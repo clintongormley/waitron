@@ -279,6 +279,10 @@ it("retries the bill's office print from Transactions and follows its outcome of
   });
   expect(getComputedStyle(part(el, "original-delivery")!).borderTopColor).not.toBe(warningBorder);
   expect(part(el, "refresh-receipt")).toBeNull();
+  await userEvent.click(part(el, "document-print-toggle")!);
+  await userEvent.click(part(el, "document-invoice")!);
+  expect(part(el, "invoice-printer-toggle")?.textContent).toMatch(/Invoice printer:\s*None/);
+  expect(part(el, "print-invoice")).toBeNull();
 });
 
 it("keeps one invoice print action across the document and printer choices in Bills", async () => {
@@ -295,7 +299,8 @@ it("keeps one invoice print action across the document and printer choices in Bi
   expect(part(el, "print-invoice")?.textContent?.trim()).toBe("Print it again");
   await userEvent.click(part(el, "document-print-toggle")!);
   await userEvent.click(part(el, "document-receipt")!);
-  expect(part(el, "original-delivery")).toBeNull();
+  expect(part(el, "delivery-status")?.textContent ?? "").toContain("Office stopped answering");
+  expect(part(el, "print-invoice")).toBeNull();
   await userEvent.click(part(el, "document-print-toggle")!);
   expect(part(el, "invoice-printer-toggle")?.textContent).toContain("Office · A4");
   expect(part(el, "print-invoice")?.textContent?.trim()).toBe("Print it again");
@@ -303,6 +308,9 @@ it("keeps one invoice print action across the document and printer choices in Bi
   await userEvent.click(part(el, "document-invoice")!);
   expect(count("invoice-printer-toggle")).toBe(1);
   expect(count("print-invoice")).toBe(1);
+  expect(ticket(el).shadowRoot!.querySelector("wt-combobox")).not.toBeNull();
+  await userEvent.click(part(el, "document-back")!);
+  expect(ticket(el).shadowRoot!.querySelector("wt-combobox")).toBeNull();
   await choose(el, bar.id);
   await vi.waitFor(() =>
     expect(part(el, "print-invoice")?.textContent?.trim()).toBe("Print on Bar"),

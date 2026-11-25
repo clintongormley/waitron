@@ -409,9 +409,8 @@ export class TillTicketView extends LitElement {
   }
 
   #leaveDocumentChoice(): void {
-    const restoreInvoice = this.printDocument === "receipt" && this.autoRefreshBillDelivery;
     this.printDocument = null;
-    if (!restoreInvoice) return;
+    if (!this.autoRefreshBillDelivery) return;
     this.invoicePrinterOpen = false;
     this.readInvoicePrinters();
   }
@@ -517,9 +516,9 @@ export class TillTicketView extends LitElement {
                 data-test="document-back"
                 variant="secondary"
                 @click=${() => {
-                  if (this.printDocument !== null && this.result.invoiceType === "F1")
-                    this.#leaveDocumentChoice();
-                  else this.documentPrinterOpen = false;
+                  if (this.printDocument === null || this.result.invoiceType !== "F1")
+                    this.documentPrinterOpen = false;
+                  this.#leaveDocumentChoice();
                 }}
                 >${t("action.back")}</wt-button
               >
@@ -566,7 +565,12 @@ export class TillTicketView extends LitElement {
   }
 
   get #showBillA4Printer(): boolean {
-    if (!this.autoRefreshBillDelivery || !this.invoicePrintersEnabled || !this.canPrintReceipt)
+    if (
+      !this.autoRefreshBillDelivery ||
+      !this.invoicePrintersEnabled ||
+      !this.canPrintReceipt ||
+      this.printDocument === "receipt"
+    )
       return false;
     const attempt = this.deliveries?.current;
     return (
@@ -582,11 +586,7 @@ export class TillTicketView extends LitElement {
   }
 
   protected get prefersInvoiceDeliveryPrinter(): boolean {
-    return (
-      this.autoRefreshBillDelivery &&
-      this.printDocument !== "receipt" &&
-      !this.useDeviceInvoicePrinter
-    );
+    return this.#showBillA4Printer && !this.useDeviceInvoicePrinter;
   }
 
   protected get savedA4Retry() {
@@ -1125,14 +1125,12 @@ export class TillTicketView extends LitElement {
 
       ${
         this.#showBillA4Printer
-          ? this.printDocument === "receipt"
-            ? nothing
-            : html`<section class="invoice-printer" aria-label=${t("equipment.invoice")}>
-                  ${this.renderInvoicePrinter()}
-                </section>
-                ${this.renderOriginalDelivery()}`
-          : this.renderOriginalDelivery()
+          ? html`<section class="invoice-printer" aria-label=${t("equipment.invoice")}>
+              ${this.renderInvoicePrinter()}
+            </section>`
+          : nothing
       }
+      ${this.renderOriginalDelivery()}
       ${
         this.emailOpen && this.canPrintReceipt
           ? html`<till-invoice-email-dialog
