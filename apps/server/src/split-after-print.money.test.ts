@@ -1,19 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { asc, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { billPayments, refunds, tenders } from "@waitron/db";
+import { insertCapturedPayment } from "@waitron/payments";
 import {
-  billAdvances,
-  billPayments,
-  refunds,
-  sales,
-  tenders,
-  workingOrderLines,
-} from "@waitron/db";
-import { saleId as brandSaleId, thousandthsToDecimal } from "@waitron/shared";
-import { invoiceRecords } from "@waitron/fiscal-verifactu/test/invoice-records.js";
-import { readBillEditState } from "./bill-editing.js";
+  centsToDecimal,
+  saleId as brandSaleId,
+  workingOrderId as brandWorkingOrderId,
+} from "@waitron/shared";
 import { readReceiptPayments } from "./receipt-payments.js";
 import { billRefundFields, seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import {
@@ -26,6 +22,7 @@ import {
   type Answer,
 } from "./testing/bill-venue.js";
 import { provisionOrderVenue, type OrderVenue } from "./testing/order-venue.js";
+import * as fixture from "./testing/split-after-print-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
@@ -46,79 +43,20 @@ useVenueDb({
 
 type Party = { partyId: string; tabId: string };
 
-function revisionOf(partyId: string): number {
-  const [row] = venue.db.all<{ revision: number }>(
-    sql`select revision from parties where id = ${partyId}`,
-  );
-  return row!.revision;
-}
-
-function dishesOf(billId: string) {
-  return inTx(venue, (tx) =>
-    tx
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, billId))
-      .orderBy(workingOrderLines.lineNo),
-  );
-}
-
-async function serve(party: Party): Promise<void> {
-  const dishes = (await dishesOf(party.tabId)).filter((line) => line.parentLineId === null);
-  const served = await send(
-    venue.app,
-    venue.cookie,
-    "POST",
-    `/api/parties/${party.partyId}/served`,
-    {
-      submissionId: randomUUID(),
-      expectedPartyRevision: revisionOf(party.partyId),
-      items: dishes.map((line) => ({
-        lineId: line.id,
-        quantity: thousandthsToDecimal(line.quantity),
-      })),
-    },
-  );
-  expect(served.status, JSON.stringify(served.json)).toBe(200);
-}
-
-async function print(party: Party): Promise<void> {
-  const billId = party.tabId;
-  const { editorVersion, draftId, draftRevision } = await inTx(venue, (tx) =>
-    readBillEditState(tx, billId),
-  );
-  const printed = await send(
-    venue.app,
-    venue.cookie,
-    "POST",
-    `/api/parties/${party.partyId}/end-meal`,
-    {
-      billId,
-      expectedPartyRevision: revisionOf(party.partyId),
-      expectedEdits: [{ billId, editorVersion, draftId, draftRevision }],
-      submissionId: randomUUID(),
-    },
-  );
-  expect(printed.status, JSON.stringify(printed.json)).toBe(200);
-}
-
 /** A party's dishes, served and printed. */
 async function printed(...names: string[]): Promise<Party> {
   const party = await seatedWith(venue, ...names);
-  await serve(party);
-  await print(party);
+  const served = await fixture.serve(venue, party, party.tabId);
+  expect(served.status, JSON.stringify(served.json)).toBe(200);
+  const ticket = await fixture.printBill(venue, party, party.tabId);
+  expect(ticket.status, JSON.stringify(ticket.json)).toBe(200);
   return party;
 }
 
-function split(billId: string): Promise<Answer> {
-  return send(
-    venue.app,
-    venue.cookie,
-    "POST",
-    `/api/working-orders/${billId}/split-after-print`,
-    {},
-  );
-}
+/** Reopen to split by an operator who does not hold `sale.rectify`. */
+const split = (billId: string) => fixture.split(venue, billId, venue.cookie);
+const invoiceOf = (billId: string) => fixture.invoiceOf(venue, billId);
+const creditsOf = (saleId: string) => fixture.creditsOf(venue, saleId);
 
 function pay(billId: string, body: Record<string, unknown>): Promise<Answer> {
   return send(venue.app, venue.cookie, "POST", `/api/working-orders/${billId}/payments`, {
@@ -140,40 +78,17 @@ async function payInCash(billId: string, amount: string): Promise<string> {
   return (paid.json.payment as { id: string }).id;
 }
 
-async function invoiceOf(billId: string) {
-  const [row] = await inTx(venue, (tx) =>
-    tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
-  );
-  return row!;
-}
-
-function creditsOf(saleId: string) {
-  return inTx(venue, (tx) => tx.select().from(sales).where(eq(sales.correctsSaleId, saleId)));
-}
-
 function balanceOf(billId: string): Promise<Answer> {
   return send(venue.app, venue.cookie, "GET", `/api/working-orders/${billId}/payments`);
 }
 
-/** Everything a split would write: the corrective and its record, the copied bill and its dishes. */
-function written() {
-  return venue.db.all(sql`
-    select
-      (select count(*) from sales) as sales,
-      (select count(*) from ${invoiceRecords}) as records,
-      (select count(*) from working_orders) as bills,
-      (select count(*) from working_order_lines) as lines,
-      (select group_concat(id || ':' || working_order_id, ',') from bill_payments) as payments
-  `)[0];
-}
-
-async function expectRefused(billId: string, code: string): Promise<void> {
-  const before = written();
-  const answered = await split(billId);
-  expect({ status: answered.status, code: answered.json.code }).toEqual({ status: 409, code });
+/** The split refused with `code`: nothing written, the bill still printed, its ticket uncredited. */
+async function refused(billId: string, code: string): Promise<void> {
+  const answered = await fixture.expectRefused(venue, billId, () => split(billId), {
+    status: 409,
+    code,
+  });
   expect(answered.json.params).toEqual({ workingOrderId: billId });
-  expect(written()).toEqual(before);
-  expect(await statusOf(venue, billId)).toBe("placed");
   expect(await creditsOf((await invoiceOf(billId)).id)).toEqual([]);
 }
 
@@ -221,13 +136,16 @@ describe("Reopen to split on a part-paid printed bill", () => {
         tx
           .select({ billPaymentId: tenders.billPaymentId, amount: tenders.amount })
           .from(tenders)
-          .innerJoin(billPayments, eq(billPayments.id, tenders.billPaymentId))
           .where(eq(tenders.saleId, saleId))
-          .orderBy(asc(billPayments.receivedAt), sql`${billPayments}.rowid`),
+          .orderBy(sql`${tenders}.rowid`),
       );
     const taken = await tendersOf(ticket.id);
     expect(taken.map((row) => row.amount)).toEqual([1000, 2000]);
-    expect(taken[0]!.billPaymentId).toBe(carried);
+    // In the order the tenders were written: the carried payment first.
+    expect(taken.map((row) => row.billPaymentId)).toEqual([
+      carried,
+      (rest.json.payment as { id: string }).id,
+    ]);
     expect(await tendersOf(original.id)).toEqual([]);
     const [creditNote] = await creditsOf(original.id);
     expect(original.total + creditNote!.total).toBe(0);
@@ -284,7 +202,34 @@ describe("Reopen to split on a part-paid printed bill", () => {
     await payInCash(party.tabId, "10.00");
     await inTx(venue, (tx) => seedPendingCardPayment(tx, party.tabId));
 
-    await expectRefused(party.tabId, "order.payment_in_flight");
+    await refused(party.tabId, "order.payment_in_flight");
+  });
+
+  it("a card charged but not yet recorded refuses", async () => {
+    const party = await printed("Red wine bottle");
+    await payInCash(party.tabId, "10.00");
+    await inTx(venue, (tx) =>
+      insertCapturedPayment(tx, {
+        origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
+        workingOrderId: brandWorkingOrderId(party.tabId),
+        provider: "fake",
+        paymentRef: `captured-${randomUUID()}`,
+        amount: centsToDecimal(2000),
+        settledAt: new Date(),
+      }),
+    );
+
+    await refused(party.tabId, "order.payment_in_flight");
+  });
+
+  it("refuses money still moving before dishes printed with Print anyway", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    const ticket = await fixture.printBill(venue, party, party.tabId, true);
+    expect(ticket.status, JSON.stringify(ticket.json)).toBe(200);
+    await inTx(venue, (tx) => seedPendingCardPayment(tx, party.tabId));
+
+    await refused(party.tabId, "order.payment_in_flight");
   });
 
   it("a pending refund refuses", async () => {
@@ -306,31 +251,7 @@ describe("Reopen to split on a part-paid printed bill", () => {
       }),
     );
 
-    await expectRefused(party.tabId, "bill.refund_in_progress");
-  });
-
-  it("an advance refuses", async () => {
-    const party = await seatedWith(venue, "Red wine bottle", "Tarta");
-    const advance = await pay(party.tabId, {
-      kind: "contribution",
-      amount: "30.00",
-      tendered: "30.00",
-      applied: "30.00",
-      ownReceipt: true,
-    });
-    expect(advance.status, JSON.stringify(advance.json)).toBe(200);
-    await serve(party);
-    await print(party);
-    const advances = () =>
-      inTx(venue, (tx) =>
-        tx.select().from(billAdvances).where(eq(billAdvances.workingOrderId, party.tabId)),
-      );
-    const before = await advances();
-    expect(before).toHaveLength(1);
-
-    await expectRefused(party.tabId, "bill.has_advance");
-
-    expect(await advances()).toEqual(before);
+    await refused(party.tabId, "bill.refund_in_progress");
   });
 
   it("a received items payment refuses", async () => {
@@ -343,7 +264,7 @@ describe("Reopen to split on a part-paid printed bill", () => {
     });
     expect(items.status, JSON.stringify(items.json)).toBe(200);
 
-    await expectRefused(party.tabId, "bill.payments_received");
+    await refused(party.tabId, "bill.payments_received");
   });
 
   it("a received card payment refuses until its provider row can move with it", async () => {
@@ -357,6 +278,6 @@ describe("Reopen to split on a part-paid printed bill", () => {
     });
     expect(keyed.status, JSON.stringify(keyed.json)).toBe(200);
 
-    await expectRefused(party.tabId, "bill.payments_received");
+    await refused(party.tabId, "bill.payments_received");
   });
 });

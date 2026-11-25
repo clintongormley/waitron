@@ -7,8 +7,8 @@ import { refusePendingPartPayment, refuseRefundInProgress } from "./working-orde
 import "./errors.js";
 
 /**
- * Reopen to split's refusals for the printed bill's money, in the order the till offers the fix:
- * money still moving, then an advance, then a payment that cannot follow the dishes.
+ * Reopen to split's refusals for the printed bill's money: money still moving, then an advance,
+ * then a payment that cannot follow the dishes.
  */
 export async function refuseSplitMoney(tx: Transaction, id: string): Promise<void> {
   await refusePendingPartPayment(tx, [id], "any");

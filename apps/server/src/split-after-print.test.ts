@@ -13,7 +13,6 @@ import {
   lineServiceCancellations,
   printJobs,
   sales,
-  workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import { adjustments, computeAdjustmentReport } from "@waitron/adjustments";
@@ -24,8 +23,7 @@ import {
   currentBusinessDay,
   resolveVenueClock,
 } from "@waitron/reporting";
-import { thousandthsToDecimal } from "@waitron/shared";
-import { filedSales, invoiceRecords } from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import { filedSales } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
@@ -46,6 +44,7 @@ import {
   provisionOrderVenue,
   type OrderVenue,
 } from "./testing/order-venue.js";
+import * as fixture from "./testing/split-after-print-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
@@ -103,12 +102,22 @@ async function revisionOfBill(billId: string): Promise<number> {
   return bill!.revision;
 }
 
-function revisionOf(partyId: string): number {
-  const [row] = venue.db.all<{ revision: number }>(
-    sql`select revision from parties where id = ${partyId}`,
-  );
-  return row!.revision;
-}
+const revisionOf = (partyId: string) => fixture.revisionOf(venue, partyId);
+const dishesOf = (billId: string) => fixture.dishesOf(venue, billId);
+const serve = (party: Party, billId: string, ...names: string[]) =>
+  fixture.serve(venue, party, billId, ...names);
+const printBill = (party: Party, billId: string, printAnyway = false) =>
+  fixture.printBill(venue, party, billId, printAnyway);
+const split = (billId: string, cookie = venue.supervisorTill, app = venue.app) =>
+  fixture.split(venue, billId, cookie, app);
+const creditsOf = (saleId: string) => fixture.creditsOf(venue, saleId);
+const invoiceOf = (billId: string) => fixture.invoiceOf(venue, billId);
+const written = () => fixture.written(venue);
+const expectRefused = (
+  billId: string,
+  answer: () => Promise<Answer>,
+  refusal: { status: number; code: string },
+) => fixture.expectRefused(venue, billId, answer, refusal);
 
 /** A party seated at a fresh table with one guest, its dishes sent to the kitchen as one group. */
 async function seat(...lines: (string | Line)[]): Promise<Party> {
@@ -159,48 +168,6 @@ async function seat(...lines: (string | Line)[]): Promise<Party> {
   return party;
 }
 
-function dishesOf(billId: string) {
-  return inTx(venue, (tx) =>
-    tx
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, billId))
-      .orderBy(workingOrderLines.lineNo),
-  );
-}
-
-async function serve(party: Party, billId: string, ...names: string[]): Promise<Answer> {
-  const dishes = (await dishesOf(billId)).filter(
-    (line) => line.parentLineId === null && (names.length === 0 || names.includes(line.name)),
-  );
-  return send(venue.app, venue.cookie, "POST", `/api/parties/${party.partyId}/served`, {
-    submissionId: randomUUID(),
-    expectedPartyRevision: revisionOf(party.partyId),
-    items: dishes.map((line) => ({
-      lineId: line.id,
-      quantity: thousandthsToDecimal(line.quantity),
-    })),
-  });
-}
-
-/** Print the bill on the first till, which has a receipt printer. */
-async function printBill(party: Party, billId: string, printAnyway = false): Promise<Answer> {
-  const { editorVersion, draftId, draftRevision } = await inTx(venue, (tx) =>
-    readBillEditState(tx, billId),
-  );
-  return send(venue.app, venue.cookie, "POST", `/api/parties/${party.partyId}/end-meal`, {
-    billId,
-    expectedPartyRevision: revisionOf(party.partyId),
-    expectedEdits: [{ billId, editorVersion, draftId, draftRevision }],
-    submissionId: randomUUID(),
-    ...(printAnyway ? { printAnyway: true } : {}),
-  });
-}
-
-function split(billId: string, cookie = venue.supervisorTill, app = venue.app): Promise<Answer> {
-  return send(app, cookie, "POST", `/api/working-orders/${billId}/split-after-print`, {});
-}
-
 /** Move the named dishes of `fromBillId` onto a new bill of the party. */
 async function moveToNewBill(party: Party, fromBillId: string, ...names: string[]) {
   const lineIds = (await dishesOf(fromBillId))
@@ -223,17 +190,6 @@ async function moveToNewBill(party: Party, fromBillId: string, ...names: string[
   return moved.json.billId as string;
 }
 
-function creditsOf(saleId: string) {
-  return inTx(venue, (tx) => tx.select().from(sales).where(eq(sales.correctsSaleId, saleId)));
-}
-
-async function invoiceOf(billId: string) {
-  const [row] = await inTx(venue, (tx) =>
-    tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
-  );
-  return row!;
-}
-
 function billsOf(partyId: string) {
   return inTx(venue, (tx) =>
     tx
@@ -241,32 +197,6 @@ function billsOf(partyId: string) {
       .from(workingOrders)
       .where(eq(workingOrders.partyId, partyId)),
   );
-}
-
-/** Everything a split would write: the corrective and its record, and the copied bill and dishes. */
-function written() {
-  return venue.db.all(sql`
-    select
-      (select count(*) from sales) as sales,
-      (select count(*) from ${invoiceRecords}) as records,
-      (select count(*) from working_orders) as bills,
-      (select count(*) from working_order_lines) as lines,
-      (select count(*) from order_amendments) as amendments,
-      (select group_concat(id || ':' || (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id), ',') from invoice_series) as series
-  `)[0];
-}
-
-async function expectRefused(
-  billId: string,
-  answer: () => Promise<Answer>,
-  refusal: { status: number; code: string },
-): Promise<Answer> {
-  const before = written();
-  const answered = await answer();
-  expect({ status: answered.status, code: answered.json.code }).toEqual(refusal);
-  expect(written()).toEqual(before);
-  expect(await statusOf(venue, billId)).toBe("placed");
-  return answered;
 }
 
 /** Served dishes, printed: the bill holds its ticket and nothing is left to serve. */
