@@ -16,7 +16,7 @@ import {
 import type {
   MenuPatchChange,
   MenuPatchTarget,
-  PatchDraft,
+  PatchDraftAnswer,
 } from "@waitron/menu/src/menu-patch-types.js";
 import { mergeOptionalTranslations } from "@waitron/menu/src/optional-translations.js";
 
@@ -137,41 +137,41 @@ export function targetKey(target: MenuPatchTarget): string {
   }
 }
 
-export interface ScheduledCorrection {
-  versionId: string;
-  activatesAt: string;
-  /** The changed items this version differs for. */
-  targets: MenuPatchTarget[];
+type ScheduledVersion = PatchDraftAnswer["queued"][number];
+
+/** A scheduled version, its `targets` the changed items it differs for. */
+export interface ScheduledCorrection extends ScheduledVersion {
   /** Those of them, by `targetKey`, whose copy here does not hold the value being corrected. */
   deliberate: string[];
   /** Whether the patch corrects this version too. */
   ticked: boolean;
 }
 
-/** The person's ticks, by activation time (a patch renumbers a scheduled version, and no two wait
- * for the same time): `false` for an unticked version, else its `deliberate` items when ticked. */
+/** The person's ticks, by `versionId`: `false` for an unticked version, else its `deliberate` items
+ * when ticked. */
 export type ScheduledChoices = ReadonlyMap<string, false | readonly string[]>;
 
 /** The scheduled versions that differ from the products' current declarations for an item whose
  * declarations are staged. One with a `deliberate` item is ticked only by a choice made for it. */
 export function scheduledCorrections(
-  { queued }: PatchDraft,
+  { queued }: PatchDraftAnswer,
   changes: readonly MenuPatchChange[],
   choices: ScheduledChoices,
 ): ScheduledCorrection[] {
   const staged = new Set(
     changes.flatMap(({ target, field }) => (field === "declarations" ? [targetKey(target)] : [])),
   );
-  return queued.flatMap(({ versionId, activatesAt, targets }) => {
-    const held = targets.filter(({ target }) => staged.has(targetKey(target)));
-    if (held.length === 0) return [];
-    const deliberate = held.flatMap(({ target, stillOld }) => (stillOld ? [] : targetKey(target)));
-    const choice = choices.get(activatesAt) ?? [];
+  return queued.flatMap((version) => {
+    const targets = version.targets.filter(({ target }) => staged.has(targetKey(target)));
+    if (targets.length === 0) return [];
+    const deliberate = targets.flatMap(({ target, stillOld }) =>
+      stillOld ? [] : targetKey(target),
+    );
+    const choice = choices.get(version.versionId) ?? [];
     return [
       {
-        versionId,
-        activatesAt,
-        targets: held.map(({ target }) => target),
+        ...version,
+        targets,
         deliberate,
         ticked: choice !== false && deliberate.every((key) => choice.includes(key)),
       },

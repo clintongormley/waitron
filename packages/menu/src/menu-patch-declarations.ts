@@ -8,17 +8,16 @@ import {
   declarationsFor,
 } from "./menu-patch.js";
 import type {
+  DeclaredCopy,
   MenuPatchChange,
   MenuPatchTarget,
   QueuedDeclarationDrift,
 } from "./menu-patch-types.js";
 
-export interface DeclarationCopy {
+export interface DeclarationCopy extends DeclaredCopy {
   /** What a declarations change corrects: the same in every version, whatever offer ids it holds. */
   subject: string;
-  productId: string;
   target: MenuPatchTarget;
-  values: object;
   /** A variant's dish, whose declarations change takes the variant too. */
   dish?: DeclarationCopy;
 }
@@ -30,9 +29,10 @@ const subjectOf = (target: MenuPatchTarget, productId: string): string =>
 function declarationCopies(document: MenuDocument): DeclarationCopy[] {
   return [...Object.values(document.offers), ...documentSetMenuOffers(document)].flatMap(
     (offer): DeclarationCopy[] => {
-      const copy = (target: MenuPatchTarget, productId: string, holder: object) => ({
+      const copy = (target: MenuPatchTarget, productId: string, holder: { name: string }) => ({
         subject: subjectOf(target, productId),
         productId,
+        name: holder.name,
         target,
         values: copyDeclarations(target.kind, holder),
       });
@@ -88,6 +88,15 @@ export function liveDeclarations(live: MenuDocument): CorrectedFrom {
   return ({ subject }) => found.get(subject);
 }
 
+/** A target and what it takes in one queued version. */
+interface TakingTarget {
+  target: MenuPatchTarget;
+  differs: boolean;
+  stillOld: boolean;
+  /** Each distinct value of each product. */
+  held: Map<string, DeclaredCopy>;
+}
+
 /** The queued versions holding a copy that is not the product's current declarations, each with the
  * targets that would correct it. A variant `correctedFrom` does not know has its dish's old value. */
 export function queuedDeclarationDrift(
@@ -96,25 +105,38 @@ export function queuedDeclarationDrift(
   correctedFrom: CorrectedFrom,
 ): QueuedDeclarationDrift[] {
   return queued.flatMap(({ versionId, activatesAt, document }) => {
-    const listed = new Map<string, QueuedDeclarationDrift["targets"][number]>();
+    const takers = new Map<string, TakingTarget>();
     for (const copy of declarationCopies(document)) {
-      const wanted = current.get(copy.productId);
-      const held = canonicalJson(copy.values);
-      if (wanted === undefined || held === canonicalJson(declarationsFor(copy.target.kind, wanted)))
-        continue;
+      const { productId, name, values } = copy;
+      const wanted = current.get(productId);
+      if (wanted === undefined) continue;
+      const held = canonicalJson(values);
+      const differs = held !== canonicalJson(declarationsFor(copy.target.kind, wanted));
       const from = correctedFrom(copy) ?? (copy.dish && correctedFrom(copy.dish));
-      const stillOld = canonicalJson(from?.values ?? null) === held;
+      const stillOld = !differs || canonicalJson(from?.values ?? null) === held;
       for (const taking of copy.dish === undefined ? [copy] : [copy.dish, copy]) {
         const target = correctedFrom(taking)?.target;
         if (target === undefined) continue;
-        const entry = listed.get(taking.subject);
-        if (entry === undefined) listed.set(taking.subject, { target, stillOld });
-        else entry.stillOld &&= stillOld;
+        const taker = takers.get(taking.subject) ?? {
+          target,
+          differs: false,
+          stillOld: true,
+          held: new Map(),
+        };
+        takers.set(taking.subject, taker);
+        taker.differs ||= differs;
+        taker.stillOld &&= stillOld;
+        taker.held.set(`${productId}/${held}`, { productId, name, values });
       }
     }
-    return listed.size === 0
+    const targets = [...takers.values()].flatMap(({ target, differs, stillOld, held }) =>
+      !differs
+        ? []
+        : [stillOld ? { target, stillOld } : { target, stillOld, replaces: [...held.values()] }],
+    );
+    return targets.length === 0
       ? []
-      : [{ versionId, activatesAt: activatesAt.toISOString(), targets: [...listed.values()] }];
+      : [{ versionId, activatesAt: activatesAt.toISOString(), targets }];
   });
 }
 
@@ -126,12 +148,11 @@ export function queuedChanges(
   changes: readonly MenuPatchChange[],
 ): MenuPatchChange[] {
   const held = subjects(document);
-  return changes.flatMap((change) =>
-    declarationProductIds(live, [change]).flatMap((productId) => {
-      const copy = held.get(subjectOf(change.target, productId));
-      return copy === undefined ? [] : [{ ...change, target: copy.target }];
-    }),
-  );
+  return changes.flatMap((change) => {
+    const [productId] = declarationProductIds(live, [change]);
+    const copy = productId && held.get(subjectOf(change.target, productId));
+    return copy ? [{ ...change, target: copy.target }] : [];
+  });
 }
 
 /** Each queued version its own `changes` change, with them applied. */
@@ -144,11 +165,13 @@ export function queuedCorrections(
   }[],
   languages: ContentLanguages,
   current: ReadonlyMap<string, DeclarationValues>,
-): Map<string, MenuDocument> {
-  const corrections = new Map<string, MenuDocument>();
-  for (const { versionId, contentHash, document, changes } of queued) {
-    const corrected = applyMenuPatch(document, changes, languages, current);
-    if (menuDocumentHash(corrected) !== contentHash) corrections.set(versionId, corrected);
+): Map<string, { document: MenuDocument; contentHash: string }> {
+  const corrections = new Map<string, { document: MenuDocument; contentHash: string }>();
+  for (const edition of queued) {
+    const document = applyMenuPatch(edition.document, edition.changes, languages, current);
+    const contentHash = menuDocumentHash(document);
+    if (contentHash !== edition.contentHash)
+      corrections.set(edition.versionId, { document, contentHash });
   }
   return corrections;
 }

@@ -8,7 +8,7 @@ import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
-import type { LiveMenu, MenuPatchResult, MenuPreview, PatchDraft } from "@waitron/menu";
+import type { LiveMenu, MenuPatchResult, MenuPreview, PatchDraftAnswer } from "@waitron/menu";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { mountMenuApi } from "./menu-api.js";
@@ -233,14 +233,17 @@ describe("reading and patching a menu's live version", () => {
     await suite.db.execute(
       sql`update products set allergens = '{"milk":{}}' where id = ${rows[0]!.id}`,
     );
-    const base = await json<PatchDraft>(await live(app, menuId), 200);
+    const base = await json<PatchDraftAnswer>(await live(app, menuId), 200);
+    const local = (date: string) => ({ date, time: "09:00", offset: "+01:00", repeated: false });
     expect(base.queued).toEqual(
-      queued.map((versionId) => ({
+      queued.map((versionId, index) => ({
         versionId,
         activatesAt: expect.any(String),
+        local: local(`2099-01-0${index + 5}`),
         targets: [{ target, stillOld: true }],
       })),
     );
+    const { revision: reviewed } = base;
     const invalid = { code: "management.request_invalid", params: { field: "queued" } };
     const badId = {
       code: "shared.invalid_id",
@@ -258,6 +261,7 @@ describe("reading and patching a menu's live version", () => {
             baseVersionId: base.versionId,
             changes: [declarations],
             queued: bad,
+            reviewed,
           }),
           400,
         ),
@@ -267,18 +271,97 @@ describe("reading and patching a menu's live version", () => {
         baseVersionId: base.versionId,
         changes: [declarations],
         queued: [queued[1]],
+        reviewed,
       }),
       200,
     );
-    const after = await json<PatchDraft>(await live(app, menuId), 200);
+    const after = await json<PatchDraftAnswer>(await live(app, menuId), 200);
     expect(after.document.offers[itemId]!.allergens).toEqual({ milk: {} });
     expect(after.queued).toEqual([
       {
         versionId: result.requeued[0]!.versionId,
         activatesAt: base.queued[0]!.activatesAt,
-        targets: [{ target, stillOld: false }],
+        local: local("2099-01-05"),
+        targets: [
+          {
+            target,
+            stillOld: false,
+            replaces: [
+              {
+                productId: rows[0]!.id,
+                name: "Soup",
+                values: expect.objectContaining({ allergens: null, dietaryDeclarations: [] }),
+              },
+            ],
+          },
+        ],
       },
     ]);
+  });
+
+  it("refuses allergens other than those reviewed, and asks no other patch what was", async () => {
+    const app = mountApp();
+    const { menuId, itemId } = await lunchWithSoup(app);
+    await publish(app, menuId);
+    const setAllergens = (allergens: string) =>
+      suite.db.execute(
+        sql`update products set allergens = ${allergens} where name = 'Soup' and id in
+          (select product_id from menu_items where menu_id = ${menuId})`,
+      );
+    await setAllergens('{"milk":{}}');
+    const base = await json<PatchDraftAnswer>(await live(app, menuId), 200);
+    const declarations = {
+      target: { kind: "offer", menuItemId: itemId },
+      field: "declarations",
+      value: "product",
+    };
+    const body = {
+      baseVersionId: base.versionId,
+      changes: [price(itemId, "4.50"), declarations],
+    };
+    const before = await publicationTables();
+    for (const reviewed of [undefined, null, 7, {}])
+      expect(await json(await patch(app, menuId, { ...body, reviewed }), 400)).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "reviewed" } },
+      });
+    await setAllergens('{"celery":{}}');
+    const stale = await patch(app, menuId, { ...body, reviewed: base.revision });
+    expect(await json(stale, 409)).toEqual({
+      error: { code: "menu_patch.declarations_changed", params: { menuId } },
+    });
+    expect(await publicationTables()).toEqual(before);
+
+    const { revision: reviewed } = await json<PatchDraftAnswer>(await live(app, menuId), 200);
+    expect(reviewed).not.toBe(base.revision);
+    const { versionId } = await json<MenuPatchResult>(
+      await patch(app, menuId, { ...body, reviewed }),
+      200,
+    );
+    const after = await json<PatchDraftAnswer>(await live(app, menuId), 200);
+    expect(after.document.offers[itemId]).toMatchObject({
+      unitPrice: "4.50",
+      allergens: { celery: {} },
+    });
+
+    await setAllergens('{"eggs":{}}');
+    const priced = { baseVersionId: versionId, changes: [price(itemId, "4.60")] };
+    expect(await json<MenuPatchResult>(await patch(app, menuId, priced), 200)).toMatchObject({
+      number: 3,
+    });
+  });
+
+  it("refuses a malformed change beside no reviewed one as the patch does", async () => {
+    const app = mountApp();
+    const { menuId } = await lunchWithSoup(app);
+    await publish(app, menuId);
+    const base = await json<LiveMenu>(await live(app, menuId), 200);
+    for (const change of [null, 7, "declarations"])
+      expect(
+        await json(
+          await patch(app, menuId, { baseVersionId: base.versionId, changes: [change] }),
+          400,
+        ),
+      ).toMatchObject({ error: { code: "menu_patch.invalid" } });
   });
 
   it("merges translated text against the venue's language when none are saved", async () => {

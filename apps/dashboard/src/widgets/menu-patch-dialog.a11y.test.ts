@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { productDeclarationValues } from "@waitron/menu/src/declaration-values.js";
-import type { DashboardApi, PatchDraft } from "../api/client.js";
-import { setLocale } from "../i18n/t.js";
+import type { DashboardApi, PatchDraftAnswer } from "../api/client.js";
+import { allergenName } from "../i18n/domain.js";
+import { fill, setLocale, t } from "../i18n/t.js";
 import {
   cleanupWidgets,
   documentProduct,
@@ -21,9 +22,10 @@ const MILK = productDeclarationValues({
   dietaryDeclarations: [],
 });
 
-const LIVE: PatchDraft = {
+const LIVE: PatchDraftAnswer = {
   versionId: "v-3",
   number: 3,
+  revision: "r-1",
   since: "2026-10-27T09:00:00.000Z",
   declarations: { "p-soup": MILK, "v-cup": MILK },
   queued: [],
@@ -38,7 +40,7 @@ const LIVE: PatchDraft = {
   ),
 };
 
-const states = ["nothing picked", "form", "field error", "review", "refused"] as const;
+const states = ["nothing picked", "form", "field error", "review", "refused", "changed"] as const;
 
 const savedLanguages = currentContentLanguages();
 
@@ -88,7 +90,7 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
         editions: [],
       })),
       patchLiveMenu: vi.fn().mockRejectedValue({
-        code: "menu_patch.unchanged",
+        code: state === "changed" ? "menu_patch.declarations_changed" : "menu_patch.unchanged",
         params: { menuId: "menu-lunch" },
       }),
       imageLibraryRequest: vi.fn(),
@@ -111,13 +113,16 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
       await press(el, "review");
       expect(bottom(el)).toBe("Correct the fields marked on Salad to continue.");
     }
-    if (state === "review" || state === "refused") {
+    if (state === "review" || state === "refused" || state === "changed") {
       await press(el, "review");
       expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).not.toBeNull();
     }
-    if (state === "refused") {
+    if (state === "refused" || state === "changed") {
       await press(el, "put-live");
       await vi.waitFor(() => expect(bottom(el)).not.toBe(""));
+      expect(el.shadowRoot!.querySelector('[data-test="reload"]') !== null).toBe(
+        state === "changed",
+      );
     }
     await settle(el);
     await expectNoA11yViolations(host);
@@ -157,19 +162,31 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
     const queued = ["2026-11-03", "2026-11-10"].map((date, index) => ({
       versionId: `v-q${index}`,
       activatesAt: `${date}T07:00:00.000Z`,
-      targets: [{ target: { kind: "offer", menuItemId: "mi-soup" }, stillOld: index === 0 }],
+      local: { date, time: "08:00", offset: "+01:00", repeated: false },
+      targets: [
+        {
+          target: { kind: "offer", menuItemId: "mi-soup" },
+          ...(index === 0
+            ? { stillOld: true }
+            : {
+                stillOld: false,
+                replaces: [
+                  {
+                    productId: "p-soup",
+                    name: "Soup",
+                    values: { ...MILK, allergens: { mustard: {} } },
+                  },
+                ],
+              }),
+        },
+      ],
     }));
     const api = {
       getLiveMenu: vi.fn(async () => ({ ...LIVE, queued })),
       getMenuPublications: vi.fn(async () => ({
         timeZone: "Europe/Madrid",
         live: null,
-        editions: queued.map(({ versionId, activatesAt }) => ({
-          versionId,
-          activatesAt,
-          state: "queued",
-          local: { date: activatesAt.slice(0, 10), time: "08:00", repeated: false },
-        })),
+        editions: queued.map((version) => ({ ...version, state: "queued" })),
       })),
       patchLiveMenu: vi.fn().mockRejectedValue({
         code: "menu_patch.invalid",
@@ -198,6 +215,18 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
     await press(el, "review");
     expect(boxes().map(({ checked }) => checked)).toEqual([true, false]);
     expect(el.shadowRoot!.querySelectorAll('[data-test="review-note"]')).toHaveLength(2);
+    expect(
+      [...el.shadowRoot!.querySelectorAll('[data-test="scheduled-line"]')].map(
+        (line) => line.textContent,
+      ),
+    ).toEqual([
+      fill("menu_patch.change_line", {
+        item: "Soup",
+        field: t("product.allergens"),
+        from: allergenName("mustard"),
+        to: allergenName("milk"),
+      }),
+    ]);
     await expectNoA11yViolations(host);
     await press(el, "put-live");
     await vi.waitFor(() =>

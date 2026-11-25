@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import type { FrozenExtraItem, FrozenOfferVariant, MenuDocument } from "@waitron/shared";
+import type {
+  FrozenExtraItem,
+  FrozenOffer,
+  FrozenOfferVariant,
+  MenuDocument,
+  PublishedSetMenu,
+} from "@waitron/shared";
 import {
   productDeclarationValues,
   type DeclarationValues,
@@ -193,6 +199,41 @@ it("words a dish's variants with it, and lists one only where its own result dif
   ]);
 });
 
+/** A set menu holding `dishes`, whose copies hold their own declarations. */
+function withSetMenu(document: MenuDocument, ...dishes: FrozenOffer[]): MenuDocument {
+  const offers = Object.fromEntries(dishes.map((offer) => [offer.id, offer]));
+  document.setMenus = { "sm-day": { offers } as unknown as PublishedSetMenu };
+  return document;
+}
+
+it("words every copy a dish's change corrects, a set menu's and the variants only it holds included", () => {
+  const document = declaredLunch();
+  const { "mi-soup": ordinary, "mi-lemonade": drink } = document.offers;
+  Object.assign(ordinary!, reviewed(null));
+  const jug = { ...structuredClone(drink!.variants[0]!), id: "v-jug", name: "Jug" };
+  withSetMenu(
+    document,
+    { ...structuredClone(ordinary!), ...reviewed({ milk: {} }) },
+    { ...structuredClone(drink!), variants: [{ ...jug, ...reviewed({ fish: {} }) }] },
+  );
+  expect(declarationLines(soup, { "p-soup": reviewed(null) }, document)).toEqual([
+    "Soup: Allergens Milk → Not yet reviewed",
+  ]);
+  const eggs = reviewed({ eggs: {} });
+  const current = { "p-lemonade": eggs, "v-large": eggs, "v-jug": eggs };
+  expect(declarationLines(lemonade, current, document)).toEqual([
+    "Lemonade, variants included: Allergens Milk → Eggs",
+    "Lemonade › Jug: Allergens Fish → Eggs",
+  ]);
+  Object.assign(document.setMenus!["sm-day"]!.offers["mi-lemonade"]!, reviewed({ nuts: {} }));
+  expect(declarationLines(lemonade, current, document)).toEqual([
+    "Lemonade, variants included: Allergens Milk → Eggs",
+    "Lemonade, variants included: Allergens Nuts → Eggs",
+    "Lemonade › Large: Allergens Milk → Eggs",
+    "Lemonade › Jug: Allergens Fish → Eggs",
+  ]);
+});
+
 it("words a variant's and an extra's own allergens and diets", () => {
   expect(declarationLines(large, { "v-large": reviewed({ eggs: {} }) })).toEqual([
     "Lemonade › Large: Allergens Milk → Eggs",
@@ -367,6 +408,16 @@ it("says which scheduled versions get the allergens and diets, apart from those 
   expect(reviewNotes([price, declared], [], both).slice(1, -1)).toEqual([
     "Las versiones que se publican en estas fechas (3 Nov 2026, 08:00 y 10 Nov 2026, 08:00) también reciben estos alérgenos y dietas, pero ninguna otra corrección.",
   ]);
+});
+
+it("says allergens and diets stay when the products' next publish puts other values back", () => {
+  expect(reviewNotes([declared, price], []).at(-1)).toBe(
+    "The next normal publish from the products puts the old values back, except allergens and diets, unless you fix the products too.",
+  );
+  setLocale("es");
+  expect(reviewNotes([kitchen, declared], []).at(-1)).toBe(
+    "La próxima publicación normal desde los productos vuelve a poner los valores anteriores, menos los alérgenos y dietas, salvo que corrijas también los productos.",
+  );
 });
 
 it("says nothing of old prices unless a price changes, nor of old values when every value is the products' own", () => {

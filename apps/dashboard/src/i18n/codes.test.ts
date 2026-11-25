@@ -492,6 +492,8 @@ it("has English and Spanish copy for each refusal of a live menu patch", () => {
   const english: Record<string, string> = {
     "menu_patch.base_changed":
       "Another version went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
+    "menu_patch.declarations_changed":
+      "Allergens, diets or scheduled versions changed while you were reviewing. Nothing was put live. Reload and review the changes again.",
     "menu_patch.unchanged": "These values are already live. Nothing was saved.",
     "menu_patch.not_published":
       "This menu has never been published, so there is nothing live to patch. Publish it first.",
@@ -500,6 +502,8 @@ it("has English and Spanish copy for each refusal of a live menu patch", () => {
   const spanish: Record<string, string> = {
     "menu_patch.base_changed":
       "Otra versión se ha publicado mientras corregías la carta. Vuelve a cargar para corregir esa versión; se conservan las correcciones que todavía encajan.",
+    "menu_patch.declarations_changed":
+      "Los alérgenos, las dietas o las versiones programadas han cambiado mientras revisabas. No se ha publicado nada. Vuelve a cargar y revisa las correcciones de nuevo.",
     "menu_patch.unchanged": "Estos valores ya están publicados. No se ha guardado nada.",
     "menu_patch.not_published":
       "Esta carta no se ha publicado nunca, así que no hay nada publicado que corregir. Publícala primero.",

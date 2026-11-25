@@ -26,7 +26,7 @@ import {
   queueMenuPublication,
 } from "./menu-schedule.js";
 import { menuDocumentHash } from "./menu-document.js";
-import { readPatchDraft } from "./menu-patch-draft.js";
+import { assertPatchReviewed, readPatchDraft } from "./menu-patch-draft.js";
 import { updateProduct } from "./operations.js";
 import { listProductVariants, setProductVariants } from "./variants.js";
 import { writeContentLanguages } from "./content-languages.js";
@@ -660,6 +660,104 @@ describe("declarations", () => {
     expect((await draft())!.queued).toEqual([]);
   });
 
+  describe("a patch of what was reviewed", () => {
+    const patchReviewed = (
+      changes: unknown,
+      revision: string,
+      queued: readonly string[] = [],
+      base = v1,
+    ) =>
+      app(async (tx) => {
+        await assertPatchReviewed(tx, f.lunch, base, revision, NOW);
+        return patchLiveMenu(tx, f.lunch, base, changes, ANA, { at: NOW, queued });
+      });
+    const changed = { code: "menu_patch.declarations_changed" };
+
+    it("is saved while nothing it showed has changed", async () => {
+      const soup = await offerTarget(f.soup);
+      await setSoup("5.50");
+      const { versionId } = await queue(day(8));
+      await declareMilk(f.soup);
+      const { revision } = (await draft())!;
+      expect((await draft())!.revision).toBe(revision);
+      const result = await patchReviewed([declarations(soup)], revision, [versionId]);
+      expect(result.number).toBe(3);
+    });
+
+    it("is refused once a product's allergens or diets have changed, writing nothing", async () => {
+      const soup = await offerTarget(f.soup);
+      await declareMilk(f.soup);
+      const { revision } = (await draft())!;
+      for (const edit of [
+        { allergens: null },
+        { allergens: { milk: {} }, dietaryDeclarations: [] },
+        { dietaryDeclarations: ["vegetarian" as const], dietOverride: null },
+      ]) {
+        await app((tx) => updateProduct(tx, f.soup, edit));
+        await refuses(() => patchReviewed([declarations(soup)], revision), {
+          ...changed,
+          params: { menuId: f.lunch },
+        });
+      }
+      await declareMilk(f.soup);
+      expect((await draft())!.revision).toBe(revision);
+    });
+
+    it("is refused once a scheduled version it corrects was numbered again, writing nothing", async () => {
+      const soup = await offerTarget(f.soup);
+      await setSoup("5.50");
+      await queue(day(8));
+      await setSoup("6.00");
+      await queue(day(9));
+      await declareMilk(f.soup);
+      const { versionId: base } = await patch(v1, [declarations(soup)]);
+      const { revision, queued } = (await draft())!;
+      const [first, second] = queued.map(({ versionId }) => versionId);
+      // Corrects a scheduled version alone, so the live version stays.
+      await patchQueued([declarations(soup)], [second!], base);
+      const now = (await draft())!;
+      expect(now.versionId).toBe(base);
+      expect(now.queued.map(({ versionId }) => versionId)).not.toContain(first);
+      const changes = [declarations(soup), ...(await priceChange("9.00"))];
+      await refuses(() => patchReviewed(changes, revision, [first!], base), changed);
+      expect((await patchReviewed(changes, now.revision, [], base)).number).toBe(9);
+    });
+
+    it("leaves another live version to the patch's own refusal", async () => {
+      const soup = await offerTarget(f.soup);
+      await declareMilk(f.soup);
+      const { revision } = (await draft())!;
+      await patch(v1, await priceChange("9.00"));
+      await declareMilk(f.lemonade);
+      await refuses(() => patchReviewed([declarations(soup)], revision), {
+        code: "menu_patch.base_changed",
+      });
+      await app((tx) => assertPatchReviewed(tx, f.dinner, v1, revision, NOW));
+    });
+  });
+
+  it("a price patch that changes nothing is refused without reading the waiting versions", async () => {
+    await setSoup("5.50");
+    const { versionId: queued } = await queue(day(8));
+    const readsWaiting = async (price: string) => {
+      const changes = await priceChange(price);
+      return (
+        await statements(async (tx) => {
+          await patchLiveMenu(tx, f.lunch, v1, changes, ANA, {
+            at: NOW,
+            queued: [queued],
+          }).catch((error: unknown) => {
+            expect(error).toMatchObject({ code: "menu_patch.unchanged" });
+          });
+        })
+      ).some(
+        (text) => /"menu_versions"\."document"/.test(text) && /"activates_at" > \?/.test(text),
+      );
+    };
+    expect(await readsWaiting("2.80")).toBe(false);
+    expect(await readsWaiting("2.90")).toBe(true);
+  });
+
   it("readPatchDraft lists no queued version that is due but not yet settled", async () => {
     await setSoup("5.50");
     await queue(day(8));
@@ -678,6 +776,7 @@ describe("declarations", () => {
     await queue(day(8));
     expect(await draft()).toEqual({
       ...(await app((tx) => readLiveMenu(tx, f.lunch, NOW))),
+      revision: expect.any(String),
       queued: [],
       declarations: expect.any(Object),
     });

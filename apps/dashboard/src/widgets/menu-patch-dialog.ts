@@ -34,7 +34,7 @@ import type {
   MenuPatchResult,
   MenuPatchTarget,
   MenuPublicationsAnswer,
-  PatchDraft,
+  PatchDraftAnswer,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -54,8 +54,10 @@ import {
   scheduledCorrections,
   targetKey,
   type ScheduledChoices,
+  type ScheduledCorrection,
 } from "./menu-patch-draft.js";
 import {
+  anyDeclarations,
   changeLines,
   itemNames,
   onlyDeclarations,
@@ -64,7 +66,6 @@ import {
   renderScheduled,
   reviewNotes,
   type Refusal,
-  type ScheduledRow,
 } from "./menu-patch-review.js";
 import { conjunctionList } from "../i18n/list.js";
 import { localTimeWords } from "./menu-publications.js";
@@ -157,7 +158,7 @@ export class MenuPatchDialog extends LitElement {
     });
   });
 
-  @state() private live: PatchDraft | null = null;
+  @state() private live: PatchDraftAnswer | null = null;
   @state() private notPublished = false;
   @state() private readError: string | null = null;
   @state() private search = "";
@@ -179,7 +180,7 @@ export class MenuPatchDialog extends LitElement {
   @state() private choices: ScheduledChoices = new Map();
   /** The newest live version delivered while the draft held work; the draft stays on `live` until
    * Reload, or until a later delivery finds nothing staged and no field failing its check. */
-  @state() private newer: PatchDraft | null = null;
+  @state() private newer: PatchDraftAnswer | null = null;
 
   #draft: MenuPatchDraft | null = null;
   /** Whether Review has been pressed since the dialog opened: until then no field shows its own
@@ -194,7 +195,7 @@ export class MenuPatchDialog extends LitElement {
   #watching: string | null = null;
   /** A live version or language change that arrived while a patch was being sent. Applying it then
    * could drop a change the answer's refusal still has to place, so it waits for the answer. */
-  #held: { answer?: PatchDraft | null; languages: boolean; reload?: boolean } | null = null;
+  #held: { answer?: PatchDraftAnswer | null; languages: boolean; reload?: boolean } | null = null;
   /** The `changeKey` of the change a bottom "no longer fits" refusal names. */
   #refusedKey: string | null = null;
   #scope: DraftScope<Edit[]> | undefined;
@@ -345,8 +346,9 @@ export class MenuPatchDialog extends LitElement {
    * even when it holds work. A later live version has a higher number (`nextNumber`,
    * `refuseOvertaken` and `requeueAfter`, `packages/menu/src/menu-publication.ts`), so an
    * answer numbered below the newest one known is a late read and is ignored. One of the version
-   * shown may hold other scheduled versions. */
-  #applyLive(answer: PatchDraft | null, reload = false): void {
+   * shown may hold other declarations or scheduled versions: it is followed, except that a review
+   * of declarations keeps what it shows until Reload. */
+  #applyLive(answer: PatchDraftAnswer | null, reload = false): void {
     if (this.busy) {
       const held = this.#held;
       const late = answer !== null && held?.answer != null && answer.number < held.answer.number;
@@ -386,14 +388,29 @@ export class MenuPatchDialog extends LitElement {
         this.reloadFailure = null;
         if (this.refusal?.code === "menu_patch.base_changed") this.refusal = null;
       }
+      if (this.refusal?.code === "menu_patch.declarations_changed") this.refusal = null;
       this.newer = null;
       this.live = newest;
     } else {
-      if (answer.number === this.live!.number) this.live = answer;
+      if (answer.number === this.live!.number) this.#sameVersion(answer, reload);
       if (!reload) return;
     }
     // Reload checks the draft again even on the version shown: the venue's languages may differ.
     this.#revalidate(reload);
+  }
+
+  /** Takes an answer of the version shown, or says it differs from what is under review. A refusal
+   * saying so stays while the answer is of the revision it refused. */
+  #sameVersion(answer: PatchDraftAnswer, reload: boolean): void {
+    if (answer.revision !== this.live!.revision) {
+      if (!reload && this.step === "review" && anyDeclarations(this.changes)) {
+        if (this.refusal?.code !== "menu_patch.base_changed")
+          this.refusal = { code: "menu_patch.declarations_changed", params: {} };
+        return;
+      }
+      if (this.refusal?.code === "menu_patch.declarations_changed") this.refusal = null;
+    }
+    this.live = answer;
   }
 
   /** Checks the draft against the shown version with the venue's content languages as they are. */
@@ -588,6 +605,7 @@ export class MenuPatchDialog extends LitElement {
     const queued = this.#scheduled().flatMap(({ versionId, ticked }) =>
       ticked ? [versionId] : [],
     );
+    const { versionId: baseVersionId, revision: reviewed } = this.live!;
     this.busy = true;
     this.refusal = null;
     this.reloadFailure = null;
@@ -595,9 +613,10 @@ export class MenuPatchDialog extends LitElement {
       if (typed.refused) Object.assign(typed, { error: "", language: null, refused: false });
     const outcome = await this.api
       .patchLiveMenu(this.menuId, {
-        baseVersionId: this.live!.versionId,
+        baseVersionId,
         changes: sent,
         ...(queued.length === 0 ? {} : { queued }),
+        ...(anyDeclarations(sent) ? { reviewed } : {}),
       })
       .then(
         (result) => ({ result }),
@@ -697,7 +716,7 @@ export class MenuPatchDialog extends LitElement {
   /** The Reload button is usually gone afterwards, so with `focus` focus moves to Review, or to
    * Close while Review is unavailable. Without it, focus stays on the refused field unless the
    * version moved onto removed that field. */
-  async #reloaded(answer: PatchDraft | null, focus = true): Promise<void> {
+  async #reloaded(answer: PatchDraftAnswer | null, focus = true): Promise<void> {
     this.reloadFailure = null;
     this.#applyLive(answer, true);
     if (!focus) {
@@ -854,7 +873,10 @@ export class MenuPatchDialog extends LitElement {
     ].join(" ");
     const count = this.#current().length;
     const reload = refusals.some(
-      ({ code }) => code === "menu_patch.base_changed" || code === "menu_patch.invalid",
+      ({ code }) =>
+        code === "menu_patch.base_changed" ||
+        code === "menu_patch.declarations_changed" ||
+        code === "menu_patch.invalid",
     )
       ? html`<wt-button
           slot="secondary"
@@ -949,16 +971,14 @@ export class MenuPatchDialog extends LitElement {
   }
 
   /** The scheduled versions the review lists; only these are ever sent. */
-  #scheduled(): ScheduledRow[] {
-    return scheduledCorrections(this.live!, this.changes, this.choices).flatMap((row) => {
-      const edition = this.queued.find(({ activatesAt }) => activatesAt === row.activatesAt);
-      return edition === undefined ? [] : [{ ...row, date: localTimeWords(edition.local) }];
-    });
+  #scheduled(): ScheduledCorrection[] {
+    return scheduledCorrections(this.live!, this.changes, this.choices);
   }
 
   #renderReview(): TemplateResult {
     const languages = currentContentLanguages();
     const { document, declarations } = this.live!;
+    const names = itemNames(document);
     const scheduled = this.#scheduled();
     // A version not among `scheduled` needs none of the staged declarations: it agrees with the
     // products already, or holds none of the items.
@@ -969,17 +989,17 @@ export class MenuPatchDialog extends LitElement {
     return html`<div class="review" data-test="review-step">
       <h3 tabindex="-1">${t("menu_patch.review_heading")}</h3>
       <ul class="changes">
-        ${changeLines(document, this.changes, languages, declarations).map(
+        ${changeLines(document, this.changes, languages, declarations, names).map(
           (line) => html`<li data-test="review-line">${line}</li>`,
         )}
       </ul>
-      ${renderScheduled(scheduled, document, this.busy, (row, ticked) => {
-        this.choices = new Map(this.choices).set(row.activatesAt, ticked && row.deliberate);
+      ${renderScheduled(scheduled, names, declarations, this.busy, (row, ticked) => {
+        this.choices = new Map(this.choices).set(row.versionId, ticked && row.deliberate);
       })}
       ${reviewNotes(
         this.changes,
         without.map(({ local }) => localTimeWords(local)),
-        scheduled.flatMap(({ ticked, date }) => (ticked ? [date] : [])),
+        scheduled.flatMap(({ ticked, local }) => (ticked ? [localTimeWords(local)] : [])),
       ).map((note) => html`<p class="note" data-test="review-note">${note}</p>`)}
     </div>`;
   }

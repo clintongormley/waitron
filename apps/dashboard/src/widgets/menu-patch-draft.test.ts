@@ -6,7 +6,7 @@ import type {
   MenuDocument,
   ContentLanguages,
 } from "@waitron/shared";
-import type { MenuPatchTarget, PatchDraft } from "../api/client.js";
+import type { MenuPatchTarget, PatchDraftAnswer } from "../api/client.js";
 import {
   MenuPatchDraft,
   patchTree,
@@ -892,10 +892,11 @@ describe("scheduledCorrections", () => {
   });
   const extraCheese = { kind: "extra", listId: "l-toppings", productId: "p-cheese" } as const;
 
-  function live(...queued: PatchDraft["queued"]): PatchDraft {
+  function live(...queued: PatchDraftAnswer["queued"]): PatchDraftAnswer {
     return {
       versionId: "v-3",
       number: 3,
+      revision: "r-1",
       since: "2026-10-27T09:00:00.000Z",
       document: lunch(),
       declarations: {},
@@ -905,9 +906,10 @@ describe("scheduledCorrections", () => {
   const differing = (
     versionId: string,
     ...targets: [MenuPatchTarget, boolean][]
-  ): PatchDraft["queued"][number] => ({
+  ): PatchDraftAnswer["queued"][number] => ({
     versionId,
     activatesAt: `${versionId}-time`,
+    local: { date: "2026-11-03", time: "08:00", offset: "+01:00", repeated: false },
     targets: targets.map(([target, stillOld]) => ({ target, stillOld })),
   });
   const ticks = (...given: Parameters<typeof scheduledCorrections>) =>
@@ -960,14 +962,16 @@ describe("scheduledCorrections", () => {
       differing("q-2", [extraCheese, true], [salad, true]),
     );
     const items = (...staged: MenuPatchTarget[]) =>
-      scheduledCorrections(draft, staged.map(declared), new Map()).map(({ targets }) => targets);
+      scheduledCorrections(draft, staged.map(declared), new Map()).map(({ targets }) =>
+        targets.map(({ target }) => target),
+      );
     expect(items(salad, soup)).toEqual([[soup, salad], [salad]]);
     expect(items(extraCheese)).toEqual([[extraCheese]]);
   });
 
   it("leaves a version the person unticked unticked, whichever items are ticked", () => {
     const draft = live(differing("q-1", [soup, true], [salad, true]));
-    const choices = new Map([["q-1-time", false as const]]);
+    const choices = new Map([["q-1", false as const]]);
     expect(ticks(draft, [declared(soup)], choices)).toEqual([["q-1", false]]);
     expect(ticks(draft, [declared(soup), declared(salad)], choices)).toEqual([["q-1", false]]);
   });
@@ -976,7 +980,7 @@ describe("scheduledCorrections", () => {
     const draft = live(differing("q-1", [soup, false], [salad, true], [bowl, false]));
     const [row] = scheduledCorrections(draft, [declared(soup)], new Map());
     expect(row!.ticked).toBe(false);
-    const choices = new Map([["q-1-time", row!.deliberate]]);
+    const choices = new Map([["q-1", row!.deliberate]]);
     expect(ticks(draft, [declared(soup)], choices)).toEqual([["q-1", true]]);
     expect(ticks(draft, [declared(soup), declared(salad)], choices)).toEqual([["q-1", true]]);
     expect(ticks(draft, [declared(soup), declared(bowl)], choices)).toEqual([["q-1", false]]);

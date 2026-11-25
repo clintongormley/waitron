@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import type { DashboardApi, MenuPatchResult, PatchDraft } from "../api/client.js";
+import type { DashboardApi, MenuPatchResult, PatchDraftAnswer } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
   cleanupWidgets,
@@ -15,9 +15,10 @@ import {
 import "./menu-patch-dialog.js";
 import type { MenuPatchDialog } from "./menu-patch-dialog.js";
 
-const LIVE: PatchDraft = {
+const LIVE: PatchDraftAnswer = {
   versionId: "v-3",
   number: 3,
+  revision: "r-1",
   since: "2026-10-27T09:00:00.000Z",
   declarations: {},
   queued: [],

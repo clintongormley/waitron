@@ -549,11 +549,18 @@ tests about +300.
   builds the corrections by applying only its `declarations` changes, for the copies the queued
   version holds, to each named queued document. Any other field of a patch never reaches a queued
   version (A1151).
-- `GET` of the patch draft answers, for a `declarations` target, the queued versions that differ:
-  `{ versionId, activatesAt, stillOld }[]` (the route the dialog already loads from; a pure
-  `queuedDeclarationDrift(queued, current, correctedFrom)` in `menu-patch-declarations.ts`, also
+- `GET` of the patch draft answers the live version, `declarations` (the products' current values),
+  the queued versions that differ,
+  `{ versionId, activatesAt, local, targets: { target, stillOld, replaces? }[] }[]`, and `revision`, a
+  hash of `declarations` and `queued` before `local` is added (the route the dialog already loads
+  from; a pure `queuedDeclarationDrift(queued, current, correctedFrom)` in
+  `menu-patch-declarations.ts`, also
   used by PR 3b: `correctedFrom` gives each copy's target and old value, Patch passing
-  `liveDeclarations(live)`).
+  `liveDeclarations(live)`). The patch route takes that revision back as `reviewed` and refuses a
+  declarations patch of another one `menu_patch.declarations_changed` (`assertPatchReviewed`).
+  (Changed 2026-11-25 by the review wave: it read `{ versionId, activatesAt, stillOld }[]`, with
+  nothing to check on the way back; a tick is now for one version id and never carried to another;
+  and `requeueAfter`'s corrections hold each document with its hash.)
 
 - [ ] **Step 1: Failing tests.** `menu-patch.test.ts`: `declarations copies the product's values to
   the dish, its set-menu copies, a variant and an extra`; `refuses a declarations value other than
@@ -618,6 +625,9 @@ corrects-all, second-call-empty and rollback. Task 3.4 owns who gets a slip.
 **Interfaces:**
 - Reads documents through `readLiveDocuments` and the queued versions' rows; a product save is rare,
   so one read per save that changed declarations is enough.
+- `QueuedDeclarationDrift` is already exported by 3a, from `menu-patch-types.ts`, as
+  `{ versionId, activatesAt, targets: { target, stillOld, replaces? }[] }`: use or rename around it
+  (2026-11-25).
 - Produces:
   ```ts
   export interface DeclarationDrift {

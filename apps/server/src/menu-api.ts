@@ -89,12 +89,14 @@ import {
   previewMenu,
   publishMenu,
   patchLiveMenu,
+  assertPatchReviewed,
   readPatchDraft,
   cancelMenuPublication,
   listMenuPublications,
   queueMenuPublication,
   rescheduleMenuPublication,
   type MenuPublicationsAnswer,
+  type PatchDraftAnswer,
   readMenuStructure,
   readMenuStructures,
   listOptionLists,
@@ -387,6 +389,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_patch.invalid": 400,
   "menu_patch.not_published": 409,
   "menu_patch.base_changed": 409,
+  "menu_patch.declarations_changed": 409,
   "menu_patch.unchanged": 409,
   "time_zone.unreadable": 500,
   "menu.reset_required": 500,
@@ -1366,7 +1369,19 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      return c.json(await gated(c, sessionId, (tx) => readPatchDraft(tx, menuId)));
+      const answer = await gated(c, sessionId, async (tx): Promise<PatchDraftAnswer | null> => {
+        const draft = await readPatchDraft(tx, menuId);
+        if (draft === null) return null;
+        const timeZone = checkedTimeZone(await venueTimeZone(tx));
+        return {
+          ...draft,
+          queued: draft.queued.map((edition) => ({
+            ...edition,
+            local: localTimeOf(new Date(edition.activatesAt), timeZone),
+          })),
+        };
+      });
+      return c.json(answer);
     }),
   );
 
@@ -1378,6 +1393,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         baseVersionId?: unknown;
         changes?: unknown;
         queued?: unknown;
+        reviewed?: unknown;
       }>(c);
       const baseVersionId = requireUuidParam(
         requireString(body.baseVersionId, "baseVersionId"),
@@ -1388,13 +1404,20 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         throw new AppError("management.request_invalid", { field: "changes" });
       const queued =
         body.queued === undefined ? [] : idList(body.queued, "queued", "MenuVersionId");
+      const reviewed = changes.some(
+        (change: { field?: unknown } | null) => change?.field === "declarations",
+      )
+        ? requireString(body.reviewed, "reviewed")
+        : undefined;
       return c.json(
-        await gated(c, sessionId, (tx, personId) =>
-          patchLiveMenu(tx, menuId, baseVersionId, changes, personId, {
+        await gated(c, sessionId, async (tx, personId) => {
+          if (reviewed !== undefined)
+            await assertPatchReviewed(tx, menuId, baseVersionId, reviewed);
+          return patchLiveMenu(tx, menuId, baseVersionId, changes, personId, {
             fallbackLanguage: deps.venueLocale ?? FALLBACK_LOCALE,
             queued,
-          }),
-        ),
+          });
+        }),
       );
     }),
   );

@@ -244,9 +244,10 @@ export type {
   MenuPatchResult,
   MenuPatchTarget,
   PatchDraft,
+  PatchDraftAnswer,
   QueuedDeclarationDrift,
 } from "./menu-patch-types.js";
-export { readPatchDraft } from "./menu-patch-draft.js";
+export { assertPatchReviewed, readPatchDraft } from "./menu-patch-draft.js";
 export {
   activateDueMenuPublications,
   cancelMenuPublication,

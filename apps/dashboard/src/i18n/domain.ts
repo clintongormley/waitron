@@ -216,6 +216,18 @@ export function allergenLabel(
     : name;
 }
 
+/** A product's whole allergen answer, `null` meaning nobody has reviewed it. */
+export function allergenWords(
+  allergens: Readonly<Record<string, { kinds?: readonly string[] }>> | null,
+): string {
+  if (allergens === null) return t("editor.allergens_unreviewed");
+  return (
+    Object.entries(allergens)
+      .map(([code, entry]) => allergenLabel(code, entry))
+      .join(", ") || t("editor.nutrition.allergens_none")
+  );
+}
+
 // Key order in ALLERGEN_NAMES is the option order in allergen-dietary-picker.ts.
 export const ALLERGEN_CODES: readonly string[] = Object.keys(ALLERGEN_NAMES);
 

@@ -832,22 +832,31 @@ export async function patchLiveMenu(
         field: "image",
         reason: "image.not_found",
       });
-  const waiting = await waitingEditions(tx, menuId, at);
+  const languages = await readContentLanguages(tx, options.fallbackLanguage ?? FALLBACK_LOCALE);
+  const document = applyMenuPatch(
+    live.document!,
+    parsed,
+    languages,
+    await readProductDeclarationValues(tx, declarationProductIds(live.document!, parsed)),
+  );
+  const contentHash = menuDocumentHash(document);
+  const unchanged = contentHash === live.contentHash;
+  const correcting = parsed.some(({ field }) => field === "declarations");
+  const waiting = unchanged && !correcting ? [] : await waitingEditions(tx, menuId, at);
   const named = waiting
     .filter(({ versionId }) => options.queued?.includes(versionId))
     .map((edition) => ({
       ...edition,
       changes: queuedChanges(edition.document, live.document!, parsed),
     }));
-  const declarations = await readProductDeclarationValues(tx, [
-    ...declarationProductIds(live.document!, parsed),
-    ...named.flatMap(({ document, changes }) => declarationProductIds(document, changes)),
-  ]);
-  const languages = await readContentLanguages(tx, options.fallbackLanguage ?? FALLBACK_LOCALE);
-  const document = applyMenuPatch(live.document!, parsed, languages, declarations);
-  const corrections = queuedCorrections(named, languages, declarations);
-  const contentHash = menuDocumentHash(document);
-  const unchanged = contentHash === live.contentHash;
+  const corrections = queuedCorrections(
+    named,
+    languages,
+    await readProductDeclarationValues(
+      tx,
+      named.flatMap(({ document, changes }) => declarationProductIds(document, changes)),
+    ),
+  );
   if (unchanged && corrections.size === 0) throw new AppError("menu_patch.unchanged", { menuId });
   let { versionId, number } = live;
   if (!unchanged) {
@@ -892,15 +901,15 @@ export function waitingEditions(tx: Transaction, menuId: string, at: Date) {
     .orderBy(asc(menuVersions.number));
 }
 
-/** Queues the `waiting` versions again under new numbers, in order, those `corrections` names with
- * its document. */
+/** Queues the `waiting` versions again under new numbers, in order, those `corrections` names as it
+ * holds them. */
 async function requeueAfter(
   tx: Transaction,
   menuId: string,
   waiting: Awaited<ReturnType<typeof waitingEditions>>,
   at: Date,
   personId: string,
-  corrections: ReadonlyMap<string, MenuDocument>,
+  corrections: ReadonlyMap<string, { document: MenuDocument; contentHash: string }>,
 ): Promise<QueuedEdition[]> {
   if (waiting.length === 0) return [];
   // Every original is cancelled before any copy is queued: at most one queued row may hold an
@@ -913,12 +922,12 @@ async function requeueAfter(
   const requeued: QueuedEdition[] = [];
   for (const edition of waiting) {
     const number = await nextNumber(tx, menuId);
-    const corrected = corrections.get(edition.versionId);
+    const { document, contentHash } = corrections.get(edition.versionId) ?? edition;
     const versionId = await insertVersion(tx, {
       menuId,
       number,
-      document: corrected ?? edition.document,
-      contentHash: corrected === undefined ? edition.contentHash : menuDocumentHash(corrected),
+      document,
+      contentHash,
       createdAt: edition.createdAt,
       createdBy: edition.createdBy,
     });

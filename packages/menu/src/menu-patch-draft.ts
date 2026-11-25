@@ -1,4 +1,8 @@
+import { createHash } from "node:crypto";
 import { now, type Transaction } from "@waitron/db";
+import { AppError } from "@waitron/shared";
+import "./errors.js";
+import { canonicalJson } from "./menu-document.js";
 import {
   declaredProductIds,
   liveDeclarations,
@@ -21,9 +25,24 @@ export async function readPatchDraft(
     tx,
     [live, ...waiting].flatMap(({ document }) => declaredProductIds(document)),
   );
-  return {
-    ...live,
-    declarations: Object.fromEntries(current),
-    queued: queuedDeclarationDrift(waiting, current, liveDeclarations(live.document)),
-  };
+  const declarations = Object.fromEntries(current);
+  const queued = queuedDeclarationDrift(waiting, current, liveDeclarations(live.document));
+  const revision = createHash("sha256")
+    .update(canonicalJson({ declarations, queued }))
+    .digest("hex");
+  return { ...live, revision, declarations, queued };
+}
+
+/** Refuses `menu_patch.declarations_changed` unless the draft of the live version `baseVersionId`
+ * still has the `revision` that was reviewed; another live version is the patch's to refuse. */
+export async function assertPatchReviewed(
+  tx: Transaction,
+  menuId: string,
+  baseVersionId: string,
+  revision: string,
+  at: Date = now(),
+): Promise<void> {
+  const draft = await readPatchDraft(tx, menuId, at);
+  if (draft?.versionId === baseVersionId && draft.revision !== revision)
+    throw new AppError("menu_patch.declarations_changed", { menuId });
 }

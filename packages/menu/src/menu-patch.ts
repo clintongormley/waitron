@@ -2,8 +2,17 @@ import { AppError, decimal, isAppError, toScale, type ContentLanguages } from "@
 import "./errors.js";
 import { folderPresentation } from "./include-folder-presentation.js";
 import type { DocumentMember, MenuDocument, IncludeFolderOverrides } from "@waitron/shared";
-import { extraDeclarationValues, type DeclarationValues } from "./declaration-values.js";
-import { PATCH_FIELDS, type MenuPatchChange, type MenuPatchTarget } from "./menu-patch-types.js";
+import {
+  extraDeclarationValues,
+  productDeclarationValues,
+  type DeclarationValues,
+} from "./declaration-values.js";
+import {
+  PATCH_FIELDS,
+  type DeclaredCopy,
+  type MenuPatchChange,
+  type MenuPatchTarget,
+} from "./menu-patch-types.js";
 import { isProductPrice } from "./modifier-limits.js";
 import {
   mergeOptionalTranslations,
@@ -244,12 +253,9 @@ function locate(
 
 const fixedNames = (copy: Copy): Record<string, string> => fixedOf(copy).names ?? {};
 
-const DECLARATION_KEYS = ["allergens", "dietOverride", "diet", "dietaryDeclarations"] as const;
-const EXTRA_DECLARATION_KEYS = ["addAllergens", "suitableFor"] as const;
-
 /** The declarations a dish, variant or extra copy holds. */
 export function copyDeclarations(kind: MenuPatchTarget["kind"], copy: object): Copy {
-  const keys = kind === "extra" ? EXTRA_DECLARATION_KEYS : DECLARATION_KEYS;
+  const keys = Object.keys(declarationsFor(kind, productDeclarationValues()));
   return Object.fromEntries(keys.map((key) => [key, (copy as Copy)[key]]));
 }
 
@@ -261,15 +267,24 @@ export function declarationsFor(kind: MenuPatchTarget["kind"], values: Declarati
 /** A variant copy's product is its own id. */
 const declarationProductId = (copy: Copy): string => (copy.productId ?? copy.id) as string;
 
-/** The product ids a list's declarations changes copy from: the offer copies' productId and their
- * variants' ids, the variant's id, the extra's productId. */
+/** Every copy a declarations change of the target corrects, its own product's first. */
+export function correctedCopies(document: MenuDocument, target: MenuPatchTarget): DeclaredCopy[] {
+  return (locate(document, target, "declarations")?.copies ?? []).map((copy) => ({
+    productId: declarationProductId(copy),
+    name: copy.name as string,
+    values: copyDeclarations(target.kind, copy),
+  }));
+}
+
+/** The product ids a list's declarations changes copy from, each change's target's own first: the
+ * offer copies' productId and their variants' ids, the variant's id, the extra's productId. */
 export function declarationProductIds(
   document: MenuDocument,
   changes: readonly MenuPatchChange[],
 ): string[] {
   const ids = changes.flatMap(({ target, field }) =>
     field === "declarations"
-      ? (locate(document, target, field)?.copies ?? []).map(declarationProductId)
+      ? correctedCopies(document, target).map(({ productId }) => productId)
       : [],
   );
   return [...new Set(ids)];

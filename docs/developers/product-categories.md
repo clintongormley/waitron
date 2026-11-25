@@ -290,15 +290,20 @@ every waiting edition again after itself.
 A manager can correct the live version itself, leaving the products and the working menu as they
 were.
 
-- `GET /management-api/menus/:id/live` gives `{ versionId, number, since, document, declarations,
-  queued }` for the version live now, with `since` as `publishedAt` above, or `null` when the menu has none. `declarations` holds
+- `GET /management-api/menus/:id/live` gives `{ versionId, number, since, document, revision,
+  declarations, queued }` for the version live now, with `since` as `publishedAt` above, or `null` when the menu has none. `declarations` holds
   the current allergens and diets of each dish, variant and extra, by product id. `queued` lists each
   scheduled version that differs from the products' current ones at a dish, variant or extra a patch
   of the live version would correct, as
-  `{ versionId, activatesAt, targets }`; each target is `{ target, stillOld }`, `stillOld` when every
+  `{ versionId, activatesAt, local, targets }`, `local` being `activatesAt` in the venue's zone, as
+  `GET /management-api/menus/:id/publications` gives it; each target is
+  `{ target, stillOld, replaces? }`, `stillOld` when every
   differing copy holds the value being corrected (its dish's, for a variant the live version lacks),
-  and a dish's takes in its variants. An unknown menu answers `menu.not_found` (404).
-- `POST /management-api/menus/:id/patch`, with `{ baseVersionId, changes, queued? }`, puts the changes
+  and a dish's takes in its variants. A target that is not `stillOld` has `replaces`: each distinct
+  value of the copies a correction writes over, as `{ productId, name, values }`, the target's own
+  product's first, the copies that agree already included. `revision` is a hash of `declarations` and
+  `queued`, taken before `local` is added. An unknown menu answers `menu.not_found` (404).
+- `POST /management-api/menus/:id/patch`, with `{ baseVersionId, changes, queued?, reviewed? }`, puts the changes
   live at once as a new version under the next number and gives `{ versionId, number, requeued }`
   (200). `requeued` lists each queued edition's copy as `{ versionId, number, activatesAt }`, lowest
   number first. With nothing to change on the live version, it stays live and is the version answered. Each change is `{ target, field, value }`; the fields each kind of target takes are
@@ -311,7 +316,10 @@ were.
   `queued` answers `shared.invalid_id` (400). An
   unknown menu answers `menu.not_found` (404), a menu with no live version
   `menu_patch.not_published` (409, `menuId`), and a live version other than `baseVersionId`
-  `menu_patch.base_changed` (409, `menuId`, `baseVersionId`, `liveVersionId`, `liveNumber`). A change the route cannot apply
+  `menu_patch.base_changed` (409, `menuId`, `baseVersionId`, `liveVersionId`, `liveNumber`). With a
+  `declarations` change, `reviewed` must be the `revision` of the answer that was reviewed: anything
+  but a string answers `management.request_invalid`, and one that is no longer the live version's
+  `revision` `menu_patch.declarations_changed` (409, `menuId`), writing nothing. A change the route cannot apply
   answers `menu_patch.invalid` (400, `change` as its index, `field` naming `target`, `field` or the
   refused field, and `reason` with the code behind a refused translation, or `image.not_found`
   for a picture the image library does not hold). A patch that leaves the

@@ -85,7 +85,7 @@ import type { ProductChildKind } from "../state/product-child-create.js";
 import { fill, t, currentLocale } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { guideHref, type GuideLink } from "../help-guide.js";
-import { allergenLabel, vatRateNumber, vatRateText } from "../i18n/domain.js";
+import { allergenWords, vatRateNumber, vatRateText } from "../i18n/domain.js";
 
 const SUMMARY_SEPARATOR = " · ";
 
@@ -1308,12 +1308,6 @@ export class ProductEditor extends LitElement {
     const parent = this.inherited;
     const inheritedAllergens = parent !== null && this.draft.allergens === null;
     const allergens = inheritedAllergens ? parent.allergens : this.draft.allergens;
-    const allergenText =
-      allergens === null
-        ? t("editor.allergens_unreviewed")
-        : Object.entries(allergens)
-            .map(([code, entry]) => allergenLabel(code, entry))
-            .join(", ") || t("editor.nutrition.allergens_none");
     const diet = dietaryPresentation(
       parent ? this.draft.dietaryDeclarations : (this.draft.dietaryDeclarations ?? []),
       parent?.dietaryDeclarations ?? [],
@@ -1322,7 +1316,7 @@ export class ProductEditor extends LitElement {
     return [
       {
         label: t("modifiers.allergens"),
-        value: allergenText,
+        value: allergenWords(allergens),
         ...(inheritedAllergens ? { placeholder: true } : {}),
         ...(allergens === null ? { warning: true } : {}),
       },

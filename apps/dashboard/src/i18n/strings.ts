@@ -4119,6 +4119,8 @@ export const en = {
     "One of these changes no longer fits the live menu, for example because the venue's content languages changed while you were editing. Nothing was put live. Reload reads the live menu and content languages again and checks each change: it drops each one that does not fit, says how many, and keeps the rest.",
   "menu_patch.products_note":
     "The next normal publish from the products puts the old values back unless you fix the products too.",
+  "menu_patch.products_note_declared":
+    "The next normal publish from the products puts the old values back, except allergens and diets, unless you fix the products too.",
   "menu_patch.keep_editing": "Keep editing",
   "menu_patch.put_live": "Put live now",
   "menu_patch.reload": "Reload",
@@ -8984,6 +8986,8 @@ export const es: Record<StringKey, string> = {
     "Una de estas correcciones ya no encaja en la carta publicada, por ejemplo porque los idiomas del contenido del local han cambiado mientras editabas. No se ha publicado nada. Volver a cargar lee de nuevo la carta publicada y los idiomas del contenido y comprueba cada corrección: descarta las que no encajan, dice cuántas y conserva el resto.",
   "menu_patch.products_note":
     "La próxima publicación normal desde los productos vuelve a poner los valores anteriores, salvo que corrijas también los productos.",
+  "menu_patch.products_note_declared":
+    "La próxima publicación normal desde los productos vuelve a poner los valores anteriores, menos los alérgenos y dietas, salvo que corrijas también los productos.",
   "menu_patch.keep_editing": "Seguir editando",
   "menu_patch.put_live": "Publicar la corrección",
   "menu_patch.reload": "Volver a cargar",

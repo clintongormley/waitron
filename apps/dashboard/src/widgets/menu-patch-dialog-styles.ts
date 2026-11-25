@@ -118,6 +118,10 @@ export const menuPatchDialogStyles = [
       min-height: var(--wt-tap-min);
       cursor: pointer;
     }
+    .tick > span {
+      min-width: 0;
+      overflow-wrap: anywhere;
+    }
     .tick input {
       flex: none;
       margin: 0;
@@ -137,6 +141,10 @@ export const menuPatchDialogStyles = [
     .scheduled-items {
       display: block;
       color: var(--wt-color-text-muted);
+      font-size: var(--wt-font-size-sm);
+    }
+    .scheduled-line {
+      display: block;
       font-size: var(--wt-font-size-sm);
     }
     legend {

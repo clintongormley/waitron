@@ -321,6 +321,10 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "Another version went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
     es: "Otra versión se ha publicado mientras corregías la carta. Vuelve a cargar para corregir esa versión; se conservan las correcciones que todavía encajan.",
   },
+  "menu_patch.declarations_changed": {
+    en: "Allergens, diets or scheduled versions changed while you were reviewing. Nothing was put live. Reload and review the changes again.",
+    es: "Los alérgenos, las dietas o las versiones programadas han cambiado mientras revisabas. No se ha publicado nada. Vuelve a cargar y revisa las correcciones de nuevo.",
+  },
   "menu_patch.unchanged": {
     en: "These values are already live. Nothing was saved.",
     es: "Estos valores ya están publicados. No se ha guardado nada.",

@@ -10,12 +10,21 @@ import {
   type FrozenOffer,
   type MenuDocument,
 } from "@waitron/shared";
-import type { DeclarationValues } from "@waitron/menu/src/declaration-values.js";
-import { declarationsFor, fixedLanguages, patchFieldValue } from "@waitron/menu/src/menu-patch.js";
-import type { MenuPatchChange, MenuPatchTarget } from "@waitron/menu/src/menu-patch-types.js";
+import {
+  correctedCopies,
+  declarationsFor,
+  fixedLanguages,
+  patchFieldValue,
+} from "@waitron/menu/src/menu-patch.js";
+import type {
+  DeclaredCopy,
+  MenuPatchChange,
+  MenuPatchTarget,
+  PatchDraftAnswer,
+} from "@waitron/menu/src/menu-patch-types.js";
 import type { AllergenDeclaration } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { allergenLabel } from "../i18n/domain.js";
+import { allergenWords } from "../i18n/domain.js";
 import { conjunctionList } from "../i18n/list.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -25,6 +34,7 @@ import {
   type PatchTreeNode,
   type ScheduledCorrection,
 } from "./menu-patch-draft.js";
+import { localTimeWords } from "./menu-publications.js";
 
 const FIELD_LABELS: Record<string, StringKey> = {
   name: "editor.name",
@@ -102,22 +112,13 @@ function words(field: string, value: unknown, isNew: boolean): string {
   return (value as string | null) || t("menu_patch.empty");
 }
 
-/** A dish's or variant's copy, or an extra's, which holds its diets as `suitableFor`. */
-type DeclaredCopy =
+/** A dish's or variant's declarations, or an extra's, which holds its diets as `suitableFor`. */
+type Declared =
   | Pick<FrozenOffer, "allergens" | "diet" | "dietaryDeclarations">
   | { addAllergens: AllergenDeclaration; suitableFor: DietaryLabel[] };
 
-const allergensOf = (copy: DeclaredCopy): AllergenDeclaration =>
-  "addAllergens" in copy ? copy.addAllergens : copy.allergens;
-
-function allergenWords(allergens: AllergenDeclaration): string {
-  if (allergens === null) return t("editor.allergens_unreviewed");
-  return (
-    Object.entries(allergens)
-      .map(([code, entry]) => allergenLabel(code, entry))
-      .join(", ") || t("editor.nutrition.allergens_none")
-  );
-}
+const allergensOf = (values: Declared): AllergenDeclaration =>
+  "addAllergens" in values ? values.addAllergens : values.allergens;
 
 function profileWords(profile: DietProfile | null): string[] {
   if (profile === null) return [];
@@ -130,11 +131,11 @@ function profileWords(profile: DietProfile | null): string[] {
   ];
 }
 
-function dietWords(copy: DeclaredCopy): string {
+function dietWords(values: Declared): string {
   const [declared, profile] =
-    "suitableFor" in copy
-      ? [copy.suitableFor, []]
-      : [copy.dietaryDeclarations, profileWords(copy.diet)];
+    "suitableFor" in values
+      ? [values.suitableFor, []]
+      : [values.dietaryDeclarations, profileWords(values.diet)];
   const labels = expandDietaryDeclarations(declared).map((label) => t(`editor.diet.${label}`));
   return [...labels, ...profile].join(", ") || t("menu_patch.empty");
 }
@@ -142,22 +143,20 @@ function dietWords(copy: DeclaredCopy): string {
 /** Lines still to be filled with their item. */
 type Lines = [key: StringKey, values: Record<string, string>][];
 
-/** What copying the product's `current` declarations onto `target` changes. Allergens not yet
- * reviewed are named even where they stay so. */
+/** What writing the product's `current` declarations over its `copies` changes, once per value they
+ * hold. Allergens not yet reviewed are named even where they stay so. */
 function declarationChange(
-  document: MenuDocument,
-  target: MenuPatchTarget,
-  productId: string,
-  current: Readonly<Record<string, DeclarationValues>>,
+  kind: MenuPatchTarget["kind"],
+  copies: readonly DeclaredCopy[],
+  current: PatchDraftAnswer["declarations"],
 ): Lines {
-  const from = patchFieldValue(document, target, "declarations") as DeclaredCopy;
-  const to = declarationsFor(target.kind, current[productId]!) as DeclaredCopy;
-  const changed = (field: StringKey, words: (copy: DeclaredCopy) => string): Lines =>
-    words(from) === words(to)
-      ? []
-      : [["menu_patch.change_line", { field: t(field), from: words(from), to: words(to) }]];
+  const to = declarationsFor(kind, current[copies[0]!.productId]!) as Declared;
+  const changed = (field: StringKey, words: (values: Declared) => string): Lines =>
+    [...new Set(copies.map(({ values }) => words(values as Declared)))]
+      .filter((from) => from !== words(to))
+      .map((from) => ["menu_patch.change_line", { field: t(field), from, to: words(to) }]);
   const same = (field: StringKey): Lines => [["menu_patch.declarations_same", { field: t(field) }]];
-  const allergens = changed("product.allergens", (copy) => allergenWords(allergensOf(copy)));
+  const allergens = changed("product.allergens", (values) => allergenWords(allergensOf(values)));
   const diets = changed("product.dietary_info", dietWords);
   if (allergens.length === 0 && allergensOf(to) === null)
     return [...same("menu_preview.allergens_unreviewed"), ...diets];
@@ -165,32 +164,28 @@ function declarationChange(
   return lines.length === 0 ? same("menu_patch.declarations_label") : lines;
 }
 
-/** A dish's change takes its variants, so one is listed only where its own result differs. */
+/** What a declarations change of `item` does to `copies`, its own product's first. A dish's change
+ * takes its variants, so one is listed only where its own result differs. */
 function declarationLines(
-  document: MenuDocument,
-  target: MenuPatchTarget,
-  current: Readonly<Record<string, DeclarationValues>>,
-  names: ReadonlyMap<string, string>,
+  kind: MenuPatchTarget["kind"],
+  item: string,
+  copies: readonly DeclaredCopy[],
+  current: PatchDraftAnswer["declarations"],
 ): string[] {
+  const [own, ...variants] = [...new Set(copies.map(({ productId }) => productId))].map((id) => {
+    const held = copies.filter(({ productId }) => productId === id);
+    return { name: held[0]!.name, lines: declarationChange(kind, held, current) };
+  });
   const named = (lines: Lines, item: string) =>
     lines.map(([key, values]) => fill(key, { ...values, item }));
-  const item = names.get(targetKey(target))!;
-  if (target.kind !== "offer") {
-    const productId =
-      target.kind === "variant" ? target.variantId : (target as { productId: string }).productId;
-    return named(declarationChange(document, target, productId, current), item);
-  }
-  const { productId, variants } = document.offers[target.menuItemId]!;
-  const dish = declarationChange(document, target, productId, current);
   return [
-    ...named(dish, variants.length === 0 ? item : fill("menu_patch.variants_included", { item })),
-    ...variants.flatMap(({ id }) => {
-      const variant: MenuPatchTarget = { ...target, kind: "variant", variantId: id };
-      const own = declarationChange(document, variant, id, current);
-      return JSON.stringify(own) === JSON.stringify(dish)
-        ? []
-        : named(own, names.get(targetKey(variant))!);
-    }),
+    ...named(
+      own!.lines,
+      variants.length === 0 ? item : fill("menu_patch.variants_included", { item }),
+    ),
+    ...variants.flatMap(({ name, lines }) =>
+      JSON.stringify(lines) === JSON.stringify(own!.lines) ? [] : named(lines, `${item} › ${name}`),
+    ),
   ];
 }
 
@@ -200,12 +195,13 @@ export function changeLines(
   document: MenuDocument,
   changes: readonly MenuPatchChange[],
   languages: ContentLanguages,
-  current: Readonly<Record<string, DeclarationValues>> = {},
+  current: PatchDraftAnswer["declarations"] = {},
+  names = itemNames(document),
 ): string[] {
-  const names = itemNames(document);
   return changes.flatMap(({ target, field, value }) => {
-    if (field === "declarations") return declarationLines(document, target, current, names);
     const item = names.get(targetKey(target))!;
+    if (field === "declarations")
+      return declarationLines(target.kind, item, correctedCopies(document, target), current);
     const label = t(FIELD_LABELS[field]!);
     const old = patchFieldValue(document, target, field, languages);
     if (field === "customerName" || field === "names" || field === "description") {
@@ -237,6 +233,9 @@ export function changeLines(
   });
 }
 
+export const anyDeclarations = (changes: readonly MenuPatchChange[]): boolean =>
+  changes.some(({ field }) => field === "declarations");
+
 export const onlyDeclarations = (changes: readonly MenuPatchChange[]): boolean =>
   changes.every(({ field }) => field === "declarations");
 
@@ -264,21 +263,29 @@ export function reviewNotes(
             ? fill("menu_patch.queued_note", { date: queuedDates[0]! })
             : fill("menu_patch.queued_note_many", { dates: conjunctionList(queuedDates) }),
         ]),
-    ...(onlyDeclarations(changes) ? [] : [t("menu_patch.products_note")]),
+    ...(onlyDeclarations(changes)
+      ? []
+      : [
+          t(
+            anyDeclarations(changes)
+              ? "menu_patch.products_note_declared"
+              : "menu_patch.products_note",
+          ),
+        ]),
   ];
 }
 
-export type ScheduledRow = ScheduledCorrection & { date: string };
-
-/** The scheduled versions the patch can correct too, each naming the changed items it differs for. */
+/** The scheduled versions the patch can correct too, each naming the changed items it differs for,
+ * and for one whose copies do not all hold the value being corrected, what its correction replaces. */
 export function renderScheduled(
-  rows: readonly ScheduledRow[],
-  document: MenuDocument,
+  rows: readonly ScheduledCorrection[],
+  names: ReadonlyMap<string, string>,
+  current: PatchDraftAnswer["declarations"],
   busy: boolean,
-  choose: (row: ScheduledRow, ticked: boolean) => void,
+  choose: (row: ScheduledCorrection, ticked: boolean) => void,
 ): TemplateResult | typeof nothing {
   if (rows.length === 0) return nothing;
-  const names = itemNames(document);
+  const item = (target: MenuPatchTarget) => names.get(targetKey(target))!;
   return html`<fieldset>
     <legend>${t("menu_patch.scheduled")}</legend>
     ${rows.map(
@@ -287,16 +294,24 @@ export function renderScheduled(
           <input
             type="checkbox"
             name="scheduled"
-            value=${row.activatesAt}
+            value=${row.versionId}
             .checked=${live(row.ticked)}
             ?disabled=${busy}
             @change=${(event: Event) => choose(row, (event.target as HTMLInputElement).checked)}
           />
           <span>
-            <span data-test="scheduled-date">${row.date}</span>
+            <span data-test="scheduled-date">${localTimeWords(row.local)}</span>
             <span class="scheduled-items" data-test="scheduled-items"
-              >${conjunctionList(row.targets.map((target) => names.get(targetKey(target))!))}</span
+              >${conjunctionList(row.targets.map(({ target }) => item(target)))}</span
             >
+            ${row.targets.flatMap(({ target, replaces }) =>
+              replaces === undefined
+                ? []
+                : declarationLines(target.kind, item(target), replaces, current).map(
+                    (line) =>
+                      html`<span class="scheduled-line" data-test="scheduled-line">${line}</span>`,
+                  ),
+            )}
           </span>
         </label>`,
     )}
