@@ -113,33 +113,10 @@ it("reads each kind of stored order line's published declarations", async () => 
   );
 });
 
-it("reads a set-menu draft's extra from its published copy, never an unpublished product edit", async () => {
-  const spec = await setupSetMenuSpecVenue(suite.db);
-  const { venue, daily, bread } = spec;
-  const breadId = bread.picks[0]!.productId;
-  const versionId = await inTx(venue, async (tx) => {
-    await updateProduct(tx, breadId, { allergens: { sesame: {} } });
-    return publishWorkingMenu(tx, venue.tables.menuId);
-  });
-  const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  await setSpecCount(spec, bill.tabId, daily, 1);
-  await saveSetMenuDraft(venue, bill, {
-    menuVersionId: versionId,
-    setMenuId: daily.menuId,
-    menuItemId: daily.items.Soup!,
-    quantity: "1",
-    extras: [bread],
-  });
-  await inTx(venue, (tx) => updateProduct(tx, breadId, { allergens: { eggs: {} } }));
-  const { dishes } = await inTx(venue, (tx) => readPartyAllergyView(tx, bill.partyId));
-  expect(dishes.map(({ line, extras }) => [line.kind, extras.map((e) => e.allergens)])).toEqual([
-    ["draft", [{ sesame: {} }]],
-  ]);
-});
-
 it("names a set-menu draft's dishes and extras as the sent lines are and shows their published allergens", async () => {
   const spec = await setupSetMenuSpecVenue(suite.db);
   const { venue, daily, productIds, bread } = spec;
+  const breadId = bread.picks[0]!.productId;
   const { large, versionId } = await inTx(venue, async (tx) => {
     const [variant] = await setProductVariants(
       tx,
@@ -159,6 +136,7 @@ it("names a set-menu draft's dishes and extras as the sent lines are and shows t
     await updateProduct(tx, productIds.Soup, { allergens: { milk: {} } });
     await updateProduct(tx, productIds.Hake, { allergens: { fish: {} } });
     await updateProduct(tx, variant!.id, { allergens: { molluscs: {} } });
+    await updateProduct(tx, breadId, { allergens: { sesame: {} } });
     return {
       large: variant!.id,
       versionId: await publishWorkingMenu(tx, venue.tables.menuId),
@@ -179,11 +157,11 @@ it("names a set-menu draft's dishes and extras as the sent lines are and shows t
         line.kind,
         name,
         allergens,
-        extras.map((extra) => extra.name),
+        extras.map((extra) => [extra.name, extra.allergens]),
       ],
     );
   expect(await dishes()).toEqual([
-    ["draft", "Soup", { milk: {} }, ["Bread"]],
+    ["draft", "Soup", { milk: {} }, [["Bread", { sesame: {} }]]],
     ["draft", "Hake (Large)", { molluscs: {} }, []],
   ]);
 
@@ -192,11 +170,13 @@ it("names a set-menu draft's dishes and extras as the sent lines are and shows t
       name: "Broth",
       allergens: { milk: {}, celery: {} },
     });
+    await updateProduct(tx, breadId, { allergens: { sesame: {}, soybeans: {} } });
     await publishWorkingMenu(tx, venue.tables.menuId);
-    for (const id of [productIds.Soup, large]) await updateProduct(tx, id, { allergens: {} });
+    for (const id of [productIds.Soup, large, breadId])
+      await updateProduct(tx, id, { allergens: {} });
   });
   const published = [
-    ["Soup", { milk: {}, celery: {} }, ["Bread"]],
+    ["Soup", { milk: {}, celery: {} }, [["Bread", { sesame: {}, soybeans: {} }]]],
     ["Hake (Large)", { molluscs: {} }, []],
   ];
   expect(await dishes()).toEqual(published.map((dish) => ["draft", ...dish]));

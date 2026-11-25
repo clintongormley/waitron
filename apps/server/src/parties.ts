@@ -647,6 +647,7 @@ export async function readPartyBills(
   const setMenus = await readBillsSetMenus(
     tx,
     bills.map((bill) => bill.workingOrderId),
+    "published",
   );
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);

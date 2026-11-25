@@ -274,7 +274,7 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
- * Each named published menu's version live at this instant and its document. Unsupported formats require
+ * Each named published menu's version live now and its document. Unsupported formats require
  * a venue reset. A version's row is never changed once written (`menu_versions` is `appendOnly()`),
  * so each handle keeps the parsed documents it has read, frozen, and reads a document again only
  * when it is not kept or its row's content hash differs from the kept one.

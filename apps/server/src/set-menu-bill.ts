@@ -154,7 +154,8 @@ export async function readBillSetMenus(
   tx: Transaction,
   workingOrderId: string,
 ): Promise<BillSetMenuState> {
-  return (await readBillsSetMenus(tx, [workingOrderId])).get(workingOrderId)!.setMenus;
+  const read = await readBillsSetMenus(tx, [workingOrderId], "recorded");
+  return read.get(workingOrderId)!.setMenus;
 }
 
 interface BillSetMenusRead {
@@ -165,6 +166,7 @@ interface BillSetMenusRead {
 export async function readBillsSetMenus(
   tx: Transaction,
   billIds: string[],
+  declarations: "recorded" | "published",
 ): Promise<Map<string, BillSetMenusRead>> {
   if (billIds.length === 0) return new Map();
   const billValues = sql`(select value from json_each(${JSON.stringify(billIds)}))`;
@@ -218,7 +220,7 @@ export async function readBillsSetMenus(
     ).values(),
   ];
   const served =
-    requests.length === 0 ? [] : await serveRecordedSetMenus(tx, requests, "published");
+    requests.length === 0 ? [] : await serveRecordedSetMenus(tx, requests, declarations);
   const servedByVersion = new Map(requests.map((request, i) => [key(request), served[i]!]));
   const exact = new Map(
     (

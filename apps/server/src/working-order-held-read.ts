@@ -481,7 +481,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         : { invoiceDelivery: billInvoiceDelivery(order.invoiceDelivery) }),
       ...(order.invoiced ? { invoiced: true as const } : {}),
       ...(await readOrderDinings(tx, [order.id])).get(order.id)!,
-      ...(order.hasSetMenus ? (await readBillsSetMenus(tx, [id])).get(id)! : {}),
+      ...(order.hasSetMenus ? (await readBillsSetMenus(tx, [id], "published")).get(id)! : {}),
       lines,
     };
   });

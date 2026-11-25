@@ -5,18 +5,20 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
-import {
-  devices,
-  deviceProfiles,
-  lineServiceCancellations,
-  products,
-  workingOrderLines,
-} from "@waitron/db";
+import { devices, deviceProfiles, lineServiceCancellations, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import { deviceProfileAdmissionRoles, hashSessionToken, tillSessions } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import {
+  createCategory,
+  createExtraList,
+  createProduct,
+  updateProduct,
+  writeProductModifiers,
+} from "@waitron/menu";
 import type { AllergyMoveRead } from "@waitron/module";
+import type { ExtraSelection, ProductAllergens } from "@waitron/shared";
 import {
   listDepartments,
   readPartyAllergy,
@@ -27,14 +29,9 @@ import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
 import { mountTillApi } from "./till-api.js";
 import { type TillApiDeps } from "./till-api-deps.js";
 import { noteSessionPerson } from "./testing/tab-person.js";
-import {
-  OPERATOR,
-  counterOrder,
-  inTx,
-  seat,
-  setupPartyVenue,
-  type PartyVenue,
-} from "./testing/party-venue.js";
+import { OPERATOR, inTx, seat, setupPartyVenue, type PartyVenue } from "./testing/party-venue.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
+import { parkOrder } from "./working-order-open.js";
 
 let v: PartyVenue;
 useVenueDb({
@@ -47,7 +44,14 @@ useVenueDb({
 });
 afterEach(() => vi.restoreAllMocks());
 
-async function fixture(existing = false) {
+async function publishBurger(allergens: ProductAllergens) {
+  await inTx(v, async (tx) => {
+    await updateProduct(tx, v.productId("Burger"), { allergens });
+    await publishWorkingMenu(tx, v.counter.menuId);
+  });
+}
+
+async function fixture(existing = false, extras: ExtraSelection[] = []) {
   const tableId = await v.table(`Allergy move ${randomUUID().slice(0, 8)}`);
   const destination = existing ? await seat(v, tableId) : null;
   if (destination !== null)
@@ -62,15 +66,19 @@ async function fixture(existing = false) {
         OPERATOR,
       ),
     );
-  await v.db
-    .update(products)
-    .set({ allergens: {} })
-    .where(eq(products.id, v.productId("Burger")));
-  const billId = await counterOrder(v, "Burger");
+  await publishBurger({});
+  const billId = randomUUID();
+  await parkOrder({ db: v.db }, v.cfg, {
+    id: billId,
+    zoneId: v.counter.zoneId,
+    lines: [{ menuItemId: v.counterItem("Burger"), quantity: "1", extras }],
+    operatorId: OPERATOR,
+  });
   const [line] = await v.db
     .select()
     .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, billId));
+    .where(eq(workingOrderLines.workingOrderId, billId))
+    .orderBy(workingOrderLines.lineNo);
   const { deviceId, profileId } = await seedDevice(v.db, { capabilities: ["take-orders"] });
   await v.db
     .update(devices)
@@ -413,32 +421,46 @@ for (const action of ["preview", "move"] as const) {
 }
 
 it("previews parent nutrition and distinct extras, retaining unknown versus reviewed empty", async () => {
-  const f = await fixture();
-  await v.db
-    .update(products)
-    .set({ allergens: { milk: {} } })
-    .where(eq(products.id, v.productId("Burger")));
-  await v.db
-    .update(products)
-    .set({ allergens: {} })
-    .where(eq(products.id, v.productId("Flan")));
-  for (const [name, productId, lineNo, quantity] of [
-    ["Reviewed extra", v.productId("Flan"), 2, 1500],
-    ["Unknown extra", null, 3, 500],
-  ] as const)
-    await v.db.insert(workingOrderLines).values({
-      workingOrderId: f.billId,
-      parentLineId: f.line.id,
-      productId,
-      lineNo,
-      name,
-      descriptions: { [v.cfg.locale]: name },
-      quantity,
-      unitPriceGross: 0,
-      lineTotal: 0,
-      vatClass: "general",
-      takeawayVatClass: "general",
-    });
+  const extras = await inTx(v, async (tx) => {
+    const { id: categoryId } = await createCategory(tx, { name: "Extras" });
+    const make = (name: string, allergens?: ProductAllergens) =>
+      createProduct(tx, {
+        categoryId,
+        name,
+        customerName: { es: `${name} customer` },
+        kitchenName: `${name} kitchen`,
+        pricingUnit: "weight",
+        unitPrice: "1.00",
+        vatClass: "general",
+        ...(allergens === undefined ? {} : { allergens }),
+      });
+    const items = [
+      { productId: (await make("Reviewed extra", {})).id, portion: "1.500" },
+      { productId: (await make("Unknown extra")).id, portion: "0.500" },
+    ];
+    const { id: listId } = await createExtraList(
+      tx,
+      {
+        name: "Allergy extras",
+        customerName: null,
+        kitchenName: null,
+        minPicks: 0,
+        maxPicks: null,
+        active: true,
+        items: items.map((item) => ({
+          ...item,
+          maxQuantity: 1,
+          preselected: false,
+          price: "0.00",
+        })),
+      },
+      v.cfg.locale,
+    );
+    await writeProductModifiers(tx, v.productId("Burger"), [{ kind: "extras", id: listId }]);
+    return [{ listId, picks: items.map(({ productId }) => ({ productId, quantity: 1 })) }];
+  });
+  const f = await fixture(false, extras);
+  await publishBurger({ milk: {} });
   const before = frozen();
   const response = await f.request();
   expect(response.status).toBe(200);

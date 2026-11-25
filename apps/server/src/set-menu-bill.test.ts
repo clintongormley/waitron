@@ -23,6 +23,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listZoneOffers } from "@waitron/venue-service";
 import {
   readBillSetMenus,
+  readBillsSetMenus,
   refuseUnlessSetMenuBill,
   setMenuLineDescriptions,
 } from "./set-menu-bill.js";
@@ -229,6 +230,24 @@ it("does not read a menu document for an ordinary bill", async () => {
   } finally {
     restore();
   }
+});
+
+it("reads the live menus' declarations only for a caller that shows the bill's dishes", async () => {
+  const id = await tableBill();
+  await inTx(venue, (tx) => seedBillSetMenu(tx, id, daily, 1));
+  const liveReads = async (run: () => Promise<unknown>) => {
+    const { queries, restore } = observeMenuVersionReads();
+    try {
+      await run();
+      return queries.filter((query) => query.sql.includes('"menu_releases"')).length;
+    } finally {
+      restore();
+    }
+  };
+  expect(await liveReads(() => read(id))).toBe(0);
+  expect(
+    await liveReads(() => inTx(venue, (tx) => readBillsSetMenus(tx, [id], "published"))),
+  ).toBeGreaterThan(0);
 });
 
 it("keeps a paid dish placed but makes it unavailable for moves", async () => {
