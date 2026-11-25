@@ -432,9 +432,9 @@ ticket de devolución que no se imprime solo se puede imprimir desde **Buscar cu
 pestaña **Transacciones**.
 
 Si cierras la ventana antes de que vuelva todo el dinero, **Buscar cuenta** muestra el recibo en
-**Devoluciones en curso**. El dinero que aún espera a la compañía de la tarjeta queda en cambio en
-este TPV: vuelve a abrir **Devolver dinero** en el recibo en este TPV para continuar. Si no, elige
-el recibo en **Buscar cuenta** para continuar:
+**Devoluciones en curso**. Si **Buscar cuenta** no lo muestra, la devolución espera en este TPV:
+vuelve a abrir **Devolver dinero** en el recibo para continuar. Si lo muestra, elige el recibo en
+**Buscar cuenta** para continuar:
 
 - **Devolver … en efectivo** o **Devolver … a la tarjeta** devuelve lo que queda de esa forma.
 - **Terminar** registra lo devuelto.

@@ -409,9 +409,9 @@ When a card refund waits for the card company, choose **Check again** to see its
 itself can be printed from **Find a bill**, on the **Transactions** tab.
 
 If you close the window before all the money is back, **Find a bill** lists the receipt under
-**Money back under way**. Money still waiting for the card company stays on this till instead:
-open **Give money back** on the receipt again on this till to carry on. Otherwise, choose the
-receipt in **Find a bill** to carry on:
+**Money back under way**. If **Find a bill** does not list it, the money back is waiting on this
+till: open **Give money back** on the receipt again to carry on. Otherwise, choose the receipt in
+**Find a bill** to carry on:
 
 - **Give back … in cash** or **Give back … to card** returns what is left that way.
 - **Finish** records what has been given back.
