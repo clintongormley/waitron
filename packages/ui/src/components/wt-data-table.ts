@@ -1929,6 +1929,17 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.clearFilters();
   }
 
+  /** Drops a column's filter and sort when its owning view is left. */
+  resetColumnView(key: string, defaultSortKey: string): void {
+    if (this.sortKey === key) {
+      this.sortKey = defaultSortKey;
+      this.sortDirection = "ascending";
+      this.#persistView();
+    }
+    const column = this.columns.find((current) => current.key === key);
+    if (column?.filter) this.#chooseFilter(column, []);
+  }
+
   /** Clears the choices on the table’s columns. */
   clearFilters(): void {
     const widths = this.filterColumnWidths ?? this.#currentColumnWidths();
@@ -3256,9 +3267,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const treeVisible = isTree ? this.#treeShown().shown : undefined;
     const renderedCount = isTree ? treeVisible!.rows.length : visible.length;
     if (renderedCount === 0)
-      return this.#withToolbar(
-        tableMessage(this.noMatchesMessage, searchRanks ? "no-matches-action" : undefined),
-      );
+      return this.#withToolbar(tableMessage(this.noMatchesMessage, "no-matches-action"));
 
     const shown = this.#shownColumns();
     const widths =

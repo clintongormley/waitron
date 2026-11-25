@@ -46,6 +46,7 @@ import "../widgets/extra-list-form.js";
 import "../widgets/option-list-form.js";
 import "../widgets/product-editor.js";
 import "../widgets/product-browser.js";
+import { productsAddAction, productsAddActionStyles } from "./products-add-action.js";
 import { offMenusSentence } from "../widgets/off-menus.js";
 import "../widgets/course-list.js";
 import type { CourseList } from "../widgets/course-list.js";
@@ -67,21 +68,10 @@ export class ProductsScreen extends LitElement {
   static override styles = [
     baseStyles,
     pageTitleStyles,
+    productsAddActionStyles,
     css`
       :host {
         display: block;
-      }
-      .header {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--wt-space-3);
-        margin-bottom: var(--wt-space-4);
-      }
-      h1 {
-        margin: 0;
-        color: var(--wt-color-text);
       }
       .delete-extra-lists {
         overflow-wrap: anywhere;
@@ -137,8 +127,7 @@ export class ProductsScreen extends LitElement {
   @state() private placementFailures: PlacementFailure[] = [];
   @state() private placementBusy = false;
   #editorGeneration = 0;
-  /** The category whose menu started the open add, or null for All products; undefined while none is. */
-  #addFrom: string | null | undefined = undefined;
+  #restoreAddFocus: (() => void) | null = null;
   #linkedProduct: string | null = null;
   /** The `product` word as this screen last read or wrote it. A new product's editor is named by
    * none, so only the word going away closes an editor. */
@@ -590,12 +579,17 @@ export class ProductsScreen extends LitElement {
     return this.shadowRoot?.querySelector("dashboard-product-browser") ?? null;
   }
 
-  /** An add hands focus back to the ⋮ of the row it started from once its last window closes. */
   #refocusAdd(): void {
-    const from = this.#addFrom;
-    this.#addFrom = undefined;
-    if (from !== undefined) this.#browser()?.focusRowMenu(from);
+    const restore = this.#restoreAddFocus;
+    this.#restoreAddFocus = null;
+    restore?.();
   }
+
+  readonly #addFromHeading = (): void => {
+    this.#restoreAddFocus = () =>
+      this.renderRoot.querySelector<HTMLElement>('.header [data-test="add-product"]')?.focus();
+    this.#openCreate(null);
+  };
 
   #closePlacement(): void {
     this.placing = null;
@@ -759,12 +753,16 @@ export class ProductsScreen extends LitElement {
     const readError = this.#tableReadError();
     const tableHidden = !this.productsLoaded;
     const locales = this.contentLanguages?.languages ?? [];
+    const readyToAdd = this.productsLoaded && this.menuSettings !== null;
+    const hasUnits = this.units.length > 0;
+    const hasLanguages = locales.length > 0;
     const refusals = this.#childRefusalErrors();
     const error = this.productsLoaded || !this.#readErrorShown ? this.errorKey : null;
     const errorText = error ? refusalText(error, this.refusalParams) : "";
     return html`
       <div class="header">
         <h1 tabindex="-1">${t("nav.products")}</h1>
+        ${productsAddAction(readyToAdd, hasLanguages, hasUnits, this.#addFromHeading)}
       </div>
       ${
         tableHidden || readError !== null
@@ -791,14 +789,15 @@ export class ProductsScreen extends LitElement {
         .categories=${this.categories}
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
-        .canAddProduct=${this.menuSettings !== null && locales.length > 0 && this.units.length > 0}
+        .canAddProduct=${readyToAdd && hasLanguages && hasUnits}
         .loaded=${this.productsLoaded}
         .defaultColor=${this.menuSettings?.defaultColor ?? null}
         .takeawayVat=${this.menuSettings?.takeawayVat ?? false}
         @add-product=${(event: CustomEvent<{ categoryId: string | null }>) => {
           event.stopPropagation();
-          this.#addFrom = event.detail.categoryId;
-          this.#openCreate(event.detail.categoryId);
+          const { categoryId } = event.detail;
+          this.#restoreAddFocus = () => this.#browser()?.focusRowMenu(categoryId);
+          this.#openCreate(categoryId);
         }}
         @edit-product=${(event: CustomEvent<{ productId: string; field?: string }>) => {
           event.stopPropagation();
@@ -808,7 +807,8 @@ export class ProductsScreen extends LitElement {
           event.stopPropagation();
           this.#openDelete(event.detail.productId);
         }}
-      ></dashboard-product-browser>
+        >${productsAddAction(readyToAdd, hasLanguages, hasUnits, this.#addFromHeading, "empty-action")}</dashboard-product-browser
+      >
       ${errorText ? html`<p class="error" role="alert">${errorText}</p>` : nothing}
       <dashboard-product-editor
         @wt-close=${() => {

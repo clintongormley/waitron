@@ -351,6 +351,7 @@ async function editKitchenName(el: ProductsScreen): Promise<void> {
   await editor(el).updateComplete;
 }
 
+beforeEach(() => localStorage.setItem("waitron.products.view", "tree"));
 afterEach(cleanupWidgets);
 afterEach(() => localStorage.clear());
 
@@ -1308,14 +1309,101 @@ describe("menu-screen", () => {
     expect(api.listProducts).toHaveBeenCalledTimes(2);
   });
 
-  it("draws the title alone in the header", async () => {
+  it.each(["heading", "empty"] as const)(
+    "adds an unfiled product from the %s and returns focus to the heading",
+    async (from) => {
+      localStorage.removeItem("waitron.products.view");
+      const api = stubApi({
+        listProducts: vi.fn().mockResolvedValue(from === "empty" ? [] : products),
+      });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+      await flush(el);
+      const heading = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        '.header [data-test="add-product"]',
+      )!;
+      const opener =
+        from === "heading"
+          ? heading
+          : el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+              '[slot="empty-action"] wt-button',
+            )!;
+      if (from === "empty") {
+        expect((await productTable(el)).shadowRoot!.querySelector(".message")?.textContent).toBe(
+          "There are no products yet.",
+        );
+      }
+      expect(opener?.checkVisibility()).toBe(true);
+      await userEvent.click(opener);
+      expect(editor(el).open).toBe(true);
+      expect(editor(el).newCategoryId).toBeNull();
+      if (from === "heading") {
+        emit(editor(el), "wt-submit", { value: value as ProductEditorInput });
+        await vi.waitFor(() => expect(step(el).open).toBe(true));
+        const closed = dialogClosed(step(el));
+        step(el).shadowRoot!.querySelector<HTMLElement>('[data-test="skip"]')!.click();
+        await closed;
+      } else {
+        const closed = dialogClosed(editor(el));
+        emit(editor(el), "wt-cancel", {});
+        await closed;
+      }
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(heading));
+    },
+  );
+
+  it.each([
+    { locale: "en-GB", missing: "unit", reason: /unit/i },
+    { locale: "es-ES", missing: "language", reason: /idioma/i },
+  ])(
+    "explains why Add product is disabled without a $missing",
+    async ({ locale, missing, reason }) => {
+      const before = currentLocale();
+      setLocale(locale);
+      onTestFinished(() => setLocale(before));
+      const api = stubApi(
+        missing === "unit"
+          ? { listUnits: vi.fn().mockResolvedValue([]) }
+          : {
+              getContentLanguages: vi
+                .fn()
+                .mockResolvedValue({ defaultLanguage: "es", languages: [] }),
+            },
+      );
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+      await flush(el);
+      const button = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        '.header [data-test="add-product"]',
+      )!;
+      expect(button?.disabled).toBe(true);
+      expect(button.parentElement?.textContent).toMatch(reason);
+    },
+  );
+
+  it("opens a category link in Tree and clears its address when the user chooses List", async () => {
+    localStorage.setItem("waitron.products.view", "list");
+    const before = location.href;
+    onTestFinished(() => history.replaceState(null, "", before));
+    history.replaceState(null, "", "/products/category/c1");
+    const replace = vi.spyOn(history, "replaceState");
+    onTestFinished(() => replace.mockRestore());
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
-    await flush(el);
-    const header = el.shadowRoot!.querySelector(".header")!;
-    expect([...header.children].map((child) => child.localName)).toEqual(["h1"]);
-    expect(el.shadowRoot!.querySelector("[data-test=add-product]")).toBeNull();
+    const table = await productTable(el);
+    await vi.waitFor(() =>
+      expect(
+        table.shadowRoot!.querySelector('tr[data-row-key="folder:c1"]')?.checkVisibility(),
+      ).toBe(true),
+    );
+    const switcher = list(el).shadowRoot!.querySelector("wt-segmented-control")!;
+    expect(switcher.value).toBe("tree");
+    await userEvent.click(switcher.shadowRoot!.querySelector("button")!);
+    await vi.waitFor(() =>
+      expect(table.shadowRoot!.querySelector('tr[data-row-key="folder:c1"]')).toBeNull(),
+    );
+    expect(
+      replace.mock.calls.some(([, , url]) => new URL(String(url), before).pathname === "/products"),
+    ).toBe(true);
   });
 
   /** Lets a closing native dialog hand focus back, which it does a task after it closes. */
@@ -4313,6 +4401,7 @@ it("A462 Products root closure clears category URL through native tree events", 
   onTestFinished(() => history.replaceState(null, "", previousUrl));
   history.replaceState(null, "", "/products");
   localStorage.clear();
+  localStorage.setItem("waitron.products.view", "tree");
   sessionStorage.clear();
   const api = stubApi({
     listProducts: vi

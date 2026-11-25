@@ -3,10 +3,14 @@ import { codeOf } from "../i18n/codes.js";
 import { refusalText } from "./delete-refusal.js";
 import { fill, t } from "../i18n/t.js";
 
-export function productListActionFeedback(message: string, announce: boolean) {
+export function productListActionFeedback(
+  message: string,
+  announce: boolean,
+  slot = "toolbar-bottom",
+) {
   return message
     ? html`<p
-        slot="toolbar-bottom"
+        slot=${slot}
         class="error"
         data-test="list-action-error"
         role=${announce ? "alert" : nothing}
@@ -49,8 +53,8 @@ export function clearProductSearch(clear: () => void, slot?: string) {
   >`;
 }
 
-export function hiddenProductSave(name: string, clear: () => void) {
-  return html`<div slot="toolbar-bottom" class="actions" data-test="product-saved-hidden">
+export function hiddenProductSave(name: string, clear: () => void, slot = "toolbar-bottom") {
+  return html`<div slot=${slot} class="actions" data-test="product-saved-hidden">
     <span role="status">${fill("product.saved_hidden", { name })}</span>
     ${clearProductSearch(clear)}
   </div>`;

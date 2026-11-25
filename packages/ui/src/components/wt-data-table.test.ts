@@ -3392,6 +3392,11 @@ test("noMatchesMessage shows when a filter, with nothing searched, hides every r
     rows: [rowsS[1]!],
     noMatchesMessage: "Hidden by a filter",
   });
+  const clear = document.createElement("button");
+  clear.slot = "no-matches-action";
+  clear.textContent = "Clear filters";
+  clear.addEventListener("click", () => el.clearFilters());
+  el.append(clear);
   expect(el.shadowRoot!.querySelector(".table-search")).toBeNull();
   await chooseOption(
     el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!,
@@ -3401,6 +3406,9 @@ test("noMatchesMessage shows when a filter, with nothing searched, hides every r
   expect(rowKeysS(el)).toEqual([]);
   expect(el.shadowRoot!.querySelector(".message")!.textContent).toBe("Hidden by a filter");
   expect(el.shadowRoot!.querySelector(".table-toolbar")).not.toBeNull();
+  expect(clear.getBoundingClientRect().width).toBeGreaterThan(0);
+  await userEvent.click(clear);
+  expect(rowKeysS(el)).toEqual(["2"]);
 });
 
 test("filter dropdowns render and narrow rows without a search box", async () => {

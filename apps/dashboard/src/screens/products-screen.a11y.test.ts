@@ -439,6 +439,7 @@ describe.each(["light", "dark"] as const)("named extras archive warnings (%s)", 
                 })),
               ),
             });
+            localStorage.setItem("waitron.products.view", entry === "folder" ? "tree" : "list");
             const { el, host } = await mountWidget<ProductsScreen>(
               "dashboard-products-screen",
               { api },

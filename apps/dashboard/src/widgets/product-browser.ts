@@ -37,7 +37,12 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-spinner.js";
-import { acceptsMenuDrop, type CategoryNameDraft, type ProductList } from "./product-list.js";
+import {
+  acceptsMenuDrop,
+  type CategoryNameDraft,
+  type ProductList,
+  type ProductsView,
+} from "./product-list.js";
 import { folderMadeAt, isRouted, type FolderMadeAt } from "./folder-made-at.js";
 import { categoryTree } from "./classification-fields.js";
 import "./category-color-form.js";
@@ -60,6 +65,15 @@ import {
   categoryDeleteImpact,
   productCategoryDeleteStyles,
 } from "./product-category-delete.js";
+import {
+  observeProductsWidth,
+  productSearchAndSelect,
+  productSelectionBar,
+  productsToolbarStyles,
+  productViewSwitch,
+  rememberedProductsView,
+  rememberProductsView,
+} from "./product-list-toolbar.js";
 
 interface OperationDraft {
   destination: string;
@@ -71,6 +85,9 @@ export class ProductBrowser extends LitElement {
   constructor() {
     super();
     new LocaleChangeController(this);
+    observeProductsWidth(this, (phone) => {
+      this.phone = phone;
+    });
   }
   static override styles = [
     baseStyles,
@@ -78,18 +95,12 @@ export class ProductBrowser extends LitElement {
     formMessageStyles,
     productAvailabilityFeedbackStyles,
     productCategoryDeleteStyles,
+    productsToolbarStyles,
     css`
       :host {
         display: block;
         min-width: 0;
         container-type: inline-size;
-      }
-      .actions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-2);
-        padding: var(--wt-space-3) 0;
       }
       .delete-extra-lists {
         overflow-wrap: anywhere;
@@ -102,10 +113,6 @@ export class ProductBrowser extends LitElement {
       }
       .operation-footer {
         width: 100%;
-      }
-      wt-input {
-        flex: 1 1 calc(var(--wt-tap-min) * 7);
-        min-width: 0;
       }
     `,
   ];
@@ -210,6 +217,8 @@ export class ProductBrowser extends LitElement {
       )!.requestClose("cancel");
     else this.operation = null;
   }
+  @state() private view = rememberedProductsView();
+  @state() private phone = false;
   #revealed: string | null = null;
   #folderMadeAt: ReadonlyMap<string, FolderMadeAt> = new Map();
 
@@ -223,6 +232,8 @@ export class ProductBrowser extends LitElement {
     this.#openMove(keys, folderId ?? "top");
   }
   override willUpdate(changed: PropertyValues): void {
+    if (changed.has("categoryId") && this.categoryId !== null && this.view === "list")
+      this.#setView("tree");
     if (changed.has("search")) this.hiddenSave = null;
     if (this.operation === null) this.#releaseOperation();
     else if (!this.#operationScope) {
@@ -304,6 +315,29 @@ export class ProductBrowser extends LitElement {
         ?.scrollIntoView({ block: "nearest" });
     }
   }
+
+  #setView(view: ProductsView): void {
+    this.#list()?.resetCategoryView();
+    this.view = view;
+    this.selected = [];
+    this.hiddenSave = null;
+    this.#revealed = null;
+  }
+
+  readonly #chooseView = (view: ProductsView): void => {
+    this.#setView(view);
+    rememberProductsView(view);
+    if (view === "list" && this.categoryId !== null) {
+      this.categoryId = null;
+      this.#emit("open-category", { categoryId: null });
+    }
+    void this.updateComplete.then(async () => {
+      const list = this.#list();
+      await list?.updateComplete;
+      if (view === "list" && this.view === view) list?.resetCategoryView();
+      this.renderRoot.querySelector("wt-segmented-control")?.focus();
+    });
+  };
 
   #list(): ProductList | null {
     return this.shadowRoot?.querySelector("dashboard-product-list") ?? null;
@@ -921,7 +955,10 @@ export class ProductBrowser extends LitElement {
   override render() {
     const renamed = this.#renamed(this.nameDraft);
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
+    const empty = this.view === "list" && !this.products.some(({ active }) => active);
+    const noticeSlot = empty ? "above-table" : "toolbar-bottom";
     return html`${productAvailabilityFeedback(this.availabilityError)}<dashboard-product-list
+        .view=${this.view}
         .availabilityPending=${this.availabilityPending}
         @change-availability=${this.#changeAvailability}
         .hidden=${this.tableHidden}
@@ -1001,77 +1038,34 @@ export class ProductBrowser extends LitElement {
           this.nameError = "";
         }}
       >
-        <wt-icon-button
-          slot="toolbar-start"
-          data-test="select"
-          label=${t("folders.select")}
-          icon="select-rows"
-          .pressed=${this.selecting}
-          @click=${() => {
+        <slot name="empty-action" slot="empty-action"></slot>
+        ${productSearchAndSelect(
+          this.search,
+          (search) => {
+            this.search = search;
+          },
+          this.selecting,
+          () => {
             this.actionError = "";
             this.selected = [];
             this.selecting = !this.selecting;
-          }}
-        ></wt-icon-button>
-        <wt-input
-          slot="toolbar-search"
-          name="menu-search"
-          type="search"
-          label=${t("folders.search")}
-          .value=${this.search}
-          @wt-change=${(event: CustomEvent<{ value: string }>) => {
-            event.stopPropagation();
-            this.search = event.detail.value;
-          }}
-        ></wt-input>
-        ${
-          this.selecting || this.summaryLoading || this.operationBusy
-            ? html`<div
-                slot="toolbar-bottom"
-                class="actions"
-                data-test="selection-bar"
-                role="group"
-                aria-label=${t("folders.select")}
-              >
-                ${
-                  !this.operation && (this.summaryLoading || this.operationBusy)
-                    ? html`<wt-spinner></wt-spinner>`
-                    : nothing
-                }
-                ${
-                  this.selecting
-                    ? html`<span data-test="selected-count" aria-live="polite"
-                          >${countOf("folders.selected", this.selected.length)}</span
-                        >
-                        <wt-button
-                          data-test="move"
-                          variant="secondary"
-                          .disabled=${!this.selected.length || this.summaryLoading || this.operationBusy}
-                          @click=${() => this.#openMove()}
-                          >${t("folders.move")}</wt-button
-                        >
-                        <wt-button
-                          data-test="delete"
-                          variant=${this.#deleteWaiting ? "secondary" : "danger"}
-                          .disabled=${this.#deleteWaiting || this.operationBusy}
-                          @click=${() => void this.#openDelete()}
-                          >${t("action.delete")}</wt-button
-                        >
-                        <wt-button
-                          data-test="cancel-selection"
-                          variant="secondary"
-                          @click=${() => void this.#leaveSelection()}
-                          >${t("action.done")}</wt-button
-                        >`
-                    : nothing
-                }
-              </div>`
-            : nothing
-        }
+          },
+        )}
+        ${productViewSwitch(this.view, this.phone || empty, this.#chooseView)}
+        ${productSelectionBar({
+          selecting: this.selecting,
+          busy: this.summaryLoading || this.operationBusy,
+          showSpinner: !this.operation,
+          count: this.selected.length,
+          deleteWaiting: this.#deleteWaiting,
+          move: () => this.#openMove(),
+          remove: () => void this.#openDelete(),
+          done: () => void this.#leaveSelection(),
+        })}
         ${
           this.routingFailed && this.categories.length
             ? html`<p
-                slot="toolbar-bottom"
+                slot=${noticeSlot}
                 class="error"
                 role="status"
                 data-test="routing-unavailable"
@@ -1083,9 +1077,9 @@ export class ProductBrowser extends LitElement {
         ${
           this.hiddenSave === null
             ? clearProductSearch(this.#clearProductSearch, "no-matches-action")
-            : hiddenProductSave(this.hiddenSave.name, this.#clearProductSearch)
+            : hiddenProductSave(this.hiddenSave.name, this.#clearProductSearch, noticeSlot)
         }
-        ${productListActionFeedback(this.#actionNotice, !this.operation && !this.colorTarget)}
+        ${productListActionFeedback(this.#actionNotice, !this.operation && !this.colorTarget, noticeSlot)}
       </dashboard-product-list>
       ${this.#operationDialog()}<dashboard-category-color-form
         .open=${this.colorTarget !== null}

@@ -3514,6 +3514,69 @@ describe("a product's variants in the list", () => {
     await vi.waitFor(() => expect(table.wrapToFit).toBe(false));
   });
 
+  it.each(["en-GB", "es-ES"])("shows the List defaults at 1180 px in %s", async (locale) => {
+    setLocale(locale);
+    await page.viewport(1180, 844);
+    const dish = cecina();
+    dish.name = "Mushroom croquettes with roasted garlic and aged sheep cheese";
+    const { el } = await mountTree({
+      view: "list",
+      categories: [
+        { ...drinks, name: "Food and drinks served during the evening" },
+        { id: "deli", name: "Cured meats from local producers", parentId: "d", color: null },
+      ],
+      products: [dish],
+    });
+    const root = await tableRoot(el);
+    expect(rowKeys(root)).toEqual(["cecina"]);
+    const headings = () =>
+      [...root.querySelectorAll("thead th")].map((th) =>
+        (th.getAttribute("aria-label") ?? th.textContent!).replace(/[▲▼]/g, "").trim(),
+      );
+    expect(headings().slice(0, 4)).toEqual([
+      t("product.name"),
+      t("product.category"),
+      t("product.price"),
+      t("editor.available"),
+    ]);
+    const category = cellUnder(root, "cecina", t("product.category"));
+    expect(category.textContent!.trim()).toBe(
+      "Food and drinks served during the evening › Cured meats from local producers",
+    );
+    expect(category.querySelector('[part~="color-swatch"]')).not.toBeNull();
+    expect(category.querySelector("button")).toBeNull();
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    await vi.waitFor(() => expect(scroll.scrollWidth).toBe(scroll.clientWidth));
+    el.parentElement!.style.width = "390px";
+    await vi.waitFor(() => expect(headings()).not.toContain(t("product.category")));
+    expect(root.querySelector('wt-combobox[data-filter="category"]')).not.toBeNull();
+  });
+
+  it("finds products through category names and filters them through descendants in List", async () => {
+    const { el, table, root } = await mountTree({ view: "list", search: "Drinks" });
+    expect(rowKeys(root)).toEqual(["cola", "lager"]);
+    el.search = "";
+    await el.updateComplete;
+    await chooseOption(root.querySelector<WtCombobox>('wt-combobox[data-filter="category"]')!, "d");
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["cola", "lager"]);
+  });
+
+  it("sorts List products by Category with each variant still under its product", async () => {
+    const { table, root } = await mountTree({
+      view: "list",
+      products: [
+        product({ id: "apple", name: "Apple", primaryCategoryId: "f" }),
+        product({ id: "water", name: "Water", primaryCategoryId: "d", variants: [bunVariant] }),
+      ],
+    });
+    expect(rowKeys(root)).toEqual(["apple", "water"]);
+    await openVariants(root, table, "water");
+    root.querySelector<HTMLButtonElement>('button[data-sort="category"]')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["water", `water:${bunVariant.id}`, "apple"]);
+  });
+
   it("draws a small, muted arrow on a product with variants, at its arrow box's end", async () => {
     const { root } = await mountDeli();
     const arrow = root.querySelector<HTMLElement>('tr[data-row-key="cecina"] .tree-toggle')!;
