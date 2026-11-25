@@ -64,7 +64,7 @@ publication dates, imports), so it needs a decision.
   sale or for a table elsewhere. A per-zone choice of menus (A1548) was withdrawn for this. Set menus are the exception: they go only on
   a seated table's bill ([set-menu design](../superpowers/specs/2026-11-17-set-menus-design.md)).
 
-- **A1546, watcher 2026-11-15 17:05:** special-day bands and month runs use dashed purple; season lines remain solid and purple remains selectable. Day boxes show selected stations, or all without a station filter, to managers in every view. The season-hours link remains on special dates too. The 2026-11-25 decision below extends the station rows to viewers.
+- **A1546, watcher 2026-11-15 17:05:** special-day bands and month runs use dashed purple; season lines remain solid and purple remains selectable. Day boxes show selected stations, or all without a station filter, to managers in every view. The season-hours link remains on special dates too. The 2026-11-25 decision below extends the station rows to viewers. Year keeps the station filter in the address and [shows all stations in its day box](../developers/design-system.md#calendar).
 
 - **Pop-up in painters (A1545, owner, 2026-11-15).** Keep the small period pop-up inside
   the Calendar painters; elsewhere use the Periods pages. The owner chose “Pop-up in painters”

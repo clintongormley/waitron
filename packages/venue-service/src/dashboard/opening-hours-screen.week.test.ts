@@ -1382,6 +1382,25 @@ it.each([
   },
 );
 
+it("names a failed Year station batch in the day box", async () => {
+  const { el } = await mount("/opening-hours/view/year/show/stations/year/2026", undefined, false, {
+    readOnly: true,
+    timesFail: REFUSED,
+  });
+  const anchor = document.createElement("button");
+  el.append(anchor);
+  yearView(el)!.dispatchEvent(
+    new CustomEvent("calendar-day-open", {
+      bubbles: true,
+      composed: true,
+      detail: { date: "2026-12-09", returnTo: () => anchor },
+    }),
+  );
+  await expect
+    .poll(() => dayBox(el)?.shadowRoot?.querySelector('[role="alert"]')?.textContent)
+    .toBe("Prep-station times could not be loaded. They will be tried again.");
+});
+
 it("a special station day retains its season link and special-day action without repeating the explanation", async () => {
   const { el } = await mount("/opening-hours/view/week/station/s1/week/2026-12-14");
   await expect.poll(() => week(el)!.station?.state).toBe("ready");

@@ -5874,8 +5874,8 @@ Opening hours' Year.
   zone hours merge touching periods. Range entries wrap between entries, each “·” kept with the
   preceding range by a non-breaking space. The box uses `--wt-modal-standard-width`, constrained
   to the viewport, and scrolls vertically when needed. Staffing retains its compact content-sized box, flat rows and slots. After the staffing rows or Closed message, show the week’s rota phase to people who can open the rota from the box.
-  The bold Prep stations section shows the selected station or all active stations. Each has one
-  row with its joined hours. For one station or All prep stations, the day box shows the station
+  The bold Prep stations section shows the selected station or all active stations. Year lists
+  all active stations. Each station has one row with its joined hours. For one station or All prep stations, the day box shows the station
   section alone. Year, Show all and department views keep their department and zone rows.
   The station hours come from the passive batch read or the selected station's read. Failures are
   announced in the box. Viewers keep their read-only season navigation.

@@ -688,7 +688,6 @@ export class OpeningHoursScreen extends LitElement {
       () => {},
     );
   }
-  /** The station the address names, if the screen may show stations and the list holds it. */
   private shownStation() {
     if (this.view === "year" || !this.stationId || !this.stationsWanted()) return undefined;
     return this.stations?.find((station) => station.id === this.stationId);
@@ -728,7 +727,7 @@ export class OpeningHoursScreen extends LitElement {
       const failed = () => {
         if (current())
           this.stationReadError = t(
-            group ? "opening.stations_load_error" : "prep.times.load_error",
+            station ? "prep.times.load_error" : "opening.stations_load_error",
           );
       };
       const recovered = () => {
