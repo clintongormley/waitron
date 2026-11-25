@@ -361,14 +361,15 @@ junto** y **Por estación**; allí la ayuda se desactiva cuando el terminal se b
 
 ## Los platos iguales comparten fila {#identical-dishes}
 
-Un pedido de 2 × Hamburguesa, de una mesa o del mostrador, llega a la estación como dos platos, para que en una mesa el terminal pueda
-servir o mover cada uno por separado. La estación los sigue viendo juntos: la comanda de la estación,
-la pantalla de estación y el pase los muestran como una fila de 2 mientras son iguales, y la lista
-**También en este pedido** de la comanda y las comandas de corrección como **EN ESPERA CAMBIADO** los
-imprimen una sola vez. Los platos quedan en filas distintas cuando cambian sus extras o sus notas, o
-cuando uno va más avanzado que el otro. En la pantalla de estación, tocar una fila, o moverla a otra
-estación, lleva todos sus platos. Los platos al peso siempre se muestran e imprimen uno a uno, porque
-cada uno se pesa por separado.
+Un pedido de 2 × Hamburguesa llega a la estación como dos platos. Mientras sean iguales, la
+pantalla de estación y el pase los muestran como una fila de 2. Toca o mueve la fila en la estación
+para actuar sobre ambos platos. Los platos con extras, notas o fases distintas aparecen en filas
+separadas.
+
+Usa **Platos iguales en una comanda de estación** para imprimir una línea de 2 o dos líneas de 1.
+El ajuste también se aplica a los tickets de anulación de **Cerrar mesa**. La lista **También en
+este pedido** y las correcciones como **EN ESPERA CAMBIADO** imprimen juntos los platos iguales.
+Los platos al peso siempre se imprimen uno a uno.
 
 ## Un plato enviado tras acabar su periodo {#after-period}
 

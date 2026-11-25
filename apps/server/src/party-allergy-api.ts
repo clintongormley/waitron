@@ -21,6 +21,7 @@ import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import { requestCfg } from "./request-config.js";
 import { runBodyIds, type Run } from "./till-api-errors.js";
 import { type TillApiDeps } from "./till-api-deps.js";
+import { requireLineIds } from "./till-request-fields.js";
 import { assertStillSignedIn, requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
 import "./errors.js";
@@ -60,7 +61,11 @@ function sendTarget(input: unknown): AllergySendTarget {
     case "group":
       return { kind: "group", groupId: id(body.groupId, "groupId") };
     case "held-line":
-      return { kind: "held-line", lineId: id(body.lineId, "lineId") };
+      return {
+        kind: "held-line",
+        lineId: id(body.lineId, "lineId"),
+        ...(body.lineIds === undefined ? {} : { lineIds: requireLineIds(body.lineIds) }),
+      };
     case "course":
       return {
         kind: "course",

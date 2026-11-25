@@ -548,6 +548,7 @@ export type CorrectionSlip = {
   orderNumber: string;
   at: string;
   item: KitchenTicketItem;
+  grouping?: KitchenTicketGrouping;
 } & (
   | { kind: "VOID" | "RECALLED" }
   | { kind: "HOLD CHANGED"; direction: "added" | "removed" }
@@ -648,13 +649,14 @@ export function formatCorrectionSlip(
     );
   b.line(hhmm(new Date(slip.at), timeZone));
   emitKitchenNote(b, slip.kitchenNote, columns);
-  if (slip.item.group !== undefined) emitGroup(b, slip.item, [slip.item], columns, slip.locale);
   const sign = slip.kind !== "HOLD CHANGED" ? "" : slip.direction === "added" ? "+" : "-";
   const item =
     slip.kind === "ALLERGY CHANGED" || slip.kind === "ALLERGY REMOVED"
       ? { ...slip.item, allergy: slip.allergyBlock }
       : slip.item;
-  emitItem(b, item, columns, slip.locale, sign);
+  const items = slip.grouping === undefined ? [item] : arrangeTicketItems([item], slip.grouping);
+  if (item.group !== undefined) emitGroup(b, item, items, columns, slip.locale);
+  for (const entry of items) emitItem(b, entry, columns, slip.locale, sign);
   if (slip.kind === "EXTRA CANCELLED") {
     const prefix = `  ${kitchenTicketWords(slip.locale).cancel} `;
     for (const line of wrapText(

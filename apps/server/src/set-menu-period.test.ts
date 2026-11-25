@@ -120,23 +120,27 @@ function at(time: string) {
   vi.setSystemTime(new Date(`2026-11-19T${time}:00+01:00`));
 }
 
-async function draftMenuDish(recorded: boolean, time = "14:00") {
+async function draftMenuDish(recorded: boolean, time = "14:00", count = 1) {
   at("14:00");
   const { tabId, partyId } = await seatWithNoAllergies(
     venue,
     await venue.table(crypto.randomUUID()),
   );
-  if (recorded) await inTx(venue, (tx) => seedBillSetMenu(tx, tabId, daily, 1));
+  if (recorded)
+    await inTx(venue, async (tx) => {
+      for (let lineNo = 1; lineNo <= count; lineNo++)
+        await seedBillSetMenu(tx, tabId, daily, lineNo);
+    });
   at(time);
   return saveSetMenuDraft(
     venue,
     { tabId, partyId },
-    {
+    ...Array.from({ length: count }, () => ({
       menuItemId: daily.menuItemId,
       menuVersionId: daily.versionId,
       setMenuId: daily.menuId,
       quantity: "1",
-    },
+    })),
   );
 }
 
@@ -153,7 +157,7 @@ async function send(
       expectedEdit: await expectedDraftEditForTest(tx, draft),
       draftRevision: draft.revision,
       lateSend,
-      groups: [{ lineIds: [draft.lines[0]!.id], release }],
+      groups: [{ lineIds: draft.lines.map((line) => line.id), release }],
     }),
   );
 }
@@ -196,33 +200,42 @@ it("asks before sending from an ended unrecorded copy and places the confirmed d
   });
 });
 
-it.each(["course", "line"])("asks before firing a held set-menu %s after lunch", async (kind) => {
-  const draft = await draftMenuDish(true);
-  const {
-    groups: [group],
-  } = await send(draft, "hold");
-  at("15:30");
-  const command = await commandFor(venue, draft.partyId);
-  const lineId = group!.lineIds[0]!;
-  const route = kind === "course" ? `${group!.id}/fire` : "fire-line";
-  const release = (lateSend?: { menuIds: string[] }) =>
-    tillRequest(app, cookie, "POST", `/api/parties/${draft.partyId}/groups/${route}`, {
-      ...command,
-      submissionId: crypto.randomUUID(),
-      lineId,
-      lateSend,
+it.each(["course", "line", "row"])(
+  "asks before firing a held set-menu %s after lunch",
+  async (kind) => {
+    const draft = await draftMenuDish(true, "14:00", kind === "row" ? 2 : 1);
+    const {
+      groups: [group],
+    } = await send(draft, "hold");
+    at("15:30");
+    const command = await commandFor(venue, draft.partyId);
+    const lineIds = group!.lineIds;
+    const lineId = lineIds[0]!;
+    expect(lineIds).toHaveLength(kind === "row" ? 2 : 1);
+    const route = kind === "course" ? `${group!.id}/fire` : "fire-line";
+    const release = (lateSend?: { menuIds: string[] }) =>
+      tillRequest(app, cookie, "POST", `/api/parties/${draft.partyId}/groups/${route}`, {
+        ...command,
+        submissionId: crypto.randomUUID(),
+        lineId,
+        ...(kind === "row" ? { lineIds } : {}),
+        lateSend,
+      });
+    expect(await release()).toMatchObject({
+      status: 409,
+      json: {
+        code: "menu_period.ended",
+        params: { menuItemIds: [daily.menuItemId], workingOrderLineIds: lineIds },
+      },
     });
-  expect(await release()).toMatchObject({
-    status: 409,
-    json: {
-      code: "menu_period.ended",
-      params: { menuItemIds: [daily.menuItemId], workingOrderLineIds: [lineId] },
-    },
-  });
-  expect((await release({ menuIds: [daily.fullMenuId] })).status).toBe(200);
-  const dish = await dishRow(lineId);
-  expect(dish).toMatchObject({ latePeriodName: "Lunch", lateConfirmedBy: confirmer });
-});
+    expect((await release({ menuIds: [daily.fullMenuId] })).status).toBe(200);
+    for (const id of lineIds)
+      expect(await dishRow(id)).toMatchObject({
+        latePeriodName: "Lunch",
+        lateConfirmedBy: confirmer,
+      });
+  },
+);
 
 it.each([
   ["after lunch", false],

@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import {
   lineServiceCancellations,
   nowIso,
+  type orderGroups,
   ticketItems,
   workingOrderLines,
   type Transaction,
@@ -9,7 +10,8 @@ import {
 import { decimal, divideDecimal, multiplyDecimal } from "@waitron/shared";
 import type { DishKitchenItem } from "./dish-kitchen.js";
 import type { TradingContext } from "./trading-context.js";
-import { enqueueCorrectionSlips } from "./kitchen-ticket-corrections.js";
+import { enqueueCorrectionSlips, enqueueHoldCorrections } from "./kitchen-ticket-corrections.js";
+import { holdPaperFor } from "./order-group-hold-paper.js";
 import { isStarted } from "./kitchen-ticket-state.js";
 
 type Line = typeof workingOrderLines.$inferSelect;
@@ -63,7 +65,11 @@ export async function enqueueServiceCancellation(
   families: readonly Family[],
   work: ReadonlyMap<string, readonly DishKitchenItem[]>,
   preparationStarted: (dish: Line) => boolean = () => false,
-) {
+  hold?: {
+    groupOf: (dish: Line) => typeof orderGroups.$inferSelect | undefined;
+    stationGrouping?: true;
+  },
+): Promise<void> {
   const corrections = families.flatMap(({ dish, family }) =>
     family.flatMap(({ row, remaining }) => {
       const item = (work.get(dish.id) ?? []).find((item) => item.workingOrderLineId === row.id);
@@ -94,8 +100,40 @@ export async function enqueueServiceCancellation(
     billId,
     corrections.filter(({ item }) => item.fired).map(({ item }) => item),
     "VOID",
+    hold?.stationGrouping,
   );
-  return corrections;
+  if (hold === undefined || corrections.length === 0) return;
+  const placed = corrections.map(({ dish, ...correction }) => ({
+    ...correction,
+    group: hold.groupOf(dish),
+  }));
+  const holdPaper = await holdPaperFor(
+    tx,
+    placed.flatMap(({ group, requested }) => (requested && group !== undefined ? [group.id] : [])),
+  );
+  await enqueueHoldCorrections(
+    tx,
+    cfg,
+    billId,
+    placed.flatMap(({ group, requested, requestedAt, holdPaperQueued, item }) => {
+      if (item.fired) return [];
+      if (group === undefined) return requested && holdPaperQueued ? [item] : [];
+      if (
+        requested &&
+        holdPaper(group.id, { stationId: item.stationId, requestedAt, firedAt: null }) === undefined
+      )
+        return [];
+      return [
+        {
+          ...item,
+          group: group.displayNumber,
+          ...(group.holdPrintedAt === null ? {} : { holdGroupId: group.id }),
+        },
+      ];
+    }),
+    { kind: "HOLD CANCELLED" },
+    hold.stationGrouping,
+  );
 }
 
 export async function writeServiceCancellations(

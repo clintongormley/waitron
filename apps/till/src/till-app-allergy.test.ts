@@ -1288,6 +1288,18 @@ it.each([
   },
 );
 
+it("previews and fires the same held portions", async () => {
+  const { el } = await mountApp();
+  const screen = await openTable(el);
+  const selection = { lineId: "held-a", lineIds: ["held-a", "held-b", "held-c"] };
+  emit(screen, "fire-held-line", selection);
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  expect(api.previewPartyAllergy.mock.calls[0]?.[1]).toEqual({ kind: "held-line", ...selection });
+  await userEvent.click(dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-none]")!);
+  await vi.waitFor(() => expect(api.fireHeldLine).toHaveBeenCalledOnce());
+  expect(api.fireHeldLine.mock.calls[0]?.[2]).toMatchObject({ lineIds: selection.lineIds });
+});
+
 it("refreshes party metadata before using a newer allergy revision without replacing the draft", async () => {
   const getTablesState = vi.fn().mockResolvedValue([table4]);
   const listGroups = vi.fn().mockResolvedValue({ revision: 5, groups: [], printProblems: [] });

@@ -602,7 +602,9 @@ it("opens on the station's ticket grouping and held printing, after MOVED slips"
     ["combined", "One line: 3 x Burger"],
     ["separate", "A line each: 1 x Burger, three times"],
   ]);
-  expect(groupingField(el).hint).toBe("Applies to new station tickets and to reprints.");
+  expect(groupingField(el).hint).toBe(
+    "Applies to new station tickets, reprints and Finish table cancellation slips.",
+  );
   expect(heldSwitch(el).label).toBe("Print held groups in advance");
   expect(heldSwitch(el).checked).toBe(true);
   expect($(el, "[data-test=held-work-hint]")!.textContent).toBe(

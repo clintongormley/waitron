@@ -329,13 +329,14 @@ locks.
 
 ## Identical dishes share a row {#identical-dishes}
 
-An order of 2 × Burger, from a table or the counter, reaches the station as two dishes, so at a table the till can serve or move each
-one on its own. The station still reads them together: the station ticket, the station screen and
-the pass show them as one row of 2 while they are the same, and the ticket's **Also on this order** list and
-correction slips such as **HOLD CHANGED** print them once. Dishes stay on separate rows when their
-extras or notes differ, or when one is further along than the other. On the station screen, tapping
-a row, or moving it to another station, takes every dish in it. Weighed dishes always show and
-print one by one, since each is weighed on its own.
+An order of 2 × Burger reaches the station as two dishes. While they are identical, the station
+screen and the pass show them as one row of 2. Tap or move the station row to act on both dishes.
+Dishes with different extras, notes or stages appear on separate rows.
+
+Set **Identical dishes on a station ticket** to print one line of 2 or two lines of 1. That setting
+also applies to cancellation slips from **Finish table**. The **Also on this order** list and
+corrections such as **HOLD CHANGED** print identical dishes together. Weighed dishes always print
+one by one.
 
 ## A dish sent after its period ended {#after-period}
 

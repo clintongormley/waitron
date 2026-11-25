@@ -395,6 +395,7 @@ export async function enqueueCorrectionSlips(
   orderId: string,
   items: CorrectionItem[],
   kind: "VOID" | "RECALLED",
+  stationGrouping = false,
 ): Promise<void> {
   items = await withoutMadeHere(tx, items);
   if (items.length === 0) return;
@@ -406,7 +407,7 @@ export async function enqueueCorrectionSlips(
     notices.map(toNoticeItem),
     kind === "VOID" ? "void" : "recalled",
   );
-  await printCorrectionSlips(tx, cfg, orderId, items, { kind }, read);
+  await printCorrectionSlips(tx, cfg, orderId, items, { kind }, read, stationGrouping);
 }
 /** Record a reroute and correct the paper at the item's old station before its station changes. */
 export async function enqueueStationMoved(
@@ -447,6 +448,7 @@ export async function enqueueHoldCorrections(
   orderId: string,
   items: CorrectionItem[],
   change: HoldCorrection,
+  stationGrouping = false,
 ): Promise<void> {
   items = await withoutMadeHere(tx, items);
   if (items.length === 0) return;
@@ -461,7 +463,15 @@ export async function enqueueHoldCorrections(
   // Work added to a HOLD ticket has its allergy copies frozen inside printCorrectionSlips, after
   // `read` was taken, so its slips read their ticket items afresh.
   const added = change.kind === "HOLD CHANGED" && change.direction === "added";
-  await printCorrectionSlips(tx, cfg, orderId, items, change, added ? undefined : read);
+  await printCorrectionSlips(
+    tx,
+    cfg,
+    orderId,
+    items,
+    change,
+    added ? undefined : read,
+    stationGrouping,
+  );
 }
 /** An extra about to come off its dish, and the dish's kitchen item as the kitchen has it. */
 export interface CancelledExtra {
@@ -648,6 +658,7 @@ async function printCorrectionSlips(
   items: CorrectionItem[],
   change: CorrectionChange,
   read?: PortionRead,
+  stationGrouping = false,
 ): Promise<void> {
   const heldGroups = items.flatMap((item) => item.holdGroupId ?? []);
   if (heldGroups.length > 0) {
@@ -699,8 +710,7 @@ async function printCorrectionSlips(
 
   const at = new Date().toISOString();
 
-  // Identical whole portions at a station with the same correction share one slip, whatever the
-  // station's grouping, as one line of their summed quantity would.
+  // Identical whole portions with the same correction share one header.
   const whole = read?.whole ?? (await readWholePortionLines(tx, lineIds));
   const slips: {
     stationId: string;
@@ -758,6 +768,7 @@ async function printCorrectionSlips(
           takeAway: header.takeAway,
           at,
           item: { ...item, qty: thousandthsToDecimal(thousandths) },
+          ...(stationGrouping ? { grouping: stationNames.get(stationId)!.ticketGrouping } : {}),
         },
         group[0]!,
         timeZone,

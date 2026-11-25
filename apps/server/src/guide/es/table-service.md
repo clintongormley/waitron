@@ -353,7 +353,8 @@ rellenada, como se explica en **Devolver un pago desde el recibo**.
 
 Cuando eliges **Cerrar mesa** y una cuenta pagada aún tiene platos sin servir, una ventana con un
 título como **2 platos sin servir** los muestra, y puedes cancelarlos todos o, si alguno tiene ticket de estación, pasar
-la comida al mostrador.
+la comida al mostrador. Puedes elegir la devolución plato por plato. El ticket de anulación
+sigue el [ajuste de agrupación de la estación](kitchen-service.md#identical-dishes).
 
 Para un plato que ha pasado a la estación pero no está marcado como empezado, responde a **En
 preparación**. Para los demás, la ventana muestra la respuesta. Marca **Devolución** junto a cada
@@ -533,7 +534,8 @@ servido** en los detalles de la fila pregunta cuántos. [**Mover platos…**](ta
 elegir cuántos platos de una fila pasan a otra cuenta, cada uno con sus extras. **Descuento** y
 **Cancelar** actúan sobre la fila y te dejan elegir cuántos de sus platos. **Cambiar plato**, en los
 detalles de la fila, cambia todos los platos de la fila y permite aumentar la cantidad.
-Para reducirla, usa **Cancelar…**.
+Para reducirla, usa **Cancelar…**. Elige **Marchar ya** en los detalles de una fila en espera
+para enviar todos sus platos con sus extras.
 
 Los alérgenos y las etiquetas dietéticas se actualizan desde el producto mientras mantienes el
 pedido abierto. No necesitas publicar la carta ni guardar el pedido.

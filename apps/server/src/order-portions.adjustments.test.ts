@@ -3,7 +3,7 @@ import { paySavedBillInCash } from "./testing/bill-payment-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   adjustmentLines,
   adjustmentRefunds,
@@ -3267,66 +3267,100 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
     expect(await rowsOf(venue, bill.billId)).toEqual(before);
   });
 
-  it("A803 portions: Finish table lists each unserved portion of a row as its own dish and cancels each with its own keep-charge cancel and slip", async () => {
-    const bill = await portionsBill(burgerRow("3"));
-    const members = await dishesNamed(bill.billId, "Burger");
-    await paid(bill);
-    const args = async () => ({
-      partyId: bill.partyId,
-      expectedPartyRevision: await inTx(venue, (tx) => partyRevision(tx, bill.partyId)),
-      operatorId: venue.managerId,
-      expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, bill.billId))],
-      submissionId: randomUUID(),
-    });
-    const first = await args();
-    const listed = await inTx(venue, (tx) =>
-      finishPartyService(tx, venue.cfg, { ...first, admission: testTradingAdmission() }),
-    ).then(
-      () => [],
-      (error: { code: string; params: { dishes: UnservedDish[] } }) => {
-        expect(error.code).toBe("party.unserved_dishes");
-        return error.params.dishes;
-      },
-    );
-    const burgersListed = listed.filter((dish) => members.includes(dish.lineId));
-    expect(burgersListed.map((dish) => [dish.lineId, dish.quantity])).toEqual(
-      members.map((id) => [id, "1.000"]),
-    );
+  it.each([
+    { ticketGrouping: "combined", hold: false, burgerLines: ["3 x BURG"] },
+    { ticketGrouping: "separate", hold: false, burgerLines: ["1 x BURG", "1 x BURG", "1 x BURG"] },
+    { ticketGrouping: "separate", hold: true, burgerLines: ["1 x BURG", "1 x BURG", "1 x BURG"] },
+  ] as const)(
+    "Finish table keeps per-dish cancellations and prints one $ticketGrouping slip (held=$hold)",
+    async ({ ticketGrouping, hold, burgerLines }) => {
+      await inTx(venue, (tx) => setStationPrinting(tx, { ticketGrouping, printHeldWork: hold }));
+      onTestFinished(() =>
+        inTx(venue, (tx) =>
+          setStationPrinting(tx, { ticketGrouping: "combined", printHeldWork: false }),
+        ),
+      );
+      const bill = hold
+        ? await heldPrinted(burgerRow("3"), true)
+        : await portionsBill(burgerRow("3"));
+      const members = await dishesNamed(bill.billId, "Burger");
+      await paid(bill);
+      const args = async () => ({
+        partyId: bill.partyId,
+        expectedPartyRevision: await inTx(venue, (tx) => partyRevision(tx, bill.partyId)),
+        operatorId: venue.managerId,
+        expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, bill.billId))],
+        submissionId: randomUUID(),
+      });
+      const first = await args();
+      const listed = await inTx(venue, (tx) =>
+        finishPartyService(tx, venue.cfg, { ...first, admission: testTradingAdmission() }),
+      ).then(
+        () => [],
+        (error: { code: string; params: { dishes: UnservedDish[] } }) => {
+          expect(error.code).toBe("party.unserved_dishes");
+          return error.params.dishes;
+        },
+      );
+      const burgersListed = listed.filter((dish) => members.includes(dish.lineId));
+      expect(burgersListed.map((dish) => [dish.lineId, dish.quantity])).toEqual(
+        members.map((id) => [id, "1.000"]),
+      );
 
-    const confirmed = await args();
-    const { jobs } = await newJobs(() =>
-      inTx(venue, (tx) =>
-        finishPartyService(tx, venue.cfg, {
-          admission: testTradingAdmission(),
-          ...confirmed,
-          cancellations: listed.map((dish) => ({
-            lineId: dish.lineId,
-            quantity: dish.quantity,
-            expectedBillRevision: dish.billRevision,
-            expectedContext: dish.context,
-            preparationStarted: false,
-            reasonId: venue.reasonId.houseVoid,
-          })),
-        }),
-      ),
-    );
+      const confirmed = await args();
+      const { jobs } = await newJobs(() =>
+        inTx(venue, (tx) =>
+          finishPartyService(tx, venue.cfg, {
+            admission: testTradingAdmission(),
+            ...confirmed,
+            cancellations: listed.map((dish) => ({
+              lineId: dish.lineId,
+              quantity: dish.quantity,
+              expectedBillRevision: dish.billRevision,
+              expectedContext: dish.context,
+              preparationStarted: !hold && dish.lineId === members[1],
+              reasonId: venue.reasonId.houseVoid,
+            })),
+          }),
+        ),
+      );
 
-    const cancels = (await recordedOn(bill.billId)).filter((record) => record.action === "cancel");
-    expect(
-      cancels
-        .filter((record) => members.includes(record.lineId!))
-        .map((record) => [members.indexOf(record.lineId!), record.quantity]),
-    ).toEqual([
-      [0, 1000],
-      [1, 1000],
-      [2, 1000],
-    ]);
-    expect(jobs.flat().filter((printed) => printed.includes("BURG"))).toEqual([
-      "1 x BURG",
-      "1 x BURG",
-      "1 x BURG",
-    ]);
-  });
+      const cancels = (await recordedOn(bill.billId)).filter(
+        (record) => record.action === "cancel",
+      );
+      expect(
+        cancels
+          .filter((record) => members.includes(record.lineId!))
+          .map((record) => [members.indexOf(record.lineId!), record.quantity]),
+      ).toEqual([
+        [0, 1000],
+        [1, 1000],
+        [2, 1000],
+      ]);
+      expect(
+        jobs
+          .map((job) => job.filter((printed) => printed.includes("BURG")))
+          .filter((job) => job.length > 0),
+      ).toEqual([burgerLines]);
+      if (!hold) {
+        const notices = await inTx(venue, (tx) => listStationNotices(tx, venue.stationId));
+        expect(
+          notices
+            .filter(
+              (notice) =>
+                notice.workingOrderId === bill.billId &&
+                notice.kind === "void" &&
+                notice.lineName === "BURG",
+            )
+            .map(({ quantity, wasStarted }) => [quantity, wasStarted])
+            .sort(),
+        ).toEqual([
+          ["1.000", true],
+          ["2.000", false],
+        ]);
+      }
+    },
+  );
 });
 
 describe("A803 portions: a whole-bill discount that prices a row two ways records today's split (plan D33)", () => {

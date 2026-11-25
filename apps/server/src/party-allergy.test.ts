@@ -504,6 +504,22 @@ describe("A669 candidate sets", () => {
     ]);
   });
 
+  it("previews every held portion in a Fire now selection", async () => {
+    const p = await party();
+    const lines = await held(p, 3);
+    const lineId = lines[0]!.id;
+    const lineIds = [lineId, lines[1]!.id];
+    const result = await view(p.partyId, { kind: "held-line", lineId, lineIds });
+    expect(result.dishes.map((dish) => dish.line)).toEqual(
+      lineIds.map((id) => ({ kind: "working", id })),
+    );
+    await split(v, p.partyId, p.tabId, [lines[1]!.lineNo]);
+    await expect(view(p.partyId, { kind: "held-line", lineId, lineIds })).rejects.toMatchObject({
+      code: "allergy.invalid",
+      params: { field: "lineIds" },
+    });
+  });
+
   it("empty line selection releases only ungrouped held work", async () => {
     const p = await party();
     const lines = await held(p, 2);

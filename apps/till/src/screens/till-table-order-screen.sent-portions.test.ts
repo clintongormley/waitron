@@ -186,12 +186,12 @@ it("A803 portion grouping: Move station on a grouped row moves every member", as
   ]);
 });
 
-it("A803 portion grouping: Fire now on a grouped row fires its first member", async () => {
-  const el = await openGrouped("held");
+it("Fire now on a grouped row names all three held portions", async () => {
+  const el = await openGrouped("held", {}, 3);
   const events = capture(el, "fire-held-line");
   await openMore(el);
   await userEvent.click(q(el, "[data-sent-line-fire]"));
-  expect(events).toEqual([{ lineId: "s-1" }]);
+  expect(events).toEqual([{ lineId: "s-1", lineIds: ["s-1", "s-2", "s-3"] }]);
 });
 
 it("A803 portion grouping: Void on a grouped row names every member", async () => {

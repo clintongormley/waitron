@@ -81,7 +81,7 @@ export type AllergySendTarget =
   | { kind: "draft"; draftId: string; lineIds: string[] }
   | { kind: "lines"; orderId: string; lineNos: number[] }
   | { kind: "group"; groupId: string }
-  | { kind: "held-line"; lineId: string }
+  | { kind: "held-line"; lineId: string; lineIds?: string[] }
   | { kind: "course"; orderId: string; courseId: string };
 
 export interface AllergyChangeSet {

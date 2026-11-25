@@ -5004,7 +5004,7 @@ export class TillApi {
   fireHeldLine(
     partyId: string,
     lineId: string,
-    command: AllergyCommand,
+    command: AllergyCommand & { lineIds?: string[] },
     options: ReadOptions = {},
   ): Promise<{ revision: number }> {
     return this.#request(
