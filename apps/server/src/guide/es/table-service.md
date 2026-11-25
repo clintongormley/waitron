@@ -429,10 +429,11 @@ Mantén la ventana abierta para aprovecharla: una que abras después desde el re
 rellenada.
 
 Cuando una devolución a tarjeta espera a la compañía de la tarjeta, elige **Comprobar de nuevo**
-para ver su respuesta, y **Devolver el resto** cuando la ventana lo ofrezca. Si la ventana dice que
-el servidor no respondió, elige **Enviar de nuevo**: el mismo dinero nunca se devuelve dos veces. Un
-ticket rectificativo que no se imprime solo se puede imprimir desde **Buscar cuenta**, en la
-pestaña **Transacciones**.
+para preguntarle por esa devolución, y **Devolver el resto** cuando la ventana lo ofrezca. Si no
+puedes devolver dinero, un responsable o encargado aprueba la consulta con su PIN. Si la ventana dice
+que el servidor no respondió, elige **Enviar de nuevo**. **Comprobar de nuevo** y **Enviar de nuevo**
+nunca devuelven el mismo dinero dos veces. Un ticket rectificativo que no se imprime solo se puede
+imprimir desde **Buscar cuenta**, en la pestaña **Transacciones**.
 
 Si cierras la ventana antes de que vuelva todo el dinero, busca el recibo en **Buscar cuenta**, en
 **Devoluciones en curso**. Si no está, la devolución espera en esta caja: vuelve a abrir **Devolver

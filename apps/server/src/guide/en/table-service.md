@@ -406,10 +406,12 @@ dish**, filled in with the cancelled dishes, their amount and the cancel's reaso
 approval covers that money, so no new PIN is asked unless you give back more. Keep the window open
 to use it: one opened later from the receipt is not filled in.
 
-When a card refund waits for the card company, choose **Check again** to see its answer, and
-**Give back the rest** when the window offers it. If the window says the box did not answer, choose
-**Send again**: the same money never goes back twice. A corrective receipt that does not print by
-itself can be printed from **Find a bill**, on the **Transactions** tab.
+When a card refund waits for the card company, choose **Check again** to ask it about that refund,
+and **Give back the rest** when the window offers it. If you cannot give money back yourself, a
+supervisor or manager approves asking with their PIN. If the window says the box did not answer,
+choose **Send again**. **Check again** and **Send again** never give the same money back twice. A
+corrective receipt that does not print by itself can be printed from **Find a bill**, on the
+**Transactions** tab.
 
 If you close the window before all the money is back, look for the receipt in **Find a bill** under
 **Money back under way**. If it is not there, the money back is waiting on this till: open **Give
