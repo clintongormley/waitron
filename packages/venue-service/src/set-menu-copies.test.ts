@@ -10,7 +10,21 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createMenu, updateMenuDetails } from "@waitron/menu";
+import {
+  createExtraList,
+  createMenu,
+  listMembers,
+  removeMember,
+  requireMenuRoot,
+  updateMenuDetails,
+  updateProduct,
+  writeProductModifiers,
+} from "@waitron/menu";
+import {
+  expandDietaryDeclarations,
+  type DietaryLabel,
+  type ProductAllergens,
+} from "@waitron/shared";
 import { listZoneOffers } from "./operations.js";
 import { serveRecordedSetMenus } from "./set-menu-copies.js";
 import { setMenuFixture } from "./testing/set-menu-fixtures.js";
@@ -47,6 +61,67 @@ it("reads recorded versions in the requested order after the full menu is republ
       structure: before.structure,
       offers: before.offers,
     });
+  }));
+
+it("serves a recorded copy at its own price with the allergens and diets published since", () =>
+  scenario(async (tx, f) => {
+    const list = await createExtraList(
+      tx,
+      { name: "Sauces", minPicks: 0, maxPicks: 1, items: [{ productId: f.soup, price: "1.00" }] },
+      "en",
+    );
+    await writeProductModifiers(tx, f.bravas, [{ kind: "extras", id: list.id }]);
+    const declare = async (allergens: ProductAllergens, diet: DietaryLabel) => {
+      for (const id of [f.bravas, f.largeBravas, f.soup])
+        await updateProduct(tx, id, {
+          allergens: id === f.bravas ? allergens : { ...allergens, sulphites: {} },
+          dietaryDeclarations: id === f.bravas ? [diet] : [diet, "kosher"],
+          dietOverride: { vegan: diet === "vegan" ? "yes" : "no" },
+        });
+    };
+    await declare({ milk: {} }, "vegetarian");
+    const { versionId } = await f.publish();
+    const recorded = async () => {
+      const [copy] = await serveRecordedSetMenus(tx, [{ versionId, menuId: f.daily }]);
+      const offer = copy!.offers.find(({ id }) => id === f.bravasItem)!;
+      const [variant] = offer.variants;
+      const extras = offer.offeredModifiers.find(({ id }) => id === list.id)!;
+      const [item] = extras.kind === "extras" ? extras.items : [];
+      return {
+        price: copy!.terms.price,
+        dish: [offer.allergens, offer.dietaryDeclarations, offer.dietOverride, offer.diet!.vegan],
+        variant: [
+          variant!.allergens,
+          variant!.dietaryDeclarations,
+          variant!.dietOverride,
+          variant!.diet!.vegan,
+        ],
+        extra: [item!.addAllergens, item!.suitableFor],
+      };
+    };
+    const served = (allergens: ProductAllergens, diet: DietaryLabel) => {
+      const vegan = diet === "vegan" ? "yes" : "no";
+      return {
+        price: "14.00",
+        dish: [allergens, [diet], { vegan }, vegan],
+        variant: [{ ...allergens, sulphites: {} }, [diet, "kosher"], { vegan }, vegan],
+        extra: [{ ...allergens, sulphites: {} }, expandDietaryDeclarations([diet, "kosher"])],
+      };
+    };
+
+    await declare({ fish: {} }, "vegan");
+    expect(await recorded()).toEqual(served({ milk: {} }, "vegetarian"));
+
+    await updateMenuDetails(tx, f.daily, { setPrice: "15.00" });
+    await f.publish();
+    expect(await recorded()).toEqual(served({ fish: {} }, "vegan"));
+
+    const root = await requireMenuRoot(tx, f.lunch);
+    for (const { id, ref } of await listMembers(tx, root))
+      if (ref.kind === "set_menu") await removeMember(tx, root, id);
+    await declare({ eggs: {} }, "vegetarian");
+    await f.publish();
+    expect(await recorded()).toEqual(served({ fish: {} }, "vegan"));
   }));
 
 it("applies the same live availability and course rule to a recorded copy", () =>

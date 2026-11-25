@@ -7,6 +7,7 @@ import {
   updateProduct,
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { readPartyAllergyView } from "./party-allergy.js";
 import { inTx, seatWithNoAllergies } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { saveSetMenuDraft } from "./testing/set-menu-bill-fixture.js";
@@ -110,4 +111,28 @@ it("reads each kind of stored order line's published declarations", async () => 
       allergens,
     })),
   );
+});
+
+it("reads a set-menu draft's extra from its published copy, never an unpublished product edit", async () => {
+  const spec = await setupSetMenuSpecVenue(suite.db);
+  const { venue, daily, bread } = spec;
+  const breadId = bread.picks[0]!.productId;
+  const versionId = await inTx(venue, async (tx) => {
+    await updateProduct(tx, breadId, { allergens: { sesame: {} } });
+    return publishWorkingMenu(tx, venue.tables.menuId);
+  });
+  const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  await setSpecCount(spec, bill.tabId, daily, 1);
+  await saveSetMenuDraft(venue, bill, {
+    menuVersionId: versionId,
+    setMenuId: daily.menuId,
+    menuItemId: daily.items.Soup!,
+    quantity: "1",
+    extras: [bread],
+  });
+  await inTx(venue, (tx) => updateProduct(tx, breadId, { allergens: { eggs: {} } }));
+  const { dishes } = await inTx(venue, (tx) => readPartyAllergyView(tx, bill.partyId));
+  expect(dishes.map(({ line, extras }) => [line.kind, extras.map((e) => e.allergens)])).toEqual([
+    ["draft", [{ sesame: {} }]],
+  ]);
 });

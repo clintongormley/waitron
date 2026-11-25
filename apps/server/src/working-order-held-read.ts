@@ -11,7 +11,7 @@ import {
   productDeclarationValues,
   extraDeclarationValues,
   readOfferedModifiers,
-  readProductDeclarationValues,
+  readPublishedDeclarations,
 } from "@waitron/menu";
 import type { ServiceMode, KitchenNoteSnapshot } from "@waitron/module";
 import {
@@ -295,6 +295,8 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         id: workingOrderLines.id,
         sentAt: workingOrderLines.sentAt,
         productId: workingOrderLines.productId,
+        menuItemId: workingOrderLines.menuItemId,
+        menuVersionId: workingOrderLines.menuVersionId,
         quantity: workingOrderLines.quantity,
         priceQuantity: workingOrderLines.priceQuantity,
         descriptions: workingOrderLines.descriptions,
@@ -322,11 +324,9 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         ),
       )
       .orderBy(workingOrderLines.lineNo);
-    const declarations = await readProductDeclarationValues(
+    const declarations = await readPublishedDeclarations(
       tx,
-      storedLines.flatMap((line) =>
-        line.sentAt !== null || line.productId === null ? [] : [line.productId],
-      ),
+      storedLines.filter((line) => line.sentAt === null),
     );
     const captured = await VENUE_SERVICE.readSentLineNutrition(
       tx,
@@ -354,7 +354,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       : undefined;
 
     const declarationOf = (line: (typeof lineRows)[number]) => {
-      if (line.sentAt === null) return declarations.get(line.variantId ?? line.productId!);
+      if (line.sentAt === null) return declarations.get(line.id);
       const saved = captured.get(line.id);
       return productDeclarationValues({
         allergens: saved?.allergens ?? null,

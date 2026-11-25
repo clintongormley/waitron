@@ -1,18 +1,12 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
   parties,
-  products,
   workingOrderLines,
   workingOrders,
   type AllergenMap,
   type Transaction,
 } from "@waitron/db";
-import {
-  effectiveProductColumns,
-  parentJoin,
-  parentProducts,
-  staffPresentationName,
-} from "@waitron/menu";
+import { readPublishedDeclarations, staffPresentationName } from "@waitron/menu";
 import type {
   AllergyDish,
   AllergySendTarget,
@@ -60,14 +54,8 @@ export async function survivingParty(tx: Transaction, partyId: string): Promise<
   }
 }
 
-async function productNutrition(tx: Transaction, ids: readonly string[]) {
-  if (ids.length === 0) return new Map<string, AllergenMap | null>();
-  const rows = await tx
-    .select({ id: products.id, allergens: effectiveProductColumns.allergens })
-    .from(products)
-    .leftJoin(parentProducts, parentJoin)
-    .where(inArray(products.id, [...new Set(ids)]));
-  return new Map(rows.map((row) => [row.id, row.allergens as AllergenMap | null]));
+function draftPickId(lineId: string, listId: string, productId: string): string {
+  return `${lineId}:${listId}:${productId}`;
 }
 
 function active(row: CurrentOrderRow): boolean {
@@ -87,18 +75,24 @@ async function readAllergyState(tx: Transaction, requestedPartyId: string) {
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
     .where(inArray(workingOrders.partyId, family));
   const storedById = new Map(stored.map(({ line }) => [line.id, line]));
-  const nutrition = await productNutrition(tx, [
-    ...stored.flatMap(({ line }) => (line.productId === null ? [] : [line.productId])),
+  const published = await readPublishedDeclarations(tx, [
+    ...storedById.values(),
     ...drafts.flatMap((draft) =>
-      draft.lines.flatMap((line) =>
-        line.extras.flatMap((list) => list.picks.map((pick) => pick.productId)),
+      draft.lines.flatMap(({ id, menuVersionId, menuItemId, extras }) =>
+        extras.flatMap(({ listId, picks }) =>
+          picks.map(({ productId }) => ({
+            id: draftPickId(id, listId, productId),
+            menuVersionId,
+            menuItemId,
+            productId,
+            extraListId: listId,
+          })),
+        ),
       ),
     ),
   ]);
-  const allergens = (lineId: string): AllergenMap | null => {
-    const id = storedById.get(lineId)?.productId;
-    return id == null ? null : (nutrition.get(id) ?? null);
-  };
+  const allergens = (lineId: string): AllergenMap | null =>
+    published.get(lineId)?.allergens ?? null;
   const dishes: AllergyDish[] = rows.map((row) => ({
     line: { kind: "working", id: row.lineId },
     billId: row.workingOrderId,
@@ -159,7 +153,11 @@ async function readAllergyState(tx: Transaction, requestedPartyId: string) {
                 ),
                 QUANTITY_SCALE,
               ),
-              allergens: nutrition.get(pick.productId) ?? null,
+              // The zone's offers hold no set menu's dishes; a set-menu draft line names its version.
+              allergens:
+                line.menuVersionId === null
+                  ? (item?.addAllergens ?? null)
+                  : allergens(draftPickId(line.id, selection.listId, pick.productId)),
             };
           });
         }),
@@ -192,16 +190,12 @@ export async function readArrivingAllergyDishes(
     .from(workingOrderLines)
     .where(and(eq(workingOrderLines.workingOrderId, billId), notSetMenuLine()))
     .orderBy(workingOrderLines.lineNo);
-  const nutrition = await productNutrition(
-    tx,
-    lines.flatMap((line) => (line.productId === null ? [] : [line.productId])),
-  );
+  const published = await readPublishedDeclarations(tx, lines);
   const cancellations = await readLineCancellations(
     tx,
     lines.map((line) => line.id),
   );
-  const allergens = (line: (typeof lines)[number]) =>
-    line.productId === null ? null : (nutrition.get(line.productId) ?? null);
+  const allergens = (line: (typeof lines)[number]) => published.get(line.id)?.allergens ?? null;
   const active = lines.filter((line) => line.quantity > (cancellations.get(line.id) ?? 0));
   return active
     .filter((line) => line.parentLineId === null)

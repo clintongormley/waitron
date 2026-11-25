@@ -191,14 +191,19 @@ describe("A669 reads", () => {
     expect([...nutrition]).toEqual([]);
   });
 
-  it("keeps kitchen declarations live after a sent dish's product changes", async () => {
+  it("shows a sent dish's newly published declarations on the kitchen screen, never an unpublished edit", async () => {
     await sent();
-    await inTx(v, (tx) =>
-      updateProduct(tx, v.productId("Burger"), {
+    await inTx(v, async (tx) => {
+      await updateProduct(tx, v.productId("Burger"), {
         allergens: { eggs: {} },
         dietaryDeclarations: ["halal"],
-      }),
-    );
+      });
+      await republishMenus(tx);
+      await updateProduct(tx, v.productId("Burger"), {
+        allergens: { fish: {} },
+        dietaryDeclarations: ["kosher"],
+      });
+    });
     const items = (await inTx(v, (tx) => listStationQueue(tx, stationId))).flatMap(
       (order) => order.items,
     );
@@ -206,6 +211,7 @@ describe("A669 reads", () => {
     for (const item of items) {
       expect(item.asServed.allergens).toEqual({ eggs: {} });
       expect(item.asServedDiet?.halal).toBe("yes");
+      expect(item.asServedDiet?.kosher).toBeUndefined();
     }
   });
 

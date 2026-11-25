@@ -1,9 +1,11 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { ticketItems, withTransaction } from "@waitron/db";
+import { ticketItems, withTransaction, workingOrderLines } from "@waitron/db";
 import type { Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { updateProduct } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { expandDietaryDeclarations } from "@waitron/shared";
 import {
   fireNewOrder,
   setupSplitExtrasVenue,
@@ -25,6 +27,73 @@ beforeAll(() => {
 });
 
 describe("split extra queues", () => {
+  it("shows a dish's and its extras' published declarations, never an unpublished product edit", async () => {
+    const venue = await setupSplitExtrasVenue();
+    const { burger, chips, cheese } = venue.products;
+    await withTransaction(db, async (tx) => {
+      await updateProduct(tx, burger, { allergens: { milk: {} }, dietaryDeclarations: ["halal"] });
+      await updateProduct(tx, chips, { allergens: { celery: {} }, dietaryDeclarations: ["vegan"] });
+      await updateProduct(tx, cheese, {
+        allergens: { eggs: {} },
+        dietaryDeclarations: ["vegetarian"],
+      });
+      const orderId = await fireNewOrder(tx, venue.cfg, [
+        {
+          productId: burger,
+          quantity: "1",
+          extras: [
+            {
+              listId: venue.lists.burger,
+              picks: [
+                { productId: chips, quantity: 1 },
+                { productId: cheese, quantity: 1 },
+              ],
+            },
+          ],
+        },
+      ]);
+      for (const id of [burger, chips, cheese])
+        await updateProduct(tx, id, { allergens: { fish: {} }, dietaryDeclarations: ["kosher"] });
+      const dish = async () => (await listStationQueue(tx, venue.stations.grill))[0]!.items[0]!;
+      const published = await dish();
+      expect(published.asServed).toEqual({ allergens: { milk: {} }, pending: false });
+      expect(published.asServedDiet).toEqual({
+        vegan: "unknown",
+        vegetarian: "unknown",
+        contains: [],
+        halal: "yes",
+      });
+      expect(published.modifiers).toMatchObject([
+        {
+          name: "CHED",
+          addAllergens: { eggs: {} },
+          suitableFor: expandDietaryDeclarations(["vegetarian"]),
+        },
+      ]);
+      expect(published.crossRefs).toMatchObject([
+        {
+          name: "CHIPS",
+          addAllergens: { celery: {} },
+          suitableFor: expandDietaryDeclarations(["vegan"]),
+        },
+      ]);
+
+      await tx
+        .update(workingOrderLines)
+        .set({ menuVersionId: null })
+        .where(eq(workingOrderLines.workingOrderId, orderId));
+      const unknown = await dish();
+      expect(unknown.asServed).toEqual({ allergens: {}, pending: true });
+      expect(unknown.asServedDiet).toEqual({
+        vegan: "unknown",
+        vegetarian: "unknown",
+        contains: [],
+      });
+      expect(unknown.modifiers).toMatchObject([{ addAllergens: null, suitableFor: [] }]);
+      expect(unknown.crossRefs).toMatchObject([{ addAllergens: null, suitableFor: [] }]);
+    });
+  });
+
   it("shows a routed extra once at Fryer and cross references both kitchen lines", async () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {

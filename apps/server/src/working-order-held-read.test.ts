@@ -1,5 +1,5 @@
-import { withTransaction, products, workingOrders } from "@waitron/db";
-import { createProduct } from "@waitron/menu";
+import { withTransaction, products, workingOrderLines, workingOrders } from "@waitron/db";
+import { createProduct, updateProduct } from "@waitron/menu";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
@@ -28,6 +28,7 @@ import {
   placeOrderWith,
   CONTENT_LANGUAGE,
   passItems,
+  seedWine,
 } from "./testing/working-order.test-support.js";
 
 describe("listHeldOrders", () => {
@@ -224,6 +225,47 @@ describe("listHeldOrders", () => {
     expect(listed).toContain(mine);
     expect(listed).toContain(foreign);
   });
+});
+it("retrieves a held variant's published declarations, never an unpublished product edit", async () => {
+  const { cfg, zoneId, menuId } = await setupVenue();
+  const id = randomUUID();
+  const wine = await withTransaction(db, (tx) => seedWine(tx, menuId));
+  await parkOrder({ db }, cfg, {
+    id,
+    zoneId,
+    lines: [
+      { menuItemId: wine.offerId, variantId: wine.wine125, quantity: "1" },
+      { menuItemId: wine.offerId, variantId: wine.wine175, quantity: "1" },
+    ],
+  });
+  await withTransaction(db, async (tx) => {
+    for (const productId of [wine.parentId, wine.wine125, wine.wine175])
+      await updateProduct(tx, productId, {
+        allergens: { fish: {} },
+        dietaryDeclarations: ["kosher"],
+        dietOverride: { vegan: "yes" },
+      });
+  });
+  const declared = async () =>
+    (await getHeldOrder({ db }, id)).lines.map(({ variantId, product }) => [
+      variantId,
+      product!.allergens,
+      product!.dietaryDeclarations,
+      product!.dietOverride,
+    ]);
+  expect(await declared()).toEqual([
+    [wine.wine125, { sulphites: {} }, ["vegan"], null],
+    [wine.wine175, { gluten: { kinds: ["wheat"] } }, ["halal"], null],
+  ]);
+
+  await db
+    .update(workingOrderLines)
+    .set({ menuVersionId: null })
+    .where(eq(workingOrderLines.workingOrderId, id));
+  expect(await declared()).toEqual([
+    [wine.wine125, null, [], null],
+    [wine.wine175, null, [], null],
+  ]);
 });
 // An options answer is frozen onto a dish that declares milk + vegan. The dish's own allergens and its
 // own vegan declaration are what the station and expo snapshots show; the answer rides beside them.

@@ -18,11 +18,12 @@ import {
   updateProduct,
   writeProductModifiers,
 } from "@waitron/menu";
-import type { AllergySendTarget } from "@waitron/module";
+import type { AllergyDish, AllergySendTarget } from "@waitron/module";
 import {
   allergyTargets,
   applyPartyAllergyPatch,
   readAllergySendView,
+  readArrivingAllergyDishes,
   readPartyAllergyView,
 } from "./party-allergy.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
@@ -267,6 +268,58 @@ describe("A669 candidate sets", () => {
     await expect(view(p.partyId, { kind: "held-line", lineId: child.id })).rejects.toMatchObject({
       code: "group.not_found",
     });
+  });
+
+  it("shows published allergens for stored, draft and arriving dishes and extras, never an unpublished product edit", async () => {
+    const p = await party();
+    const n = await nutritionProducts();
+    const dish = {
+      menuItemId: n.menuItemId,
+      variantId: n.variant.id,
+      quantity: "1",
+      extras: [
+        {
+          listId: n.list.id,
+          picks: [n.egg, n.unknown, n.empty].map(({ id }) => ({ productId: id, quantity: 1 })),
+        },
+      ],
+    };
+    await inTx(v, async (tx) => {
+      await placeGroups(tx, v.cfg, p.partyId, {
+        billId: p.tabId,
+        operatorId: OPERATOR,
+        groups: [{ release: "hold", lines: [dish] }],
+      });
+      await saveDraftForTest(tx, p.partyId, OPERATOR, {
+        billId: p.tabId,
+        draftId: null,
+        revision: 0,
+        lines: [fresh(dish)],
+      });
+      for (const { id } of [n.parent, n.variant, n.egg, n.unknown, n.empty])
+        await updateProduct(tx, id, { allergens: { fish: {} } });
+    });
+    const allergens = (dishes: AllergyDish[]) =>
+      dishes.map((d) => [d.line.kind, d.allergens, d.extras.map((extra) => extra.allergens)]);
+    const arriving = () => inTx(v, (tx) => readArrivingAllergyDishes(tx, p.tabId));
+    const wheat = { gluten: { kinds: ["wheat"] } };
+    const extras = [{ eggs: {} }, null, {}];
+    expect(allergens((await view(p.partyId)).dishes)).toEqual([
+      ["working", wheat, extras],
+      ["draft", wheat, extras],
+    ]);
+    expect(allergens(await arriving())).toEqual([["working", wheat, extras]]);
+
+    await v.db
+      .update(workingOrderLines)
+      .set({ menuVersionId: null })
+      .where(eq(workingOrderLines.workingOrderId, p.tabId));
+    expect(allergens((await view(p.partyId)).dishes)[0]).toEqual([
+      "working",
+      null,
+      [null, null, null],
+    ]);
+    expect(allergens(await arriving())).toEqual([["working", null, [null, null, null]]]);
   });
 
   it("reads every family bill and resolves a merged party id to its survivor", async () => {

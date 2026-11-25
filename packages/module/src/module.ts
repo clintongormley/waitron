@@ -312,6 +312,8 @@ export type ZoneOfferedModifier =
         readonly maxQuantity: number | null;
         readonly preselected: boolean;
         readonly available: boolean;
+        /** As published; null when never reviewed. */
+        readonly addAllergens: Readonly<AllergenMap> | null;
       }[];
     }
   | {

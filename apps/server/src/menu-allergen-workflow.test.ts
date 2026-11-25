@@ -160,25 +160,25 @@ it("retrieves held product, variant and extra declarations outside current offer
   expect(held.lines[0]!.product).toMatchObject({
     name: "Water",
     unitPrice: "2.00",
-    allergens: null,
-    dietaryDeclarations: ["vegan"],
-    dietOverride: { vegan: "yes" },
-    diet: { vegan: "yes" },
+    allergens: { milk: {} },
+    dietaryDeclarations: ["vegetarian"],
+    dietOverride: null,
+    diet: { vegan: "unknown" },
   });
   expect(held.lines[1]!.product).toMatchObject({
     name: "Burger",
     unitPrice: "15.00",
-    allergens: { eggs: {} },
-    dietaryDeclarations: ["vegan"],
-    dietOverride: { vegan: "no" },
-    diet: { vegan: "no" },
+    allergens: { milk: {} },
+    dietaryDeclarations: ["vegetarian"],
+    dietOverride: null,
+    diet: { vegan: "unknown" },
   });
   expect(held.lines[0]!.extras).toMatchObject([
     {
       name: "Lemon",
       price: "1.00",
-      addAllergens: {},
-      suitableFor: ["vegan", "vegetarian", "no_meat", "no_fish"],
+      addAllergens: { sesame: {} },
+      suitableFor: [],
     },
   ]);
 });

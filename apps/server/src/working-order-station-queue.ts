@@ -3,14 +3,17 @@ import {
   workingOrderLines,
   ticketItems,
   kitchenStations,
-  products,
   parties,
   orderGroups,
   readOrderPlaces,
   workingOrders,
   kitchenCourses,
 } from "@waitron/db";
-import { effectiveProductColumns, parentProducts, parentJoin } from "@waitron/menu";
+import {
+  extraDeclarationValues,
+  productDeclarationValues,
+  readPublishedDeclarations,
+} from "@waitron/menu";
 import {
   type ProductAllergens,
   type KitchenAllergyBlock,
@@ -26,7 +29,6 @@ import {
   QUANTITY_SCALE,
   kitchenPresentationName,
   expandDietaryDeclarations,
-  type DietaryLabel,
   classifyBand,
 } from "@waitron/shared";
 import { inArray, eq, type SQL, and, sql } from "drizzle-orm";
@@ -225,22 +227,25 @@ export async function readQueueSubItems(
   >();
   if (lineIds.length === 0) return { modifiersByParent, crossRefsByLine, asServedByParent };
 
-  const parentQuantities = new Map(
-    (
-      await tx
-        .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
-        .from(workingOrderLines)
-        .where(inArray(workingOrderLines.id, lineIds))
-    ).map((line) => [line.id, line.quantity]),
-  );
+  const publishedLine = {
+    id: workingOrderLines.id,
+    menuVersionId: workingOrderLines.menuVersionId,
+    menuItemId: workingOrderLines.menuItemId,
+    productId: workingOrderLines.productId,
+    extraListId: workingOrderLines.extraListId,
+  };
+  const parents = await tx
+    .select({ ...publishedLine, quantity: workingOrderLines.quantity })
+    .from(workingOrderLines)
+    .where(inArray(workingOrderLines.id, lineIds));
+  const parentQuantities = new Map(parents.map((line) => [line.id, line.quantity]));
 
   const childTicket = alias(ticketItems, "queue_child_ticket");
   const childStation = alias(kitchenStations, "queue_child_station");
 
-  // LEFT join, so a child whose product row has gone still renders its frozen text.
   const childRows = await tx
     .select({
-      id: workingOrderLines.id,
+      ...publishedLine,
       parentLineId: workingOrderLines.parentLineId,
       unitName: workingOrderLines.unitName,
       name: workingOrderLines.name,
@@ -250,12 +255,8 @@ export async function readQueueSubItems(
       quantity: workingOrderLines.quantity,
       stationName: childStation.name,
       ticketId: childTicket.id,
-      addAllergens: effectiveProductColumns.allergens,
-      dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
     })
     .from(workingOrderLines)
-    .leftJoin(products, eq(products.id, workingOrderLines.productId))
-    .leftJoin(parentProducts, parentJoin)
     .leftJoin(childTicket, eq(childTicket.workingOrderLineId, workingOrderLines.id))
     .leftJoin(childStation, eq(childStation.id, childTicket.stationId))
     .where(inArray(workingOrderLines.parentLineId, lineIds))
@@ -264,6 +265,7 @@ export async function readQueueSubItems(
     tx,
     childRows.flatMap((child) => (child.unitName == null ? [] : [child.id])),
   );
+  const published = await readPublishedDeclarations(tx, [...parents, ...childRows]);
   for (const child of childRows) {
     const quantity = thousandthsToDecimal(child.quantity);
     const dishes = thousandthsToDecimal(parentQuantities.get(child.parentLineId!)!);
@@ -278,8 +280,7 @@ export async function readQueueSubItems(
         name: kitchenPresentationName(child),
         ...amountPerDish,
         stationName: child.stationName,
-        addAllergens: (child.addAllergens as ProductAllergens | null) ?? null,
-        suitableFor: expandDietaryDeclarations(child.dietaryDeclarations as DietaryLabel[]),
+        ...extraDeclarationValues(published.get(child.id)),
       });
       crossRefsByLine.set(child.parentLineId!, refs);
       continue;
@@ -288,25 +289,14 @@ export async function readQueueSubItems(
     mods.push({
       name: kitchenPresentationName(child),
       ...amountPerDish,
-      addAllergens: (child.addAllergens as ProductAllergens | null) ?? null,
-      suitableFor: expandDietaryDeclarations(child.dietaryDeclarations as DietaryLabel[]),
+      ...extraDeclarationValues(published.get(child.id)),
     });
     modifiersByParent.set(child.parentLineId!, mods);
   }
 
-  const parents = await tx
-    .select({
-      lineId: workingOrderLines.id,
-      allergens: effectiveProductColumns.allergens,
-      dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
-    })
-    .from(workingOrderLines)
-    .leftJoin(products, eq(products.id, workingOrderLines.productId))
-    .leftJoin(parentProducts, parentJoin)
-    .where(inArray(workingOrderLines.id, lineIds));
-  for (const p of parents) {
-    const allergens = (p.allergens ?? {}) as ProductAllergens;
-    const expanded = expandDietaryDeclarations(p.dietaryDeclarations as DietaryLabel[]);
+  for (const { id } of parents) {
+    const declared = productDeclarationValues(published.get(id));
+    const expanded = expandDietaryDeclarations(declared.dietaryDeclarations);
     const asServedDiet: DietProfile = {
       vegan: expanded.includes("vegan") ? "yes" : "unknown",
       vegetarian: expanded.includes("vegetarian") ? "yes" : "unknown",
@@ -314,8 +304,8 @@ export async function readQueueSubItems(
       ...(expanded.includes("halal") ? { halal: "yes" as const } : {}),
       ...(expanded.includes("kosher") ? { kosher: "yes" as const } : {}),
     };
-    asServedByParent.set(p.lineId, {
-      asServed: { allergens, pending: p.allergens == null },
+    asServedByParent.set(id, {
+      asServed: { allergens: declared.allergens ?? {}, pending: declared.allergens === null },
       asServedDiet,
     });
   }
