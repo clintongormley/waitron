@@ -53,13 +53,26 @@ export function renderMenuWarnings(
         return html`<li>
           ${fill("menu_preview.extra_portion_precision", { list: warning.listName, product: warning.name, amount: `${warning.portion} ${localizedName(warning.abbreviation)}`.trim(), precision: String(warning.precision) })}
         </li>`;
-      if (warning.kind === "allergens_unreviewed")
-        return html`<li>
-          ${compact ? nothing : html`<p>${t("menu_preview.allergens_unreviewed")}</p>`}
-          <ul>
-            ${warning.products.map((product) => html`<li><a href=${`/products/product/${encodeURIComponent(product.id)}`} @click=${(event: MouseEvent) => openProduct(event, product.id)}>${staffPresentationName({ name: product.parentName ?? product.name, variantName: product.parentName === null ? null : product.name })}</a></li>`)}
-          </ul>
-        </li>`;
+      if (warning.kind === "allergens_unreviewed") {
+        const products = warning.products.map(
+          (product) =>
+            html`<li>
+              <a
+                href=${`/products/product/${encodeURIComponent(product.id)}`}
+                @click=${(event: MouseEvent) => openProduct(event, product.id)}
+                >${staffPresentationName({ name: product.parentName ?? product.name, variantName: product.parentName === null ? null : product.name })}</a
+              >
+            </li>`,
+        );
+        return compact
+          ? products
+          : html`<li>
+              <p>${t("menu_preview.allergens_unreviewed")}</p>
+              <ul>
+                ${products}
+              </ul>
+            </li>`;
+      }
       return [];
     })}
   </ul>`;

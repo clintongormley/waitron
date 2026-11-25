@@ -125,6 +125,7 @@ it("keeps counted warning details folded until opened and keeps the product link
   expect(warning.hasAttribute("open")).toBe(false);
   warning.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
   await expect.poll(() => warning.hasAttribute("open")).toBe(true);
+  expect([...warning.querySelectorAll("li")].map(text)).toEqual(["Burger"]);
   expect(warning.querySelector('a[href="/products/product/p-burger"]')?.textContent?.trim()).toBe(
     "Burger",
   );

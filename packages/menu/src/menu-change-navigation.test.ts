@@ -10,6 +10,7 @@ import type {
   MenuTarget,
 } from "@waitron/shared";
 import { navigateMenuChanges as navigate } from "./menu-navigation.js";
+import { diffMenuDocuments, menuDocumentHash } from "./menu-document.js";
 
 function navigateMenuChanges(
   live: MenuDocument | null,
@@ -783,8 +784,7 @@ describe("nested change subjects", () => {
 });
 
 describe("public diff navigation", () => {
-  it("enriches the public diff without changing its frozen document hash input", async () => {
-    const { diffMenuDocuments, menuDocumentHash } = await import("./menu-document.js");
+  it("enriches the public diff without changing its frozen document hash input", () => {
     const live = document(),
       proposed = document();
     soup(proposed).grossPrice = "2.00";
