@@ -1,3 +1,9 @@
+import type { ContentLanguages } from "@waitron/shared";
+import type { MenuSettingsAnswer } from "../api/menu-api.js";
+import {
+  MenuStructureProductEditor,
+  type StructureProductEdit,
+} from "../widgets/menu-structure-product-editor.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
@@ -509,6 +515,9 @@ export class MenusScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ type: Boolean }) canEditProducts = false;
+  @state() private menuSettings: MenuSettingsAnswer | null = null;
+  @state() private contentLanguages: ContentLanguages | null = null;
   @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
   @property({ attribute: false }) menuPeriodUsage?: MenuPeriodUsageProvider;
   @state() private periodUses?: ReadonlyMap<string, PeriodUses> | null;
@@ -544,7 +553,7 @@ export class MenusScreen extends LitElement {
   }
   @state() private products: Product[] = [];
   @state() private categories: CategorySummary[] = [];
-  @state() private defaultColor: string | null = null;
+
   @state() private loading = true;
   @state() private loadError = false;
 
@@ -654,6 +663,34 @@ export class MenusScreen extends LitElement {
   /** Any other refusal of an add, shown at the picker's end. */
   @state() private shortcutFormError = "";
 
+  readonly #productEditor = new MenuStructureProductEditor(this, {
+    api: () => this.api,
+    products: () => this.products,
+    categories: () => this.categories,
+    settings: () => this.menuSettings,
+    languages: () => this.contentLanguages,
+    showError: (message) => {
+      if (message === null) this.memberError = null;
+      this.structureWriteError = message;
+    },
+    reportRefusal: (name, error) => this.#reportRefused(name, error),
+    // The query reports a failed refresh through the screen's load state.
+    refreshProducts: () => this.#watchLibraryProducts().catch(() => undefined),
+    returnFocusTo: (path, photo) => this.#returnFocusTo(path, false, photo),
+    windowClosed: () =>
+      this.#windowClosed(this.#productEditor.saving ? this.#focusedElement() : undefined),
+  });
+
+  get #canOpenProduct(): boolean {
+    return this.canEditProducts && this.contentLanguages !== null && this.menuSettings !== null;
+  }
+
+  #watchLibraryProducts(): Promise<void> {
+    return this.#queries.watch("listLibraryProducts", [], (products) => {
+      this.products = products;
+    });
+  }
+
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
@@ -728,7 +765,7 @@ export class MenusScreen extends LitElement {
   #pickerHeld: string[] = [];
   #addable: Product[] = [];
   #focusReturn:
-    | { menuId: string; key: string; swatch: boolean }
+    | { menuId: string; key: string; swatch: boolean; focusWhenClosed?: Element | null }
     | { menuId: string; shortcuts: string[]; add: "product" | "section" }
     | null = null;
   #windowShut = false;
@@ -768,6 +805,21 @@ export class MenusScreen extends LitElement {
 
   protected override willUpdate(changed: PropertyValues): void {
     this.#followUsage();
+    if (this.busy || changed.has("structureSelecting")) this.#productEditor.cancelRead();
+    if (
+      !this.canEditProducts ||
+      this.view !== "structure" ||
+      this.creatingSection ||
+      this.editingSection ||
+      this.deletingSection ||
+      this.includingMenu ||
+      this.editingInclude ||
+      this.addingProducts ||
+      this.movingSelected ||
+      this.removingSelected ||
+      this.deletingSelected
+    )
+      this.#productEditor.close();
     // The size report comes a frame after the list is drawn, and a table redrawn in another layout
     // replaces the link a person may already have focused.
     if (this.menuId === null && (changed.has("menuId") || changed.has("loading")))
@@ -950,16 +1002,15 @@ export class MenusScreen extends LitElement {
     try {
       await Promise.all([
         this.#watchMenus(),
-        this.#queries.watch("listLibraryProducts", [], (value) => {
-          this.products = value;
-        }),
+        this.#watchLibraryProducts(),
         this.#queries.watch("listCategories", [], (value) => {
           this.categories = value;
         }),
         this.#queries.watch("getMenuSettings", [], (value) => {
-          this.defaultColor = value.defaultColor;
+          this.menuSettings = value;
         }),
         this.#queries.watch("getContentLanguages", [], (value) => {
+          this.contentLanguages = value;
           setContentLanguages(value);
         }),
       ]);
@@ -1212,6 +1263,7 @@ export class MenusScreen extends LitElement {
 
   #select(menuId: string | null): void {
     if (menuId === this.menuId) return;
+    this.#productEditor.close();
     this.#menuOpenings++;
     this.#menuFormGeneration++;
     this.menuForm = null;
@@ -1658,8 +1710,16 @@ export class MenusScreen extends LitElement {
     this.#windowShut = shut;
   }
 
+  #focusedElement(): Element | null {
+    let focused = this.ownerDocument.activeElement;
+    while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+    return focused;
+  }
+
   /** A window's close is reported after the dialog has put focus back. */
-  #windowClosed(): void {
+  #windowClosed(focusWhenClosed?: Element | null): void {
+    if (focusWhenClosed !== undefined && this.#focusReturn && "key" in this.#focusReturn)
+      this.#focusReturn.focusWhenClosed = focusWhenClosed;
     this.#windowShut = true;
     this.requestUpdate();
   }
@@ -1667,11 +1727,15 @@ export class MenusScreen extends LitElement {
   /** Waits for the write out to be read back: the row whose ⋮ had focus may be gone after it. */
   #returnFocus(): void {
     const target = this.#focusReturn;
-    if (!target || !this.#windowShut || this.busy) return;
+    if (!target || !this.#windowShut || this.busy || this.#productEditor.saving) return;
     if ("shortcuts" in target && target.shortcuts.length > 0 && this.#homeRemoveDisabled) return;
     this.#focusReturn = null;
     if (target.menuId !== this.menuId) return;
     if ("key" in target) {
+      if (target.focusWhenClosed !== undefined) {
+        const focused = this.#focusedElement();
+        if (focused !== target.focusWhenClosed && focused !== this.ownerDocument.body) return;
+      }
       const table = this.renderRoot.querySelector("dashboard-menu-structure-table");
       if (target.swatch) void table?.focusRowSwatch(target.key);
       else table?.focusRowMenu(target.key);
@@ -2654,11 +2718,12 @@ export class MenusScreen extends LitElement {
       }
       <dashboard-menu-structure-table
         .nodes=${structure.nodes}
+        .editProductsInPlace=${this.canEditProducts}
         .menus=${this.menus}
         .placeableSetMenus=${structure.placeableSetMenus ?? []}
         .products=${this.products}
         .categories=${this.categories}
-        .defaultColor=${this.defaultColor}
+        .defaultColor=${this.menuSettings?.defaultColor ?? null}
         .menuColor=${structure.root?.color ?? null}
         .current=${this.path}
         .busy=${this.busy}
@@ -2689,6 +2754,12 @@ export class MenusScreen extends LitElement {
         ) => {
           event.stopPropagation();
           this.#openAdd(event.detail.action, event.detail.path);
+        }}
+        @wt-edit-product=${(event: CustomEvent<StructureProductEdit>) => {
+          if (!this.canEditProducts) return;
+          event.stopPropagation();
+          if (this.#canOpenProduct && this.view === "structure" && !this.busy)
+            this.#productEditor.open(event.detail);
         }}
         @wt-member-remove=${(event: CustomEvent<{ path: string[]; memberId: string }>) => {
           event.stopPropagation();
@@ -3872,7 +3943,8 @@ export class MenusScreen extends LitElement {
         <div slot="preview">${this.#renderPreview()}</div>
       </wt-tabs>
       ${this.#renderNewSection()} ${this.#renderIncludeEdit()} ${this.#renderAddProducts()}
-      ${this.#renderShortcutPicker()}`;
+      ${this.#renderShortcutPicker()}
+      ${this.#productEditor.render(this.#canOpenProduct && this.view === "structure")}`;
   }
 
   override render() {
