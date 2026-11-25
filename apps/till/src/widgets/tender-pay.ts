@@ -567,10 +567,11 @@ export class TillTenderPay extends LitElement {
       this.selected = product;
       this.entry = "";
       this.view = "weighing";
-      if (this.weighOnly)
-        void this.updateComplete.then(() =>
-          this.renderRoot.querySelector("wt-price-input")?.scrollIntoView({ block: "nearest" }),
-        );
+      if (!this.weighOnly)
+        requestAnimationFrame(() => {
+          if (this.isConnected && this.view === "weighing" && this.selected === product)
+            this.scrollIntoView({ block: "nearest" });
+        });
     };
     if (this.#entryScope && this.#leave)
       void this.#leave.request({
@@ -977,8 +978,10 @@ export class TillTenderPay extends LitElement {
   }
 
   #quantityFitsUnit(product: TillProduct, quantity: string): boolean {
+    const { precision } = productUnit(product);
+    if (precision === 0 && !/^\d+$/.test(this.entry)) return false;
     try {
-      assertQuantityPrecision(quantity, productUnit(product).precision, { positive: true });
+      assertQuantityPrecision(quantity, precision, { positive: true });
       return true;
     } catch {
       return false;
@@ -1668,6 +1671,7 @@ export class TillTenderPay extends LitElement {
         label=${lineProductName(product)}
         unit=${unitName(product)}
         fixed-unit
+        placeholder=" "
         required
         decimal-locale=${currentLocale()}
         .value=${this.entry}

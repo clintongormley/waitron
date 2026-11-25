@@ -85,7 +85,7 @@ import {
   memoVisibleProducts,
   shownMenu,
 } from "../menu-filter.js";
-import { lineProductName, productName, productUnit, unitName } from "../widgets/product-name.js";
+import { lineProductName, productName, soldByTheUnit, unitName } from "../widgets/product-name.js";
 import {
   quantityText,
   servableDishes,
@@ -4695,10 +4695,9 @@ export class TillTableOrderScreen extends LitElement {
       api === this.api;
     const name = lineProductName(line.product);
     const amount = formatDecimalInput(this.#displayQty(line.quantity), currentLocale());
-    const quantity =
-      productUnit(line.product).measure === true
-        ? ` ${amount} ${unitName(line.product)}`
-        : ` ×${amount}`;
+    const quantity = !soldByTheUnit(line.product)
+      ? ` ${amount} ${unitName(line.product)}`
+      : ` ×${amount}`;
     const selected = this.#selected.has(line);
     const family = store.splitFamily(line);
     const splits =

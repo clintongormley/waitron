@@ -66,8 +66,9 @@ Cuando eliges una unidad, el precio es por una de esa unidad, y la etiqueta del 
 ejemplo **Precio por kg**. Elige **Mide una cantidad (ml, g…) — sin extras** para una unidad
 que vendes por medida. La caja pide la cantidad cuando tocas el producto. También la pide para
 las unidades de peso y las que admiten decimales en **Precisión**. Escribe la cantidad en el
-campo del producto o usa el teclado de la caja. El ticket imprime la cantidad
-y la abreviatura de la unidad, por ejemplo 250 ml. Un producto que se vende por medida no admite
+campo del producto o usa el teclado de la caja. Si la unidad no admite decimales, escribe las
+cifras sin separadores. El ticket imprime la cantidad y la abreviatura de la unidad, por ejemplo
+250 ml. Un producto que se vende por medida no admite
 extras.
 
 Waitron trae mililitros, litros, gramos, kilogramos y miligramos con el ajuste de medida activado.

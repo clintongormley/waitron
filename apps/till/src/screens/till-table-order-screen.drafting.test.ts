@@ -128,7 +128,10 @@ describe("till-table-order-screen: the last-added bar", () => {
     await el.updateComplete;
 
     expect(rows(el)).toEqual(["Jamón ×0.25"]);
-    expect(barText(el)).toContain("Jamón");
+    expect(barText(el)).toContain("Jamón 0.25 kg");
+    expect(el.shadowRoot!.querySelector("[data-draft-select]")!.textContent).toMatch(
+      /Jamón\s+0.25 kg/,
+    );
     expect(bar(el)!.querySelector("[data-last-added-step]")).toBeNull();
   });
 
@@ -154,7 +157,12 @@ describe("till-table-order-screen: the last-added bar", () => {
     await panel.updateComplete;
     const add = () =>
       panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button.add")!;
-    await userEvent.keyboard("250.5");
+    const input = panel
+      .shadowRoot!.querySelector("wt-price-input")
+      ?.shadowRoot!.querySelector("input")!;
+    await userEvent.fill(input, "1,000");
+    expect(add().disabled).toBe(true);
+    await userEvent.fill(input, "250.5");
     expect(add().disabled).toBe(true);
     expect(panel.shadowRoot!.querySelector("wt-price-input")?.error).toBe(
       t("line.quantity_invalid"),
@@ -185,6 +193,9 @@ describe("till-table-order-screen: the last-added bar", () => {
     expect(amount.shadowRoot!.querySelector('[part="unit"]')?.textContent).toBe("ml");
     const field = amount.shadowRoot!.querySelector("input")!;
     expect(field.value).toBe("250");
+    await userEvent.fill(field, "1,000");
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+    expect(store(el).lines.map((line) => line.quantity)).toEqual(["250"]);
     await userEvent.fill(field, "300");
     await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
     expect(store(el).lines.map((line) => line.quantity)).toEqual(["300"]);

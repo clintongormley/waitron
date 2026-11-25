@@ -300,7 +300,9 @@ it("adds a chosen variant at the entered litre amount while payment is held", as
     expect(amount()?.label).toBe(product.name);
     await amount().updateComplete;
     expect(input().value).toBe("");
-    expect(amount().shadowRoot!.querySelector('[part="unit"]')?.textContent).toBe("L");
+    const unit = amount().shadowRoot!.querySelector('[part="unit"]')!;
+    expect(unit.textContent).toBe("L");
+    expect(getComputedStyle(unit).visibility).toBe("visible");
     expect(root.querySelector("[data-quantity-step]")).toBeNull();
     expect(root.querySelector(".prompt")).toBeNull();
     await userEvent.fill(input(), "999999999");

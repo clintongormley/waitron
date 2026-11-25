@@ -58,7 +58,7 @@ import { LocaleChangeController } from "../state/locale-controller.js";
 import { countText, currentLocale, fill, t } from "../i18n/t.js";
 import { descriptionFor } from "./dish-format.js";
 import { helpBadge } from "./help-badge.js";
-import { productName, productTilePrice } from "./product-name.js";
+import { productName, productTilePrice, soldByTheUnit } from "./product-name.js";
 import { hasSomethingToSell, pickProduct, setMenuProduct } from "./product-pick.js";
 import {
   draftMenuDishes,
@@ -439,6 +439,13 @@ export class TillMenuBrowser extends LitElement {
 
       .sep {
         color: var(--wt-color-text-muted);
+      }
+
+      .weigh {
+        position: sticky;
+        bottom: 0;
+        z-index: 2;
+        background: var(--wt-color-bg);
       }
     `,
   ];
@@ -984,6 +991,18 @@ export class TillMenuBrowser extends LitElement {
     );
   }
 
+  #keepTileAboveAmount(tile: HTMLElement): void {
+    const panel = this.renderRoot.querySelector("till-tender-pay");
+    if (!panel) return;
+    requestAnimationFrame(() => {
+      if (!tile.isConnected || panel.offsetHeight === 0) return;
+      const tileBox = tile.getBoundingClientRect();
+      const panelBox = panel.getBoundingClientRect();
+      if (tileBox.bottom > panelBox.top && tileBox.top < panelBox.bottom)
+        tile.scrollIntoView({ block: "start" });
+    });
+  }
+
   #productButton(product: TillProduct, onTap: () => void): TemplateResult {
     const price = productTilePrice(product);
     const sellable = hasSomethingToSell(product);
@@ -1013,7 +1032,11 @@ export class TillMenuBrowser extends LitElement {
       @click=${(event: MouseEvent) => {
         if (event.detail === 0 || !this.#suppressClick) {
           if (!sellable) this.infoProduct = product;
-          else onTap();
+          else {
+            onTap();
+            if (this.weighs && !soldByTheUnit(product))
+              this.#keepTileAboveAmount(event.currentTarget as HTMLElement);
+          }
         }
       }}
     >
@@ -1399,6 +1422,7 @@ export class TillMenuBrowser extends LitElement {
       ${
         this.weighs && !this.#waitingForMenu()
           ? html`<till-tender-pay
+              class="weigh"
               weighOnly
               .store=${this.store}
               .products=${this.unfilteredServedProducts ?? this.servedProducts}

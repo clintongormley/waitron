@@ -72,7 +72,7 @@ it.each(["weight", "fractional"])(
             },
           };
     const { el, store } = await mount("0.375", product);
-    expect(el.shadowRoot!.textContent).toContain("×0.375");
+    expect(el.shadowRoot!.textContent).toContain(kind === "weight" ? "0.375 kg" : "0.375 ml");
     expect(el.shadowRoot!.querySelector("[data-last-added-step]")).toBeNull();
     expect(store.lines[0]!.quantity).toBe("0.375");
   },

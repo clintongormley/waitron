@@ -1159,10 +1159,11 @@ export class TillModifierPicker extends LitElement {
 
   #quantityImprecise(): boolean {
     if (this.quantityReadOnly) return false;
+    const { precision } = productUnit(this.product);
+    if (precision === 0 && !soldByTheUnit(this.product) && !/^\d+$/.test(this.editedQuantity))
+      return true;
     try {
-      assertQuantityPrecision(this.editedQuantity, productUnit(this.product).precision, {
-        positive: true,
-      });
+      assertQuantityPrecision(this.editedQuantity, precision, { positive: true });
     } catch {
       return true;
     }
