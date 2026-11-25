@@ -57,7 +57,8 @@ export class WtPriceInput extends WtInput {
 
       .field-control {
         flex: 1;
-        width: var(--wt-price-field-width);
+        --amount-width: var(--wt-price-field-width);
+        width: var(--amount-width);
         min-width: var(--wt-tap-min);
       }
 
@@ -65,7 +66,9 @@ export class WtPriceInput extends WtInput {
          wait for the next frame while the field's width rule still applies. */
       .before .field-control,
       .after .field-control {
-        width: calc(var(--wt-price-field-width) + var(--currency-space, 0px) + var(--wt-space-1));
+        --amount-width: calc(
+          var(--wt-price-field-width) + var(--currency-space, 0px) + var(--wt-space-1)
+        );
       }
 
       .before .field-control {
@@ -147,11 +150,29 @@ export class WtPriceInput extends WtInput {
         flex: none;
         align-self: stretch;
         padding-inline: var(--wt-space-2);
-        color: var(--wt-color-text);
+        color: var(--wt-color-text-muted);
       }
 
-      .field[data-disabled] span.unit {
-        color: var(--wt-color-text-muted);
+      /* Compact cells keep the same amount width across rows, including when the unit wraps. */
+      @supports (field-sizing: content) {
+        .fixed[data-label="float"]:not([data-compact]) .field-control {
+          field-sizing: content;
+          width: auto;
+          max-width: var(--amount-width);
+          padding-inline-end: 0;
+        }
+
+        .fixed[data-label="float"]:not([data-compact]) .after .field-control {
+          padding-inline-end: calc(var(--currency-width, 0px) + var(--wt-space-1));
+        }
+
+        .fixed[data-label="float"]:not([data-compact]) .after .currency {
+          inset-inline-end: 0;
+        }
+
+        .fixed[data-label="float"]:not([data-compact]) span.unit {
+          padding-inline-start: var(--wt-space-1);
+        }
       }
 
       /* A unit too long for the field gives up width before the amount does; its text is cut with

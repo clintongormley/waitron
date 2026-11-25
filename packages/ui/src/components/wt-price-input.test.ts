@@ -286,14 +286,12 @@ test("a fixed unit is read out with the field, after any error", async () => {
   expect(input.getAttribute("aria-describedby")).toBe(`${error.id} ${unit.id}`);
 });
 
-test("a fixed unit paints its text from tokens, with no border, and stands as tall as the field", async () => {
+test("a fixed unit has no border and stands as tall as the field", async () => {
   const el = await mount('<wt-price-input unit="kg" fixed-unit></wt-price-input>');
-  host.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
   const unit = el.shadowRoot!.querySelector<HTMLElement>(".unit")!;
   const input = el.shadowRoot!.querySelector("input")!;
   const styles = getComputedStyle(unit);
   expect(styles.borderTopStyle).toBe("none");
-  expect(styles.color).toBe("rgb(4, 5, 6)");
   expect(styles.cursor).not.toBe("pointer");
   expect(unit.getBoundingClientRect().height).toBe(input.getBoundingClientRect().height);
 });
@@ -415,6 +413,29 @@ function typedTextBox(input: HTMLInputElement, text = input.value) {
     ? { left: content.right - width, right: content.right }
     : { left: content.left, right: content.left + width };
 }
+
+test.each(["en-GB", "es-ES"])(
+  "a fixed unit follows the displayed price in %s after typing or clearing the amount",
+  async (locale) => {
+    const { el, input, currency } = await mountPrice(
+      `<wt-price-input label="Price" locale="${locale}" unit="kg" fixed-unit></wt-price-input>`,
+    );
+    el.inherited = { value: "12.50", suffix: "inherited" };
+    const unit = el.shadowRoot!.querySelector("span.unit")!;
+    for (const value of ["", "1234.50", ""]) {
+      el.value = value;
+      await el.updateComplete;
+      await settled();
+      const price = typedTextBox(input, input.value || input.placeholder);
+      const priceRight = Math.max(price.right, currency!.getBoundingClientRect().right);
+      const unitLeft =
+        unit.getBoundingClientRect().left + parseFloat(getComputedStyle(unit).paddingLeft);
+      const gap = unitLeft - priceRight;
+      expect(gap).toBeGreaterThanOrEqual(0);
+      expect(gap).toBeLessThanOrEqual(8);
+    }
+  },
+);
 
 function expectInsideField(currency: HTMLElement, input: HTMLInputElement) {
   const sign = currency.getBoundingClientRect();
@@ -1025,13 +1046,19 @@ test.each([
   },
 );
 
-test("a fixed unit is drawn as text with no box of its own", async () => {
+test("a fixed unit uses muted ink and the unit button keeps its link colour", async () => {
   const el = await mount('<wt-price-input unit="kg" fixed-unit></wt-price-input>');
   host.style.setProperty("--wt-color-text", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(10, 11, 12)");
   const unit = getComputedStyle(el.shadowRoot!.querySelector(".unit")!);
-  expect(unit.color).toBe("rgb(7, 8, 9)");
+  expect(unit.color).toBe("rgb(10, 11, 12)");
   expect(unit.borderTopStyle).toBe("none");
   expect(unit.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  const selectable = await mount('<wt-price-input unit="kg"></wt-price-input>');
+  host.style.setProperty("--wt-color-primary-text", "rgb(13, 14, 15)");
+  expect(getComputedStyle(selectable.shadowRoot!.querySelector("button.unit")!).color).toBe(
+    "rgb(13, 14, 15)",
+  );
 });
 
 test.each(["", "hide-label"])(
