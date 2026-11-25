@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtButton, WtDialog, WtModal } from "@waitron/ui";
 import { cleanupWidgets, dialogClosed, mountWidget } from "./test-helpers.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import type { EquipmentLabel } from "./equipment-label.js";
 import "./equipment-label.js";
 
@@ -15,6 +15,12 @@ class FakeWriter {
   static locks: { signal: AbortSignal }[] = [];
   static writeResult = () => Promise.resolve();
   static lockResult = () => Promise.resolve();
+  static scans: { signal: AbortSignal }[] = [];
+  static scanResult = () => Promise.resolve();
+  scan(options: { signal: AbortSignal }) {
+    FakeWriter.scans.push(options);
+    return FakeWriter.scanResult();
+  }
   write(message: unknown, options: { signal: AbortSignal }) {
     FakeWriter.writes.push({ message, options });
     return FakeWriter.writeResult();
@@ -31,6 +37,8 @@ beforeEach(() => {
   FakeWriter.locks = [];
   FakeWriter.writeResult = () => Promise.resolve();
   FakeWriter.lockResult = () => Promise.resolve();
+  FakeWriter.scans = [];
+  FakeWriter.scanResult = () => Promise.resolve();
   vi.stubGlobal("NDEFReader", FakeWriter);
 });
 afterEach(() => {
@@ -168,7 +176,13 @@ describe("equipment label NFC writer", () => {
         await el.updateComplete;
         button(el, "confirm-lock-equipment-nfc").click();
       }
-      await vi.waitFor(() => expect(message(el)).toBe("Hold the sticker still and try again"));
+      await vi.waitFor(() =>
+        expect(message(el)).toBe(
+          operation === "write"
+            ? "Hold the sticker still and try again. A locked sticker can’t be rewritten."
+            : "Hold the sticker still and try again",
+        ),
+      );
       expect(button(el, "write-equipment-nfc").disabled).toBe(false);
       if (operation === "write")
         expect(el.shadowRoot!.querySelector("[data-test=lock-equipment-nfc]")).toBeNull();
@@ -218,7 +232,11 @@ describe("equipment label NFC writer", () => {
     );
     const el = await mount();
     button(el, "write-equipment-nfc").click();
-    await vi.waitFor(() => expect(message(el)).toBe("Hold the sticker still and try again"));
+    await vi.waitFor(() =>
+      expect(message(el)).toBe(
+        "Hold the sticker still and try again. A locked sticker can’t be rewritten.",
+      ),
+    );
     expect(button(el, "write-equipment-nfc").disabled).toBe(false);
   });
 
@@ -374,5 +392,100 @@ describe("equipment label NFC writer", () => {
     await userEvent.keyboard("{Escape}");
     await reported;
     expect(FakeWriter.writes[0]!.options.signal.aborted).toBe(true);
+  });
+
+  it("says in Spanish that a failed write may be a locked sticker", async () => {
+    setLocale("es");
+    FakeWriter.writeResult = () => Promise.reject(new DOMException("IO error", "NetworkError"));
+    const el = await mount();
+    button(el, "write-equipment-nfc").click();
+    await vi.waitFor(() => expect(message(el)).toBe(t("equipment.nfc_write_failed")));
+    expect(message(el)).not.toContain("locked sticker");
+  });
+
+  it("scans only once a write starts, and keeps that one scan through a rewrite and a lock", async () => {
+    const el = await mount();
+    expect(FakeWriter.scans).toEqual([]);
+    FakeWriter.writeResult = () => new Promise<void>(() => {});
+    button(el, "write-equipment-nfc").click();
+    expect(FakeWriter.scans).toHaveLength(1);
+    el.itemId = "7d2c9a10-5b3e-4f61-8a2d-1c0e9b8a7f65";
+    await el.updateComplete;
+    FakeWriter.writeResult = () => Promise.resolve();
+    await write(el);
+    button(el, "write-equipment-nfc").click();
+    await vi.waitFor(() => expect(FakeWriter.writes).toHaveLength(3));
+    await vi.waitFor(() => expect(button(el, "lock-equipment-nfc").disabled).toBe(false));
+    button(el, "lock-equipment-nfc").click();
+    await el.updateComplete;
+    button(el, "confirm-lock-equipment-nfc").click();
+    await vi.waitFor(() => expect(message(el)).toContain("locked"));
+    expect(FakeWriter.scans.map((scan) => scan.signal.aborted)).toEqual([true, false]);
+  });
+
+  it("keeps scanning after a failed write", async () => {
+    FakeWriter.writeResult = () => Promise.reject(new DOMException("IO error", "NetworkError"));
+    const el = await mount();
+    button(el, "write-equipment-nfc").click();
+    await vi.waitFor(() => expect(message(el)).toContain("locked sticker"));
+    expect(FakeWriter.scans.map((scan) => scan.signal.aborted)).toEqual([false]);
+  });
+
+  it.each(["close", "Escape", "remove", "replace"] as const)(
+    "stops scanning on %s after a written sticker",
+    async (exit) => {
+      const el = await mount();
+      await write(el);
+      expect(FakeWriter.scans[0]!.signal.aborted).toBe(false);
+      if (exit === "close") button(el, "close-equipment-label").click();
+      else if (exit === "Escape") {
+        const reported = dialogClosed(el.shadowRoot!.querySelector("wt-modal")!);
+        await userEvent.keyboard("{Escape}");
+        await reported;
+      } else if (exit === "remove") el.remove();
+      else {
+        el.kind = "printer";
+        await el.updateComplete;
+      }
+      expect(FakeWriter.scans).toHaveLength(1);
+      expect(FakeWriter.scans[0]!.signal.aborted).toBe(true);
+    },
+  );
+
+  it.each(["rejected", "thrown"] as const)(
+    "writes when the scan is %s, and the next write tries the scan again",
+    async (how) => {
+      FakeWriter.scanResult = () => {
+        const refused = new DOMException("not ready", "NotReadableError");
+        if (how === "thrown") throw refused;
+        return Promise.reject(refused);
+      };
+      const el = await mount();
+      await write(el);
+      expect(message(el)).toContain("written");
+      expect(FakeWriter.scans).toHaveLength(1);
+      FakeWriter.scanResult = () => Promise.resolve();
+      button(el, "write-equipment-nfc").click();
+      expect(FakeWriter.scans).toHaveLength(2);
+      expect(FakeWriter.scans[1]!.signal.aborted).toBe(false);
+    },
+  );
+
+  it("a stopped scan's late refusal does not stop the replacement label's scan", async () => {
+    let refuse!: () => void;
+    FakeWriter.scanResult = () =>
+      new Promise<void>((_, reject) => {
+        refuse = () => reject(new DOMException("aborted", "AbortError"));
+      });
+    const el = await mount();
+    await write(el);
+    el.kind = "printer";
+    await el.updateComplete;
+    FakeWriter.scanResult = () => Promise.resolve();
+    await write(el);
+    refuse();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    button(el, "write-equipment-nfc").click();
+    expect(FakeWriter.scans.map((scan) => scan.signal.aborted)).toEqual([true, false]);
   });
 });

@@ -4282,6 +4282,8 @@ export const en = {
   "equipment.nfc_written": "Sticker written. You can now lock it to prevent changes.",
   "equipment.nfc_locked": "Sticker locked permanently",
   "equipment.nfc_failed": "Hold the sticker still and try again",
+  "equipment.nfc_write_failed":
+    "Hold the sticker still and try again. A locked sticker can’t be rewritten.",
   "printers.portable": "Portable printer",
   "printers.portable_hint":
     "Carried by one person, such as a belt printer; one device holds it at a time.",
@@ -9142,6 +9144,8 @@ export const es: Record<StringKey, string> = {
   "equipment.nfc_written": "Pegatina escrita. Ahora puedes bloquearla para impedir cambios.",
   "equipment.nfc_locked": "Pegatina bloqueada permanentemente",
   "equipment.nfc_failed": "Mantén la pegatina quieta e inténtalo de nuevo",
+  "equipment.nfc_write_failed":
+    "Mantén la pegatina quieta e inténtalo de nuevo. Una pegatina bloqueada no se puede reescribir.",
   "printers.portable": "Impresora portátil",
   "printers.portable_hint":
     "La lleva una persona, como una impresora de cinturón; la tiene un solo dispositivo a la vez.",

@@ -16,6 +16,7 @@ import { fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 
 interface NfcWriter {
+  scan(options: { signal: AbortSignal }): Promise<void>;
   write(
     message: { records: { recordType: "text"; data: string }[] },
     options: { signal: AbortSignal },
@@ -181,6 +182,7 @@ export class EquipmentLabel extends LitElement {
   @state() private nfcWritten = false;
   @state() private confirmLock = false;
   #nfcOperation: AbortController | undefined;
+  #nfcScan: AbortController | undefined;
   #generation = 0;
 
   #resetNfc(): void {
@@ -194,6 +196,8 @@ export class EquipmentLabel extends LitElement {
     this.printerQueued = false;
     this.#nfcOperation?.abort();
     this.#nfcOperation = undefined;
+    this.#nfcScan?.abort();
+    this.#nfcScan = undefined;
     this.nfcBusy = "";
     this.nfcMessage = null;
     this.nfcWritten = false;
@@ -228,6 +232,19 @@ export class EquipmentLabel extends LitElement {
     }
   }
 
+  /** Android opens its own tag viewer over the page for a sticker it finds while no page is
+   * scanning, so this scan, whose readings nothing uses, stays open until the label closes. */
+  async #keepScanning(Writer: new () => NfcWriter): Promise<void> {
+    if (this.#nfcScan !== undefined) return;
+    const scan = new AbortController();
+    this.#nfcScan = scan;
+    try {
+      await new Writer().scan({ signal: scan.signal });
+    } catch {
+      if (this.#nfcScan === scan) this.#nfcScan = undefined;
+    }
+  }
+
   async #nfc(operation: "write" | "lock"): Promise<void> {
     const Writer = nfcWriter();
     if (
@@ -243,6 +260,7 @@ export class EquipmentLabel extends LitElement {
     if (operation === "write") this.nfcWritten = false;
     const controller = new AbortController();
     this.#nfcOperation = controller;
+    void this.#keepScanning(Writer);
     try {
       const writer = new Writer();
       if (operation === "write")
@@ -255,7 +273,9 @@ export class EquipmentLabel extends LitElement {
       this.nfcWritten = operation === "write";
       this.nfcMessage = operation === "write" ? "equipment.nfc_written" : "equipment.nfc_locked";
     } catch {
-      if (!controller.signal.aborted) this.nfcMessage = "equipment.nfc_failed";
+      if (!controller.signal.aborted)
+        this.nfcMessage =
+          operation === "write" ? "equipment.nfc_write_failed" : "equipment.nfc_failed";
     } finally {
       if (this.#nfcOperation === controller) {
         this.#nfcOperation = undefined;
