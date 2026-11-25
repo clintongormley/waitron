@@ -237,6 +237,17 @@ it("names the version published last as newest when a dish's rename leaves Daily
     }
     throw new Error("no rename gave the newer copy the lower key");
   };
+  // Start from a copy whose hash sorts in the upper half, so each rename below has at least an
+  // even chance of sorting under it.
+  for (let attempt = 1; ; attempt++) {
+    if ((await dailyCopy(liveDaily.versionId)).key.slice(-64) >= "8") break;
+    if (attempt === 30) throw new Error("no rename gave Daily a key in the upper half");
+    const versionId = await inTx(venue, async (tx) => {
+      await updateProduct(tx, productIds.Hake, { name: `Hake first ${attempt}` });
+      return publishWorkingMenu(tx, venue.tables.menuId);
+    });
+    liveDaily = { ...daily, versionId };
+  }
   const { first, second, newer } = await partyWithTwoDailies(renameHake);
   const [moving] = await setMenuRows(first.tabId);
   const command = await commandFor(venue, first.partyId);
