@@ -1,3 +1,4 @@
+import { mountMenuStructureSaveRoute } from "./menu-structure-save-route.js";
 import { mountContentTranslationsApi, type GatedWork } from "./content-translations-api.js";
 import {
   isProductOrdering,
@@ -438,6 +439,12 @@ const runBodySection = runBodyIds("menu_section.not_found", "menu_section.wrong_
 // `menu_section.not_found`, so that code keeps its 404.
 const runBodyRole = runBodyIds("menu_section.wrong_role");
 const runBodySetMenu = runBodyIds("set_menu.not_found");
+const runStructureSave = runBodyIds(
+  "menu_section.not_found",
+  "menu_section.wrong_role",
+  "set_menu.not_found",
+  "product.not_found",
+);
 // The single-variant route names its variant in the path, so an unknown one is a 404; the whole-list
 // PUT names variants in its body, and an unknown one there stays a 400.
 const runVariant = createErrorBoundary(
@@ -1049,6 +1056,13 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
   });
 
   mountSectionRoutes(app, gated, log, deps.venueLocale ?? FALLBACK_LOCALE);
+  mountMenuStructureSaveRoute(
+    app,
+    gated,
+    log,
+    deps.venueLocale ?? FALLBACK_LOCALE,
+    runStructureSave,
+  );
   mountMenuHomeRoutes(app, gated, log);
   mountSetMenuRoutes(app, gated, log);
   mountContentTranslationsApi(app, gated, log, translationContextFor(deps), deps.managementOrigin);

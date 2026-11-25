@@ -79,7 +79,7 @@ export interface ErrorParams {
       | "outside_boundaries";
   };
   /** A content language is not a recognised language identifier. */
-  "content.language_invalid": Record<string, never>;
+  "content.language_invalid": { field?: string };
   "shared.invalid_id": { kind: string; value: string };
   /**
    * A stored source and device that do not make an origin, or make one its reader refuses: a sale's

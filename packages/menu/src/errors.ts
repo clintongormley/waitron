@@ -71,7 +71,7 @@ declare module "@waitron/shared" {
       causeCode: string;
       causeParams: Readonly<Record<string, unknown>>;
     };
-    "content.translation_invalid": Record<string, never>;
+    "content.translation_invalid": { field?: string };
     /** Required content has no text in the configured default language. */
     "content.translation_required": { language: string };
     /** A content-language save leaves out a language the venue's country pack keeps enabled for its area. */
@@ -85,11 +85,11 @@ declare module "@waitron/shared" {
     "set_menu.invalid": {
       field: "setPrice" | "lines" | "count" | "courseId" | "courseIds" | "variants" | "surcharge";
     };
-    "set_menu.not_found": { menuId: string };
+    "set_menu.not_found": { menuId: string; field?: string };
     "set_menu.not_publishable": { menuId: string; count: number };
     "set_menu.dish_sold_by_measure": { productId: string };
     "set_menu.dishes_only": { menuId: string };
-    "set_menu.wrong_place": { menuId: string };
+    "set_menu.wrong_place": { menuId: string; field?: string };
     "menu.name_taken": { field: "name" };
     "menu.reset_required": { menuId: string };
     "menu.clashes_unresolved": { menuId: string; count: number };
@@ -147,7 +147,7 @@ declare module "@waitron/shared" {
     "product.variant_invalid": { field: string };
     /** A submitted variant identity is not a variant of the product or, in a menu's variant prices,
      * not an Active one. */
-    "product.variant_not_found": { variantId: string };
+    "product.variant_not_found": { variantId: string; field?: string };
     /** A product is Inactive or Unavailable, or its menu path is disabled. */
     "product.unavailable": { productId: string };
     /** A line ordered a product on its own whose published offer is `not_sold_separately`. It
@@ -168,25 +168,25 @@ declare module "@waitron/shared" {
     "product.name_taken": { field: string; name: string };
     /** A request field is missing or malformed; `field` names it. */
     "product.invalid": { field: string };
-    "product.not_found": { productId: string };
+    "product.not_found": { productId: string; field?: string };
     "product.deleted": { productId: string; field?: string };
     "product.on_live_menu": {
       products: { id: string; name: string }[];
       menus: { id: string; name: string }[];
     };
     /** `memberId` names a member the section's list does not hold. */
-    "menu_section.not_found": { sectionId: string; memberId?: string };
+    "menu_section.not_found": { sectionId: string; memberId?: string; field?: string };
     /** A section write's value is malformed; `field` names it. */
     "menu_section.invalid": { field: string };
     "menu_section.translation_required": { field: string; language: string };
     /** Holding the child would let a section reach itself. */
-    "menu_section.member_cycle": { sectionId: string; childSectionId: string };
+    "menu_section.member_cycle": { sectionId: string; childSectionId: string; field?: string };
     /** The list already holds that product or that section. */
-    "menu_section.member_duplicate": { sectionId: string };
+    "menu_section.member_duplicate": { sectionId: string; field?: string };
     /** `sectionId` is a list a menu owns, which the write refused. */
-    "menu_section.wrong_role": { sectionId: string; role: string };
+    "menu_section.wrong_role": { sectionId: string; role: string; field?: string };
     /** A member reference or selection names nothing the write can use. */
-    "menu_section.membership_invalid": Record<string, never>;
+    "menu_section.membership_invalid": { field?: string };
     /**
      * An options list's authoring body, or an ORDER-time selection list, is refused. `field` is the
      * dotted path of the offending value (`"labels.0.kitchenName"`, `"listId"`), so the editor can

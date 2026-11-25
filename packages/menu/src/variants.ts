@@ -58,7 +58,7 @@ const variantColumns = {
   active: products.active,
 };
 
-function validatePrice(price: string | null, field: string): Decimal | null {
+export function validatePrice(price: string | null, field: string): Decimal | null {
   if (price === null) return null;
   if (typeof price !== "string" || !isProductPrice(price)) {
     throw new AppError("product.variant_invalid", { field });
