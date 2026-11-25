@@ -89,6 +89,55 @@ describe("runDue", () => {
     });
   });
 
+  it.each(["before", "after"] as const)(
+    "leaves the period recoverable when stopped %s its claim commits",
+    async (phase) => {
+      const controller = new AbortController();
+      const duty = new FakeDuty();
+      const write = db.withWriteLock.bind(db);
+      let turn = 0;
+      const lock = vi.spyOn(db, "withWriteLock").mockImplementation(async (run) => {
+        if (++turn !== 2) return write(run);
+        const result = await write(() => {
+          if (phase === "before") controller.abort();
+          return run();
+        });
+        if (phase === "after") controller.abort();
+        return result;
+      });
+      const stopped = await runDue(deps([duty]), NOW, controller.signal);
+      lock.mockRestore();
+
+      expect(duty.calls).toEqual([]);
+      expect(stopped.ran).toEqual([]);
+      expect(stopped.nextDueAt).toBeNull();
+      const retryAt = phase === "before" ? NOW : new Date(+NOW + DEFAULTS.staleAfterMs + 1);
+      const retried = await runDue(deps([duty]), retryAt);
+      expect(retried.ran).toEqual([
+        expect.objectContaining({
+          period: dayPeriod(new Date("2026-07-24T00:00:00Z")),
+          outcome: "succeeded",
+        }),
+      ]);
+    },
+  );
+
+  it("records a started duty's result and starts no later duty after cancellation", async () => {
+    const controller = new AbortController();
+    const started = new FakeDuty("duty.started", async () => {
+      controller.abort();
+      return { summary: { checked: 1 } };
+    });
+    const later = new FakeDuty("duty.later");
+    const result = await runDue(deps([started, later]), NOW, controller.signal);
+
+    expect(result.ran).toEqual([
+      expect.objectContaining({ duty: started.name, outcome: "succeeded" }),
+    ]);
+    expect(later.calls).toEqual([]);
+    expect(result.nextDueAt).toBeNull();
+  });
+
   it("is idempotent within a tick — a second call finds no gap", async () => {
     const duty = new FakeDuty();
     await runDue(deps([duty]), NOW);

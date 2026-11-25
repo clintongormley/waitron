@@ -28,8 +28,8 @@ export function reconcilerAsDuty(reconciler: PaymentReconciler): PeriodDuty {
     ...(reconciler.provider === "sumup" ? { firstRunDelayMs: BACKUP_AUDIT_PADDING_MS } : {}),
     retryParkedAfterMs: DAY_MS,
     longestResweepMs: DAY_MS,
-    async run(period: RunPeriod, now: Date): Promise<DutyOutcome> {
-      const result = await reconciler.reconcile(period, now);
+    async run(period: RunPeriod, now: Date, signal?: AbortSignal): Promise<DutyOutcome> {
+      const result = await reconciler.reconcile(period, now, signal);
       return {
         summary: summaryOf(result),
         // A paymentRef in BOTH lists is an orphan whose amount also drifted. Deliberately a SUPERSET of
@@ -93,12 +93,14 @@ export interface ReconcilePassDeps {
   /** Asked per pass, so a credential provisioned while the host runs is served on the next pass. */
   duties: readonly { duty: PeriodDuty; credentialPurpose: Purpose }[];
   credentialProvisioned: (purpose: Purpose) => Promise<boolean>;
-  runDue: (now: Date, duties: PeriodDuty[]) => Promise<TickResult>;
+  runDue: (now: Date, duties: PeriodDuty[], signal?: AbortSignal) => Promise<TickResult>;
 }
 
 /** Select each provisioned provider's duty when its tables are installed. */
-export function reconcilePassFor(deps: ReconcilePassDeps): (now: Date) => Promise<TickResult> {
-  return async (now) => {
+export function reconcilePassFor(
+  deps: ReconcilePassDeps,
+): (now: Date, signal?: AbortSignal) => Promise<TickResult> {
+  return async (now, signal) => {
     if (!deps.paymentsInstalled) return NOTHING_TO_RECONCILE;
     try {
       await deps.refreshHeld(now);
@@ -109,7 +111,7 @@ export function reconcilePassFor(deps: ReconcilePassDeps): (now: Date) => Promis
     for (const entry of deps.duties) {
       if (await deps.credentialProvisioned(entry.credentialPurpose)) duties.push(entry.duty);
     }
-    return duties.length === 0 ? NOTHING_TO_RECONCILE : deps.runDue(now, duties);
+    return duties.length === 0 ? NOTHING_TO_RECONCILE : deps.runDue(now, duties, signal);
   };
 }
 

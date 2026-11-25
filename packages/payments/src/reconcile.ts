@@ -157,7 +157,11 @@ export interface PaymentReconcileResult {
 /** One implementer per settlement identity (per `provider` id), never one per capture mechanism. */
 export interface PaymentReconciler {
   readonly provider: string;
-  reconcile(period: ReconcilePeriod, now: Date): Promise<PaymentReconcileResult>;
+  reconcile(
+    period: ReconcilePeriod,
+    now: Date,
+    signal?: AbortSignal,
+  ): Promise<PaymentReconcileResult>;
 }
 
 /** The four classes a LOCAL row can fall into. `missingLocal` is not here: it has no local row. */
@@ -259,8 +263,11 @@ export type ReconcileDeps = {
   heldAlerts: HeldAlertSink;
   settlementLagMs: number;
   collectChargeAudit?: boolean;
-  /** When supplied, this adapter owns every orphan claim, under T2's write lock. */
-  prepareOrphans?: (tx: Transaction, records: SettlementRecord[]) => Promise<ReconcilableRow[]>;
+  /** The adapter owns every orphan claim under T2's write lock. Deferred records are settlements
+   * matched to local payments whose claims were stopped and will be retried. */
+  prepareOrphans?: (
+    tx: Transaction,
+  ) => Promise<{ claimed: ReconcilableRow[]; deferred?: ReadonlySet<SettlementRecord> }>;
 } & ({ mode: "audit-only"; reverse?: ReversalFn } | { mode?: "remediate"; reverse: ReversalFn });
 
 const CODE = {
@@ -326,7 +333,8 @@ export async function reconcilePayments(
   // sweep will reverse.
   const remediable: ReconcilableRow[] = [];
   await withTransaction(deps.db, async (tx) => {
-    const prepared = (await deps.prepareOrphans?.(tx, records)) ?? [];
+    const preparation = await deps.prepareOrphans?.(tx);
+    const prepared = preparation?.claimed ?? [];
     remediable.push(...prepared);
     result.checked += prepared.filter(
       (row) => !rows.some((original) => original.paymentId === row.paymentId),
@@ -452,7 +460,9 @@ export async function reconcilePayments(
     }
 
     result.incidentsRaised += await raiseRowIncidents(tx, deps, findings, remediation, held, now);
-    result.incidentsRaised += await raiseMissingLocal(tx, deps, missing, now);
+    const deferred = preparation?.deferred;
+    const alertable = deferred ? missing.filter((record) => !deferred.has(record)) : missing;
+    result.incidentsRaised += await raiseMissingLocal(tx, deps, alertable, now);
     if (wroteHold && (await refreshHeldAlert(tx, deps.heldAlerts, { now, by: null }))) {
       result.incidentsRaised += 1;
     }

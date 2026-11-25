@@ -69,9 +69,11 @@ export function attendanceJob(deps: AttendancePassDeps & { maxSleepMs: number })
     minSleepMs: 500,
     maxSleepMs: deps.maxSleepMs,
     backoff: { firstMs: 5_000, maxMs: 300_000 },
-    async pass({ now }) {
+    async pass({ now, signal }) {
       const more =
-        (await attendanceWorkPending(deps.db, now)) && (await runAttendancePass(deps)).more;
+        (await attendanceWorkPending(deps.db, now)) &&
+        (await runAttendancePass({ ...deps, isPrimary: () => !signal.aborted && deps.isPrimary() }))
+          .more;
       return { nextDueAt: more ? now : await nextAttendanceDueAt(deps.db, now) };
     },
   };

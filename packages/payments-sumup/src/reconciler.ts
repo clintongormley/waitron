@@ -5,6 +5,7 @@ import {
   BACKUP_AUDIT_PADDING_MS,
   BACKUP_MATCH_WINDOW_MS,
   claimAbandonedCapture,
+  isAbandonedCaptureClaimable,
   getPaymentByRef,
   listAbandonedRefundOutcomes,
   listReconcilable,
@@ -42,7 +43,7 @@ export class SumUpReconciler implements PaymentReconciler {
       reconcileMoney?: ReconcileMoneyGates;
     },
   ) {}
-  async reconcile(period: ReconcilePeriod, now: Date) {
+  async reconcile(period: ReconcilePeriod, now: Date, signal?: AbortSignal) {
     const client = await this.deps.resolveClient();
     const evidence = async (paymentRef: string, ref: string, amount: string) => {
       try {
@@ -279,24 +280,32 @@ export class SumUpReconciler implements PaymentReconciler {
         provider: this.provider,
         report,
         prepareOrphans: async (tx) => {
-          if (prepared.size === 0) return [];
+          if (prepared.size === 0) return { claimed: [] };
           if (!(await admit(tx))) {
             retryOrphans = true;
-            return [];
+            return { claimed: [] };
           }
+          // A marked refund cannot be resent, so stepdown can only stop work before claiming it.
+          const stopped = signal?.aborted === true;
+          if (stopped) retryOrphans = true;
+
           const claimed = [];
+          const deferred = new Set<SettlementRecord>();
           for (const [paymentRef, { record, transaction }] of prepared) {
-            const row = await claimAbandonedCapture(tx, {
-              provider: this.provider,
-              paymentRef,
-              amount: record.amount,
-              externalRef: transaction.id,
-              settledAt: record.settledAt,
-              at: now,
-            });
-            if (row) claimed.push(row);
+            const key = { provider: this.provider, paymentRef, amount: record.amount };
+            if (stopped) {
+              if (await isAbandonedCaptureClaimable(tx, key)) deferred.add(record);
+            } else {
+              const row = await claimAbandonedCapture(tx, {
+                ...key,
+                externalRef: transaction.id,
+                settledAt: record.settledAt,
+                at: now,
+              });
+              if (row) claimed.push(row);
+            }
           }
-          return claimed;
+          return { claimed, deferred };
         },
         reverse: async (paymentRef) => {
           const { record, transaction } = prepared.get(paymentRef)!;

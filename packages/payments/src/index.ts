@@ -56,6 +56,7 @@ export {
   listAuditCandidates,
   listBackupPayments,
   claimAbandonedCapture,
+  isAbandonedCaptureClaimable,
   markReconcileRemediated,
   recordFailedRefund,
   recordRefund,

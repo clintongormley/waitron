@@ -146,8 +146,8 @@ export async function claimRow(
 }
 
 /**
- * Reclaim a `running` row stranded by a crashed process. Without this a crash locks that period
- * for ever, and no gap reveals it because the row exists.
+ * Reclaim a `running` row whose worker stopped before completing it. The row still exists, so
+ * gap detection cannot pick up the unfinished period.
  */
 export async function reclaimStale(
   tx: Transaction,

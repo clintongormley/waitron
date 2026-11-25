@@ -42,6 +42,8 @@ const outside = vi.hoisted(() => ({
   sweeps: [] as number[],
   holdSubmit: null as Promise<void> | null,
   holdSweep: null as Promise<void> | null,
+  holdReconcile: null as (() => Promise<void>) | null,
+  atGateClose: null as { submits: number; reconciles: number; sweeps: number } | null,
 }));
 
 // The suite stands for a box that prepared the handover while it was running, so its start does not
@@ -106,6 +108,40 @@ vi.mock("@waitron/module", async (importOriginal) => {
         );
       };
       return { ...real, drain: drainHere };
+    },
+  };
+});
+
+vi.mock("./handover-gate.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./handover-gate.js")>();
+  return {
+    ...actual,
+    createHandoverGate: (...args: Parameters<typeof actual.createHandoverGate>) => {
+      const gate = actual.createHandoverGate(...args);
+      gate.closed.addEventListener(
+        "abort",
+        () => {
+          outside.atGateClose = {
+            submits: outside.submits.length,
+            reconciles: outside.reconciles.length,
+            sweeps: outside.sweeps.length,
+          };
+        },
+        { once: true },
+      );
+      return gate;
+    },
+  };
+});
+
+vi.mock("@waitron/payments", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/payments")>();
+  return {
+    ...actual,
+    runDue: async (...args: Parameters<typeof actual.runDue>) => {
+      const pause = outside.holdReconcile;
+      if (pause !== null) await pause();
+      return actual.runDue(...args);
     },
   };
 });
@@ -286,6 +322,15 @@ describe("a card sale in flight when the box steps down", () => {
       WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
     };
 
+    const reconcile = hold();
+    const reachedScheduler = hold();
+    releases.push(reconcile.release);
+    outside.holdReconcile = () => {
+      if (outside.reconciles.length === 0) return Promise.resolve();
+      outside.holdReconcile = null;
+      reachedScheduler.release();
+      return reconcile.wait;
+    };
     let card: FakePaymentProvider | undefined;
     server = await startServer(env, env, {
       timings: { maxTickMs: 600000, minTickMs: 200, scheduler: { maxPeriodsPerTick: 1 } },
@@ -382,13 +427,12 @@ describe("a card sale in flight when the box steps down", () => {
     outside.holdSweep = sweep.wait;
     await vi.waitFor(() => expect(outside.holdSweep).toBeNull(), { timeout: 10_000 });
 
-    const before = {
-      submitsBeforeStepdown: outside.submits.length,
-      reconcilesBeforeStepdown: outside.reconciles.length,
-      sweepsBeforeStepdown: outside.sweeps.length,
-    };
+    await within(reachedScheduler.wait, 10_000, "a reconciliation pass at the scheduler");
     const asked = await fetch(`${base}/test/stepdown`, { method: "POST" });
     const stepdown = { status: asked.status, body: await asked.json() };
+    reconcile.release();
+    const atGateClose = outside.atGateClose;
+    if (atGateClose === null) throw new Error("the handover gate did not close");
     const billPaid = await fetch(`${base}/api/working-orders/${billId}/payments`, {
       method: "POST",
       headers: { cookie: venue.cookie2, "content-type": "application/json" },
@@ -472,7 +516,9 @@ describe("a card sale in flight when the box steps down", () => {
       sale,
       salesForOrder: n,
       restarts,
-      ...before,
+      submitsBeforeStepdown: atGateClose.submits,
+      reconcilesBeforeStepdown: atGateClose.reconciles,
+      sweepsBeforeStepdown: atGateClose.sweeps,
     };
   }, 120_000);
 
@@ -550,16 +596,14 @@ describe("a card sale in flight when the box steps down", () => {
     expect(outside.submits).toHaveLength(1);
   });
 
-  // Control, run locally and not committed: with `signalDuties(deps.duties)` in `stepDown` made a
-  // no-op, this case fails on the reconcile line with
-  //   expected [ 1793701429314, 1793701429520 ] to deeply equal []
-  // (the later calls' recorded times, which vary). With that line removed, the sweep line fails
-  // with five later sweeps: expected [ 1793701439387, 1793701439440, …(3) ] to deeply equal [].
+  // Both workers have work held across gate closure. The server's restart bounds the observation.
   it("the Stripe reconcile and the card sweep are not called after the stepdown began", () => {
     expect(seen().reconcilesBeforeStepdown).toBeGreaterThan(0);
     expect(seen().sweepsBeforeStepdown).toBeGreaterThan(0);
-    expect(outside.reconciles.slice(seen().reconcilesBeforeStepdown)).toEqual([]);
-    expect(outside.sweeps.slice(seen().sweepsBeforeStepdown)).toEqual([]);
+    expect({
+      reconciles: outside.reconciles.slice(seen().reconcilesBeforeStepdown),
+      sweeps: outside.sweeps.slice(seen().sweepsBeforeStepdown),
+    }).toEqual({ reconciles: [], sweeps: [] });
   });
 
   it("the request that asked for the stepdown received its answer, and the box restarts once", () => {

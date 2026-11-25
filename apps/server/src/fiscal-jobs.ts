@@ -49,15 +49,15 @@ export function drainJob(
 }
 
 export function reconcileJob(
-  deps: DutyDeps & { reconcile: (now: Date) => Promise<TickResult> },
+  deps: DutyDeps & { reconcile: (now: Date, signal: AbortSignal) => Promise<TickResult> },
 ): JobDefinition {
   return {
     name: RECONCILE_DUTY,
     applies: () => deps.getRole() === "primary",
     ...schedule(deps.timings),
-    pass: ({ now }) =>
+    pass: ({ now, signal }) =>
       runDuty(deps, RECONCILE_DUTY, now, async () =>
-        reconcileReport(await deps.reconcile(now), deps.log),
+        reconcileReport(await deps.reconcile(now, signal), deps.log),
       ),
   };
 }

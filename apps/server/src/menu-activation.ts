@@ -21,11 +21,13 @@ export function menuActivationJob(deps: {
     minSleepMs: 0,
     maxSleepMs: deps.maxWaitMs,
     backoff: { firstMs: 5_000, maxMs: 300_000 },
-    async pass({ now }) {
+    async pass({ now, signal }) {
       try {
-        const { activated, nextDueAt } = await withTransaction(deps.db, (tx) =>
-          activateDueMenuPublications(tx, now),
+        const result = await withTransaction(deps.db, (tx) =>
+          signal.aborted ? null : activateDueMenuPublications(tx, now),
         );
+        if (result === null) return { nextDueAt: null };
+        const { activated, nextDueAt } = result;
         for (const edition of activated) deps.log("info", "menu_publication.activated", edition);
         deps.log("debug", "menu_publication.activation_armed", {
           sleepMs: sleepMsFor(nextDueAt, deps.now(), 0, deps.maxWaitMs),

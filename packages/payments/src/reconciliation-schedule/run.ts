@@ -36,7 +36,7 @@ export interface RunRecord {
 
 export interface TickResult {
   ran: RunRecord[];
-  /** Eligible work this tick did not run, capped by `maxPeriodsPerTick`. Never silent. */
+  /** Eligible work deferred by the `maxPeriodsPerTick` cap. */
   deferred: number;
   /** Never-swept days dropped permanently by the horizon. Never silent. */
   beyondHorizon: number;
@@ -55,7 +55,7 @@ export interface TickResult {
    * FUTURE time work appears as the ledger stands at the END of this tick: the derivation's own
    * answer, together with the backoff and successor times this tick's own runs just wrote.
    *
-   * Null only when there is no duty at all.
+   * Null when there are no duties or the scheduler was stopped.
    */
   nextDueAt: Date | null;
 }
@@ -66,7 +66,11 @@ export interface TickResult {
  * A short read, then the duty OUTSIDE every transaction because it makes network calls, then a
  * short write.
  */
-export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult> {
+export async function runDue(
+  deps: SchedulerDeps,
+  now: Date,
+  signal?: AbortSignal,
+): Promise<TickResult> {
   const result: TickResult = {
     ran: [],
     deferred: 0,
@@ -78,6 +82,7 @@ export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult
   let earliestFuture = Number.POSITIVE_INFINITY;
 
   for (const duty of deps.duties) {
+    if (signal?.aborted) return result;
     try {
       const snapshot = await withTransaction(deps.db, (tx) =>
         readSnapshot(tx, { duty: duty.name, horizonStart }),
@@ -92,7 +97,8 @@ export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult
       earliestFuture = Math.min(earliestFuture, derivation.nextDueAt.getTime());
 
       for (const work of derivation.due) {
-        const completed = await runOne(deps, duty, work, now);
+        if (signal?.aborted) return result;
+        const completed = await runOne(deps, duty, work, now, signal);
         if (completed === null) continue;
         result.ran.push(completed.record);
         // The derivation above was computed from a snapshot taken BEFORE any duty ran, so it
@@ -106,6 +112,8 @@ export async function runDue(deps: SchedulerDeps, now: Date): Promise<TickResult
       result.skipped.push({ duty: duty.name, errorCode: codeOf(error) });
     }
   }
+
+  if (signal?.aborted) return result;
 
   // The items a skipped duty's loop never reached have no claim and no backoff, so nothing else in
   // this tick reports them; without this fold a tick in which every duty's snapshot read threw
@@ -136,19 +144,17 @@ interface CompletedRun {
   nextDueAt: Date | null;
 }
 
-/** Claim one unit of work, run it outside every transaction, and record what happened. Returns
- * null when another runner won the claim — not an error, and not this tick's business. Also null
- * when another runner reclaimed this row as stale WHILE this attempt was still running: by the
- * time this attempt's `completeRun` call runs, `startedAt` no longer matches, the fence rejects it,
- * and — same as a lost claim — the ledger carries no record attributable to THIS attempt, so
- * reporting it in `ran` would claim an outcome the ledger does not show. */
+/** Run outside the claim transaction. A stopped or lost claim has no outcome to report.
+ * A stale-claim takeover also fences out the old runner's completion. */
 async function runOne(
   deps: SchedulerDeps,
   duty: PeriodDuty,
   work: DueWork,
   now: Date,
+  signal: AbortSignal | undefined,
 ): Promise<CompletedRun | null> {
   const claimed = await withTransaction(deps.db, (tx) => {
+    if (signal?.aborted) return null;
     if (work.kind === "gap") {
       return claimGap(tx, { duty: duty.name, period: work.period, now });
     }
@@ -157,7 +163,8 @@ async function runOne(
     }
     return reclaimStale(tx, { id: work.row.id, now, staleAfterMs: deps.staleAfterMs });
   });
-  if (claimed === null) return null;
+  // A committed claim spends an attempt and waits for stale-claim recovery if stopped here.
+  if (claimed === null || signal?.aborted) return null;
 
   const period: RunPeriod = {
     from: new Date(claimed.periodFrom),
@@ -168,7 +175,7 @@ async function runOne(
   let errorCode: string | null = null;
   let resweepAfter: Date | undefined;
   try {
-    const outcome = await duty.run(period, now);
+    const outcome = await duty.run(period, now, signal);
     summary = outcome.summary;
     resweepAfter = outcome.resweepAfter;
   } catch (error) {

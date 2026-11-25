@@ -499,7 +499,7 @@ describe("orphan remediation", () => {
             settledAt: OLD_SETTLED,
             at: NOW,
           });
-          return claimed ? [claimed] : [];
+          return { claimed: claimed ? [claimed] : [] };
         },
       },
       PERIOD,
@@ -557,7 +557,7 @@ describe("orphan remediation", () => {
             });
             if (row !== undefined) prepared.push(row);
           }
-          return prepared;
+          return { claimed: prepared };
         },
       },
       PERIOD,

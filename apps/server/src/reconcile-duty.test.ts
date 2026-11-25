@@ -67,6 +67,23 @@ describe("a PaymentReconciler adapts to a PeriodDuty", () => {
     expect(outcome.resweepAfter).toBeUndefined();
   });
 
+  it("passes the scheduler's stop signal to an active SumUp reconciliation", async () => {
+    const { signal } = new AbortController();
+    const received: (AbortSignal | undefined)[] = [];
+    const duty = reconcilerAsDuty({
+      provider: "sumup",
+      reconcile: async (period, _now, stopSignal) => {
+        received.push(stopSignal);
+        return emptyResult(period);
+      },
+    });
+
+    await runDue({ db: suite.db, duties: [duty], ...DEFAULTS }, NOW, signal);
+
+    expect(received).toHaveLength(1);
+    expect(received[0]).toBe(signal);
+  });
+
   it("gives SumUp one hour to see cross-midnight rivals before its daily audit", async () => {
     const stripe = reconcilerAsDuty(reconcilerReturning(emptyResult(PERIOD)));
     const sumup = reconcilerAsDuty({
