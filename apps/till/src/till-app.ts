@@ -33,7 +33,6 @@ import type {
 } from "./api/client.js";
 import { billHasUnsent, billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import {
-  endedPeriodOf,
   isLateSendManagerRefusal,
   lateSendAsked,
   storedLateSendAsked,
@@ -41,6 +40,7 @@ import {
   type LateSendAsked,
 } from "./state/late-send.js";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./state/zone-menu-memory.js";
+import { menusMoved, ZoneOfferIndex } from "./state/zone-offer-index.js";
 import { floorViewChoices, type FloorViewChoices } from "./state/floor-view-memory.js";
 import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/venue-service";
 import "./widgets/device-zones-dialog.js";
@@ -446,9 +446,7 @@ import type {
   TillActiveReader,
   TillCourse,
   TillInfo,
-  MenuState,
   MenuStateAnswer,
-  MenuUnavailable,
   TillMenuOffer,
   TillProduct,
   TillSaleResult,
@@ -501,17 +499,12 @@ import "./widgets/payments-paused-dialog.js";
 import { EquipmentNfc, type EquipmentCode } from "./state/equipment-nfc.js";
 import {
   type BasketRefresh,
-  type BlockReason,
   isStale,
-  lineBlock,
   refreshBasket,
   repriceRebuilt,
-  withUnavailable,
 } from "./state/menu-refresh.js";
 import {
   NO_ORDERING_COPIES,
-  lookupSetMenuLine,
-  orderingCopies,
   type OrderingCopy,
   type SetMenuChange,
   type SetMenuOfferLookup,
@@ -2174,152 +2167,6 @@ function submittedText(tally: { fired: number; held: number; joined: number }): 
 /** A request asserting a menu version that is no longer live (D9): nothing was written. */
 function isVersionRefusal(error: unknown): boolean {
   return (error as { code?: string } | undefined)?.code === "menu.version_changed";
-}
-
-/** Whether menu membership, versions, selection eligibility or ended periods differ from the loaded
- * snapshot. */
-function menusMoved(loaded: readonly TillZoneMenu[], polled: MenuState["menus"]): boolean {
-  return (
-    loaded.length !== polled.length ||
-    polled.some((menu) => {
-      const own = loaded.find((entry) => entry.id === menu.menuId);
-      return (
-        own?.versionId !== menu.versionId ||
-        own.orderable !== menu.orderable ||
-        own.endedPeriodName !== menu.endedPeriodName
-      );
-    })
-  );
-}
-
-/** The offers a zone sells now: as loaded, or with the latest poll's unavailable set applied. */
-class ZoneOfferIndex {
-  #loaded: TillMenuOffer[] = [];
-  #loadedSetMenus: NonNullable<ZoneOffers["setMenus"]> = [];
-  #sellingVersions = new Set<string>();
-  setMenus: NonNullable<ZoneOffers["setMenus"]> = [];
-  /** The set last applied, as a sorted key, so an unchanged poll answer rebuilds nothing. */
-  #unavailableKey: string | null = null;
-  /** The offers with the latest unavailable set applied, kept rather than rebuilt at each read. */
-  live: TillMenuOffer[] = [];
-  byId = new Map<string, TillMenuOffer>();
-  versions = new Map<string, string>();
-  selectable = new Set<string>();
-  /** Each menu whose period ended earlier today, to that period's name. */
-  ended = new Map<string, string>();
-  /** False after a load that failed, when there is nothing to judge a line against. */
-  loaded = false;
-  liveFields: string | undefined;
-
-  load(
-    zoneOffers: Pick<ZoneOffers, "offers" | "menus" | "liveFields" | "setMenus">,
-    loaded = true,
-  ): void {
-    this.selectable = new Set(
-      zoneOffers.menus.filter((menu) => menu.orderable).map((menu) => menu.id),
-    );
-    this.ended = new Map(
-      zoneOffers.menus.flatMap((menu) =>
-        menu.endedPeriodName === null ? [] : [[menu.id, menu.endedPeriodName] as const],
-      ),
-    );
-    this.#loaded = zoneOffers.offers;
-    this.#loadedSetMenus = zoneOffers.setMenus ?? [];
-    this.setMenus = this.#loadedSetMenus;
-    this.#sellingVersions = new Set(
-      zoneOffers.menus.filter((menu) => menu.orderable).map((menu) => menu.versionId),
-    );
-    this.#unavailableKey = null;
-    this.#setLive(zoneOffers.offers);
-    this.versions = new Map(zoneOffers.menus.map((menu) => [menu.id, menu.versionId]));
-    this.liveFields = zoneOffers.liveFields;
-    this.loaded = loaded;
-  }
-
-  /** Whether the set differs from the one last applied; only then is it applied. */
-  setUnavailable(unavailable: MenuUnavailable): boolean {
-    const key = JSON.stringify([
-      [...unavailable.products].sort(),
-      [...unavailable.optionLabels].sort(),
-    ]);
-    if (key === this.#unavailableKey) return false;
-    this.#unavailableKey = key;
-    this.#setLive(withUnavailable(this.#loaded, unavailable));
-    this.setMenus = this.#loadedSetMenus.map((copy) => ({
-      ...copy,
-      offers: withUnavailable(copy.offers, unavailable),
-    }));
-    return true;
-  }
-
-  #setLive(live: TillMenuOffer[]): void {
-    this.live = live;
-    this.byId = new Map(live.map((offer) => [offer.id, offer]));
-  }
-
-  products(): TillProduct[] {
-    return this.live.map((offer) => menuOfferToTillProduct(offer, this.versions.get(offer.menuId)));
-  }
-
-  ordering(bill: Parameters<typeof orderingCopies>[0]): readonly OrderingCopy[] {
-    return orderingCopies(bill, this.setMenus, this.#sellingVersions);
-  }
-
-  setMenuLookup(bill?: Parameters<typeof orderingCopies>[0]): SetMenuOfferLookup {
-    const copies = new Map(
-      orderingCopies(bill, this.setMenus, this.#sellingVersions).map((row) => [
-        row.copy.menuId,
-        row,
-      ]),
-    );
-    return ({ setMenuId, menuItemId, menuVersionId }) => {
-      if (setMenuId === undefined) return undefined;
-      const recorded = Object.hasOwn(bill?.setMenus?.recorded ?? {}, setMenuId);
-      const held =
-        menuVersionId === null || recorded
-          ? undefined
-          : this.setMenus.find(
-              (copy) => copy.menuId === setMenuId && copy.versionIds.includes(menuVersionId),
-            );
-      const selected =
-        held !== undefined && menuVersionId !== null
-          ? { copy: held, versionId: menuVersionId }
-          : copies.get(setMenuId);
-      // Bill reads apply availability to recorded copies, including dishes absent from the zone.
-      const offer = selected?.copy.offers.find((dish) => dish.id === menuItemId);
-      return selected === undefined || offer === undefined
-        ? undefined
-        : { offer, versionId: selected.versionId };
-    };
-  }
-
-  /** Why each line cannot be sold as it stands. A line with no menu version is the server's to price
-   * from the live version, so a missing offer marks only a line that came from a versioned one. */
-  blocks(
-    lines: readonly OrderLine[],
-    setMenuOffer?: SetMenuOfferLookup,
-  ): (BlockReason | undefined)[] {
-    return lines.map((line) => {
-      if (!this.loaded || line.workingOrderLineId !== undefined) return undefined;
-      if (line.setMenuId !== undefined)
-        return lineBlock(line, lookupSetMenuLine(line, setMenuOffer)?.offer)?.reason;
-      const offer = this.byId.get(line.product.menuItemId ?? "");
-      if (offer === undefined && line.product.menuVersionId === undefined) return undefined;
-      return (
-        lineBlock(line, offer)?.reason ??
-        (offer !== undefined && !this.selectable.has(offer.menuId) && !this.ended.has(offer.menuId)
-          ? "period_ended"
-          : undefined)
-      );
-    });
-  }
-
-  /** The ended period each line is marked with; nothing while the offers could not be read. */
-  endedPeriods(lines: readonly OrderLine[]): (EndedPeriod | undefined)[] {
-    return lines.map((line) =>
-      this.loaded && line.setMenuId === undefined ? endedPeriodOf(line, this) : undefined,
-    );
-  }
 }
 
 /** `manualCard`: the tender is a card already charged on a terminal the box does not talk to. */
