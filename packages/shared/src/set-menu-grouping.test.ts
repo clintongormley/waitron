@@ -1,9 +1,10 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import * as shared from "./index.js";
 import { boundTable } from "./set-menu-fit.fixtures.js";
 import type { SetMenuOffer } from "./set-menu-fit.js";
 import type { SetMenuGroupingDish, SetMenuGroupingInput } from "./set-menu-grouping.js";
+import * as placement from "./set-menu-placement.js";
 
 interface CpuUsage {
   readonly user: number;
@@ -73,6 +74,12 @@ function expectWithinHalfSecond(start: number) {
   if (process.env.STRYKER_MUTATOR_WORKER === undefined) {
     expect(performance.now() - start).toBeLessThan(500);
   }
+}
+
+function checkOrdinaryTiming(check: () => void) {
+  // Coverage instrumentation adds work inside the timed interval.
+  const coverage = Reflect.get(globalThis, "__vitest_worker__")?.config?.coverage?.enabled;
+  if (coverage !== true) check();
 }
 
 it("selects a partly filled menu and charges separately for a dish with an expensive supplement", () => {
@@ -406,7 +413,7 @@ it("opens a useful menu at the limit and closes it after a cancellation without 
   const offers = [...input.offers, offer("lunch", 1400, [starter, main])];
   const start = performance.now();
   const first = group({ offers, dishes });
-  expectWithinHalfSecond(start);
+  checkOrdinaryTiming(() => expectWithinHalfSecond(start));
   expect(first.exact).toBe(false);
   const lunch = first.setMenus.find(({ offerId }) => offerId === "lunch");
   expect(lunch?.baseCents).toBe(1400);
@@ -589,12 +596,21 @@ it("bounds the work on forty diners with two percentage discounts", () => {
       { id: "second", offerId: "offer-1", kind: "percent", basisPoints: 1000 },
     ] as const,
   };
-  const start = process.cpuUsage();
-  const first = group(input);
-  const elapsed = process.cpuUsage(start);
-  // The compact bill discounts 1005¢ by 101¢ and 1015¢ by 102¢.
-  expect(first.totalCents).toBe(underMutation ? 1817 : 83327);
-  if (!underMutation) expect(elapsed.user + elapsed.system).toBeLessThan(500_000);
+  const solve = underMutation ? undefined : vi.spyOn(placement, "solvePlacement");
+  try {
+    const start = process.cpuUsage();
+    const first = group(input);
+    const elapsed = process.cpuUsage(start);
+    // The compact bill discounts 1005¢ by 101¢ and 1015¢ by 102¢.
+    expect(first.totalCents).toBe(underMutation ? 1817 : 83327);
+    if (solve === undefined) return;
+    const calls = solve.mock.calls.length;
+    expect(calls).toBeGreaterThan(0);
+    expect(calls).toBeLessThanOrEqual(20);
+    checkOrdinaryTiming(() => expect(elapsed.user + elapsed.system).toBeLessThan(500_000));
+  } finally {
+    solve?.mockRestore();
+  }
 }, 15_000);
 
 it("finds the zero-cent price on the first call when several discounts cover all supplements", () => {
