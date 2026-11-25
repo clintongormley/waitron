@@ -1,4 +1,5 @@
 import { afterEach, expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, UrlStateController, registerIcons } from "@waitron/ui";
 import type { DashboardApi } from "../api/client.js";
@@ -14,6 +15,7 @@ import {
   saveDetailsEdit,
 } from "../widgets/test-helpers.js";
 import { PrintersScreen } from "./printers-screen.js";
+import { deep } from "../testing/department-receipt-app-fixture.js";
 
 registerIcons(DASHBOARD_ICONS);
 const printer: Printer = {
@@ -247,7 +249,7 @@ for (const owner of ["name", "host"] as const) {
   });
 }
 
-it("draws no Used by link while editing, so no link can leave a draft", async () => {
+it("draws no Used by link while editing", async () => {
   const { screen } = await mount({
     listPrinterProfiles: async () => [
       {
@@ -268,7 +270,42 @@ it("draws no Used by link while editing, so no link can leave a draft", async ()
   change(screen, "name", "Bar");
   await screen.updateComplete;
   expect(q(screen, "[data-test=printer-section-used-by]")).toBeNull();
-  expect(q(screen, "[data-test=printer-details-body] a")).toBeNull();
+});
+
+it.each(["list", "search"])("guards Calibrate printer from %s Edit", async (entry) => {
+  const { app, screen } = await mount();
+  const details = "/printers/view/printers/printer/p1";
+  if (entry === "list") {
+    await app.url.write({ printer: null });
+    const row = () => deep(screen.shadowRoot!, "[data-test=printer-row-p1]");
+    await expect.poll(row).toBeTruthy();
+    (row() as HTMLElement).click();
+    await expect.poll(() => q(screen, "[data-test=edit-printer-details]")).toBeTruthy();
+    await open(screen);
+  } else {
+    await app.url.write({ editor: "edit" });
+    await expect.poll(() => field(screen, "name")).toBeTruthy();
+  }
+  const editPath = location.pathname;
+  const width = () =>
+    q(screen, "[name=printer-paper-width]") as HTMLElementTagNameMap["wt-combobox"];
+  expect(width()?.value).toBe("80mm");
+  width().dispatchEvent(new CustomEvent("wt-change", { detail: { value: "58mm" } }));
+  await screen.updateComplete;
+  const link = q(screen, "[data-test=edit-printer-calibrate]");
+  expect(link).toBeTruthy();
+  await userEvent.click(link!);
+  await choose(app, "keep");
+  expect(location.pathname).toBe(editPath);
+  expect(width().value).toBe("58mm");
+  await userEvent.click(link!);
+  await choose(app, "discard");
+  await expect.poll(() => location.pathname).toBe(`${details}/editor/calibrate/step/1`);
+  await expect
+    .poll(() => q(screen, "[data-test=calibration-result-paper]")?.textContent?.trim())
+    .toBe(t("printers.paper_width_80"));
+  expect(q(screen, "[data-test=printer-details-form]")).toBeNull();
+  expect(unload()).toBe(false);
 });
 
 it("a save whose refresh fails shows the failed read and its retry inside the details window", async () => {
@@ -340,12 +377,15 @@ it("a Save whose draft a live change has made equal to the printer sends nothing
   current = { ...printer, name: "New kitchen" };
   liveData.invalidate([{ type: "printers", id: "p1" }]);
   await expect
-    .poll(() => q(screen, "[data-test=printer-details-modal]")?.getAttribute("heading"))
+    .poll(() => deep(screen.shadowRoot!, "[data-test=printer-row-p1]")?.textContent?.trim())
     .toBe("New kitchen");
   const save = q(screen, "[data-test=save-printer-details]") as HTMLElementTagNameMap["wt-button"];
   expect(save.disabled).toBe(false);
   save.click();
   await expect.poll(() => q(screen, "[data-test=printer-details-form]")).toBeNull();
+  expect(q(screen, "[data-test=printer-details-modal]")?.getAttribute("heading")).toBe(
+    "New kitchen",
+  );
   expect(q(screen, "[data-test=edit-printer-details]")).not.toBeNull();
   expect(sent).toBe(0);
   expect(unload()).toBe(false);

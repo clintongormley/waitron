@@ -24,12 +24,19 @@ afterEach(async () => {
   await page.viewport(...viewport);
 });
 it.each([
-  ["en-GB", "printers.paper_width", "paper-width", "printer-ruler-number", 1],
-  ["es-ES", "printers.resolution", "resolution", "printer-qr-square", 1],
-  ["en-GB", "printers.portable", "printer-portable", "printer-portable", 3],
+  ["en-GB", "printers.paper_width", "paper-width", "printer-paper-width", "edit"],
+  ["es-ES", "printers.resolution", "resolution", "printer-resolution", "edit"],
+  ["en-GB", "printers.portable", "printer-portable", "printer-portable", "edit"],
+  [
+    "en-GB",
+    "printers.ruler_last_number",
+    "printer-ruler-number",
+    "printer-ruler-number",
+    "calibrate/step/1",
+  ],
 ] as const)(
-  "%s/%s opens its actual calibration control without hardware actions",
-  async (locale, label, id, name, step) => {
+  "%s/%s opens its actual control without hardware actions",
+  async (locale, label, id, name, editor) => {
     const { app, fetchImpl } = await mountPrinterApp({ locale });
     const start = fetchImpl.mock.calls.length;
     await searchSettings(app, t(label));
@@ -37,16 +44,9 @@ it.each([
     await userEvent.click(searchResult(app, `dashboard:printer:${id}`)!);
     const screen = printerScreen(app);
     await expect
-      .poll(() =>
-        screen
-          .shadowRoot!.querySelector(`[data-test=calibration-step-${step}]`)
-          ?.hasAttribute("hidden"),
-      )
-      .toBe(false);
-    expect(screen.shadowRoot!.querySelector(`[name=${name}]`)).toBeTruthy();
-    expect(location.pathname).toBe(
-      `/printers/view/printers/printer/p1/editor/calibrate/step/${step}`,
-    );
+      .poll(() => screen.shadowRoot!.querySelector(`[name=${name}]`)?.checkVisibility())
+      .toBe(true);
+    expect(location.pathname).toBe(`/printers/view/printers/printer/p1/editor/${editor}`);
     expect(fetchImpl.mock.calls.slice(start).filter(([, init]) => init.method !== "GET")).toEqual(
       [],
     );

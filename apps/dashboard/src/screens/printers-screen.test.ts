@@ -4836,7 +4836,9 @@ it("keeps the next printer's name draft when an earlier save finishes", async ()
   history.pushState(null, "", "/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
   await flush(el);
-  expect(detailsHeading(el)).toContain("Kitchen");
+  expect((q(el, '[name="printer-detail-name"]') as import("@waitron/ui").WtInput).value).toBe(
+    "Receipt desk",
+  );
   await choosePrinter(el, "discard");
   history.pushState(null, "", "/printers/view/printers/printer/p2");
   window.dispatchEvent(new PopStateEvent("popstate"));
@@ -11075,7 +11077,7 @@ describe("Deleting a printer", () => {
     const guidance = root.querySelector('[data-test="delete-guidance"]')!;
     expect(guidance.textContent).toContain(t("printers.drawer_attached"));
     expect(guidance.querySelector("a")?.getAttribute("href")).toBe(
-      "/printers/view/printers/printer/p1/editor/calibrate/step/3",
+      "/printers/view/printers/printer/p1/editor/edit",
     );
   });
 

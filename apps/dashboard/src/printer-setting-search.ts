@@ -16,7 +16,11 @@ export function printerSettingSearchDestinations(
       const printers = await api.background.listPrinters();
       const pages = field.rows === "all" ? await api.background.listPagePrinters() : [];
       return [
-        ...printers.filter((row) => field.rows !== "network" || row.transport === "network_tcp"),
+        ...printers.filter((row) => {
+          if (field.rows === "network") return row.transport === "network_tcp";
+          if (field.rows === "portable") return row.portable;
+          return true;
+        }),
         ...pages,
       ].map((row) => ({
         id: row.id,

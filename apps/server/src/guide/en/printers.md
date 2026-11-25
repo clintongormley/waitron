@@ -43,8 +43,10 @@ on the printer's details runs it again.
 ## Printer details {#printer-details}
 
 Choose a printer's name in the **Printers** tab or the **Print Queue** to open its details.
-**Edit** changes its name and, for a network
-receipt printer, its address. **Calibrate printer** runs calibration again. In a receipt
+For a receipt printer, choose **Edit** to change its name, paper width, print resolution,
+cash drawer or portability. For a network printer, you can also change the address and port.
+Turn on **Portable printer** to choose what it prints **When picked up**.
+Choose **Calibrate printer** if you need to measure the paper or test the drawer. In a receipt
 printer's row menu, **Print test page** prints a sample receipt with the venue's header but a
 made-up business name and tax number, in the venue's receipt language, marked as a test and not
 an invoice. An A4 printer's
@@ -69,7 +71,7 @@ Open **Add a printer** and choose **Pair** beside it, or use **Pair again** if i
 
 If **Delete** warns that the drawer has a balance or a pending count, follow the instructions under
 **Close first**. On the named till, choose **Close drawer** and leave zero cash. If no till is listed,
-assign the drawer in **Devices** first. If the drawer setting is off, turn it on in calibration.
+assign the drawer in **Devices** first. If **Cash drawer attached** is off, turn it on in **Edit**.
 **Delete anyway** keeps the balance and any pending count if you later add a printer at the same
 address and Waitron restores its registration.
 

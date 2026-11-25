@@ -87,8 +87,8 @@ export function printerDeleteCopy(page = false, bluetooth = false): DeleteDialog
         ...(drawer.needsDrawerSetting
           ? {
               link: {
-                href: `/printers/view/printers/printer/${encodePathSegment(impact.target.id)}/editor/calibrate/step/3`,
-                label: t("printers.calibrate"),
+                href: `/printers/view/printers/printer/${encodePathSegment(impact.target.id)}/editor/edit`,
+                label: t("action.edit"),
               },
             }
           : drawer.devices.length === 0

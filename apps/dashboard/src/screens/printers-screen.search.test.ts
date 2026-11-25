@@ -35,6 +35,7 @@ it.each(["en-GB", "es-ES"])(
           {
             ...receiptPrinter,
             hasCashDrawer: true,
+            portable: true,
             transport: transport === "a4" ? "network_tcp" : transport,
           },
         ],
@@ -55,6 +56,13 @@ it.each(["en-GB", "es-ES"])(
         )) {
           const name = field.getAttribute("name")!;
           if (!name.startsWith("printer-") || name === "printer-drawer-result") continue;
+          const editField = JSON.stringify([name, field.label, "edit", undefined]);
+          if (
+            editor === "calibrate" &&
+            field.closest("[data-test=calibration-step-3]") &&
+            actual.has(editField)
+          )
+            continue;
           const step = field
             .closest("[data-test^=calibration-step-]")
             ?.getAttribute("data-test")
@@ -76,15 +84,6 @@ it.each(["en-GB", "es-ES"])(
           .poll(() => screen.shadowRoot!.querySelector("[name=printer-drawer-result]"))
           .toBeTruthy();
         collect("calibrate");
-        for (const [answer, name] of [
-          ["paper", "printer-ruler-number"],
-          ["resolution", "printer-qr-square"],
-        ]) {
-          const label = screen
-            .shadowRoot!.querySelector(`[data-test=calibration-result-${answer}]`)!
-            .previousElementSibling!.textContent!.trim();
-          actual.add(JSON.stringify([name, label, "calibrate", 1]));
-        }
       }
       const fields = printerSettingFields;
       const declared = fields
