@@ -916,9 +916,7 @@ describe("a fiscal conflict", () => {
     await vi.waitFor(() => expect(summary(el)).not.toBeNull());
     submit(el).click();
     await vi.waitFor(() =>
-      expect(bottom(el)).toBe(
-        `${t("recovery.issuance_stopped")} ${t("give_back.nothing_given")}`,
-      ),
+      expect(bottom(el)).toBe(`${t("recovery.issuance_stopped")} ${t("give_back.nothing_given")}`),
     );
     expect(link(el)!.getAttribute("href")).toBe("/recovery/fiscal-conflict");
   });

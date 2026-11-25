@@ -196,7 +196,7 @@ describe("Give money back replaces the two old buttons in the till's words", () 
       "Give money back to a guest: for a dish, as goodwill, or the extra paid on top. If you close it before all the money is back, find the receipt in Find a bill under Money back under way; if it is not there, open Give money back on the receipt again on this till.",
     );
     expect(helpEs["help.give_money_back"]).toBe(
-      "Devuelve dinero a un cliente: por un plato, por cortesía o lo pagado de más. Si la cierras antes de que vuelva todo el dinero, busca el recibo en Buscar cuenta, en Devoluciones en curso; si no está, vuelve a abrir Devolver dinero en el recibo en esta caja.",
+      "Devuelve dinero a un cliente: por un plato, por cortesía o lo pagado de más. Si la cierras antes de que vuelva todo el dinero, busca el ticket en Buscar cuenta, en Devoluciones en curso; si no está, vuelve a abrir Devolver dinero en el ticket en esta caja.",
     );
   });
 });

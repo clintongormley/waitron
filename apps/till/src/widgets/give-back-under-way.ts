@@ -241,7 +241,7 @@ export class TillGiveBackUnderWay extends LitElement {
     this.message =
       recoveryText(refusal) ??
       (FILING_REFUSALS.has(refusal.code)
-        ? giveBackFilingMessage(refusal.code, currentLocale(), refusal)
+        ? giveBackFilingMessage(refusal.code, currentLocale(), { reason: refusal.reason })
         : codeMessage(refusal.code, currentLocale(), refusal));
     if (REREAD_AFTER.has(refusal.code)) await this.#refreshAfter();
   }
