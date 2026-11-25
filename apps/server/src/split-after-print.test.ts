@@ -43,7 +43,14 @@ import { setStationPrinting } from "./testing/station-printing.js";
 import { servedOrCharged } from "./served-dishes.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import { listFreeItems } from "./free-items.js";
-import { cancelItemHttp, cancelReasonId, seedGivenAwayLine } from "./testing/cancel-line.js";
+import {
+  cancelBody,
+  cancelItemHttp,
+  cancelReasonId,
+  GIVE_AWAY_REASON,
+  reasonIdOf,
+  seedGivenAwayLine,
+} from "./testing/cancel-line.js";
 import { openedCorrection, previewedSplit } from "./testing/invoice-correction.js";
 import { decodeTicket, printedLines } from "./testing/decode-ticket.js";
 import { createTable } from "./testing/live-table.js";
@@ -1373,6 +1380,42 @@ describe("Reopen bill stopping the dishes that never came", () => {
           .where(eq(kitchenStations.id, fryer.stationId));
       });
     }
+  });
+
+  it("a started dish's kept charge comes off the reopened bill with a Comp and its reason", async () => {
+    const party = await seat("Steak", "Small beer");
+    await serveSome(party, "Small beer", "1");
+    venue.db.run(sql`update ticket_items set state = 'ready' where working_order_line_id in
+      (select id from working_order_lines where working_order_id = ${party.tabId} and name = 'Steak')`);
+    expect((await printBill(party, party.tabId, true)).status).toBe(200);
+    const answer = await stop(party.tabId);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const newBill = answer.json.billId as string;
+    const [steak] = await dishesOf(newBill);
+    expect(steak).toMatchObject({ name: "Steak", lineNo: 1, lineTotal: 2500 });
+    const reasonId = await inTx(venue, (tx) => reasonIdOf(tx, GIVE_AWAY_REASON));
+
+    const comped = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${newBill}/adjustments`,
+      { ...(await cancelBody(venue.db, newBill, 1)), action: "comp", reasonId },
+    );
+
+    expect(comped.status, JSON.stringify(comped.json)).toBe(200);
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ reduction: adjustmentLines.reduction, reasonId: adjustments.reasonId })
+          .from(adjustmentLines)
+          .innerJoin(adjustments, eq(adjustments.id, adjustmentLines.adjustmentId))
+          .where(eq(adjustmentLines.lineId, steak!.id)),
+      ),
+    ).toEqual([{ reduction: 2500, reasonId }]);
+    const reprinted = await printBill(party, newBill);
+    expect(reprinted.status, JSON.stringify(reprinted.json)).toBe(200);
+    expect(reprinted.json.total).toBe("3.00");
   });
 
   it("does not stop the dishes on a bill already part-paid, writing nothing", async () => {
