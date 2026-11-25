@@ -15,14 +15,20 @@ export const productListCategoryStyles = css`
   wt-data-table::part(category-path-cell) {
     display: inline-grid;
     grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    vertical-align: middle;
+    align-items: start;
+    vertical-align: top;
     max-inline-size: calc(var(--wt-tap-min) * 4);
     gap: var(--wt-space-2);
     overflow-wrap: anywhere;
   }
   wt-data-table::part(category-path-name) {
     min-width: 0;
+    padding-block-start: var(--products-first-line-inset);
+  }
+  wt-data-table::part(category-path-swatch) {
+    display: flex;
+    align-items: center;
+    min-block-size: var(--wt-tap-min);
   }
 `;
 
@@ -53,7 +59,8 @@ export function productCategoryColumn(
       if (row.variant !== null || !category) return nothing;
       const { color } = categoryColorSource(category.id, byId, defaultColor);
       return html`<span part="category-path-cell"
-        >${swatchChip(color)}<span part="category-path-name">${name(row)}</span></span
+        ><span part="category-path-swatch">${swatchChip(color)}</span
+        ><span part="category-path-name">${name(row)}</span></span
       >`;
     },
     sortValue: (row) => name(row) ?? null,

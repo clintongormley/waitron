@@ -145,6 +145,14 @@ export const productListLayoutStyles = css`
 `;
 
 export const fullRowProductsMediaStyles = css`
+  wt-data-table {
+    --products-media-size: calc(var(--wt-space-6) + var(--wt-space-1));
+    /* Centre one line of text in the same band as the row's tap targets. */
+    --products-first-line-inset: calc((var(--wt-tap-min) - 1lh) / 2);
+  }
+  wt-data-table[narrow] {
+    --products-media-size: calc(var(--wt-space-6) - var(--wt-space-1) / 2);
+  }
   wt-data-table::part(tree-row) {
     position: relative;
   }
@@ -156,10 +164,11 @@ export const fullRowProductsMediaStyles = css`
     flex: none;
   }
   wt-data-table::part(products-cell) {
-    vertical-align: middle;
+    vertical-align: top;
   }
   wt-data-table::part(tree-cell) {
-    align-items: center;
+    align-items: start;
+    vertical-align: top;
     max-inline-size: 100%;
     min-inline-size: 0;
     box-sizing: border-box;
@@ -168,8 +177,33 @@ export const fullRowProductsMediaStyles = css`
   wt-data-table::part(variant-cell),
   wt-data-table::part(folder-cell) {
     display: flex;
-    align-items: center;
+    align-items: start;
     min-inline-size: 0;
+  }
+  wt-data-table::part(name-stack),
+  wt-data-table::part(variant-name),
+  wt-data-table::part(folder-name),
+  wt-data-table::part(price-layout) {
+    padding-block-start: var(--products-first-line-inset);
+  }
+  wt-data-table::part(price-layout),
+  wt-data-table::part(availability-switch),
+  wt-data-table::part(product-detail),
+  wt-data-table::part(product-row-menu) {
+    vertical-align: top;
+  }
+  wt-data-table::part(product-detail) {
+    margin-block-start: var(--products-first-line-inset);
+  }
+  wt-data-table::part(product-detail-text) {
+    display: inline-block;
+  }
+  wt-data-table::part(row-controls) {
+    min-block-size: var(--wt-tap-min);
+    align-items: center;
+  }
+  wt-data-table::part(row-checkbox) {
+    margin-block: 0;
   }
   wt-data-table[narrow]::part(naming) {
     display: grid;
@@ -220,7 +254,10 @@ export const fullRowProductsMediaStyles = css`
     inset-block: 0;
     block-size: auto;
     margin-inline-end: 0;
-    align-items: center;
+    align-items: start;
+    padding-block-start: calc(
+      var(--wt-table-cell-padding-block) + (var(--wt-tap-min) - var(--products-media-size)) / 2
+    );
   }
   wt-data-table::part(product-media):focus-visible,
   wt-data-table::part(swatch-button):focus-visible {
@@ -239,12 +276,6 @@ export const fullRowProductsMediaStyles = css`
       max(0px, calc(100% - var(--wt-tap-min) * 1.75))
     );
   }
-  wt-data-table[narrow]::part(thumb-frame),
-  wt-data-table[narrow]::part(thumb-placeholder),
-  wt-data-table[narrow]::part(color-swatch) {
-    inline-size: calc(var(--wt-space-6) - var(--wt-space-1) / 2);
-    block-size: calc(var(--wt-space-6) - var(--wt-space-1) / 2);
-  }
   wt-data-table[narrow]::part(product-media) {
     display: inline-flex;
   }
@@ -256,6 +287,7 @@ export const fullRowProductsMediaStyles = css`
   wt-data-table::part(phone-category) {
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
+    padding-block-start: 0;
   }
   wt-data-table[data-compact-products]::part(price-layout) {
     grid-template-columns: minmax(0, auto);

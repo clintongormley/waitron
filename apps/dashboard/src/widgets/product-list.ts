@@ -57,7 +57,12 @@ import {
   productAvailabilitySwitch,
   type ProductAvailabilityChange,
 } from "./product-tree-availability.js";
-import { productRowLabels, productRowStyles, unavailableLabel } from "./product-list-row-parts.js";
+import {
+  productDetailText,
+  productRowLabels,
+  productRowStyles,
+  unavailableLabel,
+} from "./product-list-row-parts.js";
 import {
   PRODUCTS_PHONE_WIDTH,
   productCategoryColumn,
@@ -896,7 +901,7 @@ export class ProductList extends LitElement {
         cell: ({ product, variant }) => {
           const courseId = variant ? variant.courseId : product.courseId;
           if (courseId === null) return nothing;
-          return this.#courseName(courseId);
+          return productDetailText(this.#courseName(courseId));
         },
         sortValue: ({ product }) => this.#courseRank(product.courseId),
         ...(this.courses.length
@@ -951,7 +956,8 @@ export class ProductList extends LitElement {
         key: "modifiers",
         choosable: "hidden",
         label: t("editor.modifiers"),
-        cell: ({ product, variant }) => (variant ? nothing : this.#modifierNames(product)),
+        cell: ({ product, variant }) =>
+          variant ? nothing : productDetailText(this.#modifierNames(product)),
         filter: {
           label: t("editor.modifiers"),
           allLabel: t("product.filter_any"),
@@ -971,7 +977,7 @@ export class ProductList extends LitElement {
         cell: ({ product, variant }) => {
           if (variant || product.ordering === "public") return nothing;
           return html`<span
-            part="badge"
+            part="badge product-detail"
             data-test="ordering-badge"
             data-ordering=${product.ordering}
             >${orderingName(product.ordering)}</span
@@ -1027,7 +1033,11 @@ export class ProductList extends LitElement {
         cell: ({ product, variant }) => {
           const state = allergenState(variant ? variant.effective.allergens : product.allergens);
           return html`<span
-            part=${variant?.allergensInherited ? "badge inherited-allergens" : "badge"}
+            part=${
+              variant?.allergensInherited
+                ? "badge product-detail inherited-allergens"
+                : "badge product-detail"
+            }
             data-test="allergen-state"
             data-state=${state}
             >${allergenStateName(state)}</span
@@ -1052,7 +1062,8 @@ export class ProductList extends LitElement {
         key: "dietary",
         choosable: "hidden",
         label: t("product.dietary_info"),
-        cell: ({ product, variant }) => (variant ? nothing : dietaryInfoText(product)),
+        cell: ({ product, variant }) =>
+          variant ? nothing : productDetailText(dietaryInfoText(product)),
         filter: {
           label: t("product.dietary_info"),
           allLabel: t("product.filter_any"),
@@ -1072,6 +1083,7 @@ export class ProductList extends LitElement {
           const { id, name } = row.variant ?? row.product;
           return html`<wt-row-actions
             align="end"
+            part="product-row-menu"
             data-test=${`actions-${id}`}
             label=${`${t("staff.actions")}: ${name}`}
           >
@@ -1202,6 +1214,7 @@ export class ProductList extends LitElement {
           if (column.key === "actions")
             return html`<wt-row-actions
               align="end"
+              part="product-row-menu"
               data-test="actions-root"
               label=${`${t("staff.actions")}: ${t("folders.all_products")}`}
               >${this.#addItems(null)}</wt-row-actions
@@ -1250,6 +1263,7 @@ export class ProductList extends LitElement {
         if (column.key === "actions")
           return html`<wt-row-actions
             align="end"
+            part="product-row-menu"
             label=${`${t("staff.actions")}: ${folder.name}`}
             data-test=${`actions-folder-${folder.id}`}
             >${this.#addItems(folder.id)}

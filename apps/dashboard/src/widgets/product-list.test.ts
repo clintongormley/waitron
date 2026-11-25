@@ -3503,6 +3503,82 @@ describe("a product's variants in the list", () => {
 
   const nameCell = (root: ShadowRoot, key: string) => cellUnder(root, key, t("product.name"));
 
+  it.each([
+    { width: 390, view: "list", selecting: false },
+    { width: 390, view: "tree", selecting: true },
+    { width: 600, view: "tree", selecting: false },
+    { width: 1180, view: "list", selecting: true },
+    { width: 1440, view: "list", selecting: false },
+  ] as const)(
+    "aligns row contents with the first line in $view at $width px (Select: $selecting)",
+    async ({ width, view, selecting }) => {
+      await page.viewport(width, 844);
+      const dish = cecina();
+      dish.name =
+        "Mushroom croquettes with roasted garlic and aged sheep cheese, served with garden herbs and fresh bread";
+      dish.courseId = starters.id;
+      if (width === 1440) showColumns("course");
+      const { table, root } = await mountTree({
+        categories: [{ ...food, id: "deli", name: "House cured meats and cheeses" }],
+        courses: [starters],
+        products: [dish],
+        view,
+        selecting,
+        reordering: selecting && view === "tree",
+      });
+      if (view === "tree") {
+        table.setExpanded("folder:deli", true);
+        await table.updateComplete;
+      }
+      await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(width === 390));
+      const row = root.querySelector('tr[data-row-key="cecina"]')!;
+      const midpoint = (rect: DOMRect) => (rect.top + rect.bottom) / 2;
+      const textLines = (element: Element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        return [...range.getClientRects()];
+      };
+      const [firstLine, nextLine] = textLines(row.querySelector("strong")!);
+      expect(nextLine?.top).toBeGreaterThan(firstLine!.top);
+      const nameCenter = midpoint(firstLine!);
+      const target = row.querySelector('[part~="product-media"]')!;
+      const photo = target.querySelector('[part~="media-frame"]')!;
+      const menu = row.querySelector("wt-row-actions")!;
+      await menu.updateComplete;
+      const controls = {
+        photo,
+        menu: menu.shadowRoot!.querySelector("button")!,
+        ...(selecting && { checkbox: row.querySelector('input[type="checkbox"]')! }),
+        ...(width >= 440 || !selecting ? { available: row.querySelector("wt-switch")! } : {}),
+      };
+      const offsets = Object.fromEntries(
+        Object.entries(controls).map(([key, control]) => [
+          key,
+          Math.round(midpoint(control.getBoundingClientRect()) - nameCenter),
+        ]),
+      );
+      if (width >= 440 || !selecting) {
+        const [price] = textLines(row.querySelector('[data-test="price"]')!);
+        offsets.price = Math.round(midpoint(price!) - nameCenter);
+      }
+      if (view === "list" && width >= 440) {
+        const [category] = textLines(row.querySelector('[part~="category-path-name"]')!);
+        offsets.category = Math.round(midpoint(category!) - nameCenter);
+      }
+      if (width === 1440) {
+        const [course] = textLines(cellUnder(root, dish.id, t("product.course")));
+        offsets.course = Math.round(midpoint(course!) - nameCenter);
+      }
+      expect(
+        Object.fromEntries(Object.entries(offsets).filter(([, offset]) => Math.abs(offset) > 3)),
+      ).toEqual({});
+      expect(target.getBoundingClientRect().height).toBeCloseTo(
+        row.getBoundingClientRect().height,
+        0,
+      );
+    },
+  );
+
   it.each(["en-GB", "es-ES"])("fits the starting columns at 1180 px in %s", async (locale) => {
     setLocale(locale);
     await page.viewport(1180, 844);

@@ -17,11 +17,12 @@ export const cellControlStyles = css`
   }
 
   :host([dense-rows]) tbody td {
-    padding-block: calc(var(--wt-space-1) / 2);
+    --wt-table-cell-padding-block: calc(var(--wt-space-1) / 2);
+    padding-block: var(--wt-table-cell-padding-block);
   }
 
   :host([dense-rows][narrow]) tbody td {
-    padding-block: calc(var(--wt-space-2) / 2);
+    --wt-table-cell-padding-block: calc(var(--wt-space-2) / 2);
   }
 `;
 
