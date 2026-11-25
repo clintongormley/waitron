@@ -2928,8 +2928,10 @@ describe("editing a line the kitchen has and has not started", () => {
       expect(await ticketRow(tabId, 2)).toMatchObject({ note: "no onions" });
     });
 
-    it("refuses a change to a row whose second dish is started, changing nothing", async () => {
+    const stationPolicies = ["held-or-waiting", "never"] as const;
+    it.each(stationPolicies)("keeps both when the second has started (%s)", async (policy) => {
       const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
+      await asApp((tx) => setChangesAfterSending(tx, policy, [tickets[0]!.stationId]));
       await asApp((tx) => advanceTicketItem(tx, tickets[1]!.id, "preparing"));
       const before = await linesOf(tabId);
 

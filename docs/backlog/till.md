@@ -722,10 +722,6 @@ the owner's redesign.
 Queued as SETTLED-SMALL (lane F), in two or three pull requests by screen. Some are the owner's own
 answers; where an entry says a rule is read across, the owner was not asked that point.
 
-- **A1080. In a save holding several problem dishes, "already started" always wins** (owner's picker
-  answer B, 2026-10-25): `ticket.already_fired` answers only when no dish in the save has started.
-  `apps/server/src/working-order-line-edits.ts` still checks dish by dish
-  ([rule](kitchen.md#changes-after-sending-every-part-of-a-dish-decides-and-removal-is-not-gated-a756-pr-8-2026-10-24)).
 - **A1081. The till's refusals about a sent item name its station.** Owner, 2026-10-25: "don't mention
   the kitchen. It's confusing. Why has the caña gone to the kitchen instead of the bar". Today's words
   say "the station" and, in Spanish, «Este plato» (`apps/till/src/i18n/codes.ts`).

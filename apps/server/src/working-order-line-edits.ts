@@ -204,33 +204,43 @@ export async function applyLineEdits(
     [parent, ...parent.children].some(
       (part) => part.sentAt !== null || part.ticket?.firedAt != null,
     );
+  let firedRefusal: AppError | undefined;
+  const keepFirstFired = (error: unknown): void => {
+    if (!(error instanceof AppError) || error.code === "ticket.already_started") throw error;
+    if (error.code === "ticket.already_fired") firedRefusal ??= error;
+    else if (firedRefusal === undefined) throw error;
+  };
   if (plan.refuseSentDrop) {
     for (const parent of order.parents) {
       if (!wasSent(parent)) continue;
-      const edit = plan.edits.find((edit) => edit.parent.id === parent.id);
-      const picks = namedPicks(edit?.intent.extras?.set);
-      const drops =
-        edit === undefined ||
-        compareDecimal(decimal(edit.intent.quantity), parent.quantity) < 0 ||
-        parent.children.some((child) => {
-          const pick = picks.find(
-            (pick) => pick.listId === child.extraListId && pick.productId === child.productId,
-          );
-          return (
-            compareDecimal(
-              extraQuantityFor(
-                pick?.quantity ?? 0,
-                decimal(edit.intent.quantity),
-                child.priceQuantity,
-              ),
-              child.quantity,
-            ) < 0
-          );
-        });
-      if (!drops) continue;
-      refuseServed(parent);
-      refuseSent(parent, kitchenHas(parent, false));
-      throw new AppError("ticket.already_fired", { workingOrderId: orderId });
+      try {
+        const edit = plan.edits.find((edit) => edit.parent.id === parent.id);
+        const picks = namedPicks(edit?.intent.extras?.set);
+        const drops =
+          edit === undefined ||
+          compareDecimal(decimal(edit.intent.quantity), parent.quantity) < 0 ||
+          parent.children.some((child) => {
+            const pick = picks.find(
+              (pick) => pick.listId === child.extraListId && pick.productId === child.productId,
+            );
+            return (
+              compareDecimal(
+                extraQuantityFor(
+                  pick?.quantity ?? 0,
+                  decimal(edit.intent.quantity),
+                  child.priceQuantity,
+                ),
+                child.quantity,
+              ) < 0
+            );
+          });
+        if (!drops) continue;
+        refuseServed(parent);
+        refuseSent(parent, kitchenHas(parent, false));
+        throw new AppError("ticket.already_fired", { workingOrderId: orderId });
+      } catch (error) {
+        keepFirstFired(error);
+      }
     }
   }
   const menuItemOf = (line: EditableParent): string => {
@@ -247,10 +257,11 @@ export async function applyLineEdits(
   );
   const contentConfig = needsModifiers ? await readContentLanguages(tx, cfg.locale) : undefined;
   const defaultLanguage = contentConfig?.defaultLanguage ?? "";
-  // Read once for the answers the edits are checked against and for the lines priced below.
+  // With a refusal held, only edits to existing lines can change the answer.
+  const freshForSnapshot = firedRefusal === undefined ? plan.fresh : [];
   const snapshot = needsModifiers
-    ? await readBasketOffers(tx, orderId, context?.zoneId, plan.fresh, [
-        ...plan.fresh.map((line) => line.menuItemId),
+    ? await readBasketOffers(tx, orderId, context?.zoneId, freshForSnapshot, [
+        ...freshForSnapshot.map((line) => line.menuItemId),
         ...plan.edits.map(({ parent }) => parent.menuItemId),
       ])
     : undefined;
@@ -360,7 +371,7 @@ export async function applyLineEdits(
     plan.edits.map(({ parent }) => parent.id),
   );
 
-  for (const { parent, intent } of plan.edits) {
+  const planEdit = async ({ parent, intent }: (typeof plan.edits)[number]) => {
     assertQuantityPrecision(
       intent.quantity,
       parent.setMenuId === null ? (parent.unitPrecision ?? MAX_UNIT_PRECISION) : 0,
@@ -422,7 +433,7 @@ export async function applyLineEdits(
         intent.makeAt !== parent.makeAtStationId) ||
       optionSnapshots !== parent.optionSnapshots ||
       extrasChanged;
-    if (!changed && rise === 0) continue;
+    if (!changed && rise === 0) return;
     // A stored line keeps its unit price, so its extras and its quantity move what it charges; its
     // options answer is filed on the sale line, and a card at the reader files the answer it priced.
     if (extrasChanged || rise !== 0 || optionSnapshots !== parent.optionSnapshots)
@@ -539,7 +550,15 @@ export async function applyLineEdits(
       copies,
       portion,
     });
+  };
+  for (const edit of plan.edits) {
+    try {
+      await planEdit(edit);
+    } catch (error) {
+      keepFirstFired(error);
+    }
   }
+  if (firedRefusal !== undefined) throw firedRefusal;
 
   await assertProductsSellable(tx, resent);
 
