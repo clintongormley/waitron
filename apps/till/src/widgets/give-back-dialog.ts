@@ -146,6 +146,9 @@ export class TillGiveBackDialog extends LitElement {
   @state() private sending = false;
   @state() private underWayBusy = false;
   @state() private sendRefusal: Refusal | null = null;
+  @state() private checkingPending = false;
+  /** What the last Check again found, while a card refund still waits. */
+  @state() private pendingStatus = "";
   @state() private approvers: StaffMember[] | null = null;
   @state() private pinError: ApproverRefusal | null = null;
   #approval?: Sending;
@@ -632,9 +635,24 @@ export class TillGiveBackDialog extends LitElement {
       }
     </div>`;
   }
+  /** Check again while a card refund waits: reads the receipt again, and sends nothing. */
+  async #checkPending(): Promise<void> {
+    this.checkingPending = true;
+    this.pendingStatus = "";
+    try {
+      this.view = await this.api.readGiveBack(this.saleId, {});
+      if (this.view.ways.some((way) => way.pending))
+        this.pendingStatus = t("give_back.pending_unanswered");
+    } catch (error) {
+      this.pendingStatus = this.#refusalText(refusalOf(error), "give_back.read_failed");
+    } finally {
+      this.checkingPending = false;
+    }
+  }
   #choices(view: GiveBackView) {
     const shown = PURPOSES.filter((purpose) => purpose !== "extra" || positive(this.#extraPaid()));
     const apart = shown.some((purpose) => !view.choices[purpose].available);
+    const waits = view.ways.some((way) => way.pending);
     return html`<p class="heading" data-what-for>${t("give_back.what_for")}</p>
       ${
         apart
@@ -643,6 +661,7 @@ export class TillGiveBackDialog extends LitElement {
             </div>`
           : html`<div>${shown.map((purpose) => this.#choiceRow(purpose))}</div>`
       }
+      ${waits && this.pendingStatus ? html`<p data-pending-status role="status">${this.pendingStatus}</p>` : nothing}
       <wt-form-actions
         .error=${this.sendRefusal === null ? "" : this.#sendRefusalText(this.sendRefusal)}
         >${recoveryLinkOf(
@@ -651,7 +670,18 @@ export class TillGiveBackDialog extends LitElement {
               .map((purpose) => view.choices[purpose].reason)
               .find((r) => recoveryText(r ?? null)) ??
             null,
-        )}${this.#cancelButton()}</wt-form-actions
+        )}${this.#cancelButton()}${
+          waits
+            ? html`<wt-button
+                variant="primary"
+                data-check-pending
+                .loading=${this.checkingPending}
+                .disabled=${this.checkingPending}
+                @click=${() => void this.#checkPending()}
+                >${t("give_back.check_again")}</wt-button
+              >`
+            : nothing
+        }</wt-form-actions
       >`;
   }
   #ways(purpose: GiveBackPurpose) {

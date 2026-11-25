@@ -76,6 +76,24 @@ describe.each(["light", "dark"] as const)("give money back accessibility (%s)", 
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations on the choice while a card refund waits, after Check again found no answer", async () => {
+    const held = { code: "tender.refund_in_progress" };
+    const { el, host } = await mount(
+      fakeGiveBackApi({
+        ...VIEW,
+        ways: VIEW.ways.map((way) =>
+          way.way === "cash" ? way : { ...way, pending: true, reason: held },
+        ),
+        choices: { ...VIEW.choices, extra: { available: false, reason: held } },
+      }),
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-check-pending]")!.click();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-pending-status]")).not.toBeNull(),
+    );
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations on a dish's form with a line waiting, extras and a dish given free", async () => {
     const { el, host } = await mount(
       fakeGiveBackApi({

@@ -340,6 +340,58 @@ describe("A dish", () => {
   });
 });
 
+describe("a card refund the box knows is waiting", () => {
+  const held = { code: "tender.refund_in_progress" };
+  const waiting = { code: "invoice_correction.refund_pending" };
+  const PENDING: GiveBackView = {
+    ...VIEW,
+    ways: [{ ...CARD, pending: true, reason: held }],
+    choices: {
+      dishes: { available: false, reason: waiting },
+      goodwill: { available: false, reason: waiting },
+      extra: { available: false, reason: held },
+    },
+  };
+  const check = (el: TillGiveBackDialog) =>
+    root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-check-pending]");
+  const status = (el: TillGiveBackDialog) => text(root(el).querySelector("[data-pending-status]"));
+
+  it("offers Check again, which reads the receipt again without sending anything", async () => {
+    const api = fakeGiveBackApi(PENDING);
+    const { el } = await mount(api);
+    expect(text(check(el))).toBe(t("give_back.check_again"));
+    expect(status(el)).toBe("");
+    check(el)!.click();
+    await vi.waitFor(() => expect(status(el)).toBe(t("give_back.pending_unanswered")));
+    expect(api.readGiveBack).toHaveBeenCalledTimes(2);
+    expect(choice(el, "goodwill")!.getAttribute("aria-disabled")).toBe("true");
+    api.readGiveBack.mockResolvedValueOnce(VIEW);
+    check(el)!.click();
+    await vi.waitFor(() => expect(choice(el, "goodwill")!.tagName).toBe("WT-CHOICE-ROW"));
+    expect(check(el)).toBeNull();
+    expect(status(el)).toBe("");
+    expect(api.readGiveBack).toHaveBeenCalledTimes(3);
+    expect(api.giveBack).not.toHaveBeenCalled();
+    expect(api.refundTransaction).not.toHaveBeenCalled();
+    expect(api.retryTenderRefund).not.toHaveBeenCalled();
+  });
+
+  it("says when the receipt could not be read again, and keeps what it showed", async () => {
+    const api = fakeGiveBackApi(PENDING);
+    const { el } = await mount(api);
+    api.readGiveBack.mockRejectedValueOnce({ code: "network" });
+    check(el)!.click();
+    await vi.waitFor(() => expect(status(el)).toBe(t("give_back.read_failed")));
+    expect(choice(el, "goodwill")!.getAttribute("aria-disabled")).toBe("true");
+    expect(check(el)).not.toBeNull();
+  });
+
+  it("offers no Check again while nothing waits for the card company", async () => {
+    const { el } = await mount();
+    expect(check(el)).toBeNull();
+  });
+});
+
 describe("How it goes back", () => {
   it("offers each payment up to what it holds, and shows a held one unavailable with its line", async () => {
     const held = { code: "tender.refund_in_progress" };
@@ -604,6 +656,20 @@ describe("in Spanish", () => {
     );
     await choose(el, "dishes");
     expect(dish(el, "salad")!.description).toBe(es["give_back.cancelled_waiting"]);
+  });
+
+  it("words Check again and its answer while a card refund waits", async () => {
+    const held = { code: "tender.refund_in_progress" };
+    const api = withView({ ways: [{ ...CARD, pending: true, reason: held }] });
+    const { el } = await mount(api);
+    const check = root(el).querySelector("[data-check-pending]")!;
+    expect(text(check)).toBe(es["give_back.check_again"]);
+    (check as HTMLElement).click();
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-pending-status]"))).toBe(
+        es["give_back.pending_unanswered"],
+      ),
+    );
   });
 });
 

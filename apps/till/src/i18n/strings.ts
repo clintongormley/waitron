@@ -244,6 +244,7 @@ export const en = {
   "give_back.pending": "{amount} is waiting for the card company's answer.",
   "give_back.rest": "{amount} has not gone back yet: it follows when the card company answers.",
   "give_back.check_again": "Check again",
+  "give_back.pending_unanswered": "The card company has not answered yet. Check again later.",
   "give_back.rest_ready":
     "{amount} has not gone back yet. Press Give back the rest to send it now.",
   "give_back.send_rest": "Give back the rest",
@@ -2721,6 +2722,8 @@ export const es: Record<StringKey, string> = {
   "give_back.rest":
     "{amount} aún no se han devuelto: se devuelven cuando responda la compañía de la tarjeta.",
   "give_back.check_again": "Comprobar de nuevo",
+  "give_back.pending_unanswered":
+    "La compañía de la tarjeta aún no ha respondido. Vuelve a comprobarlo más tarde.",
   "give_back.rest_ready":
     "{amount} aún no se han devuelto. Pulsa Devolver el resto para devolverlos ahora.",
   "give_back.send_rest": "Devolver el resto",
