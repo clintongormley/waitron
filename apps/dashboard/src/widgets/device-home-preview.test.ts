@@ -1051,6 +1051,20 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(menu.rowGap).toBe(menu.columnGap);
   });
 
+  it.each([
+    { width: 374, shortcuts: [] },
+    { width: 374, shortcuts: LIST },
+    { width: 792, shortcuts: [] },
+  ])("places Full menu directly after an Add row at $width px", async ({ width, shortcuts }) => {
+    const { el, host } = await mount({ shortcuts });
+    await widen(host, width);
+
+    const lastAdd = add(el, "section").getBoundingClientRect();
+    const heading = root(el).querySelector(".divider")!.getBoundingClientRect();
+    const sectionGap = parseFloat(getComputedStyle(frame(el)).rowGap);
+    expect(heading.top - lastAdd.bottom).toBeCloseTo(sectionGap);
+  });
+
   it("draws the add tiles in the primary colour, dashed and unfilled, as tall as a shortcut tile", async () => {
     const { el } = await mount({ shortcuts: [LEMONADE, HAM] });
     const token = (name: string) => {

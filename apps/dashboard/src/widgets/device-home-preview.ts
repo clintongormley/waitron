@@ -343,12 +343,10 @@ export class DeviceHomePreview extends LitElement {
         color: var(--wt-color-warning);
       }
 
-      /* The margin stands in for a shortcut's grip strip, so an add tile is as tall as the
-         shortcut tiles beside it rather than the tile and its strip together. */
       wt-button.add {
+        align-self: start;
         width: 100%;
         min-height: calc(var(--wt-tap-min) * 1.5);
-        margin-block-end: var(--wt-tap-min);
       }
 
       wt-button.add::part(button) {
