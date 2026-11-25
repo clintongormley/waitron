@@ -674,8 +674,6 @@ the day figures from recorded transactions. No removal was missed. `recovery_pac
   reports the box down within 35 seconds and starts its fallback reads. The earlier test froze the
   server process and left the socket silent.
   [Till connection plan, Task 4](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-jr13-till-connection.md#task-4-measure-14-first-half--a-box-that-goes-silent)
-- Remove the disabled command-answer cleanup and its own tests in a separate pull request.
-  Keep the saved answers so a till can retry an old request. See [the retention decision](#command-answers-stay-available-for-till-retries).
 
 ## Bundle: Query plans and indexes, measured on a year of data
 

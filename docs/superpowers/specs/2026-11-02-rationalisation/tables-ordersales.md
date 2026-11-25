@@ -165,6 +165,9 @@ only while a retry can arrive, so the daily tidy-up job (`jobs.md`) deletes reco
 party or bill closes (owner, 2026-11-04). That is a separate small job, and it waits until the longest
 possible till retry is confirmed (§8 M10).
 
+**2026-11-25, A1592 b:** The disabled command-answer cleanup was removed because manual till
+retries have no expiry. See [the retention decision](../../../backlog/architecture.md#command-answers-stay-available-for-till-retries).
+
 ### 1.9 `bill_payments` and 1.10 `bill_payment_lines`
 
 Keep both as they are, plus an index on `bill_payments.created_at` for attendance (`tables-people.md`;
@@ -610,6 +613,7 @@ e.g. `till-sale.ts:1050-1056`) vs `sale_settlements` ("the sale is fully paid", 
   refund-once read, and its key to `tender_refunds` goes with it.
 - **jobs**: `outgoing_mail` carries invoice emails, so `jobs.md`'s mail sender drains one queue, and a mail
   row names its delivery. The daily tidy-up job prunes `service_commands` (§1.8).
+  **2026-11-25, A1592 b:** The cleanup was removed. See [the command-answer retention decision](../../../backlog/architecture.md#command-answers-stay-available-for-till-retries).
 - **fiscal**: `verifactu_records.sale_id`, `payments.working_order_id / sale_id / bill_payment_id`,
   `adjustments.working_order_id`, `adjustment_lines.line_id`, `adjustment_refunds.tender_refund_id`
   (becomes `refund_id`). `sales.fiscal_backend/fiscal_state` and `invoice_series` stay theirs. The void
@@ -661,6 +665,7 @@ e.g. `till-sale.ts:1050-1056`) vs `sale_settlements` ("the sale is fully paid", 
 - **M10 latest till retry.** Before the tidy-up job prunes `service_commands`, establish how late a till can
   retry a command, offline tills included. Failing result: a retry that can arrive more than a day after
   its bill closes means a longer wait before pruning, since a pruned record would let the command run twice.
+  **2026-11-25, A1592 b:** The cleanup was removed. See [the command-answer retention decision](../../../backlog/architecture.md#command-answers-stay-available-for-till-retries).
 
 ---
 

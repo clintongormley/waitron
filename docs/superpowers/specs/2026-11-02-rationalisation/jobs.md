@@ -318,6 +318,9 @@ records the existing startup catch-up, clock gate, retired mirror-session except
 command step's available close times and the watcher's 30-day measurement clearance. Those
 dated corrections supersede the older table and measurement wording below.
 
+**2026-11-25, A1592 b:** The disabled command-answer cleanup was removed because manual till
+retries have no expiry. See [the retention decision](../../../backlog/architecture.md#command-answers-stay-available-for-till-retries).
+
 | Step | Deletes | Decided in |
 | --- | --- | --- |
 | Sign-in challenges | Expired `sign_in_challenges` rows | README U10; `tables-people.md` |
@@ -650,6 +653,8 @@ README U5 keeps the adoption finisher and the offer, and the finisher refuses `m
 (`reserved-identity.ts:68-69`) until then. That question is the backlog's own entry, `docs/backlog.md:706-709`.
 
 **To confirm before `housekeeping`'s service-command step is switched on:** how late a till can retry a command.
+
+**2026-11-25, A1592 b:** The cleanup was removed. See [the command-answer retention decision](../../../backlog/architecture.md#command-answers-stay-available-for-till-retries).
 
 **Where the proposed rules break:**
 

@@ -15,7 +15,7 @@ import {
   insertInChunks,
   withTransaction,
 } from "@waitron/db";
-import { seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createPrinter } from "@waitron/printing";
 import {
@@ -113,67 +113,6 @@ describe("daily housekeeping steps", () => {
     },
   );
 
-  it("scans retained command answers once before fifty thousand deletable answers", async () => {
-    const began = performance.now();
-    const diagnostic = (stage: string, data = {}) =>
-      process.stderr.write(
-        JSON.stringify({ stage, elapsedMs: performance.now() - began, ...data }) + "\n",
-      );
-    diagnostic("command-fixture-start");
-    const personId = await seedPerson(suite.db);
-    const [party] = await suite.db
-      .insert(parties)
-      .values({ openedBy: personId, state: "closed", closedAt: old })
-      .returning();
-    await insertInChunks(
-      suite.db,
-      serviceCommands,
-      Array.from({ length: 250000 }, (_, index) => ({
-        id: String(index),
-        scopeKind: "party" as const,
-        scopeId: index < 200000 ? "missing" : party!.id,
-        submissionId: String(index),
-        kind: "finish",
-        fingerprint: "same",
-        result: {},
-      })),
-    );
-    const step = HOUSEKEEPING_STEPS.find((step) => step.name === "service_commands")!;
-    diagnostic("command-fixture-seeded");
-    let scanned = 0,
-      largest = 0;
-    const controller = new AbortController();
-    await pass(
-      tidy({
-        steps: [
-          {
-            ...step,
-            enabled: true,
-            async deleteBatch(...args) {
-              const result = await step.deleteBatch(...args);
-              scanned += result.scanned;
-              largest = Math.max(largest, result.scanned);
-              if (scanned % 50000 === 0)
-                diagnostic("command-prune-progress", { scanned, cursor: result.cursor });
-              if (scanned > 250000) controller.abort();
-              return result;
-            },
-          },
-        ],
-      }),
-      controller.signal,
-    );
-    diagnostic("command-prune-complete", { scanned, largest });
-    expect(scanned).toBe(250000);
-    expect(largest).toBe(100);
-    expect(
-      suite.db.get(sql`select count(*) n from service_commands where scope_id = 'missing'`),
-    ).toEqual({ n: 200000 });
-    expect(
-      suite.db.get(sql`select count(*) n from service_commands where scope_id = ${party!.id}`),
-    ).toEqual({ n: 0 });
-  }, 120000);
-
   it("keeps photo garbage on a secondary through the runner's startup and stop", async () => {
     await suite.db
       .insert(mediaBlobs)
@@ -239,7 +178,7 @@ describe("daily housekeeping steps", () => {
       "a".repeat(64),
     ]);
   });
-  it("commits short batches separately, yielding to a stop before another batch", async () => {
+  it("yields to a stop between batches and later advances past a full batch of live challenges", async () => {
     const step = HOUSEKEEPING_STEPS.find((step) => step.name === "sign_in_challenges")!;
     await insertInChunks(
       suite.db,
@@ -249,7 +188,7 @@ describe("daily housekeeping steps", () => {
         kind: "passkey_login" as const,
         challenge: "test",
         createdAt: old,
-        expiresAt: now.toISOString(),
+        expiresAt: index >= 100 && index < 200 ? "2026-11-14T04:05:00.000Z" : now.toISOString(),
       })),
     );
     const controller = new AbortController();
@@ -261,8 +200,14 @@ describe("daily housekeeping steps", () => {
       expect(await suite.db.select().from(signInChallenges)).toHaveLength(101);
       expect(locks).toHaveBeenCalledTimes(2);
       locks.mockClear();
-      await pass(tidy({ steps: [step] }));
-      expect(await suite.db.select().from(signInChallenges)).toEqual([]);
+      await pass(tidy({ steps: [step] }), AbortSignal.timeout(5000));
+      const retained = await suite.db
+        .select({ id: signInChallenges.id })
+        .from(signInChallenges)
+        .orderBy(signInChallenges.id);
+      expect(retained.map(({ id }) => id)).toEqual(
+        Array.from({ length: 100 }, (_, index) => String(index + 100)),
+      );
       expect(locks).toHaveBeenCalledTimes(3);
     } finally {
       locks.mockRestore();
@@ -280,14 +225,12 @@ describe("daily housekeeping steps", () => {
       steps: [
         {
           name: "sign_in_challenges",
-          enabled: true,
           async deleteBatch() {
             throw failure;
           },
         },
         {
           name: "media_blobs",
-          enabled: true,
           async deleteBatch(tx) {
             const deleted = (await tx.delete(mediaBlobs).returning()).length;
             return { cursor: deleted, scanned: deleted, deleted };
@@ -373,7 +316,7 @@ describe("daily housekeeping steps", () => {
     ]);
   });
 
-  it("keeps command retry answers while the service-command step is disabled", async () => {
+  it("keeps old command answers for till retries", async () => {
     const personId = await seedPerson(suite.db);
     const [party] = await suite.db
       .insert(parties)
@@ -390,69 +333,6 @@ describe("daily housekeeping steps", () => {
     const before = await suite.db.select().from(serviceCommands);
     await pass();
     expect(await suite.db.select().from(serviceCommands)).toEqual(before);
-  });
-
-  it("deletes only command answers whose own party or bill finished over twenty-four hours ago", async () => {
-    const personId = await seedPerson(suite.db);
-    const scopes = [
-      ["old", "2026-11-13T03:59:59.999Z"],
-      ["boundary", "2026-11-13T04:00:00.000Z"],
-      ["recent", "2026-11-13T04:00:00.001Z"],
-      ["open", null],
-    ] as const;
-    for (const [id, closedAt] of scopes) {
-      await suite.db.insert(parties).values({
-        id: `party-${id}`,
-        openedBy: personId,
-        state: closedAt === null ? "open" : "closed",
-        closedAt,
-      });
-      await seedWorkingOrder(suite.db, {
-        id: `bill-${id}`,
-        status: closedAt === null ? "open" : "settled",
-        settledAt: closedAt,
-      });
-    }
-    await seedWorkingOrder(suite.db, { id: "bill-abandoned", status: "abandoned" });
-    for (const scopeKind of ["party", "bill"] as const) {
-      for (const id of [
-        "old",
-        "boundary",
-        "recent",
-        "open",
-        "missing",
-        ...(scopeKind === "bill" ? ["abandoned"] : []),
-      ]) {
-        await suite.db.insert(serviceCommands).values({
-          id: `${scopeKind}-${id}`,
-          scopeKind,
-          scopeId: `${scopeKind}-${id}`,
-          submissionId: "same",
-          kind: "finish",
-          fingerprint: "same",
-          result: {},
-        });
-      }
-    }
-    const step = HOUSEKEEPING_STEPS.find((step) => step.name === "service_commands");
-    expect(step).toBeDefined();
-    const first = await withTransaction(suite.db, (tx) => step!.deleteBatch(tx, now, 1));
-    expect(first.deleted).toBe(1);
-    expect(
-      (await withTransaction(suite.db, (tx) => step!.deleteBatch(tx, now, 5, first.cursor)))
-        .deleted,
-    ).toBe(1);
-    expect((await suite.db.select().from(serviceCommands)).map((row) => row.id).sort()).toEqual([
-      "bill-abandoned",
-      "bill-boundary",
-      "bill-missing",
-      "bill-open",
-      "bill-recent",
-      "party-boundary",
-      "party-missing",
-      "party-open",
-      "party-recent",
-    ]);
   });
 });
 

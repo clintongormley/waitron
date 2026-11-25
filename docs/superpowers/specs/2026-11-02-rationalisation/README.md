@@ -384,6 +384,9 @@ data, and `service_commands`, which the owner says is not personal data; that la
 until the latest possible till retry is confirmed. `till_sessions`, `staff_activity` and print job
 payloads stay with A980, and the bench measures them unpruned.
 
+**2026-11-25, A1592 b:** The disabled command-answer cleanup was removed because manual till
+retries have no expiry. See [the retention decision](../../../backlog/architecture.md#command-answers-stay-available-for-till-retries).
+
 **U11. Calls made after the builder check** (the builder's questions and how each was settled):
 - *Card readers on a device.* `devices.card_reader_id` holds the reader as a plain id, with no
   database key, and a profile's readers are a list on the profile (owner, 2026-11-04). Core cannot
