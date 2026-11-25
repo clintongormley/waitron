@@ -37,6 +37,8 @@ export interface PayRefusal {
   advances?: string;
   /** The dish a `set_menu.*` refusal names. */
   dishName?: string;
+  /** The dishes a `set_menu.*` refusal names. */
+  dishNames?: string[];
   /** The payment refused was a card already charged on a terminal the box does not talk to. */
   manualCard?: true;
 }

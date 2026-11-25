@@ -1,4 +1,4 @@
-import { optionSnapshotNames } from "@waitron/shared";
+import { type BillSetMenuState, optionSnapshotNames } from "@waitron/shared";
 import type { ExpoItem, LineNutrition, StationQueueItem, TabLine } from "../api/client.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import type { SentSlice } from "./sent-panel.js";
@@ -97,6 +97,18 @@ export function tabLinePortionKey(
     extras,
     shown,
   ]);
+}
+
+/** `keyOf`, with each set menu and each dish of one standing alone: which set menu a dish is in
+ * decides what leaves the bill with it. */
+export function apartInSetMenus(
+  setMenus: BillSetMenuState | undefined,
+  keyOf: (dish: TabLine) => string | null,
+): (dish: TabLine) => string | null {
+  const apart = new Set(
+    [...(setMenus?.setMenus ?? []), ...(setMenus?.dishes ?? [])].map(({ lineId }) => lineId),
+  );
+  return (dish) => (apart.has(dish.id) ? null : keyOf(dish));
 }
 
 /**

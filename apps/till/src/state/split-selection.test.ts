@@ -15,6 +15,7 @@ import {
   pickGroups,
   pickedCount,
   setCount,
+  toggleRow,
   type PickRow,
   type Picks,
 } from "./portion-selection.js";
@@ -318,6 +319,161 @@ describe("A803 selection:", () => {
         wholeBillIds: [],
         loose: [{ billId: "b1", lineIds: ["a", "b"] }],
       });
+    });
+
+    const daily = dish("daily", 3, "14.00");
+    /** The bill of `all` with a Daily row holding `held`, of which `fixed` leave only with it. */
+    const withDaily = (
+      held: readonly string[],
+      { all = [...lines, daily], fixed = [] }: { all?: TabLine[]; fixed?: string[] } = {},
+    ) => {
+      const one = source("b1", 1, all);
+      one.bill.setMenus = {
+        copies: [],
+        recorded: {},
+        exact: true,
+        setMenus: [{ lineId: "daily", lineNo: 3, copyId: "daily" }],
+        dishes: held.map((lineId, place) => ({
+          lineId,
+          setMenuLineId: "daily",
+          place,
+          productId: lineId,
+          variantId: null,
+          priceCents: 0,
+          countsAsCourseId: "main",
+          movable: !fixed.includes(lineId),
+        })),
+      };
+      return one;
+    };
+
+    it("without the set menu that holds them becomes whole", () => {
+      const next = pickOnBill(withDaily(["a", "b"]), NOTHING, new Set(["a", "b"]));
+
+      expect([...next.whole]).toEqual(["b1"]);
+      expect(next.picks.has("b1")).toBe(false);
+    });
+
+    it("but one, without the set menu that holds it, does not", () => {
+      const next = pickOnBill(withDaily(["a", "b"]), NOTHING, new Set(["a"]));
+
+      expect(next.whole.size).toBe(0);
+      expect(sorted(next.picks.get("b1"))).toEqual(["a"]);
+    });
+
+    it("beside a set menu none of them is in does not", () => {
+      const next = pickOnBill(withDaily([]), NOTHING, new Set(["a", "b"]));
+
+      expect(next.whole.size).toBe(0);
+      expect(sorted(next.picks.get("b1"))).toEqual(["a", "b"]);
+    });
+
+    const staysPicks = (one: SplitSource, picks: string[]) => {
+      const next = pickOnBill(one, NOTHING, new Set(picks));
+      expect([...next.whole]).toEqual([]);
+      expect(sorted(next.picks.get("b1"))).toEqual(picks);
+    };
+
+    it("without their comped set menu, which stays, does not", () => {
+      const comped = { ...daily, unitPriceGross: "0.00", listUnitPriceGross: "14.00" };
+      staysPicks(withDaily(["a", "b"], { all: [...lines, comped] }), ["a", "b"]);
+    });
+
+    it("without the set menu a comp or discount on one of them keeps does not", () => {
+      const discounted = { ...lines[0]!, listUnitPriceGross: "6.00" };
+      staysPicks(withDaily(["a", "b"], { all: [discounted, lines[1]!, daily] }), ["a", "b"]);
+    });
+
+    it("without the set menu a comp on an extra of one of them keeps does not", () => {
+      const extra = line("bread", 4, {
+        parentLineNo: 1,
+        unitPriceGross: "0.00",
+        listUnitPriceGross: "1.50",
+      });
+      staysPicks(withDaily(["a", "b"], { all: [...lines, daily, extra] }), ["a", "b"]);
+    });
+
+    it("without the set menu one of them leaves only with does not", () => {
+      staysPicks(withDaily(["a", "b"], { fixed: ["b"] }), ["a", "b"]);
+    });
+
+    it("by the set menu that takes them all along becomes whole", () => {
+      const next = pickOnBill(withDaily(["a", "b"]), NOTHING, new Set(["daily"]));
+
+      expect([...next.whole]).toEqual(["b1"]);
+    });
+
+    it("by a comped set menu that takes them all along becomes whole", () => {
+      const comped = { ...daily, unitPriceGross: "0.00", listUnitPriceGross: "14.00" };
+      const one = withDaily(["a", "b"], { all: [...lines, comped], fixed: ["b"] });
+
+      expect([...pickOnBill(one, NOTHING, new Set(["daily"])).whole]).toEqual(["b1"]);
+    });
+
+    it("but one beside the set menu that takes the others does not", () => {
+      staysPicks(withDaily(["a"]), ["daily"]);
+    });
+
+    it("by a set menu, with a paid dish or this person's unsent dishes, does not", () => {
+      const unsent = { ...withDaily(["a", "b"]), ownUnsent: true };
+      staysPicks(unsent, ["daily"]);
+      const paid = {
+        ...withDaily(["a", "b"]),
+        groups: source("b1", 1, [...lines, daily], { paid: ["a"] }).groups,
+      };
+      staysPicks(paid, ["daily"]);
+    });
+
+    it("unticking a set menu's dish on a whole bill drops the set menu too, and stays so after a read", () => {
+      const one = withDaily(["a", "b"]);
+
+      const next = pickOnBill(one, wholeOf("b1"), new Set(["b", "daily"]));
+
+      expect(next.whole.size).toBe(0);
+      expect(sorted(next.picks.get("b1"))).toEqual(["b"]);
+      const read = tidySplit(drawn([one], next), [one], next);
+      expect(read.split).toEqual(next);
+      expect(read.changed).toEqual([]);
+    });
+
+    it("unticking a comped set menu's dish on a whole bill drops the set menu too", () => {
+      const comped = { ...daily, unitPriceGross: "0.00", listUnitPriceGross: "14.00" };
+      const one = withDaily(["a", "b"], { all: [...lines, comped] });
+
+      const next = pickOnBill(one, wholeOf("b1"), new Set(["b", "daily"]));
+
+      expect(next.whole.size).toBe(0);
+      expect(sorted(next.picks.get("b1"))).toEqual(["b"]);
+    });
+
+    it("unticking a set menu on a whole bill drops the dishes it takes along too", () => {
+      const water = dish("water", 5, "2.00");
+      const one = withDaily(["a", "b"], { all: [...lines, daily, water] });
+
+      const next = pickOnBill(one, wholeOf("b1"), new Set(["a", "b", "water"]));
+
+      expect(next.whole.size).toBe(0);
+      expect(sorted(next.picks.get("b1"))).toEqual(["water"]);
+    });
+
+    it("unticking a comped set menu on a whole bill leaves its dishes picked", () => {
+      const comped = { ...daily, unitPriceGross: "0.00", listUnitPriceGross: "14.00" };
+      const one = withDaily(["a", "b"], { all: [...lines, comped] });
+
+      const next = pickOnBill(one, wholeOf("b1"), new Set(["a", "b"]));
+
+      expect(next.whole.size).toBe(0);
+      expect(sorted(next.picks.get("b1"))).toEqual(["a", "b"]);
+    });
+
+    it("but another dish unticked on a whole bill keeps the set menu and its dishes picked", () => {
+      const water = dish("water", 5, "2.00");
+      const one = withDaily(["a", "b"], { all: [...lines, daily, water] });
+
+      const next = pickOnBill(one, wholeOf("b1"), new Set(["a", "b", "daily"]));
+
+      expect(next.whole.size).toBe(0);
+      expect(sorted(next.picks.get("b1"))).toEqual(["a", "b", "daily"]);
     });
 
     it("no pick left clears the bill's entry", () => {
@@ -811,6 +967,158 @@ describe("A803 selection:", () => {
         "paid",
         null,
       ]);
+    });
+  });
+
+  describe("two identical set menus on one bill", () => {
+    const inMenu = (id: string, lineNo: number, name: string) =>
+      line(id, lineNo, { name, productId: name, menuItemId: name, unitPriceGross: "0.00" });
+    const daily = (id: string, lineNo: number, over: Partial<TabLine> = {}) =>
+      line(id, lineNo, {
+        name: "Daily",
+        productId: "daily",
+        menuItemId: "daily",
+        unitPriceGross: "14.00",
+        ...over,
+      });
+    const held = (setMenuLineId: string, ...lineIds: string[]) =>
+      lineIds.map((lineId, place) => ({
+        lineId,
+        setMenuLineId,
+        place,
+        productId: lineId,
+        variantId: null,
+        priceCents: 0,
+        countsAsCourseId: "main",
+        movable: true,
+      }));
+
+    /** Daily A holds s1 and h1, Daily B holds s2 and h2, and the water is in neither. */
+    const twoDailies = (
+      a: Partial<TabLine> = {},
+      paid: { paid?: string[]; received?: string } = {},
+    ): SplitSource => {
+      const lines = [
+        daily("A", 1, a),
+        inMenu("s1", 2, "Soup"),
+        inMenu("h1", 3, "Hake"),
+        daily("B", 4),
+        inMenu("s2", 5, "Soup"),
+        inMenu("h2", 6, "Hake"),
+        dish("water", 7, "2.00"),
+      ];
+      const setMenus = {
+        copies: [],
+        recorded: {},
+        exact: true,
+        setMenus: [
+          { lineId: "A", lineNo: 1, copyId: "daily" },
+          { lineId: "B", lineNo: 4, copyId: "daily" },
+        ],
+        dishes: [...held("A", "s1", "h1"), ...held("B", "s2", "h2")],
+      };
+      const [one] = splitSourcesFrom(
+        { bills: [{ billId: "b1", lines, balance: balanceOf(lines, paid) }] },
+        [bill("b1", 1, { setMenus })],
+        [],
+        "me",
+        keyFor,
+      );
+      return one!;
+    };
+
+    /** What pressing the tick of the row holding `id` does, as `till-portion-picker` sends it. */
+    const press = (one: SplitSource, split: SplitPicks, id: string): SplitPicks => {
+      const rows = rowsOf(one, split);
+      const row = rows.find(({ members }) => members.some((member) => member.id === id))!;
+      const next = split.whole.has("b1")
+        ? rows.filter((other) => other !== row).flatMap(({ members }) => members.map((m) => m.id))
+        : toggleRow(row, split.picks.get("b1") ?? new Set());
+      return pickOnBill(one, split, new Set(next));
+    };
+    const read = (one: SplitSource, split: SplitPicks) => {
+      const out = tidySplit(drawn([one], split), [one], split);
+      expect(out.changed).toEqual([]);
+      expect(out.gone).toEqual([]);
+      return out.split;
+    };
+    const sends = (one: SplitSource, split: SplitPicks) => {
+      const { wholeBillIds, loose } = toSelection([one], split);
+      return { wholeBillIds, lineIds: loose.flatMap(({ lineIds }) => lineIds).sort() };
+    };
+    const picked = (...lineIds: string[]) => ({ wholeBillIds: [], lineIds });
+
+    it("draws each set menu and each dish of one on a row of its own", () => {
+      expect(named(rowsOf(twoDailies(), NOTHING))).toEqual(
+        ["A", "s1", "h1", "B", "s2", "h2", "water"].map((id) => [id]),
+      );
+    });
+
+    it("still counts identical dishes that are in no set menu", () => {
+      const lines = [daily("A", 1), inMenu("s1", 2, "Soup"), inMenu("s2", 3, "Soup")];
+      const one = splitSourcesFrom(
+        readOf({ id: "b1", lines: [...lines, inMenu("s3", 4, "Soup")] }),
+        [
+          bill("b1", 1, {
+            setMenus: {
+              copies: [],
+              recorded: {},
+              exact: true,
+              setMenus: [{ lineId: "A", lineNo: 1, copyId: "daily" }],
+              dishes: held("A", "s1"),
+            },
+          }),
+        ],
+        [],
+        "me",
+        keyFor,
+      );
+
+      expect(named(rowsOf(one[0]!, NOTHING))).toEqual([["A"], ["s1"], ["s2", "s3"]]);
+    });
+
+    it("unticking the first on a whole bill leaves the second, its dishes and the water after a read, and then the water can go too", () => {
+      const one = twoDailies();
+
+      const unticked = read(one, press(one, wholeOf("b1"), "A"));
+      expect(sends(one, unticked)).toEqual(picked("B", "h2", "s2", "water"));
+
+      const dry = read(one, press(one, unticked, "water"));
+      expect(sends(one, dry)).toEqual(picked("B", "h2", "s2"));
+    });
+
+    it("unticking the first, comped, and its dishes on a whole bill leaves the second, its dishes and the water after a read, and then the water can go too", () => {
+      const one = twoDailies({ unitPriceGross: "0.00", listUnitPriceGross: "14.00" });
+
+      const unticked = ["A", "s1", "h1"].reduce(
+        (split, id) => read(one, press(one, split, id)),
+        wholeOf("b1"),
+      );
+      expect(sends(one, unticked)).toEqual(picked("B", "h2", "s2", "water"));
+
+      const dry = read(one, press(one, unticked, "water"));
+      expect(sends(one, dry)).toEqual(picked("B", "h2", "s2"));
+    });
+
+    it("ticking the second and its own dishes sends exactly those", () => {
+      const one = twoDailies();
+
+      const ticked = ["B", "s2", "h2"].reduce(
+        (split, id) => read(one, press(one, split, id)),
+        NOTHING,
+      );
+
+      expect(sends(one, ticked)).toEqual(picked("B", "h2", "s2"));
+    });
+
+    it("a paid dish of the first stays, and the second's same dish can still go", () => {
+      const one = twoDailies({}, { paid: ["s1"], received: "4.00" });
+
+      expect(
+        rowsOf(one, NOTHING).map((row) => [row.members[0]!.id, row.blocked?.reason ?? null]),
+      ).toContainEqual(["s1", "paid"]);
+      const ticked = read(one, press(one, press(one, NOTHING, "s1"), "s2"));
+      expect(sends(one, ticked)).toEqual(picked("s2"));
     });
   });
 

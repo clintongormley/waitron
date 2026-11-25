@@ -178,7 +178,7 @@ export async function readBillsSetMenus(
       versionId: workingOrderLines.setMenuVersionId,
       setMenuLineId: workingOrderLines.setMenuLineId,
       place: workingOrderLines.setMenuPlace,
-      countsAsCourseId: workingOrderLines.setMenuCountsAsCourseId,
+      countsAsCourseId: workingOrderLines.countsAsCourseId,
       priceCents: workingOrderLines.unitPriceGross,
       productId: workingOrderLines.productId,
       cancellationLineId: lineServiceCancellations.lineId,

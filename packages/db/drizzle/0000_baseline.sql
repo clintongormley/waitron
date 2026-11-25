@@ -129,7 +129,6 @@ CREATE TABLE `working_order_lines` (
 	`set_menu_version_id` text,
 	`set_menu_line_id` text,
 	`set_menu_place` integer,
-	`set_menu_counts_as_course_id` text,
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade,
 	FOREIGN KEY (`group_id`) REFERENCES `order_groups`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`product_id`) REFERENCES `products`(`id`) ON UPDATE no action ON DELETE restrict,
@@ -154,17 +153,15 @@ CREATE TABLE `working_order_lines` (
 	CONSTRAINT "working_order_lines_set_menu_ck" CHECK(("working_order_lines"."set_menu_role" is null
           and ("working_order_lines"."set_menu_id" is null or ("working_order_lines"."parent_line_id" is null and "working_order_lines"."menu_item_id" is not null))
           and "working_order_lines"."set_menu_version_id" is null
-          and "working_order_lines"."set_menu_line_id" is null and "working_order_lines"."set_menu_place" is null
-          and "working_order_lines"."set_menu_counts_as_course_id" is null)
+          and "working_order_lines"."set_menu_line_id" is null and "working_order_lines"."set_menu_place" is null)
         or ("working_order_lines"."set_menu_role" is 'set_menu'
           and "working_order_lines"."set_menu_id" is not null and "working_order_lines"."set_menu_version_id" is not null
           and "working_order_lines"."product_id" is null and "working_order_lines"."menu_item_id" is null and "working_order_lines"."parent_line_id" is null
           and "working_order_lines"."course_id" is null and "working_order_lines"."group_id" is null and "working_order_lines"."cohort_id" is null
-          and "working_order_lines"."set_menu_line_id" is null and "working_order_lines"."set_menu_place" is null
-          and "working_order_lines"."set_menu_counts_as_course_id" is null)
+          and "working_order_lines"."set_menu_line_id" is null and "working_order_lines"."set_menu_place" is null)
         or ("working_order_lines"."set_menu_role" is 'dish'
           and "working_order_lines"."menu_item_id" is not null
-          and "working_order_lines"."set_menu_place" is not null and "working_order_lines"."set_menu_counts_as_course_id" is not null
+          and "working_order_lines"."set_menu_place" is not null and "working_order_lines"."counts_as_course_id" is not null
           and "working_order_lines"."parent_line_id" is null and "working_order_lines"."set_menu_version_id" is null)),
 	CONSTRAINT "working_order_lines_cohort_ck" CHECK(("working_order_lines"."cohort_id" is null and "working_order_lines"."cohort_ordinal" is null and "working_order_lines"."whole_portion" is null)
         or ("working_order_lines"."cohort_id" is not null and "working_order_lines"."cohort_ordinal" is not null
@@ -3298,7 +3295,6 @@ BEGIN
       AND new.set_menu_version_id IS old.set_menu_version_id
       AND new.set_menu_line_id IS old.set_menu_line_id
       AND new.set_menu_place IS old.set_menu_place
-      AND new.set_menu_counts_as_course_id IS old.set_menu_counts_as_course_id
       AND new.variant_name IS old.variant_name
       AND new.variant_descriptions IS old.variant_descriptions
       AND new.variant_kitchen_name IS old.variant_kitchen_name
@@ -3371,7 +3367,6 @@ BEGIN
       AND new.set_menu_version_id IS old.set_menu_version_id
       AND new.set_menu_line_id IS old.set_menu_line_id
       AND new.set_menu_place IS old.set_menu_place
-      AND new.set_menu_counts_as_course_id IS old.set_menu_counts_as_course_id
       AND new.variant_name IS old.variant_name
       AND new.variant_descriptions IS old.variant_descriptions
       AND new.variant_kitchen_name IS old.variant_kitchen_name
@@ -3463,7 +3458,6 @@ BEGIN
       AND new.set_menu_version_id IS old.set_menu_version_id
       AND new.set_menu_line_id IS old.set_menu_line_id
       AND new.set_menu_place IS old.set_menu_place
-      AND new.set_menu_counts_as_course_id IS old.set_menu_counts_as_course_id
       AND new.variant_name IS old.variant_name
       AND new.variant_descriptions IS old.variant_descriptions
       AND new.variant_kitchen_name IS old.variant_kitchen_name

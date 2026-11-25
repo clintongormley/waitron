@@ -13,8 +13,9 @@ import type {
   ItemPaymentRequest,
   ItemPick,
 } from "../api/item-payment-types.js";
+import { listDishNames } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
-import { fill, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import type { PayLine, PayRefusal, PayRequest } from "../widgets/bill-pay-dialog.js";
 import { moneyPlus, paymentAsk, type Confirmation, type PayChoice } from "./bill-payment.js";
 
@@ -122,8 +123,17 @@ export function itemsAllocatedFrom(preview: AllocationPreview): AllocationPrevie
   return preview.kind === "allocated" ? { ...preview, total: preview.applied } : preview;
 }
 
-/** The Pay window's words for a set-menu dish chosen without its set menu. */
+/** The Pay window's words for a set-menu dish that leaves only with its set menu, its cancel having
+ * kept its charge, or it or an extra of it having a comp or discount. */
 export function itemsRefusal(refusal: PayRefusal): PayRefusal {
+  const { dishNames = [] } = refusal;
+  if (refusal.code === "set_menu.move_adjusted" && dishNames.length > 0)
+    return {
+      ...refusal,
+      text: fill(t("bill_pay.items_set_menu_adjusted"), {
+        dishNames: listDishNames(dishNames, currentLocale()),
+      }),
+    };
   if (refusal.code !== "set_menu.moves_with_set_menu" || refusal.dishName === undefined)
     return refusal;
   return {

@@ -111,11 +111,10 @@ async function charged(billId: string) {
       role: row.setMenuRole,
       setMenuLineId: row.setMenuLineId,
       place: row.setMenuPlace,
-      countsAs: row.setMenuCountsAsCourseId,
     }));
 }
 
-const aLaCarte = { role: null, setMenuLineId: null, place: null, countsAs: null };
+const aLaCarte = { role: null, setMenuLineId: null, place: null };
 
 async function billTotal(billId: string) {
   return (await specRows(spec, billId)).reduce((sum, { lineTotal }) => sum + lineTotal, 0);

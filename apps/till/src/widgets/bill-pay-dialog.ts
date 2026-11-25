@@ -1596,7 +1596,8 @@ export class TillBillPayDialog extends LitElement {
     return this.#offered().filter((line) => this.picks.has(line.lineNo));
   }
 
-  /** What the chosen items come to. */
+  /** The chosen lines' amounts on this bill. Set-menu dishes can come to another amount on a bill of
+   * their own, which the preview answers. */
   #pickedAmount(): Decimal {
     return toScale(
       sumDecimals(

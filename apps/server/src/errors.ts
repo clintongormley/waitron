@@ -966,8 +966,8 @@ declare module "@waitron/shared" {
     /**
      * A merge, or a move of every dish, would move `workingOrderId`'s full invoice onto
      * `intoWorkingOrderId` without the till saying which customer the dishes are invoiced to, or
-     * either bill's full invoice changed since the till asked, or a move sent an answer but leaves a
-     * dish on `workingOrderId`.
+     * either bill's full invoice changed since the till asked, or a move sent an answer but leaves
+     * something on `workingOrderId`.
      */
     "bill.merge_invoice_choice_required": { workingOrderId: string; intoWorkingOrderId: string };
     /** No bill payment was found for `paymentId`, the id the caller sent. */

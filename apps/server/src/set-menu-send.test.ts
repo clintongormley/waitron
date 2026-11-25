@@ -143,7 +143,6 @@ it("sends a set-menu-folder dish at the grouping's price, removing a set menu it
     setMenuId: daily.menuId,
     setMenuLineId: null,
     setMenuPlace: null,
-    setMenuCountsAsCourseId: null,
     menuId: daily.fullMenuId,
     menuVersionId: daily.versionId,
     menuItemId: daily.menuItemId,
@@ -178,7 +177,6 @@ it("stores a dish tapped in another set menu's folder at its a la carte price wi
   expect(placed).toMatchObject({
     setMenuId: special.menuId,
     setMenuLineId: null,
-    setMenuCountsAsCourseId: null,
     courseId: special.courseId,
     unitPriceGross: 500,
   });

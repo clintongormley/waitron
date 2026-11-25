@@ -214,21 +214,30 @@ describe("set menus in Move dishes", () => {
     );
   });
 
+  const invoiceBills = () =>
+    vi.fn().mockResolvedValue([
+      bill("wo-4", 1, {
+        setMenus: sourceMenus,
+        invoiceType: "F1",
+        recipient: {
+          taxId: "12345678Z",
+          legalName: "Table Guest",
+          address: "1 Oak Street",
+          countryCode: "ES",
+        },
+      }),
+      bill("bill-1", 2, { setMenus: targetMenus }),
+    ]);
+  const invoiceQuestion = (el: TillApp) =>
+    el.shadowRoot!.querySelector<HTMLElement>("[data-merge-invoice]");
+  const keepGuest = async (el: TillApp) => {
+    el.shadowRoot!.querySelector<HTMLElement>('[data-merge-keep="from"]')!.click();
+    await flush(el, 6);
+  };
+
   it("asks about the invoice customer before moving all the lines with one menu pick", async () => {
     const { el, order } = await openSetMenuMove({
-      getPartyBills: vi.fn().mockResolvedValue([
-        bill("wo-4", 1, {
-          setMenus: sourceMenus,
-          invoiceType: "F1",
-          recipient: {
-            taxId: "12345678Z",
-            legalName: "Table Guest",
-            address: "1 Oak Street",
-            countryCode: "ES",
-          },
-        }),
-        bill("bill-1", 2, { setMenus: targetMenus }),
-      ]),
+      getPartyBills: invoiceBills(),
     });
     emit(order, "move-dishes", { lineIds: ["daily-1"], toBillId: "bill-1" });
     await flush(el, 6);
@@ -237,6 +246,54 @@ describe("set menus in Move dishes", () => {
       "Table Guest",
     );
     expect(api.moveDishes).not.toHaveBeenCalled();
+  });
+
+  it("asks about the invoice customer when the server refuses a set menu's every dish chosen one by one", async () => {
+    const moved = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "bill.merge_invoice_choice_required" })
+      .mockResolvedValue({ billId: "bill-1" });
+    const { el, order } = await openSetMenuMove({
+      getPartyBills: invoiceBills(),
+      moveDishes: moved,
+    });
+
+    emit(order, "move-dishes", { lineIds: ["sent-sirloin"], toBillId: "bill-1" });
+    await flush(el, 6);
+
+    expect(invoiceQuestion(el)?.textContent).toContain("Table Guest");
+    expect(banner(el)).toBeNull();
+
+    await keepGuest(el);
+
+    expect(moved).toHaveBeenCalledTimes(2);
+    expect(moved).toHaveBeenLastCalledWith("wo-4", ["sent-sirloin"], "bill-1", expect.any(Object), {
+      keep: "from",
+      into: null,
+      from: { taxId: "12345678Z" },
+    });
+    expect(invoiceQuestion(el)).toBeNull();
+    expect(banner(el)).toBeNull();
+  });
+
+  it("asks again on the next Move when the answer to a set menu's every dish is refused", async () => {
+    const moved = vi.fn().mockRejectedValue({ code: "bill.merge_invoice_choice_required" });
+    const { el, order } = await openSetMenuMove({
+      getPartyBills: invoiceBills(),
+      moveDishes: moved,
+    });
+    const move = { lineIds: ["sent-sirloin"], toBillId: "bill-1" };
+    emit(order, "move-dishes", move);
+    await flush(el, 6);
+    await keepGuest(el);
+    expect(invoiceQuestion(el)).toBeNull();
+    expect(bannerText(el)).toContain("The bills' invoice details have changed.");
+
+    emit(tableOrder(el)!, "move-dishes", move);
+    await flush(el, 6);
+
+    expect(invoiceQuestion(el)?.textContent).toContain("Table Guest");
+    expect(banner(el)).toBeNull();
   });
 
   it("moves a loose dish with no target price shown", async () => {
@@ -291,7 +348,7 @@ describe("set menus in Move dishes", () => {
     );
   });
 
-  it("separates identical dishes with different menu places only in the move picker", async () => {
+  it("separates identical dishes with different menu places in the move picker, and not in the list of the bill's dishes", async () => {
     const extraDish = { ...SIRLOIN_LINE, id: "other-sirloin", lineNo: 4 };
     const extraMenu = { ...MENU_LINE, id: "daily-2", lineNo: 3 };
     const move = await openSetMenuMove({
@@ -316,6 +373,9 @@ describe("set menus in Move dishes", () => {
     const picker = move.root.querySelector<TillPortionPicker>("till-portion-picker")!;
     await picker.updateComplete;
     expect(picker.shadowRoot!.querySelectorAll('[data-pick-row$="sirloin"]')).toHaveLength(2);
+    expect(
+      [...picker.shadowRoot!.querySelectorAll("[data-pick-mark]")].map((mark) => mark.textContent),
+    ).toEqual(["Moves with Sirloin", "Moves with Sirloin"]);
 
     move.order.currentOrders = null;
     await move.order.updateComplete;

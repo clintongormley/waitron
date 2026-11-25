@@ -148,7 +148,6 @@ async function ungroup(billId: string) {
         setMenuRole: null,
         setMenuLineId: null,
         setMenuPlace: null,
-        setMenuCountsAsCourseId: null,
         unitPriceGross: sql`${workingOrderLines.aLaCarteUnitPrice}`,
         lineTotal: sql`${workingOrderLines.aLaCarteUnitPrice}`,
       })

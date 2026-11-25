@@ -20310,13 +20310,15 @@ export class TillApp extends LitElement {
       if (!this.#billCompositionCurrent(asked)) return;
       if (this.#offerBillEditConflicts(error, asked, undefined, review)) return;
       if ((error as { code?: string } | undefined)?.code === "bill.merge_invoice_choice_required") {
-        // The server also refuses a choice sent with a move that no longer takes every dish, so the
-        // question is asked again only if the fresh lines still empty the bill.
+        // The server also refuses a choice sent with a move that no longer empties the bill, so after
+        // one the question is asked again only if the fresh lines still empty the bill. A move sent
+        // with none is refused only as emptying it, which this screen cannot always tell: it
+        // does not know which set menus are frozen (D15).
         const [, read] = await this.#loadLinesAndBills();
         if (!this.#billCompositionCurrent(asked)) return;
         if (
           read.bills === null ||
-          !this.#movesEveryDish(lineIds) ||
+          (choice !== undefined && !this.#movesEveryDish(lineIds)) ||
           !this.#askMoveInvoice(event, asked, read.bills)
         )
           this.errorKey = "table.move_invoice_changed";
@@ -20370,7 +20372,7 @@ export class TillApp extends LitElement {
     if (this.#billCompositionCurrent(asked)) await this.#refreshBillDraft();
   }
 
-  /** Whether the move empties the bill. A selected set menu carries its dishes as well. */
+  /** Whether the move names everything on the bill. A selected set menu carries its dishes as well. */
   #movesEveryDish(lineIds: readonly string[]): boolean {
     const dishes = this.tabLines.filter((line) => line.parentLineNo == null);
     const moved = new Set(lineIds);

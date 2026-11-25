@@ -321,8 +321,6 @@ export const workingOrderLines = table(
     setMenuVersionId: id("set_menu_version_id"),
     setMenuLineId: id("set_menu_line_id"),
     setMenuPlace: count("set_menu_place"),
-    // The bill keeps its recorded course id even if that course is deleted.
-    setMenuCountsAsCourseId: id("set_menu_counts_as_course_id"),
   },
   (t) => [
     foreignKey({
@@ -423,17 +421,15 @@ export const workingOrderLines = table(
       sql`(${t.setMenuRole} is null
           and (${t.setMenuId} is null or (${t.parentLineId} is null and ${t.menuItemId} is not null))
           and ${t.setMenuVersionId} is null
-          and ${t.setMenuLineId} is null and ${t.setMenuPlace} is null
-          and ${t.setMenuCountsAsCourseId} is null)
+          and ${t.setMenuLineId} is null and ${t.setMenuPlace} is null)
         or (${t.setMenuRole} is 'set_menu'
           and ${t.setMenuId} is not null and ${t.setMenuVersionId} is not null
           and ${t.productId} is null and ${t.menuItemId} is null and ${t.parentLineId} is null
           and ${t.courseId} is null and ${t.groupId} is null and ${t.cohortId} is null
-          and ${t.setMenuLineId} is null and ${t.setMenuPlace} is null
-          and ${t.setMenuCountsAsCourseId} is null)
+          and ${t.setMenuLineId} is null and ${t.setMenuPlace} is null)
         or (${t.setMenuRole} is 'dish'
           and ${t.menuItemId} is not null
-          and ${t.setMenuPlace} is not null and ${t.setMenuCountsAsCourseId} is not null
+          and ${t.setMenuPlace} is not null and ${t.countsAsCourseId} is not null
           and ${t.parentLineId} is null and ${t.setMenuVersionId} is null)`,
     ),
     uniqueIndex("working_order_lines_cohort_ordinal_key").on(t.cohortId, t.cohortOrdinal),

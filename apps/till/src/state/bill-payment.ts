@@ -305,6 +305,7 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     advanceInvoiceNumbers?: unknown;
     advances?: unknown;
     dishName?: unknown;
+    dishNames?: unknown;
   };
   const unsent = billUnsentOf(error);
   return {
@@ -333,6 +334,11 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
       : {}),
     ...(typeof refused.advances === "string" ? { advances: refused.advances } : {}),
     ...(typeof refused.dishName === "string" ? { dishName: refused.dishName } : {}),
+    ...(Array.isArray(refused.dishNames)
+      ? {
+          dishNames: refused.dishNames.filter((name): name is string => typeof name === "string"),
+        }
+      : {}),
   };
 }
 

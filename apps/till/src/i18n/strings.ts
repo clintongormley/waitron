@@ -2146,7 +2146,9 @@ export const en = {
   "bill_pay.tip_amount_between": "Enter a tip above {min} and no more than {amount}",
   "bill_pay.chargeable": "This venue does not take tips, so charge at most {amount} to this card",
   "bill_pay.items_set_menu_dish":
-    "{dishName} is part of a set menu. Choose its set menu too, or leave it on this bill.",
+    "{dishName} was cancelled but is still charged, so it can only be paid for with its set menu. Choose the set menu too, or leave {dishName} on this bill.",
+  "bill_pay.items_set_menu_adjusted":
+    "Because of a comp or discount, {dishNames} can only be paid for with the set menu. Choose the set menu too, or leave {dishNames} on this bill.",
   "bill_pay.items_own_bill":
     "These items move to a bill of their own, paid now. The rest stays on this bill.",
   "bill_pay.items_own_bill_printed": "This cancels the existing receipt and reopens the bill.",
@@ -4600,7 +4602,9 @@ export const es: Record<StringKey, string> = {
   "bill_pay.chargeable":
     "Este local no acepta propinas, así que cobra como mucho {amount} en esta tarjeta",
   "bill_pay.items_set_menu_dish":
-    "{dishName} forma parte de un menú. Elige también su menú o deja el plato en esta cuenta.",
+    "{dishName} se canceló pero se sigue cobrando, así que solo se puede pagar junto con su menú. Elige también el menú o deja {dishName} en esta cuenta.",
+  "bill_pay.items_set_menu_adjusted":
+    "Por un descuento, hay que pagar {dishNames} junto con el menú. Elige también el menú o deja {dishNames} en esta cuenta.",
   "bill_pay.items_own_bill":
     "Estos artículos pasan a una cuenta propia, que se paga ahora. El resto sigue en esta cuenta.",
   "bill_pay.items_own_bill_printed": "Esto anula el ticket y reabre la cuenta.",

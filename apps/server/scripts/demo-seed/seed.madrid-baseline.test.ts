@@ -1684,7 +1684,6 @@ for (const locale of ["en", "es"] as const) {
         "set_menu_version_id",
         "set_menu_line_id",
         "set_menu_place",
-        "set_menu_counts_as_course_id",
       ]) {
         const type = [
           "sold_in_each",

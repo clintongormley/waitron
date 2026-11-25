@@ -195,16 +195,37 @@ describe("itemsAllocated", () => {
 });
 
 describe("itemsRefusal", () => {
-  it("a set-menu dish chosen alone is refused in the Pay window's words", () => {
+  it("a cancelled set-menu dish still charged, chosen alone, is refused in the Pay window's words", () => {
     const refusal = itemsRefusal({ code: "set_menu.moves_with_set_menu", dishName: "Flan" });
 
     expect(refusalText(refusal)).toBe(
-      "Flan is part of a set menu. Choose its set menu too, or leave it on this bill.",
+      "Flan was cancelled but is still charged, so it can only be paid for with its set menu. Choose the set menu too, or leave Flan on this bill.",
     );
     setLocale("es");
     expect(
       refusalText(itemsRefusal({ code: "set_menu.moves_with_set_menu", dishName: "Flan" })),
     ).toBe(fill(t("bill_pay.items_set_menu_dish"), { dishName: "Flan" }));
+  });
+
+  it("a comped or discounted set-menu dish chosen alone is refused in the Pay window's words", () => {
+    const refusal = refusalOf({
+      code: "set_menu.move_adjusted",
+      dishNames: ["Sirloin", 3, "Soup", "Hake"],
+    });
+
+    expect(refusalText(itemsRefusal(refusal))).toBe(
+      "Because of a comp or discount, Sirloin, Soup and Hake can only be paid for with the set menu. Choose the set menu too, or leave Sirloin, Soup and Hake on this bill.",
+    );
+    setLocale("es");
+    expect(refusalText(itemsRefusal(refusal))).toBe(
+      fill(t("bill_pay.items_set_menu_adjusted"), { dishNames: "Sirloin, Soup y Hake" }),
+    );
+  });
+
+  it("keeps the general words for a comped or discounted dish the refusal does not name", () => {
+    const refusal = refusalOf({ code: "set_menu.move_adjusted", dishNames: [] });
+
+    expect(itemsRefusal(refusal)).toBe(refusal);
   });
 
   it("the advances refusal names its amount in the Pay window", () => {
