@@ -54,7 +54,16 @@ import type { TillGiveBackDialog } from "./widgets/give-back-dialog.js";
 import { GiveBackSession } from "./state/give-back.js";
 import { InvoiceCorrectionSession } from "./state/invoice-correction.js";
 import { TenderRefundSession } from "./state/tender-refund.js";
-import { UNDER_WAY, VIEW } from "./widgets/give-back-dialog.test-helpers.js";
+import {
+  APPROVERS,
+  CARD,
+  REASONS,
+  UNDER_WAY,
+  VIEW,
+  completedFor,
+  previewFor,
+} from "./widgets/give-back-dialog.test-helpers.js";
+import type { GiveBackRequest, GiveBackWrite } from "./api/give-back-types.js";
 import type { TillScheduleScreen } from "./screens/till-schedule-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
@@ -27712,6 +27721,232 @@ describe("A737 post-invoice refund integration", () => {
         expect(giveBack(el)!.shadowRoot!.querySelector("till-give-back-under-way")).not.toBeNull(),
       );
       expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
+    });
+
+    /** The reads and writes Give money back sends, each answering at once. */
+    const giving = (over: Record<string, unknown> = {}) => ({
+      readGiveBack: vi.fn().mockResolvedValue(VIEW),
+      previewGiveBack: vi.fn(async (_saleId: string, request: GiveBackRequest) =>
+        previewFor(request),
+      ),
+      listAdjustmentReasons: vi.fn().mockResolvedValue(REASONS),
+      listApprovers: vi.fn().mockResolvedValue(APPROVERS),
+      giveBack: vi.fn(async (_saleId: string, body: GiveBackWrite) => completedFor(body)),
+      ...over,
+    });
+    const inWindow = <T extends Element = HTMLElement>(el: TillApp, selector: string) =>
+      giveBack(el)!.shadowRoot!.querySelector<T>(selector);
+    /** Opens Give money back and presses Give back on €5.00 of goodwill in cash. */
+    async function pressGoodwill(el: TillApp) {
+      const window = await openGiveBack(el);
+      await vi.waitFor(() => expect(inWindow(el, "[data-choice=goodwill]")).not.toBeNull());
+      inWindow(el, "[data-choice=goodwill]")!.click();
+      await window.updateComplete;
+      await vi.waitFor(() => expect(inWindow(el, "wt-combobox[name=reason]")).not.toBeNull());
+      emit(inWindow(el, "wt-combobox[name=reason]")!, "wt-change", { value: "complaint" });
+      await window.updateComplete;
+      const field = inWindow<HTMLElementTagNameMap["wt-price-input"]>(
+        el,
+        "wt-price-input[name=amount]",
+      )!;
+      await field.updateComplete;
+      await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), "5");
+      await window.updateComplete;
+      await vi.waitFor(() => expect(inWindow(el, "[data-summary]")).not.toBeNull());
+      await userEvent.click(page.elementLocator(inWindow(el, "[data-submit]")!));
+      await flush(el);
+      return window;
+    }
+
+    it("keeps a press whose answer was lost through a reload, and opens its receipt's window on Send again even when the payments cannot be read, sending it under the same ids", async () => {
+      const giveBackCall = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockImplementation(async (_saleId: string, body: GiveBackWrite) => completedFor(body));
+      const first = await open(giving({ giveBack: giveBackCall }));
+      await pressGoodwill(first.el);
+      await vi.waitFor(() => expect(inWindow(first.el, "[data-send-again]")).not.toBeNull());
+      expect(refundKeys()).toHaveLength(1);
+      first.el.remove();
+
+      const { el } = await open(
+        giving({
+          giveBack: giveBackCall,
+          getRefundableTenders: vi.fn().mockRejectedValue(new TypeError("unavailable")),
+        }),
+      );
+      expect(refundKeys()).toHaveLength(1);
+      await openGiveBack(el);
+      await vi.waitFor(() => expect(inWindow(el, "[data-send-again]")).not.toBeNull());
+      inWindow(el, "[data-send-again]")!.click();
+      await vi.waitFor(() => expect(inWindow(el, "[data-outcome]")).not.toBeNull());
+      expect(giveBackCall).toHaveBeenCalledTimes(2);
+      expect(giveBackCall.mock.calls[1]![1].submissionIds).toEqual(
+        giveBackCall.mock.calls[0]![1].submissionIds,
+      );
+      expect(refundKeys()).toEqual([]);
+    });
+
+    it("clears this person's saved press when the device locks, keeping another device's, and shows nothing of an answer arriving after", async () => {
+      let resolve!: (value: unknown) => void;
+      const giveBackCall = vi.fn(
+        (_saleId: string, _body: GiveBackWrite) =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      );
+      const activity = fakeSessionActivity();
+      const { el } = await open(giving({ giveBack: giveBackCall }), "F2", activity);
+      await pressGoodwill(el);
+      expect(giveBackCall).toHaveBeenCalledOnce();
+      expect(refundKeys()).toHaveLength(1);
+      const foreign = 'waitron.tender-refund:["other-device","p1"]:["give-back","sale-1"]';
+      localStorage.setItem(foreign, "foreign");
+
+      (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(refundKeys()).toEqual([foreign]);
+      expect(giveBack(el)).toBeNull();
+      resolve(completedFor(giveBackCall.mock.calls[0]![1]));
+      await flush(el);
+      await new Promise<void>((done) => requestAnimationFrame(() => done()));
+      expect(lock(el)).not.toBeNull();
+      expect(ticket(el)).toBeNull();
+      expect(giveBack(el)).toBeNull();
+      expect(localStorage.getItem(foreign)).toBe("foreign");
+    });
+
+    it("clears a press whose answer was lost when the device locks after a reload, before its receipt is opened again", async () => {
+      const first = await open(
+        giving({ giveBack: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")) }),
+      );
+      await pressGoodwill(first.el);
+      await vi.waitFor(() => expect(inWindow(first.el, "[data-send-again]")).not.toBeNull());
+      first.el.remove();
+      const activity = fakeSessionActivity();
+      const { el } = await mountWidget<TillApp>("till-app", {
+        api: stubApi(),
+        sessionActivity: activity as never,
+      });
+      await toCounter(el);
+      expect(refundKeys()).toHaveLength(1);
+      (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
+      await flush(el);
+      expect(refundKeys()).toEqual([]);
+      expect(lock(el)).not.toBeNull();
+    });
+
+    it("closes the window when the server connection is replaced, and shows nothing of the old connection's late answer", async () => {
+      let resolve!: (value: unknown) => void;
+      const giveBackCall = vi.fn(
+        (_saleId: string, _body: GiveBackWrite) =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      );
+      const { el } = await open(giving({ giveBack: giveBackCall }));
+      await pressGoodwill(el);
+      expect(giveBackCall).toHaveBeenCalledOnce();
+      el.api = stubApi();
+      await flush(el);
+      expect(giveBack(el)).toBeNull();
+      resolve(completedFor(giveBackCall.mock.calls[0]![1]));
+      await flush(el);
+      await new Promise<void>((done) => requestAnimationFrame(() => done()));
+      expect(giveBack(el)).toBeNull();
+    });
+
+    it.each(["F1", "F2"] as const)(
+      "reads a paid %s's payments again once the window closes, says when that read fails, and keeps the receipt and the basket",
+      async (invoiceType) => {
+        const { el, basket, getRefundableTenders } = await open(giving(), invoiceType);
+        basket.store.addProduct(coffee, "2");
+        await flush(el);
+        await pressGoodwill(el);
+        await vi.waitFor(() => expect(inWindow(el, "[data-outcome]")).not.toBeNull());
+        const reads = getRefundableTenders.mock.calls.length;
+        getRefundableTenders.mockRejectedValueOnce(new Error("read unavailable"));
+
+        emit(giveBack(el)!, "give-back-close");
+        await flush(el);
+        await vi.waitFor(() => expect(getRefundableTenders).toHaveBeenCalledTimes(reads + 1));
+        expect(getRefundableTenders.mock.calls.at(-1)![0]).toBe("sale-1");
+        expect(giveBack(el)).toBeNull();
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.textContent).toContain(t("tender_refund.refresh_failed")),
+        );
+        expect(ticket(el)!.result).toMatchObject({ invoiceNumber: "F-0001", total: "3.00" });
+        expect(basket.store.lines[0]!.quantity).toBe("2");
+      },
+    );
+
+    it("is offered on a device that cannot take cards while a card refund on the receipt waits, and its Check again reads the receipt, sending nothing", async () => {
+      const waiting: RefundableTender = {
+        ...cash,
+        tenderId: "reader-tender",
+        method: "card",
+        appliedRemaining: "0.00",
+        pendingRefundId: returned.id,
+      };
+      const readGiveBack = vi.fn().mockResolvedValue({
+        ...VIEW,
+        ways: [
+          { ...CARD, moneyLeft: "0.00", extraLeft: "0.00", pending: true, allowedHere: false },
+        ],
+      });
+      const api = giving({
+        readGiveBack,
+        getTill: vi.fn().mockResolvedValue({ ...till, capabilities: [] }),
+        getRefundableTenders: vi.fn().mockResolvedValue([waiting]),
+      });
+      const { el } = await open(api);
+      await openGiveBack(el);
+      await vi.waitFor(() => expect(inWindow(el, "[data-check-pending]")).not.toBeNull());
+      await userEvent.click(page.elementLocator(inWindow(el, "[data-check-pending]")!));
+      await vi.waitFor(() => expect(readGiveBack).toHaveBeenCalledTimes(2));
+      expect(api.previewGiveBack).not.toHaveBeenCalled();
+      expect(api.giveBack).not.toHaveBeenCalled();
+    });
+
+    it("opens while this device's storage is refused, says a press cannot be saved and sends nothing, and still locks on sign-out", async () => {
+      const api = giving({
+        giveBack: vi.fn().mockRejectedValueOnce(new TypeError("Failed to fetch")),
+      });
+      const { el } = await open(api);
+      await pressGoodwill(el);
+      await vi.waitFor(() => expect(inWindow(el, "[data-send-again]")).not.toBeNull());
+      expect(refundKeys()).toHaveLength(1);
+      emit(giveBack(el)!, "give-back-close");
+      await flush(el);
+      const blocked = (original: (this: Storage, key: string) => unknown) =>
+        function (this: Storage, key: string) {
+          if (key.startsWith("waitron.tender-refund:")) throw new Error("Storage blocked");
+          return original.call(this, key);
+        };
+      const getItem = blocked(Storage.prototype.getItem) as Storage["getItem"];
+      const removeItem = blocked(Storage.prototype.removeItem) as Storage["removeItem"];
+      const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(getItem);
+      const remove = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(removeItem);
+      try {
+        el.requestUpdate();
+        await flush(el);
+        await pressGoodwill(el);
+        await vi.waitFor(() =>
+          expect(
+            inWindow<HTMLElementTagNameMap["wt-form-actions"]>(el, "wt-form-actions")!.error,
+          ).toBe(t("give_back.storage")),
+        );
+        expect(api.giveBack).toHaveBeenCalledOnce();
+        emit(giveBack(el)!, "give-back-close");
+        await flush(el);
+        emit(shell(el)!, "logout");
+        await flush(el);
+        expect(lock(el)).not.toBeNull();
+      } finally {
+        get.mockRestore();
+        remove.mockRestore();
+      }
     });
   });
   it("a definitive first amount refusal leaves the native amount editable and a corrected request can complete", async () => {

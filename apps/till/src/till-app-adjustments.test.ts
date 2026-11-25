@@ -5115,6 +5115,7 @@ describe("till-app: service cancellation consent", () => {
         .toContain(t("find_bill.invoice_load_failed"));
       expect(cancelDialog(el)).toBeNull();
       expect(refundForm(el)).toBeNull();
+      expect(giving(el)).toBeNull();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
       expect(api.getRefundableTenders).toHaveBeenCalledExactlyOnceWith(
         "own-sale",
@@ -5143,6 +5144,7 @@ describe("till-app: service cancellation consent", () => {
       await flush(el);
       expect(ticket(el)).toBeNull();
       expect(refundForm(el)).toBeNull();
+      expect(giving(el)).toBeNull();
       expect(api.getRefundableTenders).toHaveBeenCalledExactlyOnceWith(
         "own-sale",
         expect.any(Object),
@@ -5172,6 +5174,7 @@ describe("till-app: service cancellation consent", () => {
       answer([cash]);
       await flush(el);
       expect(refundForm(el)).toBeNull();
+      expect(giving(el)).toBeNull();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
       expect(el.api.refundTransaction).not.toHaveBeenCalled();
     });
