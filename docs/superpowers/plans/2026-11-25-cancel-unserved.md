@@ -66,7 +66,8 @@ the changed files. Commands run as `pnpm --filter @waitron/<package> exec vitest
   `fiscal.remedy_invalid`. Today it is applied (run), putting a voided receipt live at AEAT. *Code:* one `sale_voids`
   condition in `record-remedy.ts`'s list. No case-view flag. The replacement refuses already (`record-replacement.ts:81`).
   *Built instead* (watcher, 25 Nov 19:35): refused only while `release-held-cancellation` is not enabled, its default on
-  every box. With it enabled, today's path stays: correct, AEAT accepts, release, AEAT ends at `Anulado`.
+  every box (review, 25 Nov: and while its cancellation is not on this box). With it enabled, today's path stays:
+  correct, AEAT accepts, release, AEAT ends at `Anulado`.
 
   34 fiscal files, 1,002 of 1,002, with both (run).
 

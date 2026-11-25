@@ -185,8 +185,9 @@ export async function applyRecordCorrection(
     // A waiting cancellation would wait for this correction while blocking it in the queue.
     (cancellation !== undefined &&
       (cancellation.estado !== "retenido" || cancellation.sinRegistroPrevio === "S")) ||
-    // Correcting files a voided receipt again, and only releasing its cancellation undoes that.
-    (voided !== undefined && !input.enabledRemedies.has("release-held-cancellation")) ||
+    // Correcting files a voided invoice again, and its set-aside cancellation then has to be released.
+    (voided !== undefined &&
+      (cancellation === undefined || !input.enabledRemedies.has("release-held-cancellation"))) ||
     (input.correctionDecision !== undefined &&
       (input.correctionDecision.priorOutcome === "rejected"
         ? delivery?.estado !== "rechazado" || filingCase.cause !== "fiscal.registro_rechazado"

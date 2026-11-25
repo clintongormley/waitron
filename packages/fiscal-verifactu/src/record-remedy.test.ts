@@ -2,7 +2,7 @@ import { deliveryColumns } from "../test/drain-fixtures.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { incidents, saleVoids, withTransaction } from "@waitron/db";
+import { incidents, saleVoids, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -451,13 +451,40 @@ it("refuses a synthetic held absent-original cancellation rather than treating i
   expect(await snapshot()).toEqual(before);
 });
 
+function voidSale(tx: Transaction) {
+  return tx.insert(saleVoids).values({
+    saleId: request.pending.saleId,
+    reason: "Wrong table",
+    voidedAt: NOW.toISOString(),
+  });
+}
+
+function applyWithReleasing() {
+  return withTransaction(suite.db, (tx) =>
+    applyRecordCorrection(tx, {
+      managementSessionId: token,
+      nodeId: node.nodeId,
+      environment: "preproduction",
+      enabledRemedies: new Set(["record-correction", "release-held-cancellation"]),
+      request,
+      now: NOW,
+    }),
+  );
+}
+
+it("refuses to correct a voided sale whose cancellation is not on this box, even while releasing one is enabled", async () => {
+  await withTransaction(suite.db, voidSale);
+  const before = await snapshot();
+  await expect(applyWithReleasing()).rejects.toMatchObject({
+    code: "fiscal.remedy_invalid",
+    params: { registroId: request.registroId },
+  });
+  expect(await snapshot()).toEqual(before);
+});
+
 it("corrects a voided sale whose cancellation is set aside only while releasing one is enabled", async () => {
   await withTransaction(suite.db, async (tx) => {
-    await tx.insert(saleVoids).values({
-      saleId: request.pending.saleId,
-      reason: "Wrong table",
-      voidedAt: NOW.toISOString(),
-    });
+    await voidSale(tx);
     const held = await appendToChain(
       tx,
       node.nodeId,
@@ -472,16 +499,7 @@ it("corrects a voided sale whose cancellation is set aside only while releasing 
   });
   expect(await snapshot()).toEqual(before);
 
-  const corrected = await withTransaction(suite.db, (tx) =>
-    applyRecordCorrection(tx, {
-      managementSessionId: token,
-      nodeId: node.nodeId,
-      environment: "preproduction",
-      enabledRemedies: new Set(["record-correction", "release-held-cancellation"]),
-      request,
-      now: NOW,
-    }),
-  );
+  const corrected = await applyWithReleasing();
   const after = await snapshot();
   expect(after.records).toHaveLength(before.records.length + 1);
   expect(after.records.find((row) => row.id === corrected.registroId)).toMatchObject({
