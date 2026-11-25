@@ -1541,8 +1541,7 @@ The List shows **Add product** beside the heading and inside the empty box. If a
 language is missing, each button is disabled with the reason beside it. Both open the product editor
 without a category and return focus to the heading's button after the last dialog closes. Tree keeps
 its category and All products menus, and their **Add product** actions open the editor in place.
-A
-menu's Structure tab has a root row like it, whose ⋮ holds the menu's top-level adds, and an empty
+A menu's Structure tab has a root row like it, whose ⋮ holds the menu's top-level adds, and an empty
 menu's box repeats them as buttons (below, after tree mode). When the first item made from the slotted button empties the slot,
 the screen moves focus to its other Add button rather than leaving it on the page; the Printers
 screen does this by naming that button as the dialog's `opener` (see the `wt-modal` entry). When
@@ -6035,9 +6034,9 @@ area at half the row through the `tab-actions` part so its tabs keep that half w
 "at 390 px, the Stations tab shows every tab and its add button whole" cases in
 `packages/venue-service/src/dashboard/prep-stations-screen.test.ts`).
 Keep actions for other tabs out of sight until their tab is selected.
-A tab whose list is a tree puts its adds in the tree rather than the tab's `actions` slot: the Products tree in its All products row's ⋮, and a menu's
-Structure tab in its root row's ⋮ and in the ⋮ of
-each section the menu owns (the "the Structure tree" cases in
+Products offers **Add product** beside its heading. In Tree, the All products and category menus
+also offer it. A menu's Structure tab puts its adds in the root and section row menus (the
+"the Structure tree" cases in
 `apps/dashboard/src/screens/menus-screen.test.ts`).
 
 Put each list in `wt-data-table`. Use `wt-row-actions` for its kebab menu — three dots, not a
@@ -6192,7 +6191,9 @@ Use the **Available** switch in a Products row to put that product or variant on
 The change applies to every menu using it. Switching a product leaves its variants' own choices
 in place. A refusal names the item above the table and restores the switch.
 
-The Products tree starts with Name, Price, Available and row actions. Open Customise for
+List starts with Name, Category, Price, Available and row actions. Tree starts with Name, Price,
+Available and row actions. On a phone, Category starts in Filters and you can show its column
+in Customise. Open Customise for
 Course, Modifiers, Standalone, Allergens and Dietary info. Off products and variants carry a red
 outlined **Unavailable** label beside their names. A closed category counts each of its direct
 products once when that product or one of its active variants is unavailable.

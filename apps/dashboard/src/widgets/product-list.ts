@@ -1582,7 +1582,6 @@ export class ProductList extends LitElement {
       this.#send("category-toggle", { categoryId: key.slice(7), open: expanded });
   };
 
-  /** Opens the category and every category above it, and scrolls it into view. */
   async revealCategory(id: string): Promise<void> {
     await this.updateComplete;
     const table = this.#table();
@@ -1667,6 +1666,7 @@ export class ProductList extends LitElement {
         rememberExpanded
         flatTreeSearch
         dense-rows
+        ?data-list=${this.view === "list"}
         .filterCandidates=${this.#filterCandidates}
         .filterOpensBranch=${(row: ListRow) => row.kind === "root" || row.kind === "folder"}
         customiseColumnsLabel=${t("table.customise_columns")}
@@ -1726,6 +1726,7 @@ export class ProductList extends LitElement {
         .rowClickLabel=${(row: ListRow) =>
           row.kind === "product" ? `${t("action.edit")}: ${(row.variant ?? row.product).name}` : ""}
         .rows=${this.#rowList}
+        .rowCellParts=${this.view === "list" ? () => "list-cell" : undefined}
         .columns=${this.#columns()}
         .rowKey=${(row: ListRow) => row.key}
         .rowParent=${(row: ListRow) => row.parentKey}

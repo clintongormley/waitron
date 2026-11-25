@@ -1376,6 +1376,9 @@ describe("menu-screen", () => {
       )!;
       expect(button?.disabled).toBe(true);
       expect(button.parentElement?.textContent).toMatch(reason);
+      expect(button.shadowRoot!.querySelector("button")?.getAttribute("aria-description")).toMatch(
+        reason,
+      );
     },
   );
 

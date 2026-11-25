@@ -3518,17 +3518,19 @@ describe("a product's variants in the list", () => {
     setLocale(locale);
     await page.viewport(1180, 844);
     const dish = cecina();
-    dish.name = "Mushroom croquettes with roasted garlic and aged sheep cheese";
-    const { el } = await mountTree({
+    dish.name = "Iberian ham croquettes";
+    const { el, table } = await mountTree({
       view: "list",
       categories: [
-        { ...drinks, name: "Food and drinks served during the evening" },
+        { ...drinks, name: "Food and drinks served during the evening", color: "#123456" },
         { id: "deli", name: "Cured meats from local producers", parentId: "d", color: null },
+        { ...food, name: "Fish" },
       ],
-      products: [dish],
+      products: [dish, product({ id: "fish", name: "Roast fish", primaryCategoryId: "f" })],
     });
+    el.parentElement!.style.width = "848px";
     const root = await tableRoot(el);
-    expect(rowKeys(root)).toEqual(["cecina"]);
+    expect(rowKeys(root)).toEqual(["cecina", "fish"]);
     const headings = () =>
       [...root.querySelectorAll("thead th")].map((th) =>
         (th.getAttribute("aria-label") ?? th.textContent!).replace(/[▲▼]/g, "").trim(),
@@ -3543,10 +3545,34 @@ describe("a product's variants in the list", () => {
     expect(category.textContent!.trim()).toBe(
       "Food and drinks served during the evening › Cured meats from local producers",
     );
-    expect(category.querySelector('[part~="color-swatch"]')).not.toBeNull();
     expect(category.querySelector("button")).toBeNull();
     const scroll = root.querySelector<HTMLElement>(".scroll")!;
-    await vi.waitFor(() => expect(scroll.scrollWidth).toBe(scroll.clientWidth));
+    const longName = nameCell(root, "cecina");
+    await vi.waitFor(() => {
+      expect(scroll.clientWidth).toBeGreaterThan(840);
+      expect(scroll.scrollWidth).toBe(scroll.clientWidth);
+      const swatch = category.querySelector('[part~="color-swatch"]')!;
+      const { width, height } = swatch.getBoundingClientRect();
+      expect(width).toBeCloseTo(height);
+      expect(getComputedStyle(swatch).backgroundColor).toBe("rgb(18, 52, 86)");
+      const photo = longName.querySelector('[part~="media-frame"]')!.getBoundingClientRect();
+      const name = longName.querySelector("strong")!.getBoundingClientRect();
+      expect(name.left).toBeGreaterThan(photo.right);
+      expect(name.top).toBeLessThan(photo.bottom);
+      const shortCategory = cellUnder(root, "fish", t("product.category"));
+      expect(shortCategory.closest("tr")!.offsetHeight).toBeLessThan(53);
+      const shortSwatch = shortCategory
+        .querySelector('[part~="color-swatch"]')!
+        .getBoundingClientRect();
+      const shortMedia = nameCell(root, "fish")
+        .querySelector('[part~="product-media"]')!
+        .getBoundingClientRect();
+      expect(
+        Math.abs(shortSwatch.top + shortSwatch.height / 2 - shortMedia.top - shortMedia.height / 2),
+      ).toBeLessThan(2);
+    });
+    await openVariants(root, table, "cecina");
+    expect(cellUnder(root, "cecina:thin", t("product.category")).textContent?.trim()).toBe("");
     el.parentElement!.style.width = "390px";
     await vi.waitFor(() => expect(headings()).not.toContain(t("product.category")));
     expect(root.querySelector('wt-combobox[data-filter="category"]')).not.toBeNull();

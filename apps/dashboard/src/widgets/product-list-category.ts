@@ -12,9 +12,24 @@ type ProductCategory = { product: Product; variant: Product["variants"][number] 
 export const PRODUCTS_PHONE_WIDTH = 440;
 
 export const productListCategoryStyles = css`
-  wt-data-table::part(category-path-cell) {
+  wt-data-table[wrap-to-fit]::part(list-cell) {
+    vertical-align: middle;
+  }
+  wt-data-table[data-list][wrap-to-fit]::part(product-cell),
+  wt-data-table[data-list][wrap-to-fit]::part(variant-cell) {
     display: flex;
     align-items: center;
+  }
+  wt-data-table[data-list][wrap-to-fit]::part(name-stack),
+  wt-data-table[data-list][wrap-to-fit]::part(variant-name) {
+    min-inline-size: 0;
+  }
+  wt-data-table::part(category-path-cell) {
+    display: inline-grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    vertical-align: middle;
+    max-inline-size: calc(var(--wt-tap-min) * 4);
     gap: var(--wt-space-2);
     overflow-wrap: anywhere;
   }

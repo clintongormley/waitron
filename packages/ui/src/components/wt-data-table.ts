@@ -1931,11 +1931,9 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.clearFilters();
   }
 
-  /** Drops a column's filter and sort when its owning view is left. */
+  /** Saves the view without this column's filter or sort, even when restore skipped its sort. */
   resetColumnView(key: string, defaultSortKey: string): void {
-    const resetSort = this.sortKey === key;
-    if (!resetSort && this.filterSelections[key] === undefined) return;
-    if (resetSort) {
+    if (this.sortKey === key) {
       this.sortKey = defaultSortKey;
       this.sortDirection = "ascending";
     }
