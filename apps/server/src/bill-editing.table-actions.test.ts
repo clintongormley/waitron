@@ -20,7 +20,7 @@ import {
   type SplitSelection,
 } from "./table-actions.js";
 import { mergeBills, moveDishes } from "./bill-actions.js";
-import { takeBillPayment } from "./bill-payments.js";
+import { payForItems } from "./pay-for-items.js";
 import { fireGroup } from "./order-group-release.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { openTillSession } from "./testing/session-device.js";
@@ -816,12 +816,11 @@ describe("A803 race replay: Split a table against another command, from one read
     ["split", "pay"],
   ] as const) {
     it(`A803 race replay: a split with a loose dish and a payment taking that dish: one commits (${order[0]} asked first)`, async () => {
-      // Two dishes of one price, so if a split renumbered its lines, this payment would commit
-      // against the staying dish and the case would go red.
       const anna = await seatedWith(venue, "Tarta", "Tarta");
       const table = await joinFree(anna.partyId);
       const [dish, staying] = linesOf(anna.tabId);
       const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, anna.tabId));
+      const expectedPartyRevision = revisionOf(anna.partyId);
       const operator = {
         personId: venue.operatorId,
         sessionId: await openTillSession(venue.db, {
@@ -835,7 +834,7 @@ describe("A803 race replay: Split a table against another command, from one read
           loose: [{ billId: anna.tabId, lineIds: [dish!.id] }],
         }),
         pay: () =>
-          takeBillPayment(
+          payForItems(
             {
               db: venue.db,
               backend: venue.backend,
@@ -846,37 +845,41 @@ describe("A803 race replay: Split a table against another command, from one read
             anna.tabId,
             {
               submissionId: randomUUID(),
-              expectedEdit,
-              kind: "items",
-              lines: [{ lineNo: dish!.lineNo }],
+              picks: [{ lineId: dish!.id }],
+              partyId: anna.partyId,
+              expectedPartyRevision,
+              expectedEdits: [expectedEdit],
               method: "cash",
               tendered: "18.00",
               applied: "18.00",
               tip: "0.00",
             },
             operator,
+            null,
           ),
       };
+      const paymentsBefore = howMany("bill_payments");
       const events = howManyGroupEvents();
       const notices = howMany("kitchen_notices");
       const idsOn = (billId: string) => linesOf(billId).map((line) => line.id);
 
       const raced = await race({ [order[0]]: commands[order[0]], [order[1]]: commands[order[1]] });
 
-      const payments = await paymentRows(venue, anna.tabId);
       if (order[0] === "pay") {
-        await judge(raced, "bill.line_paid");
+        const paid = (await judge(raced, "party.out_of_date")) as { billId: string };
         expect(howManyGroupEvents()).toBe(events);
         expect(howMany("kitchen_notices")).toBe(notices);
         expect(holderOf(table)).toBe(anna.partyId);
-        expect(idsOn(anna.tabId)).toEqual([dish!.id, staying!.id]);
-        expect(payments).toHaveLength(1);
+        expect(idsOn(anna.tabId)).toEqual([staying!.id]);
+        expect(idsOn(paid.billId)).toEqual([dish!.id]);
+        expect(await paymentRows(venue, paid.billId)).toHaveLength(1);
+        expect(await paymentRows(venue, anna.tabId)).toEqual([]);
       } else {
-        const won = (await judge(raced, "tab.line_not_found")) as { partyId: string };
+        const won = (await judge(raced, "party.out_of_date")) as { partyId: string };
         expect(holderOf(table)).toBe(won.partyId);
         expect(idsOn(anna.tabId)).toEqual([staying!.id]);
         expect(billsOf(won.partyId).flatMap(idsOn)).toEqual([dish!.id]);
-        expect(payments).toEqual([]);
+        expect(howMany("bill_payments")).toBe(paymentsBefore);
       }
     });
   }

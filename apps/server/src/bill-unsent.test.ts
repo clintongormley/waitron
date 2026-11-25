@@ -222,8 +222,8 @@ describe("payment reservations and previously received money", () => {
       .set({ state: "discarded" })
       .where(eq(orderDrafts.id, draft.id));
     const body = {
-      kind: "items",
-      lines: [{ lineNo: 1 }],
+      kind: "share",
+      shareOf: 1,
       method: "card",
       entry: "reader",
       applied: "18.00",
@@ -284,7 +284,6 @@ function ask(kind: BillPaymentAsk["kind"], method: "cash" | "card"): BillPayment
     method,
     ...(kind === "contribution" ? { amount: "5.00" } : {}),
     ...(kind === "share" ? { shareOf: 2 } : {}),
-    ...(kind === "items" ? { lines: [{ lineNo: 1 }] } : {}),
     ...(method === "cash" ? { tendered: "18.00" } : {}),
   };
 }
@@ -315,7 +314,7 @@ describe("unsent dishes block new payments on their own bill", () => {
       previewBillPayment(
         { ...deps(), admission: testTradingAdmission() },
         billId,
-        ask("items", "cash"),
+        ask("share", "cash"),
       ),
     ).rejects.toMatchObject({
       code: "bill.unsent_dishes",
@@ -337,7 +336,7 @@ describe("unsent dishes block new payments on their own bill", () => {
     });
   });
 
-  for (const kind of ["contribution", "share", "items"] as const) {
+  for (const kind of ["contribution", "share"] as const) {
     for (const method of ["cash", "manual", "reader"] as const) {
       it(`refuses ${kind} ${method} preview and create before money or provider work`, async () => {
         const billId = await tabWith(venue, "Tarta");
@@ -363,7 +362,7 @@ describe("unsent dishes block new payments on their own bill", () => {
             },
           },
         });
-        const applied = kind === "contribution" ? "5.00" : kind === "share" ? "9.00" : "18.00";
+        const applied = kind === "contribution" ? "5.00" : "9.00";
         const paid = await send(
           venue.app,
           venue.cookie,

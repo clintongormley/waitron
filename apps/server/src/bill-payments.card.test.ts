@@ -499,15 +499,14 @@ describe("a malformed payment body", () => {
 
 describe("change versus tip (design §8 test 1)", () => {
   // Steak €25.00 + House salad €12.00 + Small beer €3.00 = €40.00, and a Tarta that stays unpaid.
-  const items = [{ lineNo: 1 }, { lineNo: 2 }, { lineNo: 3 }];
   const bill = () => tabWithDishes("Steak", "House salad", "Small beer", "Tarta");
 
-  it("gives €10.00 change on €50.00 cash for €40.00 of items", async () => {
+  it("gives €10.00 change on €50.00 cash for a €40.00 part payment", async () => {
     const billId = await bill();
 
     const paid = await pay(billId, {
-      kind: "items",
-      lines: items,
+      kind: "contribution",
+      amount: "40.00",
       method: "cash",
       tendered: "50.00",
       applied: "40.00",
@@ -523,8 +522,8 @@ describe("change versus tip (design §8 test 1)", () => {
     const billId = await bill();
 
     const paid = await pay(billId, {
-      kind: "items",
-      lines: items,
+      kind: "contribution",
+      amount: "40.00",
       method: "cash",
       tendered: "50.00",
       addedTip: "10.00",
@@ -542,15 +541,15 @@ describe("change versus tip (design §8 test 1)", () => {
     const calls = venue.card.collectCalls.length;
 
     const shown = await preview(billId, {
-      kind: "items",
-      lines: items,
+      kind: "contribution",
+      amount: "40.00",
       method: "card",
       addedTip: "10.00",
     });
     const collectsAfterPreview = venue.card.collectCalls.length;
     const paid = await pay(billId, {
-      kind: "items",
-      lines: items,
+      kind: "contribution",
+      amount: "40.00",
       method: "card",
       entry: "reader",
       addedTip: "10.00",
@@ -928,16 +927,9 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
   });
 
   it("cash first while a third card is at the reader: the card for the same last €30.00 is refused order.payment_in_flight", async () => {
-    // €58.00: the Tarta paid, a €10.00 card at the reader, then the last €30.00 twice.
+    // €58.00: €18.00 paid, a €10.00 card at the reader, then the last €30.00 twice.
     const billId = await tabWithDishes("Steak", "House salad", "Small beer", "Tarta");
-    await pay(billId, {
-      kind: "items",
-      lines: [{ lineNo: 4 }],
-      method: "cash",
-      tendered: "18.00",
-      applied: "18.00",
-      tip: "0.00",
-    });
+    await cashContribution(billId, "18.00");
     const third = await heldCard(billId, "10.00");
     const calls = venue.card.collectCalls.length;
 

@@ -46,6 +46,7 @@ import {
   saleLines,
   sales,
   tenders,
+  ticketItems,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -605,6 +606,22 @@ function contribute(billId: string, amount: string, submissionId = randomUUID())
   });
 }
 
+/** Pays for one whole dish of a party's bill in cash, handed over exactly, on a bill of its own. */
+async function payForDish(partyId: string, billId: string, lineNo: number, amount: string) {
+  const [lineId] = await lineIdsOf(billId, [lineNo]);
+  return request("POST", `/api/working-orders/${billId}/item-payments`, {
+    submissionId: randomUUID(),
+    picks: [{ lineId }],
+    partyId,
+    expectedPartyRevision: await partyRevisionOf(billId),
+    expectedEdits: [await inTx((tx) => readBillEditState(tx, billId))],
+    method: "cash",
+    tendered: amount,
+    applied: amount,
+    tip: "0.00",
+  });
+}
+
 function balance(billId: string) {
   return request("GET", `/api/working-orders/${billId}/payments`);
 }
@@ -679,7 +696,6 @@ describe("the balance", () => {
       outstanding: "120.00",
       tips: "0.00",
       payments: [],
-      paidLines: [],
     });
   });
 
@@ -695,7 +711,6 @@ describe("the balance", () => {
       reserved: "0.00",
       outstanding: "0.00",
       payments: [],
-      paidLines: [],
     });
   });
 
@@ -1616,19 +1631,11 @@ describe("an item already paid for (design §8 test 5)", () => {
     expect(held.sentAt).toBeNull();
     expect(tabLines.find((line) => line.name === "Paella")!.sentAt).not.toBeNull();
 
-    const paid = await pay(billId, {
-      kind: "items",
-      lines: [{ lineNo: held.lineNo }],
-      method: "cash",
-      tendered: "18.00",
-      applied: "18.00",
-      tip: "0.00",
-    });
+    const paid = await payForDish(partyId, billId, held.lineNo, "18.00");
 
     expect(paid.status).toBe(200);
-    expect((await balance(billId)).json).toMatchObject({
-      paidLines: [{ lineNo: held.lineNo, paidQuantity: "1.000" }],
-    });
+    expect(await lineTotals(paid.json.billId as string)).toEqual(["18.00"]);
+    expect(await lineTotals(billId)).toEqual(["35.00"]);
     const groups = await request("GET", `/api/parties/${partyId}/groups`);
     expect(
       (groups.json.groups as { state: string; summary: string }[]).map(({ state, summary }) => ({
@@ -1664,24 +1671,11 @@ describe("an item already paid for (design §8 test 5)", () => {
       ],
     });
     expect(round.status).toBe(200);
-    const cakeLine = async () =>
-      (
-        (await request("GET", `/api/working-orders/${billId}/lines`)).json.lines as {
-          lineNo: number;
-          name: string;
-          sentAt: string | null;
-          firedAt: string | null;
-        }[]
-      ).find((line) => line.name === "Cake")!;
-    const cake = await cakeLine();
-    const leaving = await pay(billId, {
-      kind: "items",
-      lines: [{ lineNo: cake.lineNo }],
-      method: "cash",
-      tendered: "18.00",
-      applied: "18.00",
-      tip: "0.00",
-    });
+    const tabLines = await request("GET", `/api/working-orders/${billId}/lines`);
+    const cake = (tabLines.json.lines as { lineNo: number; name: string }[]).find(
+      (line) => line.name === "Cake",
+    )!;
+    const leaving = await payForDish(partyId, billId, cake.lineNo, "18.00");
     expect(leaving.status).toBe(200);
     const groups = await request("GET", `/api/parties/${partyId}/groups`);
     const held = (groups.json.groups as { id: string; state: string }[]).find(
@@ -1692,14 +1686,6 @@ describe("an item already paid for (design §8 test 5)", () => {
       submissionId: randomUUID(),
       expectedPartyRevision: groups.json.revision,
     });
-    const again = await pay(billId, {
-      kind: "items",
-      lines: [{ lineNo: cake.lineNo }],
-      method: "cash",
-      tendered: "18.00",
-      applied: "18.00",
-      tip: "0.00",
-    });
     const rest = await request("POST", `/api/working-orders/${billId}/payments/preview`, {
       kind: "share",
       shareOf: 1,
@@ -1707,16 +1693,25 @@ describe("an item already paid for (design §8 test 5)", () => {
     });
 
     expect(fired.status).toBe(200);
-    const sent = await cakeLine();
-    expect(sent.sentAt).not.toBeNull();
-    expect(sent.firedAt).not.toBeNull();
-    expect(again.status).toBe(409);
-    expect(again.json).toMatchObject({ code: "bill.line_paid", params: { lineNo: cake.lineNo } });
+    const [sent] = await inTx((tx) =>
+      tx
+        .select({
+          name: workingOrderLines.name,
+          sentAt: workingOrderLines.sentAt,
+          firedAt: ticketItems.firedAt,
+          state: ticketItems.state,
+        })
+        .from(workingOrderLines)
+        .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+        .where(eq(workingOrderLines.workingOrderId, leaving.json.billId as string)),
+    );
+    expect(sent).toMatchObject({ name: "Cake", state: "queued" });
+    expect(sent!.sentAt).not.toBeNull();
+    expect(sent!.firedAt).not.toBeNull();
     expect((await balance(billId)).json).toMatchObject({
-      total: "53.00",
-      received: "18.00",
+      total: "35.00",
+      received: "0.00",
       outstanding: "35.00",
-      paidLines: [{ lineNo: cake.lineNo, paidQuantity: "1.000" }],
     });
     expect(rest.json).toMatchObject({ kind: "allocated", applied: "35.00", tip: "0.00" });
   });
@@ -3953,25 +3948,22 @@ describe("retries and reused ids (plan D8, design §5.1)", () => {
     expect(opens).toHaveLength(1);
   });
 
-  it("answers the same request resent with its lines in another order and its added tip spelled out", async () => {
+  it("answers the same request resent with its added tip spelled out", async () => {
     const billId = await tabWith("Paella", "Steak", "Cake");
     const submissionId = randomUUID();
     const body = {
       submissionId,
-      kind: "items" as const,
+      kind: "contribution" as const,
+      amount: "60.00",
       method: "cash" as const,
       tendered: "60.00",
       applied: "60.00",
       tip: "0.00",
     };
-    const first = await pay(billId, { ...body, lines: [{ lineNo: 1 }, { lineNo: 2 }] });
+    const first = await pay(billId, body);
     expect(first.status).toBe(200);
 
-    const again = await pay(billId, {
-      ...body,
-      lines: [{ lineNo: 2 }, { lineNo: 1 }],
-      addedTip: "0",
-    });
+    const again = await pay(billId, { ...body, addedTip: "0" });
 
     expect(again.status).toBe(200);
     expect(again.json).toMatchObject({ payment: { id: paymentIdOf(first) } });
@@ -4454,31 +4446,19 @@ describe("a bill refund before the invoice (design §6)", () => {
     expect(again.status).toBe(200);
   });
 
-  it("keeps a line paid by an item payment of only a tip paid until that payment is refunded", async () => {
+  it("refunds a part payment of only a tip, tip only", async () => {
     const billId = await tabWith("Paella");
-    const [line] = await inTx((tx) =>
-      tx
-        .select({ id: workingOrderLines.id })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, billId)),
-    );
     const paymentId = await insertBillPayment(billId, {
-      kind: "items",
       applied: 0,
       tip: 100,
       tendered: 100,
     });
-    await inTx((tx) =>
-      tx
-        .insert(billPaymentLines)
-        .values({ billPaymentId: paymentId, lineId: line!.id, quantity: 1000, amount: 0 }),
-    );
-    expect((await balance(billId)).json).toMatchObject({ paidLines: [{ lineNo: 1 }] });
+    expect((await balance(billId)).json).toMatchObject({ received: "0.00", tips: "1.00" });
 
     const refunded = await refund(billId, paymentId, { appliedAmount: "0.00", tipAmount: "1.00" });
 
     expect(refunded.status).toBe(200);
-    expect(refunded.json).toMatchObject({ balance: { paidLines: [] } });
+    expect(refunded.json).toMatchObject({ balance: { received: "0.00", tips: "0.00" } });
   });
 
   it("lets the line of an item payment refunded whole be voided", async () => {

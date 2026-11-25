@@ -627,6 +627,33 @@ describe("the writers with no route of their own", () => {
     });
   });
 
+  it("refuses cutting part of a grouped line below what was received", async () => {
+    const billId = await inTx(async (tx) => {
+      const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: await freshTableIn(tx) });
+      await writeGroupedLines(tx, venue.cfg, tabId, [{ menuItemId: offer("Beer"), quantity: "3" }]);
+      return tabId;
+    });
+    await take(billId, cash("6.00"));
+    const quantities = () =>
+      inTx((tx) =>
+        tx
+          .select({ quantity: workingOrderLines.quantity })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, billId)),
+      );
+
+    const error = await captureError(() => inTx((tx) => cancelLine(tx, venue.cfg, billId, 1, "2")));
+
+    expect(error).toMatchObject({
+      code: "bill.received_exceeds_total",
+      params: { workingOrderId: billId, excess: "3.00" },
+    });
+    expect(await quantities()).toEqual([{ quantity: 3000 }]);
+
+    await inTx((tx) => cancelLine(tx, venue.cfg, billId, 1, "1"));
+    expect(await quantities()).toEqual([{ quantity: 2000 }]);
+  });
+
   it("refuses a void while a card payment of part of the bill is pending, before the invariant", async () => {
     const billId = await tabWith("Steak", "Cake");
     await insertPayment(billId, { applied: 2000 });
@@ -636,9 +663,9 @@ describe("the writers with no route of their own", () => {
     expect(error).toMatchObject({ code: "order.payment_in_flight" });
   });
 
-  it("refuses removing a paid line by saving the order without it, and lets an unpaid one go", async () => {
+  it("refuses saving a part-paid order for less than was received, and lets a smaller cut go", async () => {
     const billId = await tabWith("Steak", "Cake", "Beer");
-    await take(billId, cash("25.00", { kind: "items", amount: undefined, lines: [{ lineNo: 1 }] }));
+    await take(billId, cash("25.00"));
     const lines = await inTx((tx) =>
       tx
         .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
@@ -674,7 +701,7 @@ describe("the writers with no route of their own", () => {
       },
     );
 
-    expect(refused).toBe("bill.line_paid");
+    expect(refused).toBe("bill.received_exceeds_total");
     expect(saved).toBe(order!.revision + 1);
   });
 
@@ -1530,7 +1557,7 @@ describe("the invoice at full payment", () => {
     );
   });
 
-  it.each(["items", "share", "contribution"] as const)(
+  it.each(["share", "contribution"] as const)(
     "retains explicit net money without changing a pending %s selection",
     async (kind) => {
       const billId = await tabWith("Beer");
@@ -1539,18 +1566,6 @@ describe("the invoice at full payment", () => {
         applied: 300,
         ...(kind === "share" ? { shareOf: 1 } : {}),
       });
-      const [line] = await suite.db
-        .select()
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, billId));
-      if (kind === "items")
-        await suite.db
-          .insert(billPaymentLines)
-          .values({ billPaymentId: id, lineId: line!.id, quantity: 1000, amount: 300 });
-      const before = await suite.db
-        .select()
-        .from(billPaymentLines)
-        .where(eq(billPaymentLines.billPaymentId, id));
       const key = { provider: "simulator", paymentRef: randomUUID() };
       await inTx(async (tx) => {
         await insertCapturedPayment(tx, {
@@ -1594,12 +1609,6 @@ describe("the invoice at full payment", () => {
         state: "received",
       });
       expect(done.invoice).toBeNull();
-      expect(
-        await suite.db
-          .select()
-          .from(billPaymentLines)
-          .where(eq(billPaymentLines.billPaymentId, id)),
-      ).toEqual(before);
       expect((await inTx((tx) => readBillBalance(tx, billId))).outstanding).toBe("1.00");
       await take(billId, cash("1.00"));
       const [sale] = await suite.db.select().from(sales).where(eq(sales.workingOrderId, billId));
