@@ -103,8 +103,8 @@ run one after another, because they share `apps/till/src/till-app.ts`.
 
 - [A950. Automatic upgrades with rollback](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order). Automation remains in the [upgrade plan](superpowers/plans/2026-11-09-a950-shorter-upgrades.md).
 
-**3. The foundation, already running.** A1308 stays first in lane A, with
-[Small checks and indexes that are cheap only inside A1308's fresh tables](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables). A1306's history rewrite is A1308's last step (owner, 2026-11-06).
+**3. Close A1308.** Prepare the [A1306 history rewrite](backlog/ci.md#a1306-rewrite-git-history-to-drop-the-development-artifacts)
+and run [the till's physical power-cut test before go-live](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files).
 
 **4. Released by the hold, once A760 lands.** Build order (A446's pre-bill is not scheduled, owner
 2026-11-17):
@@ -1399,69 +1399,17 @@ _Formerly parts of B9 and Track C._ Open work:
 
 _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._ Detail: [backlog/architecture.md](backlog/architecture.md).
 
-- **Query plans and indexes, measured on a year of data** (bundle of 2, 2 important, size M, waits for another entry). [Detail](backlog/architecture.md#bundle-query-plans-and-indexes-measured-on-a-year-of-data)
+- **Query plans and indexes, measured on a year of data** (bundle of 3, 2 important, size M, waits for another entry). [Detail](backlog/architecture.md#bundle-query-plans-and-indexes-measured-on-a-year-of-data)
 
-- **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
-  2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
-  [design](superpowers/specs/2026-11-02-rationalisation/README.md) is written, and the owner has
-  reviewed every file and answered every question (2026-11-04). **Approved by the owner, 2026-11-04, and the top priority: it runs before more code is built on the old tables.**
-  Lane A runs it, once A1018's current slice ends. Slice 0's protection list is built ([how to use it](developers/testing-guide.md#the-protection-list)); so is its bench ([how to use it](developers/testing-guide.md#the-bench)). [A760's squash into eight sets](superpowers/plans/2026-11-04-a760-squash-into-eight-sets.md) has landed; the shared-table work is under way. 246 tables become 145. The server reads settings through the shared environment inventory and reports
-  unknown names at startup. The SMTP sender lives in the mail settings document, with its connection
-  URL sealed.
-  Privacy details now live in venue settings, and legal-name and credential changes keep activity history.
-  Ended dashboard sessions are deleted; sign-in history comes from activity records. Email-change
-  proofs use the pending address without copying it into the proof row.
-  Invoice delivery records describe the request and its outcome. The shared mail and print queues keep the retry schedule and active claims.
-  The till can take whole or part payments on a presented bill before its invoice is issued.
-  The counter saves its basket and takes payment in one request.
-  Veri*Factu reads the chain head from the latest fiscal record on the box.
-  Fiscal history retains verified clock steps and replaces the three old clock-stop tables.
-  Fiscal history also retains conflicts found in AEAT replies and lookups.
-  The shared mail queue sends certificate expiry reminders weekly from the warning date and
-  daily during the urgent period and after expiry.
-  Orders and Sales can run the receipt helper, receipt line, VAT table, invoice selection,
-  Find a bill search and date, bill allocation, receipt figures, receipt issuer, invoice typing and receipt facts suites independently.
-  Orders and Sales measures coverage for those implementations in its own package.
-  When changing receipt lines, also run the server's `receipt-document`, `receipt-document.set-menus`,
-  `invoice-document.set-menus`, `receipt-ticket`, `invoice-layout`, `receipt-adjustments`,
-  `list-unit-price.fiscal-identity`, `orders-list`, `portion-sale-projection`, `order-group`,
-  `working-order`, `issuance-pass` and `free-item-share` suites. When changing the VAT table,
-  also run `receipt-ticket`. When changing receipt figures, also run the server's
-  `receipt-adjustments`, `invoice-document`, `invoice-layout`, `receipt-document`,
-  `invoice-document.set-menus`, `receipt-document.set-menus`, `receipt-ticket`, `invoice-language`
-  and `free-item-share` suites. Changes to filed values follow [A1308 slice rule 6](superpowers/plans/2026-11-08-a1308-slice-rules.md#6-who-lands).
-  When changing receipt issuer or invoice typing, also run the server's `receipt-issuer` (real till and fiscal backend), `full-invoice-creation-date`, `invoice-recipient-flow.e2e`, `invoice-document` and `invoice-email` for saved and issued documents, and `tender-refund-receipt`, `transaction-receipt-api` and `bill-payments` for refunds, original receipts and payment replay, plus `receipt-device-evidence` for the till's stored invoice evidence.
-  When changing receipt lines, receipt figures, receipt issuer or invoice typing, also run Orders
-  and Sales' `receipt-facts` suite. When changing receipt facts, start with the server's
-  `receipt-document`, `receipt-document.set-menus`, `invoice-layout`, `invoice-layout.widths`,
-  `invoice-document`, `invoice-document.set-menus`, `receipt-ticket`, `invoice-language`,
-  `invoice-pdf`, `invoice-raster`, `free-item-share`, `receipt-deferred-payment`,
-  `till-receipt-preview`, `receipt-advances`, `receipt-adjustments`, `receipt-print`,
-  `receipt-guests.routes`, `receipt-preview-api`, `sample-receipt` and `receipt-language` suites.
-  When changing a shared fixture, find its server consumers with
-  `git grep -l -F -e full-invoice-fixture -e receipt-cases -- apps/server` and run their suites.
-  Changes to filed values follow [A1308 slice rule 6](superpowers/plans/2026-11-08-a1308-slice-rules.md#6-who-lands).
-  The Find a bill routes and readers remain in the server. When changing the parser, also run
-  the server's `find-bill-api`, `find-bill-bills`, `find-bill-transactions`
-  and `bill-advances` suites to check the HTTP routes and bill and transaction data. When changing
-  the shared search limit, also run the server's `orders-api`, `tax-office-list`, `bill-lookup-api`,
-  `report-api.returned-invoices` and `bill-payments` suites for their search-length cases.
-  When changing bill allocation, also run the server payment, receipt and advance suites named in
-  the bill allocation plan. For changes to `invalid`, `MONEY`, `money`, `ZERO` or `cashChange`,
-  find the server users with `git grep 'bill-allocation\.js' -- apps/server/src` and run their
-  focused suites. When changing `bill.nothing_outstanding`, `bill.tip_not_allowed`,
-  `bill.allocation_changed` or `order.payment_in_flight`, search the server for that error code
-  with `git grep -F '<error code>' -- apps/server/src` and run the affected tests.
-  Changes to filed values follow [A1308 slice rule 6](superpowers/plans/2026-11-08-a1308-slice-rules.md#6-who-lands).
-  Future order and sale changes follow the [package convention](developers/conventions-data.md#order-and-sale-code-belongs-in-packagesorders-sales).
-  [Bill allocation](superpowers/plans/2026-11-24-a1308-bill-allocation.md)
+- **A1308 closeout.** The 174 tables comprise 144 of the 145 planned tables, 24 later feature
+  tables and six retained by recorded decisions. A1325 retired the planned `daily_closes` table.
+  The audit found no missed removals. A1323 and A586 own the two conditional removals.
+  Open work is the A1306 history rewrite, a physical power-cut test for the till before go-live,
+  and removal of the disabled command-answer cleanup.
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
-  What it retires, listed until each slice lands: [What A1308 retires](backlog/architecture.md#what-a1308-retires).
 
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**
   [Table restrictions after the grants audit](backlog/architecture.md#remaining-table-restrictions-after-the-grants-record-audit)
-
-- **Small checks and indexes that are cheap only inside A1308's fresh tables** (size M). [Detail](backlog/architecture.md#bundle-small-checks-and-indexes-that-are-cheap-only-inside-a1308s-fresh-tables)
 
 - **Cloud's shared UI release still needs dependency updates and portal qualification.**
   Waitron's [release workflow](../.github/workflows/publish-ui.yml) checks and publishes

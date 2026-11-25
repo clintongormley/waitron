@@ -3829,6 +3829,60 @@ still passed all 59 cases. Reading that key explicitly made both lost-answer cas
 test does not check that assignment path.
 
 
+## Orders and Sales tests across packages
+
+Run the affected suite in `packages/orders-sales` first. Its receipt, invoice, Find a bill and
+bill allocation code is measured in that package. Run the server tests below for the routes and
+documents that use it.
+
+When changing receipt lines, also run the server's `receipt-document`, `receipt-document.set-menus`,
+`invoice-document.set-menus`, `receipt-ticket`, `invoice-layout`, `receipt-adjustments`,
+`list-unit-price.fiscal-identity`, `orders-list`, `portion-sale-projection`, `order-group`,
+`working-order`, `issuance-pass` and `free-item-share` suites.
+
+When changing the VAT table, also run `receipt-ticket`.
+
+When changing receipt figures, also run the server's
+`receipt-adjustments`, `invoice-document`, `invoice-layout`, `receipt-document`,
+`invoice-document.set-menus`, `receipt-document.set-menus`, `receipt-ticket`, `invoice-language`
+and `free-item-share` suites.
+
+When changing receipt issuer or invoice typing, run `receipt-issuer` with the real till and fiscal
+backend. Run `full-invoice-creation-date`, `invoice-recipient-flow.e2e`, `invoice-document` and
+`invoice-email` for saved and issued documents. Run `tender-refund-receipt`,
+`transaction-receipt-api` and `bill-payments` for refunds, original receipts and payment replay.
+Run `receipt-device-evidence` for the till's stored invoice evidence.
+
+When changing receipt lines, receipt figures, receipt issuer or invoice typing, also run Orders
+and Sales' `receipt-facts` suite. When changing receipt facts, start with the server's
+`receipt-document`, `receipt-document.set-menus`, `invoice-layout`, `invoice-layout.widths`,
+`invoice-document`, `invoice-document.set-menus`, `receipt-ticket`, `invoice-language`,
+`invoice-pdf`, `invoice-raster`, `free-item-share`, `receipt-deferred-payment`,
+`till-receipt-preview`, `receipt-advances`, `receipt-adjustments`, `receipt-print`,
+`receipt-guests.routes`, `receipt-preview-api`, `sample-receipt` and `receipt-language` suites.
+
+When changing a shared fixture, find its server consumers with
+`git grep -l -F -e full-invoice-fixture -e receipt-cases -- apps/server` and run their suites.
+
+The Find a bill routes and readers remain in the server. When changing the parser, also run
+the server's `find-bill-api`, `find-bill-bills`, `find-bill-transactions`
+and `bill-advances` suites to check the HTTP routes and bill and transaction data. When changing
+the shared search limit, also run the server's `orders-api`, `tax-office-list`, `bill-lookup-api`,
+`report-api.returned-invoices` and `bill-payments` suites for their search-length cases.
+
+When changing bill allocation, also run the server payment, receipt and advance suites named in
+the bill allocation plan. [Bill allocation plan](../superpowers/plans/2026-11-24-a1308-bill-allocation.md)
+
+For changes to `invalid`, `MONEY`, `money`, `ZERO` or `cashChange`, find the server users with
+`git grep 'bill-allocation\.js' -- apps/server/src` and run their focused suites.
+
+When changing `bill.nothing_outstanding`, `bill.tip_not_allowed`,
+`bill.allocation_changed` or `order.payment_in_flight`, search the server for that error code
+with `git grep -F '<error code>' -- apps/server/src` and run the affected tests.
+
+For changes to filed values, follow [the fiscal landing rule](../superpowers/plans/2026-11-08-a1308-slice-rules.md#6-who-lands).
+
+
 ## The protection list
 
 A1308 changes most of the tables, and every slice of it has to answer one question: did the change

@@ -662,191 +662,24 @@ also qualifies the historical operation-description references in this section.
 
 ## A1308. Rationalise the tables, background jobs, environment variables and files
 
-- A39 (#671) left some server shutdown duties registered both in the failed-start unwind and in the normal close order. The background-duties suite pins the normal order.
+The 25 November table audit found 174 tables. The schema has 144 of the 145 names in the
+[design](../superpowers/specs/2026-11-02-rationalisation/README.md#4-the-one-picture), 24 later feature
+tables and six kept by recorded decisions. A1325 retired `daily_closes` when Sales began reading
+the day figures from recorded transactions. No removal was missed. `recovery_packs` stays until
+[A1323](box.md#a1323-one-master-key-for-the-venue), and `convenio_config` stays until
+[A586](workforce.md#a586-each-persons-contract-terms). [A1325 PR](https://github.com/clintongormley/waitron/pull/4026)
 
-- **A1308. Rationalise the tables, background jobs, environment variables and files** (owner,
-  2026-11-02: "over engineered and disjunct … each bit has been designed in isolation"). The
-  [design](../superpowers/specs/2026-11-02-rationalisation/README.md) is written. The owner has
-  reviewed every file and answered every question (2026-11-04), and approved it the same day.
-  [Slice 0](https://github.com/clintongormley/waitron/blob/9faf8661ebd08545d96518b1d7d09305dcdd654c/docs/superpowers/plans/2026-11-04-a1308-slice-0-bench.md)'s protection list is built;
-  [the testing guide](../developers/testing-guide.md#the-protection-list) says how each slice uses
-  it. Its bench is built too ([how to use it](../developers/testing-guide.md#the-bench)); it runs
-  from time to time, not per slice (owner, 2026-11-10;
-  [when](../developers/testing-guide.md#when-the-bench-runs)). Next is
-  [the build order](../superpowers/plans/2026-11-08-a1308-build-order.md).
-  A790's page jobs share the print queue. Its copy audit and its three routing journals keep their
-  own tables. **Open:** later slices still need to cover the tables A802 and A739 added.
-  246 tables become 145, in eight migration sets instead of sixteen. The job runner is built with scheduled
-  menu activation, scheduled archives, the sealed-key copy and public `/health` reports. Scheduled
-  archives copy the venue database on a worker thread. You can choose an eligible test connection
-  in Backups and see its backup outcome there. Waitron Cloud receives the same scheduled backup
-  as the box-key destinations, using its own encryption key. The bucket copy runs as a service.
-  Close stops runner jobs first and the bucket copy last.
-  Role-dependent jobs recheck the role on each turn. A mirror that takes over also restarts.
-  The six watches (append-only protections, clock, free space, Cloud connection, translation
-  suggestions and practice printing) also run there. Repeated thrown passes raise one dashboard
-  alert per job after ten minutes and three failures; the manager’s box-status read includes the
-  complete job views. Attendance day processing, the outgoing-mail sender, certificate reminders
-  and box-alert email decisions also run there; idle attendance checks take no write turn.
-  Daily housekeeping also removes expired sign-in challenges, ended or idle dashboard sessions
-  and photo bytes no image references, in separate batches. Command-answer cleanup is built but
-  stays off until the latest possible till retry is confirmed; its bill branch retains abandoned
-  bills because they have no closing timestamp.
-  Filing, payment reconciliation and fiscal reconciliation also run there. A committed fiscal record
-  wakes filing, subject to the tax agency's wait between submissions. Card recovery still runs in its
-  separate loop until the one-payment-route change retires it.
-  Devices hold their assigned station and invoice printer choice revision on the device row.
-  Printers now store the device holding them and which documents they pick up on the printer row.
-  Receipt and office printers share one table. Each profile stores its ordered printer choices and defaults.
-  Device profiles hold their ordering department, starting zone, allowed zones and kitchen view on the profile row.
-  Kitchen tickets now read their bill through the order line, with no copied bill id to update on a move.
-  Each order line now carries its recorded offer and first-send facts, which stay with the line when it is split or moved.
-  Floor splits now check the parties the till read, separately from the room layout revision;
-  saved joined designs form ordinary live groups. Zones now carry their department and sale overrides;
-  saved designs now carry membership, placements retain off-layout sizes, and sets carry their
-  department, name and default. Today's map now lives on the live table and zone rows;
-  merge membership and its before-place values now live there too, with group names and seats
-  in `table_merges`. Today-only table and room updates now use narrower
-  notifications for the floor, kitchen and their dashboard readers. Transfers and the menu's zone
-  status keep their existing 15-second polls for these updates (watcher, 2026-11-13).
-  Management and device events share one loop with read-only wake checks; device events carry types
-  only. The dashboard detects a silent connection, quiets audited database-only re-read timers
-  while connected and receives pairing, discovery, practice-inbox and backup state changes.
-  Reads that depend on time, memory or external services keep their timers.
-  Tills use the device stream for menu, equipment, floor, transfer and table-allergy refreshes;
-  transfers retain their access timer to notice ended sessions, and payment-owned equipment changes
-  retain their timed refresh so the connection also works with payments disabled;
-  station, pass, clocking and receipt-delivery reads also refresh on changes while keeping their
-  clock-dependent timers. The open bill draft refreshes on changes and quiets its row-based timer
-  while connected. Clocking interests are present only when clocking is available.
-  A one-box till pauses primary-server probes while its
-  device connection is ready and the last probe found a primary, resuming immediately when it drops;
-  lists with more than one box keep probing and handing on membership charts.
-  The print agent waits on held requests for receipt and office-print work. Drawer expiry,
-  claim leases and a document's next retry can shorten that wait. Pending page work and discovery
-  retain their two-second cadence. Receipt handover records the staff member and time on the print
-  job.
-  Handhelds and kitchen displays keep timed reads under
-  jr11's measured fallback. Before go-live, qualify silence recovery with a physical power cut;
-  jr13's SIGSTOP probe is a stand-in only. The shared environment inventory declares each setting's
-  source, and the server reports unknown names and ignores misplaced file entries. The print agent
-  uses its host name. Host-script and full-disk tests use shared roots. The SMTP connection URL and
-  bucket keys are sealed.
-  Ended dashboard sessions are deleted; sign-in history comes from activity records. Email-change
-  proofs use the pending address without copying it into the proof row.
-  Each shift now holds its own job role and area and belongs to a rota week; deleting a draft week
-  deletes its shifts. Attendance questions now point at their stored day rather than copying its
-  bounds; the next due time carries deferred work, and recorded answers refuse changes and deletion.
-  Authenticator secrets and emailed confirmation codes use purpose keys from the vault ring.
-  The existing rotation command re-seals authenticator secrets and pending setups; codes issued
-  before the change still work while the ring retains their previous key.
-
-  Department sale rules, receipt trading-name choices and receiving profiles live on the department row.
-  Menus hold their own Home page order and categories their own parent and colour. Root and Home
-  sections are identified by role, with at most one of each per menu. Deleting a menu records an activity entry.
-
-  Privacy contact details live in venue settings; legal-name changes and credential saves and
-  removals leave activity entries.
-
-  There is one state-folder layout, and a box keeps its venue under that state folder.
-  A first setup has no venue claim or separate setup lock; its record and attachments live
-  in `flows/setup/`. The attempt, the staged master key's public facts, public evidence and
-  recovery-document metadata share one record. A completed setup folder ends after the trading start stays up for
-  two minutes; unknown top-level files and nested attachment folders are kept, and a refused cleanup
-  is logged without stopping the start. Start again removes its listed files and then the empty folders,
-  and sets unknown files aside under the state folder. The box certificate and key
-  share one PEM file, and a completed certificate repair ends after a start stays healthy.
-  A spare joins without reserving a fiscal identity. It gets its own fiscal identity and invoice
-  series when it takes over. A1308 removes recipes (owner, 2026-11-04). The owner chose that A760's squash
-  runs first, merged into the eight sets. Slice 5 (5a–5h) completes the location removal. It absorbs A1301's schema slices (S20–S28);
-  S23 builds no `venue_settings`, because the venue's settings become documents in the shared
-  `settings` table. It also renames every leftover "tenant" name: the `tenants` table becomes
-  `taxpayer`, and names that mean the venue or box get that name (owner, 2026-11-02; design §5 U9).
-  Menu code uses `@waitron/menu` and menu/product file paths. Product defaults and starter-unit
-  history share `settings.menu`; translation runs store their total on the first batch only.
-  The menu table, identifiers, routes and wording now use menu names; the Products screen uses
-  products names. Menu root names now come from menus.name; include-folder names, photo and colour have their own columns. Live and scheduled menu versions now share menu_releases; rescheduling leaves an activity entry. Menu version creators and release cancellers now name existing people through database keys. Periods hold their ordered staff-menu ids. Photo metadata lives on each photo; original and replacement bytes share one immutable blob store, and deleting or replacing a photo prunes bytes no photo names.
-  Membership reads its term from the signed document, and an alert's handler references a person.
-  The box's role, signing key, mirror link and pinned main-box key share one local row; role changes
-  and signing-key rotations leave events in node.db.
-  A card reader holds its device id on its own row; its enabled status comes from `disabled_at`.
-  A device keeps its chosen reader on its row, and a profile keeps its ordered readers and default
-  in one list. Reader deletion clears both; configuration exports leave those assignments behind.
-
-  Bill numbers, names and editor ownership now use columns on each bill, with the next number
-  held by its party. A party merge also moves paid bills and preserves their collection facts;
-  abandoned bills stay behind.
-  Bill and receipt refunds share one table. Each row points to the bill payment or receipt tender
-  and names the staff who handled it. Both entry points use the same refund reservation,
-  completion, card sender and recovery. Staff can print one acknowledgment from the till
-  for either refund and get later copies in Print Queue.
-
-### 2026-11-19 counter save-and-pay benchmark
-
-PR 3 of [One way to pay](../superpowers/plans/2026-11-19-a1308-one-way-to-pay.md)
-measured fresh counter cash through the old sale request and the bill's payment request. On the
-bench server at `2.29.248.230`, both measurements used the same 30-day venue at 250 bills a
-day (seed 1) and 200 samples per case in each of three rounds. The `node:26-slim` image ran
-Node 26.13.1 and SQLite 3.54.1 without STAT4.
-
-Base `1eb7a415fbd7ff50fdb3643e0c92d7c61a2148ea` produced
-`/root/waitron-bench/a1308-2026-11-19-counter-save-pay-30d/before.json`. Candidate
-`070bc8e5a7f0c14c22aac8d4a8f98c77d26eef5c` produced
-`/root/waitron-bench/a1308-2026-11-19-counter-save-pay-30d/after.json`. Later review fixes
-handle closed orders and their receipts. The timed sale starts with a fresh order.
-
-| Case | Before round medians | After median | Verdict |
-| --- | ---: | ---: | --- |
-| `payment.partial` | 5.20–5.24 ms | 5.25 ms | same |
-| `payment.final` | 11.40–11.56 ms | 11.53 ms | same |
-| `sale.counter` | 11.84–11.93 ms | 15.10 ms | slower |
-| `floor.read` | 7.38–7.43 ms | 7.40 ms | same |
-| `floor.open` | 8.70–8.79 ms | 8.75 ms | same |
-| `kitchen.queue` | 6.71–6.77 ms | 6.80 ms | same |
-| `kitchen.screen` | 7.18–7.18 ms | 7.22 ms | same |
-| `kitchen.pass` | 29.26–29.43 ms | 29.09 ms | same |
-| `kitchen.pass-screen` | 43.34–43.56 ms | 43.20 ms | same |
-| `dashboard.open` | 51.53–51.86 ms | 51.40 ms | same |
-| `kitchen.pass-release` | 5.72–5.80 ms | 5.79 ms | same |
-| `print.problems` | 3.86–3.99 ms | 3.86 ms | same |
-| `filing.pass` | 12.73–12.82 ms | 12.71 ms | same |
-
-`sale.counter` rose by 3.26 ms between the round medians. PR 3 switched this case from
-`POST /api/sales` to `POST /api/working-orders/:id/payments`.
-
-## Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
-
-Size M.
-Where each lands: the A1308 slice named in the design's "Lands in" column
-([Additions of 6 November 2026](../superpowers/specs/2026-11-02-rationalisation/README.md#additions-of-6-november-2026)).
-Include `menu_versions.created_by` when indexing the menu history. On a development Mac, the staff
-download's first write-lock turn took a median 25 ms with a seeded year and 216 ms with five years.
-
-- **A print job's payload sits ahead of its status columns.** `print_jobs.payload` averaged 20 KB
-  on the bench's first full year (built 2026-11-06, since rebuilt; the table was 8 GB of the 12 GB year).
-  **2026-11-14, A1532:** that measurement predates the one-week payload sweep; eligible old rows
-  now hold empty blobs. The printers-down check (`stationPrintersDownQuery` in
-  `apps/server/src/station-outputs-down.ts`) groups over every stuck job of a printer. It matters
-  only with many stuck jobs. Put the payload after the columns reads filter on.
-
-## What A1308 retires
-
-These entries stay open until the A1308 or A760 slice that removes the need for them lands (backlog review, 2026-11-06). The slice that does so deletes them here. If a slice changes course, its entry goes back to the index.
-
-- **If a later slice moves `local` tables into `node.db`**, that slice decides again how the drain
-  crosses the two files: SQLite refuses a trigger body that writes another attached database. A947
-  slice 3a moved five tables with no change-log triggers; the question stays for `change_log`.
-  [Detail](replication-cloud.md#if-a-later-slice-moves-local-tables-into-nodedb)
-- **Left open by #1261's review (W111):** the receipt editor's copied phone and email limits remain open.
-
-- `service_commands` rows are never pruned. Left open by service Task 2 (#715, a record per seated
-  party).
-- **The upgrade walk's historical runtime variation remains unexplained after reducing setup work (A736, [#1788](https://github.com/clintongormley/waitron/pull/1788)).**
-  [Detail](ci.md#the-upgrade-walks-historical-runtime-variation-remains-unexplained-after-reducing-setup-work-a736-1788).
+- Run A1306 in a window when the lanes are paused. [History rewrite](ci.md#a1306-rewrite-git-history-to-drop-the-development-artifacts)
+- Before go-live, connect a till to a physical box and cut power to the box. Record whether the till
+  reports the box down within 35 seconds and starts its fallback reads. The earlier test froze the
+  server process and left the socket silent.
+  [Till connection plan, Task 4](https://github.com/clintongormley/waitron/blob/0a049fa0ff84a09bb0eb863af66338c63ebeb087/docs/superpowers/plans/2026-11-08-a1308-jr13-till-connection.md#task-4-measure-14-first-half--a-box-that-goes-silent)
+- Remove the disabled command-answer cleanup and its own tests in a separate pull request.
+  Keep the saved answers so a till can retry an old request. See [the retention decision](#command-answers-stay-available-for-till-retries).
 
 ## Bundle: Query plans and indexes, measured on a year of data
 
-2 entries, size M. Their text is unchanged from the index they came from (backlog review, 2026-11-06).
+3 entries, size M.
 
 - **Index the dishes not yet fired, so the pass's reads stop scanning every ticket item ever kept
   (left open by A773-2 PR C's review).** This needs a migration.
@@ -854,6 +687,9 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
 - **Measure the remaining top-level-dish reads (A1370 follow-up).** Check `parent_line_id is null`
   reads across the server and venue-service, including `listOrderGroups`, `working-order`,
   `move-bill`, `finish-party-service` and `party-allergy`. Measure their plans with history.
+- **Measure the `menu_versions.created_by` read when indexing menu publication history.** The staff
+  data download filters by this field. On a development Mac its first write-lock turn took a
+  median 25 ms with one seeded year and 216 ms with five years. [#4058](https://github.com/clintongormley/waitron/pull/4058)
 
 
 ## Bundle: Full-invoice recipient: country code names
@@ -879,6 +715,18 @@ These entries stay open until the A1308 or A760 slice that removes the need for 
   [Detail](architecture.md#loose-ends-left-by-a435s-printer-reader-and-device-delete-steps-2-to-4).
 
 ## Decisions and deliberate limits
+
+### Command answers stay available for till retries
+
+Keep every saved `service_commands` answer because a manual till retry can reuse the same id
+without an expiry. Reopen retention if measured disk use or query cost justifies it. Watcher decision,
+25 November 2026 at 21:54.
+
+### Bundle: Small checks and indexes that are cheap only inside A1308's fresh tables
+
+The watcher dropped the `print_jobs.payload` column move on 25 November 2026. The old year-size
+measurement predates the one-week payload sweep. Measure again if the current printer-down read
+slows with many unresolved jobs. [Payload sweep](https://github.com/clintongormley/waitron/pull/3222)
 
 **English names in general fiscal tests (2026-11-24, A974).** The A1308 fi1 rename map (#4087) keeps
 this wording about private test names, including `registros` and `envios`, when its document check
