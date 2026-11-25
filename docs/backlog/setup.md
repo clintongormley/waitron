@@ -365,8 +365,7 @@ apart from a few lines, and the till's own untrusted page, which is in both lang
 to it. Choose the language from the browser's `Accept-Language`, as the dashboard's login does. The
 certificate-repair page already has Spanish steps for each device
 (`apps/server/src/connection-bootstrap-strings.ts`); share the words rather than keeping two copies.
-Open the page in both languages and themes at phone width. It follows the `fix/certificate-instructions`
-branch, which changes the same steps.
+Open the page in both languages and themes at phone width.
 
 ## Decisions and deliberate limits
 
