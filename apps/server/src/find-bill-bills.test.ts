@@ -20,6 +20,7 @@ import {
   saleSettlements,
   lineServiceCancellations,
   diningTables,
+  partyTables,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listAdjustmentReasons } from "@waitron/adjustments";
@@ -630,6 +631,14 @@ describe("Find Bills SQL paging", () => {
   it("finds a selected bill’s debt while its table stays open for another bill", async () => {
     const first = await seatedWith(venue, "Small beer");
     const second = await seatedWith(venue, "Tarta");
+    await inTx(venue, async (tx) => {
+      await VENUE_SERVICE.setBillName(tx, first.tabId, "Riley");
+      await tx.insert(partyTables).values({
+        partyId: first.partyId,
+        tableId: first.tableId,
+        leftAt: "2026-10-01T00:00:00Z",
+      });
+    });
     await inTx(venue, (tx) =>
       combineParties(tx, venue.cfg, {
         from: second.partyId,
@@ -659,6 +668,10 @@ describe("Find Bills SQL paging", () => {
       collectionStatus: "left_without_paying",
     });
     expect(debt.departedAt).not.toBeNull();
+    expect.soft(debt.tables).toHaveLength(2);
+    expect
+      .soft((await list({ q: "Riley" })).rows)
+      .toMatchObject([{ workingOrderId: first.tabId, label: "Riley" }]);
     expect((await list()).rows).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ workingOrderId: first.tabId, stillOwed: "3.00" }),

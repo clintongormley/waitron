@@ -18,6 +18,7 @@ import {
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { VENUE_SERVICE } from "./modules.js";
 import { seedKitchenStation, seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { listStationNotices } from "@waitron/venue-service";
 import {
@@ -704,6 +705,7 @@ describe("moving sent work to another table tells the kitchen", () => {
 
     await asApp(async (tx) => {
       const party = (await partyRevisionOfOrder(tx, tabId))!;
+      await VENUE_SERVICE.setBillName(tx, tabId, "Riley");
       await mergeBills(tx, cfg, tabId, checkId, {
         expectedPartyRevision: party.revision,
         operatorId: await seedPerson(tx, { displayName: randomUUID() }),

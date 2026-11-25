@@ -534,6 +534,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       id,
       orderNumber: 5,
       label: "Table 4",
+      billName: "Table 4",
       revision: 3,
       lines: [{ menuItemId: "menu-item-cafe-0", productId: "cafe", quantity: "2.000" }],
     })),

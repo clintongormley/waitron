@@ -5021,12 +5021,17 @@ describe("department transfers across operator lifetimes", () => {
     await flush(el);
     transferRoot(el)!.querySelector<HTMLElement>("[data-save-transfer]")!.click();
     await vi.waitFor(() => expect(send).toHaveBeenCalledWith("counter-tab", "restaurant"));
+    c.store.kitchenNote = "Pack separately";
+    expect(c.store.dirty).toBe(false);
     accepted = true;
     desk.refresh();
     await vi.waitFor(() => expect(c.store.persisted).toBe(false));
     expect(c.store.lines).toEqual([]);
     expect(c.store.id).not.toBe("counter-tab");
     expect(transferRoot(el)?.querySelector("[data-request-transfer]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-transfer-local-copy]")?.textContent).toContain(
+      "Pablo's lunch",
+    );
   });
 
   it("retires an open source basket after sign-in even when its acceptance is outside recent department history", async () => {

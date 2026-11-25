@@ -7,6 +7,11 @@ const livePlace = orderPlaceFactsSql(sql`r.party_id`, sql`r.delivery_table_id`, 
 });
 export const liveSearchTableNames = sql`(${livePlace} -> '$.searchNames')`;
 
+export function recordedTableNamesSql(partyId: SQL) {
+  return sql`(select json_group_array(distinct d.label order by pt.joined_at, pt.rowid)
+    from party_tables pt join dining_tables d on d.id = pt.table_id where pt.party_id = ${partyId})`;
+}
+
 export function ordersWordRank(words: string) {
   return sql`case when ${LIVE_ORDER_PLACE} then (
       with place as materialized (select ${livePlace} as facts)
@@ -32,10 +37,7 @@ export async function readOrderListPlaces(
   }>(sql`
     select wo.id,
       case when j.value ->> 'live' then ${orderPlaceFactsSql(sql`wo.party_id`, sql`wo.delivery_table_id`)} end as place,
-      case when not (j.value ->> 'live') then (
-        select json_group_array(distinct d.label order by pt.joined_at, pt.rowid)
-        from party_tables pt join dining_tables d on d.id = pt.table_id where pt.party_id = wo.party_id
-      ) end as historical
+      case when not (j.value ->> 'live') then ${recordedTableNamesSql(sql`wo.party_id`)} end as historical
     from json_each(${JSON.stringify(orders)}) j join working_orders wo on wo.id = j.value ->> 'id'
   `);
   return new Map(

@@ -13,6 +13,7 @@ import { AppError, businessDayAt, businessDayBounds, rawCentsToDecimal } from "@
 import type { BillsQuery, BillRow, FindBillPage } from "./find-bill-types.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { OrderZoneCondition } from "./zone-access.js";
+import { recordedTableNamesSql } from "./orders-list-places.js";
 import "./errors.js";
 
 type RawBill = {
@@ -45,12 +46,10 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
        where dl.sale_id = s.id and dl.deducts_sale_id is not null)`;
   return sql`with facts as (
     select wo.id, wo.opened_at, wo.order_number, wo.party_id,
-      case when ud.id is null then wo.bill_name else wo.label end as bill_name,
+      case when ud.id is null then wo.bill_name else coalesce(wo.bill_name, wo.label) end as bill_name,
       wo.delivery_table_id,
-      case when ud.id is not null then coalesce(p.table_names,
-        (select json_group_array(d.label order by pt.joined_at, pt.rowid)
-          from party_tables pt join dining_tables d on d.id = pt.table_id where pt.party_id = wo.party_id)
-      ) end as departed_tables,
+      case when ud.id is not null then
+        coalesce(p.table_names, ${recordedTableNamesSql(sql`wo.party_id`)}) end as departed_tables,
       wo.status as order_status,
       ${zone} as zone_id,
       s.id as sale_id, case when s.id is null then null else sr.code || '/' || s.invoice_number end as invoice_number,
