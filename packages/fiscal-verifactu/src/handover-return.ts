@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { ReturnDiscrepancy, ReturnedRecordsOwner } from "@waitron/module";
 import { sql } from "drizzle-orm";
 import {
+  allocateOrderNumber,
   COVERAGE_REFUSAL,
   foldForUniqueness,
   liveBackupQuery,
@@ -205,6 +206,10 @@ async function insertRow(tx: Transaction, table: string, row: ReturnRow) {
 function held(tx: Transaction, table: string, id: ReturnRow[string], key = "id") {
   return tx.all<ReturnRow>(sql`select * from ${sql.identifier(table)}
     where ${sql.identifier(key)} = ${id}`)[0];
+}
+
+function kept(tx: Transaction, table: string, id: ReturnRow[string]) {
+  return held(tx, table, id) ? id! : null;
 }
 
 export async function inspectReturnedPayments(
@@ -489,9 +494,7 @@ export async function receiveReturnedOriginals(
           if (!held(paymentTx, "tenders", tender.id))
             await insertRow(paymentTx, "tenders", {
               ...tender,
-              bill_payment_id: held(paymentTx, "bill_payments", tender.bill_payment_id)
-                ? tender.bill_payment_id!
-                : null,
+              bill_payment_id: kept(paymentTx, "bill_payments", tender.bill_payment_id),
             });
         }
         for (const settlement of returned.settlements.filter((row) => row.sale_id === sale.id)) {
@@ -500,17 +503,38 @@ export async function receiveReturnedOriginals(
         }
         for (const capture of returned.captures.filter((row) => row.sale_id === sale.id)) {
           const order = returned.orders.find((row) => row.id === capture.working_order_id)!;
-          if (!held(paymentTx, "working_orders", capture.working_order_id))
-            await insertRow(paymentTx, "working_orders", order);
+          if (!held(paymentTx, "working_orders", capture.working_order_id)) {
+            const party =
+              paymentTx.all(sql`select 1 from working_orders
+                where party_id = ${order.party_id} and bill_number = ${order.bill_number}`)
+                .length === 0
+                ? kept(paymentTx, "parties", order.party_id)
+                : null;
+            const context =
+              held(paymentTx, "floor_zones", order.zone_id) &&
+              held(paymentTx, "departments", order.department_id);
+            await insertRow(paymentTx, "working_orders", {
+              ...order,
+              order_number: held(paymentTx, "working_orders", order.order_number, "order_number")
+                ? await allocateOrderNumber(paymentTx)
+                : order.order_number!,
+              party_id: party,
+              bill_number: party === null ? null : order.bill_number!,
+              delivery_table_id: kept(paymentTx, "dining_tables", order.delivery_table_id),
+              editor_id: kept(paymentTx, "persons", order.editor_id),
+              zone_id: context ? order.zone_id! : null,
+              department_id: context ? order.department_id! : null,
+              service_mode: context ? order.service_mode! : null,
+              items_paid_from: kept(paymentTx, "working_orders", order.items_paid_from),
+              // working_orders_reopened_from_insert refuses any inserted link.
+              reopened_from: null,
+            });
+          }
           if (!held(paymentTx, "payments", capture.id))
             await insertRow(paymentTx, "payments", {
               ...capture,
-              reader_id: held(paymentTx, "card_readers", capture.reader_id)
-                ? capture.reader_id!
-                : null,
-              bill_payment_id: held(paymentTx, "bill_payments", capture.bill_payment_id)
-                ? capture.bill_payment_id!
-                : null,
+              reader_id: kept(paymentTx, "card_readers", capture.reader_id),
+              bill_payment_id: kept(paymentTx, "bill_payments", capture.bill_payment_id),
             });
         }
         for (const refund of returned.refunds.filter((row) => row.sale_id === sale.id)) {
