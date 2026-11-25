@@ -11,6 +11,7 @@ import {
   products,
 } from "@waitron/db";
 import { parentProducts, parentJoin } from "@waitron/menu";
+import { lastOrderDishes } from "@waitron/venue-service";
 import type { MakerResolver, MakerOutcome, TicketAllergyCopy } from "@waitron/module";
 import { AppError, staffPresentationName } from "@waitron/shared";
 import {
@@ -90,19 +91,57 @@ export function routingOnce(tx: Transaction, at: Date): RoutingOnce {
   });
 }
 
+export const lastOrderLineColumns = {
+  menuId: workingOrderLines.menuId,
+  offerDepartmentId: workingOrderLines.offerDepartmentId,
+};
+
 export async function makersByLine(
   resolver: MakerResolver,
   zoneId: string | null,
-  lines: readonly { id: string; productId: string | null; latePeriodId: string | null }[],
+  lines: readonly {
+    id: string;
+    productId: string | null;
+    latePeriodId: string | null;
+    menuId: string | null;
+    offerDepartmentId: string | null;
+  }[],
 ): Promise<ReadonlyMap<string, MakerOutcome>> {
+  const outcomes = new Map<string, MakerOutcome>();
+  if (zoneId !== null) {
+    const byDepartment = new Map<string, { key: string; menuId: string; productId: string }[]>();
+    for (const { id, productId, latePeriodId, menuId, offerDepartmentId } of lines) {
+      if (
+        productId === null ||
+        latePeriodId !== null ||
+        menuId === null ||
+        offerDepartmentId === null
+      )
+        continue;
+      const group = byDepartment.get(offerDepartmentId) ?? [];
+      group.push({ key: id, menuId, productId });
+      byDepartment.set(offerDepartmentId, group);
+    }
+    for (const [departmentId, dishes] of byDepartment) {
+      const service = await resolver.lastOrdersFor(departmentId);
+      for (const [id, decision] of await lastOrderDishes(
+        service,
+        zoneId,
+        dishes,
+        async () => resolver,
+      )) {
+        if (!decision.stopped || decision.route.kind === "no_preparation")
+          outcomes.set(id, { kind: "made", route: decision.route });
+      }
+    }
+  }
   const byPeriod = new Map<string | null, { id: string; productId: string }[]>();
   for (const { id, productId, latePeriodId } of lines) {
-    if (productId === null) continue;
+    if (productId === null || outcomes.has(id)) continue;
     const group = byPeriod.get(latePeriodId) ?? [];
     group.push({ id, productId });
     byPeriod.set(latePeriodId, group);
   }
-  const outcomes = new Map<string, MakerOutcome>();
   for (const [periodId, group] of byPeriod) {
     const productIds = [...new Set(group.map(({ productId }) => productId))];
     const routes = await resolver.makers(zoneId, productIds, periodId);
@@ -344,6 +383,7 @@ export async function fireLines(
     .select({
       id: workingOrderLines.id,
       setMenuRole: workingOrderLines.setMenuRole,
+      ...lastOrderLineColumns,
       makeAtStationId: workingOrderLines.makeAtStationId,
       latePeriodId: workingOrderLines.latePeriodId,
       stationActive: kitchenStations.active,
@@ -373,16 +413,16 @@ export async function fireLines(
   );
   const serviceContext = await VENUE_SERVICE.findOrderContext(tx, orderId);
   // A parked line can acquire its agreement after the caller has read the dishes to fire.
-  const agreedPeriodOf = new Map(chosenRows.map((row) => [row.id, row.latePeriodId]));
+  const storedById = new Map(chosenRows.map((row) => [row.id, row]));
   const makers = await makersByLine(
     await routing(),
     serviceContext?.zoneId ?? null,
     lines
       .filter((line) => !chosenStations.has(line.id))
       .map(({ id, productId }) => ({
+        ...storedById.get(id)!,
         id,
         productId,
-        latePeriodId: agreedPeriodOf.get(id) ?? null,
       })),
   );
   const keepStates = options.keepStations?.size ? await VENUE_SERVICE.stationStates(tx, now) : null;
@@ -717,6 +757,7 @@ export async function heldNoRouteLines(
       productId: workingOrderLines.productId,
       courseId: workingOrderLines.courseId,
       quantity: workingOrderLines.quantity,
+      ...lastOrderLineColumns,
       latePeriodId: workingOrderLines.latePeriodId,
     })
     .from(workingOrderLines)

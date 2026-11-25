@@ -8,11 +8,11 @@ import {
 } from "@waitron/db";
 import { venueMomentAt } from "@waitron/reporting";
 import { AppError } from "@waitron/shared";
-import { offeredKey } from "@waitron/venue-service";
+import { lastOrderDishes, offeredKey, type LastOrdersDecision } from "@waitron/venue-service";
 import { inArray, eq } from "drizzle-orm";
 import type { LateSendConfirmation } from "./late-send.js";
 import { VENUE_SERVICE } from "./modules.js";
-import type { FireableLine } from "./working-order-kitchen-fire.js";
+import { type FireableLine, routingOnce } from "./working-order-kitchen-fire.js";
 
 /**
  * Refuses `menu_period.ended` unless `lateSend` confirms every menu of `late`, naming `lineIds`
@@ -40,23 +40,23 @@ export async function confirmLateDishes(
   return lateSend.confirm(tx, needsManager);
 }
 /**
- * How a send of stored dishes treats one whose period ended earlier today: `ask` refuses it unless
+ * How a send treats a stored dish past last orders: `ask` refuses it unless
  * the request confirms it, `"mark"` marks it with no confirmer.
  */
-export type LateUnsentMode = { ask: LateSendConfirmation | undefined } | "mark";
+export type LateUnsentMode = { ask: LateSendConfirmation | undefined; periodOnly?: true } | "mark";
 /**
  * Judge stored dishes about to fire as entry judges a new one, and mark the late ones before they
  * fire, so their tickets print the mark. A dish already marked was judged when it was entered or by
- * an earlier send. Its menu is the one it was stored from; it is judged by the department of the
- * order's zone now, then by the one it was stored in ({@link unplacedLateDishes}).
+ * an earlier send. Cutoffs use the stored department and the receiving zone's routes.
  */
 export async function lateUnsentDishes(
   tx: Transaction,
   orderId: string,
   lines: readonly FireableLine[],
   mode: LateUnsentMode,
+  routing = routingOnce(tx, new Date()),
 ): Promise<void> {
-  await lateUnsentDishesOf(tx, [{ orderId, lines }], mode);
+  await lateUnsentDishesOf(tx, [{ orderId, lines }], mode, routing);
 }
 /**
  * {@link lateUnsentDishes} over several bills sent together: one refusal names the late lines of
@@ -69,10 +69,17 @@ export async function lateUnsentDishesOf(
     lines: readonly Pick<FireableLine, "id" | "parentLineId">[];
   }[],
   mode: LateUnsentMode,
+  routing = routingOnce(tx, new Date()),
 ): Promise<void> {
   const byDepartment = new Map<string, LateUnsentDish[]>();
   for (const { orderId, lines } of bills) {
-    const judged = await judgeLateUnsent(tx, orderId, lines);
+    const judged = await judgeLateUnsent(
+      tx,
+      orderId,
+      lines,
+      routing,
+      mode === "mark" || !mode.periodOnly,
+    );
     if (judged === null) continue;
     byDepartment.set(judged.departmentId, [
       ...(byDepartment.get(judged.departmentId) ?? []),
@@ -114,6 +121,8 @@ async function judgeLateUnsent(
   tx: Transaction,
   orderId: string,
   lines: readonly Pick<FireableLine, "id" | "parentLineId">[],
+  routing: ReturnType<typeof routingOnce>,
+  checkCutoffs: boolean,
 ): Promise<{ departmentId: string; late: LateUnsentDish[] } | null> {
   if (lines.length === 0) return null;
   const order = await VENUE_SERVICE.findOrderContext(tx, orderId);
@@ -146,32 +155,78 @@ async function judgeLateUnsent(
       })),
   ];
   if (pending.length === 0) return null;
-  const now = new Date();
+  const { at: now } = routing;
   const zone = await VENUE_SERVICE.resolveZoneContext(tx, order.zoneId);
   const service = await VENUE_SERVICE.resolveDepartmentService(tx, zone.departmentId, now);
   const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu]));
   const contexts = await VENUE_SERVICE.listLineContexts(tx, orderId);
   const contextOf = new Map(contexts.map((context) => [context.workingOrderLineId, context]));
+  const settings = new Map([[service.departmentId, checkCutoffs ? service.lastOrders : undefined]]);
+  for (const { lineId } of checkCutoffs ? pending : []) {
+    const departmentId = contextOf.get(lineId)?.departmentId;
+    if (departmentId !== undefined && !settings.has(departmentId))
+      settings.set(departmentId, await (await routing()).lastOrdersFor(departmentId));
+  }
+  const routed = new Map<string, LastOrdersDecision>();
+  if ([...settings.values()].some((service) => service !== undefined)) {
+    const stored = await tx
+      .select({ id: workingOrderLines.id, productId: workingOrderLines.productId })
+      .from(workingOrderLines)
+      .where(
+        inArray(
+          workingOrderLines.id,
+          pending.map(({ dishId }) => dishId),
+        ),
+      );
+    const productOf = new Map(stored.map(({ id, productId }) => [id, productId]));
+    const candidates = pending.flatMap(({ lineId, dishId }) => {
+      const context = contextOf.get(lineId);
+      const productId = productOf.get(dishId);
+      return context === undefined || productId == null
+        ? []
+        : [{ key: lineId, menuId: context.menuId, productId, departmentId: context.departmentId }];
+    });
+    for (const [departmentId, service] of settings) {
+      const dishes = candidates.filter((line) => line.departmentId === departmentId);
+      for (const [id, decision] of await lastOrderDishes(service, zone.zoneId, dishes, routing))
+        routed.set(id, decision);
+    }
+  }
+  const cutoffLate: LateUnsentDish[] = [];
   const ended: LateUnsentDish[] = [];
   const unplaced: { line: (typeof pending)[number]; context: LineContext }[] = [];
   for (const line of pending) {
     const context = contextOf.get(line.lineId);
-    if (context === undefined || service.orderableMenuIds.includes(context.menuId)) continue;
+    if (context === undefined) continue;
+    const decision = routed.get(line.lineId);
+    if (decision !== undefined) {
+      if (decision.stopped && decision.route.kind === "station")
+        cutoffLate.push({
+          ...line,
+          menuId: context.menuId,
+          menuItemId: context.menuItemId,
+          ...decision.run,
+        });
+      continue;
+    }
+    if (service.orderableMenuIds.includes(context.menuId)) continue;
     const period = periodOf.get(context.menuId);
     if (period === undefined) unplaced.push({ line, context });
     else ended.push({ ...line, ...period, menuItemId: context.menuItemId });
   }
   ended.push(...(await unplacedLateDishes(tx, orderId, service, unplaced, now)));
-  if (ended.length === 0) return null;
-  const dishes = await tx
-    .select({
-      id: workingOrderLines.id,
-      productId: workingOrderLines.productId,
-      parentProductId: products.parentId,
-    })
-    .from(workingOrderLines)
-    .innerJoin(products, eq(products.id, workingOrderLines.productId))
-    .where(inArray(workingOrderLines.id, [...new Set(ended.map(({ dishId }) => dishId))]));
+  const dishes =
+    ended.length === 0
+      ? []
+      : await tx
+          .select({
+            id: workingOrderLines.id,
+            productId: workingOrderLines.productId,
+            parentProductId: products.parentId,
+          })
+          .from(workingOrderLines)
+          .innerJoin(products, eq(products.id, workingOrderLines.productId))
+          .where(inArray(workingOrderLines.id, [...new Set(ended.map(({ dishId }) => dishId))]));
   const soldAs = new Map(
     dishes.map((dish) => [
       dish.id,
@@ -180,16 +235,19 @@ async function judgeLateUnsent(
         : { productId: dish.parentProductId, variantId: dish.productId! },
     ]),
   );
-  const alsoSold = await VENUE_SERVICE.productsOfferedIn(
-    tx,
-    zone.zoneId,
-    service.orderableMenuIds,
-    [...soldAs.values()],
-  );
-  const late = ended.filter(({ dishId }) => {
-    const sold = soldAs.get(dishId)!;
-    return !alsoSold.has(offeredKey(sold.productId, sold.variantId));
-  });
+  const alsoSold =
+    ended.length === 0
+      ? new Set<string>()
+      : await VENUE_SERVICE.productsOfferedIn(tx, zone.zoneId, service.orderableMenuIds, [
+          ...soldAs.values(),
+        ]);
+  const late = [
+    ...cutoffLate,
+    ...ended.filter(({ dishId }) => {
+      const sold = soldAs.get(dishId)!;
+      return !alsoSold.has(offeredKey(sold.productId, sold.variantId));
+    }),
+  ];
   if (late.length === 0) return null;
   // A late dish's extras are judged with it, as entry marks them with it.
   const lateDish = new Map(late.map((dish) => [dish.lineId, dish]));

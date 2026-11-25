@@ -37,7 +37,7 @@ import { readLineCancellations } from "./line-service-state.js";
 import { runServiceCommand } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import { bumpRevisionKeepingPayment } from "./working-order-edit-state.js";
-import { makersByLine } from "./working-order-kitchen-fire.js";
+import { lastOrderLineColumns, makersByLine } from "./working-order-kitchen-fire.js";
 import { readOrderRevision } from "./working-order-context.js";
 import type { RoutingOnce } from "./working-order-kitchen-fire.js";
 import "./errors.js";
@@ -79,6 +79,7 @@ export async function rerouteHeldAtRelease(
       parentLineId: workingOrderLines.parentLineId,
       productId: workingOrderLines.productId,
       latePeriodId: workingOrderLines.latePeriodId,
+      ...lastOrderLineColumns,
       makeAtStationId: workingOrderLines.makeAtStationId,
       groupId: workingOrderLines.groupId,
       quantity: firedQuantity,
@@ -145,7 +146,7 @@ export async function rerouteHeldAtRelease(
   const routes = await makersByLine(
     resolver,
     zoneId,
-    dishes.map(({ lineId, productId, latePeriodId }) => ({ id: lineId, productId, latePeriodId })),
+    dishes.map((dish) => ({ ...dish, id: dish.lineId })),
   );
   const moving = dishes.flatMap((row) => {
     const outcome = routes.get(row.lineId);

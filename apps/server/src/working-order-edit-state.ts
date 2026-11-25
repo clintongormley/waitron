@@ -127,6 +127,7 @@ export interface EditableLine {
 /** A stored dish line, its extras children and the offer it was sold through. */
 export interface EditableParent extends EditableLine {
   menuItemId: string | undefined;
+  offerDepartmentId?: string;
   children: EditableLine[];
 }
 export interface EditableOrder {
@@ -367,17 +368,18 @@ export async function readEditableOrder(tx: Transaction, orderId: string): Promi
           },
     servedQuantity: row.servedQuantity,
   }));
-  const menuItemByLine = new Map(
+  const contextByLine = new Map(
     (await VENUE_SERVICE.listLineContexts(tx, orderId)).map((line) => [
       line.workingOrderLineId,
-      line.menuItemId,
+      line,
     ]),
   );
   const parents = lines
     .filter((line) => line.parentLineId === null && line.setMenuRole !== "set_menu")
     .map((line) => ({
       ...line,
-      menuItemId: menuItemByLine.get(line.id),
+      menuItemId: contextByLine.get(line.id)?.menuItemId,
+      offerDepartmentId: contextByLine.get(line.id)?.departmentId,
       children: lines.filter((child) => child.parentLineId === line.id),
     }));
   const partyId = await partyOfOrder(tx, orderId);

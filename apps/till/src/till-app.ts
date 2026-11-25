@@ -1397,6 +1397,7 @@ const UNSELLABLE_LINE_REFUSALS = new Set([
 
 function periodRefusal(error: unknown): CounterError | undefined {
   const { code, menuId } = (error ?? {}) as { code?: unknown; menuId?: unknown };
+  if (code === "menu_period.last_orders") return { code };
   if (code !== "menu_period.not_running") return undefined;
   return { code, ...(typeof menuId === "string" ? { menuId } : {}) };
 }

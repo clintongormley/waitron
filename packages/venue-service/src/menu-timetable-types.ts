@@ -1,3 +1,4 @@
+import type { LastOrderService } from "@waitron/module";
 import type { BusinessDayScheduleStatus } from "./service-day-context.js";
 // Browser-safe: types only, no database or server imports.
 import type { ClosedRange, ServiceRange } from "./service-day.js";
@@ -42,6 +43,7 @@ export interface DepartmentService {
   customerMenuId: string | null;
   orderableMenuIds: readonly string[];
   endedMenus: readonly { menuId: string; periodId: string; periodName: string }[];
+  lastOrders?: LastOrderService;
   readonly keepOpen: {
     periodId: string;
     periodName: string;

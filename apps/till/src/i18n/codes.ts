@@ -191,6 +191,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "That menu is not available in the current period.",
     es: "Esa carta no está disponible en el periodo actual.",
   },
+  "menu_period.last_orders": {
+    en: "Last orders have passed for this item. Keep the original quantity or add it as a new item",
+    es: "Ya ha pasado la hora del último pedido de este artículo. Mantén la cantidad original o añádelo como otro artículo",
+  },
   "menu_period.ended": {
     en: "A dish's period has ended. Review the order and remove dishes from ended periods before sending again.",
     es: "Ha terminado el periodo de un plato. Revisa el pedido y quita los platos de periodos terminados antes de volver a enviarlo.",

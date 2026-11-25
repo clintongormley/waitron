@@ -5,6 +5,7 @@ import {
   departments,
   floorZones,
   kitchenStations,
+  menuPeriods,
   products,
   readVenueClock,
   routingCellPeriods,
@@ -21,6 +22,7 @@ import {
   parentJoin,
   parentProducts,
   productWithId,
+  readLiveDocuments,
   readOfferedExtraItemIds,
   staffPresentationName,
 } from "@waitron/menu";
@@ -63,6 +65,7 @@ import { resolveDepartmentService } from "./menu-timetable.js";
 import "./errors.js";
 import type {
   ExtraMakerOutcome,
+  LastOrderService,
   MakerOutcome,
   MakerResolver,
   StationTodayState,
@@ -861,7 +864,7 @@ export async function routingAt(
       (await resolveDepartmentService(tx, departmentId, at)).periodId,
   }: { runningPeriod?: (departmentId: string) => Promise<string | null> } = {},
 ): Promise<MakerResolver> {
-  const { moment } = await clockAt(tx, at);
+  const { clock, moment } = await clockAt(tx, at);
   const snapshotted = await snapshot(tx, scopeAt(moment));
   const { stations } = snapshotted;
   const zoneDepartment = new Map<string, string>();
@@ -881,14 +884,20 @@ export async function routingAt(
         (await readPeriods(tx)).map(({ id, departmentId }) => [id, departmentId]),
       );
   };
-  const momentFor = (zoneId: string | null, periodId: string | null | undefined) => {
+  const momentFor = (zoneId: string | null, periodId: Parameters<MakerResolver["makers"]>[2]) => {
     if (routedMoment === null || zoneId === null || periodId == null) return routedMoment;
     const departmentId = zoneDepartment.get(zoneId);
+    if (typeof periodId === "object")
+      return periodId.otherTimeIn === departmentId
+        ? { ...routedMoment, periods: new Map() }
+        : routedMoment;
     if (departmentId === undefined || agreementDepartments?.get(periodId) !== departmentId)
       return routedMoment;
     return { ...routedMoment, periods: new Map([[departmentId, periodId]]) };
   };
   let stationNames: ReadonlyMap<string, StationTodayState> | undefined;
+  let withOffsets: Set<string> | undefined;
+  const lastOrders = new Map<string, LastOrderService | undefined>();
   const productFacts = async (productIds: readonly string[]) => {
     const spellingByUuid = new Map<string, string>();
     for (const id of productIds) {
@@ -923,6 +932,44 @@ export async function routingAt(
   };
   return {
     at,
+    async lastOrdersFor(departmentId) {
+      if (moment === null) return undefined;
+      withOffsets ??= new Set(
+        (
+          await tx
+            .selectDistinct({ id: menuPeriods.departmentId })
+            .from(menuPeriods)
+            .innerJoin(departments, eq(departments.id, menuPeriods.departmentId))
+            .where(
+              and(
+                eq(departments.active, true),
+                sql`json_array_length(${menuPeriods.lastOrders}) > 0`,
+              ),
+            )
+        ).map(({ id }) => id),
+      );
+      if (!withOffsets.has(departmentId)) return undefined;
+      if (!lastOrders.has(departmentId))
+        lastOrders.set(
+          departmentId,
+          (await resolveDepartmentService(tx, departmentId, at, { clock })).lastOrders,
+        );
+      return lastOrders.get(departmentId);
+    },
+    async productsSoldIn(menuIds) {
+      const sold = new Set<string>();
+      for (const { document } of (await readLiveDocuments(tx, menuIds)).values()) {
+        const offers = [
+          ...documentOffers(document).filter(({ ordering }) => ordering !== "not_sold_separately"),
+          ...documentSetMenuOffers(document),
+        ];
+        for (const offer of offers) {
+          sold.add(offer.productId);
+          for (const { id } of offer.variants) sold.add(id);
+        }
+      }
+      return sold;
+    },
     async stations() {
       return (stationNames ??= new Map(
         stations.map((station) => [
@@ -939,7 +986,7 @@ export async function routingAt(
     async makers(zoneId, productIds, periodId) {
       const outcomes = new Map<string, MakerOutcome>();
       if (productIds.length === 0) return outcomes;
-      await enterZone(zoneId, periodId != null);
+      await enterZone(zoneId, typeof periodId === "string");
       const { spellingByUuid, facts } = await productFacts(productIds);
       const selectedMoment = momentFor(zoneId, periodId);
       for (const [uuid, id] of spellingByUuid) {

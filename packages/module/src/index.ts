@@ -58,6 +58,8 @@ export type {
   ZoneSetMenus,
   ZoneUnavailable,
   PreparationRoute,
+  LastOrderRun,
+  LastOrderService,
   MakerOutcome,
   ExtraMakerOutcome,
   MakerResolver,

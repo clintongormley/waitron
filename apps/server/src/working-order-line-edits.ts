@@ -94,6 +94,7 @@ import {
   extrasListsFor,
   STORED_SET_MENU_OFFER,
   STORED_RISE,
+  STORED_DEPARTMENT,
   FROZEN_OPTIONS,
   FROZEN_EXTRAS,
   ADDED_EXTRAS_ONLY,
@@ -460,6 +461,7 @@ export async function applyLineEdits(
       [STORED_SET_MENU_OFFER]: storedOffer,
       [RETAINED_COURSE]: true,
       [STORED_RISE]: true,
+      [STORED_DEPARTMENT]: parent.offerDepartmentId,
       courseId: parent.courseId,
       menuItemId: menuItemOf(parent),
       ...variantOf(parent),
@@ -509,11 +511,12 @@ export async function applyLineEdits(
         [FROZEN_OPTIONS]: [],
         [FROZEN_EXTRAS]: extras.added,
         [ADDED_EXTRAS_ONLY]: true,
+        [STORED_DEPARTMENT]: parent.offerDepartmentId,
         [STORED_SET_MENU_OFFER]: storedOffer,
         ...([parent, ...parent.children].some(
           (part) => part.sentAt !== null || part.ticket !== null,
         )
-          ? { [ON_SENT_DISH]: true }
+          ? { [ON_SENT_DISH]: { stationId: parent.ticket?.stationId ?? null } }
           : {}),
       });
       pricedAs.push({ kind: "extras" });
@@ -566,6 +569,8 @@ export async function applyLineEdits(
     "ignore",
     "added",
     lateSend,
+    undefined,
+    routing,
   );
   const groups: {
     rows: WorkingOrderLineInsert[];

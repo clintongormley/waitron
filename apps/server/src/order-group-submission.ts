@@ -199,6 +199,7 @@ export async function placeGroups(
   const lines = input.groups.flatMap((group) => group.lines);
   const empty = (group: PlaceGroupsInput["groups"][number]) =>
     group.lines.length === 0 && (group.existingLineIds?.length ?? 0) === 0;
+  const routing = routingOnce(tx, new Date());
   const priced =
     lines.length === 0 && !groups.some(empty)
       ? null
@@ -209,6 +210,7 @@ export async function placeGroups(
           empty(groups[0]!) ? [] : lines,
           "checked",
           input.lateSend,
+          routing,
         );
   if (groups.some(empty)) {
     throw new AppError("sale.empty_basket", {});
@@ -301,7 +303,6 @@ export async function placeGroups(
     );
   }
   await beforeOutput?.(portionsOfLine);
-  const routing = routingOnce(tx, new Date());
   for (const [i, group] of groups.entries()) {
     const groupId = groupIds[i]!;
     const fire = group.release === "fire";

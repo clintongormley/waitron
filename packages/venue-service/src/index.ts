@@ -57,6 +57,7 @@ export { VENUE_SERVICE_ALERTS } from "./alerts.js";
 export { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 export * from "./routing.js";
 export * from "./routing-store.js";
+export { lastOrderDishes, type LastOrdersDecision } from "./last-orders.js";
 export * from "./station-times.js";
 export { type HolidayReader } from "./hours.js";
 export {

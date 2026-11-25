@@ -57,7 +57,12 @@ import {
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import { clearGroups, refuseHeldLeavingParty } from "./working-order-transfer.js";
 import { lateUnsentDishes } from "./working-order-late-send.js";
-import { assertSendable, fireLines, unsentDishLines } from "./working-order-kitchen-fire.js";
+import {
+  assertSendable,
+  fireLines,
+  unsentDishLines,
+  routingOnce,
+} from "./working-order-kitchen-fire.js";
 import type { OrderAttendance } from "./working-order-context.js";
 import "./errors.js";
 
@@ -646,8 +651,9 @@ async function adoptZone(
     tx,
     unsent.map((line) => line.id),
   );
-  await lateUnsentDishes(tx, billId, unsent, "mark");
-  await fireLines(tx, cfg, billId, unsent);
+  const routing = routingOnce(tx, new Date());
+  await lateUnsentDishes(tx, billId, unsent, "mark", routing);
+  await fireLines(tx, cfg, billId, unsent, { routing });
 }
 
 export async function moveWouldSend(

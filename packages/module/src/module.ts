@@ -471,6 +471,21 @@ export interface ZoneMenuOfferVariant {
 export type PreparationRoute =
   { readonly kind: "station"; readonly stationId: string } | { readonly kind: "no_preparation" };
 
+export interface LastOrderRun {
+  periodId: string;
+  periodName: string;
+  menuIds: readonly string[];
+  start: number;
+  end: number;
+  offsets: readonly (PreparationRoute & { minutes: number })[];
+}
+
+export interface LastOrderService {
+  departmentId: string;
+  minute: number;
+  runs: readonly LastOrderRun[];
+}
+
 /** What the rules say for one product at one moment. */
 export type MakerOutcome =
   | { readonly kind: "made"; readonly route: PreparationRoute }
@@ -511,16 +526,18 @@ export interface StationTodayState {
  *  transaction it was opened on. Use the resolver only inside that transaction. */
 export interface MakerResolver {
   readonly at: Date;
+  lastOrdersFor(departmentId: string): Promise<LastOrderService | undefined>;
+  productsSoldIn(menuIds: readonly string[]): Promise<ReadonlySet<string>>;
   /** Station states from this resolver's rules and moment, including switched-off stations. */
   stations(): Promise<ReadonlyMap<string, StationTodayState>>;
   /** Answers for an order in `zoneId` (null: no service zone). An unknown zone throws
    *  `service_zone.not_found` before an unknown product throws `route.subject_not_found`.
    *  Keys preserve the first caller spelling of each product id. An agreed period applies only
-   *  in its own department. */
+   *  in its own department. `otherTimeIn` selects that department’s Any other time route. */
   makers(
     zoneId: string | null,
     productIds: readonly string[],
-    periodId?: string | null,
+    periodId?: string | null | { otherTimeIn: string },
   ): Promise<ReadonlyMap<string, MakerOutcome>>;
   /** Answers by pick key. `dishStationId` is the dish's final station, null for no preparation.
    *  Unknown zones and products are refused as in `makers`. An empty list reads nothing. */
@@ -886,6 +903,7 @@ export interface VenueServiceContribution {
     departmentId: string;
     orderableMenuIds: readonly string[];
     endedMenus: readonly { menuId: string; periodId: string; periodName: string }[];
+    lastOrders?: LastOrderService;
   }>;
   /**
    * `${productId}:${variantId ?? ""}` for each item that the live version of some listed menu of

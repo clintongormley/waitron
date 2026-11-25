@@ -41,7 +41,7 @@ import {
   centsToDecimal,
 } from "@waitron/shared";
 import { setMenuALaCartePrices } from "@waitron/orders-sales/a-la-carte-price.js";
-import { offeredKey } from "@waitron/venue-service";
+import { lastOrderDishes, offeredKey, type LastOrdersDecision } from "@waitron/venue-service";
 import { and, inArray, eq, sql } from "drizzle-orm";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import type { LateSendConfirmation } from "./late-send.js";
@@ -66,6 +66,7 @@ import {
 } from "./set-menu-offers.js";
 import type { OrderLineIdentity } from "./stored-order-lines.js";
 import type { TradingContext } from "./trading-context.js";
+import { routingOnce } from "./working-order-kitchen-fire.js";
 import { type EndedMenu, confirmLateDishes } from "./working-order-late-send.js";
 import { takesExtras } from "@waitron/menu/src/unit-extras.js";
 
@@ -247,10 +248,11 @@ export const ADDED_EXTRAS_ONLY = Symbol("addedExtrasOnly");
  */
 export const ON_SENT_DISH = Symbol("onSentDish");
 /**
- * Marks a requested line that prices a raised quantity of a stored line: after its period it is
- * refused `menu_period.not_running`, never late and never also sold. A symbol, so no JSON body can set it.
+ * A raised stored quantity follows its own cutoff. The confirmation for adding a dish cannot
+ * approve a rise. A symbol, so no JSON body can set it.
  */
 export const STORED_RISE = Symbol("storedRise");
+export const STORED_DEPARTMENT = Symbol("storedDepartment");
 // Answers an edit has already settled: symbols, so no JSON body can set them.
 export const FROZEN_OPTIONS = Symbol("frozenOptions");
 export const FROZEN_EXTRAS = Symbol("frozenExtras");
@@ -277,7 +279,8 @@ export async function priceOrderLines(
     [FROZEN_OPTIONS]?: OptionSnapshot[];
     [FROZEN_EXTRAS]?: ExtraChild[];
     [ADDED_EXTRAS_ONLY]?: true;
-    [ON_SENT_DISH]?: true;
+    [ON_SENT_DISH]?: { stationId: string | null };
+    [STORED_DEPARTMENT]?: string;
     [STORED_RISE]?: true;
   } & LineExtras &
     RetainedCourseLine)[],
@@ -288,6 +291,7 @@ export async function priceOrderLines(
   periodCheck: "added" | "none" = "added",
   lateSend?: LateSendConfirmation,
   unwrittenBill?: Parameters<typeof refuseUnlessSetMenuBill>[2],
+  routing = routingOnce(tx, new Date()),
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
   /** Aligned with `lineRows`: a dish sold in whole portions, which may be split one per dish. */
@@ -302,7 +306,7 @@ export async function priceOrderLines(
   setMenuLinks: SetMenuLinks;
 }> {
   // Pricing and linking share one clock reading, so the menus that sold a dish are the ones it links.
-  const at = new Date();
+  const { at } = routing;
   if (requestedLines.length === 0) {
     return {
       setMenuLinks: { zoneId, selling: at, dishes: [] },
@@ -360,10 +364,11 @@ export async function priceOrderLines(
   let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
   // Dishes and extras added to sent dishes can be marked when their menu ended earlier today.
   const ended = new Map<(typeof requestedLines)[number], EndedMenu>();
+  const cutoffs = new Map<(typeof requestedLines)[number], LastOrdersDecision>();
   let alsoSold: ReadonlySet<string> = new Set();
   const marks = new Map<number, NonNullable<LineContextInput["late"]>>();
   const checked = (line: (typeof requestedLines)[number]) =>
-    line[ADDED_EXTRAS_ONLY] !== true || line[ON_SENT_DISH] === true;
+    line[ADDED_EXTRAS_ONLY] !== true || line[ON_SENT_DISH] !== undefined;
   if (periodCheck === "added" && requestedLines.some(checked)) {
     const context = await VENUE_SERVICE.resolveZoneContext(tx, zoneId!);
     // Extras added to a stored dish are not new service, so a closed zone does not refuse them;
@@ -373,6 +378,8 @@ export async function priceOrderLines(
     service = await VENUE_SERVICE.resolveDepartmentService(tx, context.departmentId, at);
     const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu]));
     const items: { productId: string; variantId: string | null }[] = [];
+    type Candidate = Parameters<typeof lastOrderDishes<(typeof requestedLines)[number]>>[2][number];
+    const candidates = new Map<string, Candidate[]>();
     for (const line of requestedLines) {
       const selected = selectedSetMenu(line);
       if (selected?.fromRecordedCopy === true) continue;
@@ -380,6 +387,18 @@ export async function priceOrderLines(
         selected?.offer ??
         (line[SET_MENU_DRAFT_LINE] === undefined ? offerById.get(line.menuItemId) : undefined);
       if (offer === undefined) continue;
+      if (checked(line)) {
+        const departmentId = line[STORED_DEPARTMENT] ?? context.departmentId;
+        const group = candidates.get(departmentId) ?? [];
+        group.push({
+          key: line,
+          menuId: offer.menuId,
+          productId: line.variantId ?? offer.productId,
+          stationId: line[ON_SENT_DISH]?.stationId,
+          sourceOnly: line[STORED_RISE],
+        });
+        candidates.set(departmentId, group);
+      }
       const period = periodOf.get(offer.menuId);
       if (
         period === undefined ||
@@ -390,6 +409,19 @@ export async function priceOrderLines(
         continue;
       ended.set(line, period);
       items.push({ productId: offer.productId, variantId: line.variantId ?? null });
+    }
+    for (const [departmentId, dishes] of candidates) {
+      const settings =
+        departmentId === service.departmentId
+          ? service.lastOrders
+          : await (await routing()).lastOrdersFor(departmentId);
+      for (const [line, decision] of await lastOrderDishes(
+        settings,
+        context.zoneId,
+        dishes,
+        routing,
+      ))
+        cutoffs.set(line, decision);
     }
     if (items.length > 0) {
       alsoSold = await VENUE_SERVICE.productsOfferedIn(
@@ -424,6 +456,7 @@ export async function priceOrderLines(
       });
     }
     const period = ended.get(line);
+    const cutoff = cutoffs.get(line);
     if (
       selected?.fromRecordedCopy === true &&
       service !== null &&
@@ -434,6 +467,11 @@ export async function priceOrderLines(
         const name = service.endedMenus.find(({ menuId }) => menuId === offer.menuId)?.periodName;
         marks.set(index, { periodId: null, periodName: name ?? offer.menuName, confirmedBy: null });
       }
+    } else if (cutoff !== undefined) {
+      if (cutoff.stopped && line[STORED_RISE] === true)
+        throw new AppError("menu_period.last_orders", { menuItemId: offer.id });
+      if (cutoff.stopped && cutoff.route.kind === "station")
+        late.push({ index, menuItemId: offer.id, menuId: offer.menuId, ...cutoff.run });
     } else if (period !== undefined) {
       if (!alsoSold.has(offeredKey(offer.productId, line.variantId ?? null))) {
         late.push({ index, menuItemId: offer.id, ...period });

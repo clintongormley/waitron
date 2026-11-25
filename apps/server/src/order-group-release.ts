@@ -51,6 +51,7 @@ async function judgeHeldSetMenuDishes(
     sentAt: string | null;
   }[],
   lateSend: LateSendConfirmation | undefined,
+  routing: ReturnType<typeof routingOnce>,
 ): Promise<void> {
   // Ordered from a set-menu folder, whatever the grouping made of it.
   const dishes = lines.filter(({ setMenuId }) => setMenuId !== null);
@@ -74,7 +75,8 @@ async function judgeHeldSetMenuDishes(
   await lateUnsentDishesOf(
     tx,
     [...bills].map(([orderId, lines]) => ({ orderId, lines })),
-    { ask: lateSend },
+    { ask: lateSend, periodOnly: true },
+    routing,
   );
 }
 /**
@@ -213,7 +215,7 @@ export async function fireHeldLine(
         args.allergy,
         args.operatorId,
       );
-      await judgeHeldSetMenuDishes(tx, lines, args.lateSend);
+      await judgeHeldSetMenuDishes(tx, lines, args.lateSend, routing);
       const source = line.groupId!;
       const printed = (await printedHeldGroups(tx, [source])).get(source);
       const heldPaper = (await heldPaperStations(tx, [source])).get(source) ?? new Set<string>();
@@ -371,7 +373,7 @@ async function releaseGroup(
   active ??= await activeGroupLines(tx, groupId);
   if (active.length === 0) throw new AppError("management.request_invalid", { field: "groupId" });
   await assertPartyAllergyAnswered(tx, partyId);
-  if (late !== undefined) await judgeHeldSetMenuDishes(tx, active, late.ask);
+  if (late !== undefined) await judgeHeldSetMenuDishes(tx, active, late.ask, routing);
   const byOrder = new Map<string, string[]>();
   for (const line of active) {
     byOrder.set(line.workingOrderId, [...(byOrder.get(line.workingOrderId) ?? []), line.id]);
