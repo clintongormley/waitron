@@ -96,7 +96,7 @@ export const en = {
   "cancel_item.no": "No",
   "cancel_item.started": "Already being prepared or served",
   "cancel_item.refund_at_till":
-    "Refund the payment at a till: choose Refund a payment on the receipt.",
+    "Give the money back at a till: choose Give money back on the receipt.",
   "cancel_item.paid": "This bill is closed",
   "cancel_item.choice": "What happens to the charge?",
   "cancel_item.still_charge": "Cancel, still charge",
@@ -104,7 +104,7 @@ export const en = {
   "cancel_item.refund": "Cancel and refund {amount}",
   "cancel_item.with_free": "Comes back with it, given free: {dishes}",
   "cancel_item.free_served":
-    "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then give the money back with Correct invoice on the receipt.",
+    "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then open Give money back on the receipt.",
   "cancel_item.unavailable": "This dish cannot be cancelled here.",
 
   "device_zones.title": "Zones on this device",
@@ -1997,7 +1997,7 @@ export const en = {
   "meal_end.not_admitted":
     "This device's profile no longer lets you work on it, so it cannot print the bill for you. Log in on a device whose profile allows it.",
   "meal_end.unserved_no_mark":
-    "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Correct invoice.",
+    "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Give money back.",
   "meal_end.unconfirmed":
     "Print the bill got no answer, so the bill may have been printed. Check this bill before trying again.",
   "meal_end.refused":
@@ -2566,7 +2566,7 @@ export const es: Record<StringKey, string> = {
   "cancel_item.yes": "Sí",
   "cancel_item.no": "No",
   "cancel_item.started": "Ya se está preparando o se ha servido",
-  "cancel_item.refund_at_till": "Devuelve el dinero en una caja: Devolver un pago, en el recibo.",
+  "cancel_item.refund_at_till": "Devuelve el dinero en una caja: Devolver dinero, en el recibo.",
   "cancel_item.paid": "Esta cuenta ya está cerrada",
   "cancel_item.choice": "¿Qué pasa con el cobro?",
   "cancel_item.still_charge": "Cancelar y cobrar",
@@ -2574,7 +2574,7 @@ export const es: Record<StringKey, string> = {
   "cancel_item.refund": "Cancelar y devolver {amount}",
   "cancel_item.with_free": "Vuelve con él, por invitación: {dishes}",
   "cancel_item.free_served":
-    "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuelve el dinero con Rectificar factura en el recibo.",
+    "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después abre Devolver dinero en el recibo.",
   "cancel_item.unavailable": "Este plato no se puede cancelar aquí.",
 
   "device_zones.title": "Zonas en este dispositivo",
@@ -4443,7 +4443,7 @@ export const es: Record<StringKey, string> = {
   "meal_end.not_admitted":
     "El perfil de este dispositivo ya no te deja trabajar en él, así que no puede imprimir la cuenta por ti. Inicia sesión en un dispositivo cuyo perfil te admita.",
   "meal_end.unserved_no_mark":
-    "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
+    "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Devolver dinero.",
   "meal_end.unconfirmed":
     "Imprimir la cuenta no obtuvo respuesta, así que puede que se haya impreso. Revisa esta cuenta antes de volver a intentarlo.",
   "meal_end.refused":

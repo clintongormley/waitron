@@ -498,11 +498,11 @@ describe("Print the bill's own sentences", () => {
   it.each([
     [
       "en-GB",
-      "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Correct invoice.",
+      "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Give money back.",
     ],
     [
       "es-ES",
-      "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
+      "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Devolver dinero.",
     ],
   ])("offers no Mark served where none is drawn, in %s", (locale, message) => {
     expect(catalogues[locale]?.["meal_end.unserved_no_mark"]).toBe(message);
@@ -581,12 +581,12 @@ describe("the Finish table and Cancel item lines on a dish given free", () => {
     [
       "en-GB",
       "cancel_item.free_served",
-      "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then give the money back with Correct invoice on the receipt.",
+      "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then open Give money back on the receipt.",
     ],
     [
       "es-ES",
       "cancel_item.free_served",
-      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuelve el dinero con Rectificar factura en el recibo.",
+      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después abre Devolver dinero en el recibo.",
     ],
   ])("reads in %s for %s", (locale, key, line) => {
     expect(catalogues[locale]?.[key as StringKey]).toBe(line);

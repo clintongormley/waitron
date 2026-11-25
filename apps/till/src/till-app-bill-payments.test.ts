@@ -8122,7 +8122,7 @@ describe("till-app: giving back a bill payment", () => {
 
     expect(refundBillPayment).toHaveBeenCalledOnce();
     expect(inRefund(el, "wt-form-actions")!.error).toBe(
-      "This payment on account was already taken off the table's receipt A/45, so this ticket cannot be corrected. To give money back, first use Correct invoice on A/45: it takes the amount off the dishes at their own VAT rates, files a corrective invoice and gives back money paid on A/45. For anything more, choose Refund a payment on this ticket: it gives money back from this payment and files no corrective invoice; the accountant's export lists it.",
+      "This payment on account was already taken off the table's receipt A/45, so money cannot go back from this ticket yet. First give money back with Give money back on A/45: it gives back money paid on A/45. Once nothing paid on A/45 is left, Give money back on this ticket gives back the rest.",
     );
     expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-give-back-dialog")).toBeNull();

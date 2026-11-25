@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { en } from "./strings.js";
-import { codeMessage } from "./codes.js";
+import { en, es } from "./strings.js";
+import { CODE_TABLES, codeMessage } from "./codes.js";
+import { helpEn, helpEs } from "./help-strings.js";
 
 describe("A803 refund wording", () => {
   it.each([
     [
       "cancel_item.refund_at_till",
-      "Refund the payment at a till: choose Refund a payment on the receipt.",
+      "Give the money back at a till: choose Give money back on the receipt.",
     ],
     [
       "held.discard_holds_money",
@@ -78,5 +79,58 @@ describe("A803 refund refusal wording", () => {
     ],
   ] as const)("calls the payment return a refund in %s", (code, wording) => {
     expect(codeMessage(code, "en")).toBe(wording);
+  });
+});
+
+const OLD_EN = /correct invoice\b|refund a payment/i;
+const OLD_ES = /rectificar factura\b|devolver un pago/i;
+
+/** Every `en`/`es` pair the code tables hold, however deeply nested. */
+function pairs(value: unknown, at: string, out: [string, string, string][]): void {
+  if (typeof value !== "object" || value === null) return;
+  const entry = value as Record<string, unknown>;
+  if (typeof entry.en === "string" && typeof entry.es === "string") {
+    out.push([at, entry.en, entry.es]);
+    return;
+  }
+  for (const [key, inner] of Object.entries(entry)) pairs(inner, `${at}.${key}`, out);
+}
+
+describe("Give money back replaces the two old buttons in the till's words", () => {
+  const codes: [string, string, string][] = [];
+  pairs(CODE_TABLES, "codes", codes);
+
+  it.each(codes)("%s names neither old button, nor a corrective", (_, english, spanish) => {
+    expect(english).not.toMatch(OLD_EN);
+    expect(english).not.toMatch(/corrective/i);
+    expect(spanish).not.toMatch(OLD_ES);
+  });
+
+  // The two old windows' own words go with them (plan Task 15); Refund on the Pay window keeps its
+  // own title.
+  const kept = (key: string) =>
+    key.startsWith("invoice_correction.") ||
+    key.startsWith("tender_refund.") ||
+    key === "bill_refund.title";
+
+  it.each(Object.keys(en).filter((key) => !kept(key)))("%s names neither old button", (key) => {
+    expect(en[key as keyof typeof en]).not.toMatch(OLD_EN);
+    expect(es[key as keyof typeof es]).not.toMatch(OLD_ES);
+  });
+
+  it.each(["cancel_item.refund_at_till", "cancel_item.free_served", "meal_end.unserved_no_mark"])(
+    "%s names no corrective",
+    (key) => {
+      expect(en[key as keyof typeof en]).not.toMatch(/corrective/i);
+    },
+  );
+
+  it("words the help bubble in Give money back's terms", () => {
+    expect(helpEn["help.correct_invoice"]).toBe(
+      "Give money back to a guest: for a dish, as goodwill, or the extra paid on top. Waitron records it the right way.",
+    );
+    expect(helpEs["help.correct_invoice"]).toBe(
+      "Devuelve dinero a un cliente: por un plato, por cortesía o lo pagado de más. Waitron lo registra como corresponde.",
+    );
   });
 });
