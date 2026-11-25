@@ -1213,11 +1213,31 @@ describe("only a card's part with no answer counts as lost", () => {
 });
 
 describe("Check again while a card refund waits for the card company", () => {
-  const WAITING: InvoiceCorrectionView = { ...OPEN, pending: "6.05", left: "0.00" };
+  const leg = (over: Partial<TenderRefundView> = {}): TenderRefundView => ({
+    ...refundOf(
+      "sale-1",
+      {
+        submissionId: "s",
+        tenderId: "card-1",
+        appliedAmount: "6.05",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+      },
+      "pending",
+    ),
+    ...over,
+  });
+  const WAITING: InvoiceCorrectionView = {
+    ...OPEN,
+    pending: "6.05",
+    left: "0.00",
+    legs: [leg()],
+  };
   const BACK: InvoiceCorrectionView = {
     ...OPEN,
     moneyBack: "6.05",
     left: "0.00",
+    legs: [leg({ state: "completed" })],
     fileNow: { gross: "6.05", vatBreakdown: SPLIT },
   };
   const settled = (over: Partial<TenderRefundView> = {}): TenderRefundView => ({
@@ -1392,6 +1412,147 @@ describe("Check again while a card refund waits for the card company", () => {
     expect(status(el)).toBe("");
   });
 
+  describe("once the card company answered and what is back cannot be read again", () => {
+    const pendingLine = (el: TillGiveBackUnderWay) =>
+      text(root(el).querySelector("[data-pending]"));
+    const unread = (el: TillGiveBackUnderWay) => text(root(el).querySelector("[data-unread]"));
+    const waits = (amount: string) => t("give_back.pending").replace("{amount}", amount);
+    const ROWS = [CASH_ROW, { ...CARD_ROW, pendingRefundId: "refund-1" }];
+    /** Presses Check again, which answers `answers`, and after which nothing can be read. */
+    async function checkUnread(
+      api: Api,
+      answers: TenderRefundView[],
+      correction = WAITING,
+      rows: RefundableTender[] = ROWS,
+    ) {
+      const { el } = await mount(correction, api);
+      for (const answer of answers) api.retryTenderRefund.mockResolvedValueOnce(answer);
+      api.getInvoiceCorrection.mockResolvedValueOnce(correction).mockRejectedValue(lost());
+      api.getRefundableTenders.mockResolvedValueOnce(rows).mockRejectedValue(lost());
+      press(el, "check");
+      await vi.waitFor(() => expect(api.getInvoiceCorrection).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(idle(el)).toBe(true));
+      return el;
+    }
+
+    it("says the money is back and that the rest could not be read, not that it waits, until it is read", async () => {
+      const api = waitingApi();
+      const el = await checkUnread(api, [settled()]);
+      expect(pendingLine(el)).toBe("");
+      expect(unread(el)).toBe(
+        `${t("give_back.done_card").replace("{amount}", "€6.05").replace("{card}", "···0042")} ${t("tender_refund.read_failed")}`,
+      );
+      expect(bottom(el)).toBe("");
+      press(el, "check");
+      await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.read_failed")));
+      expect(pendingLine(el)).toBe("");
+      api.getInvoiceCorrection.mockResolvedValue(BACK);
+      api.getRefundableTenders.mockResolvedValue(TENDERS);
+      press(el, "check");
+      await vi.waitFor(() =>
+        expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 g"),
+      );
+      await vi.waitFor(() => expect(idle(el)).toBe(true));
+      expect(unread(el)).toBe("");
+      expect(api.retryTenderRefund).toHaveBeenCalledOnce();
+    });
+
+    it("does not say it could not be read while it is being read", async () => {
+      const api = waitingApi();
+      const { el } = await mount(WAITING, api);
+      api.retryTenderRefund.mockResolvedValueOnce(settled());
+      const read = deferred<InvoiceCorrectionView>();
+      api.getInvoiceCorrection
+        .mockResolvedValueOnce(WAITING)
+        .mockImplementationOnce(() => read.promise);
+      press(el, "check");
+      await vi.waitFor(() => expect(api.getInvoiceCorrection).toHaveBeenCalledTimes(2));
+      await el.updateComplete;
+      expect(pendingLine(el)).toBe("");
+      expect(unread(el)).toBe("");
+      read.reject(lost());
+      await vi.waitFor(() => expect(unread(el)).toContain(t("tender_refund.read_failed")));
+    });
+
+    it("says the refund was not made and that the rest could not be read, not that it waits", async () => {
+      const el = await checkUnread(waitingApi(), [settled({ state: "failed" })]);
+      expect(pendingLine(el)).toBe("");
+      expect(bottom(el)).toBe(t("give_back.uw_card_failed"));
+      expect(unread(el)).toBe(`${t("tender_refund.failed")} ${t("tender_refund.read_failed")}`);
+    });
+
+    it("still says the refund was not made once a second Check again cannot read either", async () => {
+      const el = await checkUnread(waitingApi(), [settled({ state: "failed" })]);
+      press(el, "check");
+      await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.read_failed")));
+      await vi.waitFor(() => expect(idle(el)).toBe(true));
+      expect(unread(el)).toContain(t("tender_refund.failed"));
+    });
+
+    it("says only what another refund not answered yet still waits for", async () => {
+      const two: InvoiceCorrectionView = {
+        ...WAITING,
+        legs: [
+          leg({ appliedAmount: "4.00" }),
+          leg({ id: "refund-2", tenderId: "card-2", appliedAmount: "2.05" }),
+        ],
+      };
+      const el = await checkUnread(
+        waitingApi(),
+        [
+          settled({ appliedAmount: "4.00" }),
+          settled({
+            id: "refund-2",
+            tenderId: "card-2",
+            appliedAmount: "2.05",
+            state: "pending",
+          }),
+        ],
+        two,
+        [...ROWS, { ...CARD_ROW, tenderId: "card-2", pendingRefundId: "refund-2" }],
+      );
+      expect(pendingLine(el)).toBe(waits("€2.05"));
+      expect(status(el)).toBe(t("give_back.pending_unanswered"));
+      expect(unread(el)).toContain("€4.00");
+    });
+
+    it("says so, and not that nothing changed, when this till's own saved refund was found settled", async () => {
+      const api = waitingApi();
+      api.refundTransaction.mockImplementationOnce(async (saleId, request) =>
+        refundOf(saleId, request, "pending"),
+      );
+      const refunds = new TenderRefundSession(SCOPE, api);
+      await refunds.submit("sale-1", {
+        tenderId: "card-1",
+        appliedAmount: "6.05",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+        invoiceCorrectionId: "correction-1",
+      });
+      const { el } = await mount(WAITING, api, EVERY_METHOD, refunds);
+      api.getTenderRefund.mockResolvedValueOnce(settled());
+      api.getInvoiceCorrection.mockRejectedValue(lost());
+      api.getRefundableTenders.mockRejectedValue(lost());
+      press(el, "check");
+      await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_unknown")));
+      await vi.waitFor(() => expect(idle(el)).toBe(true));
+      expect(pendingLine(el)).toBe("");
+      expect(unread(el)).toContain("€6.05 is back on card");
+    });
+
+    it("keeps saying it waits while nothing was answered, though the payments were never read", async () => {
+      const api = waitingApi();
+      api.getRefundableTenders.mockRejectedValue(lost());
+      const { el } = await mount(WAITING, api);
+      press(el, "check");
+      await vi.waitFor(() => expect(api.getInvoiceCorrection).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(idle(el)).toBe(true));
+      expect(pendingLine(el)).toBe(waits("€6.05"));
+      expect(unread(el)).toBe("");
+      expect(api.retryTenderRefund).not.toHaveBeenCalled();
+    });
+  });
+
   it("still says the card company has not answered about another refund it has not settled", async () => {
     const api = waitingApi();
     api.getRefundableTenders.mockReset().mockResolvedValue([
@@ -1503,6 +1664,39 @@ describe("Check again while a card refund waits for the card company", () => {
     read.resolve(WAITING);
     await vi.waitFor(() => expect(idle(el)).toBe(true));
     expect(api.retryTenderRefund).not.toHaveBeenCalled();
+  });
+
+  it("asks about no further refund when the view is taken away while one is asked about", async () => {
+    const api = waitingApi();
+    api.getRefundableTenders.mockResolvedValue([
+      { ...CARD_ROW, pendingRefundId: "refund-1" },
+      { ...CARD_ROW, tenderId: "card-2", pendingRefundId: "refund-2" },
+    ]);
+    const { el } = await mount(WAITING, api);
+    const answer = deferred<TenderRefundView>();
+    api.retryTenderRefund.mockImplementationOnce(() => answer.promise);
+    press(el, "check");
+    await vi.waitFor(() => expect(api.retryTenderRefund).toHaveBeenCalledOnce());
+    el.remove();
+    answer.resolve(settled());
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    expect(api.retryTenderRefund.mock.calls.map(([id]) => id)).toEqual(["refund-1"]);
+  });
+
+  it("tells the till the sign-in ended when that refuses a later refund, though one was answered", async () => {
+    const api = waitingApi();
+    api.getRefundableTenders.mockResolvedValue([
+      { ...CARD_ROW, pendingRefundId: "refund-1" },
+      { ...CARD_ROW, tenderId: "card-2", pendingRefundId: "refund-2" },
+    ]);
+    api.retryTenderRefund
+      .mockResolvedValueOnce(settled())
+      .mockRejectedValueOnce(refused("session.not_open"));
+    const { el } = await mount(WAITING, api);
+    const signedOut = vi.fn();
+    el.addEventListener("give-back-signed-out", signedOut);
+    press(el, "check");
+    await vi.waitFor(() => expect(signedOut).toHaveBeenCalledOnce());
   });
 
   it("asks nothing for a card this device's profile does not take, and says it still waits", async () => {

@@ -879,4 +879,43 @@ describe("having the box ask the card company again about what waits on a receip
       .mockRejectedValueOnce(refusal);
     expect(await session.askAgain(both, CARDS)).toMatchObject([{ state: "failed" }]);
   });
+
+  it.each(
+    (["completed", "failed"] as const).flatMap((state) =>
+      ["session.required", "session.not_open"].map((code) => [state, code] as const),
+    ),
+  )(
+    "throws a later refund's refusal for an ended sign-in though one was answered %s (%s), settling that one",
+    async (state, code) => {
+      const api = fakeApi();
+      const session = new TenderRefundSession(scope, api);
+      await session.submit("sale-1", ask);
+      const ended = { code, status: 401 };
+      api.retryTenderRefund.mockResolvedValueOnce(reply({ state })).mockRejectedValueOnce(ended);
+      await expect(
+        session.askAgain(
+          [row(), row({ tenderId: "tender-2", pendingRefundId: "refund-2" })],
+          CARDS,
+        ),
+      ).rejects.toBe(ended);
+      expect(session.read("sale-1")).toBeNull();
+    },
+  );
+
+  it("asks about no further refund once its window is gone, and answers those asked", async () => {
+    const api = fakeApi();
+    let open = true;
+    api.retryTenderRefund.mockImplementationOnce(async (id) => {
+      open = false;
+      return reply({ id, state: "completed" });
+    });
+    const answers = await new TenderRefundSession(scope, api).askAgain(
+      [row(), row({ tenderId: "tender-2", pendingRefundId: "refund-2" })],
+      CARDS,
+      { personId: "boss", pin: "1234" },
+      () => open,
+    );
+    expect(answers).toMatchObject([{ id: "refund-1", state: "completed" }]);
+    expect(api.retryTenderRefund).toHaveBeenCalledOnce();
+  });
 });

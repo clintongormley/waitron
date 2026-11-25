@@ -377,6 +377,24 @@ it.each([
   },
 );
 
+it("asks the card company nothing, and keeps the rest, once its window is gone while the refund's state is read", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce(pendingWithRest);
+  let read!: (value: { state: string }) => void;
+  api.getTenderRefund.mockImplementationOnce(() => new Promise((resolve) => (read = resolve)));
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask);
+  const saved = session.read("sale-1");
+  let open = true;
+  const out = session.checkRest("sale-1", { personId: "boss", pin: "1234" }, () => open);
+  await vi.waitFor(() => expect(api.getTenderRefund).toHaveBeenCalledOnce());
+  open = false;
+  read({ state: "pending" });
+  expect(await out).toEqual({ state: "pending" });
+  expect(api.retryTenderRefund).not.toHaveBeenCalled();
+  expect(session.read("sale-1")).toEqual(saved);
+});
+
 it("asks about a waiting refund once while that is out, and answers it though it cannot be forgotten afterwards", async () => {
   const api = fakeApi();
   api.giveBack.mockResolvedValueOnce({ ...pendingWithRest, rest: null });
@@ -647,6 +665,41 @@ it("answers no Send again from an earlier press once a new press was made", asyn
       session.resend("sale-1", undefined, sent(api, index).submissionIds),
     ).rejects.toMatchObject({ kind: "missing" });
   expect(api.giveBack).toHaveBeenCalledTimes(2);
+});
+
+/** Two tabs on one device: each has a session of its own, and both use the same saved press. */
+describe("Send again once another press is saved on the same receipt", () => {
+  const newer: GiveBackAsk = { ...ask, request: { ...request, amount: "9.00" } };
+  const lost = new TypeError("lost answer");
+
+  it("sends nothing when its own press is no longer saved, and leaves the newer press alone", async () => {
+    const api = fakeApi();
+    api.giveBack.mockRejectedValueOnce(lost);
+    const shown = new GiveBackSession(scope, api);
+    await expect(shown.submit("sale-1", ask)).rejects.toBe(lost);
+    const other = new GiveBackSession(scope, api);
+    await other.resend("sale-1");
+    api.giveBack.mockRejectedValueOnce(lost);
+    await expect(other.submit("sale-1", newer)).rejects.toBe(lost);
+
+    await expect(
+      shown.resend("sale-1", { personId: "boss", pin: "1234" }, sent(api, 0).submissionIds),
+    ).rejects.toMatchObject({ kind: "missing" });
+    expect(api.giveBack).toHaveBeenCalledTimes(3);
+    expect(shown.read("sale-1")?.sent?.submissionIds).toEqual(sent(api, 2).submissionIds);
+    expect(await shown.resend("sale-1", undefined, sent(api, 2).submissionIds)).toEqual(outcome());
+    expect(sent(api, 3).submissionIds).toEqual(sent(api, 2).submissionIds);
+  });
+
+  it("answers as its own press was answered, sending nothing", async () => {
+    const api = fakeApi();
+    const shown = new GiveBackSession(scope, api);
+    await shown.submit("sale-1", ask);
+    api.giveBack.mockRejectedValueOnce(lost);
+    await expect(new GiveBackSession(scope, api).submit("sale-1", newer)).rejects.toBe(lost);
+    expect(await shown.resend("sale-1", undefined, sent(api, 0).submissionIds)).toEqual(outcome());
+    expect(api.giveBack).toHaveBeenCalledTimes(2);
+  });
 });
 
 it("sends a press on one receipt while another receipt's press is out, and Send again takes only its own press's answer", async () => {

@@ -14,13 +14,20 @@ import type {
   GiveBackWay,
 } from "../api/give-back-types.js";
 import type { TenderRefundView } from "../api/tender-refund-types.js";
-import type { GiveBackRest, GiveBackSent, RestCheck } from "../state/give-back.js";
+import {
+  PROVES_NOTHING,
+  sameIds,
+  type GiveBackRest,
+  type GiveBackSent,
+  type RestCheck,
+} from "../state/give-back.js";
 import { recoveryLink, recoveryRefusalText, type RecoveryRefusal } from "./recovery-refusal.js";
 import type { StaffMember, TillApi } from "../api/client.js";
 import type { HoldReloadDetail } from "../screens/till-station-screen.js";
 import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import { refusalOf } from "../state/bill-payment.js";
 import {
+  SIGN_IN_ENDED,
   TenderRefundAttemptError,
   type RefundAskedAgain,
   type TenderRefundSession,
@@ -75,7 +82,7 @@ export function holdingReload<T>(host: HTMLElement, work: () => Promise<T>): Pro
 /** Tells the till the server ended this person's sign-in, so it locks as any ended sign-in does;
  * true when `code` says so. */
 export function signInEnded(host: HTMLElement, code: string): boolean {
-  if (code !== "session.required" && code !== "session.not_open") return false;
+  if (!SIGN_IN_ENDED.has(code)) return false;
   host.dispatchEvent(new CustomEvent("give-back-signed-out", { bubbles: true, composed: true }));
   return true;
 }
@@ -356,15 +363,16 @@ export function checkRefusalText(refusal: ReturnType<typeof refusalOf>): string 
 }
 
 /** What the card company answered about a refund asked about again. */
-function askedAgainText(refund: RefundAskedAgain): string {
+export function askedAgainText(refund: RefundAskedAgain): string {
   if (refund.state === "failed")
     return [t("tender_refund.failed"), ...balanceReason(refund.refusalReason)].join(" ");
   const back = money(sumOf([refund.appliedAmount, refund.tipAmount]));
   return cardBack(back, refund.last4 === null ? "" : `···${refund.last4}`);
 }
 
-/** Check again on the choices: reads the receipt and, while a card refund on it waits, has the box
- * ask the card company again. Answers what to say, and the receipt as last read. */
+/** Check again on the choices: reads the receipt and, while a card refund on it waits and the window
+ * is still `open`, has the box ask the card company again. Answers what to say, and the receipt as
+ * last read. */
 export async function checkReceipt(
   from: {
     api: Pick<TillApi, "readGiveBack" | "getRefundableTenders">;
@@ -372,6 +380,7 @@ export async function checkReceipt(
     saleId: string;
     capabilities: readonly string[];
   },
+  open: () => boolean,
   override?: Override,
 ): Promise<{ view: GiveBackView | null; status: string }> {
   const read = () => from.api.readGiveBack(from.saleId, {});
@@ -384,7 +393,7 @@ export async function checkReceipt(
   }
   if (!view.ways.some((way) => way.pending)) return { view, status: "" };
   const tenders = await from.api.getRefundableTenders(from.saleId, {});
-  const answers = await from.refunds.askAgain(tenders, from.capabilities, override);
+  const answers = await from.refunds.askAgain(tenders, from.capabilities, override, open);
   const said = answers.filter((refund) => refund.state !== "pending").map(askedAgainText);
   if (said.length > 0)
     try {
@@ -405,33 +414,46 @@ export const lostFor = (sent: GiveBackSent): Extract<Step, { kind: "lost" }> => 
   ids: sent.submissionIds,
 });
 
+/** `saved`, unless it is another press than the one `ids` name. */
+const ownPress = (saved: GiveBackSent | null | undefined, ids: GiveBackSubmissionIds | null) =>
+  saved && (ids === null || sameIds(saved.submissionIds, ids)) ? saved : null;
+
 /** A press whose answer is not known: `saved`, the press this device holds, else the one sent
  * with `ids`. */
 export const lostAfter = (
   sending: Pick<Sending, "way" | "needs">,
   saved: GiveBackSent | null | undefined,
   ids: GiveBackSubmissionIds | null = null,
-): Extract<Step, { kind: "lost" }> =>
-  saved
-    ? lostFor(saved)
-    : { kind: "lost", way: sending.way, needs: sending.needs, refusal: null, ids };
+): Extract<Step, { kind: "lost" }> => {
+  const own = ownPress(saved, ids);
+  return own === null
+    ? { kind: "lost", way: sending.way, needs: sending.needs, refusal: null, ids }
+    : lostFor(own);
+};
 
 /** A Send again refused where neither the form nor the choice is drawn to say so. While the press
- * may be written (`saved`, or this device's own refusal, which forgets nothing) it stays the only
- * thing to send, under its ids; otherwise nothing went back under it, and it ends. */
+ * may be written (it is still saved, or the refusal does not prove that nothing went back) it stays
+ * the only thing to send, under its ids; otherwise nothing went back under it, and it ends.
+ * `give_back.changed` is worded for the form, which is not drawn, so only its result is said. */
 export function resendRefused(
   step: Extract<Step, { kind: "lost" }>,
   refusal: ReturnType<typeof refusalOf>,
   saved: GiveBackSent | null | undefined,
 ): Step {
   const { code } = refusal;
-  if (saved || code === "approvers" || code === "storage")
+  if (ownPress(saved, step.ids) !== null || !PROVES_NOTHING.has(code))
     return { ...lostAfter(step, saved, step.ids), said: checkRefusalText(refusal) };
+  const changed = code === "give_back.changed";
   return {
     kind: "done",
     way: step.way,
-    notice: code === "sif.allocation_invalid" ? t("give_back.nothing_given") : null,
-    outcome: { parts: [], refusal: { code, params: { ...refusal } }, underWay: null, rest: null },
+    notice: changed || code === "sif.allocation_invalid" ? t("give_back.nothing_given") : null,
+    outcome: {
+      parts: [],
+      refusal: changed ? null : { code, params: { ...refusal } },
+      underWay: null,
+      rest: null,
+    },
   };
 }
 

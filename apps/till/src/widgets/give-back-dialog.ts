@@ -152,10 +152,13 @@ export class TillGiveBackDialog extends LitElement {
   readonly #beforeClose = async (reason: LeaveReason) =>
     !this.#writing() &&
     (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
-  /** Whether the window is still on the page and not closed: once it is not, nothing more is sent.
-   * A write already sent still reaches its outcome. */
+  /** Whether the window is still on the page and not closed: once it is not, it sends no further
+   * write. A write already sent still reaches its outcome. */
   #open(): boolean {
     return this.isConnected && this.active;
+  }
+  #lost() {
+    return this.step?.kind === "lost" ? this.step : null;
   }
   /** A write in flight keeps the window open until its answer can be shown. */
   #writing(): boolean {
@@ -494,7 +497,7 @@ export class TillGiveBackDialog extends LitElement {
         this.#scope?.commit(this.draft);
         return {
           step: stillStarting(outcome)
-            ? lostAfter({ way, needs }, this.#saved()?.sent)
+            ? lostAfter({ way, needs }, this.#saved()?.sent, this.#lost()?.ids)
             : { kind: "done", outcome, way, notice: null },
         };
       },
@@ -563,17 +566,16 @@ export class TillGiveBackDialog extends LitElement {
   #sendFailed(sending: Sending, error: unknown, override?: Override): void {
     const refusal = sendRefusalOf(error);
     if (signInEnded(this, refusal.code)) return;
-    const lost = this.step?.kind === "lost" ? this.step : null;
     if (
       !sending.check &&
-      (refusal.code === "network" || (refusal.code === "busy" && lost !== null))
+      (refusal.code === "network" || (refusal.code === "busy" && this.#lost() !== null))
     ) {
       this.approvers = null;
       this.approval = undefined;
       this.step =
         refusal.code === "busy"
-          ? { ...lost!, said: t("give_back.busy") }
-          : lostAfter(sending, this.#saved()?.sent, lost?.ids);
+          ? { ...this.#lost()!, said: t("give_back.busy") }
+          : lostAfter(sending, this.#saved()?.sent, this.#lost()?.ids);
     } else if (override !== undefined && APPROVER_PIN_REFUSALS.has(refusal.code))
       this.pinError = approverRefusal(error, override.personId);
     else if (override === undefined && NEEDS_APPROVER.has(refusal.code))
@@ -635,7 +637,7 @@ export class TillGiveBackDialog extends LitElement {
     const { saleId, session } = this;
     return this.#send({
       send: async (override) => {
-        const check = await session.checkRest(saleId, override);
+        const check = await session.checkRest(saleId, override, () => this.#open());
         const preview = check.state === "completed" ? check.preview : null;
         return {
           step: afterCheck(step, check),
@@ -660,7 +662,7 @@ export class TillGiveBackDialog extends LitElement {
     this.sendRefusal = null;
     return this.#send({
       send: async (override) => {
-        const { view, status } = await checkReceipt(this, override);
+        const { view, status } = await checkReceipt(this, () => this.#open(), override);
         this.view = view ?? this.view;
         this.pendingStatus = status;
         return { step: null };
@@ -671,7 +673,6 @@ export class TillGiveBackDialog extends LitElement {
       check: true,
     });
   }
-
   #closed(event: Event): void {
     event.stopPropagation();
     if (event.target !== event.currentTarget) return;

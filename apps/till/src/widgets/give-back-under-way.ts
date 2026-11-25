@@ -1,6 +1,6 @@
 import { LitElement, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { compareDecimal, decimal, formatMoney, sumDecimals } from "@waitron/shared";
+import { compareDecimal, decimal, formatMoney, negateDecimal, sumDecimals } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./supervisor-override-dialog.js";
@@ -12,6 +12,7 @@ import {
 import { giveBackStyles } from "./give-back-styles.js";
 import {
   NEEDS_APPROVER,
+  askedAgainText,
   holdingReload,
   readApprovers,
   recoveryLinkOf,
@@ -104,10 +105,10 @@ export class TillGiveBackUnderWay extends LitElement {
   @state() private cardAnswered = false;
   /** The last Check again found a card refund still waiting. */
   @state() private unanswered = false;
-  /** The step out may have had the box ask the card company. */
+  /** The step out may have had the box ask the card company, or had a card refund's outcome. */
   #asked = false;
-  /** The refunds the card company has answered about here; null stands for no refund. */
-  readonly #settledRefunds = new Set<string | null>([null]);
+  /** The outcome of each refund the card company has answered about here, by its id. */
+  readonly #outcomes = new Map<string, TenderRefundView>();
   #override?: Override;
   #retry?: Retry;
   #lastHeld = false;
@@ -216,12 +217,18 @@ export class TillGiveBackUnderWay extends LitElement {
   async #checkAgain(): Promise<void> {
     if (this.#savedOnReceipt()?.refundId) this.#cardDone(await this.refunds.resume(this.saleId));
     await this.#refresh();
-    if (!this.isConnected) return;
     this.#asked = true;
-    const answers = await this.refunds.askAgain(this.tenders, this.capabilities, this.#override);
+    const answers = await this.refunds.askAgain(
+      this.tenders,
+      this.capabilities,
+      this.#override,
+      () => this.isConnected,
+    );
     for (const answer of answers) this.#cardDone(answer);
     if (answers.length > 0) await this.#refreshAfter();
-    this.unanswered = this.tenders.some((row) => !this.#settledRefunds.has(row.pendingRefundId));
+    this.unanswered = this.tenders.some(
+      ({ pendingRefundId: id }) => id !== null && !this.#outcomes.has(id),
+    );
   }
   /** Runs `step`, asking for an approver when the person signed in may not, and running it again
    * with their PIN; the PIN lasts for that one step. */
@@ -381,7 +388,10 @@ export class TillGiveBackUnderWay extends LitElement {
     this.lostCard = this.#lostCard();
     this.terminal = null;
     this.cardAnswered = true;
-    if (result.state !== "pending") this.#settledRefunds.add(result.id);
+    if (result.state !== "pending") {
+      this.#outcomes.set(result.id, result);
+      this.#asked = true;
+    }
     if (result.state === "failed")
       this.message =
         result.refusalReason === "provider_balance_unavailable"
@@ -521,8 +531,31 @@ export class TillGiveBackUnderWay extends LitElement {
         ></wt-form-actions
       >`;
   }
+  /** The outcomes had here of refunds `correction`, read before them, shows waiting. */
+  #outcomesSince(correction: InvoiceCorrectionView): TenderRefundView[] {
+    return correction.legs.flatMap((leg) =>
+      leg.state === "pending" ? (this.#outcomes.get(leg.id) ?? []) : [],
+    );
+  }
+  /** What the card company answered since the correction shown was read, which could not be read
+   * again. */
+  #unread(outcomes: readonly TenderRefundView[]) {
+    const last4 = (tenderId: string) =>
+      this.tenders.find((row) => row.tenderId === tenderId)?.last4 ?? null;
+    return html`<p data-unread role="status">
+      ${[
+        ...outcomes.map((refund) => askedAgainText({ ...refund, last4: last4(refund.tenderId) })),
+        t("tender_refund.read_failed"),
+      ].join(" ")}
+    </p>`;
+  }
   #open(correction: InvoiceCorrectionView) {
     const { left } = correction;
+    const outcomes = this.#outcomesSince(correction);
+    const pending: string = sumDecimals([
+      decimal(correction.pending),
+      ...outcomes.map((refund) => negateDecimal(decimal(refund.appliedAmount))),
+    ]);
     return html`<p data-back>
         ${t("give_back.uw_back")
           .replace("{back}", () => this.#money(correction.moneyBack))
@@ -539,12 +572,13 @@ export class TillGiveBackUnderWay extends LitElement {
             </p>`
       }
       ${
-        positive(correction.pending)
+        positive(pending)
           ? html`<p data-pending>
-              ${t("give_back.pending").replace("{amount}", () => this.#money(correction.pending))}
+              ${t("give_back.pending").replace("{amount}", () => this.#money(pending))}
             </p>`
           : nothing
       }
+      ${outcomes.length > 0 && !this.busy ? this.#unread(outcomes) : nothing}
       ${
         this.unanswered
           ? html`<p data-pending-status role="status">${t("give_back.pending_unanswered")}</p>`

@@ -6,7 +6,7 @@ import type {
   TenderRefundView,
 } from "../api/tender-refund-types.js";
 import { parseDecimalInput } from "@waitron/ui";
-import { REASON_MAX, moneyPlus } from "./bill-payment.js";
+import { REASON_MAX, moneyPlus, refusalOf } from "./bill-payment.js";
 
 export interface TenderRefundScope {
   deviceId: string;
@@ -78,6 +78,9 @@ export function writeVerified(storage: Storage, key: string, value: string): voi
   storage.setItem(key, value);
   if (storage.getItem(key) !== value) fail("storage");
 }
+
+/** Refusals saying the server ended this person's sign-in. */
+export const SIGN_IN_ENDED = new Set(["session.required", "session.not_open"]);
 
 /** Whether what is saved is still the request `id` names, whose answer came: signing out may have
  * cleared it since, and a newer press saved its own. An unreadable entry is left: keeping it costs
@@ -348,22 +351,29 @@ export class TenderRefundSession {
 
   /** Has the box ask the card company again about each refund of `rows` still waiting for it, on the
    * payments a device with `capabilities` may refund: under the refund's own id, so nothing goes back
-   * twice. An outcome already had is answered even when a later refund's asking fails. */
+   * twice, and none once the window is no longer `open`. An outcome already had is answered even when
+   * a later refund's asking fails, unless the sign-in ended. */
   askAgain(
     rows: readonly RefundableTender[],
     capabilities: readonly string[],
     override?: TenderRefundRequest["override"],
+    open = () => true,
   ): Promise<RefundAskedAgain[]> {
     return this.#run(async () => {
       const answers: RefundAskedAgain[] = [];
       for (const row of rows) {
         if (row.pendingRefundId === null || !refundMethodAllowed(row, capabilities)) continue;
+        if (!open()) break;
         try {
           const result = await this.api.retryTenderRefund(row.pendingRefundId, override);
           this.#settleSaved(result);
           answers.push({ ...result, last4: row.last4 });
         } catch (error) {
-          if (answers.every((answer) => answer.state === "pending")) throw error;
+          if (
+            SIGN_IN_ENDED.has(refusalOf(error).code) ||
+            answers.every((answer) => answer.state === "pending")
+          )
+            throw error;
           break;
         }
       }

@@ -8,6 +8,7 @@ import { en, es } from "../i18n/strings.js";
 import { guideHref } from "../help-guide.js";
 import { formatMoney } from "@waitron/shared";
 import type {
+  GiveBackOutcome,
   GiveBackPreview,
   GiveBackRequest,
   GiveBackView,
@@ -39,10 +40,10 @@ afterEach(() => {
   localStorage.clear();
 });
 
-async function mount(api = fakeGiveBackApi()) {
+async function mount(api = fakeGiveBackApi(), session = new GiveBackSession(SCOPE, api)) {
   const { el } = await mountWidget<TillGiveBackDialog>("till-give-back-dialog", {
     api,
-    session: new GiveBackSession(SCOPE, api),
+    session,
     refunds: refundsOn(api),
     capabilities: ["take-cash", "integrated-card-payment"],
     saleId: "sale-1",
@@ -52,6 +53,16 @@ async function mount(api = fakeGiveBackApi()) {
   await vi.waitFor(() => expect(el.shadowRoot!.querySelector("[data-loading]")).toBeNull());
   await el.updateComplete;
   return { el, api };
+}
+/** Waits for the next send the window starts to have ended. */
+function checkEnded(el: TillGiveBackDialog) {
+  const held = vi.fn<(until: Promise<unknown>) => void>();
+  el.addEventListener("hold-reload", (event) => held((event as CustomEvent).detail.until), {
+    once: true,
+  });
+  return async () => {
+    await held.mock.lastCall![0].catch(() => {});
+  };
 }
 /** What each give-back the window sent asked for, less its ids. */
 const asksOf = (el: TillGiveBackDialog) =>
@@ -639,6 +650,65 @@ describe("a card refund the box knows is waiting", () => {
     await el.updateComplete;
     expect(prompt(el)).toBeNull();
     expect(api.retryTenderRefund).toHaveBeenCalledOnce();
+  });
+
+  const reads = [
+    ["the receipt is", "readGiveBack", PENDING],
+    ["its payments are", "getRefundableTenders", [WAITING_TENDER]],
+  ] as const;
+  it.each(reads)(
+    "asks the card company nothing, sending no approver's PIN, when the window is taken away while %s read",
+    async (_what, read, answer) => {
+      const api = waitingApi();
+      api.retryTenderRefund.mockRejectedValueOnce(notPermitted);
+      const { el } = await mount(api);
+      check(el)!.click();
+      await vi.waitFor(() => expect(prompt(el)).not.toBeNull());
+      const held = deferred<never>();
+      api[read].mockClear();
+      api[read].mockImplementationOnce(() => held.promise);
+      const ended = checkEnded(el);
+      approve(el);
+      await vi.waitFor(() => expect(api[read]).toHaveBeenCalledOnce());
+      el.remove();
+      held.resolve(answer as never);
+      await ended();
+      expect(api.retryTenderRefund.mock.calls).toEqual([["refund-1", undefined]]);
+    },
+  );
+
+  it("asks about no further refund when the window is taken away while one is asked about", async () => {
+    const api = waitingApi();
+    api.getRefundableTenders.mockResolvedValue([
+      WAITING_TENDER,
+      { ...WAITING_TENDER, tenderId: "card-2", pendingRefundId: "refund-2" },
+    ]);
+    const { el } = await mount(api);
+    const answer = deferred<ReturnType<typeof refundAnswer>>();
+    api.retryTenderRefund.mockImplementationOnce(() => answer.promise);
+    const ended = checkEnded(el);
+    check(el)!.click();
+    await vi.waitFor(() => expect(api.retryTenderRefund).toHaveBeenCalledOnce());
+    el.remove();
+    answer.resolve(refundAnswer({ state: "completed" }));
+    await ended();
+    expect(api.retryTenderRefund.mock.calls.map(([id]) => id)).toEqual(["refund-1"]);
+  });
+
+  it("tells the till the sign-in ended when that refuses a later refund, though one was answered", async () => {
+    const api = waitingApi();
+    api.getRefundableTenders.mockResolvedValue([
+      WAITING_TENDER,
+      { ...WAITING_TENDER, tenderId: "card-2", pendingRefundId: "refund-2" },
+    ]);
+    api.retryTenderRefund
+      .mockResolvedValueOnce(refundAnswer({ state: "completed" }))
+      .mockRejectedValueOnce({ code: "session.required", status: 401 });
+    const { el } = await mount(api);
+    const signedOut = vi.fn();
+    el.addEventListener("give-back-signed-out", signedOut);
+    check(el)!.click();
+    await vi.waitFor(() => expect(signedOut).toHaveBeenCalledOnce());
   });
 
   it("offers no Check again while nothing waits for the card company", async () => {
@@ -1962,6 +2032,23 @@ describe("sending", () => {
       expect(api.retryTenderRefund).toHaveBeenCalledOnce();
     });
 
+    it("asks the card company nothing, sending no approver's PIN, when the window is taken away while the refund's state is read", async () => {
+      const { el, api } = await waiting();
+      api.retryTenderRefund.mockRejectedValueOnce(refused);
+      again(el).click();
+      await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+      const read = deferred<{ state: string }>();
+      api.getTenderRefund.mockImplementationOnce(() => read.promise);
+      const ended = checkEnded(el);
+      await approve(el);
+      await vi.waitFor(() => expect(api.getTenderRefund).toHaveBeenCalledTimes(2));
+      el.remove();
+      read.resolve({ state: "pending" });
+      await ended();
+      expect(api.retryTenderRefund.mock.calls).toEqual([["refund-1", undefined]]);
+      expect(new GiveBackSession(SCOPE, api).read("sale-1")?.rest?.request).toEqual(restRequest);
+    });
+
     it("sends no rest and asks no approver when the window is taken away while the asking is out", async () => {
       const { el, api } = await waiting();
       const answer = deferred<ReturnType<typeof refundAnswer>>();
@@ -2366,6 +2453,17 @@ describe("sending", () => {
       );
     });
 
+    it.each(apis)(
+      "while %s, ends a press refused as changed saying only that nothing was given back",
+      async (_state, makeApi) => {
+        const { el } = await sendAgain(makeApi(), { code: "give_back.changed", status: 409 });
+        await vi.waitFor(() => expect(outcomeText(el)).toBe(t("give_back.nothing_given")));
+        expect(again(el)).toBeNull();
+        expect(submit(el)).toBeNull();
+        expect(text(root(el).querySelector("[data-close]"))).toBe(t("give_back.done"));
+      },
+    );
+
     it.each([false, true])(
       "keeps Send again when who may approve it cannot be read (nor this device's storage: %s)",
       async (unreadable) => {
@@ -2406,6 +2504,116 @@ describe("sending", () => {
       root(el).querySelector<HTMLElement>("[data-check-pending]")!.click();
       await vi.waitFor(() => expect(underWay(el)).not.toBeNull());
       await vi.waitFor(() => expect(held()).toBe(false));
+    });
+  });
+
+  describe("Send again once another tab saved a newer press on the receipt", () => {
+    const newerAsk = {
+      ...goodwillAsk,
+      request: { ...goodwillAsk.request, amount: "9.00" },
+      expected: [{ ...goodwillAsk.expected[0]!, amount: "9.00" }],
+    };
+    const failed = () => new TypeError("Failed to fetch");
+    const lostText = (el: TillGiveBackDialog) => text(root(el).querySelector("[data-lost]"));
+    const again = (el: TillGiveBackDialog) =>
+      root(el).querySelector<HTMLElementTagNameMap["wt-button"]>("[data-send-again]");
+    const idle = (el: TillGiveBackDialog) =>
+      vi.waitFor(() => expect(again(el)?.disabled).toBe(false));
+    /** The other tab settles the press saved here, then presses for €9.00, whose answer is lost. */
+    async function pressNewer(api: Api) {
+      const other = new GiveBackSession(SCOPE, api);
+      if (other.read("sale-1")) await other.resend("sale-1");
+      api.giveBack.mockRejectedValueOnce(failed());
+      await expect(other.submit("sale-1", newerAsk)).rejects.toThrow();
+      return api.giveBack.mock.calls.length;
+    }
+    /** Opened on a press of €5.00 whose answer was lost. */
+    async function lostWindow(api: Api) {
+      api.giveBack.mockRejectedValueOnce(failed());
+      await expect(new GiveBackSession(SCOPE, api).submit("sale-1", goodwillAsk)).rejects.toThrow();
+      const { el } = await mount(api);
+      return el;
+    }
+    /** Presses Send again and checks it sends nothing and stays, each of `times`. */
+    async function sendsNothing(el: TillGiveBackDialog, api: Api, sends: number, times = 2) {
+      for (let press = 0; press < times; press++) {
+        again(el)!.click();
+        await el.updateComplete;
+        await idle(el);
+        expect(lostText(el)).toBe(t("give_back.lost"));
+      }
+      expect(api.giveBack).toHaveBeenCalledTimes(sends);
+      expect(new GiveBackSession(SCOPE, api).read("sale-1")?.sent?.request.amount).toBe("9.00");
+    }
+
+    it("sends neither press, however often it is pressed, and still says its own answer is not known", async () => {
+      const api = fakeGiveBackApi();
+      const el = await lostWindow(api);
+      await sendsNothing(el, api, await pressNewer(api));
+    });
+
+    it("sends neither press once an approver signs in for it", async () => {
+      const api = fakeGiveBackApi();
+      const el = await lostWindow(api);
+      api.giveBack.mockRejectedValueOnce({
+        code: "authorization.not_permitted",
+        permission: "sale.refund",
+        status: 403,
+      });
+      again(el)!.click();
+      await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+      const sends = await pressNewer(api);
+      await approve(el);
+      await vi.waitFor(() => expect(approval(el)).toBeNull());
+      expect(lostText(el)).toBe(t("give_back.lost"));
+      await sendsNothing(el, api, sends, 1);
+    });
+
+    it("stays on its own press when that was answered as still starting meanwhile", async () => {
+      const api = fakeGiveBackApi();
+      const el = await lostWindow(api);
+      const answer = deferred<GiveBackOutcome>();
+      api.giveBack.mockImplementationOnce(() => answer.promise);
+      again(el)!.click();
+      await vi.waitFor(() => expect(api.giveBack).toHaveBeenCalledTimes(2));
+      const sends = await pressNewer(api);
+      const done = completedFor(sent(api));
+      answer.resolve({
+        ...done,
+        parts: done.parts.map((part) => ({ ...part, state: "not_started" })),
+      });
+      await idle(el);
+      await sendsNothing(el, api, sends);
+    });
+
+    it("ends its own press, saying nothing was given back, once that was refused as changed", async () => {
+      const api = fakeGiveBackApi({ ...VIEW, underWay: UNDER_WAY });
+      const session = new GiveBackSession(SCOPE, api);
+      const answer = deferred<GiveBackOutcome>();
+      api.giveBack.mockImplementationOnce(() => answer.promise);
+      const out = session.submit("sale-1", goodwillAsk);
+      const { el } = await mount(api, session);
+      answer.reject({ code: "give_back.changed", status: 409 });
+      await expect(out).rejects.toMatchObject({ code: "give_back.changed" });
+      const sends = await pressNewer(api);
+      again(el)!.click();
+      await vi.waitFor(() => expect(outcomeText(el)).toBe(t("give_back.nothing_given")));
+      expect(again(el)).toBeNull();
+      expect(api.giveBack).toHaveBeenCalledTimes(sends);
+    });
+
+    it("keeps its Send again when it is refused without proof that nothing went back", async () => {
+      const api = fakeGiveBackApi({ ...VIEW, underWay: UNDER_WAY });
+      const el = await lostWindow(api);
+      const answer = deferred<GiveBackOutcome>();
+      api.giveBack.mockImplementationOnce(() => answer.promise);
+      again(el)!.click();
+      await vi.waitFor(() => expect(api.giveBack).toHaveBeenCalledTimes(2));
+      const sends = await pressNewer(api);
+      answer.reject({ code: "storage.disk_full", status: 507 });
+      await vi.waitFor(() => expect(lostText(el)).toBe(codeMessage("storage.disk_full", "en")));
+      await idle(el);
+      await sendsNothing(el, api, sends);
     });
   });
 
