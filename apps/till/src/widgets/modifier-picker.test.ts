@@ -832,18 +832,12 @@ describe("till-modifier-picker", () => {
   });
 
   describe("variants", () => {
-    const wine = (
-      id: string,
-      unitPrice: string,
-      unitPriceDifference: string | null,
-      available = true,
-    ) => ({
+    const wine = (id: string, unitPrice: string, available = true) => ({
       id,
       name: `${id} staff`,
       customerName: { en: `${id} menu`, es: `${id} carta` },
       kitchenName: `${id} KDS`,
       unitPrice,
-      unitPriceDifference,
       available,
       // Every selling value differs from the parent's (`coffee`'s), so a chosen product that kept
       // the parent's fails the pick tests below.
@@ -872,11 +866,7 @@ describe("till-modifier-picker", () => {
       name: "Vino",
       unitPrice: "4.00",
       menuItemId: "offer-wine",
-      variants: [
-        wine("Wine 100", "3.50", "-0.50", false),
-        wine("125 ml", "5.50", "1.50"),
-        wine("Wine 150", "4.00", null),
-      ],
+      variants: [wine("Wine 100", "3.50", false), wine("125 ml", "5.50"), wine("Wine 150", "4.00")],
     };
 
     const radios = (picker: TillModifierPicker) => [
@@ -968,15 +958,15 @@ describe("till-modifier-picker", () => {
       expect(radios(picker).map((radio) => radio.disabled)).toEqual([true, false, false]);
     });
 
-    it("labels a variant priced above or below its parent with the difference, and one at the same price with none", async () => {
+    it("shows each variant as its name and full price only, whether dearer, cheaper or equal to its parent", async () => {
       const { picker } = await openPicker(wineProduct, "Vino", new WorkingOrderStore());
-      const differences = [
+      const rows = [
         ...picker.shadowRoot!.querySelectorAll<HTMLElement>("fieldset label.option"),
-      ].map((option) => option.querySelector(".price-difference")?.textContent?.trim() ?? null);
-      expect(differences).toEqual([
-        `\u2212${formatMoney("0.50", currentLocale())}`,
-        `+${formatMoney("1.50", currentLocale())}`,
-        null,
+      ].map((option) => option.textContent!.replace(/\s+/g, " ").trim());
+      expect(rows).toEqual([
+        `Wine 100 staff ${formatMoney("3.50", currentLocale())}`,
+        `125 ml staff ${formatMoney("5.50", currentLocale())}`,
+        `Wine 150 staff ${formatMoney("4.00", currentLocale())}`,
       ]);
     });
 
@@ -1035,7 +1025,6 @@ describe("till-modifier-picker", () => {
         id,
         name: id,
         unitPrice: "4.00",
-        unitPriceDifference: null,
         available,
       });
       const { picker: winePicker } = await openPicker(
@@ -1294,7 +1283,6 @@ describe("till-modifier-picker", () => {
               id: "big",
               name: "Big",
               unitPrice: "9.00",
-              unitPriceDifference: "1.00",
               available: true,
             },
           ],

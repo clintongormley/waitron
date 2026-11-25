@@ -70,7 +70,6 @@ const wine = product("wine", "Vino", {
       id: "v-glass",
       name: "Copa",
       unitPrice: "3.00",
-      unitPriceDifference: null,
       available: true,
     },
   ],
@@ -1446,7 +1445,6 @@ describe("till-menu-browser", () => {
           id: "v-cortado-large",
           name: "Grande",
           unitPrice: "2.80",
-          unitPriceDifference: null,
           available: true,
         },
       ],
@@ -2369,7 +2367,6 @@ describe("till-menu-browser", () => {
         id,
         name: id,
         unitPrice: "4.50",
-        unitPriceDifference: null,
         available,
       });
       const mixed = product("tinto", "Tinto", {

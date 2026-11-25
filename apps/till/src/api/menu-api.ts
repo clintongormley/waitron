@@ -10,9 +10,6 @@ import {
   type DiningStart,
   type MenuState,
   type ServedSetMenu,
-  subtractDecimal,
-  decimal,
-  compareDecimal,
   type ContentLanguages,
 } from "@waitron/shared";
 import type { TillRequest, ReadOptions } from "./till-request.js";
@@ -53,9 +50,6 @@ export interface TillProduct {
     kitchenName?: string | null;
     image?: string | null;
     unitPrice: string;
-    /** The variant's price minus its parent's on this menu, negative when cheaper, null when equal —
-     * for the picker's "+€1.50" label; nothing stores it. */
-    unitPriceDifference: string | null;
     available: boolean;
   })[];
   /**
@@ -224,20 +218,16 @@ export function menuOfferToTillProduct(offer: TillMenuOffer, menuVersionId?: str
     menuName: offer.menuName,
     // The offered lists pass through in the order they arrive — the product's own attachment order,
     // which nothing on the till re-sorts.
-    variants: offer.variants.map((variant) => {
-      const difference = subtractDecimal(decimal(variant.unitPrice), decimal(offer.unitPrice));
-      return {
-        ...sellingValuesOf(variant),
-        id: variant.id,
-        name: variant.name,
-        customerName: variant.customerName,
-        kitchenName: variant.kitchenName,
-        image: variant.image,
-        unitPrice: variant.unitPrice,
-        unitPriceDifference: compareDecimal(difference, decimal("0")) === 0 ? null : difference,
-        available: variant.available,
-      };
-    }),
+    variants: offer.variants.map((variant) => ({
+      ...sellingValuesOf(variant),
+      id: variant.id,
+      name: variant.name,
+      customerName: variant.customerName,
+      kitchenName: variant.kitchenName,
+      image: variant.image,
+      unitPrice: variant.unitPrice,
+      available: variant.available,
+    })),
     offeredModifiers: sellableModifiers(offer.offeredModifiers),
     modifierAvailability: offer.offeredModifiers,
     dietaryDeclarations: offer.dietaryDeclarations,

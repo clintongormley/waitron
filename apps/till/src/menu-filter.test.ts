@@ -219,7 +219,6 @@ describe("A738 filter combinations", () => {
         category: null,
         allergens,
         unitPrice: "1.00",
-        unitPriceDifference: null,
         available: true,
       })),
     };

@@ -3461,7 +3461,6 @@ describe("till-table-order-screen", () => {
             category: null,
             allergens: null,
             unitPrice: "11.00",
-            unitPriceDifference: "1.50",
             available: true,
           },
         ],

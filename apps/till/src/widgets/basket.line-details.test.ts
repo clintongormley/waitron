@@ -465,7 +465,6 @@ const sizes: NonNullable<TillProduct["variants"]> = [
     id: "v-cup",
     name: "Cup",
     unitPrice: "5.00",
-    unitPriceDifference: null,
     available: true,
   },
   {
@@ -473,7 +472,6 @@ const sizes: NonNullable<TillProduct["variants"]> = [
     id: "v-bowl",
     name: "Bowl",
     unitPrice: "8.00",
-    unitPriceDifference: "3.00",
     available: true,
   },
 ];
