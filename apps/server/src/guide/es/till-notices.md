@@ -8,6 +8,14 @@ en las páginas de fichaje y asistencia. Vuelve a la caja para usar **Abrir caj�
 
 Si Waitron no puede verificar este dispositivo para una acción, recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.
 
+## Cuando la caja no se abre {#cannot-open}
+
+Si ves **No se puede conectar con el servidor**, comprueba que este teléfono esté conectado a la red
+WiFi del local. Deja la página abierta. La caja se abre sola cuando el servidor está listo.
+
+Si ya estás en la red WiFi del local, comprueba que el servidor esté encendido. Si lo está, puede
+que tengas que [volver a instalar su certificado](table-service.md#certificate-trust).
+
 ## Lee la línea de avisos {#notice-line}
 
 La línea muestra primero el aviso más grave, con su texto principal y, tras " · ", su indicación.

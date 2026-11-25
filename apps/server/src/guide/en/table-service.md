@@ -256,6 +256,12 @@ The till's **Connect this device securely** page follows your browser's preferre
 language, with English as the fallback. Choose **Show me how** to install the box's certificate on
 this device, then open the till again.
 
+If you have opened the till before and the box's certificate changes, you may see **Can't reach
+the box** in place of the browser warning or the till's certificate screen. On the venue's WiFi,
+choose **Show me how** to open the certificate steps in a new tab. This link needs the box's
+local certificate page, which is unavailable on a spare, when HTTP access is disabled, or when
+your venue supplies its own TLS certificate.
+
 On a device that has never trusted the box, the browser may warn about the connection before the
 till can open. Open `http://` followed by the box's IP address and `/setup/trust` instead, for
 example `http://192.168.1.20/setup/trust`, to reach the page that installs its certificate. When

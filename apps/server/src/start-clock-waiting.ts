@@ -10,7 +10,7 @@ import {
 import { bootReader, type BootReading } from "./boot-reader.js";
 import { AppError, FALLBACK_LOCALE, type SupportedLocale } from "@waitron/shared";
 import "./errors.js";
-import { pageReturnPath } from "./waiting-page.js";
+import { pageReturnPath, WAITING_HEADER } from "./waiting-page.js";
 import { escapeHtml, renderDocument } from "./html-page.js";
 import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
 import { resolveLoginLocale } from "./login-locale.js";
@@ -175,6 +175,7 @@ export function createStartClockWaiting(options: StartClockWaitingOptions): Star
       {
         "Cache-Control": "no-store",
         "Retry-After": RETRY_AFTER_SECONDS,
+        [WAITING_HEADER]: "1",
         Vary: "Accept-Language",
       },
     );

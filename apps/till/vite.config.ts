@@ -11,16 +11,18 @@ import {
 import { viteNpmNotices } from "../../scripts/npm-bundle-notices.mjs";
 // By path: Vite bundles a relative import, but hands `@waitron/ui-core/theme` to Node, which
 // cannot resolve that package's `.js` specifiers to its `.ts` sources.
-import { parseBlock } from "../../packages/ui-core/src/theme/defaults.js";
+import { parseBlock, readDefaults } from "../../packages/ui-core/src/theme/defaults.js";
 
 import { buildManifest } from "./src/manifest.js";
+import { buildOfflineWorker } from "./src/offline-worker.js";
+
+const colorsCss = readFileSync(
+  new URL("../../packages/ui-core/src/tokens/colors.css", import.meta.url),
+  "utf8",
+);
 
 function lightPrimary(): string {
-  const colors = readFileSync(
-    new URL("../../packages/ui-core/src/tokens/colors.css", import.meta.url),
-    "utf8",
-  );
-  const value = parseBlock(colors, ':where([data-wt-theme-root][data-theme="light"])')[
+  const value = parseBlock(colorsCss, ':where([data-wt-theme-root][data-theme="light"])')[
     "--wt-color-primary"
   ];
   if (value === undefined) throw new Error("colors.css declares no light --wt-color-primary");
@@ -53,9 +55,61 @@ function webManifest(): PluginOption {
   };
 }
 
+function offlinePageStyles(): string {
+  const structureCss = readFileSync(
+    new URL("../../packages/ui-core/src/tokens/structure.css", import.meta.url),
+    "utf8",
+  );
+  const tokens = readDefaults(colorsCss, structureCss);
+  const palette = ["--wt-color-bg", "--wt-color-text", "--wt-color-primary-text"];
+  const layout = ["--wt-space-5", "--wt-space-6", "--wt-font-family", "--wt-font-size-xl"];
+  const css = (names: string[], values: Readonly<Record<string, string>>) =>
+    names.map((name) => `${name}: ${values[name]};`).join("\n");
+  return `
+:root {
+  ${css(palette, tokens.light)}
+  ${css(layout, tokens.structure)}
+  color-scheme: light dark;
+  background: var(--wt-color-bg);
+  color: var(--wt-color-text);
+  font-family: var(--wt-font-family);
+}
+@media (prefers-color-scheme: dark) {
+  :root { ${css(palette, tokens.dark)} }
+}
+main {
+  max-width: calc(var(--wt-space-6) * 16);
+  margin: calc(var(--wt-space-6) * 2) auto;
+  padding-inline: var(--wt-space-5);
+}
+h1 { font-size: var(--wt-font-size-xl); }
+a { color: var(--wt-color-primary-text); }
+`;
+}
+
+function tillOfflineWorker(): PluginOption {
+  return {
+    name: "waitron-till-offline-worker",
+    apply: "build",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "offline-worker.js",
+        source: buildOfflineWorker(offlinePageStyles()),
+      });
+    },
+  };
+}
+
 export default defineConfig({
   base: "/till/",
-  plugins: [devCrossAppLinks("till"), devLoopbackTwin(), webManifest(), viteNpmNotices()],
+  plugins: [
+    devCrossAppLinks("till"),
+    devLoopbackTwin(),
+    webManifest(),
+    tillOfflineWorker(),
+    viteNpmNotices(),
+  ],
   // Favicons and app icons are served from the ONE brand directory in packages/ui, so a redrawn
   // mark cannot go stale. A relative path, not `import.meta.resolve`: `@waitron/ui` has no
   // `exports` map. This line is read as text by `scripts/brand-icons.test.ts`.

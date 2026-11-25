@@ -18,6 +18,7 @@ import { ServerRouter, withServerTarget } from "./api/server-router.js";
 import { diag, setReportBuild } from "./diagnostics.js";
 import { installPressBuzz } from "./press-buzz.js";
 import { watchKeyboardInsets } from "./state/keyboard-inset.js";
+import { registerOfflineWorker } from "./register-offline-worker.js";
 import { isTrustBroken } from "./trust-check.js";
 import { trustInstructions } from "./trust-instructions.js";
 import "./till-app.js";
@@ -63,6 +64,7 @@ async function bootTill(): Promise<void> {
     diag,
   );
   router.start();
+  void registerOfflineWorker();
 
   render(html`<till-app .api=${new TillApi("", fetchImpl)} .router=${router}></till-app>`, app);
 }

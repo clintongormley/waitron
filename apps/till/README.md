@@ -89,6 +89,13 @@ Open the box’s address with `/till/` at the end, such as `https://waitron.loca
 The bare box address opens the dashboard. Replace older till bookmarks and home-screen shortcuts
 with this address. An enrolled browser keeps its device sign-in.
 
+### Retire the reconnect page
+
+In the release that removes the page, remove the call to `registerOfflineWorker()` and emit
+`buildRetiredOfflineWorker()` from the Vite plugin at the same `/till/offline-worker.js` URL.
+Keep serving that replacement so devices that skip releases can fetch it. It activates and
+unregisters itself without reloading an open till.
+
 ## Running it in dev
 
 The till is a same-origin front end: the default stack runs the server's till API on `:8080` and
