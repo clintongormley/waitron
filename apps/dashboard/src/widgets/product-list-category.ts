@@ -37,6 +37,7 @@ export function productCategoryColumn(
     path(row)
       ?.map((category) => category.name)
       .join(PATH_SEPARATOR);
+  const options = categoryTree(categories);
   return {
     key: "category",
     label: t("product.category"),
@@ -51,12 +52,14 @@ export function productCategoryColumn(
     },
     sortValue: (row) => name(row) ?? null,
     searchValue: (row) => name(row) ?? "",
-    filter: {
-      label: t("product.category"),
-      allLabel: t("product.filter_any"),
-      options: categoryTree(categories),
-      preserveOrder: true,
-      value: (row) => path(row)?.map((category) => category.id) ?? [],
-    },
+    ...(options.length && {
+      filter: {
+        label: t("product.category"),
+        allLabel: t("product.filter_any"),
+        options,
+        preserveOrder: true,
+        value: (row: ProductCategory) => path(row)?.map((category) => category.id) ?? [],
+      },
+    }),
   };
 }

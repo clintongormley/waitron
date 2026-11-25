@@ -9158,7 +9158,9 @@ describe("the Products screen in the shell", () => {
     const list = browser.shadowRoot!.querySelector("dashboard-product-list")!;
     const table = list.shadowRoot!.querySelector("wt-data-table")!;
     await vi.waitFor(() =>
-      expect(table.shadowRoot!.querySelectorAll("tbody tr").length).toBeGreaterThan(40),
+      expect(
+        table.shadowRoot!.querySelectorAll('tbody tr[data-row-key]:not([data-row-key="root"])'),
+      ).toHaveLength(listed.length),
     );
     await frame();
     const main = el.shadowRoot!.querySelector<HTMLElement>(".main")!;

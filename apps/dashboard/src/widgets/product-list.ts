@@ -1638,7 +1638,8 @@ export class ProductList extends LitElement {
   }
 
   resetCategoryView(): void {
-    this.#table()?.resetColumnView("category", "name");
+    const table = this.#table();
+    if (table) void table.updateComplete.then(() => table.resetColumnView("category", "name"));
   }
 
   clearFilters(): void {

@@ -29,6 +29,7 @@ import {
 
 import { tableMessage, tableMessageStyles } from "./wt-data-table-message.js";
 import { FilterExpansion, visibleTree } from "./wt-data-table-filter-expansion.js";
+import { mergeColumnOrder } from "./wt-data-table-column-order.js";
 
 registerIcons({
   "table-filter": "M1 2h14v1.5L10 9v5l-4 1.5V9L1 3.5z",
@@ -1606,7 +1607,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#releaseColumnWidths();
     const [moving] = movable.splice(from, 1);
     movable.splice(to, 0, moving!);
-    this.columnOrder = movable.map((column) => column.key);
+    const keys = movable.map((column) => column.key);
+    this.columnOrder = mergeColumnOrder(this.columnOrder, keys);
     if (focusedHandle) void this.updateComplete.then(() => focusedHandle.focus());
     this.columnMoveAnnouncement = `${moving!.label}, ${this.columnPositionLabel.replace("{position}", String(to + 2)).replace("{total}", String(this.columns.length))}`;
     if (this.viewKey) {
@@ -1931,13 +1933,16 @@ export class WtDataTable<Row = unknown> extends LitElement {
 
   /** Drops a column's filter and sort when its owning view is left. */
   resetColumnView(key: string, defaultSortKey: string): void {
-    if (this.sortKey === key) {
+    const resetSort = this.sortKey === key;
+    if (!resetSort && this.filterSelections[key] === undefined) return;
+    if (resetSort) {
       this.sortKey = defaultSortKey;
       this.sortDirection = "ascending";
-      this.#persistView();
     }
-    const column = this.columns.find((current) => current.key === key);
-    if (column?.filter) this.#chooseFilter(column, []);
+    const filters = { ...this.filterSelections };
+    delete filters[key];
+    this.filterSelections = filters;
+    this.#persistView();
   }
 
   /** Clears the choices on the table’s columns. */

@@ -51,6 +51,7 @@ import {
   clearProductSearch,
   hiddenProductSave,
   productListActionFeedback,
+  productRoutingFeedback,
   productAvailabilityFeedback,
   productAvailabilityFeedbackStyles,
 } from "./product-list-action-feedback.js";
@@ -232,8 +233,11 @@ export class ProductBrowser extends LitElement {
     this.#openMove(keys, folderId ?? "top");
   }
   override willUpdate(changed: PropertyValues): void {
-    if (changed.has("categoryId") && this.categoryId !== null && this.view === "list")
+    if (changed.has("categoryId") && this.categoryId !== null && this.view === "list") {
       this.#setView("tree");
+      void this.updateComplete.then(() => this.#resetCategoryOnRenderedList());
+    }
+    if (this.#emptyList) this.selecting = false;
     if (changed.has("search")) this.hiddenSave = null;
     if (this.operation === null) this.#releaseOperation();
     else if (!this.#operationScope) {
@@ -274,13 +278,15 @@ export class ProductBrowser extends LitElement {
     )
       this.#syncDeleteImpact();
     if (changed.has("nameDraft")) this.nameColor = undefined;
-    // Worked out once per change of its inputs, not on every redraw of the browser.
     if (changed.has("routing") || changed.has("categories"))
       this.#folderMadeAt = this.routing ? folderMadeAt(this.routing, this.categories) : new Map();
   }
 
   get #actionNotice(): string {
-    return (this.nameDraft?.kind === "rename" && this.nameError) || this.actionError;
+    return (
+      ((this.view === "list" || this.nameDraft?.kind === "rename") && this.nameError) ||
+      this.actionError
+    );
   }
 
   override updated(changed: PropertyValues): void {
@@ -324,6 +330,12 @@ export class ProductBrowser extends LitElement {
     this.#revealed = null;
   }
 
+  async #resetCategoryOnRenderedList(): Promise<void> {
+    const list = this.#list();
+    await list?.updateComplete;
+    list?.resetCategoryView();
+  }
+
   readonly #chooseView = (view: ProductsView): void => {
     this.#setView(view);
     rememberProductsView(view);
@@ -332,9 +344,8 @@ export class ProductBrowser extends LitElement {
       this.#emit("open-category", { categoryId: null });
     }
     void this.updateComplete.then(async () => {
-      const list = this.#list();
-      await list?.updateComplete;
-      if (view === "list" && this.view === view) list?.resetCategoryView();
+      if (view === "list" && this.view === view) await this.#resetCategoryOnRenderedList();
+      else await this.#list()?.updateComplete;
       this.renderRoot.querySelector("wt-segmented-control")?.focus();
     });
   };
@@ -952,10 +963,14 @@ export class ProductBrowser extends LitElement {
     }
   };
 
+  get #emptyList(): boolean {
+    return this.view === "list" && !this.products.some(({ active }) => active);
+  }
+
   override render() {
     const renamed = this.#renamed(this.nameDraft);
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
-    const empty = this.view === "list" && !this.products.some(({ active }) => active);
+    const empty = this.#emptyList;
     const noticeSlot = empty ? "above-table" : "toolbar-bottom";
     return html`${productAvailabilityFeedback(this.availabilityError)}<dashboard-product-list
         .view=${this.view}
@@ -1062,18 +1077,7 @@ export class ProductBrowser extends LitElement {
           remove: () => void this.#openDelete(),
           done: () => void this.#leaveSelection(),
         })}
-        ${
-          this.routingFailed && this.categories.length
-            ? html`<p
-                slot=${noticeSlot}
-                class="error"
-                role="status"
-                data-test="routing-unavailable"
-              >
-                ${t("folders.routing_unavailable")}
-              </p>`
-            : nothing
-        }
+        ${this.routingFailed && this.categories.length ? productRoutingFeedback(noticeSlot) : nothing}
         ${
           this.hiddenSave === null
             ? clearProductSearch(this.#clearProductSearch, "no-matches-action")

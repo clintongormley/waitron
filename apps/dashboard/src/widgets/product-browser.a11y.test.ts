@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { DASHBOARD_ICONS } from "../icons.js";
@@ -56,6 +56,7 @@ afterEach(cleanupWidgets);
 beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
+  localStorage.setItem("waitron.products.view", "tree");
 });
 describe.each(["light", "dark"] as const)("menu browser (%s)", (theme) => {
   async function mountPlain() {
@@ -70,6 +71,22 @@ describe.each(["light", "dark"] as const)("menu browser (%s)", (theme) => {
     await table.updateComplete;
     return { ...mounted, table };
   }
+
+  it("renders the default List and its Category column accessibly", async () => {
+    const viewport = [window.innerWidth, window.innerHeight] as const;
+    onTestFinished(() => page.viewport(...viewport));
+    await page.viewport(1180, 844);
+    localStorage.removeItem("waitron.products.view");
+    const { el, host, table } = await mountPlain();
+    el.categories = [{ id: "d", name: "Drinks", parentId: null, color: null }];
+    await el.updateComplete;
+    await el.shadowRoot!.querySelector("dashboard-product-list")!.updateComplete;
+    await table.updateComplete;
+    expect(
+      table.shadowRoot!.querySelector('[part~="category-path-cell"]')?.textContent?.trim(),
+    ).toBe("Drinks");
+    await expectNoA11yViolations(host);
+  });
 
   it("renders the Select button's tooltip on keyboard focus accessibly", async () => {
     const { el, host } = await mountPlain();

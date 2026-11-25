@@ -20,6 +20,12 @@ export function productListActionFeedback(
     : nothing;
 }
 
+export function productRoutingFeedback(slot: string) {
+  return html`<p slot=${slot} class="error" role="status" data-test="routing-unavailable">
+    ${t("folders.routing_unavailable")}
+  </p>`;
+}
+
 export const productAvailabilityFeedbackStyles = css`
   .availability-error {
     position: sticky;

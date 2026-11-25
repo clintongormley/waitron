@@ -1207,6 +1207,46 @@ it("opens a category link in Tree and stays there after closing its category", a
   expect(localStorage.getItem("waitron.products.view")).toBe("list");
 });
 
+it("shows a category name refusal when switching away from its draft", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.createCategory).mockRejectedValueOnce({ code: "category.name_taken" });
+  await menuAction(el, "add-category-root");
+  await nameBox(el);
+  await userEvent.keyboard("Drinks");
+  await chooseView(el, "List");
+  await expect
+    .element(page.getByRole("alert").filter({ hasText: codeMessage("category.name_taken") }))
+    .toBeVisible();
+});
+
+it("ends Select when the last List product goes away", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  const el = await mountBrowser({ products: [PRODUCTS[3]!] });
+  await selectKeys(el, ["bread"]);
+  el.products = [];
+  await tableOf(el);
+  el.products = [PRODUCTS[3]!];
+  const table = await tableOf(el);
+  expect(
+    table.shadowRoot!.querySelector('tr[data-row-key="bread"] input[type="checkbox"]'),
+  ).toBeNull();
+});
+
+it("drops a stored Category filter when a fresh visit opens a category link in Tree", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  sessionStorage.setItem("waitron.products.table", JSON.stringify({ filters: { category: "b" } }));
+  const linked = await mountBrowser({ categoryId: "d" });
+  expect(await rowKeys(linked)).toContain("folder:d");
+  linked.remove();
+  expect(await rowKeys(await mountBrowser())).toEqual(["bread", "burger", "cola"]);
+});
+
+it("offers no Category filter if the venue has no categories", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  const table = await tableOf(await mountBrowser({ categories: [] }));
+  expect(table.shadowRoot!.querySelector('wt-combobox[data-filter="category"]')).toBeNull();
+});
+
 it("keeps keyboard focus on the view switch when leaving an empty List", async () => {
   localStorage.setItem("waitron.products.view", "list");
   const el = await mountBrowser({ products: [] });
