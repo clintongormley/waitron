@@ -56,8 +56,8 @@ export async function inspectSetupRecoveryPack(bytes: Uint8Array, locale: "en" |
     await task.destroy();
   }
   const file = await readRecoveryPackPdf(bytes);
-  expect(file.serverKey).toBeNull();
-  expect(file.serverKeyName).toBeNull();
+  expect(file).not.toHaveProperty("serverKey");
+  expect(file).not.toHaveProperty("serverKeyName");
   expect([file.masterKey, file.masterKeyName]).toEqual([
     "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
     "2026-11-23 · QZJV",

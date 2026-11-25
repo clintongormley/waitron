@@ -8,10 +8,10 @@ import {
   RecoveryPackFileError,
   type RecoveryPackFile,
 } from "./pack-file.js";
-import type { PackPart, RecoveryPackPage, ServerKeyLocation } from "./page.js";
+import type { PackPart, RecoveryPackPage } from "./page.js";
 import { qrModules } from "./qr.js";
 
-export type { PackPart, RecoveryPackPage, ServerKeyLocation } from "./page.js";
+export type { PackPart, RecoveryPackPage } from "./page.js";
 
 export type RenderPackInput = {
   locale: PackLocale;
@@ -170,7 +170,6 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   result.catch(() => undefined);
 
   const width = () => pdf.page.width - 2 * LEFT;
-  let inset = 0;
   let scale = 1;
   let cut = false;
   /** `text` as drawn, or the most of it that `fits`, ended with a mark. */
@@ -212,8 +211,8 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
       .fontSize(size * scale)
       .strokeColor(colour)
       .lineWidth(0.35)
-      .text(safe(text), LEFT + inset, pdf.y, {
-        width: width() - 2 * inset,
+      .text(safe(text), LEFT, pdf.y, {
+        width: width(),
         fill: true,
         stroke: bold,
       });
@@ -322,19 +321,6 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     pdf.y += 12 * scale;
     face();
   };
-  const boxed = (draw: () => void, padding = 12) => {
-    const top = pdf.y;
-    pdf.y += padding;
-    inset = padding;
-    draw();
-    inset = 0;
-    const bottom = pdf.y + padding - 6;
-    pdf
-      .rect(LEFT, top, width(), bottom - top)
-      .lineWidth(1.2)
-      .stroke("black");
-    pdf.y = bottom + 12;
-  };
   const qr = (text: string, x: number, y: number, size: number) => {
     const modules = qrModules(text);
     const cell = size / (modules.length + 8);
@@ -389,18 +375,6 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
       .stroke("black");
     pdf.y = bottom + 16;
   };
-  const location = (where: ServerKeyLocation) => {
-    let text: string = words.thisPackHoldsKey;
-    if (where.kind === "pack")
-      text = `${words.noNewKey} ${(where.received ? words.keyOnPack : words.keyOnUnreceivedPack)(
-        where.number,
-        when.longDay(where.madeOn),
-      )}`;
-    if (where.kind === "sheet")
-      text = `${words.noNewKey} ${words.keyOnSheet(where.keyName, when.longDay(where.madeOn))}`;
-    boxed(() => write(text, 12, "black", 0));
-  };
-
   drawPage(() => {
     const { masterKey, masterKeyName, masterKeyHeldBy } = input.file;
     face();
@@ -451,7 +425,6 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
         write(words.failedTitle(words.part[part.kind]), 18, "black", 10, true);
         write(part.failure!.what, 11);
         write(part.failure!.todo, 11, "black", 12);
-        if (part.serverKeyLocation) location(part.serverKeyLocation);
         return;
       }
       const page = part.page!;
@@ -465,7 +438,6 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
           page.rows.map((row) => [row.label, row.value]),
           { mono: (row, column) => column === 1 && page.rows[row]!.mono === true },
         );
-      if (part.serverKeyLocation) location(part.serverKeyLocation);
       for (const note of page.notes) write(note, 10, "black", 3);
     });
   if (realPages !== pageCount) refuse("overflow");

@@ -16,11 +16,6 @@ export type RecoveryPackPage = {
   notes: string[];
 };
 
-export type ServerKeyLocation =
-  | { kind: "this-pack" }
-  | { kind: "pack"; number: number; madeOn: string; received: boolean }
-  | { kind: "sheet"; keyName: string; madeOn: string };
-
 export type PackPart = {
   kind: PartKind;
   state: "included" | "absent" | "failed" | "not-set-up";
@@ -28,5 +23,4 @@ export type PackPart = {
   page?: RecoveryPackPage;
   /** Required when `state` is `failed`. */
   failure?: { what: string; todo: string };
-  serverKeyLocation?: ServerKeyLocation;
 };

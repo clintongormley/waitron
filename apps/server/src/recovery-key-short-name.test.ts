@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, insertRecoveryPack, stampDeployment, withTransaction } from "@waitron/db";
+import { CORE_MIGRATIONS, stampDeployment } from "@waitron/db";
 import { NODE_MIGRATIONS, readRecoveryKeyName } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { newBreakGlassKeyName } from "@waitron/provisioning";
@@ -68,32 +68,6 @@ it("draws another code when a replacement would reuse the current paper name", a
   expect(await readRecoveryKeyName(suite.node, NODE)).toBe(replacement.name);
   expect(await boxKeyStored(suite.node, NODE, original.secret)).toBe(false);
   expect(await boxKeyStored(suite.node, NODE, replacement.secret)).toBe(true);
-});
-
-it("draws another code when a new key would reuse a name this node's packs recorded", async () => {
-  await withTransaction(suite.db, (tx) =>
-    insertRecoveryPack(tx, {
-      nodeId: NODE,
-      number: 1,
-      madeAt: new Date("2026-10-15T09:00:00.000Z"),
-      madeBy: null,
-      parts: [
-        { part: "server-key", state: "included", keyName: "2026-10-15 · 3333", carriedKey: true },
-      ],
-    }),
-  );
-  drawCodeIndex
-    .mockReturnValueOnce(0)
-    .mockReturnValueOnce(0)
-    .mockReturnValueOnce(0)
-    .mockReturnValueOnce(0)
-    .mockReturnValueOnce(1)
-    .mockReturnValueOnce(1)
-    .mockReturnValueOnce(1)
-    .mockReturnValueOnce(1);
-  const key = await mintBreakGlassKey({ venue: suite.db, node: suite.node }, NODE);
-  expect(key.name).toBe("2026-10-15 · 4444");
-  expect(await readRecoveryKeyName(suite.node, NODE)).toBe("2026-10-15 · 4444");
 });
 
 it("draws a new name until it matches none of the names it is told are taken", () => {

@@ -126,7 +126,8 @@ it.each(["en", "es"] as const)(
       const attached = JSON.parse(
         Buffer.from((await pdf.getAttachmentContent(PACK_ATTACHMENT))!).toString(),
       );
-      expect([attached.serverKey, attached.serverKeyName]).toEqual([null, null]);
+      expect(attached).not.toHaveProperty("serverKey");
+      expect(attached).not.toHaveProperty("serverKeyName");
     } finally {
       await task.destroy();
     }
@@ -178,9 +179,6 @@ it.each(["en", "es"] as const)(
         bucketCode: null,
         archiveCode: null,
         backupKey: null,
-        serverKey: null,
-        serverKeyName: null,
-        serverKeyHeldBy: null,
         ...made,
         masterKeyHeldBy: null,
       });

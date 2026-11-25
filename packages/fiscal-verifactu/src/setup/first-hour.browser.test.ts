@@ -1112,9 +1112,9 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   const bytes = new Uint8Array(await (await fetch(downloads[0]!.href)).arrayBuffer());
   expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe("%PDF-");
   const file = await readRecoveryPackPdf(bytes);
-  expect([file.serverKey, file.serverKeyName, file.masterKey, file.masterKeyName]).toEqual([
-    null,
-    null,
+  expect(file).not.toHaveProperty("serverKey");
+  expect(file).not.toHaveProperty("serverKeyName");
+  expect([file.masterKey, file.masterKeyName]).toEqual([
     "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
     "2026-11-23 · QZJV",
   ]);

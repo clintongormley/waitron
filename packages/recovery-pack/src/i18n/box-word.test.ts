@@ -24,9 +24,9 @@ function words(locale: PackLocale): [string, string][] {
 describe("the recovery pack's word for the Waitron machine", () => {
   it("reads both tables, nested ones and functions included", () => {
     const paths = words("en").map(([path]) => path);
-    expect(paths).toContain("pack.part.server-key");
+    expect(paths).toContain("pack.part.emergency");
     expect(paths).toContain("part.emergency.steps.0");
-    expect(paths).toContain("part.alsoServerKey");
+    expect(paths).toContain("part.keyChangedOn");
   });
 
   it("calls it the box in English, never the server", () => {

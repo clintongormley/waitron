@@ -28,9 +28,6 @@ export class RecoveryPackFileError extends Error {
   }
 }
 
-/** The pack that holds the server key, named on a pack that does not hold it. */
-export type ServerKeyHolder = { number: number; madeOn: string; received: boolean };
-
 /** Every key is always present; a part the pack does not hold is `null`. */
 export type RecoveryPackFile = {
   kind: "waitron-recovery-pack";
@@ -41,10 +38,6 @@ export type RecoveryPackFile = {
   archiveCode: string | null;
   /** Carried exactly as the box holds it: a passphrase's spaces, even at either end, are part of it. */
   backupKey: string | null;
-  /** The fiscal module's own key file, carried as it is; its reader checks it. */
-  serverKey: Record<string, unknown> | null;
-  serverKeyName: string | null;
-  serverKeyHeldBy: ServerKeyHolder | null;
   /** As printed: seven groups of four, single spaces. Only on a pack made with a new master key. */
   masterKey: string | null;
   /** The current master key's name, on every pack made while the venue has one. */
@@ -61,9 +54,6 @@ const FIELDS = [
   "bucketCode",
   "archiveCode",
   "backupKey",
-  "serverKey",
-  "serverKeyName",
-  "serverKeyHeldBy",
   "masterKey",
   "masterKeyName",
   "masterKeyHeldBy",
@@ -90,29 +80,6 @@ function exact(value: unknown, keys: readonly string[]): value is Record<string,
   );
 }
 
-/**
- * A value {@link canonicalJson} writes as JSON that reads back to the same bytes. The depth limit
- * also refuses a value that contains itself.
- */
-function json(value: unknown, depth = 0): boolean {
-  if (depth > 32) return false;
-  if (value === null || typeof value === "boolean" || typeof value === "string") return true;
-  if (typeof value === "number") return Number.isFinite(value);
-  const keys = typeof value === "object" ? Reflect.ownKeys(value as object) : [];
-  if (Array.isArray(value))
-    return (
-      Object.getPrototypeOf(value) === Array.prototype &&
-      keys.length === value.length + 1 &&
-      Object.keys(value).length === value.length &&
-      value.every((item) => json(item, depth + 1))
-    );
-  return (
-    plainObject(value) &&
-    Object.keys(value).length === keys.length &&
-    Object.values(value).every((item) => json(item, depth + 1))
-  );
-}
-
 function count(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) > 0;
 }
@@ -124,16 +91,6 @@ function code(value: unknown, prefix: string): boolean {
       value.length > prefix.length &&
       value.startsWith(prefix) &&
       !/\s/.test(value))
-  );
-}
-
-function label(value: unknown): boolean {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= 256 &&
-    value.trim() === value &&
-    !/\p{Cc}/u.test(value)
   );
 }
 
@@ -151,16 +108,6 @@ function day(value: unknown): boolean {
     typeof value === "string" &&
     /^\d{4}-\d\d-\d\d$/.test(value) &&
     instant(`${value}T00:00:00.000Z`)
-  );
-}
-
-function holder(value: unknown): boolean {
-  return (
-    value === null ||
-    (exact(value, ["number", "madeOn", "received"]) &&
-      count(value.number) &&
-      day(value.madeOn) &&
-      typeof value.received === "boolean")
   );
 }
 
@@ -191,9 +138,6 @@ function checked(value: unknown): RecoveryPackFile {
       value.backupKey === null ||
       (typeof value.backupKey === "string" && value.backupKey !== "")
     ) ||
-    !(value.serverKey === null || (plainObject(value.serverKey) && json(value.serverKey))) ||
-    !(value.serverKeyName === null || label(value.serverKeyName)) ||
-    !holder(value.serverKeyHeldBy) ||
     !masterKeyFields(value)
   )
     refuse("shape");

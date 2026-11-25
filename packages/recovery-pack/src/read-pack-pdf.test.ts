@@ -18,9 +18,6 @@ const file: RecoveryPackFile = {
   bucketCode: "WAITRON-RECOVERY-KIT-2:" + "b".repeat(600),
   archiveCode: null,
   backupKey: "k".repeat(43),
-  serverKey: null,
-  serverKeyName: "2026-10-12 · key",
-  serverKeyHeldBy: { number: 1, madeOn: "2026-10-12", received: true },
   masterKey: null,
   masterKeyName: null,
   masterKeyHeldBy: null,
@@ -91,9 +88,7 @@ describe("reading the pack file out of a pack PDF", () => {
 
   it("tells a PDF that is not a pack apart: no file, or one file of another name", async () => {
     expect(await reason(await carrier([]))).toBe("not_a_pack");
-    expect(await reason(await carrier([["waitron-recovery-key-v1.json", fileBytes]]))).toBe(
-      "not_a_pack",
-    );
+    expect(await reason(await carrier([["notes.json", fileBytes]]))).toBe("not_a_pack");
   });
 
   it("refuses bytes that are not a PDF at all", async () => {
@@ -113,14 +108,14 @@ describe("reading the pack file out of a pack PDF", () => {
       await reason(
         await twoFiles([
           [PACK_ATTACHMENT, fileBytes],
-          ["waitron-recovery-key-v1.json", fileBytes],
+          ["notes.json", fileBytes],
         ]),
       ),
     ).toBe("carrier");
     expect(
       await reason(
         await twoFiles([
-          ["waitron-recovery-key-v1.json", fileBytes],
+          ["notes.json", fileBytes],
           [PACK_ATTACHMENT, fileBytes],
         ]),
       ),

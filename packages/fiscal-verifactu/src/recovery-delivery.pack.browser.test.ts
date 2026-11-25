@@ -45,9 +45,6 @@ describe("setup's delivery is recovery pack 1", () => {
           bucketCode: null,
           archiveCode: null,
           backupKey: null,
-          serverKey: null,
-          serverKeyName: null,
-          serverKeyHeldBy: null,
           ...made,
           masterKeyHeldBy: null,
         });

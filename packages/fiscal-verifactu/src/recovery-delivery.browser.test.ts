@@ -35,11 +35,8 @@ describe("transient recovery delivery session", () => {
       expect(print).toBe(download);
       const bytes = new Uint8Array(await (await fetch(download)).arrayBuffer());
       const file = await readRecoveryPackPdf(bytes);
-      expect([file.serverKey, file.masterKey, file.masterKeyName]).toEqual([
-        null,
-        made.masterKey,
-        made.masterKeyName,
-      ]);
+      expect(file).not.toHaveProperty("serverKey");
+      expect([file.masterKey, file.masterKeyName]).toEqual([made.masterKey, made.masterKeyName]);
       const binding = await session.ready();
       expect(binding.statement).toEqual(recoveryDocumentPublic(document));
       expect(binding.bindingDigest).toBe(

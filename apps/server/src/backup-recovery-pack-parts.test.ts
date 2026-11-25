@@ -146,7 +146,7 @@ describe("the bucket part", () => {
     await storeStream();
     const built = await inTx((tx) => buildBucketPart(tx, { ...context, env }));
     expect(built).toEqual({
-      part: { kind: "bucket", state: "failed", failure: partFailure("en", code, {}) },
+      part: { kind: "bucket", state: "failed", failure: partFailure("en", code) },
       record: { part: "bucket", state: "failed" },
       file: {},
       failedWith: code,
@@ -157,7 +157,7 @@ describe("the bucket part", () => {
     await storeStream();
     await suite.db.execute(sql`update nodes set public_key = null`);
     const built = await inTx((tx) => buildBucketPart(tx, context));
-    expect(built.part.failure).toEqual(partFailure("en", "backup.stream_signer_missing", {}));
+    expect(built.part.failure).toEqual(partFailure("en", "backup.stream_signer_missing"));
   });
 });
 
@@ -225,7 +225,7 @@ describe("the archives part", () => {
   it("fails as backup.archive_settings_unreadable when the stored record cannot be read", async () => {
     await inTx((tx) => storeArchivePart(tx, {}));
     const built = await inTx((tx) => buildArchivesPart(tx, context));
-    expect(built.part.failure).toEqual(partFailure("en", "backup.archive_settings_unreadable", {}));
+    expect(built.part.failure).toEqual(partFailure("en", "backup.archive_settings_unreadable"));
     expect(built.record).toEqual({ part: "archives", state: "failed" });
     expect(built.failedWith).toBe("backup.archive_settings_unreadable");
   });
@@ -234,7 +234,7 @@ describe("the archives part", () => {
     await storeStream();
     await storeArchives();
     const short = { ...context, env: { WAITRON_BACKUP_RECOVERY_KEY: "short" } };
-    const words = partFailure("en", "backup.recovery_key_too_short", {});
+    const words = partFailure("en", "backup.recovery_key_too_short");
     expect((await inTx((tx) => buildBucketPart(tx, short))).part.failure).toEqual(words);
     expect((await inTx((tx) => buildArchivesPart(tx, short))).part.failure).toEqual(words);
   });

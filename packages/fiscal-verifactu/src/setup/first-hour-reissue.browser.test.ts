@@ -175,8 +175,8 @@ it("offers explicit replacement after raw-key loss and delivers the new real PDF
   const file = await readRecoveryPackPdf(
     new Uint8Array(await (await fetch(saved.at(-1)!)).arrayBuffer()),
   );
-  expect([file.serverKey, file.masterKey, file.masterKeyName]).toEqual([
-    null,
+  expect(file).not.toHaveProperty("serverKey");
+  expect([file.masterKey, file.masterKeyName]).toEqual([
     replacement.masterKey,
     replacement.masterKeyName,
   ]);

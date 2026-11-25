@@ -464,7 +464,8 @@ describe("a made pack", () => {
     expect(file.madeAt).toBe("2026-10-30T09:00:00.000Z");
     expect(parseRecoveryKit(file.bucketCode!).recoveryKey).toBe(KEY);
     expect(decodeArchiveRecoveryPack(file.archiveCode!).recoveryKey).toBe(KEY);
-    expect([file.serverKey, file.serverKeyName, file.serverKeyHeldBy]).toEqual([null, null, null]);
+    for (const key of ["serverKey", "serverKeyName", "serverKeyHeldBy"])
+      expect(file).not.toHaveProperty(key);
     const [record] = await packs();
     expect(record).toMatchObject({
       number: 1,
@@ -568,11 +569,8 @@ describe("a made pack", () => {
       expect(response.headers.has("x-waitron-recovery-pack-key")).toBe(false);
       const bytes = await response.arrayBuffer();
       const file = await readRecoveryPackPdf(new Uint8Array(bytes));
-      expect([file.serverKey, file.serverKeyName, file.serverKeyHeldBy]).toEqual([
-        null,
-        null,
-        null,
-      ]);
+      for (const key of ["serverKey", "serverKeyName", "serverKeyHeldBy"])
+        expect(file).not.toHaveProperty(key);
       const text = await pdfText(bytes);
       expect(text).not.toMatch(/server key|box key/i);
       const [record] = await packs();

@@ -304,7 +304,7 @@ it.each(["en", "es"] as const)(
         attachment = (await pdf.getAttachmentContent(PACK_ATTACHMENT))!;
         expect(attachment).toBeInstanceOf(Uint8Array);
         const packFile = parseRecoveryPackFile(attachment);
-        expect(packFile.serverKey).toBeNull();
+        expect(packFile).not.toHaveProperty("serverKey");
         expect(packFile.masterKey).toMatch(/^[2-9A-HJKMNP-Z]{4}( [2-9A-HJKMNP-Z]{4}){6}$/);
         masterKey = packFile.masterKey!;
         masterKeyName = packFile.masterKeyName!;

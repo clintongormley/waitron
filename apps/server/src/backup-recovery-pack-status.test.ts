@@ -9,7 +9,6 @@ import {
 
 const DAY = 24 * 60 * 60 * 1000;
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const KEY_1 = "2026-10-01 · first";
 
 const included = {
   bucket: {
@@ -393,22 +392,6 @@ describe("backups still on the older key", () => {
   it.each([true, false])("passes %s through", (value) => {
     expect(status([], { backupsUseOlderKey: value }).backupsUseOlderKey).toBe(value);
   });
-});
-
-it("the status names no box key", () => {
-  const withBoxKey: RecoveryPackPartRecord[] = [
-    included.bucket,
-    included.archives,
-    { part: "server-key", state: "included", keyName: KEY_1, carriedKey: true },
-  ];
-  const answer = status([
-    pack(2, "2026-10-22T10:00:00.000Z", { received: false, parts: withBoxKey }),
-    pack(1, "2026-10-01T10:00:00.000Z", { parts: withBoxKey }),
-  ]);
-  expect(answer).not.toHaveProperty("serverKey");
-  expect(answer.reasons.map((r): string => r.part)).not.toContain("server-key");
-  expect(answer.keep.filter((k) => k.why !== "backup_key")).toEqual([]);
-  expect(answer.unreceived).toEqual({ number: 2, madeAt: "2026-10-22T10:00:00.000Z" });
 });
 
 describe("emergency-code freshness", () => {

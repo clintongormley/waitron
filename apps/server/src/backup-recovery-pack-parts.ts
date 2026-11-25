@@ -36,12 +36,7 @@ export type PartsContext = {
   readonly env: Readonly<Record<string, string | undefined>>;
 };
 
-type FileFields = Partial<
-  Pick<
-    RecoveryPackFile,
-    "bucketCode" | "archiveCode" | "backupKey" | "serverKey" | "serverKeyName" | "serverKeyHeldBy"
-  >
->;
+type FileFields = Partial<Pick<RecoveryPackFile, "bucketCode" | "archiveCode" | "backupKey">>;
 
 export type BuiltPart = {
   readonly part: PackPart;
@@ -132,12 +127,6 @@ export function notSetUp(kind: Kind): BuiltPart {
   };
 }
 
-function refusal(error: unknown): { code: string; params: Readonly<Record<string, unknown>> } {
-  return isAppError(error)
-    ? { code: error.code, params: (error.params ?? {}) as Record<string, unknown> }
-    : { code: "", params: {} };
-}
-
 /** A part whose read refused becomes a failed page keyed by the refusal's real code. */
 async function orFailed(
   kind: Kind,
@@ -147,9 +136,9 @@ async function orFailed(
   try {
     return await build();
   } catch (error) {
-    const { code, params } = refusal(error);
+    const code = isAppError(error) ? error.code : "";
     return {
-      part: { kind, state: "failed", failure: partFailure(context.locale, code, params) },
+      part: { kind, state: "failed", failure: partFailure(context.locale, code) },
       record: { part: kind, state: "failed" },
       file: {},
       failedWith: code === "" ? "unexpected" : code,

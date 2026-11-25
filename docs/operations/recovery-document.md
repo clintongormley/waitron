@@ -12,8 +12,7 @@ permission and a secure (HTTPS) connection to that box.
 1. Open **Backups**. The **Recovery pack** card at the top says which pack is the latest and
    whether it is up to date. Choose **Make recovery pack**.
 2. The pack does not change any key: its first page names the pack that holds the current master
-   key, and its box key page names the pack or sheet that holds the box key. If the master key or
-   the pack holding the box key is lost, choose **Make a new master key** instead (below).
+   key. If the master key is lost, choose **Make a new master key** instead (below).
 3. Choose **Make pack**. When Waitron asks you to confirm it is you, use your password or
    **Use your passkey**. If your account uses an authenticator app, also enter a code from it or one
    of your recovery codes. This confirmation covers protected actions in this browser for 15 minutes

@@ -22,7 +22,7 @@ const parts: RecoveryPackPartRecord[] = [
     settingsRevision: "7",
   },
   { part: "archives", state: "absent" },
-  { part: "server-key", state: "included", keyName: "2026-10-01 · K", carriedKey: true },
+  { part: "emergency", state: "included", codeIssuedAt: "2026-10-12T08:00:00.000Z" },
 ];
 const madeAt = new Date("2026-10-30T09:00:00.000Z");
 
@@ -96,15 +96,13 @@ describe("recovery pack records", () => {
     ["a code", { part: "archives", state: "included", archiveCode: "WRA1-…" }],
     ["an unknown part", { part: "disk-key", state: "included" }],
     ["an unknown state", { part: "bucket", state: "half" }],
-    [
-      "a carried key that is not true or false",
-      { part: "server-key", state: "included", carriedKey: "yes" },
-    ],
+    ["a server-key part", { part: "server-key", state: "included" }],
+    ["a carried-key mark", { part: "bucket", state: "included", carriedKey: true }],
     [
       "a never-changed mark that is not true or false",
       { part: "bucket", state: "included", keyNeverChanged: "yes" },
     ],
-    ["a key name that is not text", { part: "server-key", state: "included", keyName: 7 }],
+    ["a key name", { part: "bucket", state: "included", keyName: "2026-10-01 · K" }],
     ["a destination outside the two", { part: "archives", state: "included", destination: "usb" }],
   ])("refuses a part record carrying %s, writing nothing", async (_name, entry) => {
     await expect(

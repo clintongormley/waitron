@@ -831,7 +831,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "packages/provisioning/src/venue-operation.fiscal.test.ts",
   "packages/provisioning/test/allocated-venue.ts",
   "packages/purchasing/src/operations.test.ts",
-  "packages/recovery-pack/src/pack-file.test.ts",
   "packages/recovery-pack/src/render-pack.test.ts",
   "packages/shared/src/capitalise.test.ts",
   "packages/shared/src/compare-label-sort.test.ts",

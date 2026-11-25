@@ -680,7 +680,8 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       recoveryPackPdf: expect.any(String),
     });
     const pdf = await readRecoveryPackPdf(Buffer.from(reply.recoveryPackPdf, "base64"));
-    expect([pdf.serverKey, pdf.serverKeyName, pdf.serverKeyHeldBy]).toEqual([null, null, null]);
+    for (const key of ["serverKey", "serverKeyName", "serverKeyHeldBy"])
+      expect(pdf).not.toHaveProperty(key);
     expect(pdf.masterKeyName).toBe(reply.masterKeyName);
     const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
     const [pack] = await readRecoveryPacks(venueDb.db, id);

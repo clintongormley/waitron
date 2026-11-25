@@ -1,14 +1,10 @@
 import { generatePassword, newBreakGlassKeyName } from "@waitron/provisioning";
 import { hashSecretAsync } from "@waitron/identity";
 import {
-  readRecoveryPacks,
   requireStamp,
   withNodeTransaction,
-  type Database,
   type NodeDatabase,
   type NodeTransaction,
-  type RecoveryPackRecord,
-  type Transaction,
 } from "@waitron/db";
 import { readRecoveryKeyName, setRecoveryKeyTx, type VenueAndNodeHandles } from "@waitron/node-db";
 
@@ -23,32 +19,22 @@ export async function mintBreakGlassSecret(
   return (await mintBreakGlassKey(handles, nodeId)).secret;
 }
 
-/** Every server key name this node's packs recorded, and the key in force. */
-export function takenKeyNames(
-  name: string | null,
-  records: readonly RecoveryPackRecord[],
-): Set<string> {
-  const taken = new Set<string>(name === null ? [] : [name]);
-  for (const record of records) {
-    for (const part of record.parts) {
-      if (part.part === "server-key" && part.keyName !== undefined) taken.add(part.keyName);
-    }
-  }
-  return taken;
+/** The name of the key in force, if any. */
+export function takenKeyNames(name: string | null): Set<string> {
+  return new Set<string>(name === null ? [] : [name]);
 }
 
 /**
- * A name no key in force or earlier pack has used. Writes nothing, so a caller can choose it and
- * save the key inside its own node transaction.
+ * A name the key in force does not use. Writes nothing, so a caller can choose it and save the key
+ * inside its own node transaction.
  */
 export async function chooseBreakGlassKeyName(
-  venue: Database | Transaction,
   node: NodeDatabase | NodeTransaction,
   nodeId: string,
 ): Promise<string> {
   return newBreakGlassKeyName(
     new Date().toISOString().slice(0, 10),
-    takenKeyNames(await readRecoveryKeyName(node, nodeId), await readRecoveryPacks(venue, nodeId)),
+    takenKeyNames(await readRecoveryKeyName(node, nodeId)),
   );
 }
 
@@ -65,12 +51,11 @@ export async function makeBreakGlassSecret(): Promise<BreakGlassSecret> {
 
 /** Saves `made`'s verifier under a fresh key name inside the caller's node transaction. */
 async function mintBreakGlassKeyTx(
-  venue: Database | Transaction,
   tx: NodeTransaction,
   nodeId: string,
   made: BreakGlassSecret,
 ): Promise<{ secret: string; name: string }> {
-  const name = await chooseBreakGlassKeyName(venue, tx, nodeId);
+  const name = await chooseBreakGlassKeyName(tx, nodeId);
   await setRecoveryKeyTx(tx, nodeId, made.verifier, name, null);
   return { secret: made.secret, name };
 }
@@ -82,7 +67,5 @@ export async function mintBreakGlassKey(
 ): Promise<{ secret: string; name: string }> {
   await requireStamp(handles.venue);
   const made = await makeBreakGlassSecret();
-  return withNodeTransaction(handles.node, (tx) =>
-    mintBreakGlassKeyTx(handles.venue, tx, nodeId, made),
-  );
+  return withNodeTransaction(handles.node, (tx) => mintBreakGlassKeyTx(tx, nodeId, made));
 }
