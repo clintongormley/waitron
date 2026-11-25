@@ -4451,7 +4451,7 @@ describe("till-app: a change refused on a bill that holds money", () => {
     ).toBe("20.00");
   });
 
-  it("sends Refund {excess} on a payment that has its own ticket to Correct invoice on that ticket", async () => {
+  it("sends Refund {excess} on a payment that has its own ticket to Give money back on that ticket", async () => {
     const { el, order } = await openHolding({
       getBillBalance: vi.fn().mockResolvedValue(
         balanceOf({
@@ -4477,7 +4477,7 @@ describe("till-app: a change refused on a bill that holds money", () => {
           manual: false,
         },
       ]),
-      readInvoiceCorrectionLines: vi.fn(() => new Promise(() => {})),
+      readGiveBack: vi.fn(() => new Promise(() => {})),
       moveDishes: vi.fn().mockRejectedValue({
         code: "bill.received_exceeds_total",
         status: 409,
@@ -4492,9 +4492,12 @@ describe("till-app: a change refused on a bill that holds money", () => {
     await flush(el);
 
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).not.toBeNull(),
+      expect(el.shadowRoot!.querySelector("till-give-back-dialog")).not.toBeNull(),
     );
     expect(api.getTransactionReceipt).toHaveBeenCalledWith("advance-sale", expect.anything());
+    expect(api.readGiveBack).toHaveBeenCalledWith("advance-sale", {});
+    expect(el.shadowRoot!.querySelector("till-give-back-dialog")!.saleId).toBe("advance-sale");
+    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
   });
 
@@ -8096,7 +8099,7 @@ describe("till-app: giving back a bill payment", () => {
     expect(refunds().map(({ request }) => request.reason)).toEqual(["Charged twice"]);
   });
 
-  it("shows the refusal naming the table's receipt, not Correct invoice on the advance, when its payment is refunded after that receipt took it off", async () => {
+  it("shows the refusal naming the table's receipt, not Give money back on the advance, when its payment is refunded after that receipt took it off", async () => {
     const advancePaid = paymentOf({ hasTicket: true, saleId: "advance-sale" });
     const refundBillPayment = vi.fn().mockRejectedValue({
       code: "advance.taken_off_final_invoice",
@@ -8122,6 +8125,7 @@ describe("till-app: giving back a bill payment", () => {
       "This payment on account was already taken off the table's receipt A/45, so this ticket cannot be corrected. To give money back, first use Correct invoice on A/45: it takes the amount off the dishes at their own VAT rates, files a corrective invoice and gives back money paid on A/45. For anything more, choose Refund a payment on this ticket: it gives money back from this payment and files no corrective invoice; the accountant's export lists it.",
     );
     expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-give-back-dialog")).toBeNull();
     expect(api.getTransactionReceipt).not.toHaveBeenCalledWith("advance-sale", expect.anything());
   });
 
@@ -9756,12 +9760,12 @@ describe("till-app: Refund on a payment that has its own ticket", () => {
       ),
       getTransactionReceipt: vi.fn().mockResolvedValue(invoiceOf("30.00")),
       getRefundableTenders: vi.fn().mockResolvedValue([advanceTender]),
-      readInvoiceCorrectionLines: vi.fn(() => new Promise(() => {})),
+      readGiveBack: vi.fn(() => new Promise(() => {})),
       refundBillPayment: vi.fn(),
     };
   }
 
-  it("opens Correct invoice on that ticket, and no bill refund", async () => {
+  it("opens Give money back on that ticket, and no bill refund", async () => {
     const { el } = await mountApp(withAdvance());
     await openTable(el);
     await openDialog(el, "rest");
@@ -9769,19 +9773,18 @@ describe("till-app: Refund on a payment that has its own ticket", () => {
     await press(el, '[data-payment-refund="pay-1"]');
 
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).not.toBeNull(),
+      expect(el.shadowRoot!.querySelector("till-give-back-dialog")).not.toBeNull(),
     );
     expect(api.getTransactionReceipt).toHaveBeenCalledWith("advance-sale", expect.anything());
-    expect(api.readInvoiceCorrectionLines).toHaveBeenCalledWith("advance-sale", {});
-    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")!.saleId).toBe(
-      "advance-sale",
-    );
+    expect(api.readGiveBack).toHaveBeenCalledWith("advance-sale", {});
+    expect(el.shadowRoot!.querySelector("till-give-back-dialog")!.saleId).toBe("advance-sale");
     expect(dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
     expect(api.refundBillPayment).not.toHaveBeenCalled();
   });
 
-  it("opens Refund a payment on that ticket, and no bill refund, once the table's receipt took it off", async () => {
+  it("opens Give money back on that ticket, and no bill refund, once the table's receipt took it off", async () => {
     const takenOff = withAdvance({ invoiceNumber: "A/45", status: "placed" });
     takenOff.getBillBalance = vi.fn().mockResolvedValue(
       balanceOf({
@@ -9807,11 +9810,14 @@ describe("till-app: Refund on a payment that has its own ticket", () => {
     await press(el, '[data-payment-refund="pay-1"]');
 
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull(),
+      expect(el.shadowRoot!.querySelector("till-give-back-dialog")).not.toBeNull(),
     );
     expect(api.getTransactionReceipt).toHaveBeenCalledWith("advance-sale", expect.anything());
     expect(api.getRefundableTenders).toHaveBeenCalledWith("advance-sale", {});
+    expect(api.readGiveBack).toHaveBeenCalledWith("advance-sale", {});
+    expect(el.shadowRoot!.querySelector("till-give-back-dialog")!.saleId).toBe("advance-sale");
     expect(dialog(el)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
     expect(api.refundBillPayment).not.toHaveBeenCalled();
