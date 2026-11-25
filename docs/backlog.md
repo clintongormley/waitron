@@ -761,6 +761,8 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 ### Printers, the print agent and receipts
 
+- **A1580. Edit printer holds the settings calibration hides** (owner, 2026-11-25; important, size M). [Detail](backlog/printers.md#a1580-edit-printer-holds-the-settings-calibration-hides)
+
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
 
 - **A print agent somewhere other than the box** (bundle of 3, size L, waits for another entry). Holds A1203, A1204, A1175. [Detail](backlog/printers.md#bundle-a-print-agent-somewhere-other-than-the-box)

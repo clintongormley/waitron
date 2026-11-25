@@ -371,6 +371,18 @@ Hardware and inbox checks to complete in the owner session.
   device test on 3 November: can one Android device reach the printers over the venue's Wi-Fi and
   Cloud over mobile data at once? [Detail](printers.md#a1175-an-android-app-for-venues-run-from-waitron-cloud)
 
+## A1580. Edit printer holds the settings calibration hides
+
+Owner, 2026-11-25: "i can't edit a printer to make it portable, i have to calibrate it. also the cash
+register setting. maybe also expose the width and resolution (without the calibration)", then "Build
+it" of a picture (`mock-edit-printer.png` in `.impeccable/shots/` on the owner's Mac, not in the
+repository). Edit holds, top to bottom: the name (and a network printer's address, as today), Paper
+width and Print resolution side by side, "Calibrate printer if you are not sure of these." with the
+first two words a link, Cash drawer attached, Portable printer with its hint, and "When picked up" only
+while Portable is on. Calibration stays for measuring paper, and the drawer test it holds must stay
+reachable. An A4 printer's Edit is unchanged. It follows #4336 and #4342, which change the same screen;
+an unfinished start is on the local branch `fix/edit-printer-settings`.
+
 ## Decisions and deliberate limits
 
 - **The print agent's setup page has no TLS certificate, on purpose (owner, 2026-09-27).** It asks
