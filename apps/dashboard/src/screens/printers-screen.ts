@@ -1692,7 +1692,13 @@ export class PrintersScreen extends LitElement {
     }));
     this.#absorbCommands(devices);
     this.#findPairAgain();
-    if (this.probeStatus === "pending") this.probeStatus = this.#probeOutcome() ?? "pending";
+    if (this.probeStatus === "pending") {
+      const outcome = this.#probeOutcome();
+      if (outcome !== undefined) {
+        this.#addressScope?.commit(this.#addressValues());
+        this.probeStatus = outcome;
+      }
+    }
   }
 
   /** What the address check found, judged against the current scan and registrations. */

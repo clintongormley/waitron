@@ -10,7 +10,7 @@ A Bluetooth printer must be in pairing mode first. Choose **Pair and add** besid
 PIN and choose **Pair and add** again. For a new printer, the name dialog opens: choose **Add**.
 
 If a network printer is not found, open **Check a known address**, type its IP address and choose
-**Connect**.
+**Connect**. When Waitron finds it, choose **Add** beside the printer or **Close** to leave the search.
 
 To remove a receipt or station printer, choose **Delete** in its row menu or details. The
 confirmation lists the assignments removed and work ended. To use it again, choose **Add a

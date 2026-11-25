@@ -212,8 +212,9 @@ venue at commit `30c1c1c564` with 250 bills a day and seed 1.
 ## Bundle: One session at the real box: printers, paper, tax QR, the drawer
 
 Hardware checks to complete with the owner. The owner walked most of the list on 20 and 25 November 2026;
-what is left is below. The 25 November session queued A1578 (slow Bluetooth prints), A1579 (Add a printer after an office printer), A1581
-(looks around A4 printing) and A1584 (a shorter Delete printer window).
+what is left is below. The 25 November session queued A1578 (slow Bluetooth prints), A1579 (review the
+**Use this agent** row after adding an A4 printer), A1581 (looks around A4 printing) and A1584
+(a shorter Delete printer window).
 
 - Verify live Google address completion during Cloud-connected Prepare setup on the owner's real box with Google lookup configured.
 - Show the owner how Orders could close **Print / Reprint** after accepting the print and confirm where it queued. The owner mentioned the window staying open on 25 November and has a choice to make about the proposed change.
