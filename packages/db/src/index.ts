@@ -96,6 +96,7 @@ export {
 } from "./schema/origin.js";
 export { invoiceSeries } from "./schema/series.js";
 export {
+  billOrderedPeriods,
   workingOrderLines,
   workingOrders,
   workingOrderStatus,

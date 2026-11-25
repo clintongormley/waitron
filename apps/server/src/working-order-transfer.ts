@@ -28,6 +28,7 @@ import { assertLinesKeptExcess, readBillExcess, refusePaidLines } from "./bill-p
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
 import { copyKitchenJobLines, copyKitchenPrintLinks } from "./kitchen-ticket-links.js";
 import { splitLineServiceState, readLineCancellations } from "./line-service-state.js";
+import { carryOrderedPeriods } from "./ordered-periods.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { grossLineTotal, perDishExtraPicks, extraQuantityFor } from "./order-line-quantities.js";
 import { recordPortionEvents, carryLineReductions } from "./order-portions.js";
@@ -205,6 +206,7 @@ export async function moveOrderLines(
     if (targetExcess !== null) await assertLinesKeptExcess(tx, targetExcess);
     if (!deferTarget) await refuseOrderOverSimplifiedLimit(tx, cfg, toTabId, before);
   }
+  if (source.length > 0 || lineNos === undefined) await carryOrderedPeriods(tx, fromTabId, toTabId);
   return source.map((line) => line.id);
 }
 /**

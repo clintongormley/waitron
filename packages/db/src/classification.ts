@@ -141,6 +141,7 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("custom_themes", "state", STATE),
   classify("incidents", "state", STATE),
   classify("working_orders", "state", "orders in flight; copied to a standby"),
+  classify("bill_ordered_periods", "state", "periods an open bill ordered in; copied to a standby"),
   classify(
     "working_order_lines",
     "state",

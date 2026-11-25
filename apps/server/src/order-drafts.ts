@@ -440,6 +440,7 @@ export async function saveDraft(
         };
       }),
     ),
+    at,
   );
   if (lines.length === 0) {
     const released = await closeBillDraft(tx, billId, operatorId, expected, "discarded");
@@ -815,7 +816,8 @@ export async function submitDraft(
       await refusePaymentInFlight(tx, [billId]);
       const edit = await requireBillEditor(tx, billId, operatorId, expectedEdit);
       await checkAndBumpParty(tx, partyId, input.expectedPartyRevision, "open");
-      const lines = (await storedLines(tx, [id])).map(({ line }) => line);
+      const stored = await storedLines(tx, [id]);
+      const lines = stored.map(({ line }) => line);
       const known = new Set(lines.map((line) => line.id));
       const named = new Set<string>();
       for (const lineId of groups.flatMap((group) => group.lineIds)) {
@@ -886,6 +888,9 @@ export async function submitDraft(
           expectedEdit,
           lateSend: input.lateSend,
           sourceDraftLineIds: freshGroups.flatMap((lines) => lines.map((line) => line.id)),
+          draftAddTimes: stored.flatMap(({ line, addedAt }) =>
+            named.has(line.id) ? [addedAt] : [],
+          ),
         },
         attendance === undefined ? undefined : { recorder: attendance, at },
       );
@@ -1297,7 +1302,7 @@ async function recordDraftEvents(
 async function storedLines(
   tx: Transaction,
   draftIds: readonly string[],
-): Promise<{ draftId: string; position: number; line: DraftLine }[]> {
+): Promise<{ draftId: string; position: number; addedAt: string; line: DraftLine }[]> {
   const rows = await tx
     .select({
       line: orderDraftLines,
@@ -1317,6 +1322,7 @@ async function storedLines(
       ({
         draftId: row.draftId,
         position: row.position,
+        addedAt: row.addedAt,
         line: {
           sourceLineId: null,
           source: null,
@@ -1346,7 +1352,7 @@ async function storedLines(
               }),
           unavailable: false,
         },
-      }) satisfies { draftId: string; position: number; line: DraftLine },
+      }) satisfies { draftId: string; position: number; addedAt: string; line: DraftLine },
   );
   return fresh.sort((a, b) => a.position - b.position || a.line.id.localeCompare(b.line.id));
 }
@@ -1356,6 +1362,7 @@ async function replaceLines(
   fromDraftIds: readonly string[],
   intoDraftId: string,
   lines: readonly DraftLine[],
+  addedAt = nowIso(),
 ): Promise<void> {
   const fresh = lines.map((line, index) => ({ line, position: index + 1 }));
   // Retained draft lines keep their allergy ticks, whose foreign key cascades on deletion.
@@ -1376,6 +1383,7 @@ async function replaceLines(
   const rows = fresh.map(({ line, position }) => ({
     id: line.id,
     draftId: intoDraftId,
+    addedAt,
     position,
     menuItemId: line.menuItemId,
     variantId: line.variantId,

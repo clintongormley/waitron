@@ -31,6 +31,7 @@ import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection
 import type { LateSendConfirmation } from "./late-send.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { expandPortionRows, portionIdentities } from "./order-portions.js";
+import { recordOrderedPeriods } from "./ordered-periods.js";
 import { tableHeld } from "./parties.js";
 import type { RetainedCourseLine } from "./retained-course.js";
 import { SET_MENU_DRAFT_LINE, type SetMenuDraftLine } from "./set-menu-bill.js";
@@ -139,6 +140,7 @@ export async function createOpenOrder(
   identities: OrderLineIdentity[];
   lineRows: WorkingOrderLineInsert[];
 }> {
+  const routing = routingOnce(tx, new Date());
   const choice = placement.invoiceChoice;
   if (
     choice?.invoiceType !== undefined &&
@@ -218,6 +220,7 @@ export async function createOpenOrder(
     "added",
     placement.lateSend,
     unwrittenBill,
+    routing,
   );
   const { gross, offers } = pricedLines;
   const expanded = expandPortionRows(
@@ -286,6 +289,7 @@ export async function createOpenOrder(
       };
     }),
   );
+  if (lineRows.length > 0) await recordOrderedPeriods(tx, id, [routing.at.toISOString()]);
   await linkSetMenusFor(tx, id, pricedLines.setMenuLinks);
   const regrouped = (await regroupBills(tx, [id])).has(id);
   const total = regrouped ? await storedOrderTotal(tx, id) : gross.total;

@@ -32,6 +32,7 @@ import type { OrderAttendance } from "./working-order-context.js";
 import { refusePaymentInFlight, bumpRevision } from "./working-order-edit-state.js";
 import { fireableLineColumns, routingOnce, fireLines } from "./working-order-kitchen-fire.js";
 import { type TabRoundLine, priceTabRound, insertTabRound } from "./working-order-open.js";
+import { recordOrderedPeriods } from "./ordered-periods.js";
 
 /** A line of a submitted group: a round line, released with its group rather than by course. */
 export type GroupLine = TabRoundLine;
@@ -144,6 +145,7 @@ export type PlaceGroupsInput = Pick<
   groups: (SubmitGroupsInput["groups"][number] & { existingLineIds?: string[] })[];
   /** Draft ids in the same order as the input dishes, before extras become child rows. */
   sourceDraftLineIds?: readonly string[];
+  draftAddTimes?: readonly string[];
 };
 /**
  * {@link submitGroups} without its replay record or party revision check, for a command that makes
@@ -157,6 +159,7 @@ export async function placeGroups(
   attendance?: { recorder: AttendanceRecorder; at: string },
   beforeOutput?: (portionIds: readonly (readonly string[])[]) => Promise<void>,
 ): Promise<SubmittedGroups> {
+  const routing = routingOnce(tx, new Date());
   const { operatorId } = input;
   const expectedEdit = parseBillEditExpected(input.expectedEdit);
   const tabId = input.billId ?? expectedEdit.billId;
@@ -199,7 +202,6 @@ export async function placeGroups(
   const lines = input.groups.flatMap((group) => group.lines);
   const empty = (group: PlaceGroupsInput["groups"][number]) =>
     group.lines.length === 0 && (group.existingLineIds?.length ?? 0) === 0;
-  const routing = routingOnce(tx, new Date());
   const priced =
     lines.length === 0 && !groups.some(empty)
       ? null
@@ -267,6 +269,9 @@ export async function placeGroups(
     creditedTo: operatorId,
   }));
   const inserted = round === null ? [] : await insertTabRound(tx, cfg, round, rows);
+  if (round !== null) {
+    await recordOrderedPeriods(tx, tabId, input.draftAddTimes ?? [routing.at.toISOString()]);
+  }
   const portionsOfLine: string[][] = lines.map(() => []);
   rows.forEach((row, i) => {
     if (row.parentLineId == null) portionsOfLine[requestOfRow[i]!]!.push(row.id!);
