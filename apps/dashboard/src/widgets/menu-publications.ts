@@ -34,7 +34,10 @@ import { conjunctionList } from "../i18n/list.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import type { MenuPublicationHeading } from "./menu-publication-actions.js";
+import {
+  publicationBlockerCount,
+  type MenuPublicationHeading,
+} from "./menu-publication-actions.js";
 import { publishWarningStyles, renderPublishWarningConfirmation } from "./menu-publish-warnings.js";
 
 type Edition = MenuPublicationsAnswer["editions"][number];
@@ -214,6 +217,9 @@ export class MenuPublicationsPanel extends LitElement {
         margin: 0;
         font-size: var(--wt-font-size-lg);
       }
+      slot:not([name]) + h2 {
+        margin-block-start: var(--wt-space-4);
+      }
       .retry {
         display: flex;
       }
@@ -329,7 +335,8 @@ export class MenuPublicationsPanel extends LitElement {
   }
 
   override updated(): void {
-    this.heading?.scheduleChanged(this.#canSchedule());
+    const blocked = this.preview !== null && publicationBlockerCount(this.preview) > 0;
+    this.heading?.scheduleChanged(blocked || this.#canSchedule());
   }
 
   openSchedule(opener: HTMLElement, preview: MenuPreview): void {
@@ -441,7 +448,7 @@ export class MenuPublicationsPanel extends LitElement {
   }
 
   #returnFocus(opener: HTMLElement | null = null): void {
-    (opener?.isConnected
+    (opener?.isConnected && !opener.matches(":disabled, [disabled]")
       ? opener
       : (this.renderRoot.querySelector<HTMLElement>("h2") ?? this.heading?.focusFallback())
     )?.focus();
@@ -462,7 +469,7 @@ export class MenuPublicationsPanel extends LitElement {
   /** Not while the draft cannot be published, nor when it is the edition it would follow. */
   #canSchedule(): boolean {
     const { preview, answer } = this;
-    if (preview === null || preview.clashes.length > 0 || answer === null) return false;
+    if (preview === null || publicationBlockerCount(preview) > 0 || answer === null) return false;
     const { status } = preview;
     let latest =
       status.state === "unpublished" ? null : { number: status.version, hash: status.hash };
@@ -587,6 +594,7 @@ export class MenuPublicationsPanel extends LitElement {
       )
         return;
     }
+    if (moving === null && preview !== null && publicationBlockerCount(preview) > 0) return;
     if (saveActionState(this.#scope).unchanged) return;
     this.#feedback.press();
     this.scheduleRefusal = null;
@@ -791,14 +799,19 @@ export class MenuPublicationsPanel extends LitElement {
     const errors = { ...own };
     if (refusal?.field != null) errors[refusal.field] ??= refusalMessage(refusal, this.preview);
     const marked = Object.values(errors).some(Boolean);
+    const moving = this.moving;
+    const blocked =
+      moving === null && this.preview !== null && publicationBlockerCount(this.preview) > 0;
+    const blockerMessage = blocked ? t("menu_preview.see_blockers") : null;
     const bottom = bottomMessage(
+      blockerMessage,
       refusal !== null && refusal.field === null ? refusalMessage(refusal, this.preview) : null,
       marked ? t("form.fix_fields") : null,
     );
     const invalid = Object.keys(own).length > 0;
     const submitAction = saveActionState(this.#scope);
     const repeated = this.repeated;
-    const moving = this.moving;
+
     const zone = this.answer?.timeZone ?? "";
     return html`<wt-dialog
       data-test="schedule-dialog"
@@ -899,7 +912,8 @@ export class MenuPublicationsPanel extends LitElement {
           variant=${submitAction.variant}
           data-test="schedule-submit"
           .loading=${this.scheduleBusy}
-          ?disabled=${submitAction.unchanged || invalid || this.confirming !== null}
+          ?disabled=${blocked || submitAction.unchanged || invalid || this.confirming !== null}
+          .ariaDescription=${blockerMessage}
           @click=${() => void this.#submitSchedule()}
           >${t(
             moving === null ? "menu_publications.schedule_action" : "menu_publications.move_action",
@@ -920,6 +934,7 @@ export class MenuPublicationsPanel extends LitElement {
               </p>`
             : nothing
         }
+        <slot></slot>
         ${
           queued.length === 0
             ? nothing

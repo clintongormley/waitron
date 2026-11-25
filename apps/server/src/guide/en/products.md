@@ -375,12 +375,14 @@ own sections leaves the source as it was; included menus still point to the same
 
 ## Review unpublished menu changes {#preview-undo}
 
-Choose **Review and publish** in the menu heading. In **Preview**, use **Publish now** or
-**Publish later** in the heading when you are ready. Choose **View** beside a change to
-see where it appears. Follow the **Edit** link to open the product or included menu. For a price
-change, **Edit product** opens the product, and the included menu's **Edit** link opens its
-**Price overrides** tab. After you publish, check the version and the box's publication time in
-the menu heading.
+Choose **Review and publish** in the menu heading. In **Fix before publishing**, choose a price or
+open the set menu you need to fix. Then open any warning you need to check. Select an item's name in
+the change list to find it in the proposed menu. On a phone, switch between **Changes** and **Menu**.
+Use the language picker above the menu to check translations or see **Internal names**.
+
+Use **Publish now** or **Publish later** in the heading when you are ready. To check or change
+a waiting publication, find it under **Scheduled versions** below the menu preview. After you
+publish, check the version and publication time in the menu heading.
 
 ## Patch the live menu in an emergency {#patch-live-menu}
 

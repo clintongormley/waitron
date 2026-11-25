@@ -28,6 +28,7 @@ import type {
   DocumentMember,
   DocumentTile,
   FrozenOffer,
+  FrozenOfferVariant,
   FrozenOfferedModifier,
   LiveOffer,
   LiveOfferedModifier,
@@ -125,15 +126,34 @@ export interface BuiltMenus {
 type PriceOrigins = NonNullable<MenuDocument["priceOrigins"]>;
 type PriceOrigin = PriceOrigins[string];
 
+function lastIncludedPriceSource(source: Extract<ValueSource, { kind: "menu" }>) {
+  while (source.from.kind === "menu") source = source.from;
+  return source;
+}
+
 function priceOrigin(source: ValueSource): PriceOrigin | undefined {
   if (source.kind === "own") return { kind: "this_menu" };
   if (source.kind === "product") return { kind: "product" };
   if (source.kind === "parent") return undefined;
-  let origin = source.from;
-  while (origin.kind === "menu") origin = origin.from;
+  const origin = lastIncludedPriceSource(source).from;
   return origin.kind === "own"
     ? { kind: "included_menu", id: source.menuId, name: source.menuName }
     : priceOrigin(origin);
+}
+
+function priceSetter(offer: CombinedOffer | undefined, variantId?: string): string | undefined {
+  const setting =
+    variantId === undefined
+      ? offer?.price
+      : offer?.variants.find((variant) => variant.variantId === variantId)?.price;
+  if (setting?.state !== "decided") return undefined;
+  const source =
+    setting.source.kind === "parent" && offer?.price.state === "decided"
+      ? offer.price.source
+      : setting.source;
+  if (source.kind !== "menu") return undefined;
+  const setter = lastIncludedPriceSource(source);
+  return setter.from.kind === "own" ? setter.menuId : undefined;
 }
 
 function priceOriginsOf(offers: Iterable<CombinedOffer>): PriceOrigins {
@@ -893,6 +913,8 @@ function serveOffer(offer: FrozenOffer, rows: LiveRows): LiveOffer | undefined {
 export interface DiffEntry {
   change: MenuChangeBody;
   section?: string;
+  // A price can come from a menu nested inside the include named in the change.
+  priceSourceMenuId?: string;
 }
 
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
@@ -1171,21 +1193,43 @@ function changedPriceOrigin(
   return { kind: "product" };
 }
 
-/** The fields that differ between two versions of one offer, the menu's own settings apart. */
-function productFields(
-  a: FrozenOffer,
-  b: FrozenOffer,
+function variantPriceAttribution(
+  was: FrozenOffer,
+  offer: FrozenOffer,
+  variant: FrozenOfferVariant,
+  previous: FrozenOfferVariant,
   decision: CombinedOffer | undefined,
   prev: Shape,
   next: Shape,
-): {
-  shared: ProductChangeField[];
-  menu: ProductChangeField[];
-  included: { id: string; name: string }[];
-} {
+): Pick<MenuChangeBody, "source" | "includedMenu"> {
+  const setting = decision?.variants.find((candidate) => candidate.variantId === variant.id)?.price;
+  if (previous.menuPrice !== variant.menuPrice) return { source: "this_menu" };
+  const source = setting?.state === "decided" ? setting.source : undefined;
+  const ownProductPriceChanged = was.grossPrice !== offer.grossPrice;
+  if ((source === undefined || source.kind === "parent") && ownProductPriceChanged)
+    return { source: "this_menu" };
+  const origin = changedPriceOrigin(variant.id, offer.placements, prev, next);
+  if (origin?.kind === "included_menu")
+    return { source: "included_menu", includedMenu: { id: origin.id, name: origin.name } };
+  if (origin?.kind === "product") return { source: "shared_product" };
+  const resolved =
+    source?.kind === "parent" && decision?.price.state === "decided"
+      ? decision.price.source
+      : source;
+  if (resolved?.kind === "menu")
+    return {
+      source: "included_menu",
+      includedMenu: { id: resolved.menuId, name: resolved.menuName },
+    };
+  return { source: ownProductPriceChanged ? "this_menu" : "shared_product" };
+}
+
+function productFields(
+  a: FrozenOffer,
+  b: FrozenOffer,
+  previousVariants: ReadonlyMap<string, FrozenOfferVariant>,
+): ProductChangeField[] {
   const shared = new Set<ProductChangeField>();
-  const menu = new Set<ProductChangeField>();
-  const included = new Map<string, { id: string; name: string }>();
   changedFacts(PRODUCT_FACTS, a, b, shared);
   if (!same(a.description, b.description)) shared.add("description");
   if (!same(a.color, b.color)) shared.add("color");
@@ -1197,9 +1241,8 @@ function productFields(
     )
   )
     shared.add("variants");
-  const before = new Map(a.variants.map((variant) => [variant.id, variant]));
   for (const variant of b.variants) {
-    const was = before.get(variant.id);
+    const was = previousVariants.get(variant.id);
     if (was === undefined) continue;
     // A variant whose value matched the dish's both before and after moved with the dish, and the
     // dish's own field names that change.
@@ -1213,40 +1256,12 @@ function productFields(
         shared.add("variants");
         if (field === "vat" || DECLARATIONS.includes(field)) shared.add(field);
       }
-    const setting = decision?.variants.find((v) => v.variantId === variant.id);
-    const fromSetting = (source: ValueSource | undefined, fallback: Set<ProductChangeField>) => {
-      if (source?.kind === "menu")
-        included.set(source.menuId, { id: source.menuId, name: source.menuName });
-      else fallback.add("variants");
-    };
-    if (was.menuPrice !== variant.menuPrice) menu.add("variants");
-    else if (was.unitPrice !== variant.unitPrice) {
-      const origin = changedPriceOrigin(variant.id, b.placements, prev, next);
-      const priceSource = setting?.price.state === "decided" ? setting.price.source : undefined;
-      if (
-        (priceSource === undefined || priceSource.kind === "parent") &&
-        a.grossPrice !== b.grossPrice
-      )
-        menu.add("variants");
-      else if (origin?.kind === "included_menu")
-        included.set(origin.id, { id: origin.id, name: origin.name });
-      else if (origin?.kind === "product") shared.add("variants");
-      else
-        fromSetting(
-          priceSource?.kind === "parent" && decision?.price.state === "decided"
-            ? decision.price.source
-            : priceSource,
-          a.grossPrice === b.grossPrice ? shared : menu,
-        );
-    }
   }
   if (!same(extrasTerms(a), extrasTerms(b))) shared.add("extras");
   const options = (offer: FrozenOffer) =>
     offer.offeredModifiers.map((entry) => (entry.kind === "options" ? entry : null));
   if (!same(options(a), options(b))) shared.add("options");
-  const ordered = (fields: Set<ProductChangeField>) =>
-    PRODUCT_FIELD_ORDER.filter((field) => fields.has(field));
-  return { shared: ordered(shared), menu: ordered(menu), included: [...included.values()] };
+  return PRODUCT_FIELD_ORDER.filter((field) => shared.has(field));
 }
 
 export function diffEntries(
@@ -1275,9 +1290,13 @@ export function diffEntries(
       ).includedMenu;
     const publicChange = { ...change } as MenuChangeBody & { section?: string };
     delete publicChange.section;
-    entries.push(
-      section === undefined ? { change: publicChange } : { change: publicChange, section },
-    );
+    const entry: DiffEntry =
+      section === undefined ? { change: publicChange } : { change: publicChange, section };
+    if (change.kind === "price_changed" && change.source === "included_menu") {
+      const setter = priceSetter(combined.get(change.productId), change.variant?.id);
+      if (setter !== undefined) entry.priceSourceMenuId = setter;
+    }
+    entries.push(entry);
   };
 
   if (live !== null && live.menuName !== proposed.menuName)
@@ -1442,81 +1461,71 @@ export function diffEntries(
         "section" in attribution ? attribution.section : undefined,
       );
     }
-    if (was.unitPrice !== offer.unitPrice || was.grossPrice !== offer.grossPrice)
+    const decision = combined.get(productId);
+    if (was.unitPrice !== offer.unitPrice || was.grossPrice !== offer.grossPrice) {
+      const price = decision?.price;
+      const origin = changedPriceOrigin(productId, offer.placements, prev, next);
+      const includedMenu =
+        origin?.kind === "included_menu"
+          ? { id: origin.id, name: origin.name }
+          : origin === undefined && price?.state === "decided" && price.source.kind === "menu"
+            ? { id: price.source.menuId, name: price.source.menuName }
+            : undefined;
       push({
         kind: "price_changed",
         productId,
         name: offer.name,
         from: was.unitPrice,
         to: offer.unitPrice,
-        ...(() => {
-          const price = combined.get(productId)?.price;
-          if (was.grossPrice !== offer.grossPrice) {
-            if (price?.state !== "decided" || price.source.kind !== "own")
-              return { source: "this_menu" as const };
-            const otherwise = price.otherwise;
-            return {
+        ...(was.grossPrice !== offer.grossPrice
+          ? {
               source: "this_menu" as const,
-              inheritedPrice: otherwise?.state === "decided" ? otherwise.value : null,
-            };
-          }
-          const origin = changedPriceOrigin(productId, offer.placements, prev, next);
-          if (origin?.kind === "included_menu")
-            return {
-              source: "included_menu" as const,
-              includedMenu: { id: origin.id, name: origin.name },
-            };
-          if (origin !== undefined) return { source: "shared_product" as const };
-          return price?.state === "decided" && price.source.kind === "menu"
-            ? {
-                source: "included_menu" as const,
-                includedMenu: { id: price.source.menuId, name: price.source.menuName },
-              }
-            : { source: "shared_product" as const };
-        })(),
-      });
-    const { shared, menu, included } = productFields(
-      was,
-      offer,
-      combined.get(productId),
-      prev,
-      next,
-    );
-    for (const includedMenu of included)
-      push({
-        kind: "product_changed",
-        productId,
-        name: offer.name,
-        fields: ["variants"],
-        source: "included_menu",
-        includedMenu,
-      });
-
-    if (shared.length > 0)
-      push({
-        kind: "product_changed",
-        productId,
-        name: offer.name,
-        fields: shared,
-        source: "shared_product",
-      });
-    if (menu.length > 0) {
-      const inherited = (combined.get(productId)?.variants ?? []).flatMap(({ variantId, price }) =>
-        price.state === "decided" && price.source.kind === "own"
-          ? [[variantId, price.otherwise?.state === "decided" ? price.otherwise.value : null]]
-          : [],
-      );
-      push({
-        kind: "product_changed",
-        productId,
-        name: offer.name,
-        fields: menu,
-        source: "this_menu",
-        ...(inherited.length === 0
-          ? {}
-          : { inheritedVariantPrices: Object.fromEntries(inherited) }),
+              ...(was.unitPrice === offer.unitPrice
+                ? { override: offer.grossPrice === null ? ("cleared" as const) : ("set" as const) }
+                : {}),
+            }
+          : includedMenu === undefined
+            ? { source: "shared_product" as const }
+            : { source: "included_menu" as const, includedMenu }),
       });
     }
+    const previousVariants = new Map(was.variants.map((variant) => [variant.id, variant]));
+    for (const variant of offer.variants) {
+      const previous = previousVariants.get(variant.id);
+      if (previous === undefined) continue;
+      if (previous.unitPrice === variant.unitPrice && previous.menuPrice === variant.menuPrice)
+        continue;
+      const attribution = variantPriceAttribution(
+        was,
+        offer,
+        variant,
+        previous,
+        decision,
+        prev,
+        next,
+      );
+      push({
+        kind: "price_changed",
+        productId,
+        name: offer.name,
+        variant: { id: variant.id, name: variant.name },
+        from: previous.unitPrice,
+        to: variant.unitPrice,
+        ...(previous.unitPrice === variant.unitPrice
+          ? { override: variant.menuPrice === null ? ("cleared" as const) : ("set" as const) }
+          : {}),
+        ...attribution,
+      });
+    }
+    const fields = productFields(was, offer, previousVariants);
+    if (fields.length > 0)
+      push({
+        kind: "product_changed",
+        productId,
+        name: offer.name,
+        fields,
+        source: "shared_product",
+      });
   }
   for (const [productId, offer] of next.offers) {
     if (prev.offers.has(productId)) continue;

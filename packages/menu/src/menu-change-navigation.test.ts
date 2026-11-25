@@ -10,6 +10,7 @@ import type {
   MenuTarget,
 } from "@waitron/shared";
 import { navigateMenuChanges as navigate } from "./menu-navigation.js";
+import { diffMenuDocuments, menuDocumentHash } from "./menu-document.js";
 
 function navigateMenuChanges(
   live: MenuDocument | null,
@@ -304,6 +305,32 @@ describe("navigateMenuChanges", () => {
     });
   });
 
+  it("targets each size's price at every occurrence and gives each change its own id", () => {
+    const live = document(),
+      proposed = document();
+    soup(live).variants = [variant("small"), variant("large")];
+    soup(proposed).variants = soup(live).variants.map((size) => ({ ...size, unitPrice: "3.00" }));
+    const changes = ["small", "large"].map((id) =>
+      change({
+        kind: "price_changed",
+        productId: "soup",
+        name: "Soup",
+        variant: { id, name: id },
+        from: "2.00",
+        to: "3.00",
+      }),
+    );
+    const [small, large] = navigateMenuChanges(live, proposed, changes);
+    for (const [result, variantId] of [
+      [small!, "small"],
+      [large!, "large"],
+    ] as const) {
+      const expected = atOccurrences([{ field: { kind: "price" }, ids: { variantId } }]);
+      expect(result.targets).toEqual({ before: expected, after: expected });
+    }
+    expect(small!.id).not.toBe(large!.id);
+  });
+
   it.each([
     [
       "names",
@@ -505,23 +532,32 @@ describe("nested change subjects", () => {
     soup(proposed).variants = [variant("small"), variant("large"), variant("added")];
     soup(proposed).variants[1]!.image = "large.webp";
     soup(proposed).variants[1]!.menuPrice = "2.00";
-    const [result] = navigateMenuChanges(live, proposed, [
+    const [result, override] = navigateMenuChanges(live, proposed, [
       change({ kind: "product_changed", productId: "soup", name: "Same", fields: ["variants"] }),
+      change({
+        kind: "price_changed",
+        productId: "soup",
+        name: "Same",
+        variant: { id: "large", name: "Large" },
+        from: "2.00",
+        to: "2.00",
+        override: "set",
+      }),
     ]);
     expect(result!.targets).toEqual({
       before: atOccurrences([
         { field: { kind: "variants" } },
         { field: { kind: "image" }, ids: { variantId: "large" } },
-        { field: { kind: "override" }, ids: { variantId: "large" } },
         { field: { kind: "summary" }, ids: { variantId: "removed" } },
       ]),
       after: atOccurrences([
         { field: { kind: "variants" } },
         { field: { kind: "image" }, ids: { variantId: "large" } },
-        { field: { kind: "override" }, ids: { variantId: "large" } },
         { field: { kind: "summary" }, ids: { variantId: "added" } },
       ]),
     });
+    const sizes = repeated({ kind: "override" }, { variantId: "large" });
+    expect(override!.targets).toEqual({ before: sizes, after: sizes });
   });
   it("addresses only the changed option label language and default, not an unchanged label", () => {
     const live = document(),
@@ -748,8 +784,7 @@ describe("nested change subjects", () => {
 });
 
 describe("public diff navigation", () => {
-  it("enriches the public diff without changing its frozen document hash input", async () => {
-    const { diffMenuDocuments, menuDocumentHash } = await import("./menu-document.js");
+  it("enriches the public diff without changing its frozen document hash input", () => {
     const live = document(),
       proposed = document();
     soup(proposed).grossPrice = "2.00";

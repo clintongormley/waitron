@@ -1,7 +1,7 @@
 import { useLocale } from "../testing/locale-setup.js";
 import { LitElement, html } from "lit";
 import { LeaveController, NavigationGuard } from "@waitron/ui";
-import { combinedFixture } from "../widgets/test-helpers.js";
+import { combinedFixture, selectPreviewPane } from "../widgets/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import {
@@ -9505,7 +9505,7 @@ describe("publishing", () => {
     const schedule = panel(el).shadowRoot!.querySelector<
       HTMLElementTagNameMap["dashboard-menu-publications"]
     >("dashboard-menu-publications")!;
-    expect(schedule.closest('[data-test="changes-column"]')).not.toBeNull();
+    expect(schedule.querySelector('[data-test="changes-pane"]')).not.toBeNull();
     expect(schedule.menuId).toBe("menu-lunch");
     expect(schedule.menuName).toBe("Lunch Menu");
     expect(schedule.api).toBe(client);
@@ -9648,10 +9648,13 @@ describe("publishing", () => {
     await vi.waitFor(async () =>
       expect(treeRows(await content(el)).querySelector('[aria-current="true"]')).not.toBeNull(),
     );
-    expect(panel(el).shadowRoot!.activeElement).toBe(link);
+    if (panel(el).shadowRoot!.querySelector("wt-segmented-control")!.getClientRects().length > 0) {
+      const tree = treeRows(await content(el));
+      expect(tree.activeElement?.getAttribute("aria-current")).toBe("true");
+    } else expect(panel(el).shadowRoot!.activeElement).toBe(link);
   }
 
-  it("inspects frozen tree names and removal places without another read or write", async () => {
+  it("inspects frozen tree names and reads removed rows without another read or write", async () => {
     const snapshot = navigablePreview();
     const original = JSON.stringify(snapshot);
     const client = api({ getMenuPreview: vi.fn().mockResolvedValue(snapshot) });
@@ -9676,10 +9679,7 @@ describe("publishing", () => {
     await chooseOption(selector, "es");
     await renderer.updateComplete;
     expect(renderer.view).toEqual({ kind: "customer", language: "es" });
-    await followChange(el, "removed-burger");
-    expect(
-      treeRows(renderer).querySelector('[aria-current="true"]')!.closest("tr")!.dataset.rowKey,
-    ).toBe("root");
+    expect(panel(el).shadowRoot!.querySelector('a[data-change-id="removed-burger"]')).toBeNull();
     expect(renderer.document).toBe(snapshot.document);
     await followChange(el, "home-order");
     expect(client.getMenuPreview.mock.calls.length).toBe(reads);
@@ -9687,11 +9687,11 @@ describe("publishing", () => {
     expect(JSON.stringify(snapshot)).toBe(original);
   });
 
-  it("publishes the proposed preview hash after viewing a removed dish's parent", async () => {
+  it("publishes the proposed preview hash with a removed dish", async () => {
     const snapshot = navigablePreview();
     const client = api({ getMenuPreview: vi.fn().mockResolvedValue(snapshot) });
     const el = await mountPreview(client);
-    await followChange(el, "removed-burger");
+    expect(panel(el).shadowRoot!.querySelector('a[data-change-id="removed-burger"]')).toBeNull();
     expect((await content(el)).document).toBe(snapshot.document);
     await publish(el);
     expect(client.publishMenu.mock.calls).toEqual([["menu-lunch", LUNCH_HASH]]);
@@ -9724,7 +9724,7 @@ describe("publishing", () => {
     expect(treeRows(renderer).querySelector('[aria-current="true"]')).toBeNull();
     await followChange(el, "lemon-description");
     expect(treeRows(renderer).textContent).toContain("New frozen name");
-    await followChange(el, "removed-burger");
+    expect(panel(el).shadowRoot!.querySelector('a[data-change-id="removed-burger"]')).toBeNull();
     expect((await content(el)).document).toBe(refreshed.document);
     expect(writeCalls(client)).toEqual([]);
   });
@@ -9878,10 +9878,11 @@ describe("publishing", () => {
       const [left, right] = panes();
       if (width === 1280) {
         expect(right!.left).toBeGreaterThanOrEqual(left!.right);
-        expect(
-          Math.abs(right!.top - inPanel(el, "changes-column")!.getBoundingClientRect().top),
-        ).toBeLessThan(1);
-      } else expect(right!.top).toBeGreaterThanOrEqual(left!.bottom);
+        expect(Math.abs(right!.top - left!.top)).toBeLessThan(1);
+      } else {
+        expect(inPanel(el, "document-pane")!.getClientRects()).toHaveLength(0);
+        await selectPreviewPane(panel(el), "menu");
+      }
       expect(inPanel(el, "publish")!.getBoundingClientRect().bottom).toBeLessThanOrEqual(left!.top);
       const selector = panel(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
         'wt-combobox[name="menu-preview-view"]',
@@ -9902,6 +9903,7 @@ describe("publishing", () => {
         element: inPanel(el, "document-pane")!,
         path: `__screenshots__/w95-final-screen/${locale}-${theme}-${width}-hierarchy.png`,
       });
+      if (width === 390) await selectPreviewPane(panel(el), "changes");
       await followChange(el, "lemon-description");
       checkWidth();
       await expectNoA11yViolations(el.parentElement!);
@@ -9918,23 +9920,12 @@ describe("publishing", () => {
       expect(selected.getBoundingClientRect().bottom).toBeLessThanOrEqual(
         menuPane.getBoundingClientRect().bottom,
       );
-      expect(panel(el).shadowRoot!.activeElement?.getAttribute("data-change-id")).toBe(
-        "lemon-description",
-      );
-      await followChange(el, "removed-empty");
-      expect(
-        treeRows(renderer).querySelector('[aria-current="true"]')!.closest("tr")!.dataset.rowKey,
-      ).toBe("root");
+      if (width === 390) await selectPreviewPane(panel(el), "changes");
+      expect(panel(el).shadowRoot!.querySelector('a[data-change-id="removed-empty"]')).toBeNull();
       expect(renderer.document).toBe(snapshot.document);
       checkWidth();
       await expectNoA11yViolations(el.parentElement!);
-      await page.screenshot({
-        element: menuPane,
-        path: `__screenshots__/w95-final-screen/${locale}-${theme}-${width}-removed.png`,
-      });
       await followChange(el, "home-order");
-      checkWidth();
-      await expectNoA11yViolations(el.parentElement!);
       expect(client.getMenuPreview).toHaveBeenCalledTimes(1);
       expect(writeCalls(client)).toEqual([]);
     },
@@ -10305,10 +10296,7 @@ describe("publishing", () => {
     await vi.waitFor(() =>
       expect(
         [...panel(el).shadowRoot!.querySelectorAll('[data-test="changes"] li')].map(text),
-      ).toEqual([
-        "Chips added under Drinks Hide",
-        "Lemonade: colour — shared product, also on Dinner Menu Edit product Hide",
-      ]),
+      ).toEqual(["Drinks › Chips", "Lemonade: colour changed in Products, also on Dinner Menu"]),
     );
     expect(client.getMenuPreview).toHaveBeenCalledWith("menu-lunch");
     expect(inPanel(el, "live")).toBeNull();
@@ -10489,7 +10477,7 @@ describe("publishing", () => {
     );
     await vi.waitFor(() =>
       expect(text(inPanel(el, "changes"))).toBe(
-        "Prices Burger price changed from €12.00 to €13.00 — shared product, also on Dinner Menu Edit product Hide",
+        "Prices Burger €12.00 → €13.00 changed in Products, also on Dinner Menu",
       ),
     );
     expect(client.getMenuPreview.mock.calls.length).toBe(reads + 1);
@@ -10782,8 +10770,7 @@ describe("publishing", () => {
   it("says there is nothing to publish when the menu matches its live version", async () => {
     const client = api({
       getMenuPreview: vi.fn().mockResolvedValue({
-        clashes: [],
-        hash: LUNCH_HASH,
+        ...lunchPreview(),
         changes: [],
         warnings: [],
         status: {
@@ -10793,8 +10780,7 @@ describe("publishing", () => {
           publishedAt: PUBLISHED_AT,
           hash: LUNCH_HASH,
         },
-        document: lunchDocument(),
-      }),
+      } satisfies MenuPreview),
     });
     const el = await mount(client, PREVIEW_PATH);
     await vi.waitFor(() =>

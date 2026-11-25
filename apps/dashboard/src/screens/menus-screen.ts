@@ -3194,6 +3194,8 @@ export class MenusScreen extends LitElement {
       .heading=${this.#publicationHeading}
       menuName=${this.#menuName()}
       .includedBy=${this.structure?.includedBy ?? []}
+      .rootMedia=${this.structure?.root}
+      .placeableSetMenus=${this.structure?.placeableSetMenus ?? []}
       .status=${this.status}
       .preview=${this.preview}
       .failed=${this.previewError}
@@ -3420,7 +3422,7 @@ export class MenusScreen extends LitElement {
         ? this.renderRoot.querySelector("dashboard-menu-preview")
         : null;
     const schedule = this.scheduleAvailable
-      ? scheduleAction((event) =>
+      ? scheduleAction(preview, (event) =>
           panel()
             ?.shadowRoot?.querySelector("dashboard-menu-publications")
             ?.openSchedule(event.currentTarget as HTMLElement, preview),
@@ -3470,10 +3472,8 @@ export class MenusScreen extends LitElement {
 
   /** On the Prices tab the clash words stay plain words: the tab's own Show clashes does what the link would. */
   #renderClashes(menuId: string) {
-    const clashes =
-      this.statusError || (this.view === "preview" && this.previewError)
-        ? 0
-        : (this.status?.clashes ?? 0);
+    if (this.view === "preview" || this.statusError) return nothing;
+    const clashes = this.status?.clashes ?? 0;
     if (!clashes) return nothing;
     const waits =
       clashes === 1

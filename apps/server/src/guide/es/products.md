@@ -401,12 +401,15 @@ las cartas incluidas siguen apuntando a las mismas cartas compartidas.
 
 ## Revisa los cambios de la carta antes de publicar {#preview-undo}
 
-Elige **Revisar y publicar** en el encabezado de la carta. En **Vista previa**, usa **Publicar ahora** o
-**Publicar más tarde** en el encabezado cuando tengas todo listo. Pulsa **Ver** junto a un cambio
-para ver dónde aparece. Sigue el enlace **Editar** para abrir el producto o la carta incluida. Si
-cambió un precio, **Editar producto** abre el producto y el enlace **Editar** de la carta incluida
-abre su pestaña **Precios propios**. Tras publicar, comprueba la versión y la hora de publicación
-del servidor en el encabezado de la carta.
+Elige **Revisar y publicar** en el encabezado de la carta. En **Corrige antes de publicar**,
+elige un precio o abre el menú que debas corregir. Después, abre los avisos que quieras revisar.
+Pulsa el nombre de un elemento en la lista de cambios para encontrarlo en la carta propuesta.
+En el móvil, cambia entre **Cambios** y **Carta**. Usa el selector de idioma sobre la carta para revisar las
+traducciones o ver los **Nombres internos**.
+
+Cuando tengas todo listo, elige **Publicar ahora** o **Publicar más tarde** en el encabezado. Para
+consultar o cambiar una publicación pendiente, búscala en **Versiones programadas**, debajo de
+la vista previa. Tras publicar, comprueba la versión y la hora en el encabezado de la carta.
 
 ## Corrige la carta publicada en una emergencia {#patch-live-menu}
 

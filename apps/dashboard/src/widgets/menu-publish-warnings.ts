@@ -1,10 +1,12 @@
-import { css, html, type TemplateResult } from "lit";
+import { css, html, nothing, type TemplateResult } from "lit";
 import type { MenuPreview } from "../api/client.js";
 import { staffPresentationName } from "@waitron/shared";
 import { localizedName } from "../i18n/localized.js";
 import { fill, t } from "../i18n/t.js";
+import { publicationBlockerCount } from "./menu-publication-actions.js";
 import { leftToBrowser } from "../navigation.js";
 import "@waitron/ui/src/components/wt-dialog.js";
+import "@waitron/ui/src/components/wt-disclosure.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-button.js";
 
@@ -42,6 +44,7 @@ export function openProduct(event: MouseEvent, id: string): void {
 export function renderMenuWarnings(
   warnings: MenuPreview["warnings"],
   menuName: string,
+  compact = false,
 ): TemplateResult {
   const missing = warnings.filter((warning) => warning.kind === "shortcut_missing").length;
   return html`<ul class="menu-publish-warnings" data-test="warnings">
@@ -51,16 +54,61 @@ export function renderMenuWarnings(
         return html`<li>
           ${fill("menu_preview.extra_portion_precision", { list: warning.listName, product: warning.name, amount: `${warning.portion} ${localizedName(warning.abbreviation)}`.trim(), precision: String(warning.precision) })}
         </li>`;
-      if (warning.kind === "allergens_unreviewed")
-        return html`<li>
-          <p>${t("menu_preview.allergens_unreviewed")}</p>
-          <ul>
-            ${warning.products.map((product) => html`<li><a href=${`/products/product/${encodeURIComponent(product.id)}`} @click=${(event: MouseEvent) => openProduct(event, product.id)}>${staffPresentationName({ name: product.parentName ?? product.name, variantName: product.parentName === null ? null : product.name })}</a></li>`)}
-          </ul>
-        </li>`;
+      if (warning.kind === "allergens_unreviewed") {
+        const products = warning.products.map(
+          (product) =>
+            html`<li>
+              <a
+                href=${`/products/product/${encodeURIComponent(product.id)}`}
+                @click=${(event: MouseEvent) => openProduct(event, product.id)}
+                >${staffPresentationName({ name: product.parentName ?? product.name, variantName: product.parentName === null ? null : product.name })}</a
+              >
+            </li>`,
+        );
+        return compact
+          ? products
+          : html`<li>
+              <p>${t("menu_preview.allergens_unreviewed")}</p>
+              <ul>
+                ${products}
+              </ul>
+            </li>`;
+      }
       return [];
     })}
   </ul>`;
+}
+
+export function renderFoldedMenuWarnings(warnings: MenuPreview["warnings"], menuName: string) {
+  const groups = [
+    {
+      kind: "allergens_unreviewed",
+      one: "menu_preview.allergens_count_one",
+      many: "menu_preview.allergens_count",
+    },
+    {
+      kind: "shortcut_missing",
+      one: "menu_preview.shortcuts_count_one",
+      many: "menu_preview.shortcuts_count",
+    },
+    {
+      kind: "extra_portion_precision",
+      one: "menu_preview.portions_count_one",
+      many: "menu_preview.portions_count",
+    },
+  ] as const;
+  return groups.map(({ kind, one, many }) => {
+    const entries = warnings.filter((warning) => warning.kind === kind);
+    const count = entries.reduce(
+      (total, entry) => total + (entry.kind === "allergens_unreviewed" ? entry.products.length : 1),
+      0,
+    );
+    return count === 0
+      ? nothing
+      : html`<wt-disclosure heading=${fill(count === 1 ? one : many, { count: String(count) })}>
+          ${renderMenuWarnings(entries, menuName, true)}
+        </wt-disclosure>`;
+  });
 }
 
 export interface PublishWarningConfirmation {
@@ -102,7 +150,7 @@ export function renderPublishWarningConfirmation(
         variant="primary"
         data-test="publish-confirm"
         .loading=${options.busy}
-        ?disabled=${options.busy || options.preview.clashes.length > 0}
+        ?disabled=${options.busy || publicationBlockerCount(options.preview) > 0}
         @click=${(event: Event) => {
           event.stopPropagation();
           options.confirm();

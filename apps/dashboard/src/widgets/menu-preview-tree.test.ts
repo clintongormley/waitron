@@ -127,16 +127,14 @@ it("connects Preview to the frozen Structure tree and switches its content names
   expect(el.shadowRoot!.querySelector("dashboard-customer-menu")).toBeNull();
 });
 
-it("uses plain grouped bullets and View to reveal a nested product without taking focus", async () => {
+it("uses a grouped name link to reveal a nested product without taking focus", async () => {
   const el = await mount();
   const node = await tree(el);
-  expect(el.shadowRoot!.querySelector('[data-group="details"] h3')!.textContent).toBe(
-    "Product details",
-  );
+  expect(el.shadowRoot!.querySelector('[data-group="details"] h3')!.textContent).toBe("Details");
   expect(el.shadowRoot!.querySelector('[data-group="prices"]')).toBeNull();
   const view = link(el);
   expect(view).not.toBeNull();
-  expect(view.textContent?.trim()).toBe("(View)");
+  expect(view.textContent?.trim()).toBe("Counter lemonade");
   view.focus();
   await userEvent.keyboard("{Enter}");
   await expect
@@ -163,7 +161,7 @@ it("uses plain grouped bullets and View to reveal a nested product without takin
   await expect.poll(() => rows(node).querySelector('[aria-current="true"]')).toBeNull();
 });
 
-it("views a removed product at its surviving parent and leaves deleted products without View", async () => {
+it("shows removed and deleted products as text", async () => {
   const removed: MenuChange = {
     id: "removed",
     kind: "product_removed",
@@ -189,12 +187,7 @@ it("views a removed product at its surviving parent and leaves deleted products 
   inner.members = [];
   delete p.document.offers.mi;
   const el = await mount(p);
-  const node = await tree(el);
-  link(el, "removed").click();
-  await expect
-    .poll(() => rows(node).querySelector('[aria-current="true"]')?.textContent)
-    .toContain("Counter cold");
-  expect(node.document).toBe(p.document);
+  expect(link(el, "removed")).toBeNull();
   expect(link(el, "deleted")).toBeNull();
   expect(
     el.shadowRoot!.querySelector("[data-test='before'], [data-test='return-proposed']"),
@@ -228,71 +221,6 @@ it("routes Home View as a normal link to this menu's Home tab", async () => {
   const el = await mount(fixture([home]));
   expect(link(el, "home")).not.toBeNull();
   expect(link(el, "home").getAttribute("href")).toBe("/menus/menu/menu-lunch/view/home");
-});
-
-it("hides one bullet and its empty group, then restores all without changing publication", async () => {
-  const p = fixture();
-  const el = await mount(p);
-  const show = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-    '[data-test="show-all-changes"]',
-  );
-  expect(show).not.toBeNull();
-  expect(show!.disabled).toBe(true);
-  const hide = el.shadowRoot!.querySelector<HTMLAnchorElement>('a[data-hide-change="stable"]');
-  expect(hide).not.toBeNull();
-  hide!.focus();
-  await userEvent.keyboard("{Enter}");
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector('[data-change-row="stable"]')).toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-group="details"]')).toBeNull();
-  expect(show!.disabled).toBe(false);
-  expect(el.shadowRoot!.activeElement).toBe(show);
-  expect(el.shadowRoot!.querySelector('[data-test="hidden-count"]')!.textContent?.trim()).toBe(
-    "1 hidden",
-  );
-  const seen: unknown[] = [];
-  el.addEventListener("wt-menu-publish", (event) => seen.push((event as CustomEvent).detail));
-  el.shadowRoot!.querySelector<HTMLElement>('[data-test="publish"]')!.click();
-  expect(seen).toEqual([{ hash: "proposed" }]);
-  expect(p.changes).toHaveLength(1);
-  show!.click();
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector('[data-change-row="stable"]')).not.toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-group="details"]')).not.toBeNull();
-  expect(show!.disabled).toBe(true);
-});
-
-it("keeps a surviving hidden change across refresh while showing new changes, then forgets it for another menu", async () => {
-  const el = await mount();
-  const hide = el.shadowRoot!.querySelector<HTMLAnchorElement>('a[data-hide-change="stable"]');
-  expect(hide).not.toBeNull();
-  hide!.click();
-  await el.updateComplete;
-  const p = fixture([change(), { ...change(), id: "new-change" }]);
-  el.preview = p;
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector('[data-change-row="stable"]')).toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-change-row="new-change"]')).not.toBeNull();
-  p.document.menuId = "other";
-  el.preview = { ...p };
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector('[data-change-row="stable"]')).not.toBeNull();
-  expect(
-    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
-      '[data-test="show-all-changes"]',
-    )!.disabled,
-  ).toBe(true);
-});
-
-it("rejects a retired Hide link after an envelope replacement", async () => {
-  const el = await mount();
-  const old = el.shadowRoot!.querySelector<HTMLAnchorElement>('a[data-hide-change="stable"]');
-  expect(old).not.toBeNull();
-  el.preview = fixture();
-  await el.updateComplete;
-  old!.click();
-  await el.updateComplete;
-  expect(el.shadowRoot!.querySelector('[data-change-row="stable"]')).not.toBeNull();
 });
 
 it("places every change kind in its named group and keeps the groups in working order", async () => {
@@ -404,7 +332,13 @@ it("places every change kind in its named group and keeps the groups in working 
       from: 1,
       to: 2,
     },
-    order_changed: { ...shared, id: "order", kind: "order_changed", listSectionId: null, list: [] },
+    order_changed: {
+      ...shared,
+      id: "order",
+      kind: "order_changed",
+      listSectionId: "mains",
+      list: ["Mains"],
+    },
     home_shortcuts_changed: { ...shared, id: "shortcuts", kind: "home_shortcuts_changed" },
     home_display_changed: {
       ...shared,
@@ -414,29 +348,38 @@ it("places every change kind in its named group and keeps the groups in working 
   };
   const el = await mount(fixture(Object.values(kinds).reverse()));
   const groups = [...el.shadowRoot!.querySelectorAll("[data-group]")];
+  const order = el.shadowRoot!.querySelector('[data-change-row="order"]')!;
+  expect(order.textContent?.trim()).toBe("Mains reordered");
+  expect(getComputedStyle(order.parentElement!).listStyleType).toBe("disc");
   expect(
     groups.map((group) => [
       group.querySelector("h3")!.textContent,
       [...group.querySelectorAll("li")].map((row) => row.getAttribute("data-change-row")),
     ]),
   ).toEqual([
-    ["Menu", ["rename"]],
-    ["Sections added", ["section-add"]],
-    ["Sections removed", ["section-remove"]],
-    ["Sections changed", ["section-change"]],
-    ["Products added", ["product-add"]],
-    ["Products removed", ["product-delete", "product-remove"]],
-    ["Products moved", ["product-move"]],
-    ["Set menus", ["set-change", "set-remove", "set-add"]],
+    ["Added", ["set-add", "product-add", "section-add"]],
+    ["Removed", ["set-remove", "product-delete", "product-remove", "section-remove"]],
     ["Prices", ["price"]],
-    ["Product details", ["extra-max", "extra-portion", "extra-unit", "details"]],
-    ["Order", ["order"]],
-    ["Home page", ["home-display", "shortcuts"]],
+    ["Order", ["order", "product-move"]],
+    [
+      "Details",
+      [
+        "home-display",
+        "shortcuts",
+        "extra-max",
+        "extra-portion",
+        "extra-unit",
+        "details",
+        "set-change",
+        "section-change",
+        "rename",
+      ],
+    ],
   ]);
 });
 
 it.each(["light", "dark"] as const)(
-  "keeps View, hidden changes and restoration accessible in Spanish (%s)",
+  "keeps the grouped name link accessible in Spanish (%s)",
   async (theme) => {
     setLocale("es-ES");
     const { el, host } = await mountWidget<MenuPreviewPanel>(
@@ -444,23 +387,8 @@ it.each(["light", "dark"] as const)(
       { preview: fixture(), menuName: "Lunch" },
       theme,
     );
-    expect(el.shadowRoot!.querySelector('[data-group="details"] h3')!.textContent).toBe(
-      "Detalles de productos",
-    );
-    expect(link(el).textContent?.trim()).toBe("(Ver)");
-    await expectNoA11yViolations(host);
-    const hide = el.shadowRoot!.querySelector<HTMLAnchorElement>('a[data-hide-change="stable"]')!;
-    expect(hide.textContent?.trim()).toBe("Ocultar");
-    hide.click();
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector('[data-test="hidden-count"]')!.textContent?.trim()).toBe(
-      "1 oculto",
-    );
-    await expectNoA11yViolations(host);
-    const show = el.shadowRoot!.querySelector<HTMLElement>('[data-test="show-all-changes"]')!;
-    expect(show.textContent?.trim()).toBe("Mostrar todos los cambios");
-    show.click();
-    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[data-group="details"] h3')!.textContent).toBe("Detalles");
+    expect(link(el).textContent?.trim()).toBe("Counter lemonade");
     await expectNoA11yViolations(host);
   },
 );
@@ -489,9 +417,8 @@ it("keeps the tree's swatch-size image slot visible beside changes in a desktop 
   );
 });
 
-it("keeps hidden changes and the content view through a same-menu empty reload", async () => {
+it("keeps the content view through a same-menu empty reload", async () => {
   const el = await mount();
-  el.shadowRoot!.querySelector<HTMLAnchorElement>('a[data-hide-change="stable"]')!.click();
   el.shadowRoot!.querySelector("wt-combobox")!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "en" }, bubbles: true, composed: true }),
   );
@@ -500,48 +427,10 @@ it("keeps hidden changes and the content view through a same-menu empty reload",
   await el.updateComplete;
   el.preview = fixture([change(), { ...change(), id: "new" }]);
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector('[data-change-row="stable"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-change-row="stable"]')).not.toBeNull();
   expect(el.shadowRoot!.querySelector('[data-change-row="new"]')).not.toBeNull();
   expect((await tree(el)).view).toEqual({ kind: "customer", language: "en" });
 });
-
-it.each([false, true])(
-  "views a removed product and section at the nearest surviving parent (outer survives: %s)",
-  async (survives) => {
-    const p = fixture([
-      {
-        id: "removed-dish",
-        kind: "product_removed",
-        productId: "dish",
-        name: "Old dish",
-        under: ["Drinks", "Cold"],
-        source: "this_menu",
-        targets: { before: [target], after: [] },
-      },
-      {
-        id: "removed-section",
-        kind: "section_removed",
-        sectionId: "gone",
-        name: "Gone",
-        parentSectionIds: ["outer", "inner"],
-        under: ["Drinks", "Cold"],
-        source: "this_menu",
-        targets: { before: [], after: [] },
-      },
-    ]);
-    p.document.root.members = survives ? [documentSection("outer", "Surviving parent", [])] : [];
-    p.document.offers = {};
-    const el = await mount(p);
-    const node = await tree(el);
-    for (const id of ["removed-dish", "removed-section"]) {
-      expect(link(el, id)).not.toBeNull();
-      link(el, id).click();
-      await expect
-        .poll(() => rows(node).querySelector('[aria-current="true"]')?.textContent)
-        .toContain(survives ? "Surviving parent" : "Frozen lunch");
-    }
-  },
-);
 
 it.each(
   (["light", "dark"] as const).flatMap((theme) =>
@@ -551,9 +440,8 @@ it.each(
         width,
         language: "en",
         saved: "Special menu was saved again",
-        source: "set menu",
-        added: "Daily menu added under Counter drinks",
-        removed: "Daily menu removed from Counter cold",
+        added: "Counter drinks › Daily menu",
+        removed: "Counter cold › Daily menu",
         changed: "Daily menu: dishes",
       },
       {
@@ -561,9 +449,8 @@ it.each(
         width,
         language: "es-ES",
         saved: "Se ha vuelto a guardar Special menu",
-        source: "menú",
-        added: "Se ha añadido Daily menu en Counter drinks",
-        removed: "Se ha quitado Daily menu de Counter cold",
+        added: "Counter drinks › Daily menu",
+        removed: "Counter cold › Daily menu",
         changed: "Daily menu: platos",
       },
     ]),
@@ -620,10 +507,9 @@ it.each(
   expect(row("add")?.textContent).toContain(display.added);
   expect(row("remove")?.textContent).toContain(display.removed);
   expect(row("copy")?.textContent).toContain(display.changed);
-  expect(row("copy")?.textContent).toContain(display.source);
   expect(row("copy")?.textContent).toContain("Weekend");
   expect(row("saved")?.textContent).toContain(display.saved);
-  expect(row("copy")?.querySelector("a[data-edit-change]")?.getAttribute("href")).toBe(
+  expect(row("copy")?.querySelector("a[data-change-id]")?.getAttribute("href")).toBe(
     "/set-menus/menu/daily",
   );
   await expectNoA11yViolations(host);
@@ -633,7 +519,7 @@ it.each(
   });
 });
 
-it("reveals the surviving list when a set-menu placement was removed", async () => {
+it("links a removed placement only while its set menu still exists", async () => {
   const p = fixture([
     {
       id: "removed-set",
@@ -646,9 +532,8 @@ it("reveals the surviving list when a set-menu placement was removed", async () 
     },
   ]);
   const el = await mount(p);
-  const node = await tree(el);
-  await userEvent.click(link(el, "removed-set"));
-  await expect
-    .poll(() => rows(node).querySelector('[aria-current="true"]')?.textContent)
-    .toContain("Counter cold");
+  expect(link(el, "removed-set")).toBeNull();
+  el.placeableSetMenus = [{ id: "daily" }];
+  await el.updateComplete;
+  expect(link(el, "removed-set").getAttribute("href")).toBe("/set-menus/menu/daily");
 });

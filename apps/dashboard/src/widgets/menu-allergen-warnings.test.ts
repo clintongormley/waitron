@@ -52,6 +52,15 @@ async function mount(theme: Theme = "light", locale = "en") {
 function q(el: MenuPreviewPanel, selector: string) {
   return el.shadowRoot!.querySelector<HTMLElement>(selector)!;
 }
+async function openAllergenWarnings(el: MenuPreviewPanel) {
+  const fold = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-disclosure"]>(
+    'wt-disclosure[heading="2 products with allergens not yet reviewed"]',
+  )!;
+  fold.open = true;
+  await fold.updateComplete;
+  await fold.whenSettled();
+  return fold;
+}
 const before = currentLocale();
 beforeEach(() => setLocale("en"));
 afterEach(() => {
@@ -62,10 +71,13 @@ afterEach(() => {
 describe("allergen publish warnings", () => {
   it("links each product and variant in the warning list and the confirmation without counting them as shortcuts", async () => {
     const { el } = await mount();
-    const section = q(el, '[data-test="warnings"]');
-    expect(section.textContent).toContain("1 shortcut");
-    expect(section.textContent).not.toContain("2 shortcuts");
-    expect(section.textContent).toContain("Allergens not yet reviewed");
+    const headings = [...el.shadowRoot!.querySelectorAll("wt-disclosure")];
+    expect(headings.map(({ heading, open }) => [heading, open])).toEqual([
+      ["2 products with allergens not yet reviewed", false],
+      ["1 missing Home page shortcut", false],
+      ["1 extra with a portion to check", false],
+    ]);
+    const section = await openAllergenWarnings(el);
     const links = [...section.querySelectorAll("a")];
     expect(links.map((a) => [a.textContent!.trim(), a.getAttribute("href")])).toEqual([
       ["Staff bread <b>", "/products/product/bread%20%2F%3F"],
@@ -112,6 +124,7 @@ describe("allergen publish warnings", () => {
     const { el } = await mount();
     const opened = vi.fn();
     el.addEventListener("wt-edit-product", opened);
+    await openAllergenWarnings(el);
     const link = q(el, 'a[href="/products/product/large"]');
     expect(link).not.toBeNull();
     for (const init of [

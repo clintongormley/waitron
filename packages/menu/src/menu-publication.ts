@@ -24,13 +24,14 @@ import {
   type DiffEntry,
   type OmittedShortcut,
 } from "./menu-document.js";
-import { menusContaining, reachableProducts } from "./section-graph.js";
+import { reachableProducts } from "./section-graph.js";
 import { readContentLanguages } from "./content-languages.js";
 import { applyMenuPatch, parseMenuPatch } from "./menu-patch.js";
 import type { LiveMenu, MenuPatchResult } from "./menu-patch-types.js";
 import { mediaImageExists } from "./sections.js";
 import { menuExists } from "./operations.js";
 import type {
+  CombinedOffer,
   MenuChangeBody,
   MenuDocument,
   MenuPreview,
@@ -418,15 +419,16 @@ export async function onceLiveVersionsAfter(
 }
 
 /** The key two menus' changes share when one shared edit made both. */
-function changeSubject({ change, section }: DiffEntry): string {
+function changeSubject({ change, section, priceSourceMenuId }: DiffEntry): string {
   switch (change.kind) {
     case "product_added":
     case "product_removed":
     case "product_deleted":
     case "product_moved":
-    case "price_changed":
     case "product_changed":
       return `${change.kind}:${change.productId}`;
+    case "price_changed":
+      return `${change.kind}:${change.productId}:${change.variant?.id ?? ""}:${priceSourceMenuId ?? ""}`;
     case "extra_unit_changed":
     case "extra_portion_changed":
     case "extra_max_quantity_changed":
@@ -451,15 +453,24 @@ function fieldsOf(change: MenuChangeBody): readonly string[] | undefined {
 /** One shared edit shows up in two menus as the same change from the same source. */
 function sameEdit(a: DiffEntry, b: DiffEntry): boolean {
   if (a.change.source !== b.change.source || changeSubject(a) !== changeSubject(b)) return false;
-  // Another menu shows this menu's own sections as an included menu's, so a section change
-  // credited to this menu in both is two includes' separate settings.
-  if (a.change.kind === "section_changed" && a.change.source === "this_menu") return false;
   const fields = fieldsOf(a.change);
   if (fields === undefined) return true;
   const otherFields = fieldsOf(b.change)!;
   return fields.length === 0
     ? otherFields.length === 0
     : fields.some((field) => otherFields.includes(field));
+}
+
+function priceIsDisputed(offer: CombinedOffer | undefined, variantId?: string): boolean {
+  if (offer === undefined) return false;
+  if (offer.variants.length === 0) return offer.price.state === "clash";
+  return offer.variants.some(
+    (variant) =>
+      variant.price.state === "clash" &&
+      (variantId === undefined
+        ? variant.price.level === "product"
+        : variant.variantId === variantId),
+  );
 }
 
 export async function previewMenu(tx: Transaction, menuId: string): Promise<MenuPreview> {
@@ -470,7 +481,11 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   if (mine === undefined) throw new AppError("menu.not_found", { menuId: menuId });
   const own = (await liveVersions(tx, [menuId], "document")).get(menuId);
   const ownDocument = own?.document ?? null;
-  const entries = diffEntries(ownDocument, mine.document, mine.combined);
+  const entries = diffEntries(ownDocument, mine.document, mine.combined).filter(
+    ({ change }) =>
+      change.kind !== "price_changed" ||
+      !priceIsDisputed(mine.combined.get(change.productId), change.variant?.id),
+  );
   const removedExtras = removedExtraOnlyProducts(ownDocument, mine.document);
 
   let everyLive: Map<string, LiveVersion> | undefined;
@@ -528,12 +543,8 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   appendDeletedExtras(entries, removedExtras, deleted);
   await refine(entries, mine.rootSectionId, deleted);
 
-  // The other menus are built and compared only to fill in a shared change's `alsoOn`.
-  if (
-    entries.length > 0 &&
-    (entries.some(({ change }) => change.source !== "this_menu") ||
-      menusContaining(graph, mine.rootSectionId).some((id) => id !== menuId))
-  ) {
+  const shared = entries.filter(({ change }) => change.source !== "this_menu");
+  if (shared.length > 0) {
     const live = await allLive();
     const { menus: built } = await buildMenuDocuments(
       tx,
@@ -542,7 +553,6 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
     );
     const others = [...built]
       .map(([other, { document, rootSectionId, combined }]) => ({
-        menuId: other,
         name: document.menuName,
         rootSectionId,
         entries: diffEntries(live.get(other)!.document, document, combined),
@@ -557,22 +567,9 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
       appendDeletedExtras(other.entries, other.removedExtras, deleted);
       await refine(other.entries, other.rootSectionId, deleted);
     }
-    for (const entry of entries) {
+    for (const entry of shared) {
       const alsoOn = others
-        .filter(
-          (other) =>
-            (entry.change.source === "this_menu" &&
-              menusContaining(graph, mine.rootSectionId).includes(other.menuId) &&
-              menuDocumentHash(built.get(other.menuId)!.document) !==
-                live.get(other.menuId)!.contentHash) ||
-            other.entries.some(
-              (candidate) =>
-                sameEdit(entry, candidate) ||
-                (entry.change.source === "this_menu" &&
-                  candidate.change.includedMenu?.id === menuId &&
-                  changeSubject(entry) === changeSubject(candidate)),
-            ),
-        )
+        .filter((other) => other.entries.some((candidate) => sameEdit(entry, candidate)))
         .map((other) => other.name);
       if (alsoOn.length > 0) entry.change.alsoOn = alsoOn;
     }

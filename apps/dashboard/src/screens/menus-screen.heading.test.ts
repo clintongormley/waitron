@@ -510,38 +510,50 @@ describe("the menu editor's heading", () => {
     },
   );
 
-  it("leaves Publish now disabled and offers no scheduling while prices clash", async () => {
-    const client = api(async () => ({ ...CHANGED, clashes: 1 }));
-    const read = client.getMenuPreview;
-    client.getMenuPreview = async (id) => ({
-      ...(await read(id)),
-      clashes: [{ productId: "p-burger", variantId: null, field: "price", candidates: [] }],
-    });
-    const el = await mount(client, PREVIEW_PATH);
-    const publish = () =>
-      q<HTMLElementTagNameMap["wt-button"]>(el, '.heading [data-test="publish"]');
-    await vi.waitFor(() => expect(publish()?.disabled).toBe(true));
-    expect(q(el, '.heading [data-test="schedule-open"]')).toBeNull();
-  });
+  const clash: MenuPreview["clashes"][number] = {
+    productId: "p-burger",
+    variantId: null,
+    field: "price",
+    candidates: [],
+  };
+  const problem: MenuPreview["setMenuProblems"][number] = {
+    menuId: "daily",
+    name: "Daily menu",
+    problems: [{ kind: "no_lines" }],
+  };
+  it.each([
+    ["a set menu has problems", { setMenuProblems: [problem] }],
+    ["prices clash", { clashes: [clash], status: { ...CHANGED, clashes: 1 } }],
+  ] satisfies [string, Partial<MenuPreview>][])(
+    "keeps both publish actions disabled when %s",
+    async (_, blockers) => {
+      const client = api();
+      const read = client.getMenuPreview;
+      client.getMenuPreview = async (id) => ({ ...(await read(id)), ...blockers });
+      const el = await mount(client, PREVIEW_PATH);
+      for (const action of ["schedule-open", "publish"]) {
+        const button = () => q<HTMLElementTagNameMap["wt-button"]>(el, `[data-test="${action}"]`);
+        await vi.waitFor(() => expect(button()?.disabled).toBe(true));
+        expect(button()?.ariaDescription).toBe("See Fix before publishing in Preview.");
+      }
+      expect(q(el, '[data-test="menu-clashes"]')).toBeNull();
+    },
+  );
 
   const clashWords = (el: MenusScreen) =>
     q(el, '[data-test="menu-clashes"] [data-test="status-clashes"]');
   it.each([
-    ["Prices", PRICES_PATH, "en", 1, "Publishing waits on 1 clash"],
-    ["Prices", PRICES_PATH, "en", 3, "Publishing waits on 3 clashes"],
-    ["Prices", PRICES_PATH, "es-ES", 1, "No se puede publicar hasta resolver 1 conflicto"],
-    ["Prices", PRICES_PATH, "es-ES", 3, "No se puede publicar hasta resolver 3 conflictos"],
-    ["Preview", PREVIEW_PATH, "en", 1, "Publishing waits on 1 clash"],
-    ["Preview", PREVIEW_PATH, "en", 3, "Publishing waits on 3 clashes"],
-    ["Preview", PREVIEW_PATH, "es-ES", 1, "No se puede publicar hasta resolver 1 conflicto"],
-    ["Preview", PREVIEW_PATH, "es-ES", 3, "No se puede publicar hasta resolver 3 conflictos"],
+    ["en", 1, "Publishing waits on 1 clash"],
+    ["en", 3, "Publishing waits on 3 clashes"],
+    ["es-ES", 1, "No se puede publicar hasta resolver 1 conflicto"],
+    ["es-ES", 3, "No se puede publicar hasta resolver 3 conflictos"],
   ])(
-    "says on the %s tab at %s, in %s, that publishing waits on %i clash(es), in red",
-    async (_tab, path, locale, clashes, words) => {
+    "says how many clashes block publishing on Prices in %s (%i)",
+    async (locale, clashes, words) => {
       setLocale(locale);
       const el = await mount(
         api(async () => ({ ...CHANGED, clashes })),
-        path,
+        PRICES_PATH,
       );
       await vi.waitFor(() => expect(clashWords(el)).not.toBeNull());
       expect(text(clashWords(el))).toBe(words);
@@ -551,26 +563,20 @@ describe("the menu editor's heading", () => {
     },
   );
 
-  it.each([
-    ["Structure", LUNCH_PATH],
-    ["Preview", PREVIEW_PATH],
-  ])(
-    "makes the clash words a link to the Prices tab filtered to the clashes on the %s tab, underlined in red",
-    async (_tab, path) => {
-      const el = await mount(
-        api(async () => ({ ...CHANGED, clashes: 2 })),
-        path,
-      );
-      await vi.waitFor(() => expect(clashWords(el)).not.toBeNull());
-      const link = clashWords(el)!;
-      expect(link.tagName).toBe("A");
-      expect(link.getAttribute("href")).toBe(`${PRICES_PATH}/filter/clashes`);
-      expect(text(link)).toBe("Publishing waits on 2 clashes");
-      const style = getComputedStyle(link);
-      expect(style.textDecorationLine).toContain("underline");
-      expect(style.color).toBe(resolved(el, "--wt-color-danger"));
-    },
-  );
+  it("links to filtered Prices in underlined red on the Structure tab", async () => {
+    const el = await mount(
+      api(async () => ({ ...CHANGED, clashes: 2 })),
+      LUNCH_PATH,
+    );
+    await vi.waitFor(() => expect(clashWords(el)).not.toBeNull());
+    const link = clashWords(el)!;
+    expect(link.tagName).toBe("A");
+    expect(link.getAttribute("href")).toBe(`${PRICES_PATH}/filter/clashes`);
+    expect(text(link)).toBe("Publishing waits on 2 clashes");
+    const style = getComputedStyle(link);
+    expect(style.textDecorationLine).toContain("underline");
+    expect(style.color).toBe(resolved(el, "--wt-color-danger"));
+  });
 
   it("draws the clash words as plain words on the Prices tab, which they would only open again", async () => {
     const el = await mount(
@@ -727,6 +733,19 @@ it.each(["light", "dark"] as const)(
       if (failed) throw { code: "server.internal" };
       return { ...CHANGED, clashes };
     });
+    const read = client.getMenuPreview;
+    client.getMenuPreview = async (id) => {
+      const preview = await read(id);
+      return {
+        ...preview,
+        clashes: Array.from({ length: clashes }, (_, index) => ({
+          productId: `p-${index}`,
+          variantId: null,
+          field: "price" as const,
+          candidates: [],
+        })),
+      };
+    };
     Object.assign(client, {
       liveData: live,
       getMenuRead: async (id: string, parts: readonly ("structure" | "preview")[]) => {
@@ -753,15 +772,15 @@ it.each(["light", "dark"] as const)(
       theme,
     );
     const heading = () => text(q(el, '[data-test="menu-status"]'));
-    const clashLine = () => text(q(el, '[data-test="menu-clashes"]'));
-    await vi.waitFor(() => expect(clashLine()).toBe("Publishing waits on 2 clashes"));
+    const panel = () => q(el, "dashboard-menu-preview")!.shadowRoot!;
+    const blockerHeading = () => text(panel().querySelector("#publish-blockers-heading"));
+    await vi.waitFor(() => expect(blockerHeading()).toBe("Fix before publishing (2)"));
     failed = true;
     live.invalidate([{ type: "products" }]);
-    const panel = () => q(el, "dashboard-menu-preview")!.shadowRoot!;
     await vi.waitFor(() =>
       expect(panel().querySelector('[data-test="preview-error"]')).not.toBeNull(),
     );
-    expect(q(el, '[data-test="status-clashes"]')).toBeNull();
+    expect(blockerHeading()).toBe("");
     expect(heading()).toBe(LIVE_WORDS);
     expect(text(panel().querySelector('[data-test="preview-error"]'))).toBe(
       "The changes could not be worked out.",
@@ -770,7 +789,7 @@ it.each(["light", "dark"] as const)(
     failed = false;
     clashes = 3;
     live.invalidate([{ type: "products" }]);
-    await vi.waitFor(() => expect(clashLine()).toBe("Publishing waits on 3 clashes"));
+    await vi.waitFor(() => expect(blockerHeading()).toBe("Fix before publishing (3)"));
     expect(panel().querySelector('[data-test="preview-error"]')).toBeNull();
     await expectNoA11yViolations(host);
   },

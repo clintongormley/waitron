@@ -869,6 +869,33 @@ describe("scheduling a publication", () => {
     expect(submitButton(el).disabled).toBe(false);
   });
 
+  it("stops an open schedule when a new preview reports set-menu problems", async () => {
+    const scheduleMenuPublication = vi.fn();
+    const el = await mount(stubApi({ scheduleMenuPublication }), { preview: draftPreview() });
+    await openSchedule(el);
+    await enter(el, "date", "2026-10-10");
+    await enter(el, "time", "12:00");
+    expect(submitButton(el).disabled).toBe(false);
+    el.preview = draftPreview({
+      setMenuProblems: [{ menuId: "daily", name: "Daily menu", problems: [{ kind: "no_lines" }] }],
+    });
+    await flush(el);
+    expect(submitButton(el).disabled).toBe(true);
+    expect(await bottom(el)).toBe("See Fix before publishing in Preview.");
+    submitButton(el).dispatchEvent(new MouseEvent("click"));
+    await flush(el);
+    expect(scheduleMenuPublication).not.toHaveBeenCalled();
+    const dialog = scheduleDialog(el);
+    const closed = new Promise<void>((resolve) =>
+      dialog.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    void dialog.closeAfter("saved");
+    await closed;
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("h2")),
+    );
+  });
+
   it("names the set menu whose problems prevent scheduling", async () => {
     const api = stubApi({
       scheduleMenuPublication: vi.fn().mockRejectedValue({
@@ -878,9 +905,18 @@ describe("scheduling a publication", () => {
     });
     const el = await mount(api, {
       preview: draftPreview({
-        setMenuProblems: [
-          { menuId: "daily", name: "Daily menu", problems: [{ kind: "no_lines" }] },
-        ],
+        document: {
+          ...draftPreview().document,
+          setMenus: {
+            daily: {
+              name: "Daily menu",
+              terms: { names: {}, price: "24.00", lines: [] },
+              root: { members: [] },
+              offers: {},
+              changedAt: "2026-10-07T08:00:00.000Z",
+            },
+          },
+        },
       }),
     });
     await openSchedule(el);
@@ -969,7 +1005,7 @@ describe("scheduling a publication", () => {
     ]);
   });
 
-  it("offers no schedule without a preview, while the preview has clashes, or when the draft is the latest edition", async () => {
+  it("offers no schedule without a preview or when the draft is the latest edition", async () => {
     const offered = async (preview: MenuPreview | null, listed = queue()) => {
       const el = await mount(stubApi({ getMenuPublications: vi.fn(async () => listed) }), {
         preview,
@@ -980,7 +1016,6 @@ describe("scheduling a publication", () => {
     };
     expect(await offered(draftPreview())).toBe(true);
     expect(await offered(null)).toBe(false);
-    expect(await offered(draftPreview({ clashes: [{}] as MenuPreview["clashes"] }))).toBe(false);
     expect(await offered(draftPreview({ hash: "4".repeat(64) }))).toBe(false);
     // v2 is queued, but v4 follows it, so a draft like v2 is a change from v4.
     expect(await offered(draftPreview({ hash: "2".repeat(64) }))).toBe(true);
@@ -1803,11 +1838,23 @@ describe("changing a queued version's time", () => {
     },
   );
 
-  it("moves a version without a preview, closes, and reads the list again", async () => {
+  it.each([
+    ["no preview", null],
+    [
+      "set-menu problems",
+      draftPreview({
+        setMenuProblems: [
+          { menuId: "daily", name: "Daily menu", problems: [{ kind: "no_lines" }] },
+        ],
+      }),
+    ],
+  ])("moves a saved version with %s and reads the list again", async (_, preview) => {
     const api = stubApi();
-    const el = await mount(api);
+    const el = await mount(api, { preview });
     await openMove(el, "v-lunch-2");
     await enter(el, "time", "09:00");
+    expect(submitButton(el).disabled).toBe(false);
+    expect(await bottom(el)).toBe("");
     await submit(el);
     expect(api.rescheduleMenuPublication.mock.calls).toEqual([
       ["menu-lunch", "v-lunch-2", { activatesAt: { date: "2026-10-08", time: "09:00" } }],

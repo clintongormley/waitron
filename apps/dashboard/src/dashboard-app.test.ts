@@ -9488,7 +9488,10 @@ describe("printer details window during a pending save", () => {
   }
 });
 
-it("lets Preview View and Hide links handle native activation inside the application shell", async () => {
+it("lets a Preview name link reveal and focus its destination inside the application shell", async () => {
+  const { innerWidth, innerHeight } = window;
+  onTestFinished(() => page.viewport(innerWidth, innerHeight));
+  await page.viewport(390, 900);
   const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
   await flush(el);
   const document = menuDocument([], {}, "Proposed lunch");
@@ -9526,18 +9529,12 @@ it("lets Preview View and Hide links handle native activation inside the applica
   await userEvent.keyboard("{Enter}");
   await vi.waitFor(() => {
     const tree = preview.shadowRoot!.querySelector("dashboard-menu-document-tree")!;
-    const row = tree
-      .shadowRoot!.querySelector("wt-data-table")!
-      .shadowRoot!.querySelector('[aria-current="true"]');
+    const rows = tree.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+    const row = rows.querySelector('[aria-current="true"]');
     expect(row?.textContent).toContain("Proposed lunch");
+    expect(rows.activeElement).toBe(row);
   });
-  expect(preview.shadowRoot!.activeElement).toBe(view);
-  const hide = preview.shadowRoot!.querySelector<HTMLAnchorElement>("[data-hide-change]")!;
-  hide.focus();
-  await userEvent.keyboard("{Enter}");
-  await vi.waitFor(() =>
-    expect(preview.shadowRoot!.querySelector('[data-change-row="rename"]')).toBeNull(),
-  );
+  expect(preview.shadowRoot!.querySelector("wt-segmented-control")!.value).toBe("menu");
 });
 
 it.each(["home", "clash"] as const)(

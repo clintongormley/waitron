@@ -74,48 +74,77 @@ it("names every includer and links to its Preview", async () => {
     "/menus/menu/terrace/view/preview",
   ]);
 });
-it.each([1, 2])(
-  "shows %i clashes as a red sentence with their sources and a filter link",
-  async (count) => {
-    const p = preview();
-    p.clashes = Array.from({ length: count }, () => ({
-      productId: "lager",
-      variantId: null,
-      field: "price",
-      candidates: [
-        { value: decimal("2.80"), place: { kind: "own_sections" }, source: { kind: "own" } },
-        {
-          value: decimal("3.00"),
-          place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
-          source: { kind: "own" },
-        },
-      ],
-    })) as MenuPreview["clashes"];
-    const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", { preview: p });
-    const message = el.shadowRoot!.querySelector<HTMLElement>('[data-test="clash-count"]')!;
-    expect(message.tagName).toBe("P");
-    expect(message.classList.contains("error")).toBe(true);
-    expect(text(message)).toBe(
-      count === 1
-        ? "1 price has a clash. Resolve it before publishing this menu."
-        : "2 prices have clashes. Resolve them before publishing this menu.",
+it.each(["en", "es-ES"])("shows clashes with their prices and sources in %s", async (locale) => {
+  const spanish = locale === "es-ES";
+  const count = spanish ? 2 : 1;
+  setLocale(locale);
+  const p = preview();
+  p.clashes = Array.from({ length: count }, () => ({
+    productId: "lager",
+    variantId: null,
+    field: "price",
+    candidates: [
+      { value: decimal("2.80"), place: { kind: "own_sections" }, source: { kind: "own" } },
+      {
+        value: decimal("3.00"),
+        place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
+        source: { kind: "own" },
+      },
+    ],
+  })) as MenuPreview["clashes"];
+  const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", { preview: p });
+  const card = el.shadowRoot!.querySelector('wt-card[data-test="publish-blockers"]')!;
+  expect(text(card.querySelector("h2"))).toBe(
+    spanish ? "Corrige antes de publicar (2)" : "Fix before publishing (1)",
+  );
+  const rows = [...card.querySelectorAll("li")];
+  expect(rows).toHaveLength(count);
+  for (const row of rows) {
+    expect(text(row)).toBe(
+      spanish
+        ? "Lager 2,80 € en las secciones de esta carta 3,00 € en Drinks Elegir un precio ›"
+        : "Lager €2.80 in this menu's sections €3.00 in Drinks Choose a price ›",
     );
-    expect([...el.shadowRoot!.querySelectorAll('[data-test="clashes"] li')].map(text)).toEqual(
-      Array.from(
-        { length: count },
-        () => "Lager: price set to €2.80 in this menu's sections, €3.00 in Drinks.",
-      ),
+    expect(row.querySelector("a")?.getAttribute("href")).toContain("/view/prices/filter/clashes");
+  }
+});
+it("places both kinds of publishing blocker before any folded warning", async () => {
+  const p = preview();
+  p.clashes = [{ productId: "lager", variantId: null, field: "price", candidates: [] }];
+  p.setMenuProblems = [
+    {
+      menuId: "daily",
+      name: "Daily menu",
+      problems: [{ kind: "dish_sold_by_measure", productId: "lager", name: "Lager" }],
+    },
+  ];
+  p.warnings = [{ kind: "shortcut_missing", name: "Missing" }];
+  const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", { preview: p });
+  const root = el.shadowRoot!;
+  const warning = root.querySelector("wt-disclosure")!;
+  expect(warning.open).toBe(false);
+  expect(warning.card).toBe(false);
+  const headingColor = getComputedStyle(root.querySelector("#document-heading")!).color;
+  expect(getComputedStyle(warning.closest("wt-card")!.querySelector("h2")!).color).toBe(
+    headingColor,
+  );
+  expect(getComputedStyle(root.querySelector("#changes-heading")!).color).toBe(headingColor);
+  expect(text(root.querySelector("#publish-blockers-heading"))).toBe("Fix before publishing (2)");
+  for (const blocker of [
+    root.querySelector("#publish-blockers-heading")!,
+    root.querySelector('a[href="/set-menus/menu/daily"]')!,
+  ]) {
+    expect(blocker.compareDocumentPosition(warning) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(
-      el.shadowRoot!.querySelector('[data-test="clash-prices"]')?.getAttribute("href"),
-    ).toContain("/view/prices");
-  },
-);
+  }
+});
+
 it("shows no clash error when every price resolves", async () => {
   const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", {
     preview: preview(),
   });
-  expect(el.shadowRoot!.querySelector('[data-test="clash-count"]')).toBeNull();
+  expect(el.shadowRoot!.querySelector("#publish-blockers-heading")).toBeNull();
 });
 it.each([
   ["en", "Lunch includes this menu. It keeps its live version until it is published."],
@@ -157,29 +186,13 @@ it.each(["ctrlKey", "metaKey", "shiftKey", "altKey"])(
   },
 );
 
-it.each([1, 2])(
-  "uses conflicto throughout the Spanish clash vocabulary and Preview sentence (%i)",
-  async (count) => {
-    setLocale("es-ES");
-    expect(t("menu_prices.clash")).toBe("Conflicto");
-    expect(t("menu_prices.clashes_only")).toBe("Con conflictos");
-    expect(t("menu_prices.show_clashes")).toBe("Ver conflictos");
-    expect(t("menus.publish_waits_clash")).toBe("No se puede publicar hasta resolver 1 conflicto");
-    expect(t("menus.publish_waits_clashes").replace("{count}", "2")).toBe(
-      "No se puede publicar hasta resolver 2 conflictos",
-    );
-    const p = preview();
-    p.clashes = Array.from({ length: count }, () => ({
-      productId: "lager",
-      variantId: null,
-      field: "price",
-      candidates: [],
-    })) as MenuPreview["clashes"];
-    const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", { preview: p });
-    expect(text(el.shadowRoot!.querySelector('[data-test="clash-count"]'))).toBe(
-      count === 1
-        ? "1 precio tiene un conflicto. Resuélvelo antes de poder publicar esta carta."
-        : "2 precios tienen conflictos. Resuélvelos antes de poder publicar esta carta.",
-    );
-  },
-);
+it("uses conflicto throughout the Spanish Prices vocabulary", () => {
+  setLocale("es-ES");
+  expect(t("menu_prices.clash")).toBe("Conflicto");
+  expect(t("menu_prices.clashes_only")).toBe("Con conflictos");
+  expect(t("menu_prices.show_clashes")).toBe("Ver conflictos");
+  expect(t("menus.publish_waits_clash")).toBe("No se puede publicar hasta resolver 1 conflicto");
+  expect(t("menus.publish_waits_clashes").replace("{count}", "2")).toBe(
+    "No se puede publicar hasta resolver 2 conflictos",
+  );
+});

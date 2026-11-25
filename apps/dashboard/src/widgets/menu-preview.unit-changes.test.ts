@@ -75,7 +75,7 @@ async function open(to: typeof from, theme: "light" | "dark" = "light") {
   );
 }
 function words(el: MenuPreviewPanel) {
-  return [...el.shadowRoot!.querySelectorAll('[data-test="changes"] li > span')]
+  return [...el.shadowRoot!.querySelectorAll('[data-test="changes"] li')]
     .map((node) => node.textContent!.replace(/\s+/g, " ").trim())
     .join(" ");
 }

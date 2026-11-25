@@ -260,8 +260,6 @@ function nestedFields(
       add(productFields(was, now, ["names", "image", "unit", "allergens", "diet", "vat"]), {
         variantId: id,
       });
-      if (was.unitPrice !== now.unitPrice) both({ kind: "price" }, { variantId: id });
-      if (was.menuPrice !== now.menuPrice) both({ kind: "override" }, { variantId: id });
     }
   }
   for (const kind of ["extras", "options"] as const) {
@@ -588,27 +586,29 @@ export function navigateMenuChanges(
           }
         }
         if (before === undefined || after === undefined) break;
-        const fields =
-          change.kind === "product_changed"
-            ? productFields(before, after, change.fields)
-            : { before: [] as MenuField[], after: [] as MenuField[] };
         if (change.kind === "price_changed") {
-          if (before.unitPrice !== after.unitPrice) {
-            fields.before.push({ kind: "price" });
-            fields.after.push({ kind: "price" });
-          }
-          if (before.grossPrice !== after.grossPrice) {
-            fields.before.push({ kind: "override" });
-            fields.after.push({ kind: "override" });
-          }
-        }
-        productTargets("before", change.productId, fields.before);
-        productTargets("after", change.productId, fields.after);
-        if (change.kind === "product_changed") {
+          const variantId = change.variant?.id;
+          const old =
+            variantId === undefined ? before : before.variants.find((v) => v.id === variantId);
+          const now =
+            variantId === undefined ? after : after.variants.find((v) => v.id === variantId);
+          if (old === undefined || now === undefined) break;
+          const previousOverride = "grossPrice" in old ? old.grossPrice : old.menuPrice;
+          const nextOverride = "grossPrice" in now ? now.grossPrice : now.menuPrice;
+          const fields: MenuField[] = [];
+          if (old.unitPrice !== now.unitPrice) fields.push({ kind: "price" });
+          if (previousOverride !== nextOverride) fields.push({ kind: "override" });
+          const ids = variantId === undefined ? {} : { variantId };
+          productTargets("before", change.productId, fields, ids);
+          productTargets("after", change.productId, fields, ids);
+        } else {
+          const fields = productFields(before, after, change.fields);
           const nested = nestedFields(before, after, change.fields);
-          for (const side of ["before", "after"] as const)
+          for (const side of ["before", "after"] as const) {
+            productTargets(side, change.productId, fields[side]);
             for (const { field, ids } of nested[side])
               productTargets(side, change.productId, [field], ids);
+          }
         }
         break;
       }

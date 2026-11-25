@@ -8,6 +8,7 @@ import {
   documentProduct,
   menuDocument,
   mountMenuPreview as mountWidget,
+  selectPreviewPane,
 } from "./test-helpers.js";
 
 let locale: string;
@@ -41,7 +42,7 @@ it.each([
   [390, "es-ES", "light"],
   [390, "es-ES", "dark"],
 ] as const)(
-  "puts unpublished changes before the menu at %i px, %s, %s",
+  "shows both panes on desktop and one at a time on a phone at %i px, %s, %s",
   async (width, language, theme) => {
     await page.viewport(width, 900);
     setLocale(language);
@@ -52,6 +53,8 @@ it.each([
     );
     const changes = el.shadowRoot!.querySelector<HTMLElement>('[data-test="changes-pane"]')!;
     const menu = el.shadowRoot!.querySelector<HTMLElement>('[data-test="document-pane"]')!;
+    expect(changes.querySelector("#changes-heading")).not.toBeNull();
+    expect(menu.querySelector('[data-test="document"]')).not.toBeNull();
     expect(changes.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
@@ -59,21 +62,26 @@ it.each([
     const b = menu.getBoundingClientRect();
     if (width === 1280) {
       expect(a.right).toBeLessThanOrEqual(b.left);
-      expect(
-        el.shadowRoot!.querySelector('[data-test="changes-column"]')!.getBoundingClientRect().top,
-      ).toBe(b.top);
+      expect(a.top).toBe(b.top);
+      expect(el.shadowRoot!.querySelector("wt-segmented-control")!.getClientRects()).toHaveLength(
+        0,
+      );
     } else {
-      expect(a.bottom).toBeLessThanOrEqual(b.top);
-      expect(a.left).toBe(b.left);
+      const picker = el.shadowRoot!.querySelector("wt-segmented-control")!;
+      expect(picker.options.map(({ label }) => label)).toEqual(
+        language === "en" ? ["Changes", "Menu"] : ["Cambios", "Carta"],
+      );
+      expect(menu.getClientRects()).toHaveLength(0);
+      await selectPreviewPane(el, "menu");
+      expect(changes.getClientRects()).toHaveLength(0);
+      expect(menu.getBoundingClientRect().left).toBe(a.left);
     }
     for (const pane of [changes, menu]) {
       expect(pane.getAttribute("role")).toBe("region");
-      expect(pane.tabIndex).toBe(0);
+      expect(pane.tabIndex).toBe(-1);
       expect(
         el.shadowRoot!.getElementById(pane.getAttribute("aria-labelledby")!)?.textContent?.trim(),
       ).toBeTruthy();
-      pane.focus();
-      expect(el.shadowRoot!.activeElement).toBe(pane);
     }
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   },

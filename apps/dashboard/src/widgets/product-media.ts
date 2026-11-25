@@ -1,6 +1,7 @@
 import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { css, html, nothing } from "lit";
 import { isStoredColor } from "@waitron/shared";
+import "@waitron/ui/src/components/wt-icon.js";
 import { fill } from "../i18n/t.js";
 import { leftToBrowser } from "../navigation.js";
 
@@ -61,6 +62,7 @@ export function productMedia(options: {
   editable?: boolean;
   busy: boolean;
   lazy?: boolean;
+  fallbackIcon?: string;
   /** Opens the product's Edit in place; without it the click follows the link. */
   open?: () => void;
   /** Where `color` comes from when it is not the product's own: a category's name or All products. */
@@ -68,7 +70,13 @@ export function productMedia(options: {
 }) {
   const { key, productId = key, name, image, color, editable = true, busy, open } = options;
   const inheritedFrom = isStoredColor(color) ? options.inheritedFrom : undefined;
-  const frame = productMediaFrame(image, color, inheritedFrom !== undefined, options.lazy);
+  const frame = productMediaFrame(
+    image,
+    color,
+    inheritedFrom !== undefined,
+    options.lazy,
+    options.fallbackIcon,
+  );
   if (!editable)
     return html`<span part="product-media swatch-box" data-test=${`color-${key}`} aria-hidden="true"
       >${frame}</span
@@ -104,6 +112,7 @@ export function productMediaFrame(
   color: string | null,
   inherited = false,
   lazy = false,
+  fallbackIcon?: string,
 ) {
   const painted = isStoredColor(color);
   return html`<span
@@ -111,6 +120,6 @@ export function productMediaFrame(
     data-test=${image ? "thumb" : "thumb-placeholder"}
     style=${painted ? `--product-media-color:${color}` : nothing}
     aria-hidden="true"
-    >${image ? html`<img part="thumbnail" loading=${lazy ? "lazy" : nothing} src=${liveMediaImage(image, "square")} alt="" draggable="false" />` : nothing}</span
+    >${image ? html`<img part="thumbnail" loading=${lazy ? "lazy" : nothing} src=${liveMediaImage(image, "square")} alt="" draggable="false" />` : fallbackIcon ? html`<wt-icon part="media-placeholder-icon" name=${fallbackIcon}></wt-icon>` : nothing}</span
   >`;
 }

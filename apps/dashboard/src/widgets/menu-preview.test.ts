@@ -12,6 +12,7 @@ import {
   documentSection,
   menuDocument,
   mountMenuPreview as mountWidget,
+  selectPreviewPane,
 } from "./test-helpers.js";
 
 // The wording is asserted as a person reads it, in English unless a case says otherwise.
@@ -82,16 +83,87 @@ function text(node: Element | null): string {
 }
 
 function items(el: MenuPreviewPanel, list: string): string[] {
-  const words = [...el.shadowRoot!.querySelectorAll(`[data-test="${list}"] li`)].map((row) =>
-    list === "changes"
-      ? [...row.children]
-          .filter((node) => node.tagName === "SPAN")
-          .map(text)
-          .join(" ")
-      : text(row),
-  );
+  const words = [...el.shadowRoot!.querySelectorAll(`[data-test="${list}"] li`)].map(text);
   return list === "changes" ? words.sort() : words;
 }
+
+it("names the changed size and describes setting or clearing a price at the same amount", async () => {
+  const base = {
+    kind: "price_changed" as const,
+    productId: "p-burger",
+    name: "Burger",
+    source: "this_menu" as const,
+    targets: { before: [], after: [] },
+  };
+  const variant = { id: "small", name: "Small" };
+  const el = await mount({
+    preview: preview([
+      { ...base, id: "touch", from: "2.00", to: "2.20", variant },
+      { ...base, id: "set", from: "2.00", to: "2.00", variant, override: "set" },
+      { ...base, id: "clear", from: "2.00", to: "2.00", override: "cleared" },
+    ]),
+  });
+  expect(text(q(el, '[data-change-row="touch"]'))).toBe("Burger › Small €2.00 → €2.20");
+  expect(text(q(el, '[data-change-row="set"]'))).toBe("Burger › Small price set on this menu");
+  expect(text(q(el, '[data-change-row="clear"]'))).toBe("Burger price no longer set on this menu");
+});
+
+it("keeps other menus off a change made only here", async () => {
+  const el = await mount({
+    preview: preview([
+      {
+        id: "rename-here",
+        kind: "menu_renamed",
+        from: "Lunch",
+        to: "Midday",
+        source: "this_menu",
+        alsoOn: ["Dinner"],
+        targets: { before: [], after: [] },
+      },
+    ]),
+  });
+  expect(text(q(el, '[data-change-row="rename-here"]'))).toBe("Menu renamed from Lunch to Midday");
+});
+
+it.each(["extras", "unit"] as const)("keeps the source of a %s change neutral", async (field) => {
+  const el = await mount({
+    preview: preview([
+      {
+        id: "modifiers",
+        kind: "product_changed",
+        productId: "p-burger",
+        name: "Burger",
+        fields: [field],
+        source: "shared_product",
+        targets: { before: [], after: [] },
+      },
+    ]),
+  });
+  expect(text(q(el, '[data-change-row="modifiers"]'))).toBe(`Burger: ${field} shared product`);
+});
+
+it("keeps counted warning details folded until opened and keeps the product link", async () => {
+  const el = await mount({
+    preview: preview(
+      [],
+      [
+        {
+          kind: "allergens_unreviewed",
+          products: [{ id: "p-burger", name: "Burger", parentName: null }],
+        },
+      ],
+    ),
+  });
+  const warning = q(el, "wt-disclosure")!;
+  expect(warning.getAttribute("heading")).toBe("1 product with allergens not yet reviewed");
+  expect(warning.hasAttribute("open")).toBe(false);
+  warning.shadowRoot!.querySelector<HTMLButtonElement>("button")!.click();
+  await expect.poll(() => warning.hasAttribute("open")).toBe(true);
+  expect([...warning.querySelectorAll("li")].map(text)).toEqual(["Burger"]);
+  expect(warning.querySelector('a[href="/products/product/p-burger"]')?.textContent?.trim()).toBe(
+    "Burger",
+  );
+});
 
 it("words every kind of change, each with where it came from", async () => {
   const el = await mount({
@@ -270,21 +342,21 @@ it("words every kind of change, each with where it came from", async () => {
   });
   expect(items(el, "changes")).toEqual(
     [
-      "Lemonade added under Drinks",
-      "Burger price changed from €12.00 to €13.00 — shared product, also on Dinner Menu",
-      "Lemonade: colour — shared product, also on Dinner Menu",
-      "Drinks renamed — included menu",
-      "Lager removed from Drinks › Beer — included menu, also on Dinner Menu and Terrace Menu",
-      "Chips added at the top level",
-      "Soup moved from Starters to the top level and Mains › Hot",
-      "Cola: names, description, photo, unit, how it is sold, variants, extras, options — shared product",
-      "Section Desserts added at the top level",
-      "Bread removed from the top level",
-      "Section Specials removed from the top level",
-      "Section Beer removed from Drinks — included menu",
-      "Mains: name, photo, colour — included menu",
-      "Order changed at the top level",
-      "Order changed in Drinks — included menu",
+      "Drinks › Lemonade",
+      "Burger €12.00 → €13.00 changed in Products, also on Dinner Menu",
+      "Lemonade: colour changed in Products, also on Dinner Menu",
+      "Drinks renamed included menu",
+      "Drinks › Beer › Lager included menu, also on Dinner Menu and Terrace Menu",
+      "Chips",
+      "Soup Starters → the top level and Mains › Hot",
+      "Cola: names, description, photo, unit, how it is sold, variants, extras, options shared product",
+      "Desserts",
+      "Bread",
+      "Specials",
+      "Drinks › Beer included menu",
+      "Mains: name, photo, colour included menu",
+      "Top level reordered",
+      "Drinks reordered included menu",
       "Device Home Page shortcuts changed",
       "What appears first on the Device Home Page changed",
       "Menu renamed from Midday Menu to Lunch Menu",
@@ -341,9 +413,9 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
   });
   expect(items(el, "changes").map((line) => line.replace(/\s/g, " "))).toEqual(
     [
-      "Se ha movido Soup: antes en Starters; ahora en el nivel principal y Mains › Hot",
-      "Ha cambiado el orden en el nivel principal",
-      "Ha cambiado el precio de Burger de 12,00 € a 13,00 € — producto compartido, también en Dinner Menu y Terrace Menu",
+      "Soup Starters → el nivel principal y Mains › Hot",
+      "Nivel principal: orden cambiado",
+      "Burger 12,00 € → 13,00 € cambio en Productos, también en Dinner Menu y Terrace Menu",
       "Han cambiado los accesos directos de la página de inicio del dispositivo",
       "Ha cambiado lo que se muestra primero en la página de inicio del dispositivo",
     ].sort(),
@@ -376,8 +448,8 @@ it("names a deleted extra-only product on its own line in English and Spanish", 
   });
   expect(items(el, "changes")).toEqual(
     [
-      "Lemonade: extras — shared product, also on Dinner Menu",
-      "Extra lemon deleted — shared product, also on Dinner Menu",
+      "Lemonade: extras shared product, also on Dinner Menu",
+      "Extra lemon deleted changed in Products, also on Dinner Menu",
     ].sort(),
   );
 
@@ -386,8 +458,8 @@ it("names a deleted extra-only product on its own line in English and Spanish", 
   await el.updateComplete;
   expect(items(el, "changes")).toEqual(
     [
-      "Lemonade: extras — producto compartido, también en Dinner Menu",
-      "Se ha eliminado Extra lemon — producto compartido, también en Dinner Menu",
+      "Lemonade: extras producto compartido, también en Dinner Menu",
+      "Se ha eliminado Extra lemon cambio en Productos, también en Dinner Menu",
     ].sort(),
   );
 });
@@ -423,7 +495,7 @@ it("names an extra's list and old and new units in both languages", async () => 
   });
   expect(items(el, "changes")).toEqual(
     [
-      "Extras: Ham unit changed from g (0 decimal places) to kg (3 decimal places) — shared product",
+      "Extras: Ham unit changed from g (0 decimal places) to kg (3 decimal places) shared product",
     ].sort(),
   );
 
@@ -432,7 +504,7 @@ it("names an extra's list and old and new units in both languages", async () => 
   await el.updateComplete;
   expect(items(el, "changes")).toEqual(
     [
-      "Extras: la unidad de Ham ha cambiado de g (0 decimales) a kg (3 decimales) — producto compartido",
+      "Extras: la unidad de Ham ha cambiado de g (0 decimales) a kg (3 decimales) producto compartido",
     ].sort(),
   );
 });
@@ -455,14 +527,14 @@ it("names an extra's list and old and new portions with their units in both lang
     ]),
   });
   expect(items(el, "changes")).toEqual(
-    ["Extras: Ham portion changed from 0.050 kg to 0.100 kg — shared product"].sort(),
+    ["Extras: Ham portion changed from 0.050 kg to 0.100 kg changed in Modifiers"].sort(),
   );
 
   setLocale("es-ES");
   el.requestUpdate();
   await el.updateComplete;
   expect(items(el, "changes")).toEqual(
-    ["Extras: la porción de Ham ha cambiado de 0.050 kg a 0.100 kg — producto compartido"].sort(),
+    ["Extras: la porción de Ham ha cambiado de 0.050 kg a 0.100 kg cambio en Modificadores"].sort(),
   );
 });
 
@@ -484,14 +556,14 @@ it("names an extra's change to no quantity limit in both languages", async () =>
     ]),
   });
   expect(items(el, "changes")).toEqual(
-    ["Extras: Ham maximum quantity changed from 2 to no limit — shared product"].sort(),
+    ["Extras: Ham maximum quantity changed from 2 to no limit changed in Modifiers"].sort(),
   );
   setLocale("es-ES");
   el.requestUpdate();
   await el.updateComplete;
   expect(items(el, "changes")).toEqual(
     [
-      "Extras: la cantidad máxima de Ham ha cambiado de 2 a sin límite — producto compartido",
+      "Extras: la cantidad máxima de Ham ha cambiado de 2 a sin límite cambio en Modificadores",
     ].sort(),
   );
 });
@@ -532,9 +604,9 @@ it("names a VAT change among a product's changed facts", async () => {
   const el = await mount({ preview: preview(VAT_CHANGES) });
   expect(items(el, "changes")).toEqual(
     [
-      "Lemonade: VAT — shared product, also on Dinner Menu",
-      "Burger: colour, VAT, variants — shared product",
-      "Cheese: VAT — shared product",
+      "Lemonade: VAT changed in Products, also on Dinner Menu",
+      "Burger: colour, VAT, variants changed in Products",
+      "Cheese: VAT changed in Products",
     ].sort(),
   );
 });
@@ -544,16 +616,16 @@ it("names a VAT change in Spanish", async () => {
   const el = await mount({ preview: preview(VAT_CHANGES) });
   expect(items(el, "changes")).toEqual(
     [
-      "Lemonade: IVA — producto compartido, también en Dinner Menu",
-      "Burger: color, IVA, variantes — producto compartido",
-      "Cheese: IVA — producto compartido",
+      "Lemonade: IVA cambio en Productos, también en Dinner Menu",
+      "Burger: color, IVA, variantes cambio en Productos",
+      "Cheese: IVA cambio en Productos",
     ].sort(),
   );
 });
 
 it.each([
-  ["en", "Lemonade: colour — shared product"],
-  ["es-ES", "Lemonade: color — producto compartido"],
+  ["en", "Lemonade: colour changed in Products"],
+  ["es-ES", "Lemonade: color cambio en Productos"],
 ])("names a change to a product's colour (%s)", async (locale, line) => {
   setLocale(locale);
   const el = await mount({
@@ -573,8 +645,8 @@ it.each([
 });
 
 it.each([
-  ["en", "Lemonade: allergens, diet — shared product"],
-  ["es-ES", "Lemonade: alérgenos, dieta — producto compartido"],
+  ["en", "Lemonade: allergens, diet changed in Products"],
+  ["es-ES", "Lemonade: alérgenos, dieta cambio en Productos"],
 ])("names a change to a product's allergens and diet (%s)", async (locale, line) => {
   setLocale(locale);
   const el = await mount({
@@ -594,8 +666,8 @@ it.each([
 });
 
 it.each([
-  ["en", "Daily menu: allergens, diet — set menu"],
-  ["es-ES", "Daily menu: alérgenos, dieta — menú"],
+  ["en", "Daily menu: allergens, diet"],
+  ["es-ES", "Daily menu: alérgenos, dieta"],
 ])("names a change to a set menu's dish allergens and diet (%s)", async (locale, line) => {
   setLocale(locale);
   const el = await mount({
@@ -614,8 +686,8 @@ it.each([
 });
 
 it.each([
-  ["en", "Bacon: how it is sold — shared product"],
-  ["es-ES", "Bacon: cómo se vende — producto compartido"],
+  ["en", "Bacon: how it is sold changed in Products"],
+  ["es-ES", "Bacon: cómo se vende cambio en Productos"],
 ])("names a change to who may order a product on its own (%s)", async (locale, line) => {
   setLocale(locale);
   const el = await mount({
@@ -993,7 +1065,7 @@ it("names a product the document offers nothing for as no longer available", asy
   expect(await topNames(tree)).toEqual([t("members.missing")]);
 });
 
-it("lists unresolved clashes above Publish and disables publishing", async () => {
+it("puts one blocker card above the phone selector and labels the disputed price", async () => {
   const value = preview([]);
   value.clashes = [
     {
@@ -1010,12 +1082,34 @@ it("lists unresolved clashes above Publish and disables publishing", async () =>
       ],
     },
   ];
+  const before = { width: innerWidth, height: innerHeight };
+  onTestFinished(() => page.viewport(before.width, before.height));
+  await page.viewport(390, 850);
   const el = await mount({ preview: value });
   const publish = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!;
   expect(publish.disabled).toBe(true);
   expect(text(q(el, '[data-test="clashes"]'))).toContain("Burger");
-  expect(text(q(el, '[data-test="clash-count"]'))).toBe(
-    "1 price has a clash. Resolve it before publishing this menu.",
+  expect(text(q(el, "#publish-blockers-heading"))).toBe("Fix before publishing (1)");
+  const blockers = q(el, 'wt-card[data-test="publish-blockers"]')!;
+  const picker = q(el, "wt-segmented-control")!;
+  expect(blockers.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    picker.getBoundingClientRect().top,
+  );
+  const choose = blockers.querySelector<HTMLAnchorElement>('[data-test="clash-prices"]')!;
+  expect(text(choose)).toContain("Choose a price");
+  expect(new URL(choose.href).pathname).toMatch(/\/view\/prices\/filter\/clashes$/);
+  await selectPreviewPane(el, "menu");
+  expect(blockers.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+    picker.getBoundingClientRect().top,
+  );
+  const tree = documentView(el);
+  expect(await topNames(tree)).toContain("Burger para clientes");
+  const table = tree.shadowRoot!.querySelector("wt-data-table")!;
+  const burger = [...table.shadowRoot!.querySelectorAll('[data-test="name"]')].find(
+    (name) => text(name) === "Burger para clientes",
+  )!;
+  expect(text(burger.closest('[part~="preview-row"]')!.querySelector('[data-test="price"]'))).toBe(
+    "Price clash",
   );
   const heard = vi.fn();
   el.addEventListener("wt-menu-publish", heard);
@@ -1030,38 +1124,11 @@ function capture(el: HTMLElement, type: string): unknown[] {
 }
 
 it.each([
-  ["en", "price set to", "Price override —"],
-  ["es-ES", "precio fijado", "Precio propio —"],
-])("names each publication clash by its set prices in %s", async (locale, wanted, retired) => {
-  setLocale(locale);
-  const value = preview([]);
-  value.clashes = [
-    {
-      productId: "p-burger",
-      variantId: null,
-      field: "price",
-      candidates: [
-        { place: { kind: "own_sections" }, value: "12.00" as never, source: { kind: "product" } },
-        {
-          place: { kind: "menu", menuId: "drinks", menuName: "Drinks" },
-          value: "14.00" as never,
-          source: { kind: "own" },
-        },
-      ],
-    },
-  ];
-  const el = await mount({ preview: value });
-  expect(text(q(el, '[data-test="clashes"]'))).toContain(wanted);
-  expect(text(q(el, '[data-test="clashes"]'))).not.toContain(retired);
-  expect(q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!.disabled).toBe(true);
-});
-
-it.each([
   ["en", "included menu", "also on Dinner"],
   ["es-ES", "carta incluida", "también en Dinner"],
 ])(
   "identifies an included menu by name and preserves affected menus in %s",
-  async (locale, source, also) => {
+  async (locale, _source, also) => {
     setLocale(locale);
     const el = await mount({
       preview: preview([
@@ -1079,7 +1146,6 @@ it.each([
       ]),
     });
     const words = text(q(el, '[data-test="changes"] .source'));
-    expect(words).toContain(source);
     expect(words).toContain("Bar {source}");
     expect(words).toContain(also);
   },
@@ -1135,7 +1201,7 @@ it.each([
         document,
       },
     });
-    expect(text(q(el, '[data-change-row="switched"] > span'))).toBe(words);
+    expect(text(q(el, '[data-change-row="switched"]'))).toBe(words);
     expect(q(el, '[data-test="changes"] .source')).toBeNull();
     const view = documentView(el);
     await view.updateComplete;
@@ -1149,64 +1215,7 @@ it.each([
   },
 );
 
-it.each([
-  [390, "en", "light"],
-  [390, "es-ES", "dark"],
-  [1280, "en", "dark"],
-  [1280, "es-ES", "light"],
-] as const)(
-  "places the menu and changes in bounded panes at %i px (%s, %s)",
-  async (width, locale, theme) => {
-    await page.viewport(width, 850);
-    try {
-      setLocale(locale);
-      const { el, host } = await mountWidget<MenuPreviewPanel>(
-        "dashboard-menu-preview",
-        {
-          menuName: "Lunch",
-          status: changedStatus,
-          preview: preview([
-            {
-              id: "layout",
-              targets: { before: [], after: [] },
-              kind: "menu_renamed",
-              from: "Old lunch",
-              to: "Lunch",
-              source: "this_menu",
-            },
-          ]),
-        },
-        theme,
-      );
-      host.style.width = "100%";
-      await el.updateComplete;
-      const documentPane = q(el, '[data-test="document-pane"]');
-      const changesPane = q(el, '[data-test="changes-pane"]');
-      expect(documentPane).not.toBeNull();
-      expect(changesPane).not.toBeNull();
-      const left = changesPane!.getBoundingClientRect();
-      const right = documentPane!.getBoundingClientRect();
-      if (width === 390) {
-        expect(right.top).toBeGreaterThanOrEqual(left.bottom);
-        expect(Math.abs(right.left - left.left)).toBeLessThan(1);
-      } else {
-        expect(right.left).toBeGreaterThanOrEqual(left.right);
-        expect(
-          Math.abs(right.top - q(el, '[data-test="changes-column"]')!.getBoundingClientRect().top),
-        ).toBeLessThan(1);
-      }
-      expect(documentPane!.contains(q(el, '[data-test="document"]'))).toBe(true);
-      expect(changesPane!.contains(q(el, '[data-test="changes"]'))).toBe(true);
-      expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
-      expect(getComputedStyle(documentPane!).overflowY).toBe("auto");
-      expect(getComputedStyle(changesPane!).overflowY).toBe("auto");
-    } finally {
-      await page.viewport(414, 850);
-    }
-  },
-);
-
-it("makes overflowing pane regions keyboard reachable", async () => {
+it("lets long desktop panes scroll with the page", async () => {
   await page.viewport(1280, 850);
   try {
     const document = menuDocument(
@@ -1224,14 +1233,8 @@ it("makes overflowing pane regions keyboard reachable", async () => {
     const el = await mount({ preview: { ...preview(changes), document } });
     for (const name of ["document", "changes"]) {
       const pane = q(el, `[data-test="${name}-pane"]`)!;
-      expect(pane.scrollHeight).toBeGreaterThan(pane.clientHeight);
-      expect(pane.tabIndex).toBe(0);
-      expect(pane.getAttribute("role")).toBe("region");
-      expect(pane.getAttribute("aria-labelledby")).toBe(`${name}-heading`);
-      pane.focus();
-      expect(el.shadowRoot!.activeElement).toBe(pane);
-      pane.scrollTop = pane.scrollHeight;
-      expect(pane.scrollTop).toBeGreaterThan(0);
+      expect(pane.scrollHeight).toBe(pane.clientHeight);
+      expect(pane.clientHeight).toBeGreaterThan(window.innerHeight);
     }
   } finally {
     await page.viewport(414, 850);
@@ -1253,7 +1256,7 @@ const CLASH: MenuPreview["clashes"][number] = {
 };
 
 it.each(["light", "dark"] as const)(
-  "draws Publish quiet like Show all changes while the menu has clashes, and blue without them (%s theme)",
+  "draws Publish quiet while the menu has clashes, and blue without them (%s theme)",
   async (theme) => {
     const renamed: MenuChange = {
       id: "change-renamed",
@@ -1276,20 +1279,16 @@ it.each(["light", "dark"] as const)(
       getComputedStyle(button.shadowRoot!.querySelector("button")!).backgroundColor;
     const button = (test: string) =>
       q<HTMLElementTagNameMap["wt-button"]>(el, `[data-test="${test}"]`)!;
-    const settled = () =>
-      Promise.all([button("publish").updateComplete, button("show-all-changes").updateComplete]);
-    await settled();
-    expect(button("show-all-changes").variant).toBe("secondary");
-    expect(button("show-all-changes").disabled).toBe(true);
+    await button("publish").updateComplete;
     expect(button("publish").disabled).toBe(true);
     expect(button("publish").variant).toBe("secondary");
-    expect(fill(button("publish"))).toBe(fill(button("show-all-changes")));
+    const quiet = fill(button("publish"));
     el.preview = preview([renamed]);
     await el.updateComplete;
-    await settled();
+    await button("publish").updateComplete;
     expect(button("publish").disabled).toBe(false);
     expect(button("publish").variant).toBe("primary");
-    expect(fill(button("publish"))).not.toBe(fill(button("show-all-changes")));
+    expect(fill(button("publish"))).not.toBe(quiet);
   },
 );
 
@@ -1303,7 +1302,7 @@ it("keeps Publish blue while its own publish is being sent, even if a clash arri
   expect(publish.variant).toBe("primary");
 });
 
-it("A498 places schedules over changes and keeps document and change controls on their heading lines", async () => {
+it("draws notices above both panes and queued versions below them", async () => {
   await page.viewport(1280, 900);
   const el = await mount({
     preview: preview([
@@ -1319,13 +1318,34 @@ it("A498 places schedules over changes and keeps document and change controls on
     ]),
   });
   el.style.width = "1200px";
+  el.includedBy = [{ id: "breakfast", name: "Breakfast Menu" }];
+  el.api.getMenuPublications = async () => ({
+    timeZone: "Europe/Madrid",
+    live: null,
+    editions: [
+      {
+        versionId: "v3",
+        number: 3,
+        state: "queued",
+        contentHash: NEW_HASH,
+        queuedAt: PUBLISHED_AT,
+        cancelledAt: null,
+        activatesAt: PUBLISHED_AT,
+        local: { date: "2026-09-26", time: "12:15", offset: "+02:00", repeated: false },
+      },
+    ],
+  });
+  el.menuId = "schedule-fixture";
+  await el.updateComplete;
   const schedules = el.shadowRoot!.querySelector("dashboard-menu-publications")!;
-  expect(schedules.closest('[data-test="changes-column"]')).not.toBeNull();
-  expect(schedules.closest('[data-test="changes-pane"]')).toBeNull();
-  const heading = q(el, "#changes-heading")!.getBoundingClientRect();
-  const showAll = q(el, '[data-test="show-all-changes"]')!.getBoundingClientRect();
-  expect(showAll.top).toBeLessThan(heading.bottom);
-  expect(showAll.left).toBeGreaterThanOrEqual(heading.right);
+  const details = '[data-test="editions"]';
+  await expect.poll(() => schedules.shadowRoot!.querySelector(details)).not.toBeNull();
+  const bounds = (element: Element) => element.getBoundingClientRect();
+  const panes = q(el, ".panes")!;
+  expect(bounds(q(el, '[data-test="only-this-menu"]')!).bottom).toBeLessThan(bounds(panes).top);
+  expect(bounds(schedules.shadowRoot!.querySelector(details)!).top).toBeGreaterThan(
+    bounds(panes).bottom,
+  );
   const tree = q<MenuDocumentTree>(el, "dashboard-menu-document-tree")!;
   await tree.updateComplete;
   const table = tree.shadowRoot!.querySelector("wt-data-table")!;
@@ -1344,6 +1364,7 @@ it("A498 keeps the content choice readable beside Expand all on a phone", async 
   await page.viewport(390, 844);
   const el = await mount({});
   el.style.width = "358px";
+  await selectPreviewPane(el, "menu");
   const tree = q<MenuDocumentTree>(el, "dashboard-menu-document-tree")!;
   await tree.updateComplete;
   const table = tree.shadowRoot!.querySelector("wt-data-table")!;
@@ -1388,7 +1409,17 @@ it("distinguishes a regional content version in the preview picker", async () =>
 
 it("names a clashing variant by its name, and by its id when the menu no longer offers it", async () => {
   const offers = structuredClone(DOCUMENT.offers);
-  (offers["mi-burger"] as { variants: unknown[] }).variants = [{ id: "v-large", name: "Large" }];
+  const burger = offers["mi-burger"]!;
+  burger.variants = [
+    {
+      ...burger,
+      id: "v-large",
+      name: "Large",
+      unitPrice: "13.00",
+      menuPrice: null,
+      pricingUnit: "each",
+    },
+  ];
   const el = await mount({
     preview: {
       ...preview([]),
@@ -1403,12 +1434,12 @@ it("names a clashing variant by its name, and by its id when the menu no longer 
   const items = [...el.shadowRoot!.querySelectorAll('[data-test="clashes"] li')].map((li) =>
     li.textContent!.replace(/\s+/g, " ").trim(),
   );
-  expect(items[0]).toMatch(/^Burger — Large:/);
-  expect(items[1]).toMatch(/^Burger — v-gone:/);
-  expect(items[2]).toMatch(/^p-unknown:/);
+  expect(items[0]).toMatch(/^Burger › Large/);
+  expect(items[1]).toMatch(/^Burger › v-gone/);
+  expect(items[2]).toMatch(/^p-unknown/);
 });
 
-it("asks the page for the price clashes instead of following the link when Show clashes is clicked", async () => {
+it("asks the page for the price clashes instead of following the link when Choose a price is clicked", async () => {
   const el = await mount({ preview: { ...preview([]), clashes: [CLASH] } });
   const heard = vi.fn();
   document.addEventListener("wt-preview-clashes", heard);
@@ -1452,13 +1483,23 @@ it("links each set menu with problems to its set menu tab, counting one problem 
 
 it("closes the publish warning confirmation on Cancel and publishes nothing", async () => {
   const el = await mount({
-    preview: preview([], [{ kind: "shortcut_missing", name: "Lemonade" }]),
+    preview: preview(
+      [],
+      [
+        {
+          kind: "allergens_unreviewed",
+          products: [{ id: "p-burger", name: "Burger", parentName: null }],
+        },
+      ],
+    ),
   });
   const published = vi.fn();
   el.addEventListener("wt-menu-publish", published);
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="publish"]')!.click();
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector('[data-test="publish-confirmation"]')).not.toBeNull();
+  const confirmation = text(q(el, '[data-test="publish-confirmation"]'));
+  expect(confirmation).toContain("Allergens not yet reviewed");
+  expect(confirmation).toContain("Burger");
   el.shadowRoot!.querySelector<HTMLElement>('[data-test="publish-cancel"]')!.click();
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector('[data-test="publish-confirmation"]')).toBeNull();

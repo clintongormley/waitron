@@ -1679,7 +1679,7 @@ heading's text" cases there. The list keeps its column choices under `waitron.me
 choice saved while the list had a Changes column names a column it no longer has, and the table
 ignores it.
 
-**A menu's queued versions sit above Unpublished changes on its Preview tab.** The "Scheduled
+**A menu's queued versions sit below the changes and proposed menu on its Preview tab.** The "Scheduled
 versions" heading and table appear only while a version is queued. The table lists waiting
 schedules soonest first, with their time on the venue's clock. Publish later and Publish now sit in
 the editor heading in that order, each when its own conditions allow it.
@@ -1687,8 +1687,8 @@ Cancelled and activated editions stay in the API response but have no row or Sta
 The time adds its UTC offset only when the venue's clock shows that
 minute twice. The menus list does not show the queue: a menu whose only version is scheduled still
 reads "Unpublished" there until it goes live. "Publish later" opens a compact form with a date
-and a time; it is offered only when the preview has loaded with no clashes and the draft
-differs from the version it would follow. Each scheduled row has a row menu, pinned at the end,
+and a time when the preview has loaded and the draft differs from the version it would follow.
+If Preview has blockers, the button is visible and disabled. Each scheduled row has a row menu, pinned at the end,
 with two separate actions: "Change time", which opens the same form starting at that version's date
 and time, and "Cancel this version", which asks first. A request that would put a newer version live
 before an older one is refused with a sentence naming each version in the way and its time, under
@@ -3377,7 +3377,7 @@ and the staffing grid's block editor in the A761 entry):
   window's Edit; and the backup key's Change the key. The owner extended it (2026-10-08, A427) to a
   button disabled because its row's own state rules the action out: it is drawn `secondary` while
   ruled out and its own variant otherwise; which conditions disable it is unchanged. A427 brought
-  these under it: Publish on a menu's Preview while the menu has clashes, which
+  these under it: Publish on a menu's Preview while the menu has blockers, which
   keeps its own variant while its own publish is being sent; and a modifier's Remove in the product
   editor while the variant window, the image picker or any window the Products screen opens for the
   editor is open, which keeps its own variant while the Products screen is sending a request for the
@@ -5919,9 +5919,10 @@ or **Unpublished**. These words wrap below the title on a phone. A changed live 
 dot and **Unpublished changes**. A menu with changes to publish offers **Review and publish** in
 the heading. On Price overrides, it is outlined while the prices have edits to save or a save is
 sending. On Preview,
-the heading offers **Publish later** and **Publish now** when each action is available. A menu with
-price clashes keeps the line that links to its Price overrides tab filtered to the clashes, in
-`--wt-color-danger`. On the Price overrides tab it uses plain words. See
+the heading offers **Publish later** and **Publish now** when each action is available. Both are
+disabled when changes in Preview have blockers. Outside Preview, a menu with price clashes keeps the line that
+links to its Price overrides tab filtered to the clashes, in `--wt-color-danger`. On the Price
+overrides tab it uses plain words. See
 `apps/dashboard/src/screens/menus-screen.heading.test.ts` and `menus-screen.heading.a11y.test.ts`
 beside it.
 
@@ -5953,57 +5954,43 @@ its sentence goes when that field changes, its language is removed or fixed by a
 version arriving while changes are staged or a field needs correcting, adds a secondary "Reload" to
 either step's footer, with the refusal's sentence above the buttons.
 
-The Preview clash link opens Price overrides with Clashes selected, including in a new tab.
+Each **Choose a price** link in Preview opens Price overrides with Clashes selected, including in a new tab.
 That explicit destination overrides a remembered price filter once after the rows load. Later
 filter choices stay in place through refreshes; an ordinary tab change keeps the remembered choice.
 
-A menu's Preview shows frozen customer content beside unpublished changes. Choose a content
-language independently of the dashboard language, or select Internal names for staff inspection.
-Keep the live version in the editor header rather than repeating it in Preview. Show price clashes
-as a red sentence, with each conflicting price and its source below it. A menu included by other
-menus names those includers as links to their Preview tabs directly below the publish row; omit
-that note when there are none. Keep the publish row and Scheduled versions outside the scrolling
-changes pane, above unpublished changes on the left, and the proposed menu on the right.
-Stack the panes with changes first when the host
-has less than 800px available. Each pane has its own accessible name and keyboard focus.
+Preview keeps publication notices and the links to menus that include this one directly below
+the editor heading. Put the Changes pane on the left and the proposed menu on the right. Below
+800 px, **Changes** (with a count when there are changes) and **Menu** switch between the same
+panes, which scroll with the page. Scheduled versions go below the panes.
 
-Group changes by type under small headings, with one plain bullet per change. Keep a source note
-for a shared product or an included menu. A native View link expands the proposed tree's ancestors,
-scrolls its product or section row into view and marks it with `aria-current`. Keep keyboard focus
-on the link. Another View or an outside click clears the previous mark. Removed items point to
-their surviving parent section; a deleted product with no place has no View. Home changes link to
-that menu's Home tab.
+Put **Fix before publishing** in one card at the top of the left column, and above the view selector
+on phones. Show one row per price clash or set menu with problems. Give each price and its source
+and link to where you can fix it. Leave **Publish now** and **Publish later** visible and disabled
+when changes in Preview have blockers. Put each warning category in a plain disclosure within the Warnings
+card. Show the warning details in full when you ask the manager to confirm publishing or scheduling.
 
-Draw the proposed document as a read-only Structure-style tree. Share row presentation with
-Structure, including indentation and the swatch slot; an image occupies that same slot, with a
-colour fallback when absent. Use one name column without headings; centre the expand arrow on the
-media slot. Read names from the frozen document; a missing requested name gets one note naming
-that language, even when the displayed fallback is a staff name. Keep the actual translation's
-language tag. Internal names have an empty
-language tag rather than inheriting the dashboard language. A replacement preview resets the
-tree's expansion and highlight without moving focus. Changing Content view makes no request.
+In the **Unpublished changes** card, use a bullet for each change under Added, Removed, Prices,
+Order or Details. Added and removed items carry their section path. A variant price change names the
+dish and size and shows both amounts. Say when a price is set here or cleared if the amount stays the
+same. Put the source of a shared change and any other menus it affects on their own muted line.
 
-Put Expand all to the right of Content view. Put Show all changes to the right of the Unpublished
-changes heading. A Hide link removes a bullet and its group when the group becomes empty.
-Show all changes restores
-them and is disabled when nothing is hidden. Show the hidden count below the heading and explain that
-Publish still includes every change. Keep hidden IDs in component state for the same menu,
-intersecting them with each refreshed change list; leaving the menu forgets them.
+Link the item's name to its proposed row. Expand its ancestors, scroll it into view and mark it
+with `aria-current`. Keep keyboard focus on the link on desktop. On a phone, switch to Menu and
+focus the row. Removed rows without a destination read as text. Set-menu names link to their
+editor while the set menu exists, and Home page changes link to the Home page tab.
 
-An Edit link sits after View and before Hide. A shared product's change links to Edit product,
-or to Edit extras list for an extras item's portion or maximum quantity. When both editions record
-the source of a changed price, a product's own price links to Edit product even through an include.
-An included override that changed or was cleared links to the included menu's Price overrides tab,
-as does an included variant-only change. Other included-menu changes link to Structure.
-A set-menu addition or edit links to its editor. The link destinations and wrapping are checked in
-`apps/dashboard/src/widgets/menu-preview.edit-links.test.ts`.
+Draw the menu as a read-only Structure tree with prices, variant rows, set menus and photos.
+Show **Price clash** in the price slot for a disputed price. An icon fills an empty photo slot. Keep the content language picker (including **Internal names**)
+and **Expand all** above the tree. Draw the actual translation's language tag and name a missing
+requested language beside its fallback. A replacement preview resets the tree's expansion and
+highlight. Changing the content language makes no request.
 
 Widget checks: `apps/dashboard/src/widgets/menu-preview-tree.test.ts` and
 `menu-preview-navigation.test.ts` beside it; publication and accessibility checks remain beside
 them. Screen freshness checks in `apps/dashboard/src/screens/menus-screen.test.ts` keep the
 displayed snapshot and publish hash together. A failed refresh retires warning confirmation and
-publish controls, drops the Preview heading's old clash count and keeps its known publication
-facts and existing refresh error. Recovery supplies the new count. After a stale-hash refusal,
+publish controls, drops the blockers card and keeps the known publication facts and existing
+refresh error. Recovery supplies the current blockers. After a stale-hash refusal,
 hide the old document while reading its replacement. Changing the dashboard interface language
 rebuilds its screen, so that separate operation reads the preview again.
 
