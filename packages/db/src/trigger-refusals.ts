@@ -76,6 +76,14 @@ export const PRODUCT_ID_FIXED_REFUSAL = "a product's id never changes";
 /** `bill_payments_guard_update`: a fixed column changed, or the state moved another way. */
 export const BILL_PAYMENT_CHANGE_REFUSAL = "bill payment cannot make that change";
 
+/**
+ * `working_orders_reopened_from_insert` and `working_orders_reopened_from_update`: `reopened_from`
+ * was set at insert, set on a bill that is not open before and after the update, set to a bill that
+ * is not placed at that moment, or changed or cleared once set.
+ */
+export const REOPENED_FROM_REFUSAL =
+  "a bill is linked once, while open, to the placed bill it reopens";
+
 /** `bill_payments_no_delete`. */
 export const BILL_PAYMENT_DELETE_REFUSAL = "a bill payment is never deleted";
 

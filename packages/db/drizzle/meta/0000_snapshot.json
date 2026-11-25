@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7d4cbac9-ada1-4ff3-8e47-68ab7ce64580",
+  "id": "5643349c-c80e-48e4-aedd-8ec3a5621b1d",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1413,6 +1413,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": true
+        },
+        "reopened_from": {
+          "name": "reopened_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -1472,6 +1479,13 @@
           "name": "working_orders_items_paid_from_idx",
           "columns": [
             "items_paid_from"
+          ],
+          "isUnique": false
+        },
+        "working_orders_reopened_from_idx": {
+          "name": "working_orders_reopened_from_idx",
+          "columns": [
+            "reopened_from"
           ],
           "isUnique": false
         }
@@ -1548,6 +1562,19 @@
           "tableTo": "working_orders",
           "columnsFrom": [
             "items_paid_from"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "working_orders_reopened_from_fk": {
+          "name": "working_orders_reopened_from_fk",
+          "tableFrom": "working_orders",
+          "tableTo": "working_orders",
+          "columnsFrom": [
+            "reopened_from"
           ],
           "columnsTo": [
             "id"

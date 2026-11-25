@@ -49,7 +49,18 @@ BEGIN
   SELECT raise(abort, 'bill payment cannot make that change')
   WHERE NOT (
     new.id IS old.id
-    AND new.working_order_id IS old.working_order_id
+    AND (new.working_order_id IS old.working_order_id
+      -- Reopen to split carries a received payment to the bill reopened from its abandoned one.
+      OR (old.state = 'received' AND new.state = 'received'
+        AND old.kind <> 'items'
+        AND (SELECT status FROM working_orders WHERE id = old.working_order_id) = 'abandoned'
+        AND exists (SELECT 1 FROM working_orders
+          WHERE id = new.working_order_id AND status = 'open'
+            AND reopened_from = old.working_order_id)
+        AND NOT exists (SELECT 1 FROM tenders WHERE bill_payment_id = old.id)
+        AND NOT exists (SELECT 1 FROM bill_advances WHERE bill_payment_id = old.id)
+        AND NOT exists (SELECT 1 FROM refunds
+          WHERE bill_payment_id = old.id AND state = 'pending')))
     AND new.submission_id IS old.submission_id
     AND new.fingerprint IS old.fingerprint
     AND new.kind IS old.kind
@@ -700,6 +711,29 @@ BEGIN
     OR exists (SELECT 1 FROM sales WHERE working_order_id = old.id);
 END;
 --> statement-breakpoint
+CREATE TRIGGER working_orders_reopened_from_insert
+BEFORE INSERT ON working_orders
+FOR EACH ROW
+WHEN new.reopened_from IS NOT NULL
+BEGIN
+  SELECT raise(abort, 'a bill is linked once, while open, to the placed bill it reopens');
+END;
+--> statement-breakpoint
+-- Created before working_orders_enforce_transition, so that trigger answers for a bill that is not
+-- open. It lets an open bill change any column, so this one holds the link: set once, from none, on
+-- a bill open before and after, to a bill placed at that moment.
+CREATE TRIGGER working_orders_reopened_from_update
+BEFORE UPDATE OF reopened_from ON working_orders
+FOR EACH ROW
+WHEN new.reopened_from IS NOT old.reopened_from
+BEGIN
+  SELECT raise(abort, 'a bill is linked once, while open, to the placed bill it reopens')
+  WHERE old.reopened_from IS NOT NULL
+    OR old.status <> 'open'
+    OR new.status <> 'open'
+    OR NOT exists (SELECT 1 FROM working_orders WHERE id = new.reopened_from AND status = 'placed');
+END;
+--> statement-breakpoint
 CREATE TRIGGER working_orders_enforce_transition
 BEFORE UPDATE ON working_orders
 FOR EACH ROW
@@ -721,6 +755,7 @@ BEGIN
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
         AND new.set_menus_exact IS old.set_menus_exact
+        AND new.reopened_from IS old.reopened_from
         AND new.dining IS old.dining)
     OR (old.status = 'placed' AND new.status = 'placed'
         AND new.id IS old.id
@@ -737,6 +772,7 @@ BEGIN
         AND new.dining IS old.dining
         AND new.items_paid_from IS old.items_paid_from
         AND new.set_menus_exact IS old.set_menus_exact
+        AND new.reopened_from IS old.reopened_from
         AND ((new.invoice_type IS old.invoice_type
           AND new.recipient_tax_id IS old.recipient_tax_id
           AND new.recipient_legal_name IS old.recipient_legal_name
@@ -775,6 +811,7 @@ BEGIN
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
         AND new.set_menus_exact IS old.set_menus_exact
+        AND new.reopened_from IS old.reopened_from
         AND new.dining IS old.dining
         AND new.zone_id IS old.zone_id
         AND new.department_id IS old.department_id
@@ -810,6 +847,7 @@ BEGIN
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
         AND new.set_menus_exact IS old.set_menus_exact
+        AND new.reopened_from IS old.reopened_from
         AND new.dining IS old.dining
         AND new.zone_id IS old.zone_id
         AND new.department_id IS old.department_id
@@ -856,6 +894,7 @@ BEGIN
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
         AND new.set_menus_exact IS old.set_menus_exact
+        AND new.reopened_from IS old.reopened_from
         AND new.dining IS old.dining)
     OR (old.delivery_table_id IS NOT NULL AND new.delivery_table_id IS NULL
         AND old.delivery_table_label IS NULL AND new.delivery_table_label IS NOT NULL
@@ -883,6 +922,7 @@ BEGIN
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
         AND new.set_menus_exact IS old.set_menus_exact
+        AND new.reopened_from IS old.reopened_from
         AND new.dining IS old.dining
         AND new.zone_id IS old.zone_id
         AND new.department_id IS old.department_id
@@ -918,6 +958,7 @@ BEGIN
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
         AND new.set_menus_exact IS old.set_menus_exact
+        AND new.reopened_from IS old.reopened_from
         AND new.party_id IS old.party_id
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name
@@ -953,6 +994,7 @@ BEGIN
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
         AND new.set_menus_exact IS old.set_menus_exact
+        AND new.reopened_from IS old.reopened_from
         AND new.party_id IS old.party_id
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name

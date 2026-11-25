@@ -133,7 +133,11 @@ BEGIN
   SELECT raise(abort, 'a payment cannot make that change')
   WHERE NOT (
     new.id IS old.id
-    AND new.working_order_id IS old.working_order_id
+    -- A card's row follows its bill payment off an abandoned bill (Reopen to split's carry).
+    AND (new.working_order_id IS old.working_order_id
+      OR (new.working_order_id = (SELECT working_order_id FROM bill_payments
+            WHERE id = old.bill_payment_id)
+        AND (SELECT status FROM working_orders WHERE id = old.working_order_id) = 'abandoned'))
     AND new.source IS old.source
     AND new.device_id IS old.device_id
     AND new.node_id IS old.node_id
@@ -144,7 +148,10 @@ BEGIN
     AND new.requested_by IS old.requested_by
     -- Short-capture recovery first links a whole-order payment to its bill contribution.
     AND (old.bill_payment_id IS NULL OR new.bill_payment_id IS old.bill_payment_id)
-    AND (old.sale_id IS NULL OR new.sale_id IS old.sale_id)
+    AND (old.sale_id IS NULL OR new.sale_id IS old.sale_id
+      OR (new.sale_id IS NULL
+        AND new.working_order_id IS NOT old.working_order_id
+        AND old.sale_id = (SELECT id FROM sales WHERE working_order_id = old.working_order_id)))
     AND (old.reader_id IS NULL OR new.reader_id IS old.reader_id)
     AND (old.reconcile_remediated_at IS NULL
       OR new.reconcile_remediated_at IS old.reconcile_remediated_at)

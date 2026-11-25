@@ -122,6 +122,9 @@ export const workingOrders = table(
     // Whether the bill's saved set menus were proven the cheapest; false when the calculation
     // stopped at its search limit.
     setMenusExact: flag("set_menus_exact").notNull().default(true),
+    // On the bill Reopen to split opened: the printed bill it reopened. Set once (core.sql's
+    // working_orders_reopened_from_* triggers); a received payment may move only along it.
+    reopenedFrom: id("reopened_from"),
   },
   (t) => [
     uniqueIndex("working_orders_party_bill_number_key")
@@ -164,6 +167,12 @@ export const workingOrders = table(
       name: "working_orders_items_paid_from_fk",
     }).onDelete("restrict"),
     index("working_orders_items_paid_from_idx").on(t.itemsPaidFrom),
+    foreignKey({
+      columns: [t.reopenedFrom],
+      foreignColumns: [t.id],
+      name: "working_orders_reopened_from_fk",
+    }).onDelete("restrict"),
+    index("working_orders_reopened_from_idx").on(t.reopenedFrom),
     check("working_orders_status_ck", enumCheck(t.status)),
     check("working_orders_dining_ck", enumCheck(t.dining)),
     foreignKey({

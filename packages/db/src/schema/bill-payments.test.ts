@@ -15,6 +15,7 @@ import {
   REFUND_CHANGE_REFUSAL,
   REFUND_DELETE_REFUSAL,
 } from "../trigger-refusals.js";
+import { billAdvances } from "./bill-advances.js";
 import { billPaymentLines, billPayments } from "./bill-payments.js";
 import { refunds } from "./refunds.js";
 import { drawerOpens } from "./drawer-opens.js";
@@ -194,10 +195,10 @@ describe("bill payments: the three tables, their checks and their triggers", () 
   }
 
   /** A sale on the bill with one tender naming `billPaymentId`. */
-  async function tenderFor(billPaymentId: string | null, amount = 1000): Promise<void> {
+  async function tenderFor(billPaymentId: string | null, amount = 1000): Promise<string> {
     nextInvoice += 1;
     const invoiceNumber = nextInvoice;
-    await inTx(async (tx) => {
+    return inTx(async (tx) => {
       const [sale] = await tx
         .insert(sales)
         .values({
@@ -223,6 +224,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
         settledAt: AT,
         billPaymentId,
       });
+      return sale!.id;
     });
   }
 
@@ -1227,6 +1229,147 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       const saleId = await aSale();
       const error = await captureError(() => open({ deviceId: null, saleId }));
       expect(checkFailed(error, "drawer_opens_target_ck")).toBe(true);
+    });
+  });
+
+  describe("bill_payments_guard_update: a received payment moves from an abandoned bill to the bill reopened from it", () => {
+    async function aBill(status: "open" | "placed"): Promise<string> {
+      const row = await seedWorkingOrder(suite.db, {
+        ...DASHBOARD,
+        nodeId,
+        status: "open",
+        openedAt: AT,
+      });
+      if (status === "placed")
+        await run(sql`update working_orders set status = 'placed' where id = ${row.id}`);
+      return row.id;
+    }
+
+    /**
+     * A printed bill holding one payment, and an open bill: linked to the printed one while it is
+     * still placed (unless `linked` is false), after which the printed bill is abandoned (unless
+     * `abandon` is false) — the order Reopen to split takes.
+     */
+    async function reopened(
+      payment: Partial<PaymentValues> = {},
+      options: {
+        linked?: boolean;
+        abandon?: boolean;
+        before?: (paymentId: string) => Promise<unknown>;
+      } = {},
+    ): Promise<{ printed: string; open: string; paymentId: string }> {
+      const printed = await aBill("open");
+      const paymentId = await receivedPayment({
+        workingOrderId: printed,
+        method: "cash",
+        tendered: 1000,
+        ...payment,
+      });
+      await options.before?.(paymentId);
+      await run(sql`update working_orders set status = 'placed' where id = ${printed}`);
+      const open = await aBill("open");
+      if (options.linked !== false)
+        await run(sql`update working_orders set reopened_from = ${printed} where id = ${open}`);
+      if (options.abandon !== false)
+        await run(sql`update working_orders set status = 'abandoned' where id = ${printed}`);
+      return { printed, open, paymentId };
+    }
+
+    async function billOf(id: string): Promise<string> {
+      const [row] = await inTx((tx) =>
+        tx
+          .select({ workingOrderId: billPayments.workingOrderId })
+          .from(billPayments)
+          .where(eq(billPayments.id, id)),
+      );
+      return row!.workingOrderId;
+    }
+
+    async function expectRefusedMove(
+      { printed, open, paymentId }: { printed: string; open: string; paymentId: string },
+      extra = "",
+    ): Promise<void> {
+      const error = await captureError(() =>
+        updatePayment(paymentId, `working_order_id = '${open}'${extra}`),
+      );
+      expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
+      expect(await billOf(paymentId)).toBe(printed);
+    }
+
+    it("a received payment moves from an abandoned bill to the bill reopened from it", async () => {
+      const { open, paymentId } = await reopened();
+      await updatePayment(paymentId, `working_order_id = '${open}'`);
+      expect(await billOf(paymentId)).toBe(open);
+    });
+
+    it("a received card payment with a completed refund moves too", async () => {
+      const { open, paymentId } = await reopened(
+        { method: "card", tendered: null },
+        { before: (id) => insertRefund(id, { state: "completed", completedAt: AT }) },
+      );
+      await updatePayment(paymentId, `working_order_id = '${open}'`);
+      expect(await billOf(paymentId)).toBe(open);
+    });
+
+    it("…not to a bill reopened from another", async () => {
+      await expectRefusedMove(await reopened({}, { linked: false }));
+    });
+
+    it("…not from a bill that is still placed", async () => {
+      await expectRefusedMove(await reopened({}, { abandon: false }));
+    });
+
+    it("…not to a reopened bill that is no longer open", async () => {
+      const move = await reopened();
+      await run(sql`update working_orders set status = 'placed' where id = ${move.open}`);
+      await expectRefusedMove(move);
+    });
+
+    it("…not a pending payment", async () => {
+      await expectRefusedMove(
+        await reopened({ method: "card", tendered: null, state: "pending", receivedAt: null }),
+      );
+    });
+
+    it("…not one a tender names", async () => {
+      await expectRefusedMove(await reopened({}, { before: (id) => tenderFor(id) }));
+    });
+
+    it("…not one that paid an advance", async () => {
+      await expectRefusedMove(
+        await reopened(
+          {},
+          {
+            before: async (id) => {
+              const advanceSaleId = await tenderFor(null);
+              const printed = await billOf(id);
+              await inTx((tx) =>
+                tx
+                  .insert(billAdvances)
+                  .values({ workingOrderId: printed, advanceSaleId, billPaymentId: id }),
+              );
+            },
+          },
+        ),
+      );
+    });
+
+    it("…not one with a refund pending", async () => {
+      await expectRefusedMove(
+        await reopened({ method: "card", tendered: null }, { before: (id) => insertRefund(id) }),
+      );
+    });
+
+    it("…not an items payment", async () => {
+      await expectRefusedMove(await reopened({ kind: "items" }));
+    });
+
+    it.each([
+      ["its applied amount", `, applied = 900`],
+      ["its applied amount kept as tip", `, applied = 900, tip = 100`],
+      ["its state", `, state = 'declined'`],
+    ])("the move changes nothing else: not %s", async (_name, extra) => {
+      await expectRefusedMove(await reopened({ applied: 1000, tendered: 1000 }), extra);
     });
   });
 });
