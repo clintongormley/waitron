@@ -371,7 +371,7 @@ Every one changes what a bill charges, so each takes the full review wave and th
 | PR | What it does; how main works after it | Depends on |
 | --- | --- | --- |
 | 2a. The grouping writer (`feat/a1515-3-regroup-writer`) | Adds the code that works out and saves a bill's grouping, the schema it needs, the course each dish counts as (recorded when added) and the `exact` answer field; nothing calls the writer yet, so counts, placing at send and the no-place question work as today. Resets venues (schema). | 1 |
-| 2b. The switch (`feat/a1515-3-regroup`) | Every path that changes a bill's dishes regroups; counts, the remove and in-bill move routes, placing at send and the no-place refusals go; the till stops offering them (D1). No schema change, no reset. | 2a |
+| 2b. The switch (`feat/a1515-3-regroup`) | Every path that changes a bill's dishes regroups; counts, the remove and in-bill move routes, placing at send and the no-place refusals go; the till stops offering them (D1). Resets venues (D26: the copies' key gains the version). | 2a |
 | 2c. Pay for items and clean-up (`feat/a1515-3-regroup-tidy`) | Pay for items prices chosen items as their own bill would group them and takes a set-menu dish alone; `set_menu_counts_as_course_id` goes. Resets venues. | 2b |
 
 **Why not one pull request, and why 2b cannot be split further.** As scoped, PR 2 is roughly 2a + 2b +
@@ -534,11 +534,34 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
   that. New: a dish at 0 inside a set menu can now cause it (Daily of Soup and Hake, 14.00 received:
   cancelling Hake leaves Soup at 6.00). Today that cancel is accepted. Recommended: accept the refusal,
   as for any other line today. Alternative: allow the cancel and leave the bill overpaid.
-- **D26. FOR THE OWNER. A set menu moved with its dishes to a bill holding another version of it is
-  charged at the target's version.** The move carries only copies the target lacks
-  (`carryBillSetMenuCopies`'s `onConflictDoNothing`, `set-menu-bill.ts:153-155`), and the regroup groups
-  by the target's recorded copy, so the moved menu's price can change. Recommended: accept (one recorded
-  copy per set menu per bill). Alternative: refuse the move while the versions differ.
+- **D26. Settled by the owner (watcher 2026-11-24 22:32): a bill keeps both versions.** "this should
+  never happen. but it may not be just the price that changed, it could be the contents. should we
+  not keep both?" A set menu moved with its dishes (or a dish moved alone whose set menu the source
+  records) brings the source's recorded copy even when the target records another version of the same
+  set menu; the bill then records both, and the grouping treats them as two set menus, cheapest over
+  all the bill's dishes. A refusal is not wanted. Cost, counted 2026-11-25 against 2a's head
+  `c7a0b651b0` (about 25–35 production lines, under the watcher's 60), built in 2b Task 2b.4:
+  - `bill_set_menu_copies`' primary key gains `menu_version_id`
+    (`packages/db/src/schema/set-menu-copies.ts:15-18`); core's starting migration is rebuilt, so
+    **2b resets venues**.
+  - `carryBillSetMenuCopies` (`set-menu-bill.ts:131-162`) conflicts on all three columns, so a moved
+    or merged copy is added beside the target's.
+  - `linkSetMenusFor` (`set-menu-links.ts:87-110`) keeps PR 1's rule that a set menu the bill already
+    records keeps its copy: it leaves out set menus the bill records before inserting, since the
+    three-column conflict would otherwise add the newest version on every order after a republish.
+  - `readBillSetMenuVersions` (`set-menu-bill.ts:120-129`) returns every recorded pair, not one per
+    set menu; its three callers change with it: `readGroupingCopies` (`set-menu-regroup.ts:31-39`),
+    `recordedSetMenusListing` (`set-menu-links.ts:113-127`) and `setMenuOfferLookup`
+    (`set-menu-offers.ts:49-75`), which accepts a dish under any version the bill records.
+  - The planner passes the calculation one offer per distinct copy key
+    (`set-menu-grouping-plan.ts:147`): a menu version id belongs to the whole published menu
+    (`set-menu-offers.ts:58-60`), so two recorded versions can hold the same set-menu copy, and so
+    the same key.
+  - The till's folder shows the newest only with no till change: `orderingCopies`
+    (`apps/till/src/state/set-menus.ts:28-35`) offers only the version `recorded` names per set menu,
+    so `readBillsSetMenus` (`set-menu-bill.ts:176-272`) fills `recorded` with the newest
+    (`changedAt`) of the bill's versions of each set menu. A set-menu row of the older version is
+    still drawn from its own copy, which `setMenuCopies` already serves.
 - **D27. FOR THE OWNER. An existing money-total test changes:** the spec fixture's bill
   (`testing/set-menu-spec-fixture.ts:248`) totals 72.00 instead of 73.00, because 3 Daily and 1
   Special is cheaper than the 2 and 2 a waiter counted (Goal 2). Lane rules make a changed money total
@@ -584,8 +607,8 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
 4. **Order of checks:** the invoice-limit and payment invariants read the regrouped total; a cancel on
    a part-paid bill can now lower the total by more than the cancelled dish (D25; 2b Task 2b.3).
 5. **Takeaway stays payable:** a takeaway bill never holds a set-menu row (D14; 2a Task 2a.3).
-6. **A set menu moved with its dishes to a bill recording another version of it** is dissolved and
-   regrouped under the target's recorded copy (D26; 2b Task 2b.4).
+6. **A set menu moved with its dishes to a bill recording another version of it** brings its own
+   copy: the target records both versions and groups over both (D26; 2b Task 2b.4).
 
 ---
 
@@ -956,9 +979,12 @@ switch never changes a grouping.
   - `moveDishes` of Hake alone from a Daily (Soup, Hake) to another bill of the party: the source's
     Soup returns to 6.00; on the target Hake is 16.00, or joins a Soup there in a Daily.
   - **D26 (owner):** `moveDishes` of the Daily row with its dishes (`resolveMoveLines`,
-    `bill-actions.ts:198-247`): the target keeps that row's id when it still groups; to a bill
-    recording another version of Daily at another price, the moved row dissolves and its dishes are
-    charged at the target's version.
+    `bill-actions.ts:198-247`): the target keeps that row's id when it still groups. To a bill
+    recording another version of Daily whose contents differ (another price and another dish), the
+    target then records both versions, the moved row keeps its own version and price, and a Daily
+    rung on the target afterwards takes whichever version is cheaper for its dishes; the till's
+    answer for the target names the newer version in `recorded`. A dish ordered on that bill after
+    a republish adds no third version.
   - D18: Soup comped while included (0 off) is refused `set_menu.move_adjusted` alone; a dish whose
     cancel kept its charge is refused `set_menu.no_place_on_target`; a dish of a comped Daily that has
     no comp of its own moves and is charged on the target, the comped Daily staying on its bill.
