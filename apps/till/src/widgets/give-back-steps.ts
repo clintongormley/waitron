@@ -14,6 +14,7 @@ import type {
 import type { GiveBackRest, GiveBackSent } from "../state/give-back.js";
 import { recoveryLink, recoveryRefusalText, type RecoveryRefusal } from "./recovery-refusal.js";
 import type { StaffMember, TillApi } from "../api/client.js";
+import type { HoldReloadDetail } from "../screens/till-station-screen.js";
 import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import { refusalOf } from "../state/bill-payment.js";
 import { TenderRefundAttemptError } from "../state/tender-refund.js";
@@ -40,6 +41,20 @@ export async function readApprovers(
     limit.done();
   }
 }
+/** Runs `work`, keeping the till from reloading for a box update until it ends, also when the
+ * device locks meanwhile and the window goes. */
+export function holdingReload<T>(host: HTMLElement, work: () => Promise<T>): Promise<T> {
+  const until = work();
+  host.dispatchEvent(
+    new CustomEvent<HoldReloadDetail>("hold-reload", {
+      detail: { until },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  return until;
+}
+
 /** Tells the till the server ended this person's sign-in, so it locks as any ended sign-in does;
  * true when `code` says so. */
 export function signInEnded(host: HTMLElement, code: string): boolean {

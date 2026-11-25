@@ -55,6 +55,7 @@ import {
   afterCheck,
   approverRights,
   doneStep,
+  holdingReload,
   lostAfter,
   lostFor,
   lostStep,
@@ -548,7 +549,7 @@ export class TillGiveBackDialog extends LitElement {
     this.sending = true;
     this.pinError = null;
     try {
-      const outcome = await sending.send(override);
+      const outcome = await holdingReload(this, () => sending.send(override));
       this.approvers = null;
       this.approval = undefined;
       this.#scope?.commit(this.draft);
@@ -621,7 +622,7 @@ export class TillGiveBackDialog extends LitElement {
     this.sending = true;
     let check: Awaited<ReturnType<GiveBackSession["checkRest"]>>;
     try {
-      check = await this.session.checkRest(this.saleId);
+      check = await holdingReload(this, () => this.session.checkRest(this.saleId));
     } catch (error) {
       const busy = error instanceof TenderRefundAttemptError && error.kind === "busy";
       const refusal = busy ? { code: "busy" } : refusalOf(error);
@@ -689,7 +690,7 @@ export class TillGiveBackDialog extends LitElement {
     this.checkingPending = true;
     this.pendingStatus = "";
     try {
-      this.view = await this.api.readGiveBack(this.saleId, {});
+      this.view = await holdingReload(this, () => this.api.readGiveBack(this.saleId, {}));
       if (this.view.ways.some((way) => way.pending))
         this.pendingStatus = t("give_back.pending_unanswered");
     } catch (error) {

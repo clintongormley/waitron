@@ -27782,6 +27782,94 @@ describe("A737 post-invoice refund integration", () => {
       });
     });
 
+    it.each([
+      [
+        "a press",
+        async (el: TillApp, out: () => Promise<never>) => {
+          currentApi.giveBack = out as never;
+          await pressGoodwill(el);
+        },
+      ],
+      [
+        "a press's Send again",
+        async (el: TillApp, out: () => Promise<never>) => {
+          currentApi.giveBack = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+          await pressGoodwill(el);
+          await vi.waitFor(() => expect(inWindow(el, "[data-send-again]")).not.toBeNull());
+          currentApi.giveBack = out as never;
+          inWindow(el, "[data-send-again]")!.click();
+        },
+      ],
+      [
+        "Check again for a card refund of this press",
+        async (el: TillApp, out: () => Promise<never>) => {
+          currentApi.giveBack = vi.fn().mockResolvedValue({
+            parts: [{ kind: "refund", amount: "5.00", state: "pending", refundId: "refund-1" }],
+            refusal: null,
+            underWay: null,
+            rest: null,
+          });
+          await pressGoodwill(el);
+          await vi.waitFor(() => expect(inWindow(el, "[data-check-again]")).not.toBeNull());
+          currentApi.getTenderRefund = out as never;
+          inWindow(el, "[data-check-again]")!.click();
+        },
+      ],
+      [
+        "Check again for a card refund the box knows",
+        async (el: TillApp, out: () => Promise<never>) => {
+          currentApi.readGiveBack = vi
+            .fn()
+            .mockResolvedValueOnce({ ...VIEW, ways: [{ ...CARD, pending: true }] })
+            .mockImplementation(out);
+          await openGiveBack(el);
+          await vi.waitFor(() => expect(inWindow(el, "[data-check-pending]")).not.toBeNull());
+          inWindow(el, "[data-check-pending]")!.click();
+        },
+      ],
+      [
+        "a step of a give-back under way",
+        async (el: TillApp, out: () => Promise<never>) => {
+          currentApi.readGiveBack = vi.fn().mockResolvedValue({ ...VIEW, underWay: UNDER_WAY });
+          currentApi.fileInvoiceCorrection = out as never;
+          await openGiveBack(el);
+          const stop = () =>
+            inWindow(el, "till-give-back-under-way")?.shadowRoot!.querySelector<HTMLElement>(
+              "[data-choice=stop]",
+            );
+          await vi.waitFor(() => expect(stop()).toBeTruthy());
+          stop()!.click();
+        },
+      ],
+    ] as const)(
+      "keeps the till from reloading for a box update while %s is out, though the device locked",
+      async (_what, send) => {
+        const answer = deferred<never>();
+        const out = vi.fn(() => answer.promise);
+        const activity = fakeSessionActivity();
+        const { el } = await open(giving(), "F2", activity);
+        const reload = vi.fn();
+        el.reload = reload;
+        await send(el, out);
+        await vi.waitFor(() => expect(out).toHaveBeenCalledOnce());
+        (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
+        await flush(el);
+        expect(lock(el)).not.toBeNull();
+
+        window.dispatchEvent(new Event(BUILD_CHANGED_EVENT));
+        await flush(el);
+        expect(reload).not.toHaveBeenCalled();
+        const bar = el.shadowRoot!.querySelector("wt-banner[data-test=update-bar]")!;
+        expect(bar).not.toBeNull();
+        emit(bar, "wt-banner-action");
+        await flush(el);
+        expect(reload).not.toHaveBeenCalled();
+
+        answer.reject(new TypeError("Failed to fetch"));
+        await vi.waitFor(() => expect(reload).toHaveBeenCalledOnce());
+      },
+    );
+
     it("keeps a press whose answer was lost through a reload, and opens its receipt's window on Send again even when the payments cannot be read, sending it under the same ids", async () => {
       const giveBackCall = vi
         .fn()

@@ -12,6 +12,7 @@ import {
 import { giveBackStyles } from "./give-back-styles.js";
 import {
   NEEDS_APPROVER,
+  holdingReload,
   readApprovers,
   recoveryLinkOf,
   recoveryText,
@@ -218,7 +219,7 @@ export class TillGiveBackUnderWay extends LitElement {
     this.refused = null;
     const approverId = this.#override?.personId;
     try {
-      await step();
+      await holdingReload(this, step);
       this.#settle();
     } catch (error) {
       await this.#failed(error, { step, lost }, approverId);
