@@ -37,6 +37,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { receiptLanguageLabel } from "./receipt-language.js";
 import "./numeric-pad.js";
+import "@waitron/ui/src/components/wt-price-input.js";
 import { pressIfEnabled } from "../state/pad-keys.js";
 import "./reader-picker.js";
 import "./modifier-picker.js";
@@ -52,7 +53,7 @@ import type {
 } from "../api/client.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { PropertyValues } from "lit";
-import { productUnit, soldByTheUnit, unitName } from "./product-name.js";
+import { lineProductName, productUnit, soldByTheUnit, unitName } from "./product-name.js";
 import { refreshProductDeclarations } from "../state/menu-refresh.js";
 import { assertQuantityPrecision } from "@waitron/menu/src/unit-validation.js";
 import { needsModifierPicker } from "../state/order-line.js";
@@ -216,10 +217,11 @@ export class TillTenderPay extends LitElement {
         font-weight: var(--wt-font-weight-bold);
       }
 
-      .quantity-step {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-2);
+      wt-price-input {
+        margin-block-end: var(--wt-space-3);
+      }
+      wt-price-input::part(unit) {
+        margin-inline-start: auto;
       }
 
       .change .amount {
@@ -565,6 +567,10 @@ export class TillTenderPay extends LitElement {
       this.selected = product;
       this.entry = "";
       this.view = "weighing";
+      if (this.weighOnly)
+        void this.updateComplete.then(() =>
+          this.renderRoot.querySelector("wt-price-input")?.scrollIntoView({ block: "nearest" }),
+        );
     };
     if (this.#entryScope && this.#leave)
       void this.#leave.request({
@@ -620,7 +626,8 @@ export class TillTenderPay extends LitElement {
     event.stopPropagation();
     const blocked = this.view === "weighing" ? this.#quantityBlocked() : this.busy;
     if (!this.isConnected || !(event.currentTarget as HTMLElement).isConnected || blocked) return;
-    this.entry = (event as CustomEvent<{ value: string }>).detail.value;
+    const { value } = (event as CustomEvent<{ value: string }>).detail;
+    this.entry = this.view === "weighing" && /^\d+,$/.test(value) ? value.replace(",", ".") : value;
     this.#entryScope?.changed();
   }
 
@@ -952,7 +959,7 @@ export class TillTenderPay extends LitElement {
    */
   #addWeight(product: TillProduct): void {
     if (!this.isConnected || this.#quantityBlocked() || this.view !== "weighing") return;
-    const quantity = this.#enteredDecimal();
+    const quantity = this.#quantityEntry();
     if (!this.#quantityFitsUnit(product, quantity)) return;
     this.#finishEntry();
     this.selected = undefined;
@@ -978,12 +985,8 @@ export class TillTenderPay extends LitElement {
     }
   }
 
-  #stepQuantity(product: TillProduct, by: Decimal): void {
-    if (this.view !== "weighing" || this.selected !== product || this.#quantityBlocked()) return;
-    const next = addDecimal(this.#enteredDecimal(), by);
-    if (!this.#quantityFitsUnit(product, next)) return;
-    this.entry = next;
-    this.#entryScope?.changed();
+  #quantityEntry(): string {
+    return this.entry.replace(/^(\d+)\.$/, "$1");
   }
 
   override render() {
@@ -1643,36 +1646,31 @@ export class TillTenderPay extends LitElement {
   #renderWeighing() {
     // `view === "weighing"` is only ever entered with a product set (see #onProductSelected).
     const product = this.selected as TillProduct;
-    const unit = productUnit(product);
-    const manualMeasure = unit.hardwareUnit === null && !soldByTheUnit(product);
-    const quantity = this.#enteredDecimal();
+    const quantity = this.#quantityEntry();
     const invalid = !this.#quantityFitsUnit(product, quantity);
     const blocked = this.#quantityBlocked();
+    const showError = invalid && quantity !== "" && quantity !== "0";
     return html`
-      <p class="prompt">${t("weigh.prompt")}</p>
-      <div class="summary">
-        <div class="row">
-          <span class="label">${unitName(product)}</span>
-          <div class="quantity-step">
-            ${manualMeasure ? this.#quantityStep(product, quantity, "-1", blocked) : nothing}
-            <span class="amount kg" aria-live="polite"
-              >${manualMeasure && this.entry === "" ? "" : this.#entryDisplay()}</span
-            >
-            ${manualMeasure ? this.#quantityStep(product, quantity, "1", blocked) : nothing}
-          </div>
-        </div>
-      </div>
+      <wt-price-input
+        name="quantity"
+        label=${lineProductName(product)}
+        unit=${unitName(product)}
+        fixed-unit
+        required
+        decimal-locale=${currentLocale()}
+        .value=${this.entry}
+        .error=${showError ? t("line.quantity_invalid") : ""}
+        ?disabled=${blocked}
+        @wt-change=${(event: Event) => this.#onPadChange(event)}
+        @keydown=${(event: KeyboardEvent) => submitOnEnter(event, this.#button(".add"))}
+      ></wt-price-input>
       <till-numeric-pad
         .value=${this.entry}
+        ?inert=${blocked}
         @wt-change=${(event: Event) => this.#onPadChange(event)}
         @pad-enter=${() => pressIfEnabled(this.#button(".add"))}
         @pad-escape=${() => pressIfEnabled(this.#button(".cancel"))}
       ></till-numeric-pad>
-      ${
-        manualMeasure && invalid && compareDecimal(quantity, decimal("0")) > 0
-          ? html`<p role="status">${t("line.quantity_invalid")}</p>`
-          : nothing
-      }
       <div class="actions">
         <wt-button
           class="add"
@@ -1693,20 +1691,6 @@ export class TillTenderPay extends LitElement {
         </wt-button>
       </div>
     `;
-  }
-
-  #quantityStep(product: TillProduct, quantity: Decimal, step: "-1" | "1", blocked: boolean) {
-    const glyph = step === "1" ? "+" : "−";
-    const label = t(step === "1" ? "basket.increase" : "basket.decrease");
-    const by = decimal(step);
-    return html`<wt-button
-      variant="secondary"
-      data-quantity-step=${step}
-      .ariaLabel=${`${label} ${unitName(product)}`}
-      ?disabled=${blocked || !this.#quantityFitsUnit(product, addDecimal(quantity, by))}
-      @click=${() => this.#stepQuantity(product, by)}
-      >${glyph}</wt-button
-    >`;
   }
 }
 

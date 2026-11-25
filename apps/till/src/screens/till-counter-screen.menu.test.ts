@@ -290,25 +290,36 @@ it("adds a chosen variant at the entered litre amount while payment is held", as
     const panel = el.shadowRoot!.querySelector("till-tender-pay")!;
     const root = panel.shadowRoot!;
     const add = () => root.querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button.add");
-    const amount = () => root.querySelector(".amount")?.textContent?.trim();
-    browser().shadowRoot!.querySelector<HTMLElement>('[data-kind="product"]')!.click();
+    const tile = browser().shadowRoot!.querySelector<HTMLElement>('[data-kind="product"]')!;
+    const amount = () => root.querySelector("wt-price-input")!;
+    const input = () => amount().shadowRoot!.querySelector("input")!;
+    tile.click();
     await panel.updateComplete;
     expect(add()?.disabled).toBe(true);
-    expect(amount()).toBe("");
-    expect(root.querySelector('[data-quantity-step="-1"]')!.hasAttribute("disabled")).toBe(true);
-    await userEvent.keyboard("999999999");
-    expect(root.querySelector('[data-quantity-step="1"]')!.hasAttribute("disabled")).toBe(true);
-    await userEvent.keyboard("{Backspace>9/}1000000000");
+    expect(amount()?.label).toBe(product.name);
+    await amount().updateComplete;
+    expect(input().value).toBe("");
+    expect(amount().shadowRoot!.querySelector('[part="unit"]')?.textContent).toBe("L");
+    expect(root.querySelector("[data-quantity-step]")).toBeNull();
+    expect(root.querySelector(".prompt")).toBeNull();
+    await userEvent.fill(input(), "999999999");
+    expect(add()?.disabled).toBe(false);
+    await userEvent.fill(input(), "1000000000");
     expect(add()?.disabled).toBe(true);
-    await userEvent.keyboard("{Backspace>10/}0,");
-    expect(root.textContent).not.toContain(t("line.quantity_invalid"));
+    await userEvent.fill(input(), "0,");
+    expect(amount().error).toBe("");
     await userEvent.keyboard("125");
-    expect(amount()).toBe("0,125");
-    await userEvent.click(root.querySelector<HTMLElement>('[data-quantity-step="1"]')!);
-    expect(amount()).toBe("1,125");
-    await userEvent.click(root.querySelector<HTMLElement>('[data-quantity-step="-1"]')!);
-    expect(amount()).toBe("0,125");
-    add()!.click();
+    expect(input().value).toBe("0,125");
+    input().dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "Enter",
+        isComposing: true,
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    expect(root.querySelector("till-modifier-picker")).toBeNull();
+    await userEvent.keyboard("{Enter}");
     await panel.updateComplete;
     const picker = () => root.querySelector("till-modifier-picker")!;
     await picker().updateComplete;
@@ -316,9 +327,14 @@ it("adds a chosen variant at the entered litre amount while payment is held", as
     await panel.updateComplete;
     expect(el.store.lines).toEqual([]);
 
-    browser().shadowRoot!.querySelector<HTMLElement>('[data-kind="product"]')!.click();
+    tile.click();
     await panel.updateComplete;
-    await userEvent.keyboard("0,125");
+    const pad = root.querySelector("till-numeric-pad")!;
+    await pad.updateComplete;
+    for (const key of ["0", ".", "1", "2", "5"]) {
+      await userEvent.click(pad.shadowRoot!.querySelector<HTMLElement>(`[data-key="${key}"]`)!);
+    }
+    expect(input().value).toBe("0,125");
     add()!.click();
     await panel.updateComplete;
     await picker().updateComplete;
@@ -326,6 +342,15 @@ it("adds a chosen variant at the entered litre amount while payment is held", as
     expect(el.store.lines.map((line) => [line.product.variantId, line.quantity])).toEqual([
       ["still", "0.125"],
     ]);
+    const basket = el.shadowRoot!.querySelector("till-basket")!;
+    await basket.updateComplete;
+    expect(basket.shadowRoot!.querySelector(".stepper")).toBeNull();
+    const lineAmount = basket.shadowRoot!.querySelector<HTMLElement>("wt-button[data-edit-amount]");
+    expect(lineAmount?.textContent?.trim()).toBe("0,125 L");
+    await userEvent.click(lineAmount!);
+    const editor = basket.shadowRoot!.querySelector("till-modifier-picker")!;
+    await editor.updateComplete;
+    expect(editor.shadowRoot!.querySelector("wt-price-input")?.value).toBe("0.125");
   } finally {
     setLocale(previous);
   }

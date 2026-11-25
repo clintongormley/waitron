@@ -496,9 +496,9 @@ To check a sent dish's allergens and diet labels, open its details and read **Re
 sent**. A dish on hold shows what is published now until you release it.
 
 Each weighed dish goes on its own line and moves to another bill whole. For a measure such as
-juice sold by the ml, tap the dish, enter the amount on the keypad or use **+** and **−**, then
-choose **Add**. For example,
-250 ml goes on one line. **Mark served** marks the whole amount as served.
+juice sold by the ml, tap the dish, type the amount into its field or use the till keypad,
+then choose **Add**. For example, 250 ml goes on one line. Tap its amount before sending to edit
+it. **Mark served** marks the whole amount as served.
 
 At a table or at the counter you can add up to 99 portions of one dish at a time.
 

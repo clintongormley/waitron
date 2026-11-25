@@ -65,8 +65,8 @@ sin salir del producto.
 Cuando eliges una unidad, el precio es por una de esa unidad, y la etiqueta del campo lo indica, por
 ejemplo **Precio por kg**. Elige **Mide una cantidad (ml, g…) — sin extras** para una unidad
 que vendes por medida. La caja pide la cantidad cuando tocas el producto. También la pide para
-las unidades de peso y las que admiten decimales en **Precisión**. Para una medida como ml,
-introduce la cantidad con el teclado o ajústala con **+** y **−**. El ticket imprime la cantidad
+las unidades de peso y las que admiten decimales en **Precisión**. Escribe la cantidad en el
+campo del producto o usa el teclado de la caja. El ticket imprime la cantidad
 y la abreviatura de la unidad, por ejemplo 250 ml. Un producto que se vende por medida no admite
 extras.
 

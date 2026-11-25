@@ -7832,7 +7832,10 @@ describe("till-app", () => {
     emit(counter, "retrieve-order", { id: "wo-vino" });
     await flush(el);
     const basket = counterBody(el)!.shadowRoot!.querySelector("till-basket")!;
-    expect(basket.shadowRoot!.querySelector(".count")?.textContent).toBe("250 ml");
+    expect(basket.shadowRoot!.querySelector("[data-edit-amount]")?.textContent?.trim()).toBe(
+      "250 ml",
+    );
+    expect(basket.shadowRoot!.querySelector(".stepper")).toBeNull();
   });
 
   it("a held pick on a dish now sold in a measure is marked not offered", async () => {

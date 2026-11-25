@@ -525,8 +525,9 @@ lee **Registrado al enviar**. Un plato en espera muestra lo que está publicado 
 liberas.
 
 Cada plato al peso va en su propia línea y pasa entero a otra cuenta. Para una medida como un
-zumo vendido por ml, toca el plato, introduce la cantidad con el teclado o usa **+** y **−**, y elige **Añadir**.
-Por ejemplo, 250 ml van en una sola línea. **Marcar servido** marca toda la cantidad como servida.
+zumo vendido por ml, toca el plato, escribe la cantidad en su campo o usa el teclado de la caja
+y elige **Añadir**. Por ejemplo, 250 ml van en una sola línea. Toca la cantidad antes de enviar
+para editarla. **Marcar servido** marca toda la cantidad como servida.
 
 En una mesa o en el mostrador puedes añadir hasta 99 porciones de un mismo plato cada vez.
 

@@ -677,7 +677,7 @@ describe("till-tender-pay", () => {
     click(el, ".cancel");
     await el.updateComplete;
     expect(query(el, ".pay")).not.toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain(t("weigh.prompt"));
+    expect(query(el, "wt-price-input")).toBeNull();
     expect(store.lines).toHaveLength(0); // the weighed product was not rung up
   });
 
@@ -734,7 +734,8 @@ describe("till-tender-pay", () => {
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     store.emit("product-selected", ham);
     await el.updateComplete;
-    expect(el.shadowRoot!.textContent).toContain(t("weigh.prompt"));
+    expect(query(el, 'wt-price-input[unit="kg"]')).not.toBeNull();
+    expect(query(el, ".prompt")).toBeNull();
     expect(query(el, "till-numeric-pad")).not.toBeNull();
     expect(query(el, "[data-quantity-step]")).toBeNull();
   });
@@ -744,7 +745,7 @@ describe("till-tender-pay", () => {
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     store.emit("product-selected", coffee); // an `each` product never weighs
     await el.updateComplete;
-    expect(el.shadowRoot!.textContent).not.toContain(t("weigh.prompt"));
+    expect(query(el, "wt-price-input")).toBeNull();
     expect(query(el, ".pay")).not.toBeNull(); // still idle
   });
 
@@ -1344,7 +1345,7 @@ describe("till-tender-pay", () => {
     store.emit("product-selected", ham);
     await el.updateComplete;
     expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(true); // never heard the add
-    expect(el.shadowRoot!.textContent).not.toContain(t("weigh.prompt")); // never heard the pick
+    expect(query(el, "wt-price-input")).toBeNull(); // never heard the pick
   });
 
   describe("integrated card terminal", () => {
@@ -3040,12 +3041,14 @@ describe("typing cash and weights with a keyboard", () => {
     expect(store.lines).toEqual([]);
   });
 
-  it("draws no text field while the cash or weight pad shows", async () => {
+  it("draws one editable amount for weight and keeps the cash pad field-free", async () => {
     const cash = await paying();
     expect(query(cash.el, "till-numeric-pad")).not.toBeNull();
     expect(textFieldsIn(cash.el.shadowRoot!)).toEqual([]);
     const weight = await weighing();
     expect(query(weight.el, "till-numeric-pad")).not.toBeNull();
-    expect(textFieldsIn(weight.el.shadowRoot!)).toEqual([]);
+    const inputs = textFieldsIn(weight.el.shadowRoot!);
+    expect(inputs).toHaveLength(1);
+    expect(inputs[0]).toMatchObject({ name: "quantity", readOnly: false });
   });
 });

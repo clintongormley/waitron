@@ -5,7 +5,7 @@ import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { lineProductName, productUnit, stepsByWholeUnit, unitName } from "./product-name.js";
+import { lineProductName, productUnit, soldByTheUnit, unitName } from "./product-name.js";
 import { trimQuantity } from "./dish-format.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { nutritionIcons, nutritionIconStyles } from "./nutrition-icons.js";
@@ -124,7 +124,7 @@ export class TillLastAdded extends LitElement {
       this.#blocked() ||
       this.readOnly ||
       this.store.lastAdded !== line ||
-      !stepsByWholeUnit(productUnit(line.product))
+      !soldByTheUnit(line.product)
     )
       return;
     const index = this.store.lines.indexOf(line);
@@ -168,7 +168,7 @@ export class TillLastAdded extends LitElement {
         ${(line.extras ?? []).map((extra) => html`<span class="modifier-answer">${extra.name || t("basket.not_offered")}${extra.quantity > 1 ? ` ×${extra.quantity}` : ""}</span>`)}
         ${line.note === undefined ? nothing : html`<span class="line-note">${t("line.note.label")}: ${line.note}</span>`}
       </button>
-      ${line.setMenuId === undefined && stepsByWholeUnit(productUnit(line.product)) ? html`<span class="last-added-steps">${([-1, 1] as const).map((by) => html`<wt-button variant="secondary" data-last-added-step=${by} ?disabled=${this.#blocked() || this.readOnly || (by === 1 && this.store.canSelectProduct?.(line.product) === false)} .ariaLabel=${`${t(by === -1 ? "basket.decrease" : "basket.increase")} ${by === -1 ? "−1" : "+1"} · ${name}`} @click=${() => this.#step(line, by)}>${by === -1 ? "−1" : "+1"}</wt-button>`)}</span>` : nothing}
+      ${line.setMenuId === undefined && soldByTheUnit(line.product) ? html`<span class="last-added-steps">${([-1, 1] as const).map((by) => html`<wt-button variant="secondary" data-last-added-step=${by} ?disabled=${this.#blocked() || this.readOnly || (by === 1 && this.store.canSelectProduct?.(line.product) === false)} .ariaLabel=${`${t(by === -1 ? "basket.decrease" : "basket.increase")} ${by === -1 ? "−1" : "+1"} · ${name}`} @click=${() => this.#step(line, by)}>${by === -1 ? "−1" : "+1"}</wt-button>`)}</span>` : nothing}
     </div>`;
   }
 }

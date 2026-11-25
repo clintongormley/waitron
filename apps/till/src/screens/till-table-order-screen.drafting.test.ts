@@ -116,6 +116,10 @@ describe("till-table-order-screen: the last-added bar", () => {
     expect(rows(el)).toEqual([]);
     const weigh = browser(el).shadowRoot!.querySelector<HTMLElement>("till-tender-pay")!;
     await (weigh as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    const amount = weigh.shadowRoot!.querySelector("wt-price-input");
+    expect(amount?.label).toBe("Jamón");
+    await amount?.updateComplete;
+    expect(amount?.shadowRoot!.querySelector('[part="unit"]')?.textContent).toBe("kg");
     const pad = weigh.shadowRoot!.querySelector<HTMLElement>("till-numeric-pad")!;
     pad.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "0.25" } }));
     await (weigh as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
@@ -152,7 +156,7 @@ describe("till-table-order-screen: the last-added bar", () => {
       panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button.add")!;
     await userEvent.keyboard("250.5");
     expect(add().disabled).toBe(true);
-    expect(panel.shadowRoot!.querySelector('[role="status"]')?.textContent).toBe(
+    expect(panel.shadowRoot!.querySelector("wt-price-input")?.error).toBe(
       t("line.quantity_invalid"),
     );
     await userEvent.keyboard("{Backspace}{Backspace}");
@@ -165,8 +169,25 @@ describe("till-table-order-screen: the last-added bar", () => {
     );
     expect(el.shadowRoot!.querySelector("[data-split-draft-line]")).toBeNull();
     expect(barText(el)).toContain("Juice 250 ml");
-    await step(el, "1");
-    expect(store(el).lines.map((line) => line.quantity)).toEqual(["251"]);
+    expect(bar(el)!.querySelector("[data-last-added-step]")).toBeNull();
+
+    await userEvent.click(bar(el)!.querySelector<HTMLElement>("[data-last-added-detail]")!);
+    const basket = [...el.shadowRoot!.querySelectorAll("till-basket")].find((each) =>
+      each.lineIndexes?.includes(0),
+    )!;
+    await basket.updateComplete;
+    expect(basket.shadowRoot!.querySelector(".stepper")).toBeNull();
+    const picker = basket.shadowRoot!.querySelector("till-modifier-picker")!;
+    await picker.updateComplete;
+    const amount = picker.shadowRoot!.querySelector("wt-price-input")!;
+    expect(amount?.label).toBe("Juice");
+    await amount.updateComplete;
+    expect(amount.shadowRoot!.querySelector('[part="unit"]')?.textContent).toBe("ml");
+    const field = amount.shadowRoot!.querySelector("input")!;
+    expect(field.value).toBe("250");
+    await userEvent.fill(field, "300");
+    await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
+    expect(store(el).lines.map((line) => line.quantity)).toEqual(["300"]);
   });
 
   it("shows no weighing prompt until a weighed dish is tapped", async () => {

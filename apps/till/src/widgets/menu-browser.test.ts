@@ -3740,8 +3740,7 @@ it("uses the filtered offer for information Add and forwards exclusions to new a
   expect(picker.product.variants!.map((variant) => variant.id)).toEqual(["clear"]);
   expect(picker.filters).toBe(filters);
   expect(
-    (root(el).querySelector("till-tender-pay.weigh")! as import("./tender-pay.js").TillTenderPay)
-      .filters,
+    (root(el).querySelector("till-tender-pay")! as import("./tender-pay.js").TillTenderPay).filters,
   ).toBe(filters);
 });
 

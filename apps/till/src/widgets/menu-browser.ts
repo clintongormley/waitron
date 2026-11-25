@@ -440,13 +440,6 @@ export class TillMenuBrowser extends LitElement {
       .sep {
         color: var(--wt-color-text-muted);
       }
-
-      .weigh {
-        position: sticky;
-        bottom: 0;
-        z-index: 2;
-        background: var(--wt-color-bg);
-      }
     `,
   ];
 
@@ -1406,7 +1399,6 @@ export class TillMenuBrowser extends LitElement {
       ${
         this.weighs && !this.#waitingForMenu()
           ? html`<till-tender-pay
-              class="weigh"
               weighOnly
               .store=${this.store}
               .products=${this.unfilteredServedProducts ?? this.servedProducts}

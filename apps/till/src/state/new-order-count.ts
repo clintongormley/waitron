@@ -1,5 +1,5 @@
 import { itemCount } from "./draft-groups.js";
-import { takesExtras } from "./order-line.js";
+import { quantityLabel, takesExtras } from "./order-line.js";
 import type { OrderLine } from "./working-order.js";
 
 /** Whole units count by quantity; anything weighed or fractional counts as one (D4). A dish no
@@ -16,17 +16,21 @@ export function newOrderItems(lines: readonly OrderLine[]): number {
   return lines.reduce((sum, line) => sum + lineItems(line), 0);
 }
 
-/** One entry per name, items summed, in first-appearance order (D6). */
+/** Sum counted dishes by name in first-appearance order. Each measured line keeps its amount. */
 export function newOrderDishes(
   lines: readonly OrderLine[],
   name: (line: OrderLine) => string,
-): { name: string; items: number }[] {
-  const byName = new Map<string, number>();
+): Array<{ name: string; items: number; amount?: string }> {
+  const byDish = new Map<string | OrderLine, number>();
   for (const line of lines) {
-    const key = name(line);
-    byName.set(key, (byName.get(key) ?? 0) + lineItems(line));
+    const key = countsWholeUnits(line) ? name(line) : line;
+    byDish.set(key, (byDish.get(key) ?? 0) + lineItems(line));
   }
-  return [...byName].map(([dishName, items]) => ({ name: dishName, items }));
+  return [...byDish].map(([dish, items]) =>
+    typeof dish === "string"
+      ? { name: dish, items }
+      : { name: name(dish), items, amount: quantityLabel(dish) },
+  );
 }
 
 /** Product id → items, every line of the product whatever its variant or choices (D7). */

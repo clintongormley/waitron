@@ -61,8 +61,8 @@ dashboard language. **Add unit** there creates a new unit without leaving the pr
 Once you choose a unit, the price is for one of that unit, and the field's label says so, such as
 **Price per kg**. Choose **Measures a quantity (ml, g…) — no extras** for a unit you sell by
 amount. The till asks for the amount when you tap the product. It also asks for amounts in weight
-units or units whose **Precision** allows decimal places. For a measure such as ml, enter the
-amount on the keypad or adjust it with **+** and **−**. The receipt prints the amount and the
+units or units whose **Precision** allows decimal places. Type the amount into the product's
+field or use the till keypad. The receipt prints the amount and the
 unit's abbreviation, such as 250 ml. A product entered by amount does not take extras.
 
 Waitron provides millilitres, litres, grams, kilograms and milligrams with the measure switch on.

@@ -156,7 +156,9 @@ it("decimal input weight is shown in Spanish and stored at the same quantity", a
   store.emit("product-selected", ham);
   await el.updateComplete;
   await type(el, "0.250");
-  expect(query(el, ".kg")!.textContent).toBe("0,250");
+  const field = el.shadowRoot!.querySelector("wt-price-input")!;
+  await field.updateComplete;
+  expect(field.shadowRoot!.querySelector("input")!.value).toBe("0,250");
   click(el, ".add");
   await el.updateComplete;
   expect(store.lines[0]!.quantity).toBe("0.250");

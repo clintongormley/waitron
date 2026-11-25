@@ -1,5 +1,6 @@
 import { ContentLanguageController, currentContentLanguages } from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
+import { html as staticHtml, literal } from "lit/static-html.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { trackDialog } from "./track-dialog.js";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/menu/src/unit-validation.js";
 import "@waitron/ui/src/components/wt-input.js";
+import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type {
   ComboboxOption,
@@ -31,7 +33,13 @@ import {
 } from "../state/order-line.js";
 import { optionSnapshotOf } from "../state/held-options.js";
 import { sameExtraSelections } from "../state/held-extras.js";
-import { productName, productUnit } from "./product-name.js";
+import {
+  lineProductName,
+  productName,
+  productUnit,
+  soldByTheUnit,
+  unitName,
+} from "./product-name.js";
 import { lineNutrition } from "./line-nutrition.js";
 import { extraNutrition } from "./diet-badges.js";
 import { optionAnswers } from "./option-snapshot.js";
@@ -124,9 +132,12 @@ export class TillModifierPicker extends LitElement {
         margin: 0 0 var(--wt-space-3);
         padding-inline-start: var(--wt-space-4);
       }
-      wt-input[name="quantity"] {
+      [name="quantity"] {
         display: block;
         margin-block-end: var(--wt-space-3);
+      }
+      wt-price-input::part(unit) {
+        margin-inline-start: auto;
       }
       .min-quantity-action {
         margin-block: calc(-1 * var(--wt-space-2)) var(--wt-space-3);
@@ -893,6 +904,8 @@ export class TillModifierPicker extends LitElement {
 
   override render() {
     const { stale, totals, saveAction, satisfied } = this.#checks;
+    const measured = !soldByTheUnit(this.product);
+    const quantityField = measured ? literal`wt-price-input` : literal`wt-input`;
     const fields = html`<div ?inert=${this.disabled}>
       ${this.inline ? nothing : html`<slot name="line-details"></slot>${lineNutrition(this.nutrition, this.recordedWhenSent)}`}
       ${
@@ -917,9 +930,11 @@ export class TillModifierPicker extends LitElement {
           : html`
               ${
                 this.#editsQuantity
-                  ? html`<wt-input
+                  ? html`${staticHtml`<${quantityField}
                         name="quantity"
-                        label=${t("table.split_quantity")}
+                        label=${measured ? lineProductName(this.product) : t("table.split_quantity")}
+                        unit=${measured ? unitName(this.product) : nothing}
+                        ?fixed-unit=${measured}
                         required
                         decimal-locale=${currentLocale()}
                         .value=${this.editedQuantity}
@@ -931,14 +946,13 @@ export class TillModifierPicker extends LitElement {
                           this.editedQuantity = event.detail.value;
                           this.#scope?.changed();
                         }}
-                      ></wt-input
-                      >${
-                        this.feedback.attempted && this.#quantityBelowMinimum()
-                          ? html`<div class="min-quantity-action">
-                              <slot name="min-quantity-action"></slot>
-                            </div>`
-                          : nothing
-                      }`
+                      ></${quantityField}>`}${
+                      this.feedback.attempted && this.#quantityBelowMinimum()
+                        ? html`<div class="min-quantity-action">
+                            <slot name="min-quantity-action"></slot>
+                          </div>`
+                        : nothing
+                    }`
                   : nothing
               }
               ${

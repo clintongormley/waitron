@@ -746,8 +746,9 @@ only when the menu is published.
 
 Tapping a parent sold as whole portions opens the picker at once
 (`pickProduct`, `apps/till/src/widgets/product-pick.ts`). For a measure, a unit that accepts
-decimals or a unit mapped to a scale, enter the amount first. The keypad also offers **+** and
-**−** for amounts entered without a scale mapping. **Add** opens the same picker
+decimals or a unit mapped to a scale, enter the amount in the product's field with its fixed
+unit, directly or with the till keypad. Tap an unsent line's amount to edit it.
+**Add** opens the same picker
 (`#addWeight`, `apps/till/src/widgets/tender-pay.ts`). The picker lists the variants in the one variant order,
 `products.variant_order`, set by the product editor (`writeProductVariants` writes the order the
 variants were sent in). The first available one is chosen to start with, except on a reopened line

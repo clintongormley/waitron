@@ -4229,10 +4229,18 @@ export class TillTableOrderScreen extends LitElement {
 
   #newOrderBar(store: WorkingOrderStore): TemplateResult {
     const items = newOrderItems(store.lines);
-    const dishes = newOrderDishes(store.lines, (line) => shownName(line.product))
-      .map((dish) => fill(t("table.new_order_dish"), { n: String(dish.items), name: dish.name }))
+    const dishes = newOrderDishes(store.lines, (line) => shownName(line.product));
+    const names = dishes
+      .map(({ name, items, amount }) =>
+        amount === undefined
+          ? fill(t("table.new_order_dish"), { n: String(items), name })
+          : `${name} ${amount}`,
+      )
       .join(" · ");
-    const text = `${t("table.draft_title")} · ${countText(items, "order_counts.items", "order_counts.items_one")} — ${dishes}`;
+    const text =
+      dishes.length === 1 && dishes[0]?.amount !== undefined
+        ? names
+        : `${t("table.draft_title")} · ${countText(items, "order_counts.items", "order_counts.items_one")} — ${names}`;
     const disabled = this.#sendAllDisabled(store);
     return html`<div class="new-order-bar" data-new-order-bar>
       <button

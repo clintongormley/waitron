@@ -85,6 +85,11 @@ describe("till-table-order-screen: the Menu's New order bar", () => {
     expect(summary(el).textContent!.trim()).toBe(
       `${t("table.draft_title")} · ${countText(3, "order_counts.items", "order_counts.items_one")} — 2 × Croquettes · 1 × Pork shoulder`,
     );
+    store(el).addProduct({ ...pork, name: "Ham", pricingUnit: "weight" }, "0.25");
+    await el.updateComplete;
+    expect(summary(el).textContent!.trim()).toContain(
+      "2 × Croquettes · 1 × Pork shoulder · Ham 0.25 kg",
+    );
   });
 
   it("the Menu's New order bar: the words open Order", async () => {
