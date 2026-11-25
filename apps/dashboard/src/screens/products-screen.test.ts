@@ -603,6 +603,26 @@ describe("menu-screen", () => {
     await vi.waitFor(() => expect(control()?.checked).toBe(true));
   });
 
+  it("does not restart Products reads when a write finishes after leaving the screen", async () => {
+    const saved = deferred<void>();
+    const setProductAvailability = vi.fn().mockReturnValue(saved.promise);
+    const api = stubApi({
+      listProducts: vi.fn().mockResolvedValue([{ ...products[0]!, primaryCategoryId: null }]),
+      setProductAvailability,
+    });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await flush(el);
+    const table = await productTable(el);
+    const control = table.shadowRoot!.querySelector("wt-switch")!;
+    control.focus();
+    await userEvent.keyboard(" ");
+    expect(setProductAvailability).toHaveBeenCalledOnce();
+    el.remove();
+    saved.resolve();
+    await flush(el);
+    expect(api.listProducts).toHaveBeenCalledOnce();
+  });
+
   it("keeps a named refusal visible when the rows are scrolled", async () => {
     const viewport = { width: innerWidth, height: innerHeight };
     await page.viewport(1280, 844);

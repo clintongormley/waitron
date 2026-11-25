@@ -1018,7 +1018,7 @@ export class ProductBrowser extends LitElement {
     this.availabilityError = "";
     try {
       await this.api.setProductAvailability(change.id, change.available);
-      this.availabilitySaved?.(change);
+      if (this.isConnected) this.availabilitySaved?.(change);
     } catch (error) {
       this.availabilityError = fill("product.availability_refused", {
         name: change.name,
