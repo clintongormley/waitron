@@ -7,7 +7,7 @@ describe("the node-local manifest", () => {
     expect(new Set(items).size).toBe(items.length);
   });
 
-  it("places and classes the original rows as the plan's table decides", () => {
+  it("checks where handover records belong and how they are classified", () => {
     const decisions = [
       "box|node.db|destination-owned",
       "node_pair_link|node.db|destination-owned",
@@ -33,6 +33,8 @@ describe("the node-local manifest", () => {
       "settings:modules|venue.db|transferred",
       "module-records/<module>.json#prepared|state|transferred",
       "module-records/<module>.json#retained|state|source-only",
+      "replaced-reset.json|state|destination-owned",
+      "identity-change.json|state|destination-owned",
       ".venue.db-litestream/|venue-folder|rebuildable",
     ];
     const actual = NODE_LOCAL_MANIFEST.map((row) => `${row.item}|${row.where}|${row.class}`);
@@ -47,16 +49,6 @@ describe("the node-local manifest", () => {
       "fiscal-readiness-db-*",
     ]);
   });
-
-  it.each(["replaced-reset.json", "identity-change.json"])(
-    "lists %s as state that belongs to its own box",
-    (item) => {
-      expect(NODE_LOCAL_MANIFEST.find((row) => row.item === item)).toMatchObject({
-        where: "state",
-        class: "destination-owned",
-      });
-    },
-  );
 
   it("never sends M1's private signing key, and carries the key ring and the venue's credentials", () => {
     const classOf = (item: string) => NODE_LOCAL_MANIFEST.find((row) => row.item === item)?.class;
