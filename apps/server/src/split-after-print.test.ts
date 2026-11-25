@@ -433,7 +433,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     ).toHaveLength(1);
   });
 
-  it("refuses a bill that has had an advance, whose ticket takes the advance off", async () => {
+  it("reopens a bill that has had an advance, whose ticket takes the advance off, and the advance counts on the new bill", async () => {
     const party = await seat("Red wine bottle", "Tarta");
     const paid = await send(
       venue.app,
@@ -476,17 +476,21 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
       { id: advance!.advanceSaleId, total: 3000 },
     ]);
 
-    await expectRefused(party.tabId, () => split(party.tabId), {
-      status: 409,
-      code: "bill.has_advance",
-    });
+    const reopened = await split(party.tabId);
 
+    expect(reopened.status, JSON.stringify(reopened.json)).toBe(200);
     expect(await salesOf()).toEqual(issued);
-    expect(await creditsOf(invoice.id)).toEqual([]);
+    expect((await creditsOf(invoice.id)).map((credit) => credit.total)).toEqual([-1800]);
     expect(await advancesOf()).toEqual([advance]);
+    expect((await fixture.balanceOf(venue, reopened.json.billId as string)).json).toMatchObject({
+      status: "open",
+      total: "48.00",
+      received: "30.00",
+      outstanding: "18.00",
+    });
   });
 
-  it("refuses a bill that has had an advance, even one given back in full", async () => {
+  it("reopens a bill that has had an advance given back in full, which counts nothing on the new bill", async () => {
     const party = await seat("Red wine bottle", "Tarta");
     const paid = await send(
       venue.app,
@@ -541,15 +545,19 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     const invoice = await invoiceOf(party.tabId);
     expect(invoice.total).toBe(4800);
 
-    await expectRefused(party.tabId, () => split(party.tabId), {
-      status: 409,
-      code: "bill.has_advance",
-    });
+    const reopened = await split(party.tabId);
 
-    expect(await creditsOf(invoice.id)).toEqual([]);
+    expect(reopened.status, JSON.stringify(reopened.json)).toBe(200);
+    expect((await creditsOf(invoice.id)).map((credit) => credit.total)).toEqual([-4800]);
     expect((await creditsOf(advance!.advanceSaleId)).map((credit) => credit.total)).toEqual([
       -3000,
     ]);
+    expect((await fixture.balanceOf(venue, reopened.json.billId as string)).json).toMatchObject({
+      status: "open",
+      total: "48.00",
+      received: "0.00",
+      outstanding: "48.00",
+    });
   });
 
   it("refuses a full invoice naming a customer before its unserved dishes", async () => {

@@ -7,6 +7,7 @@ import {
   saleSettlements,
   saleSubstitutions,
   saleVoids,
+  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
@@ -33,7 +34,8 @@ export interface TakenOffBy {
 
 /**
  * The invoice that took each of the advances `advanceSaleIds` off, by advance: the earliest sale
- * with a line deducting it that is neither a corrective nor a full invoice issued in substitution.
+ * with a line deducting it that is neither a corrective, a full invoice issued in substitution,
+ * nor the invoice of a bill since reopened, whose money and advances moved to the reopened bill.
  * A corrective, a replacement or a substitution copies that line, so it is never the one named;
  * an advance no invoice took off is absent. One read per {@link SQL_VARIABLE_LIMIT} advances.
  */
@@ -57,6 +59,12 @@ export async function advancesTakenOff(
         and(
           inArray(saleLines.deductsSaleId, advanceSaleIds.slice(start, start + SQL_VARIABLE_LIMIT)),
           isNull(sales.correctsSaleId),
+          notExists(
+            tx
+              .select({ id: workingOrders.id })
+              .from(workingOrders)
+              .where(eq(workingOrders.reopenedFrom, sales.workingOrderId)),
+          ),
           notExists(
             tx
               .select({ id: saleSubstitutions.id })

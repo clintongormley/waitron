@@ -606,7 +606,7 @@ describe("previewing Pay for items on a printed bill", () => {
     expect(ticket.status, JSON.stringify(ticket.json)).toBe(200);
 
     for (const [party, code] of [
-      [advanced, "bill.has_advance"],
+      [advanced, "bill.below_advances"],
       [unserved, "bill.unserved_dishes"],
     ] as const) {
       await fixture.expectRefused(

@@ -2,23 +2,22 @@ import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import type { Hono } from "hono";
 import { expect } from "vitest";
-import { sales, workingOrderLines } from "@waitron/db";
+import { sales, workingOrderLines, workingOrders } from "@waitron/db";
 import { thousandthsToDecimal } from "@waitron/shared";
 import { invoiceRecords } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { readBillEditState } from "../bill-editing.js";
-import { inTx, send, statusOf, type Answer } from "./bill-venue.js";
-import type { OrderVenue } from "./order-venue.js";
+import { inTx, send, statusOf, type Answer, type BillVenue } from "./bill-venue.js";
 
 type Party = { partyId: string };
 
-export function revisionOf(venue: OrderVenue, partyId: string): number {
+export function revisionOf(venue: BillVenue, partyId: string): number {
   const [row] = venue.db.all<{ revision: number }>(
     sql`select revision from parties where id = ${partyId}`,
   );
   return row!.revision;
 }
 
-export function dishesOf(venue: OrderVenue, billId: string) {
+export function dishesOf(venue: BillVenue, billId: string) {
   return inTx(venue, (tx) =>
     tx
       .select()
@@ -30,7 +29,7 @@ export function dishesOf(venue: OrderVenue, billId: string) {
 
 /** Marks the named dishes of the bill served, every dish when none is named. */
 export async function serve(
-  venue: OrderVenue,
+  venue: BillVenue,
   party: Party,
   billId: string,
   ...names: string[]
@@ -50,7 +49,7 @@ export async function serve(
 
 /** Print the bill on the first till, which has a receipt printer. */
 export async function printBill(
-  venue: OrderVenue,
+  venue: BillVenue,
   party: Party,
   billId: string,
   printAnyway = false,
@@ -67,13 +66,22 @@ export async function printBill(
   });
 }
 
-/** The party's dishes served and its bill printed. */
+/** The party's dishes served, unless the bill was reopened, whose copies are served already, and
+ * its bill printed. */
 export async function printed<P extends Party & { tabId: string }>(
-  venue: OrderVenue,
+  venue: BillVenue,
   party: P,
 ): Promise<P> {
-  const served = await serve(venue, party, party.tabId);
-  expect(served.status, JSON.stringify(served.json)).toBe(200);
+  const [bill] = await inTx(venue, (tx) =>
+    tx
+      .select({ reopenedFrom: workingOrders.reopenedFrom })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, party.tabId)),
+  );
+  if (bill!.reopenedFrom === null) {
+    const served = await serve(venue, party, party.tabId);
+    expect(served.status, JSON.stringify(served.json)).toBe(200);
+  }
   const ticket = await printBill(venue, party, party.tabId);
   expect(ticket.status, JSON.stringify(ticket.json)).toBe(200);
   return party;
@@ -82,7 +90,7 @@ export async function printed<P extends Party & { tabId: string }>(
 /** Pays `amount` of the bill in cash, on the payer's own receipt when `ownReceipt`; the payment's
  * id. */
 export async function payInCash(
-  venue: OrderVenue,
+  venue: BillVenue,
   billId: string,
   amount: string,
   ownReceipt = false,
@@ -107,25 +115,25 @@ export async function payInCash(
   return (paid.json.payment as { id: string }).id;
 }
 
-export function balanceOf(venue: OrderVenue, billId: string): Promise<Answer> {
+export function balanceOf(venue: BillVenue, billId: string): Promise<Answer> {
   return send(venue.app, venue.cookie, "GET", `/api/working-orders/${billId}/payments`);
 }
 
 export function split(
-  venue: OrderVenue,
+  venue: BillVenue,
   billId: string,
-  cookie = venue.supervisorTill,
+  cookie: string,
   app: Hono = venue.app,
   body: Record<string, unknown> = {},
 ): Promise<Answer> {
   return send(app, cookie, "POST", `/api/working-orders/${billId}/split-after-print`, body);
 }
 
-export function creditsOf(venue: OrderVenue, saleId: string) {
+export function creditsOf(venue: BillVenue, saleId: string) {
   return inTx(venue, (tx) => tx.select().from(sales).where(eq(sales.correctsSaleId, saleId)));
 }
 
-export async function invoiceOf(venue: OrderVenue, billId: string) {
+export async function invoiceOf(venue: BillVenue, billId: string) {
   const [row] = await inTx(venue, (tx) =>
     tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
   );
@@ -134,7 +142,7 @@ export async function invoiceOf(venue: OrderVenue, billId: string) {
 
 /** Everything a split would write: the corrective and its record, the copied bill and dishes, and
  * which bill each payment is on. */
-export function written(venue: OrderVenue) {
+export function written(venue: BillVenue) {
   return venue.db.all(sql`
     select
       (select count(*) from sales) as sales,
@@ -149,7 +157,7 @@ export function written(venue: OrderVenue) {
 
 /** Runs `answer`, expecting `refusal`, nothing written and the bill still printed. */
 export async function expectRefused(
-  venue: OrderVenue,
+  venue: BillVenue,
   billId: string,
   answer: () => Promise<Answer>,
   refusal: { status: number; code: string },

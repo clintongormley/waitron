@@ -11,6 +11,7 @@ import {
 } from "@waitron/core";
 import {
   billAdvances,
+  billPayments,
   invoiceCorrections,
   invoiceSeries,
   readLiveSeriesIdTx,
@@ -561,9 +562,10 @@ export async function closeInvoiceCorrection(
 }
 
 /**
- * When `saleId` is an advance, issues its bill's invoice if the bill is paid off: a payment taken
- * while the advance's correction was open issued none, and its money has already moved, so the
- * invoice is issued as that payment's completion would have issued it ({@link issueHeldBill}).
+ * When `saleId` is an advance, issues the invoice of the bill its payment is on if that bill is
+ * paid off: a payment taken while the advance's correction was open issued none, and its money
+ * has already moved, so the invoice is issued as that payment's completion would have issued it
+ * ({@link issueHeldBill}).
  * Filing needs no such step: it raises what the bill owes by the money given back.
  */
 async function issueAdvanceBill(
@@ -574,8 +576,9 @@ async function issueAdvanceBill(
   operatorId: string,
 ): Promise<void> {
   const [advance] = await tx
-    .select({ workingOrderId: billAdvances.workingOrderId })
+    .select({ workingOrderId: billPayments.workingOrderId })
     .from(billAdvances)
+    .innerJoin(billPayments, eq(billPayments.id, billAdvances.billPaymentId))
     .where(eq(billAdvances.advanceSaleId, saleId));
   if (advance === undefined) return;
   await issueHeldBill(tx, deps, cfg, advance.workingOrderId, operatorId);
