@@ -360,8 +360,8 @@ async function readPaymentRows(
 }
 
 /** The bills' {@link BillAdvances}, read only when one of their payments paid an advance: each
- * advance is linked to the payment that paid it, of its own bill (`issueAdvance`, its one writer),
- * so a bill none of whose payments paid one has none. */
+ * advance is linked to the payment that paid it, and a bill's advances are those whose payment is
+ * on it, so a bill none of whose payments paid one has none. */
 async function advancesPaidBy(
   tx: Transaction,
   workingOrderIds: readonly string[],

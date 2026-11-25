@@ -1230,9 +1230,12 @@ _2026-11-25: the owner's answers of 24 November replace D1 and D3 (A1515 piece 1
 [plan](../superpowers/plans/2026-11-24-a1515-1-pay-for-items-new-bill.md)). D1: **Reopen bill**
 asks nobody for a PIN; the credit note names the signed-in person, backed by the reopened bill it
 opened ("1 A"). D3: a part-paid printed bill can be split, its money moving to the reopened bill
-("2 B"); one holding a payment on its own receipt is still refused (owner, "ok", 24 November). As
-built, the refusal also covers a bill whose advance was given back in full (`refuseSplitMoney`,
-`apps/server/src/split-after-print-money.ts`), which the owner was not asked about._
+("2 B"). One holding a payment on its own receipt (an advance) can be reopened too (owner,
+2026-11-25, replacing the "ok" of 24 November to refusing it; REOPEN-WITH-ADVANCE,
+[plan](../superpowers/plans/2026-11-25-reopen-with-advance.md)): the advance's payment moves to the
+reopened bill, which counts it and cannot go below it. Giving the advance back on a printed bill not
+yet paid says "Reopen the bill, then give the money back."; on the reopened bill one action corrects
+the advance's receipt, refunds it and the bill stops counting it (owner, 2026-11-25, choice (c))._
 
 _2026-11-25: **Reopen bill** on a bill where something was served (or its charge kept) and other dishes
 never came offers **Stop these dishes and reopen** (CANCEL-UNSERVED PR 2, [plan](../superpowers/plans/2026-11-25-cancel-unserved.md) §4; the

@@ -7,6 +7,7 @@ import {
   billAdvances,
   billPayments,
   floorZones,
+  readHistoryNodes,
   refunds,
   saleLines,
   sales,
@@ -19,8 +20,17 @@ import { loginWithPin } from "@waitron/identity";
 import { setProfileServiceAccess } from "@waitron/venue-service";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { payments } from "@waitron/payments";
-import { addDecimal, decimal } from "@waitron/shared";
+import {
+  computeCategorySales,
+  computeDailyClose,
+  computeTopSellers,
+  computeVatSummaryForPeriod,
+  currentBusinessDay,
+  resolveVenueClock,
+} from "@waitron/reporting";
+import { addDecimal, centsToDecimal, decimal, nodeId as brandNodeId } from "@waitron/shared";
 import { filedInvoicesOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import { listAccountantExport } from "./accountant-export.js";
 import { advancesTakenOff } from "./advance-taken-off.js";
 import { readBillAdvances } from "./bill-advances.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -598,6 +608,28 @@ describe("Reopen bill on a printed bill with an advance", () => {
     });
   });
 
+  it("a correction of the advance open on the reopened bill refuses its print, issuing nothing", async () => {
+    const x = await seated("Grill for two");
+    const advanceId = await advance(x, "20.00");
+    await print(x);
+    const y = await reopen(x);
+    const opened = await openCorrection(advanceId);
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+
+    const refused = await fixture.printBill(venue(), await partyOf(y.billId), y.billId);
+
+    expect({ status: refused.status, code: refused.json.code }).toEqual({
+      status: 409,
+      code: "advance.correction_open",
+    });
+    expect(refused.json.params).toMatchObject({ workingOrderId: y.billId, saleId: advanceId });
+    expect(
+      await inTx(venue(), (tx) =>
+        tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, y.billId)),
+      ),
+    ).toEqual([]);
+  });
+
   it("a card refund of the advance still pending refuses bill.refund_in_progress, writing nothing", async () => {
     const x = await seated("Grill for two");
     const { paymentId, advanceId } = await cardAdvance(x);
@@ -1012,5 +1044,149 @@ describe("Giving back an advance on a bill printed, or reopened, after it was ta
         .map((call) => ({ processorRef: call.processorRef, amount: String(call.amount) })),
     ).toEqual([{ processorRef: card!.ref, amount: "20.00" }]);
     expect(await balanceOf(y.billId)).toMatchObject({ received: "0.00", outstanding: "72.00" });
+  });
+});
+
+/** The reports over the days around today: the VAT summary's, category sales' and its payments on
+ * account row's gross, top sellers by name, and the daily close's money taken and records counted. */
+function reportFigures() {
+  return inTx(venue(), async (tx) => {
+    const nodeId = brandNodeId(venue().cfg.nodeId);
+    const clock = await resolveVenueClock(tx, nodeId);
+    const day = currentBusinessDay(clock);
+    const shift = (days: number) =>
+      new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+    const nodeIds = await readHistoryNodes(tx, nodeId);
+    const common = {
+      nodeIds,
+      fromBusinessDay: shift(-1),
+      toBusinessDay: shift(1),
+      timeZone: clock.timeZone,
+      dayCutover: clock.dayCutover,
+      cutoverChanges: clock.cutoverChanges,
+    };
+    const vat = await computeVatSummaryForPeriod(tx, common);
+    const categories = await computeCategorySales(tx, { ...common, mode: "at_time_of_sale" });
+    const sellers = await computeTopSellers(tx, { ...common, limit: 1000 });
+    const close = await computeDailyClose(tx, {
+      nodeIds,
+      businessDay: day,
+      timeZone: clock.timeZone,
+      dayCutover: clock.dayCutover,
+      cutoverChanges: clock.cutoverChanges,
+    });
+    return {
+      vat: String(vat.grossTotal),
+      categories: String(categories.gross),
+      paymentsOnAccount: String(
+        categories.tree.find((row) => row.kind === "payments_on_account")?.gross ?? "0.00",
+      ),
+      topSellers: new Map(sellers.map((row) => [row.name, row])),
+      taken: String(close.cash.tenderTotal),
+      receipts: close.counts.sales,
+      correctives: close.counts.corrections,
+    };
+  });
+}
+
+type Figures = Awaited<ReturnType<typeof reportFigures>>;
+
+/** How far each report moved between two readings; top sellers as the rows whose figures moved. */
+function moved(before: Figures, after: Figures) {
+  const by = (a: string, b: string | undefined) =>
+    centsToDecimal(Math.round(Number(a) * 100) - Math.round(Number(b ?? "0") * 100));
+  const topSellers: [string, string, string][] = [];
+  for (const [name, row] of after.topSellers) {
+    const earlier = before.topSellers.get(name);
+    const quantity = (Number(row.quantity) - Number(earlier?.quantity ?? "0")).toFixed(3);
+    const total = by(row.total, earlier?.total);
+    if (quantity !== "0.000" || total !== "0.00") topSellers.push([name, quantity, total]);
+  }
+  return {
+    vat: by(after.vat, before.vat),
+    categories: by(after.categories, before.categories),
+    paymentsOnAccount: by(after.paymentsOnAccount, before.paymentsOnAccount),
+    topSellers,
+    taken: by(after.taken, before.taken),
+    receipts: after.receipts - before.receipts,
+    correctives: after.correctives - before.correctives,
+  };
+}
+
+describe("Reports and the accountant export of a reopened bill with an advance", () => {
+  it("a 30.05 dish with a 20.00 advance: printed the reports move 30.05, reopened 20.00 all on account, paid again 30.05 with the dish counted once", async () => {
+    const start = await reportFigures();
+    const x = await seated("Seafood platter");
+    await advance(x, "20.00");
+    await print(x);
+    expect(moved(start, await reportFigures())).toEqual({
+      vat: "30.05",
+      categories: "30.05",
+      paymentsOnAccount: "0.00",
+      topSellers: [["Seafood platter", "1.000", "27.32"]],
+      taken: "20.00",
+      receipts: 2,
+      correctives: 0,
+    });
+
+    const y = await reopen(x);
+    expect(moved(start, await reportFigures())).toEqual({
+      vat: "20.00",
+      categories: "20.00",
+      paymentsOnAccount: "20.00",
+      topSellers: [],
+      taken: "20.00",
+      receipts: 2,
+      correctives: 1,
+    });
+
+    await payRestOf(y.billId, "10.05");
+    expect(moved(start, await reportFigures())).toEqual({
+      vat: "30.05",
+      categories: "30.05",
+      paymentsOnAccount: "0.00",
+      topSellers: [["Seafood platter", "1.000", "27.32"]],
+      taken: "30.05",
+      receipts: 3,
+      correctives: 1,
+    });
+  });
+
+  it("the export names the last receipt not reopened as taking the advance off, the printed receipt takes nothing off, and its corrective cancels it", async () => {
+    const x = await seated("Grill for two");
+    const advanceId = await advance(x, "20.00");
+    const xReceipt = await print(x);
+    const y = await reopen(x);
+    const exported = async () =>
+      new Map(
+        (
+          await inTx(venue(), (tx) =>
+            listAccountantExport(tx, { from: "2000-01-01", to: "2999-12-31" }),
+          )
+        ).invoices.map((invoice) => [invoice.id, invoice]),
+      );
+
+    const open = await exported();
+    expect(open.get(advanceId)).toMatchObject({ advance: { paidBy: "cash", takenOffBy: null } });
+    expect(open.get(xReceipt)).not.toHaveProperty("takesOff");
+
+    const final = await payRestOf(y.billId, "52.00");
+    const byId = await exported();
+    const number = async (saleId: string) => (await advanceFacts(saleId)).invoiceNumber;
+    expect(byId.get(advanceId)).toMatchObject({
+      advance: { paidBy: "cash", takenOffBy: await number(final) },
+    });
+    expect(byId.get(final)).toMatchObject({ takesOff: [await number(advanceId)] });
+    expect(byId.get(xReceipt)).not.toHaveProperty("takesOff");
+    expect(byId.get(y.correctiveId)).not.toHaveProperty("takesOff");
+    expect(byId.get(y.correctiveId)).not.toHaveProperty("advance");
+    const rows = (saleId: string) =>
+      byId.get(saleId)!.vatBreakdown.map(({ rate, base, tax }) => [rate, base, tax]);
+    expect(rows(xReceipt)).toEqual([["10.00", "47.27", "4.73"]]);
+    expect(rows(y.correctiveId)).toEqual([["10.00", "-47.27", "-4.73"]]);
+    expect([String(byId.get(xReceipt)!.total), String(byId.get(y.correctiveId)!.total)]).toEqual([
+      "52.00",
+      "-52.00",
+    ]);
   });
 });
