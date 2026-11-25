@@ -4,6 +4,9 @@ Status: plan, written 2026-11-24 on `docs/give-money-back-plan` at `cc4fc8a1b7`,
 day after one fresh-context read (`~/waitron-campaign-l/receipts/give-money-back-plan-read-1.md`:
 1 Critical, 10 Important, 11 Minor; section 11 says what was done with each). PR 1 (Tasks 1–6) built on `feat/give-money-back-server`;
 PRs 2 and 3 not started.
+(2026-11-25: PRs 1 (#4257) and 2 (#4300) landed. PR 3 changes two things written below: Check again
+also has the box ask the card company about a refund that still waits (the watcher, 15:34), and
+D17's document names became **Corrective receipt** and **Replacement corrective receipt** (owner, 10:35).)
 Every `file:line` below was read on this branch; every result marked "run" came from the command
 named beside it. Nobody has approved this plan as a whole; section 0 says who decided each part. Cleared by the
 watcher 2026-11-24 12:28 with every default; the owner said yes to O2's words (12:36, "yes to 1

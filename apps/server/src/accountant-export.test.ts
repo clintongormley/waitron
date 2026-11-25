@@ -1329,7 +1329,7 @@ describe("accountant period selection", () => {
   });
 });
 
-describe("refunds without a corrective invoice", () => {
+describe("refunds without a corrective", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
   let venue: SeededVenue;
   beforeEach(async () => {

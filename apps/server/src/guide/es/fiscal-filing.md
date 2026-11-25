@@ -45,7 +45,7 @@ rechazó una factura simplificada porque su fecha era futura, indica el día en 
 verdad la venta y elige **Enviar el rectificativo**: Waitron emite un ticket rectificativo que la
 sustituye, con fecha de hoy. No se imprime solo: en una caja, ábrelo en **Buscar cuenta**, en la
 pestaña **Transacciones**, y elige **Reimprimir**. Esa primera impresión es el original; las
-siguientes son copias. Solo un administrador puede enviar cualquiera de las dos; cualquier otra
+siguientes son copias. Solo un administrador puede enviar cualquiera de los dos; cualquier otra
 persona puede iniciar sesión como administrador desde el caso.
 
 La tabla muestra los 200 casos más recientes. Si hay más, indica cuántos; expórtalos para verlos

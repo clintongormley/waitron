@@ -162,7 +162,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     expect(tableOrder(el)).not.toBeNull();
   });
 
-  it("without the permission, asks someone who may issue corrective invoices for their PIN and sends it with the same reason", async () => {
+  it("without the permission, asks someone who may issue corrective receipts and invoices for their PIN and sends it with the same reason", async () => {
     let refuse = true;
     const server = billServer(async () => {
       if (refuse) {
