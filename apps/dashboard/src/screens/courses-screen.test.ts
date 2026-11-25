@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtInput } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { en, es } from "../i18n/strings.js";
 import type { Course, DashboardApi } from "../api/client.js";
 import type { CourseList } from "../widgets/course-list.js";
 import type { CoursesScreen } from "./courses-screen.js";
@@ -100,27 +101,30 @@ describe("dashboard-courses-screen", () => {
   );
 
   it.each([
-    ["en-GB", "Courses", "Add course"],
-    ["es-ES", "Orden de platos", "Añadir orden de plato"],
-  ])("shows the heading, Add button, help and shared list in %s", async (locale, heading, add) => {
-    setLocale(locale);
-    const { el, api } = await mount();
-    await vi.waitFor(() =>
-      expect(list(el).shadowRoot!.querySelectorAll("tbody tr[data-course]")).toHaveLength(2),
-    );
-    expect(q(el, "h1")!.textContent!.trim()).toBe(heading);
-    expect(headerAdd(el)!.textContent!.trim()).toBe(add);
-    expect(q(el, ".description")).toBeNull();
-    expect(
-      list(el).shadowRoot!.querySelector("wt-help-tooltip")!.getAttribute("guide-href"),
-    ).toContain("products#course");
-    expect(el.shadowRoot!.querySelectorAll("dashboard-course-list")).toHaveLength(1);
-    expect(list(el).api).toBe(api);
-    expect(list(el).readOnly).toBe(false);
-    expect(list(el).showAddButton).toBe(false);
-    expect(list(el).shadowRoot!.querySelector("[data-test=add-course]")).toBeNull();
-    expect(api.listCourses).toHaveBeenCalledTimes(1);
-  });
+    ["en-GB", en],
+    ["es-ES", es],
+  ] as const)(
+    "shows the heading, Add button, help and shared list in %s",
+    async (locale, strings) => {
+      setLocale(locale);
+      const { el, api } = await mount();
+      await vi.waitFor(() =>
+        expect(list(el).shadowRoot!.querySelectorAll("tbody tr[data-course]")).toHaveLength(2),
+      );
+      expect(q(el, "h1")!.textContent!.trim()).toBe(strings["kitchen.courses_title"]);
+      expect(headerAdd(el)!.textContent!.trim()).toBe(strings["kitchen.add_course"]);
+      expect(q(el, ".description")).toBeNull();
+      expect(
+        list(el).shadowRoot!.querySelector("wt-help-tooltip")!.getAttribute("guide-href"),
+      ).toContain("products#course");
+      expect(el.shadowRoot!.querySelectorAll("dashboard-course-list")).toHaveLength(1);
+      expect(list(el).api).toBe(api);
+      expect(list(el).readOnly).toBe(false);
+      expect(list(el).showAddButton).toBe(false);
+      expect(list(el).shadowRoot!.querySelector("[data-test=add-course]")).toBeNull();
+      expect(api.listCourses).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it("sits the course rows in a bordered card that draws no second line under the last row", async () => {
     const { el } = await mount();

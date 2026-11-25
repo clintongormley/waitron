@@ -110,7 +110,7 @@ it("matches a setting's localized tab as location after own-label matches", () =
     {
       id: "reminder",
       screen: "venue-operations",
-      label: "Avisar después de servir los platos del orden anterior",
+      label: "Avisar para marchar el siguiente curso tras",
       pageLabel: "Departamentos y zonas",
       heading: "Operaciones",
       location: "Servicio",

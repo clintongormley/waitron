@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { TabLine, TillCourse } from "../api/client.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import {
   current,
@@ -136,10 +136,7 @@ describe("course information after sending", () => {
     expect(dialog.textContent).not.toContain("Older course");
   });
 
-  it.each([
-    ["en", "No course"],
-    ["es", "Sin orden de plato"],
-  ] as const)("shows the localized no-course label in %s", async (locale, label) => {
+  it.each(["en", "es"] as const)("shows the localized no-course label in %s", async (locale) => {
     setLocale(locale);
     const { el } = await mount({
       courses: [course],
@@ -150,7 +147,9 @@ describe("course information after sending", () => {
       }),
     });
     const dialog = await openSentDish(el, "dish");
-    expect(dialog.querySelector("[data-sent-course]")?.textContent?.trim()).toBe(label);
+    expect(dialog.querySelector("[data-sent-course]")?.textContent?.trim()).toBe(
+      t("table.course_none"),
+    );
   });
 
   it("keeps course information in the read-only fallback, with no separate course on extras", async () => {
