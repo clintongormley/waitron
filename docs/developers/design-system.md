@@ -5919,8 +5919,8 @@ or **Unpublished**. These words wrap below the title on a phone. A changed live 
 dot and **Unpublished changes**. A menu with changes to publish offers **Review and publish** in
 the heading. On Price overrides, it is outlined while the prices have edits to save or a save is
 sending. On Preview,
-the heading offers **Publish later** and **Publish now** when each action is available, or both
-disabled when Preview has blockers. Outside Preview, a menu with price clashes keeps the line that
+the heading offers **Publish later** and **Publish now** when each action is available. Both are
+disabled when changes in Preview have blockers. Outside Preview, a menu with price clashes keeps the line that
 links to its Price overrides tab filtered to the clashes, in `--wt-color-danger`. On the Price
 overrides tab it uses plain words. See
 `apps/dashboard/src/screens/menus-screen.heading.test.ts` and `menus-screen.heading.a11y.test.ts`
@@ -5966,7 +5966,7 @@ panes, which scroll with the page. Scheduled versions go below the panes.
 Put **Fix before publishing** in one card at the top of the left column, and above the view selector
 on phones. Show one row per price clash or set menu with problems. Give each price and its source
 and link to where you can fix it. Leave **Publish now** and **Publish later** visible and disabled
-while the card has any blockers. Put each warning category in a plain disclosure within the Warnings
+when changes in Preview have blockers. Put each warning category in a plain disclosure within the Warnings
 card. Show the warning details in full when you ask the manager to confirm publishing or scheduling.
 
 In the **Unpublished changes** card, use a bullet for each change under Added, Removed, Prices,

@@ -1853,6 +1853,8 @@ describe("changing a queued version's time", () => {
     const el = await mount(api, { preview });
     await openMove(el, "v-lunch-2");
     await enter(el, "time", "09:00");
+    expect(submitButton(el).disabled).toBe(false);
+    expect(await bottom(el)).toBe("");
     await submit(el);
     expect(api.rescheduleMenuPublication.mock.calls).toEqual([
       ["menu-lunch", "v-lunch-2", { activatesAt: { date: "2026-10-08", time: "09:00" } }],

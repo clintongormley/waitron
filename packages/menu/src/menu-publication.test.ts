@@ -2478,19 +2478,44 @@ describe("combined menu publication", () => {
     expect(preview.changes.filter(({ kind }) => kind === "price_changed")).toEqual([]);
   });
 
+  it("keeps an agreed dish price when a size with its own price clashes", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => addMember(tx, f.dinnerRoot, product(f.lemonade)));
+    await publish(f.dinner);
+    await app(async (tx) => {
+      await updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.lemonade), {
+        grossPrice: "3.00",
+      });
+      await setMenuVariants(
+        tx,
+        await offerOf(tx, f.drinksMenu, f.lemonade),
+        [{ variantId: f.large, price: "4.20" }],
+        f.drinksMenu,
+      );
+    });
+    const preview = await app((tx) => previewMenu(tx, f.dinner));
+    expect(preview.clashes.map(({ variantId }) => variantId)).toEqual([f.large]);
+    expect(preview.changes.filter(({ kind }) => kind === "price_changed")).toEqual([
+      expect.objectContaining({ productId: f.lemonade, from: "3.00", to: "3.00", override: "set" }),
+    ]);
+  });
+
   it("only links other menus affected by the same included menu's variant price", async () => {
     const f = await menusFixture(fx.db);
-    const [bar, brunch] = await app(async (tx) => {
+    const [bar, brunch, outer] = await app(async (tx) => {
       const bar = await createMenu(tx, { name: "Bar" });
       const barRoot = await requireMenuRoot(tx, bar.id);
       await addMember(tx, barRoot, product(f.lemonade));
       const brunch = await createMenu(tx, { name: "Brunch" });
       await addMember(tx, await requireMenuRoot(tx, brunch.id), section(barRoot));
-      return [bar.id, brunch.id];
+      const outer = await createMenu(tx, { name: "Outer" });
+      await addMember(tx, await requireMenuRoot(tx, outer.id), section(f.dinnerRoot));
+      return [bar.id, brunch.id, outer.id];
     });
     await publish(f.lunch);
     await publish(f.dinner);
     await publish(brunch);
+    await publish(outer);
     await app(async (tx) => {
       for (const [menu, price] of [
         [f.drinksMenu, "4.20"],
@@ -2509,7 +2534,24 @@ describe("combined menu publication", () => {
     expect(change).toMatchObject({
       variant: { id: f.large },
       includedMenu: { id: f.drinksMenu },
-      alsoOn: ["Lunch Menu"],
+      alsoOn: ["Lunch Menu", "Outer"],
+    });
+    for (const menu of [f.lunch, f.dinner, outer]) await publish(menu);
+    await app(async (tx) =>
+      setMenuVariants(
+        tx,
+        await offerOf(tx, f.drinksMenu, f.lemonade),
+        [{ variantId: f.large, price: null }],
+        f.drinksMenu,
+      ),
+    );
+    const cleared = (await app((tx) => previewMenu(tx, f.dinner))).changes.find(
+      ({ kind }) => kind === "price_changed",
+    );
+    expect(cleared).toMatchObject({
+      variant: { id: f.large },
+      to: "3.50",
+      alsoOn: ["Lunch Menu", "Outer"],
     });
   });
 

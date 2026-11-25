@@ -126,15 +126,34 @@ export interface BuiltMenus {
 type PriceOrigins = NonNullable<MenuDocument["priceOrigins"]>;
 type PriceOrigin = PriceOrigins[string];
 
+function lastIncludedPriceSource(source: Extract<ValueSource, { kind: "menu" }>) {
+  while (source.from.kind === "menu") source = source.from;
+  return source;
+}
+
 function priceOrigin(source: ValueSource): PriceOrigin | undefined {
   if (source.kind === "own") return { kind: "this_menu" };
   if (source.kind === "product") return { kind: "product" };
   if (source.kind === "parent") return undefined;
-  let origin = source.from;
-  while (origin.kind === "menu") origin = origin.from;
+  const origin = lastIncludedPriceSource(source).from;
   return origin.kind === "own"
     ? { kind: "included_menu", id: source.menuId, name: source.menuName }
     : priceOrigin(origin);
+}
+
+function priceSetter(offer: CombinedOffer | undefined, variantId?: string): string | undefined {
+  const setting =
+    variantId === undefined
+      ? offer?.price
+      : offer?.variants.find((variant) => variant.variantId === variantId)?.price;
+  if (setting?.state !== "decided") return undefined;
+  const source =
+    setting.source.kind === "parent" && offer?.price.state === "decided"
+      ? offer.price.source
+      : setting.source;
+  if (source.kind !== "menu") return undefined;
+  const setter = lastIncludedPriceSource(source);
+  return setter.from.kind === "own" ? setter.menuId : undefined;
 }
 
 function priceOriginsOf(offers: Iterable<CombinedOffer>): PriceOrigins {
@@ -894,6 +913,8 @@ function serveOffer(offer: FrozenOffer, rows: LiveRows): LiveOffer | undefined {
 export interface DiffEntry {
   change: MenuChangeBody;
   section?: string;
+  // A price can come from a menu nested inside the include named in the change.
+  priceSourceMenuId?: string;
 }
 
 type SectionNode = Extract<DocumentMember, { kind: "section" }>;
@@ -1269,9 +1290,13 @@ export function diffEntries(
       ).includedMenu;
     const publicChange = { ...change } as MenuChangeBody & { section?: string };
     delete publicChange.section;
-    entries.push(
-      section === undefined ? { change: publicChange } : { change: publicChange, section },
-    );
+    const entry: DiffEntry =
+      section === undefined ? { change: publicChange } : { change: publicChange, section };
+    if (change.kind === "price_changed" && change.source === "included_menu") {
+      const setter = priceSetter(combined.get(change.productId), change.variant?.id);
+      if (setter !== undefined) entry.priceSourceMenuId = setter;
+    }
+    entries.push(entry);
   };
 
   if (live !== null && live.menuName !== proposed.menuName)

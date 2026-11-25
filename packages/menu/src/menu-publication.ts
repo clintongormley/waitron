@@ -31,6 +31,7 @@ import type { LiveMenu, MenuPatchResult } from "./menu-patch-types.js";
 import { mediaImageExists } from "./sections.js";
 import { menuExists } from "./operations.js";
 import type {
+  CombinedOffer,
   MenuChangeBody,
   MenuDocument,
   MenuPreview,
@@ -418,7 +419,7 @@ export async function onceLiveVersionsAfter(
 }
 
 /** The key two menus' changes share when one shared edit made both. */
-function changeSubject({ change, section }: DiffEntry): string {
+function changeSubject({ change, section, priceSourceMenuId }: DiffEntry): string {
   switch (change.kind) {
     case "product_added":
     case "product_removed":
@@ -427,7 +428,7 @@ function changeSubject({ change, section }: DiffEntry): string {
     case "product_changed":
       return `${change.kind}:${change.productId}`;
     case "price_changed":
-      return `${change.kind}:${change.productId}:${change.variant?.id ?? ""}:${change.includedMenu?.id ?? ""}`;
+      return `${change.kind}:${change.productId}:${change.variant?.id ?? ""}:${priceSourceMenuId ?? ""}`;
     case "extra_unit_changed":
     case "extra_portion_changed":
     case "extra_max_quantity_changed":
@@ -460,6 +461,18 @@ function sameEdit(a: DiffEntry, b: DiffEntry): boolean {
     : fields.some((field) => otherFields.includes(field));
 }
 
+function priceIsDisputed(offer: CombinedOffer | undefined, variantId?: string): boolean {
+  if (offer === undefined) return false;
+  if (offer.variants.length === 0) return offer.price.state === "clash";
+  return offer.variants.some(
+    (variant) =>
+      variant.price.state === "clash" &&
+      (variantId === undefined
+        ? variant.price.level === "product"
+        : variant.variantId === variantId),
+  );
+}
+
 export async function previewMenu(tx: Transaction, menuId: string): Promise<MenuPreview> {
   const { graph, menus, sectionNames } = await buildMenuDocuments(tx, [menuId]);
   if (graph.menu(menuId)?.kind === "set_menu")
@@ -471,11 +484,7 @@ export async function previewMenu(tx: Transaction, menuId: string): Promise<Menu
   const entries = diffEntries(ownDocument, mine.document, mine.combined).filter(
     ({ change }) =>
       change.kind !== "price_changed" ||
-      !mine.clashes.some(
-        ({ productId, variantId }) =>
-          productId === change.productId &&
-          (change.variant === undefined || variantId === change.variant.id),
-      ),
+      !priceIsDisputed(mine.combined.get(change.productId), change.variant?.id),
   );
   const removedExtras = removedExtraOnlyProducts(ownDocument, mine.document);
 
