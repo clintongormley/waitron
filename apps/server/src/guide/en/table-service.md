@@ -408,10 +408,10 @@ When a card refund waits for the card company, choose **Check again** to see its
 **Send again**: the same money never goes back twice. A money back receipt that does not print by
 itself can be printed from **Find a bill**, on the **Transactions** tab.
 
-If you close the window before all the money is back, **Find a bill** lists the receipt under
-**Money back under way**. If **Find a bill** does not list it, the money back is waiting on this
-till: open **Give money back** on the receipt again to carry on. Otherwise, choose the receipt in
-**Find a bill** to carry on:
+If you close the window before all the money is back, look for the receipt in **Find a bill** under
+**Money back under way**. If it is not there, the money back is waiting on this till: open **Give
+money back** on the receipt again to carry on. If it is there, choose it in **Find a bill** to carry
+on:
 
 - **Give back … in cash** or **Give back … to card** returns what is left that way.
 - **Finish** records what has been given back.

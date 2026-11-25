@@ -431,10 +431,9 @@ el servidor no respondió, elige **Enviar de nuevo**: el mismo dinero nunca se d
 ticket de devolución que no se imprime solo se puede imprimir desde **Buscar cuenta**, en la
 pestaña **Transacciones**.
 
-Si cierras la ventana antes de que vuelva todo el dinero, **Buscar cuenta** muestra el recibo en
-**Devoluciones en curso**. Si **Buscar cuenta** no lo muestra, la devolución espera en este TPV:
-vuelve a abrir **Devolver dinero** en el recibo para continuar. Si lo muestra, elige el recibo en
-**Buscar cuenta** para continuar:
+Si cierras la ventana antes de que vuelva todo el dinero, busca el recibo en **Buscar cuenta**, en
+**Devoluciones en curso**. Si no está, la devolución espera en este TPV: vuelve a abrir **Devolver
+dinero** en el recibo para continuar. Si está, elígelo en **Buscar cuenta** para continuar:
 
 - **Devolver … en efectivo** o **Devolver … a la tarjeta** devuelve lo que queda de esa forma.
 - **Terminar** registra lo devuelto.
