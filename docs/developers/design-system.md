@@ -7296,7 +7296,7 @@ The editor has “Periods ›” above its h1. `PeriodEditing` uses `period-dial
 without a modal, sharing its fields, validation, submitted baseline and draft scope with the
 painters’ existing dialog presentation. It asks for Department when adding, then Name, Colour,
 Customer menu, Staff-only menus and Floor plan where offered. The plan chooser offers Inherit with
-the current default's name and a named choice for every plan, including the default. An edited
+the current default's name and a named choice for every plan, including the default.
 Last orders gives each station its own time and links to Routes in Prep stations. When the choices
 read fails, its message is above the buttons. An edited period shows Painted in.
 The page’s footer is Cancel and Save. Delete stays in the list menu.

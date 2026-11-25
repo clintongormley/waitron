@@ -80,7 +80,6 @@ async function fixture(db: Transaction, setMenuOnly = false) {
       name: "Lunch special",
       kind: "set_menu",
       setPrice: "14.00",
-      setVatClass: "general",
     });
     await addSetMenuDishes(db, set.id, [{ productId: product, excludedVariantIds: [] }]);
     await addMember(db, await requireMenuRoot(db, menu), { kind: "set_menu", menuId: set.id });
