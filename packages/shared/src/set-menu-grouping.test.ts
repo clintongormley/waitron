@@ -76,6 +76,12 @@ function expectWithinHalfSecond(start: number) {
   }
 }
 
+function checkOrdinaryTiming(check: () => void) {
+  // Coverage and machine load affect timing measurements.
+  const coverage = Reflect.get(globalThis, "__vitest_worker__")?.config?.coverage?.enabled;
+  if (coverage !== true) check();
+}
+
 it("selects a partly filled menu and charges separately for a dish with an expensive supplement", () => {
   const dishes = [
     dish("soup", "starter", 900),
@@ -407,7 +413,7 @@ it("opens a useful menu at the limit and closes it after a cancellation without 
   const offers = [...input.offers, offer("lunch", 1400, [starter, main])];
   const start = performance.now();
   const first = group({ offers, dishes });
-  expectWithinHalfSecond(start);
+  checkOrdinaryTiming(() => expectWithinHalfSecond(start));
   expect(first.exact).toBe(false);
   const lunch = first.setMenus.find(({ offerId }) => offerId === "lunch");
   expect(lunch?.baseCents).toBe(1400);
@@ -598,10 +604,10 @@ it("bounds the work on forty diners with two percentage discounts", () => {
     // The compact bill discounts 1005¢ by 101¢ and 1015¢ by 102¢.
     expect(first.totalCents).toBe(underMutation ? 1817 : 83327);
     if (solve === undefined) return;
-    expect(solve.mock.calls.length).toBeLessThanOrEqual(20);
-    // Coverage instrumentation changes CPU time without changing the number of solves.
-    const coverage = Reflect.get(globalThis, "__vitest_worker__")?.config?.coverage?.enabled;
-    if (coverage !== true) expect(elapsed.user + elapsed.system).toBeLessThan(500_000);
+    const calls = solve.mock.calls.length;
+    expect(calls).toBeGreaterThan(0);
+    expect(calls).toBeLessThanOrEqual(20);
+    checkOrdinaryTiming(() => expect(elapsed.user + elapsed.system).toBeLessThan(500_000));
   } finally {
     solve?.mockRestore();
   }
