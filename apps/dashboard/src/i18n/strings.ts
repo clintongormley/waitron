@@ -1169,6 +1169,10 @@ export const en = {
   "printers.poll_required": "Enter the cloud polling ID",
   "printers.poll_hint": "Identifies a cloud-connected printer that fetches its own jobs.",
   "printers.preview_title": "Print job preview",
+  "printers.preview_invoice_notice": "These pages were redrawn from the sale.",
+  "printers.preview_invoice_page": "Invoice page {page}",
+  "printers.reprint_destination_unavailable":
+    "That printer is unavailable. Choose another printer.",
   "printers.preview_paper": "Receipt paper",
   "printers.preview_cut": "Paper cut",
   "printers.preview_notice":
@@ -5992,6 +5996,10 @@ export const es: Record<StringKey, string> = {
   "printers.poll_hint":
     "Identifica una impresora conectada a la nube que recoge sus propios trabajos.",
   "printers.preview_title": "Vista previa de impresión",
+  "printers.preview_invoice_notice": "Estas páginas se han vuelto a generar a partir de la venta.",
+  "printers.preview_invoice_page": "Página {page} de la factura",
+  "printers.reprint_destination_unavailable":
+    "Esa impresora no está disponible. Elige otra impresora.",
   "printers.preview_paper": "Papel del recibo",
   "printers.preview_cut": "Corte de papel",
   "printers.preview_notice":

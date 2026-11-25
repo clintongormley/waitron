@@ -4149,7 +4149,7 @@ it("opens the selected job preview and closes it", async () => {
     "dashboard-print-job-preview",
   ) as import("../widgets/print-job-preview.js").PrintJobPreviewDialog;
   expect(preview.open).toBe(true);
-  expect(preview.preview?.text).toBe("Receipt");
+  expect(preview.preview?.kind === undefined && preview.preview?.text).toBe("Receipt");
   q(el, "[data-test=preview-close]")!.click();
   await flush(el);
   expect(preview.open).toBe(false);
@@ -5925,7 +5925,7 @@ it("opens an older finished job from Print Queue", async () => {
   expect(listRecentJobs).toHaveBeenLastCalledWith(1);
 });
 
-it("shows office printer holds and uncertain pages without receipt actions", async () => {
+it("shows office printer holds and allows viewing uncertain invoice pages", async () => {
   const before = currentLocale();
   onTestFinished(() => setLocale(before));
   setLocale("en");
@@ -5954,7 +5954,9 @@ it("shows office printer holds and uncertain pages without receipt actions", asy
   expect(text(el, "[data-test=job-error-failed-page]")).toBe("the printer refused it");
   expect(text(el, "[data-test=job-error-switched-page]")).toBe("Switched to a receipt printer");
   expect(text(el, "[data-test=job-attempts-failed-page]")).toBe("—");
-  expect(q(el, "[data-test=view-job-held-page]")).toBeNull();
+  expect(q(el, "[data-test=view-job-held-page]")).not.toBeNull();
+  expect(q(el, "[data-test=view-job-uncertain-page]")).not.toBeNull();
+  expect(q(el, "[data-test=resend-job-uncertain-page]")).toBeNull();
   expect(q(el, "[data-test=resend-job-held-page]")).toBeNull();
 
   listRecentJobs.mockResolvedValue([
@@ -13553,6 +13555,47 @@ describe("an A4 printer's details", () => {
     agentId: "a1",
     agentName: "Kitchen agent",
   };
+  it("opens the A4 invoice reprint picker and sends to the selected receipt printer", async () => {
+    const row: PrintJobRow = {
+      ...jobs[1]!,
+      id: "printed-invoice",
+      kind: "a4",
+      pageDocument: "invoice",
+      printerId: pagePrinter.id,
+      printerName: pagePrinter.name,
+      reprintRule: "any",
+      reprintPrinterIds: ["p1"],
+    };
+    const api = stubApi({
+      listPagePrinters: vi.fn().mockResolvedValue([pagePrinter]),
+      listRecentJobs: vi
+        .fn()
+        .mockResolvedValue([
+          row,
+          { ...row, id: "receipt-page", pageDocument: "receipt", canResend: false },
+        ]),
+    });
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+    await flush(el);
+    await selectTab(el, "queue");
+    expect(q(el, "[data-test=view-job-receipt-page]")).toBeNull();
+    const open = q(el, "[data-test=resend-job-printed-invoice]");
+    expect(open).not.toBeNull();
+    open!.click();
+    await flush(el);
+    const picker = q(el, "wt-combobox[name=printerId]") as import("@waitron/ui").WtCombobox;
+    expect(picker.options).toEqual([
+      { label: "Back office · A4", value: pagePrinter.id },
+      { label: printers[0]!.name, value: "p1" },
+    ]);
+    expect(picker.value).toBe(pagePrinter.id);
+    await pickOption(picker, "p1");
+    q(el, "[data-test=reprint-send]")!.click();
+    await vi.waitFor(() =>
+      expect(api.resendPrintJob).toHaveBeenCalledExactlyOnceWith(row.id, "p1"),
+    );
+  });
+
   const invoiceProfiles: PrinterProfileOffer[] = [
     ...printerProfiles,
     {

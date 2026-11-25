@@ -247,6 +247,7 @@ export type PrintPreviewBlock =
     };
 
 export interface PrintJobPreview {
+  kind?: never;
   /** The dots across the job's line, which the paper stands for. */
   widthDots: number;
   columns: number;
@@ -256,6 +257,11 @@ export interface PrintJobPreview {
   omittedGraphics: boolean;
   truncated: boolean;
   unsupported: boolean;
+}
+
+export interface A4PrintJobPreview {
+  kind: "a4";
+  pages: { data: string; width: number; height: number }[];
 }
 
 export interface DemoPrinterJob {
@@ -280,7 +286,7 @@ export interface PrintJobRow {
   printerHold?: string | null;
   createdAt: string;
   deliveredAt: string | null;
-  /** `any` receipt printer, one `wide_enough` for the printout, or only its `own`. */
+  /** `any` printer of the supported kinds, one `wide_enough` for the printout, or only its `own`. */
   reprintRule: "any" | "wide_enough" | "own";
   /** The other active printers the server would take this printout on. */
   reprintPrinterIds: string[];
@@ -406,8 +412,11 @@ export class PrintingApi extends BackupApi {
       printerId === undefined ? undefined : { printerId },
     );
   }
-  getPrintJobPreview(id: string): Promise<PrintJobPreview> {
-    return this.#request<PrintJobPreview>(`/management-api/print-jobs/${id}/preview`, "GET");
+  getPrintJobPreview(id: string): Promise<PrintJobPreview | A4PrintJobPreview> {
+    return this.#request<PrintJobPreview | A4PrintJobPreview>(
+      `/management-api/print-jobs/${id}/preview`,
+      "GET",
+    );
   }
   listDemoPrinterJobs(): Promise<DemoPrinterJob[]> {
     return this.#request<DemoPrinterJob[]>("/management-api/demo-printer/jobs", "GET");

@@ -19,6 +19,7 @@ import {
   taxpayer,
   withTransaction,
 } from "@waitron/db";
+import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedPerson, seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import {
@@ -42,12 +43,14 @@ import { jobOrigin, nodeId, seriesId } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 import { venueModuleConfig } from "./provision.js";
 import {
+  claimInvoiceDelivery,
   reserveInvoiceDelivery,
   expireInvoiceDeliveryClaims,
   invoiceDeliveryClaimsDue,
 } from "./invoice-delivery.js";
 import { clearOldPrintPayloads } from "./housekeeping.js";
 import { claimInvoicePrintJobs, resendInvoicePrintJob } from "./invoice-print.js";
+import { reportInvoicePagePrint } from "./invoice-page-print.js";
 import { mountPrintApi } from "./print-api.js";
 import { reprintJobOn } from "./print-job-reprint.js";
 import { createPairingMode } from "./pairing-mode.js";
@@ -699,6 +702,113 @@ async function manager(ctx: Awaited<ReturnType<typeof setup>>) {
       body: JSON.stringify(body),
     });
 }
+
+describe("management A4 invoice reprints", () => {
+  async function officeJob(outcome: "sent" | "unknown") {
+    const ctx = await setup();
+    const { saleId } = await issue();
+    const { office, jobId } = await withTransaction(suite.db, async (tx) => {
+      const office = await insertA4Printer(tx, { agentId: ctx.agentId });
+      const delivery = await reserveInvoiceDelivery(tx, saleId, {
+        medium: "a4",
+        pagePrinterId: office,
+        requestKey: randomUUID(),
+        personId: "staff",
+      });
+      const now = new Date(delivery.createdAt);
+      const claim = await claimInvoiceDelivery(tx, delivery.id, ctx.agentId, now);
+      expect(
+        (
+          await reportInvoicePagePrint(
+            tx,
+            claim!,
+            outcome === "sent" ? { status: "sent" } : { status: "unknown", failureCode: "timeout" },
+            now,
+          )
+        ).updated,
+      ).toBe(true);
+      return { office, jobId: delivery.printJobId! };
+    });
+    const otherOffice = await insertA4Printer(suite.db, {
+      host: "office-two.test",
+      agentId: ctx.agentId,
+    });
+    const command = await manager(ctx);
+    const list = async () => {
+      const response = await command("/management-api/print-jobs", undefined, "GET");
+      expect(response.status).toBe(200);
+      return ((await response.json()) as { id: string }[]).find((job) => job.id === jobId);
+    };
+    const resend = (printerId?: string) =>
+      command(`/management-api/print-jobs/${jobId}/resend`, { printerId });
+    return { ctx, office, otherOffice, jobId, saleId, list, resend, command };
+  }
+
+  it.each(["own", "other office", "receipt"] as const)(
+    "offers and queues a marked copy on the %s printer",
+    async (kind) => {
+      const { ctx, office, otherOffice, jobId, saleId, list, resend } = await officeJob("sent");
+      expect(await list()).toMatchObject({
+        canResend: true,
+        reprintRule: "any",
+        reprintPrinterIds: expect.arrayContaining([ctx.printer.id, otherOffice]),
+      });
+      const target = kind === "own" ? undefined : kind === "receipt" ? ctx.printer.id : otherOffice;
+      const response = await resend(target);
+      expect(response.status).toBe(202);
+      const copy = ((await response.json()) as { jobId: string }).jobId;
+      expect(copy).not.toBe(jobId);
+      const deliveries = await suite.db
+        .select()
+        .from(invoiceDeliveries)
+        .where(eq(invoiceDeliveries.saleId, saleId));
+      expect(deliveries).toHaveLength(2);
+      expect(deliveries.find((row) => row.printJobId === jobId)).toMatchObject({
+        designation: "original",
+        status: "sent",
+        printerId: office,
+      });
+      expect(deliveries.find((row) => row.printJobId === copy)).toMatchObject({
+        designation: "duplicate",
+        status: "queued",
+        medium: kind === "receipt" ? "receipt" : "a4",
+      });
+      const [job] = await suite.db.select().from(printJobs).where(eq(printJobs.id, copy));
+      expect(job?.printerId).toBe(target ?? office);
+      if (kind === "receipt") {
+        expect(job?.payload).toEqual(await laidOut(saleId, true, ctx.printer.id));
+        expect(
+          await suite.db.select().from(receiptReprints).where(eq(receiptReprints.printJobId, copy)),
+        ).toHaveLength(1);
+      } else {
+        const second = await resend();
+        expect(second.status).toBe(409);
+        expect(await second.json()).toMatchObject({ error: { code: "invoice_delivery.active" } });
+      }
+    },
+  );
+
+  it("refuses a marked copy while the source print is uncertain", async () => {
+    const { list, resend } = await officeJob("unknown");
+    const response = await resend();
+    expect.soft(await list()).toMatchObject({ canResend: false, status: "unknown" });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "print_job.not_resendable" } });
+  });
+
+  it("refuses an unavailable destination and stops offering reprints when the source printer is deleted", async () => {
+    const { ctx, office, list, resend, command } = await officeJob("sent");
+    const unavailable = await resend(randomUUID());
+    expect
+      .soft(await unavailable.json())
+      .toMatchObject({ error: { code: "print_job.printer_unsuitable" } });
+    const removal = await command(`/management-api/page-printers/${office}`, undefined, "DELETE");
+    expect(removal.status).toBe(200);
+    const deleted = await resend(ctx.printer.id);
+    expect(await deleted.json()).toMatchObject({ error: { code: "printer.not_found" } });
+    expect(await list()).toMatchObject({ canResend: false, reprintPrinterIds: [] });
+  });
+});
 
 describe("management invoice receipt resends", () => {
   it("resends a replacement of a full invoice plainly, opening no delivery", async () => {

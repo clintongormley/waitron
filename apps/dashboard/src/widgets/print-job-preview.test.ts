@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtModal } from "@waitron/ui/src/components/wt-modal.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import type { PrintJobPreview } from "../api/printing-api.js";
 import { PrintJobPreviewDialog } from "./print-job-preview.js";
 
@@ -89,6 +89,33 @@ describe("print job preview", () => {
       await expectNoA11yViolations(host);
     },
   );
+  it("shows both redrawn invoice pages in order inside the phone preview", async () => {
+    await page.viewport(390, 800);
+    const canvas = document.createElement("canvas");
+    const data = canvas.toDataURL().split(",")[1]!;
+    const { el, host } = await mountWidget<PrintJobPreviewDialog>("dashboard-print-job-preview", {
+      open: true,
+      preview: {
+        kind: "a4",
+        pages: [
+          { data, width: 900, height: 1273 },
+          { data, width: 900, height: 1273 },
+        ],
+      },
+    });
+    const pages = [...el.shadowRoot!.querySelectorAll("img")];
+    expect(pages.map((image) => image.alt)).toEqual([
+      fill("printers.preview_invoice_page", { page: "1" }),
+      fill("printers.preview_invoice_page", { page: "2" }),
+    ]);
+    for (const image of pages) {
+      await image.decode();
+      expect(image.getBoundingClientRect().width).toBeLessThan(390);
+    }
+    expect(el.shadowRoot!.textContent).toContain(t("printers.preview_invoice_notice"));
+    await expectNoA11yViolations(host);
+  });
+
   it("shows receipt text and QR content safely alongside a visual paper preview", async () => {
     const { el, host } = await mountWidget<PrintJobPreviewDialog>("dashboard-print-job-preview", {
       open: true,

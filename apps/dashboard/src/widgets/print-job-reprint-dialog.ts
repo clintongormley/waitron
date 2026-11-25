@@ -11,6 +11,8 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { bottomMessage, refusal } from "../i18n/form-message.js";
 import { fill, t } from "../i18n/t.js";
 
+type ReprintPrinter = Pick<Printer, "id" | "name" | "active">;
+
 /** Asks which printer a print-queue job is reprinted on, from what its row already says. It holds
  * no draft (as the Orders screen's reprint dialog): its one input is a single choice. Sends a
  * bubbling, composed `reprinted` naming the printer once the server has it, and `reprint-close`
@@ -31,8 +33,7 @@ export class PrintJobReprintDialog extends LitElement {
   ];
   @property({ attribute: false }) api!: Pick<DashboardApi, "resendPrintJob">;
   @property({ attribute: false }) job: PrintJobRow | null = null;
-  /** The screen's receipt printers. */
-  @property({ attribute: false }) printers: Printer[] = [];
+  @property({ attribute: false }) printers: ReprintPrinter[] = [];
   @state() private printerId = "";
   @state() private sending = false;
   @state() private errorKey: string | null = null;
@@ -60,13 +61,13 @@ export class PrintJobReprintDialog extends LitElement {
   }
 
   /** The job's own printer, offered while it is active and the job is not stuck on it. */
-  #original(): Printer | undefined {
+  #original(): ReprintPrinter | undefined {
     const job = this.job;
     if (job === null || job.stuck) return undefined;
     return this.printers.find((printer) => printer.id === job.printerId && printer.active);
   }
 
-  #offers(): Printer[] {
+  #offers(): ReprintPrinter[] {
     const ids = new Set(this.job?.reprintPrinterIds ?? []);
     const others = this.printers
       .filter(
@@ -77,7 +78,7 @@ export class PrintJobReprintDialog extends LitElement {
     return original ? [original, ...others] : others;
   }
 
-  async #send(offers: Printer[]): Promise<void> {
+  async #send(offers: ReprintPrinter[]): Promise<void> {
     if (this.job === null || this.printerId === "" || this.sending) return;
     const opening = this.#opening;
     const printerId = this.printerId;
@@ -101,7 +102,7 @@ export class PrintJobReprintDialog extends LitElement {
     }
   }
 
-  #renderChoice(job: PrintJobRow, offers: Printer[]) {
+  #renderChoice(job: PrintJobRow, offers: ReprintPrinter[]) {
     if (offers.length === 0)
       return html`<p data-test="reprint-nowhere">
         ${
@@ -135,7 +136,13 @@ export class PrintJobReprintDialog extends LitElement {
         label=${t("printers.reprint_printer")}
         .options=${offers.map((printer) => ({ value: printer.id, label: printer.name }))}
         .value=${this.printerId}
-        .error=${this.printerErrorKey === null ? "" : codeMessage(this.printerErrorKey)}
+        .error=${
+          this.printerErrorKey === null
+            ? ""
+            : job.kind === "a4"
+              ? t("printers.reprint_destination_unavailable")
+              : codeMessage(this.printerErrorKey)
+        }
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
           this.printerId = event.detail.value;
