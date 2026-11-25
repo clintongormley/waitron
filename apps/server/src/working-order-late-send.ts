@@ -47,8 +47,7 @@ export type LateUnsentMode = { ask: LateSendConfirmation | undefined; periodOnly
 /**
  * Judge stored dishes about to fire as entry judges a new one, and mark the late ones before they
  * fire, so their tickets print the mark. A dish already marked was judged when it was entered or by
- * an earlier send. Its menu is the one it was stored from; it is judged by the department of the
- * order's zone now, then by the one it was stored in ({@link unplacedLateDishes}).
+ * an earlier send. Cutoffs use the stored department and the receiving zone's routes.
  */
 export async function lateUnsentDishes(
   tx: Transaction,

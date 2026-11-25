@@ -70,26 +70,25 @@ export async function lastOrderDishes<Key>(
     if (!sold.has(run.periodId)) sold.set(run.periodId, await resolver.productsSoldIn(run.menuIds));
     return sold.get(run.periodId)!;
   };
+  const unavailable = new Set<Key>();
   for (const run of started) {
-    if (run.end <= minute && run.offsets.length === 0) continue;
+    const pending = relevant.filter(
+      ({ key }) => !unavailable.has(key) && decisions.get(key)?.stopped !== false,
+    );
+    if (pending.length === 0) break;
     const own = await routeFor(run.periodId);
     const next = minute < run.end ? runs.find(({ start }) => start === run.end) : undefined;
     const alternative = await routeFor(minute >= run.end ? null : (next?.periodId ?? false));
     const soldNext = next === undefined ? undefined : await soldIn(next);
-    const soldHere = relevant.some(
-      ({ menuId, stationId, sourceOnly }) =>
-        stationId === undefined && sourceOnly !== true && !run.menuIds.includes(menuId),
+    const soldHere = pending.some(
+      ({ menuId, sourceOnly }) => sourceOnly !== true && !run.menuIds.includes(menuId),
     )
       ? await soldIn(run)
       : undefined;
-    for (const { key, menuId, productId, stationId, sourceOnly } of relevant) {
-      if (
-        !run.menuIds.includes(menuId) &&
-        (sourceOnly === true || stationId !== undefined || !soldHere?.has(productId))
-      )
+    for (const { key, menuId, productId, stationId, sourceOnly } of pending) {
+      if (!run.menuIds.includes(menuId) && (sourceOnly === true || !soldHere?.has(productId)))
         continue;
       const known = decisions.get(key);
-      if (known !== undefined && !known.stopped) continue;
       const original: MakerOutcome | undefined =
         stationId === undefined
           ? own.get(productId)
@@ -99,14 +98,17 @@ export async function lastOrderDishes<Key>(
                 stationId === null ? { kind: "no_preparation" } : { kind: "station", stationId },
             };
       const successor = stationId === undefined ? alternative.get(productId) : original;
-      if (original?.kind !== "made") continue;
+      if (original?.kind !== "made") {
+        if (minute < run.end) unavailable.add(key);
+        continue;
+      }
       const ownCutoff = cutoff(run, original.route);
       const otherCutoff = successor?.kind === "made" ? cutoff(run, successor.route) : -Infinity;
       if (minute < run.end && minute < ownCutoff) {
         decisions.set(key, { run, route: original.route, stopped: false });
       } else if (
         successor?.kind === "made" &&
-        (minute < otherCutoff || (stationId === undefined && soldNext?.has(productId) === true))
+        (minute < otherCutoff || soldNext?.has(productId) === true)
       ) {
         decisions.set(key, { run, route: successor.route, stopped: false });
       } else {

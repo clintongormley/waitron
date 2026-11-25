@@ -3,9 +3,16 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ticketItems, workingOrderLines, workingOrders, withTransaction } from "@waitron/db";
+import {
+  kitchenStations,
+  ticketItems,
+  workingOrderLines,
+  workingOrders,
+  withTransaction,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedActivityActor } from "@waitron/db/testing/seed.js";
 import {
   addProductToMenu,
   createMenu,
@@ -23,6 +30,7 @@ import {
   replaceMenuWeek,
   saveMenuPeriod,
   setRoutingCell,
+  setStationToday,
   updateDepartment,
   updateMenuPeriod,
 } from "@waitron/venue-service";
@@ -261,7 +269,6 @@ const revisionOf = async (id: string) =>
 const orderRows = (id: string) =>
   suite.db.select({ id: workingOrders.id }).from(workingOrders).where(eq(workingOrders.id, id));
 
-/** A table's bill holding `lines` sent to the kitchen, under `lateSend` when given. */
 const sendAtTable = (v: MealVenue, lines: Line[], lateSend?: LateSendConfirmation) =>
   withTransaction(suite.db, async (tx) => {
     await updateDepartment(tx, v.restaurant, { orderStart: "table" });
@@ -327,6 +334,39 @@ it.each([
     .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(workingOrderLines.workingOrderId, id));
   expect(sent).toEqual([{ stationId: v.stations[destination], price: 400 }]);
+});
+
+it("asks at Bar's cutoff for a Lunch dish it took over", async () => {
+  at("16:00");
+  const v = await venueWithLastOrders();
+  await expect(open(v, [{ menuItemId: v.toast.setLunch, quantity: "1" }])).rejects.toMatchObject({
+    code: "menu_period.ended",
+    params: { menuItemIds: [v.toast.setLunch] },
+  });
+});
+
+it("names the period that stopped last when only Lunch has offsets", async () => {
+  at("23:10");
+  const v = await venueWithLastOrders();
+  await expect(open(v, [{ menuItemId: v.beer, quantity: "1" }])).rejects.toMatchObject({
+    code: "menu_period.ended",
+    params: { menus: [{ menuId: v.menus.drinks, periodName: "Dinner" }] },
+  });
+});
+
+it("keeps an unroutable Dinner dish out of the Lunch refusal", async () => {
+  at("19:30");
+  const v = await venueWithLastOrders();
+  const { kitchen, bar } = v.stations;
+  await withTransaction(suite.db, async (tx) => {
+    await tx
+      .update(kitchenStations)
+      .set({ isDefault: false })
+      .where(eq(kitchenStations.id, kitchen));
+    await setStationToday(tx, bar, "closed", new Date(), await seedActivityActor(tx));
+  });
+  const send = sendAtTable(v, [{ menuItemId: v.toast.brunch, quantity: "1" }]);
+  await expect(send).rejects.toMatchObject({ code: "station.no_replacement" });
 });
 
 it.each(["19:30", "22:50"])(
@@ -824,24 +864,28 @@ describe("extras added later to a stored dish", () => {
       .sort((a, b) => Number(a.parentLineId !== null) - Number(b.parentLineId !== null))
       .map(({ latePeriodName, lateConfirmedBy }) => ({ latePeriodName, lateConfirmedBy }));
 
-  it.each(["bar", "kitchen"] as const)(
-    "judges an extra by the %s that took its dish",
-    async (station) => {
+  it.each([
+    ["bar", "14:45", true],
+    ["kitchen", "14:45", false],
+    ["kitchen", "19:30", true],
+  ] as const)(
+    "judges an extra by the %s that took its dish at %s",
+    async (station, time, allowed) => {
       at("14:44");
       const v = await venueWithLastOrders();
+      if (time === "19:30")
+        await withTransaction(suite.db, async (tx) => {
+          await addProductToMenu(tx, { menuId: v.menus.brunch, productId: v.saladId });
+          await publishWorkingMenu(tx, v.menus.brunch);
+        });
       const id = await sendAtTable(v, [
         { menuItemId: v.salad, quantity: "1", makeAt: v.stations[station] },
       ]);
-      at("14:45");
-      if (station === "kitchen")
-        await expect(addAvocado(v, id)).rejects.toMatchObject({ code: "menu_period.ended" });
-      else await addAvocado(v, id);
-      expect(await marksOf(id)).toEqual(
-        Array.from({ length: station === "bar" ? 2 : 1 }, () => ({
-          latePeriodName: null,
-          lateConfirmedBy: null,
-        })),
-      );
+      at(time);
+      if (allowed) await addAvocado(v, id);
+      else await expect(addAvocado(v, id)).rejects.toMatchObject({ code: "menu_period.ended" });
+      const unmarked = { latePeriodName: null, lateConfirmedBy: null };
+      expect(await marksOf(id)).toEqual(allowed ? [unmarked, unmarked] : [unmarked]);
     },
   );
 

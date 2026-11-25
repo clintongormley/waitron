@@ -63,11 +63,11 @@ async function mealtimes(tx: Transaction) {
         await readBusinessDayScheduleRevision(tx),
       );
     },
-    async decide(at: Date) {
+    async decide(at: Date, stationId?: string) {
       const service = await resolveDepartmentService(tx, departmentId, at);
-      const dishes = [{ key: "sirloin", menuId: venue.lunch, productId: venue.sirloin }];
+      const dish = { key: "sirloin", menuId: venue.lunch, productId: venue.sirloin, stationId };
       return (
-        await lastOrderDishes(service.lastOrders, venue.zoneId, dishes, () => routingAt(tx, at))
+        await lastOrderDishes(service.lastOrders, venue.zoneId, [dish], () => routingAt(tx, at))
       ).get("sirloin");
     },
   };
@@ -87,9 +87,14 @@ it("hands a dish to the contiguous period that offers it only in its set menu", 
       { periodId: v.dinner, startsAt: "15:00", endsAt: "18:00" },
     ]);
     for (const time of ["14:50", "15:00"]) {
-      expect(await v.decide(new Date(`2026-10-05T${time}:00+02:00`)), time).toMatchObject({
+      const at = new Date(`2026-10-05T${time}:00+02:00`);
+      expect(await v.decide(at), time).toMatchObject({
         stopped: false,
         route: { kind: "station", stationId: v.bar },
+      });
+      expect(await v.decide(at, v.kitchen), time).toMatchObject({
+        stopped: false,
+        route: { kind: "station", stationId: v.kitchen },
       });
     }
   }));
