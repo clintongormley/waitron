@@ -3092,6 +3092,21 @@ async function bootServer(
     },
     log,
   );
+  // Daily attendance can run during startup. A month close needs the clock watch's anchor.
+  let monthCloseClockUnconfirmed = () => true;
+  if (workforceEnabled) {
+    jobRunner.add(
+      attendanceJob({
+        db,
+        exporter: timeRecordExporter,
+        nodeId: tradingContext.nodeId,
+        clockUnconfirmed: () => monthCloseClockUnconfirmed(),
+        now,
+        isPrimary: () => holders.singletonRole.current === "primary",
+        maxSleepMs: timings.maxTickMs,
+      }),
+    );
+  }
   if (certificateDutiesEnabled(enabledFiscal, config)) {
     jobRunner.add(
       certificateReminderJob({
@@ -4010,19 +4025,8 @@ async function bootServer(
   });
   correction.addAnchor(clockWatch);
   jobRunner.add(clockWatchJob(clockWatch, CLOCK_WATCH_MS));
-  if (workforceEnabled) {
-    jobRunner.add(
-      attendanceJob({
-        db,
-        exporter: timeRecordExporter,
-        nodeId: tradingContext.nodeId,
-        clockUnconfirmed: () => startClockHolds() || clockWatch.hasUncheckedJump(),
-        now,
-        isPrimary: () => holders.singletonRole.current === "primary",
-        maxSleepMs: timings.maxTickMs,
-      }),
-    );
-  }
+  monthCloseClockUnconfirmed = () => startClockHolds() || clockWatch.hasUncheckedJump();
+  if (workforceEnabled) jobRunner.wake("attendance.end_of_day");
   const paymentsEnabled = enabledAtStart.some((module) => module.name === "payments");
   const translationContext = translationContextFor({ venueLocale, contentLanguageRules });
   const serverAlertSources: AlertSource[] = [
