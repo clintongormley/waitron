@@ -49,8 +49,8 @@ Turn on **Portable printer** to choose what it prints **When picked up**.
 Choose **Calibrate printer** if you need to measure the paper or test the drawer. In a receipt
 printer's row menu, **Print test page** prints a sample receipt with the venue's header but a
 made-up business name and tax number, in the venue's receipt language, marked as a test and not
-an invoice. An A4 printer's
-details have no calibration; **Print test page** checks one. To remove it, choose **Delete** in
+an invoice. For an A4 printer, use **Edit** to rename it or **Print test page** to check it.
+To remove it, choose **Delete** in
 its row menu. The confirmation lists the assignments removed and work ended. To use it again,
 choose **Add a printer**, then **Add** beside it and **Add** again. It keeps its saved
 name and settings. Assign its devices and device profiles again.

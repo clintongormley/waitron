@@ -54,8 +54,8 @@ qué imprime **Al recogerla**. Elige **Calibrar impresora** para medir el papel 
 En el menú de la fila de una impresora de recibos, **Imprimir página de prueba** imprime un recibo
 de muestra con la cabecera del local pero con un nombre de empresa y un NIF inventados, en el
 idioma del ticket del local, marcado como prueba y no como factura.
-Los detalles de una impresora A4 no tienen calibración;
-**Imprimir página de prueba** la comprueba. Para quitarla, elige **Eliminar** en su menú. La
+En una impresora A4, usa **Editar** para cambiarle el nombre o **Imprimir página de prueba** para
+comprobarla. Para quitarla, elige **Eliminar** en su menú. La
 confirmación indica las asignaciones que se eliminan y el trabajo que finaliza. Para volver a
 usarla, elige **Añadir impresora**, después **Añadir** junto a ella y otra vez **Añadir**.
 Conserva su nombre y ajustes guardados. Vuelve a asignar sus dispositivos y perfiles de dispositivo.

@@ -507,6 +507,35 @@ describe("the Edit printer settings form", () => {
       portable: false,
     });
   });
+
+  it("holds the settings and calibration link until Save answers", async () => {
+    const sent = pending();
+    const { el, api } = await openDetail(
+      stubApi({
+        listPrinters: vi.fn().mockResolvedValue([{ ...printer, portable: true }]),
+        updatePrinter: vi.fn(() => sent.answer),
+      }),
+    );
+    await typeInto(el, "[name=printer-detail-name]", "Kitchen 2");
+    await press(el, detailsEditTest("save"));
+    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", { name: "Kitchen 2" });
+    for (const name of ["paper-width", "resolution", "cash-drawer", "portable", "pickup-roles"]) {
+      expect(
+        q<HTMLElementTagNameMap["wt-combobox"] | HTMLElementTagNameMap["wt-switch"]>(
+          el,
+          `[name=printer-${name}]`,
+        )?.disabled,
+        name,
+      ).toBe(true);
+    }
+    const link = q(el, "[data-test=edit-printer-calibrate]")!;
+    expect(link.getAttribute("aria-disabled")).toBe("true");
+    const address = location.href;
+    await userEvent.click(page.elementLocator(link), { force: true });
+    expect(location.href).toBe(address);
+    sent.finish();
+    await expect.poll(() => detailsEditButton(el, "save")).toBeNull();
+  });
 });
 
 describe("the calibration wizard's Save, for a printer already set up", () => {

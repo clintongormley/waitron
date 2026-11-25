@@ -883,6 +883,8 @@ export class PrintersScreen extends LitElement {
     this.#restoredPrinterTarget = target;
     if (!printer && !page) return;
     if (editor === "edit" && step === null && (printer || this.canManage)) {
+      if (printer && this.#deleteDialog.target === id && !this.#deleteDialog.submitting)
+        this.#deleteDialog.close();
       this.#openDetailEdit(
         id!,
         printer ? this.#savedEditValues(printer) : { name: page!.name, host: "", port: "" },
@@ -1055,7 +1057,6 @@ export class PrintersScreen extends LitElement {
         nameRefusal: string | null;
       })
     | null = null;
-  readonly #detailEditFeedback = new FormFeedback(this);
   #detailEditScope?: DraftScope<DetailEditValues>;
   /** What the form opened with, or last saved. */
   #detailEditBaseline?: DetailEditValues;
@@ -3799,11 +3800,7 @@ export class PrintersScreen extends LitElement {
     const action = saveActionState(this.#detailEditScope);
     return html`<wt-form-actions
       slot="footer"
-      .error=${this.#detailEditFeedback.message(
-        { ...errors, request: draft.error ?? undefined },
-        new Set(Object.keys(errors).filter((field) => errors[field as keyof DetailEditErrors])),
-        t("form.fix_fields"),
-      )}
+      .error=${bottomMessage(draft.error, invalid ? t("form.fix_fields") : null)}
     >
       <wt-button
         slot="cancel"
