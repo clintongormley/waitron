@@ -11,6 +11,7 @@ import {
   productDeclarationValues,
   extraDeclarationValues,
   readOfferedModifiers,
+  readProductDeclarationValues,
 } from "@waitron/menu";
 import type { ServiceMode, KitchenNoteSnapshot } from "@waitron/module";
 import {
@@ -33,7 +34,6 @@ import { type OrderEditAuthority, readBillEditState } from "./bill-editing.js";
 import { outstandingOf } from "./bill-payment-money.js";
 import { readPaymentsByBill } from "./bill-payments.js";
 import { readFormerNumbers } from "./former-numbers.js";
-import { readProductDeclarations } from "./line-nutrition.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { type DiningChoice, readOrderDinings } from "./order-dining.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
@@ -322,7 +322,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         ),
       )
       .orderBy(workingOrderLines.lineNo);
-    const declarations = await readProductDeclarations(
+    const declarations = await readProductDeclarationValues(
       tx,
       storedLines.flatMap((line) =>
         line.sentAt !== null || line.productId === null ? [] : [line.productId],
