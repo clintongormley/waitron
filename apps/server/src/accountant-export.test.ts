@@ -1,6 +1,7 @@
 import { strFromU8, unzipSync } from "fflate";
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DatabaseSync } from "node:sqlite";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { recordReplacement, recordSale } from "@waitron/core";
@@ -749,6 +750,28 @@ describe("accountant period selection", () => {
     );
     expect(plan.find((step) => step.includes(" refunds "))).toMatch(
       /^SEARCH refunds USING INDEX refunds_completed_at_idx \(completed_at>\? AND completed_at<\?\)$/,
+    );
+    expect(plan.filter((step) => step.startsWith("SCAN"))).toEqual([]);
+  });
+
+  it("finds the period's voids through their date index rather than every void or sale", async () => {
+    const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+    let statements: string[];
+    try {
+      await list();
+      statements = prepare.mock.calls.map(([text]) => text);
+    } finally {
+      prepare.mockRestore();
+    }
+    const voids = statements.filter((text) => text.includes('from "sale_voids"'));
+    expect(voids).toHaveLength(1);
+    const plan = (
+      await suite.db.execute<{ detail: string }>(
+        sql.raw(`explain query plan ${voids[0]!.replaceAll("?", "''")}`),
+      )
+    ).rows.map((step) => step.detail);
+    expect(plan).toContain(
+      "SEARCH sale_voids USING INDEX sale_voids_voided_at_idx (voided_at>? AND voided_at<?)",
     );
     expect(plan.filter((step) => step.startsWith("SCAN"))).toEqual([]);
   });

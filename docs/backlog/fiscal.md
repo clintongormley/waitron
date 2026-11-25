@@ -190,11 +190,13 @@ No stored fiscal row is to be rewritten.
   sale's period in that period; a void made later leaves that period's file as it was and goes on
   the corrections workbook of the period it is made in, listed against the sale's period (pinned by
   "C: a later void leaves the ended quarter as it was" in `vat-return.test.ts` and "lists, for a
-  year, a void of the previous year's invoice" in `vat-corrections.test.ts`). The accountant's sheet
-  lists a voided invoice again as a minus row by the same day (watcher, 2026-11-25). That settles Q25
+  year, a void of the previous year's invoice" in `vat-corrections.test.ts`). That settles Q25
   (which VAT period a later annulment lands in) by owner decision D12 of 2026-11-16,
   which the owner's answer of 18 November keeps (owner, 2026-11-18, question 8 of the
-  [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details. No till screen or server route calls `recordVoid` yet.
+  [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details.
+  The accountant's sheet lists a voided invoice again as a minus row under the day of the void in the
+  sale's own UTC offset, the day these figures count it made (watcher, 2026-11-25). No till screen or
+  server route calls `recordVoid` yet.
   Test titles still say "tenant"
   (`top-sellers.test.ts:501`, `overdue-orders.test.ts:252`, `vat-summary.test.ts:233`,
   `vat-summary-period.test.ts:128`), "design §3" (`overdue-orders.test.ts:194`) and "spec §12"

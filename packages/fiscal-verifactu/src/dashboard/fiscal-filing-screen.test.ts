@@ -1083,7 +1083,7 @@ describe("putting a case right", () => {
       await vi.waitFor(() => expect(details).toHaveProperty("open", false));
       await screen.updateComplete;
       expect(text(screen, "[data-test=case-changed]")).toBe(
-        "This case was already put right, it changed, or its invoice was cancelled here; nothing more was sent.",
+        "This case was already put right, it changed, or its invoice was cancelled in Waitron; nothing more was sent.",
       );
     },
   );
