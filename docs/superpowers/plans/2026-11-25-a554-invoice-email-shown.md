@@ -1,0 +1,17 @@
+# A554. Show where an invoice was emailed
+
+Staff who can email a full invoice can check the recorded destination in **Find a bill** and in **Orders → View details** before sending another copy. The owner chose both screens on 24 November 2026 at 22:05, answering question 9, “Yes, in Find a bill and Orders (Recommended)”. The option limits visibility to people who may send it again.
+
+## Read the recorded address
+
+- Reuse the delivery rows loaded by `apps/server/src/invoice-delivery-status.ts`. Add an optional `invoiceRecipientEmail` to `InvoiceDeliveryAttempt`, and fill it from `invoice_deliveries.recipient` only on `sent` email attempts, when a caller explicitly requests it. Keep the default status and action responses address-free. Register the key in `log-personal-data.ts` with `maskEmail`.
+- Set that option in `orders-api.ts` and `orders-list.ts` from the scoped dashboard session's `report.export` permission. In `till-api.ts` set it for the full-invoice status read when the signed-in till's profile permits `print-receipt` and the request proves the same device. Reuse `profileAllows` and `assertRequestDevice` or the device proof it uses in `till-session.ts`. A failed proof withholds the address while the existing status read keeps its own checks. Apply the same rule for both till claim-expiry paths. Visibility depends on permission, so a busy or unavailable mail service does not hide past sends. Orderless transactions cannot be emailed again from the till and their status stays address-free.
+- Start with failing route tests in `orders-invoice-deliveries.test.ts` and `till-api.deliveries.test.ts`. An authorized read shows the sent address after a newer non-email or unsuccessful attempt. A viewer without export permission, a till without the print capability, or a request without matching device proof receives the existing status with no address in either `current` or `history`. Keep existing zone, order scope and send-response assertions. `logger.test.ts` checks that the new key masks an email.
+
+## Show the address where staff need it
+
+- Mirror the optional field in both `api/client.ts` files. In `apps/dashboard/src/widgets/order-detail-dialog.ts`, place the address on its sent email history line for `mayExport`. In `apps/till/src/screens/till-ticket-view.ts`, show the most recent sent email address as a separate labelled line in the historical full invoice's delivery section for `canPrintReceipt`. Use the existing Lit text rendering and English and Spanish `i18n/strings.ts`. Check that a long address stays readable at phone width.
+- Start with failing browser assertions in `order-detail-dialog.delivery.test.ts` and `till-ticket-view.test.ts`. The till's existing “never shows the address” case becomes a positive historical-view check and a restricted-view check. Pin the dashboard address to its own sent attempt. Run the named files and the server route and logger files after the changes, then check the two details in Chromium at phone width in both languages and themes.
+- Update the English and Spanish `table-service.md` and `data-protection.md` guides, including the wrong-address response and who may see the recorded address. Remove the A554 entries from `docs/backlog.md` and `docs/backlog/fiscal.md`.
+
+The send forms still open empty. Storage, email sending and invoice records use the existing paths. Estimate about 85 production lines, 115 test lines and 20 guide/backlog lines.
