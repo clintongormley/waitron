@@ -3107,7 +3107,7 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
 - Not gated: every route outside those three mounts, among them every dashboard route (the Box
   status page's free-space deletion, `POST /api/box/free-space`, is one, and is how a manager frees
   the disk), the print
-  agent's routes (`print-api.ts`), the provider webhook and node enrolment; and the background
+  agent's routes (`print-agent-routes.ts`), the provider webhook and node enrolment; and the background
   duties. Their writes that do not fit fail by themselves and note the stop.
 
 **The clock refusal beside it.** A sale under a clock reading before 28-10-2024 is refused
