@@ -597,9 +597,10 @@ describe("A1515 a bill left owing less than it was paid", () => {
   it("a card give-back completed by a recovery pass a day later files the day the payments were taken", async () => {
     const { billId, paymentId } = await overpaidBill("card");
     await inTx(venue, async (tx) => {
+      // Close of day would give the same calendar date if recovery ignored the payment.
       await tx
         .update(workingOrders)
-        .set({ trustedOpenedAt: "2026-11-24T23:00:00.000Z" })
+        .set({ trustedOpenedAt: null })
         .where(eq(workingOrders.id, billId));
       await liftPaymentGuard(tx, () =>
         tx
