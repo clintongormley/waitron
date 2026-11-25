@@ -33,6 +33,15 @@ describe("certificate trust instructions", () => {
     expect(host.querySelector("a")?.href).toBe("http://box.test/setup/trust?app=till");
   });
 
+  it("says what to do in plain words", () => {
+    render(trustInstructions({ hostname: "box.test", languages: ["en"] }), host);
+    expect(host.querySelector("h1")?.textContent).toBe("Connect this device securely");
+    expect(host.querySelector("p")?.textContent).toBe(
+      "Install the box's certificate, then open the till again.",
+    );
+    expect(host.querySelector("a")?.textContent).toBe("Show me how");
+  });
+
   it("uses browser preferences and the current hostname by default", () => {
     const languages = vi.spyOn(navigator, "languages", "get").mockReturnValue(["es-MX", "en-US"]);
     try {
