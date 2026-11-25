@@ -272,6 +272,12 @@ La página de la caja **Conecta este dispositivo de forma segura** usa el idioma
 preferido de tu navegador; si no encuentra ninguno, usa el inglés. Elige **Ver cómo hacerlo** para
 instalar el certificado del servidor en este dispositivo y vuelve a abrir la caja.
 
+Si ya has abierto la caja y cambia el certificado del servidor, puede aparecer **No se puede
+conectar con el servidor** en lugar del aviso del navegador o de la página del certificado de la
+caja. En la red WiFi del local, elige **Ver cómo hacerlo** para abrir los pasos en otra pestaña.
+El enlace necesita la página local del certificado, que no está disponible en un servidor de
+reserva, si el acceso HTTP está desactivado o si el local usa su propio certificado TLS.
+
 En un dispositivo que nunca ha confiado en el servidor, el navegador puede avisar de la conexión
 antes de que la caja pueda abrirse. Abre en su lugar `http://` seguido de la dirección IP del
 servidor y `/setup/trust`, por ejemplo `http://192.168.1.20/setup/trust`, para llegar a la página

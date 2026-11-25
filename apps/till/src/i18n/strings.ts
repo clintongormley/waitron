@@ -36,6 +36,9 @@ export const en = {
   "recovery.charged": "Card charged. Do not charge again.",
   "recovery.manual_card":
     "If you already charged a card on a separate terminal, refund it there before trying this sale again.",
+  "offline.title": "Can't reach the box.",
+  "offline.wifi": "Check that this phone is on the venue's WiFi.",
+  "offline.already_on_wifi": "Already on the venue's WiFi?",
   "trust.title": "Connect this device securely",
   "trust.explanation": "Install the box's certificate, then open the till again.",
   "trust.open_setup": "Show me how",
@@ -2441,6 +2444,9 @@ export const es: Record<StringKey, string> = {
   "recovery.charged": "La tarjeta ya se ha cobrado. No vuelvas a cobrar.",
   "recovery.manual_card":
     "Si ya has cobrado con tarjeta en un datáfono independiente, devuelve el importe allí antes de intentar registrar esta venta otra vez.",
+  "offline.title": "No se puede conectar con el servidor.",
+  "offline.wifi": "Comprueba que este teléfono esté conectado a la red WiFi del local.",
+  "offline.already_on_wifi": "¿Ya estás en la red WiFi del local?",
   "trust.title": "Conecta este dispositivo de forma segura",
   "trust.explanation": "Instala el certificado del servidor y vuelve a abrir la caja.",
   "trust.open_setup": "Ver cómo hacerlo",

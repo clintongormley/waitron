@@ -296,6 +296,7 @@ it.each(GUIDE_LANGUAGES)("serves the till notices guide in %s with its sections"
   const markdown = readGuide(root, lang, "till-notices");
   expect(markdown).toBeDefined();
   expect(renderGuide(markdown!, GUIDE_PAGES).sections.map(({ id }) => id)).toEqual([
+    "cannot-open",
     "notice-line",
     "notices",
     "invoice-conflict",
