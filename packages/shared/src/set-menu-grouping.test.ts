@@ -1,9 +1,10 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import * as shared from "./index.js";
 import { boundTable } from "./set-menu-fit.fixtures.js";
 import type { SetMenuOffer } from "./set-menu-fit.js";
 import type { SetMenuGroupingDish, SetMenuGroupingInput } from "./set-menu-grouping.js";
+import * as placement from "./set-menu-placement.js";
 
 interface CpuUsage {
   readonly user: number;
@@ -589,12 +590,21 @@ it("bounds the work on forty diners with two percentage discounts", () => {
       { id: "second", offerId: "offer-1", kind: "percent", basisPoints: 1000 },
     ] as const,
   };
-  const start = process.cpuUsage();
-  const first = group(input);
-  const elapsed = process.cpuUsage(start);
-  // The compact bill discounts 1005¢ by 101¢ and 1015¢ by 102¢.
-  expect(first.totalCents).toBe(underMutation ? 1817 : 83327);
-  if (!underMutation) expect(elapsed.user + elapsed.system).toBeLessThan(500_000);
+  const solve = underMutation ? undefined : vi.spyOn(placement, "solvePlacement");
+  try {
+    const start = process.cpuUsage();
+    const first = group(input);
+    const elapsed = process.cpuUsage(start);
+    // The compact bill discounts 1005¢ by 101¢ and 1015¢ by 102¢.
+    expect(first.totalCents).toBe(underMutation ? 1817 : 83327);
+    if (solve === undefined) return;
+    expect(solve.mock.calls.length).toBeLessThanOrEqual(20);
+    // Coverage instrumentation changes CPU time without changing the number of solves.
+    const coverage = Reflect.get(globalThis, "__vitest_worker__")?.config?.coverage?.enabled;
+    if (coverage !== true) expect(elapsed.user + elapsed.system).toBeLessThan(500_000);
+  } finally {
+    solve?.mockRestore();
+  }
 }, 15_000);
 
 it("finds the zero-cent price on the first call when several discounts cover all supplements", () => {
