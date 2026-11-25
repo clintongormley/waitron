@@ -1,10 +1,11 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type {
   DeviceEquipment,
   EquipmentItem,
   InvoiceDeliveryAttempt,
   InvoiceDeliveryStatus,
+  OriginalReceiptPrint,
   TillApi,
   TillProduct,
 } from "./api/client.js";
@@ -27,11 +28,12 @@ import {
 } from "../test/bill-pay-app.js";
 import { equipmentItem, roleOf } from "../test/pay-equipment-fixtures.js";
 import { liveReadFixture } from "../test/live-connection.js";
+import { deferred as pending } from "../test/clock-app.js";
 
 const office = equipmentItem("office", "Office", { kind: "a4" });
 const bar = equipmentItem("bar", "Bar", { kind: "receipt" });
-const equipment = (item: EquipmentItem): DeviceEquipment => ({
-  roles: [roleOf("invoice", item, [office, bar])],
+const equipment = (item: EquipmentItem | null, choices = [office, bar]): DeviceEquipment => ({
+  roles: [roleOf("invoice", item, choices)],
 });
 const delivery = (item: EquipmentItem): InvoiceDeliveryStatus => ({
   current: null,
@@ -68,13 +70,6 @@ const ticket = (el: TillApp) =>
 const part = (el: TillApp, name: string) =>
   ticket(el).shadowRoot!.querySelector<HTMLElement>(`[data-test=${name}]`);
 const initialUrl = location.href;
-function pending<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
 
 beforeEach(() => {
   resetBillPayDrafts();
@@ -176,6 +171,7 @@ const endedA4: InvoiceDeliveryAttempt = {
   printerName: "Office",
   lateSuccess: false,
 };
+const printedA4: InvoiceDeliveryAttempt = { ...endedA4, status: "sent", failureCode: null };
 
 function uncertainA4(selected: EquipmentItem | null): InvoiceDeliveryStatus {
   const status = delivery(selected ?? office);
@@ -197,7 +193,7 @@ it.each([null, bar])("uses the invoice's A4 printer with equipment %j", async (s
   const before = uncertainA4(selected);
   const reads = vi.fn().mockResolvedValue(before);
   const { el, api, id } = await sold({
-    getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [roleOf("invoice", selected, [bar])] }),
+    getDeviceEquipment: vi.fn().mockResolvedValue(equipment(selected, [bar])),
     getInvoiceDeliveries: reads,
     requestPrintDelivery: vi.fn(async () => {
       const current = { ...endedA4, id: "retry", status: "queued", failureCode: null };
@@ -235,51 +231,62 @@ it.each([null, bar])("uses the invoice's A4 printer with equipment %j", async (s
 
 function fastDeliveryRereads() {
   const setTimeout = globalThis.setTimeout;
-  return vi
+  const timers = vi
     .spyOn(globalThis, "setTimeout")
     .mockImplementation((run, delay, ...args) =>
       setTimeout(run, delay === 5_000 ? 100 : delay, ...args),
     );
+  onTestFinished(() => void timers.mockRestore());
 }
 
-it("automatically recovers a failed first read and follows A4 and email delivery", async () => {
-  const a4 = uncertainA4(null);
-  const printed = { ...endedA4, status: "sent" as const, failureCode: null };
-  const email: InvoiceDeliveryAttempt = {
-    ...endedA4,
-    id: "email-copy",
-    designation: "duplicate",
-    medium: "email",
-    printerName: undefined,
-    status: "sending",
-    failureCode: null,
-  };
-  const timers = fastDeliveryRereads();
-  try {
+it.each([null, bar])(
+  "recovers a failed read and follows A4 and email with equipment %j",
+  async (selected) => {
+    const a4 = uncertainA4(selected);
+    const email: InvoiceDeliveryAttempt = {
+      ...endedA4,
+      id: "email-copy",
+      designation: "duplicate",
+      medium: "email",
+      printerName: undefined,
+      status: "sending",
+      failureCode: null,
+    };
+    fastDeliveryRereads();
     const getInvoiceDeliveries = vi
       .fn()
       .mockRejectedValueOnce(new Error("read failed"))
       .mockResolvedValue(a4);
     const { el, deliveryChanged } = await sold({
       getInvoiceDeliveries,
-      getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [roleOf("invoice", null, [bar])] }),
+      getDeviceEquipment: vi.fn().mockResolvedValue(equipment(selected, [bar])),
     });
     await vi.waitFor(() =>
       expect(part(el, "delivery-status")?.textContent ?? "").toContain("Office stopped answering"),
     );
     expect(part(el, "delivery-read-failed")).toBeNull();
+    const ordinary = a4.actions.print;
     const completed = {
       ...a4,
-      current: printed,
-      history: [printed],
+      current: printedA4,
+      history: [printedA4],
       originalCompleted: true,
-      actions: { ...a4.actions, retryOriginal: null, retryA4: undefined },
+      actions: {
+        ...a4.actions,
+        retryOriginal: null,
+        retryA4: undefined,
+        print: ordinary === null ? null : { ...ordinary, designation: "duplicate" },
+      },
     };
     getInvoiceDeliveries.mockResolvedValue(completed);
     await vi.waitFor(() => expect(part(el, "delivery-status")?.textContent).toBe("Printed on A4."));
-    expect(part(el, "invoice-printer-toggle")!.textContent).toContain("Office · A4");
-    expect(part(el, "print-invoice")).toBeNull();
-    const sending = { ...completed, current: email, history: [email, printed] };
+    expect(part(el, "invoice-printer-toggle")?.textContent).toContain(
+      selected === null ? "Office · A4" : "Bar · receipt paper",
+    );
+    expect(part(el, "print-invoice")?.textContent?.trim()).toBe(
+      selected === null ? undefined : "Print a copy on Bar",
+    );
+    const sending = { ...completed, current: email, history: [email, printedA4] };
     getInvoiceDeliveries.mockResolvedValue(sending);
     deliveryChanged();
     await vi.waitFor(() =>
@@ -288,16 +295,13 @@ it("automatically recovers a failed first read and follows A4 and email delivery
     getInvoiceDeliveries.mockResolvedValue({
       ...sending,
       current: { ...email, status: "sent" },
-      originalCompleted: true,
     });
     await vi.waitFor(() =>
       expect(part(el, "delivery-status")?.textContent ?? "").toContain("Sent by email"),
     );
     expect(part(el, "refresh-receipt")).toBeNull();
-  } finally {
-    timers.mockRestore();
-  }
-});
+  },
+);
 
 it("follows a later delivery after failure without a live connection", async () => {
   const state = uncertainA4(null);
@@ -305,60 +309,47 @@ it("follows a later delivery after failure without a live connection", async () 
   const getInvoiceDeliveries = vi
     .fn()
     .mockResolvedValue({ ...state, current: first, history: [first] });
-  const timers = fastDeliveryRereads();
-  try {
-    const { el } = await sold(
-      {
-        getInvoiceDeliveries,
-        getDeviceEquipment: vi.fn().mockResolvedValue({ roles: [roleOf("invoice", null, [bar])] }),
-      },
-      false,
-    );
-    expect(part(el, "delivery-status")?.textContent).toBe("Not delivered.");
-    getInvoiceDeliveries.mockResolvedValue({
-      ...state,
-      current: { ...endedA4, id: "new-attempt" },
-    });
-    await vi.waitFor(() =>
-      expect(part(el, "delivery-status")?.textContent).toContain("Office stopped answering"),
-    );
-  } finally {
-    timers.mockRestore();
-  }
+  fastDeliveryRereads();
+  const { el } = await sold(
+    {
+      getInvoiceDeliveries,
+      getDeviceEquipment: vi.fn().mockResolvedValue(equipment(null, [bar])),
+    },
+    false,
+  );
+  expect(part(el, "delivery-status")?.textContent).toBe("Not delivered.");
+  getInvoiceDeliveries.mockResolvedValue({
+    ...state,
+    current: { ...endedA4, id: "new-attempt" },
+  });
+  await vi.waitFor(() =>
+    expect(part(el, "delivery-status")?.textContent).toContain("Office stopped answering"),
+  );
 });
 
 it("retries a failed original print read beside a completed email", async () => {
-  const original = {
-    ...endedA4,
-    id: "emailed",
-    medium: "email",
-    status: "sent",
-    failureCode: null,
-  };
+  const original = { ...printedA4, id: "emailed", medium: "email", printerName: undefined };
+  const firstRead = pending<OriginalReceiptPrint>();
   const getReceiptPrintStatus = vi
     .fn()
-    .mockRejectedValueOnce(new Error("read failed"))
+    .mockReturnValueOnce(firstRead.promise)
     .mockResolvedValue({ status: "not_queued" });
-  const timers = fastDeliveryRereads();
-  try {
-    const { el } = await sold({
-      getReceiptPrintStatus,
-      getInvoiceDeliveries: vi
-        .fn()
-        .mockResolvedValue({
-          ...delivery(office),
-          current: original,
-          history: [original],
-          originalCompleted: true,
-        }),
-    });
-    await vi.waitFor(() =>
-      expect(part(el, "original-delivery")?.textContent).toContain("Full invoice delivered"),
-    );
-    expect(getReceiptPrintStatus).toHaveBeenCalledTimes(2);
-  } finally {
-    timers.mockRestore();
-  }
+  fastDeliveryRereads();
+  const { el } = await sold({
+    getReceiptPrintStatus,
+    getInvoiceDeliveries: vi.fn().mockResolvedValue({
+      ...delivery(office),
+      current: original,
+      history: [original],
+      originalCompleted: true,
+    }),
+  });
+  expect(part(el, "delivery-status")?.textContent).toBe("Sent by email.");
+  firstRead.reject(new Error("read failed"));
+  await vi.waitFor(() =>
+    expect(part(el, "original-delivery")?.textContent).toContain("Full invoice delivered"),
+  );
+  expect(getReceiptPrintStatus).toHaveBeenCalledTimes(2);
 });
 
 it("saves a printer selection, waits for its fresh offer, and prints once to that printer", async () => {
@@ -406,13 +397,12 @@ it("saves a printer selection, waits for its fresh offer, and prints once to tha
 
 it("returns to the invoice's printer when the till choice resolves to None", async () => {
   let selected: EquipmentItem | null = office;
-  const forDevice = () => ({ roles: [roleOf("invoice", selected, [office, bar])] });
   const { el } = await sold({
-    getDeviceEquipment: vi.fn(async () => forDevice()),
+    getDeviceEquipment: vi.fn(async () => equipment(selected)),
     getInvoiceDeliveries: vi.fn(async () => uncertainA4(selected)),
     setDeviceEquipment: vi.fn(async (change) => {
       selected = change.selection === "default" ? null : bar;
-      return forDevice();
+      return equipment(selected);
     }),
   });
   await choose(el, bar.id);

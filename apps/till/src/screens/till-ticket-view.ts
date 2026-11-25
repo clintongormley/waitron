@@ -615,7 +615,7 @@ export class TillTicketView extends LitElement {
       value: item.id,
       label: `${item.name} · ${item.kind === "a4" ? "A4" : t("invoice.receipt_paper")}`,
     });
-    const attempt = this.deliveries?.current;
+    const attempt = this.deliveries?.actions.print ? undefined : this.deliveries?.current;
     const usedA4 =
       this.prefersInvoiceDeliveryPrinter &&
       attempt?.medium === "a4" &&
