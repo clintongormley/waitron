@@ -1,0 +1,27 @@
+# Split five Server route files by job
+
+Find routes by job in files of at most 1,000 lines. Lane H's `SPLIT-ROUTE-FILES` records the owner's 24 November request. One API per PR. Keep each mount, signatures and handler bodies. Redirect imports to moved definitions. Scope is these five APIs, with `order-drafts.ts` and `cloud-client.ts` considered afterwards.
+
+## Five PRs in order
+
+In `apps/server/src/` at `94e450bec8`, groups run from their start line to the next group or retained statement. Add the API prefix and `-routes.ts` to each destination. Recheck anchors on the slice's base.
+
+| API | Destinations and boundaries | Shared state and order |
+| --- | --- | --- |
+| Print, 2,181 lines | `agent` 815, `agent-management` 1075, `discovery` 1215, `printers` 1384, `jobs` 1752, `assignments` 2021. | Keep discovery start/renew, its clock and the page-printer mounts in the entry point. Promote `DiscoveredEntry` in a prep commit, then move it with `IppQueue` to `print-discovery-types.ts`. Pass the existing map and its readers. Keep the practice-only block immediately before jobs. |
+| Management, 1,985 lines | `google` 738, `account` 829, `membership` 1008, `staff` 1054, `device-profiles` 1340, `floor` 1488, `stations` 1597, `courses` 1792, `passkey` 1904. | Keep department receipts first and the access-role mount after membership. Pass the existing throttle objects and recovery set. `settle()` still drains that set. |
+| Menu, 1,858 lines | `list`, `sections`, `home` and `set-menu` take their existing whole mounts at 555, 617, 758 and 845. Lift `languages` 1072, `collection` 1143, `details` 1322, `publishing` 1354, `item-prices` 1494, `categories` 1572 and two `products` mounts at 1640 and 1681 in one file. | Keep settings, translations and default-menu registrations in order. Keep GET `/menus/:id/read` and POST `/products/menus` with `sequence`. Pass the existing gated callback, plus `screenRouting` and `applyRouting` to the second products mount. |
+| Payments, 2,122 lines | `reader-adoption` 568, `backup-audit` 741, `provider-settings` 879, `readers` 1054, `reader-assignments` 1215, `resolution` 1337, `abandoned-refunds` 1879, `held` 1899 and `refunds` 1952. | Keep partial-refund helpers, `fiscal` and bill-payment resolution together. Pass the existing PIN throttle, reader holds, clock and issuance checks. Keep `refundDeps` with the refund handlers. |
+| Setup, 1,866 lines | `setup-join-routes.ts` 1235–1324 and `setup-cloud-recovery-session-routes.ts` 1428–1439 come out before the operation group. `setup-operation-routes.ts` takes the group from the busy flags at 906 through configuration, including the email and recovery-preparation mounts and calls to the two extracted mounts. | Keep one set of setup flags and return `setupBusy` to the entry point for Cloud sign-in and first-setup middleware. The join mount owns `joinHolder` and returns `holderOf` and `refuseJoinElsewhere` for adopt/reset. Preserve the request hold map, restart helper, fallbacks and registration order. |
+
+Print goes first while menu changes are active. Recheck overlaps per PR. Share dependencies and error boundaries in `<api>-api-deps.ts` and `<api>-api-errors.ts`. Put shared print field and wire parsers in `print-request-fields.ts` and `print-agent-reports.ts`, shared Management, Menu and Payments fields in `management-request-fields.ts`, `menu-request-fields.ts` and `payments-request-fields.ts`, and shared Setup fields and parsers in `setup-request-fields.ts` and `setup-provision-input.ts`. Keep set-menu helpers with their mount. The watcher cleared this plan on 25 November at 21:52 after Claude’s review and reread. Move both Setup groups out and keep the flag-sharing operations together under 1,000 lines.
+
+Per PR, expect 1,350–1,750 source lines moved, 120–300 wiring and 80–180 map lines. Across payments and setup, allow 80–150 tool and 40–80 test lines. Existing tests stay intact, with their shared fixtures and English-guard exceptions.
+
+## Verification and replay
+
+1. Use `node scripts/move-ts-declarations.mjs scripts/<api>-api-split.json`. In `scripts/move-ts-declarations.test.mjs`, test named local anchors before adding them in Payments and returned bindings before adding them in Setup. In Setup, lift join and the Cloud recovery session group before the outer operation group. Replay Print's prep commit before its map.
+2. Compare ordered `root.routes` entries, including duplicates, wildcards, practice-print and optional-setup cases. Swap one registration to prove the check. Compare body bytes after formatting. Check mount arguments for reassigned locals and use before initialization. Check new local imports, including type imports, for cycles. Keep these probes outside the tree and put their results in the PR. Commit the map and any mover changes.
+3. Typecheck Server and run the existing suites that import the affected mount.
+4. Drop the old cap in `scripts/product-file-size-limits.json` and run its guard. Retarget and run any guard whose path list changed. CI runs the remaining guards and selected package tests. The fiscal golden tests and all existing assertions stay unedited. Follow `finish-branch` review, push and CI for each PR.
+5. Name overlapping branches in the PR and give their lanes the mover command. The trial on #4352 at `0093d9a50f` preserved its four-line difference when starting one route early. Repeat with the exact Payments boundary if #4352 is still open. [Replay recipe](2026-11-24-working-order-file-split.md#carry-an-open-branch-across-the-split).
