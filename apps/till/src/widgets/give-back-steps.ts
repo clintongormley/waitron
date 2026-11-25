@@ -1,7 +1,7 @@
 import { html, nothing, type TemplateResult } from "lit";
 import { compareDecimal, decimal, formatMoney, sumDecimals } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, giveBackReasonMessage } from "../i18n/codes.js";
 import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
 import type {
   GiveBackAsk,
@@ -10,6 +10,7 @@ import type {
   GiveBackRight,
   GiveBackSubmissionIds,
   GiveBackView,
+  GiveBackWaitReason,
   GiveBackWay,
 } from "../api/give-back-types.js";
 import type { TenderRefundView } from "../api/tender-refund-types.js";
@@ -54,6 +55,9 @@ export async function readApprovers(
     limit.done();
   }
 }
+/** Why a choice, a dish or a payment must wait. */
+export const waitReasonText = (reason: GiveBackWaitReason): string =>
+  recoveryText(reason) ?? giveBackReasonMessage(reason.code, currentLocale(), reason.params);
 /** Runs `work`, keeping the till from reloading for a box update until it ends, also when the
  * device locks meanwhile and the window goes. */
 export function holdingReload<T>(host: HTMLElement, work: () => Promise<T>): Promise<T> {
@@ -98,8 +102,8 @@ export type Step =
       refusal: { code: string; params: Record<string, unknown> } | null;
       /** The press's ids, so Send again takes only that press's answer; null when unread. */
       ids: GiveBackSubmissionIds | null;
-      /** Send again found the press still waiting for its answer. */
-      busy?: boolean;
+      /** Why Send again sent nothing or was refused, in place of `refusal`'s words. */
+      said?: string;
     }
   | { kind: "done"; outcome: GiveBackOutcome; way: string; notice: string | null };
 
@@ -241,12 +245,12 @@ export function lostStep(
   sending: boolean,
   on: { close: () => void; resend: () => void },
 ) {
-  const said = step.busy
-    ? t("give_back.busy")
-    : step.refusal === null
+  const said =
+    step.said ??
+    (step.refusal === null
       ? t("give_back.lost")
       : (recoveryText(step.refusal) ??
-        codeMessage(step.refusal.code, currentLocale(), step.refusal.params));
+        codeMessage(step.refusal.code, currentLocale(), step.refusal.params)));
   return html`<p data-lost role="status">${said}</p>
     <wt-form-actions
       >${recoveryLinkOf(step.refusal)}<wt-button
@@ -411,6 +415,25 @@ export const lostAfter = (
   saved
     ? lostFor(saved)
     : { kind: "lost", way: sending.way, needs: sending.needs, refusal: null, ids };
+
+/** A Send again refused where neither the form nor the choice is drawn to say so. While the press
+ * may be written (`saved`, or this device's own refusal, which forgets nothing) it stays the only
+ * thing to send, under its ids; otherwise nothing went back under it, and it ends. */
+export function resendRefused(
+  step: Extract<Step, { kind: "lost" }>,
+  refusal: ReturnType<typeof refusalOf>,
+  saved: GiveBackSent | null | undefined,
+): Step {
+  const { code } = refusal;
+  if (saved || code === "approvers" || code === "storage")
+    return { ...lostAfter(step, saved, step.ids), said: checkRefusalText(refusal) };
+  return {
+    kind: "done",
+    way: step.way,
+    notice: code === "sif.allocation_invalid" ? t("give_back.nothing_given") : null,
+    outcome: { parts: [], refusal: { code, params: { ...refusal } }, underWay: null, rest: null },
+  };
+}
 
 /** A send's refusal: this device's own when its saved attempt stopped it (storage that cannot be
  * used, or a send already out on the receipt), otherwise the server's. */

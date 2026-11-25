@@ -9597,7 +9597,7 @@ export class TillApp extends LitElement {
       }}
       @give-back-held=${(event: CustomEvent<{ held: boolean }>) => {
         event.stopPropagation();
-        this.givingBackHeld = event.detail.held ? open : null;
+        if (this.givingBack === open) this.givingBackHeld = event.detail.held ? open : null;
       }}
       @give-back-signed-out=${(event: Event) => {
         event.stopPropagation();

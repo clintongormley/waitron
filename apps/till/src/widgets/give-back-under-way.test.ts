@@ -715,6 +715,19 @@ describe("a card", () => {
     expect(shown(el, "card")).toBe(false);
   });
 
+  it("sends nothing when the view is taken away while the card's payment is read again", async () => {
+    const { el, api } = await mount();
+    const read = deferred<RefundableTender[]>();
+    api.getRefundableTenders.mockImplementationOnce(() => read.promise);
+    press(el, "card");
+    await vi.waitFor(() => expect(api.getRefundableTenders).toHaveBeenCalledTimes(2));
+    el.remove();
+    read.resolve(TENDERS);
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    expect(api.refundTransaction).not.toHaveBeenCalled();
+    expect(el.refunds.read("sale-1")).toBeNull();
+  });
+
   it("sends nothing when the card's payment cannot be read again", async () => {
     const api = fakeApi();
     const { el } = await mount(OPEN, api);
@@ -1406,6 +1419,19 @@ describe("Check again while a card refund waits for the card company", () => {
     await vi.waitFor(() => expect(status(el)).toBe(t("give_back.pending_unanswered")));
     expect(busy).toHaveBeenLastCalledWith({ busy: false, held: true });
     expect(api.retryTenderRefund).toHaveBeenCalledOnce();
+  });
+
+  it("asks nothing when the view is taken away while what is back is read", async () => {
+    const api = waitingApi();
+    const { el } = await mount(WAITING, api);
+    const read = deferred<InvoiceCorrectionView>();
+    api.getInvoiceCorrection.mockImplementationOnce(() => read.promise);
+    press(el, "check");
+    await vi.waitFor(() => expect(api.getInvoiceCorrection).toHaveBeenCalledOnce());
+    el.remove();
+    read.resolve(WAITING);
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    expect(api.retryTenderRefund).not.toHaveBeenCalled();
   });
 
   it("asks nothing for a card this device's profile does not take, and says it still waits", async () => {

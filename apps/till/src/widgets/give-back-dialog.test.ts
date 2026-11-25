@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { deferred } from "../../test/clock-app.js";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
@@ -16,6 +16,7 @@ import type {
 import { GiveBackSession } from "../state/give-back.js";
 import { TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import {
+  APPROVERS,
   CARD,
   CASH,
   SCOPE,
@@ -1294,6 +1295,14 @@ describe("sending", () => {
     await el.updateComplete;
   }
   const outcomeText = (el: TillGiveBackDialog) => text(root(el).querySelector("[data-outcome]"));
+  /** Whether the window last said it holds back the full-disk screen. */
+  function holding() {
+    const seen = vi.fn<(held: boolean) => void>();
+    const listen = (event: Event) => seen((event as CustomEvent<{ held: boolean }>).detail.held);
+    document.addEventListener("give-back-held", listen);
+    onTestFinished(() => document.removeEventListener("give-back-held", listen));
+    return () => seen.mock.lastCall?.[0] ?? false;
+  }
   const sent = (api: Api, index = 0) => api.giveBack.mock.calls[index]![1];
   /** As `ready`, with Give back pressed. */
   async function press(api: Api, wayId = "cash", amount = "5") {
@@ -2250,6 +2259,160 @@ describe("sending", () => {
     await vi.waitFor(() => expect(choice(reopened, "dishes")).not.toBeNull());
     expect(bottom(reopened)).toBe(codeMessage("clock.unconfirmed", "en"));
     expect(new GiveBackSession(SCOPE, api).read("sale-1")).toBeNull();
+  });
+
+  describe("Send again refused where neither the form nor the choice is drawn", () => {
+    const UNDER: GiveBackView = { ...VIEW, underWay: UNDER_WAY };
+    const diskFull = { code: "storage.disk_full", status: 507 };
+    const lostText = (el: TillGiveBackDialog) => text(root(el).querySelector("[data-lost]"));
+    const again = (el: TillGiveBackDialog) =>
+      root(el).querySelector<HTMLElement>("[data-send-again]");
+    /** Opens on a press whose answer was lost, and presses Send again, which `error` refuses. */
+    async function sendAgain(api: Api, error: object) {
+      api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      api.giveBack.mockRejectedValueOnce(error);
+      await expect(new GiveBackSession(SCOPE, api).submit("sale-1", goodwillAsk)).rejects.toThrow();
+      const held = holding();
+      const { el } = await mount(api);
+      again(el)!.click();
+      await vi.waitFor(() => expect(api.giveBack).toHaveBeenCalledTimes(2));
+      return { el, held };
+    }
+    function breakStorage() {
+      const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+        throw new Error("unreadable");
+      });
+      onTestFinished(() => getItem.mockRestore());
+    }
+    /** An API whose receipt has money back under way, or whose receipt cannot be read. */
+    const apis: readonly [string, () => Api][] = [
+      ["a give-back is under way", () => fakeGiveBackApi(UNDER)],
+      [
+        "the receipt is unread",
+        () => {
+          const api = fakeGiveBackApi();
+          api.readGiveBack.mockRejectedValue({ code: "server.internal", status: 500 });
+          return api;
+        },
+      ],
+    ];
+
+    it.each(apis)(
+      "while %s, says why and keeps Send again, which sends the same ids, when the box could not save it",
+      async (_state, makeApi) => {
+        const api = makeApi();
+        const { el, held } = await sendAgain(api, diskFull);
+        await vi.waitFor(() => expect(lostText(el)).toBe(codeMessage("storage.disk_full", "en")));
+        expect(underWay(el)).toBeNull();
+        expect(held()).toBe(true);
+        again(el)!.click();
+        await vi.waitFor(() => expect(outcomeText(el)).toContain("€5.00"));
+        expect(api.giveBack).toHaveBeenCalledTimes(3);
+        expect(sent(api, 2).submissionIds).toEqual(sent(api, 0).submissionIds);
+      },
+    );
+
+    it.each(apis)(
+      "while %s, says why and ends the press, when nothing went back under it",
+      async (_state, makeApi) => {
+        const api = makeApi();
+        const { el, held } = await sendAgain(api, {
+          code: "invoice_correction.already_open",
+          status: 409,
+        });
+        await vi.waitFor(() =>
+          expect(outcomeText(el)).toBe(codeMessage("invoice_correction.already_open", "en")),
+        );
+        expect(again(el)).toBeNull();
+        expect(underWay(el)).toBeNull();
+        expect(held()).toBe(true);
+        expect(new GiveBackSession(SCOPE, api).read("sale-1")).toBeNull();
+        expect(text(root(el).querySelector("[data-close]"))).toBe(t("give_back.done"));
+        cleanupWidgets();
+        api.readGiveBack.mockResolvedValue(UNDER);
+        const { el: reopened } = await mount(api);
+        expect(underWay(reopened)).not.toBeNull();
+        expect(api.giveBack).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it("ends a press refused by a fiscal conflict with the recovery link, saying nothing was given back", async () => {
+      const { el } = await sendAgain(fakeGiveBackApi(UNDER), {
+        code: "sif.allocation_invalid",
+        reason: "conflict_requires_administrator",
+        recoveryUrl: "/recovery/fiscal-conflict",
+        status: 409,
+      });
+      await vi.waitFor(() =>
+        expect(
+          [...root(el).querySelectorAll("[data-outcome] p")].map((line) => text(line)),
+        ).toEqual([t("recovery.issuance_stopped"), t("give_back.nothing_given")]),
+      );
+      expect(root(el).querySelector("wt-form-actions [data-recovery]")!.getAttribute("href")).toBe(
+        "/recovery/fiscal-conflict",
+      );
+    });
+
+    it.each([false, true])(
+      "keeps Send again when who may approve it cannot be read (nor this device's storage: %s)",
+      async (unreadable) => {
+        const api = fakeGiveBackApi(UNDER);
+        api.listApprovers.mockImplementationOnce(async () => {
+          if (unreadable) breakStorage();
+          throw new TypeError("Failed to fetch");
+        });
+        const { el, held } = await sendAgain(api, {
+          code: "authorization.not_permitted",
+          permission: "sale.refund",
+          status: 403,
+        });
+        await vi.waitFor(() => expect(lostText(el)).toBe(t("give_back.uw_approvers_failed")));
+        expect(again(el)).not.toBeNull();
+        expect(held()).toBe(true);
+      },
+    );
+
+    it("keeps Send again when this device's storage cannot be read", async () => {
+      const api = fakeGiveBackApi(UNDER);
+      const { el } = await sendAgain(api, diskFull);
+      await vi.waitFor(() => expect(lostText(el)).toBe(codeMessage("storage.disk_full", "en")));
+      breakStorage();
+      again(el)!.click();
+      await vi.waitFor(() => expect(lostText(el)).toBe(t("give_back.uw_unknown")));
+      expect(again(el)).not.toBeNull();
+      expect(api.giveBack).toHaveBeenCalledTimes(2);
+    });
+
+    it("drops the choice's refusal at Check again, which may find a give-back under way", async () => {
+      const refused = { code: "tender.refund_in_progress" };
+      const api = fakeGiveBackApi({ ...VIEW, ways: [{ ...CARD, pending: true, reason: refused }] });
+      const { el, held } = await sendAgain(api, { ...refused, status: 409 });
+      await vi.waitFor(() => expect(bottom(el)).toBe(codeMessage(refused.code, "en")));
+      expect(held()).toBe(true);
+      api.readGiveBack.mockResolvedValue(UNDER);
+      root(el).querySelector<HTMLElement>("[data-check-pending]")!.click();
+      await vi.waitFor(() => expect(underWay(el)).not.toBeNull());
+      await vi.waitFor(() => expect(held()).toBe(false));
+    });
+  });
+
+  it("holds back the full-disk screen while it reads who may approve and while it asks, until cancelled", async () => {
+    const held = holding();
+    const api = fakeGiveBackApi();
+    answering(api, { needs: ["sale.refund"] });
+    const read = deferred<typeof APPROVERS>();
+    api.listApprovers.mockImplementationOnce(() => read.promise);
+    const el = await press(api);
+    await vi.waitFor(() => expect(api.listApprovers).toHaveBeenCalledOnce());
+    await el.updateComplete;
+    expect(held()).toBe(true);
+    read.resolve(APPROVERS);
+    await vi.waitFor(() => expect(approval(el)).not.toBeNull());
+    expect(held()).toBe(true);
+    approval(el)!.dispatchEvent(new CustomEvent("override-cancel"));
+    await vi.waitFor(() => expect(approval(el)).toBeNull());
+    expect(held()).toBe(false);
+    expect(api.giveBack).not.toHaveBeenCalled();
   });
 
   it("opens on a press whose answer was lost, or on a rest still to follow", async () => {

@@ -27810,6 +27810,37 @@ describe("A737 post-invoice refund integration", () => {
         await covering(el);
       });
 
+      it("waits while the outcome is shown though a window closed earlier is answered, then covers the till", async () => {
+        const read = deferred<typeof VIEW>();
+        const { el, fill } = await filling({
+          readGiveBack: vi
+            .fn()
+            .mockResolvedValueOnce({ ...VIEW, ways: [{ ...CARD, pending: true }] })
+            .mockImplementationOnce(() => read.promise)
+            .mockResolvedValue(VIEW),
+        });
+        const earlier = await openGiveBack(el);
+        await vi.waitFor(() => expect(inWindow(el, "[data-check-pending]")).not.toBeNull());
+        inWindow(el, "[data-check-pending]")!.click();
+        await vi.waitFor(() => expect(currentApi.readGiveBack).toHaveBeenCalledTimes(2));
+        const heldAgain = vi.fn<(held: boolean) => void>();
+        earlier.addEventListener("give-back-held", (event) =>
+          heldAgain((event as CustomEvent<{ held: boolean }>).detail.held),
+        );
+        emit(earlier, "give-back-close");
+        await flush(el);
+        expect(giveBack(el)).toBeNull();
+        await pressGoodwill(el);
+        await vi.waitFor(() => expect(inWindow(el, "[data-outcome]")).not.toBeNull());
+        await fill();
+        expect(stop(el)).toBeNull();
+        read.resolve(VIEW);
+        await vi.waitFor(() => expect(heldAgain.mock.lastCall).toEqual([false]));
+        await flush(el);
+        expect(stop(el)).toBeNull();
+        await closed(el);
+      });
+
       it.each(askingAgain)(
         "waits while %s, though the box refuses it for the disk, then covers the till",
         async (_where, ask) => {

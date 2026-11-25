@@ -20,7 +20,7 @@ import { trackDialog } from "./track-dialog.js";
 import { giveBackStyles } from "./give-back-styles.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { codeMessage, giveBackReasonMessage } from "../i18n/codes.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { AdjustmentReason, StaffMember, TillApi } from "../api/client.js";
 import type {
   GiveBackAsk,
@@ -31,7 +31,6 @@ import type {
   GiveBackRequest,
   GiveBackRight,
   GiveBackView,
-  GiveBackWaitReason,
   GiveBackWay,
 } from "../api/give-back-types.js";
 import { reasonPicker } from "./reason-picker.js";
@@ -75,12 +74,14 @@ import {
   readApprovers,
   recoveryLinkOf,
   recoveryText,
+  resendRefused,
   restOutcome,
   sendRefusalOf,
   signInEnded,
   stillStarting,
   summaryOf,
   terminalStep,
+  waitReasonText,
   waitsForCard,
   type Override,
   type Sending,
@@ -254,11 +255,6 @@ export class TillGiveBackDialog extends LitElement {
   }
   #money(value: string): string {
     return formatMoney(value, currentLocale());
-  }
-  #reasonText(reason: GiveBackWaitReason): string {
-    return (
-      recoveryText(reason) ?? giveBackReasonMessage(reason.code, currentLocale(), reason.params)
-    );
   }
   /** The payments this purpose can give back from: those holding money, or for the extra, an extra. */
   #offered(purpose: GiveBackPurpose): GiveBackWay[] {
@@ -576,7 +572,7 @@ export class TillGiveBackDialog extends LitElement {
       this.approval = undefined;
       this.step =
         refusal.code === "busy"
-          ? { ...lost!, busy: true }
+          ? { ...lost!, said: t("give_back.busy") }
           : lostAfter(sending, this.#saved()?.sent, lost?.ids);
     } else if (override !== undefined && APPROVER_PIN_REFUSALS.has(refusal.code))
       this.pinError = approverRefusal(error, override.personId);
@@ -599,7 +595,8 @@ export class TillGiveBackDialog extends LitElement {
   }
   /** A rest's refusal stays on its outcome; any other goes back to the form, or to the choice when
    * the window opened on a saved press, with the refusal at the bottom. Whether the press stays
-   * saved is the session's: while it does, a changed press is refused as locked. */
+   * saved is the session's: while it does, a changed press is refused as locked. Where neither form
+   * nor choice is drawn, a Send again's refusal stays on its own step. */
   #refused(refusal: Refusal, check = false): void {
     this.approvers = null;
     this.approval = undefined;
@@ -611,6 +608,10 @@ export class TillGiveBackDialog extends LitElement {
     }
     if (check) {
       this.pendingStatus = checkRefusalText(refusal);
+      return;
+    }
+    if (step?.kind === "lost" && this.view?.underWay !== null) {
+      this.step = resendRefused(step, refusal, this.#saved()?.sent);
       return;
     }
     this.step = null;
@@ -656,6 +657,7 @@ export class TillGiveBackDialog extends LitElement {
   /** Check again on the choices, while a card refund the box knows of waits. */
   #checkPending(): Promise<void> {
     this.pendingStatus = "";
+    this.sendRefusal = null;
     return this.#send({
       send: async (override) => {
         const { view, status } = await checkReceipt(this, override);
@@ -698,7 +700,7 @@ export class TillGiveBackDialog extends LitElement {
       hint,
       this.view!.choices[purpose],
       () => this.#choose(purpose),
-      (reason) => this.#reasonText(reason),
+      waitReasonText,
     );
   }
   #choices(view: GiveBackView) {
@@ -757,7 +759,7 @@ export class TillGiveBackDialog extends LitElement {
               namesLocale: this.namesLocale,
               ticked: this.draft.lineIds,
               onTick: (line, checked) => this.#tick(line, checked),
-              reasonText: (reason) => this.#reasonText(reason),
+              reasonText: waitReasonText,
             })
           : nothing
       }
@@ -816,7 +818,7 @@ export class TillGiveBackDialog extends LitElement {
         purpose,
         chosen: this.draft.way,
         onChoose: (way) => this.#chooseWay(way),
-        reasonText: (reason) => this.#reasonText(reason),
+        reasonText: waitReasonText,
       })}
       ${
         answer === null

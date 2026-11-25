@@ -214,6 +214,7 @@ export class TillGiveBackUnderWay extends LitElement {
   async #checkAgain(): Promise<void> {
     if (this.#savedOnReceipt()?.refundId) this.#cardDone(await this.refunds.resume(this.saleId));
     await this.#refresh();
+    if (!this.isConnected) return;
     this.#asked = true;
     const answers = await this.refunds.askAgain(this.tenders, this.capabilities, this.#override);
     for (const answer of answers) this.#cardDone(answer);
@@ -342,6 +343,7 @@ export class TillGiveBackUnderWay extends LitElement {
     this.refused = null;
     const read = await this.#readTenders();
     this.busy = false;
+    if (!this.isConnected) return;
     if (!read) {
       this.message = t("give_back.uw_card_unread");
       return;
