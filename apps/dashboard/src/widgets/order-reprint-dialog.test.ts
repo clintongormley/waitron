@@ -630,6 +630,13 @@ it("says the printers are loading, not that there is none, when reopened after a
 });
 
 describe("printing a full invoice", () => {
+  const printNotice = (el: OrderReprintDialog) => {
+    const queued = vi.fn<(message: string) => void>();
+    el.addEventListener("order-print-queued", (event) =>
+      queued((event as CustomEvent<string>).detail),
+    );
+    return queued;
+  };
   const BAR_PRINTER = { id: "printer-1", name: "Bar printer", kind: "receipt" as const };
   const OFFICE_PRINTER = { id: "page-1", name: "Office printer", kind: "a4" as const };
   const KITCHEN_PRINTER = { id: "printer-2", name: "Kitchen printer", kind: "receipt" as const };
@@ -952,32 +959,40 @@ describe("printing a full invoice", () => {
       invoiceDetail([BAR_PRINTER, OFFICE_PRINTER], OFFICE_PRINTER.id, "original"),
     );
     const el = await openInvoice(api);
+    const queued = printNotice(el);
     await chooseListed(el, OFFICE_PRINTER.id);
     printButton(el).click();
     await vi.waitFor(() => expect(api.requestOrderPrintDelivery).toHaveBeenCalledTimes(1));
     const [id, printerId, key] = api.requestOrderPrintDelivery.mock.calls[0] as string[];
     expect([id, printerId]).toEqual(["bill-1", "page-1"]);
     expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.textContent).toContain("Invoice sent to Office printer"),
-    );
+    expect(queued).toHaveBeenCalledExactlyOnceWith("Invoice A/12 queued for Office printer.");
     expect(api.reprintOrder).not.toHaveBeenCalled();
   });
 
-  it("once printed, keeps the heading and says only where it went while the server offers no print", async () => {
+  it("shows a queued delivery if the picker is reopened before it finishes", async () => {
     setLocale("en-GB");
     const api = invoiceApi(
       invoiceDetail([BAR_PRINTER, OFFICE_PRINTER], OFFICE_PRINTER.id, "original"),
     );
     const el = await openInvoice(api);
+    const queued = printNotice(el);
     await chooseListed(el, OFFICE_PRINTER.id);
     api.getOrder.mockResolvedValue(withCurrent(invoiceDetail(null, OFFICE_PRINTER.id), "queued"));
     printButton(el).click();
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.textContent).toContain("Invoice sent to Office printer"),
+    await vi.waitFor(() => expect(queued).toHaveBeenCalledOnce());
+    el.row = null;
+    await el.updateComplete;
+    el.row = fullRow;
+    await el.updateComplete;
+    expect(el.mode).toBe("choose");
+    el.shadowRoot!.querySelector("[name=document]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "invoice" } }),
     );
-    await vi.waitFor(() => expect(chooser(el)).toBeNull());
-    expect(el.shadowRoot!.querySelector("[data-test=print-busy]")).toBeNull();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=print-busy]")).not.toBeNull(),
+    );
+    expect(chooser(el)).toBeNull();
     expect(el.shadowRoot!.textContent).not.toContain(
       "Your previous printer is no longer available",
     );
@@ -1185,6 +1200,7 @@ describe("printing a full invoice", () => {
       },
     );
     const el = await openInvoice(api);
+    const queued = printNotice(el);
     await chooseListed(el, OFFICE_PRINTER.id);
     printButton(el).click();
     await vi.waitFor(() => expect(api.requestOrderPrintDelivery).toHaveBeenCalledTimes(1));
@@ -1201,8 +1217,7 @@ describe("printing a full invoice", () => {
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=document-back]")
         ?.disabled,
     ).toBe(false);
-    expect(el.shadowRoot!.textContent).toContain("Invoice sent to Office printer");
-    expect(el.shadowRoot!.textContent).not.toContain("sent to Bar printer");
+    expect(queued).toHaveBeenCalledExactlyOnceWith("Invoice A/12 queued for Office printer.");
   });
 
   it("words the confirmation by the copy the server says it made, not by a later offer", async () => {
@@ -1212,6 +1227,7 @@ describe("printing a full invoice", () => {
       requestOrderPrintDelivery: held.request,
     });
     const el = await openInvoice(api);
+    const queued = printNotice(el);
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
     printButton(el).click();
     await vi.waitFor(() => expect(api.requestOrderPrintDelivery).toHaveBeenCalledTimes(1));
@@ -1224,7 +1240,7 @@ describe("printing a full invoice", () => {
     );
     held.answer(deliveryAttempt("queued", "original"));
     await vi.waitFor(() => expect(printButton(el).loading).toBe(false));
-    expect(el.shadowRoot!.textContent).toContain("Invoice sent to Office printer");
+    expect(queued).toHaveBeenCalledExactlyOnceWith("Invoice A/12 queued for Office printer.");
   });
 
   it("calls a print a copy when the server answers that it made a copy", async () => {
@@ -1233,10 +1249,13 @@ describe("printing a full invoice", () => {
       requestOrderPrintDelivery: vi.fn().mockResolvedValue(deliveryAttempt("queued", "duplicate")),
     });
     const el = await openInvoice(api);
+    const queued = printNotice(el);
     await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
     printButton(el).click();
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.textContent).toContain("Copy sent to Office printer"),
+      expect(queued).toHaveBeenCalledExactlyOnceWith(
+        "Copy of invoice A/12 queued for Office printer.",
+      ),
     );
   });
 
@@ -1257,6 +1276,7 @@ describe("printing a full invoice", () => {
         requestOrderPrintDelivery: held.request,
       });
       const el = await openInvoice(api);
+      const queued = printNotice(el);
       await vi.waitFor(() => expect(chooser(el)?.value).toBe("page-1"));
       printButton(el).click();
       await vi.waitFor(() => expect(api.requestOrderPrintDelivery).toHaveBeenCalledTimes(1));
@@ -1285,14 +1305,14 @@ describe("printing a full invoice", () => {
       expect(localStorage.getItem("waitron-dashboard-document-printer:invoice")).toBe(
         _name === "answers" ? OFFICE_PRINTER.id : null,
       );
-      expect(el.shadowRoot!.textContent).not.toContain("sent to");
+      expect(queued).not.toHaveBeenCalled();
       expect(await errorMessage(el)).toBeNull();
       expect(chooser(el)!.error).toBe("");
       expect(printButton(el).loading).toBe(false);
       api.requestOrderPrintDelivery.mockResolvedValue(deliveryAttempt("queued"));
       printButton(el).click();
       await vi.waitFor(() =>
-        expect(el.shadowRoot!.textContent).toContain("Invoice sent to Bar printer"),
+        expect(queued).toHaveBeenCalledExactlyOnceWith("Invoice A/13 queued for Bar printer."),
       );
       expect(api.requestOrderPrintDelivery).toHaveBeenLastCalledWith(
         "bill-2",

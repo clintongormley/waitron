@@ -5,7 +5,12 @@ import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { DashboardApi } from "../api/client.js";
-import type { OrderRowDto, OrdersPageDto, OrdersPageQuery } from "../api/orders-api.js";
+import type {
+  OrderDeliveryAttempt,
+  OrderRowDto,
+  OrdersPageDto,
+  OrdersPageQuery,
+} from "../api/orders-api.js";
 import "./orders-screen.js";
 import type { OrdersScreen } from "./orders-screen.js";
 
@@ -767,6 +772,71 @@ describe("dashboard Orders", () => {
         expect(picker.shadowRoot!.querySelector("[name=document]")).not.toBeNull(),
       );
       expect(api.getOrderPrinters).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["en-GB", "menu", "Invoice A/12 queued for Office printer."],
+    ["es-ES", "details", "Copia de la factura A/12 puesta en cola para Office printer."],
+  ] as const)(
+    "confirms a full invoice queued from Orders (%s, %s)",
+    async (locale, via, message) => {
+      setLocale(locale);
+      const full = { ...ROW, invoiceType: "F1" as const };
+      const detail = fullDetail(full);
+      const api = stubApi({
+        listOrdersPage: vi.fn().mockResolvedValue({ ...PAGE, rows: [full] }),
+        getOrder: vi.fn().mockResolvedValue(detail),
+        requestOrderPrintDelivery: vi.fn().mockResolvedValue({
+          id: "delivery-1",
+          medium: "a4",
+          designation: via === "details" ? "duplicate" : "original",
+          status: "queued",
+          failureCode: null,
+          requestedAt: ROW.at,
+          at: null,
+          personId: null,
+          personName: null,
+          printerHold: null,
+          lateSuccess: false,
+        } satisfies OrderDeliveryAttempt),
+      });
+      const { el } = await loaded(api);
+      const table = el.shadowRoot!.querySelector("wt-data-table")!;
+      await table.updateComplete;
+      const details = el.shadowRoot!.querySelector("dashboard-order-detail-dialog")!;
+      if (via === "details") {
+        table.shadowRoot!.querySelector<HTMLElement>("tbody .row-activate")!.click();
+        await expect
+          .poll(() => details.shadowRoot!.querySelector("[data-test=print-invoice]"))
+          .not.toBeNull();
+        details.shadowRoot!.querySelector<HTMLElement>("[data-test=print-invoice]")!.click();
+      } else {
+        table
+          .shadowRoot!.querySelector("wt-row-actions")!
+          .querySelectorAll("wt-button")[1]!
+          .click();
+      }
+      const picker = el.shadowRoot!.querySelector("dashboard-order-reprint-dialog")!;
+      const choose = (name: string, value: string) =>
+        picker
+          .shadowRoot!.querySelector(`[name=${name}]`)!
+          .dispatchEvent(
+            new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+          );
+      await expect.poll(() => picker.shadowRoot!.querySelector("[name=document]")).not.toBeNull();
+      choose("document", "invoice");
+      await expect.poll(() => picker.shadowRoot!.querySelector("[name=printerId]")).not.toBeNull();
+      choose("printerId", "page-1");
+      await picker.updateComplete;
+      picker.shadowRoot!.querySelector<HTMLElement>("[data-test=print]")!.click();
+      const modal = picker.shadowRoot!.querySelector("wt-dialog")!;
+      await expect.poll(() => modal.shadowRoot!.querySelector("dialog")!.open).toBe(false);
+      const notice = el.shadowRoot!.querySelector("wt-toast")!;
+      await expect
+        .poll(() => notice.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim())
+        .toBe(message);
+      expect(details.orderId).toBe(via === "details" ? full.id : null);
     },
   );
 

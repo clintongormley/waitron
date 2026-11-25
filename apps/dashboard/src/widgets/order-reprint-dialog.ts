@@ -38,7 +38,6 @@ export class OrderReprintDialog extends LitElement {
   @state() private printing = false;
   #sending: { printer: string; original: boolean } | null = null;
   @state() private sentTo: string | null = null;
-  #sentKey: "orders.reprint.sent" | "orders.print_invoice.sent" = "orders.reprint.sent";
   @state() private printerError: string | null = null;
   /** Counts openings, so a print sent from an earlier one never updates this one. */
   #opening = 0;
@@ -160,11 +159,9 @@ export class OrderReprintDialog extends LitElement {
   #renderPrinters() {
     const printers = this.printers;
     if (this.row?.invoiceType === "F1" && this.deliveryBusy)
-      return this.sentTo !== null
-        ? nothing
-        : html`<p role="status" data-test="print-busy">
-            ${codeMessage("invoice_delivery.active")}
-          </p>`;
+      return html`<p role="status" data-test="print-busy">
+        ${codeMessage("invoice_delivery.active")}
+      </p>`;
     if (printers === null || printers.length === 0) {
       if (this.printersFailed) return nothing;
       if (printers === null)
@@ -197,7 +194,7 @@ export class OrderReprintDialog extends LitElement {
       return;
     const document = this.mode;
     const opening = this.#opening;
-    const billId = this.row.id;
+    const { id: billId, invoiceNumber, invoiceType } = this.row;
     const printerId = this.printerId;
     const printerName = this.printers?.find((printer) => printer.id === printerId)?.name ?? "";
     this.#sending = {
@@ -208,20 +205,25 @@ export class OrderReprintDialog extends LitElement {
     this.printerError = null;
     this.#showError(null);
     try {
-      let sentKey: "orders.reprint.sent" | "orders.print_invoice.sent" = "orders.reprint.sent";
-      if (this.row.invoiceType === "F1") {
+      let invoiceNotice: string | null = null;
+      if (invoiceType === "F1") {
         const attempt = await this.api.requestOrderPrintDelivery(
           billId,
           printerId,
           crypto.randomUUID(),
         );
         this.api.liveData.invalidate([{ type: "invoice_deliveries" }]);
-        if (attempt.designation === "original") sentKey = "orders.print_invoice.sent";
+        invoiceNotice = fill(
+          attempt.designation === "original"
+            ? "orders.print_invoice.queued"
+            : "orders.print_invoice.copy_queued",
+          { invoice: invoiceNumber ?? "", printer: printerName },
+        );
       } else await this.api.reprintOrder(billId, printerId);
       rememberDocumentPrinter(document, printerId);
       if (opening !== this.#opening) return;
-      this.#sentKey = sentKey;
-      this.sentTo = printerName;
+      if (invoiceNotice === null) this.sentTo = printerName;
+      else this.dispatchEvent(new CustomEvent("order-print-queued", { detail: invoiceNotice }));
     } catch (error) {
       if (opening !== this.#opening) return;
       const code = codeOf(error);
@@ -295,7 +297,7 @@ export class OrderReprintDialog extends LitElement {
           : this.#renderPrinters()
       }
       ${this.unavailablePrinter ? html`<p role="status">${t("orders.print_document.unavailable")}</p>` : nothing}
-      ${this.sentTo === null ? nothing : html`<p role="status">${fill(this.#sentKey, { printer: this.sentTo })}</p>`}
+      ${this.sentTo === null ? nothing : html`<p role="status">${fill("orders.reprint.sent", { printer: this.sentTo })}</p>`}
       ${
         this.printersFailed ||
         (this.mode !== "choose" && this.printers?.length === 0 && !this.deliveryBusy)

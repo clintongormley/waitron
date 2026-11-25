@@ -229,7 +229,8 @@ both keep the recorded invoice and customer. A simplified invoice opens its rece
 Wait for any queued original on A4 or by email to finish before choosing Receipt for a full invoice.
 
 Choose your printer and press **Print on {printer}** or **Print a copy on {printer}**. **A4** marks an
-office printer. This browser remembers the last accepted printer separately for Receipt and Invoice.
+office printer. For a full invoice, check the notice at the bottom for the invoice number and the
+printer it queued for. This browser remembers the last accepted printer separately for Receipt and Invoice.
 If that printer is unavailable, choose again. When you open the printer list, a sole available
 printer starts selected.
 Use **Refresh printers** when none are listed, or **Cancel** to leave without printing.

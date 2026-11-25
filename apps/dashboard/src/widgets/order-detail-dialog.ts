@@ -424,6 +424,7 @@ export class OrderDetailDialog extends LitElement {
   override render() {
     const detail = this.detail;
     return html`<wt-dialog .open=${this.orderId !== null} heading=${t("orders.view")}>
+        <slot></slot>
         ${this.error ? html`<p role="alert" data-test="read-failed">${this.error}</p>` : nothing}
         ${
           detail

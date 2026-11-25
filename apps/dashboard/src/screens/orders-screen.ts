@@ -16,6 +16,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import "@waitron/ui/src/components/wt-toast.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { type DashboardApi } from "../api/client.js";
 import {
@@ -100,6 +101,14 @@ export class OrdersScreen extends LitElement {
         display: block;
         color: var(--wt-color-text-muted);
       }
+      wt-toast {
+        position: fixed;
+        inset-block-end: calc(var(--wt-space-3) + env(safe-area-inset-bottom));
+        inset-inline-end: var(--wt-space-3);
+        max-inline-size: min(calc(100% - 2 * var(--wt-space-3)), calc(var(--wt-tap-min) * 11));
+        z-index: 40;
+        overflow-wrap: anywhere;
+      }
     `,
   ];
 
@@ -117,6 +126,7 @@ export class OrdersScreen extends LitElement {
   @state() private openId: string | null = null;
   @state() private reprintRow: OrderRowDto | null = null;
   @state() private reprintMode: "receipt" | "choose" = "receipt";
+  @state() private printNotice: string | null = null;
   @state() private findingCustomer = false;
   #textTimer?: ReturnType<typeof setTimeout>;
   #sort?: Pick<OrdersPageQuery, "sortKey" | "sortDirection">;
@@ -264,6 +274,18 @@ export class OrdersScreen extends LitElement {
   #openPrint(row: OrderRowDto): void {
     this.reprintMode = row.invoiceType === "F1" ? "choose" : "receipt";
     this.reprintRow = row;
+  }
+
+  #printConfirmation() {
+    return html`<wt-toast
+      .open=${this.printNotice !== null}
+      .message=${this.printNotice ?? ""}
+      close-label=${t("action.close")}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.printNotice = null;
+      }}
+    ></wt-toast>`;
   }
 
   #columns(): DataTableColumn<OrderRowDto>[] {
@@ -500,15 +522,21 @@ export class OrdersScreen extends LitElement {
         }}
         @wt-close=${() => {
           this.openId = null;
+          this.printNotice = null;
           if (this.linkedOrder !== null) this.#url.write({ order: null }, true);
         }}
-      ></dashboard-order-detail-dialog>
+        >${this.openId === null ? nothing : this.#printConfirmation()}</dashboard-order-detail-dialog
+      >
       <dashboard-order-reprint-dialog
         .api=${this.api}
         .row=${this.reprintRow}
         .mode=${this.reprintMode}
         @wt-close=${() => {
           this.reprintRow = null;
+        }}
+        @order-print-queued=${(event: CustomEvent<string>) => {
+          this.reprintRow = null;
+          this.printNotice = event.detail;
         }}
       ></dashboard-order-reprint-dialog>
       <dashboard-invoice-customer-dialog
@@ -517,7 +545,8 @@ export class OrdersScreen extends LitElement {
         @wt-close=${() => {
           this.findingCustomer = false;
         }}
-      ></dashboard-invoice-customer-dialog>`;
+      ></dashboard-invoice-customer-dialog>
+      ${this.openId === null ? this.#printConfirmation() : nothing}`;
   }
 }
 
