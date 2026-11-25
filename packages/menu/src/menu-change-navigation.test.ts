@@ -107,6 +107,10 @@ function offer(id = "soup"): FrozenOffer {
     unit,
     vatClass: "general",
     takeawayVatClass: "general",
+    allergens: null,
+    diet: null,
+    dietOverride: null,
+    dietaryDeclarations: [],
     ordering: "public",
     placements: [["drinks"], ["favourites", "drinks"]],
     variants: [],
@@ -130,7 +134,7 @@ function section(
 function document(): MenuDocument {
   const drinks = section("drinks", [{ kind: "product", menuItemId: "mi-soup", productId: "soup" }]);
   return {
-    format: 4,
+    format: 5,
     menuId: "lunch",
     menuName: "Lunch",
     root: { members: [drinks, section("favourites", [drinks])] },
@@ -429,6 +433,10 @@ function variant(id: string): FrozenOfferVariant {
     pricingUnit: "each",
     vatClass: "general",
     takeawayVatClass: "general",
+    allergens: null,
+    diet: null,
+    dietOverride: null,
+    dietaryDeclarations: [],
   };
 }
 function extras(id: string): Extract<FrozenOfferedModifier, { kind: "extras" }> {
@@ -462,6 +470,8 @@ function extras(id: string): Extract<FrozenOfferedModifier, { kind: "extras" }> 
         takeawayVatClass: "general",
         maxQuantity: null,
         preselected: false,
+        addAllergens: null,
+        suitableFor: [],
       },
     ],
   };

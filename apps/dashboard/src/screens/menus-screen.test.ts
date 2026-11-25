@@ -9552,6 +9552,10 @@ describe("publishing", () => {
       unit: offer.unit,
       vatClass: offer.vatClass,
       takeawayVatClass: offer.vatClass,
+      allergens: null,
+      diet: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
     };
     offer.variants = [
       {

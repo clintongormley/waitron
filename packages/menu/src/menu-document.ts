@@ -102,7 +102,7 @@ export type {
   MenuState,
 } from "@waitron/shared";
 
-export const MENU_DOCUMENT_FORMAT = 4;
+export const MENU_DOCUMENT_FORMAT = 5;
 
 export interface OmittedShortcut {
   ref: TileRef;
@@ -514,30 +514,12 @@ function freezeOffer(
   extraImages: ReadonlyMap<string, string | null>,
 ): FrozenOffer {
   return {
-    ...without(offer, [
-      "courseId",
-      "category",
-      "offeredModifiers",
-      "variants",
-      "combined",
-      "allergens",
-      "diet",
-      "dietOverride",
-      "dietaryDeclarations",
-    ]),
+    ...without(offer, ["courseId", "category", "offeredModifiers", "variants", "combined"]),
     image: facts.image,
     description: facts.description,
     color: facts.color,
     variants: offer.variants.map((variant) =>
-      without(variant, [
-        "available",
-        "courseId",
-        "category",
-        "allergens",
-        "diet",
-        "dietOverride",
-        "dietaryDeclarations",
-      ]),
+      without(variant, ["available", "courseId", "category"]),
     ),
     offeredModifiers: offer.offeredModifiers.map((entry): FrozenOfferedModifier =>
       entry.kind === "options"
@@ -545,7 +527,7 @@ function freezeOffer(
         : {
             ...entry,
             items: entry.items.map((item) => ({
-              ...without(item, ["addAllergens", "suitableFor"]),
+              ...item,
               image: extraImages.get(item.productId)!,
             })),
           },

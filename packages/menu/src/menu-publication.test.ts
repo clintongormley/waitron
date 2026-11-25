@@ -1388,7 +1388,7 @@ describe("menuStatus", () => {
       expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
     });
 
-    it("keeps both menus current for declaration-only changes and preserves recorded versions", async () => {
+    it("flags both menus for declaration-only changes and preserves recorded versions", async () => {
       const f = await published();
       const recorded = (
         await fx.db.execute<{ document: string; content_hash: string }>(
@@ -1406,9 +1406,7 @@ describe("menuStatus", () => {
           dietaryDeclarations: ["vegetarian"],
         });
       });
-      expect(await states(f)).toEqual({ lunch: "current", dinner: "current" });
-      for (const menuId of [f.lunch, f.dinner])
-        expect((await app((tx) => previewMenu(tx, menuId))).changes).toEqual([]);
+      expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
       expect(
         (await fx.db.execute(sql`select document, content_hash from menu_versions order by id`))
           .rows,

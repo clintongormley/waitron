@@ -9,7 +9,7 @@ const home: MenuDocument["home"] = {
 };
 const doc = (partial: Partial<MenuDocument>): MenuDocument =>
   ({
-    format: 4,
+    format: 5,
     menuId: "m",
     menuName: "M",
     root: { members: [] },
