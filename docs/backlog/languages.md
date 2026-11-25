@@ -14,8 +14,7 @@ their full text.
   2026-10-02 ("save the full translations for much later"). Asked for on C113's question
   ("Land, review words later, and add full translations for catalán, valenciano, and gallego";
   "Receipt + whole app"; Basque: "Treat it like the others"). When it is picked up, the first step is a spec and plan, ending with the owner's choices:
-  - **Receipt:** every fixed word C113 added in Catalan, Galician and Basque (and the email's
-    `correctiveReceipt`, added 2026-11-25) checked against an
+  - **Receipt:** every fixed word C113 added in Catalan, Galician and Basque checked against an
     official or authoritative source (for example Termcat, the Acadèmia Valenciana de la Llengua,
     the Real Academia Galega or Xunta terminology, Euskaltzaindia or Euskalterm), each with a
     provenance row quoting the source; and Valencian as its own receipt language — which venues

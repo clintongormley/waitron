@@ -68,8 +68,7 @@ export interface FiscalJurisdiction {
   readonly defaultTakeawayVatRate?: string;
 }
 
-/** The fixed words a printed receipt carries, one set per receipt language. `correctiveReceipt`
- * titles its email only; the paper prints `correctiveInvoice`. */
+/** The fixed words a printed receipt carries, one set per receipt language. */
 export const RECEIPT_LABEL_KEYS = [
   "nif",
   "invoice",
@@ -102,7 +101,6 @@ export const RECEIPT_LABEL_KEYS = [
   "simplifiedInvoice",
   "invoiceHeading",
   "correctiveInvoice",
-  "correctiveReceipt",
   "correctsInvoice",
   "replacesInvoiceInFull",
   "rectificationAmount",

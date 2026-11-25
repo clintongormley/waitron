@@ -253,7 +253,7 @@ describe("invoice SMTP transport", () => {
   );
 
   it.each(["en-GB", "es-ES"])(
-    "captions an emailed corrective of a receipt as a corrective receipt in %s",
+    "captions an emailed corrective invoice as one in %s",
     async (locale) => {
       const rig = await smtpRig("accepted");
       try {
@@ -261,13 +261,16 @@ describe("invoice SMTP transport", () => {
         document.invoiceLocale = locale;
         document.result.invoiceType = "R5";
         document.result.invoiceNumber = "R/7";
+        document.result.corrects = { invoiceNumber: "A/41", issuedAt: fixture.result.issuedAt };
         delete document.result.recipient;
-        const caption = `${receiptLabelsFor(locale).correctiveReceipt} R/7`;
+        const caption = `${receiptLabelsFor(locale).correctiveInvoice} R/7`;
         expect(
           await sendInvoiceThrough(rig.config)({ recipient: "guest@example.test", document }),
         ).toEqual({ status: "sent" });
         expect(rig.messages[0]).toContain(`Subject: ${caption}`);
         expect(textPart(rig.messages[0]!)).toBe(caption);
+        const pdf = (await attachmentText(rig.messages[0]!)).replace(/\s+/g, " ");
+        expect(pdf).toContain(caption);
       } finally {
         await rig.close();
       }
@@ -283,12 +286,19 @@ describe("invoice SMTP transport", () => {
         document.invoiceLocale = locale;
         document.result.invoiceType = "R4";
         document.result.invoiceNumber = "R/8";
+        document.result.corrects = {
+          invoiceNumber: fixture.result.invoiceNumber,
+          issuedAt: fixture.result.issuedAt,
+          inFull: true,
+        };
         const caption = `${receiptLabelsFor(locale).correctiveInvoice} R/8`;
         expect(
           await sendInvoiceThrough(rig.config)({ recipient: "guest@example.test", document }),
         ).toEqual({ status: "sent" });
         expect(rig.messages[0]).toContain(`Subject: ${caption}`);
         expect(textPart(rig.messages[0]!)).toBe(caption);
+        const pdf = (await attachmentText(rig.messages[0]!)).replace(/\s+/g, " ");
+        expect(pdf).toContain(caption);
       } finally {
         await rig.close();
       }
