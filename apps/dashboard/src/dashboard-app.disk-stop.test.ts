@@ -1,9 +1,9 @@
 import { withStaffPages } from "./testing/staff-page-fixture.js";
-import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi, type Mock } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { leaveCoordinatorFor, type WtBanner } from "@waitron/ui";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import "./dashboard-app.js";
 import type { DashboardApp } from "./dashboard-app.js";
@@ -190,7 +190,10 @@ async function flush(el: DashboardApp): Promise<void> {
   await el.updateComplete;
 }
 
-const diskScreen = (el: DashboardApp) => el.shadowRoot!.querySelector("wt-stop-screen");
+const diskScreen = (el: DashboardApp) => {
+  const screen = el.shadowRoot!.querySelector("wt-stop-screen");
+  return screen?.shadowRoot?.querySelector("dialog:modal") ? screen : null;
+};
 const diskDialog = (el: DashboardApp) => diskScreen(el)?.shadowRoot?.querySelector("dialog:modal");
 const actionLabel = (el: DashboardApp) =>
   diskScreen(el)?.querySelector("wt-button")?.textContent?.trim();
@@ -276,6 +279,9 @@ describe("the shell's full-disk window", () => {
   });
 
   it("takes the window away when a later read finds the stop lifted", async () => {
+    const viewport = { width: innerWidth, height: innerHeight };
+    onTestFinished(() => page.viewport(viewport.width, viewport.height));
+    await page.viewport(1280, 720);
     const background = vi.fn().mockResolvedValue(notStopped);
     const { api, liveData } = shellApi(background, {
       getMe: vi.fn().mockResolvedValue(me("manager", ["venue.view", "system.manage"])),
@@ -283,6 +289,7 @@ describe("the shell's full-disk window", () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     const main = el.shadowRoot!.querySelector<HTMLElement>("main")!;
     main.focus();
+    expect(el.shadowRoot!.activeElement).toBe(main);
     background.mockResolvedValueOnce(stopped);
     liveData.invalidate([{ type: "incidents", id: "x" }]);
     await expect.poll(() => diskDialog(el)).toBeTruthy();

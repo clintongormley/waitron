@@ -12038,6 +12038,52 @@ describe("till-app", () => {
       expect(text).not.toContain(codeMessage("storage.disk_full"));
     });
 
+    const charged = { code: "sale.charged_not_recorded", workingOrderId: "wo-1", status: 507 };
+    const recoveryUrl = "/recovery/fiscal-conflict";
+    it.each([
+      ["sale.disk_full", "cash", diskFull],
+      ["sale.disk_full_manual_card", "manual", diskFull],
+      ["sale.unconfirmed", "cash", new TypeError("Failed to fetch")],
+      ["sale.charged_disk_full", "reader", { ...charged, reason: "disk_full" }],
+      ["recovery.charged", "reader", { ...charged, recoveryUrl }],
+    ] as const)(
+      "keeps %s advice for %s visible during the disk stop",
+      async (advice, method, refusal) => {
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+        onTestFinished(() => vi.useRealTimers());
+        const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
+        const { promise, reject } = Promise.withResolvers<never>();
+        const sentDuringStop = advice === "sale.charged_disk_full";
+        const send = vi
+          .fn()
+          .mockImplementation(() => (sentDuringStop ? promise : Promise.reject(refusal)));
+        const { el } = await mountApp({ recordSale: send, pay: send, getDeviceEquipment });
+        const c = await toCounter(el);
+        c.store.addProduct(coffee, "2");
+        await el.updateComplete;
+        const detail =
+          method === "cash"
+            ? { method, amount: "5" }
+            : { method: "card", amount: "5", externalRef: "OP-4417" };
+        if (method === "reader") emit(c, "collect-card", {});
+        else emit(c, "confirm-payment", detail);
+        await flush(el);
+        expect(send).toHaveBeenCalledOnce();
+        getDeviceEquipment.mockResolvedValue(diskStopEquipment);
+        await pollDiskNotice(el);
+        if (sentDuringStop) reject(refusal);
+        await vi.waitFor(() => {
+          const warning = el.shadowRoot!.querySelector("wt-stop-screen");
+          expect(warning?.shadowRoot?.querySelector("dialog:modal")).toBeTruthy();
+          expect(warning?.textContent).toContain(t(advice));
+          if (advice === "recovery.charged")
+            expect(warning?.querySelector("a[data-recovery]")?.getAttribute("href")).toBe(
+              recoveryUrl,
+            );
+        });
+      },
+    );
+
     it("a reader card pay refused for a full disk says not to take payment", async () => {
       const text = await payReader(diskFull);
       expect(text).toContain(t("sale.disk_full"));
@@ -12058,36 +12104,6 @@ describe("till-app", () => {
       const cardAdvice = refused.slice(refused.lastIndexOf(". ") + 2);
       expect(cardAdvice.length).toBeGreaterThan(0);
       expect(t("sale.disk_full_manual_card").endsWith(` ${cardAdvice}`)).toBe(true);
-    });
-
-    it("keeps the Counter charged-card refusal visible when the disk stop arrives", async () => {
-      let refuse!: (reason: unknown) => void;
-      const pay = vi.fn(() => new Promise((_, reject) => (refuse = reject)));
-      const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
-      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-      try {
-        const { el } = await mountApp({ pay, getDeviceEquipment });
-        const c = await toCounter(el);
-        c.store.addProduct(coffee, "1");
-        await el.updateComplete;
-        emit(c, "collect-card", {});
-        await vi.waitFor(() => expect(pay).toHaveBeenCalled());
-        getDeviceEquipment.mockResolvedValue(diskStopEquipment);
-        await pollDiskNotice(el);
-        refuse({
-          code: "sale.charged_not_recorded",
-          workingOrderId: "wo-1",
-          reason: "disk_full",
-          status: 507,
-        });
-        await vi.waitFor(() => {
-          const window = el.shadowRoot!.querySelector("wt-stop-screen");
-          expect(window?.shadowRoot?.querySelector("dialog:modal")).toBeTruthy();
-          expect(window?.textContent).toContain(t("sale.charged_disk_full"));
-        });
-      } finally {
-        vi.useRealTimers();
-      }
     });
 
     it("a card charged but not recorded for a full disk names the disk", async () => {
@@ -13193,40 +13209,37 @@ describe("till-app", () => {
       async (destination) => {
         const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
         vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-        try {
-          const { el } = await mountApp({
-            getTill: vi.fn().mockResolvedValue({
-              ...till,
-              cardProvider: "stripe_terminal",
-              capabilities: ["print-receipt", "integrated-card-payment", "take-orders"],
-            }),
-            getDeviceEquipment,
-            pay: vi.fn().mockResolvedValue({ outcome: "declined" }),
-          });
-          const c = await toCounter(el);
-          c.store.addProduct(coffee, "2");
-          await el.updateComplete;
-          emit(c, "collect-card", {});
-          await vi.waitFor(() =>
-            expect(tenderPay(el).shadowRoot!.querySelector(".switch-tender")).toBeTruthy(),
-          );
+        onTestFinished(() => vi.useRealTimers());
+        const { el } = await mountApp({
+          getTill: vi.fn().mockResolvedValue({
+            ...till,
+            cardProvider: "stripe_terminal",
+            capabilities: ["print-receipt", "integrated-card-payment", "take-orders"],
+          }),
+          getDeviceEquipment,
+          pay: vi.fn().mockResolvedValue({ outcome: "declined" }),
+        });
+        const c = await toCounter(el);
+        c.store.addProduct(coffee, "2");
+        await el.updateComplete;
+        emit(c, "collect-card", {});
+        await vi.waitFor(() =>
+          expect(tenderPay(el).shadowRoot!.querySelector(".switch-tender")).toBeTruthy(),
+        );
 
-          getDeviceEquipment.mockResolvedValue(diskStopEquipment);
-          await pollDiskNotice(el);
-          const warning = () => el.shadowRoot!.querySelector("wt-stop-screen");
-          expect(warning()).toBeNull();
+        getDeviceEquipment.mockResolvedValue(diskStopEquipment);
+        await pollDiskNotice(el);
+        const warning = () => el.shadowRoot!.querySelector("wt-stop-screen");
+        expect(warning()).toBeNull();
 
-          if (destination === "floor") selectTab(el, "floor");
-          else emit(c, "logout");
-          await flush(el);
-          expect(destination === "floor" ? floor(el) : lock(el)).toBeTruthy();
-          if (destination === "lock") vi.advanceTimersByTime(15_000);
-          await vi.waitFor(() =>
-            expect(warning()?.shadowRoot?.querySelector("dialog:modal")).toBeTruthy(),
-          );
-        } finally {
-          vi.useRealTimers();
-        }
+        if (destination === "floor") selectTab(el, "floor");
+        else emit(c, "logout");
+        await flush(el);
+        expect(destination === "floor" ? floor(el) : lock(el)).toBeTruthy();
+        if (destination === "lock") vi.advanceTimersByTime(15_000);
+        await vi.waitFor(() =>
+          expect(warning()?.shadowRoot?.querySelector("dialog:modal")).toBeTruthy(),
+        );
       },
     );
 
@@ -14993,9 +15006,7 @@ describe("till-app", () => {
 
     it("collect single-flight: a second collect-order while the first is pending collects EXACTLY ONCE", async () => {
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-      onTestFinished(() => {
-        vi.useRealTimers();
-      });
+      onTestFinished(() => vi.useRealTimers());
       const collectOrder = vi.fn(() => new Promise<TillSaleResult>(() => {}));
       const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
       const { el } = await mountApp({

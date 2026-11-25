@@ -6403,7 +6403,9 @@ describe("the floor plan editor inside the real page", () => {
       const getDiskStop = vi.fn().mockResolvedValue({ stopped: false });
       const { el, unmount } = await openEditor("en-GB", 1280, { getDiskStop, liveData });
       try {
-        expect(el.shadowRoot!.querySelector("wt-stop-screen")).toBeNull();
+        expect(
+          el.shadowRoot!.querySelector("wt-stop-screen")?.shadowRoot?.querySelector("dialog:modal"),
+        ).toBeNull();
         getDiskStop.mockResolvedValue({ stopped: true });
         liveData.invalidate([{ type: "incidents", id: "space" }]);
         await vi.waitFor(() => {

@@ -109,6 +109,7 @@ const panel = (theme: "light" | "dark") => `
     <wt-toast open message="2 new alerts" close-label="Close" duration="0"></wt-toast>
     <wt-toast open tone="error" message="The tax agency rejected an invoice record" close-label="Close" duration="0"></wt-toast>
     <wt-banner message="Waitron was updated." action-label="Reload"></wt-banner>
+    <wt-banner tone="error" message="Waitron could not save the changes."></wt-banner>
     <wt-button class="open-stop-screen">Show disk warning</wt-button>
     <wt-stop-screen heading="Disk full" description="Waitron cannot operate.">
       <wt-button>Resume demo</wt-button>

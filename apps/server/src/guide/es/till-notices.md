@@ -30,7 +30,8 @@ se te pide, elige a alguien que pueda autorizar la apertura e introduce su PIN.
 **Disco lleno. Waitron no puede funcionar.** cubre la caja o el terminal de mano, incluida la
 pantalla del PIN. Sigue **Avisa al encargado** para que libere espacio en la
 [página Estado del servidor](box-status.md#free-space). Si hay un cobro en curso, comprueba primero
-su resultado y mantén abierta la sesión mientras se libera espacio. En las páginas de fichaje y
+su resultado. Si el aviso indica qué hacer con un cobro, sigue primero esas instrucciones. Mantén
+abierta la sesión mientras se libera espacio. En las páginas de fichaje y
 asistencia, el aviso dice **No se puede guardar nada: el servidor no tiene espacio**.
 
 **No se pueden registrar ventas: la hora del servidor es incorrecta · Consulta Estado del servidor en el panel** es rojo.
@@ -62,9 +63,8 @@ confirme su hora · Comprobar la hora** es rojo. Que los dispositivos coincidan 
 vuelve a activar los cobros: usa **Comprobar la hora** y cobra cuando desaparezca la línea. Si la línea sigue, un encargado o un administrador puede
 reiniciar el servidor en la [página Estado del servidor](box-status.md#restart).
 
-Mientras los cobros esperan, o mientras la hora del servidor es incorrecta o su disco está lleno,
-un botón que empieza un cobro abre **Los cobros están en pausa** en su lugar, que explica el
-motivo; el pedido sigue abierto. Usa ahí **Comprobar la hora** cuando aparezca, o pulsa **Cerrar**
+Mientras los cobros esperan por la hora del servidor, un botón que inicia un cobro abre
+**Los cobros están en pausa**. El pedido sigue abierto. Usa ahí **Comprobar la hora** cuando aparezca, o pulsa **Cerrar**
 y cobra cuando desaparezca la línea roja.
 
 **Comprobar la hora** al final de una línea roja de la hora, en lugar de **Consulta Estado del servidor en el panel**,

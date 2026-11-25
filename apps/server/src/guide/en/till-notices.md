@@ -28,7 +28,8 @@ who can authorise opening it and enter their PIN.
 
 **Disk full. Waitron cannot operate.** covers the till or handheld, including the PIN screen.
 Follow **Tell a manager** so they can free space on the [Box status page](box-status.md#free-space).
-If a payment is in progress, check its result first and stay signed in while space is freed.
+If a payment is in progress, check its result first. Follow any payment advice the warning shows
+and stay signed in while space is freed.
 On the clock-in and attendance pages, the notice reads **Nothing can be saved: the box is out of space**.
 
 **Sales can't be recorded: the box's clock is wrong · See Box status in the dashboard** is red. The box's clock is
@@ -58,9 +59,9 @@ Check the time** is red. Devices agreeing with the box do not start payments aga
 time**, and pay once the line has gone. If the line stays, a manager or administrator can restart the box on the [Box status
 page](box-status.md#restart).
 
-While payments wait, or while the box's clock is wrong or its disk is full, a button that starts
-a payment opens **Payments are paused** instead, saying why; the order stays open. Use **Check the
-time** there when it shows, or **Close** it and pay once the red line has gone.
+While payments wait for the box's time, a button that starts a payment opens **Payments are paused**
+instead. The order stays open. Use **Check the time** there when it shows, or **Close** it and pay
+once the red line has gone.
 
 **Check the time** at the end of a red clock line, instead of **See Box status in the dashboard**, means the box's
 clock is in doubt and the box could not confirm it by itself. Tap **Check the time** to open its dialog; when another notice shows first, open the

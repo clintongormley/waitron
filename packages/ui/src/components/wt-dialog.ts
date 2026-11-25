@@ -397,13 +397,6 @@ export class WtDialog extends LitElement {
         this.lastBodyScrollTop = this.bodyEl.scrollTop;
         WtDialog.track(this);
         this.watchContent();
-        this.dispatchEvent(
-          new CustomEvent("wt-dialog-opened", {
-            detail: { dialog: this },
-            bubbles: true,
-            composed: true,
-          }),
-        );
       }
       // Also when the browser has already closed the dialog itself, as on Escape.
       if (!this.open) {

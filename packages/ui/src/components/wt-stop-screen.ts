@@ -1,5 +1,6 @@
 import { css } from "lit";
 import { customElement } from "lit/decorators.js";
+import { onModalChange, underModal } from "../modal-layer.js";
 import { WtDialog } from "./wt-dialog.js";
 
 @customElement("wt-stop-screen")
@@ -9,11 +10,17 @@ export class WtStopScreen extends WtDialog {
     this.dismissible = false;
   }
 
-  keepAbove(dialog: WtDialog): void {
-    if (dialog !== this) this.raiseModal();
+  #stopWatchingModals?: () => void;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.#stopWatchingModals = onModalChange(() => {
+      if (this.open && underModal(this)) this.raiseModal();
+    });
   }
 
   override disconnectedCallback(): void {
+    this.#stopWatchingModals?.();
     super.disconnectedCallback();
     if (this.open) this.refocus();
   }

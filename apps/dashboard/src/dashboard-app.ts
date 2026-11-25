@@ -30,7 +30,6 @@ import {
   reportVenueLogoFailure,
   reportVenueLogoLoaded,
   setHelpMode,
-  type WtDialog,
   type WtInput,
   type WtToast,
 } from "@waitron/ui";
@@ -2335,8 +2334,6 @@ export class DashboardApp extends LitElement {
         class="shell"
         @focusin=${(e: FocusEvent) => this.#onShellFocusIn(e)}
         @keydown=${(e: KeyboardEvent) => this.#onLayoutKeydown(e)}
-        @wt-dialog-opened=${(event: CustomEvent<{ dialog: WtDialog }>) =>
-          this.shadowRoot!.querySelector("wt-stop-screen")?.keepAbove(event.detail.dialog)}
         @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
       >
         ${this.#demoBar(true)}
@@ -2531,22 +2528,20 @@ export class DashboardApp extends LitElement {
     });
     this.diskStopSignIn = false;
     if (result === "signed-in" && this.#canOpenScreen("box-status")) {
-      this.#selectScreen("box-status", () => this.#focusMain());
+      this.#selectScreen("box-status", () => void this.#focusMain());
     }
   }
 
-  #diskStopScreen(slot?: string): TemplateResult | typeof nothing {
-    if (
-      this.diskStop?.stopped !== true ||
-      this.screen === "box-status" ||
-      this.screen === "check-card-payments" ||
-      this.#permissionContinuation.open ||
-      this.leave.asking
-    )
-      return nothing;
+  #diskStopScreen(slot?: string): TemplateResult {
+    const open =
+      this.diskStop?.stopped === true &&
+      this.screen !== "box-status" &&
+      this.screen !== "check-card-payments" &&
+      !this.#permissionContinuation.open &&
+      !this.leave.asking;
     const canOpenBoxStatus = this.#canOpenScreen("box-status");
     return html`<wt-stop-screen
-      .open=${true}
+      .open=${open}
       data-test="disk-stop-screen"
       slot=${slot ?? nothing}
       .heading=${t("disk_stop.heading")}
@@ -2554,7 +2549,7 @@ export class DashboardApp extends LitElement {
       ><wt-button
         @click=${() =>
           canOpenBoxStatus
-            ? this.#selectScreen("box-status", () => this.#focusMain())
+            ? this.#selectScreen("box-status", () => void this.#focusMain())
             : void this.#signInForDiskStop()}
         >${t(canOpenBoxStatus ? "disk_stop.open_box_status" : "disk_stop.sign_in_as_manager")}</wt-button
       ></wt-stop-screen
@@ -2799,7 +2794,9 @@ export class DashboardApp extends LitElement {
   }
 
   /** For a control that its own navigation takes away, which would drop focus to the page. */
-  #focusMain(): void {
+  async #focusMain(): Promise<void> {
+    await this.updateComplete;
+    await this.renderRoot.querySelector("wt-stop-screen")?.updateComplete;
     const main = this.renderRoot.querySelector<HTMLElement>(".main");
     if (main === null) return;
     main.tabIndex = -1;
