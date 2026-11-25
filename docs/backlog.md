@@ -512,6 +512,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Extras list forms** (remaining deliberate limits). [Detail](backlog/menu.md#bundle-extras-list-forms)
 
+- **Remaining actions on measured dishes** (adjustments, part payment and set-menu replacements).
+  [Detail](backlog/menu.md#remaining-actions-on-measured-dishes)
+
 - **Each unit literal** (bundle of 1, size S). [Detail](backlog/menu.md#bundle-each-unit-literal)
 
 - **The combined end-to-end journey has not been walked**

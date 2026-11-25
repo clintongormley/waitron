@@ -2,10 +2,11 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, ContentLanguageController, formatDecimalInput, Gestures } from "@waitron/ui";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
+import { quantityLabel } from "../state/order-line.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { lineProductName, soldByTheUnit, unitName } from "./product-name.js";
+import { lineProductName, soldByTheUnit } from "./product-name.js";
 import { trimQuantity } from "./dish-format.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { nutritionIcons, nutritionIconStyles } from "./nutrition-icons.js";
@@ -142,9 +143,7 @@ export class TillLastAdded extends LitElement {
       nutritionDietLabels(asServedDiet(line), line.product.dietaryDeclarations),
     );
     const amount = formatDecimalInput(trimQuantity(line.quantity), currentLocale());
-    const quantity = !soldByTheUnit(line.product)
-      ? ` ${amount} ${unitName(line.product)}`
-      : ` ×${amount}`;
+    const quantity = soldByTheUnit(line.product) ? ` ×${amount}` : ` ${quantityLabel(line)}`;
     return html`<div
       class="last-added"
       data-last-added

@@ -681,13 +681,14 @@ describe("till-tender-pay", () => {
     expect(store.lines).toHaveLength(0); // the weighed product was not rung up
   });
 
-  it("can cancel amount entry after the basket is locked", async () => {
+  it.each([false, true])("keeps Cancel with Add blocked (sending %s)", async (sending) => {
     const store = new WorkingOrderStore();
     const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
     store.emit("product-selected", ham);
     await el.updateComplete;
     await type(el, "0.320");
-    store.lockEdits();
+    if (sending) store.sending = true;
+    else store.lockEdits();
     await el.updateComplete;
     expect(query(el, ".add")!.hasAttribute("disabled")).toBe(true);
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>(".cancel")!);

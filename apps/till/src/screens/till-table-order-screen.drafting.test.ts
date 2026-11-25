@@ -121,16 +121,16 @@ describe("till-table-order-screen: the last-added bar", () => {
     await amount?.updateComplete;
     expect(amount?.shadowRoot!.querySelector('[part="unit"]')?.textContent).toBe("kg");
     const pad = weigh.shadowRoot!.querySelector<HTMLElement>("till-numeric-pad")!;
-    pad.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "0.25" } }));
+    pad.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "0.250" } }));
     await (weigh as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
 
     weigh.shadowRoot!.querySelector<HTMLElement>("wt-button.add")!.click();
     await el.updateComplete;
 
-    expect(rows(el)).toEqual(["Jamón ×0.25"]);
-    expect(barText(el)).toContain("Jamón 0.25 kg");
+    expect(rows(el)).toEqual(["Jamón ×0.250"]);
+    expect(barText(el)).toContain("Jamón 0.250 kg");
     expect(el.shadowRoot!.querySelector("[data-draft-select]")!.textContent).toMatch(
-      /Jamón\s+0.25 kg/,
+      /Jamón\s+0.250 kg/,
     );
     expect(bar(el)!.querySelector("[data-last-added-step]")).toBeNull();
   });

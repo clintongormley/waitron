@@ -85,11 +85,19 @@ describe("till-table-order-screen: the Menu's New order bar", () => {
     expect(summary(el).textContent!.trim()).toBe(
       `${t("table.draft_title")} · ${countText(3, "order_counts.items", "order_counts.items_one")} — 2 × Croquettes · 1 × Pork shoulder`,
     );
-    store(el).addProduct({ ...pork, name: "Ham", pricingUnit: "weight" }, "0.25");
+    const weighed = { ...pork, name: "Ham", pricingUnit: "weight" as const };
+    for (const quantity of ["0.25", "0.5"]) store(el).addProduct(weighed, quantity);
     await el.updateComplete;
     expect(summary(el).textContent!.trim()).toContain(
-      "2 × Croquettes · 1 × Pork shoulder · Ham 0.25 kg",
+      "2 × Croquettes · 1 × Pork shoulder · Ham 0.25 kg · Ham 0.5 kg",
     );
+  });
+
+  it("fits one measured line as its name and amount", async () => {
+    const { el } = await phone();
+    store(el).addProduct({ ...pork, pricingUnit: "weight" }, "0.25");
+    await el.updateComplete;
+    expect(summary(el).textContent!.trim()).toBe("Pork shoulder 0.25 kg");
   });
 
   it("the Menu's New order bar: the words open Order", async () => {

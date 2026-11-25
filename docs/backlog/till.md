@@ -890,12 +890,11 @@ here is asked or built before that. They were separate entries, many of them que
   [table rounds](../../apps/server/src/order-group-submission.ts),
   [Move dishes](../../apps/server/src/bill-actions.ts),
   [raise tests](../../apps/server/src/order-portions.filing.test.ts).
-  - The till can serve or undo part of one row when its unit has zero decimal places and more than
-    one unit is available for the action. Measures such as centilitres can have zero decimal
-    places too. The till sends the available amount for a row with decimal places. The server
-    accepts a quantity in the line's precision for serve and undo. Finish table passes the
-    unserved amount to cancellation with the charge kept. For a line with decimal places the
-    server requires the whole available amount.
+  - For a row counted in whole portions, the till can serve or undo part of it when more than
+    one portion is available. For a measured row, the till offers the whole available amount.
+    The server accepts a quantity in the line's precision for serve and undo. Finish table
+    passes the unserved amount to cancellation with the charge kept. For a line with decimal
+    places the server requires the whole available amount.
     [Till serve and undo](../../apps/till/src/screens/till-table-order-screen.ts),
     [server serve and undo](../../apps/server/src/working-order-serving.ts),
     [zero-decimal measure test](../../packages/menu/src/units.operations.test.ts),

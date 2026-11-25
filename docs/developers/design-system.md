@@ -1171,18 +1171,19 @@ widening shows Menu. Showing Order, by the switch or by the Menu bar's words or 
 top with the switch in view: the basket scrolls to a dish only when it is added while Order shows
 (`revealAdded`), and one added on Menu counts as seen. When showing Order hides the control that
 showed it, such as the Menu bar's words, focus moves to the switch's Order button. While the New order has a line, Menu ends in a bar (`[data-new-order-bar]`,
-sticky at the window's foot) whose words (New order · items — n × dish · …, cut on one line) show
-Order and whose Send all sends what the draft bar's Send all sends and shows Order as the send
-starts, quiet and disabled exactly when the draft bar's is; Send all never shrinks or wraps, so the
-words beside it are cut first. The menu's tiles take `inOrder`, a map
+sticky at the window's foot). Its words show Order. A single measured line shows the dish and amount,
+such as **Orange juice 250 ml**. The other summaries start with the New order item count, then list
+counted dishes as **2 × Croquettes** and measured lines as their dish and amount. Send all sends what
+the draft bar's Send all sends and shows Order as the send starts. Both Send all buttons are quiet
+and disabled together. The Menu button keeps its width, so the words beside it are cut first. The menu's tiles take `inOrder`, a map
 from product id to items, every variant and choice of a product counted together, and draw the
 number at the tile's corner with the words for screen readers; side by side the map is not passed.
 A tile reserves space above the name whenever the map is passed. Adding a dish keeps the tile's
 size and the name's centred wrapping.
 Every count comes from `apps/till/src/state/new-order-count.ts`: `newOrderItems` (the switch and
-the bar), `newOrderDishes` (the bar's list, one entry per shown name in first-appearance order) and
-`newOrderByProduct` (the tiles), where a whole-unit line counts by quantity and a weighed or
-fractional one counts as one. Guards: `till-table-order-screen.view-switch.test.ts`,
+the bar), `newOrderDishes` (the bar's list, grouped by name for counted dishes, with one entry per
+measured line, in first-appearance order) and `newOrderByProduct` (the tiles). A counted line
+contributes its quantity, and a measured line contributes one item. Guards: `till-table-order-screen.view-switch.test.ts`,
 `till-table-order-screen.new-order-bar.test.ts`, the "a tile's number in the New order" cases in
 `widgets/menu-browser.test.ts` and `state/new-order-count.test.ts`; weaker than the paragraph:
 the screen cases mount the screen without `till-app`; `till-app-open-table.test.ts`'s handheld

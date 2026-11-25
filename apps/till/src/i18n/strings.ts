@@ -813,7 +813,6 @@ export const en = {
   "override.no_supervisors": "Nobody here can approve this",
   "override.error": "Could not authorize, try again",
   "override.throttled": "Too many wrong PINs. Try again in {n}s",
-  // Quantity entry for fractional and hardware-mapped units.
   // Held (parked) orders
   "held.label_prompt": "Name this order (optional)",
   "held.title": "Parked orders",

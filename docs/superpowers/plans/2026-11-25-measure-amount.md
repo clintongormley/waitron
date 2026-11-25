@@ -8,7 +8,7 @@ The owner first asked for a single value in small question 8 on 24 November. In 
 
 - In `apps/till/src/widgets/`, reuse the whole-portion decision in the product pick, basket and last-added controls. In `tender-pay.ts`, use the shared fixed-unit input with the existing keypad, exact quantity validation and variant picker. Keep entry available during a Counter payment hold, and respect send and edit locks. Keep the table amount panel in reach and scroll the selected tile clear if the panel overlaps it. Reveal the Counter controls when opening them. A whole amount takes digits without separators. Keep the unit visible before typing.
 - In `basket.ts` and `modifier-picker.ts`, reuse the current line editor and prefill the amount. In the table screen and `state/new-order-count.ts`, show each measured line with its actual amount and unit. Count it as one item, and keep counting whole portions by their quantity. At phone width a single measured line reads, for example, **Orange juice 250 ml**.
-- Keep the unit on the parked line and on reopen in `apps/server/src/working-order-held-read.ts`. Price refresh, late send and the table draft show the measured amount. Use the existing storage, sale, split and serving rules. Partial adjustments, partial payment and measured set-menu replacements stay in their existing backlog bundles.
+- Keep the unit on the parked line and on reopen in `apps/server/src/working-order-held-read.ts`. Price refresh, late send and the table draft show the measured amount. Use the existing storage, sale, split and serving rules. The backlog records the remaining partial adjustment, partial payment and set-menu replacement work under Remaining actions on measured dishes.
 
 ## Checks and pictures
 
