@@ -6,9 +6,6 @@ import { appendToChain } from "./chain.js";
 import { recordInstant } from "./corrections.js";
 import { readRecordedEntries } from "./record-reads.js";
 import { compareEvents, liveClockEntries, effectiveClockEntries } from "./effective-entries.js";
-import { projectWorkSessions } from "./projection.js";
-import { readClosures } from "./pay-period-reads.js";
-import { appendClosureMarker } from "./pay-period-close.js";
 import "./errors.js";
 
 export interface AutomaticCloseInput {
@@ -76,18 +73,6 @@ export async function recordAutomaticClose(
       },
     },
   );
-  const afterEntries = await readRecordedEntries(tx, { personId: input.personId });
-  const end = afterEntries.find((e) => e.entryId === id)!;
-  const session = projectWorkSessions(afterEntries).find((s) => s.endedAt === eventAt);
-  if (session !== undefined) {
-    const next = new Date(`${session.workDate}T00:00:00Z`);
-    next.setUTCDate(next.getUTCDate() + 1);
-    const [closure] = await readClosures(tx, {
-      period: { start: session.workDate, end: next.toISOString().slice(0, 10) },
-    });
-    if (closure !== undefined)
-      await appendClosureMarker(tx, input.nodeId, end, closure.id, input.origin);
-  }
   return id;
 }
 export async function confirmAutomaticEntry(

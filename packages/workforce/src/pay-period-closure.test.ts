@@ -68,6 +68,8 @@ it("counts a next-month local-day automatic end only when that next month closes
       openEntryId,
     }),
   );
+  const entries = await suite.db.select().from(api.timeEntries);
+  const chain = await api.readChain(suite.db, { nodeId });
   const october = await close();
   expect(october.snapshot.markedAutomaticEntryIds).toEqual([]);
   expect(october.snapshot.sessions).toEqual([]);
@@ -82,15 +84,8 @@ it("counts a next-month local-day automatic end only when that next month closes
   expect(november.snapshot.sessions.map((s) => [s.workDate, s.workedMinutes])).toEqual([
     ["2026-11-01", 270],
   ]);
-  const markers = (await suite.db.select().from(api.timeEntries)).filter(
-    (e) => e.entryKind === "confirmation",
-  );
-  expect(markers).toHaveLength(1);
-  expect(markers[0]).toMatchObject({
-    eventAt: "2026-11-01T04:00:00.000Z",
-    respondsToEntryId: entryId,
-    payPeriodClosureId: november.id,
-  });
+  expect(await suite.db.select().from(api.timeEntries)).toEqual(entries);
+  expect(await api.readChain(suite.db, { nodeId })).toEqual(chain);
 });
 async function open(personId = worker) {
   await run((tx) => backend.clockIn(tx, event("2026-10-05T09:00:00Z", personId)));
@@ -278,14 +273,13 @@ it("replays the original snapshot after clock settings and rules change without 
   ).toEqual(frozen);
   expect(await suite.db.select().from(api.timeEntries)).toEqual(rows);
 });
-it("serialises simultaneous closes into one closure and one marker", async () => {
+it("serialises simultaneous closes into one closure without changing the clock record", async () => {
   await automatic();
+  const entries = await suite.db.select().from(api.timeEntries);
   const [first, second] = await Promise.all([close(), close()]);
   expect(second).toEqual(first);
   expect(await suite.db.select().from(api.payPeriodClosures)).toHaveLength(1);
-  expect(
-    (await suite.db.select().from(api.timeEntries)).filter((e) => e.entryKind === "confirmation"),
-  ).toHaveLength(1);
+  expect(await suite.db.select().from(api.timeEntries)).toEqual(entries);
 });
 it("closes a period once for the venue", async () => {
   const first = await close();
@@ -299,35 +293,31 @@ it("closes a period once for the venue", async () => {
   });
   expect(february.sequenceNo).toBe(2);
 });
-it("rolls back closure and markers when a second marker is refused", async () => {
+it("allows a close to retry after the frozen snapshot is refused", async () => {
   await automatic();
-  await automatic(other);
   const entries = await suite.db.select().from(api.timeEntries);
-  await suite.db.execute(sql`CREATE TRIGGER test_refuse_second_marker BEFORE INSERT ON time_entries
-    WHEN NEW.entry_kind = 'confirmation' AND (SELECT count(*) FROM time_entries WHERE entry_kind = 'confirmation') > 0
-    BEGIN SELECT RAISE(ABORT, 'test marker failure'); END`);
+  await suite.db.execute(sql`CREATE TRIGGER test_refuse_closure BEFORE INSERT ON pay_period_closures
+    BEGIN SELECT RAISE(ABORT, 'test closure failure'); END`);
   try {
-    await expect(close()).rejects.toThrow(/test marker failure/);
+    await expect(close()).rejects.toThrow(/test closure failure/);
   } finally {
-    await suite.db.execute(sql`DROP TRIGGER test_refuse_second_marker`);
+    await suite.db.execute(sql`DROP TRIGGER test_refuse_closure`);
   }
   expect(await suite.db.select().from(api.payPeriodClosures)).toEqual([]);
+  expect((await close()).snapshot.sessions[0]!.workedMinutes).toBe(480);
   expect(await suite.db.select().from(api.timeEntries)).toEqual(entries);
 });
-it("records a late automatic end and counting marker against the unchanged closure", async () => {
+it("records a late automatic end as a change to the frozen totals", async () => {
   const openEntryId = await open();
   const frozen = await close();
   const entryId = await run((tx) =>
     backend.recordAutomaticClose(tx, { ...event("2026-10-05T17:00:00Z"), openEntryId }),
   );
   const rows = await suite.db.select().from(api.timeEntries);
-  expect(rows).toHaveLength(3);
-  expect(rows[2]).toMatchObject({
-    entryKind: "confirmation",
-    respondsToEntryId: entryId,
-    payPeriodClosureId: frozen.id,
-    authorKind: "automatic",
-  });
+  expect(rows.map(({ id, entryKind }) => [id, entryKind])).toEqual([
+    [openEntryId, "in"],
+    [entryId, "out"],
+  ]);
   const record = await run((tx) => backend.timeRecord(tx, { period, personId: worker }));
   expect(record.sessions[0]!.workedMinutes).toBe(480);
   expect(record.closedPeriodImpacts).toEqual([
@@ -347,23 +337,27 @@ it("records a late automatic end and counting marker against the unchanged closu
   expect(await suite.db.select().from(api.timeEntries)).toEqual(rows);
   expect(await close()).toEqual(frozen);
 });
-it("rolls back a late automatic end when its marker is refused", async () => {
+it("keeps frozen totals and permits a retry when a late automatic end is refused", async () => {
   const openEntryId = await open();
   const frozen = await close();
   const entries = await suite.db.select().from(api.timeEntries);
   await suite.db.execute(
-    sql`CREATE TRIGGER test_refuse_late_marker BEFORE INSERT ON time_entries WHEN NEW.entry_kind='confirmation' BEGIN SELECT RAISE(ABORT,'test late marker failure'); END`,
+    sql`CREATE TRIGGER test_refuse_late_end BEFORE INSERT ON time_entries WHEN NEW.entry_kind='out' BEGIN SELECT RAISE(ABORT,'test late end failure'); END`,
   );
   try {
     await expect(
       run((tx) =>
         backend.recordAutomaticClose(tx, { ...event("2026-10-05T17:00:00Z"), openEntryId }),
       ),
-    ).rejects.toThrow(/test late marker failure/);
+    ).rejects.toThrow(/test late end failure/);
   } finally {
-    await suite.db.execute(sql`DROP TRIGGER test_refuse_late_marker`);
+    await suite.db.execute(sql`DROP TRIGGER test_refuse_late_end`);
   }
   expect(await suite.db.select().from(api.timeEntries)).toEqual(entries);
+  const id = await run((tx) =>
+    backend.recordAutomaticClose(tx, { ...event("2026-10-05T17:00:00Z"), openEntryId }),
+  );
+  expect((await suite.db.select().from(api.timeEntries)).at(-1)?.id).toBe(id);
   expect(await close()).toEqual(frozen);
 });
 it("keeps a closed 480 frozen after a later accepted 540 and worker confirmation", async () => {

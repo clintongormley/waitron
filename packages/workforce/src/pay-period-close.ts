@@ -9,7 +9,6 @@ import {
   type JobOrigin,
   type Origin,
 } from "@waitron/shared";
-import { appendToChain } from "./chain.js";
 import { computeClosureHash } from "./pay-period-chain.js";
 import { readClosures } from "./pay-period-reads.js";
 import { invalidPeriod, readPayPeriodSettings, resolvePayPeriod } from "./pay-periods.js";
@@ -18,44 +17,12 @@ import { recordInPeriod } from "./record-period.js";
 import { projectTimeRecord } from "./record-projection.js";
 import { readPeriodEntries } from "./record-reads.js";
 import { automaticEntryIdsWithoutMarker } from "./effective-entries.js";
-import {
-  dailyContractedTargetMinutes,
-  summarisePeriod,
-  type Period,
-  type TimeEntryRecord,
-} from "./projection.js";
+import { dailyContractedTargetMinutes, summarisePeriod, type Period } from "./projection.js";
 import type { PayPeriodClosure } from "./record-types.js";
 import type { WorkSummaryRuleset } from "./clocking.js";
 import { payPeriodClosures } from "./schema/pay-period-closures.js";
 import { employments } from "./schema/employments.js";
 
-export async function appendClosureMarker(
-  tx: Transaction,
-  nodeId: string,
-  target: TimeEntryRecord,
-  closureId: string,
-  origin: JobOrigin,
-): Promise<void> {
-  await appendToChain(
-    tx,
-    { nodeId },
-    {
-      personId: target.personId,
-      entryKind: "confirmation",
-      eventAt: target.eventAt,
-      eventOffsetMinutes: target.offsetMinutes,
-      recordedByPersonId: null,
-      origin,
-      extension: {
-        authorKind: "automatic",
-        direction: null,
-        missingEntryKind: null,
-        respondsToEntryId: target.entryId,
-        payPeriodClosureId: closureId,
-      },
-    },
-  );
-}
 function validatePeriod(period: Period): void {
   if (
     period === null ||
@@ -200,7 +167,5 @@ export async function closePayPeriod(
   await tx
     .insert(payPeriodClosures)
     .values({ ...closure, periodStart: input.period.start, periodEnd: input.period.end });
-  for (const entry of eligible)
-    await appendClosureMarker(tx, input.nodeId, entry, closureId, input.origin);
   return closure;
 }
