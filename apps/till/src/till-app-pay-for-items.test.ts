@@ -2044,6 +2044,37 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       });
     });
 
+    it("at the Counter items refused as out of date are paid, at the next Continue, with the edit state a new bill read gives", async () => {
+      const fresh = { ...counterEdit, editorVersion: 3 };
+      const el = await retrieved(
+        {
+          previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+          payForItems: vi
+            .fn()
+            .mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 })
+            .mockResolvedValue(paidOnWo9({}, onWo1)),
+        },
+        [counterEdit, fresh],
+      );
+      await chooseFirst(el);
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+      await flush(el);
+      expect(formError(el)).toBe(codeMessage("draft.out_of_date"));
+      expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+      expect(api.getFindBill).toHaveBeenCalledOnce();
+
+      await press(el, "[data-pay-continue]");
+      expect(api.getFindBill).toHaveBeenCalledTimes(2);
+      expect(api.previewItemPayment).toHaveBeenCalledTimes(2);
+      await press(el, "[data-pay-confirm]");
+      await flush(el);
+
+      expect(
+        vi.mocked(api.payForItems).mock.calls.map(([, request]) => request.expectedEdits),
+      ).toEqual([[counterEdit], [fresh]]);
+    });
+
     describe("a retrieved order already part-paid", () => {
       const toPay = (amount: string) =>
         [
@@ -2155,6 +2186,73 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
         await flush(el);
 
         expect(banner(el)).toBe(toPay("0.00"));
+      });
+
+      it("at the Counter a payment leaves another message over the order as it was", async () => {
+        let left: string | null = null;
+        const el = await partPaid(
+          {
+            switchDining: vi.fn().mockRejectedValue({ code: "device.forbidden_action" }),
+            previewBillPayment: vi.fn().mockResolvedValue(cash("30.00", "0.00")),
+            takeBillPayment: vi.fn(async () => {
+              left = "40.00";
+              return takenOf(
+                { kind: "contribution", applied: "30.00", tendered: "30.00" },
+                { workingOrderId: "wo-1", received: "80.00", outstanding: "40.00" },
+              );
+            }),
+          },
+          () => left,
+        );
+        emit(counter(el), "dining-change", { dining: "takeaway" });
+        await flush(el);
+        const refused = banner(el);
+        expect(refused).toBe(codeMessage("device.forbidden_action"));
+
+        emit(counter(el), "counter-bill-pay", {});
+        await flush(el);
+        await press(el, 'input[name="way"][value="contribution"]');
+        await type(el, "amount", "30");
+        await type(el, "tendered", "30");
+        await press(el, "[data-pay-continue]");
+        await press(el, "[data-pay-confirm]");
+        await flush(el);
+        emit(dialog(el)!, "bill-pay-close");
+        await flush(el);
+
+        expect(api.takeBillPayment).toHaveBeenCalledOnce();
+        expect(banner(el)).toBe(refused);
+      });
+
+      it("at the Counter a balance answered for another bill is never shown as the order's to pay", async () => {
+        const el = await partPaid(
+          {
+            previewBillPayment: vi.fn().mockResolvedValue(cash("30.00", "0.00")),
+            takeBillPayment: vi
+              .fn()
+              .mockResolvedValue(
+                takenOf(
+                  { kind: "contribution", applied: "30.00", tendered: "30.00" },
+                  { workingOrderId: "wo-2", received: "110.00", outstanding: "10.00" },
+                ),
+              ),
+          },
+          () => null,
+        );
+
+        emit(counter(el), "counter-bill-pay", {});
+        await flush(el);
+        await press(el, 'input[name="way"][value="contribution"]');
+        await type(el, "amount", "30");
+        await type(el, "tendered", "30");
+        await press(el, "[data-pay-continue]");
+        await press(el, "[data-pay-confirm]");
+        await flush(el);
+        emit(dialog(el)!, "bill-pay-close");
+        await flush(el);
+
+        expect(api.takeBillPayment).toHaveBeenCalledOnce();
+        expect(banner(el)).toBe(toPay("70.00"));
       });
     });
   });
