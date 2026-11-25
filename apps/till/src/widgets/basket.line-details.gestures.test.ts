@@ -42,6 +42,13 @@ it("keeps the browser menu off a basket line during a touch hold", async () => {
   expect(touchContextMenu(el.shadowRoot!.querySelector<HTMLElement>(".name")!)).toBe(true);
 });
 
+it("keeps the browser menu on a basket line without hold for details", async () => {
+  const { el } = await opening();
+  el.lineDetails = false;
+  await el.updateComplete;
+  expect(touchContextMenu(el.shadowRoot!.querySelector<HTMLElement>(".name")!)).toBe(false);
+});
+
 it("lets the browser offer Paste in the basket's quantity field", async () => {
   const { el, line } = await opening();
   el.openLineDetails(line);
