@@ -36,7 +36,7 @@ const offer: DeclarationOffer = {
 };
 function document(dish: DeclarationOffer = offer): DeclarationDocument {
   return {
-    format: 4,
+    format: 5,
     menuId: "private-menu",
     menuName: "Lunch",
     includedMenuHashes: { secret: "hash" },

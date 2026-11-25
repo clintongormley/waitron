@@ -1444,7 +1444,7 @@ describe("A803 portions: raising a dish", () => {
       sql`select menu_item_id, menu_id, menu_version_id, menu_name, offer_department_id,
                  department_name, offer_category_name, unit_id, offer_unit_name,
                  offer_unit_precision, sold_in_each, hardware_unit, offer_vat_class,
-                 allergens, sent_nutrition, diet, diet_override, late_period_name, late_confirmed_by
+                 sent_nutrition, late_period_name, late_confirmed_by
           from working_order_lines
           where working_order_id = ${bound.billId} order by line_no`,
     );

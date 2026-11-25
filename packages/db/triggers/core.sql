@@ -441,9 +441,6 @@ BEGIN
       AND new.unit_id IS old.unit_id
       AND new.sold_in_each IS old.sold_in_each
       AND new.hardware_unit IS old.hardware_unit
-      AND new.allergens IS old.allergens
-      AND new.diet IS old.diet
-      AND new.diet_override IS old.diet_override
       AND new.late_period_name IS old.late_period_name
       AND new.late_period_id IS old.late_period_id
       AND new.late_confirmed_by IS old.late_confirmed_by
@@ -518,9 +515,6 @@ BEGIN
       AND new.unit_id IS old.unit_id
       AND new.sold_in_each IS old.sold_in_each
       AND new.hardware_unit IS old.hardware_unit
-      AND new.allergens IS old.allergens
-      AND new.diet IS old.diet
-      AND new.diet_override IS old.diet_override
       -- A late release records its decision before taking the sent stamp.
       AND (
         (
@@ -613,9 +607,6 @@ BEGIN
       AND new.unit_id IS old.unit_id
       AND new.sold_in_each IS old.sold_in_each
       AND new.hardware_unit IS old.hardware_unit
-      AND new.allergens IS old.allergens
-      AND new.diet IS old.diet
-      AND new.diet_override IS old.diet_override
       AND new.late_period_name IS old.late_period_name
       AND new.late_period_id IS old.late_period_id
       AND new.late_confirmed_by IS old.late_confirmed_by

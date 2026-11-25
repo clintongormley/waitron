@@ -16,14 +16,14 @@ import type { IncludeFolderOverrides } from "./section-types.js";
  * type definitions only. The guard is `scripts/dashboard-browser-purity.test.ts`.
  */
 
-/** Supplied from current products when the document is served. */
+/** Frozen, and replaced from current products when the document is served. */
 export type DeclarationField = "allergens" | "diet" | "dietOverride" | "dietaryDeclarations";
 export type OverlayOfferField = "available" | "courseId" | "category" | DeclarationField;
+/** Read from current rows when served, never frozen. */
+type UnfrozenOfferField = "available" | "courseId" | "category";
 
 /** `image` is the product's effective photo, which `OfferedExtraItem` does not carry. */
-export type FrozenExtraItem = Omit<OfferedExtraItem, "addAllergens" | "suitableFor"> & {
-  image: string | null;
-};
+export type FrozenExtraItem = OfferedExtraItem & { image: string | null };
 export type FrozenOptionLabel = Omit<OptionLabel, "available">;
 
 /** Every option label, and every extras item whose product is Active and has no Active variant,
@@ -32,13 +32,13 @@ export type FrozenOfferedModifier =
   | (Omit<OfferedExtrasList, "items"> & { items: FrozenExtraItem[] })
   | (Omit<OfferedOptionsList, "labels"> & { labels: FrozenOptionLabel[] });
 
-export type FrozenOfferVariant = Omit<MenuOfferVariant, OverlayOfferField>;
+export type FrozenOfferVariant = Omit<MenuOfferVariant, UnfrozenOfferField>;
 
 type PublishedOrdering = { ordering?: MenuOffer["ordering"] };
 
 export type FrozenOffer = Omit<
   MenuOffer,
-  OverlayOfferField | "placements" | "offeredModifiers" | "variants" | "ordering" | "combined"
+  UnfrozenOfferField | "placements" | "offeredModifiers" | "variants" | "ordering" | "combined"
 > &
   PublishedOrdering & {
     /** The dish's own photo and description, which `MenuOffer` does not carry. */
@@ -118,7 +118,7 @@ type MenuPriceOrigin =
   { kind: "product" } | { kind: "this_menu" } | { kind: "included_menu"; id: string; name: string };
 
 export interface MenuDocument {
-  format: 4;
+  format: 5;
   /** Direct active inclusions' working hashes. */
   includedMenuHashes?: Record<string, string>;
   menuId: string;
@@ -262,7 +262,8 @@ export interface MenuOccurrence {
 /** Where a change came from (spec §11.1). */
 export type MenuChangeSource = "this_menu" | "shared_product" | "included_menu" | "set_menu";
 
-export type SetMenuChangeField = "price" | "vat" | "names" | "lines" | "dishes";
+export type SetMenuChangeField =
+  "price" | "vat" | "names" | "lines" | "allergens" | "diet" | "dishes";
 
 export type MenuChangeBody = {
   source: MenuChangeSource;
@@ -362,6 +363,8 @@ export type ProductChangeField =
   | "image"
   | "color"
   | "unit"
+  | "allergens"
+  | "diet"
   | "vat"
   | "ordering"
   | "variants"

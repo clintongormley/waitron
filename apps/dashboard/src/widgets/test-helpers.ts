@@ -499,7 +499,7 @@ export function menuDocument(
   };
   walk(members);
   return {
-    format: 4,
+    format: 5,
     menuId: "menu-lunch",
     menuName,
     root: { members },
@@ -538,6 +538,10 @@ function frozenOffer(
     },
     vatClass: "reduced",
     takeawayVatClass: "reduced",
+    allergens: null,
+    diet: null,
+    dietOverride: null,
+    dietaryDeclarations: [],
     image: null,
     description: null,
     variants: [],

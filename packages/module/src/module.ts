@@ -757,9 +757,8 @@ export interface LineContextInput {
   /** A set-menu dish and its extras use the full-menu version that supplied the tapped offer. */
   setMenuOffer?: { offer: ZoneMenuOffer; versionId: string };
   /**
-   * The variant the line sells, as listed in its offer's `variants`: its VAT class, allergens
-   * and diet are recorded in place of the dish's. A variant the offer does not list records the
-   * dish's.
+   * The variant the line sells, as listed in its offer's `variants`: its VAT class is recorded in
+   * place of the dish's. A variant the offer does not list records the dish's.
    */
   variantId?: string;
   unit?: {
@@ -783,9 +782,6 @@ export type LineContextColumns = Pick<
   | "unitId"
   | "soldInEach"
   | "hardwareUnit"
-  | "allergens"
-  | "diet"
-  | "dietOverride"
   | "latePeriodId"
   | "latePeriodName"
   | "lateConfirmedBy"
@@ -1228,9 +1224,6 @@ export interface VenueServiceContribution {
       unitPrecision: number;
       hardwareUnit: "kg" | "g" | "mg" | null;
       vatClass: string;
-      allergens: ZoneMenuOffer["allergens"];
-      diet: unknown;
-      dietOverride: unknown;
     }[]
   >;
   /** Each line's offer is looked up in `offers`, the zone's offers the lines were priced from; one

@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   extraListItems,
   extraLists,
+  menuVersions,
   optionLists,
   optionLabels,
   products,
@@ -20,8 +21,14 @@ import {
   withTransaction,
   type Transaction,
 } from "@waitron/db";
-import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { decimal, HOME_DISPLAY_DEFAULTS, shownMembers } from "@waitron/shared";
+import { seedPerson, seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import {
+  decimal,
+  expandDietaryDeclarations,
+  HOME_DISPLAY_DEFAULTS,
+  shownMembers,
+} from "@waitron/shared";
+import { previewMenu, publishMenu } from "./menu-publication.js";
 import { plantStoredCategory, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import {
   menusFixture,
@@ -114,7 +121,10 @@ it("serves current declarations for a dish, its variant and its extra, retaining
   );
   const state = await app((tx) => applyLiveFields(tx, [document]));
   const offer = state.offers.get(f.dinner)!.find((offer) => offer.productId === f.lemonade)!;
-  expect(document.offers[offer.id]).not.toHaveProperty("allergens");
+  expect(document.offers[offer.id]!.allergens).toEqual({
+    gluten: { kinds: ["oats", "wheat"] },
+    milk: {},
+  });
   expect(offer.dietaryDeclarations).toEqual(["vegetarian"]);
   expect(offer.diet!.vegan).toBe("no");
   expect(offer.allergens).toEqual({ eggs: {} });
@@ -125,6 +135,50 @@ it("serves current declarations for a dish, its variant and its extra, retaining
   expect(extras.items.find((extra) => extra.productId === f.extraLemon)!.addAllergens).toEqual({
     gluten: { kinds: ["barley"] },
     sesame: {},
+  });
+});
+
+describe("declarations in the published document", () => {
+  async function publish(menuId: string) {
+    await seedPerson(fx.db, { id: "person-1", displayName: "Test person-1" });
+    const { hash } = await app((tx) => previewMenu(tx, menuId));
+    return app((tx) => publishMenu(tx, menuId, hash, "person-1"));
+  }
+
+  it("freezes a dish's, a variant's and an extra's declarations", async () => {
+    const f = await menusFixture(fx.db);
+    await app(async (tx) => {
+      await updateProduct(tx, f.lemonade, {
+        allergens: { milk: {} },
+        dietaryDeclarations: ["vegan"],
+        dietOverride: { vegetarian: "yes" },
+      });
+      await updateProduct(tx, f.extraLemon, {
+        allergens: { eggs: {} },
+        dietaryDeclarations: ["vegan"],
+      });
+    });
+    const { versionId } = await publish(f.dinner);
+    const [row] = await fx.db
+      .select({ document: menuVersions.document })
+      .from(menuVersions)
+      .where(eq(menuVersions.id, versionId));
+    const document = row!.document as MenuDocument;
+    const offer = document.offers[await app((tx) => offerOf(tx, f.dinner, f.lemonade))]!;
+    expect(offer.allergens).toEqual({ milk: {} });
+    expect(offer.dietaryDeclarations).toEqual(["vegan"]);
+    expect(offer.dietOverride).toEqual({ vegetarian: "yes" });
+    expect(offer.diet).toEqual({ vegan: "unknown", vegetarian: "yes", contains: [] });
+    const variant = offer.variants.find((variant) => variant.id === f.large)!;
+    expect(variant.allergens).toEqual({ milk: {} });
+    expect(variant.dietaryDeclarations).toEqual(["vegan"]);
+    expect(variant.dietOverride).toEqual({ vegetarian: "yes" });
+    expect(variant.diet).toEqual({ vegan: "unknown", vegetarian: "yes", contains: [] });
+    const extras = offer.offeredModifiers.find((modifier) => modifier.kind === "extras")!;
+    const extra = extras.items.find((item) => item.productId === f.extraLemon)!;
+    expect(extra.addAllergens).toEqual({ eggs: {} });
+    expect(extra.suitableFor).toEqual(expandDietaryDeclarations(["vegan"]));
+    expect(extra.suitableFor.length).toBeGreaterThan(1);
   });
 });
 
@@ -179,7 +233,7 @@ describe("buildMenuDocument", () => {
     const lager = await app((tx) => offerOf(tx, f.lunch, f.lager));
     const soup = await app((tx) => offerOf(tx, f.lunch, f.soup));
     expect(document).toMatchObject({
-      format: 4,
+      format: 5,
       menuId: f.lunch,
       menuName: "Lunch Menu",
       home: {
@@ -238,34 +292,17 @@ describe("buildMenuDocument", () => {
     });
   });
 
-  it("leaves out every live field and every field that is not menu content", async () => {
+  it("leaves out availability, course and reporting category, and an extras item's or option label's availability", async () => {
     const f = await menusFixture(fx.db);
     const document = await build(f.lunch);
     const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
-    for (const field of [
-      "available",
-      "courseId",
-      "category",
-      "allergens",
-      "diet",
-      "dietOverride",
-      "dietaryDeclarations",
-    ])
+    for (const field of ["available", "courseId", "category"])
       expect(Object.keys(offer)).not.toContain(field);
-    for (const field of [
-      "available",
-      "courseId",
-      "category",
-      "allergens",
-      "diet",
-      "dietOverride",
-      "dietaryDeclarations",
-    ])
+    for (const field of ["available", "courseId", "category"])
       expect(Object.keys(offer.variants[0]!)).not.toContain(field);
     const [extras, options] = offer.offeredModifiers;
     if (extras?.kind !== "extras" || options?.kind !== "options") throw new Error("lists");
-    for (const field of ["available", "addAllergens", "suitableFor"])
-      expect(Object.keys(extras.items[0]!)).not.toContain(field);
+    expect(Object.keys(extras.items[0]!)).not.toContain("available");
     for (const label of options.labels) expect(Object.keys(label)).not.toContain("available");
   });
 
@@ -601,6 +638,26 @@ describe("menuDocumentHash", () => {
       (tx, f) => updateProduct(tx, f.extraLemon, { ordering: "not_sold_separately" }),
     ],
     [
+      "the dish's takeaway VAT rate",
+      (tx, f) => updateProduct(tx, f.lemonade, { takeawayVatRate: "0.00" }),
+    ],
+  ];
+
+  it.each(unchanged)("does not move when %s changes", async (_, change) => {
+    const f = await menusFixture(fx.db);
+    const before = menuDocumentHash(await build(f.dinner));
+    await app((tx) => change(tx, f));
+    expect(menuDocumentHash(await build(f.dinner))).toBe(before);
+  });
+
+  const moved: [
+    string,
+    (tx: Transaction, f: Awaited<ReturnType<typeof menusFixture>>) => Promise<unknown>,
+  ][] = [
+    ["the dish's VAT class", (tx, f) => updateProduct(tx, f.lemonade, { vatClass: "general" })],
+    ["the variant's VAT class", (tx, f) => updateProduct(tx, f.large, { vatClass: "general" })],
+    ["the extra's VAT class", (tx, f) => updateProduct(tx, f.extraLemon, { vatClass: "general" })],
+    [
       "the dish's allergens",
       (tx, f) => updateProduct(tx, f.lemonade, { allergens: { sulphites: {} } }),
     ],
@@ -624,26 +681,6 @@ describe("menuDocumentHash", () => {
       "the extra's diet",
       (tx, f) => updateProduct(tx, f.extraLemon, { dietaryDeclarations: ["vegan"] }),
     ],
-    [
-      "the dish's takeaway VAT rate",
-      (tx, f) => updateProduct(tx, f.lemonade, { takeawayVatRate: "0.00" }),
-    ],
-  ];
-
-  it.each(unchanged)("does not move when %s changes", async (_, change) => {
-    const f = await menusFixture(fx.db);
-    const before = menuDocumentHash(await build(f.dinner));
-    await app((tx) => change(tx, f));
-    expect(menuDocumentHash(await build(f.dinner))).toBe(before);
-  });
-
-  const moved: [
-    string,
-    (tx: Transaction, f: Awaited<ReturnType<typeof menusFixture>>) => Promise<unknown>,
-  ][] = [
-    ["the dish's VAT class", (tx, f) => updateProduct(tx, f.lemonade, { vatClass: "general" })],
-    ["the variant's VAT class", (tx, f) => updateProduct(tx, f.large, { vatClass: "general" })],
-    ["the extra's VAT class", (tx, f) => updateProduct(tx, f.extraLemon, { vatClass: "general" })],
     ["the dish's name", (tx, f) => updateProduct(tx, f.lemonade, { name: "Still lemonade" })],
     ["the dish's price", (tx, f) => updateProduct(tx, f.lemonade, { unitPrice: "3.20" })],
     [
@@ -1296,11 +1333,19 @@ describe("diffMenuDocuments", () => {
     ]);
   });
 
-  it("leaves a declarations-only product edit out of publication changes", async () => {
+  it("lists a declarations-only product edit among publication changes", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.dinner);
     await app((tx) => updateProduct(tx, f.lemonade, { dietaryDeclarations: ["vegan"] }));
-    expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([]);
+    expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([
+      {
+        kind: "product_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        fields: ["diet"],
+        source: "shared_product",
+      },
+    ]);
   });
 
   it("names the list and extra when its saved portion takes a new product unit", async () => {
@@ -1663,7 +1708,7 @@ describe("diffMenuDocuments", () => {
         kind: "product_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["names", "description", "image"],
+        fields: ["names", "description", "image", "allergens", "diet"],
         source: "shared_product",
       },
       {
@@ -1740,7 +1785,7 @@ describe("diffMenuDocuments", () => {
     ]);
   });
 
-  it("names a change to one variant's own facts as the variants', not the dish's", async () => {
+  it("names a change to one variant's own facts as the variants', and its declarations on the dish too", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.dinner);
     await app((tx) =>
@@ -1756,7 +1801,7 @@ describe("diffMenuDocuments", () => {
         kind: "product_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["variants"],
+        fields: ["allergens", "diet", "variants"],
         source: "shared_product",
       },
     ]);
@@ -1788,7 +1833,7 @@ describe("diffMenuDocuments", () => {
         kind: "product_changed",
         productId: f.extraLemon,
         name: "Lemon wedge",
-        fields: ["names"],
+        fields: ["names", "allergens", "diet"],
         source: "shared_product",
       },
     ]);

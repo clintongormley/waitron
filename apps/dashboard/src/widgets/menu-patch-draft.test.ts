@@ -24,6 +24,10 @@ function variant(id: string, name: string): FrozenOfferVariant {
     pricingUnit: {} as FrozenOfferVariant["pricingUnit"],
     vatClass: "reduced",
     takeawayVatClass: "reduced",
+    allergens: null,
+    diet: null,
+    dietOverride: null,
+    dietaryDeclarations: [],
   };
 }
 
@@ -41,6 +45,8 @@ function extra(productId: string, name: string): FrozenExtraItem {
     takeawayVatClass: "reduced",
     maxQuantity: null,
     preselected: false,
+    addAllergens: null,
+    suitableFor: [],
     image: null,
   };
 }

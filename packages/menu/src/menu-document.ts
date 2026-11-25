@@ -102,7 +102,7 @@ export type {
   MenuState,
 } from "@waitron/shared";
 
-export const MENU_DOCUMENT_FORMAT = 4;
+export const MENU_DOCUMENT_FORMAT = 5;
 
 export interface OmittedShortcut {
   ref: TileRef;
@@ -514,30 +514,12 @@ function freezeOffer(
   extraImages: ReadonlyMap<string, string | null>,
 ): FrozenOffer {
   return {
-    ...without(offer, [
-      "courseId",
-      "category",
-      "offeredModifiers",
-      "variants",
-      "combined",
-      "allergens",
-      "diet",
-      "dietOverride",
-      "dietaryDeclarations",
-    ]),
+    ...without(offer, ["courseId", "category", "offeredModifiers", "variants", "combined"]),
     image: facts.image,
     description: facts.description,
     color: facts.color,
     variants: offer.variants.map((variant) =>
-      without(variant, [
-        "available",
-        "courseId",
-        "category",
-        "allergens",
-        "diet",
-        "dietOverride",
-        "dietaryDeclarations",
-      ]),
+      without(variant, ["available", "courseId", "category"]),
     ),
     offeredModifiers: offer.offeredModifiers.map((entry): FrozenOfferedModifier =>
       entry.kind === "options"
@@ -545,7 +527,7 @@ function freezeOffer(
         : {
             ...entry,
             items: entry.items.map((item) => ({
-              ...without(item, ["addAllergens", "suitableFor"]),
+              ...item,
               image: extraImages.get(item.productId)!,
             })),
           },
@@ -800,7 +782,7 @@ export async function readLiveState(
 }
 
 /**
- * The documents' offers, per menu and in menu order, with the live fields put back from the current
+ * The documents' offers, per menu and in menu order, with the live fields taken from the current
  * rows: availability, declarations, course and reporting category.
  * With `menuItemIds`, only the offers it names are read and returned, and `liveFields` digests
  * only their rows, so it is not comparable with {@link readLiveState}'s.
@@ -1074,6 +1056,8 @@ const PRODUCT_FIELD_ORDER: readonly ProductChangeField[] = [
   "image",
   "color",
   "unit",
+  "allergens",
+  "diet",
   "vat",
   "ordering",
   "variants",
@@ -1086,12 +1070,16 @@ const PRODUCT_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["names", ["name", "customerName", "kitchenName"]],
   ["image", ["image"]],
   ["unit", ["unit", "pricingUnit"]],
+  ["allergens", ["allergens"]],
+  ["diet", ["diet", "dietOverride", "dietaryDeclarations"]],
   ["vat", ["vatClass", "takeawayVatClass"]],
 ];
 
 const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["names", ["name", "customerName", "kitchenName", "presentation"]],
   ["image", ["image"]],
+  ["allergens", ["addAllergens"]],
+  ["diet", ["suitableFor"]],
   ["vat", ["vatClass", "takeawayVatClass"]],
 ];
 
@@ -1104,6 +1092,69 @@ function changedFacts(
   const read = (value: object, key: string) => (value as Record<string, unknown>)[key];
   for (const [field, keys] of facts)
     if (keys.some((key) => !same(read(a, key), read(b, key)))) into.add(field);
+}
+
+const DECLARATIONS: readonly ProductChangeField[] = ["allergens", "diet"];
+const declarationsOf = (facts: readonly [ProductChangeField, readonly string[]][]) =>
+  facts.filter(([field]) => DECLARATIONS.includes(field));
+const PRODUCT_DECLARATIONS = declarationsOf(PRODUCT_FACTS);
+const EXTRA_DECLARATIONS = declarationsOf(EXTRA_FACTS);
+
+function extraItemsOf(offer: SetMenuFrozenOffer) {
+  return new Map(
+    offer.offeredModifiers.flatMap((list) =>
+      list.kind === "extras"
+        ? list.items.map((item) => [`${list.id}:${item.productId}`, item] as const)
+        : [],
+    ),
+  );
+}
+
+/** The declarations that changed on a set menu's dishes, their variants and their extras. */
+function setMenuDeclarations(
+  was: Record<string, SetMenuFrozenOffer>,
+  copy: Record<string, SetMenuFrozenOffer>,
+): Set<ProductChangeField> {
+  const changed = new Set<ProductChangeField>();
+  for (const [id, offer] of Object.entries(copy)) {
+    const before = was[id];
+    if (before === undefined) continue;
+    changedFacts(PRODUCT_DECLARATIONS, before, offer, changed);
+    const variants = new Map(before.variants.map((variant) => [variant.id, variant]));
+    for (const variant of offer.variants) {
+      const previous = variants.get(variant.id);
+      if (previous !== undefined) changedFacts(PRODUCT_DECLARATIONS, previous, variant, changed);
+    }
+    const items = extraItemsOf(before);
+    for (const [key, item] of extraItemsOf(offer)) {
+      const previous = items.get(key);
+      if (previous !== undefined) changedFacts(EXTRA_DECLARATIONS, previous, item, changed);
+    }
+  }
+  return changed;
+}
+
+/** A set menu's dishes with their declarations left out, so a declaration edit is not a dish edit. */
+function withoutDeclarations(offers: Record<string, SetMenuFrozenOffer>) {
+  const strip = (value: object, facts: readonly [ProductChangeField, readonly string[]][]) => {
+    const kept: Record<string, unknown> = { ...value };
+    for (const [, keys] of facts) for (const key of keys) delete kept[key];
+    return kept;
+  };
+  return Object.fromEntries(
+    Object.entries(offers).map(([id, offer]) => [
+      id,
+      {
+        ...strip(offer, PRODUCT_DECLARATIONS),
+        variants: offer.variants.map((variant) => strip(variant, PRODUCT_DECLARATIONS)),
+        offeredModifiers: offer.offeredModifiers.map((list) =>
+          list.kind === "extras"
+            ? { ...list, items: list.items.map((item) => strip(item, EXTRA_DECLARATIONS)) }
+            : list,
+        ),
+      },
+    ]),
+  );
 }
 
 /** What an extras list offers on its dish, without the facts its items borrow from products. */
@@ -1181,7 +1232,7 @@ function productFields(
     for (const [field, keys] of PRODUCT_FACTS)
       if (keys.some((key) => !same(read(was, key), read(variant, key))) && !inherited(keys)) {
         shared.add("variants");
-        if (field === "vat") shared.add("vat");
+        if (field === "vat" || DECLARATIONS.includes(field)) shared.add(field);
       }
     const setting = decision?.variants.find((v) => v.variantId === variant.id);
     const fromSetting = (source: ValueSource | undefined, fallback: Set<ProductChangeField>) => {
@@ -1284,7 +1335,17 @@ export function diffEntries(
       fields.push("vat");
     if (was.name !== copy.name || !same(was.terms.names, copy.terms.names)) fields.push("names");
     if (!same(was.terms.lines, copy.terms.lines)) fields.push("lines");
-    if (!same(was.offers, copy.offers) || !same(was.root, copy.root)) fields.push("dishes");
+    const offersChanged = !same(was.offers, copy.offers);
+    if (offersChanged) {
+      const declarations = setMenuDeclarations(was.offers, copy.offers);
+      for (const field of ["allergens", "diet"] as const)
+        if (declarations.has(field)) fields.push(field);
+    }
+    if (
+      (offersChanged && !same(withoutDeclarations(was.offers), withoutDeclarations(copy.offers))) ||
+      !same(was.root, copy.root)
+    )
+      fields.push("dishes");
     if (fields.length > 0 || copy.changedAt !== was.changedAt)
       push({
         kind: "set_menu_changed",

@@ -575,6 +575,47 @@ it.each([
 });
 
 it.each([
+  ["en", "Lemonade: allergens, diet — shared product"],
+  ["es-ES", "Lemonade: alérgenos, dieta — producto compartido"],
+])("names a change to a product's allergens and diet (%s)", async (locale, line) => {
+  setLocale(locale);
+  const el = await mount({
+    preview: preview([
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-allergens",
+        targets: { before: [], after: [] },
+        kind: "product_changed",
+        productId: "p-lemonade",
+        name: "Lemonade",
+        fields: ["allergens", "diet"],
+        source: "shared_product",
+      },
+    ]),
+  });
+  expect(items(el, "changes")).toEqual([line]);
+});
+
+it.each([
+  ["en", "Daily menu: allergens, diet — set menu"],
+  ["es-ES", "Daily menu: alérgenos, dieta — menú"],
+])("names a change to a set menu's dish allergens and diet (%s)", async (locale, line) => {
+  setLocale(locale);
+  const el = await mount({
+    preview: preview([
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-set-menu-allergens",
+        targets: { before: [], after: [] },
+        kind: "set_menu_changed",
+        setMenu: { id: "m-daily", name: "Daily menu" },
+        fields: ["allergens", "diet"],
+        source: "set_menu",
+      },
+    ]),
+  });
+  expect(items(el, "changes")).toEqual([line]);
+});
+
+it.each([
   ["en", "Bacon: how it is sold — shared product"],
   ["es-ES", "Bacon: cómo se vende — producto compartido"],
 ])("names a change to who may order a product on its own (%s)", async (locale, line) => {

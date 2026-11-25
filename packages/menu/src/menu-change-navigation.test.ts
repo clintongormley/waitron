@@ -107,6 +107,10 @@ function offer(id = "soup"): FrozenOffer {
     unit,
     vatClass: "general",
     takeawayVatClass: "general",
+    allergens: null,
+    diet: null,
+    dietOverride: null,
+    dietaryDeclarations: [],
     ordering: "public",
     placements: [["drinks"], ["favourites", "drinks"]],
     variants: [],
@@ -130,7 +134,7 @@ function section(
 function document(): MenuDocument {
   const drinks = section("drinks", [{ kind: "product", menuItemId: "mi-soup", productId: "soup" }]);
   return {
-    format: 4,
+    format: 5,
     menuId: "lunch",
     menuName: "Lunch",
     root: { members: [drinks, section("favourites", [drinks])] },
@@ -357,6 +361,20 @@ describe("navigateMenuChanges", () => {
       [{ kind: "unit" }],
     ],
     [
+      "allergens",
+      (o: FrozenOffer) => {
+        o.allergens = { milk: {} };
+      },
+      [{ kind: "allergens" }],
+    ],
+    [
+      "diet",
+      (o: FrozenOffer) => {
+        o.dietaryDeclarations = ["vegan"];
+      },
+      [{ kind: "diet" }],
+    ],
+    [
       "vat",
       (o: FrozenOffer) => {
         o.vatClass = "reduced";
@@ -429,6 +447,10 @@ function variant(id: string): FrozenOfferVariant {
     pricingUnit: "each",
     vatClass: "general",
     takeawayVatClass: "general",
+    allergens: null,
+    diet: null,
+    dietOverride: null,
+    dietaryDeclarations: [],
   };
 }
 function extras(id: string): Extract<FrozenOfferedModifier, { kind: "extras" }> {
@@ -462,6 +484,8 @@ function extras(id: string): Extract<FrozenOfferedModifier, { kind: "extras" }> 
         takeawayVatClass: "general",
         maxQuantity: null,
         preselected: false,
+        addAllergens: null,
+        suitableFor: [],
       },
     ],
   };
@@ -919,4 +943,219 @@ it("keeps unresolved change rows distinct by their subject and fields without us
       bodies.map((body) => ("name" in body ? { ...body, name: "Renamed" } : body)),
     ).map((row) => row.id),
   ).toEqual(rows.map((row) => row.id));
+});
+
+describe("declaration changes", () => {
+  async function changes(live: MenuDocument, proposed: MenuDocument) {
+    const { diffMenuDocuments } = await import("./menu-document.js");
+    return diffMenuDocuments(live, proposed).map(({ id, ...rest }) => {
+      expect(id).toEqual(expect.any(String));
+      return rest;
+    });
+  }
+
+  it("lists a dish's allergen change", async () => {
+    const live = document(),
+      proposed = document();
+    soup(proposed).allergens = { milk: {} };
+    expect(await changes(live, proposed)).toEqual([
+      {
+        kind: "product_changed",
+        productId: "soup",
+        name: "Staff soup",
+        fields: ["allergens"],
+        source: "shared_product",
+        targets: {
+          before: repeated({ kind: "allergens" }),
+          after: repeated({ kind: "allergens" }),
+        },
+      },
+    ]);
+  });
+
+  it("lists a variant's diet change", async () => {
+    const live = document(),
+      proposed = document();
+    soup(live).variants = [variant("large")];
+    soup(proposed).variants = [variant("large")];
+    soup(proposed).variants[0]!.dietaryDeclarations = ["vegan"];
+    const expected = repeated({ kind: "diet" }, { variantId: "large" });
+    expect(await changes(live, proposed)).toEqual([
+      {
+        kind: "product_changed",
+        productId: "soup",
+        name: "Staff soup",
+        fields: ["diet", "variants"],
+        source: "shared_product",
+        targets: { before: expected, after: expected },
+      },
+    ]);
+  });
+
+  it("lists an extra's allergen change", async () => {
+    const live = document(),
+      proposed = document();
+    soup(live).offeredModifiers = [extras("citrus")];
+    soup(proposed).offeredModifiers = [extras("citrus")];
+    const list = soup(proposed).offeredModifiers[0]!;
+    if (list.kind !== "extras") throw new Error("extras");
+    list.items[0]!.addAllergens = { sulphites: {} };
+    const expected = repeated({ kind: "allergens" }, { listId: "citrus", extraProductId: "lemon" });
+    expect(await changes(live, proposed)).toEqual([
+      {
+        kind: "product_changed",
+        productId: "lemon",
+        name: "Staff lemon",
+        fields: ["allergens"],
+        source: "shared_product",
+        targets: { before: expected, after: expected },
+      },
+    ]);
+  });
+
+  it("lists a variant's allergen change", async () => {
+    const live = document(),
+      proposed = document();
+    soup(live).variants = [variant("large")];
+    soup(proposed).variants = [variant("large")];
+    soup(proposed).variants[0]!.allergens = { milk: {} };
+    const expected = repeated({ kind: "allergens" }, { variantId: "large" });
+    expect(await changes(live, proposed)).toEqual([
+      {
+        kind: "product_changed",
+        productId: "soup",
+        name: "Staff soup",
+        fields: ["allergens", "variants"],
+        source: "shared_product",
+        targets: { before: expected, after: expected },
+      },
+    ]);
+  });
+
+  it("lists an extra's diet change", async () => {
+    const live = document(),
+      proposed = document();
+    soup(live).offeredModifiers = [extras("citrus")];
+    soup(proposed).offeredModifiers = [extras("citrus")];
+    const list = soup(proposed).offeredModifiers[0]!;
+    if (list.kind !== "extras") throw new Error("extras");
+    list.items[0]!.suitableFor = ["vegan"];
+    const expected = repeated({ kind: "diet" }, { listId: "citrus", extraProductId: "lemon" });
+    expect(await changes(live, proposed)).toEqual([
+      {
+        kind: "product_changed",
+        productId: "lemon",
+        name: "Staff lemon",
+        fields: ["diet"],
+        source: "shared_product",
+        targets: { before: expected, after: expected },
+      },
+    ]);
+  });
+
+  function withSetMenu(doc: MenuDocument): MenuDocument {
+    doc.root.members.push({ kind: "set_menu", menuId: "daily", name: "Daily menu" });
+    doc.setMenus = {
+      daily: {
+        name: "Daily menu",
+        terms: {
+          price: "15.00",
+          vatClass: "reduced",
+          takeawayVatClass: "reduced",
+          names: { en: "Daily menu" },
+          lines: [],
+        },
+        root: { members: [{ kind: "product", menuItemId: "mi-hake", productId: "hake" }] },
+        offers: {
+          "mi-hake": {
+            ...offer("hake"),
+            id: "mi-hake",
+            menuId: "daily",
+            countsAsCourseId: "mains",
+            courseOverrideId: null,
+            variants: [{ ...variant("large"), countsAsCourseId: "mains" }],
+            offeredModifiers: [extras("citrus")],
+          },
+        },
+        changedAt: "2026-11-24T12:00:00.000Z",
+      },
+    };
+    return doc;
+  }
+  const hake = (doc: MenuDocument) => doc.setMenus!.daily!.offers["mi-hake"]!;
+  const lemon = (doc: MenuDocument) => {
+    const list = hake(doc).offeredModifiers[0]!;
+    if (list.kind !== "extras") throw new Error("extras");
+    return list.items[0]!;
+  };
+  const atSetMenu = [{ kind: "set_menu", menuId: "daily", sectionIds: [] }];
+  const setMenuChange = (fields: string[]) => ({
+    kind: "set_menu_changed",
+    setMenu: { id: "daily", name: "Daily menu" },
+    fields,
+    source: "set_menu",
+    targets: { before: atSetMenu, after: atSetMenu },
+  });
+
+  it.each([
+    [
+      "dish's allergens",
+      (doc: MenuDocument) => (hake(doc).allergens = { milk: {} }),
+      ["allergens"],
+    ],
+    ["dish's diet", (doc: MenuDocument) => (hake(doc).dietaryDeclarations = ["vegan"]), ["diet"]],
+    [
+      "variant's allergens",
+      (doc: MenuDocument) => (hake(doc).variants[0]!.allergens = { fish: {} }),
+      ["allergens"],
+    ],
+    [
+      "variant's diet",
+      (doc: MenuDocument) => (hake(doc).variants[0]!.dietOverride = { vegan: "yes" }),
+      ["diet"],
+    ],
+    [
+      "extra's allergens",
+      (doc: MenuDocument) => (lemon(doc).addAllergens = { sulphites: {} }),
+      ["allergens"],
+    ],
+    ["extra's diet", (doc: MenuDocument) => (lemon(doc).suitableFor = ["vegan"]), ["diet"]],
+  ] as const)(
+    "lists a set-menu-only %s change as that declaration, not as its dishes",
+    async (_name, edit, fields) => {
+      const live = withSetMenu(document()),
+        proposed = withSetMenu(document());
+      edit(proposed);
+      expect(await changes(live, proposed)).toEqual([setMenuChange([...fields])]);
+    },
+  );
+
+  it("lists a set-menu dish's other edit as its dishes beside its declaration", async () => {
+    const live = withSetMenu(document()),
+      proposed = withSetMenu(document());
+    hake(proposed).allergens = { milk: {} };
+    hake(proposed).dietOverride = { vegan: "yes" };
+    hake(proposed).unitPrice = "3.00";
+    expect(await changes(live, proposed)).toEqual([setMenuChange(["allergens", "diet", "dishes"])]);
+  });
+
+  it.each([
+    [
+      "variant's price",
+      (doc: MenuDocument) => {
+        hake(doc).variants[0]!.unitPrice = "9.00";
+      },
+    ],
+    [
+      "extra's price",
+      (doc: MenuDocument) => {
+        lemon(doc).price = "1.50";
+      },
+    ],
+  ] as const)("lists a set-menu-only %s change as its dishes", async (_name, edit) => {
+    const live = withSetMenu(document()),
+      proposed = withSetMenu(document());
+    edit(proposed);
+    expect(await changes(live, proposed)).toEqual([setMenuChange(["dishes"])]);
+  });
 });

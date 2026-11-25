@@ -213,6 +213,8 @@ describe("the products a published set menu can hold", () => {
       price: "1.00",
       vatClass: "general",
       takeawayVatClass: "general",
+      addAllergens: {},
+      suitableFor: [],
       maxQuantity: null,
       preselected: false,
       image: null,

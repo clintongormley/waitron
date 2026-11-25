@@ -100,6 +100,14 @@ describe("menu — menu, taxonomy and priced items", () => {
     expect(await present("working_order_lines", "category")).toBe(true);
   });
 
+  it("working_order_lines no longer has allergens, diet or diet_override", async () => {
+    const names = (await columnsOf(db, "working_order_lines"))
+      .map((c) => c.name)
+      .filter((name) => ["allergens", "diet", "diet_override", "sent_nutrition"].includes(name));
+    // `sent_nutrition` stays, so an empty list from a misnamed table cannot pass.
+    expect(names).toEqual(["sent_nutrition"]);
+  });
+
   it("products carries a plain-text name and a nullable customer_name, and no descriptions", async () => {
     const cols = (await columnsOf(db, "products"))
       .filter((c) => ["name", "customer_name", "descriptions"].includes(c.name))

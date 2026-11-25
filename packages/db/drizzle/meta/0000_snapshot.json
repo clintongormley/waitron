@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "84b5195b-e266-4a72-bf16-1099f0a5f204",
+  "id": "3a49dedc-18b4-4193-a560-5bcbed28e740",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -749,27 +749,6 @@
         },
         "hardware_unit": {
           "name": "hardware_unit",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "allergens": {
-          "name": "allergens",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "diet": {
-          "name": "diet",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "diet_override": {
-          "name": "diet_override",
           "type": "text",
           "primaryKey": false,
           "notNull": false,

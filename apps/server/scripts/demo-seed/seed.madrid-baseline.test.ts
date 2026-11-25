@@ -1650,9 +1650,6 @@ for (const locale of ["en", "es"] as const) {
         "unit_id",
         "sold_in_each",
         "hardware_unit",
-        "allergens",
-        "diet",
-        "diet_override",
         "late_period_name",
         "late_period_id",
         "late_confirmed_by",
@@ -2778,13 +2775,10 @@ for (const locale of ["en", "es"] as const) {
       }
       recomputeMadridHashes(expected[phase], {
         editDocumentRow(row) {
-          if (typeof row.productId === "string" && Array.isArray(row.variants))
-            for (const product of [row, ...row.variants] as Record<string, unknown>[])
-              for (const field of ["allergens", "diet", "dietOverride", "dietaryDeclarations"])
-                delete product[field];
-          if (row.kind === "extras" && Array.isArray(row.items))
-            for (const item of row.items as Record<string, unknown>[])
-              for (const field of ["addAllergens", "suitableFor"]) delete item[field];
+          if (typeof row.format === "number" && "offers" in row) {
+            if (row.format !== 4) throw new Error(`Madrid document format ${row.format}, not 4`);
+            row.format = 5;
+          }
         },
       });
       const tables = expected[phase].tables;
