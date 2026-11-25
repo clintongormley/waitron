@@ -669,6 +669,7 @@ export async function main([mapFile], root) {
   try {
     const expected = new Map();
     const mounts = new Map();
+    const routeTargets = new Set();
     const formatFile = async (file, text) =>
       format(text, { ...(await resolveConfig(file)), filepath: file });
     const operations = [];
@@ -709,6 +710,7 @@ export async function main([mapFile], root) {
       validateMap(original, targets, keep);
       for (const [target, names] of Object.entries(targets)) {
         const destination = resolve(root, target);
+        if (lift) routeTargets.add(destination);
         const declarations = expected.get(destination) ?? new Map();
         for (const name of names) {
           const nodes = original.statements.filter((statement) => nameOf(statement) === name);
@@ -723,6 +725,7 @@ export async function main([mapFile], root) {
       project.set(file, groupForTypeScript(original, targets));
     }
     for (const operation of operations) moveDeclarations(project, ...operation);
+    if (routeTargets.size) markTypeImports(project, routeTargets);
     for (const { file, destinations } of clients) {
       redirectInlineImports(project, file, destinations);
       markTypeImports(project, new Set(Object.keys(destinations)));
