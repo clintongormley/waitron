@@ -1,5 +1,7 @@
 import { madridWithPhotos, removeMadridSectionPhotos } from "./testing/madrid-photos.js";
 import { madridWithMenuReleases } from "./testing/madrid-releases.js";
+import { extraDeclarationValues, productDeclarationValues } from "@waitron/menu";
+import type { ProductAllergens } from "@waitron/shared";
 import { withTransaction, persons, deviceProfiles } from "@waitron/db";
 import { listStaffAdmittedTo } from "@waitron/identity";
 import { STARTER_JOB_ROLE_NAMES, DEMO_JOB_ROLE_NAMES } from "@waitron/provisioning";
@@ -425,6 +427,44 @@ const PERIOD_CHANGES: Record<"en" | "es", MadridPeriodChange> = {
     lunch: menu("Menús de mediodía"),
   }),
 };
+
+/** Menu document format 5 freezes each offer's, variant's and extras item's declarations again,
+ * worked out from the captured product rows (a variant falls back to its parent's) as the
+ * freezer does. */
+function madridWithFrozenDeclarations(semantics: CanonicalMadridSemantics): void {
+  const products = semantics.tables.products!.rows;
+  const declarations = (key: unknown) => {
+    const row = products[String(key)];
+    if (row === undefined) throw new Error(`Madrid offer names no captured product: ${key}`);
+    const parent = row.parent_id === null ? undefined : products[String(row.parent_id)];
+    const own = (column: string) => row[column] ?? parent?.[column] ?? null;
+    return {
+      allergens: own("allergens") as ProductAllergens | null,
+      dietOverride: own("diet_override"),
+      dietaryDeclarations: own("dietary_declarations"),
+    };
+  };
+  recomputeMadridHashes(semantics, {
+    editDocumentRow(row) {
+      if (typeof row.format === "number" && "offers" in row) {
+        if (row.format !== 4) throw new Error(`Madrid document format ${row.format}, not 4`);
+        row.format = 5;
+      }
+      if (typeof row.productId === "string" && Array.isArray(row.variants)) {
+        Object.assign(row, productDeclarationValues(declarations(row.productId)));
+        row.variants = (row.variants as Record<string, unknown>[]).map((variant) => ({
+          ...variant,
+          ...productDeclarationValues(declarations(variant.id)),
+        }));
+      }
+      if (row.kind === "extras" && Array.isArray(row.items))
+        row.items = (row.items as Record<string, unknown>[]).map((item) => ({
+          ...item,
+          ...extraDeclarationValues(declarations(item.productId)),
+        }));
+    },
+  });
+}
 
 const DROPPED_COLUMNS: MadridColumnDrops = {
   invoice_series: ["next_number"],
@@ -2784,6 +2824,7 @@ for (const locale of ["en", "es"] as const) {
               for (const field of ["addAllergens", "suitableFor"]) delete item[field];
         },
       });
+      madridWithFrozenDeclarations(expected[phase]);
       const tables = expected[phase].tables;
       const rows = [
         ...Object.values(tables.zone_day_ranges!.rows).map((range) => ({
