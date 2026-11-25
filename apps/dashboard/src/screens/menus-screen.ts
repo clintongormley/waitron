@@ -61,7 +61,6 @@ import "../widgets/menu-copy-dialog.js";
 import "../widgets/menu-delete-dialog.js";
 import { overtakeSentence } from "../widgets/menu-publications.js";
 import {
-  previewLiveVersion,
   publishAction,
   scheduleAction,
   type MenuPublicationHeading,
@@ -663,13 +662,14 @@ export class MenusScreen extends LitElement {
   @state() private publishResult: PublishResult | null = null;
   @state() private patching: { id: string; name: string } | null = null;
   @state() private unsentPrices = false;
-  @state() private schedulePreview: MenuPreview | null = null;
+  @state() private scheduleAvailable = false;
   readonly #publicationHeading: MenuPublicationHeading = {
-    scheduleChanged: (preview) => {
-      this.schedulePreview = preview;
+    scheduleChanged: (available) => {
+      this.scheduleAvailable = available;
     },
-    focusFallback: () => {
+    focusFallback: (fromSchedule) => {
       if (this.view !== "preview") return null;
+      if (fromSchedule) return this.renderRoot.querySelector<HTMLElement>(".heading h1");
       return (
         this.renderRoot.querySelector<HTMLElement>(
           'wt-button[data-test="publish"]:not([disabled])',
@@ -677,7 +677,6 @@ export class MenusScreen extends LitElement {
       );
     },
   };
-  #patchOpener: HTMLElement | null = null;
 
   /** Null while closed; `id` is null while creating. */
   @state() private menuForm: { id: string | null; name: string } | null = null;
@@ -1225,6 +1224,7 @@ export class MenusScreen extends LitElement {
 
   #releasePreview(): void {
     this.preview = null;
+    this.scheduleAvailable = false;
     this.previewError = false;
     this.previewResetRequired = false;
   }
@@ -1243,6 +1243,7 @@ export class MenusScreen extends LitElement {
   /** Also forgets the rows, so the tab shows loading rather than old rows until the next read. */
   #releasePrices(): void {
     this.#pricesFor = null;
+    this.unsentPrices = false;
     this.#priceQueries.release("getMenuPrices");
     this.prices = null;
     this.pricesError = false;
@@ -1314,7 +1315,6 @@ export class MenusScreen extends LitElement {
     this.structureWriteError = null;
     this.publishResult = null;
     this.patching = null;
-    this.#patchOpener = null;
     this.#releasePrices();
     this.#releasePreview();
     this.#releaseHome();
@@ -3568,9 +3568,18 @@ export class MenusScreen extends LitElement {
     return html`<wt-button
       data-test="review-publish"
       variant=${this.unsentPrices ? "secondary" : "primary"}
-      @click=${() => {
+      @click=${async () => {
+        const menuId = this.menuId;
         if (!navigationGuardFor(window)) this.#showView("preview");
-        void this.#url.write({ view: "preview", section: null, "price-filter": null });
+        const outcome = await this.#url.write({
+          view: "preview",
+          section: null,
+          "price-filter": null,
+        });
+        if (outcome !== undefined && outcome !== "proceeded") return;
+        await this.updateComplete;
+        if (this.isConnected && this.menuId === menuId && this.view === "preview")
+          this.renderRoot.querySelector<HTMLElement>(".heading h1")?.focus();
       }}
       >${t("menus.review_publish")}</wt-button
     >`;
@@ -3586,20 +3595,16 @@ export class MenusScreen extends LitElement {
       !this.previewError
         ? this.renderRoot.querySelector("dashboard-menu-preview")
         : null;
-    const schedule =
-      this.schedulePreview === preview
-        ? scheduleAction((event) =>
-            panel()
-              ?.shadowRoot?.querySelector("dashboard-menu-publications")
-              ?.openSchedule(event.currentTarget as HTMLElement, preview),
-          )
-        : nothing;
-    const publish =
-      previewLiveVersion(preview) === null
-        ? publishAction(preview, this.publishing.has(menuId), name, (event) =>
-            panel()?.requestPublish(event, preview),
-          )
-        : nothing;
+    const schedule = this.scheduleAvailable
+      ? scheduleAction((event) =>
+          panel()
+            ?.shadowRoot?.querySelector("dashboard-menu-publications")
+            ?.openSchedule(event.currentTarget as HTMLElement, preview),
+        )
+      : nothing;
+    const publish = publishAction(preview, this.publishing.has(menuId), name, (event) =>
+      panel()?.requestPublish(event, preview),
+    );
     return schedule === nothing && publish === nothing ? nothing : html`${schedule}${publish}`;
   }
 
@@ -3610,10 +3615,9 @@ export class MenusScreen extends LitElement {
       guide-href=${guideHref("products.patch-live-menu")}
       guide-label=${t("menus.patch_live_help_guide")}
       ><wt-button
-        icon="menu-rename"
+        icon="menu-edit"
         data-test=${`patch-${menu.id}`}
-        @click=${(event: Event) => {
-          this.#patchOpener = (event.currentTarget as HTMLElement).closest("wt-row-actions");
+        @click=${() => {
           this.patching = { id: menu.id, name: menu.name };
         }}
         >${t("menus.patch_live")}</wt-button
@@ -3632,12 +3636,10 @@ export class MenusScreen extends LitElement {
         const dialog = event.currentTarget as HTMLElementTagNameMap["dashboard-menu-patch-dialog"];
         if (dialog.open) return;
         this.patching = null;
-        this.#patchOpener?.focus();
-        this.#patchOpener = null;
       }}
       @wt-menu-patched=${(event: Event) => {
         event.stopPropagation();
-        this.#watchListStatuses();
+        if (this.menuId === null) this.#watchListStatuses();
       }}
     ></dashboard-menu-patch-dialog>`;
   }

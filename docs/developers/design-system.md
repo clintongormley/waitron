@@ -2963,8 +2963,8 @@ columns and tabs; and the "a help badge inside a menu row, and a menu that chang
 `wt-row-actions.test.ts`. A badge a screen places outside a primitive's `help` slot is checked
 only by that screen's own tests: the till's screen badges by
 the `*.help.test.ts` files beside the counter, floor and table-order screens, `menu-browser.ts` and
-`till-shell.ts`; the menu editor's Patch live menu badge by the cases under "patching the live
-menu" in `apps/dashboard/src/screens/menus-screen.test.ts`; nothing checks a new one.
+`till-shell.ts`. The Menus row’s Patch guide link is checked by the cases under "patching the live
+menu" in `apps/dashboard/src/screens/menus-screen.test.ts`.
 
 ### Forms
 

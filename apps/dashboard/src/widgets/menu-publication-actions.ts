@@ -1,10 +1,10 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import type { MenuPreview } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
 
 export interface MenuPublicationHeading {
-  scheduleChanged: (preview: MenuPreview | null) => void;
-  focusFallback: () => HTMLElement | null;
+  scheduleChanged: (available: boolean) => void;
+  focusFallback: (fromSchedule: boolean) => HTMLElement | null;
 }
 
 export function scheduleAction(open: (event: Event) => void) {
@@ -26,12 +26,14 @@ export function publishAction(
   menu: string,
   publish: (event: Event) => void,
 ) {
+  if (previewLiveVersion(preview) !== null) return nothing;
   return html`<wt-button
     variant=${publishing || preview.clashes.length === 0 ? "primary" : "secondary"}
     data-test="publish"
     .loading=${publishing}
+    .ariaDescription=${publishing ? fill("menu_preview.publishing", { menu }) : null}
     .disabled=${preview.clashes.length > 0}
     @click=${publish}
-    >${fill(publishing ? "menu_preview.publishing" : "menu_preview.publish", { menu })}</wt-button
+    >${t("menu_preview.publish")}</wt-button
   >`;
 }

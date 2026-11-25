@@ -9452,49 +9452,54 @@ describe("publishing", () => {
     expect(sq('[data-test="late-refusal"]')).toBeNull();
   });
 
-  it("returns focus to the editor title after cancelling the last queued version of a current menu", async () => {
-    const edition = {
-      versionId: "v-next",
-      number: 3,
-      state: "queued" as const,
-      activatesAt: "2030-01-01T11:00:00.000Z",
-      queuedAt: PUBLISHED_AT,
-      cancelledAt: null,
-      contentHash: "e".repeat(64),
-      local: { date: "2030-01-01", time: "12:00", offset: "+01:00", repeated: false },
-    };
-    const queue = { timeZone: "Europe/Madrid", live: null, editions: [edition] };
-    const preview = lunchPreview();
-    const client = api({
-      getMenuPreview: vi.fn().mockResolvedValue({
-        ...preview,
-        status: {
-          ...statuses()["menu-lunch"],
-          state: "current",
-          hash: preview.hash,
-        },
-      }),
-      getMenuPublications: vi.fn().mockResolvedValue(queue),
-      cancelMenuPublication: vi.fn(async () => {
-        client.getMenuPublications.mockResolvedValue({ ...queue, editions: [] });
-      }),
-    });
-    const el = await mount(client, PREVIEW_PATH);
-    const schedule = panel(el).shadowRoot!.querySelector("dashboard-menu-publications")!;
-    const cancel = () =>
-      schedule
-        .shadowRoot!.querySelector("wt-data-table")
-        ?.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-v-next"]');
-    await vi.waitFor(() => expect(cancel()).toBeTruthy());
-    cancel()!.closest("wt-row-actions")!.show();
-    await userEvent.click(cancel()!);
-    const confirm = schedule.shadowRoot!.querySelector<HTMLElement>(
-      '[data-test="cancel-confirm"]',
-    )!;
-    await userEvent.click(confirm);
-    await vi.waitFor(() => expect(cancel()).toBeUndefined());
-    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "h1")));
-  });
+  it.each([false, true])(
+    "returns focus after cancelling the last queued version with unpublished changes: %s",
+    async (changed) => {
+      const edition = {
+        versionId: "v-next",
+        number: 3,
+        state: "queued" as const,
+        activatesAt: "2030-01-01T11:00:00.000Z",
+        queuedAt: PUBLISHED_AT,
+        cancelledAt: null,
+        contentHash: "e".repeat(64),
+        local: { date: "2030-01-01", time: "12:00", offset: "+01:00", repeated: false },
+      };
+      const queue = { timeZone: "Europe/Madrid", live: null, editions: [edition] };
+      const preview = lunchPreview();
+      const client = api({
+        getMenuPreview: vi.fn().mockResolvedValue({
+          ...preview,
+          status: {
+            ...statuses()["menu-lunch"],
+            state: changed ? "changed" : "current",
+            hash: changed ? LUNCH_LIVE_HASH : preview.hash,
+          },
+        }),
+        getMenuPublications: vi.fn().mockResolvedValue(queue),
+        cancelMenuPublication: vi.fn(async () => {
+          client.getMenuPublications.mockResolvedValue({ ...queue, editions: [] });
+        }),
+      });
+      const el = await mount(client, PREVIEW_PATH);
+      const schedule = panel(el).shadowRoot!.querySelector("dashboard-menu-publications")!;
+      const cancel = () =>
+        schedule
+          .shadowRoot!.querySelector("wt-data-table")
+          ?.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-v-next"]');
+      await vi.waitFor(() => expect(cancel()).toBeTruthy());
+      cancel()!.closest("wt-row-actions")!.show();
+      await userEvent.click(cancel()!);
+      const confirm = schedule.shadowRoot!.querySelector<HTMLElement>(
+        '[data-test="cancel-confirm"]',
+      )!;
+      await userEvent.click(confirm);
+      await vi.waitFor(() => expect(cancel()).toBeUndefined());
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.activeElement).toBe(changed ? inPanel(el, "publish") : q(el, "h1")),
+      );
+    },
+  );
 
   it("renders the publications widget for the open menu with the preview it read", async () => {
     const client = api();
@@ -10736,16 +10741,17 @@ describe("publishing", () => {
     expect(button()!.loading).toBe(true);
     history.pushState(null, "", "/menus/menu/menu-dinner/view/preview");
     window.dispatchEvent(new PopStateEvent("popstate"));
-    await vi.waitFor(() => expect(text(inPanel(el, "publish"))).toBe("Publish now"));
-    expect(button()!.loading).toBe(false);
+    await vi.waitFor(() => expect(button()?.loading).toBe(false));
+    expect(text(button())).toBe("Publish now");
     await publish(el);
     expect(client.publishMenu).toHaveBeenLastCalledWith("menu-dinner", "c".repeat(64));
     await vi.waitFor(() =>
       expect(text(inPanel(el, "result"))).toBe("Dinner Menu version 6 is now live."),
     );
     history.back();
-    await vi.waitFor(() => expect(text(inPanel(el, "publish"))).toBe("Publishing Lunch Menu…"));
-    expect(button()!.loading).toBe(true);
+    await vi.waitFor(() => expect(button()?.loading).toBe(true));
+    expect(text(button())).toBe("Publish now");
+    expect(button()?.ariaDescription).toBe("Publishing Lunch Menu…");
     lunchOut.resolve({ versionId: "v-lunch-3", number: 3, publishedAt: NEXT_PUBLISHED_AT });
     await vi.waitFor(() =>
       expect(text(inPanel(el, "result"))).toBe(
@@ -10897,13 +10903,16 @@ describe("patching the live menu", () => {
   }
 
   it("offers Patch for live rows only and opens the chosen menu", async () => {
+    const first = deferred<Record<string, MenuStatus>>();
     const client = api({
-      getMenuStatuses: vi.fn().mockResolvedValue({
-        ...statuses(),
-        "menu-lunch": { state: "unpublished", clashes: 0 },
-      }),
+      getMenuStatuses: vi.fn().mockReturnValue(first.promise),
     });
     const el = await mount(client);
+    expect(patch(el, "menu-dinner")).toBeNull();
+    first.resolve({
+      ...statuses(),
+      "menu-lunch": { state: "unpublished", clashes: 0 },
+    });
     await openPatch(el, "menu-dinner");
     expect(patch(el)).toBeNull();
     expect(dialog(el).menuId).toBe("menu-dinner");
@@ -10963,6 +10972,30 @@ describe("patching the live menu", () => {
     );
     expect(row(el).shadowRoot!.activeElement).toBe(row(el).shadowRoot!.querySelector("button"));
     expect(client.publishMenu).not.toHaveBeenCalled();
+    expect(dialog(el).open).toBe(false);
+    await openPatch(el);
+  });
+
+  it("reports a failed list read after a patch as a load failure", async () => {
+    const client = api();
+    const el = await mount(client);
+    await openPatch(el);
+    client.getMenuStatuses.mockRejectedValue(new Error("offline"));
+    announcePatch(el);
+    await vi.waitFor(() => expect(q(el, '[data-test="statuses-error"]')).not.toBeNull());
+    expect(patch(el)).toBeNull();
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+  });
+
+  it("leaves the list's Patch dialog closed when returning from an editor", async () => {
+    const el = await mount(api());
+    await openPatch(el);
+    history.pushState(null, "", LUNCH_PATH);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Lunch Menu"));
+    await click(el, "back");
+    await vi.waitFor(() => expect(patch(el)).not.toBeNull());
+    expect(dialog(el).open).toBe(false);
   });
 
   it("keeps the patch dialog open when a dialog inside it closes", async () => {

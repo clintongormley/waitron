@@ -98,6 +98,12 @@ it.each([
       await vi.waitFor(() => expect(location.pathname).toBe(destination));
       expect(dialog.open).toBe(false);
       expect(tab().value).toBe("structure");
+      finishSave();
+      await pending;
+      await vi.waitFor(() => expect(review()?.getAttribute("variant")).toBe("primary"));
+      await guard.write(priceOverrides);
+      await vi.waitFor(() => expect(field()?.value).toBe(""));
+      expect(review()?.getAttribute("variant")).toBe("primary");
       return;
     }
 

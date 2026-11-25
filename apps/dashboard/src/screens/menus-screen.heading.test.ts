@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import {
   cleanupWidgets,
   expectNoA11yViolations,
@@ -334,8 +334,10 @@ describe("the menu editor's heading", () => {
       const review = q(el, '.heading [data-test="review-publish"]')!;
       expect(text(review)).toBe(action);
       expect(review.getAttribute("variant")).toBe("primary");
-      await page.elementLocator(review).click();
+      review.focus();
+      await userEvent.keyboard("{Enter}");
       await vi.waitFor(() => expect(location.pathname).toBe(PREVIEW_PATH));
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "h1")));
     },
   );
 
@@ -429,6 +431,47 @@ describe("the menu editor's heading", () => {
     void dialog!.requestClose("cancel");
     await closed;
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(later()));
+  });
+
+  it("returns focus to Publish later after a live refresh and Escape", async () => {
+    const live = new LiveData();
+    const client = api();
+    const publishMenu = vi.fn();
+    const getMenuRead = vi.fn(async (id: string) => ({
+      structure: { status: 200, body: await client.getMenuStructure(id) },
+      preview: { status: 200, body: await client.getMenuPreview(id) },
+    }));
+    Object.assign(client, { liveData: live, getMenuRead, publishMenu });
+    const el = await mount(client, PREVIEW_PATH);
+    const later = () => q(el, '[data-test="schedule-open"]');
+    await vi.waitFor(() => expect(later()).not.toBeNull());
+    const opener = later()!;
+    opener.focus();
+    await userEvent.keyboard("{Enter}");
+    const preview = q<HTMLElementTagNameMap["dashboard-menu-preview"]>(
+      el,
+      "dashboard-menu-preview",
+    )!;
+    const publications = preview.shadowRoot!.querySelector("dashboard-menu-publications")!;
+    const dialog = () =>
+      publications.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+        '[data-test="schedule-dialog"]',
+      );
+    await vi.waitFor(() => expect(dialog()?.open).toBe(true));
+    const old = preview.preview;
+    live.invalidate([{ type: "menu_items" }]);
+    await vi.waitFor(() => expect(preview.preview).not.toBe(old));
+    await publications.updateComplete;
+    const closed = new Promise<void>((resolve) =>
+      dialog()!.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(later()));
+    expect(later()).toBe(opener);
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(dialog()?.open).toBe(true));
+    expect(publishMenu).not.toHaveBeenCalled();
   });
 
   it("leaves Publish now disabled and offers no scheduling while prices clash", async () => {
@@ -601,25 +644,27 @@ describe("the menu editor's heading", () => {
     );
   }
 
-  it("keeps a long title and its status inside a phone's width without scrolling sideways", async () => {
-    const name = "The weekend brunch and late lunch menu served on the terrace until four";
-    const el = await onPhone(name);
-    const heading = q(el, "h1")!;
-    expect(text(heading)).toBe(name);
-    // The tree turns narrow a frame after it is drawn, and the page is measured as the person sees it.
-    const tree = q(el, "dashboard-menu-structure-table")!.shadowRoot!.querySelector(
-      "wt-data-table",
-    )!;
-    await vi.waitFor(() => expect(tree.hasAttribute("narrow")).toBe(true));
-    expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-    const h1 = heading.getBoundingClientRect();
-    const path = trail(el).getBoundingClientRect();
-    expect(h1.right).toBeLessThanOrEqual(window.innerWidth);
-    expect(path.right).toBeLessThanOrEqual(window.innerWidth);
-    const live = q(el, '[data-test="menu-status"]')!.getBoundingClientRect();
-    expect(live.top).toBeGreaterThanOrEqual(h1.bottom - 1);
-    expect(live.right).toBeLessThanOrEqual(window.innerWidth);
-  });
+  it.each(["Lunch", "The weekend brunch and late lunch menu served on the terrace until four"])(
+    "puts the status under %s inside a phone's width",
+    async (name) => {
+      const el = await onPhone(name);
+      const heading = q(el, "h1")!;
+      expect(text(heading)).toBe(name);
+      // The tree turns narrow a frame after it is drawn, and the page is measured as the person sees it.
+      const tree = q(el, "dashboard-menu-structure-table")!.shadowRoot!.querySelector(
+        "wt-data-table",
+      )!;
+      await vi.waitFor(() => expect(tree.hasAttribute("narrow")).toBe(true));
+      expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+      const h1 = heading.getBoundingClientRect();
+      const path = trail(el).getBoundingClientRect();
+      expect(h1.right).toBeLessThanOrEqual(window.innerWidth);
+      expect(path.right).toBeLessThanOrEqual(window.innerWidth);
+      const live = q(el, '[data-test="menu-status"]')!.getBoundingClientRect();
+      expect(live.top).toBeGreaterThanOrEqual(h1.bottom - 1);
+      expect(live.right).toBeLessThanOrEqual(window.innerWidth);
+    },
+  );
 
   it("breaks a menu name in one word longer than the phone is wide inside the heading", async () => {
     const el = await onPhone(`Terrace${"brunch".repeat(12)}`);

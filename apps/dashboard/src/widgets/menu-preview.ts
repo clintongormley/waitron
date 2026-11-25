@@ -35,11 +35,7 @@ import { PATH_SEPARATOR } from "./category-form.js";
 import { placeName } from "./price-source.js";
 import { setMenuAddress, leftToBrowser } from "../navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
-import {
-  previewLiveVersion,
-  publishAction,
-  type MenuPublicationHeading,
-} from "./menu-publication-actions.js";
+import { previewLiveVersion, type MenuPublicationHeading } from "./menu-publication-actions.js";
 import "./menu-publications.js";
 import type { StringKey } from "../i18n/strings.js";
 
@@ -832,12 +828,10 @@ export class MenuPreviewPanel extends LitElement {
     </section>`;
   }
 
-  #renderPublish() {
+  #renderPublishNote() {
     if (this.failed || this.preview === null || previewLiveVersion(this.preview) !== null)
       return nothing;
-    const preview = this.preview;
-    return html`${this.heading ? nothing : publishAction(preview, this.publishing, this.menuName, (event) => this.requestPublish(event, preview))}
-    ${this.includedBy.length === 0 ? nothing : html`<p slot="publish-note" class="help" data-test="only-this-menu">${this.#includerLinks()} ${t(this.includedBy.length === 1 ? "menu_preview.includer_note" : "menu_preview.includers_note")}</p>`} `;
+    return html`${this.includedBy.length === 0 ? nothing : html`<p slot="publish-note" class="help" data-test="only-this-menu">${this.#includerLinks()} ${t(this.includedBy.length === 1 ? "menu_preview.includer_note" : "menu_preview.includers_note")}</p>`} `;
   }
 
   #includerLinks() {
@@ -945,7 +939,7 @@ export class MenuPreviewPanel extends LitElement {
             .lateRefusalFor=${this.lateRefusalFor}
             .preview=${this.failed ? null : this.preview}
             .heading=${this.heading}
-            >${this.#renderPublish()}</dashboard-menu-publications
+            >${this.#renderPublishNote()}</dashboard-menu-publications
           >
           <div
             class="pane"

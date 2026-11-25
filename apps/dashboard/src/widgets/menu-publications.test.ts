@@ -175,37 +175,6 @@ afterEach(async () => {
 });
 
 describe("a menu's scheduled versions", () => {
-  it.each([false, true])(
-    "A547 retains focus after the last queued row disappears, with a publish control: %s",
-    async (withPublish) => {
-      let refresh!: (answer: MenuPublicationsAnswer) => void;
-      const read = vi
-        .fn()
-        .mockResolvedValueOnce({ ...queue(), editions: [queue().editions[0]] })
-        .mockImplementationOnce(
-          () =>
-            new Promise<MenuPublicationsAnswer>((resolve) => {
-              refresh = resolve;
-            }),
-        );
-      const el = await mount(stubApi({ getMenuPublications: read }));
-      const publish = document.createElement("wt-button");
-      publish.textContent = "Publish now";
-      if (withPublish) el.append(publish);
-      await openCancel(el);
-      const closed = new Promise((resolve) =>
-        dialog(el).addEventListener("wt-close", resolve, { once: true }),
-      );
-      inShadow(el, "cancel-confirm")!.click();
-      await closed;
-      await new Promise(requestAnimationFrame);
-      expect(el.shadowRoot!.activeElement).toBe(el.shadowRoot!.querySelector("h2"));
-      refresh({ ...queue(), editions: [] });
-      await vi.waitFor(() => expect(el.shadowRoot!.querySelector("h2")).toBeNull());
-      await vi.waitFor(() => expect(document.activeElement).toBe(withPublish ? publish : el));
-    },
-  );
-
   it("A547 moves focus from the first schedule's disappearing opener to its new heading", async () => {
     let refresh!: (answer: MenuPublicationsAnswer) => void;
     const read = vi

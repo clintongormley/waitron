@@ -16,6 +16,7 @@ import {
   cleanupWidgets,
   combinedFixture,
   mountWidget,
+  attachScheduleAction,
   menuDocument,
   closeReportsDelivered,
 } from "./widgets/test-helpers.js";
@@ -1431,6 +1432,7 @@ describe("allergen warning product links with a dirty schedule", () => {
         },
       ],
     } satisfies MenuPreview;
+    attachScheduleAction(panel);
     m.screen.shadowRoot!.append(panel);
     await panel.updateComplete;
     const q = (selector: string) => panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
