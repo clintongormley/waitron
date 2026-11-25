@@ -110,9 +110,9 @@ export function monthlyHoursReminderMail(deps: {
         timeZone: "UTC",
       }).format(new Date(close.period.start));
       const date = new Intl.DateTimeFormat(locale, {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
+        dateStyle: "long",
+        timeStyle: "short",
+        hourCycle: "h23",
         timeZone: close.clock.timeZone,
       }).format(new Date(close.scheduledCloseAt));
       const words = MONTHLY_HOURS_EMAIL_WORDS[language];

@@ -61,7 +61,8 @@ role change notices and the warning to a staff member's previous address when so
 changes it in **Users**. Managers with an email address can also receive box alerts about low
 space, deleted backups, backup runs that stopped, rolled-back upgrades and clock corrections.
 If you add your own mail server, Waitron uses it for those messages. To email customers, send the
-daily report or receive other box alerts by email, add a mail server in **System → Email**.
+daily report, get monthly Hours reminders or receive other box alerts by email, add a mail server
+in **System → Email**.
 
 If setup says it could not confirm Cloud staff email, open **System → Email** to add or check
 the mail server you use for staff email.
@@ -107,8 +108,8 @@ Continue becomes available after the mail server accepts a test of those setting
 With **Manage boxes** (Admin by default), choose **Remove mail server** and read the confirmation. **Stop** keeps the settings.
 Removing the mail server clears its saved login details too; enter them again if you set it up later.
 
-Outside development, keep a mail server for receipt email, the daily report and notices that
-Cloud does not handle. If you have enabled test Cloud email, Cloud can send
-[account email](email.md#cloud-account-email). Sales continue. On a development box without
+Outside development, keep a mail server for receipt email, the daily report, monthly Hours
+reminders and other notices that Cloud does not handle. If you have enabled test Cloud email,
+Cloud can send [account email](email.md#cloud-account-email). Sales continue. On a development box without
 Cloud email, check the test inbox. If the settings fail to reload after removal, retry loading
 them. The removal has already succeeded.

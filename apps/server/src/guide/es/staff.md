@@ -252,9 +252,9 @@ Abre **Horas** en el panel. Usa **Anterior** y **Siguiente** junto al mes para c
 Consulta la fecha de cierre y revisa las horas pendientes del mes seleccionado. Si un turno
 termina al día siguiente, búscalo en el mes en que empezó.
 
-Si tu local envía correo desde su propio servidor, recibirás un recordatorio el día anterior al
-cierre si faltan fichajes por revisar o hay solicitudes pendientes. Abre **Horas** desde el correo
-y elige el mes indicado.
+Si tu cuenta tiene una dirección de correo y tu local usa su propio servidor de correo, recibirás
+un recordatorio el día anterior al cierre si faltan fichajes por revisar o hay solicitudes
+pendientes. Abre **Horas** desde el correo y elige el mes indicado.
 
 Si puedes gestionar los ajustes del sistema, cambia **Días laborables antes del cierre** y
 pulsa **Guardar**. Por defecto tienes tres días laborables para revisar las horas. Los fines
