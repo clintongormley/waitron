@@ -1,44 +1,46 @@
 # A1589 Products category availability
 
-The owner chose “Act on everything in it” on 25 November at 20:18, as recorded in the
-[A1589 queue item](#delivery) by the watcher. This updates the Products redesign’s
-[Select mode](../specs/2026-11-24-products-list-redesign-design.md#5-select-mode).
+The watcher recorded the owner’s 25 November 20:18 choice, “Act on everything in it
+(Recommended),” under A1589 in `~/waitron-campaign-h/queue.md`.
+This updates the Products redesign’s [Select mode](../specs/2026-11-24-products-list-redesign-design.md#5-select-mode).
 
 **What staff can do.** In Products Tree, tick Oysters and choose **Mark unavailable** or
 **Mark available**. The action includes products in its subcategories and any individually ticked
-products, even when search or filters hide them. A product covered by more than one tick counts
-once. The result says how many products the box applied the choice to.
+products, including those hidden by search or filters. Each product counts once. The result
+says how many products the box applied the choice to.
 
-- [ ] **Test first.** In `apps/dashboard/src/widgets/product-browser.test.ts`, update the existing
-  Spanish phone case so it keeps the empty and fit assertions and expects the two actions to work
-  with mixed ticks. Add a Tree case with a parent, its ticked subcategory, a separately ticked
-  product inside it, and one outside. Hide the category before pressing the action. Assert one
-  request with unique product IDs, the acknowledged count, and that the submitted ticks clear.
-  Check that an empty category alone sends nothing. Run the new cases and see the failure before
-  changing product code. Reuse the suite’s deferred write and refusal cases for selection and
-  focus during a save.
-- [ ] **Expand the ticks.** In `widgets/product-availability-actions.ts`, add
-  `selectedProductIds(selection: ProductSelection, categories: readonly CategorySummary[]): string[]`
-  using the existing `categoryWithDescendants` and the browser’s full product snapshot.
-  Include active top-level products in the selected subtrees and preserve explicit product IDs.
-  In `widgets/product-browser.ts`, use the same expanded IDs at render and press time so the
-  existing toolbar enables and waits on the right products. Capture the tick keys at press time.
-  After a successful write, clear the captured ticks only in the same selection session.
-- [ ] **Show the result.** Reuse the bottom `wt-toast` in `widgets/product-list-action-feedback.ts`
-  to report a successful batch with category ticks. Add English and Spanish singular and plural
-  strings in `i18n/strings.ts` and use `widgets/count-text.ts`. The count is the number of unique
-  products acknowledged by the batch, including any already in the requested state. Keep the
-  notice dismissible and clear it on Done, view switch or the next availability write. Retain
-  the existing refusal copy and selection on failure, and the existing keyboard focus return.
-  The existing request still sends explicit IDs to the all-or-none endpoint.
+- [ ] **Test first.** In `apps/dashboard/src/widgets/product-browser.test.ts`, keep the Spanish
+  phone case’s fit and empty assertions and enable both actions for mixed ticks. Use Beer with
+  only inactive Lager for the empty-category case. Add an active child product for a Tree case
+  with a parent, its subcategory, an explicit tick inside it and one outside. Hide the category,
+  then assert one request with unique IDs and the result count. Extend the existing deferred
+  write and deleted-product cases to check a pending child, a new child tick during a batch,
+  and a refusal that names a child with no tick of its own. Assert that a late reply after Done
+  does not reopen the notice. Run the changed cases and see the expected failures first.
+- [ ] **Expand the ticks.** Put `activeProductIdsInCategories(categoryIds, products, categories)`
+  beside `categoryWithDescendants` in `widgets/category-form.ts`. Reuse it in
+  `widgets/product-browser.ts` for availability and Delete’s existing contents count. Delete
+  still counts active products only. Availability combines the helper’s active top-level
+  product IDs with explicit product ticks from the full snapshot. Use these IDs in readiness,
+  pending and focus checks and in one all-or-none request. On success, clear the tick keys
+  captured at press time in the same selection session.
+- [ ] **Show the result.** In `widgets/product-availability-actions.ts`, keep one feedback value
+  for a refusal or a category-batch result. Clear it at the start of a write, on Close and when
+  the selection session resets. Reuse the bottom `wt-toast` via
+  `widgets/product-list-action-feedback.ts` and the browser’s existing visibility check.
+  Codex proposes a dismissible info notice that stays until cleared so staff have time to read
+  the count. Verify it announces via `role="status"` and preserves the existing focus behavior.
+  Use the existing count helper in `widgets/count-text.ts` and strings in `i18n/strings.ts`.
+  Use “Marked 1 product available.” / “Marked {count} products available.” and
+  “1 producto marcado como disponible.” / “{count} productos marcados como disponibles.”
+  Use “unavailable” and “no disponible(s)” for the other action. Count the IDs in the successful
+  request, including products already in the requested state. A refusal keeps the ticks.
 
-## Delivery
-
-Update Select mode in the redesign, `docs/developers/design-system.md` and
-`docs/developers/product-categories.md`. Update both `apps/server/src/guide/{en,es}/products.md`
-guides. The backlog’s remaining Products work already lists the unfinished editor and Back work.
-Run the changed browser and accessibility suites, the server availability and guide cases, and
-the queue’s unedited fiscal and menu-refresh gates. Inspect the result on phone and desktop in
-English and Spanish, light and dark. The A1589 queue entry is in Lane H’s `queue.md`. Plan for
-60–85 production lines and 55–85 test lines. Scope ends at the existing Dashboard request and
-bottom notice. Category membership comes from the product snapshot at the time of the press.
+**Delivery.** Update the actions paragraph in the redesign’s §5, Selection mode in
+`docs/developers/design-system.md` and Moving and deleting in `docs/developers/product-categories.md`.
+Update the availability paragraphs in `apps/server/src/guide/{en,es}/products.md`.
+Run the browser and accessibility suites, the existing Delete coverage in the same browser
+file, the server availability and guide checks, and the queue’s unedited fiscal and menu-refresh
+gates. Inspect the result at phone and desktop widths in English and Spanish, light and dark.
+Expect 65–95 production and 75–110 test lines. Use the existing endpoint and its explicit-ID
+request. Category membership comes from the browser’s snapshot when staff press the button.
