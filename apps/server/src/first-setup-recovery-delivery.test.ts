@@ -255,7 +255,7 @@ it.each(["scope", "node", "key-name", "taxpayer-name", "venue-name", "secret"])(
   },
 );
 
-it("kept confirmation installs the staged master key and no box key, with only public metadata persisted", async () => {
+it("kept confirmation installs the staged master key, with only public metadata persisted", async () => {
   const f = await documentFixture();
   await f.register();
   await f.kept();

@@ -440,8 +440,8 @@ export const QUERY_DEPENDENCIES = {
   listServers: ["node_membership", "nodes", "box_joins"],
   getBackupStatus: ["backup_status", "settings.backup"],
   getStreamSettings: ["backup_status", "settings.backup"],
-  // Its answer ages with time and reads the box's key files, the running backups' key, node.db's
-  // server key name and Cloud's emergency state, none of which send an event, so its timer stays.
+  // Its answer ages with time and reads the box's key files, the running backups' key and Cloud's
+  // emergency state, none of which send an event, so its timer stays.
   getRecoveryPackStatus: [
     "recovery_packs",
     "master_keys",

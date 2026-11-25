@@ -120,7 +120,7 @@ it("a shown master key not yet downloaded or printed asks before Escape", async 
   expect(f.dialog.open).toBe(false);
 });
 
-it("a shown master key that was only copied still asks before Escape: the pack also holds the new box key", async () => {
+it("a shown master key that was only copied still asks before Escape: the pack holds more than the key", async () => {
   vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
   const f = await fixture();
   await showKey(f);

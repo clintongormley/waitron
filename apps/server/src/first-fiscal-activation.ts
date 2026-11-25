@@ -202,7 +202,6 @@ export async function publishCheckedFirstFiscal(
     host,
     {
       db: deps.db,
-      node: deps.node,
       publishSelection: async (current) => {
         await host.publishSelection(current);
       },

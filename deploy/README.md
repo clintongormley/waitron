@@ -858,7 +858,7 @@ command against it treat that entrypoint differently:
   printed text, where a long code wraps. It restores nothing and prints one line when the pack
   holds no bucket copy code (the box had no bucket copy when the pack was made), when the PDF is not
   a Waitron recovery pack, or when the file attached inside the pack is damaged or was changed after
-  it was made. The pack may also hold the box key: keep it locked away, off the box.
+  it was made. Keep the pack locked away, off the box.
 
   **A filing node also needs its fiscal recovery operation.** Follow
   [Recover a filing box](../docs/developers/offline-fiscal-restore.md) to supply the selected

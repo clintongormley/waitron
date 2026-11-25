@@ -71,7 +71,7 @@ const emergencyPart: PackPart = {
     title: "Emergency start",
     rows: [
       { label: "Legal name", value: "Bar Nora S.L." },
-      { label: "Key name", value: "2026-09-02 · K7QF" },
+      { label: "Venue", value: "Bar Nora" },
     ],
     notes: ["Keep older packs for older backups."],
   },
@@ -218,8 +218,7 @@ describe("long names", () => {
   const keyText = "0123 4567 89AB CDEF GHJK MNPQ RSTV WXYZ 0123 4567 8";
   const namesPage = (legalName: string, venueName: string): PackPart["page"] => ({
     title: "Names",
-    intro:
-      "With this key and its matching backup, the venue's server can be recovered with its own identity.",
+    intro: "A page that names the business and the venue.",
     rows: [
       { label: "Legal name", value: legalName },
       { label: "NIF", value: "B12345674" },
@@ -227,14 +226,13 @@ describe("long names", () => {
       { label: "Environment", value: "Preproduction" },
       { label: "Software ID", value: "WT" },
       { label: "Server ID", value: "4f9c2a1b" },
-      { label: "Key name", value: "2026-10-17 · ACRY" },
       { label: "Created", value: "18 October 2026, 01:30 CEST" },
     ],
     secret: { label: "Key", text: keyText, qr: true },
     notes: [
       "Keep this pack in a safe place. Anyone with this key and its matching backup can recover the server.",
       "A backup in Waitron Cloud needs your Cloud login. This pack is not a backup of your sales.",
-      "Keep older packs for older backups. A new key does not unlock backups made with an older key.",
+      "Keep older packs for older backups.",
     ],
   });
   const setupPack = (locale: "en" | "es", legalName: string, venueName: string) =>

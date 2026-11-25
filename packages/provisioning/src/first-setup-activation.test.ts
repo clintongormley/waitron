@@ -501,7 +501,6 @@ async function publicationFixture() {
   const steps: string[] = [];
   const publication = {
     db: venue.db,
-    node: venue.node,
     publishSelection: vi.fn(async () => {
       steps.push("selection");
     }),
@@ -563,11 +562,11 @@ it.each(["selection", "identity", "settings", "trading", "clear"])(
       ),
     );
     f.owner.revision = after.revision;
-    const verifier = await venue.node.select().from(box);
+    const boxRows = await venue.node.select().from(box);
     const series = await venue.db.execute("select * from invoice_series order by id");
     await expect(f.publish(after, f.checked)).resolves.toEqual(f.checked.venue);
     expect((await f.runtime.store.read())!.status).toBe("complete");
-    expect(await venue.node.select().from(box)).toEqual(verifier);
+    expect(await venue.node.select().from(box)).toEqual(boxRows);
     expect(await venue.db.execute("select * from invoice_series order by id")).toEqual(series);
     expect(f.deps.provision).toHaveBeenCalledOnce();
   },

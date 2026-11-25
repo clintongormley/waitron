@@ -4,8 +4,7 @@ The recovery pack is one PDF holding what you need when the box fails. Its first
 master key, with its name and QR code, when the pack was made with a new master key; otherwise it
 names the current master key and, when this box made the pack that showed it, that pack. Until later
 changes remove them, the other parts the box has follow, a page each: the restore codes for the
-bucket copy and the archives, the emergency code, and, on a box that files invoices, the box key or
-the name of the pack or sheet that holds it. If the box still runs and you have lost its recovery
+bucket copy and the archives, and the emergency code. If the box still runs and you have lost its recovery
 pack, or an older recovery PDF, make a new pack from the dashboard. You need the system-management
 permission and a secure (HTTPS) connection to that box.
 
@@ -34,12 +33,10 @@ or stop and change nothing.
 
 Choose **Make a new master key** on the card. The dialog says until when to keep the old pack;
 choose **Make a new master key** and confirm it is you as above. It makes a new master key in a
-new pack, and a new box key with it when the box has one (a spare that joined and was promoted has
-none). The dialog then shows the master key with its name: use **Download** or **Print**, then
+new pack. The dialog then shows the master key with its name: use **Download** or **Print**, then
 **Continue**. **Copy** copies the master key alone and does not count: the pack holds more than the key, so use
 **Download** or **Print** before **Continue**. It is shown only this once, so **Stop** and Escape do nothing while the box is making
-it. The button is offered once the card has read the box's status. If the box key's page fails, no
-new master key is made either.
+it. The button is offered once the card has read the box's status.
 
 During an unfinished first setup, carry on in the tab that was doing it (reloading that tab
 carries on until activation starts) and use that flow's recovery-pack step. Follow [first Live setup](first-live-fiscal-setup.md); do not start a
@@ -51,7 +48,7 @@ The dashboard card is [recovery-pack-card.ts](../../apps/dashboard/src/screens/r
 and its dialog [recovery-pack-dialog.ts](../../apps/dashboard/src/widgets/recovery-pack-dialog.ts).
 The server's [recovery pack routes](../../apps/server/src/backup-recovery-pack-api.ts) check
 `system.manage`, the secure connection and a fresh sign-in, make a new master key when asked,
-with a new box key when the box has one, and keep a record of each pack and each master key's name and check value, never the
+and keep a record of each pack and each master key's name and check value, never the
 key itself or the pack's contents. [Route tests](../../apps/server/src/backup-recovery-pack-api.make.test.ts)
 cover the request boundary; [dialog tests](../../apps/dashboard/src/widgets/recovery-pack-dialog.test.ts)
 and [card tests](../../apps/dashboard/src/screens/recovery-pack-card.test.ts) cover the actions.

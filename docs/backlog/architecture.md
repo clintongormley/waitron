@@ -769,6 +769,7 @@ also qualifies the historical operation-description references in this section.
   Membership reads its term from the signed document, and an alert's handler references a person.
   The box's role, recovery key, signing key, mirror link and pinned main-box key share one local
   row; role changes, recovery-key replacements and signing-key rotations leave events in node.db.
+  _2026-11-25, A1323 PR 3b: the box row holds no recovery key, and nothing records its replacement._
   A card reader holds its device id on its own row; its enabled status comes from `disabled_at`.
   A device keeps its chosen reader on its row, and a profile keeps its ordered readers and default
   in one list. Reader deletion clears both; configuration exports leave those assignments behind.

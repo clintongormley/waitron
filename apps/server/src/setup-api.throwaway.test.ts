@@ -649,7 +649,7 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     });
   });
 
-  it("Demo with no initialOperations makes a throwaway venue without a server key", async () => {
+  it("Demo with no initialOperations makes a throwaway venue", async () => {
     const res = await realApp(PREPRODUCTION_BOX)(body("demo"));
 
     expect(res.status, await res.clone().text()).toBe(200);
@@ -680,9 +680,6 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
     for (const key of ["serverKey", "serverKeyName", "serverKeyHeldBy"])
       expect(pdf).not.toHaveProperty(key);
     expect(pdf.masterKeyName).toBe(reply.masterKeyName);
-    const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
-    const [pack] = await readRecoveryPacks(venueDb.db, id);
-    expect(pack!.parts.map((part) => part.part)).not.toContain("server-key");
     expect(boxRows()).toEqual(before);
   });
 

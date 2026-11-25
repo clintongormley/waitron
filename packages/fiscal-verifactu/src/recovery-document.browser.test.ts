@@ -17,7 +17,7 @@ export function fixture(): RecoveryDocument {
     nodeKey: { nodeId: "node-1", name: "Caja principal" },
   };
 }
-describe("key-only recovery document", () => {
+describe("recovery document", () => {
   it("parses a detached document", async () => {
     const input = fixture();
     const parsed = await parseRecoveryDocument(input);

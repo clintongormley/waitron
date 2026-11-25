@@ -253,7 +253,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(isEnabled(persistedModules[0]!, ALL_MODULES[0]!.name)).toBe(true);
   });
 
-  it("the recovery pack can replace the master key without a box key", async () => {
+  it("the recovery pack can replace the master key", async () => {
     let ownNodeId = "";
     const answer = await adoptFromPrimary(
       deps({
