@@ -7649,6 +7649,60 @@ describe("alerts in the shell", () => {
     expect(location.pathname).toBe("/printers");
   });
 
+  it("opens the invoice from both alert surfaces even when the Orders list omits it", async () => {
+    history.replaceState(null, "", "/orders/status/open");
+    const orderId = "e518d75c-cecf-41c3-9919-48e1dc522d0d";
+    const getOrder = vi.fn(() => new Promise(() => undefined));
+    const api = alertsApi({
+      getMe: vi.fn().mockResolvedValue(venueViewer(["report.view"])),
+      getOrder,
+      listAlerts: vi.fn().mockResolvedValue({
+        visible: true,
+        alerts: [
+          {
+            key: "invoice_delivery.undelivered:sale",
+            kind: "ongoing",
+            code: "invoice_delivery.uncertain",
+            params: { invoice: "FF-16", orderId },
+            severity: "error",
+            since: null,
+            area: "invoice_delivery",
+            screen: "orders",
+          },
+        ],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    const orderDialog = () =>
+      el
+        .shadowRoot!.querySelector("dashboard-orders-screen")
+        ?.shadowRoot!.querySelector("dashboard-order-detail-dialog");
+    bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-go-to]")!.click();
+    await vi.waitFor(() => expect(getOrder).toHaveBeenCalledExactlyOnceWith(orderId));
+    expect(orderDialog()!.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true);
+    expect(location.pathname).toBe(`/orders/order/${orderId}/status/open`);
+    const closed = new Promise<void>((resolve) =>
+      orderDialog()!.addEventListener("wt-close", () => resolve(), { once: true }),
+    );
+    await userEvent.keyboard("{Escape}");
+    await closed;
+    expect(location.pathname).toBe("/orders/status/open");
+    bell(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=alerts-see-all]")!.click();
+    await flush(el);
+    const goTo = () =>
+      el
+        .shadowRoot!.querySelector("dashboard-alerts-screen")
+        ?.shadowRoot!.querySelector("[data-test=open-alerts-table]")
+        ?.shadowRoot!.querySelector<HTMLElement>("[data-test=alert-go-to]");
+    await vi.waitFor(() => expect(goTo()).not.toBeNull());
+    goTo()!.click();
+    await vi.waitFor(() =>
+      expect(orderDialog()?.shadowRoot!.querySelector("wt-dialog")!.open).toBe(true),
+    );
+    expect(location.pathname).toBe(`/orders/order/${orderId}`);
+  });
+
   it("offers Go to Box status on a low-disk alert to a session that manages the system, and opens the page", async () => {
     const api = alertsApi({
       getMe: vi.fn().mockResolvedValue({

@@ -65,7 +65,7 @@ const isReceipt = (row: InvoiceDelivery) => row.medium === "receipt";
 
 /**
  * Prints a full invoice on `request.printerId`, which must be one of the printers `offer` gives for
- * the sale, as the delivery status offers it. A receipt printer gets a document job built for it;
+ * the sale, or the explicit A4 retry the delivery status offers. A receipt printer gets a document job;
  * `onReceiptCopy` hears of a new duplicate one.
  */
 export async function requestPrintDelivery(
@@ -77,9 +77,9 @@ export async function requestPrintDelivery(
   },
   sale: { id: string; workingOrderId: string | null },
   offer: PrinterOffer,
-  request: Request & { printerId: string },
+  request: Request & { printerId: string; offerA4Retry?: boolean },
 ): Promise<InvoiceDeliveryAttempt> {
-  const { printerId, ...reserved } = request;
+  const { printerId, offerA4Retry, ...reserved } = request;
   await expireInvoiceDeliveryClaims(tx);
   const replay = await replayed(tx, sale.id, request.requestKey, async (row) => {
     if (row.medium === "a4") return row.printerId === printerId;
@@ -94,11 +94,17 @@ export async function requestPrintDelivery(
   const state = await readInvoiceDeliveryState(tx, sale.id, {
     emailAvailable: false,
     printers: offer,
+    offerA4Retry,
   });
   if (state === null) throw new AppError("invoice_delivery.full_invoice_required", {});
-  const printer = state.printers.find((candidate) => candidate.id === printerId);
+  const retry = state.status.actions.retryA4;
+  const printer =
+    retry?.id === printerId
+      ? retry
+      : state.printers.find((candidate) => candidate.id === printerId);
   if (printer === undefined) throw new AppError("invoice_delivery.printer_invalid", {});
-  const print = state.status.actions.print;
+  const print =
+    state.status.actions.print ?? (printer === retry ? { designation: "original" as const } : null);
   if (print === null) throw new AppError("invoice_delivery.active", {});
   if (printer.kind === "a4") {
     const row = await reserveInvoiceDelivery(tx, sale.id, {

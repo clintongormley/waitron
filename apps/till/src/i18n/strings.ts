@@ -622,6 +622,11 @@ export const en = {
   "invoice.delivery_hold_stopped": "stopped",
   "invoice.delivery_read_failed": "Could not check the invoice's delivery. Check again.",
   "invoice.delivery_error": "Could not send the invoice, try again",
+  "invoice.print_it_again": "Print it again",
+  "invoice.a4_stopped_answering": "{printer} stopped answering. Check whether it printed.",
+  "invoice.a4_check_paper": "Check whether it printed.",
+  "invoice.delivery_rechecking": "Could not check the invoice's delivery. Trying again…",
+  "invoice.print_rechecking": "Could not check the original print status. Trying again…",
   "invoice.print_on": "Print on {printer}",
   "invoice.send_on_again": "Send to {printer} again",
   "invoice.printer_read_failed": "Could not read the invoice printers. Refresh to try again.",
@@ -3056,6 +3061,13 @@ export const es: Record<StringKey, string> = {
   "invoice.delivery_read_failed":
     "No se ha podido comprobar la entrega de la factura. Vuelve a comprobarla.",
   "invoice.delivery_error": "No se pudo enviar la factura, inténtalo de nuevo",
+  "invoice.print_it_again": "Volver a imprimir",
+  "invoice.a4_stopped_answering": "{printer} dejó de responder. Comprueba si se imprimió.",
+  "invoice.a4_check_paper": "Comprueba si se imprimió.",
+  "invoice.delivery_rechecking":
+    "No se ha podido comprobar la entrega de la factura. Volviendo a intentarlo…",
+  "invoice.print_rechecking":
+    "No se ha podido comprobar si se imprimió el original. Volviendo a intentarlo…",
   "invoice.print_on": "Imprimir en {printer}",
   "invoice.send_on_again": "Volver a enviar a {printer}",
   "invoice.printer_read_failed":

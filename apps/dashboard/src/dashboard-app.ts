@@ -103,6 +103,7 @@ import "./screens/handover-intervals-screen.js";
 import "./screens/vat-return-screen.js";
 import "./screens/tax-office-screen.js";
 import "./screens/orders-screen.js";
+import type { AlertDestination } from "./widgets/alert-format.js";
 import "./screens/staff-screen.js";
 import "./screens/access-roles-screen.js";
 import "./screens/products-screen.js";
@@ -2690,10 +2691,7 @@ export class DashboardApp extends LitElement {
                           e.stopPropagation();
                           this.#selectScreen("alerts");
                         }}
-                        @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {
-                          e.stopPropagation();
-                          this.#selectScreen(e.detail.screen);
-                        }}
+                        @wt-alert-go-to=${this.#onAlertGoTo}
                       ></dashboard-alerts-bell>`
                     : nothing
                 }
@@ -2798,6 +2796,14 @@ export class DashboardApp extends LitElement {
     main.tabIndex = -1;
     main.addEventListener("blur", () => main.removeAttribute("tabindex"), { once: true });
     main.focus();
+  }
+
+  #onAlertGoTo(event: CustomEvent<AlertDestination>): void {
+    event.stopPropagation();
+    const { screen, orderId } = event.detail;
+    if (screen === "orders" && orderId && this.#permittedScreen(screen) === screen)
+      void this.#url.write({ dashboard: screen, order: orderId });
+    else this.#selectScreen(screen);
   }
 
   /** A screen (the units in-use modal) asks to open a product's editor; navigate to the menu
@@ -3621,10 +3627,7 @@ export class DashboardApp extends LitElement {
           .settledFile=${this.taxOfficeSettled}
           .canOpenBackups=${this.#canOpenScreen("backup")}
           @admin-sign-in=${() => void this.#onLogout("backup")}
-          @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {
-            e.stopPropagation();
-            this.#selectScreen(e.detail.screen);
-          }}
+          @wt-alert-go-to=${this.#onAlertGoTo}
         ></dashboard-tax-office-screen>`;
       case "orders":
         return html`<dashboard-orders-screen
@@ -3731,10 +3734,7 @@ export class DashboardApp extends LitElement {
           .canRestart=${this.#sessionPermissions.includes("system.manage")}
           .canManageUpgrades=${this.#sessionPermissions.includes("system.manage")}
           @admin-sign-in=${() => void this.#onLogout("box-status")}
-          @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {
-            e.stopPropagation();
-            this.#selectScreen(e.detail.screen);
-          }}
+          @wt-alert-go-to=${this.#onAlertGoTo}
         ></dashboard-box-status-screen>`;
       case "diagnostics":
         return html`<dashboard-diagnostics-screen
@@ -3801,10 +3801,7 @@ export class DashboardApp extends LitElement {
         return html`<dashboard-alerts-screen
           .api=${this.api}
           .canOpen=${this.#canOpenScreen}
-          @wt-alert-go-to=${(e: CustomEvent<{ screen: string }>) => {
-            e.stopPropagation();
-            this.#selectScreen(e.detail.screen);
-          }}
+          @wt-alert-go-to=${this.#onAlertGoTo}
         ></dashboard-alerts-screen>`;
       default:
         return html`<dashboard-overview-screen .api=${this.api}></dashboard-overview-screen>`;

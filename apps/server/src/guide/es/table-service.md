@@ -104,6 +104,10 @@ Después del último pago, elige **Recibo** o **Factura completa**. Un cambio qu
 la cuenta pagada ofrece la misma elección. Para imprimir, espera a que **Imprimir en {printer}**
 nombre el destino y púlsalo. Una factura completa conserva el cliente registrado.
 
+Si no está claro si se imprimió una factura en A4, comprueba la impresora que aparece en la
+ventana. Si aún la necesitas, pulsa **Volver a imprimir**. Para enviarla a otra impresora, elige
+**Impresora de facturas**. La ventana muestra cómo avanza la impresión o el envío por correo.
+
 Cuando se ofrece **Enviar por correo electrónico**, puedes enviar un recibo o una factura completa en PDF.
 Introduce el correo del cliente y pulsa **Enviar**. Imprimir y enviar por correo son acciones
 independientes. Si la caja dice **Compruébalo antes de intentarlo de nuevo**, puede que el documento
@@ -224,6 +228,8 @@ factura. El aviso puede seguir en la pantalla de inicio de sesión si el TPV se 
 la factura se haya impreso, revisa la impresora antes de volver a enviarla.
 
 ## Imprimir desde Pedidos del panel {#dashboard-documents}
+
+En un aviso de entrega de factura, elige **Ir a Pedidos** para abrir esa factura.
 
 Para buscar una cuenta anterior, elige **Cualquier fecha** o indica el intervalo de fechas. La búsqueda
 abarca todas las cuentas que coincidan, incluidas las de otras páginas. Usa **Página anterior** y

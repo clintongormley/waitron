@@ -661,7 +661,12 @@ function noCompletedOriginal(tx: Transaction) {
  * {@link undeliveredInvoice} decides.
  */
 async function undeliveredCandidates(tx: Transaction) {
-  const invoice = { id: sales.id, code: invoiceSeries.code, number: sales.invoiceNumber };
+  const invoice = {
+    id: sales.id,
+    workingOrderId: sales.workingOrderId,
+    code: invoiceSeries.code,
+    number: sales.invoiceNumber,
+  };
   const tracked = await tx
     .selectDistinct(invoice)
     .from(invoiceDeliveries)
@@ -725,7 +730,6 @@ export async function readUndeliveredInvoices(
   });
 }
 
-/** An alert's params name the invoice by number and never its customer. */
 export function invoiceDeliveryAlertSource(deps: {
   testPages: Pick<PageTestPages, "holdOn">;
 }): AlertSource {
@@ -735,7 +739,10 @@ export function invoiceDeliveryAlertSource(deps: {
     async read({ tx, now }): Promise<readonly OngoingAlert[]> {
       const alerts: OngoingAlert[] = [];
       for (const { sale, found } of await readUndeliveredInvoices(tx, now, deps.testPages)) {
-        const invoice = formatInvoiceNumber(sale.code, sale.number);
+        const params = {
+          invoice: formatInvoiceNumber(sale.code, sale.number),
+          orderId: sale.workingOrderId ?? sale.id,
+        };
         const alert = {
           key: `invoice_delivery.undelivered:${sale.id}`,
           severity: "error",
@@ -744,37 +751,37 @@ export function invoiceDeliveryAlertSource(deps: {
         } as const;
         switch (found.kind) {
           case "failed":
-            alerts.push({ ...alert, code: "invoice_delivery.failed", params: { invoice } });
+            alerts.push({ ...alert, code: "invoice_delivery.failed", params });
             break;
           case "uncertain":
-            alerts.push({ ...alert, code: "invoice_delivery.uncertain", params: { invoice } });
+            alerts.push({ ...alert, code: "invoice_delivery.uncertain", params });
             break;
           case "office_printer_unclaimed":
             alerts.push({
               ...alert,
               code: "invoice_delivery.office_printer_unclaimed",
-              params: { invoice, printer: found.printer },
+              params: { ...params, printer: found.printer },
             });
             break;
           case "uncertain_held":
             alerts.push({
               ...alert,
               code: "invoice_delivery.uncertain_held",
-              params: { invoice, printer: found.printer },
+              params: { ...params, printer: found.printer },
             });
             break;
           case "held":
             alerts.push({
               ...alert,
               code: "invoice_delivery.held",
-              params: { invoice, printer: found.printer, hold: found.hold },
+              params: { ...params, printer: found.printer, hold: found.hold },
             });
             break;
           case "queued_behind_hold":
             alerts.push({
               ...alert,
               code: "invoice_delivery.queued_behind_hold",
-              params: { invoice, printer: found.printer, hold: found.hold },
+              params: { ...params, printer: found.printer, hold: found.hold },
             });
             break;
         }

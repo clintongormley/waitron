@@ -27,6 +27,7 @@ export const dashboardPath: UrlPathConfig = {
     "set-menus": { setMenu: "menu" },
     modifiers: { view: "view", list: "list" },
     orders: {
+      order: "order",
       status: "status",
       from: "from",
       to: "to",

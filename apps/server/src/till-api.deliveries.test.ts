@@ -905,6 +905,65 @@ describe("POST /api/sales/:id/deliveries (print on A4)", () => {
     expect(await deliveryRows(saleId)).toEqual([]);
   });
 
+  it("retries an off-list A4 original from the till even after the printer is unreachable", async () => {
+    const v = await venue();
+    const { orderId, saleId } = await invoice(v);
+    const unrelated = await upstairsOffice(v);
+    await suite.db.update(devices).set({ invoicePrinterId: null });
+    await suite.db
+      .update(deviceProfiles)
+      .set({ printerLists: sql`json_remove(${deviceProfiles.printerLists}, '$.invoice')` });
+    const sender = await till(v);
+    expect((await printInvoice(v, orderId, randomUUID(), sender)).status).toBe(200);
+    await lapsedClaim(v);
+
+    const offer = { id: v.officeId, name: "Back office", kind: "a4" };
+    expect((await readStatus(v, orderId)).body).toMatchObject({
+      current: { status: "unknown" },
+      actions: { print: null, retryA4: offer },
+    });
+    const sessionOnly = v.cookie.split(";")[0]!;
+    expect((await readStatus(v, orderId, sessionOnly)).body!.actions).not.toHaveProperty("retryA4");
+    expect(await printInvoice(v, orderId, randomUUID(), undefined, unrelated)).toEqual(
+      refusal(409, "invoice_delivery.printer_invalid"),
+    );
+    expect((await printInvoice(v, orderId)).body).toMatchObject({
+      designation: "original",
+      status: "queued",
+    });
+    expect((await readStatus(v, orderId)).body!.actions).not.toHaveProperty("retryA4");
+    const retry = await agentClaims(v);
+    await withTransaction(suite.db, (tx) =>
+      reportInvoicePagePrint(tx, retry.claim, {
+        status: "failed",
+        failureCode: "printer_unreachable",
+      }),
+    );
+    expect((await readStatus(v, orderId)).body).toMatchObject({
+      current: { status: "failed", failureCode: "printer_unreachable" },
+      actions: { print: null, retryA4: offer },
+    });
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, v.officeId));
+    expect((await readStatus(v, orderId)).body!.actions).not.toHaveProperty("retryA4");
+    expect(await printInvoice(v, orderId)).toEqual(
+      refusal(409, "invoice_delivery.printer_invalid"),
+    );
+    await suite.db.update(printers).set({ active: true }).where(eq(printers.id, v.officeId));
+    expect((await printInvoice(v, orderId)).status).toBe(200);
+    const last = await agentClaims(v);
+    await withTransaction(suite.db, (tx) =>
+      reportInvoicePagePrint(tx, last.claim, { status: "sent" }),
+    );
+    const [lastDelivery] = await deliveryRows(saleId).then((rows) => rows.slice(-1));
+    expect(lastDelivery).toMatchObject({
+      printerId: v.officeId,
+      printJobId: last.jobId,
+      designation: "original",
+      status: "sent",
+    });
+    expect((await readStatus(v, orderId)).body!.actions).not.toHaveProperty("retryA4");
+  });
+
   it("gives one attempt to two tills racing", async () => {
     const v = await venue();
     const { orderId, saleId } = await invoice(v);

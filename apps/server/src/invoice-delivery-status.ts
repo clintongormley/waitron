@@ -36,6 +36,7 @@ type InvoiceDeliveryAttemptRow = InvoiceDelivery & {
   queueClaimedAt?: string | null;
   queuePrinterHold?: A4HoldCode | null;
   pagePrinterName?: string | null;
+  pagePrinterActive?: boolean | null;
 };
 
 export type InvoiceDeliveryMedium = InvoiceDelivery["medium"];
@@ -87,6 +88,7 @@ export interface InvoiceDeliveryStatus {
   originalPrinterId: string | null;
   actions: {
     retryOriginal: { medium: InvoiceDeliveryMedium } | null;
+    retryA4?: OfferedPrinter;
     print: {
       printers: OfferedPrinter[];
       designation: InvoiceDelivery["designation"];
@@ -116,6 +118,7 @@ export type PrinterOffer = (sale: InvoiceDeliverySale) => Promise<OfferedPrinter
 export type InvoiceDeliverySaleReadOptions = {
   emailAvailable: boolean | ((sale: InvoiceDeliverySale) => Promise<boolean>);
   includeInvoiceRecipientEmail?: boolean;
+  offerA4Retry?: boolean;
   printers?: PrinterOffer;
   testPages?: Pick<PageTestPages, "holdOn">;
 };
@@ -222,7 +225,11 @@ async function readStates(
     .from(sales)
     .where(inArray(sales.id, ids));
   const rows = await tx
-    .select({ ...invoiceDeliveryAttemptColumns, pagePrinterName: printers.name })
+    .select({
+      ...invoiceDeliveryAttemptColumns,
+      pagePrinterName: printers.name,
+      pagePrinterActive: printers.active,
+    })
     .from(invoiceDeliveries)
     .leftJoin(printJobs, eq(printJobs.id, invoiceDeliveries.printJobId))
     .leftJoin(printers, and(isA4Printer(), eq(printers.id, invoiceDeliveries.printerId)))
@@ -278,6 +285,7 @@ async function readStates(
       printers,
       emailable,
       options.includeInvoiceRecipientEmail === true,
+      options.offerA4Retry === true,
     );
     const latest = saleRows[0];
     if (latest?.medium === "a4" && latest.status === "queued" && latest.printerId !== null) {
@@ -350,6 +358,7 @@ function deliveryStatus(
   printers: OfferedPrinter[],
   emailAvailable: boolean,
   includeInvoiceRecipientEmail: boolean,
+  offerA4Retry: boolean,
 ): InvoiceDeliveryStatus {
   const history = rows.map((row) => ({
     ...rowAttempt(row),
@@ -395,24 +404,33 @@ function deliveryStatus(
   const busy =
     rows.some((row) => row.status === "queued" || row.status === "sending") || jobs.some(inFlight);
   const receiptRetryable = receipt.status !== "not_queued" && receipt.canRetry && !receiptWithdrawn;
-  const retryMedium =
-    current === null ||
-    !(current.status === "failed" || current.status === "unknown") ||
-    originalCompleted ||
-    busy
-      ? null
-      : (
-            current.medium === "email"
-              ? emailAvailable
-              : current.medium === "a4"
-                ? printers.some((printer) => printer.kind === "a4")
-                : receiptRetryable
-          )
-        ? current.medium
-        : receiptRetryable
-          ? "receipt"
-          : null;
   const latest = rows[0];
+  const canRetryOriginal =
+    !originalCompleted && !busy && (current?.status === "failed" || current?.status === "unknown");
+  const retryA4: OfferedPrinter | undefined =
+    offerA4Retry &&
+    canRetryOriginal &&
+    latest?.medium === "a4" &&
+    latest.designation === "original" &&
+    latest.failureCode !== "switched" &&
+    latest.pagePrinterActive &&
+    latest.printerId != null &&
+    latest.pagePrinterName != null
+      ? { id: latest.printerId, name: latest.pagePrinterName, kind: "a4" }
+      : undefined;
+  const retryMedium = !canRetryOriginal
+    ? null
+    : (
+          current.medium === "email"
+            ? emailAvailable
+            : current.medium === "a4"
+              ? retryA4 !== undefined || printers.some((printer) => printer.kind === "a4")
+              : receiptRetryable
+        )
+      ? current.medium
+      : receiptRetryable
+        ? "receipt"
+        : null;
   const designation = originalCompleted ? "duplicate" : "original";
   const original = originals.find((attempt) => attempt.sent) ?? originals[0];
   return {
@@ -421,6 +439,7 @@ function deliveryStatus(
     originalPrinterId: original?.printerId ?? null,
     actions: {
       retryOriginal: retryMedium === null ? null : { medium: retryMedium },
+      ...(retryA4 === undefined ? {} : { retryA4 }),
       print: printers.length === 0 || busy ? null : { printers, designation },
       receiptInstead:
         latest !== undefined &&

@@ -143,7 +143,7 @@ it.each([
   expect(button).not.toBeNull();
   button!.click();
   expect(heard).toHaveBeenCalledOnce();
-  expect(el.shadowRoot!.querySelector('[data-test="refresh-receipt"]')).not.toBeNull();
+  expect(el.shadowRoot!.querySelector('[data-test="refresh-receipt"]')).toBeNull();
 });
 
 it("keeps the final cash change beside the document choice", async () => {
@@ -520,7 +520,7 @@ for (const invoiceType of ["F2", "F1"] as const)
         el.shadowRoot!.textContent?.includes("The original has not been sent to a printer."),
       ).toBe(!promisesPrint);
       expect(el.shadowRoot!.querySelector("[data-test=refresh-receipt]") !== null).toBe(
-        !promisesPrint,
+        !promisesPrint && invoiceType === "F2",
       );
       // A full invoice's box still says it is undelivered; a receipt's box would hold nothing.
       expect(delivery !== null).toBe(!promisesPrint || invoiceType === "F1");
@@ -711,7 +711,11 @@ describe("an original emailed or sent on A4 that may have arrived", () => {
   for (const invoiceType of ["F2", "F1"] as const)
     it.each([
       ["emailed", [attempt("email-1", "email", "unknown")], "May not have been delivered."],
-      ["sent on A4", [attempt("a4-1", "a4", "unknown")], "May not have been delivered."],
+      [
+        "sent on A4",
+        [attempt("a4-1", "a4", "unknown")],
+        invoiceType === "F1" ? "Check whether it printed." : "May not have been delivered.",
+      ],
       [
         "held at the office printer",
         [attempt("a4-1", "a4", "unknown", "printer.offline")],

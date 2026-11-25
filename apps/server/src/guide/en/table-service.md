@@ -99,6 +99,10 @@ After the final payment, choose **Receipt** or **Full invoice**. An edit that fi
 paying the bill offers the same choice. To print, wait for **Print on {printer}** to name your
 destination, then press it. A full invoice keeps its recorded customer.
 
+If an A4 invoice may not have printed, check the printer named in the window. If you still need
+it, press **Print it again**. To send it somewhere else, choose **Invoice printer**.
+The window shows the latest print or email status as it changes.
+
 When **Send by email** is offered, you can send a receipt or full invoice as a PDF. Enter the customer's
 email address and press **Send**. Printing and email are separate actions. If the till says
 **Check before trying again**, the document may already have been delivered: ask the customer or
@@ -211,6 +215,8 @@ can stay on the sign-in screen if the till locks. If the invoice may have printe
 before sending it again.
 
 ## Print from dashboard Orders {#dashboard-documents}
+
+From an invoice delivery alert, choose **Go to Orders** to open that invoice.
 
 To find an older bill, choose **Any date** or set the date range. Search covers every matching bill,
 including other pages. Use **Previous page** and **Next page** to move through 50 bills at a time.
