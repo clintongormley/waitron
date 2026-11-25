@@ -789,30 +789,34 @@ it("filters actual completed refund rows without changing their identity, sign o
 });
 
 it.each([
-  ["en-GB", "Replacement corrective"],
-  ["es-ES", t("find_page.replacement", "es-ES")],
-] as const)("in %s, offers a replacement corrective as %s", async (language, words) => {
-  const { el } = await mount(
-    findBillApi(async (url) =>
-      json(
-        url.pathname.endsWith("options")
-          ? billOptions
-          : url.pathname === "/api/bills"
-            ? listPage()
-            : { ...listPage([transactionRow()]), dates: resolvedDates },
+  ["en-GB", "Corrective receipt", "Replacement receipt"],
+  ["es-ES", t("find_page.correction", "es-ES"), t("find_page.replacement", "es-ES")],
+] as const)(
+  "in %s, names a corrective receipt %s and a replacement %s",
+  async (language, correction, replacement) => {
+    const { el } = await mount(
+      findBillApi(async (url) =>
+        json(
+          url.pathname.endsWith("options")
+            ? billOptions
+            : url.pathname === "/api/bills"
+              ? listPage()
+              : { ...listPage([transactionRow()]), dates: resolvedDates },
+        ),
       ),
-    ),
-  );
-  await ready(el);
-  await switchTab(el, "transactions");
-  setLocale(language);
-  const grid = await ready(el, "transactions");
-  await el.updateComplete;
-  expect(grid.columns.find((c) => c.key === "type")!.filter!.options).toContainEqual({
-    value: "replacement",
-    label: words,
-  });
-});
+    );
+    await ready(el);
+    await switchTab(el, "transactions");
+    setLocale(language);
+    const grid = await ready(el, "transactions");
+    await el.updateComplete;
+    const options = grid.columns.find((c) => c.key === "type")!.filter!.options;
+    expect(options).toContainEqual({ value: "replacement", label: replacement });
+    expect(options).toContainEqual({ value: "correction", label: correction });
+    expect(options).toContainEqual({ value: "refund", label: t("find_page.refund", language) });
+    if (language === "en-GB") expect(t("find_page.refund", language)).toBe("Refund");
+  },
+);
 
 const openCorrection = (patch: Record<string, unknown> = {}) => ({
   id: "correction-1",
@@ -853,7 +857,7 @@ it("lists the corrections under way and opens the one chosen", async () => {
     return found!;
   });
   expect(el.shadowRoot!.querySelector("[data-corrections] h2")!.textContent).toBe(
-    "Corrections under way",
+    "Money back under way",
   );
   expect(button.textContent!.replace(/\s+/g, " ").trim()).toBe(
     "T/0012 · 15/10/2026, 14:00:00 · Overcharged · €4.05 of €6.05 left to give back",

@@ -10,6 +10,8 @@ import { codeMessage } from "./i18n/codes.js";
 import type { TillCancelCreditDialog } from "./widgets/cancel-credit-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
+import { completedFor, previewFor } from "./widgets/give-back-dialog.test-helpers.js";
+import type { GiveBackRequest, GiveBackView, GiveBackWrite } from "./api/give-back-types.js";
 import type { PartyBill } from "./api/client.js";
 import {
   seated,
@@ -975,9 +977,54 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       getTransactionReceipt: vi.fn().mockResolvedValue(saleResult),
       listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m1", displayName: "Marta" }]),
       refundTransaction: vi.fn(),
+      readGiveBack: vi.fn(async (saleId: string) =>
+        finishView([[`dish-${saleId}`, "5.50", [saleId === "sale-wo-4" ? "adj-1" : "adj-2"]]]),
+      ),
+      previewGiveBack: vi.fn(async (_saleId: string, request: GiveBackRequest) =>
+        previewFor(request),
+      ),
+      giveBack: vi.fn(async (_saleId: string, body: GiveBackWrite) => completedFor(body)),
+      listApprovers: vi.fn().mockResolvedValue([{ personId: "m1", displayName: "Marta" }]),
       ...overrides,
     });
   }
+  /** A receipt as Give money back reads it: each `[line, owed]` a dish cancelled at Finish table. */
+  function finishView(owed: [string, string, string[]][]): GiveBackView {
+    return {
+      lines: owed.map(([id, money, cancelIds]) => ({
+        id,
+        descriptions: { en: id },
+        quantity: "1.000",
+        gross: money,
+        left: money,
+        cancelled: { quantity: "1.000", owed: money, back: "0.00", waiting: "0.00" },
+        cancelIds,
+        partOf: null,
+        givenFree: false,
+        available: true,
+        reason: null,
+      })),
+      ways: [
+        {
+          way: "cash",
+          last4: null,
+          manual: false,
+          moneyLeft: "30.00",
+          extraLeft: "0.00",
+          pending: false,
+          allowedHere: true,
+          reason: null,
+        },
+      ],
+      underWay: null,
+      choices: {
+        dishes: { available: true, reason: null },
+        goodwill: { available: true, reason: null },
+        extra: { available: true, reason: null },
+      },
+    };
+  }
+  const giving = (el: TillApp) => el.shadowRoot!.querySelector("till-give-back-dialog");
   async function openFinish(el: TillApp) {
     emit(await openPartyTable(el), "finish-table");
     await flush(el, 8);
@@ -1191,12 +1238,11 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       "sale-wo-4",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
-    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
-    expect(
-      el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-tender-refund-dialog"]>(
-        "till-tender-refund-dialog",
-      )!.attempt,
-    ).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
+    expect(giving(el)).not.toBeNull();
+    expect(giving(el)!.saleId).toBe("sale-wo-4");
+    expect(giving(el)!.fill).toEqual({ cancellationIds: [], reasonId: "r-cancel" });
+    expect(vi.mocked(api.giveBack)).not.toHaveBeenCalled();
     expect(api.refundTransaction).not.toHaveBeenCalled();
   });
 
@@ -1225,7 +1271,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       ...first,
       approver: { personId: "m1", pin: "7777" },
     });
-    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
+    expect(giving(el)).not.toBeNull();
     for (const storage of [localStorage, sessionStorage])
       for (const key of Object.keys(storage)) expect(storage.getItem(key)).not.toContain("7777");
     expect(api.refundTransaction).not.toHaveBeenCalled();
@@ -1557,34 +1603,33 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     expect(finishDialog(el)!.freeItems).toEqual({ "line-w": ["line-1"] });
   });
 
-  describe("each receipt's refund opens filled in", () => {
-    // A refund left awaiting its answer is saved for its sale, and would reopen in the next case.
+  describe("each receipt's Give money back opens filled in", () => {
+    // A press left awaiting its answer is saved for its sale, and would reopen in the next case.
     afterEach(() => {
       for (const key of Object.keys(localStorage))
         if (key.startsWith("waitron.tender-refund:")) localStorage.removeItem(key);
     });
-    type RefundForm = HTMLElementTagNameMap["till-tender-refund-dialog"];
-    const refundForm = (el: TillApp) =>
-      el.shadowRoot!.querySelector<RefundForm>("till-tender-refund-dialog");
-    const refundPrompt = (el: TillApp) =>
-      el.shadowRoot!.querySelector<TillSupervisorOverrideDialog>(
-        "till-supervisor-override-dialog[data-tender-refund-approval]",
-      );
+    const inForm = <T extends Element = HTMLElement>(el: TillApp, selector: string) =>
+      giving(el)!.shadowRoot!.querySelector<T>(selector);
+    const prompt = (el: TillApp) =>
+      inForm<TillSupervisorOverrideDialog>(el, "till-supervisor-override-dialog");
     function named(lineId: string, name: string, quantity: string, billId = "wo-4"): Dish {
       return { ...dish(lineId, billId), name, quantity };
     }
-    const refundTransaction = () =>
-      vi.fn(async (saleId: string, ask: { tenderId: string; appliedAmount: string }) => ({
-        id: `refund-${saleId}-${ask.appliedAmount}`,
-        saleId,
-        tenderId: ask.tenderId,
-        state: "completed",
-        appliedAmount: ask.appliedAmount,
-        tipAmount: "0.00",
-        createdAt: "2026-10-22T11:01:00.000Z",
-        completedAt: "2026-10-22T11:01:01.000Z",
+    const sent = () => vi.mocked(api.giveBack).mock.calls.map((call) => call[1] as GiveBackWrite);
+    const sentTo = () => vi.mocked(api.giveBack).mock.calls.map((call) => call[0]);
+    /** The box's rule (D9): the cancel's approval covers only what the filled window sends with
+     * its cancel's ids, up to the €5.50 owed and no extra. */
+    const coverModel = () =>
+      vi.fn(async (_saleId: string, request: GiveBackRequest) => ({
+        ...previewFor(request),
+        needs:
+          request.fromCancel !== undefined &&
+          Number(request.amount) <= 5.5 &&
+          request.extra === "0.00"
+            ? []
+            : ["sale.refund"],
       }));
-    const sent = () => vi.mocked(api.refundTransaction).mock.calls.map((call) => call[1]);
     async function untick(el: TillApp, index: number) {
       const dialog = finishDialog(el)!;
       await dialog.updateComplete;
@@ -1593,19 +1638,39 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       );
       await dialog.updateComplete;
     }
-    async function openedRefund(el: TillApp) {
-      await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
-      await refundForm(el)!.updateComplete;
-      return refundForm(el)!;
+    async function opened(el: TillApp) {
+      await expect
+        .poll(() => giving(el)?.shadowRoot!.querySelector("[data-purpose]") ?? null)
+        .not.toBeNull();
+      await giving(el)!.updateComplete;
+      return giving(el)!;
     }
-    async function sendRefund(el: TillApp, change: Record<string, string> = {}) {
-      const form = await openedRefund(el);
-      for (const [name, value] of Object.entries(change))
-        emit(form.shadowRoot!.querySelector(`[name="${name}"]`)!, "wt-change", { value });
-      await form.updateComplete;
-      await userEvent.click(
-        page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),
-      );
+    const amountOf = (el: TillApp) =>
+      inForm<HTMLElementTagNameMap["wt-price-input"]>(el, "wt-price-input[name=amount]")!.value;
+    const ticked = (el: TillApp) =>
+      [
+        ...giving(el)!.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-switch"]>(
+          "wt-switch[data-line]",
+        ),
+      ]
+        .filter((row) => row.checked)
+        .map((row) => row.getAttribute("data-line"));
+    async function giveBack(el: TillApp, amount?: string) {
+      await opened(el);
+      if (amount !== undefined) {
+        const field = inForm<HTMLElementTagNameMap["wt-price-input"]>(
+          el,
+          "wt-price-input[name=amount]",
+        )!;
+        await field.updateComplete;
+        await userEvent.fill(
+          page.elementLocator(field.shadowRoot!.querySelector("input")!),
+          amount,
+        );
+        await giving(el)!.updateComplete;
+      }
+      await expect.poll(() => inForm(el, "[data-summary]")).not.toBeNull();
+      await userEvent.click(page.elementLocator(inForm(el, "[data-submit]")!));
       await flush(el, 8);
     }
     async function openReceipt(el: TillApp, saleId: string) {
@@ -1618,12 +1683,14 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       await flush(el, 10);
     }
     async function backToList(el: TillApp) {
-      await expect.poll(() => refundForm(el)).toBeNull();
+      await expect.poll(() => inForm(el, "[data-outcome]")).not.toBeNull();
+      emit(giving(el)!, "give-back-close");
+      await flush(el);
       emit(el.shadowRoot!.querySelector("till-ticket-view")!, "back-to-find-bill");
       await flush(el, 8);
     }
 
-    it("opens each sale's refund filled in with its ticked dishes", async () => {
+    it("opens each sale's window on A dish with its ticked dishes, their owed amount and the cancel's reason, sending their cancels' ids", async () => {
       const rows = [
         named("line-c", "Croquetas", "2.000"),
         named("line-1", "Flan", "1.000"),
@@ -1643,27 +1710,35 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         getCancellation: vi.fn(async (_p: string, id: string) =>
           consent(rows.find((row) => row.lineId === id)!),
         ),
-        refundTransaction: refundTransaction(),
+        readGiveBack: vi.fn().mockResolvedValue(
+          finishView([
+            ["croquetas", "11.00", ["adj-c"]],
+            ["flan", "5.50", ["adj-1"]],
+          ]),
+        ),
       });
       await openFinish(el);
       await untick(el, 2);
       await choose(el, true);
-      const form = await openedRefund(el);
-      expect(form.target).toBe("16.50");
-      expect(form.dishes).toBe("2 × Croquetas, 1 × Flan");
-      expect(form.startReasonId).toBe("r-cancel");
-      await sendRefund(el);
-      expect(sent()).toEqual([
-        expect.objectContaining({
-          appliedAmount: "16.50",
-          tipAmount: "0.00",
-          cancellationIds: ["adj-c", "adj-1"],
-        }),
-      ]);
+      await opened(el);
+      expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
+      expect(ticked(el)).toEqual(["croquetas", "flan"]);
+      expect(amountOf(el)).toBe("16.50");
+      expect(
+        inForm<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=reason]")!.value,
+      ).toBe("r-cancel");
+      await giveBack(el);
+      await expect.poll(() => sent()).toHaveLength(1);
+      expect(sent()[0]!.request).toMatchObject({
+        purpose: "dishes",
+        amount: "16.50",
+        extra: "0.00",
+        fromCancel: ["adj-c", "adj-1"],
+      });
       expect(sent()[0]).not.toHaveProperty("override");
     });
 
-    it("names a free item listed first ahead of its paid dish in the refund", async () => {
+    it("sends a free item listed first with its paid dish's cancel, in Finish table's order", async () => {
       const rows = [named("line-w", "Water", "1.000"), named("line-1", "Salad", "1.000")];
       const { el } = await mountFinish({
         finishTable: vi
@@ -1682,13 +1757,18 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
             ? freeWater(row, ["line-1"])
             : { ...consent(row), refundValue: { quantity: "1.000", gross: "7.00" } };
         }),
-        refundTransaction: refundTransaction(),
+        readGiveBack: vi
+          .fn()
+          .mockResolvedValue(finishView([["salad", "8.67", ["adj-w", "adj-1"]]])),
       });
       await openFinish(el);
       await choose(el, true);
-      const form = await openedRefund(el);
-      expect(form.target).toBe("8.67");
-      expect(form.dishes).toBe("1 × Water, 1 × Salad");
+      await opened(el);
+      expect(amountOf(el)).toBe("8.67");
+      expect(giving(el)!.fill).toEqual({
+        cancellationIds: ["adj-w", "adj-1"],
+        reasonId: "r-cancel",
+      });
     });
 
     it("sends a free item's Refund with its paid dish when the money left covers only the dish", async () => {
@@ -1711,7 +1791,13 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
             : { ...consent(row), refundValue: { quantity: "1.000", gross: "7.00" } };
         }),
         getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, appliedRemaining: "7.00" }]),
-        refundTransaction: refundTransaction(),
+        // The box still records the free water's cancel as owed once the money left is used up.
+        readGiveBack: vi.fn().mockResolvedValue(
+          finishView([
+            ["dish", "7.00", ["adj-1"]],
+            ["water", "1.67", ["adj-w"]],
+          ]),
+        ),
       });
       await openFinish(el);
       expect(finishDialog(el)!.refunds).toEqual({ "line-1": "7.00" });
@@ -1723,11 +1809,25 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         ["line-1", true],
         ["line-w", true],
       ]);
-      const form = await openedRefund(el);
-      expect(form.target).toBe("7.00");
+      await opened(el);
+      expect(giving(el)!.fill!.cancellationIds).toEqual(["adj-1"]);
+      expect(ticked(el)).toEqual(["dish"]);
+      expect(amountOf(el)).toBe("7.00");
+      expect(
+        inForm<HTMLElementTagNameMap["wt-price-input"]>(el, "wt-price-input[name=amount]")!.error,
+      ).toBe("");
+      await giveBack(el);
+      await expect.poll(() => sent()).toHaveLength(1);
+      expect(sent()[0]!.request).toMatchObject({
+        lineIds: ["dish"],
+        amount: "7.00",
+        fromCancel: ["adj-1"],
+      });
+      expect(sent()[0]).not.toHaveProperty("override");
+      expect(api.listApprovers).not.toHaveBeenCalled();
     });
 
-    it("fills in the dish's share of a comp on the whole bill", async () => {
+    it("fills in the dish's share of a comp on the whole bill as the box says it is owed", async () => {
       // The filed value of 3 portions after a 10% comp on the whole bill is €9.00, one already
       // cancelled: the next portion's share is share(2) − share(1) of €9.00 over 3.
       const row = dish();
@@ -1742,14 +1842,15 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
             refundLinks: [{ lineId: "line-1", adjustmentId: "adj-1" }],
           }),
         getCancellation: vi.fn().mockResolvedValue(read),
-        refundTransaction: refundTransaction(),
+        readGiveBack: vi.fn().mockResolvedValue(finishView([["flan", "3.00", ["adj-1"]]])),
       });
       await openFinish(el);
       expect(finishDialog(el)!.refunds).toEqual({ "line-1": "3.00" });
       await choose(el, true);
-      const form = await openedRefund(el);
-      expect(form.target).toBe("3.00");
-      expect(form.dishes).toBe("1 × Flan");
+      await opened(el);
+      expect(amountOf(el)).toBe("3.00");
+      expect(ticked(el)).toEqual(["flan"]);
+      expect(giving(el)!.fill!.cancellationIds).toEqual(["adj-1"]);
     });
 
     describe("server-held approval after Finish table", () => {
@@ -1767,7 +1868,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
                 { lineId: "line-2", adjustmentId: "adj-2" },
               ],
             }),
-          refundTransaction: refundTransaction(),
+          previewGiveBack: coverModel(),
           ...more,
         });
       }
@@ -1783,80 +1884,85 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         const { el } = await approvedFinish();
         await approve(el);
         await openReceipt(el, "sale-wo-4");
-        const first = await openedRefund(el);
-        expect(first.target).toBe("5.50");
-        expect(first.dishes).toBe("1 × Flan");
-        await sendRefund(el);
+        await opened(el);
+        expect(amountOf(el)).toBe("5.50");
+        expect(inForm(el, "[data-pin]")).toBeNull();
+        await giveBack(el);
         await backToList(el);
         await openReceipt(el, "sale-wo-check");
-        const second = await openedRefund(el);
-        expect(second.target).toBe("5.50");
-        expect(second.dishes).toBe("1 × Water");
-        await sendRefund(el);
-        expect(vi.mocked(api.refundTransaction).mock.calls.map((call) => call[0])).toEqual([
-          "sale-wo-4",
-          "sale-wo-check",
+        await opened(el);
+        expect(amountOf(el)).toBe("5.50");
+        await giveBack(el);
+        await expect.poll(() => sent()).toHaveLength(2);
+        expect(sentTo()).toEqual(["sale-wo-4", "sale-wo-check"]);
+        expect(sent().map((body) => [body.request.amount, body.request.fromCancel])).toEqual([
+          ["5.50", ["adj-1"]],
+          ["5.50", ["adj-2"]],
         ]);
-        expect(sent()).toEqual([
-          expect.objectContaining({
-            appliedAmount: "5.50",
-            cancellationIds: ["adj-1"],
-          }),
-          expect.objectContaining({
-            appliedAmount: "5.50",
-            cancellationIds: ["adj-2"],
-          }),
-        ]);
-        for (const request of sent()) expect(request).not.toHaveProperty("override");
-        expect(refundPrompt(el)).toBeNull();
+        for (const body of sent()) expect(body).not.toHaveProperty("override");
+        expect(prompt(el)).toBeNull();
+        expect(api.listApprovers).not.toHaveBeenCalled();
         expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
         for (const storage of [localStorage, sessionStorage])
           for (const key of Object.keys(storage))
             expect(storage.getItem(key)).not.toContain("7777");
       });
 
-      it("asks again for a second refund of the same sale", async () => {
+      it("asks again for a second give-back of the same sale opened from its receipt", async () => {
         const { el } = await approvedFinish();
         await approve(el);
         await openReceipt(el, "sale-wo-4");
-        await sendRefund(el, { appliedAmount: "3.00" });
+        await giveBack(el, "3.00");
+        await expect.poll(() => sent()).toHaveLength(1);
+        expect(sent()[0]!.request).toMatchObject({ amount: "3.00", fromCancel: ["adj-1"] });
         expect(sent()[0]).not.toHaveProperty("override");
-        await expect.poll(() => refundForm(el)).toBeNull();
-        vi.mocked(api.refundTransaction).mockRejectedValueOnce({
-          code: "authorization.not_permitted",
-        });
-        emit(el.shadowRoot!.querySelector("till-ticket-view")!, "tender-refund-open");
+        await expect.poll(() => inForm(el, "[data-outcome]")).not.toBeNull();
+        emit(giving(el)!, "give-back-close");
         await flush(el);
-        await sendRefund(el, { reason: "r-cancel", appliedAmount: "2.50", tipAmount: "0.00" });
-        await expect.poll(() => refundPrompt(el)).not.toBeNull();
-        expect(sent()[1]).not.toHaveProperty("override");
+        await userEvent.click(
+          el
+            .shadowRoot!.querySelector("till-ticket-view")!
+            .shadowRoot!.querySelector<HTMLElement>("[data-give-back]")!,
+        );
+        await flush(el);
+        await expect.poll(() => inForm(el, "[data-choice=dishes]")).not.toBeNull();
+        expect(giving(el)!.fill).toBeNull();
+        inForm(el, "[data-choice=dishes]")!.click();
+        await giving(el)!.updateComplete;
+        inForm<HTMLElementTagNameMap["wt-switch"]>(el, 'wt-switch[data-line="dish-sale-wo-4"]')!
+          .shadowRoot!.querySelector("input")!
+          .click();
+        await giving(el)!.updateComplete;
+        emit(inForm(el, "wt-combobox[name=reason]")!, "wt-change", { value: "r-cancel" });
+        await giving(el)!.updateComplete;
+        await expect.poll(() => inForm(el, "[data-pin]")).not.toBeNull();
+        await userEvent.click(page.elementLocator(inForm(el, "[data-submit]")!));
+        await flush(el, 8);
+        await expect.poll(() => prompt(el)).not.toBeNull();
+        expect(sent()).toHaveLength(1);
+        expect(vi.mocked(api.previewGiveBack).mock.lastCall![1]).not.toHaveProperty("fromCancel");
       });
 
-      it("asks above the total and submits the other sale without a PIN", async () => {
+      it("asks above the total and gives the other sale back without a PIN", async () => {
         const { el } = await approvedFinish();
         await approve(el);
-        vi.mocked(api.refundTransaction).mockRejectedValueOnce({
-          code: "authorization.not_permitted",
-        });
         await openReceipt(el, "sale-wo-4");
-        await sendRefund(el, { appliedAmount: "5.51" });
-        await expect.poll(() => refundPrompt(el)).not.toBeNull();
-        expect(sent()[0]).not.toHaveProperty("override");
-        expect(sent()[0]?.cancellationIds).toEqual(["adj-1"]);
-        emit(refundPrompt(el)!, "override-confirm", { personId: "m1", pin: "1234" });
+        await giveBack(el, "5.51");
+        await expect.poll(() => prompt(el)).not.toBeNull();
+        expect(api.listApprovers).toHaveBeenCalledWith(["sale.refund"]);
+        emit(prompt(el)!, "override-confirm", { personId: "m1", pin: "1234" });
         await flush(el, 8);
-        await expect.poll(() => sent()).toHaveLength(2);
-        expect(sent()[1]).toMatchObject({
-          appliedAmount: "5.51",
+        await expect.poll(() => sent()).toHaveLength(1);
+        expect(sent()[0]).toMatchObject({
+          request: { amount: "5.51", fromCancel: ["adj-1"] },
           override: { personId: "m1", pin: "1234" },
         });
         await backToList(el);
         await openReceipt(el, "sale-wo-check");
-        await sendRefund(el);
-        expect(sent()[2]).toMatchObject({
-          appliedAmount: "5.50",
-          cancellationIds: ["adj-2"],
-        });
+        await giveBack(el);
+        await expect.poll(() => sent()).toHaveLength(2);
+        expect(sent()[1]!.request).toMatchObject({ amount: "5.50", fromCancel: ["adj-2"] });
+        expect(sent()[1]).not.toHaveProperty("override");
       });
     });
   });
@@ -1884,8 +1990,8 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       "sale-wo-check",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
-    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
-    emit(el.shadowRoot!.querySelector("till-tender-refund-dialog")!, "tender-refund-close");
+    expect(giving(el)).not.toBeNull();
+    emit(giving(el)!, "give-back-close");
     await flush(el);
     emit(el.shadowRoot!.querySelector("till-ticket-view")!, "back-to-find-bill");
     await flush(el, 8);
@@ -1970,7 +2076,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     expect((finish.mock.calls.at(-1)![3] as { submissionId: string }).submissionId).toBe(
       (finish.mock.calls[2]![3] as { submissionId: string }).submissionId,
     );
-    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
+    expect(giving(el)).not.toBeNull();
     for (const storage of [localStorage, sessionStorage])
       for (const key of Object.keys(storage)) {
         expect(storage.getItem(key)).not.toContain("7777");
@@ -1990,6 +2096,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     await flush(el, 10);
     expect(tableOrder(el)?.party?.id).toBe("v7");
     expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
+    expect(giving(el)).toBeNull();
   });
 
   it("reveals a newly required note beside the field and retains the paid choices for retry", async () => {
@@ -2198,6 +2305,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     await choose(el, true);
     expect(tableOrder(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
+    expect(giving(el)).toBeNull();
     const choice = el.shadowRoot!.querySelector<HTMLElement>('[data-finish-refund="sale-wo-4"]')!;
     expect(choice).not.toBeNull();
     expect(el.shadowRoot!.textContent).toContain(t("find_bill.invoice_load_failed"));
@@ -2205,7 +2313,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     await flush(el, 10);
     expect(receipt).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("[data-finish-refund]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).not.toBeNull();
+    expect(giving(el)).not.toBeNull();
     expect(api.refundTransaction).not.toHaveBeenCalled();
   });
 
@@ -2565,6 +2673,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       expect(approval(el)).toBeNull();
       expect(api.getTransactionReceipt).not.toHaveBeenCalled();
       expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
+      expect(giving(el)).toBeNull();
     });
   });
 });

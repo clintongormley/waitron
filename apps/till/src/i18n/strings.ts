@@ -96,7 +96,7 @@ export const en = {
   "cancel_item.no": "No",
   "cancel_item.started": "Already being prepared or served",
   "cancel_item.refund_at_till":
-    "Refund the payment at a till: choose Refund a payment on the receipt.",
+    "Give the money back at a till: choose Give money back on the receipt.",
   "cancel_item.paid": "This bill is closed",
   "cancel_item.choice": "What happens to the charge?",
   "cancel_item.still_charge": "Cancel, still charge",
@@ -104,7 +104,7 @@ export const en = {
   "cancel_item.refund": "Cancel and refund {amount}",
   "cancel_item.with_free": "Comes back with it, given free: {dishes}",
   "cancel_item.free_served":
-    "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then give the money back with Correct invoice on the receipt.",
+    "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then open Give money back on the receipt.",
   "cancel_item.unavailable": "This dish cannot be cancelled here.",
 
   "device_zones.title": "Zones on this device",
@@ -176,6 +176,123 @@ export const en = {
   "tender_refund.pending_payment": "Check pending refund",
   "tender_refund.storage":
     "The refund request could not be saved or read on this device. Before starting another refund, open the receipt on another device that takes payments and choose Refund a payment: it lists what is left to refund and any refund still waiting.",
+  "give_back.title": "Give money back",
+  "give_back.loading": "Reading the receipt…",
+  "give_back.read_failed": "The receipt could not be read. Nothing has changed.",
+  "give_back.what_for": "What is it for?",
+  "give_back.dishes": "A dish",
+  "give_back.dishes_hint":
+    "Something they ordered never came, or was not right. You tick the dishes.",
+  "give_back.goodwill": "Goodwill or a complaint",
+  "give_back.goodwill_hint": "Give back an amount you choose, for example for a complaint.",
+  "give_back.extra": "Extra paid on top of the bill",
+  "give_back.extra_hint":
+    "Give back some or all of the {amount} paid on top of the bill, and nothing else. The receipt shows it as Tip.",
+  "give_back.which": "Which dishes?",
+  "give_back.cancelled_owed": "Cancelled, not served",
+  "give_back.cancelled_back": "Cancelled, money given back",
+  "give_back.cancelled_waiting": "Cancelled, money back waiting for the card company",
+  "give_back.given_free": "Given free",
+  "give_back.amount": "Money back",
+  "give_back.amount_change": "Change it to give back less, or more.",
+  "give_back.up_to": "Up to {amount} can go back.",
+  "give_back.amount_invalid": "Enter an amount above zero and up to {amount}.",
+  "give_back.extra_amount": "Extra to give back",
+  "give_back.extra_too": "Give back the extra paid on top too ({amount})",
+  "give_back.how": "How it goes back",
+  "give_back.way_cash": "Cash · up to {amount}",
+  "give_back.way_card": "Card {card} · up to {amount}",
+  "give_back.summary_cash":
+    "{amount} goes back in cash. The cash drawer opens: give it to the customer.",
+  "give_back.summary_card": "{amount} goes back to card {card} through the card reader.",
+  "give_back.summary_terminal": "{amount} goes back to card {card} on the separate card terminal.",
+  "give_back.summary_rest":
+    "{amount} cannot go back this way: it stays under way for the other payments.",
+  "give_back.pin":
+    "If you cannot give money back yourself, a supervisor or manager approves it with their PIN next.",
+  "give_back.submit": "Give back {amount}",
+  "give_back.submit_any": "Give back",
+  "give_back.preview_failed":
+    "The box could not be reached to check this money back. Nothing has been given back. Press Give back to try again.",
+  "give_back.way_not_here":
+    "This device's profile does not give money back this way. To give it back this way, open Give money back on a device whose profile does.",
+  "give_back.changed_while_checking":
+    "The money back changed while it was being checked. Check what is shown and press Give back again.",
+  "give_back.terminal_heading": "Refund it on the separate card terminal",
+  "give_back.terminal_explain":
+    "This card was keyed on a separate card terminal, so Waitron cannot refund it itself. Refund {amount} on that terminal now, then confirm it here.",
+  "give_back.terminal_done": "I have refunded {amount} on the separate card terminal",
+  "give_back.terminal_required":
+    "Confirm you have refunded the money on the separate card terminal.",
+  "give_back.terminal_pin": "A supervisor or manager then approves recording it with their PIN.",
+  "give_back.terminal_record": "Record the refund",
+  "give_back.sending": "Giving the money back…",
+  "give_back.approvers_failed":
+    "The people who can approve this could not be read. Nothing has been given back. Press Give back to try again.",
+  "give_back.nothing_given": "Nothing has been given back.",
+  "give_back.storage":
+    "This device could not save the money back before sending it. Nothing has been given back. Close this window and, on another device that takes payments, open Give money back on the receipt.",
+  "give_back.lost":
+    "The box did not answer, so it is not known whether the money went back. Send again asks the box: it sends the same money back, which never goes back twice.",
+  "give_back.send_again": "Send again",
+  "give_back.uw_card_refused":
+    "A card refund on this receipt was refused, so no money went back. Send again sends it again, asking for approval if it needs it.",
+  "give_back.done_cash": "{amount} given back in cash. Give it to the customer.",
+  "give_back.done_card_any": "{amount} is back on the card.",
+  "give_back.done_card": "{amount} is back on card {card}.",
+  "give_back.done_terminal": "{amount} given back on the separate card terminal is recorded.",
+  "give_back.print_later": "Its corrective receipt can be printed from Find a bill.",
+  "give_back.pending": "{amount} is waiting for the card company's answer.",
+  "give_back.rest": "{amount} has not gone back yet: it follows when the card company answers.",
+  "give_back.check_again": "Check again",
+  "give_back.pending_unanswered": "The card company has not answered yet. Check again later.",
+  "give_back.rest_ready":
+    "{amount} has not gone back yet. Press Give back the rest to send it now.",
+  "give_back.send_rest": "Give back the rest",
+  "give_back.still_waiting":
+    "The card company has not answered yet. Check again later: the rest stays waiting on this till.",
+  "give_back.rest_failed":
+    "The card company did not make the first refund, so the rest was not sent. Nothing more has gone back. Open Give money back again to try again or to choose another way.",
+  "give_back.under_way": "Money back under way",
+  "give_back.done": "Done",
+  "give_back.uw_back": "{back} given back so far, of {gross}.",
+  "give_back.uw_left": "{amount} left to give back.",
+  "give_back.uw_cash": "Give back {amount} in cash",
+  "give_back.uw_cash_hint": "The cash drawer opens.",
+  "give_back.uw_cash_given": "Give the customer {amount} in cash.",
+  "give_back.uw_no_cash":
+    "This till cannot give cash back. Give the cash back from a till that can.",
+  "give_back.uw_card": "Give back {amount} to card {card}",
+  "give_back.uw_card_any": "Give back {amount} to the card",
+  "give_back.uw_card_hint": "It goes back through the card reader.",
+  "give_back.uw_terminal_hint":
+    "You refund it on the separate card terminal, then a supervisor or manager approves recording it with their PIN.",
+  "give_back.uw_card_unread":
+    "The card's payment could not be read, so nothing was sent. Press the card's button again.",
+  "give_back.uw_card_changed":
+    "This card's payment has changed since it was shown, so nothing was sent. Check what is left to give back and press again.",
+  "give_back.uw_card_failed":
+    "The card company did not make the refund, so that money has not gone back. Press the card's button to try again, or give it back another way.",
+  "give_back.uw_approvers_failed":
+    "The people who can approve this could not be read. Nothing has changed. Press the same button again to try again.",
+  "give_back.uw_close": "Close",
+  "give_back.uw_card_waiting":
+    "An earlier card refund on this receipt is still waiting for an answer, so nothing was sent. Press Check again before giving more back to a card.",
+  "give_back.uw_finish": "Finish",
+  "give_back.uw_finish_hint": "Records the {amount} given back.",
+  "give_back.uw_stop": "Stop here",
+  "give_back.uw_stop_hint": "Keeps the {amount} already given back; gives no more back.",
+  "give_back.uw_cancel": "Cancel this money back",
+  "give_back.uw_cancel_hint": "Nothing has gone back yet.",
+  "give_back.uw_finished": "The {amount} given back is recorded.",
+  "give_back.uw_cancelled": "This money back is cancelled. Nothing went back.",
+  "give_back.uw_closed": "This money back is finished. The {amount} given back stays given back.",
+  "give_back.uw_finish_unrecorded":
+    "Press Finish to end this money back. The money already given back stays given back.",
+  "give_back.uw_unknown":
+    "The box's answer did not arrive. Press again: the same request is sent, so nothing happens twice.",
+  "give_back.uw_unknown_end":
+    "The box's answer did not arrive. Press Check again to see whether it was done before pressing anything else.",
   "invoice_correction.title": "Correct invoice",
   "invoice_correction.explain": "Give money back and file a corrective invoice for it.",
   "invoice_correction.loading": "Reading the invoice…",
@@ -780,8 +897,8 @@ export const en = {
   "find_page.other": "Other",
   "find_page.sale": "Sale",
   "find_page.full-invoice": "Full invoice",
-  "find_page.correction": "Corrective",
-  "find_page.replacement": "Replacement corrective",
+  "find_page.correction": "Corrective receipt",
+  "find_page.replacement": "Replacement receipt",
   "find_page.any_zone": "Any zone",
   "find_page.any_staff": "Any staff",
   "find_page.any_state": "Any state",
@@ -823,7 +940,7 @@ export const en = {
   "find_page.range": "{from}–{to} of {total}",
   "find_page.open_bill": "Open bill",
   "find_page.open_receipt": "Open receipt",
-  "find_page.corrections": "Corrections under way",
+  "find_page.corrections": "Money back under way",
   "find_page.correction_row": "{invoice} · {when} · {reason} · {left} of {gross} left to give back",
   "find_page.remove_dates": "Remove date filter",
   "find_page.remove_filter": "Remove {filter} filter",
@@ -1887,7 +2004,7 @@ export const en = {
   "meal_end.not_admitted":
     "This device's profile no longer lets you work on it, so it cannot print the bill for you. Log in on a device whose profile allows it.",
   "meal_end.unserved_no_mark":
-    "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Correct invoice.",
+    "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Give money back.",
   "meal_end.unconfirmed":
     "Print the bill got no answer, so the bill may have been printed. Check this bill before trying again.",
   "meal_end.refused":
@@ -2456,7 +2573,7 @@ export const es: Record<StringKey, string> = {
   "cancel_item.yes": "Sí",
   "cancel_item.no": "No",
   "cancel_item.started": "Ya se está preparando o se ha servido",
-  "cancel_item.refund_at_till": "Devuelve el dinero en una caja: Devolver un pago, en el recibo.",
+  "cancel_item.refund_at_till": "Devuelve el dinero en una caja: Devolver dinero, en el recibo.",
   "cancel_item.paid": "Esta cuenta ya está cerrada",
   "cancel_item.choice": "¿Qué pasa con el cobro?",
   "cancel_item.still_charge": "Cancelar y cobrar",
@@ -2464,7 +2581,7 @@ export const es: Record<StringKey, string> = {
   "cancel_item.refund": "Cancelar y devolver {amount}",
   "cancel_item.with_free": "Vuelve con él, por invitación: {dishes}",
   "cancel_item.free_served":
-    "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuelve el dinero con Rectificar factura en el recibo.",
+    "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después abre Devolver dinero en el recibo.",
   "cancel_item.unavailable": "Este plato no se puede cancelar aquí.",
 
   "device_zones.title": "Zonas en este dispositivo",
@@ -2539,6 +2656,123 @@ export const es: Record<StringKey, string> = {
   "tender_refund.pending_payment": "Consultar devolución pendiente",
   "tender_refund.storage":
     "No se ha podido guardar o leer la solicitud de devolución en este dispositivo. Antes de iniciar otra devolución, abre el recibo en otro dispositivo que cobre y elige Devolver un pago: muestra lo que queda por devolver y cualquier devolución pendiente.",
+  "give_back.title": "Devolver dinero",
+  "give_back.loading": "Leyendo el ticket…",
+  "give_back.read_failed": "No se pudo leer el ticket. No ha cambiado nada.",
+  "give_back.what_for": "¿Por qué se devuelve?",
+  "give_back.dishes": "Un plato",
+  "give_back.dishes_hint": "Algo que pidieron no llegó o no estaba bien. Tú marcas los platos.",
+  "give_back.goodwill": "Cortesía o queja",
+  "give_back.goodwill_hint": "Devuelve el importe que elijas, por ejemplo por una queja.",
+  "give_back.extra": "Lo pagado de más",
+  "give_back.extra_hint":
+    "Devuelve una parte o todos los {amount} pagados de más sobre la cuenta, y nada más. En el ticket figura como Propina.",
+  "give_back.which": "¿Qué platos?",
+  "give_back.cancelled_owed": "Cancelado, no servido",
+  "give_back.cancelled_back": "Cancelado, dinero devuelto",
+  "give_back.cancelled_waiting": "Cancelado, devolución a la espera de la compañía de la tarjeta",
+  "give_back.given_free": "Por invitación",
+  "give_back.amount": "Dinero a devolver",
+  "give_back.amount_change": "Cámbialo para devolver menos, o más.",
+  "give_back.up_to": "Se pueden devolver hasta {amount}.",
+  "give_back.amount_invalid": "Escribe un importe mayor que cero y de hasta {amount}.",
+  "give_back.extra_amount": "Pagado de más a devolver",
+  "give_back.extra_too": "Devolver también lo pagado de más ({amount})",
+  "give_back.how": "Cómo se devuelve",
+  "give_back.way_cash": "Efectivo · hasta {amount}",
+  "give_back.way_card": "Tarjeta {card} · hasta {amount}",
+  "give_back.summary_cash":
+    "Se devuelven {amount} en efectivo. Se abre el cajón: dáselo al cliente.",
+  "give_back.summary_card": "Se devuelven {amount} a la tarjeta {card} por el lector de tarjetas.",
+  "give_back.summary_terminal": "Se devuelven {amount} a la tarjeta {card} en el datáfono aparte.",
+  "give_back.summary_rest":
+    "{amount} no se pueden devolver así: quedan en curso para los demás pagos.",
+  "give_back.pin":
+    "Si tú no puedes devolver dinero, a continuación lo aprueba un responsable o encargado con su PIN.",
+  "give_back.submit": "Devolver {amount}",
+  "give_back.submit_any": "Devolver",
+  "give_back.preview_failed":
+    "No se pudo contactar con el servidor para comprobar esta devolución. No se ha devuelto nada. Pulsa Devolver para intentarlo de nuevo.",
+  "give_back.way_not_here":
+    "El perfil de este dispositivo no permite devolver dinero así. Para devolverlo así, abre Devolver dinero en un dispositivo cuyo perfil lo permita.",
+  "give_back.changed_while_checking":
+    "La devolución cambió mientras se comprobaba. Revisa lo que se muestra y vuelve a pulsar Devolver.",
+  "give_back.terminal_heading": "Devuélvelo en el datáfono aparte",
+  "give_back.terminal_explain":
+    "Esta tarjeta se cobró en un datáfono aparte, así que Waitron no puede devolverla por sí mismo. Devuelve ahora {amount} en ese datáfono y luego confírmalo aquí.",
+  "give_back.terminal_done": "He devuelto {amount} en el datáfono aparte",
+  "give_back.terminal_required": "Confirma que has devuelto el dinero en el datáfono aparte.",
+  "give_back.terminal_pin": "Después, un responsable o encargado aprueba registrarlo con su PIN.",
+  "give_back.terminal_record": "Registrar la devolución",
+  "give_back.sending": "Devolviendo el dinero…",
+  "give_back.approvers_failed":
+    "No se pudo leer quién puede aprobarlo. No se ha devuelto nada. Pulsa Devolver para intentarlo de nuevo.",
+  "give_back.nothing_given": "No se ha devuelto nada.",
+  "give_back.storage":
+    "Este dispositivo no pudo guardar la devolución antes de enviarla. No se ha devuelto nada. Cierra esta ventana y, en otro dispositivo que cobre, abre Devolver dinero en el ticket.",
+  "give_back.lost":
+    "El servidor no respondió, así que no se sabe si el dinero se devolvió. Enviar de nuevo se lo pregunta al servidor: envía la misma devolución, que nunca se devuelve dos veces.",
+  "give_back.send_again": "Enviar de nuevo",
+  "give_back.uw_card_refused":
+    "Se rechazó una devolución a tarjeta de este ticket, así que no se devolvió dinero. Enviar de nuevo la envía otra vez y pide la aprobación si hace falta.",
+  "give_back.done_cash": "Se han devuelto {amount} en efectivo. Dáselo al cliente.",
+  "give_back.done_card_any": "Se han devuelto {amount} a la tarjeta.",
+  "give_back.done_card": "Se han devuelto {amount} a la tarjeta {card}.",
+  "give_back.done_terminal": "Se han registrado los {amount} devueltos en el datáfono aparte.",
+  "give_back.print_later": "Su ticket rectificativo se puede imprimir desde Buscar cuenta.",
+  "give_back.pending": "{amount} esperan la respuesta de la compañía de la tarjeta.",
+  "give_back.rest":
+    "{amount} aún no se han devuelto: se devuelven cuando responda la compañía de la tarjeta.",
+  "give_back.check_again": "Comprobar de nuevo",
+  "give_back.pending_unanswered":
+    "La compañía de la tarjeta aún no ha respondido. Vuelve a comprobarlo más tarde.",
+  "give_back.rest_ready":
+    "{amount} aún no se han devuelto. Pulsa Devolver el resto para devolverlos ahora.",
+  "give_back.send_rest": "Devolver el resto",
+  "give_back.still_waiting":
+    "La compañía de la tarjeta aún no ha respondido. Vuelve a comprobarlo más tarde: el resto sigue esperando en esta caja.",
+  "give_back.rest_failed":
+    "La compañía de la tarjeta no hizo la primera devolución, así que el resto no se envió. No se ha devuelto nada más. Vuelve a abrir Devolver dinero para intentarlo de nuevo o elegir otra forma.",
+  "give_back.under_way": "Devolución en curso",
+  "give_back.done": "Listo",
+  "give_back.uw_back": "Devueltos {back} hasta ahora, de {gross}.",
+  "give_back.uw_left": "Quedan {amount} por devolver.",
+  "give_back.uw_cash": "Devolver {amount} en efectivo",
+  "give_back.uw_cash_hint": "Se abre el cajón.",
+  "give_back.uw_cash_given": "Da al cliente {amount} en efectivo.",
+  "give_back.uw_no_cash":
+    "Esta caja no puede devolver efectivo. Devuelve el efectivo desde una caja que pueda.",
+  "give_back.uw_card": "Devolver {amount} a la tarjeta {card}",
+  "give_back.uw_card_any": "Devolver {amount} a la tarjeta",
+  "give_back.uw_card_hint": "Se devuelve con el lector de tarjetas.",
+  "give_back.uw_terminal_hint":
+    "Lo devuelves en el datáfono aparte y luego un responsable o encargado aprueba registrarlo con su PIN.",
+  "give_back.uw_card_unread":
+    "No se ha podido leer el pago con tarjeta, así que no se ha enviado nada. Vuelve a pulsar el botón de la tarjeta.",
+  "give_back.uw_card_changed":
+    "El pago con tarjeta ha cambiado desde que se mostró, así que no se ha enviado nada. Revisa lo que queda por devolver y vuelve a pulsar.",
+  "give_back.uw_card_failed":
+    "La compañía de la tarjeta no hizo la devolución, así que ese dinero no se ha devuelto. Pulsa el botón de la tarjeta para intentarlo de nuevo o devuélvelo de otra forma.",
+  "give_back.uw_approvers_failed":
+    "No se ha podido leer quién puede aprobarlo. No ha cambiado nada. Vuelve a pulsar el mismo botón para intentarlo de nuevo.",
+  "give_back.uw_close": "Cerrar",
+  "give_back.uw_card_waiting":
+    "Una devolución anterior a tarjeta en este ticket sigue esperando respuesta, así que no se ha enviado nada. Pulsa Comprobar de nuevo antes de devolver más a una tarjeta.",
+  "give_back.uw_finish": "Terminar",
+  "give_back.uw_finish_hint": "Registra los {amount} devueltos.",
+  "give_back.uw_stop": "Parar aquí",
+  "give_back.uw_stop_hint": "Se quedan los {amount} ya devueltos; no se devuelve más.",
+  "give_back.uw_cancel": "Anular esta devolución",
+  "give_back.uw_cancel_hint": "Aún no se ha devuelto nada.",
+  "give_back.uw_finished": "Los {amount} devueltos quedan registrados.",
+  "give_back.uw_cancelled": "Esta devolución está anulada. No se devolvió nada.",
+  "give_back.uw_closed": "Esta devolución ha terminado. Los {amount} devueltos quedan devueltos.",
+  "give_back.uw_finish_unrecorded":
+    "Pulsa Terminar para acabar esta devolución. El dinero ya devuelto queda devuelto.",
+  "give_back.uw_unknown":
+    "No ha llegado la respuesta del servidor. Vuelve a pulsar: se envía la misma petición, así que nada ocurre dos veces.",
+  "give_back.uw_unknown_end":
+    "No ha llegado la respuesta del servidor. Pulsa Comprobar de nuevo para ver si se hizo antes de pulsar nada más.",
   "invoice_correction.title": "Rectificar factura",
   "invoice_correction.explain": "Devuelve dinero y presenta una factura rectificativa por él.",
   "invoice_correction.loading": "Consultando la factura…",
@@ -3142,8 +3376,8 @@ export const es: Record<StringKey, string> = {
   "find_page.other": "Otro",
   "find_page.sale": "Venta",
   "find_page.full-invoice": "Factura completa",
-  "find_page.correction": "Rectificativa",
-  "find_page.replacement": "Rectificativa por sustitución",
+  "find_page.correction": "Ticket rectificativo",
+  "find_page.replacement": "Ticket de sustitución",
   "find_page.any_zone": "Cualquier zona",
   "find_page.any_staff": "Cualquier persona",
   "find_page.any_state": "Cualquier estado",
@@ -3185,7 +3419,7 @@ export const es: Record<StringKey, string> = {
   "find_page.range": "{from}–{to} de {total}",
   "find_page.open_bill": "Abrir cuenta",
   "find_page.open_receipt": "Abrir recibo",
-  "find_page.corrections": "Rectificaciones en curso",
+  "find_page.corrections": "Devoluciones en curso",
   "find_page.correction_row":
     "{invoice} · {when} · {reason} · quedan {left} de {gross} por devolver",
   "find_page.remove_dates": "Quitar filtro de fechas",
@@ -4224,7 +4458,7 @@ export const es: Record<StringKey, string> = {
   "meal_end.not_admitted":
     "El perfil de este dispositivo ya no te deja trabajar en él, así que no puede imprimir la cuenta por ti. Inicia sesión en un dispositivo cuyo perfil te admita.",
   "meal_end.unserved_no_mark":
-    "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
+    "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Devolver dinero.",
   "meal_end.unconfirmed":
     "Imprimir la cuenta no obtuvo respuesta, así que puede que se haya impreso. Revisa esta cuenta antes de volver a intentarlo.",
   "meal_end.refused":

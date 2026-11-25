@@ -1,7 +1,14 @@
 import { and, asc, eq, isNull, ne, or } from "drizzle-orm";
 import { readCancelsForRefund } from "@waitron/adjustments";
 import { correctionTargetFor } from "@waitron/core";
-import { adjustments, saleLines, sales, type Transaction } from "@waitron/db";
+import {
+  adjustmentRefunds,
+  adjustments,
+  refunds,
+  saleLines,
+  sales,
+  type Transaction,
+} from "@waitron/db";
 import type { FiscalBackend, TrustedReading } from "@waitron/fiscal";
 import {
   addDecimal,
@@ -57,8 +64,12 @@ export interface GiveBackLine extends Availability {
    * `cancelled.back`; never below 0. A cancelled dish's line counts its extras' lines too. */
   left: string;
   /** The cancels with Refund ticked on this dish, its priced extras included: a cancel's money is
-   * owed for the dish and its extras together, so they are one selection. */
-  cancelled: { quantity: string; owed: string; back: string } | null;
+   * owed for the dish and its extras together, so they are one selection. `waiting` is the part
+   * of `back` a card refund still waits on the card company for. */
+  cancelled: { quantity: string; owed: string; back: string; waiting: string } | null;
+  /** The cancels on this dish whose money is not all given back yet: those a give-back of the
+   * dish names, and the ones `fromCancel` must equal for the cancels' approval to cover it (D9). */
+  cancelIds: string[];
   /** The cancelled dish's line this extra's line is given back with; such a line is never ticked
    * itself, and its `left` is counted on the dish's. */
   partOf: string | null;
@@ -234,7 +245,21 @@ async function readCancelsOf(tx: Transaction, workingOrderId: string) {
       );
 }
 
-type CancelShare = { quantity: Decimal; owed: Decimal; back: Decimal };
+type CancelShare = { quantity: Decimal; owed: Decimal; back: Decimal; waiting: Decimal };
+
+/** What card refunds still pending hold of each cancel of `workingOrderId`, in cents. */
+async function waitingByCancel(tx: Transaction, workingOrderId: string) {
+  const rows = await tx
+    .select({ adjustmentId: adjustmentRefunds.adjustmentId, amount: adjustmentRefunds.amount })
+    .from(adjustmentRefunds)
+    .innerJoin(refunds, eq(refunds.id, adjustmentRefunds.refundId))
+    .innerJoin(adjustments, eq(adjustments.id, adjustmentRefunds.adjustmentId))
+    .where(and(eq(adjustments.workingOrderId, workingOrderId), eq(refunds.state, "pending")));
+  const waiting = new Map<string, number>();
+  for (const row of rows)
+    waiting.set(row.adjustmentId, (waiting.get(row.adjustmentId) ?? 0) + row.amount);
+  return waiting;
+}
 
 /** The cancels with Refund ticked and the free dishes of the receipt `saleId`, keyed by the line
  * of `toLine` each filed row becomes: a cancel by its dish's line, which `members` maps to every
@@ -261,6 +286,7 @@ async function cancelsAndFreeByLine(
     const id = dish === undefined ? undefined : toLine(dish.rowId);
     if (id !== undefined) free.add(id);
   }
+  const waitingOf = await waitingByCancel(tx, sale.workingOrderId);
   for (const cancel of await readCancelsOf(tx, sale.workingOrderId)) {
     if (cancel.lineId === null || cancel.refundValue === null) continue;
     const family = filedFamilyOf(filing, pairs, cancel.lineId);
@@ -269,13 +295,19 @@ async function cancelsAndFreeByLine(
     if (dish === undefined) continue;
     const value = decimalToCents(cancel.refundValue);
     const back = decimalToCents(cancel.linked);
-    const before = cancelled.get(dish) ?? { quantity: decimal("0.000"), owed: ZERO, back: ZERO };
+    const before = cancelled.get(dish) ?? {
+      quantity: decimal("0.000"),
+      owed: ZERO,
+      back: ZERO,
+      waiting: ZERO,
+    };
     cancelled.set(dish, {
       quantity: addDecimal(before.quantity, cancel.quantity ?? decimal("0.000")),
       owed: addDecimal(before.owed, centsToDecimal(Math.max(0, value - back))),
       back: addDecimal(before.back, centsToDecimal(back)),
+      waiting: addDecimal(before.waiting, centsToDecimal(waitingOf.get(cancel.id) ?? 0)),
     });
-    cancelIds.set(dish, [...(cancelIds.get(dish) ?? []), cancel.id]);
+    if (value > back) cancelIds.set(dish, [...(cancelIds.get(dish) ?? []), cancel.id]);
     const lines = members.get(dish) ?? new Set([dish]);
     for (const id of ids) lines.add(id);
     members.set(dish, lines);
@@ -402,7 +434,7 @@ interface GiveBackFacts {
   tenders: RefundableTender[];
   /** What Correct invoice could give back now, in cents, before the records are checked. */
   correctable: number;
-  /** The cancels with Refund ticked on each line. */
+  /** The cancels on each line whose money is not all given back yet. */
   cancelIds: ReadonlyMap<string, readonly string[]>;
   /** The lines a correction names for each ticked line: a cancelled dish's family, those of its
    * lines Correct invoice still holds money on. */
@@ -462,6 +494,7 @@ export async function readFacts(
       gross: centsToDecimal(line.lineGross ?? 0),
       left: centsToDecimal(dish === undefined ? Math.max(0, rest) : 0),
       cancelled: cancel ?? null,
+      cancelIds: [...(cancelIds.get(line.id) ?? [])],
       partOf: dish ?? null,
       givenFree: free.has(line.id),
     };

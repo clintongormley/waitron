@@ -165,10 +165,9 @@ export async function refuseTakenOffAdvance(tx: Transaction, saleId: string): Pr
 }
 
 /**
- * Refuses a plain refund (Refund a payment) of the advance `saleId`'s money with
- * `tender.refund_of_advance` until an invoice took the advance off; then with
- * {@link refuseTakenOffAdvance}'s refusal while Correct invoice on that invoice can still give
- * money back, and not once it cannot.
+ * Refuses a plain refund of the advance `saleId`'s money with `tender.refund_of_advance` until an
+ * invoice took the advance off; then with {@link refuseTakenOffAdvance}'s refusal while that
+ * invoice can still give money back, and not once it cannot.
  */
 export async function refusePlainRefundOfAdvance(
   tx: Transaction,

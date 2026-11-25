@@ -27,6 +27,19 @@ import {
   openTableMenu,
 } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { formatMoney } from "@waitron/shared";
+import { transactionRow } from "../test/find-bill-fixtures.js";
+import {
+  UNDER_WAY,
+  VIEW,
+  completedFor,
+  previewFor,
+} from "./widgets/give-back-dialog.test-helpers.js";
+import type {
+  GiveBackRequest,
+  GiveBackView,
+  GiveBackWay,
+  GiveBackWrite,
+} from "./api/give-back-types.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
@@ -3277,6 +3290,88 @@ describe("till-app: service cancellation consent", () => {
       completedAt: "2026-10-17T11:01:01.000Z",
     };
     const refundForm = (el: TillApp) => el.shadowRoot!.querySelector("till-tender-refund-dialog");
+    const giving = (el: TillApp) => el.shadowRoot!.querySelector("till-give-back-dialog");
+    const cashWay: GiveBackWay = {
+      way: "cash",
+      last4: null,
+      manual: false,
+      moneyLeft: "30.00",
+      extraLeft: "2.00",
+      pending: false,
+      allowedHere: true,
+      reason: null,
+    };
+    /** The receipt as Give money back reads it: its wine cancelled with `owed` still to give back. */
+    const owedView = (
+      owed = "3.34",
+      ways: GiveBackWay[] = [cashWay],
+      cancelIds: string[] = [cancelId],
+    ): GiveBackView => ({
+      lines: [
+        {
+          id: "wine-line",
+          descriptions: { en: "Filed wine" },
+          quantity: "1.000",
+          gross: "30.00",
+          left: "30.00",
+          cancelled: { quantity: "1.000", owed, back: "0.00", waiting: "0.00" },
+          cancelIds,
+          partOf: null,
+          givenFree: false,
+          available: true,
+          reason: null,
+        },
+      ],
+      ways,
+      underWay: null,
+      choices: {
+        dishes: { available: true, reason: null },
+        goodwill: { available: true, reason: null },
+        extra: { available: true, reason: null },
+      },
+    });
+    /** The window once it has opened on A dish, filled in. */
+    async function filledForm(el: TillApp) {
+      await expect
+        .poll(() => giving(el)?.shadowRoot!.querySelector("[data-purpose]") ?? null)
+        .not.toBeNull();
+      await giving(el)!.updateComplete;
+      return giving(el)!;
+    }
+    const inForm = <T extends Element = HTMLElement>(el: TillApp, selector: string) =>
+      giving(el)!.shadowRoot!.querySelector<T>(selector);
+    const gaveBack = () => vi.mocked(api.giveBack).mock.calls.map((call) => call[1]);
+    /** Presses Give back once the summary for what is on screen is shown. */
+    async function giveBackNow(el: TillApp) {
+      const form = giving(el)!;
+      await expect.poll(() => inForm(el, "[data-summary]")).not.toBeNull();
+      await form.updateComplete;
+      await userEvent.click(page.elementLocator(inForm(el, "[data-submit]")!));
+      await flush(el);
+    }
+    /** Gives €7.50 back with the cancel's reason, which asks for a note. */
+    async function submitGiveBack(el: TillApp) {
+      await filledForm(el);
+      const wine = inForm<HTMLElementTagNameMap["wt-switch"]>(
+        el,
+        'wt-switch[data-line="wine-line"]',
+      )!;
+      if (!wine.checked) wine.shadowRoot!.querySelector("input")!.click();
+      await giving(el)!.updateComplete;
+      await typeAmount(el, "7.50");
+      emit(inForm(el, '[name="note"]')!, "wt-change", { value: "Wine returned; customer request" });
+      await giving(el)!.updateComplete;
+      await giveBackNow(el);
+    }
+    async function typeAmount(el: TillApp, value: string) {
+      const field = inForm<HTMLElementTagNameMap["wt-price-input"]>(
+        el,
+        "wt-price-input[name=amount]",
+      )!;
+      await field.updateComplete;
+      await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
+      await giving(el)!.updateComplete;
+    }
     const ticket = (el: TillApp) => el.shadowRoot!.querySelector("till-ticket-view");
     const paidMethods = (more: Record<string, unknown> = {}) =>
       apiFor(
@@ -3289,6 +3384,12 @@ describe("till-app: service cancellation consent", () => {
           getRefundableTenders: vi.fn().mockResolvedValue([cash]),
           refundTransaction: vi.fn().mockResolvedValue(refunded),
           listRefundAuthorizers: vi.fn().mockResolvedValue([]),
+          readGiveBack: vi.fn().mockResolvedValue(owedView("3.34", [cashWay], [])),
+          previewGiveBack: vi.fn(async (_saleId: string, request: GiveBackRequest) =>
+            previewFor(request),
+          ),
+          giveBack: vi.fn(async (_saleId: string, body: GiveBackWrite) => completedFor(body)),
+          listApprovers: vi.fn().mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
           ...more,
         },
       );
@@ -3297,26 +3398,6 @@ describe("till-app: service cancellation consent", () => {
       await clickChoice(el, 'input[name="refund"]');
       await chooseChargedReason(el);
       await clickChoice(el, "[data-confirm]");
-    }
-    async function submitRefund(el: TillApp) {
-      const form = refundForm(el)!;
-      await form.updateComplete;
-      await expect.poll(() => form.reasons).not.toBeNull();
-      for (const [name, value] of [
-        ["appliedAmount", "7.50"],
-        ["tipAmount", "0.00"],
-        ["reason", "r-mistake"],
-      ])
-        emit(form.shadowRoot!.querySelector(`[name="${name}"]`)!, "wt-change", { value });
-      await form.updateComplete;
-      emit(form.shadowRoot!.querySelector('[name="note"]')!, "wt-change", {
-        value: "Wine returned; customer request",
-      });
-      await form.updateComplete;
-      await userEvent.click(
-        page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),
-      );
-      await flush(el);
     }
     beforeEach(() => {
       for (const key of Object.keys(localStorage))
@@ -3345,14 +3426,15 @@ describe("till-app: service cancellation consent", () => {
       expect(api.listApprovers).not.toHaveBeenCalled();
       expect(api.getTransactionReceipt).not.toHaveBeenCalled();
       await pinPad(el, "7777");
-      await expect.poll(() => refundForm(el)).not.toBeNull();
+      await expect.poll(() => giving(el)).not.toBeNull();
       expect(methods.cancelItem).toHaveBeenCalledTimes(2);
       expect(methods.cancelItem.mock.calls[1]![2]).toMatchObject({
         refundHandoff: true,
         approver: { personId: "m-1", pin: "7777" },
       });
       expect(api.refundTransaction).not.toHaveBeenCalled();
-      expect(refundForm(el)!.attempt).toBeNull();
+      expect(vi.mocked(api.giveBack)).not.toHaveBeenCalled();
+      expect(giving(el)!.fill).toEqual({ cancellationIds: [], reasonId: "r-mistake" });
       for (const storage of [localStorage, sessionStorage])
         for (const key of Object.keys(storage)) expect(storage.getItem(key)).not.toContain("7777");
     });
@@ -3385,7 +3467,7 @@ describe("till-app: service cancellation consent", () => {
         await prompt.updateComplete;
       }
       await press(el, prompt.shadowRoot!.querySelector<HTMLElement>(".authorize")!);
-      await expect.poll(() => refundForm(el)).not.toBeNull();
+      await expect.poll(() => giving(el)).not.toBeNull();
       expect(methods.cancelItem).toHaveBeenCalledTimes(3);
       expect(methods.cancelItem.mock.calls[2]![2]).toMatchObject({
         approver: { personId: "m-1", pin: "7777" },
@@ -3581,7 +3663,7 @@ describe("till-app: service cancellation consent", () => {
         const widget = cancelDialog(el)!;
         expect(widget.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
         expect(widget.shadowRoot!.textContent).toContain(
-          "Refund the payment at a till: choose Refund a payment on the receipt.",
+          "Give the money back at a till: choose Give money back on the receipt.",
         );
         await chooseChargedReason(el);
         expect(widget.shadowRoot!.querySelector("[data-confirm]")!.textContent!.trim()).toBe(
@@ -3618,7 +3700,7 @@ describe("till-app: service cancellation consent", () => {
         await openCancel(el);
         expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
         expect(cancelDialog(el)!.shadowRoot!.textContent).not.toContain(
-          "Refund the payment at a till",
+          "Give the money back at a till",
         );
         expect(api.refundTransaction).not.toHaveBeenCalled();
       },
@@ -3639,7 +3721,7 @@ describe("till-app: service cancellation consent", () => {
       await openCancel(el);
       expect(cancelDialog(el)!.shadowRoot!.querySelector('input[name="refund"]')).not.toBeNull();
       expect(cancelDialog(el)!.shadowRoot!.textContent).not.toContain(
-        "Refund the payment at a till",
+        "Give the money back at a till",
       );
     });
 
@@ -3659,22 +3741,32 @@ describe("till-app: service cancellation consent", () => {
               { ...cash, tenderId: "manual-card", method: "card", manual: true },
               { ...cash, tenderId: "reader-card", method: "card", manual: false },
             ]),
+          readGiveBack: vi.fn().mockResolvedValue(
+            owedView(
+              "3.34",
+              ["cash", "manual-card", "reader-card"].map((way) => ({
+                ...cashWay,
+                way,
+                allowedHere: way === (allowed === cash.tenderId ? "cash" : allowed),
+              })),
+            ),
+          ),
         });
         const { el } = await mountApp(methods);
         await openTable4(el);
         await chooseRefund(el);
-        await expect.poll(() => refundForm(el)).not.toBeNull();
-        expect(refundForm(el)!.tenders.map((row) => row.tenderId)).toEqual([allowed]);
-        const disallowed = allowed === cash.tenderId ? "manual-card" : cash.tenderId;
-        emit(refundForm(el)!, "tender-refund-submit", {
-          tenderId: disallowed,
-          appliedAmount: "7.50",
-          tipAmount: "0.00",
-          reason: "Wrong dish",
-          manualConfirmed: true,
-        });
-        await flush(el);
+        await filledForm(el);
+        const here = allowed === cash.tenderId ? "cash" : allowed;
+        expect(
+          [...giving(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>("input[name=way]")]
+            .filter((input) => !input.disabled)
+            .map((input) => input.value),
+        ).toEqual([here]);
+        expect(inForm<HTMLInputElement>(el, `input[name=way][value="${here}"]`)!.checked).toBe(
+          true,
+        );
         expect(api.refundTransaction).not.toHaveBeenCalled();
+        expect(vi.mocked(api.giveBack)).not.toHaveBeenCalled();
         expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
         expect(methods.cancelItem).toHaveBeenCalledOnce();
       },
@@ -3779,7 +3871,7 @@ describe("till-app: service cancellation consent", () => {
       const { el } = await mountApp(methods);
       await openTable4(el);
       await chooseRefund(el);
-      await expect.poll(() => refundForm(el)).not.toBeNull();
+      await expect.poll(() => giving(el)).not.toBeNull();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
       expect(methods.cancelItem.mock.calls[0]![2]).toEqual({
         quantity: "1",
@@ -3797,18 +3889,24 @@ describe("till-app: service cancellation consent", () => {
       expect(api.getRefundableTenders).toHaveBeenCalledWith("own-sale", expect.any(Object));
       expect(api.refundTransaction).not.toHaveBeenCalled();
       expect(ticket(el)?.result).toEqual(paidReceipt);
-      expect(refundForm(el)!.tenders).toEqual([cash]);
+      expect(vi.mocked(api.readGiveBack)).toHaveBeenCalledWith("own-sale", {});
       expect(api.applyAdjustment).not.toHaveBeenCalled();
-      await submitRefund(el);
-      await expect.poll(() => refundForm(el)).toBeNull();
-      expect(api.refundTransaction).toHaveBeenCalledWith("own-sale", {
-        tenderId: cash.tenderId,
-        appliedAmount: "7.50",
-        tipAmount: "0.00",
-        reason: "Wine returned; customer request",
-        manualConfirmed: false,
-        submissionId: expect.any(String),
+      expect(vi.mocked(api.giveBack)).not.toHaveBeenCalled();
+      await submitGiveBack(el);
+      await expect.poll(() => gaveBack()).toHaveLength(1);
+      expect(gaveBack()[0]).toMatchObject({
+        request: {
+          purpose: "dishes",
+          lineIds: ["wine-line"],
+          amount: "7.50",
+          extra: "0.00",
+          way: "cash",
+        },
+        reasonId: "r-mistake",
+        note: "Wine returned; customer request",
       });
+      expect(gaveBack()[0]!.request).not.toHaveProperty("fromCancel");
+      expect(api.refundTransaction).not.toHaveBeenCalled();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
       expect(ticket(el)?.result).toEqual(paidReceipt);
     });
@@ -3836,6 +3934,7 @@ describe("till-app: service cancellation consent", () => {
           refundLinks: [{ lineId: "line-1", adjustmentId: cancelId }],
         }),
         listAdjustmentReasons: vi.fn().mockResolvedValue([complaint, mistake, unserved]),
+        readGiveBack: vi.fn().mockResolvedValue(owedView()),
         ...more,
       });
     async function cancelAndRefundOne(el: TillApp) {
@@ -3848,51 +3947,49 @@ describe("till-app: service cancellation consent", () => {
         reasonId: "r-unserved",
       });
       await flush(el);
-      await expect.poll(() => refundForm(el)).not.toBeNull();
-      await expect.poll(() => refundForm(el)!.reasons).not.toBeNull();
-      await refundForm(el)!.updateComplete;
-    }
-    async function sendRefund(el: TillApp, change: Record<string, string> = {}) {
-      const form = refundForm(el)!;
-      for (const [name, value] of Object.entries(change))
-        emit(form.shadowRoot!.querySelector(`[name="${name}"]`)!, "wt-change", { value });
-      await form.updateComplete;
-      await userEvent.click(
-        page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),
-      );
-      await flush(el);
+      await filledForm(el);
     }
 
-    it("opens the refund filled in with the dish, its value and the cancel's reason", async () => {
+    it("opens Give money back on A dish with the cancelled dish ticked at what it is owed and the cancel's reason, and gives it back with the cancel's ids and no PIN", async () => {
       const methods = linkedMethods();
       const { el } = await mountApp(methods);
       await openTable4(el);
       await cancelAndRefundOne(el);
-      const form = refundForm(el)!;
-      expect(form.target).toBe("3.34");
-      expect(form.startReasonId).toBe("r-unserved");
-      expect(form.dishes).toBe("1 × Wine");
-      expect(form.refundAtTill).toBe(false);
-      expect(form.shadowRoot!.querySelector("[data-dishes]")!.textContent).toBe("1 × Wine");
+      expect(refundForm(el)).toBeNull();
+      expect(vi.mocked(api.readGiveBack)).toHaveBeenCalledWith("own-sale", {});
+      expect(inForm(el, "[data-purpose]")!.textContent!.trim()).toBe(t("give_back.dishes"));
       expect(
-        form.shadowRoot!.querySelector<HTMLElement & { value: string }>('[name="appliedAmount"]')!
-          .value,
+        inForm<HTMLElementTagNameMap["wt-switch"]>(el, 'wt-switch[data-line="wine-line"]')!.checked,
+      ).toBe(true);
+      expect(
+        inForm<HTMLElementTagNameMap["wt-price-input"]>(el, "wt-price-input[name=amount]")!.value,
       ).toBe("3.34");
-      await sendRefund(el);
-      expect(api.refundTransaction).toHaveBeenCalledExactlyOnceWith("own-sale", {
-        tenderId: cash.tenderId,
-        appliedAmount: "3.34",
-        tipAmount: "0.00",
-        reason: "Not served",
-        manualConfirmed: false,
-        cancellationIds: [cancelId],
-        submissionId: expect.any(String),
+      expect(
+        inForm<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=reason]")!.value,
+      ).toBe("r-unserved");
+      expect(inForm<HTMLInputElement>(el, 'input[name=way][value="cash"]')!.checked).toBe(true);
+      await giveBackNow(el);
+      await expect.poll(() => gaveBack()).toHaveLength(1);
+      expect(gaveBack()[0]).toMatchObject({
+        request: {
+          purpose: "dishes",
+          lineIds: ["wine-line"],
+          amount: "3.34",
+          extra: "0.00",
+          way: "cash",
+          fromCancel: [cancelId],
+        },
+        reasonId: "r-unserved",
+        note: null,
       });
+      expect(gaveBack()[0]).not.toHaveProperty("override");
+      expect(vi.mocked(api.listApprovers)).not.toHaveBeenCalled();
+      expect(api.refundTransaction).not.toHaveBeenCalled();
     });
 
-    it("fills in a grouped row's refund as the server records it, its last portion first", async () => {
-      // Three salads filed as one €28.13 row are worth 9.38, 9.38 and 9.37 each; the row gives up
-      // its last first, so cancelling one refunds €9.37, not a third of €28.13.
+    it("opens a grouped row's cancel with the amount the box says is owed and the cancel's ids", async () => {
+      // Three salads filed as one €28.13 row are worth 9.38, 9.38 and 9.37 each; the box says what
+      // cancelling one still owes, so the window starts at €9.37, not a third of €28.13.
       const lineIds = ["line-1", "line-2", "line-3"];
       const base = { ...consent("settled"), saleId: "own-sale" };
       const read: CancellationRead = {
@@ -3908,9 +4005,11 @@ describe("till-app: service cancellation consent", () => {
           })),
         },
       };
-      const { el } = await mountApp(
-        linkedMethods({ getCancellation: vi.fn().mockResolvedValue(read) }),
-      );
+      const methods = linkedMethods({
+        getCancellation: vi.fn().mockResolvedValue(read),
+        readGiveBack: vi.fn().mockResolvedValue(owedView("9.37")),
+      });
+      const { el } = await mountApp(methods);
       await openTable4(el);
       emit(tableOrder(el), "cancel-item", { lineId: "line-1", lineIds });
       await flush(el);
@@ -3922,24 +4021,38 @@ describe("till-app: service cancellation consent", () => {
         reasonId: "r-unserved",
       });
       await flush(el);
-      await expect.poll(() => refundForm(el)).not.toBeNull();
-      expect(refundForm(el)!.target).toBe("9.37");
+      await filledForm(el);
+      expect(
+        inForm<HTMLElementTagNameMap["wt-price-input"]>(el, "wt-price-input[name=amount]")!.value,
+      ).toBe("9.37");
+      await giveBackNow(el);
+      await expect.poll(() => gaveBack()).toHaveLength(1);
+      expect(gaveBack()[0]!.request).toMatchObject({
+        amount: "9.37",
+        fromCancel: [cancelId],
+      });
     });
 
-    it("keeps cancellation ids when the amount is raised above the filled total", async () => {
-      const { el } = await mountApp(linkedMethods());
+    it("keeps the cancel's ids when the amount is raised above what is owed, leaving the cover to the box", async () => {
+      const methods = linkedMethods();
+      const { el } = await mountApp(methods);
       await openTable4(el);
       await cancelAndRefundOne(el);
-      await sendRefund(el, { appliedAmount: "3.35" });
-      expect(api.refundTransaction).toHaveBeenCalledOnce();
-      const sent = vi.mocked(api.refundTransaction).mock.calls[0]![1];
-      expect(sent).toMatchObject({ appliedAmount: "3.35", reason: "Not served" });
-      expect(sent.cancellationIds).toEqual([cancelId]);
+      await typeAmount(el, "3.35");
+      await giveBackNow(el);
+      await expect.poll(() => gaveBack()).toHaveLength(1);
+      expect(gaveBack()[0]).toMatchObject({
+        request: { amount: "3.35", fromCancel: [cancelId] },
+        reasonId: "r-unserved",
+      });
     });
 
-    it("keeps cancellation ids with a tip", async () => {
+    it("keeps the cancel's ids with the extra paid on top", async () => {
       const whole = { ...consent("settled"), saleId: "own-sale" };
-      const methods = linkedMethods({ getCancellation: vi.fn().mockResolvedValue(whole) });
+      const methods = linkedMethods({
+        getCancellation: vi.fn().mockResolvedValue(whole),
+        readGiveBack: vi.fn().mockResolvedValue(owedView("30.00")),
+      });
       const { el } = await mountApp(methods);
       await openTable4(el);
       await openCancel(el);
@@ -3951,22 +4064,32 @@ describe("till-app: service cancellation consent", () => {
         reasonId: "r-unserved",
       });
       await flush(el);
-      await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
-      expect(refundForm(el)!.target).toBe("30.00");
-      await sendRefund(el, { tipAmount: "2.00" });
-      const sent = vi.mocked(api.refundTransaction).mock.calls[0]![1];
-      expect(sent).toMatchObject({ appliedAmount: "30.00", tipAmount: "2.00" });
-      expect(sent.cancellationIds).toEqual([cancelId]);
+      await filledForm(el);
+      expect(
+        inForm<HTMLElementTagNameMap["wt-price-input"]>(el, "wt-price-input[name=amount]")!.value,
+      ).toBe("30.00");
+      emit(inForm(el, "wt-switch[name=extra]")!, "wt-change", { checked: true });
+      await giving(el)!.updateComplete;
+      await giveBackNow(el);
+      await expect.poll(() => gaveBack()).toHaveLength(1);
+      expect(gaveBack()[0]!.request).toMatchObject({
+        amount: "30.00",
+        extra: "2.00",
+        fromCancel: [cancelId],
+      });
     });
 
-    it("sends the cancellation ids for an amount at or below the filled total", async () => {
-      const { el } = await mountApp(linkedMethods());
+    it("sends the cancel's ids for an amount below what is owed", async () => {
+      const methods = linkedMethods();
+      const { el } = await mountApp(methods);
       await openTable4(el);
       await cancelAndRefundOne(el);
-      await sendRefund(el, { appliedAmount: "3.00" });
-      expect(vi.mocked(api.refundTransaction).mock.calls[0]![1]).toMatchObject({
-        appliedAmount: "3.00",
-        cancellationIds: [cancelId],
+      await typeAmount(el, "3.00");
+      await giveBackNow(el);
+      await expect.poll(() => gaveBack()).toHaveLength(1);
+      expect(gaveBack()[0]!.request).toMatchObject({
+        amount: "3.00",
+        fromCancel: [cancelId],
       });
     });
 
@@ -3980,7 +4103,7 @@ describe("till-app: service cancellation consent", () => {
       return read;
     };
 
-    it("refunds the last paid dish with the free items that come back with it", async () => {
+    it("gives back the last paid dish with the free items that come back with it, sending both cancels' ids", async () => {
       const methods = linkedMethods({
         getCancellation: vi.fn().mockResolvedValue(withWater()),
         cancelItem: vi.fn().mockResolvedValue({
@@ -3990,6 +4113,9 @@ describe("till-app: service cancellation consent", () => {
             { lineId: "water-1", adjustmentId: waterCancelId },
           ],
         }),
+        readGiveBack: vi
+          .fn()
+          .mockResolvedValue(owedView("10.00", [cashWay], [cancelId, waterCancelId])),
       });
       const { el } = await mountApp(methods);
       await openTable4(el);
@@ -4003,18 +4129,19 @@ describe("till-app: service cancellation consent", () => {
         withFree: ["water-1"],
       });
       await flush(el);
-      await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
+      await filledForm(el);
       expect(methods.cancelItem.mock.calls[0]![2]).toMatchObject({
         refundHandoff: true,
         withFree: ["water-1"],
       });
-      const form = refundForm(el)!;
-      expect(form.target).toBe("10.00");
-      expect(form.dishes).toBe("1 × Wine, 1 × Water");
-      await sendRefund(el);
-      expect(vi.mocked(api.refundTransaction).mock.calls[0]![1]).toMatchObject({
-        appliedAmount: "10.00",
-        cancellationIds: [cancelId, waterCancelId],
+      expect(
+        inForm<HTMLElementTagNameMap["wt-price-input"]>(el, "wt-price-input[name=amount]")!.value,
+      ).toBe("10.00");
+      await giveBackNow(el);
+      await expect.poll(() => gaveBack()).toHaveLength(1);
+      expect(gaveBack()[0]!.request).toMatchObject({
+        amount: "10.00",
+        fromCancel: [cancelId, waterCancelId],
       });
     });
 
@@ -4069,151 +4196,158 @@ describe("till-app: service cancellation consent", () => {
       await expect
         .poll(() => cancelDialog(el)?.refusal)
         .toBe(
-          "A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then give the money back with Correct invoice on the receipt.",
+          "A dish given free with this one has been served, so it cannot come back with it. Untick Refund to cancel this dish, then open Give money back on the receipt.",
         );
       expect(api.refundTransaction).not.toHaveBeenCalled();
     });
 
-    it("loads the reasons for a receipt's refund screen and retries a failed read", async () => {
+    it("reads the reasons for the filled window and retries a failed read, keeping the cancel's reason", async () => {
       const listAdjustmentReasons = vi
         .fn()
         .mockResolvedValueOnce([complaint, mistake, unserved])
         .mockRejectedValueOnce(new TypeError("Failed to fetch"))
         .mockResolvedValue([complaint, mistake, unserved]);
-      const { el } = await mountApp(linkedMethods({ listAdjustmentReasons }));
+      const methods = linkedMethods({ listAdjustmentReasons });
+      const { el } = await mountApp(methods);
       await openTable4(el);
       await cancelAndRefundOne(el);
-      emit(refundForm(el)!, "tender-refund-close");
-      await flush(el);
-      emit(ticket(el)!, "tender-refund-open");
-      await flush(el);
-      await expect.poll(() => refundForm(el)).not.toBeNull();
       await expect.poll(() => listAdjustmentReasons.mock.calls.length).toBe(2);
-      await flush(el);
-      const form = refundForm(el)!;
-      expect(form.reasons).toBeNull();
-      expect(form.reasonsLoading).toBe(false);
-      await form.updateComplete;
-      const retry = form.shadowRoot!.querySelector<HTMLElement>("[data-reasons-retry]");
-      expect(retry).not.toBeNull();
-      await userEvent.click(page.elementLocator(retry!));
+      await expect.poll(() => inForm(el, "[data-reasons-retry]")).not.toBeNull();
+      await userEvent.click(page.elementLocator(inForm(el, "[data-reasons-retry]")!));
       await flush(el);
       expect(listAdjustmentReasons).toHaveBeenCalledTimes(3);
-      expect(form.reasons).toEqual([complaint, mistake, unserved]);
-      await form.updateComplete;
+      await expect.poll(() => inForm(el, "[data-reasons-retry]")).toBeNull();
       expect(
-        form.shadowRoot!.querySelector<HTMLElement & { value: string }>(
-          'wt-combobox[name="reason"]',
-        )!.value,
-      ).toBe("");
+        inForm<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=reason]")!.value,
+      ).toBe("r-unserved");
     });
 
-    it("says to refund the rest at a till when no other payment can be refunded here", async () => {
-      const card = {
-        ...cash,
-        tenderId: "manual-card",
-        method: "card",
+    it("says the payment this device cannot take cannot be given back here, choosing the one it can, and sends staff nowhere", async () => {
+      const keyed: GiveBackWay = {
+        ...cashWay,
+        way: "manual-card",
+        last4: "4401",
         manual: true,
-        appliedRemaining: "28.00",
+        moneyLeft: "28.00",
+        extraLeft: "0.00",
+        allowedHere: false,
       };
-      const { el } = await mountApp(
-        linkedMethods({
-          getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["take-cash"] }),
-          getRefundableTenders: vi
-            .fn()
-            .mockResolvedValue([{ ...cash, appliedRemaining: "2.00" }, card]),
-        }),
-      );
+      const methods = linkedMethods({
+        getTill: vi.fn().mockResolvedValue({ ...till, capabilities: ["take-cash"] }),
+        getRefundableTenders: vi.fn().mockResolvedValue([
+          { ...cash, appliedRemaining: "2.00" },
+          {
+            ...cash,
+            tenderId: "manual-card",
+            method: "card",
+            manual: true,
+            appliedRemaining: "28.00",
+          },
+        ]),
+        readGiveBack: vi
+          .fn()
+          .mockResolvedValue(owedView("3.34", [{ ...cashWay, moneyLeft: "2.00" }, keyed])),
+      });
+      const { el } = await mountApp(methods);
       await openTable4(el);
       await cancelAndRefundOne(el);
-      const form = refundForm(el)!;
-      expect(form.refundAtTill).toBe(true);
-      expect(form.shadowRoot!.querySelector("[data-left]")).not.toBeNull();
-      expect(form.shadowRoot!.querySelector("[data-refund-at-till]")!.textContent).toBe(
-        t("cancel_item.refund_at_till"),
+      expect(inForm<HTMLInputElement>(el, 'input[name=way][value="cash"]')!.checked).toBe(true);
+      const card = inForm<HTMLInputElement>(el, 'input[name=way][value="manual-card"]')!;
+      expect(card.disabled).toBe(true);
+      expect(card.checked).toBe(false);
+      expect(inForm(el, '[data-way-reason="manual-card"]')!.textContent!.trim()).toBe(
+        t("give_back.way_not_here"),
       );
+      expect(giving(el)!.shadowRoot!.textContent).not.toContain(t("cancel_item.refund_at_till"));
     });
 
-    it("does not send staff to a till when another payment can be refunded here", async () => {
-      const card = {
-        ...cash,
-        tenderId: "manual-card",
-        method: "card",
+    it("offers every payment this device can take after a cancel, marking none unavailable", async () => {
+      const keyed: GiveBackWay = {
+        ...cashWay,
+        way: "manual-card",
         manual: true,
-        appliedRemaining: "28.00",
+        moneyLeft: "28.00",
       };
-      const { el } = await mountApp(
-        linkedMethods({
-          getTill: vi
-            .fn()
-            .mockResolvedValue({ ...till, capabilities: ["take-cash", "hand-keyed-card-payment"] }),
-          getRefundableTenders: vi
-            .fn()
-            .mockResolvedValue([{ ...cash, appliedRemaining: "2.00" }, card]),
-        }),
-      );
+      const methods = linkedMethods({
+        getTill: vi
+          .fn()
+          .mockResolvedValue({ ...till, capabilities: ["take-cash", "hand-keyed-card-payment"] }),
+        readGiveBack: vi
+          .fn()
+          .mockResolvedValue(owedView("3.34", [{ ...cashWay, moneyLeft: "2.00" }, keyed])),
+      });
+      const { el } = await mountApp(methods);
       await openTable4(el);
       await cancelAndRefundOne(el);
-      expect(refundForm(el)!.refundAtTill).toBe(false);
+      expect(inForm<HTMLInputElement>(el, 'input[name=way][value="cash"]')!.disabled).toBe(false);
+      expect(inForm<HTMLInputElement>(el, 'input[name=way][value="manual-card"]')!.disabled).toBe(
+        false,
+      );
+      expect(inForm(el, "[data-way-reason]")).toBeNull();
     });
 
-    it("does not send staff to a till when this device can refund two of the bill's three payments", async () => {
-      const manual = {
-        ...cash,
-        tenderId: "manual-card",
-        method: "card",
-        manual: true,
-        appliedRemaining: "20.00",
-      };
-      const integrated = {
-        ...cash,
-        tenderId: "reader-card",
-        method: "card",
-        manual: false,
-        appliedRemaining: "8.00",
-      };
-      const { el } = await mountApp(
-        linkedMethods({
-          getTill: vi
-            .fn()
-            .mockResolvedValue({ ...till, capabilities: ["take-cash", "hand-keyed-card-payment"] }),
-          getRefundableTenders: vi
-            .fn()
-            .mockResolvedValue([{ ...cash, appliedRemaining: "2.00" }, manual, integrated]),
-        }),
-      );
+    it("marks only the payment this device cannot take when it can take two of the bill's three", async () => {
+      const methods = linkedMethods({
+        readGiveBack: vi.fn().mockResolvedValue(
+          owedView("3.34", [
+            { ...cashWay, moneyLeft: "2.00" },
+            { ...cashWay, way: "manual-card", manual: true, moneyLeft: "20.00" },
+            { ...cashWay, way: "reader-card", moneyLeft: "8.00", allowedHere: false },
+          ]),
+        ),
+      });
+      const { el } = await mountApp(methods);
       await openTable4(el);
       await cancelAndRefundOne(el);
-      const form = refundForm(el)!;
-      expect(form.refundAtTill).toBe(false);
-      expect(form.shadowRoot!.querySelector("[data-refund-at-till]")).toBeNull();
+      expect(
+        [...giving(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>("input[name=way]")].map(
+          (input) => [input.value, input.disabled],
+        ),
+      ).toEqual([
+        ["cash", false],
+        ["manual-card", false],
+        ["reader-card", true],
+      ]);
+      expect(
+        [...giving(el)!.shadowRoot!.querySelectorAll("[data-way-reason]")].map((row) =>
+          row.getAttribute("data-way-reason"),
+        ),
+      ).toEqual(["reader-card"]);
+      expect(giving(el)!.shadowRoot!.textContent).not.toContain(t("cancel_item.refund_at_till"));
     });
 
-    it("reuses the cancel's reasons on the refund screen and reads them again from the receipt", async () => {
+    it("reads the reasons again for the filled window, which then opens Give money back afresh from the receipt", async () => {
       const listAdjustmentReasons = vi.fn().mockResolvedValue([complaint, mistake, unserved]);
       const { el } = await mountApp(linkedMethods({ listAdjustmentReasons }));
       await openTable4(el);
       await cancelAndRefundOne(el);
-      await flush(el);
-      expect(refundForm(el)!.reasons).toEqual([complaint, mistake, unserved]);
-      expect(listAdjustmentReasons).toHaveBeenCalledOnce();
-      emit(refundForm(el)!, "tender-refund-close");
-      await flush(el);
-      emit(ticket(el)!, "tender-refund-open");
-      await flush(el);
       await expect.poll(() => listAdjustmentReasons.mock.calls.length).toBe(2);
+      emit(giving(el)!, "give-back-close");
+      await flush(el);
+      expect(giving(el)).toBeNull();
+      await userEvent.click(
+        page.elementLocator(
+          ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-give-back]")!,
+        ),
+      );
+      await flush(el);
+      await expect.poll(() => listAdjustmentReasons.mock.calls.length).toBe(3);
     });
 
     it.each([
-      ["en-GB", "0.500", "0.5 × Wine"],
-      ["es-ES", "0.500", "0,5 × Wine"],
-      ["en-GB", "1.000", "1 × Wine"],
-      ["es-ES", "1.000", "1 × Wine"],
+      ["en-GB", "0.500", "0.5 × Filed wine"],
+      ["es-ES", "0.500", "0,5 × Filed wine"],
+      ["en-GB", "1.000", "Filed wine"],
+      ["es-ES", "1.000", "Filed wine"],
     ] as const)(
-      "words the dishes line's quantity in the till's language (%s, %s)",
+      "words the cancelled dish's quantity in the till's language (%s, %s)",
       async (locale, quantity, words) => {
         setLocale(locale);
-        const { el } = await mountApp(linkedMethods());
+        const view = owedView();
+        view.lines[0] = { ...view.lines[0]!, quantity };
+        const { el } = await mountApp(
+          linkedMethods({ readGiveBack: vi.fn().mockResolvedValue(view) }),
+        );
         await openTable4(el, locale);
         expect(currentLocale()).toBe(locale);
         await openCancel(el);
@@ -4225,39 +4359,55 @@ describe("till-app: service cancellation consent", () => {
           reasonId: "r-unserved",
         });
         await flush(el);
-        await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
-        expect(refundForm(el)!.dishes).toBe(words);
+        await filledForm(el);
+        expect(
+          inForm<HTMLElementTagNameMap["wt-switch"]>(el, 'wt-switch[data-line="wine-line"]')!.label,
+        ).toBe(`${words} · ${formatMoney("30.00", locale)}`);
       },
     );
 
-    it("opens a receipt's refund with nothing filled in and the reasons read", async () => {
+    it("opens Give money back from the receipt afterwards with nothing filled in and no cancel's ids", async () => {
       const methods = linkedMethods();
       const { el } = await mountApp(methods);
       await openTable4(el);
       await cancelAndRefundOne(el);
-      emit(refundForm(el)!, "tender-refund-close");
+      emit(giving(el)!, "give-back-close");
       await flush(el);
-      expect(refundForm(el)).toBeNull();
-      emit(ticket(el)!, "tender-refund-open");
+      expect(giving(el)).toBeNull();
+      await userEvent.click(
+        page.elementLocator(
+          ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-give-back]")!,
+        ),
+      );
       await flush(el);
-      await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
-      const form = refundForm(el)!;
-      expect(form.target).toBe("");
-      expect(form.startReasonId).toBe("");
-      expect(form.dishes).toBe("");
-      expect(form.refundAtTill).toBe(false);
-      await sendRefund(el, { reason: "r-unserved" });
-      const sent = vi.mocked(api.refundTransaction).mock.calls[0]![1];
-      expect(sent).toMatchObject({ appliedAmount: "30.00", reason: "Not served" });
-      expect(sent).not.toHaveProperty("cancellationIds");
+      await expect.poll(() => inForm(el, "[data-what-for]")).not.toBeNull();
+      expect(inForm(el, "[data-purpose]")).toBeNull();
+      inForm(el, "[data-choice=dishes]")!.click();
+      await giving(el)!.updateComplete;
+      expect(
+        inForm<HTMLElementTagNameMap["wt-switch"]>(el, 'wt-switch[data-line="wine-line"]')!.checked,
+      ).toBe(false);
+      expect(
+        inForm<HTMLElementTagNameMap["wt-combobox"]>(el, "wt-combobox[name=reason]")!.value,
+      ).toBe("");
+      inForm<HTMLElementTagNameMap["wt-switch"]>(el, 'wt-switch[data-line="wine-line"]')!
+        .shadowRoot!.querySelector("input")!
+        .click();
+      await giving(el)!.updateComplete;
+      await expect.poll(() => vi.mocked(api.previewGiveBack).mock.calls.length).toBeGreaterThan(0);
+      expect(vi.mocked(api.previewGiveBack).mock.lastCall![1]).not.toHaveProperty("fromCancel");
     });
 
     describe("server-held cancellation approval", () => {
       const marta = [{ personId: "m-1", displayName: "Marta" }];
-      const refundPrompt = (el: TillApp) =>
-        el.shadowRoot!.querySelector(
-          "till-supervisor-override-dialog[data-tender-refund-approval]",
-        );
+      const prompt = (el: TillApp) =>
+        inForm<TillSupervisorOverrideDialog>(el, "till-supervisor-override-dialog");
+      /** The box's rule (D9): the cancel's approval covers only what the filled window sends with
+       * its cancel's ids, up to what is owed and no extra. */
+      const coveredByCancel = (request: GiveBackRequest) =>
+        request.fromCancel?.join() === cancelId &&
+        Number(request.amount) <= 3.34 &&
+        request.extra === "0.00";
       const pinMethods = (more: Record<string, unknown> = {}) =>
         linkedMethods({
           cancelItem: vi
@@ -4268,6 +4418,10 @@ describe("till-app: service cancellation consent", () => {
               refundLinks: [{ lineId: "line-1", adjustmentId: cancelId }],
             }),
           listRefundAuthorizers: vi.fn().mockResolvedValue(marta),
+          previewGiveBack: vi.fn(async (_saleId: string, request: GiveBackRequest) => ({
+            ...previewFor(request),
+            needs: coveredByCancel(request) ? [] : ["sale.refund"],
+          })),
           ...more,
         });
       async function cancelWithPin(el: TillApp, read: CancellationRead = thirds()) {
@@ -4282,242 +4436,148 @@ describe("till-app: service cancellation consent", () => {
         await flush(el);
         await expect.poll(() => approval(el)).not.toBeNull();
         await pinPad(el, "7777");
-        await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
-        await refundForm(el)!.updateComplete;
+        await filledForm(el);
         expect(vi.mocked(api.cancelItem).mock.calls[1]![2]).toMatchObject({
           approver: { personId: "m-1", pin: "7777" },
         });
       }
-      const sent = () => vi.mocked(api.refundTransaction).mock.calls.map((call) => call[1]);
+      async function approveIn(el: TillApp, pin: string) {
+        await expect.poll(() => prompt(el)).not.toBeNull();
+        emit(prompt(el)!, "override-confirm", { personId: "m-1", pin });
+        await flush(el);
+      }
 
-      it("sends no cancellation PIN with the refund and stores none", async () => {
-        let answer!: (view: typeof refunded) => void;
-        const refundTransaction = vi.fn(
+      it("sends no cancellation PIN with the money back and stores none", async () => {
+        let answer!: (outcome: ReturnType<typeof completedFor>) => void;
+        const giveBack = vi.fn(
           () =>
-            new Promise<typeof refunded>((resolve) => {
+            new Promise<ReturnType<typeof completedFor>>((resolve) => {
               answer = resolve;
             }),
         );
-        const { el } = await mountApp(pinMethods({ refundTransaction }));
+        const methods = pinMethods({ giveBack });
+        const { el } = await mountApp(methods);
         await openTable4(el);
         await cancelWithPin(el);
-        await sendRefund(el);
-        expect(sent()).toEqual([
-          expect.objectContaining({
-            appliedAmount: "3.34",
-            tipAmount: "0.00",
-            cancellationIds: [cancelId],
-          }),
-        ]);
-        expect(sent()[0]).not.toHaveProperty("override");
-        expect(refundPrompt(el)).toBeNull();
+        expect(inForm(el, "[data-pin]")).toBeNull();
+        await giveBackNow(el);
+        await expect.poll(() => gaveBack()).toHaveLength(1);
+        expect(gaveBack()[0]!.request).toMatchObject({
+          amount: "3.34",
+          extra: "0.00",
+          fromCancel: [cancelId],
+        });
+        expect(gaveBack()[0]).not.toHaveProperty("override");
+        expect(prompt(el)).toBeNull();
+        expect(vi.mocked(api.listApprovers)).not.toHaveBeenCalled();
         expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
-        expect(
-          Object.keys(localStorage).some((key) => key.startsWith("waitron.tender-refund:")),
-        ).toBe(true);
+        expect(Object.keys(localStorage).some((key) => key.includes('"give-back"'))).toBe(true);
         for (const storage of [localStorage, sessionStorage])
           for (const key of Object.keys(storage)) {
             expect(key).not.toContain("7777");
             expect(storage.getItem(key)).not.toContain("7777");
           }
-        answer({ ...refunded, appliedAmount: "3.34" });
-        await expect.poll(() => refundForm(el)).toBeNull();
-        expect(refundTransaction).toHaveBeenCalledOnce();
+        answer(completedFor(gaveBack()[0]!));
+        await expect.poll(() => inForm(el, "[data-outcome]")).not.toBeNull();
+        expect(giveBack).toHaveBeenCalledOnce();
       });
 
-      it("opens the PIN prompt and sends no PIN when the amount is raised by €0.01", async () => {
-        const { el } = await mountApp(
-          pinMethods({
-            refundTransaction: vi
-              .fn()
-              .mockRejectedValueOnce({ code: "tender.refund_exceeds_cancelled" })
-              .mockResolvedValue(refunded),
-          }),
-        );
+      it("asks for a PIN when the amount is raised by €0.01, still sending the cancel's ids", async () => {
+        const methods = pinMethods();
+        const { el } = await mountApp(methods);
         await openTable4(el);
         await cancelWithPin(el);
-        await sendRefund(el, { appliedAmount: "3.35" });
-        await expect.poll(() => refundPrompt(el)).not.toBeNull();
-        expect(sent()[0]).not.toHaveProperty("override");
-        expect(sent()[0]?.cancellationIds).toEqual([cancelId]);
-        await pinPad(el, "1234");
-        await expect.poll(() => sent()).toHaveLength(2);
-        expect(sent()[1]).toMatchObject({
-          appliedAmount: "3.35",
+        await typeAmount(el, "3.35");
+        await expect.poll(() => inForm(el, "[data-pin]")).not.toBeNull();
+        await giveBackNow(el);
+        await approveIn(el, "1234");
+        await expect.poll(() => gaveBack()).toHaveLength(1);
+        expect(vi.mocked(api.listApprovers)).toHaveBeenCalledWith(["sale.refund"]);
+        expect(gaveBack()[0]).toMatchObject({
+          request: { amount: "3.35", fromCancel: [cancelId] },
           override: { personId: "m-1", pin: "1234" },
         });
       });
 
-      it("opens the PIN prompt and sends no PIN when a tip is added", async () => {
-        const whole = { ...consent("settled"), saleId: "own-sale" };
-        const { el } = await mountApp(
-          pinMethods({
-            getCancellation: vi.fn().mockResolvedValue(whole),
-            refundTransaction: vi
-              .fn()
-              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-              .mockResolvedValue(refunded),
-          }),
-        );
-        await openTable4(el);
-        await cancelWithPin(el, whole);
-        expect(refundForm(el)!.target).toBe("30.00");
-        await sendRefund(el, { tipAmount: "2.00" });
-        await expect.poll(() => refundPrompt(el)).not.toBeNull();
-        expect(sent()[0]).toMatchObject({ appliedAmount: "30.00", tipAmount: "2.00" });
-        expect(sent()[0]).not.toHaveProperty("override");
-        await pinPad(el, "1234");
-        await expect.poll(() => sent()).toHaveLength(2);
-        expect(sent()[1]).toMatchObject({ override: { personId: "m-1", pin: "1234" } });
-      });
-
-      it("shows the lock-out in the PIN prompt after a fresh PIN is throttled", async () => {
-        const { el } = await mountApp(
-          pinMethods({
-            refundTransaction: vi
-              .fn()
-              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-              .mockRejectedValueOnce({ code: "pin.throttled" })
-              .mockResolvedValue(refunded),
-          }),
-        );
+      it("asks for a PIN when the extra paid on top is added", async () => {
+        const methods = pinMethods();
+        const { el } = await mountApp(methods);
         await openTable4(el);
         await cancelWithPin(el);
-        await sendRefund(el);
-        expect(sent()[0]).not.toHaveProperty("override");
-        await expect.poll(() => refundPrompt(el)).not.toBeNull();
-        await pinPad(el, "1234");
-        await expect
-          .poll(() => (refundPrompt(el) as TillSupervisorOverrideDialog).error?.code)
-          .toBe("pin.throttled");
-      });
-
-      it("opens the PIN prompt when saved cancellation approval does not cover the refund", async () => {
-        const { el } = await mountApp(
-          pinMethods({
-            refundTransaction: vi
-              .fn()
-              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-              .mockResolvedValue(refunded),
-          }),
-        );
-        await openTable4(el);
-        await cancelWithPin(el);
-        await sendRefund(el);
-        expect(sent()[0]).not.toHaveProperty("override");
-        await expect.poll(() => refundPrompt(el)).not.toBeNull();
-        expect((refundPrompt(el) as TillSupervisorOverrideDialog).error).toBeNull();
-        await pinPad(el, "1234");
-        await expect.poll(() => sent()).toHaveLength(2);
-        expect(sent()[1]).toMatchObject({
-          cancellationIds: [cancelId],
+        emit(inForm(el, "wt-switch[name=extra]")!, "wt-change", { checked: true });
+        await giving(el)!.updateComplete;
+        await expect.poll(() => inForm(el, "[data-pin]")).not.toBeNull();
+        await giveBackNow(el);
+        await approveIn(el, "1234");
+        await expect.poll(() => gaveBack()).toHaveLength(1);
+        expect(gaveBack()[0]).toMatchObject({
+          request: { amount: "3.34", extra: "2.00", fromCancel: [cancelId] },
           override: { personId: "m-1", pin: "1234" },
         });
       });
 
-      it("keeps a fresh wrong-PIN refusal in the prompt until corrected", async () => {
-        const { el } = await mountApp(
-          pinMethods({
-            refundTransaction: vi
-              .fn()
-              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-              .mockRejectedValueOnce({ code: "pin.invalid" })
-              .mockResolvedValue(refunded),
-          }),
-        );
+      it("keeps a wrong PIN's refusal in the prompt, then sends the corrected one", async () => {
+        const giveBack = vi
+          .fn()
+          .mockRejectedValueOnce({ code: "pin.invalid" })
+          .mockImplementation(async (_saleId: string, body: GiveBackWrite) => completedFor(body));
+        const methods = pinMethods({ giveBack });
+        const { el } = await mountApp(methods);
         await openTable4(el);
         await cancelWithPin(el);
-        await sendRefund(el);
-        expect(sent()[0]).not.toHaveProperty("override");
-        await expect.poll(() => refundPrompt(el)).not.toBeNull();
-        await pinPad(el, "1111");
-        expect((refundPrompt(el) as TillSupervisorOverrideDialog).error?.code).toBe("pin.invalid");
-        emit(refundPrompt(el)!, "override-confirm", { personId: "m-1", pin: "1234" });
-        await flush(el);
-        await expect.poll(() => sent()).toHaveLength(3);
-        expect(sent()[2]).toMatchObject({
-          appliedAmount: "3.34",
-          cancellationIds: [cancelId],
+        await typeAmount(el, "3.35");
+        await giveBackNow(el);
+        await approveIn(el, "1111");
+        await expect.poll(() => prompt(el)?.error?.code).toBe("pin.invalid");
+        await approveIn(el, "1234");
+        await expect.poll(() => gaveBack()).toHaveLength(2);
+        expect(gaveBack()[1]).toMatchObject({
+          request: { amount: "3.35", fromCancel: [cancelId] },
           override: { personId: "m-1", pin: "1234" },
         });
       });
 
-      it("asks again for a second refund of the same sale", async () => {
-        const { el } = await mountApp(
-          pinMethods({
-            refundTransaction: vi
-              .fn()
-              .mockResolvedValueOnce({ ...refunded, appliedAmount: "3.00" })
-              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-              .mockResolvedValue(refunded),
-          }),
-        );
+      it("asks for a PIN for a second give-back of the same receipt opened from the receipt", async () => {
+        const methods = pinMethods();
+        const { el } = await mountApp(methods);
         await openTable4(el);
         await cancelWithPin(el);
-        await sendRefund(el, { appliedAmount: "3.00" });
-        expect(sent()[0]).not.toHaveProperty("override");
-        await expect.poll(() => refundForm(el)).toBeNull();
-        emit(ticket(el)!, "tender-refund-open");
+        await giveBackNow(el);
+        await expect.poll(() => gaveBack()).toHaveLength(1);
+        expect(gaveBack()[0]).not.toHaveProperty("override");
+        emit(giving(el)!, "give-back-close");
         await flush(el);
-        await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
-        await sendRefund(el, { appliedAmount: "0.34", tipAmount: "0.00", reason: "r-unserved" });
-        await expect.poll(() => refundPrompt(el)).not.toBeNull();
-        expect(sent()[1]).not.toHaveProperty("override");
-      });
-
-      it("requires a fresh PIN for a card keyed on a separate terminal", async () => {
-        const keyed = { ...cash, method: "card", manual: true, last4: "4401" };
-        const { el } = await mountApp(
-          pinMethods({
-            getTill: vi.fn().mockResolvedValue({
-              ...till,
-              capabilities: [...till.capabilities, "take-cash", "hand-keyed-card-payment"],
-            }),
-            getRefundableTenders: vi.fn().mockResolvedValue([keyed]),
-          }),
+        await userEvent.click(
+          page.elementLocator(
+            ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-give-back]")!,
+          ),
         );
-        await openTable4(el);
-        await cancelWithPin(el);
-        emit(refundForm(el)!.shadowRoot!.querySelector('[name="manualConfirmed"]')!, "wt-change", {
-          checked: true,
-        });
-        await sendRefund(el);
-        await expect.poll(() => refundPrompt(el)).not.toBeNull();
-        expect(api.refundTransaction).not.toHaveBeenCalled();
-        await pinPad(el, "1234");
-        await expect.poll(() => sent()).toHaveLength(1);
-        expect(sent()[0]).toMatchObject({ override: { personId: "m-1", pin: "1234" } });
+        await flush(el);
+        await expect.poll(() => inForm(el, "[data-choice=dishes]")).not.toBeNull();
+        inForm(el, "[data-choice=dishes]")!.click();
+        await giving(el)!.updateComplete;
+        inForm<HTMLElementTagNameMap["wt-switch"]>(el, 'wt-switch[data-line="wine-line"]')!
+          .shadowRoot!.querySelector("input")!
+          .click();
+        await giving(el)!.updateComplete;
+        emit(inForm(el, "wt-combobox[name=reason]")!, "wt-change", { value: "r-unserved" });
+        await giving(el)!.updateComplete;
+        await expect.poll(() => inForm(el, "[data-pin]")).not.toBeNull();
+        await giveBackNow(el);
+        await expect.poll(() => prompt(el)).not.toBeNull();
+        expect(gaveBack()).toHaveLength(1);
+        expect(vi.mocked(api.previewGiveBack).mock.lastCall![1]).not.toHaveProperty("fromCancel");
       });
 
-      it("opens an unrelated refund without cancellation IDs after closing", async () => {
-        const { el } = await mountApp(
-          pinMethods({
-            refundTransaction: vi
-              .fn()
-              .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-              .mockResolvedValue(refunded),
-          }),
-        );
-        await openTable4(el);
-        await cancelWithPin(el);
-        emit(refundForm(el)!, "tender-refund-close");
-        await flush(el);
-        expect(refundForm(el)).toBeNull();
-        emit(ticket(el)!, "tender-refund-open");
-        await flush(el);
-        await expect.poll(() => refundForm(el)?.reasons ?? null).not.toBeNull();
-        await sendRefund(el, { appliedAmount: "3.34", tipAmount: "0.00", reason: "r-unserved" });
-        await expect.poll(() => refundPrompt(el)).not.toBeNull();
-        expect(sent()[0]).not.toHaveProperty("override");
-      });
-
-      it("closes the refund screen without sending a refund on sign-out", async () => {
-        const { el } = await mountApp(pinMethods());
+      it("closes the window without giving anything back on sign-out", async () => {
+        const methods = pinMethods();
+        const { el } = await mountApp(methods);
         await openTable4(el);
         await cancelWithPin(el);
         emit(ticket(el)!, "logout");
         await flush(el);
-        expect(refundForm(el)).toBeNull();
+        expect(giving(el)).toBeNull();
+        expect(vi.mocked(api.giveBack)).not.toHaveBeenCalled();
         expect(api.refundTransaction).not.toHaveBeenCalled();
       });
     });
@@ -4531,91 +4591,84 @@ describe("till-app: service cancellation consent", () => {
       expect(methods.cancelItem).not.toHaveBeenCalled();
     });
 
-    it("retains a pending refund through closing and reopening without cancelling the kitchen again", async () => {
+    it("keeps money waiting for the card company through closing and reopening without cancelling the kitchen again", async () => {
       const methods = paidMethods({
-        refundTransaction: vi
-          .fn()
-          .mockResolvedValue({ ...refunded, state: "pending", completedAt: null }),
-        getTenderRefund: vi.fn().mockResolvedValue(refunded),
+        giveBack: vi.fn(async (_saleId: string, body: GiveBackWrite) => ({
+          ...completedFor(body),
+          parts: body.expected.map((part) => ({
+            kind: part.kind,
+            amount: part.amount,
+            state: "pending" as const,
+            refundId: refunded.id,
+          })),
+        })),
       });
       const { el } = await mountApp(methods);
       await openTable4(el);
       await chooseRefund(el);
-      await expect.poll(() => refundForm(el)).not.toBeNull();
-      await submitRefund(el);
-      expect(refundForm(el)?.result?.state).toBe("pending");
-      expect(refundForm(el)?.shadowRoot!.querySelector("[data-outcome]")?.textContent).toBe(
-        t("tender_refund.pending"),
+      await submitGiveBack(el);
+      await expect.poll(() => inForm(el, "[data-outcome]")).not.toBeNull();
+      expect(inForm(el, "[data-outcome]")!.textContent).toContain(
+        t("give_back.pending").replace("{amount}", () => formatMoney("7.50", currentLocale())),
       );
-      const form = refundForm(el)!;
-      const closed = new Promise<void>((resolve) =>
-        form.addEventListener("tender-refund-close", () => resolve(), { once: true }),
-      );
-      await userEvent.click(
-        page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-close]")!),
-      );
-      await closed;
+      expect(inForm(el, "[data-check-again]")).not.toBeNull();
+      emit(giving(el)!, "give-back-close");
       await flush(el);
-      expect(refundForm(el)).toBeNull();
-      await userEvent.click(
-        page.elementLocator(
-          ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-tender-refund]")!,
-        ),
-      );
+      expect(giving(el)).toBeNull();
+      const again = ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-give-back]");
+      expect(again).not.toBeNull();
+      await userEvent.click(page.elementLocator(again!));
       await flush(el);
-      expect(refundForm(el)?.attempt?.refundId).toBe(refunded.id);
-      await userEvent.click(
-        page.elementLocator(
-          refundForm(el)!.shadowRoot!.querySelector<HTMLElement>("[data-status]")!,
-        ),
-      );
-      await expect.poll(() => refundForm(el)).toBeNull();
-      expect(api.getTenderRefund).toHaveBeenCalledWith(refunded.id);
-      expect(api.refundTransaction).toHaveBeenCalledOnce();
+      await expect.poll(() => giving(el)).not.toBeNull();
+      expect(giving(el)!.fill).toBeNull();
+      expect(vi.mocked(api.giveBack)).toHaveBeenCalledOnce();
+      expect(api.refundTransaction).not.toHaveBeenCalled();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
       expect(ticket(el)?.result).toEqual(paidReceipt);
     });
 
-    it("resumes a lost refund answer with the saved request and never repeats kitchen cancellation", async () => {
+    it("sends a lost answer again with the saved request and never repeats kitchen cancellation", async () => {
       const methods = paidMethods({
-        refundTransaction: vi
+        giveBack: vi
           .fn()
           .mockRejectedValueOnce(new TypeError("Failed to fetch"))
-          .mockResolvedValue(refunded),
+          .mockImplementation(async (_saleId: string, body: GiveBackWrite) => completedFor(body)),
       });
       const { el } = await mountApp(methods);
       await openTable4(el);
       await chooseRefund(el);
-      await expect.poll(() => refundForm(el)).not.toBeNull();
-      await submitRefund(el);
-      const request = vi.mocked(api.refundTransaction).mock.calls[0]![1];
-      expect(refundForm(el)?.attempt?.request).toEqual(request);
-      await userEvent.click(
-        page.elementLocator(
-          refundForm(el)!.shadowRoot!.querySelector<HTMLElement>("[data-status]")!,
-        ),
-      );
-      await expect.poll(() => refundForm(el)).toBeNull();
-      expect(api.refundTransaction).toHaveBeenCalledTimes(2);
-      expect(vi.mocked(api.refundTransaction).mock.calls[1]).toEqual(["own-sale", request]);
+      await submitGiveBack(el);
+      await expect.poll(() => inForm(el, "[data-send-again]")).not.toBeNull();
+      expect(inForm(el, "[data-lost]")!.textContent).toContain(t("give_back.lost"));
+      await userEvent.click(page.elementLocator(inForm(el, "[data-send-again]")!));
+      await flush(el);
+      await expect.poll(() => gaveBack()).toHaveLength(2);
+      expect(gaveBack()[1]).toEqual(gaveBack()[0]);
+      await expect.poll(() => inForm(el, "[data-outcome]")).not.toBeNull();
+      expect(api.refundTransaction).not.toHaveBeenCalled();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
     });
 
-    it("leaves a failed refund visibly failed while keeping the committed kitchen cancellation", async () => {
+    it("leaves a refused money back visibly refused while keeping the committed kitchen cancellation", async () => {
       const methods = paidMethods({
-        refundTransaction: vi
-          .fn()
-          .mockResolvedValue({ ...refunded, state: "failed", completedAt: null }),
+        giveBack: vi.fn().mockRejectedValue({ code: "tender.refund_exceeds_payment", status: 409 }),
       });
       const { el } = await mountApp(methods);
       await openTable4(el);
       await chooseRefund(el);
-      await expect.poll(() => refundForm(el)).not.toBeNull();
-      await submitRefund(el);
-      expect(refundForm(el)?.result?.state).toBe("failed");
-      expect(refundForm(el)?.shadowRoot!.querySelector("[data-outcome]")?.textContent).toBe(
-        t("tender_refund.failed"),
+      await submitGiveBack(el);
+      await expect
+        .poll(
+          () =>
+            giving(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-price-input"]>(
+              "wt-price-input[name=amount]",
+            )?.error,
+        )
+        .toBe(codeMessage("tender.refund_exceeds_payment"));
+      expect(giving(el)!.shadowRoot!.querySelector("wt-form-actions")?.error).toBe(
+        t("form.fix_fields"),
       );
+      expect(inForm(el, "[data-outcome]")).toBeNull();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
       expect(ticket(el)?.result).toEqual(paidReceipt);
     });
@@ -4631,6 +4684,7 @@ describe("till-app: service cancellation consent", () => {
       expect(api.getTransactionReceipt).not.toHaveBeenCalled();
       expect(api.refundTransaction).not.toHaveBeenCalled();
       expect(refundForm(el)).toBeNull();
+      expect(giving(el)).toBeNull();
     });
 
     it("rereads raced paid kitchen consent and requires another choice before navigating to a refund", async () => {
@@ -4661,7 +4715,7 @@ describe("till-app: service cancellation consent", () => {
       expect(api.refundTransaction).not.toHaveBeenCalled();
       await chooseChargedReason(el);
       await clickChoice(el, "[data-confirm]");
-      await expect.poll(() => refundForm(el)).not.toBeNull();
+      await expect.poll(() => giving(el)).not.toBeNull();
       expect(methods.cancelItem.mock.calls[1]![2]).toMatchObject({
         expectedContext: fresh.context,
         outcome: "keep_charge",
@@ -4678,23 +4732,22 @@ describe("till-app: service cancellation consent", () => {
       const { el } = await mountApp(methods);
       await openTable4(el);
       await chooseRefund(el);
-      await expect.poll(() => refundForm(el), { timeout: 4000 }).not.toBeNull();
+      await expect.poll(() => giving(el), { timeout: 4000 }).not.toBeNull();
       expect(methods.cancelItem).toHaveBeenCalledTimes(2);
       expect(methods.cancelItem.mock.calls[1]![2]).toEqual(methods.cancelItem.mock.calls[0]![2]);
       expect(api.getTransactionReceipt).toHaveBeenCalledOnce();
       expect(api.refundTransaction).not.toHaveBeenCalled();
-      await submitRefund(el);
-      await expect.poll(() => refundForm(el)).toBeNull();
-      expect(api.refundTransaction).toHaveBeenCalledOnce();
+      await submitGiveBack(el);
+      await expect.poll(() => gaveBack()).toHaveLength(1);
       expect(methods.cancelItem).toHaveBeenCalledTimes(2);
     });
 
     it("uses the existing refund manager PIN after stopping the kitchen without repeating that stop", async () => {
       const methods = paidMethods({
-        refundTransaction: vi
-          .fn()
-          .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-          .mockResolvedValue(refunded),
+        previewGiveBack: vi.fn(async (_saleId: string, request: GiveBackRequest) => ({
+          ...previewFor(request),
+          needs: ["sale.refund"],
+        })),
         listRefundAuthorizers: vi
           .fn()
           .mockResolvedValue([{ personId: "m-1", displayName: "Marta" }]),
@@ -4702,21 +4755,23 @@ describe("till-app: service cancellation consent", () => {
       const { el } = await mountApp(methods);
       await openTable4(el);
       await chooseRefund(el);
-      await expect.poll(() => refundForm(el)).not.toBeNull();
-      await submitRefund(el);
-      await expect.poll(() => approval(el)).not.toBeNull();
-      expect(api.listRefundAuthorizers).toHaveBeenCalledOnce();
-      await pinPad(el, "1234");
-      await expect.poll(() => refundForm(el)).toBeNull();
-      expect(vi.mocked(api.refundTransaction).mock.calls[1]![1]).toMatchObject({
+      await expect.poll(() => giving(el)).not.toBeNull();
+      await submitGiveBack(el);
+      const prompt = () =>
+        inForm<TillSupervisorOverrideDialog>(el, "till-supervisor-override-dialog");
+      await expect.poll(() => prompt()).not.toBeNull();
+      expect(vi.mocked(api.listApprovers)).toHaveBeenCalledWith(["sale.refund"]);
+      emit(prompt()!, "override-confirm", { personId: "m-1", pin: "1234" });
+      await flush(el);
+      await expect.poll(() => gaveBack()).toHaveLength(1);
+      expect(gaveBack()[0]).toMatchObject({
         override: { personId: "m-1", pin: "1234" },
-        appliedAmount: "7.50",
+        request: { amount: "7.50" },
       });
       expect(methods.cancelItem).toHaveBeenCalledOnce();
-      expect(api.listApprovers).not.toHaveBeenCalled();
+      expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
       for (const key of Object.keys(localStorage))
-        if (key.startsWith("waitron.tender-refund:"))
-          expect(localStorage.getItem(key)).not.toContain("1234");
+        if (key.includes('"give-back"')) expect(localStorage.getItem(key)).not.toContain("1234");
     });
 
     it("opens the filed receipt without offering money back when no supported tender remains", async () => {
@@ -4732,32 +4787,32 @@ describe("till-app: service cancellation consent", () => {
       await expect.poll(() => ticket(el)).not.toBeNull();
       await flush(el);
       expect(refundForm(el)).toBeNull();
-      expect(ticket(el)!.shadowRoot!.querySelector("[data-tender-refund]")).toBeNull();
+      expect(giving(el)).toBeNull();
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-give-back]")).toBeNull();
       expect(api.refundTransaction).not.toHaveBeenCalled();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
     });
 
-    it("offers Correct invoice beside Refund a payment on the paid receipt, closing it on leaving", async () => {
-      const readInvoiceCorrectionLines = vi.fn(() => new Promise(() => {}));
-      const methods = paidMethods({ readInvoiceCorrectionLines });
+    it("offers Give money back on the paid receipt in place of Correct invoice and Refund a payment, closing it on leaving", async () => {
+      const readGiveBack = vi.fn(() => new Promise(() => {}));
+      const methods = paidMethods({ readGiveBack });
       const { el } = await mountApp(methods);
       await openTable4(el);
       await chooseRefund(el);
-      await expect.poll(() => refundForm(el)).not.toBeNull();
-      emit(refundForm(el)!, "tender-refund-close");
+      await expect.poll(() => giving(el)).not.toBeNull();
+      emit(giving(el)!, "give-back-close");
       await flush(el);
-      const button = ticket(el)!.shadowRoot!.querySelector<HTMLElement>(
-        "[data-invoice-correction]",
-      )!;
-      expect(button.textContent!.trim()).toBe(t("invoice_correction.title"));
+      expect(giving(el)).toBeNull();
+      expect(ticket(el)!.shadowRoot!.querySelector("[data-invoice-correction]")).toBeNull();
+      const button = ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-give-back]")!;
+      expect(button.textContent!.trim()).toBe(t("give_back.title"));
       await userEvent.click(page.elementLocator(button));
       await flush(el);
-      const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog");
-      expect(correcting()!.saleId).toBe("own-sale");
-      expect(readInvoiceCorrectionLines).toHaveBeenCalledWith("own-sale", {});
+      expect(giving(el)!.saleId).toBe("own-sale");
+      expect(readGiveBack).toHaveBeenCalledWith("own-sale", {});
       emit(ticket(el)!, "back-to-find-bill");
       await flush(el);
-      expect(correcting()).toBeNull();
+      expect(giving(el)).toBeNull();
     });
 
     it("gives a correction's card leg through Refund a payment, then has the correction read again", async () => {
@@ -4783,8 +4838,8 @@ describe("till-app: service cancellation consent", () => {
       const { el } = await mountApp(methods);
       await openTable4(el);
       await chooseRefund(el);
-      await expect.poll(() => refundForm(el)).not.toBeNull();
-      emit(refundForm(el)!, "tender-refund-close");
+      await expect.poll(() => giving(el)).not.toBeNull();
+      emit(giving(el)!, "give-back-close");
       await flush(el);
       emit(ticket(el)!, "invoice-correction-open");
       await flush(el);
@@ -4827,11 +4882,12 @@ describe("till-app: service cancellation consent", () => {
       expect(correcting().session).toBeDefined();
     });
 
-    it("opens a correction chosen in Find bill on its receipt, even with nothing left to refund", async () => {
-      const getInvoiceCorrection = vi.fn(() => new Promise(() => {}));
+    it("opens a money back under way chosen in Find bill on its receipt, even with nothing left to refund", async () => {
+      const underWay = { ...UNDER_WAY, saleId: "own-sale" };
+      const readGiveBack = vi.fn().mockResolvedValue({ ...VIEW, underWay });
       const methods = paidMethods({
         getRefundableTenders: vi.fn().mockResolvedValue([]),
-        getInvoiceCorrection,
+        readGiveBack,
       });
       const { el } = await mountApp(methods);
       await flush(el);
@@ -4844,15 +4900,16 @@ describe("till-app: service cancellation consent", () => {
         correction: { id: "correction-1", saleId: "own-sale" },
       });
       await flush(el);
-      const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog");
-      await expect.poll(() => correcting()).not.toBeNull();
+      const giving = () => el.shadowRoot!.querySelector("till-give-back-dialog");
+      await expect.poll(() => giving()).not.toBeNull();
       expect(api.getTransactionReceipt).toHaveBeenCalledWith("own-sale", expect.anything());
       expect(ticket(el)).not.toBeNull();
-      expect([correcting()!.saleId, correcting()!.correctionId]).toEqual([
-        "own-sale",
-        "correction-1",
-      ]);
-      expect(getInvoiceCorrection).toHaveBeenCalledWith("correction-1", {});
+      expect(giving()!.saleId).toBe("own-sale");
+      expect(readGiveBack).toHaveBeenCalledWith("own-sale", {});
+      await expect
+        .poll(() => giving()!.shadowRoot!.querySelector("till-give-back-under-way")?.correction.id)
+        .toBe("correction-1");
+      expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
     });
 
     const resumedCard = {
@@ -4885,9 +4942,11 @@ describe("till-app: service cancellation consent", () => {
       emit(shell(el), "find-bill");
       const findBill = () => el.shadowRoot!.querySelector("till-find-bill-screen");
       await expect.poll(findBill).not.toBeNull();
-      emit(findBill()!, "find-correction-open", {
-        correction: { id: "correction-1", saleId: "own-sale" },
-      });
+      emit(findBill()!, "find-transaction-open", { row: transactionRow({ saleId: "own-sale" }) });
+      await expect.poll(() => ticket(el)).not.toBeNull();
+      await flush(el);
+      // Correct invoice has no button now; its window stays until the till's old windows go.
+      emit(ticket(el)!, "invoice-correction-open", { correctionId: "correction-1" });
       const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog");
       return { el, correcting };
     }
@@ -5122,23 +5181,20 @@ describe("till-app: service cancellation consent", () => {
       const { el } = await mountApp(methods);
       await openTable4(el);
       await chooseRefund(el);
-      await expect.poll(() => refundForm(el)).not.toBeNull();
-      const form = refundForm(el)!;
-      await form.updateComplete;
-      emit(form.shadowRoot!.querySelector('[name="reason"]')!, "wt-change", {
-        value: "Changed my mind",
-      });
-      await form.updateComplete;
+      await expect.poll(() => giving(el)).not.toBeNull();
+      const form = await filledForm(el);
+      await typeAmount(el, "1.00");
       await userEvent.keyboard("{Escape}");
       await expect.poll(() => el.shadowRoot!.querySelector("wt-unsaved-changes")?.open).toBe(true);
-      expect(refundForm(el)).toBe(form);
+      expect(giving(el)).toBe(form);
       const closed = new Promise<void>((resolve) =>
-        form.addEventListener("tender-refund-close", () => resolve(), { once: true }),
+        form.addEventListener("give-back-close", () => resolve(), { once: true }),
       );
       await discardLeave(el);
       await closed;
       await flush(el);
-      expect(refundForm(el)).toBeNull();
+      expect(giving(el)).toBeNull();
+      expect(vi.mocked(api.giveBack)).not.toHaveBeenCalled();
       expect(api.refundTransaction).not.toHaveBeenCalled();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
       expect(ticket(el)?.result).toEqual(paidReceipt);

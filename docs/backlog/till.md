@@ -1319,7 +1319,8 @@ Served food uses Refund a payment on the receipt, as
 [A758 section 3.3](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-17-a758-adjustment-reasons-design.md#33-cancel-item-by-where-the-dish-is-picture-03)
 specifies. (2026-11-23: on a receipt Correct invoice can correct, money for served food goes back
 through Correct invoice;
-[decision](fiscal.md#goodwill-money-back-goes-through-correct-invoice-owner-and-watcher-2026-11-23).)
+[decision](fiscal.md#goodwill-money-back-goes-through-correct-invoice-owner-and-watcher-2026-11-23).
+2026-11-25: the two buttons became one Give money back, PR 2 of [docs/superpowers/plans/2026-11-24-give-money-back.md](../superpowers/plans/2026-11-24-give-money-back.md).)
 The paid-serving cases in `line-cancel.test.ts` and `line-cancel-api.test.ts` check
 fully and partly served dishes, prior cancellations, unchanged rows after refusal and completed
 replay after serving. The unpaid served-food case retains its separate cancellation behavior.

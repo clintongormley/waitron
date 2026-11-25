@@ -12,8 +12,8 @@ export const helpEn = {
     "For a customer who pays the whole bill later, outside Waitron. Confirming closes the bill for good with its invoice, and records no payment. On the dashboard's Sales & takings page, choose Download for accountant (XLSX) to find these bills on their own sheet.",
   "help.payment":
     "Choose an amount, an equal share, items, or the whole amount left. Split equally asks how many people are still to pay. After a part payment, go on to the next guest.",
-  "help.correct_invoice":
-    "Enter the money to give back, VAT included, and a reason; ticking dishes is optional. Give cash back from here, and each card through its own refund. Until it is finished, the correction waits under Find a bill.",
+  "help.give_money_back":
+    "Give money back to a guest: for a dish, as goodwill, or the extra paid on top. If you close it before all the money is back, find the receipt in Find a bill under Money back under way; if it is not there, open Give money back on the receipt again on this till.",
   "help.counter.park":
     "Saves this order without taking payment and clears the basket for the next customer. The name is optional. Pick the order up again from Parked orders, on this till or any other that serves its zone.",
   "help.counter.parked_orders":
@@ -81,8 +81,8 @@ export const helpEs: Record<HelpKey, string> = {
     "Para un cliente que paga toda la cuenta más tarde, fuera de Waitron. Al confirmar, la cuenta se cierra definitivamente con su factura y no se registra ningún pago. En la página Ventas y recaudación del panel, elige Descargar para tu gestor (XLSX) para ver estas cuentas en su propia hoja.",
   "help.payment":
     "Elige una cantidad, una parte igual, artículos o todo lo que queda. Dividir a partes iguales pregunta cuántas personas quedan por pagar. Tras un pago parcial, sigue con el siguiente comensal.",
-  "help.correct_invoice":
-    "Escribe el dinero a devolver, IVA incluido, y un motivo; marcar platos es opcional. Devuelve el efectivo desde aquí, y cada tarjeta con su propia devolución. Hasta que la termines, la rectificación espera en Buscar cuenta.",
+  "help.give_money_back":
+    "Devuelve dinero a un cliente: por un plato, por cortesía o lo pagado de más. Si la cierras antes de que vuelva todo el dinero, busca el ticket en Buscar cuenta, en Devoluciones en curso; si no está, vuelve a abrir Devolver dinero en el ticket en esta caja.",
   "help.counter.park":
     "Guarda este pedido sin cobrarlo y vacía la cesta para el siguiente cliente. El nombre es opcional. Recupéralo desde Pedidos aparcados, en esta caja o en cualquier otra que atienda su zona.",
   "help.counter.parked_orders":

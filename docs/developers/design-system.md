@@ -3419,18 +3419,17 @@ and the staffing grid's block editor in the A761 entry):
   `fiscal.records_unsent` notice, while the box waits for its tax-agency certificate, and after a
   press the box answered until the box is read again; `primary` once it can act, keeping `primary`
   while its own press is being sent.
-  A758-6 brought the till's two Refund buttons under it, on a receipt's Refund a payment and on
-  Give back a payment: drawn `secondary` while no reason is chosen or the reasons are loading (and,
-  on a receipt's refund, while no payment is picked), `primary` once a reason is chosen, keeping
-  `primary` while their own refund is being sent. They stay enabled and explain a missing reason on
-  press. On a hand-keyed card payment, a receipt's Refund a payment, outside Correct invoice's card
-  step, is also drawn `secondary` and disabled from the start, with `tender.refund_needs_correction`'s
-  sentence as the bottom message, while the payment amount is above the payment's `plainRefundLimit`
-  (the watcher, 2026-11-23 22:51); and, whatever the amounts, with `invoice_correction.already_open`'s
-  while the payment carries `correctionOpen` (a correction of the invoice is open; a finish-branch
-  review's triage, 2026-11-24, not the watcher's or the owner's).
+  A758-6 brought the till's Refund button on Give back a payment under it: drawn `secondary` while
+  no reason is chosen or the reasons are loading, `primary` once a reason is chosen, keeping
+  `primary` while its own refund is being sent. It stays enabled and explains a missing reason on
+  press.
+  The **Give back** button in a receipt's Give money back window is disabled until a payment is
+  chosen (and, for **A dish**, a dish is ticked) and while field errors shown by a press remain; it
+  is drawn `secondary` until the box's check of the money back has answered, a reason is chosen and
+  no field error is shown, then `primary`, keeping `primary` while its money back is sent. Before a
+  press it stays enabled with no reason chosen, and the press marks the reason.
   Not covered: a button disabled only while a request is being sent, an action blocked by its own
-  field checks and the sign-in screens. Nothing guards it across screens.
+  field checks on other screens, and the sign-in screens. Nothing guards it across screens.
 
 These forms follow the rule
 ([backlog](../backlog/dashboard.md#a-forms-save-stays-quiet-and-disabled-until-something-changes-a331-owner-2026-10-07) A331,

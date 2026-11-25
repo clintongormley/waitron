@@ -498,11 +498,11 @@ describe("Print the bill's own sentences", () => {
   it.each([
     [
       "en-GB",
-      "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Correct invoice.",
+      "Some dishes on this bill are not marked served. Print anyway, or take off any the guests will not have. A dish that never comes is refunded after payment with Give money back.",
     ],
     [
       "es-ES",
-      "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Rectificar factura.",
+      "Algunos platos de esta cuenta no están marcados como servidos. Imprime igualmente o quita los que los clientes no vayan a tomar. Un plato que no llegue se devuelve después del cobro con Devolver dinero.",
     ],
   ])("offers no Mark served where none is drawn, in %s", (locale, message) => {
     expect(catalogues[locale]?.["meal_end.unserved_no_mark"]).toBe(message);
@@ -581,14 +581,53 @@ describe("the Finish table and Cancel item lines on a dish given free", () => {
     [
       "en-GB",
       "cancel_item.free_served",
-      "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then give the money back with Correct invoice on the receipt.",
+      "A dish given free with this one has been served, so it cannot come back with it. Cancel this dish here, then open Give money back on the receipt.",
     ],
     [
       "es-ES",
       "cancel_item.free_served",
-      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después devuelve el dinero con Rectificar factura en el recibo.",
+      "Un plato por invitación que iba con este ya se ha servido, así que no puede volver con él. Cancela este plato aquí y después abre Devolver dinero en el recibo.",
     ],
   ])("reads in %s for %s", (locale, key, line) => {
     expect(catalogues[locale]?.[key as StringKey]).toBe(line);
+  });
+});
+
+describe("Give money back's words", () => {
+  // O2 (owner, 2026-11-24): the stored tip is called the extra paid on top, never a tip, apart
+  // from naming what the receipt prints. D11: only what Waitron knows about a dish.
+  it("keeps the approved words for the extra and the dishes, in both languages", () => {
+    const keys = [
+      "give_back.extra",
+      "give_back.extra_hint",
+      "give_back.extra_too",
+      "give_back.extra_amount",
+      "give_back.cancelled_owed",
+      "give_back.cancelled_back",
+    ] as const;
+    expect(keys.map((key) => [en[key], es[key]])).toEqual([
+      ["Extra paid on top of the bill", "Lo pagado de más"],
+      [
+        "Give back some or all of the {amount} paid on top of the bill, and nothing else. The receipt shows it as Tip.",
+        "Devuelve una parte o todos los {amount} pagados de más sobre la cuenta, y nada más. En el ticket figura como Propina.",
+      ],
+      [
+        "Give back the extra paid on top too ({amount})",
+        "Devolver también lo pagado de más ({amount})",
+      ],
+      ["Extra to give back", "Pagado de más a devolver"],
+      ["Cancelled, not served", "Cancelado, no servido"],
+      ["Cancelled, money given back", "Cancelado, dinero devuelto"],
+    ]);
+  });
+
+  it("calls the extra a tip nowhere else", () => {
+    const tipWords = Object.entries(en)
+      .filter(([key]) => key.startsWith("give_back."))
+      .filter(([key, text]) => key !== "give_back.extra_hint" && /\btip\b/i.test(text));
+    const propina = Object.entries(es)
+      .filter(([key]) => key.startsWith("give_back."))
+      .filter(([key, text]) => key !== "give_back.extra_hint" && /propina/i.test(text));
+    expect([...tipWords, ...propina]).toEqual([]);
   });
 });

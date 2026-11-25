@@ -2,7 +2,7 @@ import { isDashboardPath } from "@waitron/shared";
 import { html, nothing } from "lit";
 import { t } from "../i18n/t.js";
 
-interface RecoveryRefusal {
+export interface RecoveryRefusal {
   code: string;
   recoveryUrl?: string;
   manualCard?: true;

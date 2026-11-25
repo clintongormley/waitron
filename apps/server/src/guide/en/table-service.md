@@ -271,8 +271,9 @@ the **Reason** from the list. A reason that needs a note, such as **Other**, ask
 and the note is recorded as the reason. On a printed bill, a payment for particular items is
 refunded in full, and those items can then be paid for again.
 
-While the bill has no invoice, **Refund** beside a payment that has a ticket of its own opens
-**Correct invoice** on that ticket instead.
+While the bill has no invoice, or once its invoice has taken that payment off, **Refund** beside a
+payment that has a ticket of its own opens [Give money back](table-service.md#give-money-back) on
+that ticket instead.
 
 Choose **Refund** with the amount shown. If you cannot approve refunds yourself, a supervisor or
 manager enters their PIN. For a cash refund, hand the money to the guest when the result tells you
@@ -329,9 +330,9 @@ A dish given free can come back with the last paid dish on the bill: that dish's
 it, and the amount includes it. Cancelled on its own, a dish given free gives no money back.
 
 The tick appears only when this device can return the payment. When the guest paid in a way this
-device does not take, the window says **Refund the payment at a till: choose Refund a payment on
-the receipt.** After **Cancel and refund**, the receipt's refund opens filled in, as described
-under **Refund a payment on a receipt**.
+device does not take, the window says **Give the money back at a till: choose Give money back on
+the receipt.** After **Cancel and refund**, **Give money back** opens filled in, as described under
+[Give money back](table-service.md#give-money-back).
 
 ## Finish a paid table with food still to come {#finish-paid-table}
 
@@ -349,11 +350,11 @@ all.
 
 Choose **Cancel and refund** with the ticked dishes' total, or **Cancel** when nothing is ticked.
 **Back** leaves the table open. If you tick **Refund** and cannot give refunds yourself, someone who
-can enters their PIN. When a payment was taken in a way this device does not take, the window tells
-you to refund it at a till from the receipt.
+can enters their PIN. When a payment was taken in a way this device does not take, the window says
+**Give the money back at a till: choose Give money back on the receipt.**
 
 Once the table is finished, a **Refund** window lists each receipt with ticked dishes. Choose one to
-open its refund, filled in. When there is only one receipt, its refund opens straight away.
+open **Give money back** on it, filled in. When there is only one receipt, it opens straight away.
 
 When the guests will wait and take their food from the counter, choose **They'll collect it at the
 counter** instead. It is offered when at least one of the dishes has a station ticket. Nothing is
@@ -368,86 +369,55 @@ If you move a presented bill to the counter by hand, take payment in the table's
 payment, check **Waiting orders** at the first active counter in zone order, even if you used a
 till at a different counter.
 
-## Refund a payment on a receipt {#refund-receipt}
+## Give money back {#give-money-back}
 
-On a past receipt, choose **Refund a payment**. Pick the **Original payment**, check the **Payment
-amount to return** and the **Tip to return**, and choose a **Reason**. A reason that needs a note,
-such as **Other**, asks you to type one. Choose **Refund**. For cash, hand the money to the guest
-once the refund is done. **Download for accountant (XLSX)**, in the dashboard's **Sales &
-takings**, lists these refunds on a sheet of their
-own, with the VAT that stays declared because no corrective invoice is filed.
+On a past receipt, choose **Give money back**. **What is it for?** offers:
 
-Refund a payment gives money back without correcting the invoice, so it refuses money **Correct
-invoice** can give back, such as for a complaint: use Correct invoice for that. It still gives back
-a tip, what is still owed for dishes cancelled with **Cancel and refund** or **Finish table**, a part
-payment as below, and money on an invoice Correct invoice can never correct.
+- **A dish**: something they ordered never came, or was not right. Tick the dishes under **Which
+  dishes?**. **Money back** starts at what they cost; change it to give back less, or more.
+- **Goodwill or a complaint**: enter the **Money back** you choose, up to the amount the window
+  shows.
+- **Extra paid on top of the bill**: shown when the guest paid more than the bill. It gives back
+  some or all of that extra, and nothing else. The receipt shows it as Tip.
 
-To give back a part payment that the table's receipt already took off, first use **Correct
-invoice** on the table's receipt. Once that has given back everything paid on it, choose **Refund a
-payment** on the part payment's own receipt for the rest.
+With **A dish** or **Goodwill or a complaint**, when the chosen payment also holds extra paid on
+top, turn on **Give back the extra paid on top too** to return it as well.
 
-After **Cancel and refund**, or **Finish table** with dishes ticked, the window opens filled in.
-The payment is chosen when only one can be refunded on this device. The amount is the dishes'
-total, the tip is 0.00, the reason is the one you gave for the cancel, and the dishes are listed
-under it.
+Choose a **Reason**. A reason that needs a note, such as **Other**, asks you to type one.
 
-You do not need another PIN to refund up to the cancelled dishes' remaining value, with no tip.
-To give back more than the cancelled dishes' remaining value, use **Correct invoice**. Where it
-can never correct the receipt, raising the amount needs refund permission or a fresh approval PIN, and
-adding a tip always does. The refund still counts against the cancelled dishes, up to their value. A card keyed on a separate
-terminal always asks for a fresh PIN to confirm that the terminal refund was done.
+Under **How it goes back**, choose cash or a card; each shows how much it can take. The window then
+says what happens: in cash the cash drawer opens and you give the money to the customer, and a card
+goes back through the card reader. If the chosen payment cannot take it all, the window says how
+much stays under way for the other payments.
 
-Keep this refund window open to use the cancellation's approval. If you close it before sending
-a refund and open one from the receipt later, enter its amount and reason again and get approval
-if asked.
+Choose **Give back** with the amount. If you cannot give money back yourself, a supervisor or
+manager approves it with one PIN.
 
-When the chosen payment holds less than the dishes' total, the amount is what it holds, and a line
-such as **€2.00 left to refund from another payment** says what remains. It counts from the amount
-in the window, so it also appears, or grows, when you lower the amount. To refund the rest, choose
-**Refund a payment** again and pick a payment. That window is not filled in: enter the amount
-and reason yourself. If you cannot give refunds, it asks for the PIN. If that payment cannot be refunded on this device, the window tells
-you to refund it at a till.
+For a card keyed on a separate card terminal, the window asks you to refund it on that terminal
+first. Do so, tick **I have refunded … on the separate card terminal**, then choose **Record the
+refund**; a supervisor or manager approves recording it with their PIN. See
+[Refund a card payment on a separate terminal](table-service.md#separate-terminal).
 
-If the card provider cannot refund the payment yet, this attempt returned no money.
-You can close the window and start a new refund later.
+After **Cancel and refund**, or **Finish table** with dishes ticked, the window opens on **A
+dish**, filled in with the cancelled dishes, their amount and the cancel's reason. The cancel's
+approval covers that money, so no new PIN is asked unless you give back more. Keep the window open
+to use it: one opened later from the receipt is not filled in.
 
-To print an acknowledgment for a receipt refund, find the completed refund on the **Transactions** tab
-in **Find a bill** and choose **Print**. You can reprint it from the dashboard’s **Print Queue** for seven days.
+When a card refund waits for the card company, choose **Check again** to see its answer, and
+**Give back the rest** when the window offers it. If the window says the box did not answer, choose
+**Send again**: the same money never goes back twice. A corrective receipt that does not print by
+itself can be printed from **Find a bill**, on the **Transactions** tab.
 
-## Correct an invoice {#correct-invoice}
+If you close the window before all the money is back, look for the receipt in **Find a bill** under
+**Money back under way**. If it is not there, the money back is waiting on this till: open **Give
+money back** on the receipt again to carry on. If it is there, choose it in **Find a bill** to carry
+on:
 
-When a paid bill charged too much, or you give money back for a complaint, correct its invoice: the guest gets the difference back and
-Waitron files a corrective invoice for it. On a past receipt, choose **Correct invoice**, beside
-**Refund a payment**. The till cannot correct a full invoice naming a customer.
-
-If the overcharge was on particular dishes, tick them under **Dishes to correct (optional)**;
-otherwise leave them all unticked. Enter the **Money back, VAT included**, and check the VAT shown
-for each rate. Choose a **Reason**, such as **Complaint**, then **Correct and refund**. If you may not correct invoices,
-someone who may enters their PIN.
-
-When the bill was paid only in cash, the cash drawer opens and the corrective invoice is filed at
-once: give the customer the amount the window shows. Otherwise the window shows what is left to
-give back, with a cash step when part was paid in cash, and a **Refund to card** step for each
-card. **Give back €6.05 in cash** opens the cash drawer. **Refund to card** opens **Refund a
-payment** filled in for that card; refund the cards one at a time. While a card refund waits for the card company, choose
-**Check again** to see its answer.
-
-When a card refund finishes a correction later, its corrective receipt does not print by itself.
-To give it to the customer, open it in **Find a bill**, on the **Transactions** tab, where its type
-is **Corrective**, and print it there.
-
-If you close the window before the money is all back, the correction stays open. **Find a bill**
-lists it under **Corrections under way**; choose it to carry on, then choose one of these:
-
-- **Record correction** appears when everything is back but the corrective invoice was not filed
-  by itself; it files it.
-- **Finish now** files a corrective invoice for what has been given back so far, and gives no more
-  back.
-- **Discard** ends a correction that has given nothing back.
-- **Close keeping the refunds** ends it without a corrective invoice, when the window says one
-  cannot be filed. The money given back stays given back.
-
-If the window says an earlier request got no answer, choose **Send again**.
+- **Give back … in cash** or **Give back … to card** returns what is left that way.
+- **Finish** records what has been given back. When the receipt cannot take it, the window says why, and **Finish** ends the money back, keeping what has gone back.
+- **Stop here**, offered instead while money is left, keeps what has already gone back and gives
+  no more back.
+- **Cancel this money back** ends one that has given nothing back.
 
 ## Refund a card payment on a separate terminal {#separate-terminal}
 
@@ -724,7 +694,7 @@ Send or take off any dishes not yet sent first. If dishes on the bill are not ma
 nothing prints yet: the till lists them under **Not served yet:**. If the guests have had them,
 choose **Mark served** where it shows, then **Print the bill** again. Otherwise choose **Print
 anyway**: a dish that then never comes is refunded after payment with
-[Correct an invoice](table-service.md#correct-invoice). The till cannot correct a full invoice naming
+[Give money back](table-service.md#give-money-back). The till cannot correct a full invoice naming
 a customer, so on one of those take off any dish that may not come before you print.
 
 A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.

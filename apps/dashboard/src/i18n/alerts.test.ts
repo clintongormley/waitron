@@ -1060,6 +1060,18 @@ describe("refusals that name a way out the product already has", () => {
   );
 });
 
+describe("a money back left unfinished", () => {
+  it("says how much went back and how to finish it on a till", () => {
+    const params = { correctionId: "c1", saleId: "s1", moneyBack: "24.20" };
+    expect(alertMessage("invoice_correction.unfinished", params, "en")).toBe(
+      "€24.20 went back to a customer over an hour ago, but that money back is not finished, so its corrective receipt has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish to issue it for what has gone back. Later checks do not add to this alert while it is open, so there may be more.",
+    );
+    expect(alertMessage("invoice_correction.unfinished", params, "es")).toBe(
+      "Hace más de una hora se devolvieron 24,20 € a un cliente, pero esa devolución no está terminada, así que no se ha emitido su ticket rectificativo. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar para emitirlo por lo devuelto. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
+    );
+  });
+});
+
 describe("a correction whose automatic filing was refused", () => {
   it("says how much went back, without the refusal's code", () => {
     const params = {
@@ -1069,10 +1081,10 @@ describe("a correction whose automatic filing was refused", () => {
       refusal: "authorization.not_permitted",
     };
     expect(alertMessage("invoice_correction.filing_refused", params, "en")).toBe(
-      "€24.20 went back to a customer for an invoice correction, but its corrective invoice could not be filed. Do not give the money back again. On a till, open Find a bill, choose the correction under Corrections under way and press Record correction; if it says the invoice can no longer be corrected, press Close keeping the refunds. Later checks do not add to this alert while it is open, so there may be more.",
+      "€24.20 went back to a customer, but its corrective receipt could not be issued. Do not give the money back again. On a till, open Find a bill, choose it under Money back under way and press Finish. Later checks do not add to this alert while it is open, so there may be more.",
     );
     expect(alertMessage("invoice_correction.filing_refused", params, "es")).toBe(
-      "Se devolvieron 24,20 € a un cliente por una rectificación de factura, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta, elige la rectificación en Rectificaciones en curso y pulsa Registrar la rectificación; si indica que la factura ya no se puede rectificar, pulsa Cerrar y conservar las devoluciones. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
+      "Se devolvieron 24,20 € a un cliente, pero no se ha podido emitir su ticket rectificativo. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta, elígela en Devoluciones en curso y pulsa Terminar. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
     );
   });
 });

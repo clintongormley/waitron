@@ -606,12 +606,9 @@ it.each([
   },
 );
 
-it.each([
-  [undefined, "till-invoice-correction-dialog", "till-tender-refund-dialog"],
-  ["F1/7", "till-tender-refund-dialog", "till-invoice-correction-dialog"],
-] as const)(
-  "refunds a payment with its own receipt on a placed Counter set menu (invoice %s) through %s",
-  async (invoiceNumber, opened, other) => {
+it.each([[undefined], ["F1/7"]])(
+  "refunds a payment with its own receipt on a placed Counter set menu (invoice %s) through Give money back",
+  async (invoiceNumber) => {
     const id = "placed-takeaway";
     const { api, el, counter, pay } = await takeawaySetMenuOnCounter(id, invoiceNumber, {
       getBillBalance: vi.fn().mockResolvedValue(
@@ -648,14 +645,19 @@ it.each([
           manual: false,
         },
       ]),
-      readInvoiceCorrectionLines: vi.fn(() => new Promise(() => {})),
+      readGiveBack: vi.fn(() => new Promise(() => {})),
     });
     emit(counter(), "pay-waiting-order", { id });
     await pay({ outstanding: "10.00" });
     await press(el, '[data-payment-refund="pay-1"]');
-    await vi.waitFor(() => expect(el.shadowRoot!.querySelector(opened)).not.toBeNull());
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("till-give-back-dialog")).not.toBeNull(),
+    );
     expect(api.getTransactionReceipt).toHaveBeenCalledWith("advance-sale", expect.anything());
-    expect(el.shadowRoot!.querySelector(other)).toBeNull();
+    expect(api.readGiveBack).toHaveBeenCalledWith("advance-sale", {});
+    expect(el.shadowRoot!.querySelector("till-give-back-dialog")!.saleId).toBe("advance-sale");
+    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
     expect(dialog(el)).toBeNull();
   },

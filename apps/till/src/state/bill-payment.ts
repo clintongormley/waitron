@@ -363,7 +363,7 @@ export function refundSubmissionFor(
 }
 
 /** What is left to give back of a payment: what it took less its completed refunds, or, for one
- * that paid an advance, what the server says is left of it less what Refund a payment gave back. */
+ * that paid an advance, what the server says is left of it less what plain refunds gave back. */
 export function refundableOf(payment: BillPaymentView): { applied: string; tip: string } {
   if (payment.left !== undefined && payment.tipLeft !== undefined)
     return {

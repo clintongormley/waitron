@@ -82,7 +82,7 @@ describe.each(["light", "dark"] as const)("Cancel item accessibility (%s)", (the
     });
     expect(el.shadowRoot!.querySelector('input[name="refund"]')).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-refund-at-till]")!.textContent).toContain(
-      "Devuelve el dinero en una caja: Devolver un pago, en el recibo.",
+      "Devuelve el dinero en una caja: Devolver dinero, en el recibo.",
     );
     await expectNoA11yViolations(host);
   });
