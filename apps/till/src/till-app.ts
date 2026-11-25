@@ -125,6 +125,13 @@ import {
   t,
 } from "./i18n/t.js";
 import { codeMessage, freeItemAtFinishMessage } from "./i18n/codes.js";
+import {
+  SENT_DISH_SAVE_REFUSALS,
+  sentDishRefusal,
+  sentDishRefusalText,
+  stationNameOf,
+  type SentItemRefusal,
+} from "./i18n/sent-item-refusal.js";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import { diag } from "./diagnostics.js";
 import { TillProblemReport } from "./problem-report.js";
@@ -1339,14 +1346,6 @@ const ACTIONABLE_REFUSALS = new Set([
   "bill.tip_needs_a_sale",
 ]);
 
-/** A counter basket save refused because it would change, lower or leave out a dish already sent. */
-const SENT_DISH_SAVE_REFUSALS = new Map<string, StringKey>([
-  ["ticket.already_served", "held.sent_dish_served"],
-  ["ticket.already_started", "held.sent_dish_started"],
-  ["ticket.already_fired", "held.sent_dish_fired"],
-  ["ticket.already_sent", "held.sent_dish_sent"],
-]);
-
 /** A refusal for passing the simplified-invoice limit that names the limit, as the server sends it. */
 function overLimitOf(error: unknown): { overLimit: string } | undefined {
   const refusal = error as { code?: string; limit?: unknown } | undefined;
@@ -1837,6 +1836,7 @@ interface LateChange {
   /** The server gave no answer, so the change may have been saved. */
   unanswered: boolean;
   code?: string;
+  stationName?: string;
 }
 
 function lateChangeMessage(late: LateChange): string {
@@ -1853,7 +1853,7 @@ function lateChangeMessage(late: LateChange): string {
       : named
         ? "table.change_not_saved_named"
         : "table.change_not_saved";
-  const sentDish = sentDishRefusal(late.code, late.lineName);
+  const sentDish = sentDishRefusal(late.code, late.lineName, late.stationName);
   return fill(t(key), {
     line: late.lineName,
     table: tableLabel ?? "",
@@ -1880,6 +1880,7 @@ interface DishMove {
   name: string;
   stationId: string | null;
   refusal: string | null;
+  stationName?: string;
   busy: boolean;
   counter?: boolean;
   basketRevision?: number;
@@ -1903,6 +1904,7 @@ interface WaitingOrderMove {
   name: string;
   stationId: string | null;
   refusal: string | null;
+  stationName?: string;
   busy: boolean;
   session: number;
   api: TillApi;
@@ -1971,28 +1973,7 @@ type CounterError =
   | { partyChanged: PartyChange }
   | { billChanged: BillChange }
   | { lateChange: LateChange; also?: StringKey | { code: string } }
-  | { sentDishRefused: SentDishRefusal };
-
-/** A dish's change refused because the kitchen has it, said where its Sent window cannot. */
-interface SentDishRefusal {
-  key:
-    | "table.change_dish_started_void"
-    | "table.change_dish_fired_void"
-    | "table.change_dish_served_void";
-  dish: string;
-}
-
-/** The banner's words for a refused change of a sent dish, or undefined for another refusal. */
-function sentDishRefusal(code: string | undefined, dish: string): SentDishRefusal | undefined {
-  if (code === "ticket.already_started") return { key: "table.change_dish_started_void", dish };
-  if (code === "ticket.already_fired") return { key: "table.change_dish_fired_void", dish };
-  if (code === "ticket.already_served") return { key: "table.change_dish_served_void", dish };
-  return undefined;
-}
-
-function sentDishRefusalText({ key, dish }: SentDishRefusal): string {
-  return fill(t(key), { dish });
-}
+  | { sentDishRefused: SentItemRefusal };
 
 /** What a refusal as out of date found changed when the bill was read again: the dish the
  * adjustment named, gone or changed, or something else on the bill. */
@@ -3996,8 +3977,11 @@ export class TillApp extends LitElement {
   @state() private revealOtherDrafts = 0;
   @state() private guestsRefusal: { value: string; message: string } | null = null;
   /** A Change dish the kitchen refused as started, which the table screen shows in its window. */
-  @state() private changeRefusal: { lineNo: number; lineName: string; message: string } | null =
-    null;
+  @state() private changeRefusal: {
+    lineNo: number;
+    message: string;
+    banner: SentItemRefusal;
+  } | null = null;
   @state() private splitRefusal: SplitRefusal | null = null;
   @state() private splitRowsUnread: SplitRefusal | null = null;
   /** The panel's rows and the revision a press sends with them: one answer, written in one place,
@@ -8808,7 +8792,7 @@ export class TillApp extends LitElement {
     }
     const sentDish = code === undefined ? undefined : SENT_DISH_SAVE_REFUSALS.get(code);
     if (code !== "working_order.out_of_date" && sentDish === undefined) return false;
-    await this.#reloadChangedOrder(id, sentDish);
+    await this.#reloadChangedOrder(id, sentDish, stationNameOf(error));
     return true;
   }
 
@@ -8854,7 +8838,7 @@ export class TillApp extends LitElement {
       }
       const sentDish = code === undefined ? undefined : SENT_DISH_SAVE_REFUSALS.get(code);
       if (sentDish !== undefined) {
-        await this.#reloadChangedOrder(id, sentDish);
+        await this.#reloadChangedOrder(id, sentDish, stationNameOf(error));
         return false;
       }
       if (await this.#recoverSettlingEdit(id, error, "counter", () => !movedOn())) return false;
@@ -10260,7 +10244,7 @@ export class TillApp extends LitElement {
   /** Loads the order again after a save was refused for an out-of-date copy, or (`sentDish`) for a
    * dish already sent, whose sentence names Cancel and so is said only once Cancel is on screen.
    * A failed read of the held list keeps the sentence. */
-  async #reloadChangedOrder(id: string, sentDish?: StringKey): Promise<void> {
+  async #reloadChangedOrder(id: string, sentDish?: StringKey, stationName = ""): Promise<void> {
     const session = this.#operatorSession;
     try {
       await this.#loadHeldOrder(id, () => session !== this.#operatorSession);
@@ -10270,7 +10254,7 @@ export class TillApp extends LitElement {
           ? "held.changed_elsewhere"
           : adjustableListing(this.#store, this.counterLines, false) === null
             ? "held.reread_failed"
-            : sentDish;
+            : { sentDishRefused: { key: sentDish, stationName } };
     } catch (error) {
       if (session !== this.#operatorSession) return;
       this.errorKey = isOrderGone(error) ? "held.stale" : "held.reread_failed";
@@ -16352,6 +16336,7 @@ export class TillApp extends LitElement {
             typeof refusal === "object" && "code" in refusal
               ? refusal.code
               : ((error as { code?: string }).code ?? "server.internal"),
+          stationName: stationNameOf(error),
         };
       if (open.counter === true) {
         if (
@@ -16458,6 +16443,7 @@ export class TillApp extends LitElement {
     if (!live()) return;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     let refusal: string | null = null;
+    let stationName = "";
     try {
       await this.#resend(
         (signal) => open.api.moveDishStation(open.workingOrderId, body, { signal }),
@@ -16466,6 +16452,7 @@ export class TillApp extends LitElement {
       );
     } catch (error) {
       refusal = (error as { code?: string } | undefined)?.code ?? "server.internal";
+      stationName = stationNameOf(error);
     } finally {
       limit.done();
     }
@@ -16475,7 +16462,7 @@ export class TillApp extends LitElement {
       await this.#refreshAfterWrite("waiting", "refresh.waiting_after_move");
       return;
     }
-    const refused = { ...open, refusal };
+    const refused = { ...open, refusal, stationName };
     if (this.movingStation === busy) this.movingStation = refused;
     await this.#refreshAfterWrite("waiting", "refresh.waiting");
     if (
@@ -16485,7 +16472,9 @@ export class TillApp extends LitElement {
     )
       return;
     this.movingStation = null;
-    this.errorKey = moveRefusalKey(refusal, true) ?? { code: refusal };
+    const key = moveRefusalKey(refusal, true);
+    this.errorKey =
+      key === undefined ? { code: refusal } : { sentDishRefused: { key, stationName } };
   }
 
   #cancellationCurrent(
@@ -17522,6 +17511,7 @@ export class TillApp extends LitElement {
         lateChange: {
           lineName,
           unanswered: isNetworkFailure(outcome.error),
+          stationName: stationNameOf(outcome.error),
           ...(tableLabel === undefined ? {} : { tableLabel }),
           ...(table !== undefined && tableLabel !== table.label ? { tableNamed: true } : {}),
           ...(code === undefined ? {} : { code }),
@@ -17572,14 +17562,19 @@ export class TillApp extends LitElement {
       }
     }
     if (!identity()) return;
+    const stationName = stationNameOf(outcome.error);
     if (code === "ticket.already_started" && sender?.isConnected === true)
       this.changeRefusal = {
         lineNo,
-        lineName,
-        message: fill(t("table.change_dish_started"), { dish: lineName }),
+        banner: { key: "table.change_dish_started_void", dish: lineName, stationName },
+        message: sentDishRefusalText({
+          key: "table.change_dish_started",
+          dish: lineName,
+          stationName,
+        }),
       };
     else {
-      const sentDish = sentDishRefusal(code, lineName);
+      const sentDish = sentDishRefusal(code, lineName, stationName);
       this.errorKey =
         sentDish !== undefined
           ? { sentDishRefused: sentDish }
@@ -24696,6 +24691,7 @@ export class TillApp extends LitElement {
       .currentStationId=${open.stationId}
       .busy=${open.busy}
       .refusal=${open.refusal}
+      .stationName=${open.stationName ?? ""}
       .wholeOrder=${open.kind === "waiting"}
       @station-chosen=${(event: Event) =>
         void (open.kind === "waiting"
@@ -24982,10 +24978,7 @@ export class TillApp extends LitElement {
           const refusal = this.changeRefusal;
           if (refusal === null || event.detail.refusal !== refusal) return;
           this.changeRefusal = null;
-          if (!event.detail.shown)
-            this.errorKey = {
-              sentDishRefused: sentDishRefusal("ticket.already_started", refusal.lineName)!,
-            };
+          if (!event.detail.shown) this.errorKey = { sentDishRefused: refusal.banner };
         }}
         @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}
         @move-guests=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveGuests(event))}

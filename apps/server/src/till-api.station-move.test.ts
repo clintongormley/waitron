@@ -263,13 +263,28 @@ describe("POST /api/working-orders/:id/lines/move-station", () => {
         .set(state === "made here" ? { madeHere: true, state: "ready" } : { state })
         .where(eq(ticketItems.id, item!.id)),
     );
-    const answer = await call(`/api/working-orders/${tabId}/lines/move-station`, {
-      submissionId: randomUUID(),
-      lineIds: [item!.workingOrderLineId],
-      stationId: grill,
-    });
-    expect(answer.status).toBe(409);
-    expect(answer.json).toMatchObject({ code });
+    const setBarActive = (active: boolean) =>
+      inTx(venue, (tx) =>
+        tx.update(kitchenStations).set({ active }).where(eq(kitchenStations.id, bar)),
+      );
+    if (state === "ready") await setBarActive(false);
+    try {
+      const answer = await call(`/api/working-orders/${tabId}/lines/move-station`, {
+        submissionId: randomUUID(),
+        lineIds: [item!.workingOrderLineId],
+        stationId: grill,
+      });
+      expect(answer.status).toBe(409);
+      expect(answer.json).toMatchObject({
+        code,
+        params:
+          state === "made here"
+            ? { ticketItemId: item!.id }
+            : { ticketItemId: item!.id, stationName: "Bar" },
+      });
+    } finally {
+      if (state === "ready") await setBarActive(true);
+    }
   });
 
   it("maps an unsent line to 409 ticket.not_sent", async () => {

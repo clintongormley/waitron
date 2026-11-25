@@ -51,9 +51,9 @@ describe("readStationChanges", () => {
     const read = await withTransaction(db, (tx) => readStationChanges(tx, [never!, held!, open!]));
     expect(read).toEqual(
       new Map([
-        [never!, "never"],
-        [held!, "held"],
-        [open!, "held-or-waiting"],
+        [never!, { name: "Station 0", value: "never" }],
+        [held!, { name: "Station 1", value: "held" }],
+        [open!, { name: "Station 2", value: "held-or-waiting" }],
       ]),
     );
   });
@@ -72,7 +72,14 @@ describe("refuseChangesAfterSending", () => {
   const check = (
     records: { stationId: string; firedAt: string | null }[],
     values: Record<string, ChangesAfterSending>,
-  ) => refusal(() => refuseChangesAfterSending(orderId, records, new Map(Object.entries(values))));
+  ) =>
+    refusal(() =>
+      refuseChangesAfterSending(
+        orderId,
+        records,
+        new Map(Object.entries(values).map(([name, value]) => [name, { name, value }])),
+      ),
+    );
   const fired = "2026-10-24T10:00:00.000Z";
 
   it("refuses nothing when there are no records", () => {

@@ -8,6 +8,7 @@ import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitr
 import type { Station } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
+import { sentDishRefusalText } from "../i18n/sent-item-refusal.js";
 import type { StringKey } from "../i18n/strings.js";
 import { trackDialog } from "./track-dialog.js";
 
@@ -66,6 +67,7 @@ export class TillStationChoiceDialog extends LitElement {
   @property() selected: string | null | undefined = undefined;
   @property({ type: Boolean }) busy = false;
   @property() refusal: string | null = null;
+  @property({ attribute: false }) stationName = "";
   /** The move is of a whole order, not one dish. */
   @property({ type: Boolean }) wholeOrder = false;
 
@@ -165,7 +167,9 @@ export class TillStationChoiceDialog extends LitElement {
   #refusal(): string {
     const code = this.refusal!;
     const key = this.mode === "move" ? moveRefusalKey(code, this.wholeOrder) : undefined;
-    return key === undefined ? codeMessage(code) : t(key);
+    return key === undefined
+      ? codeMessage(code)
+      : sentDishRefusalText({ key, stationName: this.stationName });
   }
 
   override render() {

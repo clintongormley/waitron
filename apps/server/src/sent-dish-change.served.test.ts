@@ -15,6 +15,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { updateMenuItem } from "@waitron/menu";
 import { setRoutingCell } from "@waitron/venue-service";
+import { createStation } from "./kitchen.js";
 import { readBillEditState } from "./bill-editing.js";
 import { markServed } from "./working-order-serving.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
@@ -40,6 +41,13 @@ useVenueDb({
         tx,
         { row: { kind: "product", productId: wine!.id }, zoneId: null },
         { kind: "no_preparation" },
+      );
+      const [salad] = await tx.select().from(products).where(eq(products.name, "House salad"));
+      const coldPrep = await createStation(tx, { name: "Cold Prep" });
+      await setRoutingCell(
+        tx,
+        { row: { kind: "product", productId: salad!.id }, zoneId: null },
+        { kind: "station", stationId: coldPrep.id },
       );
     });
   },
@@ -212,7 +220,10 @@ describe("the whole-basket save of a bill with a sent dish", () => {
 
       expect(await saveBasket(billId, [...lines, kept!])).toMatchObject({
         status: 409,
-        json: { code: "ticket.already_started", params: { ticketItemId: ticket!.id } },
+        json: {
+          code: "ticket.already_started",
+          params: { ticketItemId: ticket!.id, stationName: "Cold Prep" },
+        },
       });
       if (menuChanged) {
         expect(await saveBasket(billId, [edited[0]!, ...lines, kept!])).toMatchObject({

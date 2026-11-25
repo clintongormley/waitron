@@ -411,8 +411,23 @@ export async function moveDishesToStation(
           throw new AppError("ticket.not_sent", { workingOrderId: orderId, lineId });
         if (row.madeHere)
           throw new AppError("ticket.made_here", { ticketItemId: row.ticketItemId });
-        if (!stillMovable({ state: row.state!, madeHere: false }, row))
-          throw new AppError("ticket.already_started", { ticketItemId: row.ticketItemId });
+        if (!stillMovable({ state: row.state!, madeHere: false }, row)) {
+          if (mover.kind === "kitchen")
+            throw new AppError("ticket.already_started", { ticketItemId: row.ticketItemId });
+          const stationId = row.stationId!;
+          const stationName =
+            stations.get(stationId)?.name ??
+            (
+              await tx
+                .select({ name: kitchenStations.name })
+                .from(kitchenStations)
+                .where(eq(kitchenStations.id, stationId))
+            )[0]!.name;
+          throw new AppError("ticket.already_started", {
+            ticketItemId: row.ticketItemId,
+            stationName,
+          });
+        }
       }
       if (options.assertFrom) {
         const asked = new Set<string>();

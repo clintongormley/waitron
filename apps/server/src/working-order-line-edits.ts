@@ -170,8 +170,12 @@ export async function applyLineEdits(
       throw new AppError("ticket.already_served", { workingOrderId: orderId, lineId: served.id });
     }
   };
-  const refuseSent = (line: EditableParent, fired: boolean): void => {
-    if (fired) throw new AppError("ticket.already_fired", { workingOrderId: orderId });
+  const refuseSent = (line: EditableParent, fired: EditableLine["ticket"] | undefined): void => {
+    if (fired != null)
+      throw new AppError("ticket.already_fired", {
+        workingOrderId: orderId,
+        stationName: stationChanges.get(fired.stationId)!.name,
+      });
     const parts = [line, ...line.children];
     const sent = parts.find((part) => part.sentAt !== null);
     if (sent !== undefined && parts.every((part) => part.ticket === null)) {
@@ -180,19 +184,22 @@ export async function applyLineEdits(
   };
   /**
    * Refuses what the kitchen state forbids, the stations' choice only for a change; answers
-   * whether the kitchen holds fired work. A bare raise leaves the started work alone, so it is not
+   * which record first shows fired work. A bare raise leaves the started work alone, so it is not
    * refused as started.
    */
-  const kitchenHas = (line: EditableParent, change: boolean, bareRaise = false): boolean => {
+  const firedWork = (line: EditableParent, change: boolean, bareRaise = false) => {
     const records = [line, ...line.children].flatMap((part) =>
       part.ticket === null ? [] : [part.ticket],
     );
     const started = records.find((record) => isStarted(record.state));
     if (started !== undefined && !bareRaise) {
-      throw new AppError("ticket.already_started", { ticketItemId: started.id });
+      throw new AppError("ticket.already_started", {
+        ticketItemId: started.id,
+        stationName: stationChanges.get(started.stationId)!.name,
+      });
     }
     if (change) refuseChangesAfterSending(orderId, records, stationChanges);
-    return records.some((record) => record.firedAt !== null);
+    return records.find((record) => record.firedAt !== null);
   };
   const wasSent = (parent: EditableParent): boolean =>
     [parent, ...parent.children].some(
@@ -230,7 +237,7 @@ export async function applyLineEdits(
           });
         if (!drops) continue;
         refuseServed(parent);
-        refuseSent(parent, kitchenHas(parent, false));
+        refuseSent(parent, firedWork(parent, false));
         throw new AppError("ticket.already_fired", { workingOrderId: orderId });
       } catch (error) {
         keepFirstFired(error);
@@ -433,9 +440,10 @@ export async function applyLineEdits(
       chargesUnchanged = false;
     const refusedDrop = rise < 0 && plan.refuseSentDrop === true;
     if (changed || refusedDrop) refuseServed(parent);
-    const fired = kitchenHas(parent, changed || rise > 0, !changed && rise > 0);
+    const fired = firedWork(parent, changed || rise > 0, !changed && rise > 0);
     if (refusedDrop) refuseSent(parent, fired);
-    const action: Action = !fired ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
+    const action: Action =
+      fired === undefined ? "free" : changed ? "change" : rise > 0 ? "raise" : "drop";
     // Added set-menu units each need their own place. Adjusted prices apply only to existing units.
     const addedApart =
       action === "free" && rise > 0 && (parent.adjusted || parent.setMenuId !== null);
@@ -563,7 +571,7 @@ export async function applyLineEdits(
 
   for (const parent of plan.removed) {
     refuseServed(parent);
-    refuseSent(parent, kitchenHas(parent, false));
+    refuseSent(parent, firedWork(parent, false));
   }
 
   // Priced before anything is written, so a refused line leaves the order as it was.

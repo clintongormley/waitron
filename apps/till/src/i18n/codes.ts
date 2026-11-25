@@ -1,6 +1,6 @@
 import { decimal, formatMoney, isZeroDecimal, PORTIONS_AT_ONCE } from "@waitron/shared";
 import { en, es } from "./strings.js";
-import { currentLocale, pickLocale } from "./t.js";
+import { currentLocale, named, pickLocale } from "./t.js";
 
 // An operator must never see a raw wire code: a code missing from this table degrades to the GENERIC
 // sentence. Add new codes with BOTH columns.
@@ -795,16 +795,16 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Ninguna estación de preparación puede preparar uno de estos platos. Corrígelo en el panel, en la página Estaciones de preparación.",
   },
   "ticket.already_started": {
-    en: "The station has already started this item, so it can no longer be changed. You can cancel it",
-    es: "La estación ya ha empezado este plato, así que ya no se puede cambiar. Puedes cancelarlo",
+    en: "This item has already been started, so it can no longer be changed. You can cancel it",
+    es: "Este artículo ya se ha empezado, así que ya no se puede cambiar. Puedes cancelarlo",
   },
   "ticket.not_sent": {
-    en: "This dish has not gone to the station yet. Choose where it is made before sending it",
-    es: "Este plato aún no ha ido a la estación. Elige dónde se prepara antes de enviarlo",
+    en: "This item has not been sent yet. Choose where it is made before sending it",
+    es: "Este artículo aún no se ha enviado. Elige dónde se prepara antes de enviarlo",
   },
   "ticket.made_here": {
-    en: "This dish is made here at the till, so it cannot be moved to a station",
-    es: "Este plato se prepara aquí en la caja, así que no se puede pasar a una estación",
+    en: "This item is made here at the till, so it cannot be moved to a station",
+    es: "Este artículo se prepara aquí en la caja, así que no se puede pasar a una estación",
   },
   "route.station_inactive": {
     en: "That station has been disabled. Choose another",
@@ -815,16 +815,16 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esa estación ya no existe. Elige otra",
   },
   "ticket.already_fired": {
-    en: "This item has already gone to the station and cannot be changed. You can cancel it",
-    es: "Este plato ya ha ido a la estación y no se puede cambiar. Puedes cancelarlo",
+    en: "This item has already been sent and cannot be changed. You can cancel it",
+    es: "Este artículo ya se ha enviado y no se puede cambiar. Puedes cancelarlo",
   },
   "ticket.already_served": {
     en: "This item has already been served and cannot be changed. You can cancel it",
-    es: "Este plato ya se ha servido y no se puede cambiar. Puedes cancelarlo",
+    es: "Este artículo ya se ha servido y no se puede cambiar. Puedes cancelarlo",
   },
   "ticket.already_sent": {
     en: "This item has already been sent and cannot be changed. You can cancel it",
-    es: "Este plato ya se ha enviado y no se puede cambiar. Puedes cancelarlo",
+    es: "Este artículo ya se ha enviado y no se puede cambiar. Puedes cancelarlo",
   },
   "tab.serve_quantity_invalid": {
     en: "That quantity cannot be marked on this line. Check how many are left to serve, or how many were served",
@@ -1235,6 +1235,17 @@ const SEATED_BELOW_ADVANCES_UNPRICED = {
   es: "Parte de este pedido se pagó con su propio ticket, y en la mesa sus menús lo dejarían por debajo. Devuelve antes dinero de ese ticket con Devolver dinero, o deja el pedido en el mostrador.",
 };
 
+const NAMED_STATION_MESSAGES = {
+  "ticket.already_started": {
+    en: "{name} has already started this item, so it can no longer be changed. You can cancel it",
+    es: "{name} ya ha empezado este artículo, así que ya no se puede cambiar. Puedes cancelarlo",
+  },
+  "ticket.already_fired": {
+    en: "This item has already been sent to {name} and cannot be changed. You can cancel it",
+    es: "Este artículo ya se ha enviado a {name} y no se puede cambiar. Puedes cancelarlo",
+  },
+};
+
 /** Every table above, for guards that read the till's wording. */
 export const CODE_TABLES: Readonly<Record<string, unknown>> = {
   CODE_MESSAGES,
@@ -1249,6 +1260,7 @@ export const CODE_TABLES: Readonly<Record<string, unknown>> = {
   DINING_FIXED,
   SEATED_BELOW_ADVANCES,
   SEATED_BELOW_ADVANCES_UNPRICED,
+  NAMED_STATION_MESSAGES,
 };
 
 export function listDishNames(names: readonly string[], locale: string): string {
@@ -1262,6 +1274,7 @@ export function codeMessage(
   params?: {
     reason?: unknown;
     dining?: unknown;
+    stationName?: unknown;
     setMenuName?: unknown;
     dishName?: unknown;
     dishNames?: unknown;
@@ -1305,6 +1318,12 @@ export function codeMessage(
   // Object.prototype member under a bare lookup.
   const entry = Object.hasOwn(CODE_MESSAGES, code) ? CODE_MESSAGES[code]! : GENERIC;
   const message = pickLocale(entry, locale);
+  if (code === "ticket.already_started" || code === "ticket.already_fired")
+    return named(
+      typeof params?.stationName === "string" ? params.stationName : "",
+      pickLocale(NAMED_STATION_MESSAGES[code], locale),
+      message,
+    );
   if (
     code === "tender.refund_of_advance" ||
     code === "bill.refund_of_advance" ||

@@ -228,8 +228,8 @@ describe("till-station-choice-dialog", () => {
   it.each([
     [
       "ticket.already_started",
-      "The station has started, finished or sent out this dish, so it stays where it is",
-      "La estación ya ha empezado, terminado o sacado este plato, así que se queda donde está",
+      "Work on this item has already started, so it stays where it is",
+      "Este artículo ya se ha empezado a preparar, así que se queda donde está",
     ],
     ["working_order.not_open", "This order has been discarded", "Este pedido se ha descartado"],
     [
@@ -239,18 +239,14 @@ describe("till-station-choice-dialog", () => {
     ],
     [
       "tab.line_not_found",
-      "This dish is no longer on this bill",
-      "Este plato ya no está en esta cuenta",
+      "This item is no longer on this bill",
+      "Este artículo ya no está en esta cuenta",
     ],
-    [
-      "ticket.not_sent",
-      "This dish has not gone to the station yet",
-      "Este plato aún no ha ido a la estación",
-    ],
+    ["ticket.not_sent", "This item has not been sent yet", "Este artículo aún no se ha enviado"],
     [
       "ticket.made_here",
-      "This dish is made here at the till, so it has no ticket at a station to move",
-      "Este plato se prepara aquí en la caja, así que no tiene comanda en ninguna estación que pasar",
+      "This item is made here at the till, so it has no ticket at a station to move",
+      "Este artículo se prepara aquí en la caja, así que no tiene comanda en ninguna estación que pasar",
     ],
   ])("shows the move-specific refusal %s at the bottom", async (code, english, spanish) => {
     const el = await mount({ mode: "move", currentStationId: "grill", refusal: code });
@@ -265,23 +261,23 @@ describe("till-station-choice-dialog", () => {
   it.each([
     [
       "ticket.already_started",
-      "The station has started, finished or sent out a dish of this order, so nothing was moved",
-      "La estación ya ha empezado, terminado o sacado un plato de este pedido, así que no se ha pasado nada",
+      "Work has already started on an item in this order, so nothing was moved",
+      "Ya se ha empezado a preparar un artículo de este pedido, así que no se ha pasado nada",
     ],
     [
       "tab.line_not_found",
-      "A dish of this order is no longer on it, so nothing was moved",
-      "Un plato de este pedido ya no está en él, así que no se ha pasado nada",
+      "An item is no longer on this order, so nothing was moved",
+      "Un artículo ya no está en este pedido, así que no se ha pasado nada",
     ],
     [
       "ticket.not_sent",
-      "A dish of this order has not gone to the station yet, so nothing was moved",
-      "Un plato de este pedido aún no ha ido a la estación, así que no se ha pasado nada",
+      "An item in this order has not been sent yet, so nothing was moved",
+      "Un artículo de este pedido aún no se ha enviado, así que no se ha pasado nada",
     ],
     [
       "ticket.made_here",
-      "A dish of this order is made here at the till, so nothing was moved",
-      "Un plato de este pedido se prepara aquí en la caja, así que no se ha pasado nada",
+      "An item in this order is made here at the till, so nothing was moved",
+      "Un artículo de este pedido se prepara aquí en la caja, así que no se ha pasado nada",
     ],
     ["working_order.not_open", "This order has been discarded", "Este pedido se ha descartado"],
     [
