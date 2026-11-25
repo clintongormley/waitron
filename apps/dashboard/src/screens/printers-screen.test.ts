@@ -2620,10 +2620,15 @@ describe("printers-screen", () => {
   });
 
   describe("closing after checking a printer address", () => {
-    async function checkedReceipt({ stale = false, registered = false } = {}) {
+    async function checkedReceipt({
+      stale = false,
+      registered = false,
+      liveData,
+    }: { stale?: boolean; registered?: boolean; liveData?: LiveData } = {}) {
       history.replaceState(null, "", "/printers/view/printers");
       const source = registered ? discoveredRegisteredNetwork[0]! : discoveredNetwork[0]!;
       const requestedAt = Date.now();
+      const freshReport = { ...source, lastSeenAt: new Date(requestedAt).toISOString() };
       const probePrinterAddress = vi.fn().mockResolvedValue({
         host: source.host,
         port: 9100,
@@ -2631,17 +2636,20 @@ describe("printers-screen", () => {
         expiresAt: requestedAt + 30_000,
       });
       const api = stubApi({
+        liveData,
         probePrinterAddress,
         listDiscoveredPrinters: vi
           .fn()
           .mockResolvedValue([
-            { ...source, lastSeenAt: new Date(requestedAt - Number(stale)).toISOString() },
+            stale
+              ? { ...source, lastSeenAt: new Date(requestedAt - 1).toISOString() }
+              : freshReport,
             discovered[0]!,
           ]),
       });
       const { el } = await mountSharedPrinter(api);
       await checkPrinterAddress(el, source.host!);
-      return { api, el };
+      return { api, el, freshReport };
     }
 
     it.each([
@@ -2671,6 +2679,27 @@ describe("printers-screen", () => {
         await closed;
       },
     );
+
+    it("finishes Close when a fresh printer report resolves the pending address question", async () => {
+      const liveData = new LiveData();
+      const { api, el, freshReport } = await checkedReceipt({ stale: true, liveData });
+      expect(text(el, "[data-test=probe-status]")).toContain(t("printers.probe_waiting"));
+      for (const field of ["probe-host", "probe-port"])
+        expect(q(el, `[data-test=${field}]`)!.shadowRoot!.querySelector("input")!.disabled).toBe(
+          true,
+        );
+
+      const closed = vi.fn();
+      q(el, "[data-test=new-printer-modal]")!.addEventListener("wt-close", closed);
+      q(el, "[data-test=cancel-new-printer]")!.click();
+      await expect.poll(() => questionOf(el).open).toBe(true);
+
+      vi.mocked(api.listDiscoveredPrinters).mockResolvedValue([freshReport]);
+      liveData.invalidate([{ type: "printer_discovery" }]);
+      await expect.poll(() => questionOf(el).open).toBe(false);
+      await expect.poll(() => closed.mock.calls.length).toBe(1);
+      expect(q(el, "[data-test=new-printer-modal]")).toBeNull();
+    });
 
     it("closes Add a printer and opens calibration after adding a different receipt printer", async () => {
       const { api, el } = await checkedReceipt();
