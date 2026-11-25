@@ -482,6 +482,8 @@ export class ProductList extends LitElement {
   }
 
   protected override updated(changed: PropertyValues<this>): void {
+    if (this.availabilityPending.size > 0)
+      this.#table()!.setAttribute("data-availability-saving", "");
     if (changed.has("nameDraft") && this.nameDraft) void this.#revealNameBox(true);
     else if (changed.has("nameError") && this.nameError) void this.#revealNameBox(false);
   }
@@ -604,6 +606,8 @@ export class ProductList extends LitElement {
       this.#fitFrame = 0;
       const table = this.#table()!;
       const width = table.clientWidth;
+      // Keep reordered rows out of scroll anchoring until their new layout is read.
+      if (this.availabilityPending.size === 0) table.removeAttribute("data-availability-saving");
       if (width > 0) {
         this.phone = width <= PRODUCTS_PHONE_WIDTH;
         const scroll = table.shadowRoot!.querySelector<HTMLElement>(".scroll");
@@ -1467,7 +1471,6 @@ export class ProductList extends LitElement {
         keep-toolbar-when-empty
         dense-rows
         wrap-to-fit
-        ?data-availability-saving=${this.availabilityPending.size > 0}
         ?data-list=${this.view === "list"}
         .filterCandidates=${this.#filterCandidates}
         .filterOpensBranch=${(row: ListRow) => row.kind === "root" || row.kind === "folder"}
