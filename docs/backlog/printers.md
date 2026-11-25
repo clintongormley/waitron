@@ -216,6 +216,7 @@ what is left is below. The 25 November session queued A1578 (slow Bluetooth prin
 around A4 printing) and A1584 (a shorter Delete printer window).
 
 - Verify live Google address completion during Cloud-connected Prepare setup on the owner's real box with Google lookup configured.
+- A billed full invoice opened from a refund’s original or an open correction cannot load its delivery status. The till opens it without the bill ID and the transaction route refuses billed sales.
 - **A739, two looks at paper.** The payment slip's new lines (#4337) after the box's next update, and, for a new
   reader payment whose first receipt has no card details, a receipt copy after the background lookup
   fills them in.

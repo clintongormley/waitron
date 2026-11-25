@@ -55,6 +55,21 @@ export function invoicePrintDestination(
   );
 }
 
+export function shouldRereadDelivery(
+  delivery: InvoiceDeliveryStatus | null | undefined,
+  billFullInvoice: boolean,
+  live: boolean | undefined,
+  stale: boolean,
+): boolean {
+  const status = delivery?.current?.status;
+  return (
+    status === "queued" ||
+    status === "sending" ||
+    (billFullInvoice &&
+      (status === "unknown" || stale || (!live && delivery?.originalCompleted !== true)))
+  );
+}
+
 /** A receipt attempt is worded by the original's print status. */
 export function deliveryWords(
   attempt: InvoiceDeliveryAttempt,
