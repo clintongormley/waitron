@@ -1726,7 +1726,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
       await tx.update(diningTables).set({ label: "Terrace 8" }).where(eq(diningTables.id, tableId));
       await tx
         .update(workingOrders)
-        .set({ label: "Recorded table" })
+        .set({ label: "Recorded table", billName: "Riley" })
         .where(eq(workingOrders.id, billId));
       return tableId;
     });
@@ -1741,7 +1741,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
         refundId,
         billPaymentId: paymentId,
         workingOrderId: billId,
-        label: "Terrace 8",
+        label: "Terrace 8 · Riley",
         provider: "fake",
         appliedAmount: "5.00",
         tipAmount: "0.00",
@@ -1758,7 +1758,7 @@ describe("design §8 test 22: the manager needs a confirmed outcome", () => {
     const afterLeaving = await list();
     expect(afterLeaving.status).toBe(200);
     expect(afterLeaving.json as unknown as unknown[]).toContainEqual(
-      expect.objectContaining({ refundId, label: "Recorded table" }),
+      expect.objectContaining({ refundId, label: "Recorded table · Riley" }),
     );
   });
 });

@@ -5,9 +5,9 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { withTransaction, workingOrders } from "@waitron/db";
+import { diningTables, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedWorkingOrder as seedOrderRow } from "@waitron/db/testing/seed.js";
+import { seedWorkingOrder as seedOrderRow, seedZone } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createPinThrottle,
@@ -26,6 +26,7 @@ import {
 } from "@waitron/payments";
 import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { releaseDeliveries } from "./delivery-release.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { systemClock } from "./till-backend.js";
 import { watchDerivationsAndLock, watchedOrder } from "./testing/watched-scrypt.js";
@@ -264,6 +265,54 @@ describe("GET /management-api/payments/held", () => {
         label: "Riley",
       }),
     ]);
+  });
+
+  it("keeps the recorded delivery place after handover and table removal", async () => {
+    const v = await setup();
+    const held = await aHeldPayment(v, {
+      amount: "12.10",
+      providerAmount: "1.21",
+      settledAt: "2026-10-15T20:30:00.000Z",
+      foundAt: "2026-10-17T03:00:00.000Z",
+    });
+    const tableId = await withTransaction(suite.db, async (tx) => {
+      const { id: zoneId } = await seedZone(tx, { name: "Terrace" });
+      const [table] = await tx
+        .insert(diningTables)
+        .values({ zoneId, label: "Terrace 8" })
+        .returning();
+      await tx
+        .update(workingOrders)
+        .set({ deliveryTableId: table!.id, label: "Recorded terrace" })
+        .where(eq(workingOrders.orderNumber, held.orderNumber));
+      return table!.id;
+    });
+    const checkLabel = async (label: string) => {
+      const res = await list(v);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual([
+        expect.objectContaining({ paymentId: held.paymentId, label }),
+      ]);
+    };
+
+    await checkLabel("Terrace 8");
+    await suite.db
+      .update(workingOrders)
+      .set({ collectedAt: "2026-10-15T20:45:00.000Z" })
+      .where(eq(workingOrders.orderNumber, held.orderNumber));
+    await suite.db
+      .update(diningTables)
+      .set({ label: "Birthday" })
+      .where(eq(diningTables.id, tableId));
+    await checkLabel("Recorded terrace");
+
+    await withTransaction(suite.db, (tx) => releaseDeliveries(tx, tableId, "Birthday"));
+    await checkLabel("Recorded terrace");
+    await suite.db
+      .update(workingOrders)
+      .set({ label: null })
+      .where(eq(workingOrders.orderNumber, held.orderNumber));
+    await checkLabel("Birthday");
   });
 
   it("refuses a session without hardware.manage", async () => {

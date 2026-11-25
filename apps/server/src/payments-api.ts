@@ -5,7 +5,7 @@ import { backupAuditDay, type BackupAuditRun } from "./backup-audit-day.js";
 import { readPairedReaderAudit, type PairedAuditRun } from "./paired-reader-audit.js";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { withIssuanceTransaction } from "@waitron/core";
-import { withPaymentOrderLabels } from "./current-order-label.js";
+import { paymentOrderLabelFields, withPaymentOrderLabels } from "./current-order-label.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 // Side-effect only: loads this host's errors.ts augmentation for the codes these routes throw.
 import "./errors.js";
@@ -1711,7 +1711,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             billPaymentId: billPayments.id,
             workingOrderId: billPayments.workingOrderId,
             orderNumber: workingOrders.orderNumber,
-            label: workingOrders.label,
+            ...paymentOrderLabelFields,
             source: billPayments.source,
             deviceId: billPayments.deviceId,
             deviceName: devices.label,
@@ -1907,7 +1907,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             provider: payments.provider,
             workingOrderId: payments.workingOrderId,
             orderNumber: workingOrders.orderNumber,
-            label: workingOrders.label,
+            ...paymentOrderLabelFields,
             settledAt: payments.settledAt,
             amount: payments.amount,
             providerAmount: payments.holdProviderAmount,
@@ -1968,7 +1968,7 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
             billPaymentId: billPayments.id,
             workingOrderId: billPayments.workingOrderId,
             orderNumber: workingOrders.orderNumber,
-            label: workingOrders.label,
+            ...paymentOrderLabelFields,
             source: refundRows.source,
             deviceId: refundRows.deviceId,
             deviceName: devices.label,

@@ -79,6 +79,7 @@ Revisa esta lista aunque siga abierta una advertencia anterior en Alertas.
 ## Resolver un pago con tarjeta retenido {#resolve-held-payment}
 
 En Informes, abre **Comprobar pagos con tarjeta** y busca el pago en **Retenidos: liquidados por otro importe**.
+Usa el número de pedido y el nombre de la cuenta para encontrar el pago. Tras la entrega, la lista conserva el lugar registrado aunque después cambie el nombre de la mesa.
 Comprueba cuánto se cobró al cliente y qué importe conservas en el panel de tu proveedor de tarjetas.
 
 - **Devuelto.** Devuelve el importe retenido desde el panel del proveedor y confirma allí la devolución.
