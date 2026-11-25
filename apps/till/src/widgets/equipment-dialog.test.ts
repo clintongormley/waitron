@@ -120,7 +120,7 @@ function changes(el: TillEquipmentDialog): EquipmentChange[] {
 }
 
 describe("till-equipment-dialog", () => {
-  it("shows each role's resolved equipment, including None, in the order staff use them", async () => {
+  it("shows the equipment roles in the order staff use them", async () => {
     const el = await mountDialog({
       equipment: equipment({ cash_drawer: onDefault("cash_drawer", null, [D1]) }),
     });
@@ -142,15 +142,10 @@ describe("till-equipment-dialog", () => {
       t("equipment.cash_drawer"),
       t("equipment.invoice"),
     ]);
-    expect(resolvedText(el, "receipt")).toBe("Counter printer");
-    expect(resolvedText(el, "payment_slip")).toBe("Portable printer");
-    expect(resolvedText(el, "card_terminal")).toBe("Reader one");
-    expect(resolvedText(el, "cash_drawer")).toBe(t("equipment.none"));
     expect(combobox(el, "receiptPrinterId")!.label).toBe(t("equipment.receipt"));
     expect(combobox(el, "paymentSlipPrinterId")).not.toBeNull();
     expect(combobox(el, "cardReaderId")).not.toBeNull();
     expect(combobox(el, "cashDrawerPrinterId")).not.toBeNull();
-    expect(resolvedText(el, "invoice")).toBe("Office HP");
     expect(combobox(el, "invoicePrinterId")).not.toBeNull();
   });
 
@@ -161,7 +156,7 @@ describe("till-equipment-dialog", () => {
       "Invoice printer",
     );
     expect(optionLabels(combobox(el, "invoicePrinterId")!)).toEqual([
-      "Use default: Office HP",
+      "Inherit: Office HP",
       "Office HP · A4",
       "Counter printer",
     ]);
@@ -191,11 +186,12 @@ describe("till-equipment-dialog", () => {
     expect(bottom(el)).toBe(t("form.fix_fields"));
   });
 
-  it("says where each role's equipment comes from", async () => {
+  it("omits repeated names and status for ordinary fixed and inherited choices", async () => {
     const el = await mountDialog();
 
-    expect(contextText(el, "receipt")).toBe(t("equipment.chosen_here"));
-    expect(contextText(el, "card_terminal")).toBe(t("equipment.from_default"));
+    expect(resolvedText(el, "receipt")).toBeUndefined();
+    expect(contextText(el, "receipt")).toBeUndefined();
+    expect(contextText(el, "card_terminal")).toBeUndefined();
   });
 
   it("leaves out a role with nothing to choose, nothing chosen and no default", async () => {
@@ -207,7 +203,7 @@ describe("till-equipment-dialog", () => {
     expect(row(el, "receipt")).not.toBeNull();
   });
 
-  it("Use default shows what it resolves to, and None where the profile has no default", async () => {
+  it("Inherit shows what it resolves to, and None where the profile has no default", async () => {
     const el = await mountDialog({
       equipment: equipment({ cash_drawer: onDefault("cash_drawer", null, [D1]) }),
     });
@@ -215,28 +211,15 @@ describe("till-equipment-dialog", () => {
     const reader = combobox(el, "cardReaderId")!;
     expect(reader.options[0]).toEqual({
       value: "",
-      label: t("equipment.use_default").replace("{name}", "Reader one"),
+      label: "Inherit: Reader one",
+      valueLabel: "Reader one",
+      inherited: true,
     });
     expect(reader.value).toBe("");
-    expect(optionLabels(combobox(el, "cashDrawerPrinterId")!)[0]).toBe(
-      t("equipment.use_default").replace("{name}", t("equipment.none")),
-    );
+    expect(optionLabels(combobox(el, "cashDrawerPrinterId")!)[0]).toBe("Inherit: None");
     const receipt = combobox(el, "receiptPrinterId")!;
     expect(receipt.options.map((option) => option.value)).toEqual(["", "P1", "P2"]);
     expect(receipt.value).toBe("P1");
-  });
-
-  it("a closed list on Use default reads as its Use default choice", async () => {
-    const el = await mountDialog({
-      equipment: equipment({ cash_drawer: onDefault("cash_drawer", null, [D1]) }),
-    });
-
-    expect(combobox(el, "cardReaderId")!.placeholder).toBe(
-      t("equipment.use_default").replace("{name}", "Reader one"),
-    );
-    expect(combobox(el, "cashDrawerPrinterId")!.placeholder).toBe(
-      t("equipment.use_default").replace("{name}", t("equipment.none")),
-    );
   });
 
   it("a held item is labelled with its holder, and a held default says who carries it", async () => {
@@ -246,13 +229,13 @@ describe("till-equipment-dialog", () => {
     });
 
     expect(optionLabels(combobox(el, "paymentSlipPrinterId")!)).toEqual([
-      t("equipment.use_default").replace("{name}", "Portable printer"),
+      "Inherit: None",
       "Bar printer",
       t("equipment.option_held")
         .replace("{item}", "Portable printer")
         .replace("{device}", "Bar till"),
     ]);
-    expect(resolvedText(el, "payment_slip")).toBe(t("equipment.none"));
+    expect(resolvedText(el, "payment_slip")).toBeUndefined();
     expect(contextText(el, "payment_slip")).toBe(
       t("equipment.held_by_person")
         .replace("{item}", "Portable printer")
@@ -278,7 +261,7 @@ describe("till-equipment-dialog", () => {
     [{ busy: true }, "Reader one, busy", false],
     [{ available: false }, "Reader one is switched off", false],
   ])(
-    "names the default reader and lets staff claim it when free (%o)",
+    "shows the default reader status and lets staff claim it when free (%o)",
     async (status, message, free) => {
       const reader = { ...R1, ...status };
       const card_terminal = onDefault(
@@ -290,10 +273,12 @@ describe("till-equipment-dialog", () => {
       const el = await mountDialog({ equipment: equipment({ card_terminal }) });
       const seen = changes(el);
 
-      expect(resolvedText(el, "card_terminal")).toBe(R1.name);
+      expect(resolvedText(el, "card_terminal")).toBeUndefined();
       expect(contextText(el, "card_terminal")).toBe(message);
       await page.getByRole("combobox", { name: t("equipment.card_terminal") }).click();
-      await page.getByRole("option", { name: "Use default: Reader one" }).click();
+      await page
+        .getByRole("option", { name: reader.heldBy ? "Inherit: None" : "Inherit: Reader one" })
+        .click();
       expect(seen).toEqual(
         free ? [{ role: "card_terminal", selection: "default", via: "list", takeOver: false }] : [],
       );
@@ -408,7 +393,7 @@ describe("till-equipment-dialog", () => {
     ]);
   });
 
-  it("choosing Use default sends the role back to its default", async () => {
+  it("choosing Inherit sends the role back to its default", async () => {
     const el = await mountDialog();
     const seen = changes(el);
 
@@ -484,7 +469,7 @@ describe("till-equipment-dialog", () => {
       fixed: true,
       label: t("equipment.switched_off").replace("{item}", "Bar printer"),
     });
-    expect(resolvedText(el, "receipt")).toBe("Bar printer");
+    expect(resolvedText(el, "receipt")).toBeUndefined();
     expect(contextText(el, "receipt")).toBe(
       t("equipment.switched_off").replace("{item}", "Bar printer"),
     );
@@ -524,10 +509,10 @@ describe("till-equipment-dialog", () => {
     expect(refreshed.value).toBe("P1");
     expect(refreshed.options.map((option) => option.value)).not.toContain("P2");
     expect(optionLabels(refreshed).join(" ")).not.toContain("Bar printer");
-    expect(resolvedText(el, "receipt")).toBe("Counter printer");
+    expect(resolvedText(el, "receipt")).toBeUndefined();
   });
 
-  it("a chosen printer deleted elsewhere reads as Use default once the list is read again, with no switched-off or held entry for it", async () => {
+  it("a chosen printer deleted elsewhere reads as Inherit once the list is read again, with no switched-off or held entry for it", async () => {
     const el = await mountDialog({
       equipment: equipment({ receipt: onItem("receipt", P2, [P1, P2], P1) }),
     });
@@ -540,7 +525,7 @@ describe("till-equipment-dialog", () => {
     expect(refreshed.value).toBe("");
     expect(refreshed.options.map((option) => option.value)).not.toContain("P2");
     expect(optionLabels(refreshed).join(" ")).not.toContain("Bar printer");
-    expect(resolvedText(el, "receipt")).toBe("Counter printer");
+    expect(resolvedText(el, "receipt")).toBeUndefined();
     expect(contextText(el, "receipt") ?? "").not.toContain("Bar printer");
   });
 
@@ -575,14 +560,14 @@ describe("till-equipment-dialog", () => {
         expect(refreshed.value).toBe("");
         expect(refreshed.options.map((option) => option.value)).toEqual(["", "R1"]);
         expect(optionLabels(refreshed).join(" ")).not.toContain("Reader two");
-        expect(contextText(el, "card_terminal")).toBe(t("equipment.from_default"));
+        expect(contextText(el, "card_terminal")).toBeUndefined();
       } finally {
         setLocale("en");
       }
     },
   );
 
-  it("a chosen reader deleted elsewhere reads as Use default once the list is read again, with no switched-off or held entry for it", async () => {
+  it("a chosen reader deleted elsewhere reads as Inherit once the list is read again, with no switched-off or held entry for it", async () => {
     const el = await mountDialog({
       equipment: equipment({ card_terminal: onItem("card_terminal", R2, [R1, R2], R1) }),
     });
@@ -595,7 +580,7 @@ describe("till-equipment-dialog", () => {
     expect(refreshed.value).toBe("");
     expect(refreshed.options.map((option) => option.value)).not.toContain("R2");
     expect(optionLabels(refreshed).join(" ")).not.toContain("Reader two");
-    expect(resolvedText(el, "card_terminal")).toBe("Reader one");
+    expect(refreshed.options[0]?.valueLabel).toBe("Reader one");
     expect(contextText(el, "card_terminal") ?? "").not.toContain("Reader two");
   });
 

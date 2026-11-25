@@ -80,7 +80,6 @@ describe("payReaderOf", () => {
       id: "r1",
       name: "Lector barra",
       provider: "sumup_cloud",
-      fromDefault: false,
     });
   });
 
@@ -98,7 +97,6 @@ describe("payReaderOf", () => {
       id: "r1",
       name: "Lector barra",
       provider: "stripe_terminal",
-      fromDefault: true,
     });
   });
 
@@ -176,7 +174,6 @@ describe("payPrinterOf", () => {
       kind: "ready",
       id: "p1",
       name: "Barra",
-      fromDefault: false,
     });
   });
 
@@ -191,7 +188,6 @@ describe("payPrinterOf", () => {
       kind: "ready",
       id: "p1",
       name: "Barra",
-      fromDefault: true,
     });
   });
 
@@ -269,10 +265,7 @@ describe("payPrinterOf", () => {
 
     expect(printer).toEqual({ kind: "unset" });
     expect(
-      rowStartsOpen(
-        { kind: "ready", id: "r1", name: "L", provider: "sumup_cloud", fromDefault: true },
-        printer,
-      ),
+      rowStartsOpen({ kind: "ready", id: "r1", name: "L", provider: "sumup_cloud" }, printer),
     ).toBe(true);
   });
 
@@ -289,9 +282,8 @@ describe("rowStartsOpen", () => {
     id: "r1",
     name: "L",
     provider: "sumup_cloud",
-    fromDefault: false,
   };
-  const printed: PayPrinter = { kind: "ready", id: "p1", name: "B", fromDefault: true };
+  const printed: PayPrinter = { kind: "ready", id: "p1", name: "B" };
 
   it.each<[string, PayReader, PayPrinter, boolean]>([
     ["reader ready, printer ready", ready, printed, false],
@@ -318,7 +310,7 @@ describe("rowStartsOpen", () => {
 
 describe("printerWantsRowOpen", () => {
   it.each<[PayPrinter, boolean]>([
-    [{ kind: "ready", id: "p1", name: "B", fromDefault: false }, false],
+    [{ kind: "ready", id: "p1", name: "B" }, false],
     [{ kind: "none_listed" }, false],
     [{ kind: "switched_off", id: "p1", name: "B" }, true],
     [{ kind: "unset" }, true],
@@ -576,7 +568,6 @@ describe("readerReasonOf: the line above the open row", () => {
       id: "r2",
       name: "Lector 2",
       provider: "sumup_cloud",
-      fromDefault: false,
     };
     expect(readerReasonOf(ready, taken)).toBeNull();
     expect(readerReasonOf(none, null)).toBeNull();

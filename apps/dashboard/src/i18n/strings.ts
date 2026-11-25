@@ -1462,9 +1462,9 @@ export const en = {
   "venue_settings.card.defaults": "Defaults",
   "venue_settings.card.privacy": "Privacy",
   "venue_privacy.notice_url": "Privacy notice web page",
-  "venue_privacy.notice_url_placeholder": "https://example.com/privacy",
+  "venue_privacy.notice_url_placeholder": "e.g. https://example.com/privacy",
   "venue_privacy.email": "Privacy email",
-  "venue_privacy.email_placeholder": "privacy@example.com",
+  "venue_privacy.email_placeholder": "e.g. privacy@example.com",
   "venue_privacy.web_address_invalid":
     "Enter the page's full web address, starting with https:// or http://, with no spaces and no user name or password, such as https://example.com/privacy.",
   "venue_privacy.email_invalid": "Enter an email address such as privacy@example.com.",
@@ -1554,6 +1554,7 @@ export const en = {
   "email.settings.authentication": "Use authentication",
   "email.settings.server": "Mail server",
   "email.settings.port": "Port",
+  "email.settings.port_hint": "e.g. {port}",
   "email.settings.encryption": "Encryption",
   "email.settings.user": "User",
   "email.settings.password": "Password",
@@ -2005,7 +2006,7 @@ export const en = {
   "kitchen.make_default": "Make default",
   "kitchen.default_badge": "Default",
   "kitchen.courses_title": "Courses",
-  "courses.name_hint": "For example, Starters",
+  "courses.name_hint": "e.g. Starters",
   "courses.help_label": "Set up courses",
   "courses.help_guide": "Courses guide",
   "courses.help":
@@ -2851,7 +2852,7 @@ export const en = {
   "invoice_customer.identifier.residence-certificate": "Residence certificate",
   "invoice_customer.identifier.other-document": "Other document",
   "invoice_customer.tax_id": "Tax number",
-  "invoice_customer.tax_id_hint": "For example ES12345678Z",
+  "invoice_customer.tax_id_hint": "e.g. ES12345678Z",
   "invoice_customer.tax_id_invalid":
     "Use only letters and digits; spaces, dots, hyphens and an ES at the start are ignored.",
   "invoice_customer.find": "Find",
@@ -3324,7 +3325,7 @@ export const en = {
   "device_profiles.form_factor.tablet-landscape": "Handheld tablet",
   "device_profiles.form_factor.kds": "Prep station display",
   "device_profiles.inactivity_timeout_label": "Auto-logout after (minutes)",
-  "device_profiles.kitchen_inactivity_hint": "For example, 30. Leave blank for never.",
+  "device_profiles.kitchen_inactivity_hint": "e.g. 30. Leave blank for never.",
   "device_profiles.err_inactivity":
     "Enter minutes with one decimal mark, or leave blank for never.",
   "device_profiles.where_heading": "Where it serves",
@@ -6223,9 +6224,9 @@ export const es: Record<StringKey, string> = {
   "venue_settings.card.defaults": "Valores predeterminados",
   "venue_settings.card.privacy": "Privacidad",
   "venue_privacy.notice_url": "Página web del aviso de privacidad",
-  "venue_privacy.notice_url_placeholder": "https://ejemplo.es/privacidad",
+  "venue_privacy.notice_url_placeholder": "p. ej. https://ejemplo.es/privacidad",
   "venue_privacy.email": "Correo de privacidad",
-  "venue_privacy.email_placeholder": "privacidad@ejemplo.es",
+  "venue_privacy.email_placeholder": "p. ej. privacidad@ejemplo.es",
   "venue_privacy.web_address_invalid":
     "Introduce la dirección web completa de la página, que empiece por https:// o http://, sin espacios y sin nombre de usuario ni contraseña, como https://ejemplo.es/privacidad.",
   "venue_privacy.email_invalid": "Introduce un correo electrónico como privacidad@ejemplo.es.",
@@ -6371,6 +6372,7 @@ export const es: Record<StringKey, string> = {
   "email.settings.authentication": "Usar autenticación",
   "email.settings.server": "Servidor de correo",
   "email.settings.port": "Puerto",
+  "email.settings.port_hint": "p. ej. {port}",
   "email.settings.encryption": "Cifrado",
   "email.settings.user": "Usuario",
   "email.settings.password": "Contraseña",
@@ -6835,7 +6837,7 @@ export const es: Record<StringKey, string> = {
   "kitchen.make_default": "Hacer predeterminada",
   "kitchen.default_badge": "Predeterminada",
   "kitchen.courses_title": "Orden de platos",
-  "courses.name_hint": "Por ejemplo, Entradas",
+  "courses.name_hint": "p. ej. Entradas",
   "courses.help_label": "Configurar el orden de platos",
   "courses.help_guide": "Guía del orden de platos",
   "courses.help":
@@ -7711,7 +7713,7 @@ export const es: Record<StringKey, string> = {
   "invoice_customer.identifier.residence-certificate": "Certificado de residencia",
   "invoice_customer.identifier.other-document": "Otro documento",
   "invoice_customer.tax_id": "NIF",
-  "invoice_customer.tax_id_hint": "Por ejemplo, ES12345678Z",
+  "invoice_customer.tax_id_hint": "p. ej. ES12345678Z",
   "invoice_customer.tax_id_invalid":
     "Usa solo letras y números; se ignoran los espacios, los puntos, los guiones y un ES al principio.",
   "invoice_customer.find": "Buscar",
@@ -8183,7 +8185,7 @@ export const es: Record<StringKey, string> = {
   "device_profiles.form_factor.tablet-landscape": "Tableta de mano",
   "device_profiles.form_factor.kds": "Pantalla de estación",
   "device_profiles.inactivity_timeout_label": "Cierre de sesión automático (minutos)",
-  "device_profiles.kitchen_inactivity_hint": "Por ejemplo, 30. Deja el campo vacío para nunca.",
+  "device_profiles.kitchen_inactivity_hint": "p. ej. 30. Deja el campo vacío para nunca.",
   "device_profiles.err_inactivity":
     "Introduce minutos con un solo separador decimal, o deja el campo vacío para nunca.",
   "device_profiles.where_heading": "Dónde sirve",

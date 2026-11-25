@@ -21,7 +21,7 @@ import type {
 } from "@waitron/ui";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { compareDecimal, decimal, formatMoney, toScale } from "@waitron/shared";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import {
   lineGross,
   offeredListsOf,
@@ -43,6 +43,7 @@ import type {
   OfferedExtraItem,
   OfferedExtrasList,
   OfferedOptionsList,
+  TillCourse,
   TillProduct,
 } from "../api/client.js";
 
@@ -298,7 +299,7 @@ export class TillModifierPicker extends LitElement {
   @property({ type: Boolean }) withNote = false;
 
   @property({ attribute: false }) initialCourse?: string;
-  @property() coursePlaceholder = "";
+  @property({ attribute: false }) courseSnapshot?: TillCourse;
   @property({ attribute: false }) courseChoices: readonly ComboboxOption[] = [];
   @property({ type: Boolean }) disabled = false;
   @property({ type: Boolean }) lineDetails = false;
@@ -546,6 +547,27 @@ export class TillModifierPicker extends LitElement {
   get #selectedProduct(): TillProduct {
     const variant = this.#chosenVariant;
     return variant === undefined ? this.product : productAsVariant(this.product, variant);
+  }
+
+  #courseName(id: string | null | undefined): string {
+    return (
+      this.courseChoices.find((choice) => choice.value === id)?.label ??
+      (this.courseSnapshot?.id === id ? this.courseSnapshot?.name : undefined) ??
+      t("equipment.none")
+    );
+  }
+
+  #courseOptions(): ComboboxOption[] {
+    const valueLabel = this.#courseName(this.#selectedProduct.courseId);
+    return [
+      {
+        value: "",
+        label: fill(t("inherit.value"), { value: valueLabel }),
+        valueLabel,
+        inherited: true,
+      },
+      ...this.courseChoices,
+    ];
   }
 
   #countOf(listId: string, productId: string): number {
@@ -883,11 +905,12 @@ export class TillModifierPicker extends LitElement {
                       ?preserve-order=${true /* Preserve configured course position. */}
                       name="course"
                       label=${`${t("table.course_label")} · ${productName(this.product)}`}
-                      placeholder=${this.coursePlaceholder || this.courseChoices.find((choice) => choice.value === "")?.label || ""}
+                      placeholder=${this.#courseName(this.courseId)}
+                      inherited-suffix=${t("inherit.suffix")}
                       search="auto"
                       searchPlaceholder=${t("form.combobox_search")}
                       noResultsLabel=${t("form.combobox_no_results")}
-                      .options=${this.courseChoices}
+                      .options=${this.#courseOptions()}
                       .value=${this.courseId}
                       @wt-change=${(event: CustomEvent<{ value: string }>) => {
                         event.stopPropagation();
@@ -895,7 +918,10 @@ export class TillModifierPicker extends LitElement {
                           !this.isConnected ||
                           !this.active ||
                           this.disabled ||
-                          !this.courseChoices.some((choice) => choice.value === event.detail.value)
+                          (event.detail.value !== "" &&
+                            !this.courseChoices.some(
+                              (choice) => choice.value === event.detail.value,
+                            ))
                         )
                           return;
                         this.courseId = event.detail.value;

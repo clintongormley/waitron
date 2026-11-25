@@ -6687,7 +6687,7 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
 
       expect(row(el).open).toBe(false);
       expect(await rowSummary(el)).toContain(
-        t("pay_equipment.ticket_at_default").replace("{printer}", "Terraza"),
+        t("pay_equipment.ticket_at").replace("{printer}", "Terraza"),
       );
       expect(printerWarning(el)).toBeUndefined();
       await paid(el);

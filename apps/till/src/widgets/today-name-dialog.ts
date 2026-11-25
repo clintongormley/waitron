@@ -200,7 +200,7 @@ export class TillTodayNameDialog extends LitElement {
           autocomplete="off"
           .maxlength=${PARTY_NAME_MAX}
           .label=${t("floor.rename_label")}
-          .placeholder=${this.#placeholder.placeholder}
+          .inherited=${{ value: this.#placeholder.placeholder, suffix: t("inherit.suffix") }}
           .value=${live(this.value)}
           .disabled=${this.busy}
           .error=${fieldError}

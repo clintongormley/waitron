@@ -180,7 +180,7 @@ export class TillPartyNameDialog extends LitElement {
           autocomplete="off"
           .maxlength=${PARTY_NAME_MAX}
           .label=${t("table.name_label")}
-          .placeholder=${this.#placeholder.placeholder}
+          .inherited=${{ value: this.#placeholder.placeholder, suffix: t("inherit.suffix") }}
           .value=${live(this.value)}
           .error=${error}
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(event)}

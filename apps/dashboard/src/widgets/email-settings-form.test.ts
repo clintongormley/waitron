@@ -476,8 +476,8 @@ it("suggests a port for the encryption without replacing the entered port", asyn
   const port = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=port]")!;
   const encryption = el.shadowRoot!.querySelector("[data-test=encryption]")!;
   for (const [value, placeholder] of [
-    ["starttls", "587"],
-    ["tls", "465"],
+    ["starttls", "e.g. 587"],
+    ["tls", "e.g. 465"],
   ]) {
     encryption.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),

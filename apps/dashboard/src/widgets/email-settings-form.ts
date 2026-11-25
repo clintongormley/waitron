@@ -24,7 +24,7 @@ import {
   type EmailSettingsView,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 
@@ -275,7 +275,7 @@ export class EmailSettingsForm extends LitElement {
       label=${t(`email.settings.${field}`)}
       .value=${this.values[field]}
       type=${field === "password" ? (this.passwordVisible ? "text" : "password") : field === "from" ? "email" : "text"}
-      placeholder=${field === "port" ? (this.values.encryption === "tls" ? "465" : "587") : ""}
+      placeholder=${field === "port" ? fill("email.settings.port_hint", { port: this.values.encryption === "tls" ? "465" : "587" }) : ""}
       inputmode=${field === "port" ? "numeric" : "text"}
       autocomplete="off"
       ?required=${["server", "port", "from"].includes(field) || (this.values.authenticate && ["user", "password"].includes(field))}

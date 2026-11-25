@@ -458,8 +458,8 @@ it("suggests a port for the encryption without replacing the entered port", asyn
   const port = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=port]")!;
   const encryption = el.shadowRoot!.querySelector("[data-test=encryption]")!;
   for (const [value, placeholder] of [
-    ["starttls", "587"],
-    ["tls", "465"],
+    ["starttls", "e.g. 587"],
+    ["tls", "e.g. 465"],
   ]) {
     encryption.dispatchEvent(
       new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
@@ -476,7 +476,7 @@ it("shows one consistent port example for the selected encryption", async () => 
   const port = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=port]")!;
   await port.updateComplete;
   expect(port.shadowRoot!.textContent).not.toContain("587");
-  expect(port.shadowRoot!.querySelector("input")!.placeholder).toBe("465");
+  expect(port.shadowRoot!.querySelector("input")!.placeholder).toBe("e.g. 465");
 });
 it.each([
   ["en-GB", "/help/en/email#test-results"],

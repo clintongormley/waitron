@@ -119,6 +119,24 @@ function courseDraft() {
     });
   return store;
 }
+it("keeps manual placement when fixing or inheriting the same course", () => {
+  const store = courseDraft();
+  const line = store.lines[0]!;
+  line.product = { ...line.product, courseId: mains.id };
+  delete line.courseId;
+  delete line.course;
+
+  for (const course of [
+    { id: mains.id, value: mains },
+    { id: undefined, value: undefined },
+  ]) {
+    expect(store.setLineDetails(0, { ...change, quantity: "2", course })).toBe(true);
+    expect(line.courseId).toBe(course.id);
+    expect(line.place).toEqual({ kind: "fire" });
+    expect(store.lines[1]!.place).toEqual({ kind: "new", slot: 1 });
+  }
+});
+
 it("A738 a combined course change inserts an earlier group and shifts its neighbour once", () => {
   const store = courseDraft();
   const line = store.lines[0]!;

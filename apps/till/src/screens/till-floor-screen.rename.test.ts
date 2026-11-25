@@ -159,7 +159,7 @@ async function pressSave(opened: HTMLElementTagNameMap["till-today-name-dialog"]
 const shown = (opened: HTMLElementTagNameMap["till-today-name-dialog"]) => ({
   heading: opened.shadowRoot!.querySelector("wt-dialog")!.heading,
   value: fieldOf(opened).value,
-  placeholder: fieldOf(opened).placeholder,
+  inherited: fieldOf(opened).inherited?.value,
   hint: fieldOf(opened).hint,
 });
 
@@ -195,7 +195,7 @@ describe("till-floor-screen: Rename", () => {
     expect(shown(opened)).toEqual({
       heading: "Rename Bar",
       value: "",
-      placeholder: "Bar",
+      inherited: "Bar",
       hint: "",
     });
     const commit = vi.spyOn(opened, "commit");
@@ -216,7 +216,7 @@ describe("till-floor-screen: Rename", () => {
     expect(shown(await pressRename(el, "bar"))).toEqual({
       heading: "Cambiar el nombre de Bar",
       value: "",
-      placeholder: "Bar",
+      inherited: "Bar",
       hint: "",
     });
   });
@@ -226,12 +226,12 @@ describe("till-floor-screen: Rename", () => {
     expect(shown(await pressRename(el, "bar"))).toEqual({
       heading: "Rename Window",
       value: "Window",
-      placeholder: "Bar",
+      inherited: "Bar",
       hint: "",
     });
   });
 
-  it("on a member of an unnamed group heads the window with the group's name and shows it as the placeholder", async () => {
+  it("on a member of an unnamed group heads the window with the group's name and shows it as inherited", async () => {
     const api = stubApi();
     const el = await mount(group(), api);
 
@@ -239,7 +239,7 @@ describe("till-floor-screen: Rename", () => {
     expect(shown(opened)).toEqual({
       heading: "Rename Bar+Counter 3+Counter 4+Counter 5",
       value: "",
-      placeholder: "Bar+Counter 3+Counter 4+Counter 5",
+      inherited: "Bar+Counter 3+Counter 4+Counter 5",
       hint: "",
     });
 
@@ -248,7 +248,7 @@ describe("till-floor-screen: Rename", () => {
     expect(api.nameToday).toHaveBeenCalledExactlyOnceWith("c4", "García birthday", 7);
   });
 
-  it("shows a group's normal name from its tables' names for today as the placeholder", async () => {
+  it("shows a group's normal name from its tables' names for today as inherited", async () => {
     const el = await mount(
       [
         table("bar", "Bar", 2, { joinId: "g" }),
@@ -259,12 +259,12 @@ describe("till-floor-screen: Rename", () => {
     expect(shown(await pressRename(el, "bar"))).toEqual({
       heading: "Rename Bar+Window",
       value: "",
-      placeholder: "Bar+Window",
+      inherited: "Bar+Window",
       hint: "",
     });
   });
 
-  it("on a group named García birthday starts from that name and shows the normal group name as the placeholder", async () => {
+  it("on a group named García birthday starts from that name and shows the normal group name as inherited", async () => {
     const el = await mount(
       group({
         bar: { joinName: "García birthday" },
@@ -277,7 +277,7 @@ describe("till-floor-screen: Rename", () => {
     expect(shown(await pressRename(el, "c3"))).toEqual({
       heading: "Rename García birthday",
       value: "García birthday",
-      placeholder: "Bar+Counter 3+Counter 5+Window",
+      inherited: "Bar+Counter 3+Counter 5+Window",
       hint: "",
     });
   });
@@ -669,7 +669,7 @@ describe("till-floor-screen: Rename", () => {
     expect(api.nameToday).toHaveBeenCalledExactlyOnceWith("c4", "García birthday", 7);
   });
 
-  it("heads the window and sets its placeholder from each floor read, keeping what the waiter typed", async () => {
+  it("heads the window and sets its inherited name from each floor read, keeping what the waiter typed", async () => {
     const el = await mount(group(), stubApi());
     const opened = await pressRename(el, "c4");
     await typeName(opened, "García birthday");
@@ -683,7 +683,7 @@ describe("till-floor-screen: Rename", () => {
     expect(shown(opened)).toEqual({
       heading: "Rename Terrace",
       value: "García birthday",
-      placeholder: "Bar+Corner+Counter 4+Counter 5",
+      inherited: "Bar+Corner+Counter 4+Counter 5",
       hint: "",
     });
   });
@@ -741,7 +741,7 @@ describe("till-floor-screen: Rename", () => {
     expect(opened.busy).toBe(true);
   });
 
-  it("keeps the heading and placeholder shown at Save while the name is sent", async () => {
+  it("keeps the heading and inherited name shown at Save while the name is sent", async () => {
     const api = stubApi();
     holdAnswer(api);
     const el = await mount(group(), api);
@@ -757,7 +757,7 @@ describe("till-floor-screen: Rename", () => {
     expect(opened.busy).toBe(true);
     expect(shown(opened)).toMatchObject({
       heading: "Rename Bar+Counter 3+Counter 4+Counter 5",
-      placeholder: "Bar+Counter 3+Counter 4+Counter 5",
+      inherited: "Bar+Counter 3+Counter 4+Counter 5",
       hint: "",
     });
   });
@@ -781,7 +781,7 @@ describe("till-floor-screen: Rename", () => {
     expect(opened.refusal).toEqual({ code: "table.label_taken", field: "name" });
     expect(shown(opened)).toMatchObject({
       heading: "Rename Bar+Corner+Counter 4+Counter 5",
-      placeholder: "Bar+Corner+Counter 4+Counter 5",
+      inherited: "Bar+Corner+Counter 4+Counter 5",
       hint: "",
     });
     expect(floorRefusal(el)).toBeNull();
