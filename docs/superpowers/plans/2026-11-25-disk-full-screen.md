@@ -1,37 +1,40 @@
 # Full-screen disk warning
 
-Staff see **Disk full** and **Waitron cannot operate.** on the same red, full-viewport layout as
-`till-main-server-strip` when the box stops for lack of space. In Spanish, use **Disco lleno** and
-**Waitron no puede funcionar.** The till adds **Tell a manager** / **Avisa al encargado**. The
-owner’s 24 November 22:15 wording is recorded in `docs/backlog/box.md` under DISK-FULL-SCREEN.
-The owner sees the English and Spanish till and dashboard previews, at phone and desktop widths
-in light and dark, before any build. The watcher clears the reviewed plan.
+Show **Disk full. Waitron cannot operate.** / **Disco lleno. Waitron no puede funcionar.** on the
+red layout of `apps/till/src/widgets/main-server-strip.ts`. The owner’s request is recorded in
+`docs/backlog/box.md`. Build after the owner approves the pictures and resolves till sign-in and
+sign-out, and the watcher clears the reviewed plan in Lane I’s `questions.md`.
 
-- **Shared window.** Add a `viewport` size to `packages/ui/src/components/wt-modal.ts`. Reuse its
-  native modal, named heading and non-dismissible setting. Match the outage’s centered column,
-  danger colors, full bleed and scrollable content. Use the current UI tokens and button. In
-  `wt-modal.test.ts` and `wt-modal.a11y.test.ts`, check screen coverage, name, focus containment,
-  Escape and both themes. Keep the outage widget’s restart and spare actions intact.
-- **Till.** In `apps/till/src/till-app.ts` and `screens/till-lock-screen.ts`, replace the full-disk
-  row on trading tills, handhelds and their PIN screen using the same box-owned equipment notice.
-  Keep the equipment polls, low-space and other notices, and payment/write responses. Let the
-  existing no-answer panel take precedence while it offers recovery. In `till-app.notices.test.ts`,
-  pin both languages, phone, the PIN screen, an unavailable notice source, and resumed reads clearing
-  the window. Assert a low-space reading alone never opens it.
-- **Dashboard.** In `apps/dashboard/src/dashboard-app.ts`, replace the bar with the modal at the
-  shell level, including when Floor plan is open. Keep the passive stop read and current permission
-  routing. **Open Box status** takes an eligible user to that page. **Sign in as a manager** tells
-  other users that it signs them out, then opens the existing sign-in with Box status as destination.
-  The window stays off Box status and sign-in. Preserve the current unsaved-changes question and
-  focus after navigation. Remove the long bar’s formatter and obsolete copy tests, while retaining
-  the alert text and the Box status recovery rows. In `dashboard-app.disk-stop.test.ts` and the
-  app’s accessibility suite, check both actions, Box status, sign-in, a dirty draft, an already
-  open editor, and recovery without a reload.
-- **Words and verification.** Update both apps’ `i18n/strings.ts`, the EN/ES `box-status.md` and
-  `till-notices.md` guides, the current convention, and the DISK-FULL-SCREEN entries in the two
-  backlog files. Keep the existing disk stop API and its response, login rules, recovery work and
-  fiscal/payment gates. Use the existing focused Chromium suites and guide/link checks, then look
-  at the actual built screens in EN/ES, both themes and both widths before finishing.
+- **Shared window.** Add a small `wt-stop-screen` extending `WtDialog` in `packages/ui`. Reuse
+  its native modal, Escape guard and focus handling. Borrow the outage’s full-bleed danger colors,
+  centered scrollable column and inverse button using existing tokens. Document the primitive in
+  `design-system.md`. Its browser and axe tests cover full viewport size, accessible name,
+  Escape, text-only and action states, and token painting in both themes.
+- **Till and handheld.** In `till-app.ts` and `screens/till-lock-screen.ts`, use the existing
+  box-owned equipment notice and polling. Keep **Tell a manager** / **Avisa al encargado**, the
+  existing exception in `conventions-ui.md`. Proposed for owner review: put the modal on trading
+  tills with **Log out** / **Cerrar sesión** using the current leave and sign-out flow. Keep the
+  PIN screen and its disk notice available. The modal covers open orders and bills. Keep KDS and
+  standalone attendance/clock screens on their current notice treatment. Let no-answer recovery,
+  in-flight or unresolved payment/refund controls, their result, and the leave question remain
+  above or ahead of the disk window. In `till-app.notices.test.ts` and the existing payment/refund
+  suites, verify the reader Stop and charged-card message stay usable, plus both languages,
+  phone, low space, a failed notice read and clearing the stop.
+- **Dashboard.** Replace the long bar in `dashboard-app.ts` with the modal at shell level. Keep
+  the passive status read and permissions. Use **Open Box status** or **Sign in as a manager**,
+  with **This signs you out.** / **Se cerrará tu sesión.** on the second path. Exempt Box status,
+  sign-in, and Check card payments, which a till’s charged-card message links to directly. Keep
+  the existing leave decision above the warning and focus the destination after navigation.
+  In `dashboard-app.disk-stop.test.ts`, `dashboard-app.test.ts` and the app’s axe suite, test both
+  actions, the three exemptions, the dirty draft, recovery after a successful passive read, and
+  that the red window covers Floor plan whether the editor opens before or during the stop.
+- **Words and checks.** Update both apps’ strings, both languages of Box status and Till notices,
+  `conventions-ui.md`, and the backlog entry and pointer. Remove the dashboard bar formatter,
+  its copy-only tests and their entry in `apps/dashboard/test-durations.json`. Keep the dashboard
+  word guard on the new strings and keep the backup alert in the bell. Leave the HTTP response
+  shape and stop calculation intact to keep this change in the UI. A failed read holds the last
+  stop until a successful refresh. Run the focused Chromium suites and guide/link guards, then
+  inspect the built warning in English and Spanish, light and dark, at phone and desktop widths.
 
-Estimate about 130 added product lines and 200 test lines, plus strings and docs. Reuse the existing
-fixtures and replace the assertions that specifically pinned the old bar and its copy.
+Estimate 155 added product lines and 245 test lines, plus words and docs. Reuse existing fixtures
+and retain behavior assertions when replacing checks of the old bar.
