@@ -203,16 +203,11 @@ every unpaired device from the list).
 
 ## Printing over RFCOMM from INSIDE the print-agent container (A140)
 
-A real RFCOMM connection
-and print from inside the container under the shipped profile — CI's runners cannot load
-Bluetooth at all — and whether the printer gets every byte before the connection closes. The
-owner printed on channel 1 from the host only. Automatic channel discovery has not run on a real
-printer. image-smoke runs the helper directly with its own
-arguments, not through `RfcommTransport`, and only as far as creating the socket; and
-`scripts/deploy-image-env.test.ts` reads the Dockerfile and `package.json` as text, so it does not
-prove the bundle's default helper path resolves inside the image. The helper's 20 + 20 second
-connect and send timeouts and the agent's 5-second grace (`apps/print-agent/src/rfcomm.ts`) were
-not measured on the box.
+The spare printed a payment slip and receipt through its print agent on 25 November. The
+session measured channel discovery at 3.24–3.34 seconds against that build's three-second limit.
+A1578 still needs a print using the discovered channel and a comparison of the same long receipt
+with immediate and delayed socket close. The helper's 20-second connect and send timeouts and the
+agent's five-second grace also await a box measurement.
 
 ## The owner's Bluetooth printer was listed only under Show all devices (A137) — the cause on the box is not confirmed
 
@@ -383,10 +378,12 @@ Hardware and inbox checks to complete in the owner session.
   and once joined the page answers only its own machine. Revisit only if the page ever asks for a
   password.
 - **Bluetooth command limits (watcher, 2026-11-16 03:02).** One pending operation per agent;
-  exact retries keep their ID and deadline. Channel discovery caches a successful lookup, including
-  an inconclusive answer's channel-1 fallback; a failed send drops it for the next job. The server
-  remembers only the last eight expired unpair command IDs across all agents, until accepted or
-  evicted. A late result can clear the discovery pairing report while that command is remembered.
+  exact retries keep their ID and deadline. The agent gives channel discovery five seconds and
+  remembers the channel after a successful send, including channel 1 after a failed lookup. Success
+  means the kernel accepted the bytes. If paper never comes out, the agent still keeps the channel
+  until a send fails or the agent restarts. The server remembers only the last eight expired unpair
+  command IDs across all agents, until accepted or evicted. A late result can clear the discovery
+  pairing report while that command is remembered.
   **Delete** ends waiting jobs immediately. If a printer was unpaired outside Waitron, delete
   it to end its waiting jobs.
   [Plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-bluetooth-pairing-commands.md).

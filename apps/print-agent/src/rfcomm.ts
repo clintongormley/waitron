@@ -38,7 +38,7 @@ export class RfcommTransport implements Transport {
     this.script = options.script ?? fileURLToPath(new URL("./rfcomm-send.py", import.meta.url));
     this.channel = options.channel;
     this.sdptool = options.sdptool ?? "sdptool";
-    this.lookupTimeoutMs = options.lookupTimeoutMs ?? 3000;
+    this.lookupTimeoutMs = options.lookupTimeoutMs ?? 5000;
     this.timeoutMs = options.timeoutMs ?? RFCOMM_TIMEOUT_MS;
     this.graceMs = options.graceMs ?? RFCOMM_GRACE_MS;
   }
@@ -61,9 +61,7 @@ export class RfcommTransport implements Transport {
               .map((match) => Number(match[1]))
               .filter((channel) => channel >= 1 && channel <= 30),
           );
-          const channel = channels.size === 1 ? channels.values().next().value! : RFCOMM_CHANNEL;
-          this.channels.set(address, channel);
-          resolve(channel);
+          resolve(channels.size === 1 ? channels.values().next().value! : RFCOMM_CHANNEL);
         },
       );
     });
@@ -86,7 +84,10 @@ export class RfcommTransport implements Transport {
         args,
         { timeout: limit, killSignal: "SIGKILL", maxBuffer: 1_048_576, encoding: "utf8" },
         (error, _stdout, stderr) => {
-          if (error === null) return resolve();
+          if (error === null) {
+            this.channels.set(address, channel);
+            return resolve();
+          }
           // Only a failure to start the interpreter names the system call.
           if (error.syscall !== undefined) {
             return reject(
