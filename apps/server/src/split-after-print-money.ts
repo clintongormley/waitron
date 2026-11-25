@@ -36,16 +36,6 @@ export async function refuseSplitMoney(tx: Transaction, id: string): Promise<voi
   if (stays !== undefined) throw new AppError("bill.payments_received", { workingOrderId: id });
 }
 
-/** Whether the bill holds a received payment. */
-export async function holdsPayment(tx: Transaction, id: string): Promise<boolean> {
-  const [held] = await tx
-    .select({ id: billPayments.id })
-    .from(billPayments)
-    .where(and(eq(billPayments.workingOrderId, id), eq(billPayments.state, "received")))
-    .limit(1);
-  return held !== undefined;
-}
-
 /**
  * Moves every received payment of the abandoned printed bill `fromBillId` to `toBillId`, the bill
  * reopened from it, where its money now counts, and a card's provider row with it, unlinked from

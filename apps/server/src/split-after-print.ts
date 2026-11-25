@@ -16,6 +16,7 @@ import {
   withIssuanceTransaction,
 } from "@waitron/core";
 import { AppError, stringToThousandths } from "@waitron/shared";
+import { holdsPayment } from "./bill-payments.js";
 import { creditWholeInvoice, type IssuedInvoice } from "./cancel-credit.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
 import { readSplitOrderLabel } from "./receipt-order.js";
@@ -31,11 +32,7 @@ import { carryLineReductions } from "./order-portions.js";
 import { bumpPartyRevision } from "./parties.js";
 import { carryBillSetMenuCopies } from "./set-menu-bill.js";
 import { carryOrderedPeriods } from "./ordered-periods.js";
-import {
-  carryReceivedPayments,
-  holdsPayment,
-  refuseSplitMoney,
-} from "./split-after-print-money.js";
+import { carryReceivedPayments, refuseSplitMoney } from "./split-after-print-money.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   abandonPlacedOrder,
