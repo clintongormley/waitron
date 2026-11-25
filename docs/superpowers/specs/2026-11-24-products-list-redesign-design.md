@@ -49,7 +49,8 @@ Show archived and the Archived state are gone before the list here is built).
 - With no products, keep the toolbar and both **Add product** buttons in List and Tree. Controls
   with nothing to act on stay visible and quiet. Add product is drawn disabled, with the reason,
   while adding is not possible (no unit or no language yet). Open All products' ⋮ to add a category.
-  This follows the owner's 25 November review of the empty List and Tree.
+  The owner asked to keep the toolbar and both Add buttons on 25 November. The watcher added the
+  quiet controls and the All products menu behaviour.
 
 ### 2. The row, the same in both views
 

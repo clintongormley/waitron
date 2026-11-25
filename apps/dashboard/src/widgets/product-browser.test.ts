@@ -1169,6 +1169,27 @@ it("searches product names in List and category names in Tree", async () => {
     .toBeVisible();
 });
 
+it("lets staff clear a Tree search after switching to an empty List", async () => {
+  const el = await mountBrowser({ products: [] });
+  await typeSearch(el, "Drinks");
+  await chooseView(el, "List");
+  const search = page.getByRole("searchbox", { name: "Search products", exact: true });
+  await expect.element(search).toHaveValue("Drinks");
+  await expect.element(search).toBeEnabled();
+  await search.fill("");
+  el.products = [PRODUCTS[0]!];
+  expect(await rowKeys(el)).toEqual(["cola"]);
+});
+
+it("returns focus to the view switch when clearing a search on an empty Tree", async () => {
+  const el = await mountBrowser({ categories: [], products: [PRODUCTS[0]!] });
+  await typeSearch(el, "Cola");
+  el.products = [];
+  await tableOf(el);
+  await page.getByRole("button", { name: "Clear search and filters" }).click();
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(viewControl(el)));
+});
+
 it("forgets a Category sort when leaving List and restores Name after a reload", async () => {
   localStorage.setItem("waitron.products.view", "list");
   const el = await mountBrowser();

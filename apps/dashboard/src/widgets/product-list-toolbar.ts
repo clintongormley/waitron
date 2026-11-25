@@ -92,7 +92,7 @@ export function productSearchAndSelect(
   selecting: boolean,
   select: () => void,
   view: ProductsView,
-  disabled: boolean,
+  noRows: boolean,
 ) {
   return html`<wt-icon-button
       slot="toolbar-start"
@@ -100,7 +100,7 @@ export function productSearchAndSelect(
       label=${t("folders.select")}
       icon="select-rows"
       .pressed=${selecting}
-      .disabled=${disabled}
+      .disabled=${noRows}
       @click=${select}
     ></wt-icon-button>
     <wt-input
@@ -108,7 +108,7 @@ export function productSearchAndSelect(
       name="menu-search"
       type="search"
       label=${t(view === "list" ? "product.search" : "folders.search")}
-      .disabled=${disabled}
+      .disabled=${noRows && search === ""}
       .value=${search}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();

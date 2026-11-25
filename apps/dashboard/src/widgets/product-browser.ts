@@ -363,7 +363,11 @@ export class ProductBrowser extends LitElement {
     this.search = "";
     this.hiddenSave = null;
     this.#list()?.clearFilters();
-    this.renderRoot.querySelector<HTMLElement>('wt-input[name="menu-search"]')?.focus();
+    if (this.#hasRowsToActOn) {
+      this.renderRoot.querySelector<HTMLElement>('wt-input[name="menu-search"]')?.focus();
+    } else {
+      this.renderRoot.querySelector("wt-segmented-control")?.focus();
+    }
     if (saved) void this.updateComplete.then(() => this.#list()?.revealProduct(saved.id));
   };
 
@@ -1078,13 +1082,13 @@ export class ProductBrowser extends LitElement {
           remove: () => void this.#openDelete(),
           done: () => void this.#leaveSelection(),
         })}
-        ${this.routingFailed && this.categories.length ? productRoutingFeedback("toolbar-bottom") : nothing}
+        ${this.routingFailed && this.categories.length ? productRoutingFeedback() : nothing}
         ${
           this.hiddenSave === null
             ? clearProductSearch(this.#clearProductSearch, "no-matches-action")
-            : hiddenProductSave(this.hiddenSave.name, this.#clearProductSearch, "toolbar-bottom")
+            : hiddenProductSave(this.hiddenSave.name, this.#clearProductSearch)
         }
-        ${productListActionFeedback(this.#actionNotice, !this.operation && !this.colorTarget, "toolbar-bottom")}
+        ${productListActionFeedback(this.#actionNotice, !this.operation && !this.colorTarget)}
       </dashboard-product-list>
       ${emptyTree ? html`<div class="empty-tree-action"><slot name="empty-action"></slot></div>` : nothing}
       ${this.#operationDialog()}<dashboard-category-color-form

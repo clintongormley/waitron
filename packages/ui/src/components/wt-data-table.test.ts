@@ -2598,6 +2598,19 @@ test("an empty source table shows only its empty state, even with an initial fil
   expect(el.shadowRoot!.querySelector(".empty")!.textContent).toContain("No users yet");
 });
 
+test("a table that keeps its empty toolbar keeps an open Filters panel after its last row leaves", async () => {
+  const el = await tableS({ columns: withStatus, keepToolbarWhenEmpty: true });
+  const root = el.shadowRoot!;
+  const trigger = root.querySelector<HTMLButtonElement>(".filters-trigger")!;
+  trigger.click();
+  await el.updateComplete;
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  el.rows = [];
+  await el.updateComplete;
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(true);
+});
+
 test("a filter on its initial choice counts in the panel badge and can be cleared", async () => {
   const status = withStatus[1]!;
   const el = await tableS({

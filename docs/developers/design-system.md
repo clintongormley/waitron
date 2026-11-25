@@ -1537,10 +1537,10 @@ Add a device button, including while empty (owner, A413, 2026-10-08). Menus hide
 leaves the slot empty. A widget that draws a table with an Add button for a screen passes the button through:
 `apps/dashboard/src/widgets/staff-list.ts` forwards the slot
 (`<slot name="empty-action" slot="empty-action">`). Products forwards it through the browser and list.
-With no products, both views show **Add product** beside the heading and under the toolbar.
-In List the second button sits inside the empty box. If a unit or content language is missing,
-each button is disabled with the reason beside it. Both open the product editor
-without a category and return focus to the heading's button after the last dialog closes. Tree keeps
+With no products, both views show **Add product** beside the heading. List shows a second button
+inside the empty box, and Tree shows it below the table. If a unit or content language is missing,
+each button is disabled with the reason beside it. Both open the product editor without a category.
+Tree keeps
 its category and All products menus, and their **Add product** actions open the editor in place.
 A menu's Structure tab has a root row like it, whose ⋮ holds the menu's top-level adds, and an empty
 menu's box repeats them as buttons (below, after tree mode). When the first item made from the slotted button empties the slot,

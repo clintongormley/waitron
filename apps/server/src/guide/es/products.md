@@ -23,8 +23,7 @@ variantes que no están a la venta. Un plato con una variante no disponible pued
 Cambia a **Árbol** para recorrer u organizar las categorías. Las categorías siguen en orden
 alfabético cuando ordenas los productos y se abren si tienen coincidencias al filtrar. Para añadir
 un producto directamente en una categoría, elige **Añadir producto** en su menú ⋮. El botón junto al
-título de la página añade un producto sin categoría. Si aún no hay productos, puedes usar también
-**Añadir producto** debajo de la barra de herramientas en ambas vistas.
+título de la página añade un producto sin categoría.
 
 Si no hay coincidencias o tus opciones ocultan un producto que acabas de guardar, elige **Borrar
 búsqueda y filtros**. Si una categoría vacía nueva desaparece al filtrar en Árbol, elige **Borrar

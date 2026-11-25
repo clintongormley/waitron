@@ -4142,9 +4142,15 @@ describe("menu-screen", () => {
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
     const table = await productTable(el);
+    const visibleAddButtons = () =>
+      [...el.shadowRoot!.querySelectorAll('[data-test="add-product"]')].filter((button) =>
+        button.checkVisibility(),
+      );
     expect(table.checkVisibility()).toBe(false);
+    expect(visibleAddButtons()).toHaveLength(1);
     for (const resolve of pending) resolve([]);
     await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
+    expect(visibleAddButtons()).toHaveLength(2);
   });
 });
 
