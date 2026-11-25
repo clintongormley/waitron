@@ -72,6 +72,14 @@ export type GiveBackApi = GiveBackUnderWayApi &
   Pick<TillApi, "readGiveBack" | "previewGiveBack" | "listAdjustmentReasons" | "listApprovers">;
 export type { GiveBackAsk };
 
+/** What Cancel and refund or Finish table hands on: the window opens on A dish with the dishes
+ * still owed on a cancel ticked, and sends the cancel ids so the cancel's approval covers them
+ * (D9). */
+export interface GiveBackFill {
+  cancellationIds: string[];
+  reasonId: string;
+}
+
 type Draft = {
   lineIds: string[];
   amount: string;
@@ -116,6 +124,7 @@ export class TillGiveBackDialog extends LitElement {
   @property() saleId = "";
   @property() invoiceNumber = "";
   @property() namesLocale = "";
+  @property({ attribute: false }) fill: GiveBackFill | null = null;
   @state() private view: GiveBackView | null = null;
   @state() private loadRefusal: Refusal | null = null;
   @state() private reasons: AdjustmentReason[] | null = null;
@@ -138,6 +147,7 @@ export class TillGiveBackDialog extends LitElement {
   #approval?: Sending;
   #previewRequest = 0;
   #lastStep = "";
+  #filled = false;
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason) =>
@@ -184,6 +194,7 @@ export class TillGiveBackDialog extends LitElement {
     this.loadRefusal = null;
     try {
       this.view = await this.api.readGiveBack(this.saleId, {});
+      this.#fillIn(this.view);
     } catch (error) {
       this.loadRefusal = refusalOf(error);
     }
@@ -235,7 +246,27 @@ export class TillGiveBackDialog extends LitElement {
       ? way.extraLeft
       : "0.00";
   }
-  #choose(purpose: GiveBackPurpose): void {
+  /** Once, on the first read, unless a saved press opened the window elsewhere. */
+  #fillIn(view: GiveBackView): void {
+    const fill = this.fill;
+    if (fill === null || this.#filled || this.step !== null || !view.choices.dishes.available)
+      return;
+    this.#filled = true;
+    const owed = view.lines.filter(
+      (line) =>
+        line.partOf === null &&
+        line.available &&
+        line.cancelled !== null &&
+        positive(line.cancelled.owed),
+    );
+    this.#choose("dishes", {
+      lineIds: owed.map((line) => line.id),
+      amount:
+        owed.length === 0 ? "" : sumDecimals(owed.map((line) => decimal(line.cancelled!.owed))),
+      reasonId: fill.reasonId,
+    });
+  }
+  #choose(purpose: GiveBackPurpose, filled: Partial<Draft> = {}): void {
     const way = this.#offered(purpose).find(usable);
     this.purpose = purpose;
     this.amountTyped = false;
@@ -245,6 +276,7 @@ export class TillGiveBackDialog extends LitElement {
       ...blank(),
       way: way?.way ?? "",
       amount: purpose === "extra" && way !== undefined ? way.extraLeft : "",
+      ...filled,
     };
     this.#scope?.commit(this.draft);
     void this.#preview();
@@ -324,6 +356,9 @@ export class TillGiveBackDialog extends LitElement {
       amount: typedMoney(this.draft.amount)!,
       extra: this.#extra(),
       way: this.draft.way,
+      ...(this.purpose === "dishes" && this.#filled && this.fill!.cancellationIds.length > 0
+        ? { fromCancel: [...this.fill!.cancellationIds] }
+        : {}),
     };
   }
   async #preview(): Promise<void> {

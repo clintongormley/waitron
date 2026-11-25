@@ -1427,6 +1427,112 @@ describe("sending", () => {
   });
 });
 
+describe("opened filled in after a cancel (D9)", () => {
+  const FILL = { cancellationIds: ["cancel-1"], reasonId: "complaint" };
+  async function mountFilled(api = fakeGiveBackApi(), fill = FILL) {
+    const { el } = await mountWidget<TillGiveBackDialog>("till-give-back-dialog", {
+      api,
+      session: new GiveBackSession(SCOPE, api),
+      saleId: "sale-1",
+      invoiceNumber: "A/1042",
+      namesLocale: "en",
+      fill,
+    });
+    await vi.waitFor(() => expect(root(el).querySelector("[data-purpose]")).not.toBeNull());
+    await el.updateComplete;
+    return { el, api };
+  }
+  const radio = (el: TillGiveBackDialog, id: string) =>
+    root(el).querySelector<HTMLInputElement>(`input[name=way][value="${id}"]`)!;
+
+  it("opens on A dish with the dish still owed on a cancel ticked at what it is owed, the cancel's reason and the payment chosen", async () => {
+    const { el, api } = await mountFilled();
+    expect(text(root(el).querySelector("[data-purpose]"))).toBe(t("give_back.dishes"));
+    expect(dish(el, "paella")!.checked).toBe(true);
+    expect(dish(el, "croquetas")!.checked).toBe(false);
+    expect(amountField(el).value).toBe("20.00");
+    expect(
+      root(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox[name=reason]")!
+        .value,
+    ).toBe("complaint");
+    expect(radio(el, "cash").checked).toBe(true);
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    expect(api.previewGiveBack).toHaveBeenLastCalledWith("sale-1", {
+      purpose: "dishes",
+      lineIds: ["paella"],
+      amount: "20.00",
+      extra: "0.00",
+      way: "cash",
+      fromCancel: ["cancel-1"],
+    });
+    expect(root(el).querySelector("[data-pin]")).toBeNull();
+  });
+
+  it("gives the dish back sending the cancel's ids and asks for no PIN", async () => {
+    const { el, api } = await mountFilled();
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    submit(el).click();
+    await vi.waitFor(() => expect(api.giveBack).toHaveBeenCalledOnce());
+    expect(api.giveBack.mock.calls[0]![1]).toMatchObject({
+      request: {
+        purpose: "dishes",
+        lineIds: ["paella"],
+        amount: "20.00",
+        extra: "0.00",
+        way: "cash",
+        fromCancel: ["cancel-1"],
+      },
+      reasonId: "complaint",
+    });
+    expect(api.giveBack.mock.calls[0]![1].override).toBeUndefined();
+    expect(api.listApprovers).not.toHaveBeenCalled();
+  });
+
+  it("chooses the only payment this device can use", async () => {
+    const { el } = await mountFilled(withView({ ways: [{ ...CASH, allowedHere: false }, CARD] }));
+    expect(radio(el, "card-1").checked).toBe(true);
+    expect(radio(el, "cash").disabled).toBe(true);
+    expect(text(root(el).querySelector("[data-way-reason=cash]"))).toBe(
+      t("give_back.way_not_here"),
+    );
+  });
+
+  it("says so when this device cannot take the payment, choosing none and keeping Give back disabled", async () => {
+    const { el, api } = await mountFilled(withView({ ways: [{ ...CASH, allowedHere: false }] }));
+    expect(radio(el, "cash").checked).toBe(false);
+    expect(radio(el, "cash").disabled).toBe(true);
+    expect(text(root(el).querySelector("[data-way-reason=cash]"))).toBe(
+      t("give_back.way_not_here"),
+    );
+    expect(submit(el).disabled).toBe(true);
+    expect(api.previewGiveBack).not.toHaveBeenCalled();
+  });
+
+  it("sends no cancel ids from a window opened without them", async () => {
+    const { el, api } = await mount();
+    await choose(el, "dishes");
+    await tick(el, "paella");
+    await reason(el, "complaint");
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    expect(api.previewGiveBack.mock.lastCall![1]).not.toHaveProperty("fromCancel");
+  });
+
+  it("opens on the choice when A dish cannot be chosen", async () => {
+    const api = withView({
+      choices: { ...VIEW.choices, dishes: { available: false, reason: null } },
+    });
+    const { el } = await mountWidget<TillGiveBackDialog>("till-give-back-dialog", {
+      api,
+      session: new GiveBackSession(SCOPE, api),
+      saleId: "sale-1",
+      namesLocale: "en",
+      fill: FILL,
+    });
+    await vi.waitFor(() => expect(root(el).querySelector("[data-what-for]")).not.toBeNull());
+    expect(root(el).querySelector("[data-purpose]")).toBeNull();
+  });
+});
+
 describe("a give-back still under way", () => {
   it("opens straight onto what is left to do, titled Money back under way", async () => {
     const api = withView({ underWay: UNDER_WAY });

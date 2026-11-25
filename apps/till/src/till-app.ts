@@ -272,6 +272,7 @@ import "./widgets/invoice-correction-dialog.js";
 import type { InvoiceCorrectionCardLeg } from "./widgets/invoice-correction-dialog.js";
 import { InvoiceCorrectionSession } from "./state/invoice-correction.js";
 import "./widgets/give-back-dialog.js";
+import type { GiveBackFill } from "./widgets/give-back-dialog.js";
 import { GiveBackSession } from "./state/give-back.js";
 import type { TillTenderRefundDialog } from "./widgets/tender-refund-dialog.js";
 import type {
@@ -4040,6 +4041,7 @@ export class TillApp extends LitElement {
     session: GiveBackSession;
     corrections: InvoiceCorrectionSession;
     refunds: TenderRefundSession;
+    fill: GiveBackFill | null;
   } | null = null;
   @state() private tenderRefunding: {
     visit: object;
@@ -9568,7 +9570,7 @@ export class TillApp extends LitElement {
             this.api === api
           ) {
             if (then === "correct") this.#openInvoiceCorrection();
-            else this.#openTenderRefund(fill);
+            else this.#openGiveBack(false, fill);
           }
         }
       }
@@ -9896,7 +9898,7 @@ export class TillApp extends LitElement {
 
   /** With `underWay`, opens on a receipt whose give-back is under way, which may have nothing left
    * to start: the window reads it and opens on what is left to do. */
-  #openGiveBack(underWay = false): void {
+  #openGiveBack(underWay = false, fill?: RefundFill): void {
     const receipt = this.historicalReceipt;
     const scope = this.#tenderRefundScope;
     const refunds = this.#tenderRefundSession;
@@ -9907,7 +9909,7 @@ export class TillApp extends LitElement {
       this.givingBack ||
       scope === undefined ||
       refunds === undefined ||
-      (!underWay && !this.giveBackOffered)
+      (!underWay && !this.#offersGiveBack())
     )
       return;
     this.givingBack = {
@@ -9915,6 +9917,10 @@ export class TillApp extends LitElement {
       session: new GiveBackSession(scope, this.api),
       corrections: new InvoiceCorrectionSession(scope, this.api),
       refunds,
+      fill:
+        fill === undefined
+          ? null
+          : { cancellationIds: fill.cancellationIds, reasonId: fill.startReasonId },
     };
   }
 
@@ -9929,6 +9935,7 @@ export class TillApp extends LitElement {
       .session=${open.session}
       .corrections=${open.corrections}
       .refunds=${open.refunds}
+      .fill=${open.fill}
       .capabilities=${this.capabilities}
       @give-back-close=${(event: Event) => {
         event.stopPropagation();

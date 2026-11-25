@@ -12,6 +12,9 @@ import type { TillGiveBackDialog } from "./give-back-dialog.js";
 class GiveBackLeaveApp extends LitElement {
   /** What the next app's window reads. */
   static view = VIEW;
+  /** What the next app's window opens filled in with. */
+  static fill: { cancellationIds: string[]; reasonId: string } | null = null;
+  readonly fill = GiveBackLeaveApp.fill;
   readonly leave = new LeaveController(this);
   readonly api = fakeGiveBackApi(GiveBackLeaveApp.view);
   readonly session = new GiveBackSession(SCOPE, this.api);
@@ -23,6 +26,7 @@ class GiveBackLeaveApp extends LitElement {
         .saleId=${"s1"}
         .invoiceNumber=${"A/1042"}
         .namesLocale=${"en"}
+        .fill=${this.fill}
         @give-back-close=${() => this.closes++}
       ></till-give-back-dialog
       >${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
@@ -34,6 +38,7 @@ afterEach(() => {
   cleanupWidgets();
   localStorage.clear();
   GiveBackLeaveApp.view = VIEW;
+  GiveBackLeaveApp.fill = null;
 });
 
 async function mount() {
@@ -184,4 +189,20 @@ it("closing the under-way view closes the window at once and ends nothing", asyn
   expect(app.shadowRoot!.querySelector("wt-unsaved-changes")?.open ?? false).toBe(false);
   expect(app.api.closeInvoiceCorrection).not.toHaveBeenCalled();
   expect(app.api.fileInvoiceCorrection).not.toHaveBeenCalled();
+});
+
+it("a window filled in after a cancel closes without asking, and asks once a dish is unticked", async () => {
+  GiveBackLeaveApp.fill = { cancellationIds: ["cancel-1"], reasonId: "complaint" };
+  const { app, form } = await mount();
+  await vi.waitFor(() => expect(form.shadowRoot!.querySelector("[data-purpose]")).not.toBeNull());
+  expect(unload()).toBe(false);
+  form
+    .shadowRoot!.querySelector('wt-switch[data-line="paella"]')!
+    .shadowRoot!.querySelector("input")!
+    .click();
+  await form.updateComplete;
+  expect(unload()).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect((await question(app)).open).toBe(true);
+  expect(app.closes).toBe(0);
 });
