@@ -1051,7 +1051,8 @@ This sent-order/history exception follows the owner's 11-November decision 6 in
 
 Allergens and diet labels are frozen into a menu's version when it is published, a variant with
 none of its own taking its parent's, and tills, kitchen screens, tickets and the allergy check read
-them from there: a product edit changes nothing on them until the menu is published (owner, 2026-11-24,
+them from there: a product edit changes nothing on them until the menu is published, or
+[Patch live menu](product-categories.md) puts the product's current values live (owner, 2026-11-24,
 [section 8](../superpowers/specs/2026-11-24-customer-menu-design.md#8-allergens-and-diets-are-published);
 before 2026-11-25 they read the live product). A till's offers carry the frozen values, so a
 declaration edit no longer moves `liveFields`.

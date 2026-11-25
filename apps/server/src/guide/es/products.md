@@ -417,7 +417,8 @@ la vista previa. Tras publicar, comprueba la versión y la hora en el encabezado
 Usa una corrección cuando encuentres un error en la carta publicada, como un precio equivocado,
 mientras los productos ya tienen cambios para la próxima carta que todavía no quieres llevar a la
 caja. Publicar llevaría también esos cambios. Una corrección cambia solo los valores que corriges,
-en la versión publicada de una carta.
+en una sola carta: en su versión publicada y, para alérgenos y dietas, en las versiones programadas
+que queden marcadas.
 
 Busca la carta publicada en **Productos y cartas → Cartas**. Abre el menú de su fila y elige
 **Corregir la carta publicada…**. La ventana muestra los elementos
@@ -444,7 +445,9 @@ con **La carpeta incluida fija este nombre.** debajo, y no se puede cambiar aqu�
 Para corregir alérgenos o etiquetas dietéticas, [cámbialos primero en el
 producto](products.md#allergens) y luego marca **Usar los alérgenos y dietas actuales del producto**
 en su elemento de la corrección. **Revisar** muestra lo que cambia y las versiones programadas que
-difieren del producto: marca las que quieras corregir.
+difieren del producto. Las que aún tienen el valor anterior ya están marcadas: desmarca las que
+quieras dejar como están y marca cualquier otra que quieras corregir. Un plato que solo se vende
+dentro de un menú no aparece en la lista de elementos: publica la carta para corregirlo.
 
 Una corrección no puede cambiar nada más: ni la unidad, la disponibilidad, el orden de plato ni
 la categoría, el orden de los elementos, los colores ni qué elementos y secciones tiene la carta.
@@ -470,7 +473,7 @@ como el valor anterior → el nuevo. Elige **Seguir editando** para volver, o **
 - No cambia nada más: ni los productos, ni los elementos y secciones de la propia carta, ni tus
   otras cartas. Un producto que está en dos cartas se corrige en cada una.
 - Una versión programada para más tarde conserva su fecha y su contenido, y entra en vigor entonces
-  sin la corrección, salvo los alérgenos y dietas de las versiones que marques. Recibe un número nuevo,
+  sin la corrección, salvo los alérgenos y dietas de las versiones que queden marcadas. Recibe un número nuevo,
   posterior al de la corrección, en **Versiones programadas**, en la pestaña **Vista previa**.
 - La próxima publicación normal vuelve a crear la carta a partir de los productos, así que vuelve a
   poner los valores anteriores, menos los alérgenos y dietas, salvo que corrijas también los

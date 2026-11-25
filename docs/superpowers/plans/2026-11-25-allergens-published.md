@@ -538,7 +538,7 @@ tests about +300.
   copy `extraDeclarationValues`'s two fields; a missing entry throws `menu_patch.invalid` with
   `field: "declarations"`. A dish's change also takes the variants of each copy it changes, each
   from its own effective values, live and in a named queued version, and a variant's drift is
-  listed under its dish as well as under itself. (Changed 2026-11-25 by lane A, put to the watcher:
+  listed under its dish as well as under itself. (Changed 2026-11-25 by lane A, agreed by the watcher at 12:27, not the owner:
   it changed the dish copies alone, so correcting a dish sold by its variants changed nothing a
   guest can order.)
 - `patchLiveMenu` reads `readProductDeclarationValues(tx, declarationProductIds(...))` before

@@ -133,7 +133,7 @@ declare module "@waitron/shared" {
       liveVersionId: string;
       liveNumber: number;
     };
-    /** The patched version would be identical to the live one. */
+    /** The patch would leave the live version, and every queued version it names, as they were. */
     "menu_patch.unchanged": { menuId: string };
     /** A Device Home Page shortcut names a product or section the menu's working structure does not reach. */
     "menu.shortcut_unreachable": { ref: MemberRef };

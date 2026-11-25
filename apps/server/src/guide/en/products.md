@@ -390,8 +390,8 @@ publish, check the version and publication time in the menu heading.
 
 Use a patch when you find a mistake in the menu that is live now, such as a wrong price, while the
 products already hold work for the next menu that you do not want on the till yet. Publishing would
-put that work live as well. A patch changes only the values you correct, in the live version of one
-menu.
+put that work live as well. A patch changes only the values you correct, in one menu:
+its live version and, for allergens and diets, the scheduled versions left ticked.
 
 Find the live menu in **Products and menus → Menus**. Open its row menu and choose
 **Patch live menu…**. The window lists the items in the live menu, with a search box,
@@ -415,8 +415,9 @@ with **The included folder sets this name.** under it, and cannot be changed her
 
 To correct allergens or diet labels, [change them on the product](products.md#allergens) first, then
 select **Use the product's current allergens and diets** on its item in the patch. **Review** shows
-what changes, and lists the scheduled versions that differ from the product: tick the ones to
-correct.
+what changes, and lists the scheduled versions that differ from the product. Those that still
+have the old value are already ticked: untick any to leave as it is, and tick any other to correct.
+A dish sold only inside a set menu is not in the list of items: publish the menu to correct it.
 
 A patch cannot change anything else: not the unit, availability, course or category, the order of
 items, colours, or which items and sections the menu holds.
@@ -440,7 +441,7 @@ value → the new one. Choose **Keep editing** to go back, or **Put live now**. 
 - It changes nothing else: not the products, not the menu's own items and sections, not your other
   menus. A product on two menus is patched on each one.
 - A version scheduled to go live later keeps its date and its content, and goes live then without
-  the patch, except for the allergens and diets of the versions you ticked. It is given a new number
+  the patch, except for the allergens and diets of the versions left ticked. It is given a new number
   after the patch's, under **Scheduled versions** on the **Preview** tab.
 - The next normal publish builds the menu from the products again, so it puts the old values back,
   except allergens and diets, unless you correct the products too.

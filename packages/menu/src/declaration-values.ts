@@ -7,7 +7,7 @@ import {
   type DietOverride,
 } from "@waitron/shared";
 
-/** A browser-safe LEAF: the dashboard's patch form reaches it through `menu-patch.ts`. */
+/** A browser-safe LEAF: the dashboard's patch form loads it. */
 
 interface DeclarationRow {
   allergens: ProductAllergens | null;

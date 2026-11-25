@@ -121,8 +121,8 @@ that one product's Modifiers group.
 
 An extras entry declares its allergens and its dietary suitability through the product it names, so
 you maintain those on that product under **Products**, not here. Allergens and diet labels are part
-of the published menu: publish the menu to put a change live. Options are text and carry no
-declarations.
+of the published menu: publish the menu to put a change live, or
+[patch the live menu](products.md#patch-live-menu). Options are text and carry no declarations.
 
 ## What the till does with a list {#till}
 
