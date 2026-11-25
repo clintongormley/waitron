@@ -393,45 +393,6 @@ export class AttendanceCorrectionsScreen extends LitElement {
     this.#resetCloseGrace();
     await this.#watchHours().catch(() => undefined);
   }
-  #monthIssues(hours: ManagerHours) {
-    const { start, end } = hours.period;
-    const during = (date: string) => date >= start && date < end;
-    const rows = hours.people.flatMap(({ displayName, hours: person }) => [
-      ...person.pending.prompts
-        .filter(
-          (prompt) =>
-            prompt.kind === "missing-times" &&
-            prompt.missingKinds.includes("out") &&
-            prompt.businessDay !== null &&
-            during(prompt.businessDay),
-        )
-        .map(
-          (prompt) =>
-            html`<li>${displayName} · ${prompt.businessDay} · ${t("hours.missing_clock_out")}</li>`,
-        ),
-      ...person.pending.items
-        .filter(
-          (item) =>
-            item.changes.some((entry) =>
-              during(storedTime(entry.at, entry.offsetMinutes).slice(0, 10)),
-            ) ||
-            item.history.some((entry) =>
-              during(storedTime(entry.eventAt, entry.offsetMinutes).slice(0, 10)),
-            ),
-        )
-        .map(
-          (item) => html`<li>${displayName} · ${statusLabel(item.status)} · ${item.reason}</li>`,
-        ),
-    ]);
-    return rows.length
-      ? html`<section data-month-issues>
-          <h2>${t("hours.month_issues")}</h2>
-          <ul>
-            ${rows}
-          </ul>
-        </section>`
-      : nothing;
-  }
   #monthlyClose(disabled: boolean) {
     const hours = this.hours;
     const close = hours?.monthClose;
@@ -486,7 +447,6 @@ export class AttendanceCorrectionsScreen extends LitElement {
               </wt-form-actions>
             </div>`
       }
-      ${this.#monthIssues(hours)}
     </section>`;
   }
   #periodControls(disabled: boolean) {

@@ -204,8 +204,8 @@ export function mountManagementAttendanceApi(
       noQuery(c);
       const body = await readRawJsonBody<{ graceDays?: unknown } | null>(c);
       await withTransaction(deps.db, async (tx) => {
-        await authorizeManager(tx, auth);
-        await setPayPeriodCloseGraceDays(tx, body?.graceDays);
+        const { authorizedBy } = await authorizeManager(tx, auth);
+        await setPayPeriodCloseGraceDays(tx, body?.graceDays, authorizedBy);
       });
       return c.body(null, 204);
     }),

@@ -13,7 +13,7 @@ export const QUERY_DEPENDENCIES = {
   lookups: ["persons"],
   queue: record,
   day: record,
-  hours: [...record, "pay_period_settings"],
+  hours: [...record, "pay_period_settings", "settings.workforce", "taxpayer"],
   ownInbox: [...record, "pay_period_settings"],
   ownDay: [...record, "pay_period_settings"],
 } as const;

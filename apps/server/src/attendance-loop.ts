@@ -64,7 +64,11 @@ export async function nextAttendanceDueAt(db: Database, now: Date): Promise<Date
 }
 
 export function attendanceJob(
-  deps: AttendancePassDeps & { maxSleepMs: number; exporter?: ModuleTimeRecordExport },
+  deps: AttendancePassDeps & {
+    maxSleepMs: number;
+    exporter?: ModuleTimeRecordExport;
+    clockUnconfirmed: () => boolean;
+  },
 ): JobDefinition {
   return {
     name: "attendance.end_of_day",
@@ -78,6 +82,7 @@ export function attendanceJob(
       "settings.venue",
       "taxpayer",
       "pay_period_settings",
+      "settings.workforce",
     ],
     minSleepMs: 500,
     maxSleepMs: deps.maxSleepMs,
@@ -90,23 +95,26 @@ export function attendanceJob(
         (await runAttendancePass({ ...deps, isPrimary })).more;
       if (more) return { nextDueAt: now };
       const attendanceAt = await nextAttendanceDueAt(deps.db, now);
+      if (deps.clockUnconfirmed()) return { nextDueAt: attendanceAt };
       const close = await nextMonthlyHoursClose(deps.db);
       if (close === null) return { nextDueAt: attendanceAt };
       const closeAt = new Date(close.scheduledCloseAt);
       if (closeAt <= now) {
         await withTransaction(deps.db, async (tx) => {
-          if (!isPrimary() || (await attendanceWorkPending(tx, now))) return;
+          if (!isPrimary() || deps.clockUnconfirmed()) return;
+          const closingAt = deps.now();
+          if (await attendanceWorkPending(tx, closingAt)) return;
           const due = await nextMonthlyHoursClose(tx);
-          if (due === null || new Date(due.scheduledCloseAt) > now) return;
+          if (due === null || new Date(due.scheduledCloseAt) > closingAt) return;
           const ruleset: WorkSummaryRuleset | null =
             (await deps.exporter?.workSummaryRules?.(tx)) ?? null;
           const paidBreakPolicy: PaidBreakPolicy | null =
             (await deps.exporter?.paidBreakPolicy?.(tx)) ?? null;
-          if (!isPrimary()) return;
+          if (!isPrimary() || deps.clockUnconfirmed()) return;
           await closePayPeriod(tx, {
             ...due,
             nodeId: deps.nodeId,
-            now: now.toISOString(),
+            now: closingAt.toISOString(),
             ruleset,
             paidBreakPolicy,
             origin: jobOrigin("business_day_close"),

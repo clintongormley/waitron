@@ -229,8 +229,8 @@ for the request's progress.
 
 ## Close monthly hours {#monthly-hours-close}
 
-Open **Hours** in the dashboard and choose the month. Check the closing date and look under
-**Needs attention this month** for missing clock-outs, unanswered requests and disputes.
+Open **Hours** in the dashboard and choose the month. Check the closing date, then review any
+unresolved hours before it closes.
 
 If you manage system settings, change **Working days before close** and choose **Save**. The default
 gives you three working days to check the hours. Weekends and public holidays on the venue's calendar

@@ -173,6 +173,13 @@ it("lets only a system manager change the working days before monthly close", as
   expect((await ask(settings, { graceDays: 0 })).status).toBe(403);
   expect((await ask(settings, { graceDays: 1.5 }, ownerCookie)).status).toBe(400);
   expect((await ask(settings, { graceDays: 0 }, ownerCookie)).status).toBe(204);
+  expect(
+    (
+      await suite.db.execute(
+        sql`select module, doc, updated_by from settings where module = 'workforce'`,
+      )
+    ).rows,
+  ).toEqual([{ module: "workforce", doc: '{"closeGraceDays":0}', updated_by: owner }]);
   expect(await (await ask(hours, undefined, ownerCookie)).json()).toMatchObject({
     monthClose: { graceDays: 0, canEdit: true, closedAt: null },
   });

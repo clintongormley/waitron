@@ -554,6 +554,48 @@ it("uses the employment that overlaps the period instead of a newer one", async 
   ]);
 });
 
+it("freezes worked hours without whole-month overtime for a mid-month contract change", async () => {
+  await automatic();
+  await suite.db
+    .update(api.employments)
+    .set({ endDate: "2026-10-29" })
+    .where(eq(api.employments.personId, worker));
+  await suite.db.insert(api.employments).values({
+    personId: worker,
+    startDate: "2026-10-30",
+    contractedMinutesPerWeek: 300,
+    contractType: "full_time",
+    payRate: 1500,
+  });
+  const { snapshot } = await close();
+  expect(snapshot.sessions).toMatchObject([{ personId: worker, workedMinutes: 480 }]);
+  expect(snapshot.summaries).toEqual([{ personId: worker, summary: null }]);
+});
+
+it("starts closing in the effective month of a retimed first clock-in", async () => {
+  await run((tx) => backend.clockIn(tx, event("2026-11-01T00:30:00Z")));
+  await run((tx) => backend.clockOut(tx, event("2026-11-01T07:00:00Z")));
+  const [entry] = await suite.db
+    .select()
+    .from(api.timeEntries)
+    .where(eq(api.timeEntries.entryKind, "in"));
+  const change = await run((tx) =>
+    backend.proposeCorrection(tx, {
+      nodeId,
+      correctsEntryId: entry!.id,
+      at: "2026-10-31T22:00:00Z",
+      offsetMinutes: 0,
+      reason: "Shift started the previous evening",
+      actorPersonId: manager,
+      origin,
+    }),
+  );
+  await run((tx) =>
+    backend.acceptCorrection(tx, { nodeId, correctionId: change, actorPersonId: worker, origin }),
+  );
+  expect(await run(api.readNextMonthlyPayPeriod)).toEqual(period);
+});
+
 it("freezes completed hours when no work-time rules are configured", async () => {
   await automatic();
   const { snapshot } = await close({ ruleset: null });

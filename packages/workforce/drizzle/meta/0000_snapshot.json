@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "8d739885-01c6-42cd-9b3e-a3e344b2e1c2",
+  "id": "82acb13b-c96b-4c8c-8a87-00988aa85392",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "absences": {
@@ -972,14 +972,6 @@
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
-        },
-        "close_grace_days": {
-          "name": "close_grace_days",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 3
         }
       },
       "indexes": {},
@@ -994,10 +986,6 @@
         "pay_period_settings_frequency_ck": {
           "name": "pay_period_settings_frequency_ck",
           "value": "\"pay_period_settings\".\"frequency\" in ('monthly', 'weekly', 'fortnightly')"
-        },
-        "pay_period_settings_close_grace_ck": {
-          "name": "pay_period_settings_close_grace_ck",
-          "value": "typeof(\"pay_period_settings\".\"close_grace_days\") = 'integer' and \"pay_period_settings\".\"close_grace_days\" between 0 and 10"
         },
         "pay_period_settings_anchor_ck": {
           "name": "pay_period_settings_anchor_ck",

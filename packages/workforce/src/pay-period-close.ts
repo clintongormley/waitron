@@ -103,6 +103,8 @@ export async function closePayPeriod(
   };
   const people = [...new Set(snapshot.entries.map((e) => e.entry.personId))].sort();
   const { ruleset } = input;
+  const dayMs = 86400000;
+  const lastDay = new Date(Date.parse(input.period.end) - dayMs).toISOString().slice(0, 10);
   for (const personId of people) {
     if (ruleset === null) {
       snapshot.summaries.push({ personId, summary: null });
@@ -123,7 +125,9 @@ export async function closePayPeriod(
     snapshot.summaries.push({
       personId,
       summary:
-        employment === undefined
+        employment === undefined ||
+        employment.startDate > input.period.start ||
+        (employment.endDate !== null && employment.endDate < lastDay)
           ? null
           : summarisePeriod(
               record.sessions.filter((s) => s.personId === personId),
@@ -132,7 +136,7 @@ export async function closePayPeriod(
                 periodMinutes: Math.round(
                   (employment.contractedMinutesPerWeek *
                     (Date.parse(input.period.end) - Date.parse(input.period.start))) /
-                    86400000 /
+                    dayMs /
                     7,
                 ),
                 dailyTargetMinutes:

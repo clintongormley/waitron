@@ -93,10 +93,11 @@ the labour advisor to confirm: a collective agreement can change each of them.
 
 ## MONTH-CLOSE. Reminder and adjustments after a month closes
 
-Send one reminder the day before closure if there are unresolved hours in the month. At each
-close, save earlier months’ changes that have yet to be included and show them in the next
-working-time export. First agree which period owns an adjustment, then plan the reminder and
-adjustments together (watcher, 2026-11-25 at 06:37). The reminder and adjustment are PR 2 in
+List unresolved hours for the selected month by the shift's work date. Send one reminder the day
+before closure if issues remain. At each close, save earlier months' changes that have yet to be
+included and show them in the next working-time export. First agree which period owns an adjustment,
+then plan the list, reminder and adjustments together (watcher, 2026-11-25 at 06:37 and 09:11).
+This is PR 2 in
 [the monthly close plan](../superpowers/plans/2026-11-25-month-close.md).
 
 ## A588. A solver drafts the rota, as a paid Waitron Cloud feature (owner, 2026-10-22)

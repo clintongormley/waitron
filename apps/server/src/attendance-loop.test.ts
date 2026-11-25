@@ -36,7 +36,13 @@ const suite = useVenueDb({
 const backend = new WorkforceBackend();
 let nodeId: string, personId: string, primary: boolean;
 const now = new Date("2026-01-07T09:00:00Z");
-const deps = () => ({ db: suite.db, nodeId, now: () => now, isPrimary: () => primary });
+const deps = () => ({
+  db: suite.db,
+  nodeId,
+  now: () => now,
+  isPrimary: () => primary,
+  clockUnconfirmed: () => false,
+});
 beforeEach(async () => {
   primary = true;
   await suite.db.execute(sql`drop trigger if exists reject_question`);
@@ -531,6 +537,61 @@ describe("attendance job lifecycle", () => {
 });
 
 describe("attendance runner job", () => {
+  it("runs due attendance while a monthly freeze waits for confirmed time", async () => {
+    await seed();
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const at = new Date("2026-02-05T04:00:00Z");
+    let waiting = true;
+    const job = attendanceJob({
+      ...deps(),
+      now: () => at,
+      maxSleepMs: 86_400_000,
+      clockUnconfirmed: () => waiting,
+    });
+    const pass = () => job.pass({ now: at, signal: new AbortController().signal });
+
+    for (let i = 0; i < 4; i++) await pass();
+    expect((await snapshot()).entries.find((entry) => entry.entryKind === "out")?.authorKind).toBe(
+      "automatic",
+    );
+    expect(await suite.db.select().from(payPeriodClosures)).toEqual([]);
+
+    expect(await pass()).toEqual({ nextDueAt: null });
+
+    waiting = false;
+    await pass();
+    expect(await suite.db.select().from(payPeriodClosures)).toHaveLength(1);
+  });
+
+  it("leaves monthly hours open if the clock becomes unconfirmed in the write queue", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const event = { nodeId, personId, origin: jobOrigin("dashboard"), offsetMinutes: 60 };
+      await backend.clockIn(tx, { ...event, at: "2026-01-05T09:00:00Z" });
+      await backend.clockOut(tx, { ...event, at: "2026-01-05T17:00:00Z" });
+    });
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const at = new Date("2026-02-05T04:00:00Z");
+    let waiting = false;
+    const job = attendanceJob({
+      ...deps(),
+      now: () => at,
+      maxSleepMs: 86_400_000,
+      clockUnconfirmed: () => waiting,
+    });
+    const withWriteLock = suite.db.withWriteLock.bind(suite.db);
+    const lock = vi.spyOn(suite.db, "withWriteLock").mockImplementationOnce(async (work) => {
+      waiting = true;
+      return withWriteLock(work);
+    });
+    try {
+      await job.pass({ now: at, signal: new AbortController().signal });
+      expect(await suite.db.select().from(payPeriodClosures)).toHaveLength(0);
+      expect(lock).toHaveBeenCalledOnce();
+    } finally {
+      lock.mockRestore();
+    }
+  });
+
   it("wakes at the monthly close, and a restarted primary freezes the completed hours once", async () => {
     await withTransaction(suite.db, async (tx) => {
       const event = { nodeId, personId, origin: jobOrigin("dashboard"), offsetMinutes: 60 };

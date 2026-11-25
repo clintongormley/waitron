@@ -1087,9 +1087,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
 
 - **Finish the clock work: a check at every start and every change** (bundle of 3, 1 go-live, 2 important, size L, waits for another entry). Holds A798. [Detail](backlog/box.md#bundle-finish-the-clock-work-a-check-at-every-start-and-every-change)
 
-- **Closing a pay period trusts the box's clock.**
-  [Detail](backlog/box.md#closing-a-pay-period-trusts-the-boxs-clock)
-
 - **Remaining bucket-copy limits** (an outage on a physical box at a venue's rate of sales; bundle of 1, size S, needs a physical box). [Detail](backlog/box.md#bundle-remaining-bucket-copy-limits)
 
 - **Qualify clock confirmation through remote access** (bundle of 1, size M). [Detail](backlog/box.md#bundle-qualify-clock-confirmation-through-remote-access)

@@ -16,8 +16,8 @@
     {
       "name": "workforce",
       "tag": "0000_baseline",
-      "when": 1795588478015,
-      "sha256": "7051955ba8370cbdaeb727e86a878b5eee03304b2ee3b044b7a30942e15ac1ab"
+      "when": 1795109981826,
+      "sha256": "17b288153018afa1e3710e2cff5857c2d25f34936058cf9917d9e402dc1d83c7"
     },
     {
       "name": "workforce-es",

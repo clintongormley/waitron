@@ -90,7 +90,7 @@ it("replaces one settings row and reads the saved cadence", async () => {
     api.setPayPeriodSettings(tx, { frequency: "fortnightly", anchorDate: "2026-10-12" }),
   );
   expect(await suite.db.select().from(api.payPeriodSettings)).toEqual([
-    { id: 1, frequency: "fortnightly", anchorDate: "2026-10-12", closeGraceDays: 3 },
+    { id: 1, frequency: "fortnightly", anchorDate: "2026-10-12" },
   ]);
 });
 it.each([

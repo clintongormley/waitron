@@ -82,7 +82,9 @@ it("query keys distinguish each selected scope and every hours source is declare
     inbox = api.ownInboxQuery(),
     manager = api.managerQuery({ kind: "pay-period" });
   for (const query of [own, inbox, manager]) {
-    expect(query.dependencies.map((d) => d.type).sort()).toEqual([...dependencies].sort());
+    const expected =
+      query === inbox ? dependencies : [...dependencies, "settings.workforce", "taxpayer"];
+    expect(query.dependencies.map((d) => d.type).sort()).toEqual([...expected].sort());
     await query.read();
   }
   const keys = [

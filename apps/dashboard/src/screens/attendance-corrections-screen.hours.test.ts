@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, streamsOver } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import { attendanceEntry, attendanceItem } from "../../test/attendance-fixtures.js";
+import { attendanceEntry } from "../../test/attendance-fixtures.js";
 import {
   change,
   click,
@@ -68,9 +68,8 @@ it("shows the monthly close date and saves a changed whole number of working day
   await expect.poll(() => save()).toHaveProperty("disabled", true);
 });
 
-it("lists only the selected month's unresolved hours, excluding recorded automatic ends", async () => {
+it("keeps the existing unresolved hours view beside the read-only close date", async () => {
   const m = await mountManagerHours({
-    live: true,
     monthClose: {
       graceDays: 3,
       canEdit: false,
@@ -80,36 +79,11 @@ it("lists only the selected month's unresolved hours, excluding recorded automat
       timeZone: "Europe/Madrid",
     },
   });
-  const pending = m.data.hours.people[0]!.hours.pending;
-  pending.items.push(
-    attendanceItem({
-      id: "old-dispute",
-      personId: "worker",
-      status: "disputed",
-      reason: "An older dispute",
-      changes: [{ target: { entryId: "old" }, at: "2025-12-31T17:00:00.000Z", offsetMinutes: 60 }],
-    }),
-  );
-  pending.prompts.push({
-    id: "missing-out",
-    personId: "worker",
-    questionId: null,
-    itemId: null,
-    businessDay: "2026-01-05",
-    day: null,
-    kind: "missing-times",
-    automaticEntryId: null,
-    missingKinds: ["out"],
-    timeZone: "Europe/Madrid",
-    history: [],
-  });
-  m.liveData!.invalidate([{ type: "time_entries" }]);
-  const issues = () => m.root.querySelector("[data-month-issues]")?.textContent ?? "";
-  await expect.poll(issues).toContain("Missing clock-out");
-  expect(issues()).toContain("Old pending hours");
-  expect(issues()).not.toContain("An older dispute");
-  expect(issues()).not.toContain("acknowledgement");
+  await record(m.root);
+  expect(m.root.querySelector("[data-month-close]")?.textContent).toContain("5 Feb 2026");
   expect(m.root.querySelector("[data-save-close-grace]")).toBeNull();
+  expect(m.root.textContent).toContain("Old pending hours");
+  expect(m.root.querySelector("[data-month-issues]")).toBeNull();
 });
 
 it.each(["approve", "decline"])(
@@ -350,6 +324,8 @@ it("starts one stream with Hours before lookups, hiding day actions until the vi
     await new Promise((r) => setTimeout(r, 0));
     expect(streams).toHaveLength(1);
     expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"pay_period_settings"');
+    expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"settings.workforce"');
+    expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"taxpayer"');
     expect(m.root.querySelector("[data-detail]")).toBeNull();
     expect(
       m.root.querySelector("[data-open-day]")!.shadowRoot!.querySelector("button")!.disabled,

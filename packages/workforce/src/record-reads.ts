@@ -4,7 +4,7 @@ import { nodes, type Database, type Transaction } from "@waitron/db";
 import { readOrigin } from "@waitron/shared";
 import { timeEntries } from "./schema/time-entries.js";
 import type { TimeEntryRecord } from "./projection.js";
-import type { Period } from "./projection.js";
+import { localWallClock, type Period } from "./projection.js";
 import { AppError } from "@waitron/shared";
 import type { PayPeriodClosure, PayPeriodSnapshot, TimeRecord } from "./record-types.js";
 import { projectTimeRecord } from "./record-projection.js";
@@ -12,7 +12,7 @@ import { recordInPeriod } from "./record-period.js";
 import { readClosures } from "./pay-period-reads.js";
 import "./errors.js";
 import { isRecordDate } from "./record-dates.js";
-import { compareEvents, liveClockEntries } from "./effective-entries.js";
+import { compareEvents, effectiveClockEntries, liveClockEntries } from "./effective-entries.js";
 
 export interface TimeRecordQuery {
   period: Period;
@@ -132,6 +132,31 @@ async function readSelectedEntries(
 }
 
 /** Filter projected sessions by the requested work dates. Rows outside the period supply context. */
+export async function readFirstEffectiveClockInDate(tx: Transaction): Promise<string | null> {
+  const entries = await readSelectedEntries(
+    tx,
+    sql`
+    with recursive
+    ${entryFamily(sql`
+      select ${seedColumns}
+      from time_entries seed
+      where seed.entry_kind = 'in' or (
+        seed.entry_kind = 'correction' and seed.correction_status = 'approved'
+        and seed.missing_entry_kind = 'in' and seed.corrects_entry_id is null
+      )
+    `)}
+    select id from family
+  `,
+  );
+  let first: string | null = null;
+  for (const entry of effectiveClockEntries(entries)) {
+    if (entry.entryKind !== "in") continue;
+    const date = localWallClock(entry.eventAt, entry.offsetMinutes).slice(0, 10);
+    if (first === null || date < first) first = date;
+  }
+  return first;
+}
+
 export async function readPeriodEntries(
   tx: Database | Transaction,
   { period, personId }: TimeRecordQuery,

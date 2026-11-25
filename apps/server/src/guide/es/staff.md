@@ -248,8 +248,8 @@ solicitud. Consulta su estado en **Mis horas**.
 
 ## Cerrar las horas del mes {#monthly-hours-close}
 
-Abre **Horas** en el panel y elige el mes. Consulta la fecha de cierre y revisa **Pendiente este mes**
-para ver las salidas sin fichar, las solicitudes sin respuesta y las discrepancias.
+Abre **Horas** en el panel y elige el mes. Consulta la fecha de cierre y revisa las horas
+pendientes antes de que se cierre el mes.
 
 Si puedes gestionar los ajustes del sistema, cambia **Días laborables antes del cierre** y
 pulsa **Guardar**. Por defecto tienes tres días laborables para revisar las horas. Los fines

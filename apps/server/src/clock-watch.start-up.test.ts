@@ -546,7 +546,7 @@ describe("the clock watch's job", () => {
       log: () => {},
       subscribe: () => () => {},
     });
-    runner.add(clockWatchJob({ check, halt: () => {}, reanchor: async () => {} }, CLOCK_WATCH_MS));
+    runner.add(clockWatchJob({ check, halt: () => {} }, CLOCK_WATCH_MS));
     try {
       await new Promise((resolve) => setImmediate(resolve));
       expect(check).not.toHaveBeenCalled();
@@ -647,6 +647,31 @@ describe("the clock watch and a jump of the box's clock", () => {
       ]);
     },
   );
+
+  it("reports a jump before and during the host check for a monthly close", async () => {
+    const checking = Promise.withResolvers<void>();
+    const host = Promise.withResolvers<typeof SYNCHRONISED>();
+    const h = harness({
+      host: () => {
+        checking.resolve();
+        return host.promise;
+      },
+      startState: confirmed("by_internet"),
+    });
+    const unchecked = h.watch.hasUncheckedJump;
+    expect(unchecked()).toBe(false);
+    h.jump(2 * MINUTE);
+    expect(unchecked()).toBe(true);
+    const tick = h.tick();
+    try {
+      await checking.promise;
+      expect(unchecked()).toBe(true);
+    } finally {
+      host.resolve(SYNCHRONISED);
+      await tick;
+    }
+    expect(unchecked()).toBe(false);
+  });
 
   it("leaves a box whose time service is synchronised as it was when its clock jumps, saying so in the log", async () => {
     const h = harness({ host: async () => SYNCHRONISED, startState: confirmed("by_internet") });

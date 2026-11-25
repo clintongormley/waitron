@@ -136,6 +136,7 @@ export {
   resolvePayPeriod,
   readPayPeriodSettings,
   setPayPeriodSettings,
+  WORKFORCE_SETTINGS,
   readPayPeriodCloseGraceDays,
   setPayPeriodCloseGraceDays,
   payPeriodCloseBoundary,
