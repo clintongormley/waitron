@@ -161,6 +161,9 @@ it("stores the boot reading in the intent but never hands it out", async () => {
 
 it("a repeated select keeps its chosen hour, and stores the boot reading it judged after a restart", async () => {
   const f = fixture();
+  f.at(instant - 60_000, 0);
+  expect(await f.run(event(binding, "earlier-selection"))).toMatchObject({ status: "selected" });
+  f.at(instant, 0);
   let boot = { bootId: "b1", uptimeMs: 1000 };
   const announced: unknown[] = [];
   const engine = () =>
@@ -179,19 +182,19 @@ it("a repeated select keeps its chosen hour, and stores the boot reading it judg
   boot = { bootId: "b1", uptimeMs: 31_000 };
   f.at(instant + 30_000, 0);
   expect(await select()).toEqual(first);
-  expect(f.writes).toHaveLength(1);
+  expect(f.writes).toHaveLength(2);
   boot = { bootId: "b2", uptimeMs: 5000 };
   f.at(instant + 60_000, 0);
   const again = await select();
   expect(again).toEqual(first);
   expect(again).not.toHaveProperty("boot");
   expect(announced).toHaveLength(1);
-  expect(f.writes).toHaveLength(2);
-  expect(f.writes[1]).toEqual({
+  expect(f.writes).toHaveLength(3);
+  expect(f.writes[2]).toEqual({
     version: 1,
     entries: [
       {
-        ...(f.writes[0] as { entries: object[] }).entries[0],
+        ...(f.writes[1] as { entries: object[] }).entries[0],
         boot: { bootId: "b2", uptimeMs: 5000, wallMs: instant + 60_000, confirmed: true },
       },
     ],

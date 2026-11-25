@@ -467,8 +467,9 @@ references can still grow with the history. Existing cumulative revisions keep t
 
 `modulePreparationMergeFits` estimates room for the dormant setup, wait and selection from the
 largest prepared revisions. A later write can still reach either limit and refuse with
-`setup.attempt_invalid`, including after the old box has given up filing. Left open by A1018
-Slice 5 (Rulings R29, R30).
+`setup.attempt_invalid` after the old box has given up filing. The spare cannot finish taking
+over until the file can accept writes again while keeping the recorded selections. Left open
+by A1018 Slice 5 (Rulings R29, R30).
 
 ## A1185: a venue not yet connected sees no prices
 
@@ -613,11 +614,13 @@ Slice 3.
 
 ## Decisions and deliberate limits
 
-**A spare can retry from its placed copy when the signed digest identifies it.** An open by a
-different SQLite version can rewrite the writer version in the database header. If recognition
-fails with the missing-copy message, put the old box's exact `<state>/handover/<operation>/venue.db`
-at `<state>/handover/<operation>/accepted.db` on the spare, if the old box still holds that file.
-Then choose **Retry a normal boot**.
+**A spare can retry from its placed copy when the signed digest identifies it.** Opening with a
+different SQLite version can prevent that match. A missing or damaged accepted file then leaves the
+start on the copy error. If a placed copy's own list names a successor, the handover can instead
+stay waiting and say the old box is no longer main. For these failed-placement retries, put the
+old box's exact `<state>/handover/<operation>/venue.db` at
+`<state>/handover/<operation>/accepted.db` on the spare if the old box still holds it. Then choose
+**Retry a normal boot**.
 
 <a id="a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself"></a>
 

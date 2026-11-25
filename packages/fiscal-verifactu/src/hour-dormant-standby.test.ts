@@ -366,6 +366,39 @@ it.each(["missing", "source", "target", "malformed", "conflict"])(
   },
 );
 
+it("an admission writes its own dormant configuration when earlier preparation exists", async () => {
+  const reserved = await reserve();
+  const earlier = {
+    ...reserveBinding,
+    eventId: "earlier-admission",
+    sourceId: standby.nodeId,
+    targetNodeId: primary.nodeId,
+  };
+  const scope = { taxpayerNif: "89890001K", environment: "preproduction" };
+  const previous = {
+    version: 1,
+    entries: [
+      {
+        kind: "wait",
+        binding: { ...earlier, action: "promote" },
+        targetMs: Date.parse("2026-10-16T11:41:00Z"),
+        softwareId: "W1",
+        operatorId: "administrator",
+        scope,
+        bases,
+        contextKey: "earlier-context",
+      },
+    ],
+    dormant: [{ ...(reserved.state as object), binding: earlier }],
+  };
+  value = previous;
+  history.push(previous);
+
+  await establish(reserved.state);
+
+  expect(history).toEqual([previous, { version: 1, entries: [], dormant: [reserved.state] }]);
+});
+
 it("does not replace an earlier dormant configuration for the same node", async () => {
   const reserved = await reserve();
   await establish(reserved.state);

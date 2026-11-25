@@ -646,21 +646,25 @@ describe("placeAcceptedCopyAtStart", () => {
       expect(existsSync(b.accepted)).toBe(true);
     });
 
-    it("an accepted.db already gone is no failure", async () => {
-      const b = await box();
-      rmSync(b.accepted);
+    it.each(["accepted copy", "operation folder"] as const)(
+      "an absent %s is no cleanup failure after recording placement",
+      async (absent) => {
+        const b = await box();
+        if (absent === "accepted copy") rmSync(b.accepted);
+        else rmSync(dirname(b.accepted), { recursive: true });
 
-      await recordCopyPlaced({
-        node: suite.node,
-        nodeId: NODE,
-        stateDir: b.stateDir,
-        operationId: OP,
-        log: b.args.log,
-      });
+        await recordCopyPlaced({
+          node: suite.node,
+          nodeId: NODE,
+          stateDir: b.stateDir,
+          operationId: OP,
+          log: b.args.log,
+        });
 
-      expect(b.logged).toEqual([]);
-      expect(await readHandoverEvent(suite.node, NODE, OP, COPY_PLACED_EVENT)).not.toBeNull();
-    });
+        expect(b.logged).toEqual([]);
+        expect(await readHandoverEvent(suite.node, NODE, OP, COPY_PLACED_EVENT)).not.toBeNull();
+      },
+    );
 
     it("a removal that fails is logged and the start goes on, with the event recorded", async () => {
       const b = await box();

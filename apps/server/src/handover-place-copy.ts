@@ -397,7 +397,8 @@ async function removeAcceptedCopy(
     await rm(accepted, { force: true });
     // The folder may hold this operation's other files, which are not this step's to remove.
     await rmdir(dirname(accepted)).catch((error: unknown) => {
-      if (errnoOf(error) !== "ENOTEMPTY") throw error;
+      const errno = errnoOf(error);
+      if (errno !== "ENOTEMPTY" && errno !== "ENOENT") throw error;
     });
   } catch (error) {
     log("error", "handover-place-copy.remove_failed", { operationId, errno: errnoOf(error) });
