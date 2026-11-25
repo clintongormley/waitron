@@ -551,7 +551,7 @@ export class ProductBrowser extends LitElement {
           this.operation = operation;
           const fresh = await this.#readAgain();
           if (fresh) {
-            this.operationError = this.#showsSame(fresh)
+            this.operationError = this.#summaryMatches(fresh, "contents")
               ? t("folders.changed_unshown")
               : codeMessage("category.contents_changed");
             this.summaries = fresh;
@@ -598,23 +598,24 @@ export class ProductBrowser extends LitElement {
   async #unchanged(): Promise<boolean> {
     const fresh = await this.#readAgain();
     if (!fresh) return false;
-    const same = this.#showsSame(fresh);
+    const same = this.#summaryMatches(fresh, "contents-and-routing");
     this.summaries = fresh;
     if (same) return true;
     this.operationError = t("folders.summary_changed");
     return false;
   }
-  /** A change in disabled products alone is not compared: the dialog neither counts them nor asks
-   * about them. */
-  #showsSame(fresh: readonly FolderSummary[]): boolean {
+  #summaryMatches(
+    fresh: readonly FolderSummary[],
+    scope: "contents" | "contents-and-routing",
+  ): boolean {
     return fresh.every((summary, index) => {
       const shown = this.summaries[index];
       return (
         shown !== undefined &&
         summary.folders === shown.folders &&
         summary.activeProducts === shown.activeProducts &&
-        summary.routes === shown.routes &&
-        summary.ownRoutes === shown.ownRoutes
+        (scope === "contents" ||
+          (summary.routes === shown.routes && summary.ownRoutes === shown.ownRoutes))
       );
     });
   }

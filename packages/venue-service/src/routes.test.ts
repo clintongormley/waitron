@@ -4243,9 +4243,9 @@ describe("folder routing preview route", () => {
   it("refuses missing authority and invalid folder-change bodies", async () => {
     const f = await fixture();
     const change = {
-      kind: "delete",
+      kind: "move",
       selection: { productIds: [], categoryIds: [f.categoryId] },
-      contents: "move_up",
+      to: null,
     };
     for (const [cookie, status, code] of [
       [undefined, 401, "management_session.required"],
@@ -4256,7 +4256,7 @@ describe("folder routing preview route", () => {
       expect(await response.json()).toMatchObject({ error: { code } });
     }
     for (const invalid of [
-      { ...change, contents: null },
+      { kind: "delete", selection: change.selection, contents: "move_up" },
       { ...change, selection: { productIds: [], categoryIds: ["invalid"] } },
       { ...change, kind: "cell" },
     ]) {

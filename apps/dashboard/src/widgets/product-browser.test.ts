@@ -2359,11 +2359,11 @@ it("deletes only completely summarised empty folders without asking", async () =
   expect(count(el)).toBe("0 selected");
 });
 it.each([
-  ["en-GB", 1, "Delete Food?"],
-  ["es", 2, "¿Eliminar Food?"],
+  ["en-GB", 1, "Delete Food?", "This can't be undone."],
+  ["es", 2, "¿Eliminar Food?", "No se puede deshacer."],
 ] as const)(
   "asks before deleting a category whose only contents are routing rules (%s, %i rules)",
-  async (locale, rules, heading) => {
+  async (locale, rules, heading, warning) => {
     setLocale(locale);
     const el = await mountBrowser();
     const summary = {
@@ -2378,6 +2378,7 @@ it.each([
     await selectKeys(el, ["folder:f"]);
     await press(el, "delete");
     await vi.waitFor(() => expect(dialog(el)?.heading).toBe(heading));
+    expect(dialog(el)!.querySelector("form p")?.textContent?.trim()).toBe(warning);
     expect(el.api.deleteProductItems).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
     expect(el.shadowRoot!.querySelector("input[name=contents]")).toBeNull();
@@ -2601,12 +2602,12 @@ it("shows the delete dialog at the compact size", async () => {
   expect(dialog(el)!.getAttribute("size")).toBe("compact");
 });
 it.each([
-  ["en-GB", contents(0, 0, 0, 0, 2), /disabl/i],
-  ["en-GB", contents(0, 0, 1, 1, 1), /disabl/i],
-  ["es", contents(0, 0, 0, 0, 1), /deshabilit/i],
+  ["en-GB", contents(0, 0, 0, 0, 2), /disabl/i, "This can't be undone."],
+  ["en-GB", contents(0, 0, 1, 1, 1), /disabl/i, "This can't be undone."],
+  ["es", contents(0, 0, 0, 0, 1), /deshabilit/i, "No se puede deshacer."],
 ] as const)(
   "asks nothing about the contents of a category holding only disabled products, says nothing about them, and moves them up (%s, case %#)",
-  async (locale, counts, disabledWord) => {
+  async (locale, counts, disabledWord, warning) => {
     setLocale(locale);
     const el = await mountBrowser();
     const summary = { id: "f", ...counts };
@@ -2619,10 +2620,10 @@ it.each([
     await vi.waitFor(() => expect(el.shadowRoot!.querySelector("wt-spinner")).toBeNull());
     expect(el.shadowRoot!.querySelector("fieldset")).toBeNull();
     expect(el.shadowRoot!.querySelector("input[name=contents]")).toBeNull();
-    const text = [...el.shadowRoot!.querySelector("form")!.querySelectorAll("p")]
-      .filter((paragraph) => !paragraph.closest('[data-test="folder-routing-preview"]'))
-      .map((paragraph) => paragraph.textContent!.trim());
-    expect(text).toEqual([]);
+    const text = [...el.shadowRoot!.querySelector("form")!.querySelectorAll("p")].map((paragraph) =>
+      paragraph.textContent!.trim(),
+    );
+    expect(text).toEqual([warning]);
     expect(dialog(el)!.textContent).not.toMatch(disabledWord);
     expect(el.api.deleteProductItems).not.toHaveBeenCalled();
     await press(el, "confirm");
@@ -3230,6 +3231,7 @@ it("when the server refuses an empty category's delete because a disabled produc
 it.each([
   ["en-GB", "a disabled product joined", { products: 4 }],
   ["en-GB", "a disabled product left", { products: 2 }],
+  ["en-GB", "the category routing rules changed", { ownRoutes: 0, routes: 2 }],
   ["es", "a disabled product joined", { products: 4 }],
   ["en-GB", "the contents changed and changed back", {}],
 ] as const)(

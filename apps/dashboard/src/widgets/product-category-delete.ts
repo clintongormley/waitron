@@ -153,7 +153,10 @@ export function categoryDeleteChoices(
   change: (event: Event) => void,
 ) {
   const { folders, active } = impact;
-  if (!folders && !active) return nothing;
+  if (!folders && !active)
+    return selection.productIds.length
+      ? nothing
+      : html`<p>${t("folders.delete_contents_warning")}</p>`;
   const selected = new Set(selection.categoryIds);
   const parentOf = (category: CategorySummary) =>
     categoryAncestors(category, categories)

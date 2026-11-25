@@ -480,28 +480,15 @@ export async function previewProductItemsRouting(
 ): Promise<ProductItemsRoutingPreview> {
   const projected = await projectProductItems(tx, change);
   const { rules, stations } = await snapshot(tx);
-  const remainingFolders = new Set(projected.categories.map(({ id }) => id));
-  const removedCellKeys = new Set(
-    rules.cells
-      .filter((cell) => cell.row.kind === "category" && !remainingFolders.has(cell.row.categoryId))
-      .map(cellKey),
-  );
   const after: RoutingRules = {
     ...rules,
     parentOf: new Map(projected.categories.map(({ id, parentId }) => [id, parentId])),
-    cells: Object.freeze(rules.cells.filter((cell) => !removedCellKeys.has(cellKey(cell)))),
-    cellPeriods: new Map(
-      [...(rules.cellPeriods ?? [])].filter(([key]) => !removedCellKeys.has(key)),
-    ),
   };
-  const compared = (await activeProducts(tx)).filter(
-    (row) => !projected.deletedProductIds.has(row.routedId),
-  );
   const moves = await compareRoutingChange(
     tx,
     rules,
     after,
-    compared,
+    await activeProducts(tx),
     { reachesZone: () => true, covers: () => true },
     (row) => ({ ...rowFacts(row), categoryId: projected.categoryOf.get(row.routedId) ?? null }),
   );

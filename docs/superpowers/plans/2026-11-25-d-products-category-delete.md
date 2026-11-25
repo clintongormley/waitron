@@ -1,6 +1,6 @@
 # Products category Delete window implementation plan
 
-Implement PRODUCTS-LIST-4 from [§7.4, Delivery and Spanish](../specs/2026-11-24-products-list-redesign-design.md). Managers see what goes, what stays and where preparation moves before confirming. Reuse the modal, draft protection, Cancel, Delete, previews, checks and requests. The list and editor redesigns are later pieces. Claude reviewed the plan, and the watcher cleared it with five edits on 25 November at 03:54.
+**Original plan cleared at 03:54.** Implement PRODUCTS-LIST-4 from [§7.4, Delivery and Spanish](../specs/2026-11-24-products-list-redesign-design.md). Managers see what goes, what stays and where preparation moves before confirming. Reuse the modal, draft protection, Cancel, Delete, previews, checks and requests. The list and editor redesigns are later pieces. Claude reviewed the plan, and the watcher cleared it with five edits on 25 November at 03:54.
 
 - [ ] **Title and choices.** Render in `product-category-delete.ts`, called by `product-browser.ts`. Use “Delete Cheeses?” (list its path only when it adds information), “Delete 3 categories?” over their paths, or “Delete Cheeses, Meats and Burger?” for a mixed selection. Keep numbered paths on both sides of differing destinations, using the nearest surviving parent and its resulting path. Say “Keep its 5 products, with no category” or “Keep its 2 categories and 5 products, in Drinks” (at the top level for categories without a parent). Count categories and products together and omit either if zero, with singular/plural ownership. Say “Delete its 5 products too”. Count the station routing rules removed under each choice, or under the title when no choice is needed. Update EN and ES in `i18n/strings.ts` and retire unused count keys.
 - [ ] **Counts and checks.** Sum disjoint outermost summaries. Exclude directly selected categories and active products from additional counts. Keep removes selected categories’ own rules. Delete too removes the whole subtree’s rules. Default to Keep and omit the contents choice when nothing else goes, while still confirming the selected deletion. Preserve the immediate empty, rule-free delete, fresh-count and retry checks, menu and extras warnings and refusals.
@@ -11,4 +11,5 @@ Implement PRODUCTS-LIST-4 from [§7.4, Delivery and Spanish](../specs/2026-11-24
 The owner revised the window on 25 November at 09:20 and 09:29, as recorded in the
 lane's questions. The [updated design](../specs/2026-11-24-products-list-redesign-design.md)
 records the shorter wording, a count for larger selections, and removal of the Delete station
-preview and rules copy. The Move preview and the Delete request's checks still apply.
+preview and rules copy. The Move preview and the Delete request's checks still apply. The owner’s revisions below the
+original plan take precedence.

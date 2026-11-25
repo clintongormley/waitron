@@ -449,30 +449,17 @@ included), no subcategories and no routing rules. When only the selected items a
 confirmation skips the contents question. A category's
 row-menu Delete uses the same path. If the summary cannot be read, deletion waits for a successful
 new attempt.
-Pressing **Delete** in the dialog reads the counts
-again; if the numbers of subcategories, active products or routing rules (in the subtree, or
-on the category's own row) have changed, it deletes nothing, shows the new counts and asks you to
-confirm again. A change in deleted products alone never stops that check, whether or not the dialog
-asked about contents: the dialog neither counts those products nor asks about them. The delete
-request carries the counts
-the dashboard read before deleting, the number of all products, deleted ones included, among them,
-and the server compares them again inside the delete itself: if
-they no longer match, nothing is deleted and the dialog reads the counts again. When a count it
-shows (subcategories, active products or routing rules) has changed, it shows the new counts with
-the refusal's own message; when none has (only deleted products changed, or the change was undone
-before the dialog read again), it says the contents changed, that what it shows is up to date, and
-asks you to choose **Delete** again. If a category with nothing in it at all, which is deleted
-without confirmation, has gained anything by then, the server refuses and the dialog opens,
-choosing its message the same way: when it now holds subcategories, active products or routing
-rules, it shows their counts with the refusal's message; when all it gained is deleted products,
-or the gain was undone before the dialog read again, it opens with that second message instead,
-shows no counts of contents, asks nothing about contents, and its **Delete** moves any deleted
-products up.
-A refused action
-keeps its dialog open with a message at the bottom.
+Pressing **Delete** reads the selected categories' summaries again. If the subcategory, active
+product or routing counts changed, the window asks for another confirmation. The request sends the
+fresh summaries, including deleted products, so the server can check again before changing
+anything. If the server refuses because a summary changed, the dialog refreshes. When the displayed
+contents changed, the manager can check the new counts. When only routing or deleted products
+changed, the manager can choose Delete again with the current selection. If a category gained
+contents after passing the empty-category shortcut, the same refusal opens the dialog. A refused
+action keeps its dialog open and puts its message below the choices.
 Deleting a category removes every routing cell on its row through `routing_cells_category_fk`.
 Move shows a table of products changing station, with old and new destinations, zones and periods.
-Choose **Retry preview** if it fails to load.
+Choose **Retry preview** if it fails to load. The preview request accepts a Move selection.
 A variant is routed by its product's category, and a variant still storing a deleted category has it cleared.
 
 ## API
