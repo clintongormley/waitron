@@ -1176,7 +1176,9 @@ it("lets staff clear a Tree search after switching to an empty List", async () =
   const search = page.getByRole("searchbox", { name: "Search products", exact: true });
   await expect.element(search).toHaveValue("Drinks");
   await expect.element(search).toBeEnabled();
+  await expect.element(page.getByRole("button", { name: "Select", exact: true })).toBeDisabled();
   await search.fill("");
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(viewControl(el)));
   el.products = [PRODUCTS[0]!];
   expect(await rowKeys(el)).toEqual(["cola"]);
 });

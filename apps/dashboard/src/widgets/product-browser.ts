@@ -1061,6 +1061,9 @@ export class ProductBrowser extends LitElement {
           this.search,
           (search) => {
             this.search = search;
+            if (search === "" && !this.#hasRowsToActOn) {
+              this.renderRoot.querySelector("wt-segmented-control")?.focus();
+            }
           },
           this.selecting,
           () => {

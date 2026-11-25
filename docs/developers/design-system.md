@@ -1540,8 +1540,8 @@ leaves the slot empty. A widget that draws a table with an Add button for a scre
 With no products, both views show **Add product** beside the heading. List shows a second button
 inside the empty box, and Tree shows it below the table. If a unit or content language is missing,
 each button is disabled with the reason beside it. Both open the product editor without a category.
-Tree keeps
-its category and All products menus, and their **Add product** actions open the editor in place.
+Cancel in the editor or finishing product placement returns focus to the heading's button. Tree
+keeps its category and All products menus, and their **Add product** actions open the editor in place.
 A menu's Structure tab has a root row like it, whose ⋮ holds the menu's top-level adds, and an empty
 menu's box repeats them as buttons (below, after tree mode). When the first item made from the slotted button empties the slot,
 the screen moves focus to its other Add button rather than leaving it on the page; the Printers
