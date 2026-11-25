@@ -434,6 +434,38 @@ describe("ending it", () => {
     expect(bottom(el)).toBe(codeMessage("invoice_correction.nothing_back"));
   });
 
+  it("reads again when the receipt was cancelled since, drawing Finish without recording", async () => {
+    const api = fakeApi();
+    const voided = { refusal: "sale.correction_not_admitted", reason: "voided", closable: true };
+    api.getInvoiceCorrection.mockResolvedValue({ ...FILING, fileNow: voided });
+    api.fileInvoiceCorrection.mockRejectedValueOnce(
+      refused("sale.correction_not_admitted", { reason: "voided" }),
+    );
+    const { el } = await mount(FILING, api);
+
+    press(el, "stop");
+    await vi.waitFor(() => expect(shown(el, "finish")).toBe(true));
+    expect(api.getInvoiceCorrection).toHaveBeenCalledExactlyOnceWith("correction-1", {});
+    expect(bottom(el)).toBe(
+      giveBackFilingMessage("sale.correction_not_admitted", "en", { reason: "voided" }),
+    );
+    expect(bottom(el)).not.toMatch(/correct/i);
+  });
+
+  it("reads again when the receipt's earlier money back cannot be read, offering no Finish", async () => {
+    const api = fakeApi();
+    const unusable = { refusal: "sale.correction_history_unusable", closable: false };
+    api.getInvoiceCorrection.mockResolvedValue({ ...FILING, left: "0.00", fileNow: unusable });
+    api.fileInvoiceCorrection.mockRejectedValueOnce(refused("sale.correction_history_unusable"));
+    const { el } = await mount({ ...FILING, left: "0.00" }, api);
+
+    press(el, "finish");
+    await vi.waitFor(() => expect(shown(el, "finish")).toBe(false));
+    expect(api.getInvoiceCorrection).toHaveBeenCalledExactlyOnceWith("correction-1", {});
+    expect(bottom(el)).toBe(giveBackFilingMessage("sale.correction_history_unusable", "en"));
+    expect(bottom(el)).not.toMatch(/correct/i);
+  });
+
   it("says a lost filing answer needs checking, not that the same request goes again", async () => {
     const api = fakeApi();
     api.fileInvoiceCorrection.mockRejectedValueOnce(lost());
@@ -454,10 +486,11 @@ describe("ending it", () => {
     press(el, "stop");
     await vi.waitFor(() =>
       expect(bottom(el)).toBe(
-        codeMessage("sale.correction_not_admitted", "en", { reason: "missing" }),
+        giveBackFilingMessage("sale.correction_not_admitted", "en", { reason: "missing" }),
       ),
     );
     expect(bottom(el)).not.toContain("Refund a payment");
+    expect(bottom(el)).not.toMatch(/correct/i);
   });
 
   it("asks for an approver when filing needs one, and says when they cannot be read", async () => {

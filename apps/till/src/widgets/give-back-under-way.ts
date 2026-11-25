@@ -53,11 +53,17 @@ interface Terminal {
   attempted: boolean;
 }
 const PIN_REFUSALS = new Set(["pin.invalid", "pin.throttled", "authorization.not_permitted"]);
+/** Refusals of recording on this receipt, worded as the view words its own filing refusal. */
+const FILING_REFUSALS = new Set([
+  "sale.correction_not_admitted",
+  "sale.correction_history_unusable",
+]);
 /** Refusals saying the shown correction is out of date: it is read again, so the right step shows. */
 const REREAD_AFTER = new Set([
   "invoice_correction.split_changed",
   "invoice_correction.still_correctable",
   "invoice_correction.nothing_back",
+  ...FILING_REFUSALS,
 ]);
 const positive = (value: string) => compareDecimal(decimal(value), decimal("0")) > 0;
 const least = (a: string, b: string) => (compareDecimal(decimal(a), decimal(b)) < 0 ? a : b);
@@ -232,7 +238,11 @@ export class TillGiveBackUnderWay extends LitElement {
       return;
     }
     this.refused = refusal;
-    this.message = recoveryText(refusal) ?? codeMessage(refusal.code, currentLocale(), refusal);
+    this.message =
+      recoveryText(refusal) ??
+      (FILING_REFUSALS.has(refusal.code)
+        ? giveBackFilingMessage(refusal.code, currentLocale(), refusal)
+        : codeMessage(refusal.code, currentLocale(), refusal));
     if (REREAD_AFTER.has(refusal.code)) await this.#refreshAfter();
   }
   async #askApprover(right: GiveBackRight): Promise<void> {
