@@ -1419,8 +1419,7 @@ describe("Reopen bill stopping the dishes that never came", () => {
   });
 
   it("does not stop the dishes on a bill already part-paid, writing nothing", async () => {
-    // 10.00 paid of 28.00: without the steak the bill would owe 3.00, less than it has received,
-    // and the printed bill's payments cannot be refunded first.
+    // 10.00 paid of 28.00: without the steak the bill would owe 3.00, less than it has received.
     const party = await steakAndBeer();
     const paymentId = await fixture.payInCash(venue, party.tabId, "10.00");
     const kitchen = () =>

@@ -62,8 +62,9 @@ export interface ReopenedBill extends SplitAfterPrint {
 
 /**
  * Credit a table's printed ticket in full and put copies of its dishes on a new open bill of the
- * same party, so each guest's dishes can be moved to their own bill and printed. Refuses in
- * the order the till offers the fix: the bill's state, then its money, then its unserved dishes.
+ * same party, so each guest's dishes can be moved to their own bill and printed; the copies leave
+ * out the dishes `stopUnserved` stops that the kitchen had not started. Refuses in the order the
+ * till offers the fix: the bill's state, then its money, then its unserved dishes.
  */
 export async function splitAfterPrint(
   deps: TillSaleDeps,
@@ -175,8 +176,8 @@ async function refuseUnservedDishes(
 ): Promise<UnservedBillDish[]> {
   const dishes = await unservedDishes(tx, id);
   if (dishes.length === 0) return dishes;
-  // A printed bill's payments cannot be refunded (`requireRefundableBill`), so one holding any is not
-  // offered the stop, which could leave it owing less than it has received.
+  // Not offered on a bill holding a payment: stopping dishes could leave the reopened bill owing
+  // less than it has received.
   const canStop = (await servedOrCharged(tx, id)).length > 0 && !(await holdsPayment(tx, id));
   if (!stopUnserved || !canStop)
     throw new AppError("bill.unserved_dishes", { workingOrderId: id, dishes, canStop });
@@ -184,7 +185,7 @@ async function refuseUnservedDishes(
 }
 
 /**
- * Stops the kitchen work of the unserved dishes that never fired, dish or extra, as a cancel of a
+ * Stops each unfired kitchen item of the unserved dishes, a dish's or an extra's, as a cancel of a
  * sent dish does; abandoning the bill voids every fired quantity still unserved, so each item is
  * corrected once. Answers the dishes the kitchen had started.
  */
@@ -250,8 +251,7 @@ async function stopHeldDishes(
 
 /**
  * Takes the stopped quantities off the reopened bill's copies as Take off does on an open bill,
- * except a dish the kitchen had started: its copy keeps the charge, so a waiter takes it off there
- * with a reason if they choose.
+ * except a dish the kitchen had started, whose copy keeps its charge.
  */
 async function takeOffCopies(
   tx: Transaction,
@@ -261,30 +261,34 @@ async function takeOffCopies(
   started: ReadonlySet<string>,
   operatorId: string,
 ): Promise<void> {
-  if (unserved.length === 0) return;
-  const rows = await tx
-    .select()
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, opened.billId));
-  const copyOf = (lineId: string) => rows.find((row) => row.id === opened.lineCopies.get(lineId))!;
-  const kept = unserved
-    .filter(({ lineId }) => started.has(lineId))
-    .map(({ lineId, quantity }) => ({ dish: copyOf(lineId), off: stringToThousandths(quantity) }));
-  const priors = await tx
-    .select()
-    .from(lineServiceCancellations)
-    .where(
-      inArray(
-        lineServiceCancellations.lineId,
-        kept.map(({ dish }) => dish.id),
-      ),
+  if (started.size > 0) {
+    const rows = await tx
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, opened.billId));
+    const rowById = new Map(rows.map((row) => [row.id, row]));
+    const kept = unserved
+      .filter(({ lineId }) => started.has(lineId))
+      .map(({ lineId, quantity }) => ({
+        dish: rowById.get(opened.lineCopies.get(lineId)!)!,
+        off: stringToThousandths(quantity),
+      }));
+    const priors = await tx
+      .select()
+      .from(lineServiceCancellations)
+      .where(
+        inArray(
+          lineServiceCancellations.lineId,
+          kept.map(({ dish }) => dish.id),
+        ),
+      );
+    await writeServiceCancellations(
+      tx,
+      serviceCancellationFamilies(rows, kept, priors),
+      operatorId,
+      true,
     );
-  await writeServiceCancellations(
-    tx,
-    serviceCancellationFamilies(rows, kept, priors),
-    operatorId,
-    true,
-  );
+  }
   for (const { lineId, quantity } of unserved) {
     if (started.has(lineId)) continue;
     const [copy] = await tx

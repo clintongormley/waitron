@@ -962,7 +962,8 @@ declare module "@waitron/shared" {
     /**
      * Reopen bill found dishes neither served in full nor taken off service, printed with Print
      * anyway; Mark served on `released` ones lets it carry on. `canStop`: something on the bill was
-     * served or its charge kept, so `stopUnserved` would stop the dishes and reopen.
+     * served or its charge kept and the bill holds no payment, so `stopUnserved` would stop the
+     * dishes and reopen.
      */
     "bill.unserved_dishes": {
       workingOrderId: string;
