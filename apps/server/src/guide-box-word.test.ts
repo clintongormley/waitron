@@ -25,7 +25,6 @@ const OTHER_EQUIPOS: Record<string, string[]> = {
     "**Equipo**",
     "activa los equipos que puede usar este perfil",
   ],
-  "printers.md": ["Los nombres de equipos en gris", "Elige un equipo para fijarlo"],
   "table-service.md": [
     "**Equipo de este dispositivo**",
     "**Equipo**, **Idioma**",

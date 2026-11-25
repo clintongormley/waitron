@@ -1535,6 +1535,7 @@ describe("the Edit dialog", () => {
     expect(field(el, "edit-reader").value).toBe("");
     expect(shown.textContent!.trim()).toBe(useDefaultNone());
     expect(field(el, "edit-reader").options[0]).toEqual(inheritOption());
+    expect(field(el, "edit-reader").inheritedSuffix).toBe(t("inherit.suffix"));
     expect(field(el, "edit-reader").placeholder).toBe("");
   });
 
@@ -1859,24 +1860,34 @@ describe("the Edit dialog", () => {
     },
   );
 
-  it("after a deleted reader is refused, a device holding another reader goes back to it once read again", async () => {
-    const api = editApi({
-      setDeviceReader: vi
-        .fn()
-        .mockRejectedValue({ code: "reader.not_found", params: { id: "r1" } }),
-    });
-    const el = await openEdit(api);
-    expect(field(el, "edit-reader").value).toBe("r2");
-    vi.mocked(api.listReaders).mockResolvedValue(readers.filter((r) => r.id !== "r1"));
-    await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
-    await flush(el);
-    await save(el);
+  it.each(["r2", "r3"])(
+    "after a deleted reader is refused, the device shows its stored reader %s again",
+    async (stored) => {
+      const api = editApi({
+        getDeviceReader: vi.fn().mockResolvedValue({ readerId: stored }),
+        setDeviceReader: vi
+          .fn()
+          .mockRejectedValue({ code: "reader.not_found", params: { id: "r1" } }),
+      });
+      const el = await openEdit(api);
+      expect(field(el, "edit-reader").value).toBe(stored);
+      vi.mocked(api.listReaders).mockResolvedValue(readers.filter((r) => r.id !== "r1"));
+      await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
+      await flush(el);
+      await save(el);
 
-    await vi.waitFor(() => expect(field(el, "edit-reader").value).toBe("r2"));
-    expect(field(el, "edit-reader").options.map((option) => option.value)).not.toContain("r1");
-    expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found"));
-    await expectSaveQuiet(el);
-  });
+      await vi.waitFor(() => expect(field(el, "edit-reader").value).toBe(stored));
+      const options = field(el, "edit-reader").options;
+      expect(options.map((option) => option.value)).not.toContain("r1");
+      expect(options).toContainEqual(
+        stored === "r3"
+          ? { value: "r3", label: "Old terminal (Acme Pay)", fixed: true }
+          : { value: "r2", label: "Bar (Zeta Pay)" },
+      );
+      expect(field(el, "edit-reader").error).toBe(codeMessage("reader.not_found"));
+      await expectSaveQuiet(el);
+    },
+  );
 
   it("a reader picked while the deleted reader's re-read is unanswered is kept", async () => {
     let answer!: (rows: ReaderRow[]) => void;
@@ -3341,7 +3352,7 @@ describe("the Edit dialog", () => {
           getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r3" }),
           getProfileReaders: vi
             .fn()
-            .mockResolvedValue({ readerIds: ["r2", "r3"], defaultReaderId: null }),
+            .mockResolvedValue({ readerIds: ["r2", "r3"], defaultReaderId: "r3" }),
         }),
       );
       const reader = field(el, "edit-reader");
@@ -3353,6 +3364,41 @@ describe("the Edit dialog", () => {
       ]);
       await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
       await vi.waitFor(() => expect(reader.options.map(({ value }) => value)).toEqual(["", "r2"]));
+    });
+
+    it("does not offer an inactive reader after the profile saves and its new reader is refused", async () => {
+      const api = equipmentApi({
+        getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r3" }),
+        getProfileReaders: vi
+          .fn()
+          .mockImplementation(async (id: string) => ({
+            readerIds: id === "pa" ? ["r2", "r3"] : ["r2"],
+            defaultReaderId: null,
+          })),
+        setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.payment_in_progress" }),
+      });
+      const el = await openEdit(api);
+      const reader = field(el, "edit-reader");
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+      await chooseOption(reader, "r2");
+      await save(el);
+      await vi.waitFor(() => expect(reader.error).toBe(t("devices.err_reader_busy")));
+      expect(api.updateDevice).toHaveBeenCalledWith(
+        "t1",
+        expect.objectContaining({ profileId: "pb" }),
+      );
+      expect(reader.options.map(({ value }) => value)).toEqual(["", "r2"]);
+    });
+
+    it("waits for the selected profile before naming its inherited printer", async () => {
+      const profiles = deferred<DeviceProfile[]>();
+      const el = await openEdit(
+        equipmentApi({ listDeviceProfiles: vi.fn().mockReturnValue(profiles.promise) }),
+      );
+      const receipt = field(el, "edit-receipt-printer");
+      expect(receipt.options).toEqual([]);
+      profiles.resolve([withDefaults]);
+      await vi.waitFor(() => expect(receipt.options[0]).toEqual(inheritOption("Kitchen")));
     });
 
     it("a reader refusal shows under the reader in its own words", async () => {

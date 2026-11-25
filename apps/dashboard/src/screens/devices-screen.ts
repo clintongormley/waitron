@@ -603,7 +603,7 @@ export class DevicesScreen extends LitElement {
   @state() private readerHolders = new Map<string, ReaderHolderRow>();
   /** Each profile's card readers, read as the Edit dialog needs them. */
   @state() private profileReaders = new Map<string, ProfileReaderList>();
-  #storedReaderId: string | null = null;
+  #storedReader: { id: string | null; profileId: string | null } = { id: null, profileId: null };
   /** Set when the profile changes before the reader has loaded, so the late load keeps Use default. */
   #profileChangedWhileReaderLoads = false;
   #editEpoch = 0;
@@ -1136,7 +1136,7 @@ export class DevicesScreen extends LitElement {
     this.readers = [];
     this.readerReadError = null;
     this.chosenReaderId = "";
-    this.#storedReaderId = null;
+    this.#storedReader = { id: null, profileId: null };
     this.#profileChangedWhileReaderLoads = false;
     this.readerHolders = new Map();
     this.profileReaders = new Map();
@@ -1157,7 +1157,7 @@ export class DevicesScreen extends LitElement {
       this.readers = readers;
       this.readerHolders = new Map(holders.map((row) => [row.readerId, row]));
       if (profileId !== null && list !== null) this.profileReaders = new Map([[profileId, list]]);
-      this.#storedReaderId = readerId;
+      this.#storedReader = { id: readerId, profileId };
       this.chosenReaderId = readerId ?? "";
       this.readerState = "ready";
       this.#readerScope = draftScopeFor(this, {
@@ -1199,7 +1199,7 @@ export class DevicesScreen extends LitElement {
       this.readers = readers;
       this.readerHolders = new Map(holders.map((row) => [row.readerId, row]));
       this.profileReaders = new Map([...this.profileReaders, [profileId, list]]);
-      this.#storedReaderId = readerId;
+      this.#storedReader = { id: readerId, profileId };
       this.#readerScope?.commit(readerId ?? "");
       if (!this.#readerOptions().some((option) => option.value === this.chosenReaderId)) {
         this.chosenReaderId = readerId ?? "";
@@ -1349,12 +1349,7 @@ export class DevicesScreen extends LitElement {
       : `${printerLabel(printer)} (${fill("equipment.carried_by", { device: holder })})`;
   }
 
-  /**
-   * Use default first, naming what it resolves to; then the profile's switched-on printers, each
-   * another device carries marked. While the profile is unchanged the device keeps the printer it
-   * chose, so that one is offered even when switched off, and marked when the profile no longer
-   * lists it.
-   */
+  /** Keep a stored printer visible on its profile so a switched-off or unlisted choice can be seen. */
   #printerOptions(
     role: (typeof PRINTER_ROLES)[number],
     profile: DeviceProfile | undefined,
@@ -1375,8 +1370,12 @@ export class DevicesScreen extends LitElement {
       fallback === undefined || this.#printerHolder(fallback, drawer) !== null
         ? null
         : printerLabel(fallback);
+    const inheritance =
+      profile !== undefined || this.editForm.profileId === ""
+        ? [inheritEquipment(resolved ?? t("equipment.none"))]
+        : [];
     return [
-      inheritEquipment(resolved ?? t("equipment.none")),
+      ...inheritance,
       ...listed.map((p) => ({ value: p.id, label: this.#printerChoiceLabel(p, drawer) })),
       ...(unlisted === undefined
         ? []
@@ -1415,8 +1414,9 @@ export class DevicesScreen extends LitElement {
       return reader === undefined ? [] : [reader];
     });
     const kept =
-      this.editForm.profileId === this.editing?.deviceProfileId
-        ? this.readers.find((r) => r.id === this.#storedReaderId && !r.active)
+      this.editForm.profileId === this.editing?.deviceProfileId &&
+      this.editForm.profileId === this.#storedReader.profileId
+        ? this.readers.find((r) => r.id === this.#storedReader.id && !r.active)
         : undefined;
     const fallback = this.readers.find((r) => r.id === list.defaultReaderId && r.active);
     const holder = fallback && this.readerHolders.get(fallback.id)?.holder;
@@ -1500,12 +1500,12 @@ export class DevicesScreen extends LitElement {
           : [deviceProfileId, ...approvedProfileIds],
     };
     const readerId = submittedReader === "" ? null : submittedReader;
-    if (this.readerState === "ready" && readerId !== this.#storedReaderId) {
+    if (this.readerState === "ready" && readerId !== this.#storedReader.id) {
       // Saved separately: the reader belongs to the payments module.
       try {
         await this.api.setDeviceReader(device.id, readerId);
         if (epoch !== this.#editEpoch) return;
-        this.#storedReaderId = readerId;
+        this.#storedReader = { id: readerId, profileId: deviceProfileId };
         readerScope?.commit(submittedReader);
       } catch (error) {
         if (epoch !== this.#editEpoch) return;

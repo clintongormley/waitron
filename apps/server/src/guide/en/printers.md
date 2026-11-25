@@ -58,7 +58,7 @@ After importing a configuration, find its A4 printers with **Add a printer** and
 
 In **Devices**, choose **Edit** from the device's row menu.
 Choose **Inherit** to follow the profile's equipment, or choose a named item to set it on this
-device. A blank equipment cell in **Devices** follows the profile.
+device. Where a device uses that kind of equipment, a blank cell in **Devices** follows the profile.
 
 Waitron alerts you when a device's battery is low; if its battery reading in **Devices** is grey or says **Not reported**, check its charge on the device itself.
 
