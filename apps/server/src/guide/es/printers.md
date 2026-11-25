@@ -106,7 +106,7 @@ el resultado, comprueba si el cajón se abrió antes de volver a abrirlo.
 
 Si moviste efectivo a mano, [regístralo en el terminal](table-service.md#drawer-cash-entry).
 
-Elige **Reimprimir** para enviar a una impresora de tickets un trabajo de ese tipo.
+Si un trabajo se envió a una impresora de tickets, **Reimprimir** ofrece impresoras de tickets.
 Si el original ya se imprimió, obtendrás un duplicado. Para imprimir en A4 una copia de una
 factura enviada a una impresora de tickets, usa **Pedidos**.
 También puedes reimprimir una comanda de estación o un justificante de devolución en una
