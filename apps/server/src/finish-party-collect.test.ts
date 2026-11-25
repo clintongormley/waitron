@@ -800,40 +800,45 @@ describe("a bill sent to the counter waits there until handed over", () => {
       });
       return { profileId: profile!.id, zoneId };
     });
-    const { deviceId } = await enrolDeviceForTest(venue.db, venue.cfg, {
-      name: "Pickup pass till",
-      profileId,
-      kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [zoneId] },
-    });
-    const personId = venue.staffId;
-    const sessionId = await openTillSession(venue.db, { deviceId, personId });
-    expect(await post(t.partyId, await collect(t.partyId, await bodyFor(t)))).toEqual({
-      status: 200,
-      body: { state: "closed" },
-    });
-    await inTx(venue, async (tx) => {
-      const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId)).find(
-        (entry) => entry.kind === "pass",
-      )!;
-      const board = await readScopedPassBoard(tx, passScopeOf(screen));
-      const card = board.toFire.find(
-        ({ target }) => target.kind === "bill" && target.workingOrderId === billId,
-      )!;
-      expect(card.releaseTicketItemIds).toHaveLength(1);
-      const result = await releasePassItems(
-        tx,
-        venue.cfg,
-        { deviceId, personId, sessionId },
-        {
-          submissionId: randomUUID(),
-          target: card.target,
-          ticketItemIds: card.releaseTicketItemIds,
-          expectedContext: card.releaseContext,
-        },
+    try {
+      const { deviceId } = await enrolDeviceForTest(venue.db, venue.cfg, {
+        name: "Pickup pass till",
+        profileId,
+        kitchenScreen: { kind: "pass", stationIds: null, zoneIds: [zoneId] },
+      });
+      const personId = venue.staffId;
+      const sessionId = await openTillSession(venue.db, { deviceId, personId });
+      expect(await post(t.partyId, await collect(t.partyId, await bodyFor(t)))).toEqual({
+        status: 200,
+        body: { state: "closed" },
+      });
+      await inTx(venue, async (tx) => {
+        const screen = (await VENUE_SERVICE.readDeviceKitchenScreens(tx, deviceId)).find(
+          (entry) => entry.kind === "pass",
+        )!;
+        const board = await readScopedPassBoard(tx, passScopeOf(screen));
+        const card = board.toFire.find(
+          ({ target }) => target.kind === "bill" && target.workingOrderId === billId,
+        )!;
+        expect(card.releaseTicketItemIds).toHaveLength(1);
+        const result = await releasePassItems(
+          tx,
+          venue.cfg,
+          { deviceId, personId, sessionId },
+          {
+            submissionId: randomUUID(),
+            target: card.target,
+            ticketItemIds: card.releaseTicketItemIds,
+            expectedContext: card.releaseContext,
+          },
+        );
+        expect(result.releasedTicketItemIds).toEqual(card.releaseTicketItemIds);
+      });
+    } finally {
+      await inTx(venue, (tx) =>
+        tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, zoneId)),
       );
-      expect(result.releasedTicketItemIds).toEqual(card.releaseTicketItemIds);
-      await tx.update(floorZones).set({ active: false }).where(eq(floorZones.id, zoneId));
-    });
+    }
   });
 
   it("shows a finished table's food only at its first counter and lets that till hand it over", async () => {
@@ -867,6 +872,19 @@ describe("a bill sent to the counter waits there until handed over", () => {
         departmentId,
       ] as const;
     });
+    const send = (zoneId: string, path: string, body: Record<string, unknown> = {}) =>
+      withZones([zoneId], async () =>
+        venue.app.request(path, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie: venue.cookie.staff },
+          body: JSON.stringify({ submissionId: randomUUID(), ...body }),
+        }),
+      );
+    const act = (zoneId: string, action: string) => send(zoneId, `/api/orders/${billId}/${action}`);
+    const onTable = await act(pickup.id, "reprint");
+    expect(onTable.status).toBe(403);
+    expect(await onTable.json()).toMatchObject({ error: { code: "service_zone.not_allowed" } });
+
     const finish = await collect(t.partyId, await bodyFor(t));
     expect(await post(t.partyId, finish)).toEqual({ status: 200, body: { state: "closed" } });
     expect(await post(t.partyId, finish)).toEqual({ status: 200, body: { state: "closed" } });
@@ -901,15 +919,6 @@ describe("a bill sent to the counter waits there until handed over", () => {
       );
     }
 
-    const send = (zoneId: string, path: string, body: Record<string, unknown> = {}) =>
-      withZones([zoneId], async () =>
-        venue.app.request(path, {
-          method: "POST",
-          headers: { "content-type": "application/json", cookie: venue.cookie.staff },
-          body: JSON.stringify({ submissionId: randomUUID(), ...body }),
-        }),
-      );
-    const act = (zoneId: string, action: string) => send(zoneId, `/api/orders/${billId}/${action}`);
     expect((await act(venue.tables.zoneId, "reprint")).status).toBe(200);
     expect((await act(pickup.id, "reprint")).status).toBe(200);
     const refused = await act(later.id, "collect");

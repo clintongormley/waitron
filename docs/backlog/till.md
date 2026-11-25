@@ -876,7 +876,7 @@ If the server requires an options list on a recalled dish absent from the live m
 
 ## Decisions and deliberate limits
 
-- **Pickup counter when the department has more than one.** Decide whether a presented bill moved at a later counter should keep that counter after payment. Today paid food from detached table bills goes to the first active counter in the sale's department.
+- **A1031 pickup counter (watcher, 2026-11-25).** A detached table bill still waiting for handover lists at the first active counter in the sale's department after payment, including when staff moved it by hand at a later counter. With no active counter it uses the recorded zone. Whether a later counter can keep that pickup is an owner's choice.
 
 - **On the voids and comps report, choosing a reason narrows the list, not the totals below it (A958,
   left open by A758-3; kept by the watcher 2026-11-24, not asked).** With
@@ -1138,21 +1138,13 @@ If the server requires an options list on a recalled dish absent from the live m
   slice 2, answer 5).** It is a fault in Waitron: the floor and the bill list carry on, and the
   server logs `bill.number_missing` naming only the bill and its party.
 
-### A paid bill may leave its party for the counter once (A758-7, 2026-10-22)
+### A paid bill leaves its party when a finished table's guests collect at the counter (A758-7)
 
-The database's freeze on a paid (settled) bill has one exception, added by the core migration
-`0185_settled_order_to_counter` (frozen at A760 and deleted with that history on 2026-11-07, A1422;
-`git show f519799de0:scripts/fixtures/a760-history/core/0185_settled_order_to_counter.sql` reads it), which
-re-created `working_orders_enforce_transition`, now in `packages/db/drizzle/0000_baseline.sql`: a
-paid bill not yet handed over may leave its party, once,
-with every other column of its row unchanged — its `revision` and `label` included. Nothing else
-about a paid bill may change; it cannot join a party, change party, or leave one after handover.
-The database allows this for every paid table bill not yet handed over, a party closed days ago
-included; only the server code limits it to Finish table's collection at the counter
-(`finishPartyService`, `apps/server/src/finish-party-service.ts`). Decision 2 of the
-[plan](../superpowers/plans/2026-10-22-a758-7-collect-at-counter.md) has the reasons.
-`scripts/behavioural-triggers.test.ts` tests refusal of a party change that also stamps collection.
-The allowed departure is exercised through Finish table in `apps/server/src/finish-party-collect.test.ts`.
+Finish table clears the party and bill number on a paid bill waiting for handover. The paid-order
+trigger allows party, number, name and editor changes while keeping the sale's recorded label and
+zone. The departure and the refusal to stamp collection with a party change are checked in
+`packages/db/src/schema/orders.transition.test.ts`.
+[Finish table decisions](../superpowers/plans/2026-10-22-a758-7-collect-at-counter.md#owner-points-each-with-the-default-this-pr-builds).
 
 ### A841 slice 2's review points kept as built (lane A, 2026-10-21, before slice 3)
 

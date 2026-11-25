@@ -131,7 +131,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | GET  /api/invoice-delivery-options                      | query order; query zone, for a bill not saved yet only | refuses GET /api/invoice-delivery-options (order), (zone); a bill not saved yet: "reads the device's invoice printer for a bill not saved yet"; a saved bill ignores the zone: "reads a saved bill's invoice options whatever zone the till sends with it" |
  * | POST /api/dead-ends/sale                                | body zone; body order  | refuses POST /api/dead-ends/sale (zone), (order)     |
  * | POST /api/working-orders                                | body zone; body order  | refuses POST /api/working-orders (zone), (order)     |
- * | GET  /api/working-orders                                | list, by pickup or recorded zone | "lists only the profile's zones, tables and orders"  |
+ * | GET  /api/working-orders                                | list, by order zone    | "lists only the profile's zones, tables and orders"  |
  * | GET  /api/working-orders/:id                            | order                  | refuses GET /api/working-orders/:id                  |
  * | GET  /api/working-orders/:id/placed                     | order                  | refuses GET /api/working-orders/:id/placed           |
  * | PUT  /api/working-orders/:id                            | order                  | refuses PUT /api/working-orders/:id                  |
@@ -155,7 +155,7 @@ import { setStationsWaitForPass } from "./testing/pass-waiting.js";
  * | POST /api/sales/:id/deliveries/:deliveryId/to-receipt   | order                  | refuses POST .../deliveries/:deliveryId/to-receipt   |
  * | POST /api/sales/:id/deliveries/:deliveryId/retry        | order                  | refuses POST .../deliveries/:deliveryId/retry        |
  * | POST /api/sales/:id/receipt                             | order                  | refuses POST /api/sales/:id/receipt                  |
- * | POST /api/sales/:id/reprint                             | recorded or pickup zone | refuses POST /api/sales/:id/reprint                  |
+ * | POST /api/sales/:id/reprint                             | order                  | refuses POST /api/sales/:id/reprint                  |
  * | POST /api/working-orders/:id/cancel                     | order                  | refuses POST /api/working-orders/:id/cancel          |
  * | POST /api/working-orders/:id/split-after-print          | order                  | refuses POST /api/working-orders/:id/split-after-print |
  * | GET  /api/tables/state, /api/zones                      | list, by table or zone | "lists only the profile's zones, tables and orders"  |

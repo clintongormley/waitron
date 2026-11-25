@@ -19,7 +19,7 @@ import { passReleaseRefusal } from "./pass-release.js";
 import { byText } from "./text-order.js";
 import { liveKitchenDish } from "./kitchen-ticket-state.js";
 
-/** A waiting station and zone no pass device could fire. */
+/** A waiting station and zone with no pass covering that pair. */
 export interface PassCoverageGap {
   stationId: string;
   stationName: string;

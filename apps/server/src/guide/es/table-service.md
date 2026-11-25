@@ -379,11 +379,11 @@ tienen ticket de estación pasa a ser un pedido pagado que espera en el mostrado
 cierra. Abre **Pedidos pendientes** en el primer mostrador activo del departamento de la venta.
 Elige **Entregar** en el pedido marcado **Pagado, sin entregar** cuando lo recojan. Desde la caja
 de la mesa, puedes encontrar su ticket en **Buscar cuenta**. Si el departamento no tiene mostrador
-activo, elige **Entregar** en el pedido en **Cocina**.
+activo, elige **Entregar** en el pedido en **Estaciones**.
 
 Si mueves manualmente al mostrador una cuenta que ya has presentado, cobra en la zona de la mesa.
-Una vez cobrada, abre **Pedidos pendientes** en el primer mostrador activo, aunque hayas movido
-la cuenta desde otro mostrador.
+Una vez cobrada, abre **Pedidos pendientes** en el primer mostrador activo según el orden de
+las zonas, aunque hayas usado una caja en otro mostrador.
 
 ## Devolver un pago desde el recibo {#refund-receipt}
 
