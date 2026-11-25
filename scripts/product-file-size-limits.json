@@ -53,7 +53,7 @@
   "apps/till/src/screens/till-ticket-view.ts": 1250,
   "apps/till/src/state/draft-sync.ts": 1250,
   "apps/till/src/state/working-order.ts": 1250,
-  "apps/till/src/till-app.ts": 25750,
+  "apps/till/src/till-app.ts": 25758,
   "apps/till/src/widgets/adjustment-dialog.ts": 1250,
   "apps/till/src/widgets/basket.ts": 1500,
   "apps/till/src/widgets/bill-pay-dialog.ts": 2500,
