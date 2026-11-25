@@ -156,9 +156,29 @@ it("lets a signed-in till ask Cloud and refuses the reply after sign-out", async
       body: JSON.stringify(available),
     });
 
-  const response = await post();
+  const caller = new AbortController();
+  const search = {
+    kind: "suggest",
+    workflowId: randomUUID(),
+    query: "Main Street",
+    language: "en",
+  };
+  let stopReceived: boolean | undefined;
+  addressLookup.mockImplementationOnce(async (_input, _authorize, signal) => {
+    caller.abort();
+    stopReceived = signal?.aborted;
+    return { candidates: [{ text: "Main Street 2" }] };
+  });
+  const response = await app.request("/api/address-lookup", {
+    method: "POST",
+    headers: { cookie, "content-type": "application/json" },
+    body: JSON.stringify(search),
+    signal: caller.signal,
+  });
   expect(response.status).toBe(200);
-  expect(await response.json()).toEqual({ available: true });
+  expect(await response.json()).toEqual({ candidates: [{ text: "Main Street 2" }] });
+  expect(addressLookup.mock.calls[0]?.[0]).toEqual(search);
+  expect(stopReceived).toBe(true);
   addressLookup.mockImplementationOnce(async (_input, authorize) => {
     await withTransaction(venue.db, (tx) => endSession(tx, token));
     await authorize();

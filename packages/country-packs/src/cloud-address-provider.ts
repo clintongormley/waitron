@@ -23,23 +23,21 @@ export interface CloudAddressReply {
 const attribution = "Google Maps";
 
 export async function cloudAddressProvider(
-  lookup: (operation: CloudAddressOperation) => Promise<CloudAddressReply>,
+  lookup: (operation: CloudAddressOperation, signal?: AbortSignal) => Promise<CloudAddressReply>,
   language: () => "en" | "es",
 ): Promise<AddressAutocompleteProvider | undefined> {
   if (!(await lookup({ kind: "available" })).available) return;
   const workflows = new Map<string, string>();
   const spain = getCountryPack("ES")!;
   return {
-    async suggest({ query, sessionToken }) {
+    async suggest({ query, sessionToken }, signal) {
       const workflowId = workflows.get(sessionToken) ?? makeBrowserUuid();
       workflows.set(sessionToken, workflowId);
       try {
-        const { candidates } = await lookup({
-          kind: "suggest",
-          workflowId,
-          query,
-          language: language(),
-        });
+        const { candidates } = await lookup(
+          { kind: "suggest", workflowId, query, language: language() },
+          signal,
+        );
         return (candidates ?? []).map(({ text }) => ({
           id: text,
           label: text,

@@ -1,12 +1,12 @@
 import { countryNameFor, getCountryPack, type CloudAddressOperation } from "@waitron/country-packs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import type {
   AddressLookupProvider,
   AddressLookupResult,
   WtAddressLookup,
 } from "@waitron/ui/src/components/wt-address-lookup.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
 import { TillApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
@@ -158,6 +158,28 @@ describe("the invoice recipient dialog's address search", () => {
     expect(abortedWhenSaving).toEqual([true]);
   });
 
+  it("frees the suggestion request when staff leave Street address", async () => {
+    let pending: AbortSignal | null | undefined;
+    const api = new TillApi("", async (_url, options) => {
+      const operation = JSON.parse(options?.body as string) as CloudAddressOperation;
+      if (operation.kind === "available") return Response.json({ available: true });
+      pending = options?.signal;
+      return new Promise((_, reject) => {
+        pending?.addEventListener("abort", () => reject(pending?.reason), { once: true });
+      });
+    });
+    const el = await mountDialog({ lookupAddress: api.addressLookup.bind(api) });
+    const street = lookup(el)!;
+    street.delay = 0;
+    await vi.waitFor(() => expect(street.provider).toBeDefined());
+    await userEvent.fill(street.shadowRoot!.querySelector("input")!, "Calle Mayor");
+    await vi.waitFor(() => expect(pending?.aborted).toBe(false));
+
+    await userEvent.keyboard("{Tab}");
+
+    expect(pending?.aborted).toBe(true);
+  });
+
   it("removes the Google Maps credit when the country changes", async () => {
     const el = await mountDialog();
     await choose(el, { ...MADRID, attribution: "Google Maps" });
@@ -252,6 +274,63 @@ describe("the invoice recipient dialog's address search", () => {
     await userEvent.keyboard("{Enter}");
     expect(saved).toHaveLength(1);
     expect(saved[0]?.recipient).toMatchObject({ address: "Calle Mayor 8, 28013 Madrid, Madrid" });
+  });
+
+  it("saves a manually entered street on the first click while suggestions are visible", async () => {
+    const el = await mountDialog();
+    const saved = confirmed(el);
+    await fill(el, "taxId", "12345678Z");
+    await fill(el, "legalName", "Ana García");
+    await fill(el, "postalCode", "28013");
+    await fill(el, "locality", "Madrid");
+    await fill(el, "province", "Madrid");
+    const street = lookup(el)!;
+    street.delay = 0;
+    await userEvent.fill(street.shadowRoot!.querySelector("input")!, "Calle Mayor 8");
+    await expect.poll(() => street.shadowRoot!.querySelector('[role="option"]')).not.toBeNull();
+
+    await userEvent.click(save(el));
+
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.recipient.address).toBe("Calle Mayor 8, 28013 Madrid, Madrid");
+  });
+
+  it("keeps Save tappable on a phone while all five suggestions are visible", async () => {
+    await page.viewport(390, 844);
+    try {
+      const el = await mountDialog({
+        addressProvider: {
+          ...provider,
+          suggest: async () =>
+            [1, 2, 3, 4, 5].map((number) => ({
+              id: String(number),
+              label: `Calle Mayor ${number}`,
+              secondaryLabel: "28013 Madrid",
+            })),
+        },
+      });
+      const saved = confirmed(el);
+      await fill(el, "taxId", "12345678Z");
+      await fill(el, "legalName", "Ana García");
+      await fill(el, "postalCode", "28013");
+      await fill(el, "locality", "Madrid");
+      await fill(el, "province", "Madrid");
+      const street = lookup(el)!;
+      street.delay = 0;
+      await userEvent.fill(street.shadowRoot!.querySelector("input")!, "Calle Mayor 8");
+      await expect
+        .poll(() => street.shadowRoot!.querySelectorAll('[role="option"]').length)
+        .toBe(5);
+
+      await commands.touchGesture({ at: "[data-invoice-save]" });
+
+      await expect
+        .poll(() => saved.map(({ recipient }) => recipient.address))
+        .toEqual(["Calle Mayor 8, 28013 Madrid, Madrid"]);
+    } finally {
+      await commands.parkTouch();
+      await resetPage();
+    }
   });
 
   it("fills the street, postcode, locality and province, and Save choice sends them", async () => {

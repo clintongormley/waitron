@@ -226,11 +226,14 @@ export interface ResolvedAddress {
 
 /** A browser-facing seam; provider credentials stay behind whichever implementation supplies it. */
 export interface AddressAutocompleteProvider {
-  suggest(input: {
-    readonly query: string;
-    readonly countryCode: string;
-    readonly sessionToken: string;
-  }): Promise<readonly AddressSuggestion[]>;
+  suggest(
+    input: {
+      readonly query: string;
+      readonly countryCode: string;
+      readonly sessionToken: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<readonly AddressSuggestion[]>;
   resolve(input: {
     readonly suggestionId: string;
     readonly sessionToken: string;

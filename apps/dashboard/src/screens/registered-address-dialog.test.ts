@@ -938,6 +938,24 @@ it("offers a suggestion from the registered street and saves a hand-edited stree
   });
 });
 
+it("saves a manually entered street on the first click while suggestions are visible", async () => {
+  const api = stubApi();
+  const panel = await mountSearching(api);
+  await open(panel);
+  await choose(panel, MADRID);
+  const street = part(panel, "registeredStreet") as WtAddressLookup;
+  street.delay = 0;
+  await userEvent.fill(street.shadowRoot!.querySelector("input")!, "Calle Mayor 8");
+  await expect.poll(() => street.shadowRoot!.querySelector('[role="option"]')).not.toBeNull();
+
+  await userEvent.click(save(panel));
+
+  expect(api.changeTaxpayerDomicile).toHaveBeenCalledExactlyOnceWith({
+    taxpayerDomicile: "Calle Mayor 8, 3º B, 28013 Madrid, Madrid",
+    expected: OLD,
+  });
+});
+
 it("fills the parts from a chosen address, its second line into Line 2, and Save sends them joined", async () => {
   const api = stubApi();
   const panel = await mountSearching(api);

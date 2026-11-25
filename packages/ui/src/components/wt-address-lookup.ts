@@ -24,11 +24,14 @@ export interface AddressLookupResult {
 /** The shape of `AddressAutocompleteProvider` in `@waitron/country`, declared here because this
  * package does not depend on that one; the setup app's type test holds the two together. */
 export interface AddressLookupProvider {
-  suggest(input: {
-    readonly query: string;
-    readonly countryCode: string;
-    readonly sessionToken: string;
-  }): Promise<readonly AddressLookupSuggestion[]>;
+  suggest(
+    input: {
+      readonly query: string;
+      readonly countryCode: string;
+      readonly sessionToken: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<readonly AddressLookupSuggestion[]>;
   resolve(input: {
     readonly suggestionId: string;
     readonly sessionToken: string;
@@ -58,11 +61,18 @@ export class WtAddressLookup extends WtInput {
   static override styles = [
     ...WtInput.styles,
     css`
+      :host {
+        position: relative;
+      }
+
       :host([hidden]) {
         display: none !important;
       }
 
       .list {
+        position: absolute;
+        inset-inline: 0;
+        z-index: 1;
         list-style: none;
         margin: var(--wt-space-1) 0 0;
         padding: var(--wt-space-1);
@@ -130,6 +140,7 @@ export class WtAddressLookup extends WtInput {
   /** The generation of the chosen suggestion being resolved, which leaving the field keeps. */
   #resolving?: number;
   #timer?: ReturnType<typeof setTimeout>;
+  #suggestionRequest?: AbortController;
   #automaticSearches = 0;
   #session = sessionToken();
   private readonly listId = uniqueId("wt-address-lookup-list");
@@ -165,6 +176,8 @@ export class WtAddressLookup extends WtInput {
   /** Drops any pending ask and any answer still on its way. */
   #forget(): void {
     clearTimeout(this.#timer);
+    this.#suggestionRequest?.abort();
+    this.#suggestionRequest = undefined;
     this.#generation += 1;
   }
 
@@ -206,16 +219,18 @@ export class WtAddressLookup extends WtInput {
   async #ask(query: string, generation: number): Promise<void> {
     const provider = this.provider;
     if (provider === undefined) return;
+    const request = (this.#suggestionRequest = new AbortController());
     try {
-      const found = await provider.suggest({
-        query,
-        countryCode: this.countryCode,
-        sessionToken: this.#session,
-      });
+      const found = await provider.suggest(
+        { query, countryCode: this.countryCode, sessionToken: this.#session },
+        request.signal,
+      );
       if (generation === this.#generation && query === streetQuery(this.value))
         this.suggestions = found;
     } catch {
       // A suggestion is optional while the person types the address.
+    } finally {
+      if (this.#suggestionRequest === request) this.#suggestionRequest = undefined;
     }
   }
 

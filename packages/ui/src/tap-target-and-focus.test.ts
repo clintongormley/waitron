@@ -96,7 +96,7 @@ async function mountNarrow(
   }
   if (tag === "wt-address-lookup") {
     const search = el as HTMLElementTagNameMap["wt-address-lookup"];
-    search.label = "Find the address";
+    search.label = "Street address";
     search.provider = {
       suggest: async () => [],
       resolve: () => Promise.reject(new Error("unused")),
