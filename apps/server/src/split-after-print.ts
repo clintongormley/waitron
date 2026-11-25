@@ -31,7 +31,11 @@ import { carryLineReductions } from "./order-portions.js";
 import { bumpPartyRevision } from "./parties.js";
 import { carryBillSetMenuCopies } from "./set-menu-bill.js";
 import { carryOrderedPeriods } from "./ordered-periods.js";
-import { carryReceivedPayments, refuseSplitMoney } from "./split-after-print-money.js";
+import {
+  carryReceivedPayments,
+  holdsPayment,
+  refuseSplitMoney,
+} from "./split-after-print-money.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   abandonPlacedOrder,
@@ -118,14 +122,14 @@ export async function reopenToSplitIn(
 ): Promise<ReopenedBill> {
   const { partyId, invoice, unserved } = await refuseReopen(tx, deps, cfg, id, read, stopUnserved);
   const opened = await openSplitBill(tx, cfg, id, partyId);
-  await stopUnservedIn(tx, cfg, id, unserved, operator.personId);
+  const started = await stopHeldDishes(tx, cfg, id, unserved);
   const correctiveId = await creditWholeInvoice(tx, deps, cfg, invoice, {
     reopenedBillId: opened.billId,
     tillSessionId: operator.sessionId,
   });
   await abandonPlacedOrder(tx, cfg, id);
   await carryReceivedPayments(tx, id, opened.billId);
-  await takeOffCopies(tx, cfg, opened, unserved, operator.personId);
+  await takeOffCopies(tx, cfg, opened, unserved, started, operator.personId);
   const revision = (await bumpPartyRevision(tx, partyId))!;
   await recordPlacedOrderCancelled(
     tx,
@@ -133,7 +137,7 @@ export async function reopenToSplitIn(
     cfg,
     id,
     operator.personId,
-    `Bill split after printing to bill ${opened.billNumber}`,
+    `Bill split after printing to bill ${opened.billNumber}${unserved.length > 0 ? "; dishes not served were stopped" : ""}`,
   );
   return {
     billId: opened.billId,
@@ -174,67 +178,115 @@ async function refuseUnservedDishes(
 ): Promise<UnservedBillDish[]> {
   const dishes = await unservedDishes(tx, id);
   if (dishes.length === 0) return dishes;
-  const canStop = (await servedOrCharged(tx, id)).length > 0;
+  // A printed bill's payments cannot be refunded (`requireRefundableBill`), so one holding any is not
+  // offered the stop, which could leave it owing less than it has received.
+  const canStop = (await servedOrCharged(tx, id)).length > 0 && !(await holdsPayment(tx, id));
   if (!stopUnserved || !canStop)
     throw new AppError("bill.unserved_dishes", { workingOrderId: id, dishes, canStop });
   return dishes;
 }
 
-/** Stops each unserved quantity in the kitchen as a cancel of a sent dish does. Runs before the
- * bill is abandoned, which voids whatever fired quantity is still unserved. */
-async function stopUnservedIn(
+/**
+ * Stops the unserved dishes that never fired, as a cancel of a sent dish does; abandoning the bill
+ * voids every fired quantity still unserved. Answers the dishes the kitchen had started.
+ */
+async function stopHeldDishes(
   tx: Transaction,
   cfg: DeviceRequestConfig,
   billId: string,
   unserved: readonly UnservedBillDish[],
+): Promise<Set<string>> {
+  const work = await dishKitchenItems(
+    tx,
+    unserved.map(({ lineId }) => lineId),
+  );
+  const items = (lineId: string) => work.get(lineId) ?? [];
+  const held = unserved.filter(({ lineId }) =>
+    items(lineId).every((item) => item.firedAt === null),
+  );
+  if (held.length > 0) {
+    const rows = await tx
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, billId));
+    const taken = held.map(({ lineId, quantity }) => ({
+      dish: rows.find((row) => row.id === lineId)!,
+      off: stringToThousandths(quantity),
+    }));
+    const priors = await tx
+      .select()
+      .from(lineServiceCancellations)
+      .where(
+        inArray(
+          lineServiceCancellations.lineId,
+          held.map(({ lineId }) => lineId),
+        ),
+      );
+    const groups = await tx
+      .select()
+      .from(orderGroups)
+      .where(
+        inArray(
+          orderGroups.id,
+          taken.flatMap(({ dish }) => dish.groupId ?? []),
+        ),
+      );
+    await enqueueServiceCancellation(
+      tx,
+      cfg,
+      billId,
+      serviceCancellationFamilies(rows, taken, priors),
+      work,
+      undefined,
+      { groupOf: (dish) => groups.find((group) => group.id === dish.groupId) },
+    );
+  }
+  return new Set(
+    unserved.flatMap(({ lineId }) =>
+      items(lineId).some((item) => isStarted(item.state)) ? [lineId] : [],
+    ),
+  );
+}
+
+/**
+ * Takes the stopped quantities off the reopened bill's copies as Take off does on an open bill,
+ * except a dish the kitchen had started: its copy keeps the charge, so a waiter takes it off there
+ * with a reason if they choose.
+ */
+async function takeOffCopies(
+  tx: Transaction,
+  cfg: DeviceRequestConfig,
+  opened: { billId: string; lineCopies: Map<string, string> },
+  unserved: readonly UnservedBillDish[],
+  started: ReadonlySet<string>,
   operatorId: string,
 ): Promise<void> {
   if (unserved.length === 0) return;
   const rows = await tx
     .select()
     .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, billId));
-  const taken = unserved.map(({ lineId, quantity }) => ({
-    dish: rows.find((row) => row.id === lineId)!,
-    off: stringToThousandths(quantity),
-  }));
-  const ids = taken.map(({ dish }) => dish.id);
+    .where(eq(workingOrderLines.workingOrderId, opened.billId));
+  const copyOf = (lineId: string) => rows.find((row) => row.id === opened.lineCopies.get(lineId))!;
+  const kept = unserved
+    .filter(({ lineId }) => started.has(lineId))
+    .map(({ lineId, quantity }) => ({ dish: copyOf(lineId), off: stringToThousandths(quantity) }));
   const priors = await tx
     .select()
     .from(lineServiceCancellations)
-    .where(inArray(lineServiceCancellations.lineId, ids));
-  const work = await dishKitchenItems(tx, ids);
-  const groups = await tx
-    .select()
-    .from(orderGroups)
     .where(
       inArray(
-        orderGroups.id,
-        taken.flatMap(({ dish }) => dish.groupId ?? []),
+        lineServiceCancellations.lineId,
+        kept.map(({ dish }) => dish.id),
       ),
     );
-  const families = serviceCancellationFamilies(rows, taken, priors);
-  await enqueueServiceCancellation(tx, cfg, billId, families, work, undefined, {
-    groupOf: (dish) => groups.find((group) => group.id === dish.groupId),
-  });
-  for (const family of families)
-    await writeServiceCancellations(
-      tx,
-      [family],
-      operatorId,
-      (work.get(family.dish.id) ?? []).some((item) => isStarted(item.state)),
-    );
-}
-
-/** Takes the stopped quantities off the reopened bill's copies as Take off does on an open bill. */
-async function takeOffCopies(
-  tx: Transaction,
-  cfg: DeviceRequestConfig,
-  opened: { billId: string; lineCopies: Map<string, string> },
-  unserved: readonly UnservedBillDish[],
-  operatorId: string,
-): Promise<void> {
+  await writeServiceCancellations(
+    tx,
+    serviceCancellationFamilies(rows, kept, priors),
+    operatorId,
+    true,
+  );
   for (const { lineId, quantity } of unserved) {
+    if (started.has(lineId)) continue;
     const [copy] = await tx
       .select()
       .from(workingOrderLines)
