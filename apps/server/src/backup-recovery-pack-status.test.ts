@@ -10,7 +10,6 @@ import {
 const DAY = 24 * 60 * 60 * 1000;
 const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 const KEY_1 = "2026-10-01 · first";
-const KEY_2 = "2026-10-20 · second";
 
 const included = {
   bucket: {
@@ -26,13 +25,7 @@ const included = {
     settingsRevision: "rev-a",
     destination: "bucket",
   },
-  serverKey: (keyName: string, carriedKey: boolean): RecoveryPackPartRecord => ({
-    part: "server-key",
-    state: "included",
-    keyName,
-    carriedKey,
-  }),
-} satisfies Record<string, RecoveryPackPartRecord | ((...args: never[]) => RecoveryPackPartRecord)>;
+} satisfies Record<string, RecoveryPackPartRecord>;
 
 function pack(
   number: number,
@@ -46,7 +39,7 @@ function pack(
     madeBy: "person",
     madeByName: options.name === undefined ? "Martha Green" : options.name,
     receivedAt: options.received === false ? null : new Date(madeAt),
-    parts: options.parts ?? [included.bucket, included.archives, included.serverKey(KEY_1, false)],
+    parts: options.parts ?? [included.bucket, included.archives],
   };
 }
 
@@ -54,7 +47,6 @@ const current: CurrentChecks = {
   keyChangedAt: "2026-09-20T08:00:00.000Z",
   bucket: { revision: "rev-b" },
   archives: { revision: "rev-a" },
-  serverKeyName: KEY_1,
 };
 
 const base: PackStatusInput = {
@@ -92,7 +84,6 @@ describe("the latest pack", () => {
       parts: [
         { part: "bucket", state: "included" },
         { part: "archives", state: "included" },
-        { part: "server-key", state: "included" },
       ],
     });
     expect(answer).toMatchObject({ upToDate: true, incomplete: false, reasons: [] });
@@ -125,16 +116,6 @@ describe("the latest pack", () => {
     ],
     ["the bucket copy was switched off", { bucket: null }, [{ part: "bucket", kind: "removed" }]],
     ["the archives were switched off", { archives: null }, [{ part: "archives", kind: "removed" }]],
-    [
-      "the server key was replaced",
-      { serverKeyName: KEY_2 },
-      [{ part: "server-key", kind: "key_replaced" }],
-    ],
-    [
-      "the fiscal module is gone",
-      { serverKeyName: undefined },
-      [{ part: "server-key", kind: "removed" }],
-    ],
   ])("is out of date when %s", (_name, change, reasons) => {
     const answer = status([pack(1, "2026-10-12T10:00:00.000Z")], {
       current: { ...current, ...change },
@@ -146,7 +127,7 @@ describe("the latest pack", () => {
   it("counts unreadable archive settings as changed, even against a record with no revision", () => {
     const noRevision = { ...included.archives, settingsRevision: undefined };
     for (const archives of [included.archives, noRevision]) {
-      const parts = [included.bucket, archives, included.serverKey(KEY_1, false)];
+      const parts = [included.bucket, archives];
       const answer = status([pack(1, "2026-10-12T10:00:00.000Z", { parts })], {
         current: { ...current, archives: "unreadable" },
       });
@@ -158,47 +139,16 @@ describe("the latest pack", () => {
   it.each<[RecoveryPackPartRecord["part"], Partial<CurrentChecks>]>([
     ["bucket", {}],
     ["archives", {}],
-    ["server-key", {}],
   ])("is out of date when the %s part was absent and is set up now", (part) => {
-    const parts = [included.bucket, included.archives, included.serverKey(KEY_1, false)].map((p) =>
+    const parts = [included.bucket, included.archives].map((p) =>
       p.part === part ? { part, state: "absent" as const } : p,
     );
     const answer = status([pack(1, "2026-10-12T10:00:00.000Z", { parts })]);
     expect(answer.reasons).toEqual([{ part, kind: "set_up_after" }]);
   });
 
-  describe("a pack made while the box had no server key", () => {
-    const parts = [
-      included.bucket,
-      included.archives,
-      { part: "server-key" as const, state: "not-set-up" as const },
-    ];
-    const made = pack(1, "2026-10-12T10:00:00.000Z", { parts });
-
-    it.each([
-      ["the box still has no key", null],
-      ["the venue no longer files invoices", undefined],
-    ])("is up to date and not incomplete while %s", (_label, serverKeyName) => {
-      const answer = status([made], { current: { ...current, serverKeyName } });
-      expect(answer.incomplete).toBe(false);
-      expect(answer.reasons).toEqual([]);
-      expect(answer.upToDate).toBe(true);
-    });
-
-    it("is out of date, not incomplete, once the box has a key", () => {
-      const answer = status([made]);
-      expect(answer.incomplete).toBe(false);
-      expect(answer.reasons).toEqual([{ part: "server-key", kind: "set_up_after" }]);
-      expect(answer.upToDate).toBe(false);
-    });
-  });
-
   it("stays up to date for a part absent then and absent now", () => {
-    const parts = [
-      { part: "bucket" as const, state: "absent" as const },
-      included.archives,
-      included.serverKey(KEY_1, false),
-    ];
+    const parts = [{ part: "bucket" as const, state: "absent" as const }, included.archives];
     expect(
       status([pack(1, "2026-10-12T10:00:00.000Z", { parts })], {
         current: { ...current, bucket: null },
@@ -210,7 +160,6 @@ describe("the latest pack", () => {
     const parts = [
       { ...included.bucket, keyChangedAt: "2026-10-12T10:00:00.000Z" },
       { ...included.archives, keyChangedAt: "2026-10-12T10:00:00.000Z" },
-      included.serverKey(KEY_1, false),
     ];
     const made = pack(1, "2026-10-12T10:00:00.000Z", { parts });
     expect(status([made], { current: { ...current, keyChangedAt: undefined } }).upToDate).toBe(
@@ -229,7 +178,6 @@ describe("the latest pack", () => {
     const parts = [
       { part: "bucket" as const, state: "failed" as const },
       { part: "archives" as const, state: "failed" as const },
-      included.serverKey(KEY_1, false),
     ];
     const answer = status([pack(1, "2026-10-12T10:00:00.000Z", { parts })]);
     expect(answer).toMatchObject({ incomplete: true, upToDate: false, reasons: [] });
@@ -237,22 +185,17 @@ describe("the latest pack", () => {
 });
 
 describe("a pack no browser confirmed receiving", () => {
-  it("is never up to date and never kept as the server key's holder", () => {
-    const answer = status(
-      [
-        pack(2, "2026-10-20T10:00:00.000Z", {
-          received: false,
-          parts: [included.bucket, included.archives, included.serverKey(KEY_2, true)],
-        }),
-      ],
-      { current: { ...current, serverKeyName: KEY_2 } },
-    );
+  it("is never up to date and never kept", () => {
+    const answer = status([
+      pack(2, "2026-10-20T10:00:00.000Z", {
+        received: false,
+      }),
+    ]);
     expect(answer.upToDate).toBe(false);
     expect(answer.latest!.received).toBe(false);
     expect(answer.unreceived).toEqual({
       number: 2,
       madeAt: "2026-10-20T10:00:00.000Z",
-      holdsCurrentServerKey: true,
     });
     expect(answer.keep).toEqual([]);
   });
@@ -260,7 +203,7 @@ describe("a pack no browser confirmed receiving", () => {
   it("identifies an unconfirmed setup PDF without treating it as received", () => {
     const madeAt = "2026-10-20T10:00:00.000Z";
     const offered = {
-      ...pack(1, madeAt, { received: false, parts: [included.serverKey(KEY_1, true)], name: null }),
+      ...pack(1, madeAt, { received: false, parts: [], name: null }),
       madeBy: null,
     };
     const answer = status([offered]);
@@ -268,33 +211,11 @@ describe("a pack no browser confirmed receiving", () => {
     expect(answer.unreceived).toEqual({
       number: 1,
       madeAt,
-      holdsCurrentServerKey: true,
       offeredAtSetup: true,
     });
   });
 
-  it("names a ticked unreceived pack even when a received pack was made after it", () => {
-    const answer = status(
-      [
-        pack(4, "2026-10-22T10:00:00.000Z", {
-          parts: [included.bucket, included.archives, included.serverKey(KEY_2, false)],
-        }),
-        pack(3, "2026-10-20T10:00:00.000Z", {
-          received: false,
-          parts: [included.bucket, included.archives, included.serverKey(KEY_2, true)],
-        }),
-      ],
-      { current: { ...current, serverKeyName: KEY_2 } },
-    );
-    expect(answer.unreceived).toEqual({
-      number: 3,
-      madeAt: "2026-10-20T10:00:00.000Z",
-      holdsCurrentServerKey: true,
-    });
-    expect(answer.keep.some((k) => k.number === 3)).toBe(false);
-  });
-
-  it("names the newest unreceived pack after the newest received one, as not holding the key", () => {
+  it("names the newest unreceived pack after the newest received one", () => {
     const answer = status([
       pack(3, "2026-10-22T10:00:00.000Z", { received: false }),
       pack(2, "2026-10-21T10:00:00.000Z", { received: false }),
@@ -303,7 +224,6 @@ describe("a pack no browser confirmed receiving", () => {
     expect(answer.unreceived).toEqual({
       number: 3,
       madeAt: "2026-10-22T10:00:00.000Z",
-      holdsCurrentServerKey: false,
     });
   });
 
@@ -318,18 +238,6 @@ describe("a pack no browser confirmed receiving", () => {
 });
 
 describe("the packs to keep", () => {
-  it("always lists the received pack holding the server key in force, with no date", () => {
-    const answer = status([
-      pack(2, "2026-10-22T10:00:00.000Z"),
-      pack(1, "2026-10-01T10:00:00.000Z", {
-        parts: [included.bucket, included.archives, included.serverKey(KEY_1, true)],
-      }),
-    ]);
-    expect(answer.keep).toEqual([
-      { number: 1, madeAt: "2026-10-01T10:00:00.000Z", until: null, why: "server_key" },
-    ]);
-  });
-
   it("keeps the newest pack with an older backup key until its archives should be gone (daily schedule)", () => {
     const change = "2026-10-25T07:00:00.000Z";
     const answer = status(
@@ -354,7 +262,6 @@ describe("the packs to keep", () => {
     const standIn = (madeAt: string): RecoveryPackPartRecord[] => [
       { ...included.bucket, keyChangedAt: madeAt, keyNeverChanged: true },
       { ...included.archives, keyChangedAt: madeAt, keyNeverChanged: true },
-      included.serverKey(KEY_1, false),
     ];
     const change = "2026-10-25T07:00:00.000Z";
     const answer = status(
@@ -418,7 +325,6 @@ describe("the packs to keep", () => {
     const parts = [
       { ...included.bucket, keyChangedAt: "2026-08-01T08:00:00.000Z" },
       { ...included.archives, keyChangedAt: "2026-08-01T08:00:00.000Z" },
-      included.serverKey(KEY_1, false),
     ];
     const made = pack(1, "2026-08-12T10:00:00.000Z", { parts });
     // A change on 1 September: kept until 9 September, long before now.
@@ -430,69 +336,6 @@ describe("the packs to keep", () => {
       status([made], { current: { ...current, keyChangedAt: "2026-10-25T07:00:00.000Z" } }).keep,
     ).toHaveLength(1);
   });
-
-  it("keeps a pack holding a replaced server key until its archives should be gone, from the replacement", () => {
-    const answer = status(
-      [
-        pack(2, "2026-10-25T10:00:00.000Z", {
-          parts: [included.bucket, included.archives, included.serverKey(KEY_2, true)],
-        }),
-        pack(1, "2026-10-01T10:00:00.000Z", {
-          parts: [included.bucket, included.archives, included.serverKey(KEY_1, true)],
-        }),
-      ],
-      { current: { ...current, serverKeyName: KEY_2 } },
-    );
-    expect(answer.keep).toEqual([
-      {
-        number: 1,
-        madeAt: "2026-10-01T10:00:00.000Z",
-        until: new Date(Date.parse("2026-10-25T10:00:00.000Z") + 8 * DAY).toISOString(),
-        why: "replaced_server_key",
-      },
-      { number: 2, madeAt: "2026-10-25T10:00:00.000Z", until: null, why: "server_key" },
-    ]);
-  });
-
-  it("dates a replaced key from the next pack that made a key, not a later one", () => {
-    const KEY_A = "2026-10-24 · between";
-    const answer = status(
-      [
-        pack(3, "2026-10-27T10:00:00.000Z", {
-          parts: [included.bucket, included.archives, included.serverKey(KEY_2, true)],
-        }),
-        pack(2, "2026-10-24T10:00:00.000Z", {
-          parts: [included.bucket, included.archives, included.serverKey(KEY_A, true)],
-        }),
-        pack(1, "2026-10-01T10:00:00.000Z", {
-          parts: [included.bucket, included.archives, included.serverKey(KEY_1, true)],
-        }),
-      ],
-      { current: { ...current, serverKeyName: KEY_2 } },
-    );
-    expect(answer.keep.find((k) => k.number === 1)!.until).toBe(
-      new Date(Date.parse("2026-10-24T10:00:00.000Z") + 8 * DAY).toISOString(),
-    );
-  });
-
-  it("dates a key replaced outside any pack from the day after the new key's name", () => {
-    const answer = status(
-      [
-        pack(1, "2026-10-01T10:00:00.000Z", {
-          parts: [included.bucket, included.archives, included.serverKey(KEY_1, true)],
-        }),
-      ],
-      { current: { ...current, serverKeyName: "2026-10-27 · third" } },
-    );
-    expect(answer.keep).toEqual([
-      {
-        number: 1,
-        madeAt: "2026-10-01T10:00:00.000Z",
-        until: new Date(Date.parse("2026-10-28T00:00:00.000Z") + 8 * DAY).toISOString(),
-        why: "replaced_server_key",
-      },
-    ]);
-  });
 });
 
 describe("backups still on the older key", () => {
@@ -501,16 +344,20 @@ describe("backups still on the older key", () => {
   });
 });
 
-describe("the box's server key now", () => {
-  it.each([
-    ["none", undefined],
-    ["not_yet", null],
-    ["set", KEY_2],
-  ] as const)("is %s for a current key name of %s, with or without a pack", (word, name) => {
-    const now = { current: { ...current, serverKeyName: name } };
-    expect(status([], now).serverKey).toBe(word);
-    expect(status([pack(1, "2026-10-12T10:00:00.000Z")], now).serverKey).toBe(word);
-  });
+it("the status names no box key", () => {
+  const withBoxKey: RecoveryPackPartRecord[] = [
+    included.bucket,
+    included.archives,
+    { part: "server-key", state: "included", keyName: KEY_1, carriedKey: true },
+  ];
+  const answer = status([
+    pack(2, "2026-10-22T10:00:00.000Z", { received: false, parts: withBoxKey }),
+    pack(1, "2026-10-01T10:00:00.000Z", { parts: withBoxKey }),
+  ]);
+  expect(answer).not.toHaveProperty("serverKey");
+  expect(answer.reasons.map((r): string => r.part)).not.toContain("server-key");
+  expect(answer.keep.filter((k) => k.why !== "backup_key")).toEqual([]);
+  expect(answer.unreceived).toEqual({ number: 2, madeAt: "2026-10-22T10:00:00.000Z" });
 });
 
 describe("emergency-code freshness", () => {

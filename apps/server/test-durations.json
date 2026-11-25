@@ -910,7 +910,6 @@
   "src/provision-allocation-input.test.ts": 3.2,
   "src/provision-fiscal-slot.test.ts": 1.4,
   "src/provision-seed-order.test.ts": 2,
-  "src/provision-throwaway.recovery-pack.test.ts": 4.2,
   "src/provision-throwaway.test.ts": 2,
   "src/provision.test.ts": 4,
   "src/purchasing-api.gate-sweep.test.ts": 2,

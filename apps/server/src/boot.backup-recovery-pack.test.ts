@@ -16,9 +16,7 @@ import {
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
-import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { verifySecretAsync } from "@waitron/identity";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
@@ -31,7 +29,6 @@ import { writeRecoveryKey } from "./backup-env-writer.js";
 import type { StartedServer } from "./boot.js";
 import type { Turns } from "./backup-turns.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
 import { writeStreamSettings } from "./stream-host.js";
 import { awaitListening, copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -97,7 +94,6 @@ async function seedVenueWithBackupSettings(): Promise<void> {
     ].map((series) => ({ ...series, nodeId: node.nodeId })),
   );
   await setNodePublicKey(suite.db, node.nodeId, "SIGNER_PUBLIC_KEY");
-  await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
   const ring = loadKeyRing(KEY_ENV);
   await withTransaction(suite.db, async (tx) => {
     await ensureStreamId(tx);
@@ -164,12 +160,12 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
         headers: json,
         body: JSON.stringify({
           locale: "es",
-          newServerKey: false,
+          newMasterKey: false,
         }),
       });
       expect(made.status).toBe(200);
       const makeQueue = turnsUsed.handed.slice(beforeMake);
-      expect(made.headers.get("x-waitron-recovery-pack-key")).toBe("unchanged");
+      expect(made.headers.has("x-waitron-recovery-pack-key")).toBe(false);
       const file = await readRecoveryPackPdf(new Uint8Array(await made.arrayBuffer()));
       expect(parseRecoveryKit(file.bucketCode!)).toMatchObject({
         streamId: await readStreamId(suite.db),
@@ -198,12 +194,10 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
         };
       };
       const fresh = await status();
-      // Every part drawn, the server key by the real fiscal module.
       expect(fresh.latest.parts).toEqual([
         { part: "emergency", state: "absent" },
         { part: "bucket", state: "included" },
         { part: "archives", state: "included" },
-        { part: "server-key", state: "included" },
       ]);
       expect(fresh.upToDate).toBe(true);
 
@@ -236,10 +230,9 @@ it("makes a pack over the real TLS listener, drawn with the production font, tha
   }
 }, 60_000);
 
-it("with the box ticked, the real fiscal module draws a new server key that the pack carries, changing no series counter and no evidence file, and logging neither key nor the session", async () => {
+it("Make a new master key over the real listener changes no series counter and no evidence file, and logs neither the master key nor the session", async () => {
   await seedVenueWithBackupSettings();
   await advanceSeriesTo(suite.db, node.nodeId, 123);
-  const oldKey = await mintBreakGlassSecret({ venue: suite.db, node: suite.node }, node.nodeId);
   const { token } = await openManagementSession(suite.db, "admin");
   await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, token));
   const cookie = `waitron_management_session=${token}`;
@@ -297,7 +290,7 @@ it("with the box ticked, the real fiscal module draws a new server key that the 
     });
     await awaitListening(httpPort());
     const { via, close } = httpsVia(await readFile(join(scratch, "tls", "ca.crt")));
-    let carried: string;
+    let masterKey: string;
     try {
       const made = await fetch(`https://127.0.0.1:${httpPort()}/api/backup/recovery-pack`, {
         ...via,
@@ -305,23 +298,18 @@ it("with the box ticked, the real fiscal module draws a new server key that the 
         headers: { cookie, "content-type": "application/json" },
         body: JSON.stringify({
           locale: "es",
-          newServerKey: true,
+          newMasterKey: true,
         }),
       });
       expect(made.status).toBe(200);
-      expect(made.headers.get("x-waitron-recovery-pack-key")).toBe("replaced");
       const file = await readRecoveryPackPdf(new Uint8Array(await made.arrayBuffer()));
-      const nodeKey = (file.serverKey as { nodeKey: { nodeId: string; secret: string } }).nodeKey;
-      expect(nodeKey.nodeId).toBe(node.nodeId);
-      carried = nodeKey.secret;
+      masterKey = made.headers.get("x-waitron-master-key")!;
+      expect(file.masterKey).toBe(masterKey);
     } finally {
       await close();
     }
     await server.close();
     server = undefined;
-    const verifier = (await readRecoveryKeyVerifier(suite.node, node.nodeId))!;
-    expect(await verifySecretAsync(carried, verifier)).toBe(true);
-    expect(await verifySecretAsync(oldKey, verifier)).toBe(false);
     expect(
       (
         await suite.db.select(seriesWithNextNumber).from(invoiceSeries).orderBy(invoiceSeries.code)
@@ -337,7 +325,8 @@ it("with the box ticked, the real fiscal module draws a new server key that the 
     expect(await readFile(historyPath)).toEqual(originalHistory);
     const log = await readFile(join(scratch, "logs", "waitron.log"), "utf8");
     expect(log).toContain('"event":"recovery.pack_made"');
-    for (const secret of [carried, oldKey, token]) expect(log).not.toContain(secret);
+    for (const secret of [masterKey.slice(0, 9), masterKey.replaceAll(" ", "").slice(0, 8), token])
+      expect(log).not.toContain(secret);
   } finally {
     await server?.close();
     await rm(scratch, { recursive: true, force: true });
