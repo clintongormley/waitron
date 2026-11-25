@@ -303,6 +303,7 @@ it("the drawer guidance opens an operable Edit from Delete in printer details", 
   await userEvent.click(link()!);
   await expect.poll(() => location.pathname).toBe(path("p1"));
   await expect.poll(() => deletion.open).toBe(false);
+  await expect.poll(() => root.activeElement?.getAttribute("name")).toBe("printer-detail-name");
   const drawer = root.querySelector<HTMLElementTagNameMap["wt-switch"]>(
     "wt-switch[name=printer-cash-drawer]",
   )!;

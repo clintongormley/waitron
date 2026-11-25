@@ -477,15 +477,17 @@ describe("the Edit printer settings form", () => {
     });
   });
 
-  it("saves a roles-only edit on a portable printer", async () => {
+  it.each([true, false])("saves roles with portability initially %s", async (portable) => {
     const { el, api } = await openDetail(
-      stubApi({ listPrinters: vi.fn().mockResolvedValue([{ ...printer, portable: true }]) }),
+      stubApi({ listPrinters: vi.fn().mockResolvedValue([{ ...printer, portable }]) }),
     );
+    if (!portable) await toggle(el, "printer-portable", true);
     await chooseOptions(q(el, "[name=printer-pickup-roles]")!, ["payment_slip"]);
     expect(await state(el, detailsEditTest("save"))).toEqual(ready);
     await press(el, detailsEditTest("save"));
     expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", {
       pickupRoles: ["payment_slip"],
+      ...(portable ? {} : { portable: true }),
     });
   });
 
