@@ -48,7 +48,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  connection.stop();
+  connection?.stop();
   vi.unstubAllGlobals();
 });
 
