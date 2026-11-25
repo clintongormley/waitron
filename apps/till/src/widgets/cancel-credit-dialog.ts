@@ -20,7 +20,7 @@ export type CancelCreditMode = "cancel" | "split";
 
 /** A cancelled bill: the number of the corrective issued, or null when no number was read; a split
  * names no number.
- * `creditedElsewhere` is a split that found the bill already credited and no new bill. */
+ * `creditedElsewhere` is a split that found the bill already credited and no open bill reopened from it. */
 export interface CancelCreditDone {
   corrective: string | null;
   creditedElsewhere?: boolean;
