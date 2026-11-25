@@ -25,6 +25,7 @@ import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { failBillPayment, issueIfFullyPaid } from "./bill-payments.js";
 import { closeInvoiceCorrection } from "./invoice-corrections.js";
 import type { DiskFullState } from "./disk-full-state.js";
+import { gateSeatOnStartClock } from "./start-clock-gate.js";
 import { discardDraft, submitDraft, type Draft } from "./order-drafts.js";
 import { payForItems, type PayForItemsRequest } from "./pay-for-items.js";
 import {
@@ -100,7 +101,7 @@ useVenueDb({
 });
 
 /** A table's bill holding a coffee (3.00) and a Tarta (18.00). */
-const coffeeAndTarta = () =>
+const coffeeAndTarta = (withHam = false) =>
   withTransaction(venue.db, async (tx) => {
     const table = await createTable(tx, {
       label: `M-${randomUUID().slice(0, 8)}`,
@@ -108,10 +109,11 @@ const coffeeAndTarta = () =>
     });
     const { tabId } = await openPartyTab(tx, venue.cfg, {
       tableId: table.id,
-      lines: [coffee, venue.offerFor("Tarta")].map((menuItemId) => ({
-        menuItemId,
-        quantity: "1",
-      })),
+      lines: [
+        { menuItemId: coffee, quantity: "1" },
+        { menuItemId: venue.offerFor("Tarta"), quantity: "1" },
+        ...(withHam ? [{ menuItemId: ham, quantity: "0.050" }] : []),
+      ],
     });
     return tabId;
   });
@@ -483,6 +485,78 @@ describe("A1515 pay for items on the card reader", () => {
     expect(await invoiceCount(newBill)).toBe(1);
   });
 
+  it("answers a reversed two-dish resend with the original bill and charge", async () => {
+    const sourceId = await coffeeAndTarta(true);
+    const body = {
+      ...(await tartaByReaderBody(sourceId)),
+      picks: [{ lineId: await lineIdOf(sourceId, 1) }, { lineId: await lineIdOf(sourceId, 2) }],
+      applied: "21.00",
+    };
+    const calls = venue.card.collectCalls.length;
+
+    const first = await sendItemsPayment(sourceId, body);
+    const again = await sendItemsPayment(sourceId, { ...body, picks: [...body.picks].reverse() });
+
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    expect(first.json.payment).toMatchObject({ outcome: "received", invoice: { total: "21.00" } });
+    expect(again).toEqual(first);
+    expect(await lineTotals(sourceId)).toEqual(["1.01"]);
+    expect(venue.card.collectCalls.length).toBe(calls + 1);
+    expect(await invoiceCount(first.json.billId as string)).toBe(1);
+  });
+
+  it("reports the captured charge when the clock prevents a resend from issuing", async () => {
+    const sourceId = await coffeeAndTarta();
+    const body = await tartaByReaderBody(sourceId);
+    const calls = venue.card.collectCalls.length;
+    venue.card.crashNextCollect("captured");
+    expect((await sendItemsPayment(sourceId, body)).status).toBe(500);
+    const newBill = await billNaming(sourceId);
+    const gated = venue.appWith({ backend: gateSeatOnStartClock(venue.backend, () => true) });
+
+    const again = await sendItemsPayment(sourceId, body, gated);
+
+    expect(again).toEqual({
+      status: 507,
+      json: {
+        code: "sale.charged_not_recorded",
+        params: { workingOrderId: newBill, reason: "clock_unconfirmed" },
+      },
+    });
+    expect(await invoiceCount(newBill)).toBe(0);
+    expect(await paymentRows(venue, newBill)).toMatchObject([{ state: "pending" }]);
+    expect(venue.card.collectCalls.length).toBe(calls + 1);
+    expect((await sendItemsPayment(sourceId, body)).json.payment).toMatchObject({
+      outcome: "received",
+    });
+    expect(await invoiceCount(newBill)).toBe(1);
+    expect(venue.card.collectCalls.length).toBe(calls + 1);
+  });
+
+  it("reports a partially refunded reader charge without issuing or putting the items back", async () => {
+    const sourceId = await coffeeAndTarta();
+    const collect = venue.card.collect.bind(venue.card);
+    const reader = vi.spyOn(venue.card, "collect").mockImplementationOnce(async (request) => {
+      const result = await collect(request);
+      return venue.card.partialRefund(result.paymentRef, decimal("5.00"));
+    });
+
+    const paid = await payTartaByReader(sourceId).finally(() => reader.mockRestore());
+    const newBill = await billNaming(sourceId);
+
+    expect(paid).toEqual({
+      status: 507,
+      json: {
+        code: "sale.charged_not_recorded",
+        params: { workingOrderId: newBill, reason: "partial_refund" },
+      },
+    });
+    expect(await paymentRows(venue, newBill)).toMatchObject([{ state: "pending" }]);
+    expect(await invoiceCount(newBill)).toBe(0);
+    expect(await lineTotals(sourceId)).toEqual(["3.00"]);
+    expect(await lineTotals(newBill)).toEqual(["18.00"]);
+  });
+
   it("a declined card puts the items back", async () => {
     const sourceId = await coffeeAndTarta();
     const { answer, release, newBill } = await heldTartaPayment(sourceId);
@@ -618,6 +692,56 @@ describe("A1515 pay for items on the card reader", () => {
 
     expect(await invoiceCount(sourceId)).toBe(1);
     expect(await statusOf(venue, sourceId)).toBe("settled");
+  });
+
+  it("completes the reader give-back while an advance correction holds the invoice", async () => {
+    const sourceId = await coffeeAndTarta();
+    const advanceId = await advanceOn(sourceId);
+    const path = `/api/working-orders/${sourceId}/payments`;
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      path,
+      await observedPaymentBody(venue.db, path, {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "5.00",
+        method: "card",
+        entry: "reader",
+        applied: "5.00",
+        tip: "0.00",
+      }),
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const paymentId = (paid.json.payment as { id: string }).id;
+    const moved = await payTartaByReader(sourceId);
+    expect(moved.status, JSON.stringify(moved.json)).toBe(200);
+    expect((await balance(sourceId)).json).toMatchObject({ overpaid: "5.00" });
+    const correctionId = await openCorrectionOf(advanceId);
+    const refundPath = `${path}/${paymentId}/refunds`;
+    const request = {
+      submissionId: randomUUID(),
+      appliedAmount: "5.00",
+      tipAmount: "0.00",
+      reason: "Paid more than the bill",
+    };
+
+    const given = await send(venue.app, venue.cookie, "POST", refundPath, request);
+
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(given.json).toMatchObject({ refund: { state: "completed", appliedAmount: "5.00" } });
+    expect(await invoiceCount(sourceId)).toBe(0);
+    await closeCorrection(correctionId);
+    expect(await invoiceCount(sourceId)).toBe(1);
+    const again = await send(venue.app, venue.cookie, "POST", refundPath, request);
+    expect(again.json).toMatchObject({ refund: { state: "completed" } });
+    expect(await invoiceCount(sourceId)).toBe(1);
+    expect(
+      venue.card.refundCalls.filter(
+        (call) => call.refundId === (given.json.refund as { id: string }).id,
+      ),
+    ).toHaveLength(1);
   });
 
   it("closing a correction of the source's advance leaves the source open while a colleague's order is unsent on it, and discarding the order issues it once", async () => {
