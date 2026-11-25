@@ -179,7 +179,7 @@ describe("till-lock-screen", () => {
     await flush(el);
     click(el, '[data-person="p2"]');
     await flush(el);
-    await type(el, "12");
+    await type(el, "1234");
     click(el, ".submit");
     await flush(el);
     expect(query(el, ".error")!.textContent).toContain(t("pin.invalid"));
@@ -207,12 +207,12 @@ describe("till-lock-screen", () => {
     await flush(el);
     click(el, '[data-person="p2"]');
     await flush(el);
-    await type(el, "12");
+    await type(el, "1234");
     live.change("person_staff_roles");
     await flush(el);
     click(el, ".submit");
     await flush(el);
-    expect(api.login).toHaveBeenCalledWith("p2", "12");
+    expect(api.login).toHaveBeenCalledWith("p2", "1234");
     live.connection.stop();
   });
 
@@ -277,7 +277,7 @@ describe("till-lock-screen", () => {
     await flush(el);
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
-    expect(query(el, ".operator")!.textContent).toContain("Ana");
+    expect(query(el, "h1.pin-heading")!.textContent).toContain("Ana");
     expect(query(el, "till-numeric-pad")).not.toBeNull();
   });
 
@@ -289,7 +289,7 @@ describe("till-lock-screen", () => {
     });
     await flush(el);
     expect(query(el, "till-numeric-pad")).not.toBeNull();
-    expect(query(el, ".operator")!.textContent).toContain("Ben");
+    expect(query(el, "h1.pin-heading")!.textContent).toContain("Ben");
   });
 
   it("ignores a remembered operator no longer on the roster", async () => {
@@ -359,17 +359,17 @@ describe("till-lock-screen", () => {
     click(el, ".submit");
     await flush(el);
     expect(query(el, ".pad-wrap[inert]")).not.toBeNull();
-    expect(query(el, ".throttle")!.textContent).toContain(t("login.throttled").replace("{n}", "1"));
+    expect(query(el, ".pin-countdown")!.textContent?.trim()).toBe("1 s");
   });
 
-  it("clears selection and PIN when the Cancel control is used", async () => {
+  it("clears selection and PIN when Not Ana? is used", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
     await flush(el);
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
     await type(el, "12");
-    expect(query(el, ".cancel")!.textContent).toContain(t("action.cancel"));
+    expect(query(el, ".cancel")!.textContent?.trim()).toBe("Not Ana?");
     click(el, ".cancel");
     await el.updateComplete;
     expect(query(el, "till-numeric-pad")).toBeNull();
@@ -377,14 +377,16 @@ describe("till-lock-screen", () => {
     expect(el.shadowRoot!.querySelectorAll("wt-button.operator-button")).toHaveLength(2);
   });
 
-  it("keeps Log in disabled until a digit is entered", async () => {
+  it("keeps Log in disabled until four digits are entered", async () => {
     const api = stubApi();
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
     await flush(el);
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
     expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(true);
-    await type(el, "1");
+    await type(el, "123");
+    expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(true);
+    await press(el, "4");
     expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(false);
   });
 
@@ -417,16 +419,16 @@ describe("till-lock-screen", () => {
     const api = stubApi({ login });
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", { api });
     await flush(el);
-    const status = () => query(el, '[role="status"]')?.textContent?.trim();
+    const status = () => query(el, '.pin-status [role="status"]')?.textContent?.trim();
     const submit = () =>
       query(el, "wt-button.submit") as HTMLElement & { disabled: boolean; loading: boolean };
     click(el, 'wt-button.operator-button[data-person="p1"]');
     await el.updateComplete;
     await type(el, "1234");
-    expect(status()).toBeUndefined();
+    expect(status()).toBe("");
     click(el, ".submit");
     await el.updateComplete;
-    expect(status()).toBe(t("login.loading"));
+    expect(status()).toBe(t("login.signing_in"));
     expect(submit().loading).toBe(true);
     expect(submit().disabled).toBe(false);
     click(el, ".submit");
@@ -434,18 +436,17 @@ describe("till-lock-screen", () => {
     expect(login).toHaveBeenCalledTimes(1);
     refuse({ code: "pin.invalid" });
     await flush(el);
-    expect(status()).toBeUndefined();
+    expect(status()).toBe(t("pin.invalid"));
     expect(submit().loading).toBe(false);
-    expect(query(el, '[role="alert"]')?.textContent?.trim()).toBe(t("pin.invalid"));
-    await type(el, "1");
+    await type(el, "1234");
     click(el, ".submit");
     await el.updateComplete;
-    expect(status()).toBe(t("login.loading"));
+    expect(status()).toBe(t("login.signing_in"));
     click(el, "wt-button.cancel");
     await el.updateComplete;
     click(el, 'wt-button.operator-button[data-person="p2"]');
     await el.updateComplete;
-    expect(status()).toBeUndefined();
+    expect(status()).toBe(t("login.enter_pin"));
   });
 
   it("remembers the operator on this device after a successful login", async () => {
@@ -743,21 +744,21 @@ describe("till-lock-screen", () => {
       // Throttled: pad greyed (inert), submit disabled, countdown at the full window.
       expect(query(el, ".pad-wrap[inert]")).not.toBeNull();
       expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(true);
-      expect(query(el, ".throttle")!.textContent).toContain(
-        t("login.throttled").replace("{n}", "3"),
-      );
+      const status = query(el, '.pin-status [role="status"]');
+      expect(status?.textContent?.trim()).toBe(t("pin.throttled"));
+      expect(query(el, '.pin-countdown[aria-hidden="true"]')?.textContent).toContain("3");
       // One second on: the countdown ticks.
       await vi.advanceTimersByTimeAsync(1000);
       await el.updateComplete;
-      expect(query(el, ".throttle")!.textContent).toContain(
-        t("login.throttled").replace("{n}", "2"),
-      );
+      expect(query(el, '.pin-status [role="status"]')).toBe(status);
+      expect(status?.textContent?.trim()).toBe(t("pin.throttled"));
+      expect(query(el, '.pin-countdown[aria-hidden="true"]')?.textContent).toContain("2");
       // The remaining two seconds elapse → entry is live again (pad no longer inert, PIN still typed so
       // submit re-enables) and the notice is gone.
       await vi.advanceTimersByTimeAsync(2000);
       await el.updateComplete;
       expect(query(el, ".pad-wrap[inert]")).toBeNull();
-      expect(query(el, ".throttle")).toBeNull();
+      expect(query(el, ".pin-countdown")).toBeNull();
       expect(query(el, ".submit")!.hasAttribute("disabled")).toBe(false);
     } finally {
       vi.useRealTimers();
@@ -816,6 +817,34 @@ describe("till-lock-screen", () => {
     expect(login).not.toHaveBeenCalled();
   });
 
+  it.each(["pin.invalid", "pin.throttled"])(
+    "ignores a late %s after choosing someone else",
+    async (code) => {
+      let refuse!: (reason: unknown) => void;
+      const response = new Promise<never>((_resolve, reject) => {
+        refuse = reject;
+      });
+      const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+        api: stubApi({ login: vi.fn().mockReturnValue(response) }),
+      });
+      await flush(el);
+      click(el, '[data-person="p1"]');
+      await el.updateComplete;
+      await type(el, "1234");
+      click(el, ".submit");
+      await el.updateComplete;
+      click(el, ".cancel");
+      await el.updateComplete;
+      click(el, '[data-person="p2"]');
+      await el.updateComplete;
+      await type(el, "12");
+      refuse({ code, retryAfterSeconds: 3 });
+      await flush(el);
+      expect(query(el, ".pin-display")!.textContent).toBe("●●");
+      expect(query(el, ".pad-wrap[inert]")).toBeNull();
+    },
+  );
+
   it("does not emit logged-in if the screen disconnects mid-login", async () => {
     let resolveLogin!: (value: { personId: string }) => void;
     const login = vi.fn(() => new Promise<{ personId: string }>((r) => (resolveLogin = r)));
@@ -855,7 +884,7 @@ describe("till-lock-screen", () => {
       disabled: boolean;
       loading: boolean;
     };
-    expect(query(el, '[role="status"]')).toBeNull();
+    expect(query(el, '.pin-status [role="status"]')?.textContent?.trim()).toBe("");
     expect(submit.disabled).toBe(false);
     expect(submit.loading).toBe(false);
   });
@@ -1024,7 +1053,7 @@ describe("till-lock-screen", () => {
     expect(panel.panel).toBe(true);
     expect(panel.silentSince).toBe(since);
     expect(query(el, "till-numeric-pad")).toBeNull();
-    expect(query(el, ".operator")).toBeNull();
+    expect(query(el, "h1.pin-heading")).toBeNull();
     expect(query(el, "wt-language-chooser")).toBeNull();
     expect(panel.querySelector("[data-check-again]")).not.toBeNull();
     el.mainServerSilent = false;
@@ -1032,7 +1061,7 @@ describe("till-lock-screen", () => {
     await el.updateComplete;
     expect(el.shadowRoot!.querySelector("till-main-server-strip")).toBeNull();
     expect(query(el, "till-numeric-pad")).not.toBeNull();
-    expect(query(el, ".operator")!.textContent).toContain("Ben");
+    expect(query(el, "h1.pin-heading")!.textContent).toContain("Ben");
   });
 
   it("hands the panel the time the main box last answered, to count the last contact from", async () => {
@@ -1352,7 +1381,11 @@ describe("the venue logo and Powered by on the sign-in", () => {
     expect(logo.shadowRoot!.querySelector(".box")!.hasAttribute("data-plate")).toBe(true);
   });
 
-  async function expectPoweredByLast(el: TillLockScreen, after: Element): Promise<void> {
+  async function expectPoweredByLast(
+    el: TillLockScreen,
+    after: Element,
+    serverAbove = false,
+  ): Promise<void> {
     const line = poweredBy(el)!;
     expect(line).not.toBeNull();
     expect(screen(el).lastElementChild).toBe(line);
@@ -1368,7 +1401,9 @@ describe("the venue logo and Powered by on the sign-in", () => {
       1,
     );
     const status = query(el, "[data-server-status]")!;
-    expect(status.getBoundingClientRect().top).toBeGreaterThanOrEqual(box.bottom);
+    const serverBox = status.getBoundingClientRect();
+    if (serverAbove) expect(serverBox.bottom).toBeLessThanOrEqual(above.top);
+    else expect(serverBox.top).toBeGreaterThanOrEqual(box.bottom);
   }
 
   it("Powered by comes last in .screen, after the names and Switch device, 16 px below it, before the server status", async () => {
@@ -1399,7 +1434,7 @@ describe("the venue logo and Powered by on the sign-in", () => {
     expect(pad.compareDocumentPosition(switchDevice) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    await expectPoweredByLast(el, switchDevice);
+    await expectPoweredByLast(el, switchDevice, true);
   });
 
   it("without dev mode, Powered by sits 16 px under the names", async () => {
@@ -1457,6 +1492,21 @@ describe("typing on the sign-in PIN pad with a keyboard", () => {
     await userEvent.keyboard("{Enter}");
     await flush(el);
     expect(login).toHaveBeenCalledExactlyOnceWith("p1", "0123");
+  });
+
+  it("requires four digits for Log in by keyboard or button", async () => {
+    const api = stubApi();
+    const el = await pinFor(api);
+    await userEvent.keyboard("012");
+    await el.updateComplete;
+    const submit = query(el, "wt-button.submit") as HTMLElement;
+    expect(submit.hasAttribute("disabled")).toBe(true);
+    submit.click();
+    await userEvent.keyboard("{Enter}");
+    expect(api.login).not.toHaveBeenCalled();
+    await userEvent.keyboard("3{Enter}");
+    await flush(el);
+    expect(api.login).toHaveBeenCalledExactlyOnceWith("p1", "0123");
   });
 
   it("Enter with no PIN logs nobody in", async () => {

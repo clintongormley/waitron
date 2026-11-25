@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget, textFieldsIn } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  loadPhoneFont,
+  mountWidget,
+  pageAt,
+  PHONE_FONT,
+  resetPage,
+  textFieldsIn,
+} from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -77,6 +85,41 @@ describe("till-supervisor-override-dialog", () => {
     expect(root(el).textContent).toContain("Responsable");
     expect(pad(el)).not.toBeNull();
     expect(pad(el)!.shadowRoot!.querySelector('[data-key="."]')).toBeNull();
+  });
+
+  it("fits Borrar todo on one line and keeps all keypad columns in the phone dialog", async () => {
+    await pageAt(363, 735, 130);
+    const font = await loadPhoneFont();
+    try {
+      const { el, host } = await mount();
+      setLocale("es-ES");
+      host.style.setProperty("--wt-font-family", PHONE_FONT);
+      await pick(el, "sup-1");
+      const keypad = root(el).querySelector("till-numeric-pad")!;
+      await keypad.updateComplete;
+      const dialog = root(el).querySelector("wt-dialog")!.shadowRoot!.querySelector("dialog")!;
+      const clear = keypad.shadowRoot!.querySelector('[data-key="clear"]')!;
+      const clearBox = clear.getBoundingClientRect();
+      const label = "Borrar todo";
+      expect(clear.textContent?.trim()).toBe(label);
+      const text = [...clear.childNodes].find((node) => node.textContent?.includes(label))!;
+      const start = text.textContent!.indexOf(label);
+      const letters = document.createRange();
+      letters.setStart(text, start);
+      letters.setEnd(text, start + label.length);
+      expect(letters.getClientRects()).toHaveLength(1);
+      expect(letters.getBoundingClientRect().left).toBeGreaterThanOrEqual(clearBox.left);
+      expect(letters.getBoundingClientRect().right).toBeLessThanOrEqual(clearBox.right);
+      const bounds = dialog.getBoundingClientRect();
+      for (const key of keypad.shadowRoot!.querySelectorAll("wt-button")) {
+        const box = key.getBoundingClientRect();
+        expect(box.left).toBeGreaterThanOrEqual(bounds.left);
+        expect(box.right).toBeLessThanOrEqual(bounds.right);
+      }
+    } finally {
+      document.fonts.delete(font);
+      await resetPage();
+    }
   });
 
   it("emits override-confirm carrying the picked personId + entered PIN, then wipes the PIN", async () => {

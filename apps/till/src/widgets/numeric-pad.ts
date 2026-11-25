@@ -65,12 +65,24 @@ export class TillNumericPad extends LitElement implements PadKeyTarget {
 
       .pad {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-auto-rows: var(--wt-till-keypad-row-height);
         gap: var(--wt-space-2);
       }
 
       .key {
         width: 100%;
+      }
+
+      .key::part(button) {
+        block-size: 100%;
+        font-size: var(--wt-font-size-xl);
+      }
+
+      [data-key="clear"]::part(button) {
+        padding-inline: var(--wt-space-1);
+        font-size: var(--wt-font-size-sm);
+        white-space: nowrap;
       }
 
       /* The decimal and backspace keys take their spoken name from this slotted text rather than an

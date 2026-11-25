@@ -156,8 +156,7 @@ The logo of the theme in use shows in these places:
   on the bar fits beside it. When the bar fills, for example on a narrow screen with **Parked
   orders**, **Waiting**, **Transfers** and **Pass** all showing, the logo steps aside; nothing else
   on the bar is hidden or made smaller to make room for it. It comes back when there is room again.
-- **The sign-in screen of a cash register or handheld**, above the device's name and the list of
-  names.
+- **The sign-in screen of a cash register or handheld**, above the device’s name when you choose a person, and above your name when you enter your PIN.
 - **"Powered by Waitron"**, which shows while a logo is set: under the dashboard's sign-in form; in
   the dashboard's banner once you are signed in, before the buttons at its end (on a narrow screen,
   such as a phone's, after the legal name on the banner's second line, or under it when the two do

@@ -170,7 +170,7 @@ El logotipo del tema en uso se ve en estos lugares:
   **Pase** a la vista, el logotipo se aparta; nada más de la barra se oculta ni se hace más
   pequeño para hacerle sitio. Vuelve en cuanto hay sitio otra vez.
 - **La pantalla de inicio de sesión de una caja registradora o de un terminal de camarero**, encima
-  del nombre del dispositivo y de la lista de nombres.
+  del nombre del dispositivo al elegir a una persona y encima de tu nombre al introducir el PIN.
 - **«Con la tecnología de Waitron»**, que se ve mientras hay un logotipo: bajo el formulario de
   inicio de sesión del panel; en la franja superior del panel con la sesión iniciada, antes de los
   botones del final (en una pantalla estrecha, como la de un teléfono, tras la razón social, en la

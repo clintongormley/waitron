@@ -74,6 +74,10 @@ export class TillSupervisorOverrideDialog extends LitElement {
         width: 100%;
       }
 
+      .pad-wrap {
+        margin-inline: calc(var(--wt-modal-inline-padding) - var(--wt-space-5));
+      }
+
       .pad-wrap[inert] {
         opacity: 0.5;
       }

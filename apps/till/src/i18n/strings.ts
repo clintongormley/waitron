@@ -731,7 +731,9 @@ export const en = {
   "theme.device": "Follow device",
   "press_buzz.label": "Vibrate on button press",
   // Login / operator selection
-  "login.enter_pin": "Enter PIN",
+  "login.enter_pin": "Enter your PIN",
+  "login.not_person": "Not {name}?",
+  "login.signing_in": "Logging in…",
   "login.pick_operator": "Choose your name",
   "login.loading": "Loading…",
   "login.no_staff": "No staff available",
@@ -739,7 +741,7 @@ export const en = {
   "login.kitchen_unavailable": "Could not load the kitchen screen.",
   "login.error": "Could not log in, try again",
   // `{n}` is substituted at the call site; `t()` does not interpolate.
-  "login.throttled": "Try again in {n}s",
+  "login.throttled": "{n} s",
   "login.powered_by": "Powered by",
   "login.logged_out_by_other":
     "You have been logged out because somebody else has logged in on this device.",
@@ -3160,14 +3162,16 @@ export const es: Record<StringKey, string> = {
   "theme.dark": "Oscuro",
   "theme.device": "Según el dispositivo",
   "press_buzz.label": "Vibrar al pulsar un botón",
-  "login.enter_pin": "Introduce el PIN",
+  "login.enter_pin": "Introduce tu PIN",
+  "login.not_person": "¿No eres {name}?",
+  "login.signing_in": "Iniciando sesión…",
   "login.pick_operator": "Elige tu nombre",
   "login.loading": "Cargando…",
   "login.no_staff": "No hay personal disponible",
   "login.load_failed": "No se pudo cargar el personal, inténtalo de nuevo",
   "login.kitchen_unavailable": "No se pudo cargar la pantalla de cocina.",
   "login.error": "No se pudo iniciar sesión, inténtalo de nuevo",
-  "login.throttled": "Inténtalo de nuevo en {n}s",
+  "login.throttled": "{n} s",
   "login.powered_by": "Con la tecnología de",
   "login.logged_out_by_other":
     "Se ha cerrado tu sesión porque otra persona ha iniciado sesión en este dispositivo.",
