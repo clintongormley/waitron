@@ -276,6 +276,7 @@ it("the legal name goes back to centred on the venue's logo when a failed logo's
 it("follows a live answer without a reload", async () => {
   startVenueTheme(document.documentElement, { fetchImpl: rejecting });
   const api = stubApi(true);
+  api.getVenueTheme.mockResolvedValue(FIXTURE_ANSWER);
   const { el } = await mount(api);
   await vi.waitFor(() => expect(lockupShown(el)).toBe(true));
   api.getVenueTheme.mockResolvedValue(withLogo(LIGHT, null, "live-logo-hash"));

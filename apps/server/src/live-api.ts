@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import type { Hono } from "hono";
 import { withTransaction, type Database } from "@waitron/db";
-import { type ResourceChange } from "@waitron/shared";
+import { type ResourceChange, type ResourceIdentity } from "@waitron/shared";
 import { resolveManagementSession, checkManagementSession } from "@waitron/identity";
 import { createErrorBoundary, requireManagementSession, codeOf } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
@@ -12,6 +13,28 @@ type BusEvent = { kind: "change"; change: ResourceChange } | { kind: "close" };
 export class LiveEvents {
   #listeners = new Set<(event: BusEvent) => void>();
   #closed = false;
+  readonly #run = randomUUID();
+  #published = 0;
+  #lastChanged = new Map<string, number>();
+
+  /** Names this server run and how many changes it has announced. A change is announced only after
+   * its commit, so a read sent after a position was handed out sees everything the position covers. */
+  get position(): string {
+    return `${this.#run}:${this.#published}`;
+  }
+  /** The types among `interests` that changed after `position`, or undefined when that is unknown. */
+  changedSince(
+    position: string | undefined,
+    interests: readonly ResourceIdentity[],
+  ): ResourceIdentity[] | undefined {
+    const [run, number = ""] = position?.split(":") ?? [];
+    const since = Number(number);
+    if (run !== this.#run || !/^\d+$/.test(number) || since > this.#published) return undefined;
+    const types = new Set(interests.map(({ type }) => type));
+    return [...types]
+      .filter((type) => (this.#lastChanged.get(type) ?? 0) > since)
+      .map((type) => ({ type }));
+  }
   get subscriberCount(): number {
     return this.#listeners.size;
   }
@@ -23,6 +46,8 @@ export class LiveEvents {
     };
   }
   publish(change: ResourceChange): void {
+    this.#published += 1;
+    for (const { type } of change.resources) this.#lastChanged.set(type, this.#published);
     for (const listener of this.#listeners) listener({ kind: "change", change });
   }
   close(): void {
@@ -87,6 +112,7 @@ export function mountLiveApi(
         ]),
         sendIds: true,
         log,
+        catchUp: { since: c.req.query("since") },
       });
     }),
   );

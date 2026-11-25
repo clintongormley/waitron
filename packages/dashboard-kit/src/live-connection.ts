@@ -13,6 +13,40 @@ interface Options {
 
 const LIVE_SILENCE_MS = 30_000;
 
+function identitiesIn(parsed: unknown): ResourceIdentity[] | undefined {
+  if (!Array.isArray(parsed)) return undefined;
+  const identities: ResourceIdentity[] = [];
+  for (const resource of parsed as unknown[]) {
+    if (
+      resource === null ||
+      typeof resource !== "object" ||
+      !("type" in resource) ||
+      typeof resource.type !== "string"
+    )
+      return undefined;
+    if ("id" in resource && typeof resource.id !== "string") return undefined;
+    identities.push(
+      "id" in resource
+        ? { type: resource.type, id: resource.id as string }
+        : { type: resource.type },
+    );
+  }
+  return identities;
+}
+
+/** What the server says changed before this stream opened, or undefined when it cannot say. */
+function missedIn(event: Event): ResourceIdentity[] | undefined {
+  try {
+    const parsed = JSON.parse((event as MessageEvent<string>).data) as { missed?: unknown } | null;
+    return identitiesIn(parsed?.missed);
+  } catch {
+    return undefined;
+  }
+}
+
+const positionOf = (event: Event): string | undefined =>
+  (event as MessageEvent<string>).lastEventId || undefined;
+
 export class LiveConnection {
   #active = false;
   #suspended = false;
@@ -25,6 +59,9 @@ export class LiveConnection {
   #retry?: ReturnType<typeof setTimeout>;
   #retryMs = 1000;
   #generation?: number;
+  /** The server's change position that every watched read is known to cover, while the stream is
+   * healthy. Undefined makes the next stream read everything again when it opens. */
+  #position?: string;
   #silenceCheck?: ReturnType<typeof setInterval>;
 
   constructor(
@@ -50,7 +87,8 @@ export class LiveConnection {
     this.#schedule();
   };
 
-  start(): void {
+  /** Pass a position only when the server gave it before any read still watched was sent. */
+  start(position?: string): void {
     const generation = this.options.sessionGeneration?.();
     if (this.#active) {
       if (generation !== this.#generation) {
@@ -62,6 +100,7 @@ export class LiveConnection {
     }
     this.#generation = generation;
     this.#active = true;
+    this.#position = position;
     if (!this.#suspended && this.data.resume()) this.data.refresh();
     this.#page = typeof window === "undefined" ? undefined : window;
     this.#page?.addEventListener("pagehide", this.#onPageHide);
@@ -92,6 +131,7 @@ export class LiveConnection {
   }
 
   #close(): void {
+    this.#position = undefined;
     this.data.setConnected(false);
     clearInterval(this.#silenceCheck);
     this.#silenceCheck = undefined;
@@ -113,12 +153,18 @@ export class LiveConnection {
       const interests = this.data.interestKeys;
       const key = `[${interests.join(",")}]`;
       if (key === this.#key) return;
+      const since = this.#position;
       this.#close();
       if (interests.length === 0) return;
+      this.#position = since;
       this.#key = key;
       const open =
         this.options.open ?? ((url: string) => new EventSource(url, { withCredentials: true }));
-      const stream = open(`/management-api/events?resources=${encodeURIComponent(key)}`);
+      const stream = open(
+        `/management-api/events?resources=${encodeURIComponent(key)}` +
+          (since === undefined ? "" : `&since=${encodeURIComponent(since)}`),
+      );
+      let catchingUp = since !== undefined;
       this.#stream = stream;
       const generation = this.#generation;
       let refreshed = false;
@@ -150,15 +196,28 @@ export class LiveConnection {
         this.data.refresh();
         reconnect();
       }, 5000);
-      listen("ready", () => this.data.setConnected(true));
-      listen("keepalive", () => {});
+      listen("ready", (event) => {
+        if (catchingUp) {
+          catchingUp = false;
+          const missed = missedIn(event);
+          if (missed === undefined) this.data.refresh();
+          else this.data.catchUp(missed);
+        }
+        this.#position = positionOf(event);
+        this.data.setConnected(true);
+      });
+      listen("keepalive", (event) => {
+        this.#position = positionOf(event);
+      });
       listen("open", () => {
         this.#retryMs = 1000;
         refreshed = false;
         closed = false;
-        this.data.refresh();
+        if (!catchingUp) this.data.refresh();
       });
       listen("error", () => {
+        catchingUp = false;
+        this.#position = undefined;
         this.data.setConnected(false);
         // EventSource retries transport interruptions itself, but HTTP failures can leave it CLOSED.
         // Chromium fires `error` on every one of its own retries, so only this stream's first error,
@@ -176,28 +235,16 @@ export class LiveConnection {
           reconnect();
         }, 0);
       });
-      listen("reset", () => this.data.refresh());
+      listen("reset", (event) => {
+        this.data.refresh();
+        this.#position = positionOf(event);
+      });
       listen("change", (event) => {
         try {
-          const parsed: unknown = JSON.parse((event as MessageEvent<string>).data);
-          if (!Array.isArray(parsed)) return;
-          const identities: ResourceIdentity[] = [];
-          for (const resource of parsed as unknown[]) {
-            if (
-              resource === null ||
-              typeof resource !== "object" ||
-              !("type" in resource) ||
-              typeof resource.type !== "string"
-            )
-              return;
-            if ("id" in resource && typeof resource.id !== "string") return;
-            identities.push(
-              "id" in resource
-                ? { type: resource.type, id: resource.id as string }
-                : { type: resource.type },
-            );
-          }
+          const identities = identitiesIn(JSON.parse((event as MessageEvent<string>).data));
+          if (identities === undefined) return;
           this.data.invalidate(identities);
+          this.#position = positionOf(event);
         } catch {
           this.data.refresh();
         }

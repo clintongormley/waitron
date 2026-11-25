@@ -715,11 +715,11 @@ export function cancelDetailsEdit(el: HTMLElement): void {
 }
 
 export function streamsOver(liveData: LiveData) {
-  const streams: { url: string; close: ReturnType<typeof vi.fn> }[] = [];
+  const streams: (EventTarget & { url: string; close: ReturnType<typeof vi.fn> })[] = [];
   const liveUpdates = new LiveConnection(liveData, {
     open: (url) => {
-      const stream = Object.assign(new EventTarget(), { readyState: 0, close: vi.fn() });
-      streams.push({ url, close: stream.close });
+      const stream = Object.assign(new EventTarget(), { url, readyState: 0, close: vi.fn() });
+      streams.push(stream);
       return stream;
     },
   });

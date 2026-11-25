@@ -288,6 +288,23 @@ describe("mountMeApi — whoami", () => {
     });
   });
 
+  it("reports the change position from before it read anything", async () => {
+    let position = "run:1";
+    const readTradingAdmission = () => {
+      position = "run:2";
+      return { state: "ready" } as const;
+    };
+    const res = await send(
+      mountApp({ changePosition: () => position, readTradingAdmission }),
+      "GET",
+      "/management-api/session/me",
+      { cookie: await cookieFor(me) },
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ changePosition: "run:1" });
+    expect(position).toBe("run:2");
+  });
+
   it("never reports a session lifetime above the configured idle timeout", async () => {
     const cookie = await cookieFor(me);
     const token = cookie.slice(`${MANAGEMENT_COOKIE}=`.length);

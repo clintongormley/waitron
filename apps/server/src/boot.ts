@@ -3624,6 +3624,7 @@ async function bootServer(
       get simulatedCardPayments() {
         return cardSimulator.current() !== undefined;
       },
+      changePosition: () => liveEvents.position,
       modules: enabledAtStart.map((m) => m.name),
       credentialKeyRing: ring,
       rpId: config.managementRpId,

@@ -5,7 +5,7 @@ import {
   startVenueTheme,
   VENUE_THEME_STORAGE_KEY,
 } from "@waitron/ui";
-import { LiveConnection, LiveData } from "@waitron/dashboard-kit";
+import { LiveData } from "@waitron/dashboard-kit";
 import {
   FIXTURE_ANSWER,
   FIXTURE_LIGHT_BG,
@@ -85,8 +85,8 @@ async function flush(el: DashboardApp): Promise<void> {
   await el.updateComplete;
 }
 
-async function mount(api: DashboardApi, liveUpdates?: LiveConnection): Promise<DashboardApp> {
-  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, liveUpdates });
+async function mount(api: DashboardApi): Promise<DashboardApp> {
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
   await flush(el);
   return el;
 }
@@ -246,27 +246,13 @@ it("a live answer sent before a newer theme was applied does not bring the older
   expect(JSON.parse(localStorage.getItem(VENUE_THEME_STORAGE_KEY)!).hash).toBe(SECOND_ANSWER.hash);
 });
 
-it("sign-in takes the start-up answer, and the live stream's opening reads the latest", async () => {
+it("sign-in reads the theme itself, since the start-up answer is older than the sign-in", async () => {
   startVenueTheme(document.documentElement, {
     fetchImpl: () => Promise.resolve(new Response(JSON.stringify(FIXTURE_ANSWER))),
   });
   await vi.waitFor(() => expect(bg()).toBe(FIXTURE_LIGHT_BG));
   const api = stubApi({ getVenueTheme: vi.fn().mockResolvedValue(SECOND_ANSWER) });
-  const streams: (EventTarget & { url: string; close(): void })[] = [];
-  const liveUpdates = new LiveConnection(api.liveData, {
-    open: (url) => {
-      const stream = Object.assign(new EventTarget(), { url, close: () => undefined });
-      streams.push(stream);
-      return stream;
-    },
-  });
-  const el = await mount(api, liveUpdates);
-  await vi.waitFor(() => expect(streams.at(-1)?.url).toContain("custom_themes"));
-  await flush(el);
-  expect(api.getVenueTheme).not.toHaveBeenCalled();
-  expect(bg()).toBe(FIXTURE_LIGHT_BG);
-  streams.at(-1)!.dispatchEvent(new Event("open"));
+  await mount(api);
   await vi.waitFor(() => expect(bg()).toBe("#fff3f3"));
   expect(api.getVenueTheme).toHaveBeenCalledOnce();
-  liveUpdates.stop();
 });

@@ -280,6 +280,8 @@ export class LoginScreen extends LitElement {
   @property({ attribute: false }) navigate: (url: string) => void = (url) =>
     window.location.assign(url);
   @property({ attribute: false }) noticeCode: string | null = null;
+  /** Holds back the passkey autofill and Google reads while the person may prove already signed in. */
+  @property({ attribute: false }) checkingSession = false;
   @property({ attribute: false }) reload: () => void = () => location.reload();
   private readonly rememberedLogin = new URLSearchParams(window.location.search).has("token")
     ? null
@@ -368,8 +370,14 @@ export class LoginScreen extends LitElement {
     window.addEventListener("waitron-session-invalid", this.#onSessionInvalid);
     if (this.noticeCode === "node.reset") return;
     if (this.token !== null && this.actionPurpose !== null) void this.#inspectAccountAction();
-    else if (this.rememberedLogin === null) void this.#conditionalPasskeyLogin();
-    else if (this.step === "password") this.#focusField("password");
+    else if (this.rememberedLogin !== null && this.step === "password")
+      this.#focusField("password");
+    if (!this.checkingSession) this.#prepareWaysToSignIn();
+  }
+
+  #prepareWaysToSignIn(): void {
+    if (this.noticeCode === "node.reset") return;
+    if (this.rememberedLogin === null) void this.#conditionalPasskeyLogin();
     void this.api
       .getGoogleConfig()
       .then(({ configured, privacyNoticeUrl }) => {
@@ -401,6 +409,8 @@ export class LoginScreen extends LitElement {
   }
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
+    if (changed.get("checkingSession") === true && !this.checkingSession)
+      this.#prepareWaysToSignIn();
     if (changed.has("step") || changed.has("token") || changed.has("actionValidated")) {
       this.attempted = false;
       if (this.refusalField !== null) this.errorKey = null;

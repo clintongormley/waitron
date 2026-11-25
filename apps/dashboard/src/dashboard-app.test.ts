@@ -1936,6 +1936,47 @@ describe("dashboard-app", () => {
     expect(el.shadowRoot!.querySelector("dashboard-profile-screen")).not.toBeNull();
   });
 
+  it("prepares no way to sign in for someone already signed in", async () => {
+    let resolveMe!: (value: typeof meResponse) => void;
+    const getGoogleConfig = vi.fn().mockResolvedValue({ configured: false });
+    const api = stubApi({
+      getGoogleConfig,
+      getMe: vi.fn(() => new Promise((resolve) => (resolveMe = resolve))),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(login(el)).toBeTruthy();
+    resolveMe(meResponse);
+    await flush(el);
+    expect(staff(el) ?? overview(el)).toBeTruthy();
+    expect(getGoogleConfig).not.toHaveBeenCalled();
+  });
+
+  it("prepares the ways to sign in once the check finds nobody signed in", async () => {
+    let rejectMe!: (error: unknown) => void;
+    const getGoogleConfig = vi.fn().mockResolvedValue({ configured: false });
+    const api = stubApi({
+      getGoogleConfig,
+      getMe: vi.fn(() => new Promise((_, reject) => (rejectMe = reject))),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(getGoogleConfig).not.toHaveBeenCalled();
+    rejectMe({ code: "management_session.required" });
+    await flush(el);
+    await vi.waitFor(() => expect(getGoogleConfig).toHaveBeenCalledOnce());
+  });
+
+  it("prepares the ways to sign in for an account link without checking for a session", async () => {
+    history.replaceState(null, "", "/account?token=t1&purpose=invitation");
+    const getGoogleConfig = vi.fn().mockResolvedValue({ configured: false });
+    const api = stubApi({ getGoogleConfig });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await flush(el);
+    expect(api.getMe).not.toHaveBeenCalled();
+    expect(getGoogleConfig).toHaveBeenCalledOnce();
+  });
+
   it("treats ANY probe rejection as not-logged-in, never an unhandled rejection", async () => {
     const api = stubApi({ getMe: vi.fn().mockRejectedValue(new Error("network down")) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
@@ -6772,6 +6813,69 @@ describe("the first live stream", () => {
     // The overview screen watches sale voids; the shell does not.
     expect(resourcesOf(streams[0]!.url)).toContain('"sale_voids"');
     expect(streams[0]!.close).not.toHaveBeenCalled();
+  });
+
+  it("carries on from the position of the sign-in check, so opening reads nothing again", async () => {
+    const liveData = new LiveData();
+    const { streams, liveUpdates } = streamsOver(liveData);
+    const api = stubApi({
+      liveData,
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, changePosition: "run:3" }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, liveUpdates });
+    await flush(el);
+    await flush(el);
+    expect(new URL(streams[0]!.url, location.origin).searchParams.get("since")).toBe("run:3");
+    expect(api.getSalesOverview).toHaveBeenCalledOnce();
+    streams[0]!.dispatchEvent(new Event("open"));
+    streams[0]!.dispatchEvent(
+      new MessageEvent("ready", { data: '{"missed":[]}', lastEventId: "run:5" }),
+    );
+    await flush(el);
+    expect(liveData.connected).toBe(true);
+    expect(api.getSalesOverview).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the first check's position when a later check answers before the stream opens", async () => {
+    let resolveLanguages!: (value: unknown) => void;
+    const liveData = new LiveData();
+    const { streams, liveUpdates } = streamsOver(liveData);
+    const api = stubApi({
+      liveData,
+      getMe: vi
+        .fn()
+        .mockResolvedValueOnce({ ...meResponse, changePosition: "run:3" })
+        .mockResolvedValue({ ...meResponse, changePosition: "run:8" }),
+      getContentLanguages: vi.fn(() => new Promise((resolve) => (resolveLanguages = resolve))),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, liveUpdates });
+    await flush(el);
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.waitFor(() => expect(api.getMe).toHaveBeenCalledTimes(2));
+    await flush(el);
+    resolveLanguages({ defaultLanguage: "es", languages: ["es"] });
+    await flush(el);
+    await flush(el);
+    expect(new URL(streams[0]!.url, location.origin).searchParams.get("since")).toBe("run:3");
+  });
+
+  it("takes no position from a check made while reads are already watched", async () => {
+    const liveData = new LiveData();
+    const { streams, liveUpdates } = streamsOver(liveData);
+    const earlier = liveData.observe(
+      { key: "earlier", dependencies: [{ type: "printers" }], read: async () => [] },
+      () => {},
+    );
+    const api = stubApi({
+      liveData,
+      getMe: vi.fn().mockResolvedValue({ ...meResponse, changePosition: "run:3" }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, liveUpdates });
+    await flush(el);
+    await flush(el);
+    expect(streams).toHaveLength(1);
+    expect(new URL(streams[0]!.url, location.origin).searchParams.has("since")).toBe(false);
+    earlier.unsubscribe();
   });
 
   it("starts live updates even when the content languages cannot be read", async () => {

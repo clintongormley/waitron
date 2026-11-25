@@ -49,6 +49,23 @@ or snapshots. `pageshow` reconnects; the new stream's `open` refreshes the retai
 If the cache has no stream interests, `pageshow` refreshes it directly. A cancelled leave prompt
 never reaches `pagehide`, so its views keep receiving updates.
 
+A page watches different data from the one before, so every move between pages replaces the stream.
+The replacement does not read everything again (2026-11-25): the server numbers the changes it
+announces (`LiveEvents.position` in `apps/server/src/live-api.ts`), each event carries the number it
+covers as its SSE id, and the next stream sends the last one as `since`. Its `ready` event names the
+watched types that changed after `since`, and only those reads, and reads that failed, are sent again.
+The first stream of a sign-in uses the position from `GET /management-api/session/me`, which the
+shell keeps only when it was taken before any read was being watched; a position newer than a read
+would hide a change that read missed. A stream reads everything when it opens, as before, whenever the position is in
+doubt: the server restarted or is another box, the stream failed or went silent, the page was left
+and shown again, or another session started. Measured on a fresh load of Products before and after:
+42 reads of 17 addresses on two streams, then 16 reads of 15 on one. Moving to Products from Menus
+went from 33 reads to 8. A read that is not answered from stored rows still needs its timer: a
+position says nothing about it.
+
+Start a page's reads together. A read started after others answer changes what the page watches, so
+it also costs another stream.
+
 `stop()` clears session data and detaches the lifecycle listeners in a visible document. When you
 stop it while the document is away, it retains only the return listener. That listener records the
 return and detaches itself without reading or reconnecting. A later explicit `start()` can then
@@ -215,12 +232,10 @@ Reusing an already cached query issues no request and therefore does not extend 
 2026-10-21, A841 slice 3: the shell's venue theme read (`DashboardApi.getVenueTheme`, watched from
 `dashboard-app.ts`) sends EVERY read passively, its first included, through
 `DashboardApi.background`, unlike `DashboardQueries`' usual active first read. Do not move it back
-to the active client. Its reads go through `readVenueTheme` (`packages/ui/src/venue-theme.ts`): the
-first after the page's start takes the start-up fetch's answer when that fetch got one, and sends
-nothing; the live stream's `open` re-reads every watched query, which is what applies a theme
-switched since start-up ("sign-in takes the start-up answer…" in
-`apps/dashboard/src/dashboard-app.venue-theme.test.ts`). An answer the read hands in is dropped if a
-theme was applied after that read was sent.
+to the active client. Its reads go through `readVenueTheme` (`packages/ui/src/venue-theme.ts`). An
+answer the read hands in is dropped if a theme was applied after that read was sent.
+2026-11-25: sign-in no longer takes the start-up fetch's answer, which is older than the sign-in
+check and so not covered by its change position (below).
 
 Test an external identity event with the view already mounted. Check the displayed value and an
 unsaved draft, then disconnect the view and confirm later events stop issuing reads. Query and

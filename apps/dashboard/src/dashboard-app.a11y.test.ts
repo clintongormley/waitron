@@ -14,6 +14,8 @@ import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, PersonSummary } from "./api/client.js";
 import type { WtInput } from "@waitron/ui";
 
+const never = () => new Promise<never>(() => {});
+
 /**
  * The screens the shell mounts fetch their own data on connect, so the stub must resolve those
  * reads too, or a stray rejection pollutes the run.
@@ -202,10 +204,10 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       VENUE_THEME_STORAGE_KEY,
       JSON.stringify({ hash: "logo", css: "", logo: { light: png(120, 40), dark: null } }),
     );
-    startVenueTheme(document.documentElement, { fetchImpl: () => new Promise(() => {}) });
+    startVenueTheme(document.documentElement, { fetchImpl: never });
     try {
       const api = signedIn
-        ? stubApi()
+        ? stubApi({ getVenueTheme: never })
         : stubApi({ getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }) });
       const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
       await flush(el);
@@ -232,7 +234,7 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       VENUE_THEME_STORAGE_KEY,
       JSON.stringify({ hash: "logo", css: "", logo: { light: png(120, 40), dark: null } }),
     );
-    startVenueTheme(document.documentElement, { fetchImpl: () => new Promise(() => {}) });
+    startVenueTheme(document.documentElement, { fetchImpl: never });
     try {
       const api = stubApi({
         getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
@@ -268,9 +270,10 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
       VENUE_THEME_STORAGE_KEY,
       JSON.stringify({ hash: "logo", css: "", logo: { light: png(120, 40), dark: null } }),
     );
-    startVenueTheme(document.documentElement, { fetchImpl: () => new Promise(() => {}) });
+    startVenueTheme(document.documentElement, { fetchImpl: never });
     try {
       const api = stubApi({
+        getVenueTheme: never,
         listAlerts: vi.fn().mockResolvedValue({ visible: true, alerts: [] }),
       });
       const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);

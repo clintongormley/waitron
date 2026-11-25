@@ -169,6 +169,16 @@ export class LiveData {
     }
   }
 
+  /** Bring reads up to date from what changed while no stream was open; failed reads are read again. */
+  catchUp(missed: readonly ResourceIdentity[]): void {
+    this.invalidate(missed);
+    for (const entry of this.#entries.values()) {
+      if (entry.snapshot.status !== "error" || entry.snapshot.loading) continue;
+      entry.dirty = true;
+      this.#schedule(entry);
+    }
+  }
+
   #schedule(entry: Entry): void {
     if (this.#paused || !entry.active || !entry.dirty || entry.scheduled || entry.snapshot.loading)
       return;

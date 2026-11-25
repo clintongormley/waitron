@@ -4968,6 +4968,7 @@ export class DashboardApi {
     venueCountry?: string;
     onboardingIntent?: "demo" | "prepare" | "live";
     simulatedCardPayments?: boolean;
+    changePosition?: string;
     sessionExpiresInSeconds?: number;
     sessionIdleTimeoutSeconds?: number;
   }> {
@@ -4985,6 +4986,7 @@ export class DashboardApi {
       venueCountry?: string;
       onboardingIntent?: "demo" | "prepare" | "live";
       simulatedCardPayments?: boolean;
+      changePosition?: string;
       sessionExpiresInSeconds?: number;
       sessionIdleTimeoutSeconds?: number;
     }>("/management-api/session/me", "GET", undefined, options);

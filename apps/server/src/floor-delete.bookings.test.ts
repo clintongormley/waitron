@@ -115,7 +115,7 @@ for (const enabled of [true, false]) {
           );
         }
         expect(new TextDecoder().decode((await reader.read()).value)).toBe(
-          `event: change\ndata: [{"type":"dining_tables","id":"${table!.id}"}]\n\n`,
+          `event: change\ndata: [{"type":"dining_tables","id":"${table!.id}"}]\nid: ${bus.position}\n\n`,
         );
         expect(bus.subscriberCount).toBe(1);
       } finally {
