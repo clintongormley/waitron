@@ -10296,10 +10296,7 @@ describe("publishing", () => {
     await vi.waitFor(() =>
       expect(
         [...panel(el).shadowRoot!.querySelectorAll('[data-test="changes"] li')].map(text),
-      ).toEqual([
-        "Drinks › Chips",
-        "Lemonade: colour · changed in Products, also on Dinner Menu",
-      ]),
+      ).toEqual(["Drinks › Chips", "Lemonade: colour · changed in Products, also on Dinner Menu"]),
     );
     expect(client.getMenuPreview).toHaveBeenCalledWith("menu-lunch");
     expect(inPanel(el, "live")).toBeNull();
