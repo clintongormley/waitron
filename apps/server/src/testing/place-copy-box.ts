@@ -35,6 +35,7 @@ import {
   signIndicator,
   type HandoverBinding,
   type NodeLocalItem,
+  type RetainedRevision,
   type SignedHandoverEnvelope,
 } from "@waitron/handover";
 import {
@@ -158,6 +159,7 @@ interface BoxOptions {
   acceptedBytes?: number;
   /** A chart the old box's copy holds that has this standing for the old box, signed by it. */
   copyNamesOldBox?: MembershipDocumentBody["nodes"][number]["standing"];
+  revisions?: readonly RetainedRevision[];
 }
 
 export type Box = Awaited<ReturnType<ReturnType<typeof placeCopyBoxes>["buildBox"]>>;
@@ -345,7 +347,7 @@ export function placeCopyBoxes(deps: {
         where: "state",
         class: "transferred",
         treatment: "merged",
-        revisions: [],
+        revisions: options.revisions ?? [],
       },
     ];
     const envelope = signIndicator(

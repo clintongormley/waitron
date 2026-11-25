@@ -226,7 +226,7 @@ async function openedCopyMatches(live: string, signedDigest: string): Promise<bo
 
 /**
  * A lost selection could let this box pick a minute the old box already used, so the start stops
- * rather than place the copy without them, while the live database is still as it was.
+ * before recording placement.
  */
 async function mergeSelections(
   merge: typeof mergeModulePreparationRevisions,
@@ -307,18 +307,24 @@ export async function placeAcceptedCopyAtStart(args: {
       (JSON.parse(awaiting.indicatorText) as { body?: unknown }).body,
     );
     const { sha256, bytes } = indicator.snapshot;
+    // `parseIndicator` refuses an indicator whose row for this file lacks revisions.
+    const revisions = indicator.nodeLocal
+      .filter((row) => row.item === MODULE_PREPARED_ITEM)
+      .flatMap((row) => row.revisions!);
     const live = join(venueDir, VENUE_FILE);
     const liveSize = await sizeIfPresent(live);
     const accepted = acceptedCopyPath(stateDir, operationId);
-    if (
+    const exactCopy = liveSize === bytes && (await digestFileIfPresent(live))?.sha256 === sha256;
+    const openedCopy =
       liveSize === bytes &&
-      ((await digestFileIfPresent(live))?.sha256 === sha256 ||
-        ((await lstat(accepted).then(
-          () => false,
-          (error: unknown) => errnoOf(error) === "ENOENT",
-        )) &&
-          (await openedCopyMatches(live, sha256))))
-    ) {
+      !exactCopy &&
+      (await lstat(accepted).then(
+        () => false,
+        (error: unknown) => errnoOf(error) === "ENOENT",
+      )) &&
+      (await openedCopyMatches(live, sha256));
+    if (exactCopy || openedCopy) {
+      if (openedCopy) await mergeSelections(merge, stateDir, revisions);
       // A crashed run may have renamed and not flushed, and `copy_placed` is recorded next.
       await steps.reachDisk(venueDir);
       return { kind: "copy_placed_owed", operationId, swapped: false };
@@ -336,14 +342,7 @@ export async function placeAcceptedCopyAtStart(args: {
     if (held.sha256 !== sha256) throw new AppError("handover.copy_mismatch", {});
 
     args.onWriting?.(bytes);
-    await mergeSelections(
-      merge,
-      stateDir,
-      // `parseIndicator` refuses an indicator whose row for this file lacks them.
-      indicator.nodeLocal
-        .filter((row) => row.item === MODULE_PREPARED_ITEM)
-        .flatMap((row) => row.revisions!),
-    );
+    await mergeSelections(merge, stateDir, revisions);
     await deleteBackupRoomNote(stateDir);
     await clearSelectedCopy(stateDir);
     await swapIn(steps, accepted, venueDir);

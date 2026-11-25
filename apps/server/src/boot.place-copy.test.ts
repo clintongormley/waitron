@@ -5,7 +5,8 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { PAIR_COPY_DIR } from "@waitron/store";
+import { readModulePreparationRevisions } from "@waitron/provisioning";
+import { MODULE_RECORDS_DIR, PAIR_COPY_DIR } from "@waitron/store";
 import { assertNotAhead } from "./node-entry.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { PAIR_COPY_READY_FILE } from "./spare-copy.js";
@@ -244,6 +245,34 @@ describe("a spare's real start at filing_assumed", () => {
     },
     120_000,
   );
+
+  it("restores the signed preparation history when it is lost with the accepted copy", async () => {
+    const revisions = [
+      {
+        binding: {
+          module: "fiscal-verifactu",
+          action: "setup",
+          eventId: "earlier-setup",
+          sourceId: "earlier-attempt",
+          targetNodeId: "source-box",
+        },
+        value: { minute: "0CNNW" },
+      },
+    ];
+    const b = await buildBox({ revisions });
+    await killedEntry(b, "opened");
+    expect(copyPlacedEvents(b)).toBe(0);
+    const state = { stateDir: b.stateDir };
+    expect(await readModulePreparationRevisions(state)).toEqual(revisions);
+    rmSync(b.accepted);
+    rmSync(join(b.stateDir, MODULE_RECORDS_DIR), { recursive: true });
+
+    const start = await entryStart(b);
+    expect(start.thrown).toBeUndefined();
+    await start.started!.close();
+    expect(copyPlacedEvents(b)).toBe(1);
+    expect(await readModulePreparationRevisions(state)).toEqual(revisions);
+  }, 120_000);
 
   it("preserves a same-size committed change left in the killed start's WAL", async () => {
     const b = await buildBox();
