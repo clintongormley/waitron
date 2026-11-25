@@ -55,7 +55,7 @@ import {
 } from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
-import { row, sheetNamed } from "./testing/xlsx-rows.js";
+import { row, sheetNamed, worksheetText } from "./testing/xlsx-rows.js";
 import type { Cell } from "./xlsx-workbook.js";
 
 const invoice = {
@@ -1288,7 +1288,7 @@ describe("accountant period selection", () => {
     const words = ACCOUNTANT_EXPORT_WORDS.en;
     expect(invoiceLineCells(minus, words)[0]![3]).toBe("Voided");
     expect(words.invoiceNotesColumn).toContain(
-      "; voids listed again as minus rows on the local day of the void;",
+      "; voids listed again as minus rows under the day this column gives;",
     );
     const bases = rows
       .filter((row) => row.invoiceType !== "replacement")
@@ -1314,6 +1314,56 @@ describe("accountant period selection", () => {
     expect(await types("2026-11-01", "2026-11-30")).toEqual(["F2"]);
     expect(await types("2026-12-01", "2026-12-31")).toEqual(["void"]);
     expect(await types("2027-01-01", "2027-01-31")).toEqual([]);
+
+    for (const [language, listedUnder] of [
+      ["en", "Listed under 2026-12-01"],
+      ["es", ACCOUNTANT_EXPORT_WORDS.es.listedUnder.replace("{day}", "2026-12-01")],
+    ] as const) {
+      expect(listedUnder).toContain("2026-12-01");
+      const firstRow = async (from: string, to: string) => {
+        const xml = worksheetText(await renderAccountantWorkbook(await list(from, to), language));
+        const cells = row(xml, 2);
+        const notes = row(xml, 1).indexOf(ACCOUNTANT_EXPORT_WORDS[language].invoiceNotesColumn);
+        return { type: cells[3], issueDate: cells[4], notes: cells[notes] };
+      };
+      expect(await firstRow("2026-11-01", "2026-11-30")).toEqual({
+        type: "F2",
+        issueDate: "2026-11-30",
+        notes: "",
+      });
+      expect(await firstRow("2026-12-01", "2026-12-31")).toEqual({
+        type: ACCOUNTANT_EXPORT_WORDS[language].void.receipt,
+        issueDate: "2026-11-30",
+        notes: listedUnder,
+      });
+    }
+  });
+
+  it("lists a void by its day in the widest offsets though its UTC stamp is outside the period", async () => {
+    for (const [index, [issuedOffsetMinutes, voidedAt]] of (
+      [
+        [840, "2026-10-31T09:59:59.999Z"],
+        [840, "2026-10-31T10:00:00.000Z"],
+        [-840, "2026-12-01T13:59:59.999Z"],
+        [-840, "2026-12-01T14:00:00.000Z"],
+      ] as const
+    ).entries()) {
+      const saleId = await seedSale(suite.db, venue, {
+        invoiceNumber: index + 1,
+        issuedAt: "2026-10-15T12:00:00.000Z",
+        issuedOffsetMinutes,
+        total: "12.10",
+        lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+      });
+      await seedVoid(suite.db, { saleId }, voidedAt);
+    }
+
+    expect(
+      (await list()).invoices.map((row) => [row.invoiceNumber, row.invoiceType, row.listedDay]),
+    ).toEqual([
+      ["A/2", "void", "2026-11-01"],
+      ["A/3", "void", "2026-11-30"],
+    ]);
   });
 
   it("shows a sale date only when it is earlier than the issue date", async () => {

@@ -71,6 +71,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     paymentMethods: { cash: "Cash", card: "Card" },
     takenOffBy: "taken off by {number}",
     takesOff: "Takes off {numbers}",
+    listedUnder: "Listed under {day}",
     invoiceColumns: {
       id: "Invoice id",
       nodeId: "Node id",
@@ -92,7 +93,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       voidedAt: "Voided at (UTC)",
     } satisfies Record<InvoiceLineKey, string>,
     invoiceNotesColumn:
-      "Notes: F3 replacements omitted; original tickets retained; voids listed again as minus rows on the local day of the void; replacement correctives flagged, not added; an invoice issued after its sale day is listed under that day",
+      "Notes: F3 replacements omitted; original tickets retained; voids listed again as minus rows under the day this column gives; replacement correctives flagged, not added; an invoice issued after its sale day is listed under that day",
     purchaseColumns: [
       "Invoice number",
       "Purchase id",
@@ -185,6 +186,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     paymentMethods: { cash: "Efectivo", card: "Tarjeta" },
     takenOffBy: "descontado en {number}",
     takesOff: "Descuenta {numbers}",
+    listedUnder: "Figura en el día {day}",
     invoiceColumns: {
       id: "Id. de factura",
       nodeId: "Id. de nodo",
@@ -206,7 +208,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       voidedAt: "Anulada el (UTC)",
     } satisfies Record<InvoiceLineKey, string>,
     invoiceNotesColumn:
-      "Notas: se omiten las sustituciones F3 y se conservan los tickets originales; las anulaciones figuran además como filas en negativo, en el día local de la anulación; los rectificativos por sustitución se indican, no se suman; una factura expedida después del día de la operación figura en ese día",
+      "Notas: se omiten las sustituciones F3 y se conservan los tickets originales; las anulaciones figuran además como filas en negativo, en el día que indica esta columna; los rectificativos por sustitución se indican, no se suman; una factura expedida después del día de la operación figura en ese día",
     purchaseColumns: [
       "Número de factura",
       "Id. de compra",

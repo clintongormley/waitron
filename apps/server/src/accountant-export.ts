@@ -34,6 +34,7 @@ import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import { advancesTakenOff, type TakenOffBy } from "./advance-taken-off.js";
 import { formatInvoiceNumber } from "@waitron/core";
 import { listPurchaseInvoices } from "@waitron/purchasing";
+import { addDays } from "@waitron/venue-service";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import type { PurchaseInvoice } from "@waitron/purchasing";
 import {
@@ -77,6 +78,8 @@ export interface AccountantInvoice {
   correctsSaleId: string | null;
   originalInvoiceNumber: string | null;
   voidedAt: string | null;
+  /** The day a minus row is listed under. */
+  listedDay?: string;
   /** On a part payment's ticket: how it was paid, and the table's ticket that took it off. */
   advance?: AdvanceCell;
   /** On a table's ticket (never a corrective): the part payments it took off. */
@@ -341,8 +344,12 @@ export async function renderAccountantWorkbook(
     const trailing: Cell[] = [invoice.saleDate ?? null, paymentOnAccount(invoice, words)];
     // Empty trailing cells are left off rather than written blank: a missing one reads as empty.
     while (trailing.at(-1) === null) trailing.pop();
+    const note =
+      invoice.listedDay === undefined
+        ? null
+        : words.listedUnder.replace("{day}", invoice.listedDay);
     for (const cells of invoiceLineCells(invoice, words))
-      invoiceRows.push([...cells, null, ...trailing]);
+      invoiceRows.push([...cells, note, ...trailing]);
   }
   const purchaseRows: Cell[][] = [];
   for (const [position, purchase] of data.purchases.entries()) {
@@ -478,6 +485,7 @@ export async function readAccountantInvoices(
   const originalSeries = alias(invoiceSeries, "original_series");
   const replacement = alias(sales, "replacement_invoice");
   const civilDate = stampDate(sales.issuedAt, sales.issuedOffsetMinutes);
+  const voidDay = stampDate(saleVoids.voidedAt, sales.issuedOffsetMinutes);
   const substitutes = exists(
     tx
       .select({ id: saleSubstitutions.id })
@@ -498,7 +506,7 @@ export async function readAccountantInvoices(
       issuedAt: sales.issuedAt,
       issuedOffsetMinutes: sales.issuedOffsetMinutes,
     })} end`;
-  const query = () =>
+  const query = (listedDay: SQL<string | null> = sql<null>`null`) =>
     tx
       .select({
         id: sales.id,
@@ -521,6 +529,7 @@ export async function readAccountantInvoices(
         originalCode: originalSeries.code,
         originalNumber: original.invoiceNumber,
         voidedAt: saleVoids.voidedAt,
+        listedDay,
       })
       .from(sales)
       .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
@@ -539,12 +548,19 @@ export async function readAccountantInvoices(
     rows = await query()
       .where(and(between(periodDay, from, to), not(substitutes)))
       .orderBy(asc(periodDay), asc(sales.issuedAt), asc(sales.id));
-    voided = await query()
+    voided = await query(voidDay)
       .where(
         and(
-          // Without this the left join to the voids makes the read scan every sale.
-          inArray(sales.id, tx.select({ saleId: saleVoids.saleId }).from(saleVoids)),
-          between(stampDate(saleVoids.voidedAt, sales.issuedOffsetMinutes), from, to),
+          // Without this the planner scanned every sale (node:26-slim, SQLite 3.54.1). Its bounds
+          // are a day wider each side: `sales_issued_offset_ck` keeps an offset within ±840 minutes.
+          inArray(
+            sales.id,
+            tx
+              .select({ saleId: saleVoids.saleId })
+              .from(saleVoids)
+              .where(between(saleVoids.voidedAt, addDays(from, -1), `${addDays(to, 1)}T24`)),
+          ),
+          between(voidDay, from, to),
           not(sales.replacesOriginal),
           not(substitutes),
         ),
@@ -568,9 +584,11 @@ export async function readAccountantInvoices(
     replacesOriginal,
     substitution,
     supplyDay,
+    listedDay,
     ...row
   }: Row): AccountantInvoice => ({
     ...row,
+    ...(listedDay === null ? {} : { listedDay }),
     ...(supplyDay !== null && supplyDay < row.issueDate ? { saleDate: supplyDay } : {}),
     invoiceNumber: formatInvoiceNumber(code, number),
     invoiceType: replacesOriginal
