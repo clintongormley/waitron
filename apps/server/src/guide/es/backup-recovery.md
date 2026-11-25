@@ -143,9 +143,8 @@ panel para configurar tus copias.
 Bajo la revisión, en «Recuperar este servidor», elige con **Elegir el PDF del paquete de recuperación** el paquete de
 recuperación que tenga la clave maestra de esta copia; o escribe la clave maestra impresa en él en
 **Clave maestra**. Un paquete con una clave maestra más nueva no abre una copia anterior.
-Marca «El servidor anterior está apagado y seguirá desconectado.»,
-«Soy la única persona recuperando este contribuyente, en todos sus locales.» y «Estos datos son
-correctos.».
+Marca «El servidor anterior se ha apagado.», «Soy la única persona recuperando este local.» y
+«Estos datos son correctos.».
 
 Si **Copias** no puede confirmar la clave guardada, conserva tanto la clave anterior como la que
 acabas de guardar. Al cambiar una clave, aún puedes copiar o descargar ambas claves mostradas

@@ -72,7 +72,6 @@ export const firstHourStrings = {
       "The box could not check its time over the internet. Check that both times below are right before you press Proceed.",
     confirmWhyProceedServer:
       "The box could not check its time over the internet. Check that the box's time below is right before you press Proceed.",
-    seriesLine: "Waitron will start this box's invoice series.",
     secondClockDo:
       "Let the box keep its time over the internet, or open this page on a phone or till on the venue's network and enter the setup password.",
     secondClockEnds:
@@ -102,7 +101,6 @@ export const firstHourStrings = {
       "El servidor no ha podido comprobar su hora por internet. Comprueba que las dos horas de abajo son correctas antes de pulsar Continuar.",
     confirmWhyProceedServer:
       "El servidor no ha podido comprobar su hora por internet. Comprueba que la hora del servidor que aparece abajo es correcta antes de pulsar Continuar.",
-    seriesLine: "Waitron creará las series de facturas de este servidor.",
     secondClockDo:
       "Deja que el servidor se ponga en hora por internet, o abre esta página desde un móvil o una caja del local y escribe la contraseña de la configuración.",
     secondClockEnds:
@@ -674,7 +672,6 @@ export class FirstSetupHour extends LitElement {
           @change=${(e: Event) => this.#edit({ reviewed: (e.currentTarget as HTMLInputElement).checked })}
         />${t.detailsCorrect} *</label
       >
-      ${action === "proceed" && !sending ? html`<p data-test="series-line">${t.seriesLine}</p>` : nothing}
       ${this.#wait.renderProblem(
         {
           ...t,

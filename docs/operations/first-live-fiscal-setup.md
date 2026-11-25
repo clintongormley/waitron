@@ -41,9 +41,7 @@ Proceed."; check both, because pressing **Proceed** confirms them (the same file
 device agrees, the step shows both times above Proceed, and Proceed confirms them"). The tick
 alone asks for nothing (the same file's "with the tick and the clocks agreeing, nothing asks for the
 series until Proceed"), and **Proceed** stays disabled until the tick is given (the same file's
-"Proceed is quiet and disabled until the details are ticked"). While the button reads **Proceed**,
-the page shows "Waitron will start this box's invoice series." (the same file's "without the tick nothing asks for the series, and the page
-says Waitron will start the series"). A missing second clock found when the page opens is explained at once, as
+"Proceed is quiet and disabled until the details are ticked"). A missing second clock found when the page opens is explained at once, as
 in the list below (the same file's "%s found on load is explained, with no failure"); clocks that
 differ are explained only after **Proceed** (the same file's "%s found on load show no clock step
 until Proceed, then explain it with no failure"). Beside **Edit these details** the page has one main button; what it reads in each

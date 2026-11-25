@@ -224,9 +224,8 @@ export const recoveryHourStrings = {
     deviceInvoices: "Invoices seen on this device",
     deviceInvoicesHint:
       "These are the last invoices this browser kept for this taxpayer and environment. The list may be incomplete.",
-    stopped: "The old box is stopped and will stay offline.",
-    sole: "I am the only person recovering this taxpayer, across all venues.",
-    seriesLine: "Waitron will start new invoice series for this box.",
+    stopped: "The old box has been shut down.",
+    sole: "I am the only person recovering this venue.",
     continue: "Continue",
     missing: "Complete recovery before continuing.",
     key: "Check the key for this backup.",
@@ -254,9 +253,8 @@ export const recoveryHourStrings = {
     deviceInvoices: "Facturas vistas en este dispositivo",
     deviceInvoicesHint:
       "Son las últimas facturas que este navegador guardó para este contribuyente y entorno. La lista puede estar incompleta.",
-    stopped: "El servidor anterior está apagado y seguirá desconectado.",
-    sole: "Soy la única persona recuperando este contribuyente, en todos sus locales.",
-    seriesLine: "Waitron creará series de facturas nuevas para este servidor.",
+    stopped: "El servidor anterior se ha apagado.",
+    sole: "Soy la única persona recuperando este local.",
     continue: "Continuar",
     missing: "Completa la recuperación antes de continuar.",
     key: "Revisa la clave de esta copia.",
@@ -858,7 +856,6 @@ export class RecoveryHourEntry extends LitElement {
             : undefined,
         )}
         ${this.#wait.counting ? this.#wait.renderWait(words) : nothing}
-        ${action === "proceed" && !sending && !emergency ? html`<p data-test="series-line">${words.seriesLine}</p>` : nothing}
       </div>
       ${
         selectedHour && !emergency

@@ -305,10 +305,7 @@ it.each([
     expect(prepare).not.toHaveBeenCalled();
   },
 );
-const RESTORE_SERIES_LINE = "Waitron will start new invoice series for this box.";
-const seriesLine = (el: Entry) =>
-  el.shadowRoot!.querySelector("[data-test=series-line]")?.textContent?.replace(/\s+/g, " ").trim();
-it("the key, both statements and the details tick send nothing until Proceed, and the page says new series will be made", async () => {
+it("the key, both statements and the details tick send nothing until Proceed", async () => {
   const { prepare } = scripted();
   const { el } = await mount(prepare);
   fakeClock();
@@ -318,32 +315,48 @@ it("the key, both statements and the details tick send nothing until Proceed, an
     await new Promise((resolve) => setTimeout(resolve, 0));
     await el.updateComplete;
     expect(prepare).not.toHaveBeenCalled();
-    expect(seriesLine(el)).toBe(RESTORE_SERIES_LINE);
     await proceed(el);
     await vi.waitFor(() => expect(selects(prepare)).toHaveLength(1));
     await vi.waitFor(() => expect(el.readCredentials()).not.toBeNull());
-    expect(el.shadowRoot!.querySelector("[data-test=series-line]")).toBeNull();
   } finally {
     vi.useRealTimers();
   }
 });
-it("the page says new series will be made only while the button reads Proceed, not during the wait after it", async () => {
-  const { prepare } = scripted([
-    { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
-    selected,
-  ]);
-  const { el } = await mount(prepare);
-  fakeClock();
-  try {
-    await fill(el);
-    expect(seriesLine(el)).toBe(RESTORE_SERIES_LINE);
-    await proceed(el);
-    await vi.waitFor(() => expect(remaining(el)).toBe("1:24"));
-    expect(el.shadowRoot!.querySelector("[data-test=series-line]")).toBeNull();
-  } finally {
-    vi.useRealTimers();
-  }
-});
+const statement = (el: LitElement, name: string) =>
+  el
+    .shadowRoot!.querySelector(`input[name="${name}"]`)
+    ?.closest("label")
+    ?.textContent?.replace(/\s+/g, " ")
+    .trim();
+it.each([
+  ["en", "The old box has been shut down. *", "I am the only person recovering this venue. *"],
+  ["es", "El servidor anterior se ha apagado. *", "Soy la única persona recuperando este local. *"],
+] as const)(
+  "%s: the statements say the old box has been shut down and name this venue, and no line says new series will be made",
+  async (locale, stopped, sole) => {
+    const { prepare } = scripted([
+      { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
+      selected,
+    ]);
+    const { el } = await mount(prepare);
+    el.locale = locale;
+    await el.updateComplete;
+    fakeClock();
+    try {
+      expect(statement(el, "recovery-old-box-stopped")).toBe(stopped);
+      expect(statement(el, "recovery-sole-operation")).toBe(sole);
+      await fill(el);
+      expect(text(el)).not.toContain("invoice series for this box");
+      expect(text(el)).not.toContain("series de facturas nuevas para este servidor");
+      await proceed(el);
+      await vi.waitFor(() => expect(remaining(el)).toBe("1:24"));
+      expect(text(el)).not.toContain("invoice series for this box");
+      expect(text(el)).not.toContain("series de facturas nuevas para este servidor");
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
 /** The key the box names, which is not the previewed backup's (`2026-10-17 · K7QX`). */
 const REFUSED_NAME = "2026-11-02 · QZJV";
 const REFUSED_KEY = {
@@ -1334,7 +1347,6 @@ it("explains each wait in Spanish with the restore page's words", async () => {
   state.decision = noSecondClock;
   el.locale = "es";
   await el.updateComplete;
-  expect(seriesLine(el)).toBe("Waitron creará series de facturas nuevas para este servidor.");
   fakeClock();
   try {
     await ready(el);
@@ -1866,9 +1878,6 @@ it("a Spanish handover start names each new series' use and offers Continuar", a
   const el = await mountPromotion(prepare);
   el.locale = "es";
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("[data-test=series-line]")?.textContent?.trim()).toBe(
-    "Waitron creará series de facturas nuevas para este servidor.",
-  );
   check(el, "recovery-details-confirmed");
   await el.updateComplete;
   await proceed(el);
@@ -2443,12 +2452,6 @@ it.each([
     await vi.waitFor(() => expect(text(el)).toContain(words));
   },
 );
-it("the Spanish series line says new series will be made", async () => {
-  const { el } = await mount();
-  el.locale = "es";
-  await el.updateComplete;
-  expect(seriesLine(el)).toBe("Waitron creará series de facturas nuevas para este servidor.");
-});
 const detailRows = (el: LitElement, list: string) =>
   [...el.shadowRoot!.querySelectorAll(`[data-test=${list}] > div`)].map((row) => [
     row.querySelector("dt")?.textContent?.trim(),
@@ -2864,7 +2867,7 @@ it("an emergency switch draws no details tick, series, Edit, Clear or Proceed, c
   expect(text(el)).not.toContain("These details are correct.");
   expect(text(el)).not.toContain("Check this venue");
   expect(el.shadowRoot!.querySelector("[data-test=venue-review]")).toBeNull();
-  for (const name of ["series-line", "edit-details", "clear", "compare", "continue"])
+  for (const name of ["edit-details", "clear", "compare", "continue"])
     expect(el.shadowRoot!.querySelector(`[data-test=${name}]`), name).toBeNull();
   el.requestUpdate();
   await el.updateComplete;
