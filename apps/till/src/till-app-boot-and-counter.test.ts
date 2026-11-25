@@ -1195,15 +1195,14 @@ describe("till-app session activity", () => {
     const identity = { deviceId: "till-dev", name: "Till 1", formFactor: "till" as const };
     let confirm!: (device: typeof identity) => void;
     const check = new Promise<typeof identity>((resolve) => (confirm = resolve));
-    let receive!: Parameters<TillApi["onMadeHere"]>[0];
+    let reply = oldDrink;
+    const client = new TillClient("", async () => Response.json({ madeHere: [reply] }));
     const { el } = await mountApp({
       getDeviceIdentity: vi.fn().mockResolvedValueOnce(identity).mockReturnValueOnce(check),
-      onMadeHere: vi.fn((listener) => {
-        receive = listener;
-      }),
+      onMadeHere: client.onMadeHere.bind(client),
     });
     await flush(el);
-    receive([oldDrink], identity.deviceId);
+    await client.getTill();
     await flush(el);
     emit(lock(el)!, "device-unauthorized");
     await flush(el);
@@ -1213,7 +1212,8 @@ describe("till-app session activity", () => {
     await userEvent.click(card.querySelector("button")!);
     await flush(el);
     expect(localStorage.getItem("waitron.makeNow.till-dev")).toBeNull();
-    receive([{ ...oldDrink, lineId: "new-drink", name: "New drink" }], identity.deviceId);
+    reply = { ...oldDrink, lineId: "new-drink", name: "New drink" };
+    await client.getTill();
     confirm(identity);
     await flush(el);
     expect(lock(el)!.deviceName).toBe(identity.name);
