@@ -193,7 +193,10 @@ No stored fiscal row is to be rewritten.
   year, a void of the previous year's invoice" in `vat-corrections.test.ts`). That settles Q25
   (which VAT period a later annulment lands in) by owner decision D12 of 2026-11-16,
   which the owner's answer of 18 November keeps (owner, 2026-11-18, question 8 of the
-  [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details. No till screen or server route calls `recordVoid` yet.
+  [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details.
+  The accountant's sheet lists a voided invoice again as a minus row under the day of the void in the
+  sale's own UTC offset, the day these figures count it made (watcher, 2026-11-25). No till screen or
+  server route calls `recordVoid` yet.
   Test titles still say "tenant"
   (`top-sellers.test.ts:501`, `overdue-orders.test.ts:252`, `vat-summary.test.ts:233`,
   `vat-summary-period.test.ts:128`), "design §3" (`overdue-orders.test.ts:194`) and "spec §12"
@@ -394,9 +397,10 @@ No product path reaches the held-cancellation remedy today: the filing queue set
 cancellation aside (`cancelsRefusedOriginal`, `setAside` and `setAsideHeldCancellations` in
 `packages/fiscal-verifactu/src/drain.ts`), `releaseHeldCancellation`
 (`packages/fiscal-verifactu/src/record-remedy-held.ts`) and the correction remedy's exception for a
-held (`retenido`) cancellation (`packages/fiscal-verifactu/src/record-remedy.ts:181-183`). The
-ordinary cancellation it handles is written only by core's `recordVoid`
-(`packages/core/src/record-void.ts`), which no till screen or server route calls
+held (`retenido`) cancellation (`packages/fiscal-verifactu/src/record-remedy.ts:185-187`), a remedy
+refused for a voided sale while `release-held-cancellation` is off or while its cancellation is not
+on this box (`record-remedy.ts:188-190`). The ordinary cancellation it handles is written only by
+core's `recordVoid` (`packages/core/src/record-void.ts`), which no till screen or server route calls
 (`git grep -n 'recordVoid\b' -- 'apps/**/*.ts' 'packages/**/*.ts' ':!*.test.ts' ':!**/testing/**'`,
 2026-11-24, lists no caller outside core but `start-clock-gate.ts`'s name list; the fiscal
 backends' `recordVoid` methods, which core's calls, and the payments package's `recordVoid` are
@@ -408,7 +412,8 @@ answer, while the correction waited behind the cancellation. The action now refu
 existing ordinary cancellation is already held for resolution. It also refuses completed,
 failed or unknown cancellation states and a synthetic held absent-original cancellation. Once
 the queue has actually held the ordinary cancellation, the same decision can be submitted again,
-accepted and followed by its explicit release. No queue-order rule was weakened.
+accepted and followed by its explicit release (2026-11-25: for a voided sale, only while
+`release-held-cancellation` is enabled; it is off on every box). No queue-order rule was weakened.
 
 For a definitively rejected delivery, the correction action requires a matching non-null rejection
 code on the case and delivery; it refuses code 3000 in either admissible outcome. This aligns the

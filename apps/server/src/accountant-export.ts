@@ -34,6 +34,7 @@ import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import { advancesTakenOff, type TakenOffBy } from "./advance-taken-off.js";
 import { formatInvoiceNumber } from "@waitron/core";
 import { listPurchaseInvoices } from "@waitron/purchasing";
+import { addDays } from "@waitron/venue-service";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import type { PurchaseInvoice } from "@waitron/purchasing";
 import {
@@ -44,6 +45,7 @@ import {
   decimalToCents,
   divideDecimal,
   multiplyDecimal,
+  negateDecimal,
   subtractDecimal,
   sumDecimals,
   type Decimal,
@@ -60,7 +62,8 @@ export interface AccountantInvoice {
   id: string;
   nodeId: string;
   invoiceNumber: string;
-  invoiceType: "F1" | "F2" | "F3" | "corrective" | "replacement";
+  /** `void` is a voided invoice's minus row. */
+  invoiceType: "F1" | "F2" | "F3" | "corrective" | "replacement" | "void";
   issueDate: string;
   /** The day the sale happened, present only when it is earlier than `issueDate`. */
   saleDate?: string;
@@ -75,6 +78,8 @@ export interface AccountantInvoice {
   correctsSaleId: string | null;
   originalInvoiceNumber: string | null;
   voidedAt: string | null;
+  /** The day a minus row is listed under. */
+  listedDay?: string;
   /** On a part payment's ticket: how it was paid, and the table's ticket that took it off. */
   advance?: AdvanceCell;
   /** On a table's ticket (never a corrective): the part payments it took off. */
@@ -339,8 +344,12 @@ export async function renderAccountantWorkbook(
     const trailing: Cell[] = [invoice.saleDate ?? null, paymentOnAccount(invoice, words)];
     // Empty trailing cells are left off rather than written blank: a missing one reads as empty.
     while (trailing.at(-1) === null) trailing.pop();
+    const note =
+      invoice.listedDay === undefined
+        ? null
+        : words.listedUnder.replace("{day}", invoice.listedDay);
     for (const cells of invoiceLineCells(invoice, words))
-      invoiceRows.push([...cells, null, ...trailing]);
+      invoiceRows.push([...cells, note, ...trailing]);
   }
   const purchaseRows: Cell[][] = [];
   for (const [position, purchase] of data.purchases.entries()) {
@@ -442,14 +451,31 @@ function saleVatDay(sale: {
   return sql<string>`coalesce(${sale.replacementSupplyDay}, ${sale.supplyDay}, ${filedDate})`;
 }
 
+/** A voided invoice's minus row: the invoice's own id and number, with the invoice as its original. */
+function minusRow(invoice: AccountantInvoice): AccountantInvoice {
+  return {
+    ...invoice,
+    invoiceType: "void",
+    total: negateDecimal(invoice.total),
+    vatBreakdown: invoice.vatBreakdown.map((vat) => ({
+      rate: vat.rate,
+      base: negateDecimal(decimal(vat.base)),
+      tax: negateDecimal(decimal(vat.tax)),
+    })),
+    correctsSaleId: invoice.id,
+    originalInvoiceNumber: invoice.invoiceNumber,
+  };
+}
+
 /** Which sales {@link readAccountantInvoices} reads. */
 export type InvoiceSelection =
   { range: { from: string; to: string } } | { saleIds: readonly string[] };
 
 /**
  * The invoices of `selection`, with their part payments. A range lists them by the day the
- * workbook lists them under and leaves out substitution (F3) invoices; a list of sale ids reads
- * each named sale that exists, F3 included, in no particular order.
+ * workbook lists them under and leaves out substitution (F3) invoices; last come the minus rows of
+ * the invoices voided in it, F3 and replacement invoices aside, by the void's day in the sale's
+ * offset. A list of sale ids reads each named sale that exists, F3 included, in no particular order.
  */
 export async function readAccountantInvoices(
   tx: Transaction,
@@ -459,6 +485,7 @@ export async function readAccountantInvoices(
   const originalSeries = alias(invoiceSeries, "original_series");
   const replacement = alias(sales, "replacement_invoice");
   const civilDate = stampDate(sales.issuedAt, sales.issuedOffsetMinutes);
+  const voidDay = stampDate(saleVoids.voidedAt, sales.issuedOffsetMinutes);
   const substitutes = exists(
     tx
       .select({ id: saleSubstitutions.id })
@@ -479,7 +506,7 @@ export async function readAccountantInvoices(
       issuedAt: sales.issuedAt,
       issuedOffsetMinutes: sales.issuedOffsetMinutes,
     })} end`;
-  const query = () =>
+  const query = (listedDay: SQL<string | null> = sql<null>`null`) =>
     tx
       .select({
         id: sales.id,
@@ -502,6 +529,7 @@ export async function readAccountantInvoices(
         originalCode: originalSeries.code,
         originalNumber: original.invoiceNumber,
         voidedAt: saleVoids.voidedAt,
+        listedDay,
       })
       .from(sales)
       .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
@@ -514,11 +542,31 @@ export async function readAccountantInvoices(
       );
   type Row = Awaited<ReturnType<ReturnType<typeof query>["execute"]>>[number];
   let rows: Row[];
-  if ("range" in selection)
+  let voided: Row[] = [];
+  if ("range" in selection) {
+    const { from, to } = selection.range;
     rows = await query()
-      .where(and(between(periodDay, selection.range.from, selection.range.to), not(substitutes)))
+      .where(and(between(periodDay, from, to), not(substitutes)))
       .orderBy(asc(periodDay), asc(sales.issuedAt), asc(sales.id));
-  else {
+    voided = await query(voidDay)
+      .where(
+        and(
+          // Without this the planner scanned every sale (node:26-slim, SQLite 3.54.1). Its bounds
+          // are a day wider each side: `sales_issued_offset_ck` keeps an offset within ±840 minutes.
+          inArray(
+            sales.id,
+            tx
+              .select({ saleId: saleVoids.saleId })
+              .from(saleVoids)
+              .where(between(saleVoids.voidedAt, addDays(from, -1), `${addDays(to, 1)}T24`)),
+          ),
+          between(voidDay, from, to),
+          not(sales.replacesOriginal),
+          not(substitutes),
+        ),
+      )
+      .orderBy(asc(saleVoids.voidedAt), asc(sales.id));
+  } else {
     rows = [];
     // Half the limit leaves room for the values the query binds besides the ids.
     const chunk = Math.floor(SQL_VARIABLE_LIMIT / 2);
@@ -528,36 +576,37 @@ export async function readAccountantInvoices(
       ))
         rows.push(row);
   }
-  const invoices: AccountantInvoice[] = rows.map(
-    ({
-      code,
-      number,
-      originalCode,
-      originalNumber,
-      replacesOriginal,
-      substitution,
-      supplyDay,
-      ...row
-    }) => ({
-      ...row,
-      ...(supplyDay !== null && supplyDay < row.issueDate ? { saleDate: supplyDay } : {}),
-      invoiceNumber: formatInvoiceNumber(code, number),
-      invoiceType: replacesOriginal
-        ? "replacement"
-        : row.correctsSaleId !== null
-          ? "corrective"
-          : substitution
-            ? "F3"
-            : row.customerTaxId === null
-              ? "F2"
-              : "F1",
-      originalInvoiceNumber:
-        originalCode === null || originalNumber === null
-          ? null
-          : formatInvoiceNumber(originalCode, originalNumber),
-      total: centsToDecimal(row.total),
-    }),
-  );
+  const invoiceOf = ({
+    code,
+    number,
+    originalCode,
+    originalNumber,
+    replacesOriginal,
+    substitution,
+    supplyDay,
+    listedDay,
+    ...row
+  }: Row): AccountantInvoice => ({
+    ...row,
+    ...(listedDay === null ? {} : { listedDay }),
+    ...(supplyDay !== null && supplyDay < row.issueDate ? { saleDate: supplyDay } : {}),
+    invoiceNumber: formatInvoiceNumber(code, number),
+    invoiceType: replacesOriginal
+      ? "replacement"
+      : row.correctsSaleId !== null
+        ? "corrective"
+        : substitution
+          ? "F3"
+          : row.customerTaxId === null
+            ? "F2"
+            : "F1",
+    originalInvoiceNumber:
+      originalCode === null || originalNumber === null
+        ? null
+        : formatInvoiceNumber(originalCode, originalNumber),
+    total: centsToDecimal(row.total),
+  });
+  const invoices = rows.map(invoiceOf);
   const onAccount = await readPaymentsOnAccount(
     tx,
     invoices.map((invoice) => invoice.id),
@@ -568,7 +617,7 @@ export async function readAccountantInvoices(
     const takesOff = onAccount.takesOff.get(invoice.id);
     if (takesOff !== undefined) invoice.takesOff = takesOff;
   }
-  return invoices;
+  return invoices.concat(voided.map((row) => minusRow(invoiceOf(row))));
 }
 
 export async function listAccountantExport(

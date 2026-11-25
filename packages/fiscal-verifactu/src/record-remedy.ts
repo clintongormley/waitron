@@ -1,7 +1,7 @@
 import "./errors.js";
 import { and, eq } from "drizzle-orm";
 import { recordIncident } from "@waitron/core";
-import { readHistoryNodes, type Transaction } from "@waitron/db";
+import { readHistoryNodes, saleVoids, type Transaction } from "@waitron/db";
 import { authorizeManager } from "@waitron/identity";
 import { canonicalJson } from "@waitron/recovery-pack";
 import { AppError, type NodeId } from "@waitron/shared";
@@ -168,6 +168,10 @@ export async function applyRecordCorrection(
         eq(verifactuRecords.fechaExpedicionFactura, target.fechaExpedicionFactura),
       ),
     );
+  const [voided] = await tx
+    .select({ saleId: saleVoids.saleId })
+    .from(saleVoids)
+    .where(eq(saleVoids.saleId, target.saleId));
   if (
     filingCase.registroId !== request.registroId ||
     (filingCase.cause !== "fiscal.registro_rechazado" &&
@@ -181,6 +185,9 @@ export async function applyRecordCorrection(
     // A waiting cancellation would wait for this correction while blocking it in the queue.
     (cancellation !== undefined &&
       (cancellation.estado !== "retenido" || cancellation.sinRegistroPrevio === "S")) ||
+    // Correcting files a voided invoice again, and its set-aside cancellation then has to be released.
+    (voided !== undefined &&
+      (cancellation === undefined || !input.enabledRemedies.has("release-held-cancellation"))) ||
     (input.correctionDecision !== undefined &&
       (input.correctionDecision.priorOutcome === "rejected"
         ? delivery?.estado !== "rechazado" || filingCase.cause !== "fiscal.registro_rechazado"

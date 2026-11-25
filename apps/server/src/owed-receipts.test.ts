@@ -31,6 +31,7 @@ import {
 } from "@waitron/printing";
 import { insertA4Printer } from "@waitron/db/testing/printers.js";
 import { expireInvoiceDeliveryClaims, reserveInvoiceDelivery } from "./invoice-delivery.js";
+import { seedVoid } from "@waitron/reporting/test/fixtures.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import type { Transaction } from "@waitron/db";
 import type { Logger } from "./logger.js";
@@ -44,7 +45,12 @@ import {
   startFreshRounds,
 } from "./owed-receipts.js";
 import type { FiscalBackend } from "@waitron/fiscal";
-import { deviceOrigin, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
+import {
+  deviceOrigin,
+  nodeId as brandNodeId,
+  jobOrigin,
+  saleId as brandSaleId,
+} from "@waitron/shared";
 import { CAPABILITY_FLAGS } from "@waitron/layouts";
 import { printSaleReceipt } from "./till-sale.js";
 import { setOrderInvoiceChoice } from "./working-order-invoice.js";
@@ -325,6 +331,22 @@ describe("owesOriginal", () => {
     });
     expect(await owes(saleId)).toBe(false);
   });
+});
+
+it.each([
+  ["gave up", true],
+  ["was never queued", false],
+] as const)("owes nothing to a voided sale whose original %s", async (_, gaveUp) => {
+  const { saleId, printerId } = await issued();
+  if (gaveUp) await receiptJob(saleId, printerId, { ...GIVEN_UP, claimedAt: AT });
+  const found = async () =>
+    (gaveUp
+      ? await givenUpOriginals(suite.db, NODE, new Date(AT))
+      : await owedSales(suite.db, NODE, new Date(AT))
+    ).length;
+  expect(await found()).toBe(1);
+  await seedVoid(suite.db, { saleId: brandSaleId(saleId) }, AT);
+  expect(await found()).toBe(0);
 });
 
 describe("startFreshRounds", () => {

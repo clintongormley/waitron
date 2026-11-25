@@ -302,7 +302,7 @@ const en = {
   "fiscal_filing.refused.not_main":
     "This box no longer files the venue's invoices. Open this page on the box that does.",
   "fiscal_filing.refused.changed":
-    "This case was already put right, or it changed; nothing more was sent.",
+    "This case was already put right, it changed, or its invoice was cancelled in Waitron; nothing more was sent.",
   "fiscal_filing.refused.not_sent":
     "Waitron could not accept this request, so nothing was sent. This is a fault in Waitron; the case stays open.",
   "fiscal_filing.refused.disk_full":
@@ -695,7 +695,7 @@ const es: Record<AeatCertificateKey, string> = {
   "fiscal_filing.refused.not_main":
     "Este servidor ya no presenta las facturas del local. Abre esta página en el servidor que las presenta.",
   "fiscal_filing.refused.changed":
-    "Este caso ya se había corregido o ha cambiado; no se ha enviado nada más.",
+    "Este caso ya se había corregido, ha cambiado o su factura se anuló en Waitron; no se ha enviado nada más.",
   "fiscal_filing.refused.not_sent":
     "Waitron no ha podido aceptar esta petición, así que no se ha enviado nada. Es un fallo de Waitron; el caso sigue abierto.",
   "fiscal_filing.refused.disk_full":

@@ -1,6 +1,7 @@
 # CANCEL-UNSERVED: a receipt for a bill nobody was served and nobody paid is cancelled at AEAT
 
-Status: cleared 2026-11-25 by the watcher (16:41, five changes) and, for PR 2, by the owner (16:43, relayed). Not started.
+Status: cleared 2026-11-25 by the watcher (16:41, five changes) and, for PR 2, by the owner (16:43, relayed).
+PR 1 is built (branch `feat/cancel-unserved-readers`); PRs 2 and 3 are not started.
 FISCAL: the owner lands every pull request (PR). Base: `main` at `bb1389b737`. "Run": a throwaway change in a detached
 worktree for this revision (server halves only; not the till, not the other-box refusal); "run (earlier)": a previous one.
 **Words.** *Receipt*: the simplified invoice (F2). *Cancellation*: the record telling AEAT the receipt should never have
@@ -64,6 +65,9 @@ the changed files. Commands run as `pnpm --filter @waitron/<package> exec vitest
 - *First:* `record-remedy.test.ts`: a description fix on a voided sale whose cancellation is set aside refuses
   `fiscal.remedy_invalid`. Today it is applied (run), putting a voided receipt live at AEAT. *Code:* one `sale_voids`
   condition in `record-remedy.ts`'s list. No case-view flag. The replacement refuses already (`record-replacement.ts:81`).
+  *Built instead* (watcher, 25 Nov 19:35): refused only while `release-held-cancellation` is not enabled, its default on
+  every box (review, 25 Nov: and while its cancellation is not on this box). With it enabled, today's path stays:
+  correct, AEAT accepts, release, AEAT ends at `Anulado`.
 
   34 fiscal files, 1,002 of 1,002, with both (run).
 
@@ -82,7 +86,9 @@ the changed files. Commands run as `pnpm --filter @waitron/<package> exec vitest
   **range** branch, by the void's day in the sale's offset (`vat-movements.ts:185`), listed last: kind **Voided /
   «Anulada»**, amounts negated, the receipt's number, the receipt as its original. The id-list branch, the old-box
   workbook's, is untouched (13 of 13, run). The notes heading's "voids flagged, not netted" / «se indican, no se restan»
-  becomes "voids listed again as minus rows" / «las anulaciones figuran además como filas en negativo».
+  becomes "voids listed again as minus rows under the day this column gives" / «las anulaciones figuran además como filas
+  en negativo, en el día que indica esta columna» (review, 25 Nov: the row's notes cell gives that day, "Listed under
+  {day}" / «Figura en el día {day}»).
 
 Dropped (watcher): VOIDED on copies; refusing a resend, email or A4; ending a placed bill whose void returns from another
 box (it then takes no payment, where today €1.00 is taken; Finish and unpaid departure refuse it; run).
@@ -105,7 +111,8 @@ box (it then takes no payment, where today €1.00 is taken; Finish and unpaid d
   ticket y reabre la cuenta.»; `split.done` "Receipt taken back. Take off any dish that never came, move each guest's
   dishes to their own bill, then print each one." / «Ticket retirado. Quita los platos que no llegaron, pasa los platos de
   cada cliente a su propia cuenta y después imprime cada una.»; `split.credited_elsewhere` "already taken back" / «ya se
-  había retirado».
+  había retirado». (Owner, 25 Nov 18:19: Reopen keeps "This cancels the existing receipt and reopens the bill."; its
+  other lines follow those words.)
 
 ## 5. PR 3. Nothing was served
 
@@ -186,6 +193,6 @@ stays. 5 kitchen-ready dishes: no. 6 menu name: yes, mock-up; Reopen's words onl
    first read's 400 for "keep the charge" on a printed bill is not a rule: with a reason it answers 200, run.)
 3. **The fix refusal must read `sale_voids`,** not "any cancellation": `record-remedy-held.test.ts` corrects an original
    whose seeded cancellation is set aside.
-4. **False words:** the sheet's notes ("not netted", changed in PR 1) and the dashboard's help ("Correct invoices …
-   including cancelling an invoiced order", PR 3).
+4. **False words:** the sheet's notes ("not netted", changed in PR 1) and the dashboard's help ("Authorise
+   issuing a corrective receipt or invoice, including cancelling an invoiced order", as #4344 words it; PR 3).
 5. **The test changes reach seven files,** not one.

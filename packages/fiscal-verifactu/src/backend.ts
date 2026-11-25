@@ -33,6 +33,7 @@ import type {
   TrustedClock,
   VatBreakdownLine,
 } from "@waitron/fiscal";
+import { prepareIssueClock } from "@waitron/fiscal";
 import { formatInvoiceNumber } from "@waitron/core";
 import { buildQrPayload, formatDate } from "@waitron/verifactu";
 import type { SignedMembershipDocument } from "@waitron/membership";
@@ -493,7 +494,7 @@ export class VerifactuBackend implements FiscalBackend {
     const chart = await this.admitIssuance(tx, issuingNodeId);
     const sif = await currentSif(tx, issuingNodeId);
     const taxpayer = await this.taxpayer(tx);
-    const now = this.clock.now();
+    const now = (await prepareIssueClock(tx, { nodeId: issuingNodeId }, this.clock)).now();
 
     const input: Omit<AnulacionInput, "Encadenamiento"> = {
       IDEmisorFacturaAnulada: original.id_emisor_factura,

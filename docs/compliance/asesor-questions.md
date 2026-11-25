@@ -1820,7 +1820,7 @@ The two shapes we could build:
   amount; the transfer is recorded against that invoice when it arrives. Much of this exists for
   F2: an order can file its invoice with no payment (`issueUnpaidInvoice`,
   `apps/server/src/working-order-invoice.ts`), the amount due on each issued invoice (its total net of
-  corrections) is read in `apps/server/src/sale-due.ts`, and a table that leaves without paying already gets an F2 for the
+  corrections; 0.00 once voided, 2026-11-25) is read in `apps/server/src/sale-due.ts`, and a table that leaves without paying already gets an F2 for the
   full amount, collected later (Q28, on the owner's 2026-10-01 decision); the dashboard's Orders
   screen filters unpaid orders and shows what each still owes (`apps/server/src/orders-list.ts`).
   Missing: recording a payment by transfer (collecting an issued invoice accepts only cash or card —

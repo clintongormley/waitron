@@ -2,22 +2,14 @@ import { allocationRows } from "../test/allocation-rows.js";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  deployment,
-  invoiceSeries,
-  nodes,
-  sales,
-  withTransaction,
-  type Transaction,
-} from "@waitron/db";
+import { deployment, invoiceSeries, nodes, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordSale } from "@waitron/core";
 import { prepareIssueClock, type TrustedClock } from "@waitron/fiscal";
 import { computeHuella } from "@waitron/verifactu";
-import { decimal, nodeId, seriesId, saleId, type SaleId } from "@waitron/shared";
+import { nodeId, seriesId, type SaleId } from "@waitron/shared";
 import * as fiscal from "./index.js";
 import { withOperationAuthority } from "@waitron/module";
 import { createEmergencyAllocationPreparation } from "./emergency-preparation.js";
@@ -46,9 +38,6 @@ beforeEach(async () => {
     sql`update settings set doc = json_set(doc, '$.timeZone', ${"Europe/Madrid"}) where module = 'business_day'`,
   );
 });
-async function prepare(tx: Transaction, id: SaleId, clock = source) {
-  return fiscal.prepareFiscalVoidClock(tx, id, clock, seededNode.nodeId);
-}
 const original = () =>
   withTransaction(suite.db, (tx) =>
     recordSale(
@@ -58,8 +47,8 @@ const original = () =>
     ),
   );
 const annul = (id: SaleId) =>
-  withTransaction(suite.db, async (tx) =>
-    backend(await prepare(tx, id)).recordVoid(tx, id, "Operator error", seededNode.nodeId),
+  withTransaction(suite.db, (tx) =>
+    backend().recordVoid(tx, id, "Operator error", seededNode.nodeId),
   );
 function snapshot() {
   return Object.fromEntries(
@@ -97,10 +86,14 @@ describe("the venue's zone across a daylight-saving change", () => {
       });
     const firstSale = await issue("2026-10-25T00:30:00.000Z");
     const secondSale = await issue("2026-10-25T01:30:00.000Z");
-    await withTransaction(suite.db, async (tx) => {
-      const clock = await prepare(tx, firstSale.saleId, sourceAt("2026-10-25T01:30:00.000Z"));
-      await backend(clock).recordVoid(tx, firstSale.saleId, "Operator error", seededNode.nodeId);
-    });
+    await withTransaction(suite.db, (tx) =>
+      backend(sourceAt("2026-10-25T01:30:00.000Z")).recordVoid(
+        tx,
+        firstSale.saleId,
+        "Operator error",
+        seededNode.nodeId,
+      ),
+    );
     const [first, annulment] = records(firstSale.saleId);
     const [second] = records(secondSale.saleId);
     const offsets = suite.db
@@ -122,7 +115,7 @@ describe("the venue's zone across a daylight-saving change", () => {
   });
 });
 
-describe("the void caller's original writing venue", () => {
+describe("a cancellation's time zone", () => {
   it("keeps the offset-zero original day and prepares the new annulment from Madrid", async () => {
     const old = await original();
     const before = records(old.saleId)[0];
@@ -138,7 +131,7 @@ describe("the void caller's original writing venue", () => {
     expect(await suite.db.select().from(invoiceSeries)).toEqual(numbers);
   });
   it.each(["", "  ", "Invalid/Zone", "+02:00"])(
-    "refuses unusable original zone %j without appending or allocating",
+    "refuses unusable venue zone %j without appending or allocating",
     async (timeZone) => {
       const old = await original();
       await suite.db.run(
@@ -152,66 +145,6 @@ describe("the void caller's original writing venue", () => {
       expect(snapshot()).toEqual(before);
     },
   );
-  it("refuses an unfiled sale before reading its clock", async () => {
-    const before = snapshot();
-    const clock = {
-      ...source,
-      now: () => {
-        throw new Error("must not read source");
-      },
-    };
-    await expect(
-      withTransaction(suite.db, (tx) => prepare(tx, saleId(randomUUID()), clock)),
-    ).rejects.toMatchObject({ code: "fiscal.sale_not_recorded" });
-    expect(snapshot()).toEqual(before);
-  });
-  it("refuses disagreement between the saved sale node and the original alta", async () => {
-    const other = await seedTaxpayerWithSif(suite.db);
-    const old = await withTransaction(suite.db, async (tx) => {
-      const [row] = await tx
-        .insert(sales)
-        .values({
-          nodeId: other.nodeId,
-          seriesId: other.seriesId,
-          id: randomUUID(),
-          source: "readiness_test",
-          invoiceNumber: 1,
-          issuedAt: AT,
-          issuedOffsetMinutes: 0,
-          total: 1441,
-          vatBreakdown: [],
-          locale: "en-GB",
-          invoiceLocales: ["en-GB"],
-          fiscalBackend: "verifactu",
-          fiscalState: "recorded",
-        })
-        .returning();
-      await backend().recordSale(tx, {
-        origin: saleInput(seededNode).origin,
-        saleId: saleId(row!.id),
-        nodeId: seededNode.nodeId,
-        seriesId: seededNode.seriesId,
-        seriesCode: "A",
-        invoiceNumber: 1,
-        issuedAt: new Date(AT),
-        offsetMinutes: 0,
-        descriptionOfOperation: "Restaurant service",
-        total: decimal("14.41"),
-        vatBreakdown: [
-          { rate: decimal("21.00"), base: decimal("10.00"), tax: decimal("2.10") },
-          { rate: decimal("10.00"), base: decimal("2.10"), tax: decimal("0.21") },
-        ],
-        counterparty: null,
-      });
-      return saleId(row!.id);
-    });
-    const before = snapshot();
-    await expect(annul(old)).rejects.toMatchObject({
-      code: "venue.time_zone_target_invalid",
-      params: { reason: "mismatch" },
-    });
-    expect(snapshot()).toEqual(before);
-  });
 });
 
 it("an active emergency identity uses the caller's issue instant rather than allocation time", async () => {

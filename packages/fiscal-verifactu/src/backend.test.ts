@@ -390,33 +390,40 @@ describe("recordVoid", () => {
 });
 
 /**
- * `FechaExpedicionFacturaAnulada` must come back as the stored calendar day for any offset. Both
- * offsets below cross midnight from a noon-UTC anchor, the case a noon anchor got wrong, which a
- * moderate offset such as +120 would not exercise. The sale is recorded at the fixture's +01:00 and
- * only the void reads the extreme offset, as when a sale is voided hours later.
+ * `FechaExpedicionFacturaAnulada` must come back as the stored calendar day for any offset. +13:00
+ * crosses midnight from a noon-UTC anchor. -12:00 only reaches midnight from noon, so it catches a
+ * midnight-UTC anchor with no offset taken off. The sale is recorded at the fixture's +01:00 and the
+ * venue's zone is changed before the void, so only the void reads the extreme offset.
  */
 describe("recordVoid — date reconstruction", () => {
-  function clockAt(offsetMinutes: number): TrustedClock {
+  function utcClock(): TrustedClock {
     return {
       now: () => ({
         instant: new Date("2026-03-01T13:05:00Z"),
-        offsetMinutes,
+        offsetMinutes: 0,
         confident: true,
         confidence: "anchored",
         anchorAgeSeconds: 0,
       }),
       anchor: () => {
-        throw new Error("clockAt: anchor() is not used by recordVoid");
+        throw new Error("utcClock: anchor() is not used by recordVoid");
       },
       currentAnchor: () => null,
     };
   }
 
+  async function setVenueZone(timeZone: string): Promise<void> {
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+    );
+  }
+
   it("reconstructs the annulled invoice's calendar day exactly at +13:00", async () => {
     const { saleId } = await sell();
+    await setVenueZone("Pacific/Tongatapu");
     const voidBackend = new VerifactuBackend({
       deploymentEnvironment: "production",
-      clock: clockAt(780),
+      clock: utcClock(),
       db: suite.db,
     });
     await withTransaction(suite.db, (tx) =>
@@ -432,11 +439,12 @@ describe("recordVoid — date reconstruction", () => {
     expect(anulacion?.fechaExpedicionFactura).toBe(alta?.fechaExpedicionFactura);
   });
 
-  it("reconstructs the annulled invoice's calendar day exactly at -13:00", async () => {
+  it("reconstructs the annulled invoice's calendar day exactly at -12:00", async () => {
     const { saleId } = await sell();
+    await setVenueZone("Etc/GMT+12");
     const voidBackend = new VerifactuBackend({
       deploymentEnvironment: "production",
-      clock: clockAt(-780),
+      clock: utcClock(),
       db: suite.db,
     });
     await withTransaction(suite.db, (tx) =>

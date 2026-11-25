@@ -23,6 +23,7 @@ import {
   printers,
   printJobs,
   sales,
+  saleVoids,
   unpaidDepartures,
   withTransaction,
 } from "@waitron/db";
@@ -55,6 +56,12 @@ const laterOriginal = alias(printJobs, "owed_later_original");
 function stillOwed(q: Transaction, saleId: SQLiteColumn): SQL {
   return and(
     isNull(sales.correctsSaleId),
+    notExists(
+      q
+        .select({ one: sql`1` })
+        .from(saleVoids)
+        .where(eq(saleVoids.saleId, saleId)),
+    ),
     // Found through the bill's unique key, as `unpaid_departures.sale_id` has no index; its one
     // writer, `insertDeparture`, names the bill's own sale.
     notExists(

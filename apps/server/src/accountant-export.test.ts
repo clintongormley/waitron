@@ -1,6 +1,7 @@
 import { strFromU8, unzipSync } from "fflate";
 import { eq, sql } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DatabaseSync } from "node:sqlite";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { recordReplacement, recordSale } from "@waitron/core";
@@ -55,7 +56,7 @@ import {
 } from "./accountant-export.js";
 import { ACCOUNTANT_EXPORT_WORDS } from "./i18n/accountant-export.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
-import { row, sheetNamed } from "./testing/xlsx-rows.js";
+import { row, sheetNamed, worksheetText } from "./testing/xlsx-rows.js";
 import type { Cell } from "./xlsx-workbook.js";
 
 const invoice = {
@@ -753,6 +754,28 @@ describe("accountant period selection", () => {
     expect(plan.filter((step) => step.startsWith("SCAN"))).toEqual([]);
   });
 
+  it("finds the period's voids through their date index rather than every void or sale", async () => {
+    const prepare = vi.spyOn(DatabaseSync.prototype, "prepare");
+    let statements: string[];
+    try {
+      await list();
+      statements = prepare.mock.calls.map(([text]) => text);
+    } finally {
+      prepare.mockRestore();
+    }
+    const voids = statements.filter((text) => text.includes('from "sale_voids"'));
+    expect(voids).toHaveLength(1);
+    const plan = (
+      await suite.db.execute<{ detail: string }>(
+        sql.raw(`explain query plan ${voids[0]!.replaceAll("?", "''")}`),
+      )
+    ).rows.map((step) => step.detail);
+    expect(plan).toContain(
+      "SEARCH sale_voids USING INDEX sale_voids_voided_at_idx (voided_at>? AND voided_at<?)",
+    );
+    expect(plan.filter((step) => step.startsWith("SCAN"))).toEqual([]);
+  });
+
   // A range read spread into one call overflowed the stack at this size (RangeError).
   it("lists a period of 180,000 invoices", { timeout: 60_000 }, async () => {
     await seedSale(suite.db, venue, {
@@ -1245,6 +1268,125 @@ describe("accountant period selection", () => {
         2,
       ),
     ).toBe("6.30");
+  });
+
+  it("lists a receipt voided in the period of its sale again as a minus row, last, and that period's bases add up to the return's", async () => {
+    const at = (day: string) => `2026-11-${day}T12:00:00.000Z`;
+    const ticket = (invoiceNumber: number, total: string, base: string) =>
+      seedSale(suite.db, venue, {
+        invoiceNumber,
+        issuedAt: at("02"),
+        total,
+        lines: [{ vatRate: "21.00", lineTotal: base }],
+      });
+    const voided = await ticket(1, "21.78", "18.00");
+    const kept = await ticket(2, "60.50", "50.00");
+    const fullInvoice = await ticket(3, "60.50", "50.00");
+    await seedSubstitution(suite.db, {
+      substitutionSaleId: fullInvoice,
+      substitutedSaleId: kept,
+    });
+    const replacement = await seedSale(suite.db, venue, {
+      invoiceNumber: 4,
+      issuedAt: at("03"),
+      total: "60.50",
+      correctsSaleId: kept,
+      replacesOriginal: true,
+      lines: [{ vatRate: "21.00", lineTotal: "50.00" }],
+    });
+    for (const saleId of [voided, fullInvoice, replacement])
+      await seedVoid(suite.db, { saleId }, at("05"));
+
+    const rows = (await list()).invoices;
+    expect(rows.map((row) => row.invoiceType)).toEqual(["F2", "F2", "replacement", "void"]);
+    const minus = rows.at(-1)!;
+    expect(minus).toMatchObject({
+      id: voided,
+      invoiceNumber: "A/1",
+      total: "-21.78",
+      vatBreakdown: [{ rate: "21.00", base: "-18.00", tax: "-3.78" }],
+      correctsSaleId: voided,
+      originalInvoiceNumber: "A/1",
+    });
+    const words = ACCOUNTANT_EXPORT_WORDS.en;
+    expect(invoiceLineCells(minus, words)[0]![3]).toBe("Voided");
+    expect(words.invoiceNotesColumn).toContain(
+      "; voids listed again as minus rows under the day this column gives;",
+    );
+    const bases = rows
+      .filter((row) => row.invoiceType !== "replacement")
+      .flatMap((row) => row.vatBreakdown.map((vat) => decimal(vat.base)));
+    const vatReturn = await withTransaction(suite.db, (tx) =>
+      computeVatReturn(tx, { year: 2026, period: { kind: "month", month: 11 } }),
+    );
+    expect([toScale(sumDecimals(bases), 2), vatReturn.baseTotal]).toEqual(["50.00", "50.00"]);
+  });
+
+  it("lists a sale in its own period and its minus row in the one it was voided in, by the day in the sale's offset", async () => {
+    const sale = await seedSale(suite.db, venue, {
+      invoiceNumber: 1,
+      issuedAt: "2026-11-30T12:00:00.000Z",
+      issuedOffsetMinutes: 60,
+      total: "12.10",
+      lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+    });
+    await seedVoid(suite.db, { saleId: sale }, "2026-11-30T23:30:00.000Z");
+
+    const types = async (from: string, to: string) =>
+      (await list(from, to)).invoices.map((row) => row.invoiceType);
+    expect(await types("2026-11-01", "2026-11-30")).toEqual(["F2"]);
+    expect(await types("2026-12-01", "2026-12-31")).toEqual(["void"]);
+    expect(await types("2027-01-01", "2027-01-31")).toEqual([]);
+
+    for (const [language, listedUnder] of [
+      ["en", "Listed under 2026-12-01"],
+      ["es", ACCOUNTANT_EXPORT_WORDS.es.listedUnder.replace("{day}", "2026-12-01")],
+    ] as const) {
+      expect(listedUnder).toContain("2026-12-01");
+      const firstRow = async (from: string, to: string) => {
+        const xml = worksheetText(await renderAccountantWorkbook(await list(from, to), language));
+        const cells = row(xml, 2);
+        const notes = row(xml, 1).indexOf(ACCOUNTANT_EXPORT_WORDS[language].invoiceNotesColumn);
+        return { type: cells[3], issueDate: cells[4], notes: cells[notes] };
+      };
+      expect(await firstRow("2026-11-01", "2026-11-30")).toEqual({
+        type: "F2",
+        issueDate: "2026-11-30",
+        notes: "",
+      });
+      expect(await firstRow("2026-12-01", "2026-12-31")).toEqual({
+        type: ACCOUNTANT_EXPORT_WORDS[language].void.receipt,
+        issueDate: "2026-11-30",
+        notes: listedUnder,
+      });
+    }
+  });
+
+  it("lists a void by its day in the widest offsets though its UTC stamp is outside the period", async () => {
+    for (const [index, [issuedOffsetMinutes, voidedAt]] of (
+      [
+        [840, "2026-10-31T09:59:59.999Z"],
+        [840, "2026-10-31T10:00:00.000Z"],
+        [-840, "2026-12-01T13:59:59.999Z"],
+        [-840, "2026-12-01T14:00:00.000Z"],
+      ] as const
+    ).entries()) {
+      const saleId = await seedSale(suite.db, venue, {
+        invoiceNumber: index + 1,
+        issuedAt: "2026-10-15T12:00:00.000Z",
+        issuedOffsetMinutes,
+        total: "12.10",
+        lines: [{ vatRate: "21.00", lineTotal: "10.00" }],
+      });
+      await seedVoid(suite.db, { saleId }, voidedAt);
+    }
+
+    expect(
+      (await list()).invoices.map((row) => [row.invoiceNumber, row.invoiceType, row.listedDay]),
+    ).toEqual([
+      ["A/2", "void", "2026-11-01"],
+      ["A/3", "void", "2026-11-30"],
+    ]);
   });
 
   it("shows a sale date only when it is earlier than the issue date", async () => {

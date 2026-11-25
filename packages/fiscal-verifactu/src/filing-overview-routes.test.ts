@@ -155,7 +155,7 @@ it("logs a day-read failure's own log-only reason as logReason, beside its param
 
 it.each([
   new AppError("venue.time_zone_invalid", { reason: "missing" }),
-  new AppError("venue.time_zone_target_invalid", { reason: "mismatch" }),
+  new AppError("venue.time_zone_target_invalid", { reason: "node" }),
   new AppError("venue.time_zone_conversion_failed", { reason: "unreadable_offset" }),
   new AppError("venue.not_found", {}),
   new AppError("settings.invalid", { module: "venue", field: "timeZone" }),

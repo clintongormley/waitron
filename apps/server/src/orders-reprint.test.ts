@@ -232,13 +232,16 @@ describe("dashboard receipt reprint", () => {
     expect(first.status).toBe(202);
     expect(second.status).toBe(202);
     const ids = [first, second].map((answer) => (answer.json as { jobId: string }).jobId);
+    const owing: boolean[] = [];
     for (const jobId of ids) {
       const [job] = await inTx(venue, (tx) =>
         tx.select().from(printJobs).where(eq(printJobs.id, jobId)),
       );
       expect(job?.kind).toBe("document");
       expect(decodeTicket(job!.payload)).toContain("DUPLICADO");
+      owing.push(decodeTicket(job!.payload).includes("Pendiente"));
     }
+    expect(owing).toEqual([true, false]);
     const audits = await inTx(venue, (tx) =>
       tx.select().from(receiptReprints).where(eq(receiptReprints.personId, venue.operatorId)),
     );
