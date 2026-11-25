@@ -285,7 +285,9 @@ describe("setup-venue-screen", () => {
   it("turns off autocorrect, the capital first letter and spellcheck on the tax number and series codes only", async () => {
     const { el } = await mountWidget<SetupVenueScreen>("setup-venue-screen", {});
     const attributes = async (name: string) => {
-      const field = el.shadowRoot!.querySelector<SetupVenueScreen>(`wt-input[name=${name}]`)!;
+      const field = el.shadowRoot!.querySelector<SetupVenueScreen>(
+        `:is(wt-input,wt-address-lookup)[name=${name}]`,
+      )!;
       await field.updateComplete;
       const input = field.shadowRoot!.querySelector("input")!;
       return ["autocapitalize", "autocorrect", "spellcheck"].map((attr) =>
@@ -1106,7 +1108,7 @@ describe("the registered business address in parts", () => {
     expect(sameSwitch(el).checked).toBe(true);
     expect(sameSwitch(el).getAttribute("label")).toBe(label);
     expect(sameSwitch(el).getAttribute("name")).toBe("registeredSameAsVenue");
-    for (const key of PARTS) expect(q(el, `[data-test=${key}]`)).toBeNull();
+    for (const key of PARTS) expect(q(el, `[data-test=${key}]:not([hidden])`)).toBeNull();
     expect(q(el, "[data-test=registered-same-hint]")!.textContent!.trim()).not.toBe("");
   });
 
@@ -1183,7 +1185,7 @@ describe("the registered business address in parts", () => {
     await el.updateComplete;
     expect(events).toEqual([]);
     await type(el, "registeredSameAsVenue", "on");
-    expect(q(el, "[data-test=registeredStreet]")).toBeNull();
+    expect(q(el, "[data-test=registeredStreet]")!.hasAttribute("hidden")).toBe(true);
     q(el, "[data-test=next]")!.click();
     expect(venueOf(events).taxpayerDomicile).toBe("Calle Mayor 1, 28013 Madrid, Madrid");
   });
@@ -2333,7 +2335,7 @@ describe("owner's fixes of 2026-11-20", () => {
         "correctiveSeriesCode",
         "fullCorrectiveSeriesCode",
       ]) {
-        const field = q(el, `wt-input[data-test=${key}]`) as HTMLElement & {
+        const field = q(el, `:is(wt-input,wt-address-lookup)[data-test=${key}]`) as HTMLElement & {
           updateComplete: Promise<unknown>;
         };
         await field.updateComplete;

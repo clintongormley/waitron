@@ -56,7 +56,7 @@ async function fixture(addressProvider?: AddressLookupProvider) {
   await host.updateComplete;
   const dialog = host.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
   await expect.poll(() => dialog.open).toBe(true);
-  const input = dialog.querySelector<WtInput>("wt-input[name=registeredStreet]")!;
+  const input = dialog.querySelector<WtInput>("wt-address-lookup[name=registeredStreet]")!;
   await input.updateComplete;
   return { app, host, dialog, input, changeTaxpayerDomicile };
 }

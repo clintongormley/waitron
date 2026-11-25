@@ -13,7 +13,9 @@ async function mount() {
   return (await mountWidget<TillInvoiceRecipientDialog>("till-invoice-recipient-dialog", {})).el;
 }
 async function edit(el: TillInvoiceRecipientDialog, name: string, value: string) {
-  const control = el.shadowRoot!.querySelector(`wt-input[name=${name}],wt-combobox[name=${name}]`);
+  const control = el.shadowRoot!.querySelector(
+    `:is(wt-input,wt-address-lookup)[name=${name}],wt-combobox[name=${name}]`,
+  );
   expect(control, `rendered ${name}`).not.toBeNull();
   control!.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),

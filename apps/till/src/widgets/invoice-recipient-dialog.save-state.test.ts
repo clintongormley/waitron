@@ -22,7 +22,9 @@ function saveButton(el: TillInvoiceRecipientDialog) {
   return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-invoice-save]")!;
 }
 function field(el: TillInvoiceRecipientDialog, name: string) {
-  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`wt-input[name=${name}]`)!;
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    `:is(wt-input,wt-address-lookup)[name=${name}]`,
+  )!;
 }
 function bottom(el: TillInvoiceRecipientDialog) {
   return el.shadowRoot!.querySelector("wt-form-actions")!;

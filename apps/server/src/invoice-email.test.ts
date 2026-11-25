@@ -576,8 +576,8 @@ it.each(["temporary-recipient-refused", "temporary-data-refused"] as const)(
 describe("invoice email privacy notice", () => {
   const venue = "Charcutería La Buena SL";
   const addressSearch = {
-    en: "If staff searched for your address, Waitron Cloud sent the search text and the selected suggestion to Google Maps.",
-    es: "Si el personal buscó su dirección, Waitron Cloud envió el texto de la búsqueda y la sugerencia seleccionada a Google Maps.",
+    en: "If address suggestions were on, Waitron Cloud may have sent the street address staff typed, and any suggestion they chose, to Google Maps.",
+    es: "Si las sugerencias de dirección estaban activadas, Waitron Cloud pudo enviar a Google Maps la dirección que escribió el personal y la sugerencia que eligió, si eligió alguna.",
   };
   const notice = (language: "en" | "es", taxRecord: boolean, contacts: string): string => {
     const words = INVOICE_EMAIL_NOTICE_WORDS[language];

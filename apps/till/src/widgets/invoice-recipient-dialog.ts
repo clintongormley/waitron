@@ -717,15 +717,10 @@ export class TillInvoiceRecipientDialog extends LitElement {
             )}
         ></wt-input>
         <wt-address-lookup
-          name="address-search"
+          name="address"
           .appliedAttribution=${this.addressAttribution?.text}
           .provider=${this.countryCode === "" ? undefined : (this.addressProvider ?? this.cloudProvider)}
           country-code=${this.countryCode}
-          label=${t("invoice.address_lookup.label").replace("{country}", () =>
-            countryNameFor(this.countryCode, currentLocale()),
-          )}
-          placeholder=${t("invoice.address_lookup.placeholder")}
-          no-results-label=${t("invoice.address_lookup.no_results")}
           unavailable-label=${t("invoice.address_lookup.unavailable")}
           .message=${
             this.foreignAddressCountry === undefined
@@ -735,9 +730,6 @@ export class TillInvoiceRecipientDialog extends LitElement {
                 )
           }
           @wt-address-chosen=${(event: CustomEvent<AddressChosenDetail>) => this.#onAddressChosen(event)}
-        ></wt-address-lookup>
-        <wt-input
-          name="address"
           required
           autocomplete="off"
           .label=${t("invoice.street_address")}
@@ -749,7 +741,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
               event,
               this.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]"),
             )}
-        ></wt-input>
+        ></wt-address-lookup>
         <wt-input
           name="postalCode"
           ?required=${this.countryCode === "ES"}

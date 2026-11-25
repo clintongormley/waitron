@@ -719,7 +719,8 @@ export class SetupVenueScreen extends LitElement {
   #cancelAddressSearch(which: AddressSearch | undefined): void {
     if (which === undefined) return;
     this.addressCredits = { ...this.addressCredits, [which]: undefined };
-    this.shadowRoot!.querySelector<WtAddressLookup>(`[data-test=${which}-lookup]`)?.cancelSearch();
+    const field = which === "address" ? "addressLine1" : "registeredStreet";
+    this.shadowRoot!.querySelector<WtAddressLookup>(`[data-test=${field}]`)?.cancelSearch();
   }
 
   #onAddressChosen(which: AddressSearch, event: CustomEvent<AddressChosenDetail>): void {
@@ -1077,19 +1078,33 @@ export class SetupVenueScreen extends LitElement {
     >`;
   }
 
-  #addressSearch(which: AddressSearch, pack: CountryPack | undefined): TemplateResult {
-    const foreign = this.foreignAddress?.which === which ? this.foreignAddress : undefined;
+  #street(which: AddressSearch, pack: CountryPack | undefined): TemplateResult {
+    const key = which === "address" ? "addressLine1" : "registeredStreet";
     const shown = which === "address" || !this.sameAsVenue;
+    const error = shown
+      ? (this.#errors.get(key) ??
+        (key === "registeredStreet" ? this.#errors.get("taxpayerDomicile") : undefined) ??
+        "")
+      : "";
+    const foreign = this.foreignAddress?.which === which ? this.foreignAddress : undefined;
     return html`<wt-address-lookup
       class="field"
-      data-test=${`${which}-lookup`}
-      name=${`${which}-search`}
+      data-test=${key}
+      name=${key}
+      autocomplete=${FIELD_AUTOCOMPLETE[key]}
+      label=${t("venue.label.address_line1")}
+      hint=${t("venue.hint.address_line1")}
+      .value=${this.values[key]}
+      required
+      ?invalid=${error !== ""}
+      error=${error}
+      ?hidden=${!shown}
       .appliedAttribution=${shown ? this.addressCredits[which] : undefined}
       .provider=${shown && pack?.countryCode === "ES" ? this.addressProvider : undefined}
       country-code=${pack?.countryCode ?? ""}
-      label=${t(which === "address" ? "venue.address_lookup.label" : "venue.address_lookup.domicile_label")}
-      placeholder=${t("venue.address_lookup.placeholder")}
-      no-results-label=${t("venue.address_lookup.no_results")}
+      @keydown=${(event: KeyboardEvent) =>
+        submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onField(key, event)}
       unavailable-label=${t("venue.address_lookup.unavailable")}
       .message=${
         foreign === undefined
@@ -1103,10 +1118,7 @@ export class SetupVenueScreen extends LitElement {
   }
 
   #field(label: string, key: TextField, type = "text"): TemplateResult {
-    const error =
-      this.#errors.get(key) ??
-      (key === "registeredStreet" ? this.#errors.get("taxpayerDomicile") : undefined) ??
-      "";
+    const error = this.#errors.get(key) ?? "";
     const demoName = this.#demo && key === "name";
     const help = !hasHint(key) ? this.#help(key) : demoName ? this.#help("name") : nothing;
     const code = CODE_FIELDS.has(key);
@@ -1154,12 +1166,11 @@ export class SetupVenueScreen extends LitElement {
             </p>`
           : nothing
       }
-      ${this.#addressSearch("domicile", pack)}
+      ${this.#street("domicile", pack)}
       ${
         this.sameAsVenue
           ? nothing
-          : html`${this.#field(t("venue.label.address_line1"), "registeredStreet")}
-              ${this.#field(t("venue.label.address_line2"), "registeredLine2")}
+          : html`${this.#field(t("venue.label.address_line2"), "registeredLine2")}
               <div class="pair">
                 ${this.#field(t("venue.label.postal_code"), "registeredPostalCode")}
                 ${this.#field(t("venue.label.city"), "registeredCity")}
@@ -1262,8 +1273,7 @@ export class SetupVenueScreen extends LitElement {
           >${t("venue.staff_language.help")}</wt-help-tooltip
         ></wt-combobox
       >
-      ${this.#addressSearch("address", pack)}
-      ${this.#field(t("venue.label.address_line1"), "addressLine1")}
+      ${this.#street("address", pack)}
       ${this.#field(t("venue.label.address_line2"), "addressLine2")}
       <div class="pair">
         ${this.#field(t("venue.label.postal_code"), "postalCode")}

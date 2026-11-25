@@ -711,6 +711,10 @@ export class VenueDetailsPanel extends LitElement {
     const required =
       field !== "addressLine2" &&
       (this.#expected![field] !== null || this.#patch()[field] !== undefined);
+    if (field === "addressLine1")
+      return html`<div class="field">
+        ${this.#street(value, required, change)} ${this.#lockReason(field)}
+      </div>`;
     if (field === "timeZone") {
       const choice = this.#timeZoneChoice(value);
       return html`<div class="field">
@@ -759,18 +763,24 @@ export class VenueDetailsPanel extends LitElement {
   #isLockedRow(field: VenueDetailField): boolean {
     return this.model!.policy[field].decision === "refuse" && this.#patch()[field] === undefined;
   }
-  #addressSearch(): TemplateResult | typeof nothing {
+  #street(
+    value: string,
+    required: boolean,
+    change: (event: CustomEvent<{ value: string }>) => void,
+  ): TemplateResult {
     const model = this.model!;
-    if (SEARCH_FILLS.some((field) => model.policy[field].decision === "refuse")) return nothing;
+    const locked = SEARCH_FILLS.some((field) => model.policy[field].decision === "refuse");
     return html`<wt-address-lookup
-      class="field"
-      name="address-search"
+      name="addressLine1"
+      autocomplete=${AUTOCOMPLETE.addressLine1}
+      label=${t(LABELS.addressLine1)}
+      .value=${value}
+      ?required=${required}
+      .error=${this.errors.addressLine1 ?? ""}
       .appliedAttribution=${this.addressAttribution}
-      .provider=${this.addressProvider ?? this.cloudAddressProvider}
+      .provider=${locked ? undefined : (this.addressProvider ?? this.cloudAddressProvider)}
       country-code=${model.issuer.country}
-      label=${t("venue_details.address_lookup.label")}
-      placeholder=${t("venue_details.address_lookup.placeholder")}
-      no-results-label=${t("venue_details.address_lookup.no_results")}
+      @wt-change=${change}
       unavailable-label=${t("venue_details.address_lookup.unavailable")}
       .message=${
         this.refusedAddress === "country"
@@ -790,8 +800,7 @@ export class VenueDetailsPanel extends LitElement {
   #fields(): TemplateResult {
     const pair = !this.#isLockedRow("postalCode") && !this.#isLockedRow("city");
     return html`<div class="fields">
-      ${this.#field("name")} ${this.#addressSearch()} ${this.#field("addressLine1")}
-      ${this.#field("addressLine2")}
+      ${this.#field("name")} ${this.#field("addressLine1")} ${this.#field("addressLine2")}
       ${
         pair
           ? html`<div class="pair">${this.#field("postalCode")} ${this.#field("city")}</div>`

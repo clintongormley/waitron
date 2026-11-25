@@ -311,7 +311,9 @@ export abstract class TaxpayerFieldDialog<Draft = string, V = string> extends Li
   async #focusField(name: string): Promise<void> {
     await this.updateComplete;
     this.#dialog()
-      ?.querySelector<HTMLElement>(`:is(wt-input,wt-combobox,wt-switch)[name=${name}]`)
+      ?.querySelector<HTMLElement>(
+        `:is(wt-input,wt-address-lookup,wt-combobox,wt-switch)[name=${name}]`,
+      )
       ?.focus();
   }
 

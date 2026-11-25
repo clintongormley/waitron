@@ -150,11 +150,10 @@ For example, a French address can be **2 Main Street**, **Paris**, **France**, w
 or province. Do not add the country name to the street. The printed invoice and till ticket name
 it in the receipt language. Order details name it in your screen language.
 
-For a Spanish address, use **Find the address** when it appears in the full-invoice window.
-Type the street and number, choose a suggestion, then check or correct the filled fields before
-you save. Press Enter if suggestions stop updating as you type. Waitron Cloud sends the search
-text and the suggestion you choose to Google Maps. You can type the address by hand in the fields
-below the search.
+For a Spanish address, type in **Customer street and number**. If suggestions appear, choose
+one and check the filled address before saving. You can also enter the whole address by hand.
+When suggestions are on, Waitron Cloud sends the street text it searches for and any suggestion
+you choose to Google Maps.
 
 At the counter, choose **Full invoice** before **Pay**. Paying the order in full issues the
 invoice. Placing a counter order alone does not issue an invoice.
@@ -174,10 +173,9 @@ correct it in **Venue settings → Venue details**: choose **Change registered a
 first. Invoices issued afterwards print the new address; invoices
 already issued keep the one they were issued with.
 
-When **Find the address** appears in either address form, start typing the street and number,
-choose a suggestion, then review and save the address. If suggestions stop updating as you type,
-press Enter in the search field. Waitron Cloud sends what you type in the search and the
-suggestion you choose to Google Maps. You can also type directly into the address fields.
+In either address form, start typing the street and number in **Street address**. If suggestions
+appear, choose one, review the filled address and save. When suggestions are on, Waitron Cloud
+sends the street text it searches for and any suggestion you choose to Google Maps.
 
 For bills closed as a [deferred payment](table-service.md#deferred-payment), set your bank account with **Change
 bank account** on the same **Business** card: enter the **IBAN** and, if you want, the bank.

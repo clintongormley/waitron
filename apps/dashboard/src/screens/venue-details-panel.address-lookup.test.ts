@@ -11,7 +11,7 @@ import type {
 } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import type { DashboardApi, VenueDetailsModel, VenueDetailWrite } from "../api/client.js";
 import "./venue-details-panel.js";
 
@@ -89,10 +89,10 @@ afterEach(() => {
   setLocale("es-ES");
 });
 
-it("shows no address search without a provider", async () => {
+it("shows a manual street field without a provider", async () => {
   const el = await editing(apiFor(), null);
-  expect(lookup(el)!.hidden).toBe(true);
-  expect(lookup(el)!.getBoundingClientRect().height).toBe(0);
+  expect(lookup(el)!.provider).toBeUndefined();
+  expect(lookup(el)!.getBoundingClientRect().height).toBeGreaterThan(0);
 });
 
 it("checks Cloud on each opening and keeps manual entry while a reply is pending", async () => {
@@ -102,16 +102,16 @@ it("checks Cloud on each opening and keeps manual entry while a reply is pending
   );
   const el = await editing(Object.assign(apiFor(), { addressLookup }), null);
   expect(field(el, "addressLine1").value).toBe("Calle Mayor 1");
-  expect(lookup(el)!.hidden).toBe(true);
+  expect(lookup(el)!.provider).toBeUndefined();
   expect(addressLookup.mock.calls).toEqual([[{ kind: "available" }]]);
   await click(el, "[data-test=cancel]");
   await click(el, "[data-test=edit]");
   expect(addressLookup.mock.calls).toEqual([[{ kind: "available" }], [{ kind: "available" }]]);
   answers[0]!({ available: true });
   await flush(el);
-  expect(lookup(el)!.hidden).toBe(true);
+  expect(lookup(el)!.provider).toBeUndefined();
   answers[1]!({ available: true });
-  await expect.poll(() => lookup(el)!.hidden).toBe(false);
+  await expect.poll(() => lookup(el)!.provider).toBeDefined();
 });
 
 it("opens the address fields without asking Cloud at a venue outside Spain", async () => {
@@ -120,7 +120,7 @@ it("opens the address fields without asking Cloud at a venue outside Spain", asy
   const api = apiFor({ ...model, issuer: { ...model.issuer, country: "PT" } });
   const el = await editing(Object.assign(api, { addressLookup }), null);
   expect(field(el, "addressLine1").disabled).toBe(false);
-  expect(lookup(el)!.hidden).toBe(true);
+  expect(lookup(el)!.provider).toBeUndefined();
   expect(addressLookup).not.toHaveBeenCalled();
 });
 
@@ -145,16 +145,25 @@ it.each(["Alicante", "03"])(
   },
 );
 
-it("puts the address search above the street address, in the venue's country", async () => {
-  const el = await editing(apiFor());
-  const search = lookup(el)!;
-  expect(search.hidden).toBe(false);
-  expect(search.countryCode).toBe("ES");
-  expect(search.label).toBe("Find the address");
-  const order = [...el.shadowRoot!.querySelectorAll("wt-address-lookup, [name]")].map((node) =>
-    node.localName === "wt-address-lookup" ? node.localName : node.getAttribute("name"),
-  );
-  expect(order.indexOf("wt-address-lookup")).toBe(order.indexOf("addressLine1") - 1);
+it("offers a suggestion while you type Street and saves a manually edited street on Enter", async () => {
+  const api = apiFor();
+  const el = await editing(api);
+  const street = field(el, "addressLine1") as WtAddressLookup;
+  street.delay = 0;
+  const input = street.shadowRoot!.querySelector("input")!;
+  await userEvent.fill(input, "Calle Mayo");
+  const option = () => street.shadowRoot!.querySelector<HTMLElement>('[role="option"]');
+  await expect.poll(option).not.toBeNull();
+  await userEvent.click(option()!);
+  await expect.poll(() => street.value).toBe("Calle Mayor 2");
+  await userEvent.fill(input, "Calle Mayor 5");
+  await click(el, "[data-test=acknowledge]");
+  input.focus();
+  await userEvent.keyboard("{Enter}");
+  expect(api.patchVenueDetails).toHaveBeenCalledExactlyOnceWith({
+    changes: { addressLine1: "Calle Mayor 5", postalCode: "28013" },
+    expected: venueDetailsFixture().details,
+  });
 });
 
 it("fills the street, postcode and city from a chosen address, and Save sends them", async () => {
@@ -187,7 +196,7 @@ it("refuses an address in another country, filling nothing and saying why", asyn
   await choose(el, { ...MADRID, countryCode: "PT" });
   expect(field(el, "addressLine1").value).toBe("Calle Mayor 1");
   expect(lookup(el)!.message).toBe(
-    "That address is not in Spain. Choose another or type it below.",
+    "That address is not in Spain. Choose another or edit the street address.",
   );
   await choose(el, MADRID);
   expect(lookup(el)!.message).toBe("");
@@ -204,7 +213,7 @@ it("refuses an address in another province, because the province cannot change h
     await choose(el, { ...MADRID, administrativeAreaCode: area, postalCode: "08001" });
     expect(field(el, "postalCode").value).toBe("28001");
     expect(lookup(el)!.message).toBe(
-      "That address is in another province, and the province cannot change here. Choose another or type it below.",
+      "That address is in another province, and the province cannot change here. Choose another or edit the street address.",
     );
   }
 });
@@ -241,7 +250,7 @@ it.each(["postalCode", "city"] as const)(
     const model = venueDetailsFixture();
     model.policy[locked] = { decision: "refuse", reasons: ["sales"] };
     const el = await editing(apiFor(model));
-    expect(lookup(el)).toBeNull();
+    expect(lookup(el)!.provider).toBeUndefined();
   },
 );
 
@@ -305,22 +314,18 @@ it("speaks Spanish", async () => {
     { code: "08", name: "Barcelona" },
   ];
   const el = await editing(apiFor(model));
-  expect(lookup(el)!.label).toBe("Buscar la dirección");
+  expect(lookup(el)!.label).toBe(t("venue_details.addressLine1"));
   await choose(el, { ...MADRID, countryCode: "PT" });
-  expect(lookup(el)!.message).toBe(
-    "Esa dirección no está en España. Elige otra o escríbela abajo.",
-  );
+  expect(lookup(el)!.message).toBe("Esa dirección no está en España. Elige otra o edita la calle.");
   await choose(el, { ...MADRID, administrativeAreaCode: "08" });
   expect(lookup(el)!.message).toBe(
-    "Esa dirección está en otra provincia, y la provincia no se puede cambiar aquí. Elige otra o escríbela abajo.",
+    "Esa dirección está en otra provincia, y la provincia no se puede cambiar aquí. Elige otra o edita la calle.",
   );
 });
 
-it("names its search field address-search", async () => {
+it("names the street field addressLine1", async () => {
   const el = await editing(apiFor());
-  expect(lookup(el)!.shadowRoot!.querySelector("input")!.getAttribute("name")).toBe(
-    "address-search",
-  );
+  expect(lookup(el)!.shadowRoot!.querySelector("input")!.getAttribute("name")).toBe("addressLine1");
 });
 
 function deferredProvider() {
@@ -336,9 +341,7 @@ async function search(el: Panel, text: string): Promise<WtAddressLookup> {
   const found = lookup(el)!;
   found.delay = 0;
   const input = found.shadowRoot!.querySelector("input")!;
-  input.focus();
-  input.value = text;
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await userEvent.fill(input, text);
   await flush(el);
   return found;
 }
@@ -368,7 +371,7 @@ it("drops a chosen address still on its way once the person edits an address fie
     await flush(el);
     expect(field(el, edited).value, edited).toBe("Typed by hand");
     expect(field(el, "addressLine1").value, edited).toBe(
-      edited === "addressLine1" ? "Typed by hand" : "Calle Mayor 1",
+      edited === "addressLine1" ? "Typed by hand" : "Calle Mayor",
     );
     cleanupWidgets();
   }
@@ -410,17 +413,17 @@ it("drops a chosen address still on its way when a save begins, even if the save
   expect(lookup(el)!.disabled).toBe(false);
   answers[0]!(MADRID);
   await flush(el);
-  expect(field(el, "addressLine1").value).toBe("Calle Mayor 1");
+  expect(field(el, "addressLine1").value).toBe("Calle Mayor");
 });
 
-it("a new search with no results shows its own line in place of an earlier refusal", async () => {
+it("typing a new street clears an earlier suggestion refusal", async () => {
   const el = await editing(apiFor(), { ...provider, suggest: async () => [] });
   await choose(el, { ...MADRID, countryCode: "PT" });
   const status = () =>
     lookup(el)!.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim() ?? "";
-  expect(status()).toBe("That address is not in Spain. Choose another or type it below.");
+  expect(status()).toBe("That address is not in Spain. Choose another or edit the street address.");
   await search(el, "Nowhere street");
-  await vi.waitFor(() => expect(status()).toBe("No address found. Type it below."));
+  await vi.waitFor(() => expect(status()).toBe(""));
 });
 
 it("credits the filled venue address until the person changes an address field", async () => {

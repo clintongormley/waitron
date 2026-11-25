@@ -85,7 +85,10 @@ async function press(el: VenueDetailsPanel, selector: string) {
   await settle(el);
 }
 async function type(el: VenueDetailsPanel, name: string, value: string) {
-  const field = q<HTMLElementTagNameMap["wt-input"]>(el, `wt-input[name="${name}"]`)!;
+  const field = q<HTMLElementTagNameMap["wt-input"]>(
+    el,
+    `:is(wt-input,wt-address-lookup)[name="${name}"]`,
+  )!;
   await field.updateComplete;
   await userEvent.fill(page.elementLocator(field.shadowRoot!.querySelector("input")!), value);
   await settle(el);

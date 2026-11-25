@@ -54,7 +54,9 @@ const flush = async (el: Dialog) => {
 };
 
 async function fill(el: Dialog, name: string, text: string) {
-  const input = q(el, `wt-input[name=${name}]`)!.shadowRoot!.querySelector("input")!;
+  const input = q(el, `:is(wt-input,wt-address-lookup)[name=${name}]`)!.shadowRoot!.querySelector(
+    "input",
+  )!;
   input.value = text;
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await el.updateComplete;
@@ -82,13 +84,11 @@ function confirmed(el: Dialog): InvoiceRecipientDetail[] {
   return saved;
 }
 
-async function startChoosing(el: Dialog) {
+async function startChoosing(el: Dialog, query = "Calle Mayor") {
   const search = lookup(el)!;
   search.delay = 0;
   const input = search.shadowRoot!.querySelector("input")!;
-  input.focus();
-  input.value = "Calle Mayor";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await userEvent.fill(input, query);
   await vi.waitFor(() =>
     expect(search.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(1),
   );
@@ -105,7 +105,7 @@ function deferredProvider() {
 }
 
 describe("the invoice recipient dialog's address search", () => {
-  it("keeps the search hidden if a Spanish availability answer arrives in another country", async () => {
+  it("keeps suggestions off if a Spanish availability answer arrives in another country", async () => {
     let answer!: (reply: { available: boolean }) => void;
     const availability = new Promise<{ available: boolean }>((resolve) => {
       answer = resolve;
@@ -117,7 +117,7 @@ describe("the invoice recipient dialog's address search", () => {
     expect(lookupAddress.mock.calls[0]?.[1]?.aborted).toBe(true);
     answer({ available: true });
     await flush(el);
-    expect(lookup(el)!.hidden).toBe(true);
+    expect(lookup(el)!.provider).toBeUndefined();
     await fill(el, "address", "2 Rue de Rivoli");
     expect(value(el, "address")).toBe("2 Rue de Rivoli");
   });
@@ -135,7 +135,7 @@ describe("the invoice recipient dialog's address search", () => {
     });
     const el = await mountDialog({ lookupAddress: api.addressLookup.bind(api) });
     const search = lookup(el)!;
-    await vi.waitFor(() => expect(search.hidden).toBe(false));
+    await vi.waitFor(() => expect(search.provider).toBeDefined());
     await fill(el, "taxId", "12345678Z");
     await fill(el, "legalName", "Ana García");
     await choose(el, MADRID);
@@ -174,7 +174,7 @@ describe("the invoice recipient dialog's address search", () => {
       expect(lookupAddress).toHaveBeenCalledWith({ kind: "available" }, expect.any(AbortSignal)),
     );
     await flush(el);
-    expect(lookup(el)!.hidden).toBe(true);
+    expect(lookup(el)!.provider).toBeUndefined();
     await fill(el, "address", "Calle Mía 5");
     expect(value(el, "address")).toBe("Calle Mía 5");
   });
@@ -199,20 +199,13 @@ describe("the invoice recipient dialog's address search", () => {
     available({ available: true });
     await flush(el);
     expect(lookupAddress.mock.calls[0]?.[1]?.aborted).toBe(false);
-    expect(lookup(el)!.hidden).toBe(false);
+    expect(lookup(el)!.provider).toBeDefined();
   });
 
-  it("is hidden without a provider, so the dialog is its manual fields alone", async () => {
+  it("keeps a manual street field without a provider", async () => {
     const el = await mountDialog({});
-    expect(lookup(el)!.hidden).toBe(true);
-    expect(lookup(el)!.getBoundingClientRect().height).toBe(0);
-  });
-
-  it("names the chosen country in its label", async () => {
-    const el = await mountDialog();
-    expect(lookup(el)!.label).toBe("Find the address (Spain)");
-    await chooseCountry(el, "FR");
-    expect(lookup(el)!.label).toBe("Find the address (France)");
+    expect(lookup(el)!.provider).toBeUndefined();
+    expect(lookup(el)!.getBoundingClientRect().height).toBeGreaterThan(0);
   });
 
   it("Escape closes an open list and leaves the dialog open", async () => {
@@ -221,8 +214,7 @@ describe("the invoice recipient dialog's address search", () => {
     el.addEventListener("invoice-recipient-cancel", () => (cancelled = true));
     const search = lookup(el)!;
     search.delay = 0;
-    search.shadowRoot!.querySelector("input")!.focus();
-    await userEvent.keyboard("Calle Mayor");
+    await userEvent.fill(search.shadowRoot!.querySelector("input")!, "Calle Mayor");
     await vi.waitFor(() =>
       expect(search.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(1),
     );
@@ -233,14 +225,33 @@ describe("the invoice recipient dialog's address search", () => {
     expect(q(el, "wt-dialog")!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
   });
 
-  it("sits directly above the street field and asks in the chosen country", async () => {
+  it("uses Street address and asks in the chosen country", async () => {
     const el = await mountDialog();
     const search = lookup(el)!;
-    expect(search.hidden).toBe(false);
+    expect(search.provider).toBeDefined();
     expect(search.countryCode).toBe("ES");
-    expect(search.nextElementSibling?.getAttribute("name")).toBe("address");
+    expect(search.name).toBe("address");
     await chooseCountry(el, "FR");
     expect(search.countryCode).toBe("FR");
+  });
+
+  it("offers a suggestion from Street address and saves a hand-edited street on Enter", async () => {
+    const el = await mountDialog();
+    const saved = confirmed(el);
+    await fill(el, "taxId", "12345678Z");
+    await fill(el, "legalName", "Ana García");
+    const street = q<WtAddressLookup>(el, '[name="address"]')!;
+    street.delay = 0;
+    const input = street.shadowRoot!.querySelector("input")!;
+    await userEvent.fill(input, "Calle Mayo");
+    const option = () => street.shadowRoot!.querySelector<HTMLElement>('[role="option"]');
+    await expect.poll(option).not.toBeNull();
+    await userEvent.click(option()!);
+    await expect.poll(() => street.value).toBe("Calle Mayor 1");
+    await userEvent.fill(input, "Calle Mayor 8");
+    await userEvent.keyboard("{Enter}");
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.recipient).toMatchObject({ address: "Calle Mayor 8, 28013 Madrid, Madrid" });
   });
 
   it("fills the street, postcode, locality and province, and Save choice sends them", async () => {
@@ -330,7 +341,7 @@ describe("the invoice recipient dialog's address search", () => {
     expect(value(el, "address")).toBe("Calle Mía 5");
     expect(value(el, "postalCode")).toBe("");
     expect(lookup(el)!.message).toBe(
-      "That address is not in Spain. Choose another or type it below.",
+      "That address is not in Spain. Choose another or edit the street address.",
     );
     await chooseCountry(el, "PT");
     expect(lookup(el)!.message).toBe("");
@@ -348,7 +359,7 @@ describe("the invoice recipient dialog's address search", () => {
     const spain = countryNameFor("ES", "es-ES");
     expect(spain).not.toBe(countryNameFor("ES", "en"));
     const el = await mountDialog();
-    expect(lookup(el)!.label).toBe(es["invoice.address_lookup.label"].replace("{country}", spain));
+    expect(lookup(el)!.label).toBe(es["invoice.street_address"]);
     await choose(el, { ...MADRID, countryCode: "PT" });
     expect(lookup(el)!.message).toBe(
       es["invoice.address_lookup.other_country"].replace("{country}", spain),
@@ -399,7 +410,7 @@ describe("the invoice recipient dialog's address search", () => {
       answers[0]!(MADRID);
       await flush(el);
       expect(value(el, field)).toBe("Typed");
-      expect(value(el, "address")).toBe(field === "address" ? "Typed" : "");
+      expect(value(el, "address")).toBe(field === "address" ? "Typed" : "Calle Mayor");
     },
   );
 
@@ -409,15 +420,14 @@ describe("the invoice recipient dialog's address search", () => {
     const saved = confirmed(el);
     await fill(el, "taxId", "12345678Z");
     await fill(el, "legalName", "Ana García");
-    await fill(el, "address", "Calle Mía 5");
     await fill(el, "postalCode", "28001");
     await fill(el, "locality", "Madrid");
     await fill(el, "province", "Madrid");
-    await startChoosing(el);
+    await startChoosing(el, "Calle Mía 5");
     await vi.waitFor(() => expect(answers).toHaveLength(1));
     save(el).click();
     await el.updateComplete;
-    expect(saved).toHaveLength(1);
+    expect(saved[0]?.recipient.address).toBe("Calle Mía 5, 28001 Madrid, Madrid");
     answers[0]!(MADRID);
     await flush(el);
     expect(value(el, "address")).toBe("Calle Mía 5");
@@ -434,7 +444,7 @@ describe("the invoice recipient dialog's address search", () => {
     expect(sent).toBe(1);
     answers[0]!(MADRID);
     await flush(el);
-    expect(value(el, "address")).toBe("");
+    expect(value(el, "address")).toBe("Calle Mayor");
   });
 
   it("ignores a chosen address once the dialog has closed", async () => {
@@ -454,8 +464,7 @@ describe("the invoice recipient dialog's address search", () => {
     await fill(el, "legalName", "Ana García");
     const search = lookup(el)!;
     search.delay = 0;
-    search.shadowRoot!.querySelector("input")!.focus();
-    await userEvent.keyboard("Calle Mayor");
+    await userEvent.fill(search.shadowRoot!.querySelector("input")!, "Calle Mayor");
     await vi.waitFor(() =>
       expect(search.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(1),
     );

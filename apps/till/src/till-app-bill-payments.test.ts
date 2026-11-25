@@ -141,7 +141,7 @@ async function typeRecipient(
 ) {
   for (const [name, value] of fields) {
     const input = form
-      .shadowRoot!.querySelector(`wt-input[name=${name}]`)!
+      .shadowRoot!.querySelector(`:is(wt-input,wt-address-lookup)[name=${name}]`)!
       .shadowRoot!.querySelector<HTMLInputElement>("input")!;
     input.value = value;
     input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
@@ -620,14 +620,14 @@ describe("till-app: the three ways to pay part of a bill", () => {
 
     const form = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
     const search = form.shadowRoot!.querySelector("wt-address-lookup")!;
-    expect(form.shadowRoot!.querySelector('wt-input[name="address"]')).not.toBeNull();
-    expect(search.hidden).toBe(true);
+    expect(form.shadowRoot!.querySelector('wt-address-lookup[name="address"]')).not.toBeNull();
+    expect(search.provider).toBeUndefined();
     expect(addressLookup).toHaveBeenCalledExactlyOnceWith(
       { kind: "available" },
       expect.any(AbortSignal),
     );
     answer({ available: true });
-    await vi.waitFor(() => expect(search.hidden).toBe(false));
+    await vi.waitFor(() => expect(search.provider).toBeDefined());
   });
 
   it("saves a full-invoice recipient on a partly paid bill and shows the saved choice", async () => {
@@ -789,17 +789,21 @@ describe("till-app: the three ways to pay part of a bill", () => {
 
     const dialog = el.shadowRoot!.querySelector("till-invoice-recipient-dialog")!;
     expect(
-      dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-input[name=address]")!
-        .error,
+      dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        "wt-address-lookup[name=address]",
+      )!.error,
     ).toBe(codeMessage("invoice.recipient_invalid"));
     expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
 
-    const street = dialog.shadowRoot!.querySelector<HTMLElement>("wt-input[name=address]")!;
+    const street = dialog.shadowRoot!.querySelector<HTMLElement>(
+      "wt-address-lookup[name=address]",
+    )!;
     emit(street, "wt-change", { value: "Calle Nueva 3" });
     await flush(el);
     expect(
-      dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-input[name=address]")!
-        .error,
+      dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        "wt-address-lookup[name=address]",
+      )!.error,
     ).toBe("");
     expect(dialog.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
   });
@@ -991,7 +995,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
         dialog.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
       ).toBe(codeMessage("invoice.choice_locked"));
       for (const field of dialog.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>(
-        "wt-input, wt-combobox",
+        "wt-input, wt-combobox, wt-address-lookup",
       ))
         expect(field.error ?? "").toBe("");
     });
@@ -9036,7 +9040,7 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
       ["province", "Madrid"],
     ]) {
       const input = form
-        .shadowRoot!.querySelector(`wt-input[name=${name}]`)!
+        .shadowRoot!.querySelector(`:is(wt-input,wt-address-lookup)[name=${name}]`)!
         .shadowRoot!.querySelector<HTMLInputElement>("input")!;
       input.value = value!;
       input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));

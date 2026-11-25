@@ -1,10 +1,9 @@
 import { popupIndex } from "../popup-helpers.js";
-import { LitElement, css, html, nothing, type PropertyValues } from "lit";
+import { css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { belongsToComposition } from "@waitron/ui-core/submit-on-enter";
-import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
-import { baseStyles } from "../base-styles.js";
-import { delegatesFocusShadowRootOptions, uniqueId } from "../interactive.js";
+import { WtInput } from "@waitron/ui-core/components/wt-input";
+import { uniqueId } from "../interactive.js";
 
 export interface AddressLookupSuggestion {
   readonly id: string;
@@ -50,19 +49,10 @@ function sessionToken(): string {
 }
 
 @customElement("wt-address-lookup")
-export class WtAddressLookup extends LitElement {
-  static override shadowRootOptions = delegatesFocusShadowRootOptions;
-
+export class WtAddressLookup extends WtInput {
   static override styles = [
-    baseStyles,
-    fieldStyles,
+    ...WtInput.styles,
     css`
-      :host {
-        display: block;
-        max-width: var(--wt-field-max-width);
-      }
-
-      /* Important, so a form that sets its fields' display cannot show an empty box. */
       :host([hidden]) {
         display: none !important;
       }
@@ -107,53 +97,45 @@ export class WtAddressLookup extends LitElement {
         margin: var(--wt-space-1) 0 0;
       }
 
-      .field[hidden] {
-        display: none;
-      }
-
       .status:empty {
         margin: 0;
       }
     `,
   ];
 
-  /** Without one, only the credit on an already filled address can be shown. */
   @property({ attribute: false }) provider?: AddressLookupProvider;
   @property({ attribute: false }) appliedAttribution?: string;
   @property({ attribute: "country-code" }) countryCode = "";
-  @property() label = "";
-  @property() name = "";
-  @property() placeholder = "";
-  @property({ attribute: "no-results-label" }) noResultsLabel = "";
   @property({ attribute: "unavailable-label" }) unavailableLabel = "";
   /** The form's own line under the field about the last choice, e.g. why it was not copied; a new
    * search hides it until the next choice or a new message. */
   @property() message = "";
-  @property({ type: Boolean, reflect: true }) disabled = false;
   /** How long typing must pause, in milliseconds, before the provider is asked. */
   @property({ type: Number }) delay = 600;
 
-  @state() private query = "";
   @state() private suggestions: readonly AddressLookupSuggestion[] = [];
   @state() private activeIndex = -1;
-  @state() private notice: "" | "none" | "unavailable" = "";
+  @state() private resolveFailed = false;
+  @state() private messageCurrent = true;
 
   #generation = 0;
-  #searching?: number;
   /** The generation of the chosen suggestion being resolved, which leaving the field keeps. */
   #resolving?: number;
-  #messageCurrent = true;
   #timer?: ReturnType<typeof setTimeout>;
   #automaticSearches = 0;
   #session = sessionToken();
-  private readonly inputId = uniqueId("wt-address-lookup");
   private readonly listId = uniqueId("wt-address-lookup-list");
   private readonly statusId = uniqueId("wt-address-lookup-status");
 
-  protected override willUpdate(changed: PropertyValues<this>): void {
-    this.hidden = this.provider === undefined && !this.appliedAttribution;
-    if (changed.has("message")) this.#messageCurrent = true;
-    if (changed.has("provider") || changed.has("countryCode") || changed.has("disabled"))
+  override willUpdate(changed: PropertyValues<this>): void {
+    super.willUpdate(changed);
+    if (changed.has("message")) this.messageCurrent = true;
+    if (
+      changed.has("provider") ||
+      changed.has("countryCode") ||
+      changed.has("disabled") ||
+      changed.has("hidden")
+    )
       this.cancelSearch();
   }
 
@@ -162,11 +144,11 @@ export class WtAddressLookup extends LitElement {
   cancelSearch(): void {
     this.#forget();
     this.#close();
-    this.notice = "";
+    this.resolveFailed = false;
   }
 
   override disconnectedCallback(): void {
-    this.#forget();
+    this.cancelSearch();
     super.disconnectedCallback();
   }
 
@@ -181,46 +163,39 @@ export class WtAddressLookup extends LitElement {
     this.activeIndex = -1;
   }
 
-  #canSearch(): boolean {
-    return !this.disabled && this.provider !== undefined && this.query.trim().length >= MIN_QUERY;
-  }
-
-  private onInput(event: Event): void {
-    event.stopPropagation();
-    this.query = (event.target as HTMLInputElement).value;
-    this.#messageCurrent = false;
-    this.#forget();
-    this.#close();
-    this.notice = "";
-    if (!this.#canSearch() || this.#automaticSearches >= AUTOMATIC_SEARCH_LIMIT) return;
+  protected override afterInput(): void {
+    this.messageCurrent = false;
+    this.cancelSearch();
+    const query = this.value.trim();
+    if (
+      this.disabled ||
+      this.hidden ||
+      this.readonly ||
+      this.provider === undefined ||
+      query.length < MIN_QUERY ||
+      this.#automaticSearches >= AUTOMATIC_SEARCH_LIMIT
+    )
+      return;
     const generation = this.#generation;
     this.#timer = setTimeout(() => {
       this.#automaticSearches += 1;
-      void this.#ask(generation);
+      void this.#ask(query, generation);
     }, this.delay);
   }
 
-  async #ask(generation: number): Promise<void> {
+  async #ask(query: string, generation: number): Promise<void> {
     const provider = this.provider;
     if (provider === undefined) return;
-    this.#searching = generation;
-    let found: readonly AddressLookupSuggestion[];
     try {
-      found = await provider.suggest({
-        query: this.query.trim(),
+      const found = await provider.suggest({
+        query,
         countryCode: this.countryCode,
         sessionToken: this.#session,
       });
+      if (generation === this.#generation && query === this.value.trim()) this.suggestions = found;
     } catch {
-      if (generation === this.#generation) this.notice = "unavailable";
-      return;
-    } finally {
-      if (this.#searching === generation) this.#searching = undefined;
+      // A suggestion is optional while the person types the address.
     }
-    if (generation !== this.#generation) return;
-    this.suggestions = found;
-    this.activeIndex = -1;
-    this.notice = found.length === 0 ? "none" : "";
   }
 
   async #choose(index: number): Promise<void> {
@@ -236,16 +211,15 @@ export class WtAddressLookup extends LitElement {
     try {
       address = await provider.resolve({ suggestionId: suggestion.id, sessionToken: session });
     } catch {
-      if (generation === this.#generation) this.notice = "unavailable";
+      if (generation === this.#generation) this.resolveFailed = true;
       return;
     } finally {
       if (this.#resolving === generation) this.#resolving = undefined;
     }
     if (generation !== this.#generation) return;
     this.#session = sessionToken();
-    this.query = "";
-    this.notice = "";
-    this.#messageCurrent = true;
+    this.resolveFailed = false;
+    this.messageCurrent = true;
     this.dispatchEvent(
       new CustomEvent<AddressChosenDetail>("wt-address-chosen", {
         detail: { address },
@@ -263,24 +237,10 @@ export class WtAddressLookup extends LitElement {
   private onKeydown(event: KeyboardEvent): void {
     if (belongsToComposition(event)) return;
     const count = this.suggestions.length;
-    if (event.key === "Enter") {
-      // Enter acts on the address search, so the surrounding form must skip it.
+    if (event.key === "Enter" && this.activeIndex >= 0) {
       event.preventDefault();
-      if (this.activeIndex >= 0) {
-        event.stopPropagation();
-        void this.#choose(this.activeIndex);
-      } else if (
-        !event.repeat &&
-        count === 0 &&
-        this.#automaticSearches >= AUTOMATIC_SEARCH_LIMIT &&
-        this.#searching !== this.#generation &&
-        this.#resolving !== this.#generation &&
-        this.#canSearch()
-      ) {
-        this.#forget();
-        this.notice = "";
-        void this.#ask(this.#generation);
-      }
+      event.stopPropagation();
+      void this.#choose(this.activeIndex);
       return;
     }
     if (count === 0) return;
@@ -295,63 +255,39 @@ export class WtAddressLookup extends LitElement {
     }
   }
 
+  private get statusLine(): string {
+    return this.provider
+      ? (this.messageCurrent && this.message) || (this.resolveFailed ? this.unavailableLabel : "")
+      : "";
+  }
+
+  protected override get fieldDecoration() {
+    if (this.provider === undefined) return undefined;
+    return {
+      autocomplete: "off",
+      extraDescriptionIds: this.statusLine ? [this.statusId] : [],
+      listbox: {
+        id: this.listId,
+        expanded: this.suggestions.length > 0,
+        activeId: this.activeIndex >= 0 ? `${this.listId}-${this.activeIndex}` : undefined,
+        onKeydown: this.onKeydown,
+        onBlur: this.onBlur,
+      },
+    };
+  }
+
   override render() {
     const credit = this.appliedAttribution
       ? html`<p class="status" part="attribution" role="status">${this.appliedAttribution}</p>`
       : nothing;
-    const inputId = this.name || this.inputId;
-    const open = this.suggestions.length > 0;
-    const line =
-      this.provider &&
-      ((this.#messageCurrent && this.message) ||
-        (this.notice === "none"
-          ? this.noResultsLabel
-          : this.notice === "unavailable"
-            ? this.unavailableLabel
-            : ""));
     return html`
-      <div
-        class="field"
-        part="field"
-        ?hidden=${!this.provider}
-        data-label=${fieldLabelState({
-          value: this.query,
-          hint: "",
-          placeholder: this.placeholder,
-          type: "text",
-        })}
-        ?data-disabled=${this.disabled}
-      >
-        ${fieldLabel(inputId, this.label, false)}
-        <input
-          class="field-control"
-          id=${inputId}
-          name=${this.name || nothing}
-          type="text"
-          autocomplete="off"
-          enterkeyhint="search"
-          role="combobox"
-          aria-autocomplete="list"
-          aria-expanded=${open ? "true" : "false"}
-          aria-controls=${this.listId}
-          aria-activedescendant=${
-            this.activeIndex >= 0 ? `${this.listId}-${this.activeIndex}` : nothing
-          }
-          aria-describedby=${line ? this.statusId : nothing}
-          placeholder=${this.placeholder}
-          ?disabled=${this.disabled}
-          .value=${this.query}
-          @input=${this.onInput}
-          @keydown=${this.onKeydown}
-          @blur=${this.onBlur}
-        />
-      </div>
+      ${super.render()}
       <ul
         id=${this.listId}
         class="list"
         role="listbox"
         aria-label=${this.label}
-        ?hidden=${!open}
+        ?hidden=${this.suggestions.length === 0}
         @pointerdown=${(event: PointerEvent) => event.preventDefault()}
       >
         ${this.suggestions.map(
@@ -375,7 +311,7 @@ export class WtAddressLookup extends LitElement {
             </li>`,
         )}
       </ul>
-      <p id=${this.statusId} class="status" role="status">${line || nothing}</p>
+      <p id=${this.statusId} class="status" role="status">${this.statusLine || nothing}</p>
       ${credit}
     `;
   }

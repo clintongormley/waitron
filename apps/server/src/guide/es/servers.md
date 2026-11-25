@@ -430,11 +430,11 @@ La configuración se reanuda en el formulario del local, en la misma pestaña. W
 local cuando lo guardas y se reinicia el servidor. Comprueba la conexión en **Sistema → Servicios
 Cloud**.
 
-Si tu cuenta de pruebas de Cloud tiene una sola empresa española, sin NIF ni locales, elige
-una sugerencia en **Buscar la dirección**. Si el domicilio fiscal es distinto, desactiva
-**Igual que la dirección del local** para ver **Buscar el domicilio fiscal**. Revisa y corrige
-los campos que se han rellenado antes de continuar. Si añades un local a una empresa que ya usa
-Cloud o la búsqueda no está disponible, escribe las direcciones a mano.
+Si tu cuenta de pruebas de Cloud tiene una sola empresa española, sin NIF ni locales, escribe la
+calle y el número en **Dirección (línea 1)** y elige una sugerencia. Si el domicilio fiscal es
+distinto, desactiva **Igual que la dirección del local** y escribe también en su campo **Dirección
+(línea 1)**. Revisa los campos antes de continuar. Si no hay sugerencias, escribe las direcciones a
+mano.
 
 En **Preparación**, puedes [elegir Cloud para el correo del personal](email.md#cloud-staff-email) y
 continuar con el servidor de correo en blanco. Si eliges **Omitir** antes de abrir Cloud o importas

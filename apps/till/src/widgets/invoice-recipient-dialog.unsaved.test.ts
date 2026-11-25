@@ -39,7 +39,7 @@ async function mount() {
 }
 async function fill(form: TillInvoiceRecipientDialog, name: string, value: string) {
   const field = form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-    `wt-input[name=${name}]`,
+    `:is(wt-input,wt-address-lookup)[name=${name}]`,
   )!;
   await field.updateComplete;
   const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
@@ -508,8 +508,9 @@ const addressProvider: AddressLookupProvider = {
 function addressFields(form: TillInvoiceRecipientDialog) {
   return ["address", "postalCode", "locality", "province"].map(
     (name) =>
-      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`wt-input[name=${name}]`)!
-        .value,
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        `:is(wt-input,wt-address-lookup)[name=${name}]`,
+      )!.value,
   );
 }
 

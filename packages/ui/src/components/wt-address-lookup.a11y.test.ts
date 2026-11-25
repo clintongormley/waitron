@@ -1,4 +1,4 @@
-import { afterEach, describe, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
@@ -21,7 +21,7 @@ const provider: AddressLookupProvider = {
 };
 
 const MARKUP =
-  '<wt-address-lookup label="Find the address" placeholder="Street and number" country-code="ES" no-results-label="No address found." unavailable-label="Suggestions are not available."></wt-address-lookup>';
+  '<wt-address-lookup label="Street address" name="address" autocomplete="address-line1" country-code="ES" unavailable-label="Suggestions are not available."></wt-address-lookup>';
 
 async function mountWith(theme: "light" | "dark"): Promise<WtAddressLookup> {
   const el = (await mountThemed(MARKUP, theme)) as WtAddressLookup;
@@ -42,6 +42,19 @@ async function typeAndWait(el: WtAddressLookup, text: string): Promise<void> {
 }
 
 describe.each(["light", "dark"] as const)("wt-address-lookup a11y (%s theme)", (theme) => {
+  test("manual street with an inline error and no provider", async () => {
+    const el = (await mountThemed(MARKUP, theme)) as WtAddressLookup;
+    el.error = "Enter the street address.";
+    await el.updateComplete;
+    const input = el.shadowRoot!.querySelector("input")!;
+    expect(input.getBoundingClientRect().height).toBeGreaterThan(0);
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(
+      el.shadowRoot!.getElementById(input.getAttribute("aria-describedby")!)?.textContent,
+    ).toBe("Enter the street address.");
+    await expectNoA11yViolations(host);
+  });
+
   test("closed, empty field", async () => {
     await mountWith(theme);
     await expectNoA11yViolations(host);
