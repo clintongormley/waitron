@@ -196,7 +196,18 @@ it("places the missing-time question inside its open-shift card", async () => {
   expect(root.querySelector("[data-open-shift] time")?.getAttribute("datetime")).toBe(
     start.eventAt,
   );
+  expect(root.querySelector("[data-open-shift]")?.textContent).toContain("Waiting for an answer");
   expect(root.querySelectorAll("section article h3")).toHaveLength(0);
+});
+
+it("includes the year for older pending work shown beside the selected week", async () => {
+  const view = hoursView();
+  const entry = attendanceEntry({ eventAt: "2025-01-05T09:00:00.000Z", offsetMinutes: 60 });
+  view.pending.prompts = [attendancePrompt({ businessDay: "2025-01-05", history: [entry] })];
+  const { el } = await mount(view);
+  const card = el.shadowRoot!.querySelector("section article")!;
+  expect(card.querySelector("h3")!.textContent).toContain("5 Jan 2025");
+  expect(card.querySelector("time")!.textContent).toContain("5 Jan 2025, 10:00");
 });
 
 it.each(["en-GB", "es-ES"] as const)(

@@ -1,13 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import { dateTimeFormat, formatBusinessDate } from "@waitron/dashboard-kit";
+import { dateTimeFormat } from "@waitron/dashboard-kit";
 import type { PersonHours } from "@waitron/dashboard-modules";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { attendanceHistory, attendanceStatus } from "./attendance-history.js";
 import { wallClock } from "../date-utils.js";
-import { hoursTime, hoursZone, periodLabel, wholeMonth } from "../hours-format.js";
+import { hoursDate, hoursTime, hoursZone, periodLabel, wholeMonth } from "../hours-format.js";
 import "@waitron/ui/src/components/wt-button.js";
 function duration(minutes: number): string {
   return `${minutes < 0 ? "−" : ""}${Math.floor(Math.abs(minutes) / 60)} h ${String(Math.abs(minutes) % 60).padStart(2, "0")} min`;
@@ -134,8 +134,17 @@ export class HoursRecord extends LitElement {
     const standaloneAutomatic = view.pending.automaticEntryIds.filter(
       (id) => !grouped || !prompts.some((prompt) => prompt.automaticEntryId === id),
     );
+    const time = (at: string, offset: number, zone: string, sameDay?: string) =>
+      hoursTime(at, offset, zone, sameDay, view.period.start);
     const history = (entry: PersonHours["record"]["entries"][number]["entry"]) =>
-      attendanceHistory(entry, hoursZone(view, wallClock(entry.eventAt, entry.offsetMinutes).date));
+      attendanceHistory(
+        entry,
+        time(
+          entry.eventAt,
+          entry.offsetMinutes,
+          hoursZone(view, wallClock(entry.eventAt, entry.offsetMinutes).date),
+        ),
+      );
     return html`<div class="content">
       ${this.manager ? nothing : html`<p>${periodLabel(view.period)}</p>`}
       <p data-total>${t("hours.total")}: ${duration(view.workedMinutes)}</p>
@@ -145,13 +154,14 @@ export class HoursRecord extends LitElement {
         const zone = hoursZone(view, wallClock(open.start.eventAt, open.start.offsetMinutes).date);
         return html`<article data-open-shift>
           <h2>${t(open.breakStart ? "clock.on_break" : "hours.open_shift")}</h2>
-          <p>${hoursTime(open.start.eventAt, open.start.offsetMinutes, zone)}</p>
-          ${open.breakStart ? html`<p>${hoursTime(open.breakStart.eventAt, open.breakStart.offsetMinutes, zone)}</p>` : nothing}
+          <p>${time(open.start.eventAt, open.start.offsetMinutes, zone)}</p>
+          ${open.breakStart ? html`<p>${time(open.breakStart.eventAt, open.breakStart.offsetMinutes, zone)}</p>` : nothing}
           ${
             prompt
-              ? html`<ul>
-                  ${prompt.history.map(history)}
-                </ul>`
+              ? html`<p>${t("hours.pending")}</p>
+                  <ul>
+                    ${prompt.history.map(history)}
+                  </ul>`
               : nothing
           }
         </article>`;
@@ -159,7 +169,7 @@ export class HoursRecord extends LitElement {
       ${view.days.map(
         (day) =>
           html`<article data-day=${day.date}>
-            <h2>${formatBusinessDate(day.date)}</h2>
+            <h2>${hoursDate(day.date, view.period.start)}</h2>
             <p>${duration(day.workedMinutes)}</p>
             ${
               day.sessions.length
@@ -167,9 +177,9 @@ export class HoursRecord extends LitElement {
                     const zone = hoursZone(view, session.workDate);
                     return html`<p>
                         <time datetime=${session.startedAt}
-                          >${hoursTime(session.startedAt, session.startOffsetMinutes, zone)}</time
+                          >${time(session.startedAt, session.startOffsetMinutes, zone)}</time
                         >–<time datetime=${session.endedAt}
-                          >${hoursTime(session.endedAt, session.endOffsetMinutes, zone, session.workDate)}</time
+                          >${time(session.endedAt, session.endOffsetMinutes, zone, session.workDate)}</time
                         >
                       </p>
                       <p>${t("hours.breaks")}: ${duration(session.breakMinutes)}</p>`;
@@ -185,7 +195,7 @@ export class HoursRecord extends LitElement {
               ${standaloneAutomatic.map(automatic)}${prompts.map((prompt) => {
                 const date = prompt.workDate ?? prompt.businessDay;
                 return html`<article>
-                  ${date ? html`<h3>${formatBusinessDate(date)}</h3>` : nothing}
+                  ${date ? html`<h3>${hoursDate(date, view.period.start)}</h3>` : nothing}
                   ${grouped && prompt.automaticEntryId ? automatic(prompt.automaticEntryId) : nothing}
                   <ul>
                     ${prompt.history.map(history)}

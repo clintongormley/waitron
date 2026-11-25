@@ -117,7 +117,7 @@ async function personInWindow(
     personId,
     questionWindows: inputs.questions.map((q) => [q.startAt, q.endAt]),
     questionEntryIds,
-    includeDisputed: monthly,
+    includeShiftContext: monthly,
   });
   const record = await readTimeRecord(tx, { personId, period }, policy, saved);
   const inbox = projectAttendanceInboxWork(personId, entries, inputs);

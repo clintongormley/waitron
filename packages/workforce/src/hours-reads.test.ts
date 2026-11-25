@@ -647,7 +647,17 @@ it("matches full-history Hours with a year of settled shifts and older outstandi
         now: new Date("2027-01-11T12:30:00Z"),
       }),
     );
-  const june = await getHours("2026-06-16");
+  const loadOutstanding = recordReads.readOutstandingHoursEntries;
+  let workerRows = Infinity;
+  const outstanding = vi
+    .spyOn(recordReads, "readOutstandingHoursEntries")
+    .mockImplementation(async (tx, scope) => {
+      const entries = await loadOutstanding(tx, scope);
+      if (scope.personId === f.personId) workerRows = entries.length;
+      return entries;
+    });
+  const june = await getHours("2026-06-16").finally(() => outstanding.mockRestore());
+  expect(workerRows).toBeLessThan(32);
   const juneHours = june.people.find((person) => person.personId === f.personId)!.hours;
   expect(juneHours.workedMinutes).toBe(14_400);
   for (const { hours } of june.people) {

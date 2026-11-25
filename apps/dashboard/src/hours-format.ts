@@ -48,9 +48,22 @@ export function hoursZone(view: PersonHours, date: string): string {
   return saved?.clock.timeZone ?? view.clock.timeZone;
 }
 
-export function hoursTime(at: string, offset: number, timeZone: string, sameDay?: string): string {
+export function hoursDate(date: string, periodStart?: string): string {
+  const label = formatBusinessDate(date);
+  return periodStart && date.slice(0, 4) !== periodStart.slice(0, 4)
+    ? `${label} ${date.slice(0, 4)}`
+    : label;
+}
+
+export function hoursTime(
+  at: string,
+  offset: number,
+  timeZone: string,
+  sameDay?: string,
+  periodStart?: string,
+): string {
   const { date, time } = wallClock(at, offset);
-  const label = sameDay === date ? time : `${formatBusinessDate(date)}, ${time}`;
+  const label = sameDay === date ? time : `${hoursDate(date, periodStart)}, ${time}`;
   if (localTimeOccurrences(date, time, timeZone).length < 2) return label;
   const abs = Math.abs(offset);
   const hours = String(Math.floor(abs / 60)).padStart(2, "0");
