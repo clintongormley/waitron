@@ -16,7 +16,7 @@ import { readAttendanceFacts } from "./attendance-facts.js";
 import { cancelPlacedOrder, markOrderPlaced } from "./working-order-counter.js";
 import { parkOrder } from "./working-order-open.js";
 
-import { overridePinAttempts } from "./till-api.js";
+import { overridePinAttempts } from "./till-request-fields.js";
 import { setupPartyVenue, OPERATOR, type PartyVenue } from "./testing/party-venue.js";
 
 const suite = useVenueDb({

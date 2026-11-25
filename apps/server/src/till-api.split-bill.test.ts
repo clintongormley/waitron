@@ -42,7 +42,7 @@ import type { Logger, LogLevel } from "./logger.js";
 import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
 import { mountTillApi } from "./till-api.js";
-import type { TillApiDeps } from "./till-api.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import type { OriginConfig } from "./trading-context.js";
 

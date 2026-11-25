@@ -650,7 +650,7 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     proof: "public",
     actions: [],
     basis:
-      "Bootstrap/lock-screen information: no selling action. till-api.ts; device-api.ts development-only switcher.",
+      "Bootstrap/lock-screen information: no selling action. till-session-routes.ts; device-api.ts development-only switcher.",
     routes: ["GET /api/till", "GET /api/staff", "GET /api/locales", "GET /api/dev/devices"],
   },
   {
@@ -664,14 +664,14 @@ const ACTIONLESS_ROUTES: readonly RouteGroup[] = [
     proof: "public",
     actions: [],
     basis:
-      "Logout clears even a missing/invalid session cookie; no device proof or action. till-api.test.ts.",
+      "Logout clears even a missing/invalid session cookie; no device proof or action. till-api.sign-in.test.ts.",
     routes: ["DELETE /api/session"],
   },
   {
     proof: "device cookie (source)",
     actions: [],
     basis:
-      "PIN sign-in proves the device and checks admission; no selling action. till-api.ts POST /api/session.",
+      "PIN sign-in proves the device and checks admission; no selling action. till-session-routes.ts POST /api/session.",
     routes: ["POST /api/session"],
   },
   {

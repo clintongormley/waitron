@@ -14,7 +14,8 @@ import {
 } from "./device-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { asObject } from "./bill-payments-api.js";
-import { groupCommand, requirePartyParam } from "./till-api.js";
+import { groupCommand } from "./till-order-commands.js";
+import { requirePartyParam } from "./till-request-fields.js";
 import { isUuid } from "./till-session.js";
 import { orderWatchZones, partyWatchZones } from "./watch-zones.js";
 import { passReleaseRefusal } from "./pass-release.js";

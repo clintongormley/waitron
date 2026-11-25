@@ -869,7 +869,7 @@ guests can move within the closed zone or out to an open zone (`moveGuests` in `
 cases in `till-api.zone-closed.test.ts`). A presented bill moved on its own into another party or
 to a free table in the closed zone takes its service context, because `adoptZone` refuses a closed
 zone only for an open bill. Printing existing orders remains
-possible: `/api/orders/:id/reprint` in `apps/server/src/till-api.ts` checks profile zone access through
+possible: `/api/orders/:id/reprint` in `apps/server/src/till-kitchen-counter-routes.ts` checks profile zone access through
 `apps/server/src/zone-access.ts` and enqueues through `reprintOrderTickets` in
 `apps/server/src/kitchen-ticket-reprint.ts`.
 Pricing still reads static offer membership; zone closures do not change recorded prices.
@@ -2599,7 +2599,7 @@ it changes it; a room it resets moves only by the reset's one. The table routes,
 (reset and update layout) and the party join refuse a sent revision that is not the room's revision
 after the catch-up, before their own write (`floor_today.out_of_date`, `refuseStale` in
 `apps/server/src/floor-revision.ts`, called by `changeRoom` and `refuseStaleZone` in
-`apps/server/src/floor-today-api.ts` and by `movingRooms` in `apps/server/src/till-api.ts`). A
+`apps/server/src/floor-today-api.ts` and by `movingRooms` in `apps/server/src/till-table-routes.ts`). A
 refusal rolls back the catch-up with everything else. The till sends the revision with a table
 route, a zone route and a party join with a merge, and any of those that sends none is refused
 (`management.request_invalid`, `requiredRevision` in `apps/server/src/floor-revision.ts`); a zone
@@ -5559,10 +5559,10 @@ get them wrong. An extras list's `maxPicks` accepts an explicit null, because th
 `packages/menu/src/extra-contract.ts`). That is pinned by its own case, `keeps an explicit null
 maxPicks, because there null is the value`. The seat-a-table
 route's `guestCount` also accepts an explicit null as a value meaning no count; the absent field means
-the same thing (`requireGuestCount`, `apps/server/src/till-api.ts`). Its route case `seats without a
+the same thing (`requireGuestCount`, `apps/server/src/till-request-fields.ts`). Its route case `seats without a
 guest count, absent or null` pins both inputs. `PUT /api/parties/:id/guests`'s `guestCount`, and
 Split a table's `guestCounts.staying` and `guestCounts.leaving`, take an explicit null as no count while an
-absent key is refused (`requireGuestCountOrNull`, `apps/server/src/till-api.ts`): in
+absent key is refused (`requireGuestCountOrNull`, `apps/server/src/till-request-fields.ts`): in
 `apps/server/src/till-api.parties.test.ts`, `clears the count with null` and `refuses the guest count
 %j as a bad field, changing nothing` pin the two halves, and in
 `apps/server/src/till-api.table-actions.test.ts`, `leaves both sides unknown when both counts are
@@ -6857,7 +6857,7 @@ signed-in person in the `x-waitron-person` header (`PERSON_HEADER`, `packages/sh
 sign-out a tab keeps naming its last person until the next sign-in or a move to another server. The server compares it with the
 person of the device's open session in one function, `personRefusal` in
 `apps/server/src/till-session.ts`, called from `requireSession`, from `signedInPersonOn` and from
-the sign-out handler (`DELETE /api/session` in `apps/server/src/till-api.ts`). A request naming
+the sign-out handler (`DELETE /api/session` in `apps/server/src/till-session-routes.ts`). A request naming
 nobody or anyone else is refused `session.person_not_signed_in`, except where `signedInPersonOn`'s
 caller answers it as for nobody signed in (`GET /api/device/me`, and kitchen-screen requests from a
 kitchen display, `apps/server/src/device-api.ts`). A route that read the session's person any other

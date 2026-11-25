@@ -14,7 +14,7 @@ import type { Statfs } from "./free-bytes.js";
 import type { StartedServer } from "./boot.js";
 import type { DeviceApiDeps } from "./device-api.js";
 import type { DiskFullState } from "./disk-full-state.js";
-import type { TillApiDeps } from "./till-api.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { freePorts } from "./testing/free-ports.js";

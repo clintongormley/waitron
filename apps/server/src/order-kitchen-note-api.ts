@@ -11,7 +11,8 @@ import {
   toDeviceBinding,
 } from "./device-session.js";
 import type { Logger } from "./logger.js";
-import type { Run, TillApiDeps } from "./till-api.js";
+import type { Run } from "./till-api-errors.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import { assertStillSignedIn, requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
 import {

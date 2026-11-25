@@ -46,9 +46,9 @@ import {
   overridePinAttempts,
   parseDrawerOverride,
   requireRevision,
-  type Run,
-  type TillApiDeps,
-} from "./till-api.js";
+} from "./till-request-fields.js";
+import { type Run } from "./till-api-errors.js";
+import { type TillApiDeps } from "./till-api-deps.js";
 import { assertStillSignedIn, requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
 import "./errors.js";

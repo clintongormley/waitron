@@ -226,7 +226,7 @@ Whether a failure after `trading.env` was written leaves this reset reachable re
 unmeasured. Also unmeasured: `operation.complete()` failing after the restart was scheduled can
 release the setup latch while that restart is pending.
 
-Remaining wording: the no-profile explanation in `apps/server/src/till-api.test.ts`, and the
+Remaining wording: the no-profile explanation in `apps/server/src/till-api.bootstrap.test.ts`, and the
 history tags in `device-session.test.ts` and `setup-api.test.ts`. From source reading,
 `cookieDomainFor` lowercases the request host but not the configured venue domain; whether the
 configuration normalizes that domain remains unchecked.

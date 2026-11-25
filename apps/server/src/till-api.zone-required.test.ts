@@ -28,7 +28,7 @@ import { nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { PaymentProvider } from "@waitron/payments";
 import { mountTillApi } from "./till-api.js";
-import type { TillApiDeps } from "./till-api.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import type { OriginConfig } from "./trading-context.js";
 
 import { createOpenOrder, parkOrder } from "./working-order-open.js";

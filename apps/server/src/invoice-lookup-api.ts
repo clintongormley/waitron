@@ -12,7 +12,8 @@ import {
 import { centsToDecimal, rawCentsToDecimal } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { INVOICE_SEARCH, isNumberSearch, requiredSearch } from "./orders-list.js";
-import type { Run, TillApiDeps } from "./till-api.js";
+import type { Run } from "./till-api-errors.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import { requireSession } from "./till-session.js";
 import { orderZoneCondition, type OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
-import { run } from "./till-api.js";
+import { run } from "./till-api-errors.js";
 
 it.each(["unchecked", "missing", "invalid", "restart_required"] as const)(
   "answers zone admission %s as a conflict with bounded params",

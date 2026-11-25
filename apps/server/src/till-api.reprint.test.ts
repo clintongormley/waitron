@@ -21,7 +21,7 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
-import type { TillApiDeps } from "./till-api.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { attachPrinterToStation } from "./station-printers.js";

@@ -12,9 +12,9 @@ import {
   parseReason,
   requirePartyParam,
   requireRevision,
-  type Run,
-  type TillApiDeps,
-} from "./till-api.js";
+} from "./till-request-fields.js";
+import { type Run } from "./till-api-errors.js";
+import { type TillApiDeps } from "./till-api-deps.js";
 import { requestCfg } from "./request-config.js";
 import { requireSession } from "./till-session.js";
 import { recordUnpaidDeparture, type UnpaidDepartureRequest } from "./unpaid-departure.js";

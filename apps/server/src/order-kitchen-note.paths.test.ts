@@ -14,7 +14,8 @@ import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider
 import { SimulatorPaymentProvider } from "@waitron/payments/src/simulator.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
 import { takeBillPayment, takeReaderBillPayment } from "./bill-payments.js";
-import { mountTillApi, type TillApiDeps } from "./till-api.js";
+import { mountTillApi } from "./till-api.js";
+import { type TillApiDeps } from "./till-api-deps.js";
 import {
   counterOrder,
   floorRow,

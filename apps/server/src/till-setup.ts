@@ -10,7 +10,7 @@ import { cardReaders, readPaymentsSettings, resolveDeviceReaderId } from "@waitr
 import type { DeviceBinding } from "./device-session.js";
 import { MODULES_SETTINGS, VENUE_SERVICE } from "./modules.js";
 import { listCourses } from "./kitchen.js";
-import type { TillApiDeps } from "./till-api.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import { readOfferedReceiptLanguages } from "./venue-locale.js";
 import { readVenueThemeSource, venueThemeAnswer } from "./venue-theme.js";
 

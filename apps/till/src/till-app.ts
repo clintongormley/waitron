@@ -1748,7 +1748,7 @@ interface CancelCrediting {
 }
 
 /** Refusals the server can raise before it looks the submission id up (`resolvePayReader`,
- * `apps/server/src/till-api.ts`). */
+ * `apps/server/src/till-card-collector.ts`). */
 const READER_REFUSED_BEFORE_LOOKUP: ReadonlySet<unknown> = new Set([
   "reader.not_held",
   "reader.payment_in_progress",

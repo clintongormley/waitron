@@ -68,7 +68,7 @@ import type { Logger } from "./logger.js";
 import { requestIdMiddleware } from "./request-id.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
-import type { TillApiDeps } from "./till-api.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import type { OrderFlow } from "./testing/bill-payment-fixture.js";
 
 import type { CardProviderPool } from "./card-provider-pool.js";

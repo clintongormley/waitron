@@ -292,7 +292,7 @@ basket use the device profile's starting zone if the profile has a department. I
 switched off or has left the department, they use the first usable zone in the profile's list
 and refuse `device_profile.no_service_zone` if there is none. A profile with no department uses
 the venue's counter-default zone and receives `service_zone.default_missing` when the venue has none
-(`resolveHttpOrderZone`, `apps/server/src/till-api.ts`; `resolveNewOrderZone` and
+(`resolveHttpOrderZone`, `apps/server/src/till-order-zones.ts`; `resolveNewOrderZone` and
 `readProfileZones`, `packages/venue-service/src/`). Public hierarchy Delete
 refuses removal of the last usable profile zone and replaces a removed starting zone with a
 permitted survivor. The fallback above still handles moved or invalid stored scope.

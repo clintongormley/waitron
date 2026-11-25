@@ -19,7 +19,8 @@ import {
 } from "./party-allergy.js";
 import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
 import { requestCfg } from "./request-config.js";
-import { runBodyIds, type Run, type TillApiDeps } from "./till-api.js";
+import { runBodyIds, type Run } from "./till-api-errors.js";
+import { type TillApiDeps } from "./till-api-deps.js";
 import { assertStillSignedIn, requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
 import "./errors.js";

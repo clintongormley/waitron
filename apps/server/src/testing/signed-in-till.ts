@@ -33,7 +33,8 @@ import { deploymentEnvironment } from "../config.js";
 import { DEVICE_COOKIE } from "../device-session.js";
 import { ALL_MODULES } from "../modules.js";
 import { systemClock } from "../till-backend.js";
-import { mountTillApi, type TillApiDeps } from "../till-api.js";
+import { mountTillApi } from "../till-api.js";
+import { type TillApiDeps } from "../till-api-deps.js";
 
 import { SESSION_COOKIE } from "../till-session.js";
 import { enrolDeviceForTest } from "./enrol.js";

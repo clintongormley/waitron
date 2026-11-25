@@ -18,7 +18,8 @@ import type { PaymentProvider } from "@waitron/payments";
 import { staffActivity } from "@waitron/workforce";
 
 import { issueOrderInvoice } from "./testing/issue-order.js";
-import { mountTillApi, type TillApiDeps } from "./till-api.js";
+import { mountTillApi } from "./till-api.js";
+import { type TillApiDeps } from "./till-api-deps.js";
 import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capture.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";

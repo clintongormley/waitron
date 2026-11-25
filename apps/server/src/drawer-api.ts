@@ -29,7 +29,8 @@ import { formatDrawerCloseTicket } from "./drawer-close-ticket.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { Logger } from "./logger.js";
 import { printerLookup, resolveDrawerAssignment, type PrinterLookup } from "./receipt-print.js";
-import type { Run, TillApiDeps } from "./till-api.js";
+import type { Run } from "./till-api-errors.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import { assertStillSignedIn, canonicaliseUuid, requireSession } from "./till-session.js";
 
 const DRAWER_CLOSE = "/api/drawer/close";

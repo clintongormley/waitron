@@ -33,16 +33,17 @@ import type { BillRefundRequest } from "./bill-refunds.js";
 import { assertProfileAction, assertTakesTender } from "./device-session.js";
 import { readGuestCountChoice } from "./receipt-guests.js";
 import type { Logger } from "./logger.js";
+import { resolveCardCollector } from "./till-card-collector.js";
+import { resolveHttpOrderZone } from "./till-order-zones.js";
 import {
   overridePinAttempts,
   parseOverrideField,
   parseReason,
   requireRevision,
-  resolveCardCollector,
-  resolveHttpOrderZone,
-  runBodyIds,
-} from "./till-api.js";
-import type { Run, TillApiDeps } from "./till-api.js";
+} from "./till-request-fields.js";
+import { runBodyIds } from "./till-api-errors.js";
+import type { Run } from "./till-api-errors.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import { sendingCfg } from "./made-here.js";
 import { requestCfg } from "./request-config.js";
 import { assertRequestDevice, isUuid, requireSession } from "./till-session.js";

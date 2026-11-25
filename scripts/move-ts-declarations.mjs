@@ -88,6 +88,64 @@ function span(source, node) {
   return { start, end };
 }
 
+function lineSpan(source, node) {
+  const { start, end } = span(source, node);
+  const lineStart = source.text.lastIndexOf("\n", start - 1) + 1;
+  return { start: lineStart, length: end - lineStart };
+}
+
+function routeAnchor(statements, anchor, fileName) {
+  const matches = statements.filter((node) => nameOf(node) === `app.${anchor.replace(" ", ":")}`);
+  if (matches.length !== 1) {
+    throw new Error(`${fileName}: expected one route anchor ${anchor}, found ${matches.length}`);
+  }
+  return matches[0];
+}
+
+function liftRoutes(source, { mount, groups }) {
+  const declaration = source.statements.find((node) => nameOf(node) === mount);
+  if (!declaration || !ts.isFunctionDeclaration(declaration) || !declaration.body) {
+    throw new Error(`${source.fileName}: missing mount function ${mount}`);
+  }
+  const { statements } = declaration.body;
+  const edits = [];
+  const functions = [];
+  for (const [name, { first, last, parameters, hoist }] of Object.entries(groups)) {
+    const from = routeAnchor(statements, first, source.fileName);
+    const to = routeAnchor(statements, last, source.fileName);
+    const { start } = lineSpan(source, from);
+    const { end } = span(source, to);
+    const previous = edits.at(-1)?.span;
+    if (to.pos < from.pos || (previous && start < previous.start + previous.length)) {
+      throw new Error(`${source.fileName}: out-of-order route range for ${name}`);
+    }
+    let body = source.text.slice(start, end);
+    let lifted = "";
+    if (hoist !== undefined) {
+      const matches = statements.filter(
+        (node) => node.pos >= from.end && node.end <= to.pos && nameOf(node) === hoist,
+      );
+      if (matches.length !== 1) {
+        throw new Error(`${source.fileName}: expected one ${hoist} inside ${name}`);
+      }
+      const { start: localStart, length } = lineSpan(source, matches[0]);
+      const localEnd = localStart + length;
+      lifted = source.text.slice(localStart, localEnd) + "\n\n";
+      body =
+        source.text.slice(start, localStart) + source.text.slice(localEnd, end).replace(/^\n+/, "");
+    }
+    const signature = Object.entries(parameters)
+      .map(([param, type]) => `${param}: ${type}`)
+      .join(", ");
+    functions.push(`export function ${name}(${signature}): void {\n${body}\n}`);
+    edits.push({
+      span: { start, length: end - start },
+      newText: `${lifted}  ${name}(${Object.keys(parameters).join(", ")});`,
+    });
+  }
+  return parse(source.fileName, [replace(source.text, edits).trimEnd(), ...functions].join("\n\n"));
+}
+
 function tokens(text) {
   const source = parse("signature.ts", text);
   const optionalSemicolons = new Set();
@@ -342,10 +400,23 @@ export async function main([mapFile], root) {
   const project = createProject(root, resolve(root, map.tsconfig));
   try {
     const expected = new Map();
+    const mounts = new Map();
+    const formatFile = async (file, text) =>
+      format(text, { ...(await resolveConfig(file)), filepath: file });
     const operations = [];
-    for (const { source, targets, keep = [] } of map.moves) {
+    for (const { source, targets, keep = [], lift } of map.moves) {
       const file = resolve(root, source);
-      const original = parse(file, project.readFile(file));
+      let original = parse(file, project.readFile(file));
+      if (lift) {
+        original = liftRoutes(original, lift);
+        const node = original.statements.find((statement) => nameOf(statement) === lift.mount);
+        const { start, end } = span(original, node);
+        const formattedMount = parse(file, await formatFile(file, original.text.slice(start, end)));
+        mounts.set(
+          file,
+          new Map([[lift.mount, [snapshot(formattedMount, formattedMount.statements[0])]]]),
+        );
+      }
       validateMap(original, targets, keep);
       for (const [target, names] of Object.entries(targets)) {
         const destination = resolve(root, target);
@@ -366,9 +437,10 @@ export async function main([mapFile], root) {
     verifyMoves(expected, project.readFile);
     const formatted = new Map();
     for (const [file, { text }] of project.changed) {
-      formatted.set(file, await format(text, { ...(await resolveConfig(file)), filepath: file }));
+      formatted.set(file, await formatFile(file, text));
     }
     verifyMoves(expected, (file) => formatted.get(file));
+    verifyMoves(mounts, (file) => formatted.get(file));
     for (const [file, text] of formatted) writeFileSync(file, text);
     return [...formatted.keys()];
   } finally {

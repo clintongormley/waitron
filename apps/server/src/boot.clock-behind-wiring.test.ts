@@ -9,7 +9,7 @@ import { withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
-import type { TillApiDeps } from "./till-api.js";
+import type { TillApiDeps } from "./till-api-deps.js";
 import { insertFiscalRegistro, insertFiscalSale } from "./testing/fiscal-fixtures.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
