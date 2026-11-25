@@ -1,5 +1,9 @@
 # A802: Correct part of a paid invoice
 
+> **2026-11-25:** the two buttons became one Give money back, PR 2 of
+> [docs/superpowers/plans/2026-11-24-give-money-back.md](../plans/2026-11-24-give-money-back.md):
+> it replaces Correct invoice and Refund a payment on a past receipt.
+>
 > **2026-11-23:** the owner's approval of policy 2 recorded "goodwill refunds stay money-only", and
 > this design says "An ordinary goodwill refund remains a money action" and "a served-dish goodwill
 > return can still use ordinary Refund a payment". That no longer holds: goodwill money goes back

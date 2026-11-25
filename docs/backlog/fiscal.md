@@ -85,7 +85,7 @@ changes no line's price, and issues no invoice"). Printing the bill issues the t
 payment; a payment after that is not an advance (question 2). Once the table's invoice has taken an
 advance off, the till refuses to correct the advance's own ticket and names Correct invoice on the
 table's invoice instead (owner, 2026-11-20 14:26: "ok. it would be very weird for the staff to do
-this, but ok"; `advance.taken_off_final_invoice`, `apps/server/src/advance-taken-off.ts`). That
+this, but ok"; `advance.taken_off_final_invoice`, `apps/server/src/advance-taken-off.ts`). (2026-11-25: the two buttons became one Give money back, PR 2 of [docs/superpowers/plans/2026-11-24-give-money-back.md](../superpowers/plans/2026-11-24-give-money-back.md).) That
 invoice can give back at most what was paid on it; once nothing paid on it is left to give back,
 Refund a payment on the advance's own ticket gives back the rest, files no corrective invoice, and
 the accountant export lists it with the VAT left declared (owner, 2026-11-21 16:36; the refusal
@@ -944,7 +944,7 @@ the pick list is widened without the mapping.
 
 ## Correcting a paid invoice: what A802 left open
 
-Staff correct part of a paid invoice from **Correct invoice** on a past receipt (A802, the
+Staff correct part of a paid invoice from **Give money back** on a past receipt (A802, the
 [design](../superpowers/specs/2026-10-20-a802-partial-paid-invoice-correction-design.md) and the
 [reshape plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a802-reshape.md); how it runs is the
 [owner's decision](#a802-a-correction-runs-like-a-bill-in-reverse-owner-2026-11-12)). Left open by
@@ -1164,11 +1164,13 @@ ticket's paid dishes, never on its own: the owner's words, on a €10 salad retu
 with a free €2 water, "they would have to return both, and get the 10€ back" (O4, "WATCHER
 2026-11-23 14:17"). That it goes with the last paid dish, and that Cancel and refund of that dish
 is refused once the free item was served, pointing staff to Correct invoice, are the watcher's
-calls ("WATCHER 2026-11-23 15:17"), listed as such in #4166 when the owner landed it. Question 14 of the
+calls ("WATCHER 2026-11-23 15:17"), listed as such in #4166 when the owner landed it. (2026-11-25: the two buttons became one Give money back, PR 2 of [docs/superpowers/plans/2026-11-24-give-money-back.md](../superpowers/plans/2026-11-24-give-money-back.md).) Question 14 of the
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md) asks the adviser to confirm.
 [Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
 
 ### Goodwill money back goes through Correct invoice (owner and watcher, 2026-11-23)
+
+(2026-11-25: the two buttons became one Give money back, PR 2 of [docs/superpowers/plans/2026-11-24-give-money-back.md](../superpowers/plans/2026-11-24-give-money-back.md).)
 
 Money given back as goodwill takes a corrective: the owner's "yes" to question 6 of the
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md) on 18 November, "yes and yes" on 21
@@ -1203,6 +1205,8 @@ ticked dishes, so ticking every dish equals ticking none: the watcher's call (O9
 [Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
 
 ### Correct invoice offers every reason, Complaint included (owner, 2026-11-23)
+
+(2026-11-25: the two buttons became one Give money back, PR 2 of [docs/superpowers/plans/2026-11-24-give-money-back.md](../superpowers/plans/2026-11-24-give-money-back.md).)
 
 Correct invoice, and its card step, offer every adjustment reason, so staff choose **Complaint**
 for goodwill money back: the owner's "Add it" (O6, lane L `questions.md`, "WATCHER 2026-11-23
@@ -1248,6 +1252,8 @@ separate counter Collect payment route. See [Full invoices at the till](#a231-fu
 for the current limits.
 
 ### A802: a correction runs like a bill in reverse (owner, 2026-11-12)
+
+(2026-11-25: the two buttons became one Give money back, PR 2 of [docs/superpowers/plans/2026-11-24-give-money-back.md](../superpowers/plans/2026-11-24-give-money-back.md).)
 
 A correction of a paid invoice is opened first (every filing check up front, nothing filed, no money
 moved), money goes back through Refund a payment as legs linked to it, and the corrective invoice is
