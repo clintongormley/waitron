@@ -956,8 +956,9 @@ took it shows **Being paid on** and the number of their bill; do not charge thos
 On a printed bill, **Items** first credits its receipt and puts its dishes on an open bill, then
 pays the chosen ones on a bill of their own. If the card is declined or you choose **Cancel
 payment**, every dish stays on that open bill, to print again or pay. If the bill is presented for
-collection and its invoice has yet to be issued, choose **Pay in parts**: it is paid with **An
-amount**, **Split equally** or **Whole bill**, not by item.
+collection and its invoice has yet to be issued, choose **Pay in parts** to see the same choices. A
+Counter order already sent to the kitchen is paid with **An amount**, **Split equally** or **Whole
+bill**, not by item.
 
 Choose the payment method, then press **Continue** to check it before taking any money. If the
 bill changes before you confirm, check the revised figures before confirming again.

@@ -1018,8 +1018,9 @@ y el número de su cuenta; no vuelvas a cobrar esos platos. En una cuenta impres
 primero abona su ticket y pasa sus platos a una cuenta abierta, y después cobra los elegidos en una
 cuenta propia. Si la tarjeta se rechaza o pulsas **Cancelar cobro**, todos los platos se quedan en
 esa cuenta abierta, para imprimirla de nuevo o cobrarla. Si la cuenta está presentada para su cobro
-y aún no se ha emitido su factura, elige **Cobrar por partes**: se cobra con **Una cantidad**,
-**Dividir a partes iguales** o **Toda la cuenta**, no por artículos.
+y aún no se ha emitido su factura, elige **Cobrar por partes** para ver las mismas opciones. Un
+pedido de mostrador ya enviado a cocina se cobra con **Una cantidad**, **Dividir a partes iguales**
+o **Toda la cuenta**, no por artículos.
 
 Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
 cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.
