@@ -3194,6 +3194,8 @@ export class MenusScreen extends LitElement {
       .heading=${this.#publicationHeading}
       menuName=${this.#menuName()}
       .includedBy=${this.structure?.includedBy ?? []}
+      .rootMedia=${this.structure?.root}
+      .placeableSetMenus=${this.structure?.placeableSetMenus ?? []}
       .status=${this.status}
       .preview=${this.preview}
       .failed=${this.previewError}

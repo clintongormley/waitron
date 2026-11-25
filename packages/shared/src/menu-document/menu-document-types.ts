@@ -257,18 +257,14 @@ export type MenuChangeBody = {
       name: string;
       from: string;
       to: string;
-      /** On a this-menu change while this menu sets a price: what it would charge with none; null
-       * when the places it would inherit from disagree. */
-      inheritedPrice?: string | null;
+      variant?: { id: string; name: string };
+      override?: "set" | "cleared";
     }
   | {
       kind: "product_changed";
       productId: string;
       name: string;
       fields: ProductChangeField[];
-      /** On a this-menu change, by variant id, for each variant this menu sets a price for: what it
-       * would charge with none; null when the places it would inherit from disagree. */
-      inheritedVariantPrices?: Record<string, string | null>;
     }
   | {
       kind: "extra_unit_changed";

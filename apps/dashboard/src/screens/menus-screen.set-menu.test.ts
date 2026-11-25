@@ -208,10 +208,7 @@ it("links a changed set menu to its editor from the full menu's Preview", async 
   await mount(lunchPath, client);
   await vi.waitFor(() => {
     expect(
-      page
-        .getByRole("link", { name: "Edit Daily menu", exact: true })
-        .element()
-        .getAttribute("href"),
+      page.getByRole("link", { name: "Daily menu", exact: true }).element().getAttribute("href"),
     ).toBe(dailyPath);
   });
 });

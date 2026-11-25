@@ -90,6 +90,14 @@ export async function mountMenuPreview<T extends MenuPreviewPanel>(
   return mounted;
 }
 
+export async function selectPreviewPane(panel: MenuPreviewPanel, value: "changes" | "menu") {
+  const picker = panel.shadowRoot!.querySelector("wt-segmented-control")!;
+  picker.dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+  );
+  await panel.updateComplete;
+}
+
 export async function mountMenuPublications<T extends MenuPublicationsPanel>(
   tag: string,
   props: Partial<T>,

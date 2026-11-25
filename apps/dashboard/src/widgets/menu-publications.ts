@@ -920,6 +920,7 @@ export class MenuPublicationsPanel extends LitElement {
               </p>`
             : nothing
         }
+        <slot></slot>
         ${
           queued.length === 0
             ? nothing

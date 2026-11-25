@@ -14,7 +14,10 @@ import {
   mountMenuPreview as mountWidget,
 } from "./test-helpers.js";
 
-beforeEach(() => {
+beforeEach(async () => {
+  const { innerWidth, innerHeight } = window;
+  onTestFinished(() => page.viewport(innerWidth, innerHeight));
+  await page.viewport(1280, 900);
   setLocale("en");
   setContentLanguages({ defaultLanguage: "es", languages: ["es", "en"] });
 });
@@ -142,6 +145,26 @@ it("keeps content selection independent of interface locale and falls back when 
   expect(view.view).toEqual({ kind: "customer", language: "es" });
 });
 
+it("switches to Menu and focuses the revealed row when a phone user follows its name", async () => {
+  await page.viewport(390, 850);
+  const el = await mount([change()]);
+  const tree = await renderer(el);
+  expect(
+    q<HTMLElementTagNameMap["wt-segmented-control"]>(el, "wt-segmented-control")?.options[0]?.label,
+  ).toBe("Changes (1)");
+  const link = viewLink(el)!;
+  expect(link.textContent?.trim()).toBe("Counter lemonade");
+  link.focus();
+  await userEvent.keyboard("{Enter}");
+  const view = await renderer(el);
+  expect(view).toBe(tree);
+  const pane = q(el, '[data-test="document-pane"]')!;
+  expect(getComputedStyle(pane).overflowY).toBe("visible");
+  expect(q(el, '[data-test="changes-pane"]')!.getClientRects()).toHaveLength(0);
+  await expect.poll(() => rows(view).activeElement).toBe(destination(view));
+  expect(destination(view)?.textContent).toContain("Limonada");
+});
+
 it("opens a moved product at its newly added occurrence rather than the first retained occurrence", async () => {
   const doc = fixture();
   const retained = { ...target, field: { kind: "summary" as const } };
@@ -177,7 +200,7 @@ it("views a renamed menu at its frozen title", async () => {
   const el = await mount([renamed]);
   const view = await follow(el, "title");
   expect(destination(view)!.closest("tr")!.dataset.rowKey).toBe("root");
-  expect(destination(view)!.textContent).toBe("Frozen title");
+  expect(destination(view)!.textContent?.trim()).toBe("Frozen title");
 });
 
 it("ignores an old View link after its snapshot has been replaced", async () => {
@@ -204,7 +227,7 @@ it("offers no View for a destination absent from the frozen proposal", async () 
   expect(q(el, '[data-change-row="stable-row"]')!.textContent).toContain("description");
 });
 
-it("views a removed section at its surviving parent without reading the before tree", async () => {
+it("shows the removed section as text even when its parent remains", async () => {
   const removed: MenuChange = {
     id: "removed",
     kind: "section_removed",
@@ -220,9 +243,8 @@ it("views a removed section at its surviving parent without reading the before t
   };
   const doc = fixture();
   const el = await mount([removed], doc);
-  const view = await follow(el, "removed");
-  expect(destination(view)!.closest("tr")!.dataset.rowKey).toBe("outer");
-  expect(view.document).toBe(doc);
+  expect(viewLink(el, "removed")).toBeNull();
+  expect(q(el, '[data-change-row="removed"]')?.textContent).toContain("Gone");
 });
 
 it("views field changes at the product row, including retired variants and modifier fields", async () => {
@@ -246,7 +268,7 @@ it("uses the first named product occurrence when it appears twice", async () => 
   expect(destination(view)!.closest("tr")!.dataset.rowKey).toBe("outer/inner/mi");
 });
 
-it("publishes the proposed hash after viewing the surviving place of a removed item", async () => {
+it("publishes the proposed hash when a removed item has no link", async () => {
   const removed: MenuChange = {
     id: "removed",
     kind: "product_removed",
@@ -257,7 +279,7 @@ it("publishes the proposed hash after viewing the surviving place of a removed i
     targets: { before: [{ ...target, sectionIds: [] }], after: [] },
   };
   const el = await mount([removed], menuDocument([], {}, "Proposed title"));
-  await follow(el, "removed");
+  expect(viewLink(el, "removed")).toBeNull();
   const seen: unknown[] = [];
   el.addEventListener("wt-menu-publish", (event) => seen.push((event as CustomEvent).detail));
   q(el, '[data-test="publish"]')!.click();
@@ -314,9 +336,8 @@ it.each(["reduce", "no-preference"] as const)(
   },
 );
 
-it.each([390, 1280])("keeps the chosen row inside the Preview pane at %i px", async (width) => {
+it.each([390, 1280])("brings the chosen row into view at %i px", async (width) => {
   await page.viewport(width, 850);
-  onTestFinished(() => page.viewport(1280, 900));
   const doc = fixture();
   doc.root.members.unshift(
     ...Array.from({ length: 30 }, (_, i) => documentProduct(`pad-${i}`, `pad-${i}`)),
@@ -324,7 +345,14 @@ it.each([390, 1280])("keeps the chosen row inside the Preview pane at %i px", as
   for (let i = 0; i < 30; i++)
     doc.offers[`pad-${i}`] = { ...doc.offers.mi!, id: `pad-${i}`, productId: `pad-${i}` };
   const el = await mount([change()], doc);
-  const view = await follow(el);
+  let view: MenuDocumentTree;
+  if (width === 390) {
+    viewLink(el)!.click();
+    view = await renderer(el);
+    await expect.poll(() => destination(view)).not.toBeNull();
+  } else {
+    view = await follow(el);
+  }
   const node = destination(view)!;
   const pane = q(el, '[data-test="document-pane"]')!;
   expect(node.getBoundingClientRect().top).toBeGreaterThanOrEqual(pane.getBoundingClientRect().top);

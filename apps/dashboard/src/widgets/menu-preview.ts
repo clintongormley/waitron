@@ -4,7 +4,6 @@ import { keyed } from "lit/directives/keyed.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, ContentLanguageController, currentContentLanguages } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
-import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import type { MenuView, MenuTarget } from "@waitron/shared";
 import { menuTargetKey } from "@waitron/menu/src/menu-navigation.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -16,29 +15,20 @@ import { formatMoney, contentLanguageDisplayName } from "@waitron/shared";
 import type { DashboardApi, MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { relativeTime } from "./relative-time.js";
 import { codeMessage } from "../i18n/codes.js";
-import { conjunctionList } from "../i18n/list.js";
 import {
-  openProduct,
+  renderFoldedMenuWarnings,
   publishWarningStyles,
   renderMenuWarnings,
   renderPublishWarningConfirmation,
 } from "./menu-publish-warnings.js";
-import { PATH_SEPARATOR } from "./category-form.js";
 import { placeName } from "./price-source.js";
 import { setMenuAddress, leftToBrowser } from "../navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { previewLiveVersion, type MenuPublicationHeading } from "./menu-publication-actions.js";
 import "./menu-publications.js";
-import type { StringKey } from "../i18n/strings.js";
-import {
-  CHANGE_GROUP_ORDER,
-  CHANGE_GROUPS,
-  GROUP_LABELS,
-  PRODUCT_FIELDS,
-  SECTION_FIELDS,
-  SET_MENU_FIELDS,
-  SOURCES,
-} from "./menu-preview-labels.js";
+import "@waitron/ui/src/components/wt-segmented-control.js";
+import { changeSource, changeWords } from "./menu-preview-changes.js";
+import { CHANGE_GROUP_ORDER, CHANGE_GROUPS, GROUP_LABELS } from "./menu-preview-labels.js";
 
 /** How the host's last publish ended, for the panel to say. */
 export type PublishResult =
@@ -105,34 +95,39 @@ export class MenuPreviewPanel extends LitElement {
       wt-combobox[slot="view"] {
         inline-size: calc(var(--wt-tap-min) * 4);
       }
-      .heading-line {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-3);
-        justify-content: space-between;
-      }
       .panes {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: var(--wt-space-5);
-        min-width: 0;
-      }
-      .changes-column {
         display: grid;
         gap: var(--wt-space-3);
         min-width: 0;
       }
       .pane {
         min-width: 0;
-        max-block-size: calc(var(--wt-tap-min) * 12);
-        overflow: auto;
-        scrollbar-gutter: stable;
+      }
+      @container (width < 800px) {
+        .panes[data-view="changes"] .menu-pane,
+        .panes[data-view="menu"] .changes-pane {
+          display: none;
+        }
       }
       @container (min-width: 800px) {
         .panes {
           grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
           align-items: start;
+          gap: var(--wt-space-5);
         }
+        .panes .pane {
+          display: block;
+          max-block-size: calc(var(--wt-tap-min) * 12);
+          overflow: auto;
+          scrollbar-gutter: stable;
+        }
+        wt-segmented-control {
+          display: none;
+        }
+      }
+      [data-test="changes"] {
+        display: grid;
+        gap: var(--wt-space-3);
       }
       section {
         display: grid;
@@ -155,6 +150,10 @@ export class MenuPreviewPanel extends LitElement {
         gap: var(--wt-space-2);
         margin: 0;
         padding-inline-start: var(--wt-space-5);
+      }
+      [data-test="changes"] ul {
+        list-style: none;
+        padding-inline-start: 0;
       }
       li {
         overflow-wrap: anywhere;
@@ -183,16 +182,8 @@ export class MenuPreviewPanel extends LitElement {
       .result.alert {
         border-inline-start-color: var(--wt-color-danger);
       }
-      .warnings li::marker {
-        color: var(--wt-color-warning);
-      }
       a {
         color: var(--wt-color-primary-text);
-      }
-      a[data-change-id],
-      a[data-edit-change],
-      a[data-hide-change] {
-        white-space: nowrap;
       }
     `,
   ];
@@ -215,7 +206,9 @@ export class MenuPreviewPanel extends LitElement {
   @state() private confirmingPreview: MenuPreview | null = null;
   #publishedWarnings: MenuPreview["warnings"] = [];
   @state() private selectedView: string | null = null;
-  @state() private hiddenChangeIds = new Set<string>();
+  @property({ attribute: false }) rootMedia?: { image: string | null; color: string | null };
+  @property({ attribute: false }) placeableSetMenus: readonly { id: string }[] = [];
+  @state() private pane: "changes" | "menu" = "changes";
   #menuId: string | null = null;
   #navigation = 0;
   @state() private navigationUnavailable = false;
@@ -234,22 +227,22 @@ export class MenuPreviewPanel extends LitElement {
 
   #target(change: MenuChange): MenuTarget | null {
     const document = this.preview?.document;
-    if (document === undefined || change.kind === "product_deleted") return null;
+    if (
+      document === undefined ||
+      change.kind === "product_deleted" ||
+      change.kind === "product_removed" ||
+      change.kind === "section_removed" ||
+      change.kind === "set_menu_removed"
+    )
+      return null;
     let target: MenuTarget | undefined;
     if (change.kind === "menu_renamed") target = { kind: "title", menuId: document.menuId };
-    else if (change.kind === "section_removed")
-      target = { kind: "list", sectionIds: change.parentSectionIds };
-    else if (change.kind === "product_removed") {
-      const old = change.targets.before.find((target) => target.kind === "product");
-      if (old?.kind === "product") target = { kind: "list", sectionIds: old.sectionIds };
-    } else if (change.kind === "product_moved") {
+    else if (change.kind === "product_moved") {
       const oldKeys = new Set(change.targets.before.map(menuTargetKey));
       target =
         change.targets.after.find((target) => !oldKeys.has(menuTargetKey(target))) ??
         change.targets.after[0];
-    } else if (change.kind === "set_menu_removed")
-      target = { kind: "list", sectionIds: change.sectionIds };
-    else target = change.targets.after[0];
+    } else target = change.targets.after[0];
     if (target === undefined || target.kind === "set_menu") return null;
     if (target.kind === "title" || target.kind === "home") return target;
     let members = document.root.members;
@@ -257,18 +250,7 @@ export class MenuPreviewPanel extends LitElement {
       const section = members.find(
         (member) => member.kind === "section" && member.sectionId === id,
       );
-      if (section?.kind !== "section") {
-        if (
-          change.kind === "section_removed" ||
-          change.kind === "product_removed" ||
-          change.kind === "set_menu_removed"
-        )
-          return {
-            kind: "list",
-            sectionIds: target.sectionIds.slice(0, target.sectionIds.indexOf(id)),
-          };
-        return null;
-      }
+      if (section?.kind !== "section") return null;
       members = section.members;
     }
     if (
@@ -292,25 +274,17 @@ export class MenuPreviewPanel extends LitElement {
     if (preview === null || this.failed || !preview.changes.includes(change)) return;
     const turn = ++this.#navigation;
     this.navigationUnavailable = false;
-    const tree = this.shadowRoot!.querySelector<MenuDocumentTree>("dashboard-menu-document-tree");
-    const resolved = await tree?.reveal(target);
+    const picker = this.renderRoot.querySelector("wt-segmented-control");
+    const phone = picker !== null && picker.getClientRects().length > 0;
+    if (phone) {
+      this.pane = "menu";
+      await this.updateComplete;
+      if (turn !== this.#navigation || this.preview !== preview) return;
+    }
+    const tree = this.renderRoot.querySelector<MenuDocumentTree>("dashboard-menu-document-tree");
+    const resolved = await tree?.reveal(target, phone);
     if (turn !== this.#navigation || this.preview !== preview) return;
     this.navigationUnavailable = !resolved;
-  }
-
-  async #hide(event: MouseEvent, change: MenuChange, preview: MenuPreview): Promise<void> {
-    event.preventDefault();
-    event.stopPropagation();
-    if (this.preview !== preview || this.failed) return;
-    const focused = this.shadowRoot!.activeElement === event.currentTarget;
-    this.hiddenChangeIds = new Set(this.hiddenChangeIds).add(change.id);
-    await this.updateComplete;
-    if (focused && this.preview === preview) {
-      const next =
-        this.shadowRoot!.querySelector<HTMLElement>("a[data-hide-change]") ??
-        this.shadowRoot!.querySelector<HTMLElement>('[data-test="show-all-changes"]');
-      next?.focus({ preventScroll: true });
-    }
   }
 
   override disconnectedCallback(): void {
@@ -325,178 +299,13 @@ export class MenuPreviewPanel extends LitElement {
       this.navigationUnavailable = false;
       this.#navigation++;
       if (this.preview === null) return;
-      const listed = new Set(this.preview.changes.map((change) => change.id));
       const menuId = this.preview.document.menuId;
       if (this.#menuId !== menuId) {
         this.selectedView = null;
-        this.hiddenChangeIds = new Set();
-      } else {
-        this.hiddenChangeIds = new Set([...this.hiddenChangeIds].filter((id) => listed.has(id)));
+        this.pane = "changes";
       }
       this.#menuId = menuId;
     }
-  }
-
-  /** One place inside a sentence. */
-  #place(path: readonly string[]): string {
-    return path.length === 0 ? t("menu_preview.top_level") : path.join(PATH_SEPARATOR);
-  }
-
-  #places(paths: readonly (readonly string[])[]): string {
-    return conjunctionList(paths.map((path) => this.#place(path)));
-  }
-
-  /** A change at one place: its own wording at the top level, else `key` with the place filled. */
-  #at(key: StringKey, top: StringKey, path: readonly string[], values: Record<string, string>) {
-    return path.length === 0
-      ? fill(top, values)
-      : fill(key, { ...values, place: this.#place(path) });
-  }
-
-  #words(change: MenuChange): string {
-    switch (change.kind) {
-      case "set_menu_added":
-        return this.#at(
-          "menu_preview.product_added",
-          "menu_preview.product_added_top",
-          change.under,
-          { name: change.setMenu.name },
-        );
-      case "set_menu_removed":
-        return this.#at(
-          "menu_preview.product_removed",
-          "menu_preview.product_removed_top",
-          change.under,
-          { name: change.setMenu.name },
-        );
-      case "set_menu_changed":
-        return change.fields.length === 0
-          ? fill("menu_preview.set_menu_saved_again", { name: change.setMenu.name })
-          : fill("menu_preview.changed_fields", {
-              name: change.setMenu.name,
-              fields: change.fields.map((field) => t(SET_MENU_FIELDS[field])).join(", "),
-            });
-      case "product_added":
-        return this.#at(
-          "menu_preview.product_added",
-          "menu_preview.product_added_top",
-          change.under,
-          { name: change.name },
-        );
-      case "product_removed":
-        return this.#at(
-          "menu_preview.product_removed",
-          "menu_preview.product_removed_top",
-          change.under,
-          { name: change.name },
-        );
-      case "product_deleted":
-        return fill("menu_preview.product_deleted", { name: change.name });
-      case "product_moved":
-        return fill("menu_preview.product_moved", {
-          name: change.name,
-          from: this.#places(change.from),
-          to: this.#places(change.to),
-        });
-      case "price_changed":
-        return fill("menu_preview.price_changed", {
-          name: change.name,
-          from: formatMoney(change.from, currentLocale()),
-          to: formatMoney(change.to, currentLocale()),
-        });
-      case "product_changed":
-        return fill("menu_preview.changed_fields", {
-          name: change.name,
-          fields: change.fields.map((field) => t(PRODUCT_FIELDS[field])).join(", "),
-        });
-      case "extra_unit_changed": {
-        const describe = (unit: typeof change.from) => {
-          const { name, abbreviation } = unitPresentation(
-            unit,
-            currentLocale(),
-            currentContentLanguages(),
-          );
-          return abbreviation && name !== abbreviation ? `${name} · ${abbreviation}` : name;
-        };
-        const from = describe(change.from),
-          to = describe(change.to);
-        if (from === to && change.from.precision === change.to.precision)
-          return fill("menu_preview.extra_unit_details_changed", {
-            list: change.listName,
-            name: change.name,
-          });
-        return fill("menu_preview.extra_unit_changed", {
-          list: change.listName,
-          name: change.name,
-          from,
-          fromPrecision: String(change.from.precision),
-          to,
-          toPrecision: String(change.to.precision),
-        });
-      }
-      case "extra_portion_changed": {
-        const locale = currentLocale().slice(0, 2);
-        const unit = (abbreviations: Record<string, string>) =>
-          abbreviations[locale] ?? abbreviations.en ?? Object.values(abbreviations)[0] ?? "";
-        return fill("menu_preview.extra_portion_changed", {
-          list: change.listName,
-          name: change.name,
-          from: `${change.from.portion} ${unit(change.from.abbreviation)}`.trim(),
-          to: `${change.to.portion} ${unit(change.to.abbreviation)}`.trim(),
-        });
-      }
-      case "extra_max_quantity_changed":
-        return fill("menu_preview.extra_max_quantity_changed", {
-          list: change.listName,
-          name: change.name,
-          from: change.from === null ? t("menu_preview.no_limit") : String(change.from),
-          to: change.to === null ? t("menu_preview.no_limit") : String(change.to),
-        });
-      case "section_added":
-        return this.#at(
-          "menu_preview.section_added",
-          "menu_preview.section_added_top",
-          change.under,
-          { name: change.name },
-        );
-      case "section_removed":
-        return this.#at(
-          "menu_preview.section_removed",
-          "menu_preview.section_removed_top",
-          change.under,
-          { name: change.name },
-        );
-      case "section_changed":
-        return change.fields.length === 1 && change.fields[0] === "names"
-          ? fill("menu_preview.section_renamed", { name: change.name })
-          : fill("menu_preview.changed_fields", {
-              name: change.name,
-              fields: change.fields.map((field) => t(SECTION_FIELDS[field])).join(", "),
-            });
-      case "order_changed":
-        return this.#at(
-          "menu_preview.order_changed",
-          "menu_preview.order_changed_top",
-          change.list,
-          {},
-        );
-      case "home_shortcuts_changed":
-        return t("menu_preview.home_shortcuts_changed");
-      case "home_display_changed":
-        return t("menu_preview.home_display_changed");
-      case "menu_renamed":
-        return fill("menu_preview.menu_renamed", { from: change.from, to: change.to });
-    }
-  }
-
-  #source(change: MenuChange): string {
-    const source =
-      change.includedMenu === undefined
-        ? t(SOURCES[change.source])
-        : `${t(SOURCES[change.source])}: ${change.includedMenu.name}`;
-    return change.alsoOn?.length
-      ? fill("menu_preview.also_on", { source, menus: conjunctionList(change.alsoOn) })
-      : source;
   }
 
   requestPublish(event: Event, preview: MenuPreview): void {
@@ -541,11 +350,9 @@ export class MenuPreviewPanel extends LitElement {
     return html`<p class="result alert" role="alert" data-test="result">${message}</p>`;
   }
 
-  #renderChanges() {
-    const preview = this.preview;
-    let body;
+  #renderReadState() {
     if (this.failed)
-      body = html`<p class="error" role="alert" data-test="preview-error">
+      return html`<p class="error" role="alert" data-test="preview-error">
           ${this.failureReason || t("menu_preview.error")}
         </p>
         <div>
@@ -561,11 +368,16 @@ export class MenuPreviewPanel extends LitElement {
             >${t("menus.retry")}</wt-button
           >
         </div>`;
-    else if (preview === null)
-      body = html`<p class="note" role="status" data-test="preview-loading">
+    if (this.preview === null)
+      return html`<p class="note" role="status" data-test="preview-loading">
         ${t("menu_preview.loading")}
       </p>`;
-    else if (previewLiveVersion(preview) !== null)
+    return nothing;
+  }
+
+  #renderChanges(preview: MenuPreview) {
+    let body;
+    if (previewLiveVersion(preview) !== null)
       body = html`<p data-test="nothing">
         ${fill("menu_preview.nothing", { number: String(previewLiveVersion(preview)) })}
       </p>`;
@@ -574,113 +386,56 @@ export class MenuPreviewPanel extends LitElement {
     else
       body = keyed(
         preview,
-        html`<div>
-            ${this.hiddenChangeIds.size === 0 ? nothing : html`<span data-test="hidden-count">${fill(this.hiddenChangeIds.size === 1 ? "menu_preview.hidden_count_one" : "menu_preview.hidden_count", { count: String(this.hiddenChangeIds.size) })}</span>`}
-            <p class="help">${t("menu_preview.hidden_hint")}</p>
-          </div>
-          <div data-test="changes">
-            ${CHANGE_GROUP_ORDER.map((group) => {
-              const rows = preview.changes.filter(
-                (change) =>
-                  !this.hiddenChangeIds.has(change.id) && CHANGE_GROUPS[change.kind] === group,
-              );
-              if (rows.length === 0) return nothing;
-              return html`<section data-group=${group}>
-                <h3>${t(GROUP_LABELS[group])}</h3>
-                <ul>
-                  ${rows.map((change) => {
-                    const target = this.#target(change);
-                    const words = this.#words(change);
-                    return html`<li data-change-row=${change.id}>
-                      <span>${words}</span>
-                      ${change.source === "this_menu" ? nothing : html`<span class="source">— ${this.#source(change)}</span>`}
-                      ${
-                        target === null
-                          ? nothing
-                          : html`<a
-                              ?data-own-click=${target.kind !== "home"}
-                              data-change-id=${change.id}
-                              href=${`/menus/menu/${encodeURIComponent(preview.document.menuId)}/view/${target.kind === "home" ? "home" : "preview"}`}
-                              @click=${target.kind === "home" ? nothing : (event: MouseEvent) => void this.#navigate(event, change, target)}
-                              >(${t("menu_preview.view_change")})</a
-                            >`
-                      }
-                      ${this.#renderEdit(change)}
-                      <a
-                        data-own-click
-                        data-hide-change=${change.id}
-                        href=${`/menus/menu/${encodeURIComponent(preview.document.menuId)}/view/preview`}
-                        @click=${(event: MouseEvent) => void this.#hide(event, change, preview)}
-                        >${t("menu_preview.hide_change")}</a
-                      >
-                    </li>`;
-                  })}
-                </ul>
-              </section>`;
-            })}
-          </div>`,
+        html`<div data-test="changes">
+          ${CHANGE_GROUP_ORDER.map((group) => {
+            const rows = preview.changes.filter((change) => CHANGE_GROUPS[change.kind] === group);
+            if (rows.length === 0) return nothing;
+            return html`<section data-group=${group}>
+              <h3>${t(GROUP_LABELS[group])}</h3>
+              <ul role="list">
+                ${rows.map((change) => {
+                  const source = changeSource(change);
+                  return html`<li data-change-row=${change.id}>
+                    ${changeWords(change, (name) => this.#changeLink(change, name))}
+                    ${source ? html`<span class="source"> · ${source}</span>` : nothing}
+                  </li>`;
+                })}
+              </ul>
+            </section>`;
+          })}
+        </div>`,
       );
     return html`<section>
-      <div class="heading-line">
-        <h2 id="changes-heading">${t("menu_preview.changes_heading")}</h2>
-        ${
-          preview !== null && !this.failed && preview.changes.length > 0
-            ? html`<wt-button
-                variant="secondary"
-                data-test="show-all-changes"
-                .disabled=${this.hiddenChangeIds.size === 0}
-                @click=${(event: Event) => {
-                  event.stopPropagation();
-                  this.hiddenChangeIds = new Set();
-                }}
-                >${t("menu_preview.show_all_changes")}</wt-button
-              >`
-            : nothing
-        }
-      </div>
+      ${this.#renderClashes()} ${this.#renderSetMenuProblems()} ${this.#renderWarnings()}
+      <h2 id="changes-heading">${t("menu_preview.changes_heading")}</h2>
       ${body}
     </section>`;
   }
 
-  #renderEdit(change: MenuChange) {
-    if (change.kind === "set_menu_changed" || change.kind === "set_menu_added") {
-      const { id, name } = change.setMenu;
-      return html`<a data-edit-change=${change.id} href=${setMenuAddress(id)}
-        >${fill("menu_preview.edit_menu", { menu: name })}</a
+  #changeLink(change: MenuChange, name: string) {
+    if ("setMenu" in change) {
+      if (
+        change.kind === "set_menu_removed" &&
+        !this.placeableSetMenus.some(({ id }) => id === change.setMenu.id)
+      )
+        return name;
+      return html`<a data-change-id=${change.id} href=${setMenuAddress(change.setMenu.id)}
+        >${name}</a
       >`;
     }
-    if (change.source === "included_menu" && change.includedMenu !== undefined) {
-      const { id, name } = change.includedMenu;
-      const prices =
-        change.kind === "price_changed" ||
-        (change.kind === "product_changed" && change.fields.every((field) => field === "variants"));
-      return html`<a
-        data-edit-change=${change.id}
-        href=${`/menus/menu/${encodeURIComponent(id)}/view/${prices ? "prices" : "structure"}`}
-        >${fill("menu_preview.edit_menu", { menu: name })}</a
+    const menu = encodeURIComponent(this.preview!.document.menuId);
+    if (change.kind === "home_display_changed" || change.kind === "home_shortcuts_changed")
+      return html`<a data-change-id=${change.id} href=${`/menus/menu/${menu}/view/home`}
+        >${name}</a
       >`;
-    }
-    if (change.source !== "shared_product") return nothing;
-    if (change.kind === "extra_portion_changed" || change.kind === "extra_max_quantity_changed") {
-      return html`<a
-        data-edit-change=${change.id}
-        href=${`/modifiers/view/extras/list/${encodeURIComponent(change.listId)}`}
-        >${t("extras.edit")}</a
-      >`;
-    }
-    if (
-      change.kind === "product_deleted" ||
-      change.kind === "product_removed" ||
-      !("productId" in change)
-    )
-      return nothing;
-    const { productId } = change;
+    const target = this.#target(change);
+    if (target === null) return name;
     return html`<a
       data-own-click
-      data-edit-change=${change.id}
-      href=${`/products/product/${encodeURIComponent(productId)}`}
-      @click=${(event: MouseEvent) => openProduct(event, productId)}
-      >${t("product.edit")}</a
+      data-change-id=${change.id}
+      href=${`/menus/menu/${menu}/view/preview`}
+      @click=${(event: MouseEvent) => void this.#navigate(event, change, target)}
+      >${name}</a
     >`;
   }
 
@@ -689,8 +444,7 @@ export class MenuPreviewPanel extends LitElement {
     if (warnings.length === 0) return nothing;
     return html`<section class="warnings" aria-labelledby="warnings-heading">
       <h2 id="warnings-heading">${t("menu_preview.warnings_heading")}</h2>
-      <p class="help" data-test="warnings-note">${t("menu_preview.warnings_note")}</p>
-      ${renderMenuWarnings(warnings, this.menuName)}
+      ${renderFoldedMenuWarnings(warnings, this.menuName)}
     </section>`;
   }
 
@@ -715,6 +469,7 @@ export class MenuPreviewPanel extends LitElement {
         .inspectionKey=${preview}
         .view=${view}
         .languages=${config}
+        .rootMedia=${this.rootMedia}
       >
         <wt-combobox
           slot="view"
@@ -840,40 +595,64 @@ export class MenuPreviewPanel extends LitElement {
     </section>`;
   }
 
-  override render() {
-    return html`${this.#renderResult()} ${this.#renderWarnings()} ${this.#renderClashes()}
-      ${this.#renderSetMenuProblems()}
-      <div class="panes">
-        <div class="changes-column" data-test="changes-column">
-          <dashboard-menu-publications
-            .api=${this.api}
-            .menuId=${this.menuId}
-            .menuName=${this.menuName}
-            .lateRefusalFor=${this.lateRefusalFor}
-            .preview=${this.failed ? null : this.preview}
-            .heading=${this.heading}
-            >${this.#renderPublishNote()}</dashboard-menu-publications
-          >
-          <div
-            class="pane"
-            data-test="changes-pane"
-            tabindex="0"
-            role="region"
-            aria-labelledby="changes-heading"
-          >
-            ${this.#renderChanges()}
-          </div>
-        </div>
-        <div
-          class="pane"
-          data-test="document-pane"
-          tabindex=${this.preview !== null && !this.failed ? 0 : nothing}
-          role=${this.preview !== null && !this.failed ? "region" : nothing}
-          aria-labelledby=${this.preview !== null && !this.failed ? "document-heading" : nothing}
-        >
-          ${this.#renderDocument()}
-        </div>
+  #renderPanes(preview: MenuPreview) {
+    const count = preview.changes.length;
+    return html`<div class="panes" data-view=${this.pane}>
+      <wt-segmented-control
+        name="menu-preview-pane"
+        label=${t("menu_preview.pane_label")}
+        hide-label
+        equal-width
+        .value=${this.pane}
+        .options=${[
+          {
+            value: "changes",
+            label:
+              count === 0
+                ? t("menu_preview.pane_changes")
+                : fill("menu_preview.pane_count", { count: String(count) }),
+          },
+          { value: "menu", label: t("menu_preview.pane_menu") },
+        ]}
+        @wt-change=${(event: CustomEvent<{ value: "changes" | "menu" }>) => {
+          event.stopPropagation();
+          this.pane = event.detail.value;
+        }}
+      ></wt-segmented-control>
+      <div
+        class="pane changes-pane"
+        data-test="changes-pane"
+        tabindex="0"
+        role="region"
+        aria-labelledby="changes-heading"
+      >
+        ${this.#renderChanges(preview)}
       </div>
+      <div
+        class="pane menu-pane"
+        data-test="document-pane"
+        tabindex="0"
+        role="region"
+        aria-labelledby="document-heading"
+      >
+        ${this.#renderDocument()}
+      </div>
+    </div>`;
+  }
+
+  override render() {
+    return html`${this.#renderResult()}
+      <dashboard-menu-publications
+        .api=${this.api}
+        .menuId=${this.menuId}
+        .menuName=${this.menuName}
+        .lateRefusalFor=${this.lateRefusalFor}
+        .preview=${this.failed ? null : this.preview}
+        .heading=${this.heading}
+      >
+        ${this.#renderPublishNote()} ${this.#renderReadState()}
+        ${this.preview !== null && !this.failed ? this.#renderPanes(this.preview) : nothing}
+      </dashboard-menu-publications>
       ${
         this.confirmingPreview === null
           ? nothing

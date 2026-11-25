@@ -8,3 +8,9 @@ Managers see publishing blockers first, read a short list of changes, and open t
 4. **Checks and guides.** Start with failing assertions in `menu-preview-{layout,navigation,top,tree}.test.ts`, `menu-preview.test.ts` and `menu-document-tree.test.ts` for phone and desktop focus, removed rows and external links, range and photos, warning links, confirmation, notices above the panes and queued versions below. Run those, `menu-preview.{a11y,edit-links,unit-changes}.test.ts`, `menu-document-tree.a11y.test.ts`, the Menus screen, heading, set-menu, publication and icon tests. Keep stale-response and scheduled-publish behavior covered. Rewrite the Preview and scheduled-version descriptions in `docs/developers/design-system.md` and both `apps/server/src/guide/{en,es}/products.md`, and update `docs/backlog/menu.md`. Run scoped types and guide guards. Capture before and after at 1440 and 390 px in EN and ES, light and dark, with unpublished changes, staged prices and a menu without photos. Select belongs to piece 2d. Send pictures to the watcher for the owner's approval before landing.
 
 Estimate 500 production lines added and 250 removed, 330 test lines added and 240 removed, plus about 45 guide and design lines. Use the runbook's cross-package review for the Preview response.
+
+Watcher clearance, 25 November: remove the inherited price fields from the Preview response. Keep
+equal-price override changes and say whether they were set or cleared. Group additions and
+removals together, credit extra portions and maxima to Modifiers, and link removed set menus
+only while they can still be opened. Let phone panes scroll with the page. Capture both phone
+views, a clash and an expanded warning. Retire the tests of the removed Edit and Hide links.

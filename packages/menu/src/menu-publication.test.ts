@@ -1773,6 +1773,74 @@ describe("previewMenu", () => {
     ]);
   });
 
+  it("lists affected menus for the size whose shared price actually changed there", async () => {
+    const f = await menusFixture(fx.db);
+    const small = await app(async (tx) => {
+      const [, small] = await setProductVariants(
+        tx,
+        f.lemonade,
+        [
+          {
+            id: f.large,
+            name: "Large",
+            customerName: { en: "A big glass" },
+            kitchenName: "LRG",
+            image: libraryImageName("large.jpg"),
+            unitPrice: "3.50",
+            available: true,
+          },
+          {
+            name: "Small",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "2.00",
+            available: true,
+          },
+        ],
+        "en",
+      );
+      await setMenuVariants(
+        tx,
+        await offerOf(tx, f.dinner, f.lemonade),
+        [{ variantId: f.large, price: "4.50" }],
+        f.dinner,
+      );
+      return small!.id;
+    });
+    await publish(f.dinner);
+    await publish(f.lunch);
+    await app(async (tx) => {
+      await updateProduct(tx, f.large, { unitPrice: "3.90" });
+      await updateProduct(tx, small, { unitPrice: "2.20" });
+    });
+    const preview = await app((tx) => previewMenu(tx, f.lunch));
+    const prices = changeBodies(preview.changes).filter(
+      (change) => change.kind === "price_changed",
+    );
+    expect(prices).toEqual([
+      {
+        kind: "price_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        source: "shared_product",
+        variant: { id: f.large, name: "Large" },
+        from: "3.50",
+        to: "3.90",
+      },
+      {
+        kind: "price_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        source: "shared_product",
+        variant: { id: small, name: "Small" },
+        from: "2.00",
+        to: "2.20",
+        alsoOn: ["Dinner Menu"],
+      },
+    ]);
+  });
+
   describe("credits a price change to the menu whose setting moved", () => {
     const priceChange = async (menuId: string) =>
       changeBodies((await app((tx) => previewMenu(tx, menuId))).changes).filter(
@@ -1935,176 +2003,25 @@ describe("previewMenu", () => {
           grossPrice: null,
         });
       });
-      expect(
-        changeBodies((await app((tx) => previewMenu(tx, f.lunch))).changes)
-          .filter((change) => change.kind === "price_changed" || change.kind === "product_changed")
-          .map((change) => ({
-            kind: change.kind,
-            source: change.source,
-            ...("fields" in change ? { fields: change.fields } : {}),
-          })),
-      ).toEqual([
-        { kind: "price_changed", source: "this_menu" },
-        { kind: "product_changed", source: "this_menu", fields: ["variants"] },
-      ]);
-    });
-  });
-
-  describe("says what this menu would inherit now on its own price change", () => {
-    const priceChanges = async (menuId: string) =>
-      changeBodies((await app((tx) => previewMenu(tx, menuId))).changes).filter(
-        (change) => change.kind === "price_changed",
-      );
-
-    it("names Burger's product price while Dinner sets its own, following a product price change", async () => {
-      const f = await menusFixture(fx.db);
-      await publish(f.dinner);
-      await app(async (tx) =>
-        updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.burger), {
-          grossPrice: "11.00",
-        }),
-      );
-      expect(await priceChanges(f.dinner)).toEqual([
-        {
-          kind: "price_changed",
-          productId: f.burger,
-          name: "Burger",
-          from: "12.00",
-          to: "11.00",
-          source: "this_menu",
-          inheritedPrice: "12.00",
-        },
-      ]);
-      await app((tx) => updateProduct(tx, f.burger, { unitPrice: "13.50" }));
-      expect((await priceChanges(f.dinner)).map((change) => change.inheritedPrice)).toEqual([
-        "13.50",
-      ]);
-    });
-
-    it("leaves it out when Dinner clears a price it had live", async () => {
-      const f = await menusFixture(fx.db);
-      await app(async (tx) =>
-        updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.burger), {
-          grossPrice: "11.00",
-        }),
-      );
-      await publish(f.dinner);
-      await app(async (tx) =>
-        updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.burger), { grossPrice: null }),
-      );
-      const [change] = await priceChanges(f.dinner);
-      expect(change).toMatchObject({ source: "this_menu", from: "11.00", to: "12.00" });
-      expect(change).not.toHaveProperty("inheritedPrice");
-    });
-
-    it("leaves it out of a shared product's price change", async () => {
-      const f = await menusFixture(fx.db);
-      await publish(f.dinner);
-      await app((tx) => updateProduct(tx, f.burger, { unitPrice: "13.50" }));
-      const [change] = await priceChanges(f.dinner);
-      expect(change).toMatchObject({ source: "shared_product", from: "12.00", to: "13.50" });
-      expect(change).not.toHaveProperty("inheritedPrice");
-    });
-
-    it("says null when the places Dinner would inherit Lemonade's price from disagree", async () => {
-      const f = await menusFixture(fx.db);
-      await publish(f.dinner);
-      await app(async (tx) => {
-        await addMember(tx, f.dinnerRoot, product(f.lemonade));
-        await updateMenuItem(tx, f.drinksMenu, await offerOf(tx, f.drinksMenu, f.lemonade), {
-          grossPrice: "3.40",
-        });
-        await updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.lemonade), {
-          grossPrice: "3.10",
-        });
-      });
-      expect(await priceChanges(f.dinner)).toEqual([
+      expect(await priceChange(f.lunch)).toEqual([
         {
           kind: "price_changed",
           productId: f.lemonade,
           name: "Lemonade",
-          from: "3.00",
-          to: "3.10",
+          from: "2.80",
+          to: "3.40",
           source: "this_menu",
-          inheritedPrice: null,
         },
-      ]);
-    });
-  });
-
-  describe("says what each variant this menu prices would charge without its own price", () => {
-    const ownVariantChanges = async (menuId: string) =>
-      changeBodies((await app((tx) => previewMenu(tx, menuId))).changes)
-        .filter((change) => change.kind === "product_changed")
-        .filter((change) => change.source === "this_menu");
-    const priceLarge = (f: MenusFixture, menuId: string, price: string) =>
-      app(async (tx) =>
-        setMenuVariants(
-          tx,
-          await offerOf(tx, menuId, f.lemonade),
-          [{ variantId: f.large, price }],
-          menuId,
-        ),
-      );
-
-    it("names Drinks' Large price while Lunch sets its own", async () => {
-      const f = await menusFixture(fx.db);
-      await publish(f.lunch);
-      await priceLarge(f, f.lunch, "4.00");
-      expect(await ownVariantChanges(f.lunch)).toEqual([
         {
-          kind: "product_changed",
+          kind: "price_changed",
           productId: f.lemonade,
           name: "Lemonade",
-          fields: ["variants"],
+          variant: { id: f.large, name: "Large" },
+          from: "2.80",
+          to: "3.40",
           source: "this_menu",
-          inheritedVariantPrices: { [f.large]: "3.50" },
         },
       ]);
-      await priceLarge(f, f.drinksMenu, "4.10");
-      expect((await ownVariantChanges(f.lunch)).map((c) => c.inheritedVariantPrices)).toEqual([
-        { [f.large]: "4.10" },
-      ]);
-    });
-
-    it("says null when the places Lunch would inherit Large's price from disagree", async () => {
-      const f = await menusFixture(fx.db);
-      await publish(f.lunch);
-      await app((tx) => addMember(tx, f.lunchRoot, product(f.lemonade)));
-      await priceLarge(f, f.drinksMenu, "3.90");
-      await priceLarge(f, f.lunch, "4.00");
-      expect((await ownVariantChanges(f.lunch)).map((c) => c.inheritedVariantPrices)).toEqual([
-        { [f.large]: null },
-      ]);
-    });
-
-    it("leaves it out when Lunch sets no variant price", async () => {
-      const f = await menusFixture(fx.db);
-      await app((tx) =>
-        setProductVariants(
-          tx,
-          f.lemonade,
-          [
-            {
-              id: f.large,
-              name: "Large",
-              customerName: { en: "A big glass" },
-              kitchenName: "LRG",
-              image: libraryImageName("large.jpg"),
-              unitPrice: null,
-              available: true,
-            },
-          ],
-          "en",
-        ),
-      );
-      await publish(f.lunch);
-      await app(async (tx) =>
-        updateMenuItem(tx, f.lunch, await offerOf(tx, f.lunch, f.lemonade), { grossPrice: "3.30" }),
-      );
-      const [change] = await ownVariantChanges(f.lunch);
-      expect(change).toMatchObject({ fields: ["variants"] });
-      expect(change).not.toHaveProperty("inheritedVariantPrices");
     });
   });
 
@@ -2287,10 +2204,12 @@ describe("previewMenu", () => {
         source: "shared_product",
       },
       {
-        kind: "product_changed",
+        kind: "price_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["variants"],
+        variant: { id: f.large, name: "Large" },
+        from: "3.00",
+        to: "3.20",
         source: "shared_product",
       },
     ]);
@@ -2633,9 +2552,11 @@ it.each([false, true])("credits included variant price, own dish price=%s", asyn
   const changes = (await app((tx) => previewMenu(tx, menuId))).changes;
   expect(changes).toContainEqual(
     expect.objectContaining({
-      kind: "product_changed",
+      kind: "price_changed",
       productId: f.lemonade,
-      fields: ["variants"],
+      variant: { id: f.large, name: "Large" },
+      from: ownPrice ? "2.80" : "3.50",
+      to: "4.20",
       source: "included_menu",
       includedMenu: { id: f.drinksMenu, name: "Drinks" },
     }),
@@ -2874,21 +2795,35 @@ describe("review regressions", () => {
             "en",
           );
       });
-      const changes = (await app((tx) => previewMenu(tx, f.dinner))).changes.filter(
-        (c) => c.kind === "product_changed" && c.productId === f.lemonade,
-      );
+      const changes = changeBodies((await app((tx) => previewMenu(tx, f.dinner))).changes);
+      expect(changes).toContainEqual({
+        kind: "price_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        variant: { id: f.large, name: "Large" },
+        from: "3.50",
+        to: "4.20",
+        source: "included_menu",
+        includedMenu: { id: f.drinksMenu, name: "Drinks" },
+      });
       expect(changes).toContainEqual(
-        expect.objectContaining({
-          fields: ["variants"],
-          source: otherSource === "own" ? "this_menu" : "shared_product",
-        }),
-      );
-      expect(changes).toContainEqual(
-        expect.objectContaining({
-          fields: ["variants"],
-          source: "included_menu",
-          includedMenu: { id: f.drinksMenu, name: "Drinks" },
-        }),
+        otherSource === "own"
+          ? {
+              kind: "price_changed",
+              productId: f.lemonade,
+              name: "Lemonade",
+              variant: { id: small, name: "Small" },
+              from: "2.00",
+              to: "2.50",
+              source: "this_menu",
+            }
+          : {
+              kind: "product_changed",
+              productId: f.lemonade,
+              name: "Lemonade",
+              fields: ["variants"],
+              source: "shared_product",
+            },
       );
     },
   );
@@ -2945,19 +2880,23 @@ it("retains two direct included sources for independent variant edits", async ()
   const preview = await app((tx) => previewMenu(tx, f.dinner));
   expect(preview.clashes).toEqual([]);
   const changes = preview.changes.filter(
-    (c) => c.kind === "product_changed" && c.productId === f.lemonade,
+    (c) => c.kind === "price_changed" && c.productId === f.lemonade,
   );
   expect(changes).toHaveLength(2);
   expect(changes).toContainEqual(
     expect.objectContaining({
-      fields: ["variants"],
+      variant: { id: setup.large, name: "Large" },
+      from: "3.00",
+      to: "4.20",
       source: "included_menu",
       includedMenu: { id: f.drinksMenu, name: "Drinks" },
     }),
   );
   expect(changes).toContainEqual(
     expect.objectContaining({
-      fields: ["variants"],
+      variant: { id: setup.small, name: "Small" },
+      from: "3.00",
+      to: "2.20",
       source: "included_menu",
       includedMenu: { id: setup.second, name: "Second drinks" },
     }),

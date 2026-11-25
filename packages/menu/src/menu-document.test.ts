@@ -1140,7 +1140,7 @@ describe("diffMenuDocuments", () => {
     expect(diffMenuDocuments(document, document)).toEqual([]);
   });
 
-  it("says nothing about an inherited price, having no combined offers", async () => {
+  it("reports changes to the effective price without a combined offer", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.dinner);
     await app(async (tx) =>
@@ -1148,8 +1148,62 @@ describe("diffMenuDocuments", () => {
     );
     const [change] = diffMenuDocuments(live, await build(f.dinner));
     expect(change).toMatchObject({ kind: "price_changed", source: "this_menu", to: "11.00" });
-    expect(change).not.toHaveProperty("inheritedPrice");
   });
+
+  it.each([true, false])(
+    "reports a price override with the same amount, setting=%s",
+    async (setting) => {
+      const f = await menusFixture(fx.db);
+      const price = (set: boolean) =>
+        app(async (tx) =>
+          updateMenuItem(tx, f.dinner, await offerOf(tx, f.dinner, f.burger), {
+            grossPrice: set ? "12.00" : null,
+          }),
+        );
+      await price(!setting);
+      const live = await build(f.dinner);
+      await price(setting);
+      expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([
+        {
+          kind: "price_changed",
+          productId: f.burger,
+          name: "Burger",
+          from: "12.00",
+          to: "12.00",
+          source: "this_menu",
+          override: setting ? "set" : "cleared",
+        },
+      ]);
+    },
+  );
+
+  it.each([true, false])(
+    "reports a variant override with the same amount, setting=%s",
+    async (setting) => {
+      const f = await menusFixture(fx.db);
+      const price = (set: boolean) =>
+        app(async (tx) =>
+          setMenuVariants(tx, await offerOf(tx, f.dinner, f.lemonade), [
+            { variantId: f.large, price: set ? "3.50" : null },
+          ]),
+        );
+      await price(!setting);
+      const live = await build(f.dinner);
+      await price(setting);
+      expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([
+        {
+          kind: "price_changed",
+          productId: f.lemonade,
+          name: "Lemonade",
+          variant: { id: f.large, name: "Large" },
+          from: "3.50",
+          to: "3.50",
+          source: "this_menu",
+          override: setting ? "set" : "cleared",
+        },
+      ]);
+    },
+  );
 
   it("names a reorder of the top level as this menu's change", async () => {
     const f = await menusFixture(fx.db);
@@ -1313,10 +1367,12 @@ describe("diffMenuDocuments", () => {
         source: "this_menu",
       },
       {
-        kind: "product_changed",
+        kind: "price_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["variants"],
+        variant: { id: f.large, name: "Large" },
+        from: "2.80",
+        to: "2.60",
         source: "this_menu",
       },
     ]);
@@ -1780,18 +1836,20 @@ describe("diffMenuDocuments", () => {
     });
     expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([
       {
-        kind: "product_changed",
+        kind: "price_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["names", "description", "image", "allergens", "diet"],
-        source: "shared_product",
+        variant: { id: f.large, name: "Large" },
+        from: "3.50",
+        to: "4.00",
+        source: "this_menu",
       },
       {
         kind: "product_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["variants"],
-        source: "this_menu",
+        fields: ["names", "description", "image", "allergens", "diet"],
+        source: "shared_product",
       },
     ]);
   });
@@ -1850,6 +1908,15 @@ describe("diffMenuDocuments", () => {
         .where(eq(optionLabels.id, WITH_ICE));
     });
     expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([
+      {
+        kind: "price_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        variant: { id: f.large, name: "Huge" },
+        from: "3.50",
+        to: "3.90",
+        source: "shared_product",
+      },
       {
         kind: "product_changed",
         productId: f.lemonade,

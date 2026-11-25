@@ -98,6 +98,69 @@ it("shows only frozen members in document order, with collapsible nested section
   expect(row(el, "drinks/beer/mi")!.querySelector(".row-activate")).toBeNull();
 });
 
+it("shows a placed set menu with the price and name saved in its frozen terms", async () => {
+  const doc = fixture();
+  doc.root.members.push({ kind: "set_menu", menuId: "daily", name: "Daily menu" });
+  doc.setMenus = {
+    daily: {
+      name: "Daily special",
+      terms: { names: { es: "Menú del día" }, price: "24.00", lines: [] },
+      changedAt: "2026-11-25T10:00:00Z",
+      root: { members: [] },
+      offers: {},
+    },
+  };
+  const el = await mount(doc);
+  el.view = { kind: "customer", language: "es" };
+  await settle(el);
+  const set = row(el, "set-menu:daily");
+  expect(set?.querySelector('[data-test="name"]')?.textContent).toBe("Menú del día");
+  expect(set?.querySelector('[data-test="price"]')?.textContent?.trim()).toBe("€24.00");
+});
+
+it("fits the prices, names and fallback media at phone width and reveals the exact size", async () => {
+  await page.viewport(390, 850);
+  const doc = fixture();
+  const offer = doc.offers.juice!;
+  offer.name = "Fresh orange juice";
+  offer.variants = ["2.00", "3.00"].map((unitPrice, index) => ({
+    ...offer,
+    id: String(index),
+    name: index === 0 ? "Small" : "Large",
+    unitPrice,
+    menuPrice: null,
+    pricingUnit: "each",
+    image: null,
+  }));
+  const el = await mount(doc);
+  expect(row(el, "juice")?.querySelector('[data-test="price"]')?.textContent?.trim()).toBe(
+    "€2.00–€3.00",
+  );
+  expect(row(el, "juice")?.querySelector("wt-icon[name='prep-station']")).toBeInstanceOf(
+    HTMLElement,
+  );
+  expect(
+    await el.reveal({
+      kind: "product",
+      productId: "juice",
+      menuItemId: "juice",
+      sectionIds: [],
+      variantId: "1",
+      field: { kind: "price" },
+    }),
+  ).toBe(true);
+  expect(row(el, "juice/1")?.querySelector('[aria-current="true"]')?.textContent?.trim()).toBe(
+    "Large",
+  );
+  expect(row(el, "juice/1")?.querySelector('[data-test="price"]')?.textContent?.trim()).toBe(
+    "€3.00",
+  );
+  const priceRight = (key: string) =>
+    row(el, key)!.querySelector('[data-test="price"]')!.getBoundingClientRect().right;
+  expect(priceRight("juice/1")).toBeCloseTo(priceRight("juice"), 0);
+  expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(390);
+});
+
 it("switches the frozen names with requested, default and staff fallbacks visibly identified", async () => {
   const el = await mount();
   await toggle(el, "drinks");
