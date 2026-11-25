@@ -2315,7 +2315,7 @@ export const en = {
   "server.last_contact_minutes": "Last contact: {n} minutes ago.",
   "server.last_contact_minutes_one": "Last contact: 1 minute ago.",
   "server.carries_on": "If the main box answers again, the till carries on by itself.",
-  "server.none_answering": "No box is answering. Check this device's network connection.",
+  "server.none_answering": "Can't reach the box. Check that this device is on the venue's WiFi.",
   "cloud_emergency.start": "Start the venue in the cloud",
   "cloud_emergency.main_answering": "The main box is answering again.",
   "cloud_emergency.requirements":
@@ -4713,7 +4713,7 @@ export const es: Record<StringKey, string> = {
   "server.last_contact_minutes_one": "Último contacto: hace 1 minuto.",
   "server.carries_on": "Si el servidor principal vuelve a responder, la caja continúa sola.",
   "server.none_answering":
-    "Ningún servidor responde. Revisa la conexión de red de este dispositivo.",
+    "No se puede conectar con el servidor. Comprueba que este dispositivo esté conectado a la red WiFi del local.",
   "cloud_emergency.start": "Iniciar el local en la nube",
   "cloud_emergency.main_answering": "El servidor principal vuelve a responder.",
   "cloud_emergency.requirements":

@@ -23,7 +23,7 @@ const STATES: [string, Partial<TillMainServerStrip>][] = [
   ["spare and Cloud are both offered", { spareAnswering: true, showSwitch: true, showCloud: true }],
   ["the spare answers", { spareAnswering: true, showSwitch: true }],
   ["the switch was refused", { spareAnswering: true, showSwitch: true, refused: true }],
-  ["no server answers", { spareAnswering: false, showSwitch: true }],
+  ["no server answers", { noBoxAnswering: true, showSwitch: true }],
   ["the spare answers but the switch is not offered", { spareAnswering: true, showSwitch: false }],
   [
     "the last contact is counted",

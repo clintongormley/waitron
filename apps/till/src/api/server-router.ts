@@ -63,6 +63,7 @@ export class ServerRouter extends EventTarget {
   #servers: Tracked[];
   #current: string;
   #waiting = false;
+  #noBoxAnswering = false;
   /** Set when the latest round found a box taking sales but an in-flight request kept the till where
    * it was. */
   #moveHeld = false;
@@ -106,6 +107,9 @@ export class ServerRouter extends EventTarget {
   }
   get waiting(): boolean {
     return this.#waiting;
+  }
+  get noBoxAnswering(): boolean {
+    return this.#noBoxAnswering;
   }
 
   /** The box requests go to did not answer its latest probe, and either no box took sales in the
@@ -296,8 +300,10 @@ export class ServerRouter extends EventTarget {
         .filter((s) => !probed.includes(s))
         .map((s) => this.#probe(s)),
     );
-    const yes = this.#shown().filter((s) => s.state === "primary");
+    const shown = this.#shown();
+    const yes = shown.filter((s) => s.state === "primary");
     this.#waiting = yes.length === 0;
+    this.#noBoxAnswering = shown.every((s) => s.answered === false);
     this.#moveHeld = false;
     if (yes.length > 0) {
       const best = yes.reduce((a, b) => ((b.term ?? -1) > (a.term ?? -1) ? b : a));
@@ -318,6 +324,7 @@ export class ServerRouter extends EventTarget {
     const signature = JSON.stringify({
       statuses: this.statuses(),
       waiting: this.#waiting,
+      noBoxAnswering: this.#noBoxAnswering,
       current: this.#current,
       standings: this.#servers.map((s) => s.standing ?? null),
       mainSilentSince: this.mainSilentSince,

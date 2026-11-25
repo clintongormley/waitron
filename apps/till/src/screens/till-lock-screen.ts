@@ -295,6 +295,7 @@ export class TillLockScreen extends LitElement {
   @property({ type: Boolean }) canChooseDevice = false;
 
   @property({ type: Boolean }) serverWaiting = false;
+  @property({ type: Boolean }) noBoxAnswering = false;
 
   @property({ type: Boolean }) mainServerSilent = false;
   @property({ attribute: false }) mainSilentSince: number | null = null;
@@ -635,6 +636,7 @@ export class TillLockScreen extends LitElement {
 
   #renderMainServer() {
     return html`<till-main-server-strip
+      .noBoxAnswering=${this.noBoxAnswering}
       panel
       .spareAnswering=${this.spareAnswering}
       .showSwitch=${true}
@@ -653,7 +655,11 @@ export class TillLockScreen extends LitElement {
     if (!this.serverWaiting) return nothing;
     return html`
       <p class="servers status" role="status" data-server-status>
-        ${this.mainServerSilent ? nothing : t("server.waiting_sales")}
+        ${
+          this.mainServerSilent
+            ? nothing
+            : t(this.noBoxAnswering ? "server.none_answering" : "server.waiting_sales")
+        }
         <wt-button
           variant="secondary"
           size=${this.mainServerSilent ? "lg" : "md"}

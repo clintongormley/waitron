@@ -1,6 +1,6 @@
 # A1574 PR 2 · Show connection loss on the open till
 
-The owner said “Build it” and “Split it” on 25 November 2026, recorded under A1574 in `docs/backlog/till.md`. When an open till gets no answer from any known box, show **Can't reach the box. Check that this device is on the venue's WiFi.** In Spanish, use **No se puede conectar con el servidor. Comprueba que este dispositivo esté conectado a la red WiFi del local.** The notice clears or changes when the next completed check gets an answer. Reuse the existing checks. A silent connection on a one-box till can take the live connection's 30-second silence timer plus the probe's 3-second timeout to detect while the page is active.
+The owner said “Build it” and “Split it” on 25 November 2026, recorded under A1574 in `docs/backlog/till.md` at `521b6f1bdda580188e73c42e11eb138a1201522d`. When an open till gets no answer from any known box, show **Can't reach the box. Check that this device is on the venue's WiFi.** In Spanish, use **No se puede conectar con el servidor. Comprueba que este dispositivo esté conectado a la red WiFi del local.** The notice clears or changes when the next completed check gets an answer. Reuse the existing checks. A silent connection on a one-box till can take the live connection's 30-second silence timer plus the probe's 3-second timeout to detect while the page is active.
 
 ## Build and check
 

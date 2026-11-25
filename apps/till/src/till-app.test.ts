@@ -18055,7 +18055,7 @@ describe("till-app follows a server move", () => {
     // present after.
     const router = new ServerRouter({
       origin: BOX,
-      fetchImpl: probeFetch(), // every server is down → a round finds no primary → waiting
+      fetchImpl: answeringFetch({ [BOX]: { acceptingSales: false, term: 2 } }),
       storage: memoryStorage(),
     });
     const api = stubApi();
@@ -18065,12 +18065,31 @@ describe("till-app follows a server move", () => {
     // Not waiting yet (no probe has run) → no banner.
     expect(router.waiting).toBe(false);
     expect(banner()).toBeNull();
-    // A probe round with every server unreachable leaves the router waiting for a server that takes
-    // sales; the `state-changed` it dispatches repaints the app, which now shows the banner.
+    // The box answers but cannot yet sell.
     await router.probeNow();
     await flush(el);
     expect(router.waiting).toBe(true);
     expect(banner()!.textContent).toContain(t("server.waiting_sales"));
+  });
+
+  it("shows WiFi guidance on the PIN screen and Counter while no box replies", async () => {
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: probeFetch(),
+      storage: memoryStorage(),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api: stubApi(), router });
+    await flush(el);
+    await router.probeNow();
+    await flush(el);
+    const status = lock(el)!.shadowRoot!.querySelector("[data-server-status]")!;
+    const words =
+      "No se puede conectar con el servidor. Comprueba que este dispositivo esté conectado a la red WiFi del local.";
+    expect(status.textContent).toContain(words);
+    expect(status.querySelector("[data-check-again]")).not.toBeNull();
+
+    await toCounter(el);
+    expect(el.shadowRoot!.querySelector(".banner[role='status']")?.textContent).toContain(words);
   });
 
   /** A fetch where each listed server answers its `/api/node` with the given body; the rest fail. */
@@ -18570,16 +18589,19 @@ describe("the main-server strip", () => {
     expect(lockStrip(el)).not.toBeNull();
     expect(lockStrip(el)!.spareAnswering).toBe(false);
     await lockStrip(el)!.updateComplete;
+    expect(lockStrip(el)!.shadowRoot!.textContent).toContain(t("server.none_answering"));
     expect(lockStrip(el)!.shadowRoot!.querySelector("[data-switch-to-spare]")).toBeNull();
   });
 
-  it("a venue with no spare shows today's waiting line and no strip", async () => {
+  it("a venue with no spare shows the WiFi line and no strip", async () => {
     const { el, router } = await mount([bothServers[0]!]);
     await signIn(el, ["node.manage"]);
     await silentFor(el, router, 20_000);
     expect(router.spare).toBeUndefined();
     expect(shellStrip(el)).toBeNull();
-    expect(waitingLine(el)).toBeDefined();
+    expect(el.shadowRoot!.querySelector(".banner[role='status']")?.textContent).toContain(
+      t("server.none_answering"),
+    );
   });
 
   const entrance = {

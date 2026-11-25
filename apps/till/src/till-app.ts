@@ -46,6 +46,10 @@ import type { DeviceZoneSelection, DeviceZoneSelectionInput } from "@waitron/ven
 import "./widgets/device-zones-dialog.js";
 import "./widgets/notice-strip.js";
 import "./widgets/main-server-strip.js";
+import {
+  serverConnectionNotice,
+  serverConnectionNoticeStyles,
+} from "./widgets/server-connection-notice.js";
 import { diskStopScreen } from "./widgets/disk-stop-screen.js";
 import "./widgets/cloud-emergency-dialog.js";
 import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
@@ -2338,6 +2342,7 @@ type TicketDeliveryTarget = { id: string; transaction: boolean };
 @customElement("till-app")
 export class TillApp extends LitElement {
   static override styles = [
+    serverConnectionNoticeStyles,
     baseStyles,
     css`
       .finish-refund-list {
@@ -2471,18 +2476,6 @@ export class TillApp extends LitElement {
       .refresh-countdown {
         flex: 1;
         margin: 0;
-      }
-
-      /* The compact no-server-taking-sales banner, muted so it informs without the
-         alarm weight of the danger .error banner above. */
-      .banner {
-        margin: 0 0 var(--wt-space-3);
-        padding: var(--wt-space-2) var(--wt-space-3);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        background: var(--wt-color-surface);
-        color: var(--wt-color-text-muted);
-        text-align: center;
       }
 
       .mode-indicator {
@@ -5852,7 +5845,7 @@ export class TillApp extends LitElement {
       this.#editAttendancePrompt(prompt.id, true);
   }
 
-  #attendanceMessage(): string {
+  #attendanceMessage(noBoxAnswering = false): string {
     const snapshot = this.attendanceSnapshot;
     if (snapshot?.uncertainCommandId) return t("attendance.uncertain");
     if (snapshot?.retryCommand) return t("attendance.retry_response_message");
@@ -5861,9 +5854,10 @@ export class TillApp extends LitElement {
       snapshot?.readError ??
       snapshot?.dayError ??
       snapshot?.approversError;
+    if (noBoxAnswering && (error ?? this.clockSnapshot.refusal)?.code === NO_BOX_ANSWERING)
+      return t("server.none_answering");
     return error ? codeMessage(error.code) : this.#clockMessage();
   }
-
   async #retryAttendance(): Promise<void> {
     if (this.#attendanceNeedsInitialRead) await this.#clocking?.refresh();
     else await this.#attendance?.retryRead();
@@ -23806,7 +23800,6 @@ export class TillApp extends LitElement {
     this.screen = screen;
   }
 
-  /** The lock screen draws its own outage panel. */
   #renderServerNotice() {
     const strip = this.#mainServerStrip();
     if (strip !== undefined)
@@ -23814,6 +23807,7 @@ export class TillApp extends LitElement {
         .panel=${!this.deviceMode}
         .modal=${!this.deviceMode}
         .switchBusy=${this.spareSwitchBusy}
+        .noBoxAnswering=${this.router?.noBoxAnswering ?? false}
         .spareAnswering=${strip.spareAnswering}
         .showSwitch=${!this.deviceMode}
         .refused=${this.mainServerRefused}
@@ -23825,9 +23819,7 @@ export class TillApp extends LitElement {
         @switch-to-spare=${() => void this.#onSwitchToSpare()}
         @start-in-cloud=${() => void this.#onStartInCloud()}
       ></till-main-server-strip>`;
-    return this.router?.waiting
-      ? html`<p class="banner" role="status">${t("server.waiting_sales")}</p>`
-      : nothing;
+    return this.router?.waiting ? serverConnectionNotice(this.router.noBoxAnswering) : nothing;
   }
 
   #inShell(): boolean {
@@ -24821,6 +24813,8 @@ export class TillApp extends LitElement {
 
   override render() {
     const shellFormFactor = this.#inShell() ? this.formFactor : undefined;
+    const noBoxAnswering = this.router?.noBoxAnswering ?? false;
+    const attendanceMessage = this.attendancePage ? this.#attendanceMessage(noBoxAnswering) : "";
     const lateSendWindow = this.lateSendWindow;
     const lateSendApproval = this.lateSendApproval;
     const served = this.#currentServedCommand();
@@ -25303,7 +25297,7 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${this.#renderRefreshNotice("held")} ${this.#renderRefreshNotice("waiting")}
-        ${this.#inShell() ? this.#renderServerNotice() : nothing}
+        ${shellFormFactor !== undefined ? this.#renderServerNotice() : nothing}
         ${
           this.cloudEmergencyOpen && this.cloudEmergency !== undefined
             ? html`<till-cloud-emergency-dialog
@@ -25558,6 +25552,13 @@ export class TillApp extends LitElement {
             : nothing
         }
         ${
+          noBoxAnswering &&
+          (this.frontDoor !== undefined || this.clockPage || this.attendancePage) &&
+          attendanceMessage !== t("server.none_answering")
+            ? serverConnectionNotice(true)
+            : nothing
+        }
+        ${
           this.frontDoor === "chooser"
             ? html`<till-device-chooser
                 .api=${this.api}
@@ -25576,7 +25577,7 @@ export class TillApp extends LitElement {
                       void this.#retryAttendanceCommand();
                     }}
                     .reading=${this.attendanceSnapshot?.reading || this.clockSnapshot.reading}
-                    .error=${this.#attendanceMessage()}
+                    .error=${attendanceMessage}
                     @attendance-edit=${(event: CustomEvent<{ prompt: { id: string } }>) => {
                       event.stopPropagation();
                       this.#editAttendancePrompt(event.detail.prompt.id);
@@ -25620,9 +25621,7 @@ export class TillApp extends LitElement {
                       .canClockIn=${this.clockSnapshot.state?.state === "out"}
                       .error=${this.#clockMessage()}
                     ></till-clock-in-screen>`
-                  : // The shell is keyed on the locale, so a switch rebuilds it in the new language. The
-                    // lock screen also shows after a boot failure, rather than an empty shell.
-                    shellFormFactor !== undefined
+                  : shellFormFactor !== undefined
                     ? keyed(
                         currentLocale(),
                         html`<till-shell
@@ -25728,6 +25727,7 @@ export class TillApp extends LitElement {
                           .deviceId=${this.deviceId}
                           .canChooseDevice=${this.devTab || this.devDevices !== undefined}
                           .serverWaiting=${this.router?.waiting ?? false}
+                          .noBoxAnswering=${noBoxAnswering}
                           .mainServerSilent=${this.#mainServerStrip() !== undefined}
                           .spareAnswering=${this.#mainServerStrip()?.spareAnswering ?? false}
                           .mainSilentSince=${this.router?.mainSilentSince ?? null}

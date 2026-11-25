@@ -6922,8 +6922,8 @@ primitive.
   worded in `--wt-color-danger`; a hovered one's border turns `--wt-color-danger`.
 - **States.** "The main box is not answering." with a **Switch to the spare box** button while
   the spare answers and the button is allowed; the same words without the button on a kitchen
-  display showing its kitchen screen or for a signed-in person without `node.manage`; "No box is
-  answering…" with no button when the spare is silent too; and the refusal in place of those words
+  display showing its kitchen screen or for a signed-in person without `node.manage`; "Can't reach
+  the box…" with no spare-switch button when no box answers; and the refusal in place of those words
   when a press found the main box answering. Under the first line, "Last contact: {n} seconds ago."
   counts up once a second from the main box's last answer, the router's `mainLastAnsweredAt`, or
   from `mainSilentSince` when the main box has not answered since the till loaded (in minutes from
@@ -6932,6 +6932,10 @@ primitive.
   shows with a refusal.
 - **Announcing.** The strip is `role="alert"`; the counting line is `aria-live="off"`, so it is not
   read out every second.
+- **Before a recovery panel applies.** A compact line tells staff to check the venue's WiFi when
+  no known box answers. Enrolment, device choice, clock-in and attendance use only the compact
+  line. If Retry in Check your times was refused during that silence, the message appears beside
+  Retry instead.
 
 Cases: `apps/till/src/widgets/main-server-strip.test.ts`, its `main-server-strip.a11y.test.ts`,
 "main-server strip" in `apps/till/src/till-app.test.ts`, `apps/till/src/screens/till-lock-screen.test.ts`

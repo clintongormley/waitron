@@ -61,12 +61,15 @@ it("says the main server still answers once refused", async () => {
   expect(button(el)).not.toBeNull();
 });
 
-it("says no server answers, with no button, while the spare is silent too", async () => {
+it("shows WiFi guidance, with no switch, when no server answers", async () => {
   const { el } = await mountWidget<TillMainServerStrip>("till-main-server-strip", {
+    noBoxAnswering: true,
     spareAnswering: false,
     showSwitch: true,
   });
-  expect(el.shadowRoot!.textContent).toContain(t("server.none_answering"));
+  expect(el.shadowRoot!.textContent).toContain(
+    "Can't reach the box. Check that this device is on the venue's WiFi.",
+  );
   expect(el.shadowRoot!.textContent).not.toContain(t("server.main_silent"));
   expect(button(el)).toBeNull();
 });

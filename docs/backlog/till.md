@@ -855,16 +855,6 @@ here is asked or built before that. They were separate entries, many of them que
   - W104 (#1225), not acted on: the dialogs were never looked at on a box.
     [Detail](till.md#what-w104-left-open-1225)
 
-## A1574. A till that cannot reach the box says so
-
-Owner, 2026-11-25: "Build it" and "Split it". Seen on an Oppo Find X10 (Chrome 158.0.8127.42,
-installed till app):
-
-- **Losing the WiFi with the till open.** The PIN page said "No box is taking sales right now. The
-  till carries on as soon as one does." while the box was fine. When no box answers: "Can't reach the
-  box. Check that this device is on the venue's WiFi." When a box answers and is not selling, today's
-  words stay. Show the notice on every till screen: "Check your times" showed nothing.
-
 ## Decisions and deliberate limits
 
 - **A1031 pickup counter (watcher, 2026-11-25).** A detached table bill still waiting for handover lists at the first active counter in the sale's department after payment, including when staff moved it by hand at a later counter. With no active counter it uses the recorded zone. Whether a later counter can keep that pickup is an owner's choice.

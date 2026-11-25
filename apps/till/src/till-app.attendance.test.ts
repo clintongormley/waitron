@@ -20,6 +20,7 @@ import {
   attendancePrompt,
 } from "../test/attendance-fixtures.js";
 import type { AttendanceCommandResult, AttendanceInbox } from "./api/client.js";
+import { ServerRouter } from "./api/server-router.js";
 import type { TillApp } from "./till-app.js";
 import type { TillAttendanceQuestions } from "./screens/till-attendance-questions.js";
 
@@ -54,6 +55,65 @@ function inbox(): AttendanceInbox {
 const empty = (): AttendanceInbox => ({ ...inbox(), prompts: [], items: [] });
 
 describe("till attendance sign-in flow", () => {
+  it("keeps Check your times open through an outage and its refused Retry", async () => {
+    const origin = "https://box.example.test";
+    const servers = [
+      { nodeId: "node", url: origin, standing: "serving-primary" as const },
+      {
+        nodeId: "spare",
+        url: "https://spare.example.test",
+        standing: "serving-secondary" as const,
+      },
+    ];
+    let online = false;
+    const router = new ServerRouter({
+      origin,
+      fetchImpl: async () => {
+        if (!online) throw new TypeError("Failed to fetch");
+        return Response.json({ acceptingSales: true, term: 1 });
+      },
+    });
+    const f = await clockApp({ props: { router } });
+    router.setServers(servers);
+    const pending = deferred<AttendanceInbox>();
+    const offline = { code: "server.waiting_sales", status: 503 };
+    f.api.getAttendanceInbox.mockReturnValueOnce(pending.promise).mockRejectedValue(offline);
+    await signIn(f.el);
+    await vi.waitFor(() => expect(f.api.getAttendanceInbox).toHaveBeenCalled());
+    const open = questions(f.el)!;
+    const banner = () => f.el.shadowRoot!.querySelector(".banner[role='status']");
+    const words = "Can't reach the box. Check that this device is on the venue's WiFi.";
+
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    try {
+      await router.probeNow();
+      await vi.advanceTimersByTimeAsync(21_000);
+      await f.el.updateComplete;
+      expect(banner()?.textContent ?? "").toContain(words);
+      expect(f.el.shadowRoot!.querySelector("till-main-server-strip")).toBeNull();
+      expect(questions(f.el)).toBe(open);
+    } finally {
+      vi.useRealTimers();
+      pending.reject(offline);
+    }
+
+    const retry = () => open.shadowRoot!.querySelector("[data-retry]");
+    await vi.waitFor(() => expect(retry()).not.toBeNull());
+    await questionButton(f.el, "[data-retry]");
+    await vi.waitFor(() => expect(f.api.getAttendanceInbox).toHaveBeenCalledTimes(2));
+    expect(open.shadowRoot!.textContent).toContain(words);
+    expect(retry()).not.toBeNull();
+    expect(banner()).toBeNull();
+
+    online = true;
+    await router.probeNow();
+    f.api.getAttendanceInbox.mockResolvedValue(inbox());
+    await questionButton(f.el, "[data-retry]");
+    await vi.waitFor(() => expect(open.inbox?.prompts).toHaveLength(1));
+    expect(open.shadowRoot!.textContent).not.toContain(words);
+    expect(questions(f.el)).toBe(open);
+  });
+
   it("keeps the full-disk strip while attendance questions are open", async () => {
     const f = await clockApp({
       api: {
@@ -913,4 +973,23 @@ it("an initial clock read failure keeps Retry read usable before attendance load
   await vi.waitFor(() => expect(questions(f.el)?.inbox?.prompts.length).toBe(1));
   expect(f.api.getClockState).toHaveBeenCalledTimes(2);
   expect(f.api.sendAttendanceCommand).not.toHaveBeenCalled();
+});
+
+it("uses the connection words when Retry read must retry the initial clock read", async () => {
+  const router = new ServerRouter({
+    origin: "https://box.example.test",
+    fetchImpl: async () => {
+      throw new TypeError("Failed to fetch");
+    },
+  });
+  const f = await clockApp({ props: { router } });
+  await router.probeNow();
+  f.api.getClockState.mockRejectedValue({ code: "server.waiting_sales", status: 503 });
+  await signIn(f.el);
+  await questionButton(f.el, "[data-retry]");
+  await vi.waitFor(() => expect(f.api.getClockState).toHaveBeenCalledTimes(2));
+  expect(questions(f.el)?.shadowRoot?.textContent ?? "").toContain(
+    "Can't reach the box. Check that this device is on the venue's WiFi.",
+  );
+  expect(f.el.shadowRoot!.querySelector(".banner[role='status']")).toBeNull();
 });

@@ -315,6 +315,65 @@ describe("ServerRouter", () => {
     expect(changed).toHaveBeenCalledTimes(2);
   });
 
+  it("publishes silence and HTTP refusals as different states even when neither box sells", async () => {
+    let refuses = false;
+    const down = probeFetch({});
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: (input) =>
+        refuses ? Promise.resolve(new Response(null, { status: 503 })) : down(input),
+      storage: memoryStorage(),
+    });
+    const snapshots: (boolean | undefined)[] = [];
+    router.addEventListener("state-changed", () => snapshots.push(router.noBoxAnswering));
+
+    expect(router.noBoxAnswering).toBe(false);
+    await router.probeNow();
+    refuses = true;
+    await router.probeNow();
+    refuses = false;
+    await router.probeNow();
+
+    expect(router.waiting).toBe(true);
+    expect(router.statuses()[0]!.state).toBe("unreachable");
+    expect(snapshots).toEqual([true, false, true]);
+  });
+
+  it("keeps the last round's silence while one probe is still pending", async () => {
+    const table: Record<string, Answer> = {};
+    const answering = probeFetch(table);
+    let spareReply: Promise<Response> | undefined;
+    const router = new ServerRouter({
+      origin: BOX,
+      fetchImpl: (input) =>
+        String(input).startsWith(CLOUD) && spareReply ? spareReply : answering(input),
+      storage: memoryStorage(),
+    });
+    router.setServers([{ url: BOX }, { url: CLOUD, standing: "serving-secondary" }]);
+    await router.probeNow();
+    expect(router.noBoxAnswering).toBe(true);
+
+    table[BOX] = { acceptingSales: true, term: 2 };
+    let answerSpare!: (response: Response) => void;
+    spareReply = new Promise((resolve) => {
+      answerSpare = resolve;
+    });
+    const round = router.probeNow();
+    try {
+      await vi.waitFor(() => expect(router.statuses()[0]!.state).toBe("primary"));
+      expect(router.noBoxAnswering).toBe(true);
+    } finally {
+      answerSpare(Response.json({ acceptingSales: false, term: 1 }));
+      await round;
+    }
+    expect(router.noBoxAnswering).toBe(false);
+
+    table[BOX] = "down";
+    await router.probeNow();
+    expect(router.waiting).toBe(true);
+    expect(router.noBoxAnswering).toBe(false);
+  });
+
   // `setServers` and a probe round must share one signature gate: if the gate compared only against
   // the last ROUND's signature, this round would match the stale value and skip its dispatch, leaving
   // the display on `unknown` while the server is really `standby`.

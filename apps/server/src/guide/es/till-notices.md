@@ -8,13 +8,18 @@ en las páginas de fichaje y asistencia. Vuelve a la caja para usar **Abrir caj�
 
 Si Waitron no puede verificar este dispositivo para una acción, recarga o vuelve a abrir Waitron en este dispositivo y vuelve a intentarlo.
 
-## Cuando la caja no se abre {#cannot-open}
+## Cuando la caja no puede conectar con el servidor {#cannot-open}
 
 Si ves **No se puede conectar con el servidor**, comprueba que este teléfono esté conectado a la red
 WiFi del local. Deja la página abierta. La caja se abre sola cuando el servidor está listo.
 
 Si ya estás en la red WiFi del local, comprueba que el servidor esté encendido. Si lo está, puede
 que tengas que [volver a instalar su certificado](table-service.md#certificate-trust).
+
+Si la caja ya está abierta y dice **No se puede conectar con el servidor**, comprueba que este
+dispositivo esté conectado a la red WiFi del local. Deja la pantalla abierta mientras la caja
+vuelve a comprobar la conexión. En la pantalla del PIN, pulsa **Comprobar de nuevo** si quieres
+comprobarla al momento. En **Comprueba tus horas**, pulsa **Volver a consultar** si no se pudieron cargar.
 
 ## Lee la línea de avisos {#notice-line}
 
@@ -27,7 +32,8 @@ la lista de los demás avisos, del más grave al menos grave. La lista aparece b
 desplaza la pantalla hacia abajo, así que nunca tapa el pedido. Mientras está abierta, en lugar del
 número aparece **Ocultar**: tócalo para cerrar la lista.
 
-No hay botón para cerrar un aviso. Una pantalla de estación no muestra la línea de avisos.
+No hay botón para cerrar un aviso. En una pantalla de estación, fíjate en el aviso de conexión si
+el servidor deja de responder. La lista de avisos para el personal está en la caja y en el terminal de mano.
 
 ## Qué significa cada aviso {#notices}
 
