@@ -26,11 +26,13 @@ async function fixture() {
   const venueDir = dirname(suite.db.get<{ file: string }>(sql`pragma database_list`)!.file);
   let registration: string | undefined = "first";
   const delivered = vi.fn<CloudConnection["sendStaffReport"]>(async () => "sent");
+  const readRegistration = vi.fn(async () => registration);
   const log = vi.fn();
   let now = new Date("2026-01-01T00:00:00Z");
   return {
     stateDir,
     delivered,
+    readRegistration,
     log,
     setNow: (time: string) => {
       now = new Date(time);
@@ -51,7 +53,7 @@ async function fixture() {
         now: () => now,
         log,
         connection: {
-          errorReportRegistration: async () => registration,
+          errorReportRegistration: readRegistration,
           sendStaffReport: delivered,
         },
       }),
@@ -393,10 +395,28 @@ it("refuses a preview replaced by a newer one while its send was being checked",
   const reports = f.reports();
   const preview = await reports.preview("till", "staff");
   if (!preview.available) throw new Error("Preview unavailable");
+  let startChecking!: () => void;
+  const checking = new Promise<void>((resolve) => {
+    startChecking = resolve;
+  });
+  let resumeSend!: () => void;
+  const mayContinue = new Promise<void>((resolve) => {
+    resumeSend = resolve;
+  });
+  f.readRegistration.mockImplementationOnce(async () => {
+    startChecking();
+    await mayContinue;
+    return "first";
+  });
   const sending = reports.send("till", "staff", preview.id);
-  const newer = await reports.preview("till", "staff");
-  await expect(sending).rejects.toMatchObject({ code: "cloud.request_invalid" });
-  expect(newer.available).toBe(true);
+  try {
+    await Promise.race([checking, sending]);
+    const newer = await reports.preview("till", "staff");
+    expect(newer.available).toBe(true);
+  } finally {
+    resumeSend();
+    await expect(sending).rejects.toMatchObject({ code: "cloud.request_invalid" });
+  }
   expect(f.delivered).not.toHaveBeenCalled();
 });
 
