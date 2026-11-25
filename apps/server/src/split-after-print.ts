@@ -92,7 +92,7 @@ export async function reopenToSplitIn(
   const opened = await openSplitBill(tx, cfg, id, partyId);
   const correctiveId = await creditWholeInvoice(tx, deps, cfg, invoice, {
     reopenedBillId: opened.billId,
-    sessionId: operator.sessionId,
+    tillSessionId: operator.sessionId,
   });
   await abandonPlacedOrder(tx, cfg, id);
   await carryReceivedPayments(tx, id, opened.billId, invoice.id);

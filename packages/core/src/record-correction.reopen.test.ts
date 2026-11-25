@@ -209,7 +209,10 @@ it("credits a bill's ticket whole for a person without sale.rectify when its reo
     .update(workingOrders)
     .set({ status: "abandoned" })
     .where(eq(workingOrders.id, printedBillId));
-  const result = await apply(await wholeCredit(), { reopenedBillId, sessionId: staffSessionId });
+  const result = await apply(await wholeCredit(), {
+    reopenedBillId,
+    tillSessionId: staffSessionId,
+  });
   const [row] = await suite.db.select().from(sales).where(eq(sales.id, result.saleId));
   expect(row).toMatchObject({ authorizedBy: staffId, correctsSaleId: ticketId, total: -1210 });
 });
@@ -224,7 +227,7 @@ it("refuses a partial correction", async () => {
       total: "-6.05",
       lines: [{ ...whole.lines[0]!, quantity: "-1", lineTotal: "-5.00" }],
     },
-    { reopenedBillId, sessionId: staffSessionId },
+    { reopenedBillId, tillSessionId: staffSessionId },
     reopenInvalid(reopenedBillId, "not_whole"),
   );
 });
@@ -233,13 +236,13 @@ it("refuses when no open bill was reopened from the ticket's bill", async () => 
   const unlinked = await bill("open");
   await expectRefused(
     await wholeCredit(),
-    { reopenedBillId: unlinked, sessionId: staffSessionId },
+    { reopenedBillId: unlinked, tillSessionId: staffSessionId },
     reopenInvalid(unlinked, "no_reopened_bill"),
   );
   const unknown = crypto.randomUUID();
   await expectRefused(
     await wholeCredit(),
-    { reopenedBillId: unknown, sessionId: staffSessionId },
+    { reopenedBillId: unknown, tillSessionId: staffSessionId },
     reopenInvalid(unknown, "no_reopened_bill"),
   );
 });
@@ -248,7 +251,7 @@ it("refuses when the reopened bill holds no copy of the ticket's dishes", async 
   const empty = await reopen(printedBillId, 2);
   await expectRefused(
     await wholeCredit(),
-    { reopenedBillId: empty, sessionId: staffSessionId },
+    { reopenedBillId: empty, tillSessionId: staffSessionId },
     reopenInvalid(empty, "dishes_missing"),
   );
 });
@@ -268,7 +271,7 @@ it("refuses when the reopened bill is missing one of the ticket's dishes", async
   });
   await expectRefused(
     await wholeCredit(),
-    { reopenedBillId, sessionId: staffSessionId },
+    { reopenedBillId, tillSessionId: staffSessionId },
     reopenInvalid(reopenedBillId, "dishes_missing"),
   );
 });
@@ -279,7 +282,7 @@ it("refuses when the reopened bill names another bill", async () => {
   const reopenedBillId = await reopen(otherPrinted);
   await expectRefused(
     await wholeCredit(),
-    { reopenedBillId, sessionId: staffSessionId },
+    { reopenedBillId, tillSessionId: staffSessionId },
     reopenInvalid(reopenedBillId, "no_reopened_bill"),
   );
 });
@@ -292,7 +295,7 @@ it("refuses when the reopened bill is no longer open", async () => {
     .where(eq(workingOrders.id, reopenedBillId));
   await expectRefused(
     await wholeCredit(),
-    { reopenedBillId, sessionId: staffSessionId },
+    { reopenedBillId, tillSessionId: staffSessionId },
     reopenInvalid(reopenedBillId, "no_reopened_bill"),
   );
 });
@@ -305,7 +308,7 @@ it("refuses an ended session", async () => {
     .where(eq(tillSessions.id, staffSessionId));
   await expectRefused(
     await wholeCredit(),
-    { reopenedBillId, sessionId: staffSessionId },
+    { reopenedBillId, tillSessionId: staffSessionId },
     { code: "session.not_open", params: { sessionId: staffSessionId } },
   );
 });
@@ -334,7 +337,7 @@ it("credits a replaced ticket's replacement whole on the reopened bill's authori
   );
   const result = await apply(await wholeCredit(replacementId), {
     reopenedBillId,
-    sessionId: staffSessionId,
+    tillSessionId: staffSessionId,
   });
   const [row] = await suite.db.select().from(sales).where(eq(sales.id, result.saleId));
   expect(row).toMatchObject({ authorizedBy: staffId, correctsSaleId: replacementId });
@@ -354,7 +357,7 @@ it("refuses a credit of an earlier correction of the reopened bill's ticket", as
   );
   await expectRefused(
     { ...whole, correctsSaleId: earlierId },
-    { reopenedBillId, sessionId: staffSessionId },
+    { reopenedBillId, tillSessionId: staffSessionId },
     reopenInvalid(reopenedBillId, "no_reopened_bill", earlierId),
   );
 });
@@ -363,7 +366,8 @@ it("records the session's person even when the reopen kind also names a manager"
   const reopenedBillId = await reopen(printedBillId);
   const authz = {
     reopenedBillId,
-    sessionId: staffSessionId,
+    tillSessionId: staffSessionId,
+    sessionId: managerSessionId,
     override: { personId: managerId, pin: "2468" },
     managementSessionId: crypto.randomUUID(),
   };

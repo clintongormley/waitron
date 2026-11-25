@@ -94,7 +94,7 @@ export interface RecordCorrectionInput {
     | AuthzInput
     | { managementSessionId: string }
     | { invoiceCorrectionId: string }
-    | { reopenedBillId: string; sessionId: string };
+    | { reopenedBillId: string; tillSessionId: string };
   clock: TrustedClock;
 }
 
@@ -171,14 +171,12 @@ export async function recordCorrection(
 
   const series = await requireCorrectiveSeries(tx, input.seriesId, input.nodeId, "corrective");
 
-  // The reopen kind carries `sessionId` too, so it is tested before the last branch, which would
-  // send it to `authorize` for `sale.rectify`.
   const authorization =
     "reopenedBillId" in input.authz
       ? await authorizeReopenedCredit(tx, {
           saleId: correctsSaleId,
           reopenedBillId: input.authz.reopenedBillId,
-          sessionId: input.authz.sessionId,
+          sessionId: input.authz.tillSessionId,
           wholeInvoice: input.wholeInvoice === true,
         })
       : "invoiceCorrectionId" in input.authz
