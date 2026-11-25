@@ -101,7 +101,16 @@ export class TillLockScreen extends LitElement {
         margin-block-start: var(--wt-space-3);
       }
 
+      .pin-notices > :first-child {
+        margin-block-start: 0;
+      }
+
+      .pin-notices:focus-visible {
+        outline-offset: calc(-2 * var(--wt-focus-offset));
+      }
+
       .compact {
+        --wt-till-pin-status-height: 2lh;
         --wt-till-keypad-row-height: var(--wt-tap-min);
         max-block-size: 45dvh;
         overflow: auto;
@@ -164,6 +173,14 @@ export class TillLockScreen extends LitElement {
 
       .pin-status .error {
         color: var(--wt-color-danger);
+      }
+
+      .pin-screen .pin-heading {
+        margin-block-end: var(--wt-space-3);
+      }
+
+      .pin-screen .pin-status {
+        margin-block-end: 0;
       }
 
       .servers,
@@ -693,6 +710,11 @@ export class TillLockScreen extends LitElement {
   #renderPin(person: StaffMember) {
     const throttled = this.#throttle.remaining > 0;
     const error = this.errorKey;
+    const hasNotices =
+      this.serverWaiting ||
+      this.notices.length > 0 ||
+      this.loggedOutByOther ||
+      this.clockNotice !== undefined;
     let status = "";
     if (throttled) status = t("pin.throttled");
     else if (this.signingIn) status = t("login.signing_in");
@@ -708,7 +730,18 @@ export class TillLockScreen extends LitElement {
         >
         ${throttled ? html`<span class="pin-countdown" aria-hidden="true">${t("login.throttled").replace("{n}", String(this.#throttle.remaining))}</span>` : nothing}
       </div>
-      ${this.compact ? nothing : html`<div class="pin-notices">${this.#renderNotices()}${this.#renderServers()}</div>`}
+      ${
+        this.compact
+          ? nothing
+          : html`<div
+              class="pin-notices"
+              role=${hasNotices ? "region" : nothing}
+              aria-label=${hasNotices ? t("staff_notice.list") : nothing}
+              tabindex=${hasNotices ? 0 : nothing}
+            >
+              ${this.#renderServers()}${this.#renderNotices()}
+            </div>`
+      }
       <div class="pad-wrap" ?inert=${throttled}>
         <till-numeric-pad
           mode="pin"

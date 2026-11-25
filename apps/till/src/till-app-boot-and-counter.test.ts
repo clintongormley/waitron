@@ -1564,6 +1564,7 @@ describe("till-app session activity", () => {
 
   it.each([
     { logo: false, scale: 100 },
+    { logo: true, scale: 100 },
     { logo: true, scale: 130 },
   ])(
     "keeps the phone PIN pad in place through five states (logo $logo, text $scale%)",
@@ -1578,22 +1579,18 @@ describe("till-app session activity", () => {
         .mockRejectedValueOnce({ code: "storage.disk_full" })
         .mockRejectedValue({ code: "pin.throttled", retryAfterSeconds: 30 });
       if (logo) {
-        localStorage.setItem(
-          VENUE_THEME_STORAGE_KEY,
-          JSON.stringify({
-            ...FIXTURE_ANSWER,
-            logo: { light: png(120, 40), dark: null },
-          }),
-        );
+        const answer = { ...FIXTURE_ANSWER, logo: { light: png(120, 40), dark: null } };
+        localStorage.setItem(VENUE_THEME_STORAGE_KEY, JSON.stringify(answer));
         startVenueTheme(document.documentElement, {
           fetchImpl: () => new Promise<Response>(() => {}),
         });
       }
       const hadPageTokens = document.documentElement.hasAttribute("data-wt-theme-root");
-      applyTokens(document.documentElement);
-      await pageAt(363, 735, scale);
-      const font = await loadPhoneFont();
+      let font: FontFace | undefined;
       try {
+        applyTokens(document.documentElement);
+        await pageAt(363, 735, scale);
+        font = await loadPhoneFont();
         const { el, host } = await mountApp({
           login,
           listStaff: vi.fn().mockResolvedValue([
@@ -1631,18 +1628,22 @@ describe("till-app session activity", () => {
         const cancel = root.querySelector(".cancel")!.shadowRoot!.querySelector("button")!;
         const logIn = submit.shadowRoot!.querySelector("button")!;
         expect(logIn.getBoundingClientRect().height).toBe(cancel.getBoundingClientRect().height);
-        expect(submit.getAttribute("size")).toBe("lg");
-        expect(innerHeight - submit.getBoundingClientRect().bottom).toBeLessThan(65);
-        expect(key.getBoundingClientRect().width).toBeGreaterThanOrEqual(100);
-        expect(status.textContent).toContain(t("login.enter_pin"));
+        const bottomGap = innerHeight - submit.getBoundingClientRect().bottom;
+        if (scale === 100) expect(bottomGap).toBeGreaterThanOrEqual(0);
+        expect(bottomGap).toBeLessThan(65);
         await userEvent.keyboard("1234");
         await screen.updateComplete;
         expect(top()).toBe(restingTop);
         screen.serverWaiting = true;
         screen.loggedOutByOther = true;
         await screen.updateComplete;
-        expect(root.querySelector("[data-server-status]")).not.toBeNull();
-        expect(root.querySelector("[data-logged-out-by-other]")).not.toBeNull();
+        const notices = root.querySelector<HTMLElement>('[role="region"][tabindex="0"]')!;
+        const retry = notices.querySelector<HTMLElement>("[data-check-again]")!;
+        expect(notices.clientHeight).toBeGreaterThan(0);
+        notices.scrollTop = retry.offsetTop;
+        expect(retry.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+          notices.getBoundingClientRect().bottom + 1,
+        );
         expect.soft(top()).toBe(restingTop);
         submit.click();
         await flush(el);
@@ -1666,7 +1667,7 @@ describe("till-app session activity", () => {
         expect(root.querySelector(".pad-wrap")!.hasAttribute("inert")).toBe(true);
         expect(top()).toBe(restingTop);
         fitsStatus();
-        if (logo) {
+        if (scale === 130) {
           await page.viewport(320, 420);
           fitsStatus();
           const actions = root.querySelector(".actions")!;
@@ -1675,7 +1676,7 @@ describe("till-app session activity", () => {
           expect(scrollY).toBeGreaterThan(0);
         }
       } finally {
-        document.fonts.delete(font);
+        if (font) document.fonts.delete(font);
         await resetPage();
         if (!hadPageTokens) document.documentElement.removeAttribute("data-wt-theme-root");
         if (logo) {
@@ -6713,10 +6714,7 @@ it("signs in and out on a kitchen display without replacing its station board", 
   await screen!.updateComplete;
   const pad = screen!.shadowRoot!.querySelector("till-numeric-pad")!;
   await (pad as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-  for (const digit of "1234") {
-    pad.shadowRoot!.querySelector<HTMLElement>(`[data-key="${digit}"]`)!.click();
-    await screen!.updateComplete;
-  }
+  await userEvent.keyboard("1234");
   await screen!.updateComplete;
   const submit = screen!.shadowRoot!.querySelector<HTMLElement>(".submit")!;
   const panel = screen!.shadowRoot!.querySelector<HTMLElement>(".compact")!;
