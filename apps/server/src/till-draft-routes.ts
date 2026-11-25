@@ -1,5 +1,5 @@
 import { withIssuanceTransaction } from "@waitron/core";
-import { workingOrders, parties, withTransaction, newId, workingOrderLines } from "@waitron/db";
+import { workingOrders, parties, withTransaction, workingOrderLines } from "@waitron/db";
 import type { PinThrottle } from "@waitron/identity";
 import { readRawJsonBody, readJsonBody, requireUuidParam } from "@waitron/server-kit";
 import { AppError, thousandthsToDecimal } from "@waitron/shared";
@@ -16,6 +16,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { moveWouldSend } from "./move-bill.js";
 import { requireDining } from "./order-dining.js";
 import {
+  draftPricingLine,
   readDrafts,
   type BillEditState,
   saveDraft,
@@ -26,7 +27,6 @@ import {
 } from "./order-drafts.js";
 import { partyFamily, readBillsOfParties, partyZone } from "./parties.js";
 import { requestCfg } from "./request-config.js";
-import { RETAINED_COURSE } from "./retained-course.js";
 import { readBillLines } from "./stored-order-lines.js";
 import { groupCommand, allergyCommand } from "./till-order-commands.js";
 import { named } from "./till-order-zones.js";
@@ -251,19 +251,8 @@ export function mountTillDraftRoutes(
         const priced = await priceOrderLines(
           tx,
           cfg,
-          newId(),
-          lines.map((line) => ({
-            menuItemId: line.menuItemId,
-            quantity: line.quantity,
-            options: line.options,
-            extras: line.extras,
-            note: line.note ?? undefined,
-            variantId: line.variantId ?? undefined,
-            menuVersionId: line.menuVersionId ?? undefined,
-            courseId: line.courseId ?? undefined,
-            [RETAINED_COURSE]: true,
-            makeAt: line.makeAt,
-          })),
+          draft.billId,
+          lines.map((line) => draftPricingLine(line, draft.lines.indexOf(line), false)),
           zoneId ?? undefined,
           undefined,
           "ignore",

@@ -125,6 +125,7 @@ import {
   type RefundMoney,
 } from "./bill-payment-money.js";
 import { bumpPartyRevision, fingerprint } from "./parties.js";
+import { parseSetMenuWireLines } from "./set-menu-wire-lines.js";
 import {
   filedLines,
   priceOrderInvoice,
@@ -1850,6 +1851,7 @@ async function saveCounterBasket(
   status: typeof workingOrders.$inferSelect.status | undefined,
 ): Promise<void> {
   refuseUnavailableInvoiceRequest(basket.invoiceType, basket.recipient);
+  const lines = parseSetMenuWireLines(basket.lines);
   if (status !== undefined) {
     if (status !== "open") throw new AppError("working_order.not_open", { workingOrderId });
     await refusePaymentInFlight(tx, [workingOrderId]);
@@ -1865,6 +1867,7 @@ async function saveCounterBasket(
         workingOrderId,
         {
           ...basket,
+          lines,
           revision: basket.revision,
           expectedEdit: req.expectedEdit,
           dining: req.dining,
@@ -1887,8 +1890,8 @@ async function saveCounterBasket(
   }
   if (basket.revision !== undefined)
     throw new AppError("working_order.not_open", { workingOrderId });
-  if (basket.lines.length === 0) throw new AppError("sale.empty_basket", {});
-  await createOpenOrder(tx, cfg, workingOrderId, basket.lines, null, {
+  if (lines.length === 0) throw new AppError("sale.empty_basket", {});
+  await createOpenOrder(tx, cfg, workingOrderId, lines, null, {
     kitchenNote: basket.kitchenNote,
     zoneId: basket.zoneId,
     creditedTo: operatorId,

@@ -166,10 +166,10 @@ async function printedItems(saleId: string): Promise<string[]> {
 }
 
 const DIVIDED_ROWS = [
-  { name: "Lunch menu", lineGross: 0, setMenuPart: -1400, vatRate: 1000 },
   { name: "Soup", lineGross: 358, setMenuPart: 358, vatRate: 1000 },
   { name: "Hake", lineGross: 814, setMenuPart: 814, vatRate: 1000 },
   { name: "Lemonade", lineGross: 228, setMenuPart: 228, vatRate: 2100 },
+  { name: "Lunch menu", lineGross: 0, setMenuPart: -1400, vatRate: 1000 },
 ];
 
 describe("a whole credit", () => {

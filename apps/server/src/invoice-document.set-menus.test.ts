@@ -23,7 +23,6 @@ import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { inTx, seatWithNoAllergies, type PartyVenue } from "./testing/party-venue.js";
 import {
   sendSpecDishes,
-  setSpecCount,
   setupSetMenuSpecVenue,
   specBill,
   specDeps,
@@ -111,23 +110,30 @@ async function pdfText(bytes: Uint8Array): Promise<string> {
 
 const COVERED = ["Soup", "Hake", "Sea bass"];
 
+/** The spec bill's full-invoice rows: its two Sirloin surcharges, then its set menus in the order
+ * of their first dishes. */
+function expectSpecBillRows(documentRows: string[][]) {
+  expect(documentRows).toEqual([
+    ["Sirloin", "4,55", "4,55"],
+    ["Sirloin", "4,55", "4,55"],
+    ["Daily menu", "12,73", "12,73"],
+    ["Daily menu", "12,73", "12,73"],
+    ["Daily menu", "12,73", "12,73"],
+    ["Special menu", "18,18", "18,18"],
+  ]);
+}
+
 it.each([
   ["the PDF", readInvoiceDocument],
   ["the email", readReceiptEmailDocument],
 ] as const)("the full invoice lists set menus and surcharges: %s", async (surface, read) => {
   const { tabId } = await specBill(spec, "fire");
   await asFullInvoice(tabId);
-  await payWhole(tabId, "73.00");
+  await payWhole(tabId, "72.00");
   const saleId = await saleOf(tabId);
   const document = await inTx(venue, (tx) => read(venue.backend, tx, venue.cfg, saleId));
   expect(document.result.invoiceType).toBe("F1");
-  expect(rows(document)).toEqual([
-    ["Daily menu", "12,73", "12,73"],
-    ["Daily menu", "12,73", "12,73"],
-    ["Special menu", "18,18", "18,18"],
-    ["Special menu", "18,18", "18,18"],
-    ["Sirloin", "4,55", "4,55"],
-  ]);
+  expectSpecBillRows(rows(document));
   const pdf =
     surface === "the PDF"
       ? await renderInvoicePdf(document)
@@ -137,13 +143,12 @@ it.each([
   expect(text).toContain("4,55");
   expect(text).not.toContain("+4,55");
   for (const covered of COVERED) expect(text).not.toContain(covered);
-  expect(text.match(/Sirloin/g)).toHaveLength(1);
-  expect(text).toContain("73,00");
+  expect(text.match(/Sirloin/g)).toHaveLength(2);
+  expect(text).toContain("72,00");
 });
 
 it("a covered soup with bread keeps its bread's figures on the full invoice", async () => {
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  await setSpecCount(spec, bill.tabId, spec.daily, 2);
   await sendSpecDishes(
     spec,
     bill,
@@ -154,16 +159,15 @@ it("a covered soup with bread keeps its bread's figures on the full invoice", as
     "fire",
   );
   await asFullInvoice(bill.tabId);
-  await payWhole(bill.tabId, "29.50");
+  await payWhole(bill.tabId, "15.50");
   const saleId = await saleOf(bill.tabId);
   const document = await inTx(venue, (tx) =>
     readInvoiceDocument(venue.backend, tx, venue.cfg, saleId),
   );
   expect(rows(document)).toEqual([
-    ["Daily menu", "12,73", "12,73"],
-    ["Daily menu", "12,73", "12,73"],
     ["Soup", "", ""],
     ["Bread", "1,36", "1,36"],
+    ["Daily menu", "12,73", "12,73"],
   ]);
 });
 
@@ -172,7 +176,7 @@ it("a covered soup with bread keeps its bread's figures on the full invoice", as
 it("a replacement (R4) of a set-menu invoice follows the same rule", async () => {
   const { tabId } = await specBill(spec, "fire");
   await asFullInvoice(tabId);
-  await payWhole(tabId, "73.00");
+  await payWhole(tabId, "72.00");
   const saleId = await saleOf(tabId);
   const document = await inTx(venue, async (tx) => {
     await refusedByAeat(tx, saleId);
@@ -188,13 +192,7 @@ it("a replacement (R4) of a set-menu invoice follows the same rule", async () =>
     return readCustomerInvoiceDocument(venue.backend, tx, venue.cfg, replacementId);
   });
   expect(document.result.invoiceType).toBe("R4");
-  expect(rows(document)).toEqual([
-    ["Daily menu", "12,73", "12,73"],
-    ["Daily menu", "12,73", "12,73"],
-    ["Special menu", "18,18", "18,18"],
-    ["Special menu", "18,18", "18,18"],
-    ["Sirloin", "4,55", "4,55"],
-  ]);
+  expectSpecBillRows(rows(document));
   const text = await pdfText(await renderInvoicePdf(document));
   for (const covered of COVERED) expect(text).not.toContain(covered);
 });

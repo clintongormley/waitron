@@ -47,12 +47,13 @@ async function judgeHeldSetMenuDishes(
   lines: readonly {
     id: string;
     workingOrderId: string;
-    setMenuRole: "set_menu" | "dish" | null;
+    setMenuId: string | null;
     sentAt: string | null;
   }[],
   lateSend: LateSendConfirmation | undefined,
 ): Promise<void> {
-  const dishes = lines.filter(({ setMenuRole }) => setMenuRole === "dish");
+  // Ordered from a set-menu folder, whatever the grouping made of it.
+  const dishes = lines.filter(({ setMenuId }) => setMenuId !== null);
   if (dishes.length === 0) return;
   const kitchen = await dishKitchenItems(
     tx,
@@ -166,7 +167,7 @@ export async function fireHeldLine(
           id: workingOrderLines.id,
           groupId: workingOrderLines.groupId,
           quantity: workingOrderLines.quantity,
-          setMenuRole: workingOrderLines.setMenuRole,
+          setMenuId: workingOrderLines.setMenuId,
           sentAt: workingOrderLines.sentAt,
           workingOrderId: workingOrderLines.workingOrderId,
           billStatus: workingOrders.status,

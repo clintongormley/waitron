@@ -1,4 +1,3 @@
-import "../widgets/set-menu-counts.js";
 import type { ChangeAvailability, ChangeOptionAvailability } from "../widgets/product-info.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
 import type { BillBalance, MenuState } from "../api/client.js";
@@ -34,6 +33,7 @@ import {
 import { lineGross } from "../state/order-line.js";
 import { lineProductName } from "../widgets/product-name.js";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
+import { notCheapestText } from "../widgets/set-menu-presentation.js";
 import "../widgets/menu-browser.js";
 import "../widgets/basket.js";
 import "../widgets/last-added.js";
@@ -144,6 +144,13 @@ export class TillCounterScreen extends LitElement {
       .total-cell {
         grid-column: 2;
         grid-row: 2;
+      }
+      .not-cheapest {
+        margin: 0;
+        padding: 0 var(--wt-space-4) var(--wt-space-3);
+        font-family: var(--wt-font-family);
+        font-size: var(--wt-font-size-md);
+        color: var(--wt-color-text-muted);
       }
       .payment-cell {
         grid-column: 2;
@@ -288,14 +295,6 @@ export class TillCounterScreen extends LitElement {
     moves: readonly DishMove[],
   ) => Promise<string | undefined>;
 
-  #addSetMenu = (menuId: string): Promise<string | undefined> => {
-    const count =
-      this.setMenuBill === undefined
-        ? 0
-        : menusWithCopies(this.setMenuBill).filter(({ copy }) => copy.setMenuId === menuId).length;
-    return this.saveSetMenuCount?.(menuId, count + 1) ?? Promise.resolve(undefined);
-  };
-
   readonly #browserProducts = memoVisibleProducts();
   readonly #searchProducts = memoVisibleProducts();
   readonly #unfilteredProducts = memoVisibleProducts();
@@ -329,8 +328,6 @@ export class TillCounterScreen extends LitElement {
       .setMenuBill=${copies.length === 0 ? undefined : this.setMenuBill}
       .setMenuCopies=${copies}
       .setMenuCourses=${this.setMenuCourses}
-      .addSetMenu=${this.#addSetMenu}
-      .moveSetMenuDishes=${this.moveSetMenuDishes}
       .setMenuDishNames=${new Map(
         this.store.lines.flatMap((line) =>
           line.setMenuId === undefined || line.workingOrderLineId === undefined
@@ -437,6 +434,8 @@ export class TillCounterScreen extends LitElement {
 
   #gridBody(): TemplateResult {
     const { placedPrice, total } = this.#setMenuPrices();
+    const notCheapest =
+      this.setMenuBill === undefined ? undefined : notCheapestText(this.setMenuBill);
     const balance = this.overpaidBalance;
     const overpaid = balance != null && overpaidOf(balance) !== null ? balance : null;
     return html`<div class="body grid-body">
@@ -463,19 +462,6 @@ export class TillCounterScreen extends LitElement {
             this,
             this.stage === "collect" || this.busy || this.orderInFlight,
           )}
-          ${
-            this.stage === "order" &&
-            this.store.dining === "takeaway" &&
-            this.setMenuCopies.length > 0
-              ? html`<till-set-menu-counts
-                  .bill=${this.setMenuBill ?? null}
-                  .draft=${this.store.lines}
-                  .onSale=${this.setMenuCopies.map(({ copy }) => copy)}
-                  .busy=${this.store.editsLocked || this.busy || this.orderInFlight}
-                  .saveCount=${this.saveSetMenuCount}
-                ></till-set-menu-counts>`
-              : nothing
-          }
           <till-basket
             stacked
             .store=${this.store}
@@ -494,6 +480,7 @@ export class TillCounterScreen extends LitElement {
         </div>
         <div class="total-cell">
           <till-total .store=${this.store} .previewTotal=${total}></till-total>
+          ${notCheapest === undefined ? nothing : html`<p class="not-cheapest" data-not-cheapest>${notCheapest}</p>`}
         </div>
         <div class="payment-cell">
           ${

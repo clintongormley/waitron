@@ -24,9 +24,9 @@ import { inTx, type PartyVenue } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   addSpecLunch,
+  groupLunchBillByHand,
   lunchBill,
   sendSpecDishes,
-  setSpecCount,
   setupSetMenuSpecVenue,
   specDeps,
   specRows,
@@ -190,10 +190,10 @@ function filedRows(ticket: TillSaleResult) {
 }
 
 /** The 80 mm full invoice's item lines, spaces collapsed: the unbroken run of lines starting with
- * a quantity, from the set menu's on. */
+ * a quantity, under the item table's headings. */
 function itemLines(text: string): string[] {
   const lines = text.split("\n").map((line) => line.replace(/\s+/gu, " ").trim());
-  const first = lines.findIndex((line) => /Lunch menu/u.test(line));
+  const first = lines.findIndex((line) => /^Uds Concepto/u.test(line)) + 1;
   const end = lines.findIndex((line, at) => at > first && !/^\d+ /u.test(line));
   return lines.slice(first, end === -1 ? undefined : end);
 }
@@ -227,16 +227,16 @@ async function both(billId: string) {
 }
 
 const DIVIDED_FIGURES = [
-  ["Lunch menu", "1", "", "", "", ""],
   ["Soup", "1", "3.25", "3.25", "10.00", "3.58"],
   ["Hake", "1", "7.40", "7.40", "10.00", "8.14"],
   ["Lemonade", "1", "1.88", "1.88", "21.00", "2.28"],
+  ["Lunch menu", "1", "", "", "", ""],
 ];
 const DIVIDED_PAGE = [
-  ["Lunch menu", "1", "", "", "", ""],
   ["Soup", "1", "3,25", "3,25", "10%", "3,58"],
   ["Hake", "1", "7,40", "7,40", "10%", "8,14"],
   ["Lemonade", "1", "1,88", "1,88", "21%", "2,28"],
+  ["Lunch menu", "1", "", "", "", ""],
 ];
 const DIVIDED_VAT = [
   { rate: "10.00", base: "10.65", tax: "1.07" },
@@ -254,10 +254,10 @@ describe("the full invoice of a takeaway set menu divided between 10% and 21%", 
       await issue(bill.tabId, "14.00");
       const { settled, document, printed } = await both(bill.tabId);
       expect(itemLines(printed)).toEqual([
-        "1 Lunch menu",
         "1 Soup 3,25 3,25 10%",
         "1 Hake 7,40 7,40 10%",
         "1 Lemonade 1,88 1,88 21%",
+        "1 Lunch menu",
       ]);
       expect(settled.invoiceType).toBe("F1");
       expect(filedRows(settled)).toEqual(DIVIDED_FIGURES);
@@ -274,30 +274,31 @@ describe("the full invoice of a takeaway set menu divided between 10% and 21%", 
     await payWhole(bill.tabId, "12.60");
     const { settled, document } = await both(bill.tabId);
     const expected = [
-      ["Lunch menu", "1", "", "", "", ""],
       ["Soup", "1", "2.93", "2.93", "10.00", "3.22"],
       ["Hake", "1", "6.66", "6.66", "10.00", "7.33"],
       ["Lemonade", "1", "1.69", "1.69", "21.00", "2.05"],
+      ["Lunch menu", "1", "", "", "", ""],
     ];
     expect(filedRows(settled)).toEqual(expected);
     expect(filedRows(document.result as TillSaleResult)).toEqual(expected);
     expect(a4Rows(document)).toEqual([
-      ["Lunch menu", "1", "", "", "", ""],
       ["Soup", "1", "2,93", "2,93", "10%", "3,22"],
       ["Hake", "1", "6,66", "6,66", "10%", "7,33"],
       ["Lemonade", "1", "1,69", "1,69", "21%", "2,05"],
+      ["Lunch menu", "1", "", "", "", ""],
     ]);
     expect(settled.total).toBe("12.60");
   });
 
   it("leaves out a dish that files 0.00 in its divided set menu when a one-rate set menu is on the same bill", async () => {
     const bill = await lunchBill(spec, lunch, lunch.versionId, [rollItem]);
-    await setSpecCount(spec, bill.tabId, spec.daily, 1);
     const daily = { ...spec.daily, versionId: lunch.versionId };
     await sendSpecDishes(spec, bill, [
       { dish: "Soup", from: daily },
       { dish: "Hake", from: daily },
     ]);
+    // The grouping leaves a dish at 0.00 out of every set menu, so the bill is grouped by hand.
+    await groupLunchBillByHand(spec, lunch, bill.tabId);
     await payWhole(bill.tabId, "28.00");
     const { settled, document } = await both(bill.tabId);
     const expected = [...DIVIDED_FIGURES, ["Daily menu", "1", "12.73", "12.73", "10.00", "14.00"]];

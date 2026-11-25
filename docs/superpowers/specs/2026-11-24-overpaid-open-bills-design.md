@@ -304,6 +304,9 @@ request yet and still being edited) or **L** (`feat/give-money-back-till`).
   `assertLinesKeptExcess` `:636`. Callers: `adjustments-apply.ts:1420`, `bill-actions.ts:369`,
   `table-actions.ts:431`, `set-menu-count.ts:158`, `working-order-removal.ts:190,210,276`,
   `working-order-line-edits.ts:1150`. All go; `readBillExcess` (`:621`) stays.
+  _2026-11-25: A1515-3 PR 2b (#4313) deletes `set-menu-count.ts` and adds calls of this refusal in
+  `working-order-open.ts`, `working-order-removal.ts` and `working-order-transfer.ts`, where working
+  out a bill's set menus again can leave it below what it received._
 - **Pending money:** each caller also refuses card money in flight (`refusePaymentInFlight` by
   `bumpRevision`, `working-order-edit-state.ts:230,266`; `set-menu-count.ts:123`;
   `adjustments-apply.ts:815`). Read, not run for each.

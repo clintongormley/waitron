@@ -20,13 +20,13 @@ import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { inTx, order, type PartyVenue } from "./testing/party-venue.js";
 import {
   addSpecLunch,
+  groupLunchBillByHand,
   lunchBill,
   printSpecBill,
   serveSpecBill,
   setupSetMenuSpecVenue,
   specDeps,
   sendSpecDishes,
-  setSpecCount,
   specRows,
   type SpecLunch,
   type SpecVenue,
@@ -126,8 +126,13 @@ async function saleIdOf(billId: string) {
 /** The printed lines from the first item to the end of the VAT table, spaces collapsed. */
 function itemsAndVat(text: string): string[] {
   const lines = text.split("\n").map((line) => line.replace(/\s+/gu, " ").trim());
-  const first = lines.findIndex((line) => /Lunch menu/u.test(line));
-  const total = lines.findIndex((line, at) => at > first && /^TOTAL/iu.test(line));
+  const total = lines.findIndex((line) => /^TOTAL/iu.test(line));
+  // The items start after the last line giving a date and time.
+  const dated = lines
+    .slice(0, total)
+    .map((line) => /\d{4}, \d{2}:\d{2}$/u.test(line))
+    .lastIndexOf(true);
+  const first = dated + 1;
   const vat = lines.slice(total + 1).filter((line) => /\d+ ?%/u.test(line));
   return [
     ...lines.slice(first, total).filter((line) => line !== "" && !/^-+$/u.test(line)),
@@ -189,10 +194,10 @@ async function hakeSupplement(cents: number | null) {
 }
 
 const DIVIDED = [
-  "1 Lunch menu 14,00",
   "1 Soup A",
   "1 Hake A",
   "1 Lemonade B",
+  "1 Lunch menu 14,00",
   "A 10% 10,65 1,07 11,72",
   "B 21% 1,88 0,40 2,28",
 ];
@@ -218,10 +223,10 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
       await printSpecBill(spec, bill.partyId, bill.tabId);
       const { original, settled, bySaleId } = await prints(bill.tabId);
       expect(itemsAndVat(original)).toEqual([
-        "1 Lunch menu 14,00",
         "1 Soup A",
         "1 Hake +2,00 A",
         "1 Lemonade B",
+        "1 Lunch menu 14,00",
         "A 10% 12,47 1,25 13,72",
         "B 21% 1,88 0,40 2,28",
       ]);
@@ -238,11 +243,11 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
     await printSpecBill(spec, bill.partyId, bill.tabId);
     const { original, settled, bySaleId } = await prints(bill.tabId);
     expect(itemsAndVat(original)).toEqual([
-      "1 Lunch menu 14,00",
-      expect.stringMatching(/^Descuento 10 ?% -1,40$/u),
       "1 Soup A",
       "1 Hake A",
       "1 Lemonade B",
+      "1 Lunch menu 14,00",
+      expect.stringMatching(/^Descuento 10 ?% -1,40$/u),
       "A 10% 9,59 0,96 10,55",
       "B 21% 1,69 0,36 2,05",
     ]);
@@ -282,10 +287,10 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
       creditId,
     );
     expect(itemsAndVat(credit)).toEqual([
-      "-1 Lunch menu -14,00",
       "-1 Soup A",
       "-1 Hake A",
       "-1 Lemonade B",
+      "-1 Lunch menu -14,00",
       "A 10% -10,65 -1,07 -11,72",
       "B 21% -1,88 -0,40 -2,28",
     ]);
@@ -298,10 +303,10 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
     await printSpecBill(spec, bill.partyId, bill.tabId);
     const { original, settled, bySaleId } = await prints(bill.tabId);
     expect(itemsAndVat(original)).toEqual([
-      "1 Lunch menu 14,00",
       "1 Soup A",
       "1 Hake A",
       "1 Lemonade B",
+      "1 Lunch menu 14,00",
       "1 Agua mineral 2,00 A",
       expect.stringMatching(/^Descuento 100 ?% -2,00 A$/u),
       // 14.00 shared 12.25 : 1.75 by menu price, the 12.25 divided 3.13, 7.12 and 2.00.
@@ -314,14 +319,16 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
 
   it("lists a dish with no weight under its divided set menu, with the letter of the rate it is filed at", async () => {
     const bill = await lunchBill(spec, lunch, lunch.versionId, [rollItem]);
+    // The grouping leaves a dish at 0.00 out of every set menu, so the bill is grouped by hand.
+    await groupLunchBillByHand(spec, lunch, bill.tabId);
     await printSpecBill(spec, bill.partyId, bill.tabId);
     const { original, settled, bySaleId } = await prints(bill.tabId);
     expect(itemsAndVat(original)).toEqual([
-      "1 Lunch menu 14,00",
       "1 Soup A",
       "1 Hake A",
       "1 Lemonade B",
       "1 Bread roll B",
+      "1 Lunch menu 14,00",
       "A 10% 10,65 1,07 11,72",
       "B 21% 1,88 0,40 2,28",
     ]);
@@ -331,20 +338,21 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
 
   it("lists a dish with no weight under its divided set menu when a one-rate set menu is on the same bill", async () => {
     const bill = await lunchBill(spec, lunch, lunch.versionId, [rollItem]);
-    await setSpecCount(spec, bill.tabId, spec.daily, 1);
     const daily = { ...spec.daily, versionId: lunch.versionId };
     await sendSpecDishes(spec, bill, [
       { dish: "Soup", from: daily },
       { dish: "Hake", from: daily },
     ]);
+    // The grouping leaves a dish at 0.00 out of every set menu, so the bill is grouped by hand.
+    await groupLunchBillByHand(spec, lunch, bill.tabId);
     await printSpecBill(spec, bill.partyId, bill.tabId);
     const { original, settled, bySaleId } = await prints(bill.tabId);
     expect(itemsAndVat(original)).toEqual([
-      "1 Lunch menu 14,00",
       "1 Soup A",
       "1 Hake A",
       "1 Lemonade B",
       "1 Bread roll B",
+      "1 Lunch menu 14,00",
       "1 Daily menu 14,00 A",
       "A 10% 23,38 2,34 25,72",
       "B 21% 1,88 0,40 2,28",

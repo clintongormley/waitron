@@ -1,13 +1,8 @@
 import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { type Transaction, withTransaction, workingOrders } from "@waitron/db";
 import type { PinThrottle } from "@waitron/identity";
-import {
-  readJsonBody,
-  requireUuidParam,
-  requireBodyUuid,
-  requireString,
-} from "@waitron/server-kit";
-import { type ExtraSelection, type OptionSelection, AppError } from "@waitron/shared";
+import { readJsonBody, requireUuidParam, requireString } from "@waitron/server-kit";
+import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
 import { canEmailInvoice } from "./invoice-email-contact.js";
@@ -17,7 +12,7 @@ import { requireDining, switchOrderDining } from "./order-dining.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { resolveInvoicePrinter } from "./receipt-print.js";
 import { requestCfg } from "./request-config.js";
-import { SET_MENU_DRAFT_LINE } from "./set-menu-bill.js";
+import { parseSetMenuWireLines, type SetMenuWireFields } from "./set-menu-wire-lines.js";
 import { resolveHttpOrderZone, named } from "./till-order-zones.js";
 import { requireUuidId, requireRevision } from "./till-request-fields.js";
 import { runBodyCourse, run } from "./till-api-errors.js";
@@ -60,13 +55,13 @@ export function mountTillWorkingOrderRoutes(
           quantity: string;
           extras?: ExtraSelection[];
           options?: OptionSelection[];
-        } & LineExtras)[];
+        } & LineExtras &
+          SetMenuWireFields)[];
         zoneId?: string;
         label?: string;
         kitchenNote?: string | null;
         lateSend?: unknown;
         dining?: unknown;
-        firstSetMenuId?: unknown;
       }>(c);
       // The client mints `body.id`, which becomes the stored primary key; this screen is the only
       // refusal of a malformed one.
@@ -74,17 +69,9 @@ export function mountTillWorkingOrderRoutes(
       if (body.zoneId !== undefined) {
         requireUuidParam(body.zoneId, "ServiceZoneId");
       }
-      const firstSetMenu =
-        body.firstSetMenuId === undefined
-          ? undefined
-          : {
-              menuId: requireBodyUuid(body.firstSetMenuId, "firstSetMenuId").toLowerCase(),
-              personId,
-            };
-      if (firstSetMenu !== undefined && body.zoneId === undefined)
-        throw new AppError("management.request_invalid", { field: "zoneId" });
       const lateSend = parseLateSend(body.lateSend);
       const dining = requireDining(body.dining);
+      const lines = parseSetMenuWireLines(body.lines);
       const zoneId = await resolveHttpOrderZone(deps, session, body.lines.length, body.zoneId);
       await gateZones(
         deps,
@@ -97,14 +84,13 @@ export function mountTillWorkingOrderRoutes(
           cfg,
           {
             id: body.id,
-            lines: body.lines,
+            lines,
             zoneId,
             label: body.label,
             kitchenNote: body.kitchenNote,
             operatorId: personId,
             lateSend: late,
             dining,
-            firstSetMenu,
           },
           deps.attendance === undefined
             ? undefined
@@ -155,10 +141,8 @@ export function mountTillWorkingOrderRoutes(
           quantity: string;
           extras?: ExtraSelection[];
           options?: OptionSelection[];
-          setMenuId?: unknown;
-          setMenuReservedLineId?: unknown;
-          setMenuReservedPlace?: unknown;
-        } & LineExtras)[];
+        } & LineExtras &
+          SetMenuWireFields)[];
         label?: string;
         revision?: unknown;
         expectedEdit: BillEditExpected | null;
@@ -166,46 +150,7 @@ export function mountTillWorkingOrderRoutes(
         dining?: unknown;
       }>(c);
       const expected = requireRevision(body.revision);
-      const lines = body.lines.map((line, position) => {
-        const { setMenuId, setMenuReservedLineId, setMenuReservedPlace, ...dish } = line;
-        if (
-          setMenuId === undefined &&
-          setMenuReservedLineId === undefined &&
-          setMenuReservedPlace === undefined
-        )
-          return dish;
-        const field = (name: string) => `lines[${position}].${name}`;
-        const menuId = requireBodyUuid(setMenuId, field("setMenuId")).toLowerCase();
-        const menuVersionId = requireBodyUuid(
-          dish.menuVersionId,
-          field("menuVersionId"),
-        ).toLowerCase();
-        if (typeof dish.quantity !== "string" || !/^1(?:\.0{1,3})?$/.test(dish.quantity))
-          throw new AppError("management.request_invalid", { field: field("quantity") });
-        const place = setMenuReservedPlace;
-        let reserved = null;
-        if (setMenuReservedLineId !== undefined || place !== undefined) {
-          const setMenuLineId = requireBodyUuid(
-            setMenuReservedLineId,
-            field("setMenuReservedLineId"),
-          ).toLowerCase();
-          if (typeof place !== "number" || !Number.isSafeInteger(place) || place < 0)
-            throw new AppError("management.request_invalid", {
-              field: field("setMenuReservedPlace"),
-            });
-          reserved = { setMenuLineId, place };
-        }
-        return {
-          ...dish,
-          menuVersionId,
-          [SET_MENU_DRAFT_LINE]: {
-            setMenuId: menuId,
-            position,
-            held: false,
-            reserved,
-          },
-        };
-      });
+      const lines = parseSetMenuWireLines(body.lines);
       const lateSend = parseLateSend(body.lateSend);
       const dining = requireDining(body.dining);
       const sendCfg = sendingCfg(cfg, c, session.device);

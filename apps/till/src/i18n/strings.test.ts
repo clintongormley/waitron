@@ -55,6 +55,8 @@ describe("the Spanish strings call a restaurant menu a carta", () => {
       "set_menu.folders",
       "set_menu.many",
       "set_menu.no_place_heading",
+      "set_menu.none_maybe_cheaper",
+      "set_menu.not_cheapest",
       "set_menu.one",
       "table.move_dishes_cancelled",
     ]);

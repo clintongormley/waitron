@@ -106,7 +106,7 @@ export function itemsAllocatedFrom(preview: AllocationPreview): AllocationPrevie
 
 /** The Pay window's words for a set-menu dish chosen without its set menu. */
 export function itemsRefusal(refusal: PayRefusal): PayRefusal {
-  if (refusal.code !== "set_menu.no_place_on_target" || refusal.dishName === undefined)
+  if (refusal.code !== "set_menu.moves_with_set_menu" || refusal.dishName === undefined)
     return refusal;
   return {
     ...refusal,

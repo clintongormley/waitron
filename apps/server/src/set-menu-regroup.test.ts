@@ -1,19 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
-import { Hono } from "hono";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import {
   adjustmentLines,
   insertInChunks,
   lineServiceCancellations,
-  persons,
   statementChunks,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createAdjustmentReason } from "@waitron/adjustments";
-import { loginWithPin } from "@waitron/identity";
 import { addProducts, menuItems, requireMenuRoot } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
@@ -29,9 +26,9 @@ import {
 } from "@waitron/venue-service";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
+import { readBillsSetMenus } from "./set-menu-bill.js";
 import { readGroupingCopies, regroupBills, saveBillGrouping } from "./set-menu-regroup.js";
 import { copyBillDishes } from "./split-after-print.js";
-import { mountTillApi } from "./till-api.js";
 import { readOrderRevision } from "./working-order-context.js";
 import { parkOrder } from "./working-order-open.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
@@ -45,11 +42,10 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
-import { sessionCookieForTest } from "./testing/session-device.js";
 import { saveSetMenuDraft } from "./testing/set-menu-bill-fixture.js";
 import {
+  addEmptySpecSetMenus,
   sendSpecDraft,
-  setSpecCount,
   setupSetMenuSpecVenue,
   specDeps,
   specRows,
@@ -64,8 +60,6 @@ let venue: PartyVenue;
 /** The ordinary menu's offer of each dish, the same in every zone. */
 let ordinary: Record<SpecDish, string>;
 let takeawayZoneId: string;
-let app: Hono;
-let cookie: string;
 
 useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -99,26 +93,6 @@ useVenueDb({
       await ensureOperator(tx, WAITER_A);
       await ensureOperator(tx, WAITER_B);
     });
-    const token = await inTx(venue, async (tx) => {
-      const [admin] = await tx
-        .select({ id: persons.id })
-        .from(persons)
-        .where(eq(persons.email, "owner@example.test"));
-      return (
-        await loginWithPin(tx, {
-          deviceId: venue.cfg.origin.deviceId,
-          personId: admin!.id,
-          pin: "1234",
-        })
-      ).token;
-    });
-    cookie = await sessionCookieForTest(db, token);
-    app = new Hono();
-    mountTillApi(
-      app,
-      { ...specDeps(spec), cfg: venue.cfg, venueLocale: "es-ES", secureCookies: false },
-      () => {},
-    );
   },
 });
 
@@ -154,6 +128,37 @@ async function sendReleased(
     }),
   );
   await sendSpecDraft(spec, draft.partyId, draft.id, release);
+}
+
+/** Puts a sent bill back as a send left it before sends regrouped: no set-menu row, every dish a
+ *  la carte. */
+async function ungroup(billId: string) {
+  await inTx(venue, async (tx) => {
+    await tx
+      .delete(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, billId),
+          eq(workingOrderLines.setMenuRole, "set_menu"),
+        ),
+      );
+    await tx
+      .update(workingOrderLines)
+      .set({
+        setMenuRole: null,
+        setMenuLineId: null,
+        setMenuPlace: null,
+        setMenuCountsAsCourseId: null,
+        unitPriceGross: sql`${workingOrderLines.aLaCarteUnitPrice}`,
+        lineTotal: sql`${workingOrderLines.aLaCarteUnitPrice}`,
+      })
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, billId),
+          eq(workingOrderLines.setMenuRole, "dish"),
+        ),
+      );
+  });
 }
 
 function regroup(...billIds: string[]) {
@@ -198,12 +203,9 @@ async function exactOf(billId: string) {
   return bill!.exact;
 }
 
+/** The bill's set menus as the till's read of a party's bills carries them. */
 async function setMenusAnswer(billId: string) {
-  const read = await app.request(`/api/bills/${billId}/set-menus`, {
-    headers: { cookie, "content-type": "application/json" },
-  });
-  expect(read.status).toBe(200);
-  return (await read.json()).setMenus;
+  return (await inTx(venue, (tx) => readBillsSetMenus(tx, [billId]))).get(billId)!.setMenus;
 }
 
 function menuRows(shaped: Awaited<ReturnType<typeof shape>>) {
@@ -306,6 +308,7 @@ async function expectFrozenThenNewPair(
 it("groups Soup and Hake into one Daily menu and answers it as exact", async () => {
   const bill = await seated();
   await send(bill, "Soup", "Hake");
+  await ungroup(bill.tabId);
   expect(await total(bill.tabId)).toBe(2200);
 
   expect(await regroup(bill.tabId)).toEqual(new Set([bill.tabId]));
@@ -344,14 +347,11 @@ it("groups Soup and Hake into one Daily menu and answers it as exact", async () 
     vatClass: "reduced",
     takeawayVatClass: "reduced",
   });
-  const counted = await seated();
-  const [countedRow] = (await setSpecCount(spec, counted.tabId, spec.daily, 1)).setMenus;
-  const [written] = (await rows(counted.tabId)).filter(({ id }) => id === countedRow!.lineId);
   expect({
     name: row!.name,
     descriptions: row!.descriptions,
     unitPrecision: row!.unitPrecision,
-  }).toEqual({ name: "Daily menu", descriptions: written!.descriptions, unitPrecision: 0 });
+  }).toEqual({ name: "Daily menu", descriptions: { "es-ES": "Daily menu" }, unitPrecision: 0 });
   expect(Object.keys(row!.descriptions).length).toBeGreaterThan(0);
   expect(await total(bill.tabId)).toBe(1400);
   expect(await exactOf(bill.tabId)).toBe(true);
@@ -536,6 +536,7 @@ it("writes nothing on a bill discounted as a whole (D2)", async () => {
 it("leaves a dish paid for by item as it is (D2)", async () => {
   const bill = await seated();
   await send(bill, "Hake", "Sirloin");
+  await ungroup(bill.tabId);
   const hake = (await shape(bill.tabId)).find(({ what }) => what === "Hake")!;
   const hakeLineNo = (await rows(bill.tabId)).find(({ id }) => id === hake.id)!.lineNo;
   expect(
@@ -646,6 +647,7 @@ it("leaves a set menu whose dish carries a service cancellation, as a reopened b
 it("leaves the dishes a whole-bill discount reduced as they are, with their list price cleared (D15)", async () => {
   const bill = await seated();
   await send(bill, "Soup", "Hake");
+  await ungroup(bill.tabId);
   await adjust(bill.tabId, null, { action: "discount_percent", percentBp: 1000 });
   await inTx(venue, (tx) =>
     tx
@@ -748,20 +750,65 @@ it("saves a valid grouping a calculation hands it, even when not the cheapest", 
   ]);
 });
 
-it("charges a takeaway bill's dishes a la carte and removes its set menu (D14)", async () => {
+it("groups a takeaway bill's sent dishes into its cheapest set menu, and takes its price", async () => {
+  const bill = await seated();
+  await inTx(venue, (tx) =>
+    tx.update(workingOrders).set({ dining: "takeaway" }).where(eq(workingOrders.id, bill.tabId)),
+  );
+  await send(bill, "Soup", "Hake");
+  const shaped = await shape(bill.tabId);
+  const daily = menuRows(shaped)[0]?.id;
+  expect(
+    shaped.map(({ what, role, price, setMenuLineId }) => ({ what, role, price, setMenuLineId })),
+  ).toEqual([
+    { what: "Soup", role: "dish", price: 0, setMenuLineId: daily },
+    { what: "Hake", role: "dish", price: 0, setMenuLineId: daily },
+    { what: "Daily menu", role: "set_menu", price: 1400, setMenuLineId: null },
+  ]);
+  await takeBillPayment(
+    specDeps(spec),
+    venue.cfg,
+    bill.tabId,
+    {
+      submissionId: randomUUID(),
+      tip: "0.00",
+      kind: "share",
+      shareOf: 1,
+      applied: "14.00",
+      method: "cash",
+      tendered: "14.00",
+    },
+    venue.operator,
+  );
+  const [row] = await venue.db
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, bill.tabId));
+  expect(row?.status).toBe("settled");
+});
+
+it("groups a counter takeaway bill's dishes into one set menu, leaving no empty one", async () => {
   const id = randomUUID();
   await parkOrder({ db: venue.db }, venue.cfg, {
     id,
     zoneId: takeawayZoneId,
-    lines: [{ menuItemId: ordinary.Hake, quantity: "1" }],
+    lines: [
+      { menuItemId: ordinary.Soup, quantity: "1" },
+      { menuItemId: ordinary.Hake, quantity: "1" },
+    ],
     operatorId: OPERATOR,
     dining: "takeaway",
   });
-  await setSpecCount(spec, id, spec.daily, 1);
-  expect(menuRows(await shape(id))).toHaveLength(1);
-  expect(await regroup(id)).toEqual(new Set([id]));
-  expect((await shape(id)).map(({ what, role, price }) => ({ what, role, price }))).toEqual([
-    { what: "Hake", role: null, price: 1600 },
+  await addEmptySpecSetMenus(spec, id, spec.daily);
+  await regroup(id);
+  const shaped = await shape(id);
+  const daily = menuRows(shaped)[0]?.id;
+  expect(
+    shaped.map(({ what, role, price, setMenuLineId }) => ({ what, role, price, setMenuLineId })),
+  ).toEqual([
+    { what: "Soup", role: "dish", price: 0, setMenuLineId: daily },
+    { what: "Hake", role: "dish", price: 0, setMenuLineId: daily },
+    { what: "Daily menu", role: "set_menu", price: 1400, setMenuLineId: null },
   ]);
 });
 
@@ -798,6 +845,7 @@ it("changes nothing when a bill is regrouped with nothing changed", async () => 
 it("copies a bill whose new set menu comes after its dishes in a later insert statement", async () => {
   const bill = await seated();
   await send(bill, "Soup", "Hake");
+  await ungroup(bill.tabId);
   const perStatement = statementChunks(workingOrderLines, Array.from({ length: 1 << 16 }))[0]!
     .length;
   const [soupRow] = await rows(bill.tabId);

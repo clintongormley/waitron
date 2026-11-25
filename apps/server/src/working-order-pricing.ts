@@ -38,6 +38,7 @@ import {
   newCustomerText,
   stringToThousandths,
   decimalToCents,
+  centsToDecimal,
 } from "@waitron/shared";
 import { setMenuALaCartePrices } from "@waitron/orders-sales/a-la-carte-price.js";
 import { offeredKey } from "@waitron/venue-service";
@@ -55,7 +56,6 @@ import { type RetainedCourseLine, RETAINED_COURSE } from "./retained-course.js";
 import {
   SET_MENU_DRAFT_LINE,
   type SetMenuDraftLine,
-  type SetMenuPlacement,
   refuseUnlessSetMenuBill,
 } from "./set-menu-bill.js";
 import type { SetMenuLinks } from "./set-menu-links.js";
@@ -287,13 +287,15 @@ export async function priceOrderLines(
   invalidMakeAt: "refuse" | "ignore" = "refuse",
   periodCheck: "added" | "none" = "added",
   lateSend?: LateSendConfirmation,
+  unwrittenBill?: Parameters<typeof refuseUnlessSetMenuBill>[2],
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
   /** Aligned with `lineRows`: a dish sold in whole portions, which may be split one per dish. */
   portionable: boolean[];
   gross: GrossLines;
   identities: OrderLineIdentity[];
-  lineContexts: (LineContextInput & { placement?: Omit<SetMenuPlacement, "workingOrderLineId"> })[];
+  /** `setMenuId`: the set menu whose folder a dish was tapped in (D11). */
+  lineContexts: (LineContextInput & { setMenuId?: string })[];
   /** The zone's offers the lines were priced from, for `lineContextColumns`. */
   offers: ZoneOffers;
   /** For `linkSetMenusFor`, once the rows are written. */
@@ -342,7 +344,7 @@ export async function priceOrderLines(
       ? []
       : [{ ...line, setMenuId: draft.setMenuId, menuVersionId: line.menuVersionId ?? null }];
   });
-  if (setMenuLines.length > 0) await refuseUnlessSetMenuBill(tx, workingOrderId);
+  if (setMenuLines.length > 0) await refuseUnlessSetMenuBill(tx, workingOrderId, unwrittenBill);
   const setMenus = await setMenuOfferLookup(tx, workingOrderId, setMenuLines, offers.menus);
   const selectedSetMenu = (line: (typeof requestedLines)[number]) => {
     if (line[STORED_SET_MENU_OFFER] !== undefined) return line[STORED_SET_MENU_OFFER];
@@ -548,7 +550,7 @@ export async function priceOrderLines(
         portionable: boolean;
         aLaCarteCents: number | null;
         countsAsCourseId: string | null;
-        placement?: Omit<SetMenuPlacement, "workingOrderLineId">;
+        setMenuId?: string;
         late?: LineContextInput["late"];
         vatClass: VatClass;
         takeawayVatClass: VatClass;
@@ -579,9 +581,12 @@ export async function priceOrderLines(
       vatClass: selection.vatClass as VatClass,
       takeawayVatClass: selection.takeawayVatClass as VatClass,
     };
+    const aLaCarteCents = aLaCarte[index]!;
     const product = {
       name: selection.name,
-      unitPrice: selection.unitPrice,
+      // D10: a dish taken from a set-menu copy starts at its a la carte price; only the bill's
+      // grouping lowers it.
+      unitPrice: aLaCarteCents === null ? selection.unitPrice : centsToDecimal(aLaCarteCents),
       unit: prepareUnitSnapshot(selection.unit, contentConfig),
       pricingUnit: selection.unit.hardwareUnit === null ? ("each" as const) : ("weight" as const),
       vatClass: classes.vatClass,
@@ -660,11 +665,7 @@ export async function priceOrderLines(
     lineMeta.push({
       kind: "parent",
       setMenuOffer: line.setMenuOffer,
-      ...(draft === undefined
-        ? {}
-        : {
-            placement: { draft, productId: offer.productId, variantId: line.variantId ?? null },
-          }),
+      ...(draft === undefined ? {} : { setMenuId: draft.setMenuId }),
       productId: selection.productId,
       ...(line.variantId == null ? {} : { variantId: line.variantId }),
       menuItemId: line.menuItemId,
@@ -672,7 +673,7 @@ export async function priceOrderLines(
       note,
       makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
       portionable,
-      aLaCarteCents: aLaCarte[index]!,
+      aLaCarteCents,
       countsAsCourseId: countsAs[index]!,
       ...classes,
       ...(mark === undefined ? {} : { late: mark }),
@@ -795,9 +796,9 @@ export async function priceOrderLines(
     workingOrderLineId: ids[index]!,
     menuItemId: meta.menuItemId,
     ...(meta.setMenuOffer === undefined ? {} : { setMenuOffer: meta.setMenuOffer }),
-    ...(meta.kind !== "parent" || meta.placement === undefined
+    ...(meta.kind !== "parent" || meta.setMenuId === undefined
       ? {}
-      : { placement: meta.placement }),
+      : { setMenuId: meta.setMenuId }),
     ...(meta.kind === "parent" && meta.variantId !== undefined
       ? { variantId: meta.variantId }
       : {}),

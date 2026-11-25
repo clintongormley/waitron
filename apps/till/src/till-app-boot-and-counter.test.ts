@@ -3851,6 +3851,25 @@ describe("till-app logout while a request is waiting for the server", () => {
     expect(parkOrder).toHaveBeenCalledOnce();
   });
 
+  it("rechecks a new takeaway park's dead ends with its way of selling, as the park sends it", async () => {
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({ sends: false, deadEnds: [], stations: [] });
+    const parkOrder = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "station.no_replacement" })
+      .mockResolvedValue(undefined);
+    const { el } = await mountApp({ parkOrder, askSaleDeadEnds });
+    const c = await toCounter(el);
+    c.store.addProduct(c.products[0]!, "1");
+    c.store.setDining("takeaway");
+    emit(c, "park-order", { label: "Later" });
+    await vi.waitFor(() => expect(parkOrder).toHaveBeenCalledTimes(2));
+
+    expect(askSaleDeadEnds).toHaveBeenCalledWith(
+      expect.objectContaining({ step: "place", dining: "takeaway" }),
+    );
+    expect(parkOrder).toHaveBeenCalledWith(expect.objectContaining({ dining: "takeaway" }));
+  });
+
   it("does not retry a park after its dead-end recheck outlives sign-out", async () => {
     let answerDeadEnds!: (result: { sends: false; deadEnds: [] }) => void;
     const parkOrder = vi

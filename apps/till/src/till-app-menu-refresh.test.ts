@@ -3503,23 +3503,3 @@ it.each(["recorded", "live"] as const)(
     expect(dialog(el)).toBeNull();
   },
 );
-
-it("shows the named dish and available choices when Send cannot place it", async () => {
-  const { el } = await mountApp(
-    tableStubs(DINING, {
-      submitDraft: vi
-        .fn()
-        .mockRejectedValue({ code: "set_menu.no_place", status: 409, dishName: "Sea bass" }),
-    }),
-  );
-  await toTable(el);
-  await sendLemonadeRound(el);
-
-  expect(banner(el)?.textContent).toContain("There is no place for Sea bass");
-  expect(banner(el)?.textContent).toContain(
-    codeMessage("set_menu.no_place", "en-GB", {
-      dishName: "Sea bass",
-    }),
-  );
-  expect(roundStore(el).lineCount).toBe(1);
-});

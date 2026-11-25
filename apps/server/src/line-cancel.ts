@@ -207,7 +207,7 @@ export async function cancelItem(
         .select()
         .from(workingOrderLines)
         .where(eq(workingOrderLines.id, lineId));
-      if (line?.setMenuRole === "set_menu") throw new AppError("set_menu.remove_from_summary", {});
+      if (line?.setMenuRole === "set_menu") throw new AppError("set_menu.worked_out_by_bill", {});
       const [bill] = await tx
         .select()
         .from(workingOrders)

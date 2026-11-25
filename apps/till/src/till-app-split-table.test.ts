@@ -3081,7 +3081,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         await flush(el);
         await answer(el, "discard");
 
-        expect(heard).toEqual([{ excess: "5.00", billId: "b2", bill: "Bill 2" }]);
+        expect(heard).toEqual([{ excess: "5.00", billId: "b2", bill: "Bill 2", split: true }]);
       });
 
       it("Refund for a bill the re-read no longer lists says it has left, opens nothing and keeps the panel", async () => {

@@ -27,15 +27,11 @@ import type { UnservedBillDish } from "./meal-end.js";
  */
 declare module "@waitron/shared" {
   interface ErrorParams {
-    "set_menu.holds_dishes": { setMenuName: string; dishNames: string[] };
-    "set_menu.not_selling": { setMenuName: string };
-    "set_menu.needed_by_draft": { setMenuName: string; dishNames: string[] };
-    "set_menu.no_place": { dishName: string; draftLineId?: string };
-    "set_menu.no_place_on_target": { dishName: string };
-    "set_menu.place_taken": { dishName: string };
+    "set_menu.moves_with_set_menu": { dishName: string };
     "set_menu.move_adjusted": { dishNames: string[] };
-    "set_menu.remove_from_summary": Record<string, never>;
+    "set_menu.worked_out_by_bill": Record<string, never>;
     "set_menu.not_seated": Record<string, never>;
+    "set_menu.bill_holds_set_menus": Record<string, never>;
     "module.not_prepared": { module: string };
     "module.providers_enabled": Record<string, never>;
     "module.disabled": { module: string };

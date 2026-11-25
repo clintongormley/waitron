@@ -609,6 +609,8 @@ export const en = {
   "set_menu.many": "{n} set menus",
   "set_menu.open": "Open",
   "set_menu.open_places": "Open: {places}",
+  "set_menu.not_cheapest": "These set menus may not be the cheapest for this bill.",
+  "set_menu.none_maybe_cheaper": "Set menus might make this bill cheaper.",
   "set_menu.unsent": "Not sent",
   "set_menu.move": "Move",
   "set_menu.move_named": "Move {dish} to {menu} ({price})",
@@ -1786,8 +1788,6 @@ export const en = {
   "table.move_dishes_confirm": "Move",
   "table.move_dishes_includes": "Moves with {dishes}",
   "table.move_dishes_cancelled": "Move {dish} with its set menu to keep the charge.",
-  "table.move_dishes_target_price": "{dish} on the other bill · {amount}",
-  "table.move_dishes_read_failed": "Could not check places on that bill. Choose it again to retry.",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "pin.throttled": "Too many wrong PINs. Wait a moment, then try again",
@@ -1984,10 +1984,16 @@ export const en = {
   "bill.pay_with_bill_payments":
     "Part of this bill is already paid: take the rest as a bill payment",
   "bill.received_exceeds_total_excess":
-    "Moving these items would leave this bill owing {amount} less than has already been paid on it. Move fewer items, or refund {amount} first.",
+    "Moving these items would leave this bill owing {amount} less than has already been paid on it. Refund {amount} first, or move fewer items.",
   "bill.received_exceeds_total_line_excess":
     "This change would leave this bill owing {amount} less than has already been paid on it. Change less, or refund {amount} first.",
+  "bill.received_exceeds_total_send_excess":
+    "Sending these dishes would leave this bill owing {amount} less than has already been paid on it. Refund {amount} first.",
+  "bill.received_exceeds_total_merge_excess":
+    "Merging would leave this bill owing {amount} less than has already been paid on it. Refund {amount} first, or keep the bills apart.",
   "bill.refund_excess": "Refund {amount}",
+  "bill.refund_excess_bill_gone":
+    "{bill} has left this table or been paid, so there is nothing to refund here.",
   "sale.over_simplified_limit":
     "This would take the order over {amount}, the limit for a simplified invoice. Choose Full invoice, or remove items.",
   "bill.take_rest": "Take the rest",
@@ -3089,6 +3095,8 @@ export const es: Record<StringKey, string> = {
   "set_menu.many": "{n} menús",
   "set_menu.open": "Libre",
   "set_menu.open_places": "Libres: {places}",
+  "set_menu.not_cheapest": "Puede que estos menús no sean lo más barato para esta cuenta.",
+  "set_menu.none_maybe_cheaper": "Puede que con menús esta cuenta salga más barata.",
   "set_menu.unsent": "Sin enviar",
   "set_menu.move": "Mover",
   "set_menu.move_named": "Mover {dish} a {menu} ({price})",
@@ -4242,9 +4250,6 @@ export const es: Record<StringKey, string> = {
   "table.move_dishes_confirm": "Mover",
   "table.move_dishes_includes": "Se mueve con {dishes}",
   "table.move_dishes_cancelled": "Mueve {dish} con su menú para conservar el cargo.",
-  "table.move_dishes_target_price": "{dish} en la otra cuenta · {amount}",
-  "table.move_dishes_read_failed":
-    "No se pudo comprobar si hay sitio en esa cuenta. Vuelve a elegirla.",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "pin.throttled": "Demasiados PIN incorrectos. Espera un momento y vuelve a intentarlo",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",
@@ -4435,10 +4440,16 @@ export const es: Record<StringKey, string> = {
   "bill.pay_with_bill_payments":
     "Parte de esta cuenta ya está pagada: cobra el resto como pago de cuenta",
   "bill.received_exceeds_total_excess":
-    "Al mover estos artículos, la cuenta quedaría {amount} por debajo de lo que ya se ha pagado en ella. Mueve menos artículos o devuelve antes {amount}.",
+    "Al mover estos artículos, la cuenta quedaría {amount} por debajo de lo que ya se ha pagado en ella. Devuelve antes {amount} o mueve menos artículos.",
   "bill.received_exceeds_total_line_excess":
     "Con este cambio, la cuenta quedaría {amount} por debajo de lo que ya se ha pagado en ella. Cambia menos o devuelve antes {amount}.",
+  "bill.received_exceeds_total_send_excess":
+    "Al enviar estos platos, la cuenta quedaría {amount} por debajo de lo que ya se ha pagado en ella. Devuelve antes {amount}.",
+  "bill.received_exceeds_total_merge_excess":
+    "Al juntar las cuentas, esta cuenta quedaría {amount} por debajo de lo que ya se ha pagado en ella. Devuelve antes {amount} o deja las cuentas separadas.",
   "bill.refund_excess": "Devolver {amount}",
+  "bill.refund_excess_bill_gone":
+    "{bill} ya no está en esta mesa o ya se ha pagado, así que aquí no hay nada que devolver.",
   "sale.over_simplified_limit":
     "El pedido pasaría de {amount}, el límite de una factura simplificada. Elige Factura completa o quita artículos.",
   "bill.take_rest": "Cobrar el resto",

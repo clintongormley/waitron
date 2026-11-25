@@ -10,7 +10,7 @@ import { mount, showView } from "./till-table-order-screen.test-helpers.js";
 
 afterEach(cleanupWidgets);
 
-it("shows bill counts above the draft, keeps the set menu's included price and saves a count tap", async () => {
+it("shows the bill's set menus above the draft with no count or Cancel, keeping the set menu's included price", async () => {
   const draft = new WorkingOrderStore();
   draft.appendLines([seaBass]);
   const changeSetMenu = vi.fn(async () => undefined);
@@ -23,21 +23,24 @@ it("shows bill counts above the draft, keeps the set menu's included price and s
   });
   await showView(el, "order", { ifShown: true });
   const pane = el.shadowRoot!.querySelector("[data-draft-pane]")!;
-  const counts = pane.querySelector("till-set-menu-counts")!;
-  await counts.updateComplete;
-  const stepper = counts.shadowRoot!.querySelector("wt-number-stepper")!;
-  expect([stepper.label, stepper.value]).toEqual([daily.name, "2"]);
+  expect(pane.querySelector("till-set-menu-counts")).toBeNull();
+  const help = pane.querySelector(".help-anchor > wt-help-tooltip")!;
+  expect(help.getAttribute("aria-label")).toContain("Set menus");
   const summary = pane.querySelector("till-set-menu-summary")!;
   await summary.updateComplete;
   expect(summary.shadowRoot!.textContent).toContain("3 set menus");
+  await userEvent.click(summary.shadowRoot!.querySelector("summary")!);
+  const buttons = Array.from(summary.shadowRoot!.querySelectorAll("wt-button"), (button) =>
+    button.textContent!.trim(),
+  );
+  expect(buttons).not.toContain("Cancel");
+  expect(buttons).not.toContain("Move");
   const basket = [...pane.querySelectorAll("till-basket")].find((item) =>
     item.lineIndexes?.includes(0),
   )!;
   await basket.updateComplete;
   expect(basket.shadowRoot!.textContent).toMatch(/Sea bass\s*menu/);
-
-  await userEvent.click(stepper.shadowRoot!.querySelector('[data-step="1"]')!);
-  expect(changeSetMenu).toHaveBeenCalledExactlyOnceWith({ menuId: daily.menuId, count: 3 });
+  expect(changeSetMenu).not.toHaveBeenCalled();
 });
 
 const dailyLine = (id: string, lineNo: number): TabLine => ({

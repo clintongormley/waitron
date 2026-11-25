@@ -35,3 +35,16 @@ it.each(["light", "dark"] as const)(
     await expectNoA11yViolations(host);
   },
 );
+
+it.each(["light", "dark"] as const)(
+  "the note on an answer with no set menus that may not be the cheapest is accessible in %s",
+  async (theme) => {
+    const { el, host } = await mountWidget<TillSetMenuSummary>(
+      "till-set-menu-summary",
+      { bill: { ...bill, setMenus: [], dishes: [], exact: false }, courseNames: courses },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-not-cheapest]")).toBeTruthy();
+    await expectNoA11yViolations(host);
+  },
+);

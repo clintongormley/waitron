@@ -1,9 +1,10 @@
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-counter-screen.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { ServiceZoneSummary, TillProduct } from "../api/client.js";
+import { bill } from "../../test/set-menu-widgets.js";
 
 const products: TillProduct[] = [
   {
@@ -66,6 +67,17 @@ describe.each(["light", "dark"] as const)("till-counter-screen a11y (%s theme)",
       { store: new WorkingOrderStore(), payRest: "70.00" },
       theme,
     );
+    await expectNoA11yViolations(host);
+  });
+  it("a takeaway bill whose set menus may not be the cheapest has no violations", async () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom("counter-bill", [], undefined, 1, undefined, "takeaway");
+    const { host, el } = await mountWidget<TillCounterScreen>(
+      "till-counter-screen",
+      { store, setMenuBill: { ...bill, exact: false } },
+      theme,
+    );
+    expect(el.shadowRoot!.querySelector("[data-not-cheapest]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 });

@@ -4652,7 +4652,10 @@ export class TillApi {
 
   askSaleDeadEnds(
     request:
-      | { step: "pay" | "place"; lines: SaleLine[]; zoneId?: string; workingOrderId?: string }
+      | ({ step: "pay" | "place"; lines: SaleLine[]; dining?: Dining } & {
+          zoneId?: string;
+          workingOrderId?: string;
+        })
       | (SaleLine & { workingOrderLineId?: string })[],
     workingOrderId?: string,
   ): Promise<DeadEndAnswer> {
@@ -5418,10 +5421,6 @@ export class TillApi {
       guestCount,
       expectedPartyRevision,
     });
-  }
-
-  readBillSetMenus(billId: string): Promise<BillSetMenusReply> {
-    return this.#request(`/api/bills/${billId}/set-menus`, "GET");
   }
 
   setSetMenuCount(

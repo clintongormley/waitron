@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   billPayments,
   billSetMenuCopies,
@@ -49,6 +49,36 @@ export async function setMenuOnFullMenu(
   return { menuId, versionId, fullMenuId, menuItemId, courseId, productId, name };
 }
 
+/**
+ * Prices `copy`'s dish on the full menu at `aLaCarte`, and in the set menu at `supplementCents`
+ * when given, then republishes; answers the new version. With the dish dearer a la carte than the
+ * set menu and its supplement, a bill works the dish out into that set menu.
+ */
+export async function priceSetMenuDish(
+  tx: Transaction,
+  copy: { fullMenuId: string; productId: string; menuItemId: string },
+  { aLaCarte, supplementCents }: { aLaCarte: number; supplementCents?: number },
+): Promise<string> {
+  await tx
+    .update(menuItems)
+    .set({ grossPrice: aLaCarte })
+    .where(and(eq(menuItems.menuId, copy.fullMenuId), eq(menuItems.productId, copy.productId)));
+  if (supplementCents !== undefined)
+    await tx
+      .update(menuItems)
+      .set({ grossPrice: supplementCents })
+      .where(eq(menuItems.id, copy.menuItemId));
+  return publishWorkingMenu(tx, copy.fullMenuId);
+}
+
+/** Stamps the line's list price at its current price, taking nothing off and recording no adjustment. */
+export async function freezeBillLine(tx: Transaction, lineId: string): Promise<void> {
+  await tx
+    .update(workingOrderLines)
+    .set({ listUnitPriceGross: sql`${workingOrderLines.unitPriceGross}` })
+    .where(eq(workingOrderLines.id, lineId));
+}
+
 export async function seedBillSetMenu(
   tx: Transaction,
   workingOrderId: string,
@@ -56,12 +86,21 @@ export async function seedBillSetMenu(
   lineNo: number,
   cents = 1400,
 ) {
-  await tx
-    .insert(billSetMenuCopies)
-    .values({ workingOrderId, setMenuId: copy.menuId, menuVersionId: copy.versionId })
-    .onConflictDoNothing({
-      target: [billSetMenuCopies.workingOrderId, billSetMenuCopies.setMenuId],
-    });
+  // A set menu the bill already records keeps its copy, as linking a dish leaves it.
+  const [recorded] = await tx
+    .select({ id: billSetMenuCopies.setMenuId })
+    .from(billSetMenuCopies)
+    .where(
+      and(
+        eq(billSetMenuCopies.workingOrderId, workingOrderId),
+        eq(billSetMenuCopies.setMenuId, copy.menuId),
+      ),
+    );
+  if (recorded === undefined) {
+    await tx
+      .insert(billSetMenuCopies)
+      .values({ workingOrderId, setMenuId: copy.menuId, menuVersionId: copy.versionId });
+  }
   const locales = await readInvoiceLocales(tx);
   const [{ id }] = await tx
     .insert(workingOrderLines)

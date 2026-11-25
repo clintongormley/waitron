@@ -372,20 +372,38 @@ describe("A1208 counter orders are written as portions", () => {
     expect((await park(croquettes("1"))).orderNumber).toBe(before.orderNumber + 1);
   });
 
-  it("A1208 the ceiling refusal still comes first", async () => {
-    const id = randomUUID();
-    await expect(
-      inTx(venue, (tx) =>
-        createOpenOrder(
-          tx,
-          { ...venue.cfg, simplifiedInvoiceLimit: decimal("3000.00") },
-          id,
-          croquettes("1000"),
-          null,
-          { zoneId: counter.zoneId },
+  it("A1208 refuses a counter order over the ceiling, and too many portions before the ceiling", async () => {
+    const open = (quantity: string) => {
+      const id = randomUUID();
+      return {
+        id,
+        opened: inTx(venue, (tx) =>
+          createOpenOrder(
+            tx,
+            { ...venue.cfg, simplifiedInvoiceLimit: decimal("300.00") },
+            id,
+            croquettes(quantity),
+            null,
+            { zoneId: counter.zoneId },
+          ),
         ),
-      ),
-    ).rejects.toMatchObject({ code: "sale.total_exceeds_simplified_limit" });
+      };
+    };
+    // 99 croquettes, the most one line may hold, are 329.67: over the ceiling.
+    const overCeiling = open("99");
+    await expect(overCeiling.opened).rejects.toMatchObject({
+      code: "sale.total_exceeds_simplified_limit",
+    });
+    // The total is checked once the portions are written, so 1000 croquettes meet the cap first.
+    const overCap = open("1000");
+    await expect(overCap.opened).rejects.toMatchObject({
+      code: "tab.portions_too_many",
+      params: { limit: 99 },
+    });
+    for (const { id } of [overCeiling, overCap])
+      expect(await venue.db.select().from(workingOrders).where(eq(workingOrders.id, id))).toEqual(
+        [],
+      );
   });
 
   it("A1208 openTab with lines writes portions", async () => {

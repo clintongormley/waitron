@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { printers, printJobs, sales } from "@waitron/db";
+import { printers, printJobs, sales, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { buildReceiptDocument, type ReceiptDocumentInput } from "./receipt-document.js";
@@ -18,9 +18,9 @@ import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { inTx, seatWithNoAllergies, type PartyVenue } from "./testing/party-venue.js";
 import {
+  addEmptySpecSetMenus,
   printSpecBill,
   sendSpecDishes,
-  setSpecCount,
   setupSetMenuSpecVenue,
   specBill,
   specDeps,
@@ -98,24 +98,24 @@ const settled = (billId: string) =>
 
 it("a simplified ticket lists the set menus and surcharges and no covered dish", async () => {
   const { tabId } = await specBill(spec, "fire");
-  await payWhole(tabId, "73.00");
+  await payWhole(tabId, "72.00");
   const ticket = await settled(tabId);
   expect(ticket.invoiceType).toBe("F2");
   expect(items(ticket)).toEqual([
-    ["2  Daily menu", "28,00"],
-    ["2  Special menu", "40,00"],
     ["1  Sirloin", "+5,00"],
+    ["1  Sirloin", "+5,00"],
+    ["3  Daily menu", "42,00"],
+    ["1  Special menu", "20,00"],
   ]);
   const printed = JSON.stringify(
     buildReceiptDocument({ ...FULL_INVOICE_DOCUMENT_FIXTURE, result: ticket }),
   );
   for (const covered of ["Soup", "Hake", "Sea bass"]) expect(printed).not.toContain(covered);
-  expect(printed.match(/Sirloin/g)).toHaveLength(1);
+  expect(printed.match(/Sirloin/g)).toHaveLength(2);
 });
 
 it("a covered soup with bread prints the soup with no amount and the bread under it", async () => {
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  await setSpecCount(spec, bill.tabId, spec.daily, 2);
   await sendSpecDishes(
     spec,
     bill,
@@ -125,19 +125,18 @@ it("a covered soup with bread prints the soup with no amount and the bread under
     ],
     "fire",
   );
-  await payWhole(bill.tabId, "29.50");
+  await payWhole(bill.tabId, "15.50");
   const ticket = await settled(bill.tabId);
   expect(ticket.lines.map(({ setMenuRole, gross }) => [setMenuRole, gross])).toEqual([
-    ["set_menu", "14.00"],
-    ["set_menu", "14.00"],
     ["dish", "0.00"],
     ["dish", "0.00"],
     [undefined, "1.50"],
+    ["set_menu", "14.00"],
   ]);
   expect(items(ticket)).toEqual([
-    ["2  Daily menu", "28,00"],
     ["1  Soup", ""],
     ["  Bread", "1,50"],
+    ["1  Daily menu", "14,00"],
   ]);
 });
 
@@ -306,7 +305,7 @@ it("a reprint prints what the first print did", async () => {
   const bill = await specBill(spec, "fire");
   await printSpecBill(spec, bill.partyId, bill.tabId);
   const { original, settled, bySaleId } = await printedItemRows(bill);
-  expect(original).toHaveLength(3);
+  expect(original).toHaveLength(4);
   expect(original.join("\n")).not.toMatch(/Soup|Hake|Sea bass/u);
   expect(settled).toEqual(original);
   expect(bySaleId).toEqual(original);
@@ -355,7 +354,7 @@ it("a comped surcharge keeps its row on both receipt reads", async () => {
   const bill = await compedSurchargeBill();
   await printSpecBill(spec, bill.partyId, bill.tabId);
   const { saleId, original, settled, bySaleId } = await printedItemRows(bill);
-  expect(original.filter((row) => row.includes("Sirloin"))).toHaveLength(1);
+  expect(original.filter((row) => row.includes("Sirloin"))).toHaveLength(2);
   expect(settled).toEqual(original);
   expect(bySaleId).toEqual(original);
   const receipt = await inTx(venue, (tx) =>
@@ -390,12 +389,14 @@ it("a credit of a comped surcharge keeps its row, at 0.00, with no comp", async 
 
 it("after a set menu leaves the bill, a reprint by sale id prints each discount under its own row", async () => {
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  await setSpecCount(spec, bill.tabId, spec.daily, 3);
-  const [firstSpecial] = (await setSpecCount(spec, bill.tabId, spec.special, 2)).setMenus.slice(3);
-  await setSpecCount(spec, bill.tabId, spec.daily, 2);
+  const dailies = await addEmptySpecSetMenus(spec, bill.tabId, spec.daily, 3);
+  const [firstSpecial] = await addEmptySpecSetMenus(spec, bill.tabId, spec.special, 2);
+  await inTx(venue, (tx) =>
+    tx.delete(workingOrderLines).where(eq(workingOrderLines.id, dailies[2]!)),
+  );
   const numbers = (await specRows(spec, bill.tabId)).map(({ lineNo }) => lineNo);
   expect(numbers).not.toEqual(numbers.map((_, i) => i + 1));
-  await compLine(bill.tabId, firstSpecial!.lineId, 1000);
+  await compLine(bill.tabId, firstSpecial!, 1000);
   await printSpecBill(spec, bill.partyId, bill.tabId);
   const [sale] = await venue.db
     .select({ id: sales.id })

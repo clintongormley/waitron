@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, max } from "drizzle-orm";
 import {
   devices,
   kitchenCourses,
@@ -22,11 +22,11 @@ import {
   setTakeawayVatRate,
   writeProductModifiers,
 } from "@waitron/menu";
-import { thousandthsToDecimal } from "@waitron/shared";
+import { stringToCents, thousandthsToDecimal } from "@waitron/shared";
 import { readBillEditState } from "../bill-editing.js";
 import { endMeal } from "../meal-end.js";
 import { readDrafts, submitDraft } from "../order-drafts.js";
-import { setSetMenuCount } from "../set-menu-count.js";
+import { readGroupingCopies, saveBillGrouping } from "../set-menu-regroup.js";
 import { markServed } from "../working-order-serving.js";
 import { expectedDraftEditForTest } from "./draft-command-fixture.js";
 import {
@@ -38,7 +38,7 @@ import {
   type PartyVenue,
 } from "./party-venue.js";
 import { publishWorkingMenu } from "./publish-menu.js";
-import { saveSetMenuDraft } from "./set-menu-bill-fixture.js";
+import { saveSetMenuDraft, seedBillSetMenu } from "./set-menu-bill-fixture.js";
 import { testTradingAdmission } from "./trading-admission.js";
 
 export type SpecDish = "Soup" | "Hake" | "Sea bass" | "Sirloin";
@@ -47,6 +47,7 @@ export interface SpecSetMenu {
   menuId: string;
   versionId: string;
   name: string;
+  priceCents: number;
   /** The set menu's own menu item for each dish it lists. */
   items: Partial<Record<SpecDish, string>>;
 }
@@ -161,7 +162,7 @@ export async function setupSetMenuSpecVenue(db: Database): Promise<SpecVenue> {
         if (surcharge !== undefined)
           await tx.update(menuItems).set({ grossPrice: surcharge }).where(eq(menuItems.id, id));
       }
-      return { menuId, versionId: "", name, items };
+      return { menuId, versionId: "", name, priceCents: stringToCents(price), items };
     };
     const daily = await setMenu("Daily menu", "14.00", ["Soup", "Hake", "Sirloin"], {
       Sirloin: 500,
@@ -244,8 +245,9 @@ export async function addSpecLunch(spec: SpecVenue): Promise<SpecLunch> {
 }
 
 /**
- * A takeaway bill holding a Lunch menu with Soup, Hake and Lemonade sent from it from the copy
- * `versionId`, then each of `moreItems` (menu item ids of the Lunch menu), fired: 14.00.
+ * A takeaway bill with Soup, Hake and Lemonade sent from the Lunch menu's copy `versionId`, then
+ * each of `moreItems` (menu item ids of the Lunch menu), fired. Sending groups the three into one
+ * Lunch menu: 14.00.
  */
 export async function lunchBill(
   spec: SpecVenue,
@@ -260,7 +262,6 @@ export async function lunchBill(
       .update(workingOrders)
       .set({ dining: "takeaway" })
       .where(eq(workingOrders.id, bill.tabId));
-    await setSetMenuCount(tx, venue.cfg, bill.tabId, lunch.menuId, 1, venue.operator.personId);
   });
   const draft = await saveSetMenuDraft(
     venue,
@@ -279,11 +280,102 @@ export async function lunchBill(
   return bill;
 }
 
-export function setSpecCount(spec: SpecVenue, billId: string, setMenu: SpecSetMenu, count: number) {
-  const { venue } = spec;
-  return inTx(venue, (tx) =>
-    setSetMenuCount(tx, venue.cfg, billId, setMenu.menuId, count, venue.operator.personId),
+/**
+ * Groups the bill by hand rather than by the cheapest grouping: each of `menus` holds the dish rows
+ * it names, at no charge, and every other dish row is charged a la carte. A set-menu row already on
+ * the bill for the same copy is kept. For a grouping a fresh calculation of the test's order would
+ * not produce, such as a dish at 0.00 inside a set menu.
+ */
+export function groupSpecBillByHand(
+  spec: SpecVenue,
+  billId: string,
+  menus: readonly { menuId: string; lineIds: readonly string[] }[],
+) {
+  return inTx(spec.venue, async (tx) =>
+    saveBillGrouping(tx, billId, await readGroupingCopies(tx, billId), (input) => {
+      const saved = [...(input.previous?.setMenus ?? [])];
+      const chosen = menus.map(({ menuId }, index) => {
+        const offer = input.offers.find(({ id }) => id.startsWith(`${menuId}:`))!;
+        const kept = saved.findIndex(({ offerId }) => offerId === offer.id);
+        const id = kept === -1 ? `menu-${index}` : saved.splice(kept, 1)[0]!.id;
+        return { id, offer };
+      });
+      const placed = new Map(
+        menus.flatMap(({ lineIds }, index) => lineIds.map((lineId) => [lineId, index] as const)),
+      );
+      const dishes = input.dishes.map(({ id, courseId, aLaCarteCents, extrasCents }) => {
+        const index = placed.get(id);
+        if (index === undefined)
+          return { id, place: null, chargeCents: aLaCarteCents, extrasCents };
+        const { id: setMenuId, offer } = chosen[index]!;
+        const lineIndex = offer.lines.findIndex(({ courseIds }) => courseIds.includes(courseId));
+        return { id, place: { setMenuId, lineIndex }, chargeCents: 0, extrasCents };
+      });
+      return {
+        exact: true,
+        totalCents:
+          chosen.reduce((sum, { offer }) => sum + offer.priceCents, 0) +
+          dishes.reduce((sum, { chargeCents, extrasCents }) => sum + chargeCents + extrasCents, 0),
+        unusedDiscountIds: [],
+        setMenus: chosen.map(({ id, offer }) => ({
+          id,
+          offerId: offer.id,
+          discountId: null,
+          baseCents: offer.priceCents,
+          discountCents: 0,
+        })),
+        dishes,
+      };
+    }),
   );
+}
+
+/**
+ * Groups a {@link lunchBill} by hand: its first Soup, Hake, Lemonade and every other dish it sent
+ * into its Lunch menu, and any Soup or Hake sent after them into one Daily menu.
+ */
+export async function groupLunchBillByHand(spec: SpecVenue, lunch: SpecLunch, billId: string) {
+  const dishes = (await specRows(spec, billId)).filter(
+    ({ setMenuRole, parentLineId }) => setMenuRole !== "set_menu" && parentLineId === null,
+  );
+  const named = new Set<string>();
+  const inLunch: string[] = [];
+  const inDaily: string[] = [];
+  for (const { id, name } of dishes) {
+    if (named.has(name)) inDaily.push(id);
+    else {
+      named.add(name);
+      inLunch.push(id);
+    }
+  }
+  return groupSpecBillByHand(spec, billId, [
+    { menuId: lunch.menuId, lineIds: inLunch },
+    ...(inDaily.length === 0 ? [] : [{ menuId: spec.daily.menuId, lineIds: inDaily }]),
+  ]);
+}
+
+/**
+ * Appends `count` set-menu rows of `setMenu` holding no dish to the bill, at its price, and returns
+ * their ids.
+ */
+export function addEmptySpecSetMenus(
+  spec: SpecVenue,
+  billId: string,
+  setMenu: SpecSetMenu,
+  count = 1,
+): Promise<string[]> {
+  return inTx(spec.venue, async (tx) => {
+    const [last] = await tx
+      .select({ lineNo: max(workingOrderLines.lineNo) })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, billId));
+    const ids: string[] = [];
+    for (let index = 1; index <= count; index++)
+      ids.push(
+        await seedBillSetMenu(tx, billId, setMenu, (last?.lineNo ?? 0) + index, setMenu.priceCents),
+      );
+    return ids;
+  });
 }
 
 export interface SpecDishLine {
@@ -344,14 +436,13 @@ export async function sendSpecDishes(
 }
 
 /**
- * The spec bill: a seated bill eaten here with 2 Daily and 2 Special, added in that order, then
- * 4 Soup, 1 Hake, 1 Sea bass and 2 Sirloin, sent in that order, held unless told. Total 73.00.
+ * The spec bill: a seated bill eaten here with 4 Soup, 1 Hake, 1 Sea bass and 2 Sirloin, sent in
+ * that order, held unless told. Sending groups them into 3 Daily and 1 Special, 72.00 in all; the
+ * set-menu rows' ids are answered by set menu, in line order.
  */
 export async function specBill(spec: SpecVenue, release: "hold" | "fire" = "hold") {
   const { venue, daily, special } = spec;
   const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
-  const dailies = (await setSpecCount(spec, bill.tabId, daily, 2)).setMenus;
-  const specials = (await setSpecCount(spec, bill.tabId, special, 2)).setMenus.slice(2);
   await sendSpecDishes(
     spec,
     bill,
@@ -364,11 +455,12 @@ export async function specBill(spec: SpecVenue, release: "hold" | "fire" = "hold
     ],
     release,
   );
-  return {
-    ...bill,
-    daily: dailies.map(({ lineId }) => lineId),
-    special: specials.map(({ lineId }) => lineId),
-  };
+  const menus = (await specRows(spec, bill.tabId)).filter(
+    ({ setMenuRole }) => setMenuRole === "set_menu",
+  );
+  const of = (menu: SpecSetMenu) =>
+    menus.filter(({ setMenuId }) => setMenuId === menu.menuId).map(({ id }) => id);
+  return { ...bill, daily: of(daily), special: of(special) };
 }
 
 export function specRows(spec: SpecVenue, billId: string) {

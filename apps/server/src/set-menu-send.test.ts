@@ -1,7 +1,6 @@
-import { eq, type Query } from "drizzle-orm";
-import { SQLiteSelectBase } from "drizzle-orm/sqlite-core";
-import { expect, it, vi } from "vitest";
-import { kitchenCourses, orderGroups, workingOrderLines } from "@waitron/db";
+import { eq } from "drizzle-orm";
+import { expect, it } from "vitest";
+import { kitchenCourses, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   createExtraList,
@@ -12,12 +11,11 @@ import {
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { GroupRelease } from "./order-group-records.js";
-import { readDrafts, submitDraft, type Draft } from "./order-drafts.js";
+import { submitDraft, type Draft } from "./order-drafts.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import {
   commandFor,
   inTx,
-  revisionOf,
   seatWithNoAllergies,
   setupPartyVenue,
   type PartyVenue,
@@ -122,7 +120,8 @@ const rowsOf = (tabId: string) =>
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
 
-it("sends a set-menu dish at its placed price while a separately ordered one keeps its own price", async () => {
+// Flan (5.00) is cheaper than any set menu here, so the grouping charges it a la carte (D10).
+it("sends a set-menu-folder dish at the grouping's price, removing a set menu it does not pay, while a separately ordered one keeps its own price", async () => {
   const bill = await tableBill();
   const menuLineId = await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, daily, 1));
   const draft = await save(
@@ -135,20 +134,22 @@ it("sends a set-menu dish at its placed price while a separately ordered one kee
     },
   );
   const sent = await send(draft);
-  const [menu, included, added, separate] = await rowsOf(bill.tabId);
-  expect(menu!.id).toBe(menuLineId);
+  const rows = await rowsOf(bill.tabId);
+  expect(rows.map(({ id }) => id)).not.toContain(menuLineId);
+  const [included, added, separate] = rows;
+  expect(rows).toHaveLength(3);
   expect(included).toMatchObject({
-    setMenuRole: "dish",
+    setMenuRole: null,
     setMenuId: daily.menuId,
-    setMenuLineId: menuLineId,
-    setMenuPlace: 0,
-    setMenuCountsAsCourseId: daily.courseId,
+    setMenuLineId: null,
+    setMenuPlace: null,
+    setMenuCountsAsCourseId: null,
     menuId: daily.fullMenuId,
     menuVersionId: daily.versionId,
     menuItemId: daily.menuItemId,
     courseId: daily.courseId,
-    unitPriceGross: 0,
-    lineTotal: 0,
+    unitPriceGross: 500,
+    lineTotal: 500,
     groupId: sent.groups[0]!.id,
   });
   expect(included!.optionSnapshots).toHaveLength(1);
@@ -166,127 +167,27 @@ it("sends a set-menu dish at its placed price while a separately ordered one kee
   });
 });
 
-it("keeps the requested place on the second set menu", async () => {
-  const bill = await tableBill();
-  const second = await inTx(venue, async (tx) => {
-    await seedBillSetMenu(tx, bill.tabId, daily, 1);
-    return seedBillSetMenu(tx, bill.tabId, daily, 2);
-  });
-  const draft = await save(bill, {
-    ...dessert(),
-    setMenuReservedLineId: second,
-    setMenuReservedPlace: 0,
-  });
-  await send(draft);
-  expect((await rowsOf(bill.tabId))[2]).toMatchObject({
-    setMenuLineId: second,
-    setMenuPlace: 0,
-  });
-});
-
-it("places in saved draft order even when sending groups in reverse order", async () => {
-  const bill = await tableBill();
-  const first = await inTx(venue, async (tx) => {
-    const id = await seedBillSetMenu(tx, bill.tabId, daily, 1);
-    await seedBillSetMenu(tx, bill.tabId, daily, 2);
-    return id;
-  });
-  const draft = await save(bill, { ...dessert(), note: "First" }, { ...dessert(), note: "Second" });
-  const [early, late] = draft.lines;
-  await send(draft, [
-    { lineIds: [late!.id], release: "hold" },
-    { lineIds: [early!.id], release: "hold" },
-  ]);
-  const placed = (await rowsOf(bill.tabId)).find((row) => row.setMenuLineId === first);
-  expect(placed?.note).toBe("First");
-});
-
-it("refuses the whole send and retains the draft when the second dish has no place", async () => {
-  const bill = await tableBill();
-  await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, daily, 1));
-  const draft = await save(bill, dessert(), dessert());
-  const before = await rowsOf(bill.tabId);
-  const revision = await revisionOf(venue, bill.partyId);
-  await expect(
-    send(draft, [{ lineIds: draft.lines.map(({ id }) => id), release: "fire" }]),
-  ).rejects.toMatchObject({ code: "set_menu.no_place", params: { dishName: "Flan" } });
-  expect(await rowsOf(bill.tabId)).toEqual(before);
-  expect(
-    await venue.db.select().from(orderGroups).where(eq(orderGroups.partyId, bill.partyId)),
-  ).toEqual([]);
-  expect(await revisionOf(venue, bill.partyId)).toBe(revision);
-  expect(await inTx(venue, (tx) => readDrafts(tx, bill.partyId))).toEqual([draft]);
-});
-
-it("uses the landing copy's price and counts-as course while sending with the tapped course", async () => {
+it("stores a dish tapped in another set menu's folder at its a la carte price with the tapped course", async () => {
   const bill = await tableBill();
   const target = await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, daily, 1));
   const tap = { ...dessert(), setMenuId: special.menuId, menuItemId: special.menuItemId };
   const draft = await save(bill, tap);
   await send(draft);
-  const [, placed] = await rowsOf(bill.tabId);
+  const [placed, ...rest] = await rowsOf(bill.tabId);
+  expect(rest).toEqual([]);
   expect(placed).toMatchObject({
     setMenuId: special.menuId,
-    setMenuLineId: target,
-    setMenuCountsAsCourseId: daily.courseId,
+    setMenuLineId: null,
+    setMenuCountsAsCourseId: null,
     courseId: special.courseId,
-    unitPriceGross: 0,
+    unitPriceGross: 500,
   });
+  expect(placed!.id).not.toBe(target);
 
-  const second = await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, special, 3, 2100));
+  await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, special, 3, 2100));
   await send(await save(bill, tap));
-  const [, kept, , later] = await rowsOf(bill.tabId);
+  const [kept, later, ...left] = await rowsOf(bill.tabId);
+  expect(left).toEqual([]);
   expect(kept).toEqual(placed);
-  expect(later).toMatchObject({ setMenuLineId: second, lineTotal: 500 });
-});
-
-it("keeps a place reserved by a draft dish left out of this send", async () => {
-  const bill = await tableBill();
-  const [first, second] = await inTx(venue, async (tx) => [
-    await seedBillSetMenu(tx, bill.tabId, daily, 1),
-    await seedBillSetMenu(tx, bill.tabId, daily, 2),
-  ]);
-  const draft = await save(bill, dessert(), {
-    ...dessert(),
-    setMenuReservedLineId: first,
-    setMenuReservedPlace: 0,
-  });
-  const sent = await send(draft, [{ lineIds: [draft.lines[0]!.id], release: "hold" }]);
-  expect((await rowsOf(bill.tabId))[2]).toMatchObject({ setMenuLineId: second });
-  await send(sent.draft!);
-  expect((await rowsOf(bill.tabId))[3]).toMatchObject({ setMenuLineId: first });
-});
-
-it("refuses to place a dish after its only set-menu line is removed", async () => {
-  const bill = await tableBill();
-  const lineId = await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, daily, 1));
-  const draft = await save(bill, dessert());
-  await inTx(venue, (tx) => tx.delete(workingOrderLines).where(eq(workingOrderLines.id, lineId)));
-  await expect(send(draft)).rejects.toMatchObject({ code: "set_menu.no_place" });
-  expect(await rowsOf(bill.tabId)).toEqual([]);
-});
-
-it("sends ordinary dishes without reading set-menu copies", async () => {
-  const bill = await tableBill();
-  const draft = await save(bill, { menuItemId: venue.item("Burger"), quantity: "1" });
-  const prototype = SQLiteSelectBase.prototype as unknown as {
-    _prepare(oneTime?: boolean): unknown;
-    toSQL(): Query;
-  };
-  const prepare = prototype._prepare;
-  const reads: string[] = [];
-  const observed = vi.spyOn(prototype, "_prepare").mockImplementation(function (
-    this: { toSQL(): Query },
-    oneTime,
-  ) {
-    const { sql } = this.toSQL();
-    if (sql.includes('from "bill_set_menu_copies"')) reads.push(sql);
-    return prepare.call(this, oneTime);
-  });
-  try {
-    await send(draft);
-    expect(reads).toEqual([]);
-  } finally {
-    observed.mockRestore();
-  }
+  expect(later).toMatchObject({ setMenuLineId: null, lineTotal: 500 });
 });

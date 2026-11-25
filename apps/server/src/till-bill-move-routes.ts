@@ -1,33 +1,22 @@
 import { withIssuanceTransaction } from "@waitron/core";
 import { withTransaction } from "@waitron/db";
-import { requireBodyUuid, readRawJsonBody } from "@waitron/server-kit";
-import { type DishMove, int4InRange, AppError } from "@waitron/shared";
+import { readRawJsonBody } from "@waitron/server-kit";
 import type { Hono } from "hono";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import { moveDishes, mergeBills } from "./bill-actions.js";
 import { invalid } from "./bill-allocation.js";
-import {
-  requireOrderBillEditor,
-  parseBillEditExpecteds,
-  parseBillEditExpected,
-} from "./bill-editing.js";
+import { parseBillEditExpecteds, parseBillEditExpected } from "./bill-editing.js";
 import { billNameZoneSubject, setBillName } from "./bill-identities.js";
 import { asObject } from "./bill-payments-api.js";
 import { issueIfFullyPaid } from "./bill-payments.js";
 import { refuseTakenOff } from "./floor-today-table.js";
 import { sendingCfg } from "./made-here.js";
 import { previewBillMoveAllergy, moveBill } from "./move-bill.js";
-import type { BillEditExpected } from "./order-drafts.js";
-import { partyOfOrder, checkAndBumpParty } from "./parties.js";
 import { requestCfg } from "./request-config.js";
-import { refuseUnlessSetMenuBill } from "./set-menu-bill.js";
-import { moveSetMenuDishes } from "./set-menu-moves.js";
-import { assertTabOpen } from "./stored-order-lines.js";
 import { recheckFireSession } from "./till-order-commands.js";
 import { named } from "./till-order-zones.js";
 import {
   requireTabParam,
-  requireRevision,
   requireLineIds,
   requireOtherBill,
   billCommand,
@@ -43,55 +32,12 @@ import { checkZones } from "./zone-access.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
-function requireSetMenuMoves(value: unknown): DishMove[] {
-  if (!Array.isArray(value) || value.length === 0) throw invalid("moves");
-  return value.map((entry: unknown) => {
-    const { lineId, to } = asObject(entry);
-    const { setMenuLineId, place } = asObject(to);
-    if (!int4InRange(place, 0)) throw invalid("moves");
-    return {
-      lineId: requireBodyUuid(lineId, "moves").toLowerCase(),
-      to: { setMenuLineId: requireBodyUuid(setMenuLineId, "moves").toLowerCase(), place },
-    };
-  });
-}
-
 export function mountTillBillMoveRoutes(
   app: Hono,
   deps: TillApiDeps,
   log: Logger,
   fiscal: TillSaleDeps,
 ): void {
-  app.post("/api/bills/:id/set-menu-moves", (c) =>
-    run(c, log, async () => {
-      const session = await requireSession(deps, c, { action: "take-orders" });
-      const cfg = requestCfg(deps.cfg, session);
-      const billId = requireTabParam(c.req.param("id")).toLowerCase();
-      const body = asObject(await readRawJsonBody<unknown>(c));
-      const moves = requireSetMenuMoves(body.moves);
-      const expected = requireRevision(body.expectedPartyRevision, "expectedPartyRevision");
-      const result = await withTransaction(deps.db, async (tx) => {
-        await requireEconomicWrite(tx, deps.cfg, deps.admission);
-        await checkZones(tx, session, [{ orderId: billId }]);
-        const revision = await assertTabOpen(tx, billId);
-        await refuseUnlessSetMenuBill(tx, billId);
-        const partyId = await partyOfOrder(tx, billId);
-        await requireOrderBillEditor(tx, billId, {
-          operatorId: session.personId,
-          expectedEdit: body.expectedEdit as BillEditExpected | null,
-        });
-        // A takeaway without a party uses its bill revision in the same request field.
-        if (partyId === null && revision !== expected)
-          throw new AppError("working_order.out_of_date", { workingOrderId: billId, revision });
-        const partyRevision =
-          partyId === null ? revision + 1 : await checkAndBumpParty(tx, partyId, expected, "open");
-        const setMenus = await moveSetMenuDishes(tx, cfg, billId, moves);
-        return { setMenus, partyRevision };
-      });
-      return c.json(result);
-    }),
-  );
-
   // The path is the bill the dishes leave.
   app.post("/api/bills/:id/move-dishes", (c) =>
     runBodyLines(c, log, async () => {

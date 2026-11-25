@@ -24,7 +24,7 @@ import {
 } from "@waitron/shared";
 import { or, eq, and, inArray, sql, isNull, isNotNull, exists } from "drizzle-orm";
 import { setImmediate as nextTurn } from "node:timers/promises";
-import { refusePaidLines } from "./bill-payments.js";
+import { assertLinesKeptExcess, readBillExcess, refusePaidLines } from "./bill-payments.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
 import { copyKitchenJobLines, copyKitchenPrintLinks } from "./kitchen-ticket-links.js";
 import { splitLineServiceState, readLineCancellations } from "./line-service-state.js";
@@ -34,11 +34,12 @@ import { recordPortionEvents, carryLineReductions } from "./order-portions.js";
 import {
   isSetMenuBill,
   refuseUnlessSetMenuBill,
-  refuseDraftLosingSetMenuPlace,
   carryBillSetMenuCopies,
+  recordBillSetMenuVersions,
 } from "./set-menu-bill.js";
 import { recordedSetMenusListing } from "./set-menu-links.js";
-import { replaceMovedDishes } from "./set-menu-moves.js";
+import { refuseMovingFrozenDishes } from "./set-menu-moves.js";
+import { regroupBills } from "./set-menu-regroup.js";
 import { totalBeforeEdit, refuseOrderOverSimplifiedLimit } from "./stored-order-lines.js";
 import type { TradingContext } from "./trading-context.js";
 
@@ -74,7 +75,10 @@ function modesMatch(
  * keeping each line's id, modifier links and any fired ticket; returns the ids of the lines it
  * moved. A caller naming a set-menu line includes its dishes in the selection. It makes no
  * service-mode check: the caller has made {@link assertServiceModesMatch}'s, or copied the
- * source's context onto the destination.
+ * source's context onto the destination. The destination's regrouping may not raise what it holds
+ * over its total (`bill.received_exceeds_total`); the source's balance is its caller's to check.
+ * With `deferTarget`, the caller works out the destination's set menus and checks its
+ * simplified-invoice limit itself, after its last move into it.
  */
 export async function moveOrderLines(
   tx: Transaction,
@@ -82,8 +86,9 @@ export async function moveOrderLines(
   fromTabId: string,
   toTabId: string,
   lineNos: number[] | undefined,
-  opts: { actorId?: string } = {},
+  opts: { actorId?: string; deferTarget?: boolean } = {},
 ): Promise<string[]> {
+  const deferTarget = opts.deferTarget === true;
   // A self-transfer would allocate line numbers that collide with the rows being moved.
   if (fromTabId === toTabId) {
     throw new AppError("tab.merge_self", { tabId: fromTabId });
@@ -128,6 +133,7 @@ export async function moveOrderLines(
       parentLineId: workingOrderLines.parentLineId,
       setMenuRole: workingOrderLines.setMenuRole,
       setMenuId: workingOrderLines.setMenuId,
+      setMenuVersionId: workingOrderLines.setMenuVersionId,
       setMenuLineId: workingOrderLines.setMenuLineId,
     })
     .from(workingOrderLines)
@@ -148,23 +154,21 @@ export async function moveOrderLines(
   );
   const toTakesSetMenus = movedMenus.length > 0 || looseDishes.length > 0;
   if (toTakesSetMenus) await refuseUnlessSetMenuBill(tx, toTabId);
-  // A whole-bill merge carries the draft along with its menus.
-  if (lineNos !== undefined && movedMenus.length > 0) {
-    await refuseDraftLosingSetMenuPlace(
-      tx,
-      fromTabId,
-      movedMenuIds,
-      new Set(source.map(({ id }) => id)),
-    );
-  }
+  await refuseMovingFrozenDishes(
+    tx,
+    looseDishes.map(({ id }) => id),
+  );
   if (lineNos === undefined) {
     await carryBillSetMenuCopies(tx, fromTabId, toTabId);
   } else {
-    const carried = new Set(movedMenus.map(({ setMenuId }) => setMenuId!));
+    const carried = movedMenus.map(({ setMenuId, setMenuVersionId }) => ({
+      menuId: setMenuId!,
+      versionId: setMenuVersionId!,
+    }));
     const listing = await recordedSetMenusListing(tx, fromTabId, source);
     if (listing.length > 0 && (toTakesSetMenus || (await isSetMenuBill(tx, toTabId))))
-      for (const setMenuId of listing) carried.add(setMenuId);
-    if (carried.size > 0) await carryBillSetMenuCopies(tx, fromTabId, toTabId, [...carried]);
+      carried.push(...listing);
+    if (carried.length > 0) await recordBillSetMenuVersions(tx, toTabId, carried);
   }
 
   const [agg] = await tx
@@ -172,7 +176,9 @@ export async function moveOrderLines(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, toTabId));
   const base = agg!.next;
-  const before = source.length > 0 ? await totalBeforeEdit(tx, cfg, toTabId) : null;
+  const checksTarget = source.length > 0 && !deferTarget;
+  const before = checksTarget ? await totalBeforeEdit(tx, cfg, toTabId) : null;
+  const targetExcess = checksTarget ? await readBillExcess(tx, toTabId) : null;
 
   // Moved in place so every row keyed on the line id survives. Destination numbers start beyond its
   // current maximum, so no update collides on `(working_order_id, line_no)`.
@@ -185,15 +191,8 @@ export async function moveOrderLines(
         and(eq(workingOrderLines.workingOrderId, fromTabId), eq(workingOrderLines.id, line.id)),
       );
   }
-  // Loose dishes can take places on menus that arrived in the same move.
-  if (looseDishes.length > 0) {
-    await replaceMovedDishes(
-      tx,
-      toTabId,
-      looseDishes.map(({ id }) => id),
-    );
-  }
   if (source.length > 0) {
+    await regroupBills(tx, deferTarget ? [fromTabId] : [fromTabId, toTabId]);
     const lineIds = source.map((line) => line.id);
     await stampSentOrderNumber(tx, lineIds, from.orderNumber);
 
@@ -203,7 +202,8 @@ export async function moveOrderLines(
       toOrderId: toTabId,
       actorId: opts.actorId ?? null,
     });
-    await refuseOrderOverSimplifiedLimit(tx, cfg, toTabId, before);
+    if (targetExcess !== null) await assertLinesKeptExcess(tx, targetExcess);
+    if (!deferTarget) await refuseOrderOverSimplifiedLimit(tx, cfg, toTabId, before);
   }
   return source.map((line) => line.id);
 }
@@ -368,7 +368,7 @@ export async function carveOffLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-  opts: { splitExtras?: boolean; actorId?: string },
+  opts: { splitExtras?: boolean; actorId?: string; deferTarget?: boolean },
 ): Promise<{ splitLines: Map<string, SplitRow> }> {
   return carveLines(tx, cfg, fromTabId, toTabId, transfers, opts);
 }
@@ -379,7 +379,12 @@ async function carveLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-  opts: { splitExtras?: boolean; splitIntoUnits?: boolean; actorId?: string },
+  opts: {
+    splitExtras?: boolean;
+    splitIntoUnits?: boolean;
+    actorId?: string;
+    deferTarget?: boolean;
+  },
 ): Promise<{ splitLines: Map<string, SplitRow> }> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
   const sourceRows = await tx
@@ -517,7 +522,10 @@ async function carveLines(
 
   const movedLineIds =
     wholeLineNos.length > 0
-      ? await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos, { actorId: opts.actorId })
+      ? await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos, {
+          actorId: opts.actorId,
+          deferTarget: opts.deferTarget,
+        })
       : [];
 
   const splitLines = new Map<string, SplitRow>();

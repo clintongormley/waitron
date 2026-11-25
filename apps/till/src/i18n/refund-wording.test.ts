@@ -19,7 +19,19 @@ describe("A803 refund wording", () => {
     ],
     [
       "bill.received_exceeds_total_excess",
-      "Moving these items would leave this bill owing {amount} less than has already been paid on it. Move fewer items, or refund {amount} first.",
+      "Moving these items would leave this bill owing {amount} less than has already been paid on it. Refund {amount} first, or move fewer items.",
+    ],
+    [
+      "bill.received_exceeds_total_send_excess",
+      "Sending these dishes would leave this bill owing {amount} less than has already been paid on it. Refund {amount} first.",
+    ],
+    [
+      "bill.received_exceeds_total_merge_excess",
+      "Merging would leave this bill owing {amount} less than has already been paid on it. Refund {amount} first, or keep the bills apart.",
+    ],
+    [
+      "bill.refund_excess_bill_gone",
+      "{bill} has left this table or been paid, so there is nothing to refund here.",
     ],
     [
       "bill.received_exceeds_total_line_excess",

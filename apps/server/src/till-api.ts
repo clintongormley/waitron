@@ -38,7 +38,6 @@ import { mountTillKitchenCounterRoutes } from "./till-kitchen-counter-routes.js"
 import { mountTillSaleReceiptRoutes } from "./till-sale-receipt-routes.js";
 import { mountTillDrawerAndCancelRoutes } from "./till-drawer-and-cancel-routes.js";
 import { mountTillTableRoutes } from "./till-table-routes.js";
-import { mountTillSetMenuRoutes } from "./till-set-menu-routes.js";
 import { mountTillGroupRoutes } from "./till-group-routes.js";
 import { mountTillDraftRoutes } from "./till-draft-routes.js";
 import { mountTillOrderLineRoutes } from "./till-order-line-routes.js";
@@ -164,8 +163,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   mountTillDrawerAndCancelRoutes(app, deps, log, pinThrottle);
 
   mountTillTableRoutes(app, deps, log, pinThrottle, catchUpFloor, fiscal);
-
-  mountTillSetMenuRoutes(app, deps, log);
 
   mountTillGroupRoutes(app, deps, log, pinThrottle);
 

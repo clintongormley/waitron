@@ -22,6 +22,7 @@ import {
 import type { OrderLine } from "../state/working-order.js";
 import { lineProductName } from "./product-name.js";
 import {
+  notCheapestText,
   setMenuCourseName,
   setMenuPrice,
   setMenuTag,
@@ -53,6 +54,9 @@ export class TillSetMenuSummary extends LitElement {
       }
       .open {
         display: block;
+      }
+      p.open {
+        margin: 0;
       }
       .open,
       .unsent {
@@ -100,7 +104,10 @@ export class TillSetMenuSummary extends LitElement {
 
   override render() {
     const bill = this.bill;
-    if (bill === null || bill.setMenus.length === 0) return nothing;
+    if (bill === null) return nothing;
+    const note = notCheapestText(bill);
+    if (bill.setMenus.length === 0)
+      return note === undefined ? nothing : html`<p class="open" data-not-cheapest>${note}</p>`;
     const held = draftPlacements(bill, this.draft).placed;
     const draftNames = new Map(
       this.draft.map((line, index) => [
@@ -193,6 +200,7 @@ export class TillSetMenuSummary extends LitElement {
       <summary>
         ${total} · ${types}
         ${places === "" ? nothing : html`<span class="open">${fill(t("set_menu.open_places"), { places })}</span>`}
+        ${note === undefined ? nothing : html`<span class="open" data-not-cheapest>${note}</span>`}
       </summary>
       ${repeat(
         rows,
@@ -221,23 +229,27 @@ export class TillSetMenuSummary extends LitElement {
                 `,
               )}
             </ul>
-            <wt-button
-              variant="secondary"
-              ?disabled=${disabled || this.removeMenu === undefined}
-              @click=${() =>
-                void this.#apply(row.id, async () => {
-                  if (row.places.some(({ sent }) => sent.length > 0))
-                    return this.removeMenu!(row.id);
-                  const draft = draftNamesLosingPlace(bill, this.draft, [row.id]);
-                  if (draft.length > 0)
-                    return codeMessage("set_menu.needed_by_draft", undefined, {
-                      setMenuName: row.name,
-                      dishNames: draft,
-                    });
-                  return this.removeMenu!(row.id);
-                })}
-              >${t("action.cancel")}</wt-button
-            >
+            ${
+              this.removeMenu === undefined
+                ? nothing
+                : html`<wt-button
+                    variant="secondary"
+                    ?disabled=${disabled}
+                    @click=${() =>
+                      void this.#apply(row.id, async () => {
+                        if (row.places.some(({ sent }) => sent.length > 0))
+                          return this.removeMenu!(row.id);
+                        const draft = draftNamesLosingPlace(bill, this.draft, [row.id]);
+                        if (draft.length > 0)
+                          return codeMessage("set_menu.needed_by_draft", undefined, {
+                            setMenuName: row.name,
+                            dishNames: draft,
+                          });
+                        return this.removeMenu!(row.id);
+                      })}
+                    >${t("action.cancel")}</wt-button
+                  >`
+            }
             ${
               this.compMenu === undefined
                 ? nothing

@@ -13,7 +13,7 @@ export const billSetMenuCopies = table(
   },
   (t) => [
     primaryKey({
-      columns: [t.workingOrderId, t.setMenuId],
+      columns: [t.workingOrderId, t.setMenuId, t.menuVersionId],
       name: "bill_set_menu_copies_pk",
     }),
     foreignKey({

@@ -136,7 +136,7 @@ export interface DishToPlace {
   reserved: DishPlace | null;
 }
 
-export interface PlacementResult extends DishPlace {
+interface PlacementResult extends DishPlace {
   id: string;
   priceCents: number;
   countsAsCourseId: string;

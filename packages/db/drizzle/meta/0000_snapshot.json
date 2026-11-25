@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "3a49dedc-18b4-4193-a560-5bcbed28e740",
+  "id": "7d4cbac9-ada1-4ff3-8e47-68ab7ce64580",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1702,7 +1702,8 @@
         "bill_set_menu_copies_pk": {
           "columns": [
             "working_order_id",
-            "set_menu_id"
+            "set_menu_id",
+            "menu_version_id"
           ],
           "name": "bill_set_menu_copies_pk"
         }

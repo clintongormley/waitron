@@ -68,7 +68,10 @@ export function draftMenuDishes(draft: readonly OrderLine[]): DishToPlace[] {
   );
 }
 
-export function draftPlacements(bill: BillSetMenuState, draft: readonly OrderLine[]) {
+export function draftPlacements(
+  bill: BillSetMenuState,
+  draft: readonly OrderLine[],
+): ReturnType<typeof placeInOrder> {
   return placeInOrder(bill, draftMenuDishes(draft));
 }
 

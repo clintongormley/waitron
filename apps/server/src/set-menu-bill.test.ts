@@ -68,9 +68,31 @@ async function tableBill() {
 
 const read = (id: string) => inTx(venue, (tx) => readBillSetMenus(tx, id));
 
-async function placeDish(id: string, setMenuLineId: string) {
+/**
+ * Sends Flan, then seeds a Daily row at `lineNo` with Flan placed in it, Flan numbered after it.
+ * Sent first: a send works out the bill's set menus, and would remove an empty one.
+ */
+async function placeDish(id: string, lineNo: number) {
   await order(venue, id, "Flan");
   return inTx(venue, async (tx) => {
+    const flan = and(
+      eq(workingOrderLines.workingOrderId, id),
+      eq(workingOrderLines.productId, daily.productId),
+    );
+    await tx
+      .update(workingOrderLines)
+      .set({ lineNo: lineNo + 1 })
+      .where(flan);
+    // The send recorded the Daily's live copy; the bill records `daily.versionId` instead.
+    await tx
+      .delete(billSetMenuCopies)
+      .where(
+        and(
+          eq(billSetMenuCopies.workingOrderId, id),
+          eq(billSetMenuCopies.setMenuId, daily.menuId),
+        ),
+      );
+    const setMenuLineId = await seedBillSetMenu(tx, id, daily, lineNo);
     const [{ id: lineId }] = await tx
       .update(workingOrderLines)
       .set({
@@ -82,14 +104,9 @@ async function placeDish(id: string, setMenuLineId: string) {
         unitPriceGross: 0,
         lineTotal: 0,
       })
-      .where(
-        and(
-          eq(workingOrderLines.workingOrderId, id),
-          eq(workingOrderLines.productId, daily.productId),
-        ),
-      )
+      .where(flan)
       .returning({ id: workingOrderLines.id });
-    return lineId;
+    return { setMenuLineId, lineId };
   });
 }
 
@@ -112,8 +129,7 @@ it("admits a takeaway counter order", async () => {
 
 it("reads the old copy and the copy a moved line brought with it", async () => {
   const id = await tableBill();
-  const lineId = await inTx(venue, (tx) => seedBillSetMenu(tx, id, daily, 1));
-  const dishId = await placeDish(id, lineId);
+  const { setMenuLineId: lineId, lineId: dishId } = await placeDish(id, 1);
   const next = await inTx(venue, async (tx) => {
     await updateMenuDetails(tx, daily.menuId, { setPrice: "16.00" });
     const versionId = await publishWorkingMenu(tx, daily.fullMenuId);
@@ -197,8 +213,7 @@ it("keeps a paid dish placed but makes it unavailable for moves", async () => {
   const id = await tableBill();
   await order(venue, id, "Burger");
   const payment = await cashContribution(venue, id, "2.00");
-  const setLineId = await inTx(venue, (tx) => seedBillSetMenu(tx, id, daily, 2));
-  const dishId = await placeDish(id, setLineId);
+  const { lineId: dishId } = await placeDish(id, 2);
   await inTx(venue, (tx) =>
     tx.insert(billPaymentLines).values({
       billPaymentId: payment,
@@ -276,8 +291,7 @@ it.each([false, true])(
   "keeps the place of a cancelled dish only when its charge was kept: %s",
   async (chargeKept) => {
     const id = await tableBill();
-    const setMenuLineId = await inTx(venue, (tx) => seedBillSetMenu(tx, id, daily, 1));
-    const lineId = await placeDish(id, setMenuLineId);
+    const { lineId } = await placeDish(id, 1);
     await inTx(venue, (tx) =>
       recordAdjustment(tx, {
         workingOrderId: id,
@@ -320,8 +334,7 @@ it.each([false, true])(
 
 it("keeps a dish reduced by a bill-wide discount placed but unavailable for moves", async () => {
   const id = await tableBill();
-  const setMenuLineId = await inTx(venue, (tx) => seedBillSetMenu(tx, id, daily, 1));
-  const lineId = await placeDish(id, setMenuLineId);
+  const { lineId } = await placeDish(id, 1);
   await inTx(venue, async (tx) => {
     const adjustmentId = await recordAdjustment(tx, {
       workingOrderId: id,

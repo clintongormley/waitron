@@ -6,10 +6,11 @@ import {
   billPayments,
   billSetMenuCopies,
   lineServiceCancellations,
-  menuItems,
+  menuReleases,
+  menuVersions,
   orderDraftLines,
-  orderDrafts,
   products,
+  statementChunks,
   workingOrderLines,
   workingOrders,
   type Transaction,
@@ -17,12 +18,9 @@ import {
 import {
   AppError,
   contentLanguageCode,
-  placeInOrder,
   setMenuCopyOf,
   type BillSetMenuState,
   type DishPlace,
-  type DishToPlace,
-  type PlacementResult,
   type ServedSetMenuCopy,
 } from "@waitron/shared";
 import { serveRecordedSetMenus } from "@waitron/venue-service";
@@ -79,29 +77,47 @@ export function isSetMenuBillRow(
   );
 }
 
+/** `unwritten`: the bill's row when this transaction has not written it yet. */
 export async function refuseUnlessSetMenuBill(
   tx: Transaction,
   workingOrderId: string,
+  unwritten?: Pick<typeof workingOrders.$inferSelect, "partyId" | "dining" | "serviceMode">,
 ): Promise<void> {
-  if (!(await isSetMenuBill(tx, workingOrderId))) throw new AppError("set_menu.not_seated", {});
+  const holds =
+    unwritten === undefined ? await isSetMenuBill(tx, workingOrderId) : isSetMenuBillRow(unwritten);
+  if (!holds) throw new AppError("set_menu.not_seated", {});
 }
 
-export async function readBillSetMenuVersions(
+/** Every (set menu, version) the bill records: a moved set menu can bring a second version (D26). */
+export function readBillSetMenuVersions(
   tx: Transaction,
   workingOrderId: string,
-): Promise<Map<string, string>> {
-  const rows = await tx
+): Promise<{ menuId: string; versionId: string }[]> {
+  return tx
     .select({ menuId: billSetMenuCopies.setMenuId, versionId: billSetMenuCopies.menuVersionId })
     .from(billSetMenuCopies)
     .where(eq(billSetMenuCopies.workingOrderId, workingOrderId));
-  return new Map(rows.map(({ menuId, versionId }) => [menuId, versionId]));
 }
 
+/** A (set menu, version) pair a bill records. */
+export interface RecordedSetMenuVersion {
+  menuId: string;
+  versionId: string;
+}
+
+const copyConflict = {
+  target: [
+    billSetMenuCopies.workingOrderId,
+    billSetMenuCopies.setMenuId,
+    billSetMenuCopies.menuVersionId,
+  ],
+};
+
+/** Records on `toBillId` every copy `fromBillId` records. */
 export async function carryBillSetMenuCopies(
   tx: Transaction,
   fromBillId: string,
   toBillId: string,
-  menuIds?: readonly string[],
 ): Promise<void> {
   await tx
     .insert(billSetMenuCopies)
@@ -113,21 +129,25 @@ export async function carryBillSetMenuCopies(
           menuVersionId: billSetMenuCopies.menuVersionId,
         })
         .from(billSetMenuCopies)
-        .where(
-          and(
-            eq(billSetMenuCopies.workingOrderId, fromBillId),
-            menuIds === undefined
-              ? undefined
-              : inArray(
-                  billSetMenuCopies.setMenuId,
-                  sql`(select value from json_each(${JSON.stringify(menuIds)}))`,
-                ),
-          ),
-        ),
+        .where(eq(billSetMenuCopies.workingOrderId, fromBillId)),
     )
-    .onConflictDoNothing({
-      target: [billSetMenuCopies.workingOrderId, billSetMenuCopies.setMenuId],
-    });
+    .onConflictDoNothing(copyConflict);
+}
+
+/** Records on `billId` exactly these (set menu, version) pairs, keeping any it already records. */
+export async function recordBillSetMenuVersions(
+  tx: Transaction,
+  billId: string,
+  versions: readonly RecordedSetMenuVersion[],
+): Promise<void> {
+  const rows = versions.map(({ menuId, versionId }) => ({
+    workingOrderId: billId,
+    setMenuId: menuId,
+    menuVersionId: versionId,
+  }));
+  for (const chunk of statementChunks(billSetMenuCopies, rows)) {
+    await tx.insert(billSetMenuCopies).values(chunk).onConflictDoNothing(copyConflict);
+  }
 }
 
 export async function readBillSetMenus(
@@ -209,38 +229,108 @@ export async function readBillsSetMenus(
   );
   const placed = lines.filter((line) => line.role === "dish" && line.setMenuLineId !== null);
   const dishes = placed.length === 0 ? [] : await placedSetMenuDishes(tx, placed);
-  return new Map(
-    billIds.map((billId) => {
-      const billVersions = versions.filter((row) => row.billId === billId);
-      const billMenus = menuLines.filter((row) => row.billId === billId);
-      const copies = new Map<string, { copy: ServedSetMenuCopy; versionId: string }>();
-      for (const row of [...billVersions, ...billMenus]) {
-        const copy = servedByVersion.get(key(row))!;
-        if (!copies.has(copy.key)) copies.set(copy.key, { copy, versionId: row.versionId! });
-      }
-      return [
-        billId,
-        {
-          setMenus: {
-            copies: [...copies.values()].map(({ copy, versionId }) =>
-              setMenuCopyOf(copy, versionId),
-            ),
-            recorded: Object.fromEntries(
-              billVersions.map(({ menuId, versionId }) => [menuId, versionId]),
-            ),
-            setMenus: billMenus.map(({ id, lineNo, menuId, versionId }) => ({
-              lineId: id,
-              lineNo,
-              copyId: servedByVersion.get(key({ menuId, versionId }))!.key,
-            })),
-            dishes: dishes.filter((dish) => dish.billId === billId).map(({ dish }) => dish),
-            exact: exact.get(billId)!,
-          },
-          setMenuCopies: [...copies.values()].map(({ copy }) => copy),
-        },
-      ];
-    }),
+  const bills = billIds.map((billId) => {
+    const billVersions = versions.filter((row) => row.billId === billId);
+    const billMenus = menuLines.filter((row) => row.billId === billId);
+    const copies = new Map<string, { copy: ServedSetMenuCopy; versionId: string }>();
+    for (const row of [...billVersions, ...billMenus]) {
+      const copy = servedByVersion.get(key(row))!;
+      if (!copies.has(copy.key)) copies.set(copy.key, { copy, versionId: row.versionId! });
+    }
+    return {
+      billId,
+      billMenus,
+      copies,
+      recorded: recordedCopies([...copies.values()], billVersions),
+    };
+  });
+  const publishOrder = await versionPublishOrder(
+    tx,
+    bills.flatMap(({ recorded }) => tiedVersions(recorded)),
   );
+  return new Map(
+    bills.map(({ billId, billMenus, copies, recorded }) => [
+      billId,
+      {
+        setMenus: {
+          copies: [...copies.values()].map(({ copy, versionId }) => setMenuCopyOf(copy, versionId)),
+          recorded: newestRecorded(recorded, publishOrder),
+          setMenus: billMenus.map(({ id, lineNo, menuId, versionId }) => ({
+            lineId: id,
+            lineNo,
+            copyId: servedByVersion.get(key({ menuId, versionId }))!.key,
+          })),
+          dishes: dishes.filter((dish) => dish.billId === billId).map(({ dish }) => dish),
+          exact: exact.get(billId)!,
+        },
+        setMenuCopies: [...copies.values()].map(({ copy }) => copy),
+      },
+    ]),
+  );
+}
+
+type RecordedCopy = { menuId: string; versionId: string; changedAt: string };
+
+/** The bill's copies its recorded versions hold. Taken from the bill's copies, so a version whose
+ *  copy another recorded version also holds is never named. */
+function recordedCopies(
+  copies: readonly { copy: ServedSetMenuCopy; versionId: string }[],
+  recorded: readonly { menuId: string; versionId: string }[],
+): RecordedCopy[] {
+  const pairs = new Set(recorded.map(({ menuId, versionId }) => `${versionId}:${menuId}`));
+  return copies
+    .filter(({ copy, versionId }) => pairs.has(`${versionId}:${copy.menuId}`))
+    .map(({ copy, versionId }) => ({ menuId: copy.menuId, versionId, changedAt: copy.changedAt }));
+}
+
+/** The versions whose copy shares its set menu's change time with another recorded copy. */
+function tiedVersions(recorded: readonly RecordedCopy[]): string[] {
+  return recorded
+    .filter((one) =>
+      recorded.some(
+        (other) =>
+          other !== one && other.menuId === one.menuId && other.changedAt === one.changedAt,
+      ),
+    )
+    .map(({ versionId }) => versionId);
+}
+
+/** The newest of the bill's recorded versions of each set menu, the one the till offers: by the
+ *  copy's own change time, as `markNewestOnSale` picks for a new bill, then by publish order. */
+function newestRecorded(
+  recorded: readonly RecordedCopy[],
+  publishOrder: ReadonlyMap<string, number>,
+): Record<string, string> {
+  const newest = new Map<string, RecordedCopy>();
+  for (const copy of recorded) {
+    const current = newest.get(copy.menuId);
+    if (
+      current === undefined ||
+      copy.changedAt > current.changedAt ||
+      (copy.changedAt === current.changedAt &&
+        publishOrder.get(copy.versionId)! > publishOrder.get(current.versionId)!)
+    )
+      newest.set(copy.menuId, copy);
+  }
+  return Object.fromEntries([...newest].map(([menuId, { versionId }]) => [menuId, versionId]));
+}
+
+/** Each version's place in the order the versions went on sale: by when its release activated, then
+ *  by its number, the order `liveVersions` chooses by within one menu. */
+async function versionPublishOrder(
+  tx: Transaction,
+  versionIds: readonly string[],
+): Promise<Map<string, number>> {
+  if (versionIds.length === 0) return new Map();
+  const rows = await tx
+    .select({ id: menuVersions.id })
+    .from(menuVersions)
+    .innerJoin(menuReleases, eq(menuReleases.versionId, menuVersions.id))
+    .where(
+      inArray(menuVersions.id, sql`(select value from json_each(${JSON.stringify(versionIds)}))`),
+    )
+    .orderBy(menuReleases.activatesAt, menuVersions.number, menuVersions.id);
+  return new Map(rows.map(({ id }, index) => [id, index]));
 }
 
 /** Which of the dishes `lineIds` carry a comp or discount, on the dish or on one of its extras:
@@ -359,154 +449,4 @@ export interface SetMenuDraftLine {
   setMenuId: string;
   held: boolean;
   reserved: DishPlace | null;
-}
-
-type WorkingLine = typeof workingOrderLines.$inferInsert;
-export interface SetMenuPlacement {
-  workingOrderLineId: string;
-  draft: Pick<SetMenuDraftLine, "position" | "setMenuId" | "reserved" | "draftLineId">;
-  productId: string;
-  variantId: string | null;
-}
-
-export function setMenuDishColumns(result: PlacementResult) {
-  return {
-    setMenuLineId: result.setMenuLineId,
-    setMenuPlace: result.place,
-    setMenuCountsAsCourseId: result.countsAsCourseId,
-    unitPriceGross: result.priceCents,
-    lineTotal: result.priceCents,
-  };
-}
-
-export async function readSetMenuReservations(
-  tx: Transaction,
-  workingOrderId: string,
-  sending: ReadonlySet<string> = new Set(),
-): Promise<DishPlace[]> {
-  const reservations = await tx
-    .select({
-      draftLineId: orderDraftLines.id,
-      setMenuLineId: orderDraftLines.setMenuReservedLineId,
-      place: orderDraftLines.setMenuReservedPlace,
-    })
-    .from(orderDraftLines)
-    .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftLines.draftId))
-    .where(
-      and(
-        eq(orderDrafts.billId, workingOrderId),
-        eq(orderDrafts.state, "open"),
-        isNotNull(orderDraftLines.setMenuReservedLineId),
-      ),
-    );
-  return reservations.flatMap(({ draftLineId, setMenuLineId, place }) =>
-    sending.has(draftLineId) || setMenuLineId === null || place === null
-      ? []
-      : [{ setMenuLineId, place }],
-  );
-}
-
-export async function refuseDraftLosingSetMenuPlace(
-  tx: Transaction,
-  billId: string,
-  removedMenus: ReadonlySet<string>,
-  leavingLines: ReadonlySet<string> = removedMenus,
-): Promise<void> {
-  const rows = await tx
-    .select({
-      id: orderDraftLines.id,
-      productId: menuItems.productId,
-      variantId: orderDraftLines.variantId,
-      name: products.name,
-      setMenuLineId: orderDraftLines.setMenuReservedLineId,
-      place: orderDraftLines.setMenuReservedPlace,
-    })
-    .from(orderDraftLines)
-    .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftLines.draftId))
-    .innerJoin(menuItems, eq(menuItems.id, orderDraftLines.menuItemId))
-    .innerJoin(
-      products,
-      eq(products.id, sql`coalesce(${orderDraftLines.variantId}, ${menuItems.productId})`),
-    )
-    .where(
-      and(
-        eq(orderDrafts.billId, billId),
-        eq(orderDrafts.state, "open"),
-        isNotNull(orderDraftLines.setMenuId),
-      ),
-    )
-    .orderBy(orderDrafts.createdAt, orderDrafts.id, orderDraftLines.position);
-  if (rows.length === 0) return;
-  const dishes = rows.map(({ id, productId, variantId, setMenuLineId, place }) => ({
-    id,
-    productId,
-    variantId,
-    reserved: setMenuLineId === null || place === null ? null : { setMenuLineId, place },
-  }));
-  const state = await readBillSetMenus(tx, billId);
-  const before = placeInOrder(state, dishes).placed;
-  const after = placeInOrder(
-    {
-      ...state,
-      setMenus: state.setMenus.filter(({ lineId }) => !removedMenus.has(lineId)),
-      dishes: state.dishes.filter(({ lineId }) => !leavingLines.has(lineId)),
-    },
-    dishes,
-  );
-  const unplaced = new Set(after.unplaced);
-  const lost = before.filter(({ id }) => unplaced.has(id));
-  if (lost.length === 0) return;
-
-  const menu = state.setMenus.find(({ lineId }) => removedMenus.has(lineId))!;
-  const copy = state.copies.find(({ id }) => id === menu.copyId)!;
-  const names = new Map(rows.map(({ id, name }) => [id, name]));
-  throw new AppError("set_menu.needed_by_draft", {
-    setMenuName: copy.name,
-    dishNames: [...new Set(lost.map(({ id }) => names.get(id)!))],
-  });
-}
-
-export async function placeSetMenuRows(
-  tx: Transaction,
-  workingOrderId: string,
-  rows: readonly WorkingLine[],
-  order: readonly SetMenuPlacement[],
-): Promise<readonly WorkingLine[]> {
-  if (order.length === 0) return rows;
-  const state = await readBillSetMenus(tx, workingOrderId);
-  const sending = new Set(order.flatMap(({ draft }) => draft.draftLineId ?? []));
-  const held = await readSetMenuReservations(tx, workingOrderId, sending);
-  const dishes: DishToPlace[] = [...order]
-    .sort((a, b) => a.draft.position - b.draft.position)
-    .map(({ workingOrderLineId: id, draft, productId, variantId }) => ({
-      id,
-      productId,
-      variantId,
-      reserved: draft.reserved,
-    }));
-  const { placed, unplaced } = placeInOrder(state, dishes, held);
-  const refused = unplaced[0];
-  if (refused !== undefined) {
-    const draftLineId = order.find(({ workingOrderLineId }) => workingOrderLineId === refused)!
-      .draft.draftLineId;
-    throw new AppError("set_menu.no_place", {
-      dishName: rows.find((row) => row.id === refused)!.name,
-      ...(draftLineId === undefined ? {} : { draftLineId }),
-    });
-  }
-  const resultById = new Map(placed.map((place) => [place.id, place]));
-  const menuOfRow = new Map(
-    order.map(({ workingOrderLineId, draft }) => [workingOrderLineId, draft.setMenuId]),
-  );
-  return rows.map((row) => {
-    const placement = resultById.get(row.id!);
-    return placement === undefined
-      ? row
-      : {
-          ...row,
-          setMenuRole: "dish",
-          setMenuId: menuOfRow.get(placement.id)!,
-          ...setMenuDishColumns(placement),
-        };
-  });
 }

@@ -1,19 +1,23 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
-import { floorZones, persons, ticketItems, workingOrders, workingOrderLines } from "@waitron/db";
+import { floorZones, persons, ticketItems, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { loginWithPin } from "@waitron/identity";
 import { updateMenuDetails } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import * as venueService from "@waitron/venue-service";
-import { readBillEditState } from "./bill-editing.js";
-import { insertPartyBill, partyRevision } from "./parties.js";
+import { insertPartyBill } from "./parties.js";
 import { mountTillApi } from "./till-api.js";
+import { placeGroups } from "./testing/group-submit-fixture.js";
 import { inTx, seatWithNoAllergies } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
-import { saveSetMenuDraft, seedBillSetMenu } from "./testing/set-menu-bill-fixture.js";
+import {
+  saveSetMenuDraft,
+  seedBillSetMenu,
+  setMenuOnFullMenu,
+} from "./testing/set-menu-bill-fixture.js";
 import { setMenuBill, setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 
@@ -71,169 +75,6 @@ function request(method: string, path: string, body?: unknown) {
   });
 }
 
-it("sets a bill's count, reads it for a move, cancels one line and refuses the stale count", async () => {
-  const { venue, copy } = fixture;
-  const { partyId, tabId } = await seated();
-  const expectedPartyRevision = await inTx(venue, (tx) => partyRevision(tx, partyId));
-  const path = `/api/bills/${tabId}/set-menus`;
-  const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, tabId));
-  const count = { count: 2, expectedPartyRevision, expectedEdit };
-  const raised = await request("PUT", `${path}/${copy.menuId}`, count);
-  expect(raised.status).toBe(200);
-  const answer = await raised.json();
-  expect(answer).toMatchObject({
-    partyRevision: expectedPartyRevision + 1,
-    setMenus: {
-      recorded: { [copy.menuId]: copy.versionId },
-      setMenus: [{ lineNo: 1 }, { lineNo: 2 }],
-    },
-  });
-
-  const read = await request("GET", path);
-  expect(read.status).toBe(200);
-  expect(await read.json()).toEqual(answer);
-  const stale = await request("PUT", `${path}/${copy.menuId}`, { ...count, count: 3 });
-  expect(stale.status).toBe(409);
-  expect(await stale.json()).toMatchObject({ error: { code: "party.out_of_date" } });
-
-  const [first, second] = answer.setMenus.setMenus;
-  const removed = await request("DELETE", `/api/bills/${tabId}/set-menu-lines/${first.lineId}`, {
-    expectedPartyRevision: answer.partyRevision,
-    expectedEdit,
-  });
-  expect(removed.status).toBe(200);
-  expect(await removed.json()).toMatchObject({
-    partyRevision: expectedPartyRevision + 2,
-    setMenus: { setMenus: [second] },
-  });
-  expect(
-    await venue.db
-      .select({ id: workingOrderLines.id })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, tabId)),
-  ).toEqual([{ id: second.lineId }]);
-});
-
-it.each(["PUT", "DELETE"] as const)(
-  "%s refuses a change while another person owns the bill's draft",
-  async (method) => {
-    const { venue, copy } = fixture;
-    const bill = await seated();
-    const lineId = await inTx(venue, (tx) => seedBillSetMenu(tx, bill.tabId, copy, 1));
-    await saveSetMenuDraft(venue, bill, {
-      menuItemId: copy.menuItemId,
-      menuVersionId: copy.versionId,
-      setMenuId: copy.menuId,
-      quantity: "1",
-    });
-    const expectedPartyRevision = await inTx(venue, (tx) => partyRevision(tx, bill.partyId));
-    const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, bill.tabId));
-    const path = method === "PUT" ? `set-menus/${copy.menuId}` : `set-menu-lines/${lineId}`;
-    const response = await request(method, `/api/bills/${bill.tabId}/${path}`, {
-      count: 2,
-      expectedPartyRevision,
-      expectedEdit,
-    });
-    expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({ error: { code: "draft.taken_over" } });
-    expect(
-      await venue.db
-        .select({ id: workingOrderLines.id })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, bill.tabId)),
-    ).toEqual([{ id: lineId }]);
-    expect(await inTx(venue, (tx) => partyRevision(tx, bill.partyId))).toBe(expectedPartyRevision);
-  },
-);
-
-it("requires the observed editor state on a party bill even with a current party revision", async () => {
-  const { venue, copy } = fixture;
-  const { tabId, partyId } = await seated();
-  const lineId = await inTx(venue, (tx) => seedBillSetMenu(tx, tabId, copy, 1));
-  const expectedPartyRevision = await inTx(venue, (tx) => partyRevision(tx, partyId));
-  const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, tabId));
-
-  const stale = await request("PUT", `/api/bills/${tabId}/set-menus/${copy.menuId}`, {
-    count: 2,
-    expectedPartyRevision,
-    expectedEdit: { ...expectedEdit, editorVersion: expectedEdit.editorVersion + 1 },
-  });
-  expect(stale.status).toBe(409);
-  expect(await stale.json()).toMatchObject({ error: { code: "draft.out_of_date" } });
-  const missing = await request("DELETE", `/api/bills/${tabId}/set-menu-lines/${lineId}`, {
-    expectedPartyRevision,
-  });
-  expect(missing.status).toBe(400);
-  expect(await missing.json()).toMatchObject({
-    error: { code: "management.request_invalid", params: { field: "expectedEdit" } },
-  });
-
-  expect(await inTx(venue, (tx) => partyRevision(tx, partyId))).toBe(expectedPartyRevision);
-  expect(
-    await venue.db
-      .select({ id: workingOrderLines.id })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, tabId)),
-  ).toEqual([{ id: lineId }]);
-});
-
-it("uses the named set menu and line when their ids are uppercase", async () => {
-  const { venue, copy } = fixture;
-  const { tabId, partyId } = await seated();
-  const lineId = await inTx(venue, (tx) => seedBillSetMenu(tx, tabId, copy, 1));
-  const expectedPartyRevision = await inTx(venue, (tx) => partyRevision(tx, partyId));
-  const expectedEdit = await inTx(venue, (tx) => readBillEditState(tx, tabId));
-
-  const raised = await request(
-    "PUT",
-    `/api/bills/${tabId}/set-menus/${copy.menuId.toUpperCase()}`,
-    {
-      count: 2,
-      expectedPartyRevision,
-      expectedEdit,
-    },
-  );
-  expect(raised.status).toBe(200);
-  const removed = await request(
-    "DELETE",
-    `/api/bills/${tabId}/set-menu-lines/${lineId.toUpperCase()}`,
-    {
-      expectedPartyRevision: expectedPartyRevision + 1,
-      expectedEdit,
-    },
-  );
-  expect(removed.status).toBe(200);
-  expect(await removed.json()).toMatchObject({ setMenus: { setMenus: [{ lineNo: 2 }] } });
-});
-
-it.each([
-  ["PUT", "set-menus", "setMenuId"],
-  ["DELETE", "set-menu-lines", "lineId"],
-])("answers with the malformed path field for %s", async (method, path, field) => {
-  const { tabId } = await seated();
-  const response = await request(method, `/api/bills/${tabId}/${path}/invalid-id`, {
-    count: 1,
-    expectedPartyRevision: 0,
-  });
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({
-    error: { code: "management.request_invalid", params: { field } },
-  });
-});
-
-it.each([-1, 100, 1.5, "2", null])("refuses an invalid count %s", async (count) => {
-  const { copy } = fixture;
-  const { tabId } = await seated();
-  const response = await request("PUT", `/api/bills/${tabId}/set-menus/${copy.menuId}`, {
-    count,
-    expectedPartyRevision: 0,
-  });
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({
-    error: { code: "management.request_invalid", params: { field: "count" } },
-  });
-});
-
 it("returns each bill's recorded copy in full with one lookup, even after republishing", async () => {
   const { venue, copy } = fixture;
   const { partyId, billId, menuLineId: older, dishId } = await setMenuBill(fixture);
@@ -286,7 +127,7 @@ it("returns each bill's recorded copy in full with one lookup, even after republ
 });
 
 async function counterTakeaway() {
-  const { venue, copy } = fixture;
+  const { venue } = fixture;
   const id = crypto.randomUUID();
   const zoneId = venue.counter.zoneId;
   await inTx(venue, async (tx) => {
@@ -301,99 +142,32 @@ async function counterTakeaway() {
       "till_choice",
     );
   });
-  return { id, zoneId, dining: "takeaway", lines: [], firstSetMenuId: copy.menuId };
+  return {
+    id,
+    zoneId,
+    dining: "takeaway",
+    lines: [{ menuItemId: venue.counterItem("Flan"), quantity: "1" }],
+  };
 }
 
-it("starts a counter takeaway with one set menu and replays the same order number", async () => {
-  const { venue } = fixture;
-  const body = await counterTakeaway();
-  const { id } = body;
-  const opened = await request("POST", "/api/working-orders", body);
-  expect(opened.status).toBe(200);
-  const answer = await opened.json();
-  expect(answer).toMatchObject({
-    id,
-    orderNumber: expect.any(Number),
-    revision: 1,
-    setMenus: { setMenus: [{ lineNo: 1 }], dishes: [] },
-  });
-  const retried = await request("POST", "/api/working-orders", body);
-  expect(retried.status).toBe(200);
-  expect(await retried.json()).toEqual(answer);
-  expect(
-    await venue.db
-      .select({ id: workingOrders.id, dining: workingOrders.dining })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id)),
-  ).toEqual([{ id, dining: "takeaway" }]);
-  expect(
-    await venue.db
-      .select({ role: workingOrderLines.setMenuRole })
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id)),
-  ).toEqual([{ role: "set_menu" }]);
-});
-
-it("requires the shown counter zone before opening a bill for a set menu", async () => {
+/**
+ * A counter takeaway holding an empty set menu of the fixture's copy at line 2, with its revision
+ * and set-menu state. Opened with a Flan the caller's save drops: an order opens with a line.
+ */
+async function counterWithSetMenu() {
   const { venue, copy } = fixture;
-  const id = crypto.randomUUID();
-  const response = await request("POST", "/api/working-orders", {
-    id,
-    dining: "takeaway",
-    lines: [],
-    firstSetMenuId: copy.menuId,
-  });
-  expect(response.status).toBe(400);
-  expect(await response.json()).toMatchObject({
-    error: { code: "management.request_invalid", params: { field: "zoneId" } },
-  });
-  expect(
-    await venue.db
-      .select({ id: workingOrders.id })
-      .from(workingOrders)
-      .where(eq(workingOrders.id, id)),
-  ).toEqual([]);
-});
-
-it("reopens a counter takeaway with the original menu's price and dishes after republishing", async () => {
-  const { venue, copy } = fixture;
-  const original = await inTx(venue, async (tx) => {
-    await updateMenuDetails(tx, copy.menuId, { setPrice: "14.00" });
-    return publishWorkingMenu(tx, copy.fullMenuId);
-  });
   const body = await counterTakeaway();
   expect((await request("POST", "/api/working-orders", body)).status).toBe(200);
-  await inTx(venue, async (tx) => {
-    await updateMenuDetails(tx, copy.menuId, { setPrice: "15.00" });
-    await publishWorkingMenu(tx, copy.fullMenuId);
-  });
-  const reopened = await request("GET", `/api/working-orders/${body.id}`);
-  expect(reopened.status).toBe(200);
-  expect(await reopened.json()).toMatchObject({
-    dining: "takeaway",
-    lines: [],
-    setMenus: { recorded: { [copy.menuId]: original }, setMenus: [{ lineNo: 1 }] },
-    setMenuCopies: [
-      { menuId: copy.menuId, terms: { price: "14.00" }, offers: [{ id: copy.menuItemId }] },
-    ],
-  });
-  const parked = await request("GET", "/api/working-orders");
-  expect(parked.status).toBe(200);
-  expect(await parked.json()).toContainEqual(
-    expect.objectContaining({
-      id: body.id,
-      items: [],
-      total: "14.00",
-    }),
-  );
-});
+  await inTx(venue, (tx) => seedBillSetMenu(tx, body.id, copy, 2));
+  const held = await (await request("GET", `/api/working-orders/${body.id}`)).json();
+  return { body, revision: held.revision as number, setMenus: held.setMenus };
+}
 
-it("saves a dish at its recorded set-menu price without sending it to the kitchen", async () => {
+// D10: one dish fills no set menu, so a dish tapped in a set-menu folder stays at its a la carte
+// price and the empty set menu goes.
+it("saves a dish tapped in a set-menu folder at its a la carte price without sending it to the kitchen", async () => {
   const { venue, copy } = fixture;
-  const body = await counterTakeaway();
-  const opened = await request("POST", "/api/working-orders", body);
-  expect(opened.status).toBe(200);
-  const { revision, setMenus } = await opened.json();
+  const { body, revision, setMenus } = await counterWithSetMenu();
   const path = `/api/working-orders/${body.id}`;
   const response = await request("PUT", path, {
     dining: body.dining,
@@ -424,10 +198,7 @@ it("saves a dish at its recorded set-menu price without sending it to the kitche
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, body.id))
       .orderBy(workingOrderLines.lineNo),
-  ).toMatchObject([
-    { role: "set_menu", sentAt: expect.any(String) },
-    { role: "dish", price: 0, reservedMenu: setMenus.setMenus[0].lineId, place: 0, sentAt: null },
-  ]);
+  ).toEqual([{ role: null, price: 500, reservedMenu: null, place: null, sentAt: null }]);
   const reopened = await request("GET", path);
   expect(reopened.status).toBe(200);
   const saved = await reopened.json();
@@ -437,10 +208,10 @@ it("saves a dish at its recorded set-menu price without sending it to the kitche
         menuItemId: copy.menuItemId,
         menuVersionId: setMenus.recorded[copy.menuId],
         setMenuId: copy.menuId,
-        product: { unitPrice: "0.00" },
+        product: { unitPrice: "5.00" },
       },
     ],
-    setMenus: { dishes: [{ setMenuLineId: setMenus.setMenus[0].lineId, place: 0 }] },
+    setMenus: { setMenus: [], dishes: [] },
   });
   const fresh = { menuItemId: copy.menuItemId, setMenuId: copy.menuId, quantity: "1" };
   const kept = {
@@ -454,12 +225,6 @@ it("saves a dish at its recorded set-menu price without sending it to the kitche
   expect(await missingVersion.json()).toMatchObject({
     error: { code: "management.request_invalid", params: { field: "lines[1].menuVersionId" } },
   });
-  const noPlace = await request("PUT", path, {
-    ...update,
-    lines: [kept, { ...fresh, menuVersionId: kept.menuVersionId }],
-  });
-  expect(noPlace.status).toBe(409);
-  expect(await noPlace.json()).toMatchObject({ error: { code: "set_menu.no_place" } });
   expect(await (await request("GET", path)).json()).toEqual(saved);
   const placed = await request("POST", `${path}/place`, { expectedEdit: null });
   expect(placed.status).toBe(200);
@@ -473,54 +238,42 @@ it("saves a dish at its recorded set-menu price without sending it to the kitche
 });
 
 it("refuses Eat in on a counter bill with a set menu using the set-menu refusal", async () => {
-  const body = await counterTakeaway();
+  const { body, revision } = await counterWithSetMenu();
   const path = `/api/working-orders/${body.id}`;
-  const opened = await request("POST", "/api/working-orders", body);
-  expect(opened.status).toBe(200);
-  const { revision } = await opened.json();
   const switched = await request("PUT", `${path}/dining`, {
     dining: "eat_in",
     revision,
     expectedEdit: null,
   });
   expect(switched.status).toBe(409);
-  expect(await switched.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
+  expect(await switched.json()).toMatchObject({ error: { code: "set_menu.bill_holds_set_menus" } });
   expect(await (await request("GET", path)).json()).toMatchObject({ dining: "takeaway", revision });
 });
 
-it("discards a parked counter order whose only line is a set-menu charge", async () => {
-  const body = await counterTakeaway();
-  const path = `/api/working-orders/${body.id}`;
-  const opened = await request("POST", "/api/working-orders", body);
-  expect(opened.status).toBe(200);
-  const { revision, setMenus } = await opened.json();
-  const saved = await request("PUT", path, {
-    dining: "takeaway",
-    revision,
-    expectedEdit: null,
-    lines: [],
-  });
-  expect(saved.status).toBe(200);
-  expect(await (await request("GET", path)).json()).toMatchObject({ setMenus, lines: [] });
-  expect((await request("DELETE", path, { expectedEdit: null })).status).toBe(200);
-  const [order] = await fixture.venue.db
-    .select({ status: workingOrders.status })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, body.id));
-  expect(order?.status).toBe("abandoned");
-});
-
 it("keeps sending from the held-order edit on a seated bill that has started service", async () => {
-  const { venue, copy } = fixture;
-  const { tabId } = await seated();
-  await inTx(venue, (tx) => seedBillSetMenu(tx, tabId, copy, 1));
+  const { venue } = fixture;
+  const { tabId, partyId } = await seated();
+  await inTx(venue, (tx) =>
+    placeGroups(tx, venue.cfg, partyId, {
+      operatorId: venue.operator.personId,
+      billId: tabId,
+      groups: [{ lines: [{ menuItemId: venue.item("Flan"), quantity: "1" }], release: "fire" }],
+    }),
+  );
+  const [first] = await venue.db
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, tabId));
   const path = `/api/working-orders/${tabId}`;
   const order = await (await request("GET", path)).json();
   const saved = await request("PUT", path, {
     dining: order.dining,
     expectedEdit: order.expectedEdit,
     revision: order.revision,
-    lines: [{ menuItemId: venue.item("Flan"), quantity: "1" }],
+    lines: [
+      { workingOrderLineId: first!.id, menuItemId: venue.item("Flan"), quantity: "1" },
+      { menuItemId: venue.item("Flan"), quantity: "1" },
+    ],
   });
   expect(saved.status).toBe(200);
   const lines = await venue.db
@@ -528,16 +281,204 @@ it("keeps sending from the held-order edit on a seated bill that has started ser
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
-  expect(lines).toEqual([
-    { role: "set_menu", sentAt: expect.any(String) },
+  // A sent dish started service, so the added Flan is sent too; a set-menu row would not have.
+  expect(lines.filter(({ role }) => role !== "set_menu")).toEqual([
+    { role: null, sentAt: expect.any(String) },
     { role: null, sentAt: expect.any(String) },
   ]);
 });
 
-it("refuses a first set-menu count on Eat in and leaves no counter order behind", async () => {
+let counterMenu: Awaited<ReturnType<typeof setMenuOnFullMenu>> | undefined;
+
+/** A 4.00 set menu of Burger (12.00 a la carte) on the Counter's own menu. */
+async function counterSetMenu() {
+  const { venue } = fixture;
+  counterMenu ??= await inTx(venue, (tx) =>
+    setMenuOnFullMenu(tx, venue.counter.menuId, venue.productId("Burger"), "Counter menu", "4.00"),
+  );
+  return counterMenu;
+}
+
+async function freshBasket(dining: "takeaway" | "eat_in") {
+  const copy = await counterSetMenu();
   const body = await counterTakeaway();
-  const refused = await request("POST", "/api/working-orders", { ...body, dining: "eat_in" });
-  expect(refused.status).toBe(409);
-  expect(await refused.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
-  expect((await request("GET", `/api/working-orders/${body.id}`)).status).toBe(404);
+  return {
+    ...body,
+    dining,
+    lines: [
+      {
+        menuItemId: copy.menuItemId,
+        menuVersionId: copy.versionId,
+        setMenuId: copy.menuId,
+        quantity: "1",
+      },
+    ],
+  };
+}
+
+function payWithBasket(
+  id: string,
+  dining: string,
+  basket: { lines: unknown[]; zoneId?: string; revision?: number },
+) {
+  return request("POST", `/api/working-orders/${id}/payments`, {
+    submissionId: crypto.randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    method: "cash",
+    tendered: "20.00",
+    expectedEdit: null,
+    dining,
+    basket,
+  });
+}
+
+function sendFresh(mode: "park" | "pay", body: Awaited<ReturnType<typeof freshBasket>>) {
+  return mode === "park"
+    ? request("POST", "/api/working-orders", body)
+    : payWithBasket(body.id, body.dining, { lines: body.lines, zoneId: body.zoneId });
+}
+
+const billRows = (id: string) =>
+  fixture.venue.db
+    .select({
+      role: workingOrderLines.setMenuRole,
+      setMenuId: workingOrderLines.setMenuId,
+      price: workingOrderLines.unitPriceGross,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, id))
+    .orderBy(workingOrderLines.lineNo);
+
+it.each(["park", "pay"] as const)(
+  "can %s a fresh Counter takeaway holding a dish tapped in a set-menu folder, charging the set menu's price",
+  async (mode) => {
+    const copy = await counterSetMenu();
+    const body = await freshBasket("takeaway");
+    const response = await sendFresh(mode, body);
+    expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
+    expect(await billRows(body.id)).toEqual([
+      { role: "dish", setMenuId: copy.menuId, price: 0 },
+      { role: "set_menu", setMenuId: copy.menuId, price: 400 },
+    ]);
+    const balance = await (await request("GET", `/api/working-orders/${body.id}/payments`)).json();
+    expect(balance).toMatchObject({
+      total: "4.00",
+      received: mode === "pay" ? "4.00" : "0.00",
+    });
+  },
+);
+
+it.each(["park", "pay"] as const)(
+  "refuses to %s a fresh eat-in Counter basket holding a dish tapped in a set-menu folder",
+  async (mode) => {
+    const body = await freshBasket("eat_in");
+    const response = await sendFresh(mode, body);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
+    expect(await billRows(body.id)).toEqual([]);
+  },
+);
+
+it("pays a held Counter takeaway whose basket now holds a dish tapped in a set-menu folder", async () => {
+  const copy = await counterSetMenu();
+  const body = await freshBasket("takeaway");
+  const held = {
+    ...body,
+    lines: [{ menuItemId: fixture.venue.counterItem("Flan"), quantity: "1" }],
+  };
+  expect((await request("POST", "/api/working-orders", held)).status).toBe(200);
+  const { revision } = await (await request("GET", `/api/working-orders/${body.id}`)).json();
+  const paid = await payWithBasket(body.id, body.dining, { lines: body.lines, revision });
+  expect(paid.status, JSON.stringify(await paid.clone().json())).toBe(200);
+  expect(await billRows(body.id)).toEqual([
+    { role: "dish", setMenuId: copy.menuId, price: 0 },
+    { role: "set_menu", setMenuId: copy.menuId, price: 400 },
+  ]);
+  expect(
+    await (await request("GET", `/api/working-orders/${body.id}/payments`)).json(),
+  ).toMatchObject({ total: "4.00", received: "4.00" });
+});
+
+const askSaleDeadEnds = (body: Record<string, unknown>) =>
+  request("POST", "/api/dead-ends/sale", body);
+
+it.each(["pay", "place"] as const)(
+  "answers the %s dead-end check for a fresh Counter takeaway holding a dish tapped in a set-menu folder",
+  async (step) => {
+    const body = await freshBasket("takeaway");
+    const response = await askSaleDeadEnds({
+      step,
+      lines: body.lines,
+      zoneId: body.zoneId,
+      dining: body.dining,
+    });
+    expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
+    expect(await response.json()).toMatchObject({ sends: true, deadEnds: [] });
+  },
+);
+
+it("refuses the dead-end check for a fresh eat-in Counter basket holding a dish tapped in a set-menu folder", async () => {
+  const body = await freshBasket("eat_in");
+  const response = await askSaleDeadEnds({
+    step: "pay",
+    lines: body.lines,
+    zoneId: body.zoneId,
+    dining: body.dining,
+  });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
+});
+
+it("answers the dead-end check for a held Counter takeaway whose basket now holds a dish tapped in a set-menu folder", async () => {
+  const body = await freshBasket("takeaway");
+  const held = {
+    ...body,
+    lines: [{ menuItemId: fixture.venue.counterItem("Flan"), quantity: "1" }],
+  };
+  expect((await request("POST", "/api/working-orders", held)).status).toBe(200);
+  const response = await askSaleDeadEnds({
+    step: "pay",
+    lines: body.lines,
+    workingOrderId: body.id,
+  });
+  expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
+  expect(await response.json()).toMatchObject({ sends: true, deadEnds: [] });
+});
+
+it("prices a held eat-in Counter order's dead-end check as stored, whatever dining the request sends", async () => {
+  const body = await freshBasket("eat_in");
+  const held = {
+    ...body,
+    lines: [{ menuItemId: fixture.venue.counterItem("Flan"), quantity: "1" }],
+  };
+  expect((await request("POST", "/api/working-orders", held)).status).toBe(200);
+  const response = await askSaleDeadEnds({
+    step: "pay",
+    lines: body.lines,
+    workingOrderId: body.id,
+    dining: "takeaway",
+  });
+  expect(response.status, JSON.stringify(await response.clone().json())).toBe(409);
+  expect(await response.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
+});
+
+it("answers the dead-end check for a table draft line tapped in a set-menu folder", async () => {
+  const { venue, copy } = fixture;
+  const bill = await seated();
+  // An earlier case republished the menu, so the copy's own version is no longer live.
+  const versionId = await inTx(venue, (tx) => publishWorkingMenu(tx, copy.fullMenuId));
+  const draft = await saveSetMenuDraft(venue, bill, {
+    menuItemId: copy.menuItemId,
+    menuVersionId: versionId,
+    setMenuId: copy.menuId,
+    quantity: "1",
+  });
+  const response = await request("POST", "/api/dead-ends/draft", {
+    partyId: bill.partyId,
+    draftId: draft.id,
+    lineIds: [draft.lines[0]!.id],
+  });
+  expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
+  expect(await response.json()).toMatchObject({ sends: true, deadEnds: [] });
 });

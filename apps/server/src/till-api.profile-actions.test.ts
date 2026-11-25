@@ -421,10 +421,6 @@ const ROUTES: readonly Row[] = [
   ordering("POST", `/api/parties/${id}/end-meal`),
   ordering("POST", `/api/bills/${id}/merge`),
   ordering("POST", `/api/bills/${id}/move-dishes`),
-  ordering("GET", `/api/bills/${id}/set-menus`),
-  ordering("PUT", `/api/bills/${id}/set-menus/${id}`),
-  ordering("DELETE", `/api/bills/${id}/set-menu-lines/${id}`),
-  ordering("POST", `/api/bills/${id}/set-menu-moves`),
   ordering("POST", `/api/bills/${id}/move`),
 ];
 

@@ -151,14 +151,13 @@ async function readPicks(
           part: { quantity, ofQuantity: row.quantity },
         };
   });
-  // A set menu's dish chosen with its set menu is already in the set menu's price; chosen without
-  // it, the new bill has no set menu to place it in, as the move would find.
+  // A set menu's dish chosen with its set menu is already in the set menu's price.
   const ids = new Set(picked.map((line) => line.id));
   const priced = picked.map((line) => {
     const row = byId.get(line.id)!;
     if (row.setMenuLineId === null) return line;
     if (!ids.has(row.setMenuLineId))
-      throw new AppError("set_menu.no_place_on_target", { dishName: row.name });
+      throw new AppError("set_menu.moves_with_set_menu", { dishName: row.name });
     return { ...line, familyCents: 0 };
   });
   // A dish leaves whole when chosen whole or brought along by a set menu chosen whole; a part

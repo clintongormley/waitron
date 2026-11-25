@@ -84,26 +84,6 @@ it("accepts a saved set-menu dish and reports a placed group", async () => {
   expect(result.json).toMatchObject({ draft: null, groups: [{ lineIds: [expect.any(String)] }] });
 });
 
-it("answers 409 when a set-menu dish has no place", async () => {
-  const { path, body } = await draft(false);
-  const result = await request("POST", path, body);
-  expect(result.status).toBe(409);
-  expect(result.json).toMatchObject({
-    code: "set_menu.no_place",
-    params: { dishName: "Soup", draftLineId: body.groups[0]!.lineIds[0] },
-  });
-});
-
-it("names the second draft line when the first takes the only place", async () => {
-  const { path, body } = await draft(true, 2);
-  const result = await request("POST", path, body);
-  expect(result.status).toBe(409);
-  expect(result.json).toMatchObject({
-    code: "set_menu.no_place",
-    params: { dishName: "Soup", draftLineId: body.groups[0]!.lineIds[1] },
-  });
-});
-
 it("lets a till mark a dish that only a set menu lists sold out", async () => {
   const { path, body } = await draft(true);
   const availability = `/api/service-zones/${venue.zoneId}/products/${daily.productId}/availability`;

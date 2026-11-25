@@ -68,7 +68,7 @@ import {
   cancelPortions,
 } from "./order-portions.js";
 import { RETAINED_COURSE } from "./retained-course.js";
-import { type SetMenuPlacement, placeSetMenuRows } from "./set-menu-bill.js";
+import { regroupBills } from "./set-menu-regroup.js";
 import { linkSetMenusFor } from "./set-menu-links.js";
 import { setMenuOfferLookup } from "./set-menu-offers.js";
 import { totalBeforeEdit, refuseOrderOverSimplifiedLimit } from "./stored-order-lines.js";
@@ -695,7 +695,8 @@ export async function applyLineEdits(
   let nextLineNo = order.maxLineNo;
   const inserted: WorkingOrderLineInsert[] = [];
   const insertedContexts: typeof priced.lineContexts = [];
-  const setMenuPlacements: SetMenuPlacement[] = [];
+  // D11: a dish taken from a set-menu folder, and a portion added to one, records that set menu.
+  const setMenuOfRow = new Map<string, string>();
   const fireNow: Parameters<typeof fireLines>[3] = [];
   const keepMadeHere = new Map<string, { madeHere: boolean; stationId: string }>();
   const keepStations = new Map<string, string>();
@@ -910,22 +911,10 @@ export async function applyLineEdits(
       });
     }
     for (const [rowIndex, row] of group.rows.entries()) {
-      const origin = as.origin;
-      const placement = group.contexts[rowIndex]!.placement;
-      if (placement !== undefined) {
-        setMenuPlacements.push({ workingOrderLineId: row.id!, ...placement });
-      } else if (row.parentLineId === null && origin?.setMenuId != null) {
-        setMenuPlacements.push({
-          workingOrderLineId: row.id!,
-          draft: {
-            position: setMenuPlacements.length,
-            setMenuId: origin.setMenuId,
-            reserved: null,
-          },
-          productId: origin.parentProductId ?? origin.productId!,
-          variantId: origin.parentProductId === null ? null : origin.productId,
-        });
-      }
+      const setMenuId =
+        group.contexts[rowIndex]!.setMenuId ??
+        (row.parentLineId === null ? as.origin?.setMenuId : undefined);
+      if (setMenuId != null) setMenuOfRow.set(row.id!, setMenuId);
       if (as.joins?.groupId === null) {
         const source =
           row.parentLineId === null
@@ -984,13 +973,15 @@ export async function applyLineEdits(
       insertedContexts,
       priced.offers,
     );
-    const placed = await placeSetMenuRows(
+    await insertInChunks(
       tx,
-      orderId,
-      inserted.map((row) => ({ ...row, ...contextByLine.get(row.id!) })),
-      setMenuPlacements,
+      workingOrderLines,
+      inserted.map((row) => ({
+        ...row,
+        ...contextByLine.get(row.id!),
+        ...(setMenuOfRow.has(row.id!) ? { setMenuId: setMenuOfRow.get(row.id!)! } : {}),
+      })),
     );
-    await insertInChunks(tx, workingOrderLines, placed);
     await carryLineReductions(tx, copiedContexts);
     await copyAllergyWorkingTicks(tx, copiedDishes);
   }
@@ -1143,6 +1134,7 @@ export async function applyLineEdits(
         ),
       );
   }
+  if (changed && (await regroupBills(tx, [orderId])).has(orderId)) chargesUnchanged = false;
   await assertLinesKeptExcess(tx, excessBefore);
   if (changed) await refuseOrderOverSimplifiedLimit(tx, cfg, orderId, before);
   if (changed) {

@@ -724,7 +724,6 @@ export class TillMenuBrowser extends LitElement {
     if (!hasSomethingToSell(product) || this.store.editsLocked) return;
     const bill = this.setMenuBill ?? EMPTY_SET_MENUS;
     const candidates = this.#pickCandidates(pick);
-    const draft = draftMenuDishes(this.store.lines.filter((line) => line !== pick.existing));
     const reserved =
       target === undefined || "place" in target
         ? target
@@ -738,17 +737,6 @@ export class TillMenuBrowser extends LitElement {
                 [dish],
               ).placed,
           )[0];
-    if (
-      reserved === undefined &&
-      (target !== undefined ||
-        !candidates.some(
-          (dish) => !placeInOrder(bill, [...draft, dish]).unplaced.includes(dish.id),
-        ))
-    ) {
-      this.setMenuError = "";
-      this.placeRequest = { ...pick };
-      return;
-    }
     if (pick.confirmed === undefined && needsModifierPicker(product)) {
       this.#pickerSetMenu = { pick, target };
       this.pickerProduct = product;
@@ -1262,7 +1250,6 @@ export class TillMenuBrowser extends LitElement {
               .versionId=${row.versionId}
               .courseNames=${this.setMenuCourses}
               .busy=${this.changingSetMenu || this.store.editsLocked}
-              @add-set-menu=${(event: CustomEvent<{ setMenuId: string }>) => this.addSetMenu && void this.#chooseSetMenu(() => this.addSetMenu!(event.detail.setMenuId))}
               @pick-set-menu-dish=${(event: CustomEvent<PickSetMenuDishDetail>) => this.#pickSetMenu({ detail: event.detail })}
             ></till-set-menu-folder>`
       }

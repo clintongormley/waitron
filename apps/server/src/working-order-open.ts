@@ -22,36 +22,31 @@ import {
   type ExtraSelection,
   type OptionSelection,
   type Dining,
-  type BillSetMenuState,
   AppError,
   normalisePartyName,
 } from "@waitron/shared";
 import { eq, and, sql } from "drizzle-orm";
+import { assertLinesKeptExcess, readBillExcess } from "./bill-payments.js";
 import { checkedInvoiceRecipient, selectOrderInvoice } from "./invoice-selection.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { expandPortionRows, portionIdentities } from "./order-portions.js";
 import { tableHeld } from "./parties.js";
 import type { RetainedCourseLine } from "./retained-course.js";
-import {
-  readBillSetMenus,
-  SET_MENU_DRAFT_LINE,
-  type SetMenuDraftLine,
-  placeSetMenuRows,
-} from "./set-menu-bill.js";
-import { setSetMenuCount } from "./set-menu-count.js";
+import { SET_MENU_DRAFT_LINE, type SetMenuDraftLine } from "./set-menu-bill.js";
 import { linkSetMenusFor, type SetMenuLinks } from "./set-menu-links.js";
+import { regroupBills } from "./set-menu-regroup.js";
 import {
   type OrderLineIdentity,
   totalBeforeEdit,
   refuseOrderOverSimplifiedLimit,
+  storedOrderTotal,
 } from "./stored-order-lines.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import {
   type WorkingOrderDeps,
   type OrderAttendance,
   captureOrderEdit,
-  readOrderRevision,
 } from "./working-order-context.js";
 import { type FireableLine, fireableLineColumns } from "./working-order-kitchen-fire.js";
 import {
@@ -77,21 +72,19 @@ export interface ParkOrderRequest {
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
+    [SET_MENU_DRAFT_LINE]?: SetMenuDraftLine;
   } & LineExtras)[];
   zoneId?: string;
   label?: string;
   operatorId?: string;
   lateSend?: LateSendConfirmation;
   dining?: Dining;
-  firstSetMenu?: { menuId: string; personId: string };
 }
 
 export interface ParkOrderResult {
   id: string;
   orderNumber: number;
   serviceMode: ServiceMode | null;
-  revision?: number;
-  setMenus?: BillSetMenuState;
 }
 /**
  * Persist an OPEN working order and its priced lines on the CALLER's transaction, returning the
@@ -108,6 +101,7 @@ export async function createOpenOrder(
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
+    [SET_MENU_DRAFT_LINE]?: SetMenuDraftLine;
   } & LineExtras)[],
   label: string | null,
   // `creditedTo` is the operator creating the order, whose sale its lines count as.
@@ -202,6 +196,13 @@ export async function createOpenOrder(
     copiedDining ??
     placement.keepDining ??
     (await VENUE_SERVICE.resolveOrderDining(tx, effectiveZoneId, placement.dining));
+  const unwrittenBill = lines.some((line) => line[SET_MENU_DRAFT_LINE] !== undefined)
+    ? {
+        partyId: placement.partyId ?? null,
+        dining,
+        serviceMode: (await VENUE_SERVICE.resolveZoneContext(tx, effectiveZoneId)).serviceMode,
+      }
+    : undefined;
   const pricedLines = await priceOrderLines(
     tx,
     cfg,
@@ -212,9 +213,9 @@ export async function createOpenOrder(
     placement.invalidMakeAt ?? "refuse",
     "added",
     placement.lateSend,
+    unwrittenBill,
   );
   const { gross, offers } = pricedLines;
-  if (recipient === null) refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, gross.total);
   const expanded = expandPortionRows(
     pricedLines.lineRows,
     pricedLines.lineContexts,
@@ -272,11 +273,21 @@ export async function createOpenOrder(
   await insertInChunks(
     tx,
     workingOrderLines,
-    lineRows.map((row) => ({ ...row, ...contextByLine.get(row.id!) })),
+    lineRows.map((row, index) => {
+      const setMenuId = lineContexts[index]!.setMenuId;
+      return {
+        ...row,
+        ...contextByLine.get(row.id!),
+        ...(setMenuId === undefined ? {} : { setMenuId }),
+      };
+    }),
   );
   await linkSetMenusFor(tx, id, pricedLines.setMenuLinks);
+  const regrouped = (await regroupBills(tx, [id])).has(id);
+  const total = regrouped ? await storedOrderTotal(tx, id) : gross.total;
+  if (recipient === null) refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, total);
 
-  if (choice !== undefined) await selectOrderInvoice(tx, choice, cfg, id, gross.total);
+  if (choice !== undefined) await selectOrderInvoice(tx, choice, cfg, id, total);
   return { orderNumber, billNumber, gross, identities, lineRows };
 }
 
@@ -286,7 +297,7 @@ export async function parkOrder(
   req: ParkOrderRequest,
   attendance?: OrderAttendance,
 ): Promise<ParkOrderResult> {
-  if (req.lines.length === 0 && req.firstSetMenu === undefined) {
+  if (req.lines.length === 0) {
     throw new AppError("sale.empty_basket", {});
   }
 
@@ -302,11 +313,7 @@ export async function parkOrder(
       });
       await captureOrderEdit(tx, attendance, req.id, req.operatorId, 0, "park");
       const serviceMode = (await VENUE_SERVICE.findOrderContext(tx, req.id))?.serviceMode ?? null;
-      const reply = { id: req.id, orderNumber, serviceMode };
-      if (req.firstSetMenu === undefined) return reply;
-      const { menuId, personId } = req.firstSetMenu;
-      const setMenus = await setSetMenuCount(tx, cfg, req.id, menuId, 1, personId);
-      return { ...reply, revision: await readOrderRevision(tx, req.id), setMenus };
+      return { id: req.id, orderNumber, serviceMode };
     });
   } catch (error) {
     if (!isUniqueViolation(error)) {
@@ -318,7 +325,6 @@ export async function parkOrder(
       const [existing] = await tx
         .select({
           orderNumber: workingOrders.orderNumber,
-          revision: workingOrders.revision,
           serviceMode: workingOrders.serviceMode,
         })
         .from(workingOrders)
@@ -327,14 +333,11 @@ export async function parkOrder(
       if (existing === undefined) {
         throw error;
       }
-      const reply = {
+      return {
         id: req.id,
         orderNumber: existing.orderNumber,
         serviceMode: existing.serviceMode,
       };
-      return req.firstSetMenu === undefined
-        ? reply
-        : { ...reply, revision: existing.revision, setMenus: await readBillSetMenus(tx, req.id) };
     });
   }
 }
@@ -487,6 +490,7 @@ export async function insertTabRound(
   rows: WorkingOrderLineInsert[],
 ): Promise<(FireableLine & { lineNo: number; groupId: string | null })[]> {
   const before = await totalBeforeEdit(tx, cfg, round.tabId);
+  const excessBefore = await readBillExcess(tx, round.tabId);
   const inserted: (FireableLine & { lineNo: number; groupId: string | null })[] = [];
   const contextByLine = await VENUE_SERVICE.lineContextColumns(
     tx,
@@ -494,12 +498,18 @@ export async function insertTabRound(
     round.lineContexts,
     round.offers,
   );
-  const withContexts = rows.map((row) => ({ ...row, ...contextByLine.get(row.id!) }));
-  const placementOrder = round.lineContexts.flatMap(({ workingOrderLineId, placement }) =>
-    placement === undefined ? [] : [{ workingOrderLineId, ...placement }],
+  // D11: a dish taken from a set-menu folder records that set menu; the grouping writes the rest.
+  const setMenuOfRow = new Map(
+    round.lineContexts.flatMap(({ workingOrderLineId, setMenuId }) =>
+      setMenuId === undefined ? [] : [[workingOrderLineId, setMenuId] as const],
+    ),
   );
-  const placed = await placeSetMenuRows(tx, round.tabId, withContexts, placementOrder);
-  for (const chunk of statementChunks(workingOrderLines, placed)) {
+  const withContexts = rows.map((row) => ({
+    ...row,
+    ...contextByLine.get(row.id!),
+    ...(setMenuOfRow.has(row.id!) ? { setMenuId: setMenuOfRow.get(row.id!)! } : {}),
+  }));
+  for (const chunk of statementChunks(workingOrderLines, withContexts)) {
     inserted.push(
       ...(await tx
         .insert(workingOrderLines)
@@ -512,6 +522,8 @@ export async function insertTabRound(
     );
   }
   await linkSetMenusFor(tx, round.tabId, round.setMenuLinks);
+  await regroupBills(tx, [round.tabId]);
+  await assertLinesKeptExcess(tx, excessBefore);
   await refuseOrderOverSimplifiedLimit(tx, cfg, round.tabId, before);
   return inserted;
 }
