@@ -3,6 +3,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/
 import { currentLocale, setLocale } from "../i18n/t.js";
 import {
   attendanceInbox,
+  attendanceMissingTimesPrompts,
   attendanceItem,
   attendancePrompt,
 } from "../../test/attendance-fixtures.js";
@@ -24,11 +25,7 @@ describe.each(["light", "dark"] as const)("attendance questions in %s", (theme) 
         });
         for (const props of [
           { inbox: attendanceInbox() },
-          {
-            inbox: attendanceInbox([
-              attendancePrompt({ kind: "missing-times", history: [], missingKinds: ["in", "out"] }),
-            ]),
-          },
+          { inbox: attendanceInbox(attendanceMissingTimesPrompts()) },
           { inbox: attendanceInbox([proposal], [item]) },
           { inbox: attendanceInbox([proposal], [{ ...item, readyToApply: false }]) },
           { inbox: attendanceInbox([proposal], [{ ...item, status: "overtaken" as const }]) },

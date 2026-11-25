@@ -918,7 +918,6 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
 
 ### Working time and staff
 
-- **A1577. The till's Check your times screen in plain words** (owner, 2026-11-25; important, size S). [Detail](backlog/workforce.md#a1577-the-tills-check-your-times-screen-in-plain-words)
 
 _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md).
 

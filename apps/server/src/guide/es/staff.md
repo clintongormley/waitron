@@ -233,6 +233,9 @@ abrirla.
 
 ## Horas y descansos {#hours}
 
+Si aparece **Comprueba tus horas**, revisa los fichajes de cada día. Pulsa **Añadir fichajes que
+faltan** para introducir los que no estén registrados.
+
 Usa **Iniciar descanso** y **Terminar descanso** para una pausa durante tu turno. Usa **Fichar salida** cuando termines de trabajar.
 
 Si falta un fichaje o su hora es incorrecta, elige **Corregir mis horas** en el menú de tu nombre.

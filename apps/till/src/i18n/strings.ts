@@ -318,7 +318,6 @@ export const en = {
   "attendance.declined": "Declined",
   "attendance.corrected": "Corrected",
 
-  "attendance.work_day": "Work day",
   "attendance.save": "Save",
   "attendance.edit_heading": "Fix my hours",
   "attendance.disagree_heading": "Disagree with this change",
@@ -335,6 +334,13 @@ export const en = {
   "attendance.reason_long": "Use no more than 500 characters for the reason.",
 
   "attendance.questions": "Check your times",
+  "attendance.add_missing_times": "Add missing times",
+  "attendance.some_times_missing": "Some times are missing.",
+  "attendance.no_times_recorded": "No times recorded.",
+  "attendance.clocked_in": "Clocked in",
+  "attendance.clocked_out": "Clocked out",
+  "attendance.added_automatically": "added automatically",
+  "attendance.you_answered": "You answered",
   "attendance.confirm": "That's right",
   "attendance.different": "No, I left at…",
   "attendance.supply": "Supply your missing times",
@@ -2728,7 +2734,6 @@ export const es: Record<StringKey, string> = {
   "attendance.declined": "Rechazado",
   "attendance.corrected": "Corregido",
 
-  "attendance.work_day": "Jornada",
   "attendance.save": "Guardar",
   "attendance.edit_heading": "Corregir mis horas",
   "attendance.disagree_heading": "Disconformidad con este cambio",
@@ -2745,6 +2750,13 @@ export const es: Record<StringKey, string> = {
   "attendance.reason_long": "El motivo no puede superar los 500 caracteres.",
 
   "attendance.questions": "Comprueba tus horas",
+  "attendance.add_missing_times": "Añadir fichajes que faltan",
+  "attendance.some_times_missing": "Faltan algunos fichajes.",
+  "attendance.no_times_recorded": "No hay fichajes.",
+  "attendance.clocked_in": "Fichaste la entrada",
+  "attendance.clocked_out": "Fichaste la salida",
+  "attendance.added_automatically": "añadida automáticamente",
+  "attendance.you_answered": "Respondiste",
   "attendance.confirm": "Es correcto",
   "attendance.different": "No, salí a las…",
   "attendance.supply": "Indica las horas que faltan",

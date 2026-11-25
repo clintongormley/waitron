@@ -214,6 +214,9 @@ starting screen, sign out and sign in again to open it.
 
 ## Hours and breaks {#hours}
 
+If **Check your times** appears, look at the recorded times for each day. Choose
+**Add missing times** to enter any times that are missing.
+
 Use **Start break** and **End break** for a pause during your shift. Use **Clock out** when your work ends.
 
 When a recorded time is wrong or missing, choose **Fix my hours** from your name's menu. On a

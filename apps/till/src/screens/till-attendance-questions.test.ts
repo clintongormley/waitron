@@ -3,7 +3,9 @@ import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import {
+  attendanceEntry,
   attendanceInbox,
+  attendanceMissingTimesPrompts,
   attendanceItem,
   attendancePrompt,
 } from "../../test/attendance-fixtures.js";
@@ -48,7 +50,7 @@ describe("attendance questions before work", () => {
     const { el } = await mount({ inbox: attendanceInbox([attendancePrompt(), proposal]) });
     const card = (id: string) => el.shadowRoot!.querySelector(`[data-prompt="${id}"]`)!;
     expect([...card("question").querySelectorAll("h2")].map((h) => h.textContent!.trim())).toEqual([
-      "Work day: 2026-10-13",
+      "Tuesday 13 October",
     ]);
     expect(card("question").querySelectorAll("p")[0]!.textContent).not.toContain("2026-10-13");
     expect(card("proposal").querySelector("h2")).toBeNull();
@@ -79,11 +81,101 @@ describe("attendance questions before work", () => {
     const { el } = await mount({ inbox: attendanceInbox([prompt]) });
     expect(el.shadowRoot!.querySelector("[data-confirm]")).toBeNull();
     expect(el.shadowRoot!.querySelector("time")).toBeNull();
-    expect(el.shadowRoot!.textContent).toContain("Supply your missing times");
-    expect(el.shadowRoot!.textContent).toContain("Work day: 2026-10-13");
+    expect(el.shadowRoot!.textContent).toContain("Add missing times");
+    expect(el.shadowRoot!.textContent).toContain("Tuesday 13 October");
     const edits = watch(el, "attendance-edit");
     await userEvent.click(button(el, "[data-edit]"));
     expect(edits.map((e) => e.detail)).toEqual([{ prompt }]);
+  });
+
+  it("shows the work dates, missing times and stored attendance in plain words", async () => {
+    const locale = currentLocale();
+    setLocale("en-GB");
+    try {
+      const { el } = await mount({ inbox: attendanceInbox(attendanceMissingTimesPrompts()) });
+      const [monday, tuesday] = el.shadowRoot!.querySelectorAll("article");
+      const lines = (card: Element) =>
+        Array.from(card.querySelectorAll("li"), (row) =>
+          row.textContent!.replace(/\s+/g, " ").trim(),
+        );
+      expect(monday!.querySelector("h2")!.textContent).toBe("Monday 23 November");
+      expect(monday!.querySelector("p")!.textContent).toBe("Some times are missing.");
+      expect(lines(monday!)).toEqual([
+        "Clocked in 19:10",
+        "Clocked out 19:35 · added automatically",
+        "You answered 19:35",
+      ]);
+      expect(Array.from(monday!.querySelectorAll("time"), (time) => time.dateTime)).toEqual([
+        "2026-11-23T18:10:00.000Z",
+        "2026-11-23T18:35:00.000Z",
+        "2026-11-23T18:35:00.000Z",
+      ]);
+      expect(tuesday!.querySelector("h2")!.textContent).toBe("Tuesday 24 November");
+      expect(tuesday!.querySelector("p")!.textContent).toBe("No times recorded.");
+      for (const card of [monday!, tuesday!]) {
+        expect(
+          Array.from(card.querySelectorAll("wt-button"), (action) => action.textContent),
+        ).toEqual(["Add missing times"]);
+      }
+      setLocale("es-ES");
+      await el.updateComplete;
+      expect(monday!.querySelector("h2")!.textContent).toBe("lunes, 23 de noviembre");
+      expect(lines(monday!)).toEqual([
+        "Fichaste la entrada 19:10",
+        "Fichaste la salida 19:35 · añadida automáticamente",
+        "Respondiste 19:35",
+      ]);
+      expect(tuesday!.querySelector("p")!.textContent).toBe("No hay fichajes.");
+      expect(tuesday!.querySelector("[data-edit]")!.textContent).toBe("Añadir fichajes que faltan");
+    } finally {
+      setLocale(locale);
+    }
+  });
+
+  it.each([
+    ["after midnight", "2026-11-24T00:30:00.000Z", 60, "2026-11-24 01:30 +01:00"],
+    ["at a different offset", "2026-11-23T18:35:00.000Z", 120, "2026-11-23 20:35 +02:00"],
+  ] as const)(
+    "retains the recorded date and offset %s",
+    async (_label, eventAt, offsetMinutes, shown) => {
+      const [prompt] = attendanceMissingTimesPrompts();
+      prompt.history = [attendanceEntry({ eventAt, offsetMinutes })];
+      const { el } = await mount({ inbox: attendanceInbox([prompt]) });
+      expect(el.shadowRoot!.querySelector("time")!.textContent).toBe(shown);
+    },
+  );
+
+  it("keeps both recorded offsets on a work day that crosses a clock change", async () => {
+    const [prompt] = attendanceMissingTimesPrompts();
+    prompt.businessDay = "2026-10-25";
+    prompt.day = {
+      businessDay: "2026-10-25",
+      startAt: "2026-10-24T22:00:00.000Z",
+      endAt: "2026-10-25T23:00:00.000Z",
+    };
+    prompt.history = [
+      { ...prompt.history[0]!, eventAt: "2026-10-25T00:10:00.000Z", offsetMinutes: 120 },
+      attendanceEntry({ eventAt: "2026-10-25T01:35:00.000Z", offsetMinutes: 60 }),
+    ];
+    const { el } = await mount({ inbox: attendanceInbox([prompt]) });
+    expect(Array.from(el.shadowRoot!.querySelectorAll("time"), (time) => time.textContent)).toEqual(
+      ["2026-10-25 02:10 +02:00", "2026-10-25 02:35 +01:00"],
+    );
+  });
+
+  it("keeps details for breaks and corrections beside an ordinary clock-in", async () => {
+    const [prompt] = attendanceMissingTimesPrompts();
+    const [clockIn, clockOut, answer] = prompt.history;
+    prompt.history = [
+      clockIn!,
+      { ...clockOut!, entryKind: "break_start" },
+      { ...answer!, entryKind: "correction", correctionReason: "Corrected the closing time" },
+    ];
+    const { el } = await mount({ inbox: attendanceInbox([prompt]) });
+    expect(Array.from(el.shadowRoot!.querySelectorAll("time"), (time) => time.textContent)).toEqual(
+      ["19:10", "2026-11-23 19:35 +01:00", "2026-11-23 19:35 +01:00"],
+    );
+    expect(el.shadowRoot!.textContent).toContain("Corrected the closing time");
   });
 
   it("proposals show the distinct original and proposed times, reason and both worker decisions", async () => {
