@@ -263,8 +263,11 @@ export type ReconcileDeps = {
   heldAlerts: HeldAlertSink;
   settlementLagMs: number;
   collectChargeAudit?: boolean;
-  /** When supplied, this adapter owns every orphan claim, under T2's write lock. */
-  prepareOrphans?: (tx: Transaction, records: SettlementRecord[]) => Promise<ReconcilableRow[]>;
+  /** The adapter owns every orphan claim under T2's write lock. Deferred records are settlements
+   * matched to local payments whose claims were stopped and will be retried. */
+  prepareOrphans?: (
+    tx: Transaction,
+  ) => Promise<{ claimed: ReconcilableRow[]; deferred?: ReadonlySet<SettlementRecord> }>;
 } & ({ mode: "audit-only"; reverse?: ReversalFn } | { mode?: "remediate"; reverse: ReversalFn });
 
 const CODE = {
@@ -330,7 +333,8 @@ export async function reconcilePayments(
   // sweep will reverse.
   const remediable: ReconcilableRow[] = [];
   await withTransaction(deps.db, async (tx) => {
-    const prepared = (await deps.prepareOrphans?.(tx, records)) ?? [];
+    const preparation = await deps.prepareOrphans?.(tx);
+    const prepared = preparation?.claimed ?? [];
     remediable.push(...prepared);
     result.checked += prepared.filter(
       (row) => !rows.some((original) => original.paymentId === row.paymentId),
@@ -365,6 +369,7 @@ export async function reconcilePayments(
 
     const missing: SettlementRecord[] = [];
     for (const record of classified.unmatched) {
+      if (preparation?.deferred?.has(record)) continue;
       if (record.references.some((reference) => existing.has(reference))) continue;
       missing.push(record);
       result.missingLocal.push(missingLocalMismatch(record));

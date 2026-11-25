@@ -322,6 +322,15 @@ describe("a card sale in flight when the box steps down", () => {
       WAITRON_FISCAL_TEST_SUBMISSIONS: "enabled",
     };
 
+    const reconcile = hold();
+    const reachedScheduler = hold();
+    releases.push(reconcile.release);
+    outside.holdReconcile = () => {
+      if (outside.reconciles.length === 0) return Promise.resolve();
+      outside.holdReconcile = null;
+      reachedScheduler.release();
+      return reconcile.wait;
+    };
     let card: FakePaymentProvider | undefined;
     server = await startServer(env, env, {
       timings: { maxTickMs: 600000, minTickMs: 200, scheduler: { maxPeriodsPerTick: 1 } },
@@ -418,14 +427,6 @@ describe("a card sale in flight when the box steps down", () => {
     outside.holdSweep = sweep.wait;
     await vi.waitFor(() => expect(outside.holdSweep).toBeNull(), { timeout: 10_000 });
 
-    const reconcile = hold();
-    const reachedScheduler = hold();
-    releases.push(reconcile.release);
-    outside.holdReconcile = () => {
-      outside.holdReconcile = null;
-      reachedScheduler.release();
-      return reconcile.wait;
-    };
     await within(reachedScheduler.wait, 10_000, "a reconciliation pass at the scheduler");
     const asked = await fetch(`${base}/test/stepdown`, { method: "POST" });
     const stepdown = { status: asked.status, body: await asked.json() };

@@ -1029,6 +1029,31 @@ export async function existingReferences(
   return found;
 }
 
+function claimableAbandonedCapture(params: Key & { amount: Decimal }) {
+  return and(
+    keyWhere(params),
+    inArray(payments.state, ["failed", "captured"]),
+    eq(payments.amount, decimalToCents(params.amount)),
+    isNull(payments.saleId),
+    isNull(payments.billPaymentId),
+    isNull(payments.reconcileRemediatedAt),
+    sql`exists (select 1 from ${workingOrders} where ${workingOrders.id} = ${payments.workingOrderId} and ${workingOrders.status} = 'abandoned')`,
+    sql`not exists (select 1 from ${paymentRefunds} where ${paymentRefunds.paymentId} = ${payments.id})`,
+    isNull(payments.heldAt),
+  );
+}
+
+export async function isAbandonedCaptureClaimable(
+  tx: Transaction,
+  params: Key & { amount: Decimal },
+): Promise<boolean> {
+  const [row] = await tx
+    .select({ id: payments.id })
+    .from(payments)
+    .where(claimableAbandonedCapture(params));
+  return row !== undefined;
+}
+
 export async function claimAbandonedCapture(
   tx: Transaction,
   params: Key & { amount: Decimal; externalRef: string; settledAt: Date; at: Date },
@@ -1042,19 +1067,7 @@ export async function claimAbandonedCapture(
       reconcileRemediatedAt: params.at.toISOString(),
       updatedAt: nowIso(),
     })
-    .where(
-      and(
-        keyWhere(params),
-        inArray(payments.state, ["failed", "captured"]),
-        eq(payments.amount, decimalToCents(params.amount)),
-        isNull(payments.saleId),
-        isNull(payments.billPaymentId),
-        isNull(payments.reconcileRemediatedAt),
-        sql`exists (select 1 from ${workingOrders} where ${workingOrders.id} = ${payments.workingOrderId} and ${workingOrders.status} = 'abandoned')`,
-        sql`not exists (select 1 from ${paymentRefunds} where ${paymentRefunds.paymentId} = ${payments.id})`,
-        isNull(payments.heldAt),
-      ),
-    )
+    .where(claimableAbandonedCapture(params))
     .returning({
       paymentId: payments.id,
       paymentRef: payments.paymentRef,

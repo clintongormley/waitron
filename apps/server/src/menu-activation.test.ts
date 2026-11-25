@@ -370,7 +370,7 @@ describe("menuActivationJob", () => {
   it("leaves an overdue menu queued when stopped before opening its transaction", async () => {
     const [versionId] = await lunchWithQueue(3);
     const held = latch();
-    const { duty, door } = startDuty({ holdFirst: held.waited });
+    const { duty, door, lines } = startDuty({ holdFirst: held.waited });
     try {
       await vi.waitFor(() => expect(door.begins).toBe(1));
     } finally {
@@ -379,6 +379,7 @@ describe("menuActivationJob", () => {
       await stopping;
     }
     expect(await stateOf(versionId!)).toBe("queued");
+    expect(lines.map((line) => line.event)).not.toContain("menu_publication.activation_armed");
   });
 
   it("stopJobs() waits for a run in flight, which then arms nothing", async () => {

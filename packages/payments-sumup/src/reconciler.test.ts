@@ -896,20 +896,24 @@ it.each(["before", "after"] as const)(
   "handles stepdown %s claiming an abandoned payment for refund",
   async (phase) => {
     const seeded = await failedPayment("stepdown");
+    await failedPayment("needs-check");
     await suite.db.execute(
       sql`update working_orders set status = 'abandoned' where id = ${seeded.workingOrderId}`,
     );
     const controller = new AbortController();
     const mark = () =>
       suite.db.all<{ at: string | null }>(
-        sql`select reconcile_remediated_at as at from payments`,
+        sql`select reconcile_remediated_at as at from payments where payment_ref = 'stepdown'`,
       )[0]!.at;
     const client = new FakeSumUp();
-    vi.spyOn(client, "findTransaction").mockImplementation(async () => {
-      if ((mark() === null) === (phase === "before")) controller.abort();
+    vi.spyOn(client, "findTransaction").mockImplementation(async (query) => {
+      const needsCheck =
+        ("foreignTransactionId" in query && query.foreignTransactionId === "needs-check") ||
+        ("id" in query && query.id === "needs-check-charge");
+      if (!needsCheck && (mark() === null) === (phase === "before")) controller.abort();
       return {
-        id: "stepdown-charge",
-        foreignTransactionId: "stepdown",
+        id: needsCheck ? "needs-check-charge" : "stepdown-charge",
+        foreignTransactionId: needsCheck ? "needs-check" : "stepdown",
         status: "SUCCESSFUL",
         amount: decimal("10.00"),
         currency: "EUR",
@@ -925,6 +929,17 @@ it.each(["before", "after"] as const)(
     });
     const stopped = await audit.reconcile(period, now, controller.signal);
     expect(controller.signal.aborted).toBe(true);
+    expect(stopped.missingLocal.map((row) => row.references)).toEqual([["needs-check-charge"]]);
+    expect(stopped.chargeAudit?.missingLocal.map((row) => row.hintedPaymentRef)).toEqual([
+      "needs-check",
+    ]);
+    expect(
+      suite.db.all(sql`
+      select json_extract(params, '$.count') as count,
+             json_extract(params, '$.settlements[0].paymentRef') as paymentRef
+      from incidents where code = 'payment.reconcile_missing_local'
+    `),
+    ).toEqual([{ count: 1, paymentRef: "needs-check" }]);
     const refund = { transactionId: "stepdown-charge", amount: "10.00" };
     if (phase === "before") {
       expect(stopped.resweepAfter).toEqual(new Date("2026-07-26T00:00:00Z"));

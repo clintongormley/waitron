@@ -5,6 +5,7 @@ import {
   BACKUP_AUDIT_PADDING_MS,
   BACKUP_MATCH_WINDOW_MS,
   claimAbandonedCapture,
+  isAbandonedCaptureClaimable,
   getPaymentByRef,
   listAbandonedRefundOutcomes,
   listReconcilable,
@@ -279,25 +280,30 @@ export class SumUpReconciler implements PaymentReconciler {
         provider: this.provider,
         report,
         prepareOrphans: async (tx) => {
-          if (prepared.size === 0) return [];
+          if (prepared.size === 0) return { claimed: [] };
+          const admitted = await admit(tx);
           // A marked refund cannot be resent, so stepdown can only stop work before claiming it.
-          if (!(await admit(tx)) || signal?.aborted) {
-            retryOrphans = true;
-            return [];
-          }
+          const stopped = signal?.aborted === true;
+          if (!admitted || stopped) retryOrphans = true;
+          if (!admitted && !stopped) return { claimed: [] };
+
           const claimed = [];
+          const deferred = new Set<SettlementRecord>();
           for (const [paymentRef, { record, transaction }] of prepared) {
-            const row = await claimAbandonedCapture(tx, {
-              provider: this.provider,
-              paymentRef,
-              amount: record.amount,
-              externalRef: transaction.id,
-              settledAt: record.settledAt,
-              at: now,
-            });
-            if (row) claimed.push(row);
+            const key = { provider: this.provider, paymentRef, amount: record.amount };
+            if (stopped) {
+              if (await isAbandonedCaptureClaimable(tx, key)) deferred.add(record);
+            } else {
+              const row = await claimAbandonedCapture(tx, {
+                ...key,
+                externalRef: transaction.id,
+                settledAt: record.settledAt,
+                at: now,
+              });
+              if (row) claimed.push(row);
+            }
           }
-          return claimed;
+          return { claimed, deferred };
         },
         reverse: async (paymentRef) => {
           const { record, transaction } = prepared.get(paymentRef)!;

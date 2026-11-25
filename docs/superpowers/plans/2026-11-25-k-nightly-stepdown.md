@@ -16,15 +16,15 @@ run keeps its existing behavior. The shutdown deadline still applies to both pro
   and retain the outcomes of runs that finished. A claim already committed at that point follows
   the existing stale-claim recovery. Forward the signal through the period duty into the SumUp
   reconciler. Check it after refund admission and before marking the batch of abandoned payments.
-  The schema and Stripe adapter stay outside this change.
+  On stop, leave only payments that met the existing claim criteria out of the missing-payment
+  alert. Keep the one-day retry. The schema and Stripe adapter stay outside this change.
 - In `apps/server/src/handover-stepdown.real.test.ts`, sample the counts when the real gate closes.
   Pause a reconciliation pass at the scheduler entrance and release it after the stepdown answer.
   The existing checks still cover the admitted sale, payment refusals, AEAT and the card sweep.
-- Of the jobs marked to stop, the external workers already use their signal apart from payment
-  reconciliation. Menu activation starts its local work in one queued transaction, so check the
-  signal inside that callback in `apps/server/src/menu-activation.ts`. Give attendance's existing
-  primary check the signal so it can refuse a queued write turn. The demo printer stays outside
-  this change because its worker would need changes at its send boundary.
+- Check the signal inside the menu activation transaction. Give attendance's existing primary
+  check the signal so it can refuse a queued write turn. The demo printer would need changes at
+  its send boundary. Card follow-up still drops the signal before settling captured bill
+  payments. Lane L's SETTLE-STEPDOWN owns that invoice-writing path.
 
 ## Checks
 

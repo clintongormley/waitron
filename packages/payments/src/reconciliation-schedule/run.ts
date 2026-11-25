@@ -36,7 +36,7 @@ export interface RunRecord {
 
 export interface TickResult {
   ran: RunRecord[];
-  /** Eligible work this tick did not run, capped by `maxPeriodsPerTick`. Never silent. */
+  /** Eligible work deferred by the `maxPeriodsPerTick` cap. */
   deferred: number;
   /** Never-swept days dropped permanently by the horizon. Never silent. */
   beyondHorizon: number;
@@ -144,12 +144,11 @@ interface CompletedRun {
   nextDueAt: Date | null;
 }
 
-/** Claim one unit of work, run it outside every transaction, and record what happened. Returns
- * null when another runner won the claim — not an error, and not this tick's business. Also null
- * when another runner reclaimed this row as stale WHILE this attempt was still running: by the
- * time this attempt's `completeRun` call runs, `startedAt` no longer matches, the fence rejects it,
- * and — same as a lost claim — the ledger carries no record attributable to THIS attempt, so
- * reporting it in `ran` would claim an outcome the ledger does not show. */
+/**
+ * Claim one unit, run it outside every transaction, and record what happened. A stopped or lost
+ * claim has no outcome to report. A completion that loses its fence to a stale-claim recovery
+ * also returns null because the row no longer belongs to this attempt.
+ */
 async function runOne(
   deps: SchedulerDeps,
   duty: PeriodDuty,
@@ -167,7 +166,7 @@ async function runOne(
     }
     return reclaimStale(tx, { id: work.row.id, now, staleAfterMs: deps.staleAfterMs });
   });
-  // A committed claim left here is eligible for the existing stale-claim recovery.
+  // A committed claim spends an attempt and waits for stale-claim recovery if stopped here.
   if (claimed === null || signal?.aborted) return null;
 
   const period: RunPeriod = {
