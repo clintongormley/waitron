@@ -105,6 +105,7 @@ import { type AlertView } from "./api/servers-api.js";
 import { createSessionSignals } from "./session-signals.js";
 import type { WtInput } from "@waitron/ui";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
+import { receiptPrinter } from "./testing/printer-settings-fixture.js";
 
 const stubRequest: DashboardRequest = async () => [] as never;
 const adjustmentsRequest: DashboardRequest = async (path, method, body, options) =>
@@ -9387,26 +9388,7 @@ describe("printer details window during a pending save", () => {
           let refuse!: (error: unknown) => void;
           const api = stubApi({
             getMe: vi.fn().mockResolvedValue({ ...meResponse, locale }),
-            listPrinters: vi.fn().mockResolvedValue([
-              {
-                id: "p1",
-                name: "Kitchen",
-                transport: "network_tcp",
-                host: "10.0.0.9",
-                port: 9100,
-                localKey: null,
-                pollId: null,
-                paperWidth: "80mm",
-                resolution: "180dpi",
-                hasCashDrawer: false,
-                portable: false,
-                holder: null,
-                pendingJobs: 0,
-                lastPrintAt: null,
-                lastPrintAgentId: null,
-                active: true,
-              },
-            ]),
+            listPrinters: vi.fn().mockResolvedValue([receiptPrinter]),
             listPrinterProfiles: vi.fn().mockResolvedValue([]),
             listPrinterStationNames: vi.fn().mockResolvedValue([]),
             listDiscoveredPrinters: vi.fn().mockResolvedValue([]),
