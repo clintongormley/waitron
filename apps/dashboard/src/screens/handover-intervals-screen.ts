@@ -145,7 +145,7 @@ export class HandoverIntervalsScreen extends LitElement {
         label: t("returned_invoices.invoice"),
         cell: (row) =>
           html`<span part="value"
-            >${row.invoiceNumber}<br />${row.issueDate}<br />${t(`returned_invoices.kind_${row.category}`)}${row.category === "cancellation" ? "" : html`<br />${row.kind}`}</span
+            >${row.invoiceNumber}<br />${row.issueDate}<br />${t(row.category === "correction" && row.kind === "R5" ? "returned_invoices.kind_correction_receipt" : `returned_invoices.kind_${row.category}`)}${row.category === "cancellation" ? "" : html`<br />${row.kind}`}</span
           >`,
       },
       {

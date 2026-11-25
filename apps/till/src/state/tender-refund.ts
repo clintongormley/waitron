@@ -6,18 +6,20 @@ import type {
   TenderRefundView,
 } from "../api/tender-refund-types.js";
 import { parseDecimalInput } from "@waitron/ui";
-import { REASON_MAX, moneyPlus } from "./bill-payment.js";
+import { REASON_MAX, moneyPlus, refusalOf } from "./bill-payment.js";
 
 export interface TenderRefundScope {
   deviceId: string;
   personId: string;
 }
-export type TenderRefundAsk = Omit<TenderRefundRequest, "submissionId" | "override">;
+type TenderRefundAsk = Omit<TenderRefundRequest, "submissionId" | "override">;
 export interface SavedTenderRefund {
   saleId: string;
   request: Omit<TenderRefundRequest, "override">;
   refundId: string | null;
 }
+/** The card company's answer about a refund asked about again, and the card it goes back to. */
+export type RefundAskedAgain = TenderRefundView & Pick<RefundableTender, "last4">;
 type RefundApi = Pick<TillApi, "refundTransaction" | "getTenderRefund" | "retryTenderRefund">;
 
 export class TenderRefundAttemptError extends Error {
@@ -77,6 +79,20 @@ export function writeVerified(storage: Storage, key: string, value: string): voi
   if (storage.getItem(key) !== value) fail("storage");
 }
 
+/** Refusals saying the server ended this person's sign-in. */
+export const SIGN_IN_ENDED = new Set(["session.required", "session.not_open"]);
+
+/** Whether what is saved is still the request `id` names, whose answer came: signing out may have
+ * cleared it since, and a newer press saved its own. An unreadable entry is left: keeping it costs
+ * a replay under the same id, never a second payment. */
+export function stillSaved(savedId: () => string | undefined, id: string | undefined): boolean {
+  try {
+    return savedId() === id;
+  } catch {
+    return false;
+  }
+}
+
 function normalized(ask: TenderRefundAsk): TenderRefundAsk {
   if (typeof ask.tenderId !== "string" || ask.tenderId === "") return fail("invalid");
   if (typeof ask.reason !== "string" || ask.reason.trim() === "" || ask.reason.length > REASON_MAX)
@@ -85,12 +101,6 @@ function normalized(ask: TenderRefundAsk): TenderRefundAsk {
     return fail("invalid");
   const correctionId = ask.invoiceCorrectionId;
   if (correctionId !== undefined && (typeof correctionId !== "string" || correctionId === ""))
-    return fail("invalid");
-  const ids = ask.cancellationIds;
-  if (
-    ids !== undefined &&
-    (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || id === ""))
-  )
     return fail("invalid");
   const appliedAmount = tenderRefundAmount(ask.appliedAmount) ?? fail("invalid");
   const tipAmount = tenderRefundAmount(ask.tipAmount) ?? fail("invalid");
@@ -106,14 +116,12 @@ function normalized(ask: TenderRefundAsk): TenderRefundAsk {
     tipAmount,
     reason: ask.reason.trim(),
     manualConfirmed: ask.manualConfirmed === true,
-    ...(ids === undefined || ids.length === 0 ? {} : { cancellationIds: [...ids] }),
     ...(correctionId === undefined ? {} : { invoiceCorrectionId: correctionId.toLowerCase() }),
   };
 }
 
 function fingerprint(ask: TenderRefundAsk): string {
-  const body = normalized(ask);
-  return JSON.stringify({ ...body, cancellationIds: [...(body.cancellationIds ?? [])].sort() });
+  return JSON.stringify(normalized(ask));
 }
 
 /** Unknown outcomes keep the original request; a PIN exists only on the outgoing call. */
@@ -224,7 +232,7 @@ export class TenderRefundSession {
     return this.attempts.read(this.scope, saleId);
   }
 
-  async #run(work: () => Promise<TenderRefundView>): Promise<TenderRefundView> {
+  async #run<T>(work: () => Promise<T>): Promise<T> {
     if (this.#busy) return fail("busy");
     this.#busy = true;
     try {
@@ -339,5 +347,47 @@ export class TenderRefundSession {
       this.#answer(sent, result);
       return result;
     });
+  }
+
+  /** Has the box ask the card company again about each refund of `rows` still waiting for it, on the
+   * payments a device with `capabilities` may refund: under the refund's own id, so nothing goes back
+   * twice, and none once the window is no longer `open`. An outcome already had is answered even when
+   * a later refund's asking fails, unless the sign-in ended. */
+  askAgain(
+    rows: readonly RefundableTender[],
+    capabilities: readonly string[],
+    override?: TenderRefundRequest["override"],
+    open = () => true,
+  ): Promise<RefundAskedAgain[]> {
+    return this.#run(async () => {
+      const answers: RefundAskedAgain[] = [];
+      for (const row of rows) {
+        if (row.pendingRefundId === null || !refundMethodAllowed(row, capabilities)) continue;
+        if (!open()) break;
+        try {
+          const result = await this.api.retryTenderRefund(row.pendingRefundId, override);
+          this.#settleSaved(result);
+          answers.push({ ...result, last4: row.last4 });
+        } catch (error) {
+          if (
+            SIGN_IN_ENDED.has(refusalOf(error).code) ||
+            answers.every((answer) => answer.state === "pending")
+          )
+            throw error;
+          break;
+        }
+      }
+      return answers;
+    });
+  }
+
+  /** Settles the request this device saved for the refund, if it saved one it can read. */
+  #settleSaved(result: TenderRefundView): void {
+    try {
+      const saved = this.read(result.saleId);
+      if (saved?.refundId === result.id) this.#answer(saved, result);
+    } catch (error) {
+      if (!(error instanceof TenderRefundAttemptError && error.kind === "storage")) throw error;
+    }
   }
 }

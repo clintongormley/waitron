@@ -2,28 +2,20 @@ import type { TillApi } from "../api/client.js";
 import type {
   InvoiceCorrectionCashGiven,
   InvoiceCorrectionCashRequest,
-  InvoiceCorrectionOpened,
-  InvoiceCorrectionRequest,
 } from "../api/invoice-correction-types.js";
 import {
   fail,
   scopePrefix,
+  stillSaved,
   tenderRefundAmount,
   withJournalStorage,
   writeVerified,
   type TenderRefundScope,
 } from "./tender-refund.js";
 
-type Override = InvoiceCorrectionRequest["override"];
-export type InvoiceCorrectionAsk = Omit<InvoiceCorrectionRequest, "submissionId" | "override">;
-type CorrectionApi = Pick<TillApi, "openInvoiceCorrection" | "giveInvoiceCorrectionCash">;
+type Override = InvoiceCorrectionCashRequest["override"];
+type CorrectionApi = Pick<TillApi, "giveInvoiceCorrectionCash">;
 type Saved<T> = T & { submissionId: string };
-
-export interface InvoiceCorrectionOpening {
-  correctionId: string;
-  /** Null when the invoice already had an open correction, which the till resumes instead. */
-  opened: InvoiceCorrectionOpened | null;
-}
 
 const codeOf = (error: unknown) =>
   error && typeof error === "object" && "code" in error ? error.code : undefined;
@@ -31,26 +23,7 @@ const statusOf = (error: unknown) =>
   error && typeof error === "object" && "status" in error ? error.status : undefined;
 
 const money = (value: string) => tenderRefundAmount(value) ?? value;
-const id = (value: string) => value.toLowerCase();
-
-/** The request's values in a fixed order, so a retry built in another order is the same request. */
-function openFingerprint(ask: InvoiceCorrectionAsk): string {
-  return JSON.stringify([
-    money(ask.gross),
-    ask.lineIds === undefined ? null : ask.lineIds.map(id).sort(),
-    id(ask.reasonId),
-    typeof ask.note === "string" && ask.note.trim() !== "" ? ask.note.trim() : null,
-    ask.expectedSplit
-      .map(({ rate, base, tax }) => JSON.stringify([rate, base, tax].map(money)))
-      .sort(),
-  ]);
-}
-
 const cashFingerprint = (ask: { amount: string }) => JSON.stringify([money(ask.amount)]);
-
-/** Journal keys with a request on its way, counted across every session: reopening the window makes
- * a new session, which must not drop what an earlier one is still sending. */
-const sending = new Map<string, number>();
 
 /**
  * Saves each request's submission id in the refund journal before sending, so an unknown answer is
@@ -67,8 +40,8 @@ export class InvoiceCorrectionSession {
     private readonly storage?: Storage,
   ) {}
 
-  #key(kind: "open" | "cash", id: string): string {
-    return `${scopePrefix(this.scope)}${JSON.stringify([`invoice-correction-${kind}`, id])}`;
+  #key(correctionId: string): string {
+    return `${scopePrefix(this.scope)}${JSON.stringify(["invoice-correction-cash", correctionId])}`;
   }
 
   #read<T>(key: string): Saved<T> | null {
@@ -82,18 +55,8 @@ export class InvoiceCorrectionSession {
     });
   }
 
-  /**
-   * Removes the entry at `key` only while it still holds `submissionId`'s request. An unreadable
-   * entry is left: keeping it costs a replay under the same id, never a second payment.
-   */
   #forget(key: string, submissionId: string): void {
-    let held: string | undefined;
-    try {
-      held = this.#read(key)?.submissionId;
-    } catch {
-      return;
-    }
-    if (held === submissionId)
+    if (stillSaved(() => this.#read(key)?.submissionId, submissionId))
       withJournalStorage(this.storage, (storage) => storage.removeItem(key));
   }
 
@@ -105,14 +68,10 @@ export class InvoiceCorrectionSession {
   ): Promise<R> {
     if (this.#busy) return fail("busy");
     this.#busy = true;
-    sending.set(key, (sending.get(key) ?? 0) + 1);
     try {
       return await this.#sendOnce(key, ask, fingerprint, send);
     } finally {
       this.#busy = false;
-      const left = sending.get(key)! - 1;
-      if (left === 0) sending.delete(key);
-      else sending.set(key, left);
     }
   }
 
@@ -125,13 +84,7 @@ export class InvoiceCorrectionSession {
     let request = this.#read<T>(key);
     const fresh = request === null;
     if (request !== null) {
-      let saved: string;
-      try {
-        saved = fingerprint(request);
-      } catch {
-        return fail("storage");
-      }
-      if (saved !== fingerprint(ask)) return fail("locked");
+      if (fingerprint(request) !== fingerprint(ask)) return fail("locked");
     } else {
       request = { ...ask, submissionId: crypto.randomUUID() };
       const value = JSON.stringify({ version: 1, request });
@@ -145,8 +98,8 @@ export class InvoiceCorrectionSession {
       const code = codeOf(error);
       const status = statusOf(error);
       if (
-        // `invoice_correction.*` as in the card leg, and `sale.correction_*`, which Open and the cash
-        // route raise only after their submission lookup.
+        // `invoice_correction.*` as in the card leg, and `sale.correction_*`, which the cash route
+        // raises only after its submission lookup.
         (typeof code === "string" &&
           (code.startsWith("invoice_correction.") || code.startsWith("sale.correction_"))) ||
         (fresh && typeof status === "number" && status < 500)
@@ -156,42 +109,8 @@ export class InvoiceCorrectionSession {
     }
   }
 
-  savedOpen(saleId: string): Saved<InvoiceCorrectionAsk> | null {
-    return this.#read(this.#key("open", saleId));
-  }
-
-  /** Drops the saved Open of `saleId` once the correction it may have opened has been found; never
-   * while any session's Open of it is on its way, whose own answer removes its id. */
-  forgetOpen(saleId: string): void {
-    const key = this.#key("open", saleId);
-    if (sending.has(key)) return;
-    let held: string | undefined;
-    try {
-      held = this.#read(key)?.submissionId;
-    } catch {
-      return;
-    }
-    if (held !== undefined) this.#forget(key, held);
-  }
-
   savedCash(correctionId: string): Saved<{ amount: string }> | null {
-    return this.#read(this.#key("cash", correctionId));
-  }
-
-  async open(
-    saleId: string,
-    ask: InvoiceCorrectionAsk,
-    override?: Override,
-  ): Promise<InvoiceCorrectionOpening> {
-    try {
-      const opened = await this.#send(this.#key("open", saleId), ask, openFingerprint, (request) =>
-        this.api.openInvoiceCorrection(saleId, { ...request, ...(override && { override }) }),
-      );
-      return { correctionId: opened.correction.id, opened };
-    } catch (error) {
-      if (codeOf(error) !== "invoice_correction.already_open") throw error;
-      return { correctionId: (error as { correctionId: string }).correctionId, opened: null };
-    }
+    return this.#read(this.#key(correctionId));
   }
 
   giveCash(
@@ -199,7 +118,7 @@ export class InvoiceCorrectionSession {
     ask: Omit<InvoiceCorrectionCashRequest, "submissionId" | "override">,
     override?: Override,
   ): Promise<InvoiceCorrectionCashGiven> {
-    return this.#send(this.#key("cash", correctionId), ask, cashFingerprint, (request) =>
+    return this.#send(this.#key(correctionId), ask, cashFingerprint, (request) =>
       this.api.giveInvoiceCorrectionCash(correctionId, {
         ...request,
         ...(override && { override }),

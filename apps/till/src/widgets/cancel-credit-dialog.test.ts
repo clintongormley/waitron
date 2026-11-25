@@ -51,11 +51,11 @@ function capture<T>(el: TillCancelCreditDialog, type: string): T[] {
 }
 
 describe("till-cancel-credit-dialog: what it will do", () => {
-  it("names the invoice and its amount, and says a corrective invoice is issued and the bill cancelled", async () => {
+  it("names the invoice and its amount, and says a corrective receipt is issued and the bill cancelled", async () => {
     const el = await mount();
 
     expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toBe(
-      `Invoice A/12 (${money("24.50")}) will be credited in full: a corrective invoice is issued and the bill is cancelled.`,
+      `Invoice A/12 (${money("24.50")}) will be credited in full: a corrective receipt is issued and the bill is cancelled.`,
     );
     expect(text(confirm(el))).toBe(t("cancel_credit.confirm"));
     expect(text(root(el).querySelector("[data-cancel-credit-next]"))).toBe(
@@ -74,7 +74,7 @@ describe("till-cancel-credit-dialog: what it will do", () => {
     const el = await mount({ invoiceNumber: null });
 
     expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toBe(
-      `This bill's invoice (${money("24.50")}) will be credited in full: a corrective invoice is issued and the bill is cancelled.`,
+      `This bill's invoice (${money("24.50")}) will be credited in full: a corrective receipt is issued and the bill is cancelled.`,
     );
   });
 
@@ -83,7 +83,7 @@ describe("till-cancel-credit-dialog: what it will do", () => {
     const el = await mount();
 
     expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toBe(
-      `La factura A/12 (${money("24.50")}) se abona por completo: se emite una factura rectificativa y se cancela la cuenta.`,
+      `La factura A/12 (${money("24.50")}) se abona por completo: se emite un ticket rectificativo y se cancela la cuenta.`,
     );
     expect(text(confirm(el))).toBe("Cancelar y abonar");
     expect(text(root(el).querySelector("[data-cancel-credit-close]"))).toBe("Mantener la cuenta");
@@ -232,12 +232,12 @@ describe("till-cancel-credit-dialog: dismissing", () => {
 });
 
 describe("till-cancel-credit-dialog: done", () => {
-  it("names the corrective invoice issued, offers only Done, and asks for no reason", async () => {
+  it("names the corrective receipt issued, offers only Done, and asks for no reason", async () => {
     const el = await mount({ done: { corrective: "R/3" } });
     const closed = capture(el, "cancel-credit-close");
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
-      "Corrective invoice R/3 issued. The bill is cancelled.",
+      "Corrective receipt R/3 issued. The bill is cancelled.",
     );
     expect(reason(el)).toBeNull();
     expect(root(el).querySelector("[data-cancel-credit-confirm]")).toBeNull();
@@ -251,7 +251,7 @@ describe("till-cancel-credit-dialog: done", () => {
     expect(root(el).querySelector("wt-form-actions [data-cancel-credit-finished]")).not.toBeNull();
   });
 
-  it("says the bill is cancelled when the corrective invoice's number could not be read", async () => {
+  it("says the bill is cancelled when the corrective receipt's number could not be read", async () => {
     const el = await mount({ done: { corrective: null } });
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
@@ -264,7 +264,7 @@ describe("till-cancel-credit-dialog: done", () => {
     const el = await mount({ done: { corrective: "R/3" } });
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
-      "Factura rectificativa R/3 emitida. La cuenta queda cancelada.",
+      "Ticket rectificativo R/3 emitido. La cuenta queda cancelada.",
     );
   });
 });

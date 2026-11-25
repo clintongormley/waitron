@@ -370,33 +370,6 @@ describe("clock-stopped payment guidance", () => {
   });
 });
 
-it("says plainly what Send again does to a correction whose answer was lost, in both languages", () => {
-  expect([en["invoice_correction.saved_cash"], en["invoice_correction.saved"]]).toEqual([
-    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again corrects the invoice now and gives {amount} back in cash, opening the cash drawer. If it did, Send again shows what happened. Nothing happens twice.",
-    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again opens the correction, so you can then choose how to give back {amount}; nothing is refunded or filed yet. If it did, Send again shows it. Nothing happens twice.",
-  ]);
-  expect([es["invoice_correction.saved_cash"], es["invoice_correction.saved"]]).toEqual([
-    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo rectifica la factura ahora y devuelve {amount} en efectivo, abriendo el cajón. Si llegó, al pulsar Enviar de nuevo verás lo que pasó. Nada ocurre dos veces.",
-    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo abre la rectificación, para que luego elijas cómo devolver {amount}; aún no se devuelve ni se presenta nada. Si llegó, al pulsar Enviar de nuevo verás la rectificación. Nada ocurre dos veces.",
-  ]);
-});
-
-it("says Send again got no answer either, in both languages", () => {
-  expect([en["invoice_correction.still_lost"], es["invoice_correction.still_lost"]]).toEqual([
-    "Still no answer. Check this till's connection to the box, then send again.",
-    "Sigue sin respuesta. Comprueba la conexión de esta caja con el servidor y vuelve a enviar.",
-  ]);
-});
-
-it("says why a till that cannot give cash back stops after opening a correction, in both languages", () => {
-  expect(en["invoice_correction.no_cash_here"]).toBe(
-    "This till cannot give cash back. Give the cash back from a till that can; while nothing has been given back, Discard ends the correction.",
-  );
-  expect(es["invoice_correction.no_cash_here"]).toBe(
-    "Esta caja no puede devolver efectivo. Devuelve el efectivo desde una caja que pueda; mientras no se haya devuelto nada, Descartar termina la rectificación.",
-  );
-});
-
 it("says a receipt has no printer on this device, and what to do, in both languages", () => {
   expect([en["document.no_receipt_printer"], es["document.no_receipt_printer"]]).toEqual([
     "This device has no receipt printer switched on. Choose one in Equipment, then try again.",
@@ -422,7 +395,6 @@ describe("till texts say where a problem is put right", () => {
   const sendsElsewhere = /manager|whoever|encargado|responsable/i;
   it.each([
     ["venue.time_zone_confirm", "dashboard", "panel"],
-    ["tender_refund.storage", "Refund a payment", "Devolver un pago"],
     ["station.printer_down", "the dashboard, under Printers.", "el panel, en Impresoras."],
     [
       "device.join_refused_hint",
@@ -564,11 +536,11 @@ describe("Print the bill's refused wording", () => {
   it.each([
     [
       "en-GB",
-      "Some dishes on this bill are not marked served. This is a full invoice naming a customer, and the till cannot file a correction for it, so take off any dish that may not come before you print.",
+      "Some dishes on this bill are not marked served. This is a full invoice naming a customer, and the till cannot issue a corrective invoice for it, so take off any dish that may not come before you print.",
     ],
     [
       "es-ES",
-      "Algunos platos de esta cuenta no están marcados como servidos. Es una factura completa a nombre de un cliente y la caja no puede presentar una rectificación para ella, así que quita antes de imprimir los platos que puedan no llegar.",
+      "Algunos platos de esta cuenta no están marcados como servidos. Es una factura completa a nombre de un cliente y la caja no puede emitir una factura rectificativa para ella, así que quita antes de imprimir los platos que puedan no llegar.",
     ],
   ])("says in %s that a full invoice naming a customer cannot be corrected", (locale, message) => {
     expect(catalogues[locale]?.["meal_end.unserved_full_invoice"]).toBe(message);
@@ -641,5 +613,45 @@ describe("Give money back's words", () => {
       .filter(([key]) => key.startsWith("give_back."))
       .filter(([key, text]) => key !== "give_back.extra_hint" && /propina/i.test(text));
     expect([...tipWords, ...propina]).toEqual([]);
+  });
+});
+
+describe("a corrective receipt corrects a receipt, a corrective invoice a full invoice", () => {
+  it.each<[StringKey, string, string]>([
+    [
+      "cancel_credit.scope_unnumbered",
+      "This bill's invoice ({amount}) will be credited in full: a corrective receipt is issued and the bill is cancelled.",
+      "La factura de esta cuenta ({amount}) se abona por completo: se emite un ticket rectificativo y se cancela la cuenta.",
+    ],
+    [
+      "cancel_credit.approval_next",
+      "If you cannot issue corrective receipts and invoices yourself, someone who can approves it with their PIN next.",
+      "Si tú no puedes emitir tickets y facturas rectificativos, a continuación lo aprueba alguien que pueda con su PIN.",
+    ],
+    [
+      "cancel_credit.refused_not_permitted",
+      "The person who approved this cannot issue corrective receipts and invoices. Choose someone who can.",
+      "La persona que lo ha aprobado no puede emitir tickets y facturas rectificativos. Elige a alguien que pueda.",
+    ],
+    [
+      "cancel_credit.done_unnumbered",
+      "A corrective receipt was issued and the bill is cancelled.",
+      "Se emitió el ticket rectificativo y la cuenta queda cancelada.",
+    ],
+    [
+      "find_page.replacement",
+      "Replacement corrective receipt",
+      "Ticket rectificativo por sustitución",
+    ],
+  ])("%s", (key, english, spanish) => {
+    expect(en[key]).toBe(english);
+    expect(es[key]).toBe(spanish);
+  });
+
+  it.each(["en-GB", "es-ES"])("%s no longer says money back receipt", (locale) => {
+    const named = Object.entries(catalogues[locale]!).filter(([, text]) =>
+      /money[- ]back receipt|ticket de devolución/i.test(text),
+    );
+    expect(named).toEqual([]);
   });
 });

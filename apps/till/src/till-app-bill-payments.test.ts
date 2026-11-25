@@ -4570,7 +4570,6 @@ describe("till-app: a change refused on a bill that holds money", () => {
     expect(api.getTransactionReceipt).toHaveBeenCalledWith("advance-sale", expect.anything());
     expect(api.readGiveBack).toHaveBeenCalledWith("advance-sale", {});
     expect(el.shadowRoot!.querySelector("till-give-back-dialog")!.saleId).toBe("advance-sale");
-    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
   });
 
@@ -8245,7 +8244,6 @@ describe("till-app: giving back a bill payment", () => {
     expect(inRefund(el, "wt-form-actions")!.error).toBe(
       "This payment on account was already taken off the table's receipt A/45, so money for dishes or goodwill cannot go back from this ticket yet. First give money back with Give money back on A/45: it gives back money paid on A/45. Once nothing paid on A/45 is left, Give money back on this ticket gives back the rest.",
     );
-    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-give-back-dialog")).toBeNull();
     expect(api.getTransactionReceipt).not.toHaveBeenCalledWith("advance-sale", expect.anything());
   });
@@ -9917,7 +9915,6 @@ describe("till-app: Refund on a payment that has its own ticket", () => {
     expect(api.readGiveBack).toHaveBeenCalledWith("advance-sale", {});
     expect(el.shadowRoot!.querySelector("till-give-back-dialog")!.saleId).toBe("advance-sale");
     expect(dialog(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
     expect(api.refundBillPayment).not.toHaveBeenCalled();
   });
@@ -9955,8 +9952,6 @@ describe("till-app: Refund on a payment that has its own ticket", () => {
     expect(api.readGiveBack).toHaveBeenCalledWith("advance-sale", {});
     expect(el.shadowRoot!.querySelector("till-give-back-dialog")!.saleId).toBe("advance-sale");
     expect(dialog(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
     expect(api.refundBillPayment).not.toHaveBeenCalled();
   });

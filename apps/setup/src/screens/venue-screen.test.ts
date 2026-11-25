@@ -886,10 +886,10 @@ describe("setup-venue-screen form errors", () => {
     next(el).click();
     await el.updateComplete;
     expect(errorOf(el, "correctiveSeriesCode")).toBe(
-      "Enter the series code for correctives of simplified invoices.",
+      "Enter the series code for corrective receipts.",
     );
     expect(errorOf(el, "fullCorrectiveSeriesCode")).toBe(
-      "Enter the series code for correctives of full invoices.",
+      "Enter the series code for corrective invoices.",
     );
   });
 

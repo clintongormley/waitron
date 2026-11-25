@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { deferred } from "../../test/clock-app.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { es } from "../i18n/strings.js";
+import { en, es } from "../i18n/strings.js";
 import { codeMessage, giveBackFilingMessage } from "../i18n/codes.js";
 import type { TillApi } from "../api/client.js";
 import type {
@@ -90,7 +91,6 @@ function fakeApi() {
     listApprovers: vi.fn<TillApi["listApprovers"]>(async () => [
       { personId: "manager", displayName: "Marta" },
     ]),
-    openInvoiceCorrection: vi.fn(),
     giveInvoiceCorrectionCash: vi.fn(async (_id: string, request: { amount: string }) => ({
       correction: { ...OPEN, state: "filed" as const, moneyBack: request.amount, left: "0.00" },
       refunds: [],
@@ -100,7 +100,7 @@ function fakeApi() {
       refundOf(saleId, request),
     ),
     getTenderRefund: vi.fn(),
-    retryTenderRefund: vi.fn(),
+    retryTenderRefund: vi.fn<TillApi["retryTenderRefund"]>(),
   };
 }
 type Api = ReturnType<typeof fakeApi>;
@@ -555,6 +555,19 @@ describe("cash", () => {
     expect(shown(el, "finish")).toBe(true);
   });
 
+  it("tells the till the sign-in ended when the server says so, for the till to lock", async () => {
+    const api = fakeApi();
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce({ code: "session.required", status: 401 });
+    const { el } = await mount(OPEN, api);
+    const signedOut = vi.fn();
+    el.addEventListener("give-back-signed-out", signedOut);
+
+    press(el, "cash");
+    await vi.waitFor(() => expect(signedOut).toHaveBeenCalledOnce());
+    expect(signedOut.mock.calls[0]![0]).toMatchObject({ bubbles: true, composed: true });
+    expect(api.giveInvoiceCorrectionCash).toHaveBeenCalledOnce();
+  });
+
   it("after a cash answer is lost, gives that same amount again even when less is left", async () => {
     const api = fakeApi();
     api.giveInvoiceCorrectionCash.mockRejectedValueOnce(lost());
@@ -665,6 +678,29 @@ describe("a card", () => {
     await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_card_failed")));
   });
 
+  it.each([
+    ["en", en],
+    ["es-ES", es],
+  ] as const)(
+    "says in %s that the card company cannot refund yet, not to press the card's button again",
+    async (locale, words) => {
+      setLocale(locale);
+      const api = fakeApi();
+      api.refundTransaction.mockImplementationOnce(async (saleId, request) => ({
+        ...refundOf(saleId, request, "failed"),
+        refusalReason: "provider_balance_unavailable" as const,
+      }));
+      const { el } = await mount(OPEN, api);
+
+      press(el, "card");
+      await vi.waitFor(() =>
+        expect(bottom(el)).toBe(
+          `${words["tender_refund.failed"]} ${words["refund.provider_balance_unavailable"]}`,
+        ),
+      );
+    },
+  );
+
   it("sends nothing when the card's payment changed since it was shown", async () => {
     const api = fakeApi();
     const { el } = await mount(OPEN, api);
@@ -677,6 +713,19 @@ describe("a card", () => {
     await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_card_changed")));
     expect(api.refundTransaction).not.toHaveBeenCalled();
     expect(shown(el, "card")).toBe(false);
+  });
+
+  it("sends nothing when the view is taken away while the card's payment is read again", async () => {
+    const { el, api } = await mount();
+    const read = deferred<RefundableTender[]>();
+    api.getRefundableTenders.mockImplementationOnce(() => read.promise);
+    press(el, "card");
+    await vi.waitFor(() => expect(api.getRefundableTenders).toHaveBeenCalledTimes(2));
+    el.remove();
+    read.resolve(TENDERS);
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    expect(api.refundTransaction).not.toHaveBeenCalled();
+    expect(el.refunds.read("sale-1")).toBeNull();
   });
 
   it("sends nothing when the card's payment cannot be read again", async () => {
@@ -1111,7 +1160,7 @@ describe("only a card's part with no answer counts as lost", () => {
     expect(api.refundTransaction.mock.calls[1]![1]).toEqual(first);
   });
 
-  it("keeps a refused card refund Refund a payment saved when this window closes", async () => {
+  it("keeps a refused card refund saved outside a correction when this window closes", async () => {
     const api = fakeApi();
     const refunds = new TenderRefundSession(SCOPE, api);
     api.refundTransaction.mockRejectedValueOnce(
@@ -1163,6 +1212,529 @@ describe("only a card's part with no answer counts as lost", () => {
   });
 });
 
+describe("Check again while a card refund waits for the card company", () => {
+  const leg = (over: Partial<TenderRefundView> = {}): TenderRefundView => ({
+    ...refundOf(
+      "sale-1",
+      {
+        submissionId: "s",
+        tenderId: "card-1",
+        appliedAmount: "6.05",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+      },
+      "pending",
+    ),
+    ...over,
+  });
+  const WAITING: InvoiceCorrectionView = {
+    ...OPEN,
+    pending: "6.05",
+    left: "0.00",
+    legs: [leg()],
+  };
+  const BACK: InvoiceCorrectionView = {
+    ...OPEN,
+    moneyBack: "6.05",
+    left: "0.00",
+    legs: [leg({ state: "completed" })],
+    fileNow: { gross: "6.05", vatBreakdown: SPLIT },
+  };
+  const settled = (over: Partial<TenderRefundView> = {}): TenderRefundView => ({
+    ...refundOf("sale-1", {
+      submissionId: "s",
+      tenderId: "card-1",
+      appliedAmount: "6.05",
+      tipAmount: "0.00",
+      reason: "Overcharged",
+    }),
+    ...over,
+  });
+  /** A correction whose card refund the box has waiting, sent by the press that opened it or by
+   * another till: this till saved no request for it. */
+  function waitingApi() {
+    const api = fakeApi();
+    api.getInvoiceCorrection.mockResolvedValue(WAITING);
+    api.getRefundableTenders.mockResolvedValue([
+      CASH_ROW,
+      { ...CARD_ROW, pendingRefundId: "refund-1" },
+    ]);
+    api.retryTenderRefund.mockResolvedValue(settled({ state: "pending" }));
+    return api;
+  }
+  const status = (el: TillGiveBackUnderWay) =>
+    text(root(el).querySelector("[data-pending-status]"));
+  const notPermitted = () => refused("authorization.not_permitted", { permission: "sale.refund" });
+
+  it("has the box ask about that same refund, then shows what is back, and Finish records it once", async () => {
+    const api = waitingApi();
+    const { el } = await mount(WAITING, api);
+    expect(api.retryTenderRefund).not.toHaveBeenCalled();
+    api.retryTenderRefund.mockResolvedValueOnce(settled());
+    api.getInvoiceCorrection.mockResolvedValueOnce(WAITING).mockResolvedValue(BACK);
+
+    press(el, "check");
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-back]"))).toBe(
+        t("give_back.uw_back").replace("{back}", "€6.05").replace("{gross}", "€6.05"),
+      ),
+    );
+    expect(api.retryTenderRefund.mock.calls).toEqual([["refund-1", undefined]]);
+    expect(api.refundTransaction).not.toHaveBeenCalled();
+    expect(root(el).querySelector("[data-pending]")).toBeNull();
+    expect(bottom(el)).toBe("");
+    api.fileInvoiceCorrection.mockResolvedValueOnce({ ...BACK, state: "filed" });
+    press(el, "finish");
+    press(el, "finish");
+    await vi.waitFor(() => expect(outcome(el)).toContain("€6.05"));
+    expect(api.fileInvoiceCorrection).toHaveBeenCalledExactlyOnceWith("correction-1", {
+      expectedSplit: SPLIT,
+    });
+  });
+
+  it("asks once about a refund this till saved, and settles the saved request with the answer", async () => {
+    const api = waitingApi();
+    api.refundTransaction.mockImplementationOnce(async (saleId, request) =>
+      refundOf(saleId, request, "pending"),
+    );
+    const refunds = new TenderRefundSession(SCOPE, api);
+    await refunds.submit("sale-1", {
+      tenderId: "card-1",
+      appliedAmount: "6.05",
+      tipAmount: "0.00",
+      reason: "Overcharged",
+      invoiceCorrectionId: "correction-1",
+    });
+    api.getTenderRefund.mockResolvedValue(settled({ state: "pending" }));
+    const { el } = await mount(WAITING, api, EVERY_METHOD, refunds);
+    api.retryTenderRefund.mockResolvedValueOnce(settled());
+    api.getInvoiceCorrection.mockResolvedValueOnce(WAITING).mockResolvedValue(BACK);
+    press(el, "check");
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 g"),
+    );
+    expect(api.retryTenderRefund).toHaveBeenCalledOnce();
+    expect(api.refundTransaction).toHaveBeenCalledOnce();
+    expect(refunds.read("sale-1")).toBeNull();
+  });
+
+  it("says the card company still has not answered, until the next step is pressed", async () => {
+    const api = waitingApi();
+    const { el } = await mount(WAITING, api);
+    expect(status(el)).toBe("");
+    press(el, "check");
+    await vi.waitFor(() => expect(status(el)).toBe(t("give_back.pending_unanswered")));
+    const read = deferred<InvoiceCorrectionView>();
+    api.getInvoiceCorrection.mockImplementationOnce(() => read.promise);
+    press(el, "check");
+    await el.updateComplete;
+    expect(status(el)).toBe("");
+    read.resolve(WAITING);
+    await vi.waitFor(() => expect(status(el)).toBe(t("give_back.pending_unanswered")));
+    expect(api.retryTenderRefund.mock.calls.map(([id]) => id)).toEqual(["refund-1", "refund-1"]);
+  });
+
+  it.each([
+    [undefined, () => t("give_back.uw_card_failed")],
+    [
+      "provider_balance_unavailable",
+      () => `${t("tender_refund.failed")} ${t("refund.provider_balance_unavailable")}`,
+    ],
+  ] as const)("says the card company did not make it (reason %s)", async (refusalReason, said) => {
+    const api = waitingApi();
+    const { el } = await mount(WAITING, api);
+    api.retryTenderRefund.mockResolvedValueOnce(
+      settled({ state: "failed", ...(refusalReason && { refusalReason }) }),
+    );
+    api.getInvoiceCorrection.mockResolvedValueOnce(WAITING).mockResolvedValue(OPEN);
+    api.getRefundableTenders
+      .mockResolvedValueOnce([CASH_ROW, { ...CARD_ROW, pendingRefundId: "refund-1" }])
+      .mockResolvedValue(TENDERS);
+    press(el, "check");
+    await vi.waitFor(() => expect(bottom(el)).toBe(said()));
+    expect(status(el)).toBe("");
+    await vi.waitFor(() => expect(shown(el, "card")).toBe(true));
+  });
+
+  it("does not say the card company has not answered once it has, though the payments cannot be read after it", async () => {
+    const api = waitingApi();
+    const { el } = await mount(WAITING, api);
+    api.retryTenderRefund.mockResolvedValueOnce(settled());
+    api.getInvoiceCorrection.mockResolvedValueOnce(WAITING).mockResolvedValue(BACK);
+    api.getRefundableTenders
+      .mockResolvedValueOnce([CASH_ROW, { ...CARD_ROW, pendingRefundId: "refund-1" }])
+      .mockRejectedValue(lost());
+    press(el, "check");
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 g"),
+    );
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    expect(api.retryTenderRefund).toHaveBeenCalledOnce();
+    expect(status(el)).toBe("");
+  });
+
+  it("says the card company did not make it, and not that it has not answered, when nothing can be read after its answer", async () => {
+    const api = waitingApi();
+    const { el } = await mount(WAITING, api);
+    api.retryTenderRefund.mockResolvedValueOnce(settled({ state: "failed" }));
+    api.getInvoiceCorrection.mockResolvedValueOnce(WAITING).mockRejectedValue(lost());
+    api.getRefundableTenders
+      .mockResolvedValueOnce([CASH_ROW, { ...CARD_ROW, pendingRefundId: "refund-1" }])
+      .mockRejectedValue(lost());
+    press(el, "check");
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_card_failed")));
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    expect(status(el)).toBe("");
+  });
+
+  it("does not say so either when this till's own saved refund is found settled and the payments cannot be read", async () => {
+    const api = waitingApi();
+    api.refundTransaction.mockImplementationOnce(async (saleId, request) =>
+      refundOf(saleId, request, "pending"),
+    );
+    const refunds = new TenderRefundSession(SCOPE, api);
+    await refunds.submit("sale-1", {
+      tenderId: "card-1",
+      appliedAmount: "6.05",
+      tipAmount: "0.00",
+      reason: "Overcharged",
+      invoiceCorrectionId: "correction-1",
+    });
+    const { el } = await mount(WAITING, api, ["take-cash"], refunds);
+    api.getTenderRefund.mockResolvedValueOnce(settled());
+    api.getInvoiceCorrection.mockResolvedValue(BACK);
+    api.getRefundableTenders.mockRejectedValue(lost());
+    press(el, "check");
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 g"),
+    );
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    expect(status(el)).toBe("");
+  });
+
+  describe("once the card company answered and what is back cannot be read again", () => {
+    const pendingLine = (el: TillGiveBackUnderWay) =>
+      text(root(el).querySelector("[data-pending]"));
+    const unread = (el: TillGiveBackUnderWay) => text(root(el).querySelector("[data-unread]"));
+    const waits = (amount: string) => t("give_back.pending").replace("{amount}", amount);
+    const ROWS = [CASH_ROW, { ...CARD_ROW, pendingRefundId: "refund-1" }];
+    /** Presses Check again, which answers `answers`, and after which nothing can be read. */
+    async function checkUnread(
+      api: Api,
+      answers: TenderRefundView[],
+      correction = WAITING,
+      rows: RefundableTender[] = ROWS,
+    ) {
+      const { el } = await mount(correction, api);
+      for (const answer of answers) api.retryTenderRefund.mockResolvedValueOnce(answer);
+      api.getInvoiceCorrection.mockResolvedValueOnce(correction).mockRejectedValue(lost());
+      api.getRefundableTenders.mockResolvedValueOnce(rows).mockRejectedValue(lost());
+      press(el, "check");
+      await vi.waitFor(() => expect(api.getInvoiceCorrection).toHaveBeenCalledTimes(2));
+      await vi.waitFor(() => expect(idle(el)).toBe(true));
+      return el;
+    }
+
+    it("says the money is back and that the rest could not be read, not that it waits, until it is read", async () => {
+      const api = waitingApi();
+      const el = await checkUnread(api, [settled()]);
+      expect(pendingLine(el)).toBe("");
+      expect(unread(el)).toBe(
+        `${t("give_back.done_card").replace("{amount}", "€6.05").replace("{card}", "···0042")} ${t("tender_refund.read_failed")}`,
+      );
+      expect(bottom(el)).toBe("");
+      press(el, "check");
+      await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.read_failed")));
+      expect(pendingLine(el)).toBe("");
+      api.getInvoiceCorrection.mockResolvedValue(BACK);
+      api.getRefundableTenders.mockResolvedValue(TENDERS);
+      press(el, "check");
+      await vi.waitFor(() =>
+        expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 g"),
+      );
+      await vi.waitFor(() => expect(idle(el)).toBe(true));
+      expect(unread(el)).toBe("");
+      expect(api.retryTenderRefund).toHaveBeenCalledOnce();
+    });
+
+    it("does not say it could not be read while it is being read", async () => {
+      const api = waitingApi();
+      const { el } = await mount(WAITING, api);
+      api.retryTenderRefund.mockResolvedValueOnce(settled());
+      const read = deferred<InvoiceCorrectionView>();
+      api.getInvoiceCorrection
+        .mockResolvedValueOnce(WAITING)
+        .mockImplementationOnce(() => read.promise);
+      press(el, "check");
+      await vi.waitFor(() => expect(api.getInvoiceCorrection).toHaveBeenCalledTimes(2));
+      await el.updateComplete;
+      expect(pendingLine(el)).toBe("");
+      expect(unread(el)).toBe("");
+      read.reject(lost());
+      await vi.waitFor(() => expect(unread(el)).toContain(t("tender_refund.read_failed")));
+    });
+
+    it("says the refund was not made and that the rest could not be read, not that it waits", async () => {
+      const el = await checkUnread(waitingApi(), [settled({ state: "failed" })]);
+      expect(pendingLine(el)).toBe("");
+      expect(bottom(el)).toBe(t("give_back.uw_card_failed"));
+      expect(unread(el)).toBe(`${t("tender_refund.failed")} ${t("tender_refund.read_failed")}`);
+    });
+
+    it("still says the refund was not made once a second Check again cannot read either", async () => {
+      const el = await checkUnread(waitingApi(), [settled({ state: "failed" })]);
+      press(el, "check");
+      await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.read_failed")));
+      await vi.waitFor(() => expect(idle(el)).toBe(true));
+      expect(unread(el)).toContain(t("tender_refund.failed"));
+    });
+
+    it("says only what another refund not answered yet still waits for", async () => {
+      const two: InvoiceCorrectionView = {
+        ...WAITING,
+        legs: [
+          leg({ appliedAmount: "4.00" }),
+          leg({ id: "refund-2", tenderId: "card-2", appliedAmount: "2.05" }),
+        ],
+      };
+      const el = await checkUnread(
+        waitingApi(),
+        [
+          settled({ appliedAmount: "4.00" }),
+          settled({
+            id: "refund-2",
+            tenderId: "card-2",
+            appliedAmount: "2.05",
+            state: "pending",
+          }),
+        ],
+        two,
+        [...ROWS, { ...CARD_ROW, tenderId: "card-2", pendingRefundId: "refund-2" }],
+      );
+      expect(pendingLine(el)).toBe(waits("€2.05"));
+      expect(status(el)).toBe(t("give_back.pending_unanswered"));
+      expect(unread(el)).toContain("€4.00");
+    });
+
+    it("says so, and not that nothing changed, when this till's own saved refund was found settled", async () => {
+      const api = waitingApi();
+      api.refundTransaction.mockImplementationOnce(async (saleId, request) =>
+        refundOf(saleId, request, "pending"),
+      );
+      const refunds = new TenderRefundSession(SCOPE, api);
+      await refunds.submit("sale-1", {
+        tenderId: "card-1",
+        appliedAmount: "6.05",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+        invoiceCorrectionId: "correction-1",
+      });
+      const { el } = await mount(WAITING, api, EVERY_METHOD, refunds);
+      api.getTenderRefund.mockResolvedValueOnce(settled());
+      api.getInvoiceCorrection.mockRejectedValue(lost());
+      api.getRefundableTenders.mockRejectedValue(lost());
+      press(el, "check");
+      await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_unknown")));
+      await vi.waitFor(() => expect(idle(el)).toBe(true));
+      expect(pendingLine(el)).toBe("");
+      expect(unread(el)).toContain("€6.05 is back on card");
+    });
+
+    it("keeps saying it waits while nothing was answered, though the payments were never read", async () => {
+      const api = waitingApi();
+      api.getRefundableTenders.mockRejectedValue(lost());
+      const { el } = await mount(WAITING, api);
+      press(el, "check");
+      await vi.waitFor(() => expect(api.getInvoiceCorrection).toHaveBeenCalledOnce());
+      await vi.waitFor(() => expect(idle(el)).toBe(true));
+      expect(pendingLine(el)).toBe(waits("€6.05"));
+      expect(unread(el)).toBe("");
+      expect(api.retryTenderRefund).not.toHaveBeenCalled();
+    });
+  });
+
+  it("still says the card company has not answered about another refund it has not settled", async () => {
+    const api = waitingApi();
+    api.getRefundableTenders.mockReset().mockResolvedValue([
+      { ...CARD_ROW, pendingRefundId: "refund-1" },
+      { ...CARD_ROW, tenderId: "card-2", pendingRefundId: "refund-2" },
+    ]);
+    const { el } = await mount(WAITING, api);
+    api.retryTenderRefund
+      .mockResolvedValueOnce(settled())
+      .mockResolvedValueOnce(settled({ id: "refund-2", tenderId: "card-2", state: "pending" }));
+    press(el, "check");
+    await vi.waitFor(() => expect(status(el)).toBe(t("give_back.pending_unanswered")));
+    expect(api.retryTenderRefund).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["lost", () => lost(), "give_back.uw_unknown"],
+    ["refused on a full disk", () => refused("storage.disk_full"), "storage.disk_full"],
+    [
+      "refused as the box's time is not confirmed",
+      () => refused("clock.unconfirmed"),
+      "clock.unconfirmed",
+    ],
+  ] as const)(
+    "says so when the asking is %s, and asks about the same refund again at the next press",
+    async (_what, error, said) => {
+      const api = waitingApi();
+      api.retryTenderRefund.mockRejectedValueOnce(error());
+      const { el } = await mount(WAITING, api);
+      press(el, "check");
+      await vi.waitFor(() =>
+        expect(bottom(el)).toBe(said === "give_back.uw_unknown" ? t(said) : codeMessage(said)),
+      );
+      expect(idle(el)).toBe(true);
+      press(el, "check");
+      await vi.waitFor(() => expect(status(el)).toBe(t("give_back.pending_unanswered")));
+      expect(bottom(el)).toBe("");
+      expect(api.retryTenderRefund.mock.calls.map(([id]) => id)).toEqual(["refund-1", "refund-1"]);
+    },
+  );
+
+  it("says the receipt could not be read when nothing was asked, also after an asking was lost", async () => {
+    const api = waitingApi();
+    const { el } = await mount(WAITING, api);
+    api.retryTenderRefund.mockRejectedValueOnce(lost());
+    press(el, "check");
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_unknown")));
+    api.getInvoiceCorrection.mockRejectedValueOnce(lost());
+    press(el, "check");
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.read_failed")));
+    expect(api.retryTenderRefund).toHaveBeenCalledOnce();
+  });
+
+  it("asks an approver when the person signed in may not, then asks with their PIN", async () => {
+    const api = waitingApi();
+    api.retryTenderRefund.mockRejectedValueOnce(notPermitted());
+    const { el } = await mount(WAITING, api);
+    press(el, "check");
+    const pin = await pinDialog(el);
+    expect(api.listApprovers).toHaveBeenCalledWith("sale.refund", expect.anything());
+    api.retryTenderRefund.mockResolvedValueOnce(settled());
+    api.getInvoiceCorrection.mockResolvedValueOnce(WAITING).mockResolvedValue(BACK);
+    signIn(pin);
+    await vi.waitFor(() => expect(shown(el, "finish")).toBe(true));
+    expect(root(el).querySelector("till-supervisor-override-dialog")).toBeNull();
+    expect(api.retryTenderRefund.mock.calls).toEqual([
+      ["refund-1", undefined],
+      ["refund-1", MANAGER],
+    ]);
+  });
+
+  it("tells the till the sign-in ended when the asking is refused for it", async () => {
+    const api = waitingApi();
+    api.retryTenderRefund.mockRejectedValueOnce(refused("session.required"));
+    const { el } = await mount(WAITING, api);
+    const signedOut = vi.fn();
+    el.addEventListener("give-back-signed-out", signedOut);
+    press(el, "check");
+    await vi.waitFor(() => expect(signedOut).toHaveBeenCalledOnce());
+  });
+
+  it("asks once when pressed twice, and is busy until that is answered", async () => {
+    const api = waitingApi();
+    const { el } = await mount(WAITING, api);
+    const busy = vi.fn();
+    el.addEventListener("give-back-busy", (event) => busy((event as CustomEvent).detail));
+    const answer = deferred<TenderRefundView>();
+    api.retryTenderRefund.mockImplementationOnce(() => answer.promise);
+    press(el, "check");
+    press(el, "check");
+    await vi.waitFor(() => expect(api.retryTenderRefund).toHaveBeenCalledOnce());
+    await el.updateComplete;
+    press(el, "check");
+    expect(busy).toHaveBeenLastCalledWith({ busy: true, held: true });
+    answer.resolve(settled({ state: "pending" }));
+    await vi.waitFor(() => expect(status(el)).toBe(t("give_back.pending_unanswered")));
+    expect(busy).toHaveBeenLastCalledWith({ busy: false, held: true });
+    expect(api.retryTenderRefund).toHaveBeenCalledOnce();
+  });
+
+  it("asks nothing when the view is taken away while what is back is read", async () => {
+    const api = waitingApi();
+    const { el } = await mount(WAITING, api);
+    const read = deferred<InvoiceCorrectionView>();
+    api.getInvoiceCorrection.mockImplementationOnce(() => read.promise);
+    press(el, "check");
+    await vi.waitFor(() => expect(api.getInvoiceCorrection).toHaveBeenCalledOnce());
+    el.remove();
+    read.resolve(WAITING);
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    expect(api.retryTenderRefund).not.toHaveBeenCalled();
+  });
+
+  it("asks about no further refund when the view is taken away while one is asked about", async () => {
+    const api = waitingApi();
+    api.getRefundableTenders.mockResolvedValue([
+      { ...CARD_ROW, pendingRefundId: "refund-1" },
+      { ...CARD_ROW, tenderId: "card-2", pendingRefundId: "refund-2" },
+    ]);
+    const { el } = await mount(WAITING, api);
+    const answer = deferred<TenderRefundView>();
+    api.retryTenderRefund.mockImplementationOnce(() => answer.promise);
+    press(el, "check");
+    await vi.waitFor(() => expect(api.retryTenderRefund).toHaveBeenCalledOnce());
+    el.remove();
+    answer.resolve(settled());
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
+    expect(api.retryTenderRefund.mock.calls.map(([id]) => id)).toEqual(["refund-1"]);
+  });
+
+  it("tells the till the sign-in ended when that refuses a later refund, though one was answered", async () => {
+    const api = waitingApi();
+    api.getRefundableTenders.mockResolvedValue([
+      { ...CARD_ROW, pendingRefundId: "refund-1" },
+      { ...CARD_ROW, tenderId: "card-2", pendingRefundId: "refund-2" },
+    ]);
+    api.retryTenderRefund
+      .mockResolvedValueOnce(settled())
+      .mockRejectedValueOnce(refused("session.not_open"));
+    const { el } = await mount(WAITING, api);
+    const signedOut = vi.fn();
+    el.addEventListener("give-back-signed-out", signedOut);
+    press(el, "check");
+    await vi.waitFor(() => expect(signedOut).toHaveBeenCalledOnce());
+  });
+
+  it("asks nothing for a card this device's profile does not take, and says it still waits", async () => {
+    const api = waitingApi();
+    const { el } = await mount(WAITING, api, ["take-cash"]);
+    const busy = vi.fn();
+    el.addEventListener("give-back-busy", (event) => busy((event as CustomEvent).detail));
+    press(el, "check");
+    await vi.waitFor(() => expect(status(el)).toBe(t("give_back.pending_unanswered")));
+    expect(busy).toHaveBeenLastCalledWith({ busy: false, held: true });
+    expect(api.retryTenderRefund).not.toHaveBeenCalled();
+  });
+
+  it("keeps Send again for a card's part with no answer when another refund is answered", async () => {
+    const api = waitingApi();
+    api.refundTransaction.mockRejectedValueOnce(lost());
+    const refunds = new TenderRefundSession(SCOPE, api);
+    await refunds
+      .submit("sale-1", {
+        tenderId: "card-2",
+        appliedAmount: "1.00",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+        invoiceCorrectionId: "correction-1",
+      })
+      .catch(() => {});
+    const { el } = await mount(WAITING, api, EVERY_METHOD, refunds);
+    api.retryTenderRefund.mockResolvedValueOnce(settled());
+    api.getInvoiceCorrection.mockResolvedValueOnce(WAITING).mockResolvedValue(BACK);
+    press(el, "check");
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-back]"))).toContain("€6.05 g"),
+    );
+    expect(root(el).querySelector("[data-send-again]")).not.toBeNull();
+    expect(refunds.read("sale-1")?.refundId).toBeNull();
+  });
+});
+
 describe("what still works when a read fails", () => {
   it("keeps offering the card when the payments cannot be read again after some cash is given", async () => {
     const api = fakeApi();
@@ -1190,7 +1762,6 @@ describe("what still works when a read fails", () => {
 
   it("offers the cash still left when the saved cash request cannot be read", async () => {
     const other = new InvoiceCorrectionSession(SCOPE, {
-      openInvoiceCorrection: () => Promise.reject(lost()),
       giveInvoiceCorrectionCash: () => Promise.reject(lost()),
     });
     await other.giveCash("correction-1", { amount: "2.00" }).catch(() => {});
@@ -1251,6 +1822,107 @@ describe("what still works when a read fails", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("what holds back the full-disk screen", () => {
+  /** The latest `give-back-busy`, the first of which comes before `mount` returns. */
+  function listening() {
+    const seen = vi.fn<(detail: { busy: boolean; held: boolean }) => void>();
+    const listen = (event: Event) => seen((event as CustomEvent).detail);
+    document.addEventListener("give-back-busy", listen);
+    onTestFinished(() => document.removeEventListener("give-back-busy", listen));
+    return () => seen.mock.lastCall?.[0];
+  }
+  const answered = { busy: false, held: true };
+
+  it("is nothing before a step, and again once Check again found nothing new", async () => {
+    const latest = listening();
+    const api = fakeApi();
+    const { el } = await mount(OPEN, api);
+    expect(latest()).toEqual({ busy: false, held: false });
+    const read = deferred<InvoiceCorrectionView>();
+    api.getInvoiceCorrection.mockImplementationOnce(() => read.promise);
+    press(el, "check");
+    await el.updateComplete;
+    expect(latest()).toEqual({ busy: true, held: true });
+    read.resolve(OPEN);
+    await vi.waitFor(() => expect(latest()).toEqual({ busy: false, held: false }));
+  });
+
+  it("is a refusal, until the next step is pressed", async () => {
+    const latest = listening();
+    const api = fakeApi();
+    api.refundTransaction.mockRejectedValueOnce(refused("invoice_correction.money_short"));
+    const { el } = await mount(OPEN, api);
+    press(el, "card");
+    await vi.waitFor(() => expect(bottom(el)).not.toBe(""));
+    expect(latest()).toEqual(answered);
+    press(el, "check");
+    await vi.waitFor(() => expect(latest()).toEqual({ busy: false, held: false }));
+  });
+
+  it("is a step waiting for its approver", async () => {
+    const latest = listening();
+    const api = fakeApi();
+    api.fileInvoiceCorrection.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.rectify" }),
+    );
+    const { el } = await mount(FILING, api);
+    press(el, "stop");
+    await pinDialog(el);
+    expect(latest()).toEqual(answered);
+  });
+
+  it("is a card's part with no answer, also from an earlier visit", async () => {
+    const latest = listening();
+    const api = fakeApi();
+    api.refundTransaction.mockRejectedValueOnce(lost());
+    const first = await mount(OPEN, api);
+    press(first.el, "card");
+    await vi.waitFor(() =>
+      expect(root(first.el).querySelector("[data-send-again]")).not.toBeNull(),
+    );
+    expect(latest()).toEqual(answered);
+    first.el.remove();
+    await mount(OPEN, api);
+    expect(latest()).toEqual(answered);
+  });
+
+  it("is the cash to hand over", async () => {
+    const latest = listening();
+    const api = fakeApi();
+    api.giveInvoiceCorrectionCash.mockResolvedValueOnce({
+      correction: { ...OPEN, moneyBack: "5.00", left: "1.05" },
+      refunds: [],
+      replayed: false,
+    } as never);
+    const { el } = await mount(OPEN, api);
+    press(el, "cash");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-cash-given]")).not.toBeNull());
+    expect(latest()).toEqual(answered);
+  });
+
+  it("is the card company's answer to a card's part", async () => {
+    const latest = listening();
+    const api = fakeApi();
+    api.refundTransaction.mockImplementationOnce(async (saleId, request) =>
+      refundOf(saleId, request, "pending"),
+    );
+    api.getInvoiceCorrection.mockResolvedValue({ ...OPEN, pending: "6.05", left: "0.00" });
+    const { el } = await mount(OPEN, api);
+    press(el, "card");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-pending]")).not.toBeNull());
+    expect(bottom(el)).toBe("");
+    expect(latest()).toEqual(answered);
+  });
+
+  it("is how it ended", async () => {
+    const latest = listening();
+    const { el } = await mount(FILING);
+    press(el, "stop");
+    await vi.waitFor(() => expect(outcome(el)).not.toBe(""));
+    expect(latest()).toEqual(answered);
   });
 });
 

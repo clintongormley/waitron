@@ -1,6 +1,6 @@
 import { LitElement, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import { compareDecimal, decimal, formatMoney, sumDecimals } from "@waitron/shared";
+import { compareDecimal, decimal, formatMoney, negateDecimal, sumDecimals } from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./supervisor-override-dialog.js";
@@ -10,7 +10,16 @@ import {
   type OverrideConfirmDetail,
 } from "./supervisor-override-dialog.js";
 import { giveBackStyles } from "./give-back-styles.js";
-import { NEEDS_APPROVER, recoveryLinkOf, recoveryText, terminalStep } from "./give-back-steps.js";
+import {
+  NEEDS_APPROVER,
+  askedAgainText,
+  holdingReload,
+  readApprovers,
+  recoveryLinkOf,
+  recoveryText,
+  signInEnded,
+  terminalStep,
+} from "./give-back-steps.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, giveBackFilingMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -29,7 +38,6 @@ import {
   type TenderRefundSession,
 } from "../state/tender-refund.js";
 import { refusalOf } from "../state/bill-payment.js";
-import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 
 export type GiveBackUnderWayApi = Pick<
   TillApi,
@@ -70,7 +78,8 @@ const least = (a: string, b: string) => (compareDecimal(decimal(a), decimal(b)) 
 
 /** A give-back still under way (D12): what is back, what is left, and the steps that finish it.
  * Closing the window it sits in ends nothing. `give-back-busy` says when a step starts and ends,
- * so the window is not closed before a step's answer is shown. */
+ * so the window is not closed before a step's answer is shown, and, as `held`, whether a step is
+ * out or staff have its answer to read. */
 @customElement("till-give-back-under-way")
 export class TillGiveBackUnderWay extends LitElement {
   static override styles = [baseStyles, giveBackStyles];
@@ -92,8 +101,17 @@ export class TillGiveBackUnderWay extends LitElement {
   @state() private terminal: Terminal | null = null;
   /** A card's part whose answer never arrived; while it exists only it is sent again. */
   @state() private lostCard: SavedTenderRefund | null = null;
+  /** A card's part was answered here. */
+  @state() private cardAnswered = false;
+  /** The last Check again found a card refund still waiting. */
+  @state() private unanswered = false;
+  /** The step out may have had the box ask the card company, or had a card refund's outcome. */
+  #asked = false;
+  /** The outcome of each refund the card company has answered about here, by its id. */
+  readonly #outcomes = new Map<string, TenderRefundView>();
   #override?: Override;
   #retry?: Retry;
+  #lastHeld = false;
   #focused = false;
 
   override connectedCallback(): void {
@@ -105,15 +123,30 @@ export class TillGiveBackUnderWay extends LitElement {
     super.disconnectedCallback();
     this.#abandonCard();
   }
+  #held(): boolean {
+    return (
+      this.busy ||
+      this.message !== "" ||
+      this.approvers !== null ||
+      this.lostCard !== null ||
+      this.cashGiven !== null ||
+      this.cardAnswered ||
+      this.unanswered ||
+      this.correction.state !== "open"
+    );
+  }
   override updated(changed: PropertyValues): void {
-    if (changed.has("busy"))
+    const held = this.#held();
+    if (changed.has("busy") || held !== this.#lastHeld) {
+      this.#lastHeld = held;
       this.dispatchEvent(
         new CustomEvent("give-back-busy", {
-          detail: { busy: this.busy },
+          detail: { busy: this.busy, held },
           bubbles: true,
           composed: true,
         }),
       );
+    }
     if (this.#focused) return;
     const first = this.shadowRoot!.querySelector<LitElement>("[data-choice]");
     if (first === null) return;
@@ -179,11 +212,23 @@ export class TillGiveBackUnderWay extends LitElement {
   #refreshAfter(): Promise<void> {
     return this.#refresh().catch(() => undefined);
   }
-  /** Check again: a card part waiting for the card company is asked first, so its saved request
-   * is settled before the correction is read. */
+  /** Check again: reads what is back, settling a saved card refund first, then has the box ask the
+   * card company about each refund on the receipt that still waits for it. */
   async #checkAgain(): Promise<void> {
     if (this.#savedOnReceipt()?.refundId) this.#cardDone(await this.refunds.resume(this.saleId));
     await this.#refresh();
+    this.#asked = true;
+    const answers = await this.refunds.askAgain(
+      this.tenders,
+      this.capabilities,
+      this.#override,
+      () => this.isConnected,
+    );
+    for (const answer of answers) this.#cardDone(answer);
+    if (answers.length > 0) await this.#refreshAfter();
+    this.unanswered = this.tenders.some(
+      ({ pendingRefundId: id }) => id !== null && !this.#outcomes.has(id),
+    );
   }
   /** Runs `step`, asking for an approver when the person signed in may not, and running it again
    * with their PIN; the PIN lasts for that one step. */
@@ -192,9 +237,11 @@ export class TillGiveBackUnderWay extends LitElement {
     this.busy = true;
     this.message = "";
     this.refused = null;
+    this.unanswered = false;
+    this.#asked = false;
     const approverId = this.#override?.personId;
     try {
-      await step();
+      await holdingReload(this, step);
       this.#settle();
     } catch (error) {
       await this.#failed(error, { step, lost }, approverId);
@@ -219,6 +266,7 @@ export class TillGiveBackUnderWay extends LitElement {
       return;
     }
     const refusal = refusalOf(error);
+    if (signInEnded(this, refusal.code)) return;
     if (this.approvers !== null && approverId !== undefined && PIN_REFUSALS.has(refusal.code)) {
       this.pinError = approverRefusal(error, approverId);
       return;
@@ -234,7 +282,8 @@ export class TillGiveBackUnderWay extends LitElement {
     this.terminal = null;
     if (refusal.code === "network") {
       this.lostCard = this.#lostCard();
-      if (this.lostCard === null) this.message = t(retry.lost);
+      if (this.lostCard === null)
+        this.message = t(this.#asked ? "give_back.uw_unknown" : retry.lost);
       return;
     }
     this.refused = refusal;
@@ -247,9 +296,8 @@ export class TillGiveBackUnderWay extends LitElement {
   }
   async #askApprover(right: GiveBackRight): Promise<void> {
     this.#override = undefined;
-    const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      this.approvers = await this.api.listApprovers(right, { signal: limit.signal });
+      this.approvers = await readApprovers(this.api, right);
       this.pinError = null;
     } catch (error) {
       const read = refusalOf(error);
@@ -260,8 +308,6 @@ export class TillGiveBackUnderWay extends LitElement {
         read.code === "network"
           ? t("give_back.uw_approvers_failed")
           : codeMessage(read.code, currentLocale(), read);
-    } finally {
-      limit.done();
     }
   }
   #signedIn(event: CustomEvent<OverrideConfirmDetail>): void {
@@ -306,6 +352,7 @@ export class TillGiveBackUnderWay extends LitElement {
     this.refused = null;
     const read = await this.#readTenders();
     this.busy = false;
+    if (!this.isConnected) return;
     if (!read) {
       this.message = t("give_back.uw_card_unread");
       return;
@@ -338,9 +385,18 @@ export class TillGiveBackUnderWay extends LitElement {
     };
   }
   #cardDone(result: TenderRefundView): void {
-    this.lostCard = null;
+    this.lostCard = this.#lostCard();
     this.terminal = null;
-    if (result.state === "failed") this.message = t("give_back.uw_card_failed");
+    this.cardAnswered = true;
+    if (result.state !== "pending") {
+      this.#outcomes.set(result.id, result);
+      this.#asked = true;
+    }
+    if (result.state === "failed")
+      this.message =
+        result.refusalReason === "provider_balance_unavailable"
+          ? `${t("tender_refund.failed")} ${t("refund.provider_balance_unavailable")}`
+          : t("give_back.uw_card_failed");
   }
   /** The separate terminal's refund is always confirmed with a PIN (plan 5.4). */
   async #record(step: Terminal): Promise<void> {
@@ -475,8 +531,31 @@ export class TillGiveBackUnderWay extends LitElement {
         ></wt-form-actions
       >`;
   }
+  /** The outcomes had here of refunds `correction`, read before them, shows waiting. */
+  #outcomesSince(correction: InvoiceCorrectionView): TenderRefundView[] {
+    return correction.legs.flatMap((leg) =>
+      leg.state === "pending" ? (this.#outcomes.get(leg.id) ?? []) : [],
+    );
+  }
+  /** What the card company answered since the correction shown was read, which could not be read
+   * again. */
+  #unread(outcomes: readonly TenderRefundView[]) {
+    const last4 = (tenderId: string) =>
+      this.tenders.find((row) => row.tenderId === tenderId)?.last4 ?? null;
+    return html`<p data-unread role="status">
+      ${[
+        ...outcomes.map((refund) => askedAgainText({ ...refund, last4: last4(refund.tenderId) })),
+        t("tender_refund.read_failed"),
+      ].join(" ")}
+    </p>`;
+  }
   #open(correction: InvoiceCorrectionView) {
     const { left } = correction;
+    const outcomes = this.#outcomesSince(correction);
+    const pending: string = sumDecimals([
+      decimal(correction.pending),
+      ...outcomes.map((refund) => negateDecimal(decimal(refund.appliedAmount))),
+    ]);
     return html`<p data-back>
         ${t("give_back.uw_back")
           .replace("{back}", () => this.#money(correction.moneyBack))
@@ -493,10 +572,16 @@ export class TillGiveBackUnderWay extends LitElement {
             </p>`
       }
       ${
-        positive(correction.pending)
+        positive(pending)
           ? html`<p data-pending>
-              ${t("give_back.pending").replace("{amount}", () => this.#money(correction.pending))}
+              ${t("give_back.pending").replace("{amount}", () => this.#money(pending))}
             </p>`
+          : nothing
+      }
+      ${outcomes.length > 0 && !this.busy ? this.#unread(outcomes) : nothing}
+      ${
+        this.unanswered
+          ? html`<p data-pending-status role="status">${t("give_back.pending_unanswered")}</p>`
           : nothing
       }
       ${this.#choice("check", t("give_back.check_again"), "", () => void this.#run(() => this.#checkAgain(), "give_back.read_failed"))}

@@ -1,26 +1,90 @@
 import { html, nothing, type TemplateResult } from "lit";
 import { compareDecimal, decimal, formatMoney, sumDecimals } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, giveBackReasonMessage } from "../i18n/codes.js";
 import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
 import type {
   GiveBackAsk,
   GiveBackOutcome,
   GiveBackPreview,
   GiveBackRight,
+  GiveBackSubmissionIds,
+  GiveBackView,
+  GiveBackWaitReason,
   GiveBackWay,
 } from "../api/give-back-types.js";
-import type { GiveBackRest, GiveBackSent } from "../state/give-back.js";
+import type { TenderRefundView } from "../api/tender-refund-types.js";
+import {
+  PROVES_NOTHING,
+  sameIds,
+  type GiveBackRest,
+  type GiveBackSent,
+  type RestCheck,
+} from "../state/give-back.js";
 import { recoveryLink, recoveryRefusalText, type RecoveryRefusal } from "./recovery-refusal.js";
+import type { StaffMember, TillApi } from "../api/client.js";
+import type { HoldReloadDetail } from "../screens/till-station-screen.js";
+import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
+import { refusalOf } from "../state/bill-payment.js";
+import {
+  SIGN_IN_ENDED,
+  TenderRefundAttemptError,
+  type RefundAskedAgain,
+  type TenderRefundSession,
+} from "../state/tender-refund.js";
 
 export type Override = OverrideConfirmDetail;
 /** One send: the rights an approver must hold before it goes, the rights to ask for if the write
- * then wants an approver, and the payment the outcome names. */
+ * then wants an approver, and the payment the outcome names. A `check` is a Check again: with no
+ * answer it is only pressed again, where a press is sent again under its ids. */
 export interface Sending {
-  send: (override?: Override) => Promise<GiveBackOutcome>;
+  send: (override?: Override) => Promise<Sent>;
   rights: GiveBackRight[];
   needs: GiveBackRight[];
   way: string;
+  check?: true;
+}
+/** What the window shows once a send is answered, and a send that follows it. */
+export interface Sent {
+  step: Step | null;
+  next?: Sending;
+}
+/** Who may approve, read under the till's request limit: a read that stalls is abandoned and
+ * rejects, so the caller shows its refusal rather than waiting for ever. */
+export async function readApprovers(
+  api: Pick<TillApi, "listApprovers">,
+  rights: GiveBackRight | readonly GiveBackRight[],
+): Promise<StaffMember[]> {
+  const limit = limited(TABLE_REQUEST_LIMIT_MS);
+  try {
+    return await api.listApprovers(rights, { signal: limit.signal });
+  } finally {
+    limit.done();
+  }
+}
+/** Why a choice, a dish or a payment must wait. */
+export const waitReasonText = (reason: GiveBackWaitReason): string =>
+  recoveryText(reason) ?? giveBackReasonMessage(reason.code, currentLocale(), reason.params);
+/** Runs `work`, keeping the till from reloading for a box update until it ends, also when the
+ * device locks meanwhile and the window goes. */
+export function holdingReload<T>(host: HTMLElement, work: () => Promise<T>): Promise<T> {
+  const until = work();
+  host.dispatchEvent(
+    new CustomEvent<HoldReloadDetail>("hold-reload", {
+      detail: { until },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  return until;
+}
+
+/** Tells the till the server ended this person's sign-in, so it locks as any ended sign-in does;
+ * true when `code` says so. */
+export function signInEnded(host: HTMLElement, code: string): boolean {
+  if (!SIGN_IN_ENDED.has(code)) return false;
+  host.dispatchEvent(new CustomEvent("give-back-signed-out", { bubbles: true, composed: true }));
+  return true;
 }
 export const APPROVER_PIN_REFUSALS = new Set(["pin.invalid", "pin.throttled"]);
 export const NEEDS_APPROVER = new Set([
@@ -43,6 +107,10 @@ export type Step =
       needs: GiveBackRight[];
       /** What the server answered last, when it answered. */
       refusal: { code: string; params: Record<string, unknown> } | null;
+      /** The press's ids, so Send again takes only that press's answer; null when unread. */
+      ids: GiveBackSubmissionIds | null;
+      /** Why Send again sent nothing or was refused, in place of `refusal`'s words. */
+      said?: string;
     }
   | { kind: "done"; outcome: GiveBackOutcome; way: string; notice: string | null };
 
@@ -110,6 +178,13 @@ export function terminalStep(
     </wt-form-actions>`;
 }
 
+const cardBack = (amount: string, card: string) =>
+  card === ""
+    ? t("give_back.done_card_any").replace("{amount}", () => amount)
+    : t("give_back.done_card")
+        .replace("{amount}", () => amount)
+        .replace("{card}", () => card);
+
 /** What went back, what waits, and why anything did not, from the write's answer. A cash
  * correction prints its own receipt; any other says where to print it (D14). */
 function outcomeLines(
@@ -135,11 +210,7 @@ function outcomeLines(
         ? t("give_back.done_cash").replace("{amount}", () => money(back))
         : way?.manual
           ? t("give_back.done_terminal").replace("{amount}", () => money(back))
-          : card === ""
-            ? t("give_back.done_card_any").replace("{amount}", () => money(back))
-            : t("give_back.done_card")
-                .replace("{amount}", () => money(back))
-                .replace("{card}", () => card),
+          : cardBack(money(back), card),
     );
   if (
     way?.way !== "cash" &&
@@ -154,11 +225,16 @@ function outcomeLines(
         money(sumOf([outcome.rest!.amount, outcome.rest!.extra])),
       ),
     );
-  if (outcome.refusal !== null)
-    lines.push(
+  if (outcome.refusal !== null) {
+    const said =
       recoveryText(outcome.refusal) ??
-        codeMessage(outcome.refusal.code, currentLocale(), outcome.refusal.params),
+      codeMessage(outcome.refusal.code, currentLocale(), outcome.refusal.params);
+    lines.push(
+      outcome.refusalReason === "provider_balance_unavailable"
+        ? `${said} ${t("refund.provider_balance_unavailable")}`
+        : said,
     );
+  }
   if (notice !== null) lines.push(notice);
   return html`<div class="body-step" data-outcome role="status">
     ${
@@ -177,10 +253,11 @@ export function lostStep(
   on: { close: () => void; resend: () => void },
 ) {
   const said =
-    step.refusal === null
+    step.said ??
+    (step.refusal === null
       ? t("give_back.lost")
       : (recoveryText(step.refusal) ??
-        codeMessage(step.refusal.code, currentLocale(), step.refusal.params));
+        codeMessage(step.refusal.code, currentLocale(), step.refusal.params)));
   return html`<p data-lost role="status">${said}</p>
     <wt-form-actions
       >${recoveryLinkOf(step.refusal)}<wt-button
@@ -246,13 +323,17 @@ export function doneStep(
     >`;
 }
 
-/** The outcome once Check again read the card refund it waits for: still waiting, failed (the
+const balanceReason = (reason: TenderRefundView["refusalReason"]) =>
+  reason === undefined ? [] : [t(`refund.${reason}`)];
+
+/** The outcome once Check again asked about the card refund it waits for: still waiting, failed (the
  * rest is dropped), or through. */
 export function afterCheck(
   step: Extract<Step, { kind: "done" }>,
-  state: "pending" | "failed" | "completed",
+  check: RestCheck,
 ): Extract<Step, { kind: "done" }> {
   const { outcome } = step;
+  const { state } = check;
   if (state === "pending") return { ...step, notice: t("give_back.still_waiting") };
   const parts = outcome.parts.map((part) =>
     part.state === "pending" && part.kind !== "correction"
@@ -262,12 +343,66 @@ export function afterCheck(
   if (state === "completed") return { ...step, notice: null, outcome: { ...outcome, parts } };
   return {
     ...step,
-    notice:
+    notice: [
       outcome.rest === null
         ? codeMessage("give_back.refund_failed", currentLocale())
         : t("give_back.rest_failed"),
+      ...balanceReason(check.refusalReason),
+    ].join(" "),
     outcome: { ...outcome, parts, rest: null },
   };
+}
+
+/** What is said when a Check again was refused or got no answer: asking again is always safe, and
+ * the money it asks about may already be back. */
+export function checkRefusalText(refusal: ReturnType<typeof refusalOf>): string {
+  if (refusal.code === "approvers") return t("give_back.uw_approvers_failed");
+  if (refusal.code === "busy") return t("give_back.busy");
+  if (refusal.code === "network" || refusal.code === "storage") return t("give_back.uw_unknown");
+  return recoveryText(refusal) ?? codeMessage(refusal.code, currentLocale(), refusal);
+}
+
+/** What the card company answered about a refund asked about again. */
+export function askedAgainText(refund: RefundAskedAgain): string {
+  if (refund.state === "failed")
+    return [t("tender_refund.failed"), ...balanceReason(refund.refusalReason)].join(" ");
+  const back = money(sumOf([refund.appliedAmount, refund.tipAmount]));
+  return cardBack(back, refund.last4 === null ? "" : `···${refund.last4}`);
+}
+
+/** Check again on the choices: reads the receipt and, while a card refund on it waits and the window
+ * is still `open`, has the box ask the card company again. Answers what to say, and the receipt as
+ * last read. */
+export async function checkReceipt(
+  from: {
+    api: Pick<TillApi, "readGiveBack" | "getRefundableTenders">;
+    refunds: TenderRefundSession;
+    saleId: string;
+    capabilities: readonly string[];
+  },
+  open: () => boolean,
+  override?: Override,
+): Promise<{ view: GiveBackView | null; status: string }> {
+  const read = () => from.api.readGiveBack(from.saleId, {});
+  let view: GiveBackView;
+  try {
+    view = await read();
+  } catch (error) {
+    if (refusalOf(error).code !== "network") throw error;
+    return { view: null, status: t("give_back.read_failed") };
+  }
+  if (!view.ways.some((way) => way.pending)) return { view, status: "" };
+  const tenders = await from.api.getRefundableTenders(from.saleId, {});
+  const answers = await from.refunds.askAgain(tenders, from.capabilities, override, open);
+  const said = answers.filter((refund) => refund.state !== "pending").map(askedAgainText);
+  if (said.length > 0)
+    try {
+      view = await read();
+    } catch {
+      return { view, status: [...said, t("tender_refund.read_failed")].join(" ") };
+    }
+  if (view.ways.some((way) => way.pending)) said.push(t("give_back.pending_unanswered"));
+  return { view, status: said.join(" ") };
 }
 
 /** The lost step for a press saved earlier, with what the server answered it last. */
@@ -276,7 +411,58 @@ export const lostFor = (sent: GiveBackSent): Extract<Step, { kind: "lost" }> => 
   way: sent.request.way,
   needs: sent.needs,
   refusal: sent.refusal,
+  ids: sent.submissionIds,
 });
+
+/** `saved`, unless it is another press than the one `ids` name. */
+const ownPress = (saved: GiveBackSent | null | undefined, ids: GiveBackSubmissionIds | null) =>
+  saved && (ids === null || sameIds(saved.submissionIds, ids)) ? saved : null;
+
+/** A press whose answer is not known: `saved`, the press this device holds, else the one sent
+ * with `ids`. */
+export const lostAfter = (
+  sending: Pick<Sending, "way" | "needs">,
+  saved: GiveBackSent | null | undefined,
+  ids: GiveBackSubmissionIds | null = null,
+): Extract<Step, { kind: "lost" }> => {
+  const own = ownPress(saved, ids);
+  return own === null
+    ? { kind: "lost", way: sending.way, needs: sending.needs, refusal: null, ids }
+    : lostFor(own);
+};
+
+/** A Send again refused where neither the form nor the choice is drawn to say so. While the press
+ * may be written (it is still saved, or the refusal does not prove that nothing went back) it stays
+ * the only thing to send, under its ids; otherwise nothing went back under it, and it ends.
+ * `give_back.changed` is worded for the form, which is not drawn, so only its result is said. */
+export function resendRefused(
+  step: Extract<Step, { kind: "lost" }>,
+  refusal: ReturnType<typeof refusalOf>,
+  saved: GiveBackSent | null | undefined,
+): Step {
+  const { code } = refusal;
+  if (ownPress(saved, step.ids) !== null || !PROVES_NOTHING.has(code))
+    return { ...lostAfter(step, saved, step.ids), said: checkRefusalText(refusal) };
+  const changed = code === "give_back.changed";
+  return {
+    kind: "done",
+    way: step.way,
+    notice: changed || code === "sif.allocation_invalid" ? t("give_back.nothing_given") : null,
+    outcome: {
+      parts: [],
+      refusal: changed ? null : { code, params: { ...refusal } },
+      underWay: null,
+      rest: null,
+    },
+  };
+}
+
+/** A send's refusal: this device's own when its saved attempt stopped it (storage that cannot be
+ * used, or a send already out on the receipt), otherwise the server's. */
+export const sendRefusalOf = (error: unknown) =>
+  error instanceof TenderRefundAttemptError
+    ? { code: error.kind === "storage" || error.kind === "busy" ? error.kind : "network" }
+    : refusalOf(error);
 
 /** The outcome a saved rest reopens on: the card refund it waits for, if any, and the rest. */
 export const restOutcome = (rest: GiveBackRest): GiveBackOutcome => ({

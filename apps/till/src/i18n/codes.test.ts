@@ -615,6 +615,15 @@ it("words each refusal a cancel and credit can meet, in both languages, naming n
   }
 });
 
+it("words money back larger than what is left of its receipt", () => {
+  expect(codeMessage("sale.correction_exceeds_total", "en")).toBe(
+    "That is more than is left of this receipt after the money already given back.",
+  );
+  expect(codeMessage("sale.correction_exceeds_total", "es")).toBe(
+    "Es más de lo que queda de este ticket después del dinero ya devuelto.",
+  );
+});
+
 it("says in both languages that a printer cannot be chosen for this device, naming no identifier", () => {
   const generic = {
     en: codeMessage("server.internal", "en"),
@@ -1029,23 +1038,16 @@ it("says a dish list that no longer matches the invoice is out of date, in Engli
 it.each([
   [
     "en",
-    en,
     "A card refund of this bill is still waiting for the card company's answer. Try again once it has answered.",
   ],
   [
     "es",
-    es,
     "Una devolución a tarjeta de esta cuenta aún espera la respuesta de la compañía de la tarjeta. Vuelve a intentarlo cuando haya respondido.",
   ],
-] as const)(
-  "in %s, tells staff a card refund still waits for its answer, naming no old window",
-  (locale, words, sentence) => {
-    const message = codeMessage("invoice_correction.refund_pending", locale);
-    expect(message).toBe(sentence);
-    expect(message).not.toContain(words["tender_refund.title"]);
-    expect(message).not.toContain(words["tender_refund.pending_payment"]);
-  },
-);
+] as const)("in %s, tells staff a card refund still waits for its answer", (locale, sentence) => {
+  const message = codeMessage("invoice_correction.refund_pending", locale);
+  expect(message).toBe(sentence);
+});
 
 it.each([
   "invoice_correction.not_settled",

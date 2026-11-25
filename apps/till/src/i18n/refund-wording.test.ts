@@ -118,77 +118,12 @@ describe("Give money back replaces the two old buttons in the till's words", () 
     expect(spanish).not.toMatch(OLD_ES);
   });
 
-  // The two old windows' own words, read only from those windows or from steps nothing reaches
-  // without them, go with them (plan Task 15); Refund on the Pay window keeps its own title.
-  const OLD_WINDOW_KEYS = new Set([
-    "tender_refund.title",
-    "tender_refund.total",
-    "tender_refund.invoice_unchanged",
-    "tender_refund.correction_leg",
-    "tender_refund.unavailable",
-    "tender_refund.applied",
-    "tender_refund.tip",
-    "tender_refund.amount_invalid",
-    "tender_refund.tip_requires_all",
-    "tender_refund.manual_confirm",
-    "tender_refund.confirm_required",
-    "tender_refund.manual_instruction",
-    "tender_refund.status",
-    "tender_refund.retry",
-    "tender_refund.pending_payment",
-    "tender_refund.left",
-    "tender_refund.storage",
-    "invoice_correction.title",
-    "invoice_correction.explain",
-    "invoice_correction.loading",
-    "invoice_correction.read_failed",
-    "invoice_correction.dishes",
-    "invoice_correction.left",
-    "invoice_correction.gross",
-    "invoice_correction.gross_invalid",
-    "invoice_correction.refundable",
-    "invoice_correction.confirm",
-    "invoice_correction.confirm_any",
-    "invoice_correction.back",
-    "invoice_correction.left_back",
-    "invoice_correction.pending",
-    "invoice_correction.check_again",
-    "invoice_correction.give_cash",
-    "invoice_correction.give_cash_hint",
-    "invoice_correction.cash_given",
-    "invoice_correction.refund_card",
-    "invoice_correction.refund_card_hint",
-    "invoice_correction.finish_now",
-    "invoice_correction.finish_now_hint",
-    "invoice_correction.record",
-    "invoice_correction.record_hint",
-    "invoice_correction.discard",
-    "invoice_correction.discard_hint",
-    "invoice_correction.close_keeping",
-    "invoice_correction.close_keeping_hint",
-    "invoice_correction.refund_still",
-    "invoice_correction.card_unread",
-    "invoice_correction.card_changed",
-    "invoice_correction.card_not_opened",
-    "invoice_correction.changed_while_checking",
-    "invoice_correction.filed",
-    "invoice_correction.closed",
-    "invoice_correction.discarded",
-    "invoice_correction.unknown",
-    "invoice_correction.close",
-    "invoice_correction.saved",
-    "invoice_correction.no_cash_here",
-    "invoice_correction.saved_cash",
-    "invoice_correction.resend",
-    "invoice_correction.still_lost",
-    "invoice_correction.unknown_end",
-    "invoice_correction.approvers_failed",
-    "bill_refund.title",
-  ]);
-  const kept = (key: string) => OLD_WINDOW_KEYS.has(key);
+  // Refund on the Pay window keeps its own title.
+  const KEPT_KEYS = new Set(["bill_refund.title"]);
+  const kept = (key: string) => KEPT_KEYS.has(key);
 
   it("lists only keys the till still has", () => {
-    expect([...OLD_WINDOW_KEYS].filter((key) => !Object.hasOwn(en, key))).toEqual([]);
+    expect([...KEPT_KEYS].filter((key) => !Object.hasOwn(en, key))).toEqual([]);
   });
 
   it.each(Object.keys(en).filter((key) => !kept(key)))("%s names neither old button", (key) => {

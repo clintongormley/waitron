@@ -1,13 +1,16 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { fakeGiveBackApi, SCOPE } from "./give-back-dialog.test-helpers.js";
 import { recoveryRefusalOf } from "./recovery-refusal.js";
+import { GiveBackSession } from "../state/give-back.js";
 import { refusalOf } from "../state/bill-payment.js";
 import type { TillPresentedPayDialog } from "./presented-pay-dialog.js";
 import "./presented-pay-dialog.js";
 import "./bill-pay-dialog.js";
 import "./bill-refund-dialog.js";
-import "./tender-refund-dialog.js";
+import type { TillGiveBackDialog } from "./give-back-dialog.js";
+import "./give-back-dialog.js";
 import "./cancel-credit-dialog.js";
 
 let previousLocale: string;
@@ -151,23 +154,6 @@ const dialogCases = [
       reasons: [],
     },
   },
-  {
-    tag: "till-tender-refund-dialog",
-    props: {
-      tenders: [
-        {
-          tenderId: "tender",
-          method: "cash",
-          last4: null,
-          appliedRemaining: "35.00",
-          tipRemaining: "0.00",
-          manual: false,
-          pendingRefundId: null,
-        },
-      ],
-      reasons: [],
-    },
-  },
   { tag: "till-cancel-credit-dialog", props: { invoiceNumber: "A/1", amount: "35.00" } },
 ];
 it.each(dialogCases)("keeps recovery available for $tag", async ({ tag, props }) => {
@@ -184,6 +170,29 @@ it.each(dialogCases)("keeps recovery available for $tag", async ({ tag, props })
   });
   expect(el.shadowRoot!.querySelector("a[data-recovery]")?.getAttribute("href")).toBe(
     "/recovery/fiscal-conflict",
+  );
+  expect(
+    el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,
+  ).toContain(t("recovery.issuance_stopped"));
+});
+
+it("keeps recovery available for till-give-back-dialog", async () => {
+  setLocale("en");
+  const api = fakeGiveBackApi();
+  api.readGiveBack.mockRejectedValue({
+    code: "sif.allocation_invalid",
+    recoveryUrl: "/recovery/fiscal-conflict",
+    status: 409,
+  });
+  const { el } = await mountWidget<TillGiveBackDialog>("till-give-back-dialog", {
+    api,
+    session: new GiveBackSession(SCOPE, api),
+    saleId: "sale-1",
+  });
+  await vi.waitFor(() =>
+    expect(el.shadowRoot!.querySelector("a[data-recovery]")?.getAttribute("href")).toBe(
+      "/recovery/fiscal-conflict",
+    ),
   );
   expect(
     el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-form-actions")!.error,

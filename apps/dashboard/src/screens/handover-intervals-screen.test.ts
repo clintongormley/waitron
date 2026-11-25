@@ -393,3 +393,31 @@ it.each([
     localStorage.removeItem(`${key}:columns`);
   }
 });
+
+it.each([
+  ["R5", "en-GB", "Corrective receipt"],
+  ["R4", "en-GB", "Corrective invoice"],
+  ["R1", "en-GB", "Corrective invoice"],
+  ["R5", "es-ES", es["returned_invoices.kind_correction_receipt"]],
+  ["R4", "es-ES", es["returned_invoices.kind_correction"]],
+] as const)("names a returned %s in %s", async (kind, locale, named) => {
+  setLocale(locale);
+  const { el } = await mountWidget<HandoverIntervalsScreen>("dashboard-handover-intervals-screen", {
+    api: {
+      listHandoverIntervals: async () => ({ intervals: [], timeZone: "Europe/Madrid" }),
+      listReturnedInvoices: async () => ({
+        ...invoicePage,
+        rows: [{ ...invoice, kind, category: "correction" }],
+        total: 1,
+      }),
+    } as unknown as DashboardApi,
+  });
+  const table = () => el.shadowRoot!.querySelectorAll("wt-data-table")[1]!;
+  await vi.waitFor(() => expect(table().rows).toHaveLength(1));
+  await table().updateComplete;
+  const cell = [...table().shadowRoot!.querySelectorAll('[part~="value"]')].find((value) =>
+    value.textContent!.includes("A/42"),
+  )!;
+  expect(cell.textContent).toContain(named);
+  expect(cell.textContent).toContain(kind);
+});

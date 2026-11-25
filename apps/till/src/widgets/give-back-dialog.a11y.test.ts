@@ -8,6 +8,7 @@ import {
   VIEW,
   completedFor,
   fakeGiveBackApi,
+  refundsOn,
 } from "./give-back-dialog.test-helpers.js";
 import { GiveBackSession } from "../state/give-back.js";
 import "./give-back-dialog.js";
@@ -27,6 +28,7 @@ describe.each(["light", "dark"] as const)("give money back accessibility (%s)", 
       {
         api,
         session: new GiveBackSession(SCOPE, api),
+        refunds: refundsOn(api),
         saleId: "s1",
         invoiceNumber: "A/1042",
         namesLocale: "es",
@@ -114,6 +116,17 @@ describe.each(["light", "dark"] as const)("give money back accessibility (%s)", 
     await choose(el, "goodwill");
     el.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
     await el.updateComplete;
+    await expectNoA11yViolations(host);
+  });
+
+  it("has no violations on a form whose reasons could not be read", async () => {
+    const api = fakeGiveBackApi();
+    api.listAdjustmentReasons.mockRejectedValue(new TypeError("Failed to fetch"));
+    const { el, host } = await mount(api);
+    await choose(el, "goodwill");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-reasons-retry]")).not.toBeNull(),
+    );
     await expectNoA11yViolations(host);
   });
 

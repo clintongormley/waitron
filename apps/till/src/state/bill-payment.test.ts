@@ -796,7 +796,7 @@ describe("a payment's refunds", () => {
     expect(refundableOf(refunded)).toEqual({ applied: "30.00", tip: "5.00" });
   });
 
-  it("leaves to give back of a payment on account what is left of it less what Refund a payment gave back", () => {
+  it("leaves to give back of a payment on account what is left of it less what a plain refund gave back", () => {
     const advance = payment({
       hasTicket: true,
       saleId: "advance-sale",

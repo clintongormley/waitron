@@ -93,7 +93,7 @@ describe.each(["light", "dark"] as const)("refund acknowledgment %s", (theme) =>
       expect(el.shadowRoot!.querySelector("time")!.textContent).toContain("UTC");
       expect(
         el.shadowRoot!.querySelector(
-          "till-ticket-view, svg, img, [data-tender-refund], [data-test=open-drawer], [data-test=original-delivery]",
+          "till-ticket-view, svg, img, [data-give-back], [data-test=open-drawer], [data-test=original-delivery]",
         ),
       ).toBeNull();
       expect(el.getBoundingClientRect().right).toBeLessThanOrEqual(390);

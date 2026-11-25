@@ -2301,8 +2301,6 @@ describe("Give money back", () => {
       refundable: true,
     });
     expect(giveBack(el)!.textContent!.trim()).toBe(uiText("give_back.title"));
-    expect(el.shadowRoot!.querySelector("[data-tender-refund]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-invoice-correction]")).toBeNull();
     const actions = el.shadowRoot!.querySelector<HTMLElement>(".receipt-actions")!;
     expect(giveBack(el)!.getBoundingClientRect().width).toBe(actions.getBoundingClientRect().width);
     const opened: Event[] = [];

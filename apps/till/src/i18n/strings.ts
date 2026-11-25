@@ -144,37 +144,16 @@ export const en = {
   "refund_ack.load_failed": "The refund acknowledgment could not be opened. Try again.",
   "find_page.refund": "Refund",
 
-  "tender_refund.title": "Refund a payment",
   "tender_refund.refresh_failed":
     "The refund was recorded, but the payment balances could not be refreshed. Reopen the receipt to check them.",
   "tender_refund.read_failed":
     "The refundable payments could not be loaded. Reopen the receipt to try again.",
-  "tender_refund.total": "Total to return",
-  "tender_refund.invoice_unchanged": "This returns money only. The original invoice is unchanged.",
-  "tender_refund.correction_leg":
-    "This refund is part of the invoice's correction. Once all its money is back, Waitron files the corrective invoice by itself when it can; otherwise Find a bill lists it under Corrections under way, with what is left to do.",
   "tender_refund.choose": "Original payment",
-  "tender_refund.unavailable": "No cash or card money is available to refund.",
-  "tender_refund.applied": "Payment amount to return",
-  "tender_refund.tip": "Tip to return",
-  "tender_refund.amount_invalid":
-    "Enter an amount from zero to {amount}; the total returned must be above zero.",
-  "tender_refund.tip_requires_all":
-    "Return a tip on its own, or with all the remaining payment amount.",
-  "tender_refund.manual_confirm": "I have returned this money on the original card terminal",
-  "tender_refund.confirm_required": "Confirm that the money has been returned.",
-  "tender_refund.manual_instruction":
-    "Return this amount on the original terminal, then confirm below. An authorized PIN is required.",
   "tender_refund.pending": "The refund is awaiting confirmation. Check or retry this same attempt.",
   "tender_refund.completed": "The money was returned. The original invoice is unchanged.",
   "tender_refund.failed": "The refund failed. No money was returned by this attempt.",
   "refund.provider_balance_unavailable":
     "The card provider cannot refund this yet. You can start a new refund later.",
-  "tender_refund.status": "Check status",
-  "tender_refund.retry": "Retry this refund",
-  "tender_refund.pending_payment": "Check pending refund",
-  "tender_refund.storage":
-    "The refund request could not be saved or read on this device. Before starting another refund, open the receipt on another device that takes payments and choose Refund a payment: it lists what is left to refund and any refund still waiting.",
   "give_back.title": "Give money back",
   "give_back.loading": "Reading the receipt…",
   "give_back.read_failed": "The receipt could not be read. Nothing has changed.",
@@ -233,6 +212,8 @@ export const en = {
     "This device could not save the money back before sending it. Nothing has been given back. Close this window and, on another device that takes payments, open Give money back on the receipt.",
   "give_back.lost":
     "The box did not answer, so it is not known whether the money went back. Send again asks the box: it sends the same money back, which never goes back twice.",
+  "give_back.busy":
+    "Money back on this receipt is still waiting for the box's answer, so nothing more has been sent. Try again in a moment.",
   "give_back.send_again": "Send again",
   "give_back.uw_card_refused":
     "A card refund on this receipt was refused, so no money went back. Send again sends it again, asking for approval if it needs it.",
@@ -292,67 +273,7 @@ export const en = {
     "The box's answer did not arrive. Press again: the same request is sent, so nothing happens twice.",
   "give_back.uw_unknown_end":
     "The box's answer did not arrive. Press Check again to see whether it was done before pressing anything else.",
-  "invoice_correction.title": "Correct invoice",
-  "invoice_correction.explain": "Give money back and file a corrective invoice for it.",
-  "invoice_correction.loading": "Reading the invoice…",
-  "invoice_correction.read_failed": "The invoice could not be read. Nothing has changed.",
-  "invoice_correction.dishes": "Dishes to correct (optional)",
-  "invoice_correction.left": "{amount} left to correct",
-  "invoice_correction.gross": "Money back, VAT included",
-  "invoice_correction.gross_invalid": "Enter an amount above zero, in euros and cents.",
   "invoice_correction.split": "VAT {rate}%: base {base}, VAT {tax}",
-  "invoice_correction.refundable": "{amount} can still be given back, from these payments:",
-  "invoice_correction.confirm": "Correct and refund {amount}",
-  "invoice_correction.confirm_any": "Correct and refund",
-  "invoice_correction.back": "{back} given back so far, of {gross}.",
-  "invoice_correction.left_back": "{amount} left to give back.",
-  "invoice_correction.pending": "{amount} is waiting for the card company's answer.",
-  "invoice_correction.check_again": "Check again",
-  "invoice_correction.give_cash": "Give back {amount} in cash",
-  "invoice_correction.give_cash_hint": "The cash drawer opens.",
-  "invoice_correction.cash_given": "Give the customer {amount} in cash.",
-  "invoice_correction.refund_card": "Refund to card",
-  "invoice_correction.refund_card_hint": "Opens Refund a payment for this correction.",
-  "invoice_correction.finish_now": "Finish now",
-  "invoice_correction.finish_now_hint":
-    "Files a corrective invoice for the {amount} given back, and gives no more back.",
-  "invoice_correction.record": "Record correction",
-  "invoice_correction.record_hint": "Files the corrective invoice for the {amount} given back.",
-  "invoice_correction.discard": "Discard",
-  "invoice_correction.discard_hint":
-    "Ends the correction. Nothing was given back, so nothing is filed.",
-  "invoice_correction.close_keeping": "Close keeping the refunds",
-  "invoice_correction.close_keeping_hint":
-    "Ends the correction without a corrective invoice. The money given back stays given back.",
-  "invoice_correction.refund_still": "Refund a payment still gives money back.",
-  "invoice_correction.card_unread":
-    "The card's payment could not be read. Choose Refund to card again.",
-  "invoice_correction.card_changed":
-    "This card's payment has changed since it was shown. Check what is left to give back and choose again.",
-  "invoice_correction.card_not_opened":
-    "Refund a payment could not save its request on this device, so it did not open. Choose Refund to card again.",
-  "invoice_correction.changed_while_checking":
-    "The correction changed while it was being checked. Check the VAT shown and press Correct and refund again.",
-  "invoice_correction.filed": "Corrective invoice filed for {amount}.",
-  "invoice_correction.closed":
-    "Correction closed without a corrective invoice. The {amount} given back stays given back.",
-  "invoice_correction.discarded": "Correction discarded. Nothing was given back.",
-  "invoice_correction.unknown":
-    "The box's answer did not arrive. Press again: the same request is sent, so nothing happens twice.",
-  "invoice_correction.close": "Close",
-  "invoice_correction.saved":
-    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again opens the correction, so you can then choose how to give back {amount}; nothing is refunded or filed yet. If it did, Send again shows it. Nothing happens twice.",
-  "invoice_correction.no_cash_here":
-    "This till cannot give cash back. Give the cash back from a till that can; while nothing has been given back, Discard ends the correction.",
-  "invoice_correction.saved_cash":
-    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again corrects the invoice now and gives {amount} back in cash, opening the cash drawer. If it did, Send again shows what happened. Nothing happens twice.",
-  "invoice_correction.resend": "Send again",
-  "invoice_correction.still_lost":
-    "Still no answer. Check this till's connection to the box, then send again.",
-  "invoice_correction.unknown_end":
-    "The box's answer did not arrive. Press Check again to see whether it was done before pressing anything else.",
-  "invoice_correction.approvers_failed": "Could not read who can approve this. Try again.",
-  "tender_refund.left": "{amount} left to refund from another payment",
 
   "kitchen_note.changed": "Station note changed",
   "kitchen_note.removed": "Station note removed",
@@ -893,7 +814,7 @@ export const en = {
   "find_page.sale": "Sale",
   "find_page.full-invoice": "Full invoice",
   "find_page.correction": "Corrective receipt",
-  "find_page.replacement": "Replacement receipt",
+  "find_page.replacement": "Replacement corrective receipt",
   "find_page.any_zone": "Any zone",
   "find_page.any_staff": "Any staff",
   "find_page.any_state": "Any state",
@@ -2016,7 +1937,7 @@ export const en = {
   "meal_end.cannot_file":
     "This bill's ticket cannot be filed with the tax agency as it stands, so no ticket was issued and nothing was printed. Trying again will not help. If this bill has a full invoice, check its customer's details.",
   "meal_end.unserved_full_invoice":
-    "Some dishes on this bill are not marked served. This is a full invoice naming a customer, and the till cannot file a correction for it, so take off any dish that may not come before you print.",
+    "Some dishes on this bill are not marked served. This is a full invoice naming a customer, and the till cannot issue a corrective invoice for it, so take off any dish that may not come before you print.",
   // The confirmation before closing a whole bill as a deferred payment.
   "deferred_close.title": "Close as deferred payment",
   "deferred_close.bill": "Bill",
@@ -2233,14 +2154,14 @@ export const en = {
   "cancel_credit.action": "Cancel and credit",
   "cancel_credit.title": "Cancel and credit",
   "cancel_credit.scope":
-    "Invoice {invoice} ({amount}) will be credited in full: a corrective invoice is issued and the bill is cancelled.",
+    "Invoice {invoice} ({amount}) will be credited in full: a corrective receipt is issued and the bill is cancelled.",
   "cancel_credit.scope_unnumbered":
-    "This bill's invoice ({amount}) will be credited in full: a corrective invoice is issued and the bill is cancelled.",
+    "This bill's invoice ({amount}) will be credited in full: a corrective receipt is issued and the bill is cancelled.",
   "cancel_credit.reason": "Reason",
   "cancel_credit.reason_invalid": "Say why the bill is cancelled",
   "cancel_credit.reason_long": "Keep the reason to 500 characters or fewer",
   "cancel_credit.approval_next":
-    "If you cannot issue corrective invoices yourself, someone who can approves it with their PIN next.",
+    "If you cannot issue corrective receipts and invoices yourself, someone who can approves it with their PIN next.",
   "cancel_credit.confirm": "Cancel and credit",
   "cancel_credit.keep": "Keep the bill",
   "cancel_credit.approvers_failed": "Could not read who can approve this. Try again.",
@@ -2251,9 +2172,9 @@ export const en = {
   "cancel_credit.refused_payment_in_flight":
     "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it before cancelling.",
   "cancel_credit.refused_not_permitted":
-    "The person who approved this cannot issue corrective invoices. Choose someone who can.",
-  "cancel_credit.done": "Corrective invoice {number} issued. The bill is cancelled.",
-  "cancel_credit.done_unnumbered": "A corrective invoice was issued and the bill is cancelled.",
+    "The person who approved this cannot issue corrective receipts and invoices. Choose someone who can.",
+  "cancel_credit.done": "Corrective receipt {number} issued. The bill is cancelled.",
+  "cancel_credit.done_unnumbered": "A corrective receipt was issued and the bill is cancelled.",
   "cancel_credit.done_action": "Done",
   // Reopen bill: a printed receipt is credited in full and its dishes go onto a new open bill
   "split.action": "Reopen bill",
@@ -2626,38 +2547,17 @@ export const es: Record<StringKey, string> = {
   "refund_ack.print_failed": "No se pudo imprimir el justificante. Inténtalo de nuevo.",
   "refund_ack.load_failed": "No se pudo abrir el justificante de devolución. Inténtalo de nuevo.",
   "find_page.refund": "Devolución",
-  "tender_refund.title": "Devolver un pago",
   "tender_refund.refresh_failed":
     "La devolución se ha registrado, pero no se han podido actualizar los saldos. Vuelve a abrir el recibo para consultarlos.",
   "tender_refund.read_failed":
     "No se han podido cargar los pagos que se pueden devolver. Vuelve a abrir el recibo para intentarlo de nuevo.",
-  "tender_refund.total": "Total que se devuelve",
-  "tender_refund.invoice_unchanged": "Esto solo devuelve dinero. La factura original no cambia.",
-  "tender_refund.correction_leg":
-    "Esta devolución forma parte de la rectificación de la factura. Cuando se haya devuelto todo su dinero, Waitron presenta la factura rectificativa por sí solo si puede; si no, Buscar cuenta la muestra en Rectificaciones en curso, con lo que queda por hacer.",
   "tender_refund.choose": "Pago original",
-  "tender_refund.unavailable": "No hay dinero en efectivo o tarjeta disponible para devolver.",
-  "tender_refund.applied": "Importe del pago que se devuelve",
-  "tender_refund.tip": "Propina que se devuelve",
-  "tender_refund.amount_invalid":
-    "Introduce un importe entre cero y {amount}; el total devuelto debe ser mayor que cero.",
-  "tender_refund.tip_requires_all":
-    "Devuelve una propina sola o junto con todo el importe restante del pago.",
-  "tender_refund.manual_confirm": "He devuelto este dinero en el terminal de tarjeta original",
-  "tender_refund.confirm_required": "Confirma que has devuelto el dinero.",
-  "tender_refund.manual_instruction":
-    "Devuelve este importe en el terminal original y confirma abajo. Se necesita un PIN autorizado.",
   "tender_refund.pending":
     "La devolución está pendiente de confirmación. Consulta o reintenta este mismo intento.",
   "tender_refund.completed": "Se ha devuelto el dinero. La factura original no cambia.",
   "tender_refund.failed": "La devolución ha fallado. Este intento no ha devuelto dinero.",
   "refund.provider_balance_unavailable":
     "El proveedor de pagos aún no puede hacer esta devolución. Puedes iniciar una nueva devolución más tarde.",
-  "tender_refund.status": "Consultar estado",
-  "tender_refund.retry": "Reintentar esta devolución",
-  "tender_refund.pending_payment": "Consultar devolución pendiente",
-  "tender_refund.storage":
-    "No se ha podido guardar o leer la solicitud de devolución en este dispositivo. Antes de iniciar otra devolución, abre el recibo en otro dispositivo que cobre y elige Devolver un pago: muestra lo que queda por devolver y cualquier devolución pendiente.",
   "give_back.title": "Devolver dinero",
   "give_back.loading": "Leyendo el ticket…",
   "give_back.read_failed": "No se pudo leer el ticket. No ha cambiado nada.",
@@ -2714,6 +2614,8 @@ export const es: Record<StringKey, string> = {
     "Este dispositivo no pudo guardar la devolución antes de enviarla. No se ha devuelto nada. Cierra esta ventana y, en otro dispositivo que cobre, abre Devolver dinero en el ticket.",
   "give_back.lost":
     "El servidor no respondió, así que no se sabe si el dinero se devolvió. Enviar de nuevo se lo pregunta al servidor: envía la misma devolución, que nunca se devuelve dos veces.",
+  "give_back.busy":
+    "Una devolución de este ticket aún espera la respuesta del servidor, así que no se ha enviado nada más. Inténtalo de nuevo en un momento.",
   "give_back.send_again": "Enviar de nuevo",
   "give_back.uw_card_refused":
     "Se rechazó una devolución a tarjeta de este ticket, así que no se devolvió dinero. Enviar de nuevo la envía otra vez y pide la aprobación si hace falta.",
@@ -2775,68 +2677,7 @@ export const es: Record<StringKey, string> = {
     "No ha llegado la respuesta del servidor. Vuelve a pulsar: se envía la misma petición, así que nada ocurre dos veces.",
   "give_back.uw_unknown_end":
     "No ha llegado la respuesta del servidor. Pulsa Comprobar de nuevo para ver si se hizo antes de pulsar nada más.",
-  "invoice_correction.title": "Rectificar factura",
-  "invoice_correction.explain": "Devuelve dinero y presenta una factura rectificativa por él.",
-  "invoice_correction.loading": "Consultando la factura…",
-  "invoice_correction.read_failed": "No se ha podido leer la factura. No ha cambiado nada.",
-  "invoice_correction.dishes": "Platos que se rectifican (opcional)",
-  "invoice_correction.left": "Quedan {amount} por rectificar",
-  "invoice_correction.gross": "Dinero a devolver, IVA incluido",
-  "invoice_correction.gross_invalid": "Escribe un importe mayor que cero, en euros y céntimos.",
   "invoice_correction.split": "IVA {rate} %: base {base}, IVA {tax}",
-  "invoice_correction.refundable": "Aún se pueden devolver {amount}, de estos pagos:",
-  "invoice_correction.confirm": "Rectificar y devolver {amount}",
-  "invoice_correction.confirm_any": "Rectificar y devolver",
-  "invoice_correction.back": "Devueltos {back} hasta ahora, de {gross}.",
-  "invoice_correction.left_back": "Quedan {amount} por devolver.",
-  "invoice_correction.pending": "{amount} espera la respuesta de la entidad de la tarjeta.",
-  "invoice_correction.check_again": "Volver a consultar",
-  "invoice_correction.give_cash": "Devolver {amount} en efectivo",
-  "invoice_correction.give_cash_hint": "Se abre el cajón.",
-  "invoice_correction.cash_given": "Da al cliente {amount} en efectivo.",
-  "invoice_correction.refund_card": "Devolver a la tarjeta",
-  "invoice_correction.refund_card_hint": "Abre Devolver un pago para esta rectificación.",
-  "invoice_correction.finish_now": "Terminar ahora",
-  "invoice_correction.finish_now_hint":
-    "Presenta una factura rectificativa por los {amount} devueltos y no devuelve más.",
-  "invoice_correction.record": "Registrar la rectificación",
-  "invoice_correction.record_hint": "Presenta la factura rectificativa por los {amount} devueltos.",
-  "invoice_correction.discard": "Descartar",
-  "invoice_correction.discard_hint":
-    "Termina la rectificación. No se ha devuelto nada, así que no se presenta nada.",
-  "invoice_correction.close_keeping": "Cerrar y conservar las devoluciones",
-  "invoice_correction.close_keeping_hint":
-    "Termina la rectificación sin factura rectificativa. El dinero devuelto queda devuelto.",
-  "invoice_correction.refund_still": "Devolver un pago sigue permitiendo devolver dinero.",
-  "invoice_correction.card_unread":
-    "No se ha podido leer el pago con tarjeta. Vuelve a elegir Devolver a la tarjeta.",
-  "invoice_correction.card_changed":
-    "El pago con tarjeta ha cambiado desde que se mostró. Revisa lo que queda por devolver y vuelve a elegir.",
-  "invoice_correction.card_not_opened":
-    "Devolver un pago no ha podido guardar su solicitud en este dispositivo, así que no se ha abierto. Vuelve a elegir Devolver a la tarjeta.",
-  "invoice_correction.changed_while_checking":
-    "La rectificación cambió mientras se comprobaba. Revisa el IVA que se muestra y vuelve a pulsar Rectificar y devolver.",
-  "invoice_correction.filed": "Factura rectificativa presentada por {amount}.",
-  "invoice_correction.closed":
-    "Rectificación cerrada sin factura rectificativa. Los {amount} devueltos quedan devueltos.",
-  "invoice_correction.discarded": "Rectificación descartada. No se ha devuelto nada.",
-  "invoice_correction.unknown":
-    "No ha llegado la respuesta del servidor. Vuelve a pulsar: se envía la misma petición, así que nada ocurre dos veces.",
-  "invoice_correction.close": "Cerrar",
-  "invoice_correction.saved":
-    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo abre la rectificación, para que luego elijas cómo devolver {amount}; aún no se devuelve ni se presenta nada. Si llegó, al pulsar Enviar de nuevo verás la rectificación. Nada ocurre dos veces.",
-  "invoice_correction.no_cash_here":
-    "Esta caja no puede devolver efectivo. Devuelve el efectivo desde una caja que pueda; mientras no se haya devuelto nada, Descartar termina la rectificación.",
-  "invoice_correction.saved_cash":
-    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo rectifica la factura ahora y devuelve {amount} en efectivo, abriendo el cajón. Si llegó, al pulsar Enviar de nuevo verás lo que pasó. Nada ocurre dos veces.",
-  "invoice_correction.resend": "Enviar de nuevo",
-  "invoice_correction.still_lost":
-    "Sigue sin respuesta. Comprueba la conexión de esta caja con el servidor y vuelve a enviar.",
-  "invoice_correction.unknown_end":
-    "No ha llegado la respuesta del servidor. Pulsa Volver a consultar para ver si se hizo antes de pulsar nada más.",
-  "invoice_correction.approvers_failed":
-    "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
-  "tender_refund.left": "Quedan {amount} por devolver de otro pago",
 
   "kitchen_note.changed": "Nota para la estación cambiada",
   "kitchen_note.removed": "Nota para la estación eliminada",
@@ -3376,7 +3217,7 @@ export const es: Record<StringKey, string> = {
   "find_page.sale": "Venta",
   "find_page.full-invoice": "Factura completa",
   "find_page.correction": "Ticket rectificativo",
-  "find_page.replacement": "Ticket de sustitución",
+  "find_page.replacement": "Ticket rectificativo por sustitución",
   "find_page.any_zone": "Cualquier zona",
   "find_page.any_staff": "Cualquier persona",
   "find_page.any_state": "Cualquier estado",
@@ -4476,7 +4317,7 @@ export const es: Record<StringKey, string> = {
   "meal_end.cannot_file":
     "El ticket de esta cuenta no se puede registrar en Hacienda tal como está, así que no se ha emitido ningún ticket y no se ha impreso nada. Reintentar no servirá de nada. Si esta cuenta lleva factura completa, revisa los datos del cliente.",
   "meal_end.unserved_full_invoice":
-    "Algunos platos de esta cuenta no están marcados como servidos. Es una factura completa a nombre de un cliente y la caja no puede presentar una rectificación para ella, así que quita antes de imprimir los platos que puedan no llegar.",
+    "Algunos platos de esta cuenta no están marcados como servidos. Es una factura completa a nombre de un cliente y la caja no puede emitir una factura rectificativa para ella, así que quita antes de imprimir los platos que puedan no llegar.",
   "deferred_close.title": "Cerrar como pago aplazado",
   "deferred_close.bill": "Cuenta",
   "deferred_close.invoice": "Factura",
@@ -4693,14 +4534,14 @@ export const es: Record<StringKey, string> = {
   "cancel_credit.action": "Cancelar y abonar",
   "cancel_credit.title": "Cancelar y abonar",
   "cancel_credit.scope":
-    "La factura {invoice} ({amount}) se abona por completo: se emite una factura rectificativa y se cancela la cuenta.",
+    "La factura {invoice} ({amount}) se abona por completo: se emite un ticket rectificativo y se cancela la cuenta.",
   "cancel_credit.scope_unnumbered":
-    "La factura de esta cuenta ({amount}) se abona por completo: se emite una factura rectificativa y se cancela la cuenta.",
+    "La factura de esta cuenta ({amount}) se abona por completo: se emite un ticket rectificativo y se cancela la cuenta.",
   "cancel_credit.reason": "Motivo",
   "cancel_credit.reason_invalid": "Indica por qué se cancela la cuenta",
   "cancel_credit.reason_long": "Usa 500 caracteres como mucho para el motivo",
   "cancel_credit.approval_next":
-    "Si tú no puedes emitir facturas rectificativas, a continuación lo aprueba alguien que pueda con su PIN.",
+    "Si tú no puedes emitir tickets y facturas rectificativos, a continuación lo aprueba alguien que pueda con su PIN.",
   "cancel_credit.confirm": "Cancelar y abonar",
   "cancel_credit.keep": "Mantener la cuenta",
   "cancel_credit.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
@@ -4711,10 +4552,9 @@ export const es: Record<StringKey, string> = {
   "cancel_credit.refused_payment_in_flight":
     "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo antes de cancelar.",
   "cancel_credit.refused_not_permitted":
-    "La persona que lo ha aprobado no puede emitir facturas rectificativas. Elige a alguien que pueda.",
-  "cancel_credit.done": "Factura rectificativa {number} emitida. La cuenta queda cancelada.",
-  "cancel_credit.done_unnumbered":
-    "Se emitió la factura rectificativa y la cuenta queda cancelada.",
+    "La persona que lo ha aprobado no puede emitir tickets y facturas rectificativos. Elige a alguien que pueda.",
+  "cancel_credit.done": "Ticket rectificativo {number} emitido. La cuenta queda cancelada.",
+  "cancel_credit.done_unnumbered": "Se emitió el ticket rectificativo y la cuenta queda cancelada.",
   "cancel_credit.done_action": "Hecho",
   "split.action": "Reabrir cuenta",
   "split.title": "Reabrir cuenta",

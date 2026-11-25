@@ -1707,8 +1707,8 @@ it.each([
     [
       "A-0CSQW — Simplified invoices (tickets)",
       "FF-0CSQW — Full invoices",
-      "R-0CSQW — Corrective of simplified invoices",
-      "RF-0CSQW — Corrective of full invoices",
+      "R-0CSQW — Corrective receipts",
+      "RF-0CSQW — Corrective invoices",
     ],
   ],
   [
@@ -1718,8 +1718,8 @@ it.each([
     [
       "A-0CSQW — Facturas simplificadas (tickets)",
       "FF-0CSQW — Facturas completas",
-      "R-0CSQW — Rectificativa de simplificadas",
-      "RF-0CSQW — Rectificativa de completas",
+      "R-0CSQW — Tickets rectificativos",
+      "RF-0CSQW — Facturas rectificativas",
     ],
   ],
 ] as const)(

@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   GiveBackAsk,
   GiveBackOutcome,
@@ -7,6 +7,11 @@ import type {
   GiveBackWrite,
 } from "../api/give-back-types.js";
 import { GiveBackSession } from "./give-back.js";
+
+type GiveBackRetry = (
+  refundId: string,
+  override?: { personId: string; pin: string },
+) => Promise<{ state: string; refusalReason?: "provider_balance_unavailable" }>;
 
 const scope = { deviceId: "device-1", personId: "person-1" };
 const request: GiveBackRequest = {
@@ -68,6 +73,7 @@ function fakeApi() {
     }),
     previewGiveBack: vi.fn(async (): Promise<GiveBackPreview> => restPreview),
     getTenderRefund: vi.fn(async () => ({ state: "completed" as string })),
+    retryTenderRefund: vi.fn<GiveBackRetry>(async () => ({ state: "pending" })),
   };
 }
 
@@ -168,6 +174,46 @@ it("sends a press refused for a PIN again with the same ids once a PIN is given"
   );
 });
 
+it("keeps a press refused for its PIN while it is sent again with one, so reopening cannot forget it", async () => {
+  const api = fakeApi();
+  api.giveBack.mockRejectedValueOnce({ code: "authorization.not_permitted", status: 403 });
+  const session = new GiveBackSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toMatchObject({
+    code: "authorization.not_permitted",
+  });
+  let answer!: (value: GiveBackOutcome) => void;
+  api.giveBack.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+  const out = session.submit("sale-1", ask, { personId: "boss", pin: "1234" });
+  const ids = sent(api, 0).submissionIds;
+
+  session.abandon("sale-1");
+  new GiveBackSession(scope, api).abandon("sale-1");
+  expect(session.read("sale-1")?.sent?.submissionIds).toEqual(ids);
+  await expect(
+    session.submit("sale-1", { ...ask, request: { ...request, amount: "19.00" } }),
+  ).rejects.toMatchObject({ kind: "busy" });
+  answer(outcome());
+  expect(await out).toEqual(outcome());
+  expect(await session.resend("sale-1", undefined, ids)).toEqual(outcome());
+  expect(api.giveBack).toHaveBeenCalledTimes(2);
+});
+
+it("marks a press refused again for its PIN as refused once more, so it may still be forgotten", async () => {
+  const api = fakeApi();
+  api.giveBack.mockRejectedValueOnce({ code: "authorization.not_permitted", status: 403 });
+  api.giveBack.mockRejectedValueOnce({ code: "pin.invalid", status: 403 });
+  const session = new GiveBackSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toMatchObject({
+    code: "authorization.not_permitted",
+  });
+  await expect(
+    session.submit("sale-1", ask, { personId: "boss", pin: "0000" }),
+  ).rejects.toMatchObject({ code: "pin.invalid" });
+  expect(session.read("sale-1")?.sent?.firstSendRefused).toBe(true);
+  session.abandon("sale-1");
+  expect(session.read("sale-1")).toBeNull();
+});
+
 it("lets a first press refused for its PIN be changed", async () => {
   const api = fakeApi();
   api.giveBack.mockRejectedValueOnce({ code: "pin.invalid", status: 403 });
@@ -259,6 +305,269 @@ it("says a rest still waits while the card company has not answered", async () =
   expect(api.previewGiveBack).not.toHaveBeenCalled();
 });
 
+it("has the box ask the card company again about the same refund while it waits, with the approver's PIN, and takes its answer", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce(pendingWithRest);
+  api.getTenderRefund.mockResolvedValue({ state: "pending" });
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask);
+  const approver = { personId: "boss", pin: "1234" };
+
+  expect(await session.checkRest("sale-1")).toEqual({ state: "pending" });
+  api.retryTenderRefund.mockResolvedValueOnce({ state: "completed" });
+  expect(await session.checkRest("sale-1", approver)).toEqual({
+    state: "completed",
+    preview: restPreview,
+  });
+  expect(api.retryTenderRefund.mock.calls).toEqual([
+    ["refund-1", undefined],
+    ["refund-1", approver],
+  ]);
+  expect(api.giveBack).toHaveBeenCalledOnce();
+});
+
+it.each(["completed", "failed"])(
+  "only reads a refund the box already knows is %s, asking the card company nothing",
+  async (state) => {
+    const api = fakeApi();
+    api.giveBack.mockResolvedValueOnce(pendingWithRest);
+    api.getTenderRefund.mockResolvedValueOnce({ state });
+    const session = new GiveBackSession(scope, api);
+    await session.submit("sale-1", ask);
+    expect(await session.checkRest("sale-1")).toMatchObject({ state });
+    expect(api.retryTenderRefund).not.toHaveBeenCalled();
+  },
+);
+
+it("forgets a rest whose refund the asked card company did not make, saying why when it says", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce(pendingWithRest);
+  api.getTenderRefund.mockResolvedValueOnce({ state: "pending" });
+  api.retryTenderRefund.mockResolvedValueOnce({
+    state: "failed",
+    refusalReason: "provider_balance_unavailable",
+  });
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask);
+  expect(await session.checkRest("sale-1")).toEqual({
+    state: "failed",
+    refusalReason: "provider_balance_unavailable",
+  });
+  expect(session.read("sale-1")).toBeNull();
+});
+
+it.each([
+  ["refused", { code: "authorization.not_permitted", permission: "sale.refund" }],
+  ["lost", new TypeError("Failed to fetch")],
+])(
+  "keeps the rest when the box's asking again is %s, so it can be asked again",
+  async (_, error) => {
+    const api = fakeApi();
+    api.giveBack.mockResolvedValueOnce(pendingWithRest);
+    api.getTenderRefund.mockResolvedValue({ state: "pending" });
+    api.retryTenderRefund.mockRejectedValueOnce(error);
+    const session = new GiveBackSession(scope, api);
+    await session.submit("sale-1", ask);
+    const saved = session.read("sale-1");
+    await expect(session.checkRest("sale-1")).rejects.toBe(error);
+    expect(session.read("sale-1")).toEqual(saved);
+    api.retryTenderRefund.mockResolvedValueOnce({ state: "completed" });
+    expect(await session.checkRest("sale-1")).toMatchObject({ state: "completed" });
+    expect(api.retryTenderRefund.mock.calls.map(([id]) => id)).toEqual(["refund-1", "refund-1"]);
+  },
+);
+
+it("asks the card company nothing, and keeps the rest, once its window is gone while the refund's state is read", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce(pendingWithRest);
+  let read!: (value: { state: string }) => void;
+  api.getTenderRefund.mockImplementationOnce(() => new Promise((resolve) => (read = resolve)));
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask);
+  const saved = session.read("sale-1");
+  let open = true;
+  const out = session.checkRest("sale-1", { personId: "boss", pin: "1234" }, () => open);
+  await vi.waitFor(() => expect(api.getTenderRefund).toHaveBeenCalledOnce());
+  open = false;
+  read({ state: "pending" });
+  expect(await out).toEqual({ state: "pending" });
+  expect(api.retryTenderRefund).not.toHaveBeenCalled();
+  expect(session.read("sale-1")).toEqual(saved);
+});
+
+it("asks about a waiting refund once while that is out, and answers it though it cannot be forgotten afterwards", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce({ ...pendingWithRest, rest: null });
+  api.getTenderRefund.mockResolvedValueOnce({ state: "pending" });
+  let answer!: (value: { state: string }) => void;
+  api.retryTenderRefund.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask);
+  const out = session.checkRest("sale-1");
+  await vi.waitFor(() => expect(api.retryTenderRefund).toHaveBeenCalledOnce());
+  await expect(session.checkRest("sale-1")).rejects.toMatchObject({ kind: "busy" });
+  expect(api.getTenderRefund).toHaveBeenCalledOnce();
+
+  vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+    throw new Error("Storage blocked");
+  });
+  answer({ state: "completed" });
+  expect(await out).toEqual({ state: "completed", preview: null });
+  expect(api.retryTenderRefund).toHaveBeenCalledOnce();
+});
+
+it.each([
+  ["a press with no answer", () => Promise.reject(new TypeError("Failed to fetch"))],
+  [
+    "another refund left waiting",
+    async () =>
+      outcome({
+        parts: [{ kind: "refund", amount: "5.00", state: "pending", refundId: "refund-2" }],
+      }),
+  ],
+])(
+  "leaves %s saved since the device locked alone when the old asking is answered",
+  async (_what, next) => {
+    const api = fakeApi();
+    api.giveBack.mockResolvedValueOnce(pendingWithRest);
+    api.getTenderRefund.mockResolvedValueOnce({ state: "pending" });
+    let answer!: (value: { state: string }) => void;
+    api.retryTenderRefund.mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    const locked = new GiveBackSession(scope, api);
+    await locked.submit("sale-1", ask);
+    const out = locked.checkRest("sale-1");
+    await vi.waitFor(() => expect(api.retryTenderRefund).toHaveBeenCalledOnce());
+    localStorage.clear();
+    api.giveBack.mockImplementationOnce(next);
+    const session = new GiveBackSession(scope, api);
+    await session.submit("sale-1", ask).catch(() => {});
+    const saved = session.read("sale-1");
+    expect(saved).not.toBeNull();
+
+    answer({ state: "failed" });
+    expect(await out).toEqual({ state: "failed" });
+    expect(session.read("sale-1")).toEqual(saved);
+  },
+);
+
+/** Sends `request`'s press, its answer still out, then signs out, which clears what is saved. */
+async function sentBeforeSignOut(refusedFirst = false) {
+  const api = fakeApi();
+  const old = new GiveBackSession(scope, api);
+  if (refusedFirst) {
+    api.giveBack.mockRejectedValueOnce({ code: "tender.refund_exceeds_payment", status: 409 });
+    await old.submit("sale-1", ask).catch(() => {});
+  }
+  let settle!: { answer: (value: GiveBackOutcome) => void; refuse: (error: unknown) => void };
+  api.giveBack.mockImplementationOnce(
+    () => new Promise((answer, refuse) => (settle = { answer, refuse })),
+  );
+  const out = refusedFirst ? old.resend("sale-1") : old.submit("sale-1", ask);
+  localStorage.clear();
+  return { api, out, settle };
+}
+
+describe("a press's late answer, once the device was signed out and in again", () => {
+  type Settle = Awaited<ReturnType<typeof sentBeforeSignOut>>["settle"];
+  const lateAnswers: [string, (late: Settle) => void, boolean?][] = [
+    ["that it went back", (late) => late.answer(outcome())],
+    [
+      "that it did not go back",
+      (late) =>
+        late.answer(
+          outcome({
+            parts: [{ kind: "refund", amount: "8.00", state: "failed", refundId: "refund-1" }],
+            refusal: { code: "give_back.refund_failed", params: {} },
+          }),
+        ),
+    ],
+    ["that a card refund waits, with a rest", (late) => late.answer(pendingWithRest)],
+    ["that nothing was written", (late) => late.refuse({ code: "give_back.changed", status: 409 })],
+    [
+      "that it may not be sent",
+      (late) => late.refuse({ code: "authorization.not_permitted", status: 403 }),
+    ],
+    [
+      "that it was refused",
+      (late) => late.refuse({ code: "tender.refund_exceeds_payment", status: 409 }),
+    ],
+    [
+      "that was lost, to a press refused before",
+      (late) => late.refuse(new TypeError("Failed to fetch")),
+      true,
+    ],
+  ];
+
+  it.each(lateAnswers)(
+    "%s, leaves the newer press with no answer saved under its own ids",
+    async (_what, late, refusedFirst) => {
+      const { api, out, settle } = await sentBeforeSignOut(refusedFirst);
+      api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+      const session = new GiveBackSession(scope, api);
+      await session.submit("sale-1", ask).catch(() => {});
+      const newer = session.read("sale-1");
+      expect(newer?.sent?.submissionIds).toEqual(sent(api, refusedFirst ? 2 : 1).submissionIds);
+
+      late(settle);
+      await out.catch(() => {});
+      expect(session.read("sale-1")).toEqual(newer);
+    },
+  );
+
+  it.each(lateAnswers)("%s, saves nothing again", async (_what, late, refusedFirst) => {
+    const { api, out, settle } = await sentBeforeSignOut(refusedFirst);
+    late(settle);
+    await out.catch(() => {});
+    expect(new GiveBackSession(scope, api).read("sale-1")).toBeNull();
+  });
+});
+
+it("leaves a press saved beside the same rest alone when the rest's refund is answered late", async () => {
+  const api = fakeApi();
+  api.giveBack.mockResolvedValueOnce(pendingWithRest);
+  api.getTenderRefund.mockResolvedValueOnce({ state: "pending" });
+  let answer!: (value: { state: string }) => void;
+  api.retryTenderRefund.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask);
+  const out = session.checkRest("sale-1");
+  await vi.waitFor(() => expect(api.retryTenderRefund).toHaveBeenCalledOnce());
+  api.giveBack.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  const otherTab = new GiveBackSession(scope, api);
+  await otherTab.sendRest("sale-1", restPreview).catch(() => {});
+  const { submissionIds } = sent(api, 1);
+
+  answer({ state: "failed" });
+  expect(await out).toEqual({ state: "failed" });
+  expect(otherTab.read("sale-1")?.sent?.submissionIds).toEqual(submissionIds);
+});
+
+it.each([
+  ["proving nothing went back", { code: "give_back.changed", status: 409 }],
+  ["for another reason", { code: "tender.refund_exceeds_payment", status: 409 }],
+  ["for a right", { code: "authorization.not_permitted", status: 403 }],
+])(
+  "hands back the box's refusal %s even when it cannot be saved afterwards, keeping the press to send again",
+  async (_what, refusal) => {
+    const api = fakeApi();
+    api.giveBack.mockImplementationOnce(async () => {
+      for (const method of ["removeItem", "setItem"] as const)
+        vi.spyOn(Storage.prototype, method).mockImplementation(() => {
+          throw new Error("full");
+        });
+      throw refusal;
+    });
+    const session = new GiveBackSession(scope, api);
+    await expect(session.submit("sale-1", ask)).rejects.toBe(refusal);
+    expect(session.read("sale-1")?.sent).toMatchObject({
+      submissionIds: sent(api, 0).submissionIds,
+      firstSendRefused: false,
+    });
+  },
+);
+
 it("keeps no rest after a refusal: what is left is given back from a new press", async () => {
   const api = fakeApi();
   api.giveBack.mockResolvedValueOnce({
@@ -312,6 +621,117 @@ it("forgets a rest whose card refund the card company did not make", async () =>
   expect(await session.checkRest("sale-1")).toEqual({ state: "failed" });
   expect(session.read("sale-1")).toBeNull();
   expect(api.previewGiveBack).not.toHaveBeenCalled();
+});
+
+it("answers a Send again of a press answered meanwhile as that answer did, sending nothing", async () => {
+  const api = fakeApi();
+  let answer!: (value: GiveBackOutcome) => void;
+  api.giveBack.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+  const session = new GiveBackSession(scope, api);
+  const first = session.submit("sale-1", ask);
+  await expect(session.resend("sale-1")).rejects.toMatchObject({ kind: "busy" });
+  answer(pendingWithRest);
+  await first;
+  expect(session.read("sale-1")?.sent).toBeNull();
+  expect(await session.resend("sale-1", undefined, sent(api, 0).submissionIds)).toEqual(
+    pendingWithRest,
+  );
+  expect(api.giveBack).toHaveBeenCalledOnce();
+});
+
+it("answers a Send again of a press refused meanwhile with a refusal proving nothing went back with that refusal, sending nothing", async () => {
+  const api = fakeApi();
+  const changed = { code: "give_back.changed", status: 409 };
+  api.giveBack.mockRejectedValueOnce(changed);
+  const session = new GiveBackSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toBe(changed);
+  expect(session.read("sale-1")).toBeNull();
+  await expect(session.resend("sale-1", undefined, sent(api, 0).submissionIds)).rejects.toBe(
+    changed,
+  );
+  expect(api.giveBack).toHaveBeenCalledOnce();
+});
+
+it("answers no Send again from an earlier press once a new press was made", async () => {
+  const api = fakeApi();
+  const session = new GiveBackSession(scope, api);
+  await session.submit("sale-1", ask);
+  api.giveBack.mockRejectedValueOnce({ code: "pin.invalid", status: 403 });
+  await expect(session.submit("sale-1", ask)).rejects.toMatchObject({ code: "pin.invalid" });
+  session.abandon("sale-1");
+  expect(session.read("sale-1")).toBeNull();
+  for (const index of [0, 1])
+    await expect(
+      session.resend("sale-1", undefined, sent(api, index).submissionIds),
+    ).rejects.toMatchObject({ kind: "missing" });
+  expect(api.giveBack).toHaveBeenCalledTimes(2);
+});
+
+/** Two tabs on one device: each has a session of its own, and both use the same saved press. */
+describe("Send again once another press is saved on the same receipt", () => {
+  const newer: GiveBackAsk = { ...ask, request: { ...request, amount: "9.00" } };
+  const lost = new TypeError("lost answer");
+
+  it("sends nothing when its own press is no longer saved, and leaves the newer press alone", async () => {
+    const api = fakeApi();
+    api.giveBack.mockRejectedValueOnce(lost);
+    const shown = new GiveBackSession(scope, api);
+    await expect(shown.submit("sale-1", ask)).rejects.toBe(lost);
+    const other = new GiveBackSession(scope, api);
+    await other.resend("sale-1");
+    api.giveBack.mockRejectedValueOnce(lost);
+    await expect(other.submit("sale-1", newer)).rejects.toBe(lost);
+
+    await expect(
+      shown.resend("sale-1", { personId: "boss", pin: "1234" }, sent(api, 0).submissionIds),
+    ).rejects.toMatchObject({ kind: "missing" });
+    expect(api.giveBack).toHaveBeenCalledTimes(3);
+    expect(shown.read("sale-1")?.sent?.submissionIds).toEqual(sent(api, 2).submissionIds);
+    expect(await shown.resend("sale-1", undefined, sent(api, 2).submissionIds)).toEqual(outcome());
+    expect(sent(api, 3).submissionIds).toEqual(sent(api, 2).submissionIds);
+  });
+
+  it("answers as its own press was answered, sending nothing", async () => {
+    const api = fakeApi();
+    const shown = new GiveBackSession(scope, api);
+    await shown.submit("sale-1", ask);
+    api.giveBack.mockRejectedValueOnce(lost);
+    await expect(new GiveBackSession(scope, api).submit("sale-1", newer)).rejects.toBe(lost);
+    expect(await shown.resend("sale-1", undefined, sent(api, 0).submissionIds)).toEqual(outcome());
+    expect(api.giveBack).toHaveBeenCalledTimes(2);
+  });
+});
+
+it("sends a press on one receipt while another receipt's press is out, and Send again takes only its own press's answer", async () => {
+  const api = fakeApi();
+  const cash: GiveBackAsk = {
+    request: { purpose: "goodwill", amount: "5.00", extra: "0.00", way: "cash" },
+    reasonId: "reason-1",
+    note: null,
+    expected: [{ kind: "refund", amount: "5.00", way: "cash" }],
+  };
+  const given = (id: string) =>
+    outcome({ parts: [{ kind: "refund", amount: "5.00", state: "completed", refundId: id }] });
+  const session = new GiveBackSession(scope, api);
+  api.giveBack.mockResolvedValueOnce(given("first"));
+  await session.submit("sale-b", cash);
+  const firstIds = sent(api, 0).submissionIds;
+  let answerA!: (value: GiveBackOutcome) => void;
+  api.giveBack.mockImplementationOnce(() => new Promise((resolve) => (answerA = resolve)));
+  const onA = session.submit("sale-a", ask);
+
+  api.giveBack.mockResolvedValueOnce(given("second"));
+  expect(await session.submit("sale-b", cash)).toEqual(given("second"));
+  const secondIds = sent(api, 2).submissionIds;
+  expect(secondIds).not.toEqual(firstIds);
+  answerA(outcome());
+  await onA;
+  expect(session.read("sale-b")).toBeNull();
+  await expect(session.resend("sale-b", undefined, firstIds)).rejects.toMatchObject({
+    kind: "missing",
+  });
+  expect(await session.resend("sale-b", undefined, secondIds)).toEqual(given("second"));
+  expect(api.giveBack).toHaveBeenCalledTimes(3);
 });
 
 it("refuses to send again, check or send a rest when nothing is saved", async () => {

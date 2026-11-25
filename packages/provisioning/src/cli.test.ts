@@ -1042,7 +1042,7 @@ describe("runCli venue", () => {
       "time zone (e.g. Europe/Madrid): ",
       "day cutover (HH:MM): ",
       "series code for simplified invoices (tickets): ",
-      "series code for correctives of simplified invoices: ",
+      "series code for corrective receipts: ",
       "admin name: ",
       "admin email: ",
     ]);

@@ -9,10 +9,12 @@ import type {
   GiveBackSubmissionIds,
   GiveBackWrite,
 } from "../api/give-back-types.js";
+import type { TenderRefundView } from "../api/tender-refund-types.js";
 import {
   TenderRefundAttemptError,
   fail,
   scopePrefix,
+  stillSaved,
   withJournalStorage,
   writeVerified,
   type TenderRefundScope,
@@ -44,11 +46,15 @@ export interface SavedGiveBack {
   sent: GiveBackSent | null;
   rest: GiveBackRest | null;
 }
+type RefundAnswer = Pick<TenderRefundView, "refusalReason"> & { state: string };
 export type RestCheck =
-  { state: "pending" | "failed" } | { state: "completed"; preview: GiveBackPreview | null };
+  | { state: "pending" }
+  | ({ state: "failed" } & Pick<TenderRefundView, "refusalReason">)
+  | { state: "completed"; preview: GiveBackPreview | null };
 
 type GiveBackApi = Pick<TillApi, "giveBack" | "previewGiveBack"> & {
-  getTenderRefund(refundId: string, options: object): Promise<{ state: string }>;
+  getTenderRefund(refundId: string, options: object): Promise<RefundAnswer>;
+  retryTenderRefund(refundId: string, override?: GiveBackWrite["override"]): Promise<RefundAnswer>;
 };
 
 /**
@@ -59,7 +65,7 @@ type GiveBackApi = Pick<TillApi, "giveBack" | "previewGiveBack"> & {
  * `venue.time_zone_not_ready` is in neither set: a card reader's first part commits its refund
  * before `requireEconomicWrite` can raise it (apps/server/src/tender-refund-sends.ts).
  */
-const PROVES_NOTHING = new Set([
+export const PROVES_NOTHING = new Set([
   "give_back.changed",
   "sale.correction_not_admitted",
   "invoice_correction.already_open",
@@ -102,16 +108,25 @@ const refusalOf = (error: unknown) => {
   return typeof code === "string" ? { code, params } : null;
 };
 const waitingKinds = new Set(["refund", "extra"]);
+export const sameIds = (a: GiveBackSubmissionIds, b: GiveBackSubmissionIds) =>
+  a.refund === b.refund && a.extra === b.extra && a.correction === b.correction && a.leg === b.leg;
 
 /**
  * Give money back's saved attempt, in the refund journal so signing out clears it with the rest:
  * each press is saved with its ids before it is sent, so a lost answer is sent again under them and
  * the server answers it from what it stored. A rest, the part of a card reader's press not yet
  * sent, is saved whether or not a card refund still waits, and gets ids of its own when first sent.
- * One send at a time.
+ * One send at a time on each receipt.
  */
 export class GiveBackSession {
-  #busy = false;
+  /** The receipts with a send out: one at a time on each. */
+  readonly #busy = new Set<string>();
+  /** How each receipt's last press ended once it is no longer saved, under that press's ids, so a
+   * window opened on its Send again before the answer came shows that answer instead of sending. */
+  readonly #settled = new Map<
+    string,
+    { ids: GiveBackSubmissionIds } & ({ answer: GiveBackOutcome } | { error: unknown })
+  >();
   constructor(
     private readonly scope: TenderRefundScope,
     private readonly api: GiveBackApi,
@@ -139,13 +154,13 @@ export class GiveBackSession {
     });
   }
 
-  async #run<T>(work: () => Promise<T>): Promise<T> {
-    if (this.#busy) return fail("busy");
-    this.#busy = true;
+  async #run<T>(saleId: string, work: () => Promise<T>): Promise<T> {
+    if (this.#busy.has(saleId)) return fail("busy");
+    this.#busy.add(saleId);
     try {
       return await work();
     } finally {
-      this.#busy = false;
+      this.#busy.delete(saleId);
     }
   }
 
@@ -158,6 +173,9 @@ export class GiveBackSession {
     const sent = saved.sent!;
     const firstSend = fresh || sent.firstSendRefused;
     const { request, reasonId, note, expected, manualConfirmed, submissionIds } = sent;
+    // Once out, the press may be written, so until its answer it is not one to forget.
+    if (sent.firstSendRefused)
+      this.#write({ ...saved, sent: { ...sent, firstSendRefused: false, refusal: null } }, saleId);
     let answer: GiveBackOutcome;
     try {
       answer = await this.api.giveBack(saleId, {
@@ -171,25 +189,30 @@ export class GiveBackSession {
       });
     } catch (error) {
       const refusal = refusalOf(error);
-      if (refusal !== null && PROVES_NOTHING.has(refusal.code))
-        this.#write(saved.rest === null ? null : { ...saved, sent: null }, saleId);
-      else if (refusal !== null) {
-        const proves = firstSend && FIRST_SEND_REFUSALS.has(refusal.code);
-        this.#write({ ...saved, sent: { ...sent, firstSendRefused: proves, refusal } }, saleId);
-      } else if (sent.firstSendRefused || sent.refusal !== null)
-        this.#write(
-          { ...saved, sent: { ...sent, firstSendRefused: false, refusal: null } },
-          saleId,
-        );
+      const code = refusal?.code ?? "";
+      const proves = PROVES_NOTHING.has(code);
+      const firstSendRefused = firstSend && FIRST_SEND_REFUSALS.has(code);
+      const left = { ...saved, sent: proves ? null : { ...sent, firstSendRefused, refusal } };
+      this.#settle(saleId, submissionIds.refund, proves && saved.rest === null ? null : left);
+      if (proves) this.#settled.set(saleId, { ids: submissionIds, error });
       throw error;
     }
-    try {
-      this.#keep(saleId, sent, answer);
-    } catch (error) {
-      // The money's outcome is what staff must see; the press stays saved and is sent again.
-      if (!(error instanceof TenderRefundAttemptError && error.kind === "storage")) throw error;
-    }
+    this.#settled.set(saleId, { ids: submissionIds, answer });
+    this.#keep(saleId, sent, answer);
     return answer;
+  }
+
+  /** Saves what an answer leaves, while the press or rest saved is still the one `id` names. The
+   * answer is what staff must see: one that cannot be saved leaves the entry to be asked again. */
+  #settle(saleId: string, id: string | undefined, left: SavedGiveBack | null): void {
+    const idOf = (saved: SavedGiveBack | null) =>
+      saved?.sent?.submissionIds.refund ?? saved?.rest?.waitFor;
+    if (!stillSaved(() => idOf(this.read(saleId)), id)) return;
+    try {
+      this.#write(left, saleId);
+    } catch {
+      // The entry stays.
+    }
   }
 
   /** What to keep once the server answered: a card refund still waiting, a rest, or a press whose
@@ -205,7 +228,9 @@ export class GiveBackSession {
       (part) => part.state === "pending" && waitingKinds.has(part.kind),
     );
     const waitFor = waiting.find((part) => part.refundId !== undefined)?.refundId;
-    this.#write(
+    this.#settle(
+      saleId,
+      sent.submissionIds.refund,
       answer.refusal !== null || (waitFor === undefined && answer.rest === null)
         ? null
         : {
@@ -220,7 +245,6 @@ export class GiveBackSession {
               way: sent.request.way,
             },
           },
-      saleId,
     );
   }
 
@@ -231,7 +255,8 @@ export class GiveBackSession {
     override?: GiveBackWrite["override"],
     needs: GiveBackRight[] = [],
   ): Promise<GiveBackOutcome> {
-    return this.#run(() => {
+    this.#settled.delete(saleId);
+    return this.#run(saleId, () => {
       const saved = this.read(saleId);
       if (saved?.sent) {
         if (fingerprint(saved.sent) === fingerprint(ask))
@@ -248,11 +273,23 @@ export class GiveBackSession {
     });
   }
 
-  /** Sends the press whose answer was lost again, under its ids. */
-  resend(saleId: string, override?: GiveBackWrite["override"]): Promise<GiveBackOutcome> {
-    return this.#run(() => {
+  /** Sends the press whose answer was lost again, under its ids. With `ids`, only the press they
+   * name is sent; once its answer has come and it is no longer saved, answers as that answer did,
+   * sending nothing. */
+  resend(
+    saleId: string,
+    override?: GiveBackWrite["override"],
+    ids: GiveBackSubmissionIds | null = null,
+  ): Promise<GiveBackOutcome> {
+    return this.#run(saleId, async () => {
       const saved = this.read(saleId);
-      if (!saved?.sent) return fail("missing");
+      if (!saved?.sent || (ids !== null && !sameIds(saved.sent.submissionIds, ids))) {
+        const settled = this.#settled.get(saleId);
+        if (settled === undefined || ids === null || !sameIds(settled.ids, ids))
+          return fail("missing");
+        if ("error" in settled) throw settled.error;
+        return settled.answer;
+      }
       return this.#send(saleId, saved, override, false);
     });
   }
@@ -265,18 +302,37 @@ export class GiveBackSession {
       this.#write(saved.rest === null ? null : { ...saved, sent: null }, saleId);
   }
 
-  /** Whether the waiting card refund, if any, is done and, once it is, what any rest would do. A
-   * settled refund with nothing to follow is forgotten. */
-  checkRest(saleId: string): Promise<RestCheck> {
-    return this.#run(async () => {
+  /** The refund's state. While it waits and the window is still `open`, the box asks the card
+   * company again under the refund's own id, so nothing goes back twice; that needs `sale.refund`,
+   * which reading its state does not. */
+  async #askAgain(
+    refundId: string,
+    override: GiveBackWrite["override"],
+    open: () => boolean,
+  ): Promise<RefundAnswer> {
+    const known = await this.api.getTenderRefund(refundId, {});
+    return known.state === "pending" && open()
+      ? this.api.retryTenderRefund(refundId, override)
+      : known;
+  }
+
+  /** Whether the waiting card refund, if any, is done, asking the card company again while it is
+   * not, and, once it is, what any rest would do. A settled refund with nothing to follow is
+   * forgotten. */
+  checkRest(
+    saleId: string,
+    override?: GiveBackWrite["override"],
+    open = () => true,
+  ): Promise<RestCheck> {
+    return this.#run(saleId, async () => {
       const rest = this.read(saleId)?.rest ?? fail("missing");
-      const { state } =
+      const { state, refusalReason }: RefundAnswer =
         rest.waitFor === undefined
           ? { state: "completed" }
-          : await this.api.getTenderRefund(rest.waitFor, {});
+          : await this.#askAgain(rest.waitFor, override, open);
       if (state === "pending") return { state };
-      if (state === "failed" || rest.request === null) this.#write(null, saleId);
-      if (state === "failed") return { state };
+      if (state === "failed" || rest.request === null) this.#settle(saleId, rest.waitFor, null);
+      if (state === "failed") return { state, refusalReason };
       return {
         state: "completed",
         preview:

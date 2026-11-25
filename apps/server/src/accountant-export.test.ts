@@ -456,7 +456,7 @@ describe("accountant workbook", () => {
       "",
       "",
     ]);
-    expect(row(xml, 4)[3]).toBe("Corrective");
+    expect(row(xml, 4)[3]).toBe("Corrective invoice");
     expect(xml).toContain('<c r="M2" t="n" s="1"><v>10.00</v></c>');
     expect(row(xml, 1)[17]).toBe("Voided at (UTC)");
     expect(row(xml, 1)[18]).toContain("original tickets retained");
@@ -550,8 +550,41 @@ describe("accountant workbook", () => {
   });
 
   it.each([
-    ["en", "Replacement corrective — do not add (repeats the original)"],
-    ["es", ACCOUNTANT_EXPORT_WORDS.es.replacement],
+    [
+      "en",
+      ["Corrective receipt", "Corrective invoice"],
+      [
+        "Replacement corrective receipt — do not add (repeats the original)",
+        "Replacement corrective invoice — do not add (repeats the original)",
+      ],
+    ],
+    [
+      "es",
+      [
+        ACCOUNTANT_EXPORT_WORDS.es.corrective.receipt,
+        ACCOUNTANT_EXPORT_WORDS.es.corrective.invoice,
+      ],
+      [
+        ACCOUNTANT_EXPORT_WORDS.es.replacement.receipt,
+        ACCOUNTANT_EXPORT_WORDS.es.replacement.invoice,
+      ],
+    ],
+  ] as const)(
+    "names a corrective a receipt when it names no customer and an invoice when it does, in %s",
+    (language, corrective, replacement) => {
+      const type = (invoiceType: "corrective" | "replacement", customerTaxId: string | null) =>
+        invoiceLineCells(
+          { ...invoice, invoiceType, customerTaxId },
+          ACCOUNTANT_EXPORT_WORDS[language],
+        )[0]![INVOICE_LINE_KEYS.indexOf("invoiceType")];
+      expect([type("corrective", null), type("corrective", "B12345678")]).toEqual(corrective);
+      expect([type("replacement", null), type("replacement", "B12345678")]).toEqual(replacement);
+    },
+  );
+
+  it.each([
+    ["en", "Replacement corrective invoice — do not add (repeats the original)"],
+    ["es", ACCOUNTANT_EXPORT_WORDS.es.replacement.invoice],
   ] as const)(
     "types a replaced invoice as its ordinary type and tells the reader not to add its replacement, in %s",
     async (language, replacementType) => {
@@ -1031,7 +1064,7 @@ describe("accountant period selection", () => {
     expect([row(xml, 2).slice(3, 7), row(xml, 3).slice(3, 7)]).toEqual([
       ["F1", "2026-11-02", "Harbour Foods", "12345678Z"],
       [
-        "Replacement corrective — do not add (repeats the original)",
+        "Replacement corrective invoice — do not add (repeats the original)",
         "2026-11-05",
         "Harbour Foods",
         "12345678Z",
@@ -1296,7 +1329,7 @@ describe("accountant period selection", () => {
   });
 });
 
-describe("refunds without a corrective invoice", () => {
+describe("refunds without a corrective", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], timeoutMs: 60_000 });
   let venue: SeededVenue;
   beforeEach(async () => {
@@ -1557,7 +1590,7 @@ describe("refunds without a corrective invoice", () => {
       ),
     );
     const relationshipId = strFromU8(files["xl/workbook.xml"]!).match(
-      /<sheet name="Refunds, no corrective invoice"[^>]*r:id="([^"]+)"/,
+      /<sheet name="Refunds with no corrective"[^>]*r:id="([^"]+)"/,
     )?.[1];
     const target = strFromU8(files["xl/_rels/workbook.xml.rels"]!).match(
       new RegExp(`<Relationship Id="${relationshipId}"[^>]*Target="([^"]+)"`),
@@ -1773,12 +1806,12 @@ describe("refunds without a corrective invoice", () => {
         ),
       );
       expect(strFromU8(files["xl/workbook.xml"]!)).toContain(
-        `name="${language === "en" ? "Refunds, no corrective invoice" : ACCOUNTANT_EXPORT_WORDS.es.refundSheet}"`,
+        `name="${language === "en" ? "Refunds with no corrective" : ACCOUNTANT_EXPORT_WORDS.es.refundSheet}"`,
       );
       const xml = strFromU8(files["xl/worksheets/sheet4.xml"]!);
       expect(row(xml, 1)).toEqual([
         language === "en"
-          ? "Note: no corrective invoice was filed for these refunds, so the VAT shown stays declared until the accountant acts"
+          ? "Note: no corrective receipt or invoice was filed for these refunds, so the VAT shown stays declared until the accountant acts"
           : ACCOUNTANT_EXPORT_WORDS.es.refundNote,
       ]);
       expect(row(xml, 2)).toEqual(words.refundColumns);

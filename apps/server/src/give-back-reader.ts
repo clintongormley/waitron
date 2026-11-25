@@ -1,6 +1,7 @@
 import { withTransaction, type Transaction } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
 import { readPersonAuthority, type Authorization, type PersonAuthority } from "@waitron/identity";
+import type { RefundRefusalReason } from "@waitron/payments";
 import { codeOf } from "@waitron/server-kit";
 import { AppError, type SaleId } from "@waitron/shared";
 import type { GiveBackPart } from "./give-back-plan.js";
@@ -36,6 +37,13 @@ export type PartAuthority = {
   rectify?: Authorization;
   authority: PersonAuthority;
 };
+
+interface SettledPart {
+  id: string;
+  state: string;
+  correctionId?: string;
+  refusalReason?: RefundRefusalReason;
+}
 
 interface ReaderSequence {
   /** Who gives back; a correction whose leg fails is discarded under their name. */
@@ -98,8 +106,9 @@ async function runReaderParts(
   sequence: ReaderSequence,
 ): Promise<GiveBackOutcome> {
   let refusal: WaitReason | null = null;
+  let refusalReason: RefundRefusalReason | undefined;
   for (const [index, step] of sequence.parts.entries()) {
-    let settled: { id: string; state: string; correctionId?: string } | null;
+    let settled: SettledPart | null;
     try {
       settled = await readerPart(deps, cfg, saleId, sequence, step);
     } catch (error) {
@@ -108,6 +117,7 @@ async function runReaderParts(
       break;
     }
     if (settled === null) break;
+    refusalReason = settled.refusalReason;
     if (settled.correctionId !== undefined && settled.state === "completed")
       await fileCorrectionAutomatically(deps, settled.correctionId).catch((error: unknown) => {
         deps.log?.("error", "invoice_correction.automatic_filing_failed", {
@@ -135,9 +145,10 @@ async function runReaderParts(
     }
     if (settled.state !== "completed") break;
   }
-  return withTransaction(deps.db, (tx) =>
+  const outcome = await withTransaction(deps.db, (tx) =>
     readGiveBackOutcomeOf(tx, deps, cfg, saleId, ask, refusal),
   );
+  return refusalReason === undefined ? outcome : { ...outcome, refusalReason };
 }
 
 /** Writes one reader part in its own transaction, then waits for the card company's answer as
@@ -149,7 +160,7 @@ async function readerPart(
   saleId: SaleId,
   sequence: ReaderSequence,
   step: ReaderSequence["parts"][number],
-): Promise<{ id: string; state: string; correctionId?: string } | null> {
+): Promise<SettledPart | null> {
   let release: (() => void) | undefined;
   try {
     const reserved = await withTransaction(deps.db, async (tx) => {
@@ -192,6 +203,7 @@ async function readerPart(
       id: settled.id,
       state: settled.state,
       ...(reserved.correctionId === undefined ? {} : { correctionId: reserved.correctionId }),
+      ...(settled.refusalReason === undefined ? {} : { refusalReason: settled.refusalReason }),
     };
   } catch (error) {
     release?.();

@@ -180,8 +180,8 @@ it("starts the venue only after Continue is pressed under the new series", async
   ).toEqual([
     "A-0CSQW — Simplified invoices (tickets)",
     "FF-0CSQW — Full invoices",
-    "R-0CSQW — Corrective of simplified invoices",
-    "FR-0CSQW — Corrective of full invoices",
+    "R-0CSQW — Corrective receipts",
+    "FR-0CSQW — Corrective invoices",
   ]);
   await new Promise((resolve) => setTimeout(resolve, 50));
   await el.updateComplete;

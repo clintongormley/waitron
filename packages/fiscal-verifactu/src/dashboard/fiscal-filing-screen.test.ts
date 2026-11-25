@@ -783,7 +783,9 @@ describe("vf-fiscal-filing-screen", () => {
   it.each([
     ["alta", "F1", "A full invoice that names the customer."],
     ["alta", "F3", "A full invoice that replaces earlier simplified invoices."],
-    ["alta", "R5", "An invoice that corrects an earlier one."],
+    ["alta", "R5", "A corrective receipt: it corrects an earlier receipt."],
+    ["alta", "R1", "A corrective invoice: it corrects an earlier full invoice."],
+    ["alta", "R4", "A corrective invoice: it corrects an earlier full invoice."],
     ["anulacion", null, "A cancellation of an earlier invoice."],
     ["alta", "X9", "An invoice record."],
   ] as const)("names the record %s %s in plain words", async (tipoRegistro, tipoFactura, line) => {
@@ -1398,7 +1400,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
     const details = await openDetails(screen);
     const confirmation = () => flat(details.querySelector("[data-test=replacement-confirmation]"));
     expect(confirmation()).toContain(
-      `Waitron will issue a replacement corrective invoice for invoice T1/41 of ${calendar("2026-11-03")}, total ${formatMoney("12.10", "en")}, dated ${calendar(deviceDay())}.`,
+      `Waitron will issue a replacement corrective receipt for invoice T1/41 of ${calendar("2026-11-03")}, total ${formatMoney("12.10", "en")}, dated ${calendar(deviceDay())}.`,
     );
     expect(confirmation()).toContain(
       "It goes to AEAT after any earlier invoices Waitron is holding back. The refused invoice stays as it is.",
@@ -1483,7 +1485,7 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
       ],
       [
         "es",
-        "Rectificativa emitida. Para imprimir su original, ábrela en una caja en Buscar cuenta, en la pestaña Transacciones, y elige Reimprimir. Las impresiones siguientes son copias.",
+        "Rectificativo emitido. Para imprimir su original, ábrelo en una caja en Buscar cuenta, en la pestaña Transacciones, y elige Reimprimir. Las impresiones siguientes son copias.",
       ],
     ] as const) {
       setLocale(language);
@@ -1605,14 +1607,14 @@ describe("replacing a simplified invoice AEAT refused for a future date", () => 
   it.each([
     [
       "sale.replacement_not_first",
-      "This invoice already has a refund or another corrective invoice, and Waitron cannot replace an invoice that has one, so nothing was sent. Nothing can be done here; the case stays open.",
+      "This invoice already has a refund or another corrective, and Waitron cannot replace an invoice that has one, so nothing was sent. Nothing can be done here; the case stays open.",
     ],
     [
       "fiscal.correction_unsupported",
       "AEAT holds, or may still receive, another record of this invoice, so a replacement could count the sale twice. Nothing was sent, and nothing can be done here; the case stays open.",
     ],
-    ["series.no_corrective_for_node", "This box has no series for correcting simplified invoices"],
-    ["series.no_full_corrective_for_node", "This box has no series for correcting full invoices"],
+    ["series.no_corrective_for_node", "This box has no series for corrective receipts"],
+    ["series.no_full_corrective_for_node", "This box has no series for corrective invoices"],
   ] as const)("says what %s means under the actions, keeping Send", async (code, words) => {
     const request = replacementServer(futureCase("2026-11-03"), async () => {
       throw refusal(code);
@@ -1648,6 +1650,9 @@ describe("replacing a full invoice AEAT refused for a future date, with full-inv
     expect(flat(details.querySelector("[data-test=put-right-intro]"))).toBe(
       "AEAT refused this full invoice because its date was in the future. Give the day the sale really happened, and Waitron issues a replacement corrective invoice for it, naming the same customer.",
     );
+    expect(flat(details.querySelector("[data-test=replacement-confirmation]"))).toContain(
+      "Waitron will issue a replacement corrective invoice for invoice T1/41",
+    );
     expect(
       [...details.querySelectorAll("wt-input, wt-textarea, wt-select")].map((el) =>
         el.getAttribute("name"),
@@ -1669,7 +1674,7 @@ describe("replacing a full invoice AEAT refused for a future date, with full-inv
     const { screen } = await mountFull(replacementServer(futureCase("2026-11-03")));
     const details = await openDetails(screen);
     expect(flat(details.querySelector("[data-test=put-right-intro]"))).toBe(
-      "AEAT refused this simplified invoice because its date was in the future. Give the day the sale really happened, and Waitron issues a replacement corrective invoice for it.",
+      "AEAT refused this simplified invoice because its date was in the future. Give the day the sale really happened, and Waitron issues a replacement corrective receipt for it.",
     );
   });
 

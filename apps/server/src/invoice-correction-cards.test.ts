@@ -21,7 +21,11 @@ import {
   readInvoiceCorrection,
 } from "./invoice-corrections.js";
 import { recoverTenderRefunds } from "./tender-refund-recovery.js";
-import { startTenderRefundResolvers, stopTenderRefundResolvers } from "./tender-refund-sends.js";
+import {
+  resumeTenderRefund,
+  startTenderRefundResolvers,
+  stopTenderRefundResolvers,
+} from "./tender-refund-sends.js";
 import { refundSettledTender } from "./tender-refunds.js";
 import { inTx } from "./testing/bill-venue.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
@@ -377,6 +381,45 @@ describe("a correction's connected card legs", () => {
       ...cashLegs,
       { ...leg, state: "completed", completedAt: expect.any(String) },
     ]);
+  });
+
+  it("a retried card leg the card company says went through is counted once, and Finish files the correction once", async () => {
+    const t = await cashAndReader();
+    const { correction } = await open(t.saleId, "24.20");
+    await cash(correction.id, "14.20");
+    loseNextAnswer();
+    const leg = await cardRefund(t, "10.00", correction.id);
+    const sends = v.card.refundCalls.length;
+    v.card.scriptLookups({
+      kind: "match",
+      providerRefundRef: `confirmed-${leg.id}`,
+      outcome: "completed",
+      providerStatus: "succeeded",
+    });
+    for (let press = 0; press < 2; press++)
+      expect(await resumeTenderRefund(v.deps, leg.id, "retry")).toMatchObject({
+        state: "completed",
+      });
+    expect(v.card.refundCalls).toHaveLength(sends);
+    const split = await splitOf(t.saleId, "24.20");
+    expect(await read(correction.id)).toMatchObject({
+      state: "open",
+      moneyBack: "24.20",
+      pending: "0.00",
+      left: "0.00",
+      fileNow: { gross: "24.20", vatBreakdown: split },
+    });
+
+    const before = salesCount();
+    const filed = await fileNow(correction.id, split);
+    expect(filed).toMatchObject({ state: "filed", moneyBack: "24.20" });
+    await expect(fileNow(correction.id, split)).rejects.toMatchObject({
+      code: "invoice_correction.not_open",
+    });
+    await recoverTenderRefunds(v.deps);
+    expect(salesCount()).toBe(before + 1);
+    const correctives = await v.db.select().from(sales).where(eq(sales.correctsSaleId, t.saleId));
+    expect(correctives.map((row) => row.total)).toEqual([-2420]);
   });
 
   it("answers a repeated card leg with its refund after the leg has filed the correction", async () => {

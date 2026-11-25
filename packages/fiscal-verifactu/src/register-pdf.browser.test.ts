@@ -226,8 +226,8 @@ describe("register PDF", () => {
         "A-S000001 / Simplified invoices (tickets)",
         "B-S000001 / Simplified invoices (tickets)",
         "FF-S000001 / Full invoices",
-        "R-S000001 / Corrective of simplified invoices",
-        "RF-S000001 / Corrective of full invoices",
+        "R-S000001 / Corrective receipts",
+        "RF-S000001 / Corrective invoices",
       ],
     ],
     [
@@ -236,8 +236,8 @@ describe("register PDF", () => {
         "A-S000001 / Facturas simplificadas (tickets)",
         "B-S000001 / Facturas simplificadas (tickets)",
         "FF-S000001 / Facturas completas",
-        "R-S000001 / Rectificativa de simplificadas",
-        "RF-S000001 / Rectificativa de completas",
+        "R-S000001 / Tickets rectificativos",
+        "RF-S000001 / Facturas rectificativas",
       ],
     ],
   ] as const)("labels each series purpose on the %s sheet", async (locale, labels) => {

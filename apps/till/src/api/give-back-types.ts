@@ -116,6 +116,8 @@ export interface GiveBackOutcome {
   }[];
   /** A later part refused after an earlier one moved money. */
   refusal: { code: string; params: Record<string, unknown> } | null;
+  /** Why the card company made no refund; a resend's answer leaves it out. */
+  refusalReason?: "provider_balance_unavailable";
   underWay: InvoiceCorrectionView | null;
   /** What was not sent yet: it goes once the card company answers, under fresh ids. */
   rest: GiveBackRequest | null;

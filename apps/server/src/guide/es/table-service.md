@@ -428,10 +428,11 @@ Mantén la ventana abierta para aprovecharla: una que abras después desde el re
 rellenada.
 
 Cuando una devolución a tarjeta espera a la compañía de la tarjeta, elige **Comprobar de nuevo**
-para ver su respuesta, y **Devolver el resto** cuando la ventana lo ofrezca. Si la ventana dice que
-el servidor no respondió, elige **Enviar de nuevo**: el mismo dinero nunca se devuelve dos veces. Un
-ticket rectificativo que no se imprime solo se puede imprimir desde **Buscar cuenta**, en la
-pestaña **Transacciones**.
+para preguntarle por esa devolución, y **Devolver el resto** cuando la ventana lo ofrezca. Si no
+puedes devolver dinero, un responsable o encargado aprueba la consulta con su PIN. Si la ventana dice
+que el servidor no respondió, elige **Enviar de nuevo**. **Comprobar de nuevo** y **Enviar de nuevo**
+nunca devuelven el mismo dinero dos veces. Un ticket rectificativo que no se imprime solo se puede
+imprimir desde **Buscar cuenta**, en la pestaña **Transacciones**.
 
 Si cierras la ventana antes de que vuelva todo el dinero, busca el recibo en **Buscar cuenta**, en
 **Devoluciones en curso**. Si no está, la devolución espera en esta caja: vuelve a abrir **Devolver
@@ -706,8 +707,8 @@ queda y elige **Cerrar mesa** cuando todos hayan terminado.
 
 Una cuenta que sigue abierta al terminar el día de trabajo recibe entonces su ticket, sin
 imprimirlo. Cóbrala con **Cobrar** o registra una salida sin pagar. Una cuenta con platos en espera
-o sin enviar sigue abierta. Una cuenta con una rectificación abierta de un pago que tiene su propio
-ticket sigue abierta hasta que esa rectificación se termine o se descarte.
+o sin enviar sigue abierta. Una cuenta con una devolución en curso de un pago que tiene su propio
+ticket sigue abierta hasta que esa devolución se termine o se anule.
 
 Si la cuenta se emitió al terminar el día de trabajo, selecciona el día en que se abrió en
 **Ventas y recaudación**. Para los impuestos, consulta [Modelo 303 (IVA)](invoices.md#vat-return). Las fechas registradas

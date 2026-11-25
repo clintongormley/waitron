@@ -88,7 +88,7 @@ export interface AdvanceCell {
   takenOffBy: string | null;
 }
 
-/** A completed Refund a payment on a ticket: no corrective invoice was filed for it. */
+/** A completed plain refund of a ticket's payment: no corrective was filed for it. */
 export interface RefundWithoutCorrective {
   id: string;
   refundedAt: string;
@@ -303,7 +303,7 @@ export function invoiceLineCells(
       invoiceType:
         invoice.invoiceType === "F1" || invoice.invoiceType === "F2" || invoice.invoiceType === "F3"
           ? invoice.invoiceType
-          : words[invoice.invoiceType],
+          : words[invoice.invoiceType][invoice.customerTaxId === null ? "receipt" : "invoice"],
       issueDate: invoice.issueDate,
       customerName: invoice.customerName,
       customerTaxId: invoice.customerTaxId,
@@ -643,7 +643,7 @@ export function refundsWithoutCorrectiveQuery(tx: Transaction, window: (column: 
 
 /**
  * Refunds of a ticket's payment completed within `window`, by calendar date, that are not part of
- * a Correct invoice. A bill refund is never listed: what it gives back is owed on the bill again.
+ * a correction. A bill refund is never listed: what it gives back is owed on the bill again.
  */
 async function listRefundsWithoutCorrective(
   tx: Transaction,

@@ -3758,7 +3758,7 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
       ],
     });
 
-  it("offers no Refund once Correct invoice has given all of it back", async () => {
+  it("offers no Refund once corrections have given all of it back", async () => {
     const el = await mount({ balance: advanceRow("0.00") });
 
     expect(root(el).querySelector("[data-payment-refund]")).toBeNull();
@@ -3767,7 +3767,7 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
     );
   });
 
-  // A €30.00 part payment of which Correct invoice gave €10.00 back.
+  // A €30.00 part payment of which a correction gave €10.00 back.
   const takenOffRow = balanceOf({
     received: "20.00",
     outstanding: "100.00",
@@ -3840,7 +3840,7 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
       payments: [{ ...takenOffRow.payments[0]!, left: "30.00", givenBack }],
     });
 
-  it("shows what Refund a payment gave back of it, and offers to refund only the rest", async () => {
+  it("shows what a plain refund gave back of it, and offers to refund only the rest", async () => {
     const el = await mount({ balance: givenBackRow("20.00") });
 
     const row = root(el).querySelector("[data-payment]")!;
