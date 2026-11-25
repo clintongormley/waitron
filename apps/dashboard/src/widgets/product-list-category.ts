@@ -69,7 +69,6 @@ export function productCategoryColumn(
       >`;
     },
     sortValue: (row) => name(row) ?? null,
-    searchValue: (row) => name(row) ?? "",
     ...(options.length && {
       filter: {
         label: t("product.category"),

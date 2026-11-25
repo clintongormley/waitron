@@ -129,7 +129,6 @@ export class ProductBrowser extends LitElement {
   /** The category the address names; the browser opens it, and every category above it, once. */
   @property({ attribute: false }) categoryId: string | null = null;
   @property({ type: Boolean }) canAddProduct = false;
-  @property({ type: Boolean }) loaded = false;
   @property({ type: Boolean }) tableHidden = false;
   @property({ attribute: false }) defaultColor: string | null = null;
   @property({ attribute: false }) takeawayVat = false;
@@ -237,7 +236,7 @@ export class ProductBrowser extends LitElement {
       this.#setView("tree");
       void this.updateComplete.then(() => this.#resetCategoryOnRenderedList());
     }
-    if (this.#emptyList) this.selecting = false;
+    if (!this.#hasRowsToActOn) this.selecting = false;
     if (changed.has("search")) this.hiddenSave = null;
     if (this.operation === null) this.#releaseOperation();
     else if (!this.#operationScope) {
@@ -961,15 +960,18 @@ export class ProductBrowser extends LitElement {
     }
   };
 
-  get #emptyList(): boolean {
-    return this.view === "list" && !this.products.some(({ active }) => active);
+  get #emptyProducts(): boolean {
+    return !this.products.some(({ active }) => active);
+  }
+
+  get #hasRowsToActOn(): boolean {
+    return !this.#emptyProducts || (this.view === "tree" && this.categories.length > 0);
   }
 
   override render() {
     const renamed = this.#renamed(this.nameDraft);
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
-    const empty = this.#emptyList;
-    const noticeSlot = empty ? "above-table" : "toolbar-bottom";
+    const emptyTree = !this.tableHidden && this.view === "tree" && this.#emptyProducts;
     return html`${productAvailabilityFeedback(this.availabilityError)}<dashboard-product-list
         .view=${this.view}
         .availabilityPending=${this.availabilityPending}
@@ -1002,7 +1004,6 @@ export class ProductBrowser extends LitElement {
         }}
         .nameDraft=${this.nameDraft}
         .nameError=${this.nameError}
-        .loaded=${this.loaded}
         @add-category=${(event: CustomEvent<{ parentId: string | null }>) => {
           event.stopPropagation();
           this.search = "";
@@ -1051,7 +1052,7 @@ export class ProductBrowser extends LitElement {
           this.nameError = "";
         }}
       >
-        <slot name="empty-action" slot="empty-action"></slot>
+        ${this.view === "list" ? html`<slot name="empty-action" slot="empty-action"></slot>` : nothing}
         ${productSearchAndSelect(
           this.search,
           (search) => {
@@ -1063,8 +1064,10 @@ export class ProductBrowser extends LitElement {
             this.selected = [];
             this.selecting = !this.selecting;
           },
+          this.view,
+          !this.#hasRowsToActOn,
         )}
-        ${productViewSwitch(this.view, this.phone || empty, this.#chooseView)}
+        ${productViewSwitch(this.view, this.phone, this.#chooseView)}
         ${productSelectionBar({
           selecting: this.selecting,
           busy: this.summaryLoading || this.operationBusy,
@@ -1075,14 +1078,15 @@ export class ProductBrowser extends LitElement {
           remove: () => void this.#openDelete(),
           done: () => void this.#leaveSelection(),
         })}
-        ${this.routingFailed && this.categories.length ? productRoutingFeedback(noticeSlot) : nothing}
+        ${this.routingFailed && this.categories.length ? productRoutingFeedback("toolbar-bottom") : nothing}
         ${
           this.hiddenSave === null
             ? clearProductSearch(this.#clearProductSearch, "no-matches-action")
-            : hiddenProductSave(this.hiddenSave.name, this.#clearProductSearch, noticeSlot)
+            : hiddenProductSave(this.hiddenSave.name, this.#clearProductSearch, "toolbar-bottom")
         }
-        ${productListActionFeedback(this.#actionNotice, !this.operation && !this.colorTarget, noticeSlot)}
+        ${productListActionFeedback(this.#actionNotice, !this.operation && !this.colorTarget, "toolbar-bottom")}
       </dashboard-product-list>
+      ${emptyTree ? html`<div class="empty-tree-action"><slot name="empty-action"></slot></div>` : nothing}
       ${this.#operationDialog()}<dashboard-category-color-form
         .open=${this.colorTarget !== null}
         .busy=${this.colorBusy}

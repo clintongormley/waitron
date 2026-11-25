@@ -790,7 +790,6 @@ export class ProductsScreen extends LitElement {
         .extraLists=${this.extraLists}
         .optionLists=${this.optionLists}
         .canAddProduct=${readyToAdd && hasLanguages && hasUnits}
-        .loaded=${this.productsLoaded}
         .defaultColor=${this.menuSettings?.defaultColor ?? null}
         .takeawayVat=${this.menuSettings?.takeawayVat ?? false}
         @add-product=${(event: CustomEvent<{ categoryId: string | null }>) => {

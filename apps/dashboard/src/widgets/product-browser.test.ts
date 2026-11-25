@@ -1150,6 +1150,25 @@ it("starts in List and remembers a view switch while leaving Category filters an
   expect(await rowKeys(await mountBrowser())).toContain("folder:d");
 });
 
+it("searches product names in List and category names in Tree", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  const el = await mountBrowser();
+  await typeSearch(el, "Drinks");
+  expect(await rowKeys(el)).toEqual([]);
+  await expect
+    .element(page.getByRole("searchbox", { name: "Search products", exact: true }))
+    .toBeVisible();
+  await typeSearch(el, "Cola");
+  expect(await rowKeys(el)).toEqual(["cola"]);
+
+  await chooseView(el, "Tree");
+  await typeSearch(el, "Drinks");
+  expect(await rowKeys(el)).toContain("folder:d");
+  await expect
+    .element(page.getByRole("searchbox", { name: "Search products and categories", exact: true }))
+    .toBeVisible();
+});
+
 it("forgets a Category sort when leaving List and restores Name after a reload", async () => {
   localStorage.setItem("waitron.products.view", "list");
   const el = await mountBrowser();
@@ -1447,6 +1466,8 @@ it("searches a folder's own name and a product's variant names, never a product'
   await typeSearch(el, "drinks cola");
   expect(await rowKeys(el)).toEqual([]);
   await typeSearch(el, "cup");
+  expect(await rowKeys(el)).toEqual(["with-variants"]);
+  await chooseView(el, "List");
   expect(await rowKeys(el)).toEqual(["with-variants"]);
 });
 it("opens and closes a category from its row, and says which it will do", async () => {

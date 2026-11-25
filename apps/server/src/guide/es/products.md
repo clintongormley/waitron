@@ -15,15 +15,16 @@ cada uno de sus grupos que tiene algo configurado, así ves lo que está configu
 encabezado para abrirla o cerrarla. Si contiene algo que tienes que corregir, se abre sola y sigue
 abierta hasta que lo corriges.
 
-Usa **Lista** para buscar productos por nombre o categoría. En **Filtros**, elige una **Categoría**
-para incluir también sus subcategorías. En **Disponible**, elige **No** para encontrar platos o
+En **Lista**, busca por nombre de producto o variante. Para encontrar platos de una categoría y
+sus subcategorías, elige una **Categoría** en **Filtros**. En **Disponible**, elige **No** para encontrar platos o
 variantes que no están a la venta. Un plato con una variante no disponible puede aparecer bajo
 **Sí** y **No**.
 
 Cambia a **Árbol** para recorrer u organizar las categorías. Las categorías siguen en orden
 alfabético cuando ordenas los productos y se abren si tienen coincidencias al filtrar. Para añadir
 un producto directamente en una categoría, elige **Añadir producto** en su menú ⋮. El botón junto al
-título de la página añade un producto sin categoría.
+título de la página añade un producto sin categoría. Si aún no hay productos, puedes usar también
+**Añadir producto** debajo de la barra de herramientas en ambas vistas.
 
 Si no hay coincidencias o tus opciones ocultan un producto que acabas de guardar, elige **Borrar
 búsqueda y filtros**. Si una categoría vacía nueva desaparece al filtrar en Árbol, elige **Borrar

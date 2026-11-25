@@ -4,6 +4,8 @@
 
 ## First PR · List, view switch and Add product
 
+On 25 November the owner reviewed the List screenshots. Follow [the revised design](../specs/2026-11-24-products-list-redesign-design.md#4-finding-things) for product and variant search in List, and keep the toolbar and both Add buttons in empty List and Tree.
+
 Staff can switch views and add or find dishes in List. Category is omitted from phone List rows until the second PR. Say so beside the 390 px pictures.
 
 - In `apps/dashboard/src/widgets/product-list.ts`, reuse the table and cells. Omit root and category rows in List. Variants open under their dish. Put the Category column in `product-list-category.ts` using `category-form.ts`. Show a plain swatch and one path. Find dishes by category name and filter through descendants. Default to Name, Category, Price, Available and pinned ⋮. At 440 px or less of the Products browser’s own width, start with Category hidden and retain its filter.

@@ -46,6 +46,10 @@ export const productsToolbarStyles = css`
     gap: var(--wt-space-2);
     padding: var(--wt-space-3) 0;
   }
+  .empty-tree-action {
+    text-align: center;
+    margin-block-start: var(--wt-space-3);
+  }
   wt-input[name="menu-search"] {
     flex: 1 1 calc(var(--wt-tap-min) * 7);
     min-width: 0;
@@ -87,6 +91,8 @@ export function productSearchAndSelect(
   setSearch: (search: string) => void,
   selecting: boolean,
   select: () => void,
+  view: ProductsView,
+  disabled: boolean,
 ) {
   return html`<wt-icon-button
       slot="toolbar-start"
@@ -94,13 +100,15 @@ export function productSearchAndSelect(
       label=${t("folders.select")}
       icon="select-rows"
       .pressed=${selecting}
+      .disabled=${disabled}
       @click=${select}
     ></wt-icon-button>
     <wt-input
       slot="toolbar-search"
       name="menu-search"
       type="search"
-      label=${t("folders.search")}
+      label=${t(view === "list" ? "product.search" : "folders.search")}
+      .disabled=${disabled}
       .value=${search}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();

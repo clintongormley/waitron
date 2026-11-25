@@ -378,14 +378,11 @@ export class ProductList extends LitElement {
   /** Whether the box's colour chooser is open: it takes the cursor without the person leaving the
    * box. */
   @property({ type: Boolean }) choosingColor = false;
-  /** Whether the menu has loaded, so that an empty one is known to be empty. */
-  @property({ type: Boolean }) loaded = false;
 
   #listNames: ReadonlyMap<string, string> = new Map();
   #nameValue = "";
   /** Set once the box has sent its name or its cancel, until a refusal or a new box. */
   #nameSent = false;
-  #emptyChecked = false;
   /** Rebuilt in willUpdate only when a property #rows() reads changes, and a new read there joins
    * that list; kept otherwise so wt-data-table keeps the search text it prepared for each row. */
   #rowList: ListRow[] = [];
@@ -669,11 +666,6 @@ export class ProductList extends LitElement {
   protected override updated(changed: PropertyValues<this>): void {
     if (changed.has("nameDraft") && this.nameDraft) void this.#revealNameBox(true);
     else if (changed.has("nameError") && this.nameError) void this.#revealNameBox(false);
-    if (this.loaded && !this.#emptyChecked) {
-      this.#emptyChecked = true;
-      if (this.view === "tree" && this.products.length === 0 && this.categories.length === 0)
-        void this.#openRootMenu();
-    }
   }
 
   async #revealNameBox(focus: boolean): Promise<void> {
@@ -698,19 +690,6 @@ export class ProductList extends LitElement {
       box.focus();
       box.select();
     }
-  }
-
-  /** `show()` moves no focus, so the person's place on the page is kept. */
-  async #openRootMenu(): Promise<void> {
-    const table = this.#table();
-    if (!table) return;
-    await table.updateComplete;
-    const menu = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-      '[data-test="actions-root"]',
-    );
-    if (!menu) return;
-    await menu.updateComplete;
-    menu.show();
   }
 
   #commitName(): void {
@@ -1665,6 +1644,7 @@ export class ProductList extends LitElement {
         viewKey="waitron.products.table"
         rememberExpanded
         flatTreeSearch
+        keep-toolbar-when-empty
         dense-rows
         ?data-list=${this.view === "list"}
         .filterCandidates=${this.#filterCandidates}

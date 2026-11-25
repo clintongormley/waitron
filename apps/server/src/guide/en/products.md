@@ -14,14 +14,15 @@ Details is open when you add a product and closed when you edit one. While it is
 something set, so you can see what is set without opening it. Click its heading to open or close it. If
 it contains something you need to fix, it opens itself and stays open until you have fixed it.
 
-Use **List** to find products by name or category. In **Filters**, choose a **Category** to include
-its subcategories. Under **Available**, choose **No** to find dishes or variants that are off sale.
+In **List**, search by product or variant name. To find dishes in a category and its subcategories,
+choose a **Category** in **Filters**. Under **Available**, choose **No** to find dishes or variants that are off sale.
 A dish with an unavailable variant can appear under **Yes** and **No**.
 
 Switch to **Tree** to browse or organise categories. Categories stay in alphabetical order when
 you sort products, and matching categories open while you filter. To add directly in a category,
 choose **Add product** in that category's ⋮ menu. The button beside the page heading starts a product
-without a category.
+without a category. If there are no products, you can also use **Add product** below the toolbar in
+either view.
 
 If no products match or your choices hide a product you just saved, choose **Clear search and
 filters**. If a new empty category disappears while you filter in Tree, choose **Clear all** in

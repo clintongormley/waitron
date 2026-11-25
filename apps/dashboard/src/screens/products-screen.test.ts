@@ -1309,6 +1309,34 @@ describe("menu-screen", () => {
     expect(api.listProducts).toHaveBeenCalledTimes(2);
   });
 
+  it.each(["list", "tree"])(
+    "keeps the toolbar and both Add buttons in an empty %s",
+    async (view) => {
+      localStorage.setItem("waitron.products.view", view);
+      const api = stubApi({
+        listProducts: vi.fn().mockResolvedValue([]),
+        listCategories: vi.fn().mockResolvedValue([]),
+      });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+      await flush(el);
+      const table = await productTable(el);
+      expect(table.shadowRoot!.querySelector(".table-toolbar")?.checkVisibility()).toBe(true);
+      await expect
+        .element(page.getByRole("button", { name: "Filters", exact: true }))
+        .toBeVisible();
+      await expect.element(page.getByRole("button", { name: "Customise columns" })).toBeVisible();
+      await expect
+        .element(page.getByRole("button", { name: "Select", exact: true }))
+        .toBeDisabled();
+      await expect.element(page.getByRole("searchbox")).toBeDisabled();
+      const switcher = list(el).shadowRoot!.querySelector("wt-segmented-control")!;
+      expect(switcher.checkVisibility()).toBe(true);
+      expect(switcher.slot).toBe("toolbar-search");
+      const addButtons = [...el.shadowRoot!.querySelectorAll('[data-test="add-product"]')];
+      expect(addButtons.filter((button) => button.checkVisibility())).toHaveLength(2);
+    },
+  );
+
   it.each(["heading", "empty"] as const)(
     "adds an unfiled product from the %s and returns focus to the heading",
     async (from) => {
@@ -4106,16 +4134,17 @@ describe("menu-screen", () => {
     await vi.waitFor(() => expect(api.getProductEditor).toHaveBeenCalledWith("p1"));
   });
 
-  it("tells the product list the menu has loaded only once its products have", async () => {
+  it("shows the Products browser after products have loaded", async () => {
     const pending: ((value: Product[]) => void)[] = [];
     const api = stubApi({
       listProducts: vi.fn(() => new Promise<Product[]>((resolve) => pending.push(resolve))),
     });
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
-    expect(list(el).loaded).toBe(false);
+    const table = await productTable(el);
+    expect(table.checkVisibility()).toBe(false);
     for (const resolve of pending) resolve([]);
-    await vi.waitFor(() => expect(list(el).loaded).toBe(true));
+    await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
   });
 });
 

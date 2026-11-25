@@ -46,8 +46,10 @@ Show archived and the Archived state are gone before the list here is built).
   naming a category opens the Tree at that category (**my call**), so switching to the List removes
   the category from the address.
 - Switching views keeps the search and the filters both views have; a Category filter is dropped.
-- With no products the List says so and offers Add product. Add product is drawn disabled, with the
-  reason, while adding is not possible (no unit or no language yet), as the row's adds are today.
+- With no products, keep the toolbar and both **Add product** buttons in List and Tree. Controls
+  with nothing to act on stay visible and quiet. Add product is drawn disabled, with the reason,
+  while adding is not possible (no unit or no language yet). Open All products' ⋮ to add a category.
+  This follows the owner's 25 November review of the empty List and Tree.
 
 ### 2. The row, the same in both views
 
@@ -101,8 +103,10 @@ Show archived and the Archived state are gone before the list here is built).
   closed, and closes them again when the
   filters are cleared. This reverses A461/A462's "filters alone keep the ordinary tree rules". Opening
   them does not count as the person opening them (nothing is remembered).
-- **Search** keeps A461's flat matches with paths in the Tree. In the List, a category's name finds the
-  products in it (**my call**). No matches offers **Clear search and filters** (**my call**).
+- **Search** keeps A461's flat matches with paths in the Tree. In List, **Search products** matches
+  product and variant names. Choose a **Category** in **Filters** to find products in it. On
+  25 November the owner said “categories shouldn't be searchable in the list view”. No matches
+  offers **Clear search and filters** (**my call**).
 - A product saved while the search or filters hide it is not shown; a line above the table says it was
   saved and offers Clear search and filters (**my call**).
 

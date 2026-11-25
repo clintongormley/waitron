@@ -993,6 +993,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** What a column filter's open list says when its search matches no option. */
   @property() filterNoResultsLabel = "No results";
   @property() filtersLabel = "Filters";
+  @property({ type: Boolean, attribute: "keep-toolbar-when-empty" }) keepToolbarWhenEmpty = false;
   @property() filteredColumnLabel = "Filtered";
   @property() filtersClearAllLabel = "Clear all";
   @property() filtersCloseLabel = "Close filters";
@@ -1424,7 +1425,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (
       !this.#hasFilters() ||
       (this.serverPaging === undefined &&
-        ((this.rows.length === 0 && !this.#hasSlottedFilters()) ||
+        ((this.rows.length === 0 && !this.keepToolbarWhenEmpty && !this.#hasSlottedFilters()) ||
           this.loading ||
           this.errorMessage !== ""))
     )
@@ -3081,8 +3082,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     </div>`;
   }
 
-  /** Every branch with rows to filter draws this one template, so a choice that empties the rows
-   * or brings them back keeps the toolbar and the filters panel, and the focus inside them. */
+  /** Keep the same toolbar and filter panel mounted when a choice empties or restores the rows. */
   #withToolbar(content: unknown) {
     return html`${this.#renderToolbar()}<slot name="toolbar-bottom"></slot>${
         this.#hasFilters()
@@ -3260,9 +3260,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const { visible, ranks: searchRanks, filterMatches } = this.#searched();
     if (this.rows.length === 0) {
       const empty = tableMessage(this.emptyMessage, "empty-action");
-      return this.serverPaging === undefined && !this.#hasSlottedFilters()
-        ? empty
-        : this.#withToolbar(empty);
+      return this.keepToolbarWhenEmpty ||
+        this.serverPaging !== undefined ||
+        this.#hasSlottedFilters()
+        ? this.#withToolbar(empty)
+        : empty;
     }
 
     const label = this.ariaLabel || undefined;

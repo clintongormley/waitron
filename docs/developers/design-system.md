@@ -1537,8 +1537,9 @@ Add a device button, including while empty (owner, A413, 2026-10-08). Menus hide
 leaves the slot empty. A widget that draws a table with an Add button for a screen passes the button through:
 `apps/dashboard/src/widgets/staff-list.ts` forwards the slot
 (`<slot name="empty-action" slot="empty-action">`). Products forwards it through the browser and list.
-The List shows **Add product** beside the heading and inside the empty box. If a unit or content
-language is missing, each button is disabled with the reason beside it. Both open the product editor
+With no products, both views show **Add product** beside the heading and under the toolbar.
+In List the second button sits inside the empty box. If a unit or content language is missing,
+each button is disabled with the reason beside it. Both open the product editor
 without a category and return focus to the heading's button after the last dialog closes. Tree keeps
 its category and All products menus, and their **Add product** actions open the editor in place.
 A menu's Structure tab has a root row like it, whose ⋮ holds the menu's top-level adds, and an empty
@@ -2063,7 +2064,8 @@ and tables with fewer than two movable columns. Browser tests check each added c
 
 A row opened with the pointer keeps its focus destination after an editor closes, without a focus ring or lifted focus background. An editor opened and closed from the keyboard returns visible focus; later keyboard navigation shows focus. Dialogs record whether the opening control had visible focus before moving into their content.
 
-`wt-data-table` shows its empty message and `empty-action` slot alone when `rows` is empty.
+`wt-data-table` shows its empty message and `empty-action` slot alone when `rows` is empty. Products uses
+`keep-toolbar-when-empty` to keep the toolbar and its configured controls above the empty message.
 When the table has source rows, it draws a toolbar if `searchable` is set, a column carries a
 `filter`, a column is `choosable` and the columns hold at least two movable ones (every column
 but the first and a `pinned: "end"` one), a tree has an `expandAllLabel`, or the screen supplies a

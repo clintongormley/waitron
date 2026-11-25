@@ -3409,7 +3409,7 @@ describe("the product list as a tree", () => {
     expect(sent).toEqual(["cancel", "cancel"]);
   });
 
-  it("opens the All products menu, without moving focus, when the menu loads empty, and only that once", async () => {
+  it("keeps the All products menu closed on an empty Tree until staff open it", async () => {
     const outside = document.createElement("button");
     document.body.append(outside);
     onTestFinished(() => outside.remove());
@@ -3417,14 +3417,17 @@ describe("the product list as a tree", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [],
       categories: [],
-      loaded: true,
     });
     const menu = (await tableRoot(el)).querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
       '[data-test="actions-root"]',
     )!;
     const popup = () => menu.shadowRoot!.querySelector("[popover]")!;
-    await vi.waitFor(() => expect(popup().matches(":popover-open")).toBe(true));
+    await menu.updateComplete;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(popup().matches(":popover-open")).toBe(false);
     expect(document.activeElement).toBe(outside);
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    expect(popup().matches(":popover-open")).toBe(true);
     menu.hide();
     el.products = [];
     await el.updateComplete;
@@ -3432,7 +3435,7 @@ describe("the product list as a tree", () => {
     expect(popup().matches(":popover-open")).toBe(false);
   });
 
-  it("leaves the menu closed before the menu has loaded, and for one with something in it", async () => {
+  it("leaves the All products menu closed as the first product appears", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [],
       categories: [],
@@ -3444,7 +3447,6 @@ describe("the product list as a tree", () => {
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect((await popup()).matches(":popover-open")).toBe(false);
     el.products = [product()];
-    el.loaded = true;
     await el.updateComplete;
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect((await popup()).matches(":popover-open")).toBe(false);
@@ -3587,11 +3589,8 @@ describe("a product's variants in the list", () => {
     expect(root.querySelector('wt-combobox[data-filter="category"]')).not.toBeNull();
   });
 
-  it("finds products through category names and filters them through descendants in List", async () => {
-    const { el, table, root } = await mountTree({ view: "list", search: "Drinks" });
-    expect(rowKeys(root)).toEqual(["cola", "lager"]);
-    el.search = "";
-    await el.updateComplete;
+  it("filters products through category descendants in List", async () => {
+    const { table, root } = await mountTree({ view: "list" });
     await chooseOption(root.querySelector<WtCombobox>('wt-combobox[data-filter="category"]')!, "d");
     await table.updateComplete;
     expect(rowKeys(root)).toEqual(["cola", "lager"]);
