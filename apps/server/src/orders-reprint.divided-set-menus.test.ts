@@ -3,7 +3,6 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { kitchenCourses, printers, printJobs, products, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { createPinThrottle } from "@waitron/identity";
 import { addSetMenuDishes, createProduct, menuItems, setTakeawayVatRate } from "@waitron/menu";
 import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { enqueueReceiptCopy, readOriginalReceiptPrint } from "./receipt-print.js";
@@ -260,10 +259,7 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
     await serveSpecBill(spec, bill.partyId, bill.tabId);
     await printSpecBill(spec, bill.partyId, bill.tabId);
     const before = await prints(bill.tabId);
-    await splitAfterPrint(specDeps(spec), venue.cfg, bill.tabId, {
-      ...venue.operator,
-      attempts: { throttle: createPinThrottle(), slot: "split" },
-    });
+    await splitAfterPrint(specDeps(spec), venue.cfg, bill.tabId, venue.operator);
     const bySaleId = await printed(
       await inTx(venue, (tx) =>
         readTransactionReceipt(venue.backend, tx, venue.cfg, before.saleId),

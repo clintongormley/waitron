@@ -13,10 +13,9 @@ import {
   lineServiceCancellations,
   printJobs,
   sales,
-  workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import { adjustments, computeAdjustmentReport } from "@waitron/adjustments";
+import { adjustments, computeAdjustmentReport, listAdjustmentReasons } from "@waitron/adjustments";
 import { createExtraList, writeProductModifiers } from "@waitron/menu";
 import {
   computeCategorySales,
@@ -24,8 +23,7 @@ import {
   currentBusinessDay,
   resolveVenueClock,
 } from "@waitron/reporting";
-import { thousandthsToDecimal } from "@waitron/shared";
-import { filedSales, invoiceRecords } from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import { filedSales } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { readPartyAllergy, setAllergyLineTicks, writePartyAllergy } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
 import { gateSeatOnStartClock } from "./start-clock-gate.js";
@@ -46,6 +44,7 @@ import {
   provisionOrderVenue,
   type OrderVenue,
 } from "./testing/order-venue.js";
+import * as fixture from "./testing/split-after-print-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 
@@ -103,12 +102,22 @@ async function revisionOfBill(billId: string): Promise<number> {
   return bill!.revision;
 }
 
-function revisionOf(partyId: string): number {
-  const [row] = venue.db.all<{ revision: number }>(
-    sql`select revision from parties where id = ${partyId}`,
-  );
-  return row!.revision;
-}
+const revisionOf = (partyId: string) => fixture.revisionOf(venue, partyId);
+const dishesOf = (billId: string) => fixture.dishesOf(venue, billId);
+const serve = (party: Party, billId: string, ...names: string[]) =>
+  fixture.serve(venue, party, billId, ...names);
+const printBill = (party: Party, billId: string, printAnyway = false) =>
+  fixture.printBill(venue, party, billId, printAnyway);
+const split = (billId: string, cookie = venue.supervisorTill, app = venue.app) =>
+  fixture.split(venue, billId, cookie, app);
+const creditsOf = (saleId: string) => fixture.creditsOf(venue, saleId);
+const invoiceOf = (billId: string) => fixture.invoiceOf(venue, billId);
+const written = () => fixture.written(venue);
+const expectRefused = (
+  billId: string,
+  answer: () => Promise<Answer>,
+  refusal: { status: number; code: string },
+) => fixture.expectRefused(venue, billId, answer, refusal);
 
 /** A party seated at a fresh table with one guest, its dishes sent to the kitchen as one group. */
 async function seat(...lines: (string | Line)[]): Promise<Party> {
@@ -159,48 +168,6 @@ async function seat(...lines: (string | Line)[]): Promise<Party> {
   return party;
 }
 
-function dishesOf(billId: string) {
-  return inTx(venue, (tx) =>
-    tx
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, billId))
-      .orderBy(workingOrderLines.lineNo),
-  );
-}
-
-async function serve(party: Party, billId: string, ...names: string[]): Promise<Answer> {
-  const dishes = (await dishesOf(billId)).filter(
-    (line) => line.parentLineId === null && (names.length === 0 || names.includes(line.name)),
-  );
-  return send(venue.app, venue.cookie, "POST", `/api/parties/${party.partyId}/served`, {
-    submissionId: randomUUID(),
-    expectedPartyRevision: revisionOf(party.partyId),
-    items: dishes.map((line) => ({
-      lineId: line.id,
-      quantity: thousandthsToDecimal(line.quantity),
-    })),
-  });
-}
-
-/** Print the bill on the first till, which has a receipt printer. */
-async function printBill(party: Party, billId: string, printAnyway = false): Promise<Answer> {
-  const { editorVersion, draftId, draftRevision } = await inTx(venue, (tx) =>
-    readBillEditState(tx, billId),
-  );
-  return send(venue.app, venue.cookie, "POST", `/api/parties/${party.partyId}/end-meal`, {
-    billId,
-    expectedPartyRevision: revisionOf(party.partyId),
-    expectedEdits: [{ billId, editorVersion, draftId, draftRevision }],
-    submissionId: randomUUID(),
-    ...(printAnyway ? { printAnyway: true } : {}),
-  });
-}
-
-function split(billId: string, cookie = venue.supervisorTill, app = venue.app): Promise<Answer> {
-  return send(app, cookie, "POST", `/api/working-orders/${billId}/split-after-print`, {});
-}
-
 /** Move the named dishes of `fromBillId` onto a new bill of the party. */
 async function moveToNewBill(party: Party, fromBillId: string, ...names: string[]) {
   const lineIds = (await dishesOf(fromBillId))
@@ -223,17 +190,6 @@ async function moveToNewBill(party: Party, fromBillId: string, ...names: string[
   return moved.json.billId as string;
 }
 
-function creditsOf(saleId: string) {
-  return inTx(venue, (tx) => tx.select().from(sales).where(eq(sales.correctsSaleId, saleId)));
-}
-
-async function invoiceOf(billId: string) {
-  const [row] = await inTx(venue, (tx) =>
-    tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
-  );
-  return row!;
-}
-
 function billsOf(partyId: string) {
   return inTx(venue, (tx) =>
     tx
@@ -243,40 +199,9 @@ function billsOf(partyId: string) {
   );
 }
 
-/** Everything a split would write: the corrective and its record, and the copied bill and dishes. */
-function written() {
-  return venue.db.all(sql`
-    select
-      (select count(*) from sales) as sales,
-      (select count(*) from ${invoiceRecords}) as records,
-      (select count(*) from working_orders) as bills,
-      (select count(*) from working_order_lines) as lines,
-      (select count(*) from order_amendments) as amendments,
-      (select group_concat(id || ':' || (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id), ',') from invoice_series) as series
-  `)[0];
-}
-
-async function expectRefused(
-  billId: string,
-  answer: () => Promise<Answer>,
-  refusal: { status: number; code: string },
-): Promise<Answer> {
-  const before = written();
-  const answered = await answer();
-  expect({ status: answered.status, code: answered.json.code }).toEqual(refusal);
-  expect(written()).toEqual(before);
-  expect(await statusOf(venue, billId)).toBe("placed");
-  return answered;
-}
-
 /** Served dishes, printed: the bill holds its ticket and nothing is left to serve. */
-async function printed(...lines: (string | Line)[]): Promise<Party> {
-  const party = await seat(...lines);
-  expect((await serve(party, party.tabId)).status).toBe(200);
-  const answer = await printBill(party, party.tabId);
-  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-  return party;
-}
+const printed = async (...lines: (string | Line)[]): Promise<Party> =>
+  fixture.printed(venue, await seat(...lines));
 
 describe("POST /api/working-orders/:id/split-after-print", () => {
   it("prints, splits, and each guest gets a ticket", async () => {
@@ -379,12 +304,16 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect((await split(party.tabId)).status).toBe(200);
   });
 
-  it("needs sale.rectify, and names unserved dishes first", async () => {
+  it("needs no sale.rectify, and names unserved dishes first", async () => {
     const party = await printed("Tarta");
-    await expectRefused(party.tabId, () => split(party.tabId, venue.cookie), {
-      status: 403,
-      code: "authorization.not_permitted",
-    });
+    const original = await invoiceOf(party.tabId);
+    const answer = await split(party.tabId, venue.cookie);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const credits = await creditsOf(original.id);
+    expect(credits.map((credit) => [credit.total, credit.authorizedBy])).toEqual([
+      [-original.total, venue.operatorId],
+    ]);
+    expect(await statusOf(venue, party.tabId)).toBe("abandoned");
 
     const unserved = await seat("Tarta");
     expect((await printBill(unserved, unserved.tabId, true)).status).toBe(200);
@@ -394,7 +323,38 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     });
   });
 
-  it("refuses a part-paid bill before its unserved dishes", async () => {
+  it("the new bill names the printed one", async () => {
+    const party = await printed("Tarta");
+    const answer = await split(party.tabId, venue.cookie);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const [reopened] = await inTx(venue, (tx) =>
+      tx
+        .select({ status: workingOrders.status, reopenedFrom: workingOrders.reopenedFrom })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, answer.json.billId as string)),
+    );
+    expect(reopened).toEqual({ status: "open", reopenedFrom: party.tabId });
+  });
+
+  it("Cancel and credit still needs sale.rectify", async () => {
+    const party = await printed("Tarta");
+    const before = written();
+    const cancel = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/cancel`,
+      { reason: "Wrong" },
+    );
+    expect({ status: cancel.status, code: cancel.json.code }).toEqual({
+      status: 403,
+      code: "authorization.not_permitted",
+    });
+    expect(written()).toEqual(before);
+    expect(await statusOf(venue, party.tabId)).toBe("placed");
+  });
+
+  it("a part-paid bill names its unserved dishes, its money moving nowhere", async () => {
     const party = await seat("Tarta");
     expect((await printBill(party, party.tabId, true)).status).toBe(200);
     await inTx(venue, (tx) =>
@@ -414,13 +374,23 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
       }),
     );
 
-    await expectRefused(party.tabId, () => split(party.tabId), {
+    const refused = await expectRefused(party.tabId, () => split(party.tabId), {
       status: 409,
-      code: "bill.payments_received",
+      code: "bill.unserved_dishes",
     });
+
+    expect(refused.json.params).toMatchObject({ workingOrderId: party.tabId });
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ id: billPayments.id })
+          .from(billPayments)
+          .where(eq(billPayments.workingOrderId, party.tabId)),
+      ),
+    ).toHaveLength(1);
   });
 
-  it("refuses a bill holding an advance, whose ticket takes the advance off", async () => {
+  it("refuses a bill that has had an advance, whose ticket takes the advance off", async () => {
     const party = await seat("Red wine bottle", "Tarta");
     const paid = await send(
       venue.app,
@@ -465,7 +435,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
 
     await expectRefused(party.tabId, () => split(party.tabId), {
       status: 409,
-      code: "bill.payments_received",
+      code: "bill.has_advance",
     });
 
     expect(await salesOf()).toEqual(issued);
@@ -473,7 +443,83 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect(await advancesOf()).toEqual([advance]);
   });
 
-  it("refuses a full invoice naming a customer before its unserved dishes or the permission", async () => {
+  it("refuses a bill that has had an advance, even one given back in full", async () => {
+    const party = await seat("Red wine bottle", "Tarta");
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "30.00",
+        method: "cash",
+        tendered: "30.00",
+        applied: "30.00",
+        tip: "0.00",
+        ownReceipt: true,
+      },
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const [advance] = await inTx(venue, (tx) =>
+      tx.select().from(billAdvances).where(eq(billAdvances.workingOrderId, party.tabId)),
+    );
+    const override = { personId: venue.adminId, pin: "1234" };
+    const shown = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${advance!.advanceSaleId}/corrections/preview`,
+      { gross: "30.00" },
+    );
+    expect(shown.status, JSON.stringify(shown.json)).toBe(200);
+    const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
+    const opened = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/transactions/${advance!.advanceSaleId}/corrections`,
+      {
+        submissionId: randomUUID(),
+        gross: "30.00",
+        reasonId: reason!.id,
+        note: "Given back",
+        expectedSplit: shown.json.vatBreakdown,
+        override,
+      },
+    );
+    expect(opened.status, JSON.stringify(opened.json)).toBe(200);
+    const correctionId = (opened.json.correction as { id: string }).id;
+    const givenBack = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/cash`,
+      { submissionId: randomUUID(), amount: "30.00", override },
+    );
+    expect(givenBack.status, JSON.stringify(givenBack.json)).toBe(200);
+    expect((await creditsOf(advance!.advanceSaleId)).map((credit) => credit.total)).toEqual([
+      -3000,
+    ]);
+    expect((await serve(party, party.tabId)).status).toBe(200);
+    const ticket = await printBill(party, party.tabId);
+    expect(ticket.status, JSON.stringify(ticket.json)).toBe(200);
+    const invoice = await invoiceOf(party.tabId);
+    expect(invoice.total).toBe(4800);
+
+    await expectRefused(party.tabId, () => split(party.tabId), {
+      status: 409,
+      code: "bill.has_advance",
+    });
+
+    expect(await creditsOf(invoice.id)).toEqual([]);
+    expect((await creditsOf(advance!.advanceSaleId)).map((credit) => credit.total)).toEqual([
+      -3000,
+    ]);
+  });
+
+  it("refuses a full invoice naming a customer before its unserved dishes", async () => {
     venue.db.run(sql`update taxpayer set taxpayer_domicile = 'Calle Fiscal 8, Madrid'`);
     onTestFinished(() => {
       venue.db.run(sql`update taxpayer set taxpayer_domicile = null`);
@@ -565,7 +611,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     });
   });
 
-  it("refuses an operator without sale.rectify before looking for a corrective series", async () => {
+  it("refuses on a box with no corrective series, copying nothing", async () => {
     const party = await printed("Tarta");
     const [live] = await inTx(venue, (tx) =>
       tx
@@ -584,9 +630,10 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     );
     try {
       await expectRefused(party.tabId, () => split(party.tabId, venue.cookie), {
-        status: 403,
-        code: "authorization.not_permitted",
+        status: 409,
+        code: "series.no_corrective_for_node",
       });
+      expect((await billsOf(party.partyId)).map((bill) => bill.status)).toEqual(["placed"]);
     } finally {
       await inTx(venue, (tx) =>
         insertNodeSeriesTx(tx, venue.cfg.nodeId, [

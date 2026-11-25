@@ -147,8 +147,6 @@ export function mountTillDrawerAndCancelRoutes(
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       await gateZones(deps, session, [{ orderId: id }]);
-      const body = await readJsonBody<{ override?: unknown }>(c);
-      const override = parseOverrideField(body.override);
       return c.json(
         await splitAfterPrint(
           {
@@ -161,8 +159,7 @@ export function mountTillDrawerAndCancelRoutes(
           },
           cfg,
           id,
-          { personId, sessionId, attempts: overridePinAttempts(pinThrottle, session.deviceId) },
-          override,
+          { personId, sessionId },
         ),
       );
     }),

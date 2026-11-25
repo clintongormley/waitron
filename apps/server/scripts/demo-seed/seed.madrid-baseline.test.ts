@@ -1607,6 +1607,26 @@ for (const locale of ["en", "es"] as const) {
           match: "NONE",
         })),
       ].sort((a, b) => a.id - b.id);
+      orders.columns.push({
+        name: "reopened_from",
+        type: "TEXT",
+        notnull: 0,
+        dflt_value: null,
+        pk: 0,
+      });
+      orders.foreignKeys = [
+        ...orders.foreignKeys.map((key) => ({ ...key, id: key.id + (key.id >= 2 ? 1 : 0) })),
+        {
+          id: 2,
+          seq: 0,
+          table: "working_orders",
+          from: "reopened_from",
+          to: "id",
+          on_update: "NO ACTION",
+          on_delete: "RESTRICT",
+          match: "NONE",
+        },
+      ].sort((a, b) => a.id - b.id);
       const orderLines = expected[phase].tables.working_order_lines!;
       orderLines.columns.splice(
         orderLines.columns.findIndex((column) => column.name === "unit_precision") + 1,

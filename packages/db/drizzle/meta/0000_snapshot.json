@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "7d4cbac9-ada1-4ff3-8e47-68ab7ce64580",
+  "id": "56b22dd3-eb22-4748-801e-40006036ea1f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -1413,6 +1413,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": true
+        },
+        "reopened_from": {
+          "name": "reopened_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
       "indexes": {
@@ -1474,6 +1481,14 @@
             "items_paid_from"
           ],
           "isUnique": false
+        },
+        "working_orders_reopened_from_key": {
+          "name": "working_orders_reopened_from_key",
+          "columns": [
+            "reopened_from"
+          ],
+          "isUnique": true,
+          "where": "\"working_orders\".\"reopened_from\" is not null"
         }
       },
       "foreignKeys": {
@@ -1548,6 +1563,19 @@
           "tableTo": "working_orders",
           "columnsFrom": [
             "items_paid_from"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "working_orders_reopened_from_fk": {
+          "name": "working_orders_reopened_from_fk",
+          "tableFrom": "working_orders",
+          "tableTo": "working_orders",
+          "columnsFrom": [
+            "reopened_from"
           ],
           "columnsTo": [
             "id"

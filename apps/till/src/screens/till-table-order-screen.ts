@@ -3377,8 +3377,6 @@ export class TillTableOrderScreen extends LitElement {
       }`;
   }
 
-  /** The server reads lines only of an open bill (`tab.not_open`), so a presented or paid bill's
-   * total comes from the bills read. */
   #savedTotal(): string {
     const shown = this.#shownBill;
     return shown === undefined || shown.status === "open" ? this.#payStore!.total : shown.total;
@@ -7048,11 +7046,8 @@ export class TillTableOrderScreen extends LitElement {
     printBill: TemplateResult | typeof nothing,
   ): (TemplateResult | typeof nothing)[] {
     const target = { workingOrderId: bill.workingOrderId };
-    const credits =
-      bill.status === "placed" &&
-      bill.receiptAvailable &&
-      !bill.hasPayments &&
-      !namesCustomer(bill);
+    const reopens = bill.status === "placed" && bill.receiptAvailable && !namesCustomer(bill);
+    const credits = reopens && !bill.hasPayments;
     return [
       this.fullInvoices &&
       owing(bill) &&
@@ -7089,7 +7084,7 @@ export class TillTableOrderScreen extends LitElement {
             ${t("cancel_credit.action")}
           </wt-button>`
         : nothing,
-      credits && bill.leftUnpaid !== true
+      reopens && bill.leftUnpaid !== true
         ? html`<wt-button
             icon="menu-split"
             data-split-after-print

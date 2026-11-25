@@ -953,29 +953,742 @@ now needs its set menu chosen too (PR2-D12's words).
 
 ## PR 4 — Printed bills (`feat/a1515-1-printed-bills`)
 
-- **No PIN** (owner "1 A"): `splitAfterPrint` (`apps/server/src/split-after-print.ts:50-80`) stops
-  asking `sale.rectify` and runs outside `withRectifyPinAhead`. `recordCorrection` checks
-  `sale.rectify` itself (`packages/core/src/record-correction.ts:166-182`), so a correction made
-  without it needs a new kind of authorisation there: a change to the fiscal core. Its exact form is
-  written on the PR 4 page and cleared by the watcher before building. The till's approver step for
-  Reopen to split goes (`till-app.ts:21876-21970`, mode `"split"` only; Cancel and credit keeps its
-  PIN).
-- **A part-paid printed bill** (owner "2 B"): `refusePlacedOrderMoney`
-  (`working-order.ts:8008-8014`) stops refusing received money on this path, and the money counts
-  towards the table's remaining bill. Two ways to carry it are weighed on the PR 4 page, with every
-  reader of `bill_payments.working_order_id` and `payments.working_order_id` traced: (a) move the
-  received payments to the new open bill, through a new column `bill_payments.carried_from` and a
-  change to the `bill_payments_guard_update` trigger (`core.sql:45-82`) allowing `working_order_id`
-  to change only from an `abandoned` bill; (b) reopen the same bill rather than copying its dishes
-  to a new one, so the payments never move. A pending payment still refuses
-  (`order.payment_in_flight`).
-- **A printed bill holding an advance** (a part payment with its own receipt, `bill_advances`)
-  stays refused: its ticket already counts that money and the advance row is append-only. This
-  narrows the owner's "2 B", so it goes to the owner through the watcher with the PR 4 page; PR 1's
-  D4 is the same rule for open bills.
-- **Pay for items on a printed bill** runs Reopen to split, then PR 1's pay for items from the
-  reopened bill, in one transaction; the till's Items on a printed bill moves from the old items
-  payment (kept by PR 2, PR2-D13) to the new route.
+_2026-11-25: the owner renamed Reopen to split to **Reopen bill** / **Reabrir cuenta**; the old name below is as written then._
+
+Branch `feat/a1515-1-printed-bills`, on top of PR 2 (#4280) until that lands, then rebased onto
+`main`. Every line count and `file:line` below was read on PR 2's tip (`78ec159ea0`). Tasks 1–6
+change the server and the packages under it (Task 4 in two parts, 4a and 4b); Tasks 6–8 change the
+till; Task 9 is the guides.
+
+**What a person can do when it lands:**
+- **Reopen to split** on a printed bill asks nobody for a PIN.
+- It also works when part of the printed bill is already paid. The receipt is credited in full as
+  today, the dishes go onto a new open bill, and the money already paid moves with them and counts
+  towards that bill. If the guests then pay for items on their own bills and the table's bill is
+  left paid more than it comes to, the till offers **Give back** and **Keep as tip**, as PR 2 built.
+- **Pay > Items** on a printed bill does the same in one go: it reopens the bill, moves the chosen
+  dishes to a bill of their own and takes the payment there, with its own receipt. A declined card
+  puts the dishes back on the reopened bill, which can be printed again or paid as any open bill.
+- After a Pay for items payment the till no longer reads the table's bill again on its own: the
+  server's answer carries it.
+
+**What stays as it is in PR 4:**
+- **Cancel and credit** keeps its approver's PIN (`cancelPlacedOrder`,
+  `apps/server/src/working-order-counter.ts:168-197`, `withRectifyPinAhead` at `:202-220`), and
+  still refuses a bill holding money (`refusePlacedOrderMoney`, `:242-248`).
+- The other refusals of Reopen to split: a counter order (`bill.not_at_table`), a bill whose guests
+  left unpaid, a bill with no ticket, a full invoice naming a customer, and dishes printed with
+  Print anyway and not yet served, which already offers **Mark served**
+  (`apps/server/src/split-after-print.ts:83-109`).
+- A printed bill holding an advance (a part payment that has its own receipt) stays refused (owner,
+  "ok", 2026-11-24 10:4x); PR 1's D4 is the same rule for open bills.
+- The old items payment (`kind: "items"`) and its server route: PR 3 removes them. After PR 4 the
+  till sends it nowhere.
+- No new route. The two Pay for items routes and the Reopen to split route keep their paths and
+  permissions, so `till-api.profile-zones.test.ts` and `till-api.session-person.test.ts` need no new
+  rows. The Pay for items routes gain one profile check on a printed bill (PR4-D7, *Who may*), so
+  `till-api.profile-actions.test.ts` gains its refusing cases (Task 5).
+
+**File-size room** (caps in `scripts/product-file-size-limits.json`, counts on `78ec159ea0`):
+`apps/server/src/bill-payments.ts` 2,988 of 3,000 and `apps/till/src/api/client.ts` 5,745 of 5,750
+take no net growth; `apps/till/src/till-app.ts` is 26,169 of 26,250, so Tasks 6–8 together add at
+most ~60 lines there and put the rest in `apps/till/src/state/`; `packages/payments/src/store.ts`
+1,113 of 1,250 takes none (the new writer gets its own file). Every other product file 1,000. No cap
+is raised.
+
+**Decisions:**
+
+- **PR4-D1. A credit made by Reopen to split needs no `sale.rectify` — the exact form, for the
+  watcher to clear before Task 2 starts.**
+  - *What the check is today.* `recordCorrection` (`packages/core/src/record-correction.ts:166-182`)
+    accepts three kinds of authority, and every one needs a person holding `sale.rectify`: a till
+    session (`authorize`, `packages/identity/src/authorize.ts:41-58`: the signed-in person holds it,
+    or an approver's PIN does), a dashboard session (`authorizeManager`, permission `sale.rectify`),
+    or an open invoice correction whose recorded approver holds it (`authorizeCorrectionApproval`,
+    `packages/core/src/correction-approval.ts:38`). The one it accepts is written on the credit note
+    as `sales.authorized_by` (`record-correction.ts:312`), fixed at insert because `sales` is
+    append-only. So no way of filing the credit without a holder of `sale.rectify` leaves
+    `recordCorrection` unchanged; I looked for one and found none.
+  - *The form (recommended).* A fourth kind, `{ reopenedBillId: string; sessionId: string }`,
+    tested for first (`"reopenedBillId" in`). The order matters against the last branch, not the
+    `managementSessionId` one: the last branch takes anything the two tests before it did not
+    (`record-correction.ts:166-182`) and sends it to `authorize` with `permission: "sale.rectify"`
+    (`:177-181`). So this kind, carrying `sessionId`, would land there if tested later, and be
+    refused for want of `sale.rectify`. A wrong order refuses; it never lets a credit through.
+    `recordCorrection` accepts it only when all of these hold, else refuses a new core code
+    `sale.correction_reopen_invalid` `{ saleId, reopenedBillId, reason }`, before a number is
+    allocated:
+    1. `wholeInvoice` is true (`reason: "not_whole"`): it can never free a partial correction.
+    2. The working order `reopenedBillId` exists, is `open`, and its new column `reopened_from`
+       (Task 1) names the bill whose ticket is being credited, read as `sales.working_order_id`
+       of `input.correctsSaleId` (`reason: "no_reopened_bill"`). Task 1's trigger adds what the
+       check cannot see itself: that link was set once, while the credited bill was still `placed`,
+       on a bill that was open, and has not changed since. That is all it shows. It does not show
+       which dishes the open bill holds; Reopen to split puts the copies there in the same
+       transaction. Cancel and credit opens no such bill, so it cannot use the kind, whatever its
+       caller passes.
+    3. The till session is open (`session.not_open`, as `authorize` refuses it). Its person is
+       recorded as `authorized_by`. Identity gains `signedInPerson(tx, sessionId)`, the session read
+       `authorize` already does at `:46-51`, and `authorize` calls it.
+    For check 2 and the trigger to hold, `splitAfterPrint` opens the new bill, sets its
+    `reopened_from` while the printed bill is still `placed`, and copies the dishes onto it, all
+    before it credits the ticket and then abandons the printed bill, in its one transaction (today
+    it credits, abandons and only then opens the new bill, `split-after-print.ts:65-67`).
+    `createOpenOrder` takes no such option (`apps/server/src/working-order-open.ts:113-133`), so
+    the link is set by an update right after it.
+  - *A smaller form, if the watcher prefers it.* The same kind without check 2: core checks only
+    `wholeInvoice` and the session. It is a few lines shorter and keeps core from reading
+    `working_orders`, but then nothing in the database stops any other caller from passing the kind
+    and filing a whole credit with no permission.
+  - *Risks of the recommended form.* (i) Any code that links an open bill to a printed one and
+    then credits the printed bill's ticket frees the credit from the PIN. Task 1's trigger narrows
+    this: the link can be made only once, from none, on an open bill, to a bill that is `placed` at
+    that moment, and never changed or cleared after. It does not stop new code from making such a
+    link to a printed bill and crediting it. Only `split-after-print.ts` writes the column; a
+    reviewer must check every new writer, and no guard does. (ii) Core starts reading
+    `working_orders` (a table in `@waitron/db`, which core already writes through
+    `sales.working_order_id`). (iii) Once the dishes are on the open bill, taking one off follows an
+    open bill's rules, not `sale.rectify`. `copyBillDishes` copies each row whole (`...row`,
+    `split-after-print.ts:166`), so a copy keeps its original's `served_quantity`. The cancel
+    context counts a dish whose served quantity is above zero as started
+    (`apps/server/src/line-cancel-context.ts:117`), and the cancel route then sends removing a
+    started dish's charge through the adjustment's approver check (`approverToCheck`,
+    `apps/server/src/line-cancel-api.ts:251-278`; `adjustments-api.ts:119-133` asks for the
+    approver only where the adjustment's plan needs approval), as for any served dish on an open
+    bill. I read this; I did not run it.
+    (iv) The golden huella and `inmutabilidad` are untouched: the kind changes who is recorded as
+    authorising, never what is filed.
+- **PR4-D2. The money moves to the reopened bill (way a); reopening the same bill (way b) cannot
+  work.** `sales` allows one sale per working order: `unique("sales_working_order_id_key")`
+  (`packages/db/src/schema/sales.ts:168`, shipped as `CREATE UNIQUE INDEX` in
+  `packages/db/drizzle/0000_baseline.sql:1534`), which the comment at `:126-128` calls the
+  sale-idempotency key. The printed bill already owns its ticket's sale, so a reopened printed bill
+  could never file the ticket for what is left on it. The credited ticket must also still reprint
+  its dishes, which is why Reopen to split copies them (`copyBillDishes`,
+  `split-after-print.ts:140-143`: "Kitchen state, print links and sale links stay with the
+  originals"). Way (a) keeps both: the printed bill, its ticket and its credit note stay exactly as
+  Reopen to split leaves them today, and only the money moves.
+- **PR4-D3. What moves, and the link that allows it.** In the split's transaction, after the
+  printed bill is `abandoned` and the reopened bill is open, every `received` payment of the printed
+  bill moves to the reopened bill: its `bill_payments` row, and the card provider row (`payments`)
+  that names it. `failed` and `declined` payments hold no money and stay, as the printed bill's
+  history. Refunds, drawer entries and slips name the payment's id, not its bill, so they follow.
+  Instead of the outline's `bill_payments.carried_from`, the new column is
+  `working_orders.reopened_from` on the reopened bill (foreign key to `working_orders.id`,
+  `restrict`, with an index, as PR 1's `items_paid_from`, `packages/db/src/schema/orders.ts:121,159-163`).
+  One column then serves three needs: the trigger checks that a payment moves only from a bill to
+  the bill reopened from it; PR4-D1's check 2; and Pay for items' replay lookup on a printed bill
+  (PR4-D7). Where a carried payment was first taken is its bill's `reopened_from`. The triggers
+  (Task 1):
+  - A new trigger on `working_orders` fixes the link itself. An insert must leave `reopened_from`
+    null. An update may change it only from null, only on a bill that is `open` before and after
+    the update, and only to a bill that is `placed` at that moment; once set it never changes or
+    clears. This is needed because `working_orders_enforce_transition` lets an `open` bill change
+    any column (`old.status = 'open'`, `packages/db/triggers/core.sql:715`). Since the trigger
+    refuses any change to a bill that is not open, the transition trigger's branches need not list
+    the column.
+  - `bill_payments_guard_update` (`packages/db/triggers/core.sql:45-91`) also allows
+    `working_order_id` to change when the old bill is `abandoned`, the new bill is `open` with
+    `reopened_from` equal to the old bill, the payment is `received` and not `items` (PR4-D12), no
+    tender names it, it paid no advance (`bill_advances`), and no refund of it is pending. Every
+    other column stays as it was.
+  - `payments_guard_update` (`packages/payments/triggers/payments.sql:9`, which today fixes
+    `working_order_id`) allows it to change to the bill its `bill_payment_id` now names, when the
+    old bill is `abandoned`. In the same update `sale_id` may go back to null (PR4-D4), only from
+    the sale of the old bill (`sales.working_order_id`); today it is fixed once set (`:20`). The
+    `bill_payments` row is moved first, so the subquery sees it.
+- **PR4-D4. Both rows move, and a card already linked to the printed ticket is unlinked.** Two
+  things I read, not ran, make moving only `bill_payments` wrong:
+  1. Printing a part-paid bill links its card payments to the printed ticket's sale
+     (`issueUnpaidInvoice` → `linkBillCardPaymentsToSale`, `apps/server/src/working-order-invoice.ts:366`).
+     When the reopened bill later files its ticket, `linkCardBillPayments`
+     (`apps/server/src/bill-payments.ts:841-864`) calls `associatePaymentWithSale`, which refuses
+     `payment.already_associated` for a row whose `sale_id` is set
+     (`packages/payments/src/store.ts:309-336`). The reopened bill could never be paid off.
+  2. A card paid after printing keeps `sale_id` null until the bill settles. Left on the abandoned
+     bill, the reconcile sweep counts a captured card with no sale on a bill that is neither open
+     nor placed as an orphan (`packages/payments/src/reconcile.ts:221-227`), and one on an
+     `abandoned` bill goes on to be claimed for reversal at the provider (`:411`, then
+     `markReconcileRemediated`, `store.ts:1087-1097`, which, unlike `claimAbandonedCapture`
+     (`:1050`), does not leave out bill payments). That would hand the guest's money back while it
+     still counts on the table's bill.
+  Clearing `sale_id` at the move, rather than repointing it when the new ticket is filed, leaves
+  each moved provider row in exactly the state of a card part payment on an open bill today
+  (bill = the open bill, `sale_id` null, `bill_payment_id` set), so filing (`linkCardBillPayments`)
+  and every reader that already handles that state handle it unchanged. Task 4b's tests check both
+  points by running them, with a control: the reconcile listing (`listReconcilable`,
+  `store.ts:747-773`) shows the moved card on an `open` bill, and the same test with the provider
+  row left behind shows it on an `abandoned` one.
+- **PR4-D5. What a part-paid printed bill still refuses.** `refusePlacedOrderMoney` keeps its
+  callers but Reopen to split stops calling it; a new `refuseSplitMoney` (in a new file,
+  `apps/server/src/split-after-print-money.ts`) refuses, in this order and after the bill's own
+  refusals (as today, `split-after-print.ts:61-63`):
+  - a pending card payment, or a card charged but not yet recorded: `order.payment_in_flight`, as
+    today (`refusePendingPartPayment` and `ordersWithUnfiledPayment`);
+  - a card refund still pending: `bill.refund_in_progress` (`refuseRefundInProgress`,
+    `apps/server/src/working-order-edit-state.ts:207-222`): until it ends, the money the bill holds
+    is unknown;
+  - an advance: new code **`bill.has_advance`** (409, `{ workingOrderId }`). English: "Part of this
+    bill was paid with its own receipt, so it cannot be reopened to split. Take the rest of the
+    payment on this bill by amount or in equal shares." Spanish: "Parte de esta cuenta se pagó con
+    su propio ticket, así que no se puede reabrir para dividirla. Cobra el resto en esta cuenta por
+    importe o a partes iguales." The advance's money is on its own ticket and the printed ticket
+    takes it off (`split-after-print.test.ts:423-474`: a 30.00 advance and an 18.00 ticket), and
+    `bill_advances` is append-only (`packages/migrations/migrations.manifest.json:19`), so the
+    advance cannot follow the money;
+  - a received items payment (`kind = 'items'`, the old way PR 2 keeps for printed bills):
+    `bill.payments_received`, as today. PR4-D12 keeps it off the move, so without this refusal the
+    move would end in the trigger's raw refusal instead of a worded answer.
+  Then the dishes' refusal and the split as today. `bill.payments_received` stays an answer of
+  Reopen to split for that one case only; PR 3, which deletes the kind, deletes the refusal.
+- **PR4-D6. Every reader of the two `working_order_id` columns, traced** (`rg` for
+  `billPayments.workingOrderId`, `bp.working_order_id`, `payments.workingOrderId` and
+  `p.working_order_id` outside tests, on `78ec159ea0`). After the move each sees the payment on the
+  reopened bill, where its money now counts:
+  - *Bill money and filing:* `readPaymentRows`/`readHeld`, `holdsPayment`, `givenBackAfterSettling`,
+    `itemsBeingPaidOn`, `findSubmission`, `linkCardBillPayments` (`bill-payments.ts:374`, `:534`,
+    `:730`, `:958`, `:1060`, `:1731-1741`, `:2452`), `bill-overpaid.ts:132`, `pay-for-items.ts:329`,
+    `set-menu-bill.ts:322` (the old items kind's pin, PR 3), `working-order-invoice.ts:160`,
+    `working-order-edit-state.ts:213-255`, `packages/db/src/order-dining.ts:45`, `till-sale.ts:140`
+    (`readTenderBlock`: a hand-keyed card's operation number on the receipt, found by sale and bill,
+    which is one more reason the provider row moves) and `till-sale.ts:386`
+    (`ordersWithUnfiledPayment`).
+  - *Refunds:* `bill-refunds.ts:139`, `:196` (a refund names the payment and its bill: the till
+    sends the reopened bill's id, as it lists that bill's payments), `tender-refund-sends.ts:200`,
+    `:336` (a completed card refund issues the payment's bill), `tender-refund-receipt.ts:46-48`
+    (the refund receipt's language, which the reopened bill copies), `bill-refund-alerts.ts:85`.
+  - *Receipts and slips:* `receipt-payments.ts:131` (an issued, unpaid ticket's reprint lists the
+    bill's payments: the credited ticket then reprints without them, and the reopened bill's ticket
+    lists them), `payment-slip-print.ts:332`.
+  - *Card recovery and reconcile:* `payments-api.ts:1531`, `:1634`, `:1711-1726`, `:1914`,
+    `:1966-1982` (pending payments and their recovery; a carried payment is received), and in
+    `packages/payments`: `store.ts:397` (`selectCapturedForWorkingOrder`), `:571`, `:631`,
+    `:766-773` (`listReconcilable`, PR4-D4), `:817`, `:853`, `:872`, `:1053-1067`
+    (`claimAbandonedCapture`, bill payments left out), `holds.ts:82`, `resolutions.ts:41`,
+    `personal-data.ts:17`, and `packages/payments-stripe/src/provider.ts:485` (attempts only).
+  - *Reports and lists:* `packages/reporting/src/cash-up.ts:98-108` (by the payment's own time and
+    device and the bill's node, which the reopened bill shares), `find-bill-bills.ts:66`, `:93`,
+    `find-bill-transactions.ts:90`, `orders-list.ts:345`, `:1118`, `outside-payments-report.ts:37-44`
+    (lists a carried hand-keyed card under the reopened bill's order number),
+    `paired-reader-audit.ts:91`.
+  - *Devices, handover and personal data:* `device-delete.ts:59-70`, `old-box-data-since.ts:283-380`,
+    `personal-data-actions.ts:78`, `packages/fiscal-verifactu/src/handover-return.ts:130`, `:145`,
+    `packages/venue-service/src/department-transfers.ts:367`, `:375` (pending only).
+  A moved payment's `received_at` comes before its bill's `opened_at`. I found no reader comparing
+  the two (`rg` for `openedAt`/`opened_at` on a line with `received` or `payment`: none); that is a
+  text search, not a proof.
+- **PR4-D7. Pay for items on a printed bill.** The two Pay for items routes accept a `placed` bill.
+  - *The payment*, in one transaction (a reader card's begin step included):
+    1. check the request's party revision and the printed bill's edit state against what the till
+       read (`guardPathParty`, `apps/server/src/bill-actions.ts:94-110`, without bumping, and
+       `requireBillEditors`, `apps/server/src/bill-editing.ts:116-127`, with the request's
+       `expectedEdits`, which name the printed bill);
+    2. reopen it (`reopenToSplitIn`, Task 3's in-transaction body of `splitAfterPrint`, money
+       included), which answers the reopened bill's id and each printed line's copy
+       (`copyBillDishes` builds that map, `split-after-print.ts:154`, and starts returning it);
+    3. translate each pick's `lineId` to its copy, then `moveItemsToNewBill` from the reopened bill
+       (`apps/server/src/pay-for-items.ts:229-276`) with the party's revision as the reopen left it
+       and the reopened bill's edit state, both read by the server, as D9 does for the new bill;
+    4. take the payment on the items' bill, as today.
+    A refusal anywhere rolls the whole of it back, so the printed bill stays printed and nothing is
+    credited.
+  - *The same request twice.* `earlierItemsBill` (`pay-for-items.ts:321-334`) also looks among the
+    bills paid for from a bill whose `reopened_from` is the printed bill, so a resend to the printed
+    bill's id answers the first payment and reopens nothing.
+  - *The preview* (`previewPayForItems`, `pay-for-items.ts:463-524`, which today refuses a placed
+    bill through `refuseClosedBill`) prices the printed bill's own lines, which the copies repeat,
+    and first runs Reopen to split's refusals that write nothing (`refuseReopen`: the bill's, the
+    money's and the dishes'), so staff learn of a refusal before any money is taken.
+  - *Who may (for the watcher to confirm).* What Pay for items needs (`payment.take` and its
+    profile checks, D9), and, on a printed bill only, the device profile's `take-orders` action,
+    which Reopen to split's route requires (`requireSession(deps, c, { action: "take-orders" })`,
+    `apps/server/src/till-api.ts:2849-2851`). The printed-bill path of both routes checks it first,
+    before the reopen or `refuseReopen`, with `assertProfileAction(device, "take-orders")`
+    (`apps/server/src/device-session.ts:328-336`), so it is refused as the split route refuses it:
+    `device.forbidden_action` `{ action: "take-orders" }`. Today the payment route requires
+    `payment.take` and the preview route only a session
+    (`apps/server/src/bill-payments-api.ts:483-497`); Pay for items on an open bill, and paying a
+    printed bill by amount (`till-api.profile-actions.test.ts:1134`), keep needing no `take-orders`.
+  - *Every dish chosen.* The till pays the whole printed bill as today (PR2-D3), so no reopen
+    happens; the server's `bill.all_items_chosen` stays the backstop.
+  - *The answer* names the items' bill (`billId`) and carries the table's bill as the payment left
+    it (PR4-D10), here the reopened bill, which is how the till learns its id.
+- **PR4-D8. A card declined after the reopen.** The reopen cannot be undone: the credit note is
+  filed. The put-back (D2) moves the items to the reopened bill, which is open, so the table is
+  left with one open bill holding every dish at the printed ticket's total, with the money already
+  paid on it, to be printed again or paid as any open bill. The till moves to it (Task 8).
+- **PR4-D9. Give back on a reopened bill.** A carried payment is a payment of the reopened bill like
+  any other, so PR 2's rule applies unchanged (`refundPermission`,
+  `apps/server/src/bill-overpaid.ts:42-55`): giving back no more than what the bill is paid over
+  its total needs `payment.take`, no approver's PIN; more needs `sale.refund`. The excess exists
+  only because Pay for items took dishes off a bill that money had already paid for, so it is the
+  same money paid twice, the case the owner freed from the PIN.
+- **PR4-D10. The Pay for items answer carries the table's bill** (from #4280's "Discussed and not
+  done": "would save one of four reads after each such payment"). `payForItems` answers
+  `{ billId, payment, sourceBalance }`: `sourceBalance` is the bill the items came from (the
+  reopened bill on a printed one), read after the payment, after the put-back for a reader card that
+  charged nothing, and on a replay. On a replay it is read from the items bill's `items_paid_from`,
+  never from the request's bill id: on a printed bill that id names the abandoned printed bill,
+  while the items came from the reopened one (`earlierItemsBill` answers the items bill,
+  `pay-for-items.ts:322-336`). Today, in `#onBillPaid` (`apps/till/src/till-app.ts:23663-23756`),
+  a Pay for items answer leaves `own` undefined (`:23673`), so every branch that opens no receipt
+  window (a card not charged, a card still pending, any Pay for items at the Counter) calls
+  `#rereadAfterPaid(open)` (`:23760-23765`), whose `#rereadBillPaying` reads `getBillBalance`
+  before reading the order (`:23079-23096`). With `sourceBalance` the till skips that read and
+  shows the answer's balance. The receipt window's close (`#onBackToTable`, `:24376-24397`) keeps
+  its own reads: the window can stay open for minutes, and `#loadBillBalance` already skips the
+  balance read for a bill holding no payment (`:15300`).
+- **PR4-D11. The till's Reopen to split.** It is offered on a printed bill with payments too (today
+  only on one with none, `apps/till/src/screens/till-table-order-screen.ts:7086-7090`); Cancel and
+  credit keeps `!bill.hasPayments`. The split is sent with no override, and a refusal never opens
+  the approver's PIN prompt for it (`#onCancelCreditRefused`, `till-app.ts:21853`, for mode
+  `"cancel"` only); `splitAfterPrint` in the till's client drops its `override` argument
+  (`apps/till/src/api/client.ts:4297`). On a bill with money paid, the dialog's scope line adds
+  "{paid} already paid counts towards the new bill." / "Lo ya pagado ({paid}) cuenta para la cuenta
+  nueva." (`split.scope_paid`), the amount read as the bill row's `total` less `outstanding`. The
+  dialog shows `bill.has_advance`'s words (an unmapped code falls back to `codeMessage`,
+  `apps/till/src/widgets/cancel-credit-dialog.ts:189-195`). `split.refused_payments`
+  (`apps/till/src/i18n/strings.ts:2150`, Spanish `:4486`) and its map entry (`:61`) stay, for the
+  one case PR4-D5 still refuses that way, and its words change to: "Part of this bill was paid for
+  by item, so it cannot be reopened to split. Take the rest of the payment on this bill by amount
+  or in equal shares." / "Parte de esta cuenta se pagó por artículos, así que no se puede reabrir
+  para dividirla. Cobra el resto en esta cuenta por importe o a partes iguales." PR 3 deletes them
+  with the kind.
+- **PR4-D12. An items payment is never carried.** The `bill_payments` trigger's exception leaves out
+  `kind = 'items'`, as the tip exception does (`core.sql:61`). After PR 4 the till sends that kind
+  nowhere, but a printed bill may already hold one, taken before PR 4 through the route PR 2 kept;
+  `refuseSplitMoney` refuses such a bill first (PR4-D5, tested in Task 4a). PR 3 deletes the kind,
+  the clause and that refusal.
+- **PR4-D13. The kitchen hears nothing new.** Reopen to split tells no station today (it refuses
+  unserved dishes first), and Pay for items' move sends no MOVED slip (D8).
+
+**Changed test checks** (behaviour PR 4 changes on purpose; each named in the PR description):
+in `apps/server/src/split-after-print.test.ts`, "needs sale.rectify, and names unserved dishes
+first" (`:382`) becomes "needs no sale.rectify…" (a session without it splits); "refuses a
+part-paid bill before its unserved dishes" (`:397`) is replaced by Task 4a's tests (a part-paid bill
+splits); "refuses a bill holding an advance…" (`:423`) expects `bill.has_advance`, its other checks
+unchanged; "refuses an operator without sale.rectify before looking for a corrective series"
+(`:568`) becomes "refuses on a box with no corrective series, copying nothing", expecting
+`series.no_corrective_for_node` (409, `apps/server/src/till-api.ts:530`). That is the refusal
+`creditWholeInvoice` raises when it reads the live series (`readLiveSeriesIdTx`,
+`apps/server/src/cancel-credit.ts:55`, throwing `NO_LIVE_SERIES["corrective"]`,
+`packages/db/src/reserved-identity.ts:71`, `:102`), before `recordCorrection` and its
+`requireCorrectiveSeries` run. In `apps/till/src/till-app-parties-closing.test.ts`,
+"without the permission, asks for an approver's PIN and sends it with the split" (`:786`) is
+deleted. In `apps/till/src/till-app-pay-for-items.test.ts`, "a printed bill's items still go to
+today's route" (PR 2's Task 2a) is rewritten for the new route. The implementer greps
+`splitAfterPrint(` across `apps/till/src/**/*.test.ts` and lists any other check it changes; every
+Cancel and credit check passes unedited.
+
+### Task 1 (PR 4): Storage for the reopened bill's link, and the triggers that let money move to it
+
+**Files:**
+- Modify: `packages/db/src/schema/orders.ts` (`reopenedFrom` on `workingOrders`, its foreign key
+  and index, beside `itemsPaidFrom` at `:121`, `:159-163`)
+- Modify: `packages/db/triggers/core.sql`: `bill_payments_guard_update` (PR4-D3), and new triggers
+  `working_orders_reopened_from_insert` and `working_orders_reopened_from_update` (PR4-D3's first
+  bullet). `working_orders_enforce_transition` is not changed: the new update trigger refuses any
+  change of the column on a bill that is not open, before and after.
+- Modify: `packages/db/src/trigger-refusals.ts` (`REOPENED_FROM_REFUSAL`, the new triggers' words,
+  as each behavioural trigger's are, asserted by `scripts/behavioural-triggers.test.ts`, per the
+  file's header at `:9-11`)
+- Modify: `packages/payments/triggers/payments.sql` (`payments_guard_update`, PR4-D3)
+- Regenerated: `packages/db/drizzle/0000_baseline.sql` and its snapshot
+  (`pnpm --filter @waitron/server migration-baseline rebuild --set core`), and the payments set's
+  (`… rebuild --set payments`)
+- Modify: `scripts/schema-constraints.test.ts` (`["working_orders", ["reopened_from"], "working_orders"]`,
+  beside `:297`)
+- Test: `packages/db/src/schema/bill-payments.test.ts`, create
+  `packages/db/src/schema/orders.reopened-from.test.ts`, `packages/payments/src/schema/payments-guard.test.ts`
+
+- [ ] **Step 1: Write the failing tests.** In `bill-payments.test.ts`, each starting from a
+  `placed` bill A with a received cash payment, A then set `abandoned`, and an open bill B:
+  - `"a received payment moves from an abandoned bill to the bill reopened from it"`: B's
+    `reopened_from` is A; updating the payment's `working_order_id` to B is accepted.
+  - `"…not to a bill reopened from another"`: B's `reopened_from` is null → refused
+    (`bill payment cannot make that change`).
+  - `"…not from a bill that is still placed"`, `"…not a pending payment"`, `"…not one a tender names"`,
+    `"…not one that paid an advance"`, `"…not one with a refund pending"`, `"…not an items payment"`.
+  - `"the move changes nothing else"`: the same update also changing `applied` is refused.
+  In `orders.reopened-from.test.ts`, with a `placed` bill A and an open bill B (each refusal is
+  `REOPENED_FROM_REFUSAL` unless named):
+  - `"an open bill is linked once to a placed bill"`: setting B's `reopened_from` to A is accepted;
+    then A goes `abandoned` and B keeps the link (the order Reopen to split uses).
+  - `"…not to a bill that is not placed"`: to an open bill, to an `abandoned` one, to a `settled`
+    one, and to B itself: each refused.
+  - `"…not on a bill that is not open"`: B `placed`, or B moved to `placed` in the same update:
+    refused.
+  - `"…not changed or cleared once set"`: after the accepted link, setting it to another placed bill
+    is refused, and setting it to null is refused.
+  - `"…not at insert"`: inserting an open bill with `reopened_from` set to A is refused.
+  - `"…and only to a bill that exists"`: an unknown id is refused by the foreign key.
+  - Control, so the refusals are not the trigger refusing everything: an update of B that changes
+    another column and leaves `reopened_from` alone is accepted, linked or not.
+  In `payments-guard.test.ts`: `"a card's row follows its bill payment off an abandoned bill"`
+  (accepted); `"…not to any other bill"` (refused); `"its sale goes back to none only from the old
+  bill's own sale, in the same move"` (accepted), and `"…not from another sale"` and `"…not without
+  the move"` (refused).
+- [ ] **Step 2: Add the column only, then run.** Add `reopenedFrom`, its foreign key and index to
+  `orders.ts` and rebuild the core baseline, triggers untouched, so no test fails with
+  `no such column`. Run `pnpm --filter @waitron/db exec vitest run src/schema/bill-payments.test.ts
+  src/schema/orders.reopened-from.test.ts` and `pnpm --filter @waitron/payments exec vitest run
+  src/schema/payments-guard.test.ts`. Expected: FAIL for the trigger reason. The move cases are
+  refused (`bill payment cannot make that change`, `a payment cannot make that change`), and the
+  `reopened_from` refusals are accepted, since nothing refuses them yet. The foreign-key case and
+  the controls already pass.
+- [ ] **Step 3: Add the two new triggers, change the two guard triggers, rebuild both baselines.**
+- [ ] **Step 4: Run** the Step 2 commands, then from the root `pnpm exec vitest run
+  scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts
+  scripts/behavioural-triggers.test.ts scripts/classification-complete.test.ts
+  scripts/two-file-foreign-keys.test.ts scripts/starting-migrations.test.ts
+  scripts/append-only-migration-sets.test.ts scripts/module-graph-honesty.test.ts`,
+  `pnpm --filter @waitron/composition exec vitest run src/composition.test.ts` and
+  `pnpm --filter @waitron/fiscal-verifactu exec vitest run inmutabilidad`. Expected: all PASS; read
+  each `Tests` count.
+- [ ] **Step 5: Commit** `git commit -s -m "Link a reopened bill to the printed one, and let its payments move to it"`.
+
+### Task 2 (PR 4): A whole credit backed by a reopened bill needs no sale.rectify
+
+Starts only once the watcher has cleared PR4-D1's form; built as cleared.
+
+**Files:**
+- Modify: `packages/identity/src/authorize.ts` (`signedInPerson`, used by `authorize`)
+- Modify: `packages/core/src/record-correction.ts` (`RecordCorrectionInput.authz` gains
+  `{ reopenedBillId: string; sessionId: string }`; the checks of PR4-D1)
+- Modify: `packages/core/src/errors.ts` (`sale.correction_reopen_invalid`)
+- Test: create `packages/core/src/record-correction.reopen.test.ts` (set up as
+  `record-correction.approval.test.ts` is)
+
+- [ ] **Step 1: Write the failing tests:**
+  - `"credits a bill's ticket whole for a person without sale.rectify when its reopened bill is open"`:
+    the corrective is filed with `authorized_by` the session's person.
+  - `"refuses a partial correction"` (`reason: "not_whole"`), `"refuses when no open bill was
+    reopened from the ticket's bill"`, `"…when the reopened bill names another bill"` and `"…when it
+    is no longer open"` (each `reason: "no_reopened_bill"`), `"refuses an ended session"`
+    (`session.not_open`); none allocates an invoice number.
+  - `"the other kinds still need sale.rectify"`: the same credit with `{ sessionId }` alone refuses
+    `authorization.not_permitted`.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/core exec vitest run src/record-correction.reopen.test.ts`.
+  Expected: FAIL (the kind is not accepted).
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the Step 2 command, `pnpm --filter @waitron/core exec vitest run
+  src/record-correction.test.ts src/record-correction.approval.test.ts
+  src/record-correction.management.test.ts`, `pnpm --filter @waitron/identity exec vitest run
+  src/authorize.test.ts` (or the file that tests `authorize`), `pnpm --filter @waitron/fiscal-verifactu
+  exec vitest run src/write-path.e2e.test.ts inmutabilidad`, and from the root `pnpm exec vitest run
+  scripts/errors-reachable.test.ts`. Expected: PASS, the golden huella and `inmutabilidad` unedited.
+- [ ] **Step 5: Commit** `git commit -s -m "Let a whole credit backed by a reopened bill be filed without the right to correct a sale"`.
+
+### Task 3 (PR 4): Reopen to split needs no PIN
+
+**Files:**
+- Modify: `apps/server/src/split-after-print.ts` (open the new bill, set its `reopened_from` by an
+  update while the printed bill is still `placed`, and copy the dishes, all before the credit and
+  the abandon (PR4-D1); credit with `{ reopenedBillId, sessionId }`; no
+  `withRectifyPinAhead` and no `authorize`; `copyBillDishes` returns the line copies; export
+  `reopenToSplitIn(tx, deps, cfg, id, operator)` and `refuseReopen(tx, deps, cfg, id)` for Task 5)
+- Modify: `apps/server/src/cancel-credit.ts` (`creditWholeInvoice`'s `authz` takes the new kind)
+- Modify: `apps/server/src/till-api.ts` (the `split-after-print` route, `:2849-2873`, reads no
+  `override`; `splitAfterPrint` takes `{ personId, sessionId }`)
+- Test: `apps/server/src/split-after-print.test.ts` (the changed checks above, and new cases)
+
+- [ ] **Step 1: Write the failing tests** in `split-after-print.test.ts`:
+  - `"needs no sale.rectify, and names unserved dishes first"` (was `:382`): a session without it
+    splits; the corrective's `authorized_by` is that person.
+  - `"the new bill names the printed one"`: its `reopened_from` is the printed bill.
+  - `"Cancel and credit still needs sale.rectify"`: the same session's cancel refuses
+    `authorization.not_permitted` (Review Focus 11).
+  - `"refuses on a box with no corrective series, copying nothing"` (was `:568`):
+    `series.no_corrective_for_node` (409); no new bill.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/split-after-print.test.ts`.
+  Expected: FAIL on the first case (`authorization.not_permitted`).
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the Step 2 command plus `src/split-after-print.set-menus.test.ts
+  src/till-api.profile-actions.test.ts src/a-la-carte-price.test.ts` (it imports `copyBillDishes`,
+  `a-la-carte-price.test.ts:22`, whose answer this task changes) and the file that tests Cancel and credit's route (find it
+  with `rg -l "/cancel" apps/server/src --glob '*.test.ts'`), and from the root
+  `pnpm exec vitest run scripts/errors-reachable.test.ts`. Expected: PASS; read each `Tests` count.
+- [ ] **Step 5: Commit** `git commit -s -m "Reopen a printed bill to split it without a manager's PIN"`.
+
+### Task 4a (PR 4): A part-paid printed bill can be reopened, its cash moving with its dishes
+
+**Files:**
+- Create: `apps/server/src/split-after-print-money.ts` (`refuseSplitMoney`, PR4-D5;
+  `carryReceivedPayments(tx, fromBillId, toBillId)`, PR4-D3: the `bill_payments` rows only)
+- Modify: `apps/server/src/split-after-print.ts` (`refuseSplitMoney` in place of
+  `refusePlacedOrderMoney`; `carryReceivedPayments` after `abandonPlacedOrder`)
+- Modify: `apps/server/src/errors.ts` (`bill.has_advance`), `apps/server/src/till-api.ts` (409),
+  `apps/till/src/i18n/codes.ts` (English and Spanish, PR4-D5)
+- Test: create `apps/server/src/split-after-print.money.test.ts` (with `split-after-print.test.ts`'s
+  helpers); the changed checks above
+
+Until Task 4b, `refuseSplitMoney` also refuses `bill.payments_received` for a received payment
+that a card provider row (`payments.bill_payment_id`) names, so no card's `bill_payments` row moves
+without its provider row. Task 4b deletes that line.
+
+- [ ] **Step 1: Write the failing tests:**
+  - `"a part-paid printed bill splits, and its cash counts towards the new bill"`: a 30.00 bill,
+    10.00 cash received after printing; split; the new bill's balance shows the payment, still to
+    pay 20.00; the printed bill holds no payment; one corrective of −30.00.
+  - `"the new bill's ticket takes the carried money as its tender"` (Review Focus 9): then 20.00
+    more in cash; the new bill is `settled`, its ticket 30.00, its tenders 10.00 and 20.00 in time
+    order; the credited ticket has no tender, and it and its credit note sum to zero.
+  - `"the credited ticket reprints without the carried payments"` (`receipt-payments.ts:131`).
+  - `"a pending card still refuses"` (`order.payment_in_flight`), `"a pending refund refuses"`
+    (`bill.refund_in_progress`), `"an advance refuses"` (`bill.has_advance`), `"a received items
+    payment refuses"` (`bill.payments_received`, PR4-D5; the items payment taken through PR 2's
+    route on the printed bill); in each, nothing is credited and no bill opens.
+  - `"a failed payment stays with the printed bill"`.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/split-after-print.money.test.ts`.
+  Expected: FAIL on the first case (`bill.payments_received`).
+- [ ] **Step 3: Implement**, and change the two checks at `split-after-print.test.ts:397` and `:423`.
+- [ ] **Step 4: Run** the Step 2 command plus `src/split-after-print.test.ts
+  src/bill-payments.test.ts src/bill-overpaid.test.ts`, from the root `pnpm exec vitest run
+  scripts/errors-reachable.test.ts scripts/alert-codes.test.ts scripts/no-bare-transaction.test.ts`,
+  and `pnpm --filter @waitron/till exec vitest run src/i18n/codes.test.ts`. Expected: PASS; read
+  each `Tests` count.
+- [ ] **Step 5: Commit** `git commit -s -m "Reopen a part-paid printed bill, its cash moving to the reopened bill"`.
+
+### Task 4b (PR 4): Card payments move with their provider rows
+
+**Files:**
+- Create: `packages/payments/src/carry.ts` (`carryProviderRows(tx, { billPaymentIds, toWorkingOrderId,
+  fromSaleId })`: the provider rows follow, `sale_id` cleared where it is `fromSaleId`, PR4-D4);
+  export it from `packages/payments/src/index.ts`
+- Modify: `apps/server/src/split-after-print-money.ts` (`carryReceivedPayments` calls
+  `carryProviderRows` after moving the `bill_payments` rows; `refuseSplitMoney` drops Task 4a's
+  interim card refusal)
+- Test: create `packages/payments/src/carry.test.ts` (the package's own coverage run does not run
+  the server's tests); extend `apps/server/src/split-after-print.money.test.ts` (with the reader
+  fakes `bill-payments.card.test.ts` uses)
+
+- [ ] **Step 1: Write the failing tests:**
+  - In `carry.test.ts`: `"moves the named rows to the bill and clears only the old sale"` (a row
+    linked to `fromSaleId` ends with `sale_id` null; a row with `sale_id` null stays null; a row of
+    another bill payment is untouched).
+  - `"a card paid before printing is linked to the new ticket"` (Review Focus 10; PR4-D4 point 1):
+    a 10.00 reader card captured on the open bill, then printed (its provider row names the printed
+    ticket), split, paid off; the provider row names the new ticket and the new bill.
+  - `"a card paid after printing is not a stray to the reconcile sweep"` (Review Focus 10; point 2):
+    after the split, `listReconcilable` lists the card with `workingOrderStatus: "open"`. Control,
+    run once and recorded in the PR: with `carryProviderRows` skipped, the same test shows
+    `"abandoned"`.
+  - `"a hand-keyed card's operation number prints on the new ticket"` (`readTenderBlock`).
+  - `"a carried payment is refunded on the new bill"` (Review Focus 8): refund 5.00 of a carried
+    reader card through the reopened bill's id; it completes, and the reopened bill's balance
+    counts it.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/payments exec vitest run src/carry.test.ts` and
+  `pnpm --filter @waitron/server exec vitest run src/split-after-print.money.test.ts`.
+  Expected: FAIL (`carryProviderRows` does not exist; the card cases refuse `bill.payments_received`).
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the Step 2 commands plus `pnpm --filter @waitron/server exec vitest run
+  src/split-after-print.test.ts src/bill-payments.test.ts src/bill-refunds.card.test.ts
+  src/bill-overpaid.test.ts`, `pnpm --filter @waitron/payments exec vitest run src/reconcile.test.ts
+  src/schema/payments-guard.test.ts`, and from the root `pnpm exec vitest run
+  scripts/no-bare-transaction.test.ts`. Expected: PASS; read each `Tests` count.
+- [ ] **Step 5: Commit** `git commit -s -m "Move a part-paid printed bill's card payments with their provider rows"`.
+
+### Task 5 (PR 4): Paying for items on a printed bill
+
+Built as the watcher confirms PR4-D7's *Who may*.
+
+**Files:**
+- Modify: `apps/server/src/pay-for-items.ts` (`billFor`, `:373-395`: a `placed` source runs
+  PR4-D7's steps; `earlierItemsBill`, `:321-334`; `previewPayForItems`, `:463-524`: a `placed` bill
+  runs `refuseReopen` instead of `refuseClosedBill`; on a `placed` bill both first call
+  `assertProfileAction(device, "take-orders")`, PR4-D7 *Who may*). If the file would pass ~900
+  lines, the printed path goes in a new `apps/server/src/pay-for-items-printed.ts`.
+- Modify: `apps/server/src/bill-payments-api.ts` (both Pay for items routes, `:483-497` onwards,
+  pass `session.device` to `payForItems` and `previewPayForItems`)
+- Test: create `apps/server/src/pay-for-items.printed.test.ts` (with `pay-for-items.test.ts`'s and
+  `pay-for-items.card.test.ts`'s helpers); extend `apps/server/src/till-api.profile-actions.test.ts`
+  in its `describe("the person's permission and the profile's action are both needed")` (`:1133`).
+  These are cases, not `ROUTES` rows: that table sends each route a random bill id (`:156`), and
+  the check needs a printed bill, as the presented-bill case at `:1134` seeds one.
+
+This task may be split at the declined-reader-card case (that case and those after it in a second
+task, with its own run and commit) if the implementer nears ~100 tool calls.
+
+- [ ] **Step 1: Write the failing tests** (Review Focus 6, 7 and 9):
+  - `"cash pays for chosen items on a printed bill"`: soup 6.00 and hake 15.00, printed; pay for
+    the hake, cash 20.00; the printed ticket is credited (−21.00), the hake's bill `settled` with a
+    15.00 ticket, the reopened bill `open` with the soup at 6.00.
+  - `"on a part-paid printed bill the paid money stays with the table's bill"`: 10.00 cash received
+    after printing; pay for the hake by cash; the reopened bill holds the soup (6.00) and the
+    10.00, `overpaid: "4.00"`, no ticket yet; Keep as tip then settles it with a 6.00 ticket; the
+    credit note, the hake's ticket and the soup's ticket together come to what the guests paid
+    less the tip.
+  - `"the same request twice reopens once"`: one `submissionId` sent twice to the printed bill's
+    id; one corrective, one reopened bill, one items bill, the second answer equal to the first.
+  - `"a declined card leaves every dish on the reopened bill"`: reader card on the hake, declined;
+    the printed ticket stays credited, the reopened bill `open` with soup and hake at 21.00 and any
+    paid money, the items' bill `abandoned`, no ticket for it.
+  - `"a refusal reopens nothing"`: a stale `applied` refuses `bill.allocation_changed`; the bill
+    is still `placed`, no corrective, no new bill.
+  - `"the preview says the reopen's refusal before any money"`: a printed bill holding an advance
+    previews `bill.has_advance`; one with an unserved dish, `bill.unserved_dishes`.
+  - `"a stale party revision is refused before the reopen"` (`party.out_of_date`).
+  - `"part of a line on a printed bill"`: one of three beers; the reopened bill keeps two.
+  - In `till-api.profile-actions.test.ts`: `"refuses Pay for items on a printed bill on a till
+    without take-orders, reopening nothing"` (`forbidden("take-orders")`; the bill is still
+    `placed`, no corrective) and `"refuses its preview the same way"`. Control:
+    `"pays for items on an open bill on a till without take-orders"` (200), so the check is held
+    to printed bills.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/pay-for-items.printed.test.ts
+  src/till-api.profile-actions.test.ts`. Expected: FAIL on the first case of each
+  (`bill.presented`).
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the Step 2 command plus `src/pay-for-items.test.ts src/pay-for-items.card.test.ts
+  src/pay-for-items.move.test.ts src/split-after-print.test.ts src/split-after-print.money.test.ts
+  src/bill-payments-api.test.ts`. Expected: PASS; read each `Tests` count.
+- [ ] **Step 5: Commit** `git commit -s -m "Pay for chosen items on a printed bill by reopening it in the same step"`.
+
+### Task 6 (PR 4): The Pay for items answer carries the table's bill
+
+**Files:**
+- Modify: `apps/server/src/pay-for-items.ts` (`payForItems` answers `sourceBalance`, read with
+  `readBillBalance`, `bill-payments.ts:976`, in the payment's transaction, or with `getBillBalance`,
+  `:2983`, after a reader card's collect step; also on a replay, where the bill read is the items
+  bill's `items_paid_from`, not the request's bill id, PR4-D10)
+- Modify: `apps/till/src/api/item-payment-types.ts` (`ItemPaymentResult.sourceBalance: BillBalance`),
+  `apps/till/src/state/pay-for-items.ts` (`takePayment`, `:194-204`, passes it on as
+  `sourceBalance`), `apps/till/src/till-app.ts` (+~10: `#onBillPaid` uses it where it calls
+  `#rereadAfterPaid` for a Pay for items answer, PR4-D10; a card not charged still returns to the
+  form, not the confirmation)
+- Test: extend `apps/server/src/pay-for-items.test.ts`, `apps/server/src/pay-for-items.card.test.ts`,
+  `apps/server/src/pay-for-items.printed.test.ts`, `apps/till/src/state/pay-for-items.test.ts`, `apps/till/src/till-app-pay-for-items.test.ts`
+
+- [ ] **Step 1: Write the failing tests:**
+  - Server: `"the answer carries the table's bill as the payment left it"` (cash: the soup's 6.00
+    left, no payment) and `"…as the put-back left it"` (a declined reader card: 21.00 again).
+  - Server, in `pay-for-items.printed.test.ts`: `"a replay on a printed bill carries the reopened
+    bill"`: the same cash request sent twice to the printed bill's id; the second answer's
+    `sourceBalance` names the reopened bill (the soup's 6.00 left), not the abandoned printed bill.
+  - Till: `"a declined reader card for items shows the table's bill from the answer, reading no
+    balance"`: `getBillBalance` is never called; the form shows the decline and the answer's
+    balance. `"at the Counter the order is read again without a balance read"`. `"a card still
+    pending on a till reads no balance"`.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/server exec vitest run src/pay-for-items.test.ts
+  src/pay-for-items.card.test.ts src/pay-for-items.printed.test.ts` and `pnpm --filter @waitron/till exec vitest run
+  src/state/pay-for-items.test.ts src/till-app-pay-for-items.test.ts`. Expected: FAIL (no
+  `sourceBalance`; one `getBillBalance` call).
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the Step 2 commands plus `pnpm --filter @waitron/till exec vitest run
+  src/till-app-bill-payments.test.ts src/till-app-handheld-pay.test.ts
+  src/till-app-counter-payment-window.test.ts`, `pnpm --filter @waitron/till typecheck`, and from
+  the root `pnpm exec vitest run scripts/product-file-size.test.ts`. Expected: PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "Answer Pay for items with the table's bill, so the till need not read it again"`.
+
+### Task 7 (PR 4): The till's Reopen to split asks no PIN and works on a part-paid bill
+
+**Files:**
+- Modify: `apps/till/src/screens/till-table-order-screen.ts` (only `:7086-7132`: Reopen to split is
+  offered without `!bill.hasPayments`; Cancel and credit keeps it)
+- Modify: `apps/till/src/till-app.ts` (`#sendCancelCredit`, from `:21718`: a split sends no
+  override; `#onCancelCreditRefused`, `:21853`: the approver step for `"cancel"` only; the dialog
+  gets the bill's paid amount)
+- Modify: `apps/till/src/api/client.ts` (`splitAfterPrint` drops `override`, from `:4293`)
+- Modify: `apps/till/src/widgets/cancel-credit-dialog.ts` (property `paid: string | null`; the scope
+  line adds `split.scope_paid`; the split map keeps `bill.payments_received`, `:61`, PR4-D11)
+- Modify: `apps/till/src/i18n/strings.ts` (`split.scope_paid` in English and Spanish;
+  `split.refused_payments`, `:2150-2151` and `:4486-4487`, takes PR4-D11's new words)
+- Test: `apps/till/src/till-app-parties-closing.test.ts`, `apps/till/src/widgets/cancel-credit-dialog.test.ts`,
+  the file that tests the bill ⋮ menu's items (`rg -l "data-split-after-print" apps/till/src`),
+  `apps/till/src/api/client.test.ts`
+
+- [ ] **Step 1: Write the failing tests:**
+  - `"offers Reopen to split on a printed bill with payments, and Cancel and credit only without"`.
+  - `"splits a part-paid bill and says what was paid carries over"`: bill row total 30.00,
+    outstanding 20.00 → the dialog says "€10.00 already paid counts towards the new bill."; the
+    split is sent with no override; the new bill opens.
+  - `"a split refused as not permitted opens no PIN prompt"`: `authorization.not_permitted` → the
+    refusal shown, no `till-supervisor-override-dialog`.
+  - `"a bill with an advance says to take the rest by amount or in shares"` (`bill.has_advance`).
+  - `"a bill paid for by item says so"` (`bill.payments_received` → PR4-D11's words).
+  - In `client.test.ts`: `"splitAfterPrint sends no override"`.
+  - Delete the check at `till-app-parties-closing.test.ts:786`.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-parties-closing.test.ts
+  src/widgets/cancel-credit-dialog.test.ts`. Expected: FAIL on the first case.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the Step 2 command plus `src/api/client.test.ts src/i18n/codes.test.ts
+  src/i18n/strings.test.ts`, the dialog's `*.a11y.test.ts` if it has one, the bill menu's test file,
+  `pnpm --filter @waitron/till typecheck`, and from the root `pnpm exec vitest run
+  scripts/product-file-size.test.ts scripts/english-only.test.ts`. Expected: PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "Reopen a printed bill to split it on the till with no PIN, also when part is paid"`.
+
+### Task 8 (PR 4): Pay > Items on a printed bill through the new route
+
+**Files:**
+- Modify: `apps/till/src/state/pay-for-items.ts` (`withItems`, `:118-140`, and `previewPayment`,
+  `:176-190`, lose `staysOnBill`: every items choice goes to the new routes)
+- Modify: `apps/till/src/till-app.ts` (delete `#itemsStayOnBill`, `:12810`, and its uses at
+  `:23431`, `:23456` and in the `withItems` call from `:23505`; when the answer's `sourceBalance`
+  names another bill than the Pay window's (PR4-D7, D8): a receipt window returns to that bill
+  (`SettlementDocument` gains `returnTo`, read by `#onBackToTable`, `:24376-24397`, in place of
+  `staysOnBill`); otherwise the screen and the Pay window move to it (`#switchToBill`), the window
+  showing the decline or the payment in progress there). The move goes in a new
+  `apps/till/src/state/reopened-bill.ts` where it can. The request's `expectedEdits` name the
+  printed bill's edit state, which the Pay window already holds for a printed bill (today's
+  whole-bill payment sends it: `paymentAsk(…, open.expectedEdit)`, `till-app.ts:23507`).
+- Test: extend `apps/till/src/till-app-pay-for-items.test.ts` and `apps/till/src/state/pay-for-items.test.ts`
+
+- [ ] **Step 1: Write the failing tests:**
+  - `"a printed bill's items go to the new route and the table shows the reopened bill"`: party bill
+    row `status: "placed"`, Pay > Items, one dish, cash → `previewItemPayment` and `payForItems` on
+    the printed bill's id; the receipt window for the items' bill; after `settlement-close` the
+    screen shows the reopened bill named by `sourceBalance`, and no Pay is offered on the printed
+    bill. (This rewrites PR 2's "a printed bill's items still go to today's route".)
+  - `"a declined card on a printed bill moves to the reopened bill and says so"`: the Pay window's
+    form, on the reopened bill, shows `bill_pay.card_declined`.
+  - `"the preview's reopen refusal shows before any money"`: `previewItemPayment` rejects
+    `bill.unserved_dishes` → the Pay window says it; `payForItems` is never called.
+- [ ] **Step 2: Run** `pnpm --filter @waitron/till exec vitest run src/till-app-pay-for-items.test.ts
+  src/state/pay-for-items.test.ts`. Expected: FAIL (the preview goes to `previewBillPayment`).
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** the Step 2 command plus `src/till-app-bill-payments.test.ts
+  src/till-app-current-bill-pay.test.ts src/till-app-handheld-pay.test.ts`, `pnpm --filter
+  @waitron/till typecheck`, and from the root `pnpm exec vitest run scripts/product-file-size.test.ts`.
+  Expected: PASS; read each `Tests` count.
+- [ ] **Step 5: Commit** `git commit -s -m "Pay for items on a printed bill from the till by reopening it"`.
+
+### Task 9 (PR 4): Look at it, then say it in the guides and the backlog
+
+**Files:**
+- Modify: `apps/server/src/guide/en/table-service.md` (`:263-264`, `:710-713`, `:963`) and
+  `apps/server/src/guide/es/table-service.md` (their twins: `:279`, `:757-760`, `:1028-1029`)
+- Modify: `docs/backlog/menu.md` (A1515's piece 1 line, `:854`) and `docs/backlog/fiscal.md`
+  (ADVISER-SPLIT-AFTER-PRINT, `:1217-1229`: its D1 and D3 are replaced by the owner's "1 A" and
+  "2 B"; add a dated line, do not rewrite the entry)
+
+- [ ] **Step 1: Look.** On a Claude slot (`wa-wt demo waitron-feat-a1515-1-printed-bills`; never
+  the owner's stack), at till and phone width, light and dark: print a seated table's bill, take
+  €10 in cash, then **Reopen to split** (no PIN asked; the dialog's paid line); then on another
+  printed bill **Pay > Items** > one dish > cash, and once with the simulator's **declined** card.
+  Fix what reads or lays out badly in the task that drew it. Screenshots stay in the working folder
+  and go to the owner directly. `wa-wt down waitron-feat-a1515-1-printed-bills` afterwards.
+- [ ] **Step 2: Write the guides from what Step 1 showed**, English then Spanish, same `{#id}`s:
+  `:710-713` says money already paid counts towards the new bill, and that a bill with a payment
+  on its own receipt is paid by amount or in shares instead; `:963` says that on a printed bill
+  **Items** first credits its receipt and puts its dishes back on an open bill, then pays the chosen
+  ones on their own, and a declined card leaves every dish on that open bill to print again or pay;
+  cut `:263-264` (no printed bill takes an items payment any more). Cut, do not reword, any
+  sentence Step 1 proved wrong.
+- [ ] **Step 3: Update the backlog**: A1515's piece 1 line says printed bills are paid for by item
+  and split with no PIN, part-paid ones included (pull request 4 of 4 to land; PR 3 then removes
+  the old items payment), and the fiscal decision gets its dated line.
+- [ ] **Step 4: Run** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts
+  src/guide-box-word.test.ts` and from the root `pnpm exec vitest run scripts/guide-links.test.ts
+  scripts/english-only.test.ts`. Expected: PASS.
+- [ ] **Step 5: Commit** `git commit -s -m "Say in the table service guide how printed bills are split and paid for by item"`,
+  then `/finish-branch` with the full wave and two Codex angles; the owner lands it.
+
+**For the watcher, before Task 2:** two things to clear. (1) PR4-D1's form: recommended, the
+reopened-bill check, now backed by Task 1's trigger that sets the link once, on an open bill, to a
+bill still `placed`; or the smaller form without the check. (2) PR4-D7's *Who may*: Pay for items
+on a printed bill also needs the device profile's `take-orders` action, as Reopen to split does
+(Task 5). **For the owner, through the watcher (not blocking):** a card declined
+after Pay for items on a printed bill leaves its receipt credited and every dish on an open bill of
+the table, to print again or pay (PR4-D8).
 
 ## PR 3 — Removal (`feat/a1515-1-items-kind-removal`)
 

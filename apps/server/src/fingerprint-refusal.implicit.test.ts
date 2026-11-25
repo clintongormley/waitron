@@ -529,6 +529,7 @@ describe("a declined Pay for items card whose table's invoice is refused", () =>
         tip: "0.00",
       },
       { personId: venue.operatorId, sessionId: session!.id },
+      null,
     ).finally(() => warn.mockRestore());
 
     await expect(answer).rejects.toMatchObject({ code: "fiscal.fingerprint_mismatch" });

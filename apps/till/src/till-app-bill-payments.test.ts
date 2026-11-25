@@ -1567,24 +1567,34 @@ describe("A803 invoice entry: the ⋮ and the payment step open one Full invoice
 });
 
 describe("A803 LOOK F2: the foot of a bill that is not open", () => {
-  it.each([
-    ["presented", { status: "placed", outstanding: "7.80" }],
-    ["paid", { status: "settled", outstanding: "0.00" }],
-  ] as const)(
-    "shows a %s bill's total from the bills read when its lines are refused",
-    async (_, state) => {
-      const getTabLines = vi.fn().mockRejectedValue({ code: "tab.not_open" });
-      const { el } = await mountApp({
-        getPartyBills: vi.fn().mockResolvedValue([billOf({ ...state, total: "7.80" })]),
-        getTabLines,
-      });
-      const order = await openTable(el);
-      await showBillFooter(order);
+  it("shows a presented bill's total from the bills read, not the sum of the dishes its lines read answers", async () => {
+    // The lines read answers bill120's dishes, which sum to 120.00.
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([billOf({ status: "placed", total: "7.80", outstanding: "7.80" })]),
+    });
+    const order = await openTable(el);
+    await showBillFooter(order);
 
-      expect(getTabLines).toHaveBeenCalledWith("wo-4");
-      expect(text(order.shadowRoot!.querySelector("[data-order-total]"))).toBe(money("7.80"));
-    },
-  );
+    expect(api.getTabLines).toHaveBeenCalledWith("wo-4");
+    expect(text(order.shadowRoot!.querySelector("[data-order-total]"))).toBe(money("7.80"));
+  });
+
+  it("shows a paid bill's total from the bills read when its lines are refused", async () => {
+    const getTabLines = vi.fn().mockRejectedValue({ code: "tab.not_open" });
+    const { el } = await mountApp({
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([billOf({ status: "settled", total: "7.80", outstanding: "0.00" })]),
+      getTabLines,
+    });
+    const order = await openTable(el);
+    await showBillFooter(order);
+
+    expect(getTabLines).toHaveBeenCalledWith("wo-4");
+    expect(text(order.shadowRoot!.querySelector("[data-order-total]"))).toBe(money("7.80"));
+  });
 });
 
 describe("A803 LOOK F7: focus goes back to what opened Full invoice", () => {
@@ -4212,6 +4222,13 @@ describe("till-app: Find bill collects the rest of a printed bill", () => {
       expect(
         dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[name="way"]:checked')!.value,
       ).toBe("contribution");
+      expect(
+        dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[name="way"][value="items"]')!
+          .disabled,
+      ).toBe(true);
+      expect(text(dialog(el)!.shadowRoot!.querySelector("[data-pay-items-reason]"))).toBe(
+        t("bill_pay.items_barred_found"),
+      );
       await type(el, "tendered", "30");
       await press(el, "[data-pay-continue]");
       await press(el, "[data-pay-confirm]");

@@ -1,4 +1,5 @@
 import type {
+  BillBalance,
   BillEditExpected,
   BillPaymentRequest,
   BillPaymentResult,
@@ -48,8 +49,10 @@ export interface ItemPaymentRequest
   entry?: "reader";
 }
 
-/** The new bill and its payment; `payment.balance` is the new bill's. */
+/** The new bill and its payment; `payment.balance` is the new bill's, `sourceBalance` the bill the
+ * items came from, as the payment left it. */
 export interface ItemPaymentResult {
   billId: string;
   payment: BillPaymentResult;
+  sourceBalance: BillBalance;
 }

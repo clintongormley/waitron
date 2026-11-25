@@ -277,10 +277,22 @@ export class TillBillPayDialog extends LitElement {
         margin: 0 0 var(--wt-space-3);
       }
 
-      .deferred p {
+      .deferred p,
+      .way-reason {
         margin: 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+
+      .way-reason {
+        margin-block-start: var(--wt-space-2);
+      }
+
+      /* Wraps within the width the window's choices and amounts set, never widening it. */
+      .credited,
+      .scope,
+      .own-bill {
+        contain: inline-size;
       }
 
       .scope,
@@ -507,6 +519,10 @@ export class TillBillPayDialog extends LitElement {
   /** The answer to the own-receipt question; null while unanswered. */
   @state() private ownReceipt: boolean | null = null;
   @property({ type: Boolean }) confirmationLocked = false;
+  /** Why Items is shown disabled, under the choices; null while it is offered. */
+  @property({ attribute: false }) itemsBarred: StringKey | null = null;
+  /** The printed bill this window paid from was credited, as the till words it; null if not. */
+  @property({ attribute: false }) credited: string | null = null;
   /** Whether the venue takes tips; without them the dialog asks for and offers none. The app sets
    * it from the till's setup. */
   @property({ type: Boolean }) tipsEnabled = true;
@@ -778,6 +794,17 @@ export class TillBillPayDialog extends LitElement {
     } else if (changed.has("takesCash")) this.method = this.takesCash ? "cash" : "card";
     if (changed.has("amount")) this.typedAmountValue = this.amount;
     if (changed.has("asked") && this.asked === null) this.ownReceipt = null;
+    const billBefore = (changed.get("balance") as BillBalance | null | undefined)?.workingOrderId;
+    if (
+      billBefore !== undefined &&
+      this.balance !== null &&
+      billBefore !== this.balance.workingOrderId
+    ) {
+      // Another bill's dishes carry other ids and numbers, so a choice from the bill left is not
+      // carried across, and nothing chosen there is marked missing here.
+      this.picks = new Map();
+      this.#feedback.reset();
+    }
     if (!this.busy && this.asked === null && !this.confirmationLocked) {
       // A line moved back from a failed Pay for items keeps its id but takes a new line number.
       const before = (changed.get("lines") as PayLine[] | undefined) ?? this.lines;
@@ -1213,7 +1240,10 @@ export class TillBillPayDialog extends LitElement {
       .beforeClose=${this.#entry ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => this.#close(event)}
     >
-      <div class="body">${view.body} ${this.#readerStopControl()}</div>
+      <div class="body">
+        ${this.credited === null ? nothing : html`<p class="credited" role="status" data-pay-credited>${this.credited}</p>`}
+        ${view.body} ${this.#readerStopControl()}
+      </div>
       ${view.actions}
     </wt-dialog>`;
   }
@@ -1641,6 +1671,7 @@ export class TillBillPayDialog extends LitElement {
     checked: boolean,
     pick: () => void,
     disabled = false,
+    describedBy?: string,
   ): TemplateResult {
     return html`<label class="option">
       <input
@@ -1649,6 +1680,7 @@ export class TillBillPayDialog extends LitElement {
         .value=${value}
         .checked=${checked}
         ?disabled=${disabled}
+        aria-describedby=${describedBy ?? nothing}
         @change=${(event: Event) => {
           event.stopPropagation();
           if (!this.isConnected || !this.#active || this.busy) return;
@@ -1710,10 +1742,13 @@ export class TillBillPayDialog extends LitElement {
                 this.chosenWay = way;
                 this.#shareRun = null;
               },
-              way === "whole" && this.balance === null,
+              (way === "whole" && this.balance === null) ||
+                (way === "items" && this.itemsBarred !== null),
+              way === "items" && this.itemsBarred !== null ? "items-reason" : undefined,
             ),
           )}
         </div>
+        ${this.itemsBarred === null ? nothing : html`<p class="way-reason" id="items-reason" data-pay-items-reason>${t(this.itemsBarred)}</p>`}
       </fieldset>
       <p class="scope" data-pay-scope>${this.#scope()}</p>
       ${this.#deferred()} ${this.#wayFields(errors)} ${this.#methodFields(errors)}
@@ -2252,7 +2287,17 @@ export class TillBillPayDialog extends LitElement {
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
     const body = html`${outsideCardSummary(asked.card?.entry === "manual" ? asked.card : {})}
       <p class="scope" data-pay-scope>${this.#scope()}</p>
-      ${this.#ownBill() ? html`<p data-pay-own-bill>${t("bill_pay.items_own_bill")}</p>` : nothing}
+      ${
+        this.#ownBill()
+          ? html`<p class="own-bill" data-pay-own-bill>
+              ${t(
+                this.balance?.status === "placed"
+                  ? "bill_pay.items_own_bill_printed"
+                  : "bill_pay.items_own_bill",
+              )}
+            </p>`
+          : nothing
+      }
       <dl class="allocation">
         <div class=${cash === null ? "headline" : ""} data-pay-applied>
           <dt>${t("bill_pay.applied")}</dt>

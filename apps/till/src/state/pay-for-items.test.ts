@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AllocationPreview,
+  BillBalance,
   BillEditExpected,
   BillPaymentResult,
   TillApi,
@@ -16,6 +17,7 @@ import {
   itemsAsk,
   itemsChoiceOf,
   itemsRefusal,
+  itemsBarredReason,
   itemsRequestOf,
   previewPayment,
   takePayment,
@@ -58,6 +60,41 @@ const edit: BillEditExpected = {
   draftRevision: null,
 };
 const revisions = { expectedPartyRevision: 3, partyId: "v1" };
+
+describe("itemsBarredReason", () => {
+  const at = {
+    found: false,
+    counter: false,
+    counterCollect: false,
+    printed: false,
+    status: "open" as const,
+  };
+
+  it("bars Items on a Counter order sent to the kitchen, even once its receipt is issued, not on one unsent", () => {
+    expect(itemsBarredReason({ ...at, counter: true, status: "placed" })).toBe(
+      "bill_pay.items_barred_counter",
+    );
+    expect(itemsBarredReason({ ...at, counter: true, printed: true, status: "placed" })).toBe(
+      "bill_pay.items_barred_counter",
+    );
+    expect(itemsBarredReason({ ...at, counter: true, counterCollect: true })).toBe(
+      "bill_pay.items_barred_counter",
+    );
+    expect(itemsBarredReason({ ...at, counter: true })).toBeNull();
+  });
+
+  it("bars Items on a table bill placed with no receipt, but not on a printed one or an open one", () => {
+    expect(itemsBarredReason({ ...at, status: "placed" })).toBe("bill_pay.items_barred_counter");
+    expect(itemsBarredReason({ ...at, printed: true, status: "placed" })).toBeNull();
+    expect(itemsBarredReason(at)).toBeNull();
+  });
+
+  it("bars Items from Find a bill with its own reason", () => {
+    expect(itemsBarredReason({ ...at, found: true, printed: true, status: "placed" })).toBe(
+      "bill_pay.items_barred_found",
+    );
+  });
+});
 
 describe("itemsChoiceOf", () => {
   it("every dish picked whole is the whole bill", () => {
@@ -209,7 +246,7 @@ function itemsConfirmation(asked: PayRequest): Confirmation {
 
 describe("withItems", () => {
   it("freezes the picks, the bill's edit state and the party's revision for an items choice", () => {
-    expect(withItems(itemsConfirmation(itemsAsked), itemsAsked, edit, revisions, false)).toEqual({
+    expect(withItems(itemsConfirmation(itemsAsked), itemsAsked, edit, revisions)).toEqual({
       ...itemsConfirmation(itemsAsked),
       items: {
         picks: [{ lineId: "line-2", quantity: "1" }],
@@ -221,18 +258,16 @@ describe("withItems", () => {
   });
 
   it("refuses an items choice with no edit state rather than send one the route refuses", () => {
-    expect(() =>
-      withItems(itemsConfirmation(itemsAsked), itemsAsked, null, revisions, false),
-    ).toThrow("edit state");
+    expect(() => withItems(itemsConfirmation(itemsAsked), itemsAsked, null, revisions)).toThrow(
+      "edit state",
+    );
   });
 
-  it("adds nothing for a whole-bill choice or a printed bill", () => {
+  it("adds nothing for a whole-bill choice", () => {
     const whole: PayRequest = { choice: { kind: "whole" }, pay: { method: "card" } };
     const confirmation = itemsConfirmation(whole);
 
-    expect(withItems(confirmation, whole, edit, revisions, false)).toBe(confirmation);
-    const printed = itemsConfirmation(itemsAsked);
-    expect(withItems(printed, itemsAsked, edit, revisions, true)).toBe(printed);
+    expect(withItems(confirmation, whole, edit, revisions)).toBe(confirmation);
   });
 });
 
@@ -340,12 +375,12 @@ describe("previewPayment and takePayment", () => {
     const api = apiStub();
     const whole: PayRequest = { choice: { kind: "whole" }, pay: { method: "card" } };
 
-    await previewPayment(api as unknown as TillApi, "wo-4", whole, edit, false);
+    await previewPayment(api as unknown as TillApi, "wo-4", whole, edit);
     expect(api.previewBillPayment).toHaveBeenCalledWith(
       "wo-4",
       paymentAsk(whole.choice, whole.pay, undefined, edit),
     );
-    const confirmation = withItems(itemsConfirmation(whole), whole, edit, revisions, false);
+    const confirmation = withItems(itemsConfirmation(whole), whole, edit, revisions);
     await expect(
       takePayment(
         api as unknown as TillApi,
@@ -369,7 +404,7 @@ describe("previewPayment and takePayment", () => {
     const api = apiStub();
 
     await expect(
-      previewPayment(api as unknown as TillApi, "wo-4", itemsAsked, edit, false),
+      previewPayment(api as unknown as TillApi, "wo-4", itemsAsked, edit),
     ).resolves.toEqual({
       kind: "allocated",
       choice: null,
@@ -383,13 +418,7 @@ describe("previewPayment and takePayment", () => {
       picks: [{ lineId: "line-2", quantity: "1" }],
       method: "card",
     });
-    const confirmation = withItems(
-      itemsConfirmation(itemsAsked),
-      itemsAsked,
-      edit,
-      revisions,
-      false,
-    );
+    const confirmation = withItems(itemsConfirmation(itemsAsked), itemsAsked, edit, revisions);
     const request = { ...confirmation, submissionId: "s" } as Confirmation & {
       submissionId: string;
       items: ItemsPart;
@@ -402,35 +431,17 @@ describe("previewPayment and takePayment", () => {
     expect(api.takeBillPayment).not.toHaveBeenCalled();
   });
 
-  it("previewPayment and takePayment send a printed bill's items choice down today's route with kind items", async () => {
+  it("takePayment passes on the table's bill an items answer carries", async () => {
     const api = apiStub();
+    const sourceBalance = { workingOrderId: "wo-4", total: "21.00" } as unknown as BillBalance;
+    api.payForItems.mockResolvedValue({ billId: "wo-9", payment: paid, sourceBalance });
+    const request = {
+      ...withItems(itemsConfirmation(itemsAsked), itemsAsked, edit, revisions),
+      submissionId: "s",
+    } as Confirmation & { submissionId: string; items: ItemsPart };
 
-    await previewPayment(api as unknown as TillApi, "wo-4", itemsAsked, edit, true);
-    expect(api.previewBillPayment).toHaveBeenCalledWith(
-      "wo-4",
-      expect.objectContaining({ kind: "items", lines: [{ lineNo: 2, quantity: "1" }] }),
-    );
-    const confirmation = withItems(
-      itemsConfirmation(itemsAsked),
-      itemsAsked,
-      edit,
-      revisions,
-      true,
-    );
-    await takePayment(
-      api as unknown as TillApi,
-      "wo-4",
-      { ...confirmation, submissionId: "s" },
-      {
-        signal,
-      },
-    );
-    expect(api.takeBillPayment).toHaveBeenCalledWith(
-      "wo-4",
-      expect.objectContaining({ kind: "items", submissionId: "s" }),
-      { signal },
-    );
-    expect(api.previewItemPayment).not.toHaveBeenCalled();
-    expect(api.payForItems).not.toHaveBeenCalled();
+    await expect(
+      takePayment(api as unknown as TillApi, "wo-4", request, { signal }),
+    ).resolves.toEqual({ ...paid, paidOn: "wo-9", sourceBalance });
   });
 });

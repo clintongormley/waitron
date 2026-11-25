@@ -147,8 +147,10 @@ export class WtDialog extends LitElement {
       }
 
       /* A message taller than the room the body leaves scrolls, so the buttons below it stay in
-         view. */
+         view. Its own length never sets the window's width: it wraps within the width the body and
+         the buttons set. */
       .footer > .form-message {
+        contain: inline-size;
         margin: 0;
         min-height: 0;
         overflow-y: auto;

@@ -9,6 +9,7 @@ import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { assertBillHasNoUnsent, readBillUnsent } from "./bill-unsent.js";
 import { ORDER_INVOICE_CHOICE, selectOrderInvoice } from "./invoice-selection.js";
 import { linkSaleDishes } from "./order-portions.js";
+import { reopenedChainIds } from "./reopened-bills.js";
 import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import {
   billAdvances,
@@ -1706,19 +1707,20 @@ export function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
   };
 }
 
-/** What already uses `submissionId` on the bill (design §5.1): one of its payments, or a refund of
- * one of them. */
+/** What already uses `submissionId` on the bill or a bill reopened from it (design §5.1): one of
+ * their payments, or a refund of one of them. */
 export async function findSubmission(
   tx: Transaction,
   workingOrderId: string,
   submissionId: string,
 ): Promise<{ payment: PaymentRow | undefined; refund: RefundRow | undefined }> {
+  const bills = reopenedChainIds(workingOrderId);
   const [payment] = await tx
     .select()
     .from(billPayments)
     .where(
       and(
-        eq(billPayments.workingOrderId, workingOrderId),
+        sql`${billPayments.workingOrderId} in ${bills}`,
         eq(billPayments.submissionId, submissionId),
       ),
     );
@@ -1728,7 +1730,7 @@ export async function findSubmission(
     .innerJoin(billPayments, eq(billPayments.id, refundRows.billPaymentId))
     .where(
       and(
-        eq(billPayments.workingOrderId, workingOrderId),
+        sql`${billPayments.workingOrderId} in ${bills}`,
         eq(refundRows.submissionId, submissionId),
       ),
     );

@@ -753,10 +753,7 @@ describe("a takeaway set menu whose dishes' rates differ", () => {
     const { saleId } = await printBill(tab.partyId, tab.tabId);
     await lemonadeAt("21.00");
 
-    const { billId } = await splitAfterPrint(specDeps(spec), venue.cfg, tab.tabId, {
-      ...venue.operator,
-      attempts: { throttle: createPinThrottle(), slot: "split" },
-    });
+    const { billId } = await splitAfterPrint(specDeps(spec), venue.cfg, tab.tabId, venue.operator);
     const [credit] = await venue.db
       .select({ id: sales.id })
       .from(sales)

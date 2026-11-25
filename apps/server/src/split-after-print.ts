@@ -14,7 +14,6 @@ import {
   requireSupportedCorrection,
   withIssuanceTransaction,
 } from "@waitron/core";
-import { authorize, type Override, type PinAttempts } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { creditWholeInvoice, type IssuedInvoice } from "./cancel-credit.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
@@ -23,13 +22,13 @@ import { unservedDishes } from "./meal-end.js";
 import { carryLineReductions } from "./order-portions.js";
 import { bumpPartyRevision } from "./parties.js";
 import { carryBillSetMenuCopies } from "./set-menu-bill.js";
+import { carryReceivedPayments, refuseSplitMoney } from "./split-after-print-money.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   abandonPlacedOrder,
   lockPlacedOrder,
   recordPlacedOrderCancelled,
-  refusePlacedOrderMoney,
-  withRectifyPinAhead,
+  type BillRead,
 } from "./working-order-counter.js";
 import { createOpenOrder } from "./working-order-open.js";
 import { readInvoiceNumber } from "./stored-order-lines.js";
@@ -41,42 +40,83 @@ export interface SplitAfterPrint {
   correctiveNumber: string;
 }
 
+/** A printed bill reopened: its new open bill and its party, the corrective filed, and each dish's
+ * copy. */
+export interface ReopenedBill extends SplitAfterPrint {
+  party: { id: string; revision: number };
+  /** Each dish of the printed bill, by id, to its copy on the new bill. */
+  lineCopies: Map<string, string>;
+}
+
 /**
- * Credit a table's printed, unpaid ticket in full and put copies of its dishes on a new open bill
- * of the same party, so each guest's dishes can be moved to their own bill and printed. Refuses in
- * the order the till offers the fix: the bill's state, then its money, then its unserved dishes,
- * then the permission.
+ * Credit a table's printed ticket in full and put copies of its dishes on a new open bill of the
+ * same party, so each guest's dishes can be moved to their own bill and printed. Refuses in
+ * the order the till offers the fix: the bill's state, then its money, then its unserved dishes.
  */
 export async function splitAfterPrint(
   deps: TillSaleDeps,
   cfg: DeviceRequestConfig,
   id: string,
-  operator: { personId: string; sessionId: string; attempts: PinAttempts },
-  override?: Override,
+  operator: { personId: string; sessionId: string },
 ): Promise<SplitAfterPrint> {
-  return withRectifyPinAhead(deps, id, operator, override, (checkedOverride) =>
-    withIssuanceTransaction(deps.db, async (tx) => {
-      const authz = { sessionId: operator.sessionId, override: checkedOverride };
-      const placed = await lockPlacedOrder(tx, deps, cfg, id);
-      const { partyId, invoice } = await refuseSplitBill(tx, id, placed.partyId, placed.invoice);
-      await refusePlacedOrderMoney(tx, id);
-      await refuseUnservedDishes(tx, id);
-      await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
-      const correctiveId = await creditWholeInvoice(tx, deps, cfg, invoice, authz);
-      await abandonPlacedOrder(tx, cfg, id);
-      const opened = await openSplitBill(tx, cfg, id, partyId);
-      await bumpPartyRevision(tx, partyId);
-      await recordPlacedOrderCancelled(
-        tx,
-        deps,
-        cfg,
-        id,
-        operator.personId,
-        `Bill split after printing to bill ${opened.billNumber}`,
-      );
-      return { billId: opened.billId, correctiveNumber: await readInvoiceNumber(tx, correctiveId) };
-    }),
+  return withIssuanceTransaction(deps.db, async (tx) => {
+    const { billId, correctiveNumber } = await reopenToSplitIn(tx, deps, cfg, id, operator);
+    return { billId, correctiveNumber };
+  });
+}
+
+/** Reopen bill's refusals, which write nothing; answers the bill's party and ticket. `read` is
+ * the bill as the caller has read it in this transaction, when it has. */
+export async function refuseReopen(
+  tx: Transaction,
+  deps: Pick<TillSaleDeps, "admission">,
+  cfg: DeviceRequestConfig,
+  id: string,
+  read?: BillRead,
+): Promise<{ partyId: string; invoice: IssuedInvoice }> {
+  const placed = await lockPlacedOrder(tx, deps, cfg, id, read);
+  const refused = await refuseSplitBill(tx, id, placed.partyId, placed.invoice);
+  await refuseSplitMoney(tx, id);
+  await refuseUnservedDishes(tx, id);
+  return refused;
+}
+
+/**
+ * {@link splitAfterPrint} inside the caller's issuance transaction. The new bill, open, names the
+ * printed one in `reopened_from` and holds copies of its dishes, so `authorizeReopenedCredit` files
+ * the whole credit for the session's person without `sale.rectify`.
+ */
+export async function reopenToSplitIn(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: DeviceRequestConfig,
+  id: string,
+  operator: { personId: string; sessionId: string },
+  read?: BillRead,
+): Promise<ReopenedBill> {
+  const { partyId, invoice } = await refuseReopen(tx, deps, cfg, id, read);
+  const opened = await openSplitBill(tx, cfg, id, partyId);
+  const correctiveId = await creditWholeInvoice(tx, deps, cfg, invoice, {
+    reopenedBillId: opened.billId,
+    tillSessionId: operator.sessionId,
+  });
+  await abandonPlacedOrder(tx, cfg, id);
+  await carryReceivedPayments(tx, id, opened.billId);
+  const revision = (await bumpPartyRevision(tx, partyId))!;
+  await recordPlacedOrderCancelled(
+    tx,
+    deps,
+    cfg,
+    id,
+    operator.personId,
+    `Bill split after printing to bill ${opened.billNumber}`,
   );
+  return {
+    billId: opened.billId,
+    correctiveNumber: await readInvoiceNumber(tx, correctiveId),
+    party: { id: partyId, revision },
+    lineCopies: opened.lineCopies,
+  };
 }
 
 /** The bill's own refusals, ahead of its money's: each says why this bill cannot be reopened. */
@@ -93,7 +133,7 @@ async function refuseSplitBill(
     .where(eq(unpaidDepartures.workingOrderId, id));
   if (departure !== undefined) throw new AppError("bill.left_unpaid", { workingOrderId: id });
   if (invoice === undefined) throw new AppError("bill.not_issued", { workingOrderId: id });
-  // `recordCorrection` refuses the same invoice, but only after the dishes and the permission.
+  // `recordCorrection` refuses the same invoice, but only after the dishes.
   const target = await correctionTargetFor(tx, invoice.id);
   const [credited] = await tx
     .select({ counterpartyTaxId: sales.counterpartyTaxId })
@@ -114,7 +154,7 @@ async function openSplitBill(
   cfg: DeviceRequestConfig,
   fromBillId: string,
   partyId: string,
-): Promise<{ billId: string; billNumber: number }> {
+): Promise<{ billId: string; billNumber: number; lineCopies: Map<string, string> }> {
   const [from] = await tx
     .select({ receiptLocale: workingOrders.receiptLocale })
     .from(workingOrders)
@@ -133,19 +173,24 @@ async function openSplitBill(
       ...(from!.receiptLocale === null ? {} : { receiptLocale: from!.receiptLocale }),
     },
   );
-  await copyBillDishes(tx, fromBillId, billId);
-  return { billId, billNumber: billNumber! };
+  await tx
+    .update(workingOrders)
+    .set({ reopenedFrom: fromBillId })
+    .where(eq(workingOrders.id, billId));
+  const lineCopies = await copyBillDishes(tx, fromBillId, billId);
+  return { billId, billNumber: billNumber!, lineCopies };
 }
 
 /**
  * Copies every line of `fromBillId` onto `toBillId`, which holds none, with whether its set menus were
- * proven cheapest. Kitchen state, print links and sale links stay with the originals.
+ * proven cheapest, and answers each line's copy by the original's id. Kitchen state, print links and
+ * sale links stay with the originals.
  */
 export async function copyBillDishes(
   tx: Transaction,
   fromBillId: string,
   toBillId: string,
-): Promise<void> {
+): Promise<Map<string, string>> {
   const rows = await tx
     .select()
     .from(workingOrderLines)
@@ -210,4 +255,5 @@ export async function copyBillDishes(
         to: copyOf.get(row.id)!,
       })),
   );
+  return copyOf;
 }

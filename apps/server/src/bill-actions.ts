@@ -100,11 +100,21 @@ export async function guardPathParty(
     .from(workingOrders)
     .where(eq(workingOrders.id, billId));
   if (bill === undefined) throw new AppError("tab.not_open", { tabId: billId });
+  await guardBillParty(tx, bill, command, options);
+  return bill;
+}
+
+/** {@link guardPathParty} of a bill the caller has read in this transaction. */
+export async function guardBillParty(
+  tx: Transaction,
+  bill: { partyId: string | null },
+  command: Omit<BillCommand, "partyId"> & { partyId?: string | null },
+  options: { bump?: boolean } = {},
+): Promise<void> {
   if (command.partyId !== undefined && command.partyId !== bill.partyId) {
     await refuseMovedParty(tx, command.partyId ?? bill.partyId!);
   }
   if (bill.partyId !== null) await guardParty(tx, bill.partyId, command, options);
-  return bill;
 }
 
 /**

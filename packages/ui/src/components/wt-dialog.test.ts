@@ -751,6 +751,26 @@ test("shows its footer actions' message in the footer, on its own line above the
   expect(actions.shadowRoot!.querySelector("[data-error]")).toBeNull();
 });
 
+test("wraps a long footer message within the width its body sets, never widening the window", async () => {
+  const el = (await mount(`<wt-dialog heading="Pay">
+    <div style="width: 300px">Choose how this is paid</div>
+    <wt-form-actions slot="footer"><button>Continue</button></wt-form-actions>
+  </wt-dialog>`)) as Openable;
+  el.open = true;
+  await el.updateComplete;
+  const dialog = el.shadowRoot!.querySelector("dialog")!;
+  const before = dialog.getBoundingClientRect().width;
+  const actions = el.querySelector("wt-form-actions")!;
+  actions.error =
+    "The card was declined and nothing was taken. Try the card again, or go back and choose another way to pay.";
+  const message = (await formMessageOf(actions))!;
+
+  expect(dialog.getBoundingClientRect().width).toBe(before);
+  const box = message.getBoundingClientRect();
+  expect(box.right).toBeLessThanOrEqual(dialog.getBoundingClientRect().right);
+  expect(box.height).toBeGreaterThan(2 * parseFloat(getComputedStyle(message).fontSize));
+});
+
 test("on a browser without custom states, still shows its footer actions' message in the footer", async () => {
   const saved = Object.getOwnPropertyDescriptor(ElementInternals.prototype, "states")!;
   delete (ElementInternals.prototype as unknown as Record<string, unknown>).states;

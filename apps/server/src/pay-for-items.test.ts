@@ -176,7 +176,7 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
       tendered: "20.00",
     });
 
-    const paid = await payForItems(deps(), v.cfg, billId, req, v.operator);
+    const paid = await payForItems(deps(), v.cfg, billId, req, v.operator, null);
 
     expect(await billsNaming(billId)).toEqual([{ id: paid.billId, status: "settled" }]);
     expect(await invoicesOf(paid.billId)).toEqual(["15.00"]);
@@ -188,6 +188,27 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
     expect(await paymentsOf(billId)).toEqual([]);
   });
 
+  it("the answer carries the table's bill as the payment left it", async () => {
+    const { partyId, billId } = await seatedBill({ product: "soup" }, { product: "hake" });
+    const req = await request(partyId, billId, [{ lineId: await lineOf(billId, "hake") }], {
+      method: "cash",
+      applied: "15.00",
+      tip: "0.00",
+      tendered: "20.00",
+    });
+
+    const paid = await payForItems(deps(), v.cfg, billId, req, v.operator, null);
+
+    expect(paid.sourceBalance).toMatchObject({
+      workingOrderId: billId,
+      status: "open",
+      total: "6.00",
+      received: "0.00",
+      outstanding: "6.00",
+      payments: [],
+    });
+  });
+
   it("a hand-keyed card does the same", async () => {
     const { partyId, billId } = await seatedBill({ product: "soup" }, { product: "hake" });
     const req = await request(partyId, billId, [{ lineId: await lineOf(billId, "hake") }], {
@@ -196,7 +217,7 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
       tip: "0.00",
     });
 
-    const paid = await payForItems(deps(), v.cfg, billId, req, v.operator);
+    const paid = await payForItems(deps(), v.cfg, billId, req, v.operator, null);
 
     expect(await billsNaming(billId)).toEqual([{ id: paid.billId, status: "settled" }]);
     expect(await invoicesOf(paid.billId)).toEqual(["15.00"]);
@@ -232,7 +253,7 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
       tip: "0.00",
     });
 
-    const paid = await payForItems(deps(), v.cfg, billId, req, v.operator);
+    const paid = await payForItems(deps(), v.cfg, billId, req, v.operator, null);
 
     expect(await invoicesOf(billId)).toEqual(["6.00"]);
     expect(await statusOf(billId)).toBe("settled");
@@ -248,8 +269,8 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
       tendered: "20.00",
     });
 
-    const first = await payForItems(deps(), v.cfg, billId, req, v.operator);
-    const second = await payForItems(deps(), v.cfg, billId, req, v.operator);
+    const first = await payForItems(deps(), v.cfg, billId, req, v.operator, null);
+    const second = await payForItems(deps(), v.cfg, billId, req, v.operator, null);
 
     expect(second).toEqual(first);
     expect(await billsNaming(billId)).toEqual([{ id: first.billId, status: "settled" }]);
@@ -265,10 +286,10 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
       tip: "0.00",
       tendered: "20.00",
     });
-    await payForItems(deps(), v.cfg, billId, req, v.operator);
+    await payForItems(deps(), v.cfg, billId, req, v.operator, null);
 
     await expect(
-      payForItems(deps(), v.cfg, billId, { ...req, tendered: "50.00" }, v.operator),
+      payForItems(deps(), v.cfg, billId, { ...req, tendered: "50.00" }, v.operator, null),
     ).rejects.toMatchObject({ code: "submission.id_reused" });
   });
 
@@ -281,7 +302,7 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
       tendered: "10.00",
     });
 
-    await expect(payForItems(deps(), v.cfg, billId, req, v.operator)).rejects.toMatchObject({
+    await expect(payForItems(deps(), v.cfg, billId, req, v.operator, null)).rejects.toMatchObject({
       code: "management.request_invalid",
       params: { field: "tendered" },
     });
@@ -298,7 +319,7 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
       tendered: "20.00",
     });
 
-    await expect(payForItems(deps(), v.cfg, billId, req, v.operator)).rejects.toMatchObject({
+    await expect(payForItems(deps(), v.cfg, billId, req, v.operator, null)).rejects.toMatchObject({
       code: "bill.allocation_changed",
     });
     expect(await billsNaming(billId)).toEqual([]);
@@ -317,7 +338,13 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
     ];
 
     expect(
-      await previewPayForItems(v.db, billId, { picks, method: "cash", tendered: "20.00" }),
+      await previewPayForItems(
+        deps(),
+        v.cfg,
+        billId,
+        { picks, method: "cash", tendered: "20.00" },
+        null,
+      ),
     ).toEqual({ total: "17.50", applied: "17.50", tip: "0.00", change: "2.50" });
     expect(await billsNaming(billId)).toEqual([]);
     expect(await lineTotals(billId)).toEqual(["7.50", "15.00", "6.00"]);
@@ -343,10 +370,15 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
         billId,
         await request(partyId, billId, picks, { method: "card", applied: "1.25", tip: "0.00" }),
         v.operator,
+        null,
       ).catch((error: unknown) => error);
-      const previewing = await previewPayForItems(v.db, billId, { picks, method: "card" }).catch(
-        (error: unknown) => error,
-      );
+      const previewing = await previewPayForItems(
+        deps(),
+        v.cfg,
+        billId,
+        { picks, method: "card" },
+        null,
+      ).catch((error: unknown) => error);
 
       expect(paying).toMatchObject({
         code: "tab.transfer_quantity_invalid",
@@ -376,6 +408,7 @@ describe("A1515 pay for items: what the new bill keeps", () => {
       billId,
       { ...req, externalRef: "4471", externalProvider: "other", externalMachine: "Bar terminal" },
       v.operator,
+      null,
     );
 
     const details = {
@@ -399,10 +432,10 @@ describe("A1515 pay for items: what the new bill keeps", () => {
       })),
       externalRef: "4471",
     };
-    await payForItems(deps(), v.cfg, billId, req, v.operator);
+    await payForItems(deps(), v.cfg, billId, req, v.operator, null);
 
     await expect(
-      payForItems(deps(), v.cfg, billId, { ...req, externalRef: "4472" }, v.operator),
+      payForItems(deps(), v.cfg, billId, { ...req, externalRef: "4472" }, v.operator, null),
     ).rejects.toMatchObject({ code: "submission.id_reused" });
     expect(await billsNaming(billId)).toHaveLength(1);
   });
@@ -426,7 +459,7 @@ describe("A1515 pay for items: what the new bill keeps", () => {
         tendered: "15.00",
       });
 
-      const paid = await payForItems(deps(), v.cfg, billId, req, v.operator);
+      const paid = await payForItems(deps(), v.cfg, billId, req, v.operator, null);
 
       const [newBill] = await v.db
         .select({ receiptLocale: workingOrders.receiptLocale })

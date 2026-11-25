@@ -28,6 +28,20 @@ export interface Authorization {
   viaOverride: boolean;
 }
 
+/** The person signed in on the open till session `sessionId`; throws `session.not_open`. */
+export async function signedInPerson(
+  tx: Database | Transaction,
+  sessionId: string,
+): Promise<string> {
+  const [row] = await tx
+    .select({ personId: tillSessions.personId })
+    .from(tillSessions)
+    .innerJoin(persons, eq(persons.id, tillSessions.personId))
+    .where(and(eq(tillSessions.id, sessionId), isNull(tillSessions.endedAt)));
+  if (row === undefined) throw new AppError("session.not_open", { sessionId });
+  return row.personId;
+}
+
 /**
  * Satisfied EITHER by the session's operator holding `permission`, OR by a supervisor `override` (a
  * second person's PIN, who must hold it). Returns the authorizing person for the caller to record.
@@ -43,15 +57,10 @@ export async function authorize(
   args: { sessionId: string; permission: Permission | (string & {}); override?: Override },
   attempts?: PinAttempts,
 ): Promise<Authorization> {
-  const [row] = await tx
-    .select({ personId: tillSessions.personId })
-    .from(tillSessions)
-    .innerJoin(persons, eq(persons.id, tillSessions.personId))
-    .where(and(eq(tillSessions.id, args.sessionId), isNull(tillSessions.endedAt)));
-  if (row === undefined) throw new AppError("session.not_open", { sessionId: args.sessionId });
+  const operatorId = await signedInPerson(tx, args.sessionId);
 
-  if (holds(await readPersonAuthority(tx, row.personId), args.permission)) {
-    return { authorizedBy: row.personId, permission: args.permission, viaOverride: false };
+  if (holds(await readPersonAuthority(tx, operatorId), args.permission)) {
+    return { authorizedBy: operatorId, permission: args.permission, viaOverride: false };
   }
 
   if (args.override === undefined) {

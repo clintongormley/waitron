@@ -1,5 +1,6 @@
 import type {
   AllocationPreview,
+  BillBalance,
   BillEditExpected,
   BillPaymentResult,
   BillRevisions,
@@ -12,6 +13,7 @@ import type {
   ItemPaymentRequest,
   ItemPick,
 } from "../api/item-payment-types.js";
+import type { StringKey } from "../i18n/strings.js";
 import { fill, t } from "../i18n/t.js";
 import type { PayLine, PayRefusal, PayRequest } from "../widgets/bill-pay-dialog.js";
 import { moneyPlus, paymentAsk, type Confirmation, type PayChoice } from "./bill-payment.js";
@@ -90,6 +92,22 @@ export function itemsAllocated(
   };
 }
 
+/** Why the Pay window offers no Items: from Find a bill; or on a Counter order sent to the kitchen
+ * (in the Counter window's collect stage or `placed` there, or `placed` with no receipt since moved
+ * to a table), which Pay for items refuses; else null. */
+export function itemsBarredReason(open: {
+  found: boolean;
+  counter: boolean;
+  counterCollect: boolean;
+  printed: boolean;
+  status: BillBalance["status"] | undefined;
+}): StringKey | null {
+  if (open.found) return "bill_pay.items_barred_found";
+  if (open.counterCollect || (open.status === "placed" && (open.counter || !open.printed)))
+    return "bill_pay.items_barred_counter";
+  return null;
+}
+
 /** Whether `preview` is Pay for items': only it carries the chosen items' price, as they are paid
  * on a bill of their own. */
 export function paysOnNewBill(
@@ -114,16 +132,14 @@ export function itemsRefusal(refusal: PayRefusal): PayRefusal {
   };
 }
 
-/** `confirmation` with its items part, for an items choice paid on a bill of its own; one whose
- * items `staysOnBill`, a printed bill's, is still paid where it is. */
+/** `confirmation` with its items part, for an items choice paid on a bill of its own. */
 export function withItems(
   confirmation: Confirmation,
   asked: PayRequest,
   expectedEdit: BillEditExpected | null,
   revisions: BillRevisions,
-  staysOnBill: boolean,
 ): Confirmation {
-  if (asked.choice.kind !== "items" || staysOnBill) return confirmation;
+  if (asked.choice.kind !== "items") return confirmation;
   // The route refuses an items payment with no edit state, and a resend would repeat it.
   if (expectedEdit === null) throw new Error("Pay for items needs the bill's edit state");
   return {
@@ -172,16 +188,15 @@ export function itemsRequestOf(
   return body;
 }
 
-/** The preview for `asked`: an items choice through Pay for items unless its items `staysOnBill`
- * (a printed bill's), every other through today's bill payment preview. */
+/** The preview for `asked`: an items choice through Pay for items, every other through today's bill
+ * payment preview. */
 export async function previewPayment(
   api: TillApi,
   billId: string,
   asked: PayRequest,
   expectedEdit: BillEditExpected | null,
-  staysOnBill: boolean,
 ): Promise<AllocationPreview> {
-  if (asked.choice.kind === "items" && !staysOnBill)
+  if (asked.choice.kind === "items")
     return itemsAllocated(await api.previewItemPayment(billId, itemsAsk(asked)), asked.pay.method);
   return api.previewBillPayment(
     billId,
@@ -190,15 +205,16 @@ export async function previewPayment(
 }
 
 /** Takes the payment: with an items part through Pay for items, answering the new bill as
- * `paidOn`; otherwise through today's bill payment. */
+ * `paidOn` and the bill the items came from as `sourceBalance`; otherwise through today's bill
+ * payment. */
 export async function takePayment(
   api: TillApi,
   billId: string,
   request: Confirmation & { submissionId: string },
   options: ReadOptions,
-): Promise<BillPaymentResult & { paidOn?: string }> {
+): Promise<BillPaymentResult & { paidOn?: string; sourceBalance?: BillBalance }> {
   const { items } = request;
   if (items === undefined) return api.takeBillPayment(billId, request, options);
   const paid = await api.payForItems(billId, itemsRequestOf({ ...request, items }), options);
-  return { ...paid.payment, paidOn: paid.billId };
+  return { ...paid.payment, paidOn: paid.billId, sourceBalance: paid.sourceBalance };
 }

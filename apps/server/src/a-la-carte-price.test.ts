@@ -411,7 +411,7 @@ it("keeps the a la carte price on the row a split cuts off", async () => {
   ]);
 });
 
-it("keeps the a la carte price on the set-menu dish Reopen to split copies onto the new bill", async () => {
+it("keeps the a la carte price on the set-menu dish Reopen bill copies onto the new bill", async () => {
   const from = await tableBill();
   const to = await tableBill();
   await send(await saveSetMenuDraft(venue, from, inMenu(supplement)));
@@ -556,7 +556,7 @@ it("keeps the course a dish counts as on the rows a split carves", async () => {
   ]);
 });
 
-it("keeps the course a dish counts as on the dishes Reopen to split copies onto the new bill", async () => {
+it("keeps the course a dish counts as on the dishes Reopen bill copies onto the new bill", async () => {
   const from = await tableBill();
   const to = await tableBill();
   await send(await saveSetMenuDraft(venue, from, inMenu(supplement)));

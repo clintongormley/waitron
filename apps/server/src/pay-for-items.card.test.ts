@@ -580,6 +580,24 @@ describe("A1515 pay for items on the card reader", () => {
     expect(await partyRevisionOf(venue, sourceId)).toBeGreaterThan(partyDuring);
   });
 
+  it("the answer carries the table's bill as the put-back left it", async () => {
+    const sourceId = await coffeeAndTarta();
+    venue.card.failNextCollect();
+
+    const paid = await payTartaByReader(sourceId);
+
+    expect(paid.status).toBe(200);
+    expect(paid.json.payment).toMatchObject({ outcome: "declined" });
+    expect(paid.json.sourceBalance).toMatchObject({
+      workingOrderId: sourceId,
+      status: "open",
+      total: "21.00",
+      received: "0.00",
+      reserved: "0.00",
+      outstanding: "21.00",
+    });
+  });
+
   it("a declined card leaves a source the move left paid open, with no invoice", async () => {
     const sourceId = await coffeeAndTarta();
     await contribute(sourceId, "3.00");
@@ -1213,6 +1231,7 @@ describe("A1515 pay for items on the card reader", () => {
       sourceId,
       body,
       { personId: venue.operatorId, sessionId: session!.id },
+      null,
     ).finally(() => warn.mockRestore());
 
     await expect(paid).rejects.toMatchObject({ code: "storage.disk_full" });

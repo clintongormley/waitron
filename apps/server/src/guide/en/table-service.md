@@ -272,8 +272,7 @@ available to refund.
 In the bill's payment window, choose **Refund** beside the payment. The **Refund a payment**
 window asks how much to refund and why. For **Part of it**, enter the **Amount to refund**. Choose
 the **Reason** from the list. A reason that needs a note, such as **Other**, asks you to type one,
-and the note is recorded as the reason. On a printed bill, a payment for particular items is
-refunded in full, and those items can then be paid for again.
+and the note is recorded as the reason.
 
 While the bill has no invoice, or once its invoice has taken that payment off, **Refund** beside a
 payment that has a ticket of its own opens [Give money back](table-service.md#give-money-back) on
@@ -602,7 +601,7 @@ Everything else you do at the table is in the **⋮** menu beside the switcher, 
 first, headed with the bill on screen, such as **Bill 2 · Clint**, acts on that bill alone: **Name
 this bill**, **Move dishes…**, **Merge bills**, **Move this bill**, **Comp the bill**, **Record
 unpaid departure**, **Full invoice**, **Print the bill**, **Receipt copy**, **Cancel and
-credit** and **Reopen to split**, each when it applies. The second, **Whole table**, acts on everyone at the
+credit** and **Reopen bill**, each when it applies. The second, **Whole table**, acts on everyone at the
 table: **Allergies**, **Name the party**, **Guests**, **Mark bill requested for …** with the party's
 name (once requested, **Cancel the bill request for …**), **Split a table** (when the party sits at
 more than one table), **Join a table**, **Move guests** and **Finish table**. An action that needs a
@@ -701,10 +700,10 @@ a customer, so on one of those take off any dish that may not come before you pr
 
 A printed bill takes no more dishes. If the guests order something else, put it on **+ New bill**.
 
-If the guests then want to pay separately, open **⋮** and choose **Reopen to split**. The receipt
-is credited and its dishes go onto a new bill, ready for [**Move dishes…**](table-service.md#move-dishes).
-Once part of the bill is paid it cannot be split this way: the other guests pay the rest with
-**Pay**.
+If the guests then want to pay separately, open **⋮** and choose **Reopen bill**. This
+cancels the existing receipt and reopens the bill, ready for [**Move dishes…**](table-service.md#move-dishes).
+Money already paid counts towards it. A bill that has had a payment on its own receipt cannot be
+reopened: take the rest with **An amount** or **Split equally**.
 
 When a guest has already paid part of the bill with
 [a receipt of their own](table-service.md#pay-window), the bill lists the dishes, then that payment
@@ -950,13 +949,15 @@ particular dishes. For an equal share, enter how many people are still to pay, i
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
 The chosen dishes move to a bill of their own, paid at once, with its own receipt; the rest stays
 on this bill. Choosing every dish pays the whole bill. If the card is declined or you choose
-**Cancel payment**, the dishes go back to this bill. If they cannot go back, they stay on a bill of
-their own, to be paid there: at a table it is listed in the bill switcher, and at the Counter under
-**Parked orders**. While their card is still out, the till that
+**Cancel payment**, the dishes go back to this bill. If they cannot go back, for example because
+this bill was printed or paid while the card was out, they stay on a bill of their own, to be paid
+there: at a table it is listed in the bill switcher, and at the Counter under **Parked orders**.
+While their card is still out, the till that
 took it shows **Being paid on** and the number of their bill; do not charge those dishes again.
-On a printed bill, items are still paid on that bill. A printed bill offers these choices for what
-it still owes. If the bill is presented for collection and its invoice has yet to be issued,
-choose **Pay in parts** to see the same choices.
+On a printed bill, **Items** cancels the existing receipt and reopens the bill. A Counter order already
+sent to the kitchen, even once moved to a table, is paid with **An amount**, **Split equally** or
+**Whole bill**, not by item; when its bill is presented for collection, choose **Pay in parts** to
+see those choices.
 
 Choose the payment method, then press **Continue** to check it before taking any money. If the
 bill changes before you confirm, check the revised figures before confirming again.

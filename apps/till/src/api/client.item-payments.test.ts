@@ -87,6 +87,7 @@ describe("TillApi: Pay for items", () => {
         },
         balance,
       },
+      sourceBalance: { ...balance, workingOrderId: "wo-4" },
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(answer));
     const signal = new AbortController().signal;

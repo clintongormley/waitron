@@ -8,7 +8,7 @@ import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitr
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { trackDialog } from "./track-dialog.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, type DialogRefusal } from "../state/bill-payment.js";
@@ -18,7 +18,8 @@ import { servableDishes, serveListed, unservedDishText } from "./dish-format.js"
 /** `cancel` credits the receipt and cancels the bill; `split` also puts its dishes on a new bill. */
 export type CancelCreditMode = "cancel" | "split";
 
-/** A cancelled bill: the number of the corrective issued, or null when no number was read.
+/** A cancelled bill: the number of the corrective issued, or null when no number was read; a split
+ * names no number.
  * `creditedElsewhere` is a split that found the bill already credited and no new bill. */
 export interface CancelCreditDone {
   corrective: string | null;
@@ -41,20 +42,12 @@ const REFUSALS: Record<string, StringKey> = {
 const TEXT = {
   cancel: {
     title: "cancel_credit.title",
-    scope: "cancel_credit.scope",
-    scopeUnnumbered: "cancel_credit.scope_unnumbered",
     confirm: "cancel_credit.confirm",
-    done: "cancel_credit.done",
-    doneUnnumbered: "cancel_credit.done_unnumbered",
     refusals: REFUSALS,
   },
   split: {
     title: "split.title",
-    scope: "split.scope",
-    scopeUnnumbered: "split.scope_unnumbered",
     confirm: "split.confirm",
-    done: "split.done",
-    doneUnnumbered: "split.done_unnumbered",
     refusals: {
       ...REFUSALS,
       network: "split.unconfirmed",
@@ -63,15 +56,13 @@ const TEXT = {
       "bill.left_unpaid": "split.refused_left_unpaid",
       "bill.not_at_table": "split.refused_not_at_table",
       "bill.not_issued": "split.refused_not_issued",
+      "bill.has_advance": "split.refused_advance",
       "bill.unserved_dishes": "split.unserved",
     },
   },
 } satisfies Record<
   CancelCreditMode,
-  Record<
-    "title" | "scope" | "scopeUnnumbered" | "confirm" | "done" | "doneUnnumbered",
-    StringKey
-  > & { refusals: Record<string, StringKey> }
+  Record<"title" | "confirm", StringKey> & { refusals: Record<string, StringKey> }
 >;
 
 @customElement("till-cancel-credit-dialog")
@@ -247,22 +238,19 @@ export class TillCancelCreditDialog extends LitElement {
   }
 
   #scopeText(): string {
+    if (this.mode === "split") return t("split.scope");
     const amount = formatMoney(this.amount, currentLocale());
-    const text = TEXT[this.mode];
     return this.invoiceNumber === null
-      ? t(text.scopeUnnumbered).replace("{amount}", () => amount)
-      : t(text.scope)
-          .replace("{invoice}", () => this.invoiceNumber!)
-          .replace("{amount}", () => amount);
+      ? fill(t("cancel_credit.scope_unnumbered"), { amount })
+      : fill(t("cancel_credit.scope"), { invoice: this.invoiceNumber, amount });
   }
 
   #doneText(done: CancelCreditDone): string {
-    const [numbered, unnumbered]: [StringKey, StringKey] = done.creditedElsewhere
-      ? ["split.credited_elsewhere", "split.credited_elsewhere_unnumbered"]
-      : [TEXT[this.mode].done, TEXT[this.mode].doneUnnumbered];
+    if (this.mode === "split")
+      return t(done.creditedElsewhere ? "split.credited_elsewhere" : "split.done");
     return done.corrective === null
-      ? t(unnumbered)
-      : t(numbered).replace("{number}", () => done.corrective!);
+      ? t("cancel_credit.done_unnumbered")
+      : fill(t("cancel_credit.done"), { number: done.corrective });
   }
 
   #doneBody(done: CancelCreditDone) {
@@ -346,7 +334,11 @@ export class TillCancelCreditDialog extends LitElement {
       <p data-cancel-credit-scope>${this.#scopeText()}</p>
       ${this.mode === "split" ? nothing : this.#reasonField(fieldError)}
       ${unserved === null ? nothing : this.#unservedBody(unserved)}
-      <p class="muted" data-cancel-credit-next>${t("cancel_credit.approval_next")}</p>
+      ${
+        this.mode === "split"
+          ? nothing
+          : html`<p class="muted" data-cancel-credit-next>${t("cancel_credit.approval_next")}</p>`
+      }
       <wt-form-actions .error=${this.#bottomMessage(fieldError)}
         >${recoveryLink(this.shownRefusal)}
         <wt-button

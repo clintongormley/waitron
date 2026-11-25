@@ -2,7 +2,6 @@ import { eq, inArray } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { adjustmentLines, billSetMenuCopies, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createPinThrottle } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { groupSetMenus, suggestMove, type SetMenuGroupingInput } from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
@@ -47,10 +46,7 @@ async function printedBill() {
 }
 
 function split(billId: string) {
-  return splitAfterPrint(specDeps(spec), venue.cfg, billId, {
-    ...venue.operator,
-    attempts: { throttle: createPinThrottle(), slot: "split" },
-  });
+  return splitAfterPrint(specDeps(spec), venue.cfg, billId, venue.operator);
 }
 
 /** Comps line `lineNo` of the bill whole, under the give-away reason. */

@@ -1,0 +1,163 @@
+import { beforeEach, describe, expect, it } from "vitest";
+import { billOf } from "../../test/bill-pay-app.js";
+import type { BillBalance, BillEditExpected } from "../api/client.js";
+import { fill, setLocale, t } from "../i18n/t.js";
+import {
+  billAfterDocument,
+  billAfterItems,
+  billNoticeText,
+  creditedNotice,
+  goneNotice,
+  movedToBill,
+  noticeAfterGone,
+  reopenedTo,
+} from "./reopened-bill.js";
+
+const balance = (workingOrderId: string) => ({ workingOrderId }) as unknown as BillBalance;
+const edit: BillEditExpected = {
+  billId: "wo-4",
+  editorVersion: 0,
+  draftId: null,
+  draftRevision: null,
+};
+
+describe("movedToBill", () => {
+  it("moves the window to the reopened bill, unprinted, its balance shown and its edit state unread", () => {
+    const open = {
+      id: 7,
+      billId: "wo-4",
+      printed: true,
+      balance: balance("wo-4"),
+      expectedEdit: edit,
+    };
+
+    expect(movedToBill(open, balance("wo-10"))).toEqual({
+      id: 7,
+      billId: "wo-10",
+      printed: false,
+      balance: balance("wo-10"),
+      expectedEdit: null,
+    });
+  });
+});
+
+describe("creditedNotice and billNoticeText", () => {
+  beforeEach(() => setLocale("en"));
+  const reopen = { from: "wo-4", to: "wo-5" };
+  const reopened = billOf({ workingOrderId: "wo-5", billNumber: 2 });
+
+  it("says the receipt is cancelled and which bill holds the dishes, naming no corrective", () => {
+    const printed = billOf({
+      billNumber: null,
+      status: "abandoned",
+      correctives: ["R-1/3", "R-1/4"],
+    });
+    const notice = creditedNotice([printed, reopened], reopen);
+
+    expect(billNoticeText(notice)).toBe("Receipt cancelled. The dishes are on Bill 2.");
+    setLocale("es");
+    try {
+      const spanish = fill(t("table.bill_credited"), { shown: "Cuenta 2" });
+      expect(spanish).not.toContain("Receipt");
+      expect(billNoticeText(notice)).toBe(spanish);
+    } finally {
+      setLocale("en");
+    }
+  });
+
+  it("says the same when the read names no corrective, and nothing while the reopened bill is unlisted", () => {
+    expect(billNoticeText(creditedNotice([reopened], reopen))).toBe(
+      "Receipt cancelled. The dishes are on Bill 2.",
+    );
+    expect(creditedNotice([billOf()], reopen)).toBeNull();
+  });
+
+  it("names the chosen dishes' own bill when they could not go back", () => {
+    const printed = billOf({ billNumber: null, status: "abandoned", correctives: ["R-1/4"] });
+    const own = billOf({ workingOrderId: "wo-9", billNumber: 3 });
+    const kept = { from: "wo-4", to: "wo-9" };
+
+    expect(billNoticeText(creditedNotice([printed, own], kept))).toBe(
+      "Receipt cancelled. The dishes are on Bill 3.",
+    );
+    expect(billNoticeText(creditedNotice([own], kept))).toBe(
+      "Receipt cancelled. The dishes are on Bill 3.",
+    );
+  });
+
+  it("words a bill that left the table, with or without its number, in the language shown now", () => {
+    const shown = billOf({ workingOrderId: "wo-5", billNumber: 2 });
+    const notice = goneNotice(billOf(), shown);
+    expect(billNoticeText(notice)).toBe(
+      fill(t("table.bill_gone"), { gone: "Bill 1", shown: "Bill 2" }),
+    );
+    expect(billNoticeText(goneNotice(undefined, shown))).toBe(
+      fill(t("table.bill_gone_unnumbered"), { shown: "Bill 2" }),
+    );
+    setLocale("es");
+    try {
+      expect(billNoticeText(notice)).toBe(
+        fill(t("table.bill_gone"), { gone: "Cuenta 1", shown: "Cuenta 2" }),
+      );
+    } finally {
+      setLocale("en");
+    }
+  });
+});
+
+describe("billAfterItems", () => {
+  const items = (status: BillBalance["status"]) =>
+    ({ workingOrderId: "wo-9", status }) as unknown as BillBalance;
+  const answer = (status: BillBalance["status"]) => ({
+    balance: items(status),
+    paidOn: "wo-9",
+    sourceBalance: balance("wo-5"),
+  });
+
+  it("is the reopened bill, unless a card that charged nothing left the dishes on their open bill", () => {
+    expect(billAfterItems("wo-4", answer("abandoned"), true)).toEqual(balance("wo-5"));
+    expect(billAfterItems("wo-4", answer("open"), false)).toEqual(balance("wo-5"));
+    expect(billAfterItems("wo-4", answer("open"), true)).toEqual(items("open"));
+  });
+
+  it("is nothing when the answer names the bill paid from", () => {
+    expect(billAfterItems("wo-5", answer("open"), true)).toBeUndefined();
+  });
+});
+
+describe("reopenedTo and noticeAfterGone", () => {
+  beforeEach(() => setLocale("en"));
+  const reopen = { from: "wo-4", to: "wo-5" };
+  const reopened = billOf({ workingOrderId: "wo-5", billNumber: 2 });
+  const other = billOf({ workingOrderId: "wo-6", billNumber: 3 });
+
+  it("is the reopened bill only when the bill that left is the one Pay for items reopened, and it is listed", () => {
+    expect(reopenedTo(reopen, "wo-4", [reopened, other])).toBe("wo-5");
+    expect(reopenedTo(reopen, "wo-6", [reopened, other])).toBeUndefined();
+    expect(reopenedTo(reopen, "wo-4", [other])).toBeUndefined();
+    expect(reopenedTo(undefined, "wo-4", [reopened])).toBeUndefined();
+  });
+
+  it("says the receipt was cancelled for the reopened bill, else names the bill shown, else nothing", () => {
+    expect(noticeAfterGone(reopen, "wo-4", [reopened], undefined, reopened)).toEqual(
+      creditedNotice([reopened], reopen),
+    );
+    expect(noticeAfterGone(reopen, "wo-6", [reopened], other, reopened)).toEqual(
+      goneNotice(other, reopened),
+    );
+    expect(noticeAfterGone(undefined, "wo-6", [reopened], other, undefined)).toBeNull();
+  });
+});
+
+describe("the bill shown on closing a settlement document", () => {
+  const others = [{ workingOrderId: "wo-6" }, { workingOrderId: "wo-7" }];
+
+  it.each([
+    ["the first bill still to pay when the document names none", undefined, others, "wo-6"],
+    ["no other bill when none is left to pay", undefined, [], undefined],
+    ["the bill the document names", "wo-5", others, "wo-5"],
+    ["no other bill when the one it names is on screen", "wo-4", others, undefined],
+  ] as const)("is %s", (_, returnTo, left, next) => {
+    expect(billAfterDocument(returnTo, "wo-4", left)).toBe(next);
+  });
+});

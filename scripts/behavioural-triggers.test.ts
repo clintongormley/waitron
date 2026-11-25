@@ -39,6 +39,7 @@ import {
   PARTY_ALLERGY_GUEST_ANSWER_REFUSAL,
   POST_SETTLEMENT_REFUSAL,
   PRODUCT_ID_FIXED_REFUSAL,
+  REOPENED_FROM_REFUSAL,
   TRANSITION_REFUSAL,
   VARIANT_LOCALES_REFUSAL,
   VARIANT_ONE_LEVEL_REFUSAL,
@@ -143,6 +144,8 @@ const EXPECTED_TRIGGERS = [
   "working_orders_invoice_type_update",
   "working_orders_recipient_identity_insert",
   "working_orders_recipient_identity_update",
+  "working_orders_reopened_from_insert",
+  "working_orders_reopened_from_update",
   "sales_recipient_identity_insert",
   "invoice_series_guard_update",
   "refunds_guard_update",
@@ -928,6 +931,46 @@ describe("working_orders_dining_fixed", () => {
         `update working_orders set dining = 'takeaway' where id = 'wo-dining-free'`,
       ),
     ).toBeUndefined();
+  });
+});
+
+describe("working_orders_reopened_from_*", () => {
+  it("refuses an insert naming the bill it reopens", () => {
+    expect(
+      refusalFor(
+        connection,
+        `insert into working_orders (id, source, device_id, order_number, status, opened_at, dining, reopened_from) ` +
+          `values ('wo-reopen-insert', 'device', 'dev-active', (select max(order_number) + 1 from working_orders), 'open', '${STAMP}', 'eat_in', 'wo-placed')`,
+      ),
+    ).toBe(REOPENED_FROM_REFUSAL);
+  });
+
+  it("refuses linking an open bill to a bill that is not placed", () => {
+    connection.exec(workingOrder("wo-reopen-unplaced", "open"));
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set reopened_from = 'wo-settled' where id = 'wo-reopen-unplaced'`,
+      ),
+    ).toBe(REOPENED_FROM_REFUSAL);
+  });
+
+  it("links an open bill to a placed one once, and refuses changing or clearing it", () => {
+    connection.exec(workingOrder("wo-reopen-linked", "open"));
+    connection.exec(workingOrder("wo-reopen-printed", "placed"));
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set reopened_from = 'wo-reopen-printed' where id = 'wo-reopen-linked'`,
+      ),
+    ).toBeUndefined();
+    for (const value of ["'wo-placed'", "null"])
+      expect(
+        refusalFor(
+          connection,
+          `update working_orders set reopened_from = ${value} where id = 'wo-reopen-linked'`,
+        ),
+      ).toBe(REOPENED_FROM_REFUSAL);
   });
 });
 

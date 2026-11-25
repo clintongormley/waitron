@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { setHelpMode } from "@waitron/ui";
@@ -1281,10 +1281,18 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     expect(text(root(el).querySelector("[data-pay-collecting]"))).toBe(t("card.collecting"));
   });
 
-  it("says a declined card took nothing, above the action", async () => {
-    const el = await mount({ refusal: { code: "declined" } });
-    expect(actions(el).error).toBe(t("bill_pay.card_declined"));
-  });
+  it.each([
+    ["en", "The card was declined."],
+    ["es", "La tarjeta se ha rechazado."],
+  ])(
+    "says a declined card was declined, and nothing more, above the action, in %s",
+    async (locale, sentence) => {
+      setLocale(locale);
+      onTestFinished(() => setLocale("en"));
+      const el = await mount({ refusal: { code: "declined" } });
+      expect(actions(el).error).toBe(sentence);
+    },
+  );
 
   it("keeps a declined item chosen when it comes back to the bill under a new line number", async () => {
     const el = await mount();
@@ -3920,6 +3928,86 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
       expect(confirmed).toEqual([{}]);
       cleanupWidgets();
     }
+  });
+
+  it("on a printed bill says only that this cancels the receipt and reopens the bill", async () => {
+    for (const [status, sentence] of [
+      ["placed", "This cancels the existing receipt and reopens the bill."],
+      ["open", t("bill_pay.items_own_bill")],
+    ] as const) {
+      const el = await mount({
+        balance: balanceOf({ status, outstanding: "120.00" }),
+        asked: itemsAsked,
+        preview: ownBill("35.00"),
+      });
+      expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(sentence);
+      cleanupWidgets();
+    }
+  });
+
+  it("says in Spanish what paying a printed bill's items does", async () => {
+    setLocale("es");
+    onTestFinished(() => setLocale("en"));
+    const el = await mount({
+      balance: balanceOf({ status: "placed", outstanding: "120.00" }),
+      asked: itemsAsked,
+      preview: ownBill("35.00"),
+    });
+    expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(
+      "Esto anula el ticket y reabre la cuenta.",
+    );
+  });
+
+  // The printed bill's sentence is too short for a line that does not wrap to show clearly.
+  it.each(["placed", "open"] as const)(
+    "on a bill that is %s, the confirm step is no wider than the step that chooses the items",
+    async (status) => {
+      await page.viewport(1280, 800);
+      onTestFinished(() => page.viewport(414, 896));
+      const balance = balanceOf({ status, outstanding: "120.00" });
+      const width = (el: TillBillPayDialog) =>
+        root(el)
+          .querySelector("wt-dialog")!
+          .shadowRoot!.querySelector("dialog")!
+          .getBoundingClientRect().width;
+      const choosing = width(await mount({ balance }));
+      cleanupWidgets();
+      const confirming = width(
+        await mount({ balance, asked: itemsAsked, preview: ownBill("35.00") }),
+      );
+
+      expect(confirming).toBeLessThanOrEqual(choosing);
+    },
+  );
+
+  it("after a declined card on a printed bill, the credited line wraps rather than widening the window", async () => {
+    await page.viewport(1280, 800);
+    onTestFinished(() => page.viewport(414, 896));
+    const over = {
+      balance: balanceOf({ status: "open", outstanding: "120.00" }),
+      refusal: { code: "declined" },
+    };
+    const width = (el: TillBillPayDialog) =>
+      root(el)
+        .querySelector("wt-dialog")!
+        .shadowRoot!.querySelector("dialog")!
+        .getBoundingClientRect().width;
+    const plain = width(await mount(over));
+    cleanupWidgets();
+    const credited = fill(t("table.bill_credited"), {
+      shown: "Bill 2 · Company dinner for the visiting architects",
+    });
+    expect(credited).toBe(
+      "Receipt cancelled. The dishes are on Bill 2 · Company dinner for the visiting architects.",
+    );
+    const el = await mount({ ...over, credited });
+    const line = root(el).querySelector("[data-pay-credited]")!;
+    expect(text(line)).toBe(credited);
+
+    expect(width(el)).toBeLessThanOrEqual(plain);
+    const below =
+      line.nextElementSibling!.getBoundingClientRect().top - line.getBoundingClientRect().bottom;
+    expect(below).toBeCloseTo(parseFloat(getComputedStyle(line.parentElement!).rowGap), 1);
   });
 
   it("shows the preview's total for the chosen items", async () => {

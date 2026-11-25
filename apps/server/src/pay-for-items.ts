@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { withIssuanceTransaction } from "@waitron/core";
 import {
   billPayments,
@@ -21,7 +21,13 @@ import {
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
-import { guardPathParty, moveDishes, refuseClosedBill, type BillCommand } from "./bill-actions.js";
+import {
+  guardBillParty,
+  guardPathParty,
+  moveDishes,
+  refuseClosedBill,
+  type BillCommand,
+} from "./bill-actions.js";
 import { readBillAdvances } from "./bill-advances.js";
 import {
   invalid,
@@ -31,25 +37,31 @@ import {
   type AllocationPreview,
   type BillFunds,
 } from "./bill-allocation.js";
-import { readBillEditState } from "./bill-editing.js";
+import { readBillEditState, requireBillEditors } from "./bill-editing.js";
 import {
   afterCardCharged,
   beginReaderBillPayment,
   collectBegunReaderPayment,
   diskFullBeforePayment,
+  getBillBalance,
   issueIfFullyPaid,
+  readBillBalance,
   refuseCoveredWhileAdvanceCorrectionOpen,
   takeBillPaymentIn,
+  type BillBalance,
   type BillPaymentDeps,
   type BillPaymentRequest,
   type BillPaymentResult,
   type ReaderBillPaymentDeps,
   type ReaderPaymentHold,
 } from "./bill-payments.js";
+import { assertProfileAction, type DeviceBinding } from "./device-session.js";
 import { outsideCardDetails } from "./outside-card.js";
 import { withSettledSlip } from "./payment-slip-print.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { fingerprint } from "./parties.js";
+import { lastReopenedBill } from "./reopened-bills.js";
+import { refuseReopen, reopenToSplitIn } from "./split-after-print.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
@@ -318,20 +330,89 @@ function retryPrintOf(req: PayForItemsRequest): string {
   });
 }
 
-/** The bill an earlier request with this submission id paid for items of `fromBillId` on (D6). */
+/**
+ * The bill an earlier request with this submission id paid for items of `fromBillId` on (D6), or,
+ * when `fromBillId` was a printed bill, of the bill reopened from it (PR4-D7); and the table's bill
+ * those items came from, as it is now: the last bill reopened from that one, if it was printed and
+ * reopened again since.
+ */
 async function earlierItemsBill(
   tx: Transaction,
   fromBillId: string,
   submissionId: string,
-): Promise<string | undefined> {
+): Promise<{ billId: string; sourceId: string } | undefined> {
+  const reopened = tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(eq(workingOrders.reopenedFrom, fromBillId));
   const [row] = await tx
-    .select({ billId: billPayments.workingOrderId })
+    .select({ billId: billPayments.workingOrderId, sourceId: workingOrders.itemsPaidFrom })
     .from(billPayments)
     .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
     .where(
-      and(eq(workingOrders.itemsPaidFrom, fromBillId), eq(billPayments.submissionId, submissionId)),
+      and(
+        or(
+          eq(workingOrders.itemsPaidFrom, fromBillId),
+          inArray(workingOrders.itemsPaidFrom, reopened),
+        ),
+        eq(billPayments.submissionId, submissionId),
+      ),
     );
-  return row?.billId;
+  return row === undefined
+    ? undefined
+    : { billId: row.billId, sourceId: await lastReopenedBill(tx, row.sourceId!) };
+}
+
+/** The bill the items move from, and the move's party read and picks, as the till sent them. */
+interface ItemsSource {
+  fromBillId: string;
+  picks: readonly ItemPick[];
+  party: { partyId?: string; expectedPartyRevision?: number };
+  expectedEdits: BillEditExpected[];
+}
+
+/**
+ * A printed bill reopened (PR4-D7), its party read and edit state checked first against
+ * what the till read: the items then move from the reopened bill, each pick naming its line's copy,
+ * under the party's revision and the edit state as the reopen left them. Any other bill is answered
+ * as sent. Runs in the item payment's issuance transaction, as the reopen files a credit note.
+ */
+async function reopenIfPrinted(
+  tx: Transaction,
+  deps: TillSaleDeps,
+  cfg: DeviceRequestConfig,
+  sent: ItemsSource,
+  operator: { personId: string; sessionId: string },
+  device: DeviceBinding | null,
+): Promise<ItemsSource> {
+  const [bill] = await tx
+    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, sent.fromBillId));
+  if (bill?.status !== "placed") return sent;
+  assertProfileAction(device, "take-orders");
+  await guardBillParty(tx, bill, { operatorId: operator.personId, ...sent.party }, { bump: false });
+  await requireBillEditors(tx, [sent.fromBillId], operator.personId, sent.expectedEdits);
+  const { billId, party, lineCopies } = await reopenToSplitIn(
+    tx,
+    deps,
+    cfg,
+    sent.fromBillId,
+    operator,
+    bill,
+  );
+  const picks = sent.picks.map((pick) => {
+    const copy = lineCopies.get(pick.lineId);
+    if (copy === undefined)
+      throw new AppError("tab.line_not_found", { tabId: sent.fromBillId, lineId: pick.lineId });
+    return { ...pick, lineId: copy };
+  });
+  return {
+    fromBillId: billId,
+    picks,
+    party: { partyId: party.id, expectedPartyRevision: party.revision },
+    expectedEdits: [await readBillEditState(tx, billId)],
+  };
 }
 
 /**
@@ -339,7 +420,8 @@ async function earlierItemsBill(
  * ({@link moveItemsToNewBill}) and the payment covers it whole. Cash and a hand-keyed card issue its
  * ticket in that transaction; a reader card is collected after it commits, and one that charges
  * nothing puts the items back (`failBillPayment`). A resend of the same submission answers as the
- * first did.
+ * first did. On a printed bill the device's profile must allow `take-orders`, and the bill is reopened
+ * first, in the same transaction ({@link reopenIfPrinted}).
  */
 export async function payForItems(
   deps: BillPaymentDeps | ReaderBillPaymentDeps,
@@ -347,7 +429,8 @@ export async function payForItems(
   fromBillId: string,
   req: PayForItemsRequest,
   operator: { personId: string; sessionId: string },
-): Promise<{ billId: string; payment: BillPaymentResult }> {
+  device: DeviceBinding | null,
+): Promise<{ billId: string; payment: BillPaymentResult; sourceBalance: BillBalance }> {
   if (req.entry === "reader" && !("provider" in deps)) throw invalid("entry");
   if (req.method === "cash" ? req.tendered === undefined : req.tendered !== undefined)
     throw invalid("tendered");
@@ -368,34 +451,56 @@ export async function payForItems(
     ...(req.externalRef === undefined ? {} : { externalRef: req.externalRef }),
     ...outsideCardDetails(req),
   });
-  /** The bill an earlier request paid on, else the new bill the items move to, and its edit state. */
+  /** The bill an earlier request paid on, else the new bill the items move to, and its edit state;
+   * and the bill the items came from, on a replay as {@link earlierItemsBill} answers it, never
+   * `fromBillId`, which on a printed bill names the abandoned bill (PR4-D10). */
   const billFor = async (tx: Transaction, holdSourceInvoice: boolean) => {
     const earlier = await earlierItemsBill(tx, fromBillId, req.submissionId);
-    if (earlier !== undefined) return { billId: earlier, request: payment(null) };
+    if (earlier !== undefined) return { ...earlier, request: payment(null) };
+    const source = await reopenIfPrinted(
+      tx,
+      deps,
+      cfg,
+      {
+        fromBillId,
+        picks: req.picks,
+        party: {
+          ...(req.partyId === undefined ? {} : { partyId: req.partyId }),
+          ...(req.expectedPartyRevision === undefined
+            ? {}
+            : { expectedPartyRevision: req.expectedPartyRevision }),
+        },
+        expectedEdits: req.expectedEdits,
+      },
+      operator,
+      device,
+    );
     const { billId } = await moveItemsToNewBill(
       tx,
       cfg,
-      fromBillId,
-      req.picks,
+      source.fromBillId,
+      source.picks,
       {
         operatorId: operator.personId,
-        ...(req.partyId === undefined ? {} : { partyId: req.partyId }),
-        ...(req.expectedPartyRevision === undefined
-          ? {}
-          : { expectedPartyRevision: req.expectedPartyRevision }),
-        expectedEdits: req.expectedEdits,
+        ...source.party,
+        expectedEdits: source.expectedEdits,
         admission: deps.admission,
       },
       { deps, cfg },
       { holdSourceInvoice },
     );
-    return { billId, request: payment(await readBillEditState(tx, billId)) };
+    return {
+      billId,
+      sourceId: source.fromBillId,
+      request: payment(await readBillEditState(tx, billId)),
+    };
   };
   const pending = diskFullBeforePayment(deps);
   const preRead = pending !== false && (await pending);
   if ("provider" in deps && req.entry === "reader") {
     const hold: ReaderPaymentHold = { release: () => {}, capturedReplay: false };
     let billId = fromBillId;
+    let sourceId = fromBillId;
     try {
       const begun = await withSettledSlip((slip) =>
         withIssuanceTransaction(
@@ -403,6 +508,7 @@ export async function payForItems(
           async (tx) => {
             const bill = await billFor(tx, true);
             billId = bill.billId;
+            sourceId = bill.sourceId;
             const started = await beginReaderBillPayment(
               tx,
               deps,
@@ -422,8 +528,9 @@ export async function payForItems(
           deps.log,
         ),
       );
-      if (begun.kind === "replay") return { billId, payment: begun.result };
-      return { billId, payment: await collectBegunReaderPayment(deps, cfg, begun) };
+      const paid =
+        begun.kind === "replay" ? begun.result : await collectBegunReaderPayment(deps, cfg, begun);
+      return { billId, payment: paid, sourceBalance: await getBillBalance(deps, sourceId) };
     } catch (error) {
       if (!hold.capturedReplay) throw error;
       return afterCardCharged(deps, billId, () => Promise.reject(error));
@@ -434,14 +541,12 @@ export async function payForItems(
   return withIssuanceTransaction(
     deps.db,
     async (tx) => {
-      const { billId, request } = await billFor(tx, false);
-      return {
-        billId,
-        payment: await takeBillPaymentIn(tx, deps, cfg, billId, request, operator, {
-          preRead,
-          print,
-        }),
-      };
+      const { billId, sourceId, request } = await billFor(tx, false);
+      const paid = await takeBillPaymentIn(tx, deps, cfg, billId, request, operator, {
+        preRead,
+        print,
+      });
+      return { billId, payment: paid, sourceBalance: await readBillBalance(tx, sourceId) };
     },
     deps.log,
   );
@@ -473,22 +578,28 @@ export interface PayForItemsAsk {
 
 /**
  * What paying for the chosen items would take, writing nothing: their price as
- * {@link priceItemPicks} reads it, allocated as a whole payment of a bill of that total.
+ * {@link priceItemPicks} reads it, allocated as a whole payment of a bill of that total. A printed
+ * bill is priced by its own dishes, which a reopen would copy, after Reopen bill's refusals.
  */
 export async function previewPayForItems(
-  db: Database,
+  deps: { db: Database; admission: TradingAdmission },
+  cfg: DeviceRequestConfig,
   fromBillId: string,
   ask: PayForItemsAsk,
+  device: DeviceBinding | null,
 ): Promise<{ total: string; applied: string; tip: string; change: string | null }> {
   if (ask.method === "cash" ? ask.tendered === undefined : ask.tendered !== undefined)
     throw invalid("tendered");
-  return withTransaction(db, async (tx) => {
+  return withTransaction(deps.db, async (tx) => {
     const [bill] = await tx
-      .select({ status: workingOrders.status })
+      .select({ status: workingOrders.status, partyId: workingOrders.partyId })
       .from(workingOrders)
       .where(eq(workingOrders.id, fromBillId));
     if (bill === undefined) throw new AppError("tab.not_open", { tabId: fromBillId });
-    refuseClosedBill(fromBillId, bill.status);
+    if (bill.status === "placed") {
+      assertProfileAction(device, "take-orders");
+      await refuseReopen(tx, deps, cfg, fromBillId, bill);
+    } else refuseClosedBill(fromBillId, bill.status);
     if (ask.picks.length === 0) throw new AppError("sale.empty_basket", {});
     const total = await priceItemPicks(tx, fromBillId, ask.picks);
     const funds: BillFunds = {

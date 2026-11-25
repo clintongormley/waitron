@@ -3,7 +3,6 @@ import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createPinThrottle } from "@waitron/identity";
 import { addProducts, menuItems, requireMenuRoot } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SimulatorPaymentProvider } from "@waitron/payments";
@@ -404,16 +403,13 @@ it("moves a dish with no comp of its own out of a comped Daily, which stays on i
   expect(await grouping(target.tabId)).toEqual(HAKE_DAILY);
 });
 
-it("keeps a comped dish and its Daily in place on the bill Reopen to split copies, after Sea bass is sent there (D15)", async () => {
+it("keeps a comped dish and its Daily in place on the copy Reopen bill makes, after Sea bass is sent there (D15)", async () => {
   const bill = await seated();
   await send(bill, ["Soup", "Sirloin"]);
   await comp(bill.tabId, await idOf(bill.tabId, "Sirloin"));
   await serveSpecBill(spec, bill.partyId, bill.tabId);
   await printSpecBill(spec, bill.partyId, bill.tabId);
-  const { billId } = await splitAfterPrint(specDeps(spec), venue.cfg, bill.tabId, {
-    ...venue.operator,
-    attempts: { throttle: createPinThrottle(), slot: "split" },
-  });
+  const { billId } = await splitAfterPrint(specDeps(spec), venue.cfg, bill.tabId, venue.operator);
   const copied = await grouping(billId);
   expect(copied.rows).toEqual([
     { what: "Soup", price: 0, in: "Daily menu 1" },
@@ -570,6 +566,7 @@ it("Pay for items of a Daily with its dishes pays a new bill of 14.00, and the s
     source.tabId,
     await payRequest(source, [daily], { method: "cash", applied: "14.00", tendered: "14.00" }),
     venue.operator,
+    null,
   );
 
   expect(paid.payment.outcome).toBe("received");
@@ -596,6 +593,7 @@ it("a declined reader card for a Daily puts both bills back to their first group
       simulationOutcome: "declined",
     }),
     venue.operator,
+    null,
   );
 
   expect(paid.payment.outcome).toBe("declined");
@@ -630,6 +628,7 @@ it("refuses Pay for items of a not-cheapest Special at its preview's 20.00, as t
       source.tabId,
       await payRequest(source, [special], { method: "cash", applied: "20.00", tendered: "20.00" }),
       venue.operator,
+      null,
     ),
   ).rejects.toMatchObject({ code: "bill.allocation_changed" });
   expect(await grouping(source.tabId)).toEqual(before);
@@ -715,7 +714,7 @@ it("leaves a not-cheapest Special row for row when a held row splits into units 
   expect(await specialRows(bill.tabId)).toEqual(before);
 });
 
-it("copies a not-cheapest Special row for row when a printed bill is reopened to split (D17)", async () => {
+it("copies a not-cheapest Special row for row when a printed bill is reopened (D17)", async () => {
   const bill = await seated();
   await send(bill, ["Soup", "Hake"]);
   await seedSpecial(bill.tabId);
@@ -724,10 +723,7 @@ it("copies a not-cheapest Special row for row when a printed bill is reopened to
   const before = await grouping(bill.tabId);
   expect(before.total).toBe(2000);
 
-  const { billId } = await splitAfterPrint(specDeps(spec), venue.cfg, bill.tabId, {
-    ...venue.operator,
-    attempts: { throttle: createPinThrottle(), slot: "split" },
-  });
+  const { billId } = await splitAfterPrint(specDeps(spec), venue.cfg, bill.tabId, venue.operator);
 
   const copied = await grouping(billId);
   expect(copied).toEqual({

@@ -20,7 +20,7 @@ export {
   holdsInCopy,
   type PersonAuthority,
 } from "./authority.js";
-export { authorize, authorizeApproval, authorizeByPin } from "./authorize.js";
+export { authorize, authorizeApproval, authorizeByPin, signedInPerson } from "./authorize.js";
 export { checkPin, verifyPersonCredential, verifyThrottledCredential } from "./credential.js";
 export type { PinAttempts } from "./credential.js";
 export type { SecretCheck } from "./secret-check.js";
