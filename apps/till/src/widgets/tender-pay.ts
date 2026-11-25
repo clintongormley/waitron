@@ -53,6 +53,7 @@ import type {
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { PropertyValues } from "lit";
 import { productUnit, soldByTheUnit, unitName } from "./product-name.js";
+import { refreshProductDeclarations } from "../state/menu-refresh.js";
 import { needsModifierPicker, quantityPlaces } from "../state/order-line.js";
 import { trackDialog } from "./track-dialog.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
@@ -358,6 +359,9 @@ export class TillTenderPay extends LitElement {
   readonly #labelFeedback = new FormFeedback(this);
   @state() private refEntry = "";
   @state() private outside: OutsideCardDetails = {};
+  /** The dishes offered now: one being weighed shows their allergens and diets. */
+  @property({ attribute: false }) products: readonly TillProduct[] = [];
+
   @state() private selected?: TillProduct;
   @state() private tipEntry = "";
   readonly #tipFeedback = new FormFeedback(this);
@@ -568,7 +572,23 @@ export class TillTenderPay extends LitElement {
       this.#guestsOrderId = this.store.id;
       this.#resetGuests();
     }
+    if (changed.has("products")) {
+      if (this.selected) this.selected = this.#withDeclarationsNow(this.selected);
+      if (this.modifierDraft)
+        this.modifierDraft = {
+          ...this.modifierDraft,
+          product: this.#withDeclarationsNow(this.modifierDraft.product),
+        };
+    }
     this.#syncScopes();
+  }
+
+  #withDeclarationsNow(product: TillProduct): TillProduct {
+    const { menuItemId } = product;
+    return refreshProductDeclarations(
+      product,
+      this.products.find((offered) => offered.menuItemId === menuItemId),
+    );
   }
 
   /** A trailing dot (`"0."`, mid-entry) and an empty pad are the two shapes `decimal()` would

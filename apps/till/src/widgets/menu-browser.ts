@@ -1410,6 +1410,7 @@ export class TillMenuBrowser extends LitElement {
               class="weigh"
               weighOnly
               .store=${this.store}
+              .products=${this.unfilteredServedProducts ?? this.servedProducts}
               .filters=${this.filters}
             ></till-tender-pay>`
           : nothing

@@ -3329,6 +3329,50 @@ it.each([
   }
 });
 
+it.each(["counter", "table"] as const)(
+  "takes a new version's allergens while a weighed dish is weighed and its choices are open (%s)",
+  async (kind) => {
+    const weighed = (version: string, allergens: TillMenuOffer["allergens"]) => {
+      const [, cooked] = burgerOffer().offeredModifiers;
+      const kilos = { ...unit, id: "unit-kg", precision: 3, hardwareUnit: "kg" as const };
+      const dish = offer("offer-ham", "Ham", "9.00", {
+        allergens,
+        unit: kilos,
+        offeredModifiers: [cooked!],
+      });
+      return menu(version, [dish]);
+    };
+    const { el, store, browser, serve } = await openSelling(
+      kind,
+      weighed("v1", {}),
+      menuState("v1"),
+    );
+    [...browser.shadowRoot!.querySelectorAll<HTMLElement>('[data-kind="product"]')]
+      .find((row) => row.textContent!.includes("Ham"))!
+      .click();
+    await flush(el);
+    const screen = kind === "table" ? browser : counter(el);
+    const pay = screen.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+    emit(pay.shadowRoot!.querySelector("till-numeric-pad")!, "wt-change", { value: "2" });
+    await pay.updateComplete;
+
+    await serve(weighed("v2", { milk: {} }), menuState("v2"));
+    pay.shadowRoot!.querySelector<HTMLElement>(".add")!.click();
+    await pay.updateComplete;
+    const picker = pay.shadowRoot!.querySelector("till-modifier-picker")!;
+    expect(picker.product.allergens).toEqual({ milk: {} });
+
+    await serve(weighed("v3", { sesame: {} }), menuState("v3"));
+    expect(pay.shadowRoot!.querySelector("till-modifier-picker")).toBe(picker);
+    emit(picker, "wt-modifier-confirm", { product: picker.product, extras: [] });
+    expect(store.lines).toHaveLength(1);
+    expect(store.lines[0]!.product).toMatchObject({
+      menuVersionId: "v1",
+      allergens: { sesame: {} },
+    });
+  },
+);
+
 it("reads the counter's offers again when only the live fields move", async () => {
   const { el } = await mountApp();
   await toCounter(el);

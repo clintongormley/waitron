@@ -500,6 +500,7 @@ export class TillCounterScreen extends LitElement {
             .filters=${this.selectedFilters}
             .paymentWindow=${this.stage === "order" || this.paymentWindow}
             .store=${this.store}
+            .products=${this.products}
             .hasSetMenus=${(this.setMenuBill?.setMenus.length ?? 0) > 0}
             .sendingTender=${this.sendingTender}
             .busy=${this.busy || this.payHeld}
