@@ -108,14 +108,12 @@ the cause was not found.
 ## What the AppArmor profile (A129, #862; A134, #887) left open
 
 - **`trust` is still refused.** A property write (`trust`) and `Disconnect` were measured still
-  refused against the stand-in BlueZ; BlueZ's `Agent1.Release` is not allowed either; the stand-in
-  never sends it, and whether a real BlueZ does is still open.
-- **Box check owed:** after `sudo bash waitron.sh install`, switch off the kernel's rate limit on
-  its log first (`sudo sysctl -w kernel.printk_ratelimit=0`), which can drop refusal lines —
-  image-smoke switches it off for that reason. Then `scan on` / `scan off` and a pairing from
-  `docker compose exec -it print-agent bluetoothctl`, then
-  `sudo journalctl -k --since '-5 min' | grep 'apparmor="DENIED"'` should print nothing for
-  `waitron-print-agent`.
+  refused against the stand-in BlueZ; BlueZ's `Agent1.Release` is not allowed either, and the
+  stand-in never sends it.
+- **The box check ran on 25 November 2026 and found no refusals**, without a positive control: on the
+  spare, with the kernel's log rate limit off, a scan from inside the agent's container, a delete that
+  unpaired the owner's printer and a pairing through the dashboard left no `apparmor="DENIED"` line in
+  `journalctl -k`. No refused `Agent1.Release` appeared.
 - **A bus policy that refused BlueZ's own calls would read as `no_controller`**: measured
   2026-09-29 on a CI runner against the stand-in BlueZ, with a profile that allowed the bus
   daemon's own messages but no message to BlueZ: `bluetoothctl --timeout 3 devices Paired` printed
@@ -156,73 +154,20 @@ just a green typecheck.
 
 ## Photographs and timings of pictures on paper
 
-The owner's photographs of a receipt, a kitchen
-ticket, the ruler page, a sample receipt and the test page on both printers are owed, and
-so are the box's timings (what to time: `docs/developers/testing-guide.md`, "How long a job of
-pictures takes to print on the box is not measured"). Anything the timings or photographs show
+Still owed: photographs of a kitchen ticket and the ruler page, and the two jobs
+`docs/developers/testing-guide.md` ("How long a job of pictures takes to print on the box") names, timed to
+the printer's own answer. On 25 November the owner photographed receipts, slips and an A4 invoice, and
+View printout matched the paper; the timings taken then are in that section. Anything the rest shows
 wrong becomes a new item.
-
-## Repeat the 58mm receipt in the wider Epson after the print-area fix
-
-The owner's wider printer clipped
-the right edge of a 58mm receipt whose payload centred without an explicit print area; whether the
-printer's own width setting also contributed was not tested. The corrected output on a 58 mm roll
-in that printer has not yet been printed; the 58 mm Bluetooth printer's test page printed whole on
-2026-11-20. Since C107 the print area is the image's width — 360 or 384 dots on 58 mm paper,
-512 or 576 on 80 mm.
-
-## The HP has not been added by typing its address
-
-The owner's home is
-the case that motivated it: the box sits on 192.168.10.x and the HP LaserJet on 192.168.20.x,
-which the port-9100 sweep cannot reach. On 2026-11-20 the Epson at `192.168.10.81` was added this
-way and printed. Still to try: type the HP's `192.168.20.56:9100`, which should come back as an
-office printer.
-
-## The setup-page link is unproven on the box
-
-The print agent builds it from
-`WAITRON_PRINT_AGENT_SETUP_URL` (passed through by `deploy/compose.yml`), or from the first of `WAITRON_BOX_ADDRESSES` (`apps/print-agent/src/config.ts`);
-no review seat ran the deployed compose and nobody has yet followed the link from a dashboard on
-the real box.
-
-## Bluetooth at the box
-
-Check that **Delete**, which unpairs since #3913, clears the real printer's pairing under the
-shipped AppArmor profile with bluetoothd's `autopair` plugin off. The owner paired a real printer
-through the dashboard on 20 November; the first attempt was refused by the printer
-(`AuthenticationFailed`) and the second worked. `waitron.sh install` switches
-`autopair` off with a systemd drop-in where it can (`deploy/README.md` says when it leaves
-Bluetooth alone), and the operator then types the PIN, 0000 for a 0000 printer; that drop-in was
-tried on a GitHub runner, where the Bluetooth service itself never ran, and has not run on the
-owner's box. Also owed: whether a real Bluetooth service sends `Agent1.Release`, which the
-profile does not allow and the CI stand-in never sends; what the box's real adapter reports as
-paired; time a pairing through the dashboard (whether scanning while pairing slows a real pairing
-is not measured — the agent keeps scanning through a pairing because skipping the scan would drop
-every unpaired device from the list).
 
 ## Printing over RFCOMM from INSIDE the print-agent container (A140)
 
-The spare printed a payment slip and receipt through its print agent on 25 November. The
-session measured channel discovery at 3.24–3.34 seconds against that build's three-second limit.
-The [A1578 plan](../superpowers/plans/2026-11-25-a1578-bluetooth-printing.md) lists the remaining
-print measurements. The helper's 20-second connect and send timeouts and the agent's five-second
-grace also await a box measurement.
-
-## The owner's Bluetooth printer was listed only under Show all devices (A137) — the cause on the box is not confirmed
-
-It needs the fixed image on the box first: run
-`docker compose exec print-agent bluetoothctl --timeout 6 scan on`, then
-`docker compose exec print-agent bluetoothctl devices`, and record how many devices are listed
-and where the printer falls among them. Choose **Delete** in Waitron and confirm that the box
-has unpaired the printer. Restart the print agent (`docker compose restart print-agent`) and wait a minute, so neither
-the agent nor the server holds an earlier reading of the printer; open Add a printer repeatedly, record on which scan it is first listed
-without Show all devices, and look for `bluetooth info failed` lines in
-`docker compose logs print-agent`.
-
-A404 (2026-11-05) found that each plain report from the agent dropped the printer mark an earlier
-scan had set, which hid a paired printer between scans; that may also explain this entry (not
-checked on the box).
+On 25 November 2026 a 108 KB job sent from the spare's container printed whole, to its last line,
+both when the connection was closed at once and five seconds later. The connection itself is fast or slow for as
+long as the printer stays switched on: 0.2–1.4 s, sometimes about 2 s, after some switch-ons and 2.7–4.3 s after others, with no
+known cause, and a Bluetooth scan just before did not cure it. The helper's 20-second connect and
+send timeouts and the agent's five-second grace have not been tried at their limits.
+[A1578 plan](../superpowers/plans/2026-11-25-a1578-bluetooth-printing.md).
 
 ## The virtual PDF printer
 
@@ -263,34 +208,19 @@ venue at commit `30c1c1c564` with 250 bills a day and seed 1.
 
 ## Bundle: One session at the real box: printers, paper, tax QR, the drawer
 
-Hardware and inbox checks to complete in the owner session.
+Hardware checks to complete with the owner. The owner walked most of the list on 20 and 25 November 2026;
+what is left is below. The 25 November session queued A1578 (slow Bluetooth prints), A1579 (Add a printer after an office printer), A1581
+(looks around A4 printing), A1582 (print an invoice again from the till), A1583 (View printout and
+Reprint for A4 rows), A1584 (a shorter Delete printer window), A1585 (dragging by touch) and A1587
+(the invoice email's attachment and message).
 
 - Verify live Google address completion during Cloud-connected Prepare setup on the owner's real box with Google lookup configured.
-
-- **What the 20 November session raised, by lane** (session notes:
-  `~/waitron-campaign-shared/real-box-session-20261120.md`, on the owner's Mac):
-  - C: drawer button only with a drawer (#3899), invoice email offered only when the bill can be emailed (#3905), Full invoice keeps its details on reopen (#3914, #3921), return to Card readers and no email in search boxes (#3927).
-  - D: profile printer switches (#3903), Email in System on every box (#3909), City on address forms (#3923).
-  - F: profile default reader at Pay (#3901), receipt card details, slip venue time and receipt copy (#3904), slip button after payment (#3920), default invoice printer (#3911).
-  - H: A4 paper-out wording, Print Queue rows and the retired agent's alert (#3908), Delete unpairs a Bluetooth printer (#3913).
-  - L: the registered address edit in Venue details (#3910), then the registered address asked in parts in setup and that edit, with the A4 full invoice's address, phone and email on one line (FULL-INVOICE-ISSUER-ADDRESS PR 2).
-  - B: open: PRINTER-TEST-PAGE-REAL-RECEIPT.
-
-- **A739 physical payment and delivery qualification.** On the real till, printer and reader,
-  check the post-payment slip button for each method, including a part payment, the slip's venue
-  time and the marked receipt copy from Print Queue: all three changed after the 20 November
-  session (lane F's #3920 and #3904) and have not been seen on paper. An emailed full
-  invoice was handed to the box's mail server and appears in the sender's Sent folder; arrival in a
-  separate recipient's inbox has not been seen. The session confirmed the receipt from the till,
-  a marked copy from Orders, and a Solo receipt and slip carrying the card and authorisation
-  details. For a new reader payment whose first receipt has no card details, check a receipt copy
-  after the background lookup fills them in.
-- **A773 physical-till trial: dragging.** Try long-press movement of New order lines and held
-  headings on a physical till. Keep drag only if it works reliably; Move to… and the held heading's
-  Move earlier/later actions remain available. Browser gesture checks do not settle this choice.
-  [Spec §11](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#11-left-for-later-backlog)
-- **A773 physical-till trial: serving part of a line.** Try marking part of a line served through
-  the dish window during service. Decide whether it is practical before changing that workflow.
+- **A739, two looks at paper.** The payment slip's new lines (#4337) after the box's next update, and, for a new
+  reader payment whose first receipt has no card details, a receipt copy after the background lookup
+  fills them in.
+- **A773 physical-till trial: dragging, after A1585.** On 25 November holding a line on the Pixel Tablet opened
+  the browser's menu every time, so nothing could be dragged; the owner asked for it to be fixed, not removed. Try it again on
+  the tablet once A1585 is on the box.
   [Spec §11](../superpowers/specs/2026-10-16-a773-courses-and-groups-design.md#11-left-for-later-backlog)
 - **What the AppArmor profile (A129, #862; A134, #887) left open:** **`trust` is still refused.** [Detail](printers.md#what-the-apparmor-profile-a129-862-a134-887-left-open)
 - **Loose ends left by C107 (#974).**
@@ -300,56 +230,29 @@ Hardware and inbox checks to complete in the owner session.
 - **Shared office-printer queues need physical qualification after A576.** From the shipped
   print-agent container, discover two queues on one computer, add both and print distinguishable
   pages to each. [Detail](printers.md#shared-office-printer-queues)
-- **Office-printer detection is proven on one office printer only.** The owner's HP Color LaserJet
-  MFP M181fw's real reply is a test fixture, and the live query marked it from a Mac on the owner's
-  network. It has not run from the box's container, and no receipt printer that answers IPP has
+- **Office-printer detection is proven on one office printer only.** Both boxes list the owner's HP
+  Color LaserJet MFP M181fw as an office printer. No receipt printer that answers IPP has
   been captured, so "A4 or letter means office printer" is a heuristic with one data point.
-- **A552. Invoices on the owner's office printer: a multi-page invoice and power loss.** On
-  20 November a one-page full invoice printed on the HP with its QR at 35 mm, and after paper ran
-  out it printed by itself once paper was back. Still owed: a multi-page invoice (A553), what
-  Waitron reports when the printer loses power mid-job, and the paper-out wording and Print Queue
-  rows lane H's #3908 changed, once that build reaches the box.
+- **A552. Invoices on the owner's office printer: a multi-page invoice.**
   [Detail](printers.md#a552-invoices-on-the-owners-office-printer-a-multi-page-invoice-and-power-loss)
 - **A printer reported by its `.local` name may stay addable.** From a Mac, resolving the HP's
-  `.local` name took 5 seconds, past the 1.5-second limit, so it was left unmarked. Not tried from
-  the box's container, where the lookup may fail outright; either way the printer stays addable.
+  `.local` name took 5 seconds, past the 1.5-second limit, so it was left unmarked. The system lookup inside the
+  main box's agent container does not resolve `waitron.local` or `waitron-spare.local` (`ENOTFOUND`
+  within 5 ms, 25 November); the HP's own name was not tried there, nor the agent's own lookup. Either way the printer stays addable.
+- **The print agent's setup-page link has never been followed on a box.** On the owner's main box
+  `WAITRON_PRINT_AGENT_SETUP_URL` and `WAITRON_BOX_ADDRESSES` are both empty, so its agent offers no
+  link (`apps/print-agent/src/config.ts`).
 - **Photographs and timings of pictures on paper.**
   [Detail](printers.md#photographs-and-timings-of-pictures-on-paper)
-- **Left unchecked since #327:** whether a device knock reaches the box while the Add agent dialog
-  is open, the five-line feed before the cut, and the receipt preview against printed paper. On
-  20 November discovery (the HP, and the Bluetooth printer seen on the spare box), receipts, slips,
-  a marked copy and the drawer pulse were all seen at the box.
-- **The TM-T88III's built-in QR command is untried** (spec "Verification on paper"): whether it
-  prints anything at all. On 20 November the drawn QR's dark squares measured 40 mm on the Epson's
-  80 mm paper, the top of the 30–40 mm band, and it scanned to AEAT's pre-production check page;
-  whether that band is meant to count the code's blank border is still undecided.
-- **Repeat the 58mm receipt in the wider Epson after the print-area fix.** The 58 mm Bluetooth
-  printer's test page printed whole on 20 November; a 58 mm roll in the wider printer, the case that
-  clipped, has not been printed since the fix.
-  [Detail](printers.md#repeat-the-58mm-receipt-in-the-wider-epson-after-the-print-area-fix)
-- **The HP has not been added by typing its address.** On 20 November the Epson was re-added
-  through Check a known address at `192.168.10.81` and came back with its saved calibration; the
-  HP's `192.168.20.56:9100`, on the network the sweep cannot reach, should come back as an office
-  printer.
-  [Detail](printers.md#the-hp-has-not-been-added-by-typing-its-address)
-- **The setup-page link is unproven on the box.**
-  [Detail](printers.md#the-setup-page-link-is-unproven-on-the-box)
-- **Bluetooth at the box.** On 20 November the owner unpaired, paired again (the first try was
-  refused by the printer, the second worked) and printed a test page. Delete now unpairs too (lane
-  H's #3913); that is not yet tried at the box.
-  [Detail](printers.md#bluetooth-at-the-box)
+- **Whether the 30–40 mm band for the tax QR counts the code's blank border is undecided.** The drawn
+  QR's dark squares measured 40 mm on the Epson's 80 mm paper, the top of the band, and it scanned to AEAT's
+  pre-production check page. The TM-T88III also prints a QR with its own command (seen 25 November).
 - **Printing over RFCOMM from INSIDE the print-agent container (A140).**
   [Detail](printers.md#printing-over-rfcomm-from-inside-the-print-agent-container-a140)
-- **The owner's Bluetooth printer was listed only under Show all devices (A137) — the cause on the
-  box is not confirmed.** It needs the fixed image on the box first.
-  [Detail](printers.md#the-owners-bluetooth-printer-was-listed-only-under-show-all-devices-a137--the-cause-on-the-box-is-not-confirmed)
-- **timesyncd's clock file after a backward set has not been watched across a reboot.**
-  [Detail](box.md#timesyncds-clock-file-after-a-backward-set-has-not-been-watched-across-a-reboot)
-- **The clock watch's suspend-aware clock has not been run across a real suspend on Linux.** It
-  reads `/proc/uptime` so that a box waking from sleep is not taken for a clock jumping forward.
-  Slice 9b's measurement M3 set the wall clock on a Linux runner and `/proc/uptime` did not move
-  with it; nobody has suspended a Linux box and watched it (`docs/developers/conventions-data.md`,
-  "A clock jump"). Left open by A798-B slice 9 (#2025).
+- **A TP-Link UB500 Bluetooth stick does not come up on a box.** Debian's kernel asks for
+  `rtl_bt/rtl8761bu_fw.bin`, which the install does not have, so the adapter stays down; the owner's spare
+  prints through its built-in Intel radio. Install `firmware-realtek` from `waitron.sh`, and have
+  Add a printer say so where a stick still does not come up (seen 25 November 2026).
 
 ## Bundle: A print agent somewhere other than the box
 
@@ -629,12 +532,13 @@ construct a friendly computer name from a printer label.
 ## A552. Invoices on the owner's office printer: a multi-page invoice and power loss
 
 Owed on
-the HP Color LaserJet MFP M181fw: a multi-page full invoice through the product; the same invoice
-as Apple Raster at 600 dpi; a test page from the Printers tab; and what Waitron reports when the
-printer is switched off mid-job. On 2026-11-20 a one-page full invoice printed with its QR at
-35 mm; the Lenovo saved a paper-out hold, then recorded one successful attempt after paper
-returned. The till wording and the A4 rows in Print Queue, which lane H's #3908 changed, still
-need checking on that printer with the updated build.
+the HP Color LaserJet MFP M181fw: a multi-page full invoice through the product, on a build with
+A1566's layout (#4163), and the same invoice as Apple Raster at 600 dpi.
+
+On 2026-11-25 (build `c8feeb29c9`) a test page printed. With no paper, the till, the alert and Print Queue said so within
+about 20 seconds and the invoice printed by itself once paper was back. With the power cut mid-print, the
+delivery became `unknown` after two minutes and nothing was sent again; the printer printed nothing when it came back, and Orders printed the
+invoice unmarked, as the original. What the till lacks there is A1582.
 
 How long the box takes to draw a page (A553, measured 2026-11-20 on the Lenovo M710q, i7-7700T):
 the server's `renderInvoicePage` from main `58508d7fe8`, bundled as the server is and run on the

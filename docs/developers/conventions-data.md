@@ -4803,7 +4803,9 @@ How it moves (A1420 plan D3; A1506 plan row 3):
   look compares how far the wall clock (`Date.now()`) moved since the last look with how far the
   boot clock moved. The boot clock is `/proc/uptime`, read through `bootReader().elapsed`
   (`apps/server/src/boot-reader.ts`). It keeps counting while the machine is suspended, so a box
-  waking from sleep is not taken for a jump. A failed read answers NaN, which is never a jump. A
+  waking from sleep is not taken for a jump (measured on the owner's M710q, 2026-11-25: across a
+  two-minute suspend `/proc/uptime` moved 123.1 s, the wall clock 123.1 s, the monotonic clock 3.1 s;
+  the watch itself was not running). A failed read answers NaN, which is never a jump. A
   difference of more than a minute (`JUMP_MS`), forwards or back, is a jump. A clock set by
   Waitron is never one: the watch is an anchor of the clock correction, so every set the host is
   asked to make, refused or not, re-takes the watch's starting point, and a move after the set is still seen at the next
@@ -4990,9 +4992,11 @@ comes out:
 - `clock.retry` takes the same lock (`busy`), then is refused `synchronised`, `not_running`
   (automatic time off, synchronisation read as neither yes nor no, or no listed time service
   running) or `saved_time_ahead` (timesyncd's saved
-  clock file is dated after now, or its date cannot be read). The reason is timesyncd's man page,
-  read, not measured: it "will advance the clock when it is started and notices that the system
-  clock is before the modification time of /var/lib/systemd/timesync/clock". Otherwise it runs `systemctl restart` on each running listed time service, writing no
+  clock file is dated after now, or its date cannot be read). The reason is timesyncd's man page:
+  it "will advance the clock when it is started and notices that the system
+  clock is before the modification time of /var/lib/systemd/timesync/clock". On the owner's M710q
+  (2026-11-25, time servers unreachable) a reboot with that file ten minutes ahead moved the clock
+  forward to it, and a reboot after a ten-minute backward set that moved the file back kept the set time. Otherwise it runs `systemctl restart` on each running listed time service, writing no
   journal line of its own, and answers `{"ok":true}` or `restart_failed`.
   Any other line answers `unknown_request`.
 

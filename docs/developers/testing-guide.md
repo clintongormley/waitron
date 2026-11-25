@@ -2269,7 +2269,13 @@ lines and a receipt, each sent to the owner's Bluetooth printer through
 answer to a `GS r 1` sent after the job (C106: _"the printer answers it only after the print data
 before it"_). Record them here when they are taken.
 
-The only measurement so far is C106's, on the owner's Mac, not the box, with Menlo rather than the
+On 2026-11-25 some jobs were timed on the box to the agent's report, which is earlier than the paper: the
+network printer took 0.13–0.15 s for 25 KB and 2.1 s for 76 KB, and the Bluetooth printer, through the
+spare's container in the printer's fast state, 0.3–2.1 s for a 13–16 KB slip and 0.8–1.9 s for a
+43–48 KB receipt (the states: `docs/backlog/printers.md`, "Printing over RFCOMM"). A one-page A4
+invoice took 13.5–13.7 s to the HP's completed answer.
+
+The only measurement to the printer's own answer is C106's, on the owner's Mac, not the box, with Menlo rather than the
 font the box draws with. In the queue entry's own words: _"The same 36-line Spanish receipt, 32
 columns: as text (ESC t 16, cp1252) 946 bytes; as `GS v 0` images at 384 dots wide, one 24-dot band
 per line, Menlo 20 px, 38,292 bytes. … Two runs each: text 2.72 s and 2.74 s to the answer; image

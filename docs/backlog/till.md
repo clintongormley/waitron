@@ -776,7 +776,7 @@ answers; where an entry says a rule is read across, the owner was not asked that
 
 ## Bundle: For the owner's redesign of the table screens and review of the device screens
 
-17 entries. The owner is redesigning the table screens (owner, 2026-11-11: "we have to redesign the
+18 entries. The owner is redesigning the table screens (owner, 2026-11-11: "we have to redesign the
 table management screens, which i will do shortly") and will review the device screens, so nothing
 here is asked or built before that. They were separate entries, many of them questions, until
 2026-11-24.
@@ -785,6 +785,11 @@ here is asked or built before that. They were separate entries, many of them que
   review of the device screens (owner, 2026-11-24: "leave this one on hold - i will review the device
   screens in the near future").
   [Detail](till.md#a1211-the-served-toast-covers-the-order-screens-fire--send-all-buttons)
+- **Serving part of a row (A773's physical trial, owner, 2026-11-25).** It works, in four taps: the
+  row's details, **Mark served**, −, **Mark 1 served**; nothing says it will ask how many. Owner: "i think being able to
+  expand/collapse the rows will be more useful but i'm going to have a big design session on this
+  with impeccable. currently it is pretty bad". Seen on the same phone screens: a **Held ·** heading with nothing held, a
+  **Quantity** box beside **Change dish** in Dish details, and the Served toast over the totals.
 - **A893. Review every table state and its look (owner, 2026-10-18)**, with A936 (Waiting's minutes
   on the map), A856 and A859 below.
   [Detail](till.md#a893-owner-review-of-every-table-state-and-its-look-after-a757-lands)

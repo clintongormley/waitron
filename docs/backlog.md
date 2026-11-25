@@ -673,7 +673,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   when the till's void screen is designed.
   [Detail](backlog/till.md#cash-handed-back-for-a-voided-cash-sale-is-recorded-nowhere)
 
-- **For the owner's redesign of the table screens and review of the device screens** (bundle of 17,
+- **For the owner's redesign of the table screens and review of the device screens** (bundle of 18,
   nothing to build before them). Holds A1211, A893, A936, A856, A859, A561, A562, A1101, A550, A857, A672,
   A1333, A470, A1107, A1108, A1359, A1290, A1265.
   [Detail](backlog/till.md#bundle-for-the-owners-redesign-of-the-table-screens-and-review-of-the-device-screens)
@@ -768,7 +768,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **A print agent somewhere other than the box** (bundle of 3, size L, waits for another entry). Holds A1203, A1204, A1175. [Detail](backlog/printers.md#bundle-a-print-agent-somewhere-other-than-the-box)
 
-- **One session at the real box: printers, paper, tax QR, the drawer** (size M, needs the real hardware and inbox). Holds the remaining A739, A773 and A552 checks. [Detail](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
+- **One session at the real box: printers, paper, tax QR, the drawer** (size S, needs the real hardware). Holds the remaining A739, A773 and A552 checks. [Detail](backlog/printers.md#bundle-one-session-at-the-real-box-printers-paper-tax-qr-the-drawer)
 
 - **Measure one-job print pulls on the box.** Physical throughput, authentication and large retained queues remain unmeasured. [Detail](backlog/printers.md#measure-one-job-print-pulls-on-the-box)
 
