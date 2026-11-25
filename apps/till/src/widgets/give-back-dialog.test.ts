@@ -785,6 +785,60 @@ describe("pressing before the preview answered", () => {
   });
 });
 
+describe("a fiscal conflict", () => {
+  const conflict = {
+    code: "sif.allocation_invalid",
+    reason: "conflict_requires_administrator",
+    recoveryUrl: "/recovery/fiscal-conflict",
+  };
+  const link = (el: TillGiveBackDialog) =>
+    root(el).querySelector<HTMLAnchorElement>("wt-form-actions [data-recovery]");
+
+  it("says new invoices are stopped and links to recovery when the check refuses", async () => {
+    const api = fakeGiveBackApi();
+    api.previewGiveBack.mockRejectedValue({ ...conflict, status: 409 });
+    const { el } = await mount(api);
+    await choose(el, "goodwill");
+    await type(el, "5");
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("recovery.issuance_stopped")));
+    expect(link(el)!.getAttribute("href")).toBe("/recovery/fiscal-conflict");
+    expect(text(link(el))).toBe(t("recovery.open"));
+  });
+
+  it("says so on each choice the read holds back, with the recovery link", async () => {
+    const { code, ...params } = conflict;
+    const closed = { available: false, reason: { code, params } };
+    const { el } = await mount(
+      withView({ choices: { dishes: closed, goodwill: closed, extra: closed } }),
+    );
+    expect(text(root(el).querySelector("[data-choice-reason=dishes]"))).toBe(
+      t("recovery.issuance_stopped"),
+    );
+    expect(link(el)!.getAttribute("href")).toBe("/recovery/fiscal-conflict");
+  });
+
+  it("says so after part of the money went back, with the recovery link", async () => {
+    const api = fakeGiveBackApi();
+    const { code, ...params } = conflict;
+    api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
+      ...completedFor(body),
+      refusal: { code, params },
+    }));
+    const { el } = await mount(api);
+    await choose(el, "goodwill");
+    await reason(el, "complaint");
+    await type(el, "5");
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    submit(el).click();
+    await vi.waitFor(() =>
+      expect(text(root(el).querySelector("[data-outcome]"))).toContain(
+        t("recovery.issuance_stopped"),
+      ),
+    );
+    expect(link(el)!.getAttribute("href")).toBe("/recovery/fiscal-conflict");
+  });
+});
+
 describe("closing", () => {
   it("does not close for a close event from something inside it", async () => {
     const { el } = await mount();

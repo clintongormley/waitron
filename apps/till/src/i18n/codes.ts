@@ -549,10 +549,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The box could not finish this money back. Open Give money back again to see what is left to give back.",
     es: "El servidor no pudo terminar esta devolución. Vuelve a abrir Devolver dinero para ver lo que queda por devolver.",
   },
-  "sif.allocation_invalid": {
-    en: "This box is in a fiscal conflict with another box, so no money can go back from it now. Nothing has been given back.",
-    es: "Este servidor tiene un conflicto fiscal con otro servidor, así que ahora no se puede devolver dinero desde él. No se ha devuelto nada.",
-  },
   "sale.correction_not_admitted": {
     en: "This invoice cannot be corrected.",
     es: "Esta factura no se puede rectificar.",

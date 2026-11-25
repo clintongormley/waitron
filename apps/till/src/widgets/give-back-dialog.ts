@@ -58,8 +58,11 @@ import {
   doneStep,
   lostFor,
   lostStep,
+  recoveryLinkOf,
+  recoveryText,
   restOutcome,
   stillStarting,
+  summaryOf,
   terminalStep,
   waitsForCard,
   type Override,
@@ -231,7 +234,9 @@ export class TillGiveBackDialog extends LitElement {
     return formatMoney(value, currentLocale());
   }
   #reasonText(reason: GiveBackWaitReason): string {
-    return giveBackReasonMessage(reason.code, currentLocale(), reason.params);
+    return (
+      recoveryText(reason) ?? giveBackReasonMessage(reason.code, currentLocale(), reason.params)
+    );
   }
   /** The payments this purpose can give back from: those holding money, or for the extra, an extra. */
   #offered(purpose: GiveBackPurpose): GiveBackWay[] {
@@ -412,7 +417,7 @@ export class TillGiveBackDialog extends LitElement {
   }
   #refusalText(refusal: Refusal, lost: StringKey): string {
     if (refusal.code === "network") return t(lost);
-    return codeMessage(refusal.code, currentLocale(), refusal);
+    return recoveryText(refusal) ?? codeMessage(refusal.code, currentLocale(), refusal);
   }
   async #confirm(): Promise<void> {
     this.attempted = true;
@@ -641,7 +646,13 @@ export class TillGiveBackDialog extends LitElement {
       }
       <wt-form-actions
         .error=${this.sendRefusal === null ? "" : this.#sendRefusalText(this.sendRefusal)}
-        >${this.#cancelButton()}</wt-form-actions
+        >${recoveryLinkOf(
+          this.sendRefusal ??
+            shown
+              .map((purpose) => view.choices[purpose].reason)
+              .find((r) => recoveryText(r ?? null)) ??
+            null,
+        )}${this.#cancelButton()}</wt-form-actions
       >`;
   }
   #dishText(line: GiveBackLine): string {
@@ -733,35 +744,6 @@ export class TillGiveBackDialog extends LitElement {
       })}
     </fieldset>`;
   }
-  #summary(answer: GiveBackPreview) {
-    const way = this.#way()!;
-    const total = moneyPlus(typedMoney(this.draft.amount)!, this.#extra());
-    const now = this.#money(sumDecimals(answer.parts.map((part) => decimal(part.amount))));
-    const card = way.last4 === null ? "" : `···${way.last4}`;
-    const said =
-      way.way === "cash"
-        ? t("give_back.summary_cash")
-        : t(answer.manual ? "give_back.summary_terminal" : "give_back.summary_card");
-    return html`<div class="summary" data-summary>
-      <p class="total" data-summary-total>${this.#money(total)}</p>
-      <p data-summary-way>
-        ${said
-          .replace("{amount}", () => now)
-          .replace("{card}", () => card)
-          .replace(/\s+/g, " ")}
-      </p>
-      ${
-        positive(answer.leftUnderWay)
-          ? html`<p data-summary-rest>
-              ${t("give_back.summary_rest").replace("{amount}", () =>
-                this.#money(answer.leftUnderWay),
-              )}
-            </p>`
-          : nothing
-      }
-      ${answer.needs.length > 0 ? html`<p class="muted" data-pin>${t("give_back.pin")}</p>` : nothing}
-    </div>`;
-  }
   #form(view: GiveBackView, purpose: GiveBackPurpose) {
     const own = this.attempted ? this.#errors() : new Map<Field, string>();
     const errors = new Map(own);
@@ -829,7 +811,12 @@ export class TillGiveBackDialog extends LitElement {
           void this.#loadReasons();
         },
       })}
-      ${this.#ways(purpose)} ${answer === null ? nothing : this.#summary(answer)}
+      ${this.#ways(purpose)}
+      ${
+        answer === null
+          ? nothing
+          : summaryOf(answer, way!, moneyPlus(typedMoney(this.draft.amount)!, this.#extra()))
+      }
       <wt-form-actions
         .error=${[
           errors.size > 0 ? t("form.fix_fields") : "",
@@ -845,7 +832,11 @@ export class TillGiveBackDialog extends LitElement {
         ]
           .filter(Boolean)
           .join(" ")}
-        ><wt-button slot="cancel" variant="secondary" data-back @click=${() => this.#back()}
+        >${recoveryLinkOf(sent ?? refusal)}<wt-button
+          slot="cancel"
+          variant="secondary"
+          data-back
+          @click=${() => this.#back()}
           >${t("action.back")}</wt-button
         >
         <wt-button
@@ -931,7 +922,7 @@ export class TillGiveBackDialog extends LitElement {
       return html`<p class="muted" data-loading role="status">${t("give_back.loading")}</p>`;
     return html`<wt-form-actions
       .error=${this.#refusalText(this.loadRefusal, "give_back.read_failed")}
-      >${this.#cancelButton()}${
+      >${recoveryLinkOf(this.loadRefusal)}${this.#cancelButton()}${
         this.loadRefusal.code === "network"
           ? html`<wt-button variant="primary" data-reload @click=${() => void this.#load()}
               >${t("find_page.retry")}</wt-button

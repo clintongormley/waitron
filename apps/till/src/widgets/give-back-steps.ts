@@ -6,10 +6,12 @@ import type { OverrideConfirmDetail } from "./supervisor-override-dialog.js";
 import type {
   GiveBackAsk,
   GiveBackOutcome,
+  GiveBackPreview,
   GiveBackRight,
   GiveBackWay,
 } from "../api/give-back-types.js";
 import type { GiveBackRest, GiveBackSent } from "../state/give-back.js";
+import { recoveryLink, recoveryRefusalText, type RecoveryRefusal } from "./recovery-refusal.js";
 
 export type Override = OverrideConfirmDetail;
 /** One send: the rights an approver must hold before it goes, the rights to ask for if the write
@@ -47,6 +49,20 @@ export type Step =
 const money = (value: string) => formatMoney(value, currentLocale());
 const sumOf = (amounts: readonly string[]) => sumDecimals(amounts.map((amount) => decimal(amount)));
 const positive = (value: string) => compareDecimal(decimal(value), decimal("0")) > 0;
+
+type Refused = { code: string; params?: object | null } | null;
+/** The recovery a refusal or a wait reason points to, read from the answer or from its params. */
+export function recoveryOf(refused: Refused): RecoveryRefusal | null {
+  if (refused === null) return null;
+  const recovery = { ...refused.params, ...refused } as RecoveryRefusal;
+  return recoveryRefusalText(recovery) === null ? null : recovery;
+}
+/** The recovery's sentence, which every refund window says first, or null when there is none. */
+export const recoveryText = (refused: Refused): string | null => {
+  const recovery = recoveryOf(refused);
+  return recovery === null ? null : recoveryRefusalText(recovery);
+};
+export const recoveryLinkOf = (refused: Refused) => recoveryLink(recoveryOf(refused));
 
 /** The separate terminal's step (picture g): staff give the money back there, then confirm. */
 export function terminalStep(
@@ -139,7 +155,10 @@ function outcomeLines(
       ),
     );
   if (outcome.refusal !== null)
-    lines.push(codeMessage(outcome.refusal.code, currentLocale(), outcome.refusal.params));
+    lines.push(
+      recoveryText(outcome.refusal) ??
+        codeMessage(outcome.refusal.code, currentLocale(), outcome.refusal.params),
+    );
   if (notice !== null) lines.push(notice);
   return html`<div class="body-step" data-outcome role="status">
     ${
@@ -160,10 +179,15 @@ export function lostStep(
   const said =
     step.refusal === null
       ? t("give_back.lost")
-      : codeMessage(step.refusal.code, currentLocale(), step.refusal.params);
+      : (recoveryText(step.refusal) ??
+        codeMessage(step.refusal.code, currentLocale(), step.refusal.params));
   return html`<p data-lost role="status">${said}</p>
     <wt-form-actions
-      ><wt-button slot="cancel" variant="secondary" data-close @click=${on.close}
+      >${recoveryLinkOf(step.refusal)}<wt-button
+        slot="cancel"
+        variant="secondary"
+        data-close
+        @click=${on.close}
         >${t("action.cancel")}</wt-button
       ><wt-button
         variant="primary"
@@ -201,7 +225,7 @@ export function doneStep(
   const waits = waitsForCard(step.outcome);
   return html`${outcomeLines(step.outcome, way, step.notice, false)}
     <wt-form-actions
-      ><wt-button
+      >${recoveryLinkOf(step.outcome.refusal)}<wt-button
         slot="cancel"
         variant=${waits ? "secondary" : "primary"}
         data-close
@@ -282,4 +306,32 @@ export function approverRights(
     permission === "sale.refund" || permission === "sale.rectify" ? [permission] : [];
   const rights = [...new Set([...needs, ...named])];
   return rights.length > 0 ? rights : ["sale.refund"];
+}
+
+/** What Give back will do, from the preview's answer: the total, how it goes back, any rest left
+ * under way, and whether a PIN is asked. */
+export function summaryOf(answer: GiveBackPreview, way: GiveBackWay, total: string) {
+  const now = money(sumOf(answer.parts.map((part) => part.amount)));
+  const card = way.last4 === null ? "" : `···${way.last4}`;
+  const said =
+    way.way === "cash"
+      ? t("give_back.summary_cash")
+      : t(answer.manual ? "give_back.summary_terminal" : "give_back.summary_card");
+  return html`<div class="summary" data-summary>
+    <p class="total" data-summary-total>${money(total)}</p>
+    <p data-summary-way>
+      ${said
+        .replace("{amount}", () => now)
+        .replace("{card}", () => card)
+        .replace(/\s+/g, " ")}
+    </p>
+    ${
+      positive(answer.leftUnderWay)
+        ? html`<p data-summary-rest>
+            ${t("give_back.summary_rest").replace("{amount}", () => money(answer.leftUnderWay))}
+          </p>`
+        : nothing
+    }
+    ${answer.needs.length > 0 ? html`<p class="muted" data-pin>${t("give_back.pin")}</p>` : nothing}
+  </div>`;
 }

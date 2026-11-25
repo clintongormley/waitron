@@ -314,6 +314,25 @@ describe("ending it", () => {
     expect(api.fileInvoiceCorrection).not.toHaveBeenCalled();
   });
 
+  it("a fiscal conflict refusing the cash says new invoices are stopped and links to recovery", async () => {
+    const api = fakeApi();
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce(
+      refused("sif.allocation_invalid", {
+        reason: "conflict_requires_administrator",
+        recoveryUrl: "/recovery/fiscal-conflict",
+      }),
+    );
+    const { el } = await mount(OPEN, api);
+    press(el, "cash");
+    await vi.waitFor(() => expect(bottom(el)).toBe(t("recovery.issuance_stopped")));
+    const link = root(el).querySelector("wt-form-actions [data-recovery]")!;
+    expect(link.getAttribute("href")).toBe("/recovery/fiscal-conflict");
+
+    press(el, "check");
+    await vi.waitFor(() => expect(bottom(el)).toBe(""));
+    expect(root(el).querySelector("[data-recovery]")).toBeNull();
+  });
+
   it("Cancel this money back is offered only with nothing back or waiting, and closes it", async () => {
     const { el, api } = await mount();
     expect(text(root(el).querySelector("[data-choice=cancel]"))).toBe(t("give_back.uw_cancel"));

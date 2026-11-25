@@ -10,7 +10,7 @@ import {
   type OverrideConfirmDetail,
 } from "./supervisor-override-dialog.js";
 import { giveBackStyles } from "./give-back-styles.js";
-import { NEEDS_APPROVER, terminalStep } from "./give-back-steps.js";
+import { NEEDS_APPROVER, recoveryLinkOf, recoveryText, terminalStep } from "./give-back-steps.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -78,6 +78,8 @@ export class TillGiveBackUnderWay extends LitElement {
   @state() private tenders: RefundableTender[] = [];
   @state() private busy = false;
   @state() private message = "";
+  /** The refusal `message` says, when it points to a recovery page. */
+  @state() private refused: { code: string } | null = null;
   @state() private cashGiven: string | null = null;
   @state() private approvers: StaffMember[] | null = null;
   @state() private pinError: ApproverRefusal | null = null;
@@ -183,6 +185,7 @@ export class TillGiveBackUnderWay extends LitElement {
     if (this.busy) return;
     this.busy = true;
     this.message = "";
+    this.refused = null;
     const approverId = this.#override?.personId;
     try {
       await step();
@@ -228,7 +231,8 @@ export class TillGiveBackUnderWay extends LitElement {
       if (this.lostCard === null) this.message = t(retry.lost);
       return;
     }
-    this.message = codeMessage(refusal.code, currentLocale(), refusal);
+    this.refused = refusal;
+    this.message = recoveryText(refusal) ?? codeMessage(refusal.code, currentLocale(), refusal);
     if (REREAD_AFTER.has(refusal.code)) await this.#refreshAfter();
   }
   async #askApprover(right: GiveBackRight): Promise<void> {
@@ -241,6 +245,7 @@ export class TillGiveBackUnderWay extends LitElement {
       const read = refusalOf(error);
       this.#settle();
       this.terminal = null;
+      this.refused = null;
       this.message =
         read.code === "network"
           ? t("give_back.uw_approvers_failed")
@@ -288,6 +293,7 @@ export class TillGiveBackUnderWay extends LitElement {
   async #card(row: RefundableTender): Promise<void> {
     this.busy = true;
     this.message = "";
+    this.refused = null;
     const read = await this.#readTenders();
     this.busy = false;
     if (!read) {
@@ -497,7 +503,7 @@ export class TillGiveBackUnderWay extends LitElement {
       }
       ${this.#endChoices(correction)}
       <wt-form-actions .error=${this.message}
-        ><wt-button
+        >${this.message === "" ? nothing : recoveryLinkOf(this.refused)}<wt-button
           slot="cancel"
           variant="secondary"
           data-close

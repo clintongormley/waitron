@@ -1616,11 +1616,8 @@ it("words Give money back's refusals in both languages, saying nothing went back
   expect(codeMessage("give_back.refund_failed", "es")).toBe(
     "La compañía de la tarjeta no hizo la devolución, así que ese dinero no se ha devuelto. Vuelve a abrir Devolver dinero para intentarlo de nuevo o elegir otra forma.",
   );
-  for (const code of ["give_back.failed", "sif.allocation_invalid"])
-    for (const locale of ["en", "es"]) {
-      expect(codeMessage(code, locale)).not.toBe(codeMessage("unknown", locale));
-      expect(codeMessage(code, locale)).not.toContain(code);
-    }
-  expect(codeMessage("sif.allocation_invalid", "es")).toContain("servidor");
-  expect(codeMessage("sif.allocation_invalid", "es")).not.toContain("equipo");
+  for (const locale of ["en", "es"]) {
+    expect(codeMessage("give_back.failed", locale)).not.toBe(codeMessage("unknown", locale));
+    expect(codeMessage("give_back.failed", locale)).not.toContain("give_back.failed");
+  }
 });
