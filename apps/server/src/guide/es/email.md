@@ -70,8 +70,8 @@ persona cambia el correo de un miembro del personal en **Usuarios**. Los encarga
 electrónico también pueden recibir alertas por falta de espacio, copias de seguridad eliminadas o
 detenidas, actualizaciones revertidas y correcciones del reloj. Si añades tu propio servidor de
 correo, Waitron lo usa para esos mensajes. Añade un servidor en **Sistema → Correo** para enviar
-correos a clientes o el informe diario, o para recibir recordatorios de Horas y otras alertas del
-servidor.
+correos a clientes o el informe diario, o para recibir recordatorios mensuales de Horas u otras
+alertas del servidor por correo.
 
 Si la configuración indica que no se ha podido confirmar el correo del personal de Cloud, abre
 **Sistema → Correo** para añadir o revisar el servidor que usas para el correo del personal.
@@ -125,7 +125,7 @@ los ajustes. Al quitar el servidor también se borran sus datos de acceso; intro
 si lo configuras más adelante.
 
 Fuera de desarrollo, conserva un servidor de correo para enviar recibos, el informe diario,
-recordatorios de Horas y otros avisos que Cloud no gestiona. Si has activado el correo de Cloud de
-prueba, Cloud puede enviar el [correo de cuentas](email.md#cloud-account-email). Las ventas continúan. En un servidor de desarrollo
-sin correo de Cloud, consulta el buzón de prueba. Si los ajustes no se cargan tras quitar el servidor,
-vuelve a cargarlos. El servidor ya se ha quitado.
+recordatorios mensuales de Horas y otros avisos que Cloud no gestiona. Si has activado el correo de
+Cloud de prueba, Cloud puede enviar el [correo de cuentas](email.md#cloud-account-email). Las ventas
+continúan. En un servidor de desarrollo sin correo de Cloud, consulta el buzón de prueba. Si los
+ajustes no se cargan tras quitar el servidor, vuelve a cargarlos. El servidor ya se ha quitado.

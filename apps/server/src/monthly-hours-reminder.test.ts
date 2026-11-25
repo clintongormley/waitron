@@ -68,9 +68,9 @@ it.each(["send", "resolved", "moved"])(
           /1 issue is open[\s\S]*5 February 2026 at 00:00[\s\S]*https:\/\/box\.test\/hours/,
         ),
       });
-      expect((await owner.compose({ ...claim.prepared, language: "es" }, mail)).subject).not.toBe(
-        "Review hours for January 2026",
-      );
+      const spanish = await owner.compose({ ...claim.prepared, language: "es" }, mail);
+      expect(spanish.subject).not.toBe("Review hours for January 2026");
+      expect(spanish.text).toMatch(/Hay 1 asunto pendiente.*5 de febrero de 2026 a las 0?0:00/);
     } else {
       expect(claim).toBeNull();
     }

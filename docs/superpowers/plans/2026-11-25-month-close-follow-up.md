@@ -15,7 +15,7 @@ Managers can read the selected month's dates and issues. A later closed month's 
 
 ## PR 2c. Reminder
 
-- Reuse `attendance-loop.ts` and `monthly-hours-close.ts` for the calendar date before close, from the venue's day-change boundary. Count missing-time questions and requests waiting for a manager. Send the month, close date, count and Hours link to active `workforce.correct` holders through `readStaffEmailRecipients` and `enqueueMail`, using the venue's SMTP. Include the scheduled close time in the mail key. Recheck at claim and expire at close. Add the mail kind and lifetime, rebuild the core baseline, declare the venue reset in the PR and register the handler in `boot.ts`.
+- Reuse `attendance-loop.ts` and `monthly-hours-close.ts` for the calendar date before close, from the venue's day-change boundary. Count missing-time questions and requests waiting for a manager. Send the month, close date and time, count and Hours link to active `workforce.correct` holders through `readStaffEmailRecipients` and `enqueueMail`, using the venue's SMTP. Include the scheduled close time in the mail key and use it as the expiry. Recheck at claim. Add the mail kind, rebuild the core baseline, declare the venue reset in the PR and register the handler in `boot.ts`.
 - Start red in `attendance-loop.test.ts` for queueing once, an overdue open shift counting once through its question, a normal open shift with zero grace and a moved close. Use the handler test for claim, wording and recipients. Update guides and backlog and run mail-kind and baseline guards. Estimate 170 product and 145 test lines plus baseline.
 
 Overtime by contract moves with [A586](../../backlog/workforce.md#overtime-when-a-contract-changes)

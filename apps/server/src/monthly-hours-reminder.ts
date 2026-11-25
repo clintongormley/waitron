@@ -104,7 +104,6 @@ export function monthlyHoursReminderMail(deps: {
       const date = new Intl.DateTimeFormat(locale, {
         dateStyle: "long",
         timeStyle: "short",
-        hourCycle: "h23",
         timeZone: close.clock.timeZone,
       }).format(new Date(close.scheduledCloseAt));
       const words = MONTHLY_HOURS_EMAIL_WORDS[language];
