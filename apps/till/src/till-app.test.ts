@@ -997,6 +997,7 @@ describe("till-app", () => {
     expect(askSaleDeadEnds).toHaveBeenCalledWith({
       step: "pay",
       lines: [{ menuItemId: "menu-item-cafe-0", quantity: "1", makeAt: null }],
+      dining: "eat_in",
       zoneId: "zone-counter",
     });
     expect(order).toEqual(["ask"]);

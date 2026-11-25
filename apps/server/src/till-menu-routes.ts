@@ -11,6 +11,9 @@ import { assertProfileAction } from "./device-session.js";
 import { currentZoneDevice } from "./device-zones.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { requestCfg } from "./request-config.js";
+import { requireDining } from "./order-dining.js";
+import { SET_MENU_DRAFT_LINE } from "./set-menu-bill.js";
+import { parseSetMenuWireLines } from "./set-menu-wire-lines.js";
 import { named, newOrderZoneIn } from "./till-order-zones.js";
 import { run, runAvailability, runBodyCourse } from "./till-api-errors.js";
 import type { TillApiDeps } from "./till-api-deps.js";
@@ -207,9 +210,12 @@ export function mountTillMenuRoutes(app: Hono, deps: TillApiDeps, log: Logger): 
         lines: (CounterPaymentBasket["lines"][number] & { workingOrderLineId?: string })[];
         zoneId?: string;
         workingOrderId?: string;
+        dining?: unknown;
       }>(c);
       if (!Array.isArray(body.lines) || !["pay", "place", "edit"].includes(body.step))
         throw invalid("lines");
+      const lines = parseSetMenuWireLines(body.lines);
+      const requestedDining = body.dining === undefined ? undefined : requireDining(body.dining);
       if (body.workingOrderId !== undefined)
         requireUuidParam(body.workingOrderId, "WorkingOrderId");
       if (body.zoneId !== undefined) requireUuidParam(body.zoneId, "ServiceZoneId");
@@ -240,7 +246,7 @@ export function mountTillMenuRoutes(app: Hono, deps: TillApiDeps, log: Logger): 
           order === undefined ? null : await VENUE_SERVICE.findOrderContext(tx, order.id);
         const zoneId =
           order === undefined
-            ? await newOrderZoneIn(tx, session, body.lines.length, body.zoneId)
+            ? await newOrderZoneIn(tx, session, lines.length, body.zoneId)
             : context?.zoneId;
         const mode =
           context?.serviceMode ??
@@ -248,7 +254,7 @@ export function mountTillMenuRoutes(app: Hono, deps: TillApiDeps, log: Logger): 
             ? "prepay"
             : (await VENUE_SERVICE.resolveZoneContext(tx, zoneId)).serviceMode);
         const unsentCount =
-          order === undefined ? body.lines.length : (await unsentDishLines(tx, order.id)).length;
+          order === undefined ? lines.length : (await unsentDishLines(tx, order.id)).length;
         const sends =
           body.step === "pay"
             ? unsentCount > 0 &&
@@ -258,7 +264,7 @@ export function mountTillMenuRoutes(app: Hono, deps: TillApiDeps, log: Logger): 
                   : paysAfterSending(mode)))
             : body.step === "place"
               ? unsentCount > 0
-              : body.lines.length > 0;
+              : lines.length > 0;
         const alreadySent = new Set<string>();
         if (order !== undefined) {
           const rows = await tx
@@ -273,11 +279,22 @@ export function mountTillMenuRoutes(app: Hono, deps: TillApiDeps, log: Logger): 
           for (const row of rows)
             if (row.sentAt !== null || row.ticketId !== null) alreadySent.add(row.id);
         }
-        const active = body.lines.flatMap((line, index) =>
+        const active = lines.flatMap((line, index) =>
           line.workingOrderLineId !== undefined && alreadySent.has(line.workingOrderLineId)
             ? []
             : [{ line, key: String(index) }],
         );
+        // A held order is priced as it is stored; a new one as the till will write it.
+        const unwrittenBill =
+          order === undefined &&
+          zoneId !== undefined &&
+          active.some(({ line }) => line[SET_MENU_DRAFT_LINE] !== undefined)
+            ? {
+                partyId: null,
+                dining: await VENUE_SERVICE.resolveOrderDining(tx, zoneId, requestedDining),
+                serviceMode: mode,
+              }
+            : undefined;
         const priced =
           sends && active.length > 0
             ? await priceOrderLines(
@@ -289,6 +306,8 @@ export function mountTillMenuRoutes(app: Hono, deps: TillApiDeps, log: Logger): 
                 undefined,
                 "ignore",
                 "none",
+                undefined,
+                unwrittenBill,
               )
             : null;
         const parents = priced?.lineRows.filter((line) => line.parentLineId === null) ?? [];

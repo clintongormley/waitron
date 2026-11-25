@@ -13,7 +13,11 @@ import { placeGroups } from "./testing/group-submit-fixture.js";
 import { inTx, seatWithNoAllergies } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
-import { seedBillSetMenu, setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
+import {
+  saveSetMenuDraft,
+  seedBillSetMenu,
+  setMenuOnFullMenu,
+} from "./testing/set-menu-bill-fixture.js";
 import { setMenuBill, setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 
@@ -394,4 +398,70 @@ it("pays a held Counter takeaway whose basket now holds a dish tapped in a set-m
   expect(
     await (await request("GET", `/api/working-orders/${body.id}/payments`)).json(),
   ).toMatchObject({ total: "4.00", received: "4.00" });
+});
+
+const askSaleDeadEnds = (body: Record<string, unknown>) =>
+  request("POST", "/api/dead-ends/sale", body);
+
+it.each(["pay", "place"] as const)(
+  "answers the %s dead-end check for a fresh Counter takeaway holding a dish tapped in a set-menu folder",
+  async (step) => {
+    const body = await freshBasket("takeaway");
+    const response = await askSaleDeadEnds({
+      step,
+      lines: body.lines,
+      zoneId: body.zoneId,
+      dining: body.dining,
+    });
+    expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
+    expect(await response.json()).toMatchObject({ sends: true, deadEnds: [] });
+  },
+);
+
+it("refuses the dead-end check for a fresh eat-in Counter basket holding a dish tapped in a set-menu folder", async () => {
+  const body = await freshBasket("eat_in");
+  const response = await askSaleDeadEnds({
+    step: "pay",
+    lines: body.lines,
+    zoneId: body.zoneId,
+    dining: body.dining,
+  });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
+});
+
+it("answers the dead-end check for a held Counter takeaway whose basket now holds a dish tapped in a set-menu folder", async () => {
+  const body = await freshBasket("takeaway");
+  const held = {
+    ...body,
+    lines: [{ menuItemId: fixture.venue.counterItem("Flan"), quantity: "1" }],
+  };
+  expect((await request("POST", "/api/working-orders", held)).status).toBe(200);
+  const response = await askSaleDeadEnds({
+    step: "pay",
+    lines: body.lines,
+    workingOrderId: body.id,
+  });
+  expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
+  expect(await response.json()).toMatchObject({ sends: true, deadEnds: [] });
+});
+
+it("answers the dead-end check for a table draft line tapped in a set-menu folder", async () => {
+  const { venue, copy } = fixture;
+  const bill = await seated();
+  // An earlier case republished the menu, so the copy's own version is no longer live.
+  const versionId = await inTx(venue, (tx) => publishWorkingMenu(tx, copy.fullMenuId));
+  const draft = await saveSetMenuDraft(venue, bill, {
+    menuItemId: copy.menuItemId,
+    menuVersionId: versionId,
+    setMenuId: copy.menuId,
+    quantity: "1",
+  });
+  const response = await request("POST", "/api/dead-ends/draft", {
+    partyId: bill.partyId,
+    draftId: draft.id,
+    lineIds: [draft.lines[0]!.id],
+  });
+  expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
+  expect(await response.json()).toMatchObject({ sends: true, deadEnds: [] });
 });

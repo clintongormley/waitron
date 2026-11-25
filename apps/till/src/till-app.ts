@@ -8320,6 +8320,7 @@ export class TillApp extends LitElement {
         this.api.askSaleDeadEnds({
           step,
           lines: this.#currentSaleLines(),
+          dining: this.#store.dining,
           ...(this.#store.persisted
             ? { workingOrderId: id }
             : { zoneId: this.counterServiceZoneId }),
