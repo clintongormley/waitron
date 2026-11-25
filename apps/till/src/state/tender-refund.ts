@@ -302,6 +302,13 @@ export class TenderRefundSession {
     });
   }
 
+  /** Whether the saved request for this sale has had only refusals as answers, so nothing moved
+   * under it. Known only to the session that sent it. */
+  refusedOnly(saleId: string): boolean {
+    const saved = this.read(saleId);
+    return saved?.refundId === null && this.#refused.has(saved.request.submissionId);
+  }
+
   /** Forgets a saved request that only refusals have answered, so nothing moved under it. A
    * request with an answer ever lost, or one being sent, is kept. */
   abandon(saleId: string): void {

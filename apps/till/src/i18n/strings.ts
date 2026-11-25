@@ -232,6 +232,8 @@ export const en = {
   "give_back.lost":
     "The box did not answer, so it is not known whether the money went back. Send again asks the box: it sends the same money back, which never goes back twice.",
   "give_back.send_again": "Send again",
+  "give_back.uw_card_refused":
+    "A card refund on this receipt was refused, so no money went back. Send again sends it again, asking for approval if it needs it.",
   "give_back.done_cash": "{amount} given back in cash. Give it to the customer.",
   "give_back.done_card_any": "{amount} is back on the card.",
   "give_back.done_card": "{amount} is back on card {card}.",
@@ -2701,6 +2703,8 @@ export const es: Record<StringKey, string> = {
   "give_back.lost":
     "El servidor no respondió, así que no se sabe si el dinero se devolvió. Enviar de nuevo se lo pregunta al servidor: envía la misma devolución, que nunca se devuelve dos veces.",
   "give_back.send_again": "Enviar de nuevo",
+  "give_back.uw_card_refused":
+    "Se rechazó una devolución a tarjeta de este ticket, así que no se devolvió dinero. Enviar de nuevo la envía otra vez y pide la aprobación si hace falta.",
   "give_back.done_cash": "Se han devuelto {amount} en efectivo. Dáselo al cliente.",
   "give_back.done_card_any": "Se han devuelto {amount} a la tarjeta.",
   "give_back.done_card": "Se han devuelto {amount} a la tarjeta {card}.",

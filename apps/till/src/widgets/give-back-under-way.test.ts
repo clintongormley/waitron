@@ -956,6 +956,32 @@ describe("only a card's part with no answer counts as lost", () => {
     expect(api.refundTransaction.mock.calls[1]![1].invoiceCorrectionId).toBe("correction-1");
   });
 
+  it("words a card refund saved elsewhere on the receipt that the box refused as refused, resending it under the same submission id", async () => {
+    const api = fakeApi();
+    const refunds = new TenderRefundSession(SCOPE, api);
+    api.refundTransaction.mockRejectedValueOnce(
+      refused("authorization.not_permitted", { permission: "sale.refund" }),
+    );
+    await refunds
+      .submit("sale-1", {
+        tenderId: "card-1",
+        appliedAmount: "1.00",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+      })
+      .catch(() => {});
+    const first = api.refundTransaction.mock.calls[0]![1];
+    const { el } = await mount(OPEN, api, EVERY_METHOD, refunds);
+
+    expect(text(root(el).querySelector("[data-lost]"))).toBe(t("give_back.uw_card_refused"));
+    expect(shown(el, "card")).toBe(false);
+    api.getInvoiceCorrection.mockResolvedValue({ ...OPEN, moneyBack: "1.00", left: "5.05" });
+    root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
+    await vi.waitFor(() => expect(text(root(el).querySelector("[data-left]"))).toContain("€5.05"));
+    expect(api.refundTransaction).toHaveBeenCalledTimes(2);
+    expect(api.refundTransaction.mock.calls[1]![1]).toEqual(first);
+  });
+
   it("keeps a refused card refund Refund a payment saved when this window closes", async () => {
     const api = fakeApi();
     const refunds = new TenderRefundSession(SCOPE, api);

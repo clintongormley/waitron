@@ -722,6 +722,28 @@ it("forgets on abandon a request only refusals for a right answered", async () =
   expect(session.read("sale-1")).toBeNull();
 });
 
+it("says a saved request only refusals for a right answered is refused, and one ever lost is not", async () => {
+  const api = {
+    refundTransaction: vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" }),
+    getTenderRefund: vi.fn(),
+    retryTenderRefund: vi.fn(),
+  };
+  const session = new TenderRefundSession(scope, api);
+  expect(session.refusedOnly("sale-1")).toBe(false);
+  await expect(session.submit("sale-1", ask)).rejects.toBeTruthy();
+  expect(session.refusedOnly("sale-1")).toBe(true);
+  expect(session.refusedOnly("sale-2")).toBe(false);
+  expect(new TenderRefundSession(scope, api).refusedOnly("sale-1")).toBe(false);
+  await expect(session.retry("sale-1")).rejects.toThrow("Failed to fetch");
+  expect(session.refusedOnly("sale-1")).toBe(false);
+  await expect(session.retry("sale-1")).rejects.toBeTruthy();
+  expect(session.refusedOnly("sale-1")).toBe(false);
+});
+
 it("keeps on abandon a request whose answer was ever lost", async () => {
   const api = {
     refundTransaction: vi

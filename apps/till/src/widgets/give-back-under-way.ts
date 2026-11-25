@@ -134,6 +134,13 @@ export class TillGiveBackUnderWay extends LitElement {
       return null;
     }
   }
+  #refusedOnly(): boolean {
+    try {
+      return this.refunds.refusedOnly(this.saleId);
+    } catch {
+      return false;
+    }
+  }
   #lostCard(): SavedTenderRefund | null {
     const saved = this.#savedOnReceipt();
     return saved?.refundId === null ? saved : null;
@@ -458,7 +465,9 @@ export class TillGiveBackUnderWay extends LitElement {
       ${this.#cashChoice(left)}
       ${
         this.lostCard !== null
-          ? html`<p data-lost role="status">${t("give_back.lost")}</p>
+          ? html`<p data-lost role="status">
+                ${t(this.#refusedOnly() ? "give_back.uw_card_refused" : "give_back.lost")}
+              </p>
               <wt-button
                 variant="primary"
                 data-send-again
