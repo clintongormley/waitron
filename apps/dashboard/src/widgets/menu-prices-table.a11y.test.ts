@@ -118,9 +118,15 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     const keys = ["mi-burger", "mi-lemonade", "mi-lemonade:v-small", "mi-lemonade:v-large"];
     for (const key of keys) {
       const tr = root.querySelector(`tr[data-row-key="${key}"]`)!;
-      expect(tr.querySelector('wt-price-input[name="price-override"]'), key).not.toBeNull();
+      // A product with variants shows its price as text, with no field of its own.
+      expect(tr.querySelector('wt-price-input[name="price-override"]') === null, key).toBe(
+        key === "mi-lemonade",
+      );
       expect(tr.querySelector('td[data-pinned="end"] wt-row-actions'), key).not.toBeNull();
     }
+    expect(
+      root.querySelector('tr[data-row-key="mi-lemonade"] [part~="derived-price"]')!.textContent,
+    ).toBe("3,00\u00a0€ – 3,75\u00a0€");
     const smallCell = root.querySelector('tr[data-row-key="mi-lemonade:v-small"] td')!;
     await expect.element(page.elementLocator(smallCell)).toHaveAccessibleName("Lemonade Small");
     expect(root.querySelector('tr[data-row-key="mi-burger"] [part~="clash"]')).not.toBeNull();
@@ -128,6 +134,31 @@ describe.each(["light", "dark"] as const)("menu prices (%s)", (theme) => {
     await vi.waitFor(() =>
       expect(el.shadowRoot!.querySelector('[data-test="show-clashes"]')).not.toBeNull(),
     );
+    await expectNoA11yViolations(host);
+  });
+
+  it("accessible product row with variants showing its variants' clash as text, with no field", async () => {
+    const lemonadeRow = rows[1]!;
+    const { el, host } = await mount(theme, {
+      rows: [
+        {
+          ...lemonadeRow,
+          override: null,
+          combined: {
+            ...lemonadeRow.combined,
+            variants: lemonadeRow.combined.variants.map((v, at) =>
+              at === 0 ? { ...v, price: { ...clash, level: "variant" } } : v,
+            ),
+          },
+        } as MenuPriceRow,
+      ],
+    });
+    const table = el.shadowRoot!.querySelector("wt-data-table")!;
+    await table.updateComplete;
+    const tr = table.shadowRoot!.querySelector('tr[data-row-key="mi-lemonade"]')!;
+    expect(tr.querySelector("wt-price-input")).toBeNull();
+    expect(tr.querySelector('[part~="derived-price"]')!.textContent).toBe("—");
+    expect(tr.querySelector('[part~="clash"]')!.getAttribute("aria-hidden")).toBeNull();
     await expectNoA11yViolations(host);
   });
 

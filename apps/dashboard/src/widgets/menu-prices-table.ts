@@ -196,6 +196,10 @@ export class MenuPricesTable extends LitElement {
         position: relative;
         --wt-price-field-width: max(var(--wt-price-range-field-width), var(--range-field-width));
       }
+      /* At least as wide as a field, so it lines up with them and its notes wrap as theirs do. */
+      wt-data-table::part(derived-price) {
+        min-inline-size: max(var(--wt-price-range-field-width), var(--range-field-width));
+      }
       wt-data-table::part(clash) {
         color: var(--wt-color-danger);
         font-weight: var(--wt-font-weight-bold);
@@ -257,6 +261,9 @@ export class MenuPricesTable extends LitElement {
         }
         wt-data-table::part(override-field) {
           --wt-price-field-width: var(--narrow-price-field-width);
+        }
+        wt-data-table::part(derived-price) {
+          min-inline-size: var(--narrow-price-field-width);
         }
         wt-data-table::part(name-box) {
           display: block;
@@ -741,18 +748,45 @@ export class MenuPricesTable extends LitElement {
     );
   }
 
+  /** A product with variants charges what its variants charge (owner decision, menu editor
+   * redesign §3), so its row shows that price or range as text and offers no field. Its clash
+   * sentence is not hidden from a screen reader, since no field carries it as a hint. */
+  #derivedCell(line: Line) {
+    const { item } = line;
+    const clash = this.#clash(line);
+    const inherited = this.#inherited(line);
+    const variantsSetOne = pricesAVariant(item);
+    return html`<span part="price-cell"
+      ><span part="derived-price"
+        >${clash === null && inherited.state === "price" ? spanText(inherited) : "—"}</span
+      >${
+        clash !== null || variantsSetOne
+          ? html`<span part="price-notes"
+              >${
+                clash === null
+                  ? nothing
+                  : html`<span part="clash">${this.#clashSentence(line, clash)}</span>`
+              }${
+                variantsSetOne
+                  ? html`<span part="muted price-note">${t("menu_prices.variant_overrides")}</span>`
+                  : nothing
+              }</span
+            >`
+          : nothing
+      }</span
+    >`;
+  }
+
   #overrideCell(line: Line) {
     const { item, variant } = line;
+    if (variant === null && item.variants.length > 0) return this.#derivedCell(line);
     const key = keyOf(line);
     const clash = this.#clash(line);
     const sentence = clash === null ? "" : this.#clashSentence(line, clash);
     const inherited = this.#inherited(line);
     let placeholder: string;
     let hint: string;
-    if (clash === "variant") {
-      placeholder = "—";
-      hint = sentence;
-    } else if (inherited.state === "clash" || clash === "own") {
+    if (inherited.state === "clash" || clash === "own") {
       placeholder = t("menu_prices.clash_placeholder");
       hint = clash === "own" ? sentence : t("menu_prices.override_help_clash");
     } else {
@@ -761,7 +795,6 @@ export class MenuPricesTable extends LitElement {
         ? t("menu_prices.override_help").replace("{price}", priceText(inherited.low))
         : t("menu_prices.override_help_range").replace("{range}", spanText(inherited));
     }
-    const variantsSetOne = variant === null && item.override === null && pricesAVariant(item);
     const labelKey =
       this.#stored(line) !== null ? "menu_prices.override_label_set" : "menu_prices.override_label";
     return html`<span part="price-cell"
@@ -783,19 +816,11 @@ export class MenuPricesTable extends LitElement {
         @keydown=${(event: KeyboardEvent) => this.#onKeydown(event, line)}
       ></wt-price-input
       >${
-        clash !== null || variantsSetOne
-          ? html`<span part="price-notes"
-              >${
-                clash === null
-                  ? nothing
-                  : html`<span part="clash" aria-hidden="true">${sentence}</span>`
-              }${
-                variantsSetOne
-                  ? html`<span part="muted price-note">${t("menu_prices.variant_overrides")}</span>`
-                  : nothing
-              }</span
+        clash === null
+          ? nothing
+          : html`<span part="price-notes"
+              ><span part="clash" aria-hidden="true">${sentence}</span></span
             >`
-          : nothing
       }</span
     >`;
   }
