@@ -969,7 +969,7 @@ export class TillInvoiceCorrectionDialog extends LitElement {
             ${t("invoice_correction.explain")}${helpBadge(
               "help.give_money_back",
               t("invoice_correction.title"),
-              { guide: "table-service.correct-invoice" },
+              { guide: "table-service.give-money-back" },
             )}
           </p>
           ${this.#body()}

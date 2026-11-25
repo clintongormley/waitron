@@ -167,7 +167,7 @@ describe("the choice", () => {
     expect(text(badge)).toBe(
       "Give money back to a guest: for a dish, as goodwill, or the extra paid on top. Waitron records it the right way.",
     );
-    expect(badge.getAttribute("guide-href")).toBe(guideHref("table-service.correct-invoice"));
+    expect(badge.getAttribute("guide-href")).toBe(guideHref("table-service.give-money-back"));
   });
 
   it("shows a choice with nothing to give back quiet, with no line", async () => {

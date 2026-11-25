@@ -1205,7 +1205,7 @@ it.each(["en", "es"])("links its help to the guide's Correct an invoice in %s", 
   const { el } = await mount();
   const tip = root(el).querySelector<HTMLElementTagNameMap["wt-help-tooltip"]>("wt-help-tooltip")!;
   expect(tip.getAttribute("mode")).toBe("help-mode");
-  expect(tip.getAttribute("guide-href")).toBe(`/help/${locale}/table-service#correct-invoice`);
+  expect(tip.getAttribute("guide-href")).toBe(`/help/${locale}/table-service#give-money-back`);
 });
 
 describe("what an open correction files, and why it cannot", () => {

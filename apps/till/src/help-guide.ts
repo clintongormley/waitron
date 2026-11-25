@@ -3,7 +3,7 @@ import { currentLocale } from "./i18n/t.js";
 export const GUIDE_LINKS = {
   "table-service.set-menus": { page: "table-service", section: "set-menus" },
   "table-service.pay-window": { page: "table-service", section: "pay-window" },
-  "table-service.correct-invoice": { page: "table-service", section: "correct-invoice" },
+  "table-service.give-money-back": { page: "table-service", section: "give-money-back" },
   "products.nutrition-at-the-till": { page: "products", section: "nutrition-at-the-till" },
   "kitchen-service.kitchen-screen": { page: "kitchen-service", section: "kitchen-screen" },
   "kitchen-service.corrections": { page: "kitchen-service", section: "corrections" },

@@ -940,7 +940,7 @@ export class TillGiveBackDialog extends LitElement {
         >
           <p class="muted help-anchor">
             ${this.invoiceNumber}${helpBadge("help.give_money_back", t("give_back.title"), {
-              guide: "table-service.correct-invoice",
+              guide: "table-service.give-money-back",
             })}
           </p>
           ${this.#body()}
