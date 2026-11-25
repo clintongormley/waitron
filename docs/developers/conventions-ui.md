@@ -1727,8 +1727,8 @@ Each guard below reads named string tables or rendered pages, and each is weaker
   `start-clock-waiting.ts` and the recovery page draw theirs from the tables), the guide pages'
   bodies, log lines or command-line output such as `restore-command.ts`'s.
 - `packages/fiscal-verifactu/src/setup/box-word.browser.test.ts` reads English and Spanish:
-  `serverKeyPageWords` (the recovery pack's box key page), `checkVenueStrings`, `clockWaitStrings`,
-  `firstHourStrings`, `recoveryHourStrings`, `promotionWords`, `fiscalSetupStrings`, and
+  `checkVenueStrings`, `clockWaitStrings`, `firstHourStrings`, `recoveryHourStrings`,
+  `promotionWords`, `fiscalSetupStrings`, and
   `MASTER_KEY_FIELD_WORDS` (`@waitron/recovery-pack`), every word of the master-key field. In
   English it allows "time server"; in Spanish it refuses every "equipo". It does not read words
   written inside a component, the series register PDF's or the emergency record's inline

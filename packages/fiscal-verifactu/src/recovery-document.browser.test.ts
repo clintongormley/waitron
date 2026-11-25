@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   parseRecoveryDocument,
   parseRecoveryDocumentPublic,
-  recoveryDocumentBytes,
   recoveryDocumentPublic,
   type RecoveryDocument,
 } from "./recovery-document.js";
@@ -19,14 +18,11 @@ export function fixture(): RecoveryDocument {
   };
 }
 describe("key-only recovery document", () => {
-  it("parses a detached document and canonicalises lexical keys", async () => {
+  it("parses a detached document", async () => {
     const input = fixture();
     const parsed = await parseRecoveryDocument(input);
     Object.assign(input.nodeKey, { name: "changed" });
     expect(parsed.nodeKey.name).toBe("Caja principal");
-    expect(new TextDecoder().decode(recoveryDocumentBytes(parsed))).toBe(
-      '{"createdAt":"2026-10-17T12:30:00.000Z","kind":"waitron-recovery-document","nodeKey":{"name":"Caja principal","nodeId":"node-1"},"scope":{"environment":"production","softwareId":"W1","taxpayerNif":"B12345674"},"taxpayerName":"Olivo Restauración SL","venueName":"Olivo Centro","version":1}',
-    );
   });
   it("public projection has exact public keys and refuses a secret", () => {
     const input = fixture();

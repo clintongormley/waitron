@@ -1,5 +1,4 @@
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 import { loadRecoveryPackFonts } from "./recovery-pdf-node.js";
 import type { RecoveryDocument } from "./recovery-document.js";
 import { renderSetupRecoveryPack } from "./setup-recovery-pack.js";
@@ -41,13 +40,12 @@ const made = {
 };
 
 it.each(["en", "es"] as const)(
-  "draws in full a venue name at the recovery document's 256, in the widest letter the pack's font draws, beside a legal name at the tax agency's 120-character cap, in %s",
+  "draws in full a venue name at the recovery document's 256, in the widest letter the pack's font draws, in %s",
   async (locale) => {
-    const taxpayerName = "Ԫ".repeat(NOMBRE_RAZON_MAX);
     const venueName = "Ԫ".repeat(256);
     const texts = await pages(
       await renderSetupRecoveryPack(
-        { ...document, taxpayerName, venueName },
+        { ...document, venueName },
         made,
         locale,
         "Europe/Madrid",

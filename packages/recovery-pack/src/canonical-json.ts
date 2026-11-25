@@ -1,8 +1,4 @@
-/**
- * Keys sorted at every depth, no whitespace — the algorithm of the fiscal module's key file
- * (`packages/fiscal-verifactu/src/recovery-document.ts`, `recoveryDocumentBytes`), so a key file
- * nested in a pack keeps its own canonical bytes.
- */
+/** Keys sorted at every depth, no whitespace. */
 export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (typeof value !== "object" || value === null) return JSON.stringify(value);

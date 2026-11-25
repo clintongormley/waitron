@@ -174,7 +174,7 @@ export class FirstSetupHour extends LitElement {
   @state() private sending?: "proceed" | "compareAgain" | "tryAgain";
   @state() private error = false;
   @state() private pdfUrl?: string;
-  @state() private pdfUsed = false;
+  @state() private keyUsed = false;
   /**
    * The box answered that it no longer holds the keys it made, as after a restart. Only then may
    * the step make new ones: new keys would orphan a master key the person already copied.
@@ -247,7 +247,7 @@ export class FirstSetupHour extends LitElement {
     this.#delivery = undefined;
     this.#reference = undefined;
     this.pdfUrl = undefined;
-    this.pdfUsed = false;
+    this.keyUsed = false;
     this.masterKey = undefined;
     this.kept = false;
   }
@@ -489,11 +489,8 @@ export class FirstSetupHour extends LitElement {
       if (current()) this.busy = false;
     }
   }
-  #keyUsed(): void {
-    this.pdfUsed = true;
-  }
   async #keepPdf(): Promise<void> {
-    if (this.busy || !this.pdfUsed || !this.#delivery || this.kept) return;
+    if (this.busy || !this.keyUsed || !this.#delivery || this.kept) return;
     const generation = ++this.#generation,
       delivery = this.#delivery;
     this.busy = true;
@@ -531,10 +528,10 @@ export class FirstSetupHour extends LitElement {
         .pdfUrl=${pdfUrl}
         fileName="waitron-recovery-pack-1.pdf"
         .copy=${copy}
-        @wt-master-key-used=${() => this.#keyUsed()}
+        @wt-master-key-used=${() => (this.keyUsed = true)}
       ></wt-master-key-box>
       ${
-        this.pdfUsed
+        this.keyUsed
           ? html`<wt-form-actions
               ><wt-button
                 data-test="kept"

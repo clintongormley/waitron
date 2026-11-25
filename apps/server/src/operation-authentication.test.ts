@@ -15,7 +15,6 @@ import { readOperationAuthority, type OperationAuthority } from "@waitron/module
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { generateSync } from "otplib";
 import { authorityKey, makeMasterKey } from "@waitron/credentials";
-import { encodeRecoveryKey } from "@waitron/fiscal-verifactu";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import {
@@ -328,7 +327,7 @@ describe("a recovery key's authority", () => {
   it("a wrong key is refused with `promotion.break_glass_invalid`", async () => {
     const own = await mintMasterKey(suite.db);
     const boxKey = await mintBreakGlassSecret(handles(), NODE);
-    const printedBoxKey = encodeRecoveryKey(boxKey);
+    const printedBoxKey = "06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C";
     expect(printedBoxKey.replaceAll(" ", "")).toHaveLength(41);
     for (const secret of [
       encodeMasterKeyCode(makeMasterKey()),

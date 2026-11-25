@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ModuleClockSetAnswer, ModuleClockSetRequest } from "@waitron/module";
 import { authorityKey } from "@waitron/credentials";
-import { encodeRecoveryKey } from "@waitron/fiscal-verifactu/src/recovery-key-code.js";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { escapeHtml } from "./html-page.js";
 import { START_CLOCK_WAITING_WORDS } from "./i18n/start-clock-waiting.js";
@@ -306,7 +305,7 @@ describe("the restore's waiting app: the master key as printed on the recovery p
 
   it("the clock page refuses the 41-symbol box key and the staged authority key itself", async () => {
     const w = await waiting();
-    for (const key of [encodeRecoveryKey("AbCdEfGhIjKlMnOpQrStUvWxYz012345"), STAGED]) {
+    for (const key of ["06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C", STAGED]) {
       const res = await w.post("challenge", { key });
       expect(res.status).toBe(403);
       expect(await res.json()).toEqual(refused);

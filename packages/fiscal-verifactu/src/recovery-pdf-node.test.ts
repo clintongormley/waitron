@@ -1,120 +1,35 @@
 import { spawnSync } from "node:child_process";
 import * as nodeFonts from "./recovery-pdf-node.js";
 import { readFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, expect, it, vi } from "vitest";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { renderRecoveryPdf } from "./recovery-pdf-node.js";
-import { decodeRecoveryKey } from "./recovery-key-code.js";
-import { recoveryDocumentBytes, type RecoveryKeyDocument } from "./recovery-document.js";
 import {
   inspectSetupRecoveryPack,
   setupPackDocument,
 } from "../test/setup-recovery-pack-inspect.js";
 
-const document: RecoveryKeyDocument = {
-  ...setupPackDocument,
-  nodeKey: { ...setupPackDocument.nodeKey, secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
-};
 const roots: string[] = [];
 afterAll(async () => {
   await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
 });
 
-async function inspect(bytes: Uint8Array, locale: "en" | "es") {
-  const task = getDocument({
-    data: bytes.slice(),
-    useSystemFonts: false,
-    disableFontFace: true,
-    useWorkerFetch: false,
-    useWasm: false,
+it("reads the actual source font when the asset loader is unavailable", async () => {
+  vi.doMock("./assets/register-noto-sans.ttf?inline", () => {
+    throw new Error("No font asset loader");
   });
   try {
-    const pdf = await task.promise;
-    expect(pdf.numPages).toBe(1);
-    const page = await pdf.getPage(1);
-    const size = page.getViewport({ scale: 1 });
-    expect(size.width).toBeCloseTo(595.28, 1);
-    expect(size.height).toBeCloseTo(841.89, 1);
-    const text = (await page.getTextContent()).items
-      .map((item) => ("str" in item ? item.str : ""))
-      .join(" ")
-      .replace(/\s+/g, " ");
-    for (const expected of [
-      document.taxpayerName,
-      document.venueName,
-      "B12345674",
-      "W1",
-      "NODE -1",
-      "Caja principal",
-      locale === "en" ? "17 October 2026, 14:30" : "17 de octubre de 2026, 14:30",
-    ])
-      expect(text).toContain(expected);
-    expect(text).toContain(locale === "en" ? "Waitron box key" : "Clave del servidor de Waitron");
-    expect(text).toContain(
-      locale === "en"
-        ? "older sheets for older backups"
-        : "hojas anteriores para copias anteriores",
-    );
-    expect(text).toContain("06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C");
-    expect(text).not.toMatch(/(?:Check|Control):/);
-    const key = text.match(/(?:Key|Clave): ([0-9A-Z ]{51})/)![1]!.trim();
-    expect(decodeRecoveryKey(key)).toBe("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
-    expect(text).not.toMatch(/allocation|register|signing|administrator|TLS|S000001|P000001/i);
-    const attachments = await pdf.getAttachments();
-    expect(attachments).toBeInstanceOf(Map);
-    expect([...attachments!.keys()]).toEqual(["waitron-recovery-key-v1.json"]);
-    const attached = await pdf.getAttachmentContent("waitron-recovery-key-v1.json");
-    expect(Buffer.from(attached!)).toEqual(Buffer.from(recoveryDocumentBytes(document)));
-    const metadata = await pdf.getMetadata();
-    expect(metadata.info).toMatchObject({
-      Custom: new Map([
-        [
-          "WaitronRecoveryDigest",
-          "sha256-v1:" + createHash("sha256").update(attached!).digest("hex"),
-        ],
-      ]),
-    });
+    expect(
+      Buffer.from(await nodeFonts.loadRecoveryFont()).equals(
+        await readFile(new URL("./assets/register-noto-sans.ttf", import.meta.url)),
+      ),
+      "regular font bytes",
+    ).toBe(true);
   } finally {
-    await task.destroy();
+    vi.doUnmock("./assets/register-noto-sans.ttf?inline");
   }
-}
-
-it.each(["en", "es"] as const)("renders the actual key-only PDF in Node in %s", async (locale) => {
-  const rendered = renderRecoveryPdf(document, locale, "Europe/Madrid");
-  await expect(rendered).resolves.toBeInstanceOf(Uint8Array);
-  await inspect(await rendered, locale);
 });
-
-it("rejects an invalid document and locale before delivering bytes", async () => {
-  await expect(
-    renderRecoveryPdf(
-      { ...document, nodeKey: { ...document.nodeKey, secret: "wrong" } },
-      "en",
-      "Europe/Madrid",
-    ),
-  ).rejects.toThrow("Recovery PDF refused");
-  await expect(renderRecoveryPdf(document, "fr" as "en", "Europe/Madrid")).rejects.toThrow(
-    "Recovery PDF refused",
-  );
-});
-
-it.each(["en", "es"] as const)(
-  "reads the actual source font when the asset loader is unavailable in %s",
-  async (locale) => {
-    vi.doMock("./assets/register-noto-sans.ttf?inline", () => {
-      throw new Error("No font asset loader");
-    });
-    try {
-      await inspect(await renderRecoveryPdf(document, locale, "Europe/Madrid"), locale);
-    } finally {
-      vi.doUnmock("./assets/register-noto-sans.ttf?inline");
-    }
-  },
-);
 
 it("the setup recovery pack carries its fonts and attachment in a relocated real Node bundle", async () => {
   const root = await mkdtemp(join(tmpdir(), "waitron-recovery-pdf-bundle-"));
@@ -143,41 +58,6 @@ it("the setup recovery pack carries its fonts and attachment in a relocated real
     expect(run.status, run.stderr?.toString()).toBe(0);
     await inspectSetupRecoveryPack(new Uint8Array(run.stdout), locale);
   }
-});
-
-it.each(["en", "es"] as const)("prints no installation code in %s", async (locale) => {
-  const task = getDocument({
-    data: await renderRecoveryPdf(document, locale, "Europe/Madrid"),
-    useSystemFonts: false,
-    disableFontFace: true,
-    useWorkerFetch: false,
-    useWasm: false,
-  });
-  try {
-    const pdf = await task.promise;
-    const text = (await (await pdf.getPage(1)).getTextContent()).items
-      .map((item) => ("str" in item ? item.str : ""))
-      .join(" ")
-      .replace(/\s+/g, " ");
-    expect(text).not.toContain("Installation code");
-    expect(text).not.toContain("Código de instalación");
-    const attached = JSON.parse(
-      new TextDecoder().decode((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!),
-    );
-    expect(Object.hasOwn(attached, "installationCodes")).toBe(false);
-  } finally {
-    await task.destroy();
-  }
-});
-
-it("refuses a sheet that still carries an installation code", async () => {
-  await expect(
-    renderRecoveryPdf(
-      { ...document, installationCodes: ["0CNNW"] } as RecoveryKeyDocument,
-      "en",
-      "Europe/Madrid",
-    ),
-  ).rejects.toThrow("Recovery PDF refused");
 });
 
 it.each(["inline", "source"])("loads the pack's mono bytes from %s", async (source) => {
