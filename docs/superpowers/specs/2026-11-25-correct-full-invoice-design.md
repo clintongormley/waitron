@@ -186,9 +186,9 @@ naming a customer, correcting one full invoice, and came back `Correcto`
 **Size (estimate):** about 700 production lines and 1,300 test lines with question 1's option 1,
 in two pull requests: (1) writer, filing and receipt-printer paper; (2) A4 and email delivery. With
 option 2, the first alone. No new table, no migration, no venue reset.
-_2026-11-25: superseded by the plan's sizes. Keeping the delivery staff chose on a give-back still
-under way needs one new column, so core's starting migration is rebuilt and every box is reset when
-the delivery pull request lands._
+_2026-11-25: superseded by the plan's sizes: five pull requests, no migration and no reset (an
+earlier note here said one new column; after the plan's fresh read it is not needed, since a late card
+answer goes out the way the original did)._
 
 ## 6. Questions for the owner (each with my recommendation)
 
@@ -232,11 +232,22 @@ Relayed by the watcher in lane L's `questions.md`: "WATCHER 2026-11-25 10:35" (1
    invoices everywhere". For the build: «ticket rectificativo» / «factura rectificativa» in Spanish.
    The till's lines (the watcher's wording of the answer): "A corrective invoice for Acme Foods SL
    (−€10.00) is printing.", emailed "… has been emailed to accounts@acme.es.", and for a receipt "A
-   corrective receipt (−€10.00) is printing." GIVE-MONEY-BACK PR 3 rewords what is already on `main`;
-   this item owns only the words it adds.
+   corrective receipt (−€10.00) is printing." GIVE-MONEY-BACK PR 3 is to reword what is already on `main`
+   (its Task 15c, not done on 2026-11-25) before this item's PR 2; this item owns only the words it adds.
 4. **A line given back in part:** "Blank those two columns (Recommended)", on corrective invoices
    and corrective receipts. For the build: no quantity and no unit price on such a line; a whole dish
    keeps −1 × price.
+
+**After the plan's fresh read, 2026-11-25** (lane L's calls, for the watcher; the plan's section 1, 5 and 6):
+
+- A full invoice AEAT **refused** waits only while Waitron offers a fix for the refusal; any other keeps
+  today's plain refund and the accountant's list. This narrows section 5's "every other refusal stays".
+- On a press that names more than the cancelled dish, the paper shares the money by menu price while the
+  cancel reads paid in full first; what is left of a cancelled dish counts each corrective once.
+- "In part" (answer 4) is one condition: the corrective row's amount differs from the line's.
+- The end screen names the two kinds of corrective, so section 2's "Staff still never see the word
+  'corrective'" no longer holds (answer 3).
+- R1 for a dish that never came is built on lane L's best guess, before the adviser answers.
 
 ## 7. Left out
 
