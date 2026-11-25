@@ -1,12 +1,6 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
-import {
-  baseStyles,
-  draftScopeFor,
-  type DraftScope,
-  type MasterKeyBoxCopy,
-  type MasterKeyUsedDetail,
-} from "@waitron/ui";
+import { baseStyles, draftScopeFor, type DraftScope, type MasterKeyBoxCopy } from "@waitron/ui";
 import type {
   InitialSetupActions,
   InitialSetupRecoveryReference,
@@ -443,7 +437,7 @@ export class FirstSetupHour extends LitElement {
           taxpayerName: context.venue.legalName,
           venueName: context.venue.name,
           createdAt: new Date().toISOString(),
-          nodeKey: staged.key,
+          nodeKey: { nodeId: staged.key.nodeId, name: staged.key.name },
         },
         { masterKey: staged.masterKey, masterKeyName: staged.masterKeyName },
         this.locale,
@@ -495,9 +489,8 @@ export class FirstSetupHour extends LitElement {
       if (current()) this.busy = false;
     }
   }
-  /** Copy does not count: the pack also holds the box key, which Copy leaves out. */
-  #keyUsed(event: CustomEvent<MasterKeyUsedDetail>): void {
-    if (event.detail.action !== "copy") this.pdfUsed = true;
+  #keyUsed(): void {
+    this.pdfUsed = true;
   }
   async #keepPdf(): Promise<void> {
     if (this.busy || !this.pdfUsed || !this.#delivery || this.kept) return;
@@ -538,7 +531,7 @@ export class FirstSetupHour extends LitElement {
         .pdfUrl=${pdfUrl}
         fileName="waitron-recovery-pack-1.pdf"
         .copy=${copy}
-        @wt-master-key-used=${(event: CustomEvent<MasterKeyUsedDetail>) => this.#keyUsed(event)}
+        @wt-master-key-used=${() => this.#keyUsed()}
       ></wt-master-key-box>
       ${
         this.pdfUsed

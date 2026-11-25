@@ -6,7 +6,7 @@ import { currentSif } from "./registro-sif.js";
 import { readHourHistory } from "./hour-history-reader.js";
 import { projectHourHistory, type HourHistorySource, type HourScope } from "./hour-history.js";
 import {
-  parseRecoveryDocument,
+  parseRecoveryKeyDocument,
   parseRecoveryDocumentPublic,
   type RecoveryDocument,
 } from "./recovery-document.js";
@@ -77,7 +77,7 @@ export const FISCAL_RECOVERY_PACK_PAGE: NonNullable<
         options,
       ),
     };
-  const keyFile = await parseRecoveryDocument({
+  const keyFile = await parseRecoveryKeyDocument({
     ...document,
     nodeKey: { nodeId: node.nodeId, name: context.newKey.name, secret: context.newKey.secret },
   });

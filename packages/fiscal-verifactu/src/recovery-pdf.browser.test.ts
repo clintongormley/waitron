@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { renderRecoveryPdf } from "./recovery-pdf.js";
 import { readRecoveryPdf, openRecoveryPdf } from "./recovery-reader.js";
-import { recoveryDocumentBytes, type RecoveryDocument } from "./recovery-document.js";
+import { recoveryDocumentBytes, type RecoveryKeyDocument } from "./recovery-document.js";
 import { decodeRecoveryKey } from "./recovery-key-code.js";
 
-const document: RecoveryDocument = {
+const document: RecoveryKeyDocument = {
   kind: "waitron-recovery-document",
   version: 1,
   scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },
@@ -78,7 +78,7 @@ describe("key-only recovery PDF", () => {
     "keeps the recovery key block together with maximum labels in %s",
     async (locale) => {
       const label = (prefix: string) => prefix + "W".repeat(254) + "Z";
-      const input: RecoveryDocument = {
+      const input: RecoveryKeyDocument = {
         ...document,
         taxpayerName: label("L"),
         venueName: label("V"),

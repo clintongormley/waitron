@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import type { InitialSetupActions } from "@waitron/module/src/setup-contract.js";
-import { readRecoveryPdf, openRecoveryPdf } from "../recovery-reader.js";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { FISCAL_SETUP } from "@waitron/fiscal-verifactu/setup";
 const instant = Date.parse("2026-10-18T12:30:00Z");
 const clock = {
@@ -1112,17 +1112,13 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   expect(opened).toHaveBeenCalledWith(downloads[0]!.href, "_blank");
   const bytes = new Uint8Array(await (await fetch(downloads[0]!.href)).arrayBuffer());
   expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe("%PDF-");
-  const decoded = await readRecoveryPdf(bytes);
-  expect(decoded.document?.nodeKey).toEqual({
-    nodeId: "node",
-    name: "Olivo key",
-    secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-  });
-  expect(decoded.document?.scope).toEqual({
-    taxpayerNif: "B12345674",
-    environment: "production",
-    softwareId: "W1",
-  });
+  const file = await readRecoveryPackPdf(bytes);
+  expect([file.serverKey, file.serverKeyName, file.masterKey, file.masterKeyName]).toEqual([
+    null,
+    null,
+    "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+    "2026-11-23 · QZJV",
+  ]);
   expect(JSON.stringify(Object.entries(sessionStorage))).not.toContain(
     "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
   );
@@ -1155,50 +1151,6 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
   expect(el.shadowRoot!.textContent).not.toContain("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
 });
-it("the wizard PDF uses the reviewed Canary venue zone", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(instant);
-  try {
-    const request = structuredClone(context);
-    request.venue.timeZone = "Atlantic/Canary";
-    const { el, api } = await mount({ request });
-    api.stageNodeKey = async () => ({
-      stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
-      key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
-      masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
-      masterKeyName: "2026-11-23 · QZJV",
-    });
-    api.registerRecoveryDocument = async () => {};
-    api.confirmRecoveryDocument = async () => {};
-    await ready(el);
-    await proceed(el);
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
-    );
-    const { downloads } = captureDownloads();
-    await userEvent.click(button(el, "prepare-pdf"));
-    await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull());
-    await userEvent.click(keyPart(el, "download")!);
-    const task = openRecoveryPdf(
-      new Uint8Array(await (await fetch(downloads[0]!.href)).arrayBuffer()),
-    );
-    try {
-      const pdf = await task.promise;
-      let text = "";
-      for (let n = 1; n <= pdf.numPages; n++)
-        text += (await (await pdf.getPage(n)).getTextContent()).items
-          .map((item) => ("str" in item ? item.str : ""))
-          .join(" ");
-      expect(text).toContain("18 October 2026, 13:30");
-      expect(text).toContain("WEST");
-    } finally {
-      await task.destroy();
-    }
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
 it.each([
   ["en", "Recovery pack", "Show the master key", "Download", "Recovery pack confirmed."],
   [

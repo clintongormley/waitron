@@ -1,5 +1,10 @@
 import { expect, it } from "vitest";
-import { parseRecoveryDocumentPublic, type RecoveryDocumentPublic } from "./recovery-document.js";
+import {
+  parseRecoveryDocument,
+  parseRecoveryDocumentPublic,
+  recoveryDocumentPublic,
+  type RecoveryDocumentPublic,
+} from "./recovery-document.js";
 
 const sheet: RecoveryDocumentPublic = {
   kind: "waitron-recovery-document",
@@ -19,4 +24,16 @@ it("refuses a sheet that still carries installation codes", () => {
   expect(() => parseRecoveryDocumentPublic({ ...sheet, installationCodes: ["0CNNW"] })).toThrow(
     "Recovery PDF refused",
   );
+});
+
+it("a recovery document carries no box-key secret", async () => {
+  await expect(
+    parseRecoveryDocument({
+      ...sheet,
+      nodeKey: { ...sheet.nodeKey, secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+    }),
+  ).rejects.toThrow("Recovery PDF refused");
+  const parsed = await parseRecoveryDocument(sheet);
+  expect(parsed).toEqual(sheet);
+  expect(recoveryDocumentPublic(parsed)).toEqual(sheet);
 });

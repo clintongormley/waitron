@@ -6,7 +6,7 @@ import type {
   InitialSetupActions,
   InitialSetupNodeKey,
 } from "@waitron/module/src/setup-contract.js";
-import { readRecoveryPdf } from "../recovery-reader.js";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { FISCAL_SETUP } from "./first-fiscal-screen.js";
 
 const hosts: HTMLElement[] = [];
@@ -41,14 +41,32 @@ const input = {
     ],
   },
 };
-const pair = (name: string, stageId: string, secret: string): InitialSetupNodeKey => ({
+const pair = (
+  name: string,
+  stageId: string,
+  secret: string,
+  masterKey: string,
+  masterKeyName: string,
+): InitialSetupNodeKey => ({
   stage: { stageId, nodeId: "node", name },
   key: { nodeId: "node", name, secret },
-  masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
-  masterKeyName: "2026-11-23 · QZJV",
+  masterKey,
+  masterKeyName,
 });
-const old = pair("Old key", "old", "AbCdEfGhIjKlMnOpQrStUvWxYz012345");
-const replacement = pair("New key", "replacement", "012345AbCdEfGhIjKlMnOpQrStUvWxYz");
+const old = pair(
+  "Old key",
+  "old",
+  "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+  "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+  "2026-11-23 · QZJV",
+);
+const replacement = pair(
+  "New key",
+  "replacement",
+  "012345AbCdEfGhIjKlMnOpQrStUvWxYz",
+  "2SZ5 ZYJ9 UN95 RXKV NF7B N8VU GYU4",
+  "2026-11-23 · RKMB",
+);
 const control = (el: LitElement, name: string) =>
   el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${name}]`)!;
 const download = (el: LitElement) =>
@@ -163,11 +181,15 @@ it("offers explicit replacement after raw-key loss and delivers the new real PDF
   await expect.poll(() => download(el)).not.toBeNull();
   expect(control(el, "replace-key"), "the replacement is offered once per lost key").toBeNull();
   await userEvent.click(download(el)!);
-  const decoded = await readRecoveryPdf(
+  const file = await readRecoveryPackPdf(
     new Uint8Array(await (await fetch(saved.at(-1)!)).arrayBuffer()),
   );
-  expect(decoded.document?.nodeKey).toEqual(replacement.key);
-  expect(decoded.document).not.toHaveProperty("installationCodes");
+  expect([file.serverKey, file.masterKey, file.masterKeyName]).toEqual([
+    null,
+    replacement.masterKey,
+    replacement.masterKeyName,
+  ]);
+  expect(file).not.toHaveProperty("installationCodes");
   expect(calls.filter((c) => c.action === "reissue")).toHaveLength(1);
   expect(calls.filter((c) => c.action === "select")).toEqual([
     { action: "select", value: { comparisonId: "comparison", confirmed: true } },

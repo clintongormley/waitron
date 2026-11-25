@@ -9,11 +9,11 @@ export type RecoveryDocument = {
   taxpayerName: string;
   venueName: string;
   createdAt: string;
-  nodeKey: NamedNodeKey;
-};
-export type RecoveryDocumentPublic = Omit<RecoveryDocument, "nodeKey"> & {
   nodeKey: Pick<NamedNodeKey, "nodeId" | "name">;
 };
+export type RecoveryDocumentPublic = RecoveryDocument;
+/** The key file the box-key reader and pages read; the document setup delivers never has it. */
+export type RecoveryKeyDocument = Omit<RecoveryDocument, "nodeKey"> & { nodeKey: NamedNodeKey };
 export const RECOVERY_ATTACHMENT = "waitron-recovery-key-v1.json";
 export const MAX_RECOVERY_ATTACHMENT = 8192;
 export const MAX_RECOVERY_PDF = 8 * 1024 * 1024;
@@ -48,7 +48,7 @@ function label(value: unknown): value is string {
     !/\p{Cc}/u.test(value)
   );
 }
-function checked(value: unknown, secret: boolean): RecoveryDocument | RecoveryDocumentPublic {
+function checked(value: unknown, secret: boolean): RecoveryDocument | RecoveryKeyDocument {
   if (
     !exact(value, [
       "kind",
@@ -81,22 +81,26 @@ function checked(value: unknown, secret: boolean): RecoveryDocument | RecoveryDo
         !/^[A-Za-z0-9_-]{32}$/.test(value.nodeKey.secret)))
   )
     refuseRecovery();
-  return structuredClone(value) as RecoveryDocument | RecoveryDocumentPublic;
+  return structuredClone(value) as RecoveryDocument | RecoveryKeyDocument;
 }
 export function parseRecoveryDocumentPublic(value: unknown): RecoveryDocumentPublic {
-  return checked(value, false) as RecoveryDocumentPublic;
+  return checked(value, false);
 }
 export async function parseRecoveryDocument(value: unknown): Promise<RecoveryDocument> {
-  const document = checked(value, true) as RecoveryDocument;
+  return checked(value, false);
+}
+export async function parseRecoveryKeyDocument(value: unknown): Promise<RecoveryKeyDocument> {
+  const document = checked(value, true) as RecoveryKeyDocument;
   await encodeNodeKey(document.nodeKey, document.scope, "raw192");
   return document;
 }
 export function recoveryDocumentPublic(value: RecoveryDocument): RecoveryDocumentPublic {
-  const document = checked(value, true) as RecoveryDocument;
-  return { ...document, nodeKey: { nodeId: document.nodeKey.nodeId, name: document.nodeKey.name } };
+  return checked(value, false);
 }
-export function recoveryDocumentBytes(value: RecoveryDocument): Uint8Array<ArrayBuffer> {
-  const document = checked(value, true);
+export function recoveryDocumentBytes(
+  value: RecoveryDocument | RecoveryKeyDocument,
+): Uint8Array<ArrayBuffer> {
+  const document = checked(value, "secret" in value.nodeKey);
   function canonical(v: unknown): string {
     if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
     if (typeof v !== "object" || v === null) return JSON.stringify(v);

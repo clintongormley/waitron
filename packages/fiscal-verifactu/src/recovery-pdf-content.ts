@@ -3,21 +3,21 @@ import { create, type Font } from "fontkit";
 import { shortNodeId } from "@waitron/shared";
 import { encodeRecoveryKey } from "./recovery-key-code.js";
 import {
-  parseRecoveryDocument,
+  parseRecoveryKeyDocument,
   recoveryDocumentBytes,
   RECOVERY_ATTACHMENT,
   MAX_RECOVERY_PDF,
   refuseRecovery,
-  type RecoveryDocument,
+  type RecoveryKeyDocument,
 } from "./recovery-document.js";
 
 export async function renderRecoveryPdfWithFont(
-  input: RecoveryDocument,
+  input: RecoveryKeyDocument,
   locale: "en" | "es",
   loadFont: () => Promise<Uint8Array>,
   timeZone: string,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  const document = await parseRecoveryDocument(input);
+  const document = await parseRecoveryKeyDocument(input);
   if (locale !== "en" && locale !== "es") refuseRecovery();
   if (typeof timeZone !== "string" || timeZone === "") refuseRecovery();
   let created: string;

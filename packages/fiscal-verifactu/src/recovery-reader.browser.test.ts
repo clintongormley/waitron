@@ -9,9 +9,9 @@ import {
   MAX_RECOVERY_ATTACHMENT,
   MAX_RECOVERY_PDF,
   recoveryDocumentBytes,
-  type RecoveryDocument,
+  type RecoveryKeyDocument,
 } from "./recovery-document.js";
-const document: RecoveryDocument = {
+const document: RecoveryKeyDocument = {
   kind: "waitron-recovery-document",
   version: 1,
   scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },

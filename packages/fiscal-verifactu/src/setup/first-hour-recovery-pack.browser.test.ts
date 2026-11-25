@@ -201,14 +201,17 @@ it.each(["download", "print"])(
   },
 );
 
-it("Copy alone leaves Continue hidden: the pack also holds the box key, which Copy leaves out", async () => {
+it("Copy is enough to show Continue, and Continue keeps the pack", async () => {
   captureHandovers();
   const { el, kept } = await mount();
   await showKey(el);
+  expect(control(el, "kept")).toBeNull();
   await userEvent.click(control(el, "copy")!);
   await expect.poll(() => text(el, "copied")).toBe("Copied.");
-  expect(control(el, "kept")).toBeNull();
+  await expect.poll(() => control(el, "kept")).not.toBeNull();
   expect(kept).toEqual([]);
+  await userEvent.click(control(el, "kept")!);
+  await expect.poll(() => kept).toHaveLength(1);
 });
 
 it("a Print the browser blocks does not count: it says so where a refused Copy does, and Continue stays hidden", async () => {

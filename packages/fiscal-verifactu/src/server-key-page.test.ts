@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { shortNodeId } from "@waitron/shared";
 import { encodeRecoveryKey } from "./recovery-key-code.js";
-import type { RecoveryDocument } from "./recovery-document.js";
+import type { RecoveryKeyDocument } from "./recovery-document.js";
 import { serverKeyPage } from "./server-key-page.js";
 
-const document: RecoveryDocument = {
+const document: RecoveryKeyDocument = {
   kind: "waitron-recovery-document",
   version: 1,
   scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "production" },

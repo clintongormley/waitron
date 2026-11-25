@@ -15,11 +15,7 @@ export function fixture(): RecoveryDocument {
     taxpayerName: "Olivo Restauración SL",
     venueName: "Olivo Centro",
     createdAt: "2026-10-17T12:30:00.000Z",
-    nodeKey: {
-      nodeId: "node-1",
-      name: "Caja principal",
-      secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-    },
+    nodeKey: { nodeId: "node-1", name: "Caja principal" },
   };
 }
 describe("key-only recovery document", () => {
@@ -29,7 +25,7 @@ describe("key-only recovery document", () => {
     Object.assign(input.nodeKey, { name: "changed" });
     expect(parsed.nodeKey.name).toBe("Caja principal");
     expect(new TextDecoder().decode(recoveryDocumentBytes(parsed))).toBe(
-      '{"createdAt":"2026-10-17T12:30:00.000Z","kind":"waitron-recovery-document","nodeKey":{"name":"Caja principal","nodeId":"node-1","secret":"AbCdEfGhIjKlMnOpQrStUvWxYz012345"},"scope":{"environment":"production","softwareId":"W1","taxpayerNif":"B12345674"},"taxpayerName":"Olivo Restauración SL","venueName":"Olivo Centro","version":1}',
+      '{"createdAt":"2026-10-17T12:30:00.000Z","kind":"waitron-recovery-document","nodeKey":{"name":"Caja principal","nodeId":"node-1"},"scope":{"environment":"production","softwareId":"W1","taxpayerNif":"B12345674"},"taxpayerName":"Olivo Restauración SL","venueName":"Olivo Centro","version":1}',
     );
   });
   it("public projection has exact public keys and refuses a secret", () => {
@@ -37,7 +33,12 @@ describe("key-only recovery document", () => {
     const publicDoc = recoveryDocumentPublic(input);
     expect(publicDoc).toEqual({ ...input, nodeKey: { nodeId: "node-1", name: "Caja principal" } });
     expect(parseRecoveryDocumentPublic(publicDoc)).toEqual(publicDoc);
-    expect(() => parseRecoveryDocumentPublic(input)).toThrow("Recovery PDF refused");
+    expect(() =>
+      parseRecoveryDocumentPublic({
+        ...input,
+        nodeKey: { ...input.nodeKey, secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+      }),
+    ).toThrow("Recovery PDF refused");
   });
   it.each([
     (d: RecoveryDocument) => Object.assign(d, { password: "forbidden" }),

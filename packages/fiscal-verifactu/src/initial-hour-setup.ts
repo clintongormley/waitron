@@ -139,7 +139,7 @@ export function createHourInitialSetup(
         taxpayerName: document.identity.taxpayerName,
         venueName: document.identity.venueName,
         createdAt: new Date().toISOString(),
-        nodeKey: document.key,
+        nodeKey: { nodeId: document.key.nodeId, name: document.key.name },
       };
       const { loadRecoveryPackFonts } = await import("./recovery-pdf-node.js");
       const { renderSetupRecoveryPack } = await import("./setup-recovery-pack.js");

@@ -3,7 +3,7 @@ import { shortNodeId } from "@waitron/shared";
 import { encodeRecoveryKey } from "./recovery-key-code.js";
 import {
   refuseRecovery,
-  type RecoveryDocument,
+  type RecoveryKeyDocument,
   type RecoveryDocumentPublic,
 } from "./recovery-document.js";
 
@@ -53,7 +53,7 @@ export const serverKeyPageWords = {
 } as const;
 
 function createdWhen(
-  document: RecoveryDocument | RecoveryDocumentPublic,
+  document: RecoveryKeyDocument | RecoveryDocumentPublic,
   language: string,
   timeZone: string,
   withTime: boolean,
@@ -84,7 +84,7 @@ function createdWhen(
 
 /** The pack's server-key page; a document without a secret describes the key in force. */
 export function serverKeyPage(
-  document: RecoveryDocument | RecoveryDocumentPublic,
+  document: RecoveryKeyDocument | RecoveryDocumentPublic,
   options: { readonly locale: "en" | "es"; readonly timeZone: string },
 ): RecoveryPackPage {
   const w = serverKeyPageWords[options.locale];

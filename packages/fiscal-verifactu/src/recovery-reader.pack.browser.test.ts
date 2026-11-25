@@ -15,10 +15,10 @@ import {
   RECOVERY_ATTACHMENT,
   RecoveryPackWithoutKeyError,
   recoveryDocumentBytes,
-  type RecoveryDocument,
+  type RecoveryKeyDocument,
 } from "./recovery-document.js";
 
-const keyDocument: RecoveryDocument = {
+const keyDocument: RecoveryKeyDocument = {
   kind: "waitron-recovery-document",
   version: 1,
   scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },

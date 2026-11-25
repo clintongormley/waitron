@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createRecoveryDelivery } from "./recovery-delivery.js";
-import { readRecoveryPdf } from "./recovery-reader.js";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { recoveryDocumentPublic, type RecoveryDocument } from "./recovery-document.js";
 const document: RecoveryDocument = {
   kind: "waitron-recovery-document",
@@ -9,7 +9,7 @@ const document: RecoveryDocument = {
   taxpayerName: "Olivo Restauración SL",
   venueName: "Olivo Centro",
   createdAt: "2026-10-17T12:30:00.000Z",
-  nodeKey: { nodeId: "node-1", name: "Caja principal", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+  nodeKey: { nodeId: "node-1", name: "Caja principal" },
 };
 async function digest(bytes: Uint8Array<ArrayBuffer>) {
   return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (n) =>
@@ -34,7 +34,12 @@ describe("transient recovery delivery session", () => {
       const print = await session.print();
       expect(print).toBe(download);
       const bytes = new Uint8Array(await (await fetch(download)).arrayBuffer());
-      expect((await readRecoveryPdf(bytes)).document).toEqual(document);
+      const file = await readRecoveryPackPdf(bytes);
+      expect([file.serverKey, file.masterKey, file.masterKeyName]).toEqual([
+        null,
+        made.masterKey,
+        made.masterKeyName,
+      ]);
       const binding = await session.ready();
       expect(binding.statement).toEqual(recoveryDocumentPublic(document));
       expect(binding.bindingDigest).toBe(
@@ -45,7 +50,7 @@ describe("transient recovery delivery session", () => {
         ),
       );
       expect(binding.documentDigest).toBe(await digest(bytes));
-      expect(JSON.stringify(binding)).not.toContain(document.nodeKey.secret);
+      expect(JSON.stringify(binding)).not.toContain(made.masterKey);
       expect(confirm).not.toHaveBeenCalled();
       expect(await session.kept()).toBe("host-grant");
       expect(confirm).toHaveBeenCalledExactlyOnceWith(binding);
@@ -90,15 +95,9 @@ describe("transient recovery delivery session", () => {
   it("freezes caller input and rejects invalid data", async () => {
     const input = structuredClone(document);
     const session = createRecoveryDelivery(input, made, "en", async () => true, "Europe/Madrid");
-    Object.assign(input.nodeKey, { secret: "z".repeat(32) });
+    Object.assign(input.nodeKey, { name: "changed" });
     try {
-      expect(
-        (
-          await readRecoveryPdf(
-            new Uint8Array(await (await fetch(await session.download())).arrayBuffer()),
-          )
-        ).document,
-      ).toEqual(document);
+      expect((await session.ready()).statement).toEqual(document);
     } finally {
       session.dispose();
     }

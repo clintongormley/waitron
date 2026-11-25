@@ -1,6 +1,6 @@
 import { getDocument, GlobalWorkerOptions } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import type { RecoveryDocument } from "./recovery-document.js";
+import type { RecoveryKeyDocument } from "./recovery-document.js";
 import {
   PDFDocument,
   PDFDict,
@@ -22,7 +22,7 @@ import {
   RECOVERY_ATTACHMENT,
   RecoveryPackWithoutKeyError,
   refuseRecovery,
-  parseRecoveryDocument,
+  parseRecoveryKeyDocument,
   recoveryDocumentBytes,
 } from "./recovery-document.js";
 GlobalWorkerOptions.workerSrc = workerUrl;
@@ -109,15 +109,15 @@ async function checkCarrier(bytes: Uint8Array): Promise<{ contentDigest: string;
  * The server key a pack carries, held to the key file's checks. The pack file's own canonical-bytes
  * check covers the nested key's bytes, so it needs no second comparison; only the key leaves.
  */
-async function packServerKey(file: Uint8Array): Promise<RecoveryDocument> {
+async function packServerKey(file: Uint8Array): Promise<RecoveryKeyDocument> {
   const pack = parseRecoveryPackFile(file);
   if (pack.serverKey === null)
     throw new RecoveryPackWithoutKeyError(pack.serverKeyName, pack.serverKeyHeldBy);
-  return parseRecoveryDocument(pack.serverKey);
+  return parseRecoveryKeyDocument(pack.serverKey);
 }
 export async function readRecoveryPdf(
   bytes: Uint8Array,
-): Promise<{ document: RecoveryDocument; attachmentBytes: Uint8Array<ArrayBuffer> }> {
+): Promise<{ document: RecoveryKeyDocument; attachmentBytes: Uint8Array<ArrayBuffer> }> {
   if (!(bytes instanceof Uint8Array) || bytes.length === 0 || bytes.length > MAX_RECOVERY_PDF)
     refuseRecovery();
   let task: ReturnType<typeof openRecoveryPdf> | undefined;
@@ -140,7 +140,7 @@ export async function readRecoveryPdf(
       return { document, attachmentBytes: recoveryDocumentBytes(document) };
     }
     const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(attachedBytes);
-    const document = await parseRecoveryDocument(JSON.parse(text));
+    const document = await parseRecoveryKeyDocument(JSON.parse(text));
     const canonical = recoveryDocumentBytes(document);
     if (
       canonical.length !== attachedBytes.length ||

@@ -1,9 +1,9 @@
 import { expect, it } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { renderRecoveryPdf } from "./recovery-pdf-node.js";
-import { recoveryDocumentBytes, type RecoveryDocument } from "./recovery-document.js";
+import { recoveryDocumentBytes, type RecoveryKeyDocument } from "./recovery-document.js";
 
-const document: RecoveryDocument = {
+const document: RecoveryKeyDocument = {
   kind: "waitron-recovery-document",
   version: 1,
   scope: { taxpayerNif: "B12345674", softwareId: "W1", environment: "production" },

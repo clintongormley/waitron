@@ -9,13 +9,16 @@ import { afterAll, expect, it, vi } from "vitest";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { renderRecoveryPdf } from "./recovery-pdf-node.js";
 import { decodeRecoveryKey } from "./recovery-key-code.js";
-import { recoveryDocumentBytes, type RecoveryDocument } from "./recovery-document.js";
+import { recoveryDocumentBytes, type RecoveryKeyDocument } from "./recovery-document.js";
 import {
   inspectSetupRecoveryPack,
   setupPackDocument,
 } from "../test/setup-recovery-pack-inspect.js";
 
-const document: RecoveryDocument = setupPackDocument;
+const document: RecoveryKeyDocument = {
+  ...setupPackDocument,
+  nodeKey: { ...setupPackDocument.nodeKey, secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+};
 const roots: string[] = [];
 afterAll(async () => {
   await Promise.all(roots.map((root) => rm(root, { recursive: true, force: true })));
@@ -170,7 +173,7 @@ it.each(["en", "es"] as const)("prints no installation code in %s", async (local
 it("refuses a sheet that still carries an installation code", async () => {
   await expect(
     renderRecoveryPdf(
-      { ...document, installationCodes: ["0CNNW"] } as RecoveryDocument,
+      { ...document, installationCodes: ["0CNNW"] } as RecoveryKeyDocument,
       "en",
       "Europe/Madrid",
     ),
