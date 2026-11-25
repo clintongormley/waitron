@@ -615,12 +615,15 @@ Slice 3.
 ## Decisions and deliberate limits
 
 **A spare can retry from its placed copy when the signed digest identifies it.** Opening with a
-different SQLite version can prevent that match. A missing or damaged accepted file then leaves the
-start on the copy error. If a placed copy's own list names a successor, the handover can instead
-stay waiting and say the old box is no longer main. For these failed-placement retries, put the
-old box's exact `<state>/handover/<operation>/venue.db` at
-`<state>/handover/<operation>/accepted.db` on the spare if the old box still holds it. Then choose
-**Retry a normal boot**.
+different SQLite version can prevent that match. A damaged retained file can also stop the start
+after the placed copy has been opened, even with the same SQLite version. If the old box still holds
+the exact `<state>/handover/<operation>/venue.db`, restore it to
+`<state>/handover/<operation>/accepted.db` on the spare. If you see the copy error page, restore
+the file and choose **Retry a normal boot**. If the spare is running and the handover says the
+old box is no longer main, stop the spare before restoring the file, then start it again.
+
+If the start reports an unreadable or full preparation file, the accepted database may already be
+in place. Repair the preparation file before choosing **Retry a normal boot**.
 
 <a id="a1279-a-local-secondary-promotes-only-over-a-chart-it-signed-itself"></a>
 

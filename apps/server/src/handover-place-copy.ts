@@ -314,17 +314,16 @@ export async function placeAcceptedCopyAtStart(args: {
     const live = join(venueDir, VENUE_FILE);
     const liveSize = await sizeIfPresent(live);
     const accepted = acceptedCopyPath(stateDir, operationId);
-    const exactCopy = liveSize === bytes && (await digestFileIfPresent(live))?.sha256 === sha256;
-    const openedCopy =
+    if (
       liveSize === bytes &&
-      !exactCopy &&
-      (await lstat(accepted).then(
-        () => false,
-        (error: unknown) => errnoOf(error) === "ENOENT",
-      )) &&
-      (await openedCopyMatches(live, sha256));
-    if (exactCopy || openedCopy) {
-      if (openedCopy) await mergeSelections(merge, stateDir, revisions);
+      ((await digestFileIfPresent(live))?.sha256 === sha256 ||
+        ((await lstat(accepted).then(
+          () => false,
+          (error: unknown) => errnoOf(error) === "ENOENT",
+        )) &&
+          (await openedCopyMatches(live, sha256))))
+    ) {
+      await mergeSelections(merge, stateDir, revisions);
       // A crashed run may have renamed and not flushed, and `copy_placed` is recorded next.
       await steps.reachDisk(venueDir);
       return { kind: "copy_placed_owed", operationId, swapped: false };

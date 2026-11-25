@@ -1316,16 +1316,18 @@ describe("placeAcceptedCopyAtStart", () => {
       expect(existsSync(b.preparation)).toBe(false);
     });
 
-    it("a missing accepted.db with the digest already equal is not a refusal: the copy is in place", async () => {
+    it("recovers the preparation file when the live digest already matches and accepted.db is missing", async () => {
       const b = await box();
       await placeAcceptedCopyAtStart(b.args);
       rmSync(b.accepted);
+      rmSync(b.preparation);
 
       expect(await placeAcceptedCopyAtStart(b.args)).toEqual({
         kind: "copy_placed_owed",
         operationId: OP,
         swapped: false,
       });
+      expect(JSON.parse(readFileSync(b.preparation, "utf8")).prepared).toEqual([REVISION]);
     });
 
     async function openPlacedCopy(b: Awaited<ReturnType<typeof box>>): Promise<void> {
