@@ -6724,7 +6724,9 @@ queue order made the correction wait behind that cancellation. Repeated passes s
 
 The correction action now refuses while an existing cancellation is waiting, completed, failed or
 unknown. An ordinary cancellation already set aside by the drainer can be corrected and explicitly
-released afterwards. The refusal and that later accepting path run together in
+released afterwards. Correcting a sale that has a `sale_voids` row is also
+refused (`fiscal.remedy_invalid`) while the server's remedy policy does not enable
+`release-held-cancellation`; turning releasing on lifts that refusal. The refusal and that later accepting path run together in
 `apps/server/src/fiscal-remedy.staff-refund.test.ts`, including preservation of the actual cash
 refund. Those cases cover this action's admission boundary, not every future queue dependency.
 

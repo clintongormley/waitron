@@ -221,7 +221,7 @@ it("resolves a staff Cancel and refund followed by a test-built cancellation by 
       reason: "Synthetic correction before held cancellation",
       facts: { description: "Corrected restaurant service" },
     },
-    ["record-correction"],
+    ["record-correction", "release-held-cancellation"],
   );
   expect(corrected).toMatchObject({ status: 200 });
   expect((await drain(deps, NOW)).recordsAccepted).toBe(1);
@@ -412,7 +412,7 @@ it("releases the old chain's cancellation once a correction issued on another ch
       reason: "Synthetic new issuing chain",
       facts: { description: "Corrected restaurant service" },
     },
-    ["record-correction"],
+    ["record-correction", "release-held-cancellation"],
   );
   expect(corrected).toMatchObject({ status: 200 });
   expect((await drain(deps, NOW)).recordsAccepted).toBe(1);
@@ -503,7 +503,7 @@ it("allows the same correction decision after the filing queue has actually held
   expect((await drain(deps, NOW)).recordsAccepted).toBe(0);
   const heldCase = (await fiscalFacts()).cases.find((row) => row.registroId === cancellationId)!;
   expect(heldCase).toMatchObject({ cause: "fiscal.anulacion_retenida", status: "open" });
-  const accepted = await remedy(request, ["record-correction"]);
+  const accepted = await remedy(request, ["record-correction", "release-held-cancellation"]);
   expect(accepted).toMatchObject({ status: 200 });
   expect((await drain(deps, NOW)).recordsAccepted).toBe(1);
   expect(

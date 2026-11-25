@@ -2,7 +2,7 @@ import { deliveryColumns } from "../test/drain-fixtures.js";
 import { seedPersons, setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
-import { incidents, withTransaction } from "@waitron/db";
+import { incidents, saleVoids, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -449,6 +449,45 @@ it("refuses a synthetic held absent-original cancellation rather than treating i
   const before = await snapshot();
   await expect(apply()).rejects.toMatchObject({ code: "fiscal.remedy_invalid" });
   expect(await snapshot()).toEqual(before);
+});
+
+it("corrects a voided sale whose cancellation is set aside only while releasing one is enabled", async () => {
+  await withTransaction(suite.db, async (tx) => {
+    await tx.insert(saleVoids).values({
+      saleId: request.pending.saleId,
+      reason: "Wrong table",
+      voidedAt: NOW.toISOString(),
+    });
+    const held = await appendToChain(
+      tx,
+      node.nodeId,
+      anulacionFor(node, request.pending.saleId, 1, 2, "preproduction"),
+    );
+    await tx.insert(verifactuSubmissions).values({ registroId: held.id, estado: "retenido" });
+  });
+  const before = await snapshot();
+  await expect(apply()).rejects.toMatchObject({
+    code: "fiscal.remedy_invalid",
+    params: { registroId: request.registroId },
+  });
+  expect(await snapshot()).toEqual(before);
+
+  const corrected = await withTransaction(suite.db, (tx) =>
+    applyRecordCorrection(tx, {
+      managementSessionId: token,
+      nodeId: node.nodeId,
+      environment: "preproduction",
+      enabledRemedies: new Set(["record-correction", "release-held-cancellation"]),
+      request,
+      now: NOW,
+    }),
+  );
+  const after = await snapshot();
+  expect(after.records).toHaveLength(before.records.length + 1);
+  expect(after.records.find((row) => row.id === corrected.registroId)).toMatchObject({
+    correctsRegistroId: request.registroId,
+    descripcionOperacion: "Corrected restaurant service",
+  });
 });
 
 it("refuses a record of a box outside this box's takeover history before reading the case", async () => {
