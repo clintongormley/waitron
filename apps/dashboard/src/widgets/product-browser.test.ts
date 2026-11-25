@@ -5236,54 +5236,69 @@ const categoryDeleteMove = (
 });
 
 it.each([
-  ["en-GB", true, false, "All 2 will usually be made in Kitchen instead of Bar."],
+  ["en-GB", "common", "All 2 will usually be made in Kitchen instead of Bar."],
   [
     "en-GB",
-    false,
-    false,
+    "one zone",
     "2 products will be made in Kitchen instead of Bar in some zones or at some times.",
   ],
   [
     "en-GB",
-    true,
-    true,
-    "2 products will be made in Kitchen instead of Bar depending on the order.",
+    "timed",
+    "2 products will be made in Kitchen instead of Bar in some zones or at some times.",
   ],
-  ["es", true, false, "Los 2 se prepararán normalmente en Kitchen en vez de en Bar."],
-  ["es", true, true, "2 productos se prepararán en Kitchen en vez de en Bar según el pedido."],
-] as const)(
-  "describes station moves in %s with every zone moving (%s) and the moves for extras only (%s)",
-  async (locale, bothZones, extrasOnly, sentence) => {
-    setLocale(locale);
-    const zones = [
-      { id: "patio", name: "Patio", departmentId: null },
-      { id: "bar", name: "Bar", departmentId: null },
-    ];
-    const cola = product("cola", "Cola", "d");
-    const tea = product("tea", "Tea", "d");
-    const el = await mountBrowser({ routing: routingWith({ zones }), products: [cola, tea] });
-    vi.mocked(el.api.summariseFolders).mockResolvedValue([{ id: "d", ...contents(0, 2) }]);
-    vi.mocked(el.api.previewProductItemsRouting).mockResolvedValue({
-      stations: categoryDeleteStations,
-      periods: [],
-      moves: zones.flatMap((zone) =>
-        (zone.id === "bar" && !bothZones ? [cola] : [cola, tea]).map((item) => ({
-          ...categoryDeleteMove(item, zone),
-          ...(extrasOnly ? { dish: { productId: "cake", productName: "Cake" } } : {}),
-        })),
-      ),
-    });
-    await selectKeys(el, ["folder:d"]);
-    await press(el, "delete");
-    await vi.waitFor(() => expect(dialog(el)?.textContent).toContain(sentence));
-    const details = dialog(el)!.querySelector("wt-disclosure")!;
-    expect(details.heading).toBe(locale === "es" ? "Detalles" : "Details");
-    expect(details.open).toBe(false);
-    await userEvent.click(details.shadowRoot!.querySelector<HTMLButtonElement>(".header")!);
-    expect(details.open).toBe(true);
-    expect(details.querySelectorAll("tbody tr")).toHaveLength(bothZones ? 4 : 3);
-  },
-);
+  ["en-GB", "some", "2 products will usually be made in Kitchen instead of Bar."],
+  ["en-GB", "no preparation", "Usually from Bar to No preparation."],
+  ["en-GB", "extras", "From Bar to Kitchen depending on the order."],
+  ["es", "common", "Los 2 se prepararán normalmente en Kitchen en vez de en Bar."],
+  ["es", "extras", "De Bar a Kitchen según el pedido."],
+] as const)("describes %s station moves with %s routing", async (locale, example, sentence) => {
+  setLocale(locale);
+  const zones = [
+    { id: "patio", name: "Patio", departmentId: null },
+    { id: "bar", name: "Bar", departmentId: null },
+  ];
+  const cola = product("cola", "Cola", "d");
+  const tea = product("tea", "Tea", "d");
+  const products = example === "some" ? [cola, tea, product("bread", "Bread", "d")] : [cola, tea];
+  const el = await mountBrowser({ routing: routingWith({ zones }), products });
+  vi.mocked(el.api.summariseFolders).mockResolvedValue([
+    { id: "d", ...contents(0, products.length) },
+  ]);
+  const moves = zones.flatMap((zone) => {
+    const ordinary = (zone.id === "bar" && example === "one zone" ? [cola] : [cola, tea]).map(
+      (item) => categoryDeleteMove(item, zone),
+    );
+    if (example === "extras")
+      return [
+        ...ordinary,
+        {
+          ...ordinary[0]!,
+          productId: "cola-large",
+          productName: "Large cola",
+          dish: { productId: "cake", productName: "Cake" },
+        },
+      ];
+    if (example === "timed") return ordinary.map((move) => ({ ...move, periodIds: ["lunch"] }));
+    if (example === "no preparation")
+      return ordinary.map((move) => ({ ...move, to: { kind: "no_preparation" } as const }));
+    return ordinary;
+  });
+  vi.mocked(el.api.previewProductItemsRouting).mockResolvedValue({
+    stations: categoryDeleteStations,
+    periods: example === "timed" ? [{ id: "lunch", name: "Lunch", departmentName: "Dining" }] : [],
+    moves,
+  });
+  await selectKeys(el, ["folder:d"]);
+  await press(el, "delete");
+  await vi.waitFor(() => expect(dialog(el)?.textContent).toContain(sentence));
+  const details = dialog(el)!.querySelector("wt-disclosure")!;
+  expect(details.heading).toBe(locale === "es" ? "Detalles" : "Details");
+  expect(details.open).toBe(false);
+  await userEvent.click(details.shadowRoot!.querySelector<HTMLButtonElement>(".header")!);
+  expect(details.open).toBe(true);
+  expect(details.querySelectorAll("tbody tr")).toHaveLength(moves.length);
+});
 
 it("keeps pairs with only one station in common distinct", async () => {
   const cola = product("cola", "Cola", "d");

@@ -433,8 +433,9 @@ clears variant prices in the same transaction. A Device Home shortcut becomes a 
 its saved position. Configuration export leaves deleted rows and their dependent rows behind.
 
 The Delete title names a single category or counts several. It names every selected category
-and product when you select both kinds. The list gives full paths whenever they add to the title,
-with “(2 of 3)” where categories share a path. When there are contents beyond the selected items,
+and product when you select both kinds. The list gives the paths when more than one category is
+selected, or when the path adds to a single category's name. It adds “(2 of 3)” where categories
+share a path. When there are contents beyond the selected items,
 the window counts them once, excluding deleted products.
 
 - **Keep its 1 category and 3 products, in Drinks** moves the contents up. Unselected
@@ -474,9 +475,9 @@ products up.
 A refused action
 keeps its dialog open with a message at the bottom.
 Deleting a category removes every routing cell on its row through `routing_cells_category_fk`.
-Before a move or category deletion, check the station changes. Delete shows one line per pair of
-destinations and puts the full table, including zones and periods, under **Details**. Changing the
-choice refreshes the preview. Choose **Retry preview** if it fails to load.
+Move shows a table of products changing station, with old and new destinations, zones and periods.
+Delete shows one line per pair of old and new destinations and puts the same table under **Details**.
+Changing the choice refreshes the preview. Choose **Retry preview** if it fails to load.
 A variant is routed by its product's category, and a variant still storing a deleted category has it cleared.
 
 ## API

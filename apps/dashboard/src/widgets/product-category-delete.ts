@@ -279,7 +279,7 @@ export function categoryDeleteRouting(
           : t("folders.station_scoped");
       const usually = ordinary ? t("folders.station_usually") : "";
       const count = String(products.size);
-      const stationPair = move.from?.kind === "station" && move.to?.kind === "station";
+      const stationPair = !asExtra && move.from?.kind === "station" && move.to?.kind === "station";
       const key = stationPair
         ? all
           ? "folders.station_all"

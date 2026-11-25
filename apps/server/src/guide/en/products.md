@@ -103,7 +103,8 @@ to, as described below.
 To drop into a subcategory, open its parent categories before you start dragging.
 When you drop products or categories, the Move window opens with the destination selected. Review
 any preparation station changes and choose **Move to…** to save. You can also drop onto
-**All products** to move items out of their category.
+**All products** to move items out of their category. Check the station changes when you open
+**Move to…** from the toolbar too.
 
 When you delete a category, choose whether to keep its contents or delete them too. Check where
 the contents go and which station routing rules each choice removes. If preparation moves to
