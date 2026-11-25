@@ -1,9 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   kitchenStations,
-  products,
   ticketItems,
   withTransaction,
   workingOrderLines,
@@ -12,8 +11,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { effectiveProductColumns, parentJoin, parentProducts } from "@waitron/menu";
 import { dishKitchenItems, dishKitchenItemsQuery, onDishesOrTheirExtras } from "./dish-kitchen.js";
+import { queueExtrasQuery } from "./working-order-station-queue.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -213,18 +212,7 @@ describe("dish kitchen records", () => {
         .update(ticketItems)
         .set({ firedAt: "2026-10-02T10:00:00.000Z" })
         .where(onDishesOrTheirExtras(tx, [a, b])),
-      tx
-        .select({
-          parentLineId: workingOrderLines.parentLineId,
-          descriptions: workingOrderLines.descriptions,
-          addAllergens: effectiveProductColumns.allergens,
-          dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
-        })
-        .from(workingOrderLines)
-        .leftJoin(products, eq(products.id, workingOrderLines.productId))
-        .leftJoin(parentProducts, parentJoin)
-        .where(inArray(workingOrderLines.parentLineId, [a, b]))
-        .orderBy(workingOrderLines.lineNo),
+      queueExtrasQuery(tx, [a, b]),
     ]);
     const plans = async () =>
       Promise.all(

@@ -37,6 +37,7 @@ import { readFormerNumbers } from "./former-numbers.js";
 import { type KitchenPhase, kitchenPhase } from "./kitchen-phase.js";
 import { stationOrdersWithPrintProblem } from "./kitchen-ticket-problems.js";
 import { kitchenWork, firedQuantity } from "./kitchen-ticket-state.js";
+import { publishedLineColumns } from "./line-nutrition.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readGroupNumberLabels } from "./order-group-records.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
@@ -199,6 +200,31 @@ export interface StationQueueGroup {
   thresholds: StationThresholds;
   bumpMode: BumpMode;
 }
+
+/** The extras of the dishes `lineIds` names, each with its own ticket's station. */
+export function queueExtrasQuery(tx: Transaction, lineIds: string[]) {
+  const childTicket = alias(ticketItems, "queue_child_ticket");
+  const childStation = alias(kitchenStations, "queue_child_station");
+  return tx
+    .select({
+      ...publishedLineColumns,
+      parentLineId: workingOrderLines.parentLineId,
+      unitName: workingOrderLines.unitName,
+      name: workingOrderLines.name,
+      kitchenName: workingOrderLines.kitchenName,
+      variantName: workingOrderLines.variantName,
+      variantKitchenName: workingOrderLines.variantKitchenName,
+      quantity: workingOrderLines.quantity,
+      stationName: childStation.name,
+      ticketId: childTicket.id,
+    })
+    .from(workingOrderLines)
+    .leftJoin(childTicket, eq(childTicket.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(childStation, eq(childStation.id, childTicket.stationId))
+    .where(inArray(workingOrderLines.parentLineId, lineIds))
+    .orderBy(workingOrderLines.lineNo);
+}
+
 /**
  * Queue lines' child modifiers and cross references, then each line's own allergens and diet.
  */
@@ -227,40 +253,13 @@ export async function readQueueSubItems(
   >();
   if (lineIds.length === 0) return { modifiersByParent, crossRefsByLine, asServedByParent };
 
-  const publishedLine = {
-    id: workingOrderLines.id,
-    menuVersionId: workingOrderLines.menuVersionId,
-    menuItemId: workingOrderLines.menuItemId,
-    productId: workingOrderLines.productId,
-    extraListId: workingOrderLines.extraListId,
-  };
   const parents = await tx
-    .select({ ...publishedLine, quantity: workingOrderLines.quantity })
+    .select({ ...publishedLineColumns, quantity: workingOrderLines.quantity })
     .from(workingOrderLines)
     .where(inArray(workingOrderLines.id, lineIds));
   const parentQuantities = new Map(parents.map((line) => [line.id, line.quantity]));
 
-  const childTicket = alias(ticketItems, "queue_child_ticket");
-  const childStation = alias(kitchenStations, "queue_child_station");
-
-  const childRows = await tx
-    .select({
-      ...publishedLine,
-      parentLineId: workingOrderLines.parentLineId,
-      unitName: workingOrderLines.unitName,
-      name: workingOrderLines.name,
-      kitchenName: workingOrderLines.kitchenName,
-      variantName: workingOrderLines.variantName,
-      variantKitchenName: workingOrderLines.variantKitchenName,
-      quantity: workingOrderLines.quantity,
-      stationName: childStation.name,
-      ticketId: childTicket.id,
-    })
-    .from(workingOrderLines)
-    .leftJoin(childTicket, eq(childTicket.workingOrderLineId, workingOrderLines.id))
-    .leftJoin(childStation, eq(childStation.id, childTicket.stationId))
-    .where(inArray(workingOrderLines.parentLineId, lineIds))
-    .orderBy(workingOrderLines.lineNo);
+  const childRows = await queueExtrasQuery(tx, lineIds);
   const counted = await VENUE_SERVICE.readLinesSoldInEach(
     tx,
     childRows.flatMap((child) => (child.unitName == null ? [] : [child.id])),
