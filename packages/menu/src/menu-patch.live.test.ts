@@ -660,6 +660,50 @@ describe("declarations", () => {
     expect((await draft())!.queued).toEqual([]);
   });
 
+  it("says what a patch replaces at a scheduled version's added variant once that variant alone loses an allergen", async () => {
+    const lemonade = await offerTarget(f.lemonade);
+    await declareMilk(f.lemonade);
+    const { versionId: base } = await patch(v1, [declarations(lemonade)]);
+    await app(async (tx) => {
+      const variants = await listProductVariants(tx, f.lemonade);
+      const medium = {
+        name: "Medium",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "3.25",
+        available: true,
+      };
+      await setProductVariants(tx, f.lemonade, [...variants, medium], "en");
+    });
+    await queue(day(8));
+    const { id: medium } = (await app((tx) => listProductVariants(tx, f.lemonade))).find(
+      ({ name }) => name === "Medium",
+    )!;
+    await app((tx) => updateProduct(tx, medium, { allergens: {} }));
+    const [listed] = (await draft())!.queued;
+    const milk = expect.objectContaining({ allergens: { milk: {} } });
+    expect(listed!.targets).toEqual([
+      {
+        target: lemonade,
+        stillOld: true,
+        replaces: [
+          { productId: f.lemonade, name: "Lemonade", values: milk },
+          { productId: f.large, name: "Large", values: milk },
+          { productId: medium, name: "Medium", values: milk },
+        ],
+      },
+    ]);
+    const { requeued } = await patchQueued([declarations(lemonade)], [listed!.versionId], base);
+    const { variants } = (await versionRow(requeued[0]!.versionId)).document.offers[
+      lemonade.menuItemId
+    ]!;
+    expect(variants.map(({ name, allergens }) => ({ name, allergens }))).toEqual([
+      { name: "Large", allergens: { milk: {} } },
+      { name: "Medium", allergens: {} },
+    ]);
+  });
+
   describe("a patch of what was reviewed", () => {
     const patchReviewed = (
       changes: unknown,

@@ -271,7 +271,8 @@ On the two routes that take a time, the time refusals come before any of these: 
 clock skips `menu_publication.time_skipped` (400, `date`, `time`); a minute it shows twice, sent
 without `occurrence: "earlier" | "later"`, `menu_publication.time_repeated` (400, `date`, `time`,
 `occurrences: [{ at, offset }]`); a venue time zone that is not a named zone
-`time_zone.unreadable` (500), which the list answers too. Malformed ids answer
+`time_zone.unreadable` (500), which the list answers too, and the live read below when it lists a
+scheduled version. Malformed ids answer
 `shared.invalid_id` (400).
 
 The routes keep a menu's editions going live in number order. A new edition, queued or published now, overtakes every queued
@@ -299,7 +300,8 @@ were.
   `GET /management-api/menus/:id/publications` gives it; each target is
   `{ target, stillOld, replaces? }`, `stillOld` when every
   differing copy holds the value being corrected (its dish's, for a variant the live version lacks),
-  and a dish's takes in its variants. A target that is not `stillOld` has `replaces`: each distinct
+  and a dish's takes in its variants. A target that is not `stillOld`, or holding a variant the live
+  version lacks that differs and takes other values than its dish, has `replaces`: each distinct
   value of the copies a correction writes over, as `{ productId, name, values }`, the target's own
   product's first, the copies that agree already included. `revision` is a hash of `declarations` and
   `queued`, taken before `local` is added. An unknown menu answers `menu.not_found` (404).

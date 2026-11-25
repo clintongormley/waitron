@@ -346,8 +346,8 @@ export class MenuPatchDialog extends LitElement {
    * even when it holds work. A later live version has a higher number (`nextNumber`,
    * `refuseOvertaken` and `requeueAfter`, `packages/menu/src/menu-publication.ts`), so an
    * answer numbered below the newest one known is a late read and is ignored. One of the version
-   * shown may hold other declarations or scheduled versions: it is followed, except that a review
-   * of declarations keeps what it shows until Reload. */
+   * shown may hold other declarations or scheduled versions: it is followed, except that
+   * without `reload` a review of declarations refuses one of another revision. */
   #applyLive(answer: PatchDraftAnswer | null, reload = false): void {
     if (this.busy) {
       const held = this.#held;

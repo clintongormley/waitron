@@ -276,7 +276,7 @@ export function reviewNotes(
 }
 
 /** The scheduled versions the patch can correct too, each naming the changed items it differs for,
- * and for one whose copies do not all hold the value being corrected, what its correction replaces. */
+ * and, where the answer says what its correction replaces, those lines. */
 export function renderScheduled(
   rows: readonly ScheduledCorrection[],
   names: ReadonlyMap<string, string>,

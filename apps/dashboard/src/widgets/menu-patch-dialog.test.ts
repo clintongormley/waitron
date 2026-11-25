@@ -3872,6 +3872,35 @@ it("shows what a scheduled version's correction replaces, unless it is the live 
   expect(scheduledLines(el)[0]).toEqual(["Soup: Alérgenos Mostaza → Leche"]);
 });
 
+it("shows under a ticked row what its correction replaces at a variant the live version lacks", async () => {
+  const lemonade = { kind: "offer", menuItemId: "mi-lemonade" } as const;
+  const held = (productId: string, name: string) => ({
+    productId,
+    name,
+    values: { ...MILK, allergens: { mustard: {} } },
+  });
+  const replaces = [held("p-lemonade", "Lemonade"), held("v-jug", "Jug")];
+  const row = {
+    ...differing("v-q0", "2026-11-03"),
+    targets: [{ target: lemonade, stillOld: true, replaces }],
+  };
+  const el = await mount(
+    stubApi({
+      getLiveMenu: vi.fn(async () =>
+        live(3, lunch(), [row], { ...CURRENT, "v-jug": { ...MILK, allergens: {} } }),
+      ),
+    }),
+  );
+  await reviewing(el, "Lemonade");
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Lemonade", true]]);
+  expect(scheduledLines(el)).toEqual([
+    [
+      "Lemonade, variants included: Allergens Mustard → Milk",
+      "Lemonade › Jug: Allergens Mustard → None",
+    ],
+  ]);
+});
+
 it("keeps the scheduled ticks fixed while the patch is being sent", async () => {
   const el = await mount(
     scheduledApi([differing("v-q0", "2026-11-03", [soup, true])], {

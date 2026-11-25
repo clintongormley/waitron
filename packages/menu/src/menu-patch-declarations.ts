@@ -93,6 +93,9 @@ interface TakingTarget {
   target: MenuPatchTarget;
   differs: boolean;
   stillOld: boolean;
+  /** A differing copy is of a variant `correctedFrom` does not know, whose product's current values
+   * are not its dish's. */
+  unshown: boolean;
   /** Each distinct value of each product. */
   held: Map<string, DeclaredCopy>;
 }
@@ -112,7 +115,14 @@ export function queuedDeclarationDrift(
       if (wanted === undefined) continue;
       const held = canonicalJson(values);
       const differs = held !== canonicalJson(declarationsFor(copy.target.kind, wanted));
-      const from = correctedFrom(copy) ?? (copy.dish && correctedFrom(copy.dish));
+      const known = correctedFrom(copy);
+      const from = known ?? (copy.dish && correctedFrom(copy.dish));
+      const dishWanted = copy.dish && current.get(copy.dish.productId);
+      const unshown =
+        differs &&
+        known === undefined &&
+        copy.dish !== undefined &&
+        canonicalJson(dishWanted ?? null) !== canonicalJson(wanted);
       const stillOld = !differs || canonicalJson(from?.values ?? null) === held;
       for (const taking of copy.dish === undefined ? [copy] : [copy.dish, copy]) {
         const target = correctedFrom(taking)?.target;
@@ -121,18 +131,24 @@ export function queuedDeclarationDrift(
           target,
           differs: false,
           stillOld: true,
+          unshown: false,
           held: new Map(),
         };
         takers.set(taking.subject, taker);
         taker.differs ||= differs;
         taker.stillOld &&= stillOld;
+        taker.unshown ||= unshown;
         taker.held.set(`${productId}/${held}`, { productId, name, values });
       }
     }
-    const targets = [...takers.values()].flatMap(({ target, differs, stillOld, held }) =>
+    const targets = [...takers.values()].flatMap(({ target, differs, stillOld, unshown, held }) =>
       !differs
         ? []
-        : [stillOld ? { target, stillOld } : { target, stillOld, replaces: [...held.values()] }],
+        : [
+            stillOld && !unshown
+              ? { target, stillOld }
+              : { target, stillOld, replaces: [...held.values()] },
+          ],
     );
     return targets.length === 0
       ? []

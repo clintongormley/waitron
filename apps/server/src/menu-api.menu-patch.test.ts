@@ -299,6 +299,43 @@ describe("reading and patching a menu's live version", () => {
     ]);
   });
 
+  it("reads the live version whatever the venue's zone while it lists no scheduled version", async () => {
+    const app = mountApp();
+    const { menuId } = await lunchWithSoup(app);
+    await publish(app, menuId);
+    const setSoup = (column: "kitchen_name" | "allergens", value: string) =>
+      suite.db.execute(
+        sql`update products set ${sql.identifier(column)} = ${value} where name = 'Soup'`,
+      );
+    await setSoup("kitchen_name", "SOPA");
+    const preview = await json<MenuPreview>(
+      await send(app, "GET", `/management-api/menus/${menuId}/preview`),
+      200,
+    );
+    await json(
+      await send(app, "POST", `/management-api/menus/${menuId}/publications`, {
+        body: { expectedHash: preview.hash, activatesAt: { date: "2099-01-05", time: "09:00" } },
+      }),
+      201,
+    );
+    const setVenueZone = (timeZone: string) =>
+      suite.db.execute(
+        sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+      );
+    await setVenueZone("Mars/Olympus");
+    try {
+      expect(await json<PatchDraftAnswer>(await live(app, menuId), 200)).toMatchObject({
+        queued: [],
+      });
+      await setSoup("allergens", '{"milk":{}}');
+      expect(await json(await live(app, menuId), 500)).toEqual({
+        error: { code: "time_zone.unreadable", params: {} },
+      });
+    } finally {
+      await setVenueZone("Europe/Madrid");
+    }
+  });
+
   it("refuses allergens other than those reviewed, and asks no other patch what was", async () => {
     const app = mountApp();
     const { menuId, itemId } = await lunchWithSoup(app);

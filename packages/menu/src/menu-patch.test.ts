@@ -1176,7 +1176,9 @@ describe("declarations", () => {
         current,
         liveDeclarations(live),
       );
-    const listed = (...targets: { target: MenuPatchTarget; stillOld: boolean }[]) => [
+    const listed = (
+      ...targets: { target: MenuPatchTarget; stillOld: boolean; replaces?: unknown }[]
+    ) => [
       {
         versionId: "v2",
         activatesAt: AT.toISOString(),
@@ -1346,7 +1348,7 @@ describe("declarations", () => {
       for (const offer of offers(live)) offer.variants = [];
       const current = allOf(f, { variant: NUTS });
       expect(drift(document, live, current)).toEqual(
-        listed({ target: targets.dish, stillOld: true }),
+        listed({ target: targets.dish, stillOld: true, replaces: expect.any(Array) }),
       );
 
       const deliberate = structuredClone(document);
@@ -1370,7 +1372,57 @@ describe("declarations", () => {
       for (const offer of offers(inheriting))
         for (const variant of offer.variants) Object.assign(variant, EGGS);
       expect(drift(inheriting, live, current)).toEqual(
-        listed({ target: targets.dish, stillOld: true }),
+        listed({ target: targets.dish, stillOld: true, replaces: expect.any(Array) }),
+      );
+    });
+
+    it("says what a ticked correction replaces at an added variant that takes other values than its dish", async () => {
+      const { f, document, targets } = await lunchWithSetMenu();
+      const live = structuredClone(document);
+      for (const offer of offers(live))
+        if (offer.productId === f.lemonade)
+          for (const copy of [offer, ...offer.variants]) Object.assign(copy, MILK);
+      const queued = structuredClone(live);
+      for (const offer of offers(queued))
+        if (offer.productId === f.lemonade)
+          offer.variants.unshift({
+            ...structuredClone(offer.variants[0]!),
+            id: "medium",
+            name: "Medium",
+          });
+      const taking = (dish: DeclarationValues, medium: DeclarationValues) =>
+        new Map([...allOf(f, { dish, variant: dish }), ["medium", medium]]);
+      const none = allOf(f, {}).get(f.soup)!;
+      const all = [
+        { productId: f.lemonade, name: "Lemonade", values: MILK },
+        { productId: "medium", name: "Medium", values: MILK },
+        { productId: f.large, name: "Large", values: MILK },
+      ];
+
+      // The dish changes live, to other values than the variant takes.
+      expect(drift(queued, live, taking(NUTS, none))).toEqual(
+        listed(
+          { target: targets.dish, stillOld: true, replaces: all },
+          { target: targets.variant, stillOld: true },
+        ),
+      );
+      // The dish already agrees.
+      expect(drift(queued, live, taking(MILK, none))).toEqual(
+        listed({ target: targets.dish, stillOld: true, replaces: all }),
+      );
+      // Its dish's live line covers it.
+      expect(drift(queued, live, taking(none, none))).toEqual(
+        listed(
+          { target: targets.dish, stillOld: true },
+          { target: targets.variant, stillOld: true },
+        ),
+      );
+      // It already agrees.
+      expect(drift(queued, live, taking(NUTS, MILK))).toEqual(
+        listed(
+          { target: targets.dish, stillOld: true },
+          { target: targets.variant, stillOld: true },
+        ),
       );
     });
 

@@ -52,8 +52,10 @@ export interface QueuedDeclarationDrift {
   versionId: string;
   activatesAt: string;
   /** The targets whose copies here differ, a dish's including its variants; `stillOld` when every
-   * differing copy holds the value being corrected. When not, `replaces` holds each distinct value
-   * of the copies a correction writes over, the target's own product's first. */
+   * differing copy holds the value being corrected. When not, or when a differing copy is of a
+   * variant the live version lacks whose product's current values are not its dish's, `replaces`
+   * holds each distinct value of the copies a correction writes over, the target's own product's
+   * first. */
   targets: { target: MenuPatchTarget; stillOld: boolean; replaces?: DeclaredCopy[] }[];
 }
 

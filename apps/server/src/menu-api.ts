@@ -16,7 +16,7 @@ import {
   type ContentLanguageRules,
   type MenuDeleteImpact,
 } from "@waitron/shared";
-import { readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
+import { now, readVenueClock, withTransaction, type Database, type Transaction } from "@waitron/db";
 import {
   moveProductItems,
   deleteProductItems,
@@ -1372,6 +1372,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const answer = await gated(c, sessionId, async (tx): Promise<PatchDraftAnswer | null> => {
         const draft = await readPatchDraft(tx, menuId);
         if (draft === null) return null;
+        if (draft.queued.length === 0) return { ...draft, queued: [] };
         const timeZone = checkedTimeZone(await venueTimeZone(tx));
         return {
           ...draft,
@@ -1411,9 +1412,11 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         : undefined;
       return c.json(
         await gated(c, sessionId, async (tx, personId) => {
+          const at = now();
           if (reviewed !== undefined)
-            await assertPatchReviewed(tx, menuId, baseVersionId, reviewed);
+            await assertPatchReviewed(tx, menuId, baseVersionId, reviewed, at);
           return patchLiveMenu(tx, menuId, baseVersionId, changes, personId, {
+            at,
             fallbackLanguage: deps.venueLocale ?? FALLBACK_LOCALE,
             queued,
           });

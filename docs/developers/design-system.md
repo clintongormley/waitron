@@ -5958,14 +5958,16 @@ product has not had reviewed are named even where they stay so. A dish with vari
 variants included", and a variant has lines of its own only where its result differs. Under the list a
 `fieldset`, "Correct these scheduled versions too", has one checkbox for each scheduled version that
 differs for a ticked item, with its date and those items, ticked while it holds the old value for all
-of them. An item whose copies there do not all hold the old value has its lines under the date and
-items, worded as in the list, saying what the correction replaces. A person's tick is for that version
+of them. An item has its lines under the date and items, worded as in the list, saying what the
+correction replaces, when a copy there that differs does not hold the old value, or is of a variant
+the live version lacks that takes other values than its dish. A person's tick is for that version
 alone, and does not carry over to an item ticked later whose copy there does not hold
 the old value. Then come the notes, with "Keep editing" and "Put live now" in the footer. A "went live" or "no longer fits" refusal, or a newer live
 version arriving while changes are staged or a field needs correcting, adds a secondary "Reload" to
 either step's footer, with the refusal's sentence above the buttons. While a ticked checkbox is under
-review, a change to the allergens, diets or scheduled versions behind it leaves the review as it is and
-says so the same way, with "Reload".
+review, a change to the allergens or diets of any product the live or scheduled versions hold, or to
+which scheduled versions differ or when they go live, leaves the review as it is and says so the same
+way, with "Reload".
 
 Each **Choose a price** link in Preview opens Price overrides with Clashes selected, including in a new tab.
 That explicit destination overrides a remembered price filter once after the rows load. Later
