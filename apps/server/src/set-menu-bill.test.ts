@@ -9,7 +9,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { recordAdjustment } from "@waitron/adjustments";
-import { decimal } from "@waitron/shared";
+import { decimal, type ProductAllergens } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   addMember,
@@ -17,16 +17,20 @@ import {
   requireMenuRoot,
   saveSetMenuDishCourse,
   updateMenuDetails,
+  updateProduct,
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listZoneOffers } from "@waitron/venue-service";
 import {
   readBillSetMenus,
+  readBillsSetMenus,
   refuseUnlessSetMenuBill,
   setMenuLineDescriptions,
 } from "./set-menu-bill.js";
 import { setMenuOfferLookup } from "./set-menu-offers.js";
 import { createCourse } from "./kitchen.js";
+import { partyOfOrder, readPartyBills } from "./parties.js";
+import { getHeldOrder } from "./working-order-held-read.js";
 import {
   cashContribution,
   counterOrder,
@@ -173,6 +177,40 @@ it("returns one copy when the recorded copy and another full-menu version have t
   ]);
 });
 
+it.each([
+  [
+    "retrieved bill",
+    async (id: string) => (await getHeldOrder({ db: venue.db }, id)).setMenuCopies,
+  ],
+  [
+    "party's bill",
+    async (id: string) =>
+      (await inTx(venue, async (tx) => readPartyBills(tx, (await partyOfOrder(tx, id))!)))[0]!
+        .setMenuCopies,
+  ],
+] as const)(
+  "serves the %s's set menu at its recorded price with the allergens published since",
+  async (_, copies) => {
+    const id = await tableBill();
+    const publish = (allergens: ProductAllergens, setPrice: string) =>
+      inTx(venue, async (tx) => {
+        await updateProduct(tx, daily.productId, { allergens });
+        await updateMenuDetails(tx, daily.menuId, { setPrice });
+        return publishWorkingMenu(tx, daily.fullMenuId);
+      });
+    const retrieved = async () =>
+      (await copies(id))?.map(({ terms, offers }) => [
+        terms.price,
+        offers.map(({ allergens }) => allergens),
+      ]);
+    const versionId = await publish({ milk: {} }, "14.00");
+    await inTx(venue, (tx) => seedBillSetMenu(tx, id, { ...daily, versionId }, 1));
+    expect(await retrieved()).toEqual([["14.00", [{ milk: {} }]]]);
+    await publish({ eggs: {} }, "16.00");
+    expect(await retrieved()).toEqual([["14.00", [{ eggs: {} }]]]);
+  },
+);
+
 function observeMenuVersionReads() {
   const queries: Query[] = [];
   const prototype = SQLiteSelectBase.prototype as unknown as {
@@ -207,6 +245,24 @@ it("does not read a menu document for an ordinary bill", async () => {
   } finally {
     restore();
   }
+});
+
+it("reads the live menus' declarations only for a caller that shows the bill's dishes", async () => {
+  const id = await tableBill();
+  await inTx(venue, (tx) => seedBillSetMenu(tx, id, daily, 1));
+  const liveReads = async (run: () => Promise<unknown>) => {
+    const { queries, restore } = observeMenuVersionReads();
+    try {
+      await run();
+      return queries.filter((query) => query.sql.includes('"menu_releases"')).length;
+    } finally {
+      restore();
+    }
+  };
+  expect(await liveReads(() => read(id))).toBe(0);
+  expect(
+    await liveReads(() => inTx(venue, (tx) => readBillsSetMenus(tx, [id], "published"))),
+  ).toBeGreaterThan(0);
 });
 
 it("keeps a paid dish placed but makes it unavailable for moves", async () => {

@@ -154,7 +154,7 @@ export async function recordedSetMenusListing(
   if (productIds.length === 0) return [];
   const requests = await readBillSetMenuVersions(tx, billId);
   if (requests.length === 0) return [];
-  const copies = (await serveRecordedSetMenus(tx, requests)).map((copy, index) =>
+  const copies = (await serveRecordedSetMenus(tx, requests, "recorded")).map((copy, index) =>
     setMenuCopyOf(copy, requests[index]!.versionId),
   );
   const listing = new Set(

@@ -9,6 +9,7 @@ import { readOrderPreviewItems } from "./order-preview.js";
 import { readOrderStateCounts } from "./order-state-counts.js";
 import { readArrivingAllergyDishes, readPartyAllergyView } from "./party-allergy.js";
 import { inTx } from "./testing/party-venue.js";
+import { republishMenus } from "./testing/publish-menu.js";
 import { setMenuBill, setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 
 let fixture: Awaited<ReturnType<typeof setupSetMenuReaders>>;
@@ -20,6 +21,7 @@ useVenueDb({
     await inTx(fixture.venue, async (tx) => {
       await createStation(tx, { name: "Kitchen", isDefault: true });
       await updateProduct(tx, fixture.copy.productId, { allergens: { milk: {} } });
+      await republishMenus(tx);
     });
   },
 });

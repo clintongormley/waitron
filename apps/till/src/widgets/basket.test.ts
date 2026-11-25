@@ -483,6 +483,29 @@ describe("till-basket", () => {
     expect(optionDiet!.textContent).toContain(t("diet.halal"));
   });
 
+  it("shows a pick's allergens from the list it was taken from when two lists offer its product", async () => {
+    const first = offeredItem("p-cheese", "Cheese", "1.00", { addAllergens: { eggs: {} } });
+    const second = offeredItem("p-cheese", "Cheese", "1.00", { addAllergens: { milk: {} } });
+    const store = new WorkingOrderStore();
+    store.addProduct(
+      {
+        ...coffee,
+        id: "burger",
+        name: "Hamburguesa",
+        offeredModifiers: [
+          offeredExtras("list-toppings", "Toppings", [first]),
+          offeredExtras("list-sides", "Sides", [second]),
+        ],
+      },
+      "1",
+      { extras: [pick("list-sides", second)] },
+    );
+    const { el } = await mountWidget<TillBasket>("till-basket", { store });
+    const shown = el.shadowRoot!.querySelector(`[data-test="option-allergens-0-0"]`)!.textContent;
+    expect(shown).toContain(allergenName("milk", currentLocale()));
+    expect(shown).not.toContain(allergenName("eggs", currentLocale()));
+  });
+
   it("renders no per-pick nutrition chrome for a pick that declares neither", async () => {
     const bun = offeredItem("p-plain-bun", "Pan normal", "0.00");
     const burger: TillProduct = {

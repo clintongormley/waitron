@@ -817,10 +817,11 @@ variant's effective values above, and freezes the parent's names beside the vari
 `sale_lines` row names the variant and its parent only as plain values, never as keys. In the station, the variant is routed by its parent's
 row in the routing grid: the parent's product cells first, then its effective category's cells and
 each parent category's, or the No category cells when the parent has no category, then All
-categories (`selectRoutingCell`). Its course, category, allergens and dietary labels
+categories (`selectRoutingCell`). Its course and category
 are its effective values (`effectiveProductColumns`; `packages/venue-service/src/routing.ts`;
-`priceOrderLines` in `working-order-pricing.ts`, `fireLines` in `working-order-kitchen-fire.ts`
-and `readQueueSubItems` in `working-order-station-queue.ts` under `apps/server/src/`). The
+`priceOrderLines` in `working-order-pricing.ts` and `fireLines` in `working-order-kitchen-fire.ts`
+under `apps/server/src/`). Its allergens and dietary labels are the published menu's
+(`readPublishedDeclarations`, under _Published declarations_). The
 till splits a tab line by the unit precision the line
 froze (`TabLine.unitPrecision`), since a variant is not one of the till's products.
 
@@ -1033,24 +1034,53 @@ Changes refresh the menu immediately; restoration stays manual.
 `nutritionIcons` draws allergen and positive diet icons beside counter and table-order line names,
 and, at the large size, a dish's and an extra's allergens on the station and pass cards.
 A null allergen declaration draws no icons. Sent counter and table rows use `sentNutrition` from
-`working_order_lines.sent_nutrition`, captured at the first `sent_at` through the effective current product
-read, including variant inheritance. `readDisplayLineNutrition` keeps unstamped rows live and
-never substitutes current declarations for a missing sent snapshot. Each extra stays separate.
-Stations reads retain their current-product declarations. Orders history detail reads the same saved
-contexts, keeps each extra separate and folds portions only with matching declaration values.
+`working_order_lines.sent_nutrition`, captured at the first `sent_at` from the published menu.
+`readDisplayLineNutrition` reads unstamped rows from the published menu and
+never substitutes its declarations for a missing sent snapshot. Each extra stays separate.
+Orders history detail reads the same saved contexts, keeps each extra separate and folds portions
+only with matching declaration values.
 A missing capture stays distinct from an unreviewed or reviewed-empty allergen declaration.
 This sent-order/history exception follows the owner's 11-November decision 6 in
 [the A1517 proposal](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11). The retired Allergens screen has no destination or print path.
 
 
-### Live declarations in an open till view
+### Published declarations
 
-The existing menu-state poll refreshes declarations in open lines and choices from current offers,
-without editing saved orders or their prices. Sent details continue to show first-send captures.
-A product absent from every current offer keeps its last open-view declaration until retrieval or
-reload. The watcher cleared this limit for A1150 PR 2 on 15 November 2026 at 21:52; there is no
-separate declaration read.
+Allergens and diet labels are frozen into a menu's version when it is published, a variant with
+none of its own taking its parent's, and tills, kitchen screens, tickets and the allergy check read
+them from there: a product edit changes nothing on them until the menu is published (owner, 2026-11-24,
+[section 8](../superpowers/specs/2026-11-24-customer-menu-design.md#8-allergens-and-diets-are-published);
+before 2026-11-25 they read the live product). A till's offers carry the frozen values, so a
+declaration edit no longer moves `liveFields`.
 
+Station and pass screens, kitchen tickets, the allergy check, held dishes and the first-send capture
+read an order line's values through `readPublishedDeclarations`
+(`packages/menu/src/published-declarations.ts`). It looks for the line's exact dish, variant or
+extra in the live version of the line's menu, whether or not that menu is sold now, so a correction
+published after the dish was sent reaches the kitchen. Where the live version does not hold that
+exact item, the newest earlier version that was once live and does hold it answers, going back no
+further than the line's own version; a published correction therefore survives the dish leaving the
+menu. A bill's recorded set-menu copies take their dishes' declarations through the same reader.
+Station and pass screens subscribe to `menu_versions` and `menu_releases`, so a published correction
+refreshes them (`KITCHEN_TYPES`, `apps/till/src/api/live-connection.ts`).
+
+In an open till view, the existing menu-state poll reads the menu again when the published version
+moves and refreshes declarations in open lines and choices, without editing saved orders or their
+prices. Sent details continue to show first-send captures. An ordinary line follows its own menu
+item and never another menu's offer of the same product; an extra follows its own list. A set-menu
+line, or a set-menu dish whose choices are open, follows the copy its own menu version names, sold
+now or recorded on its bill (which can record two versions of one set menu), else
+the copy the live version of its own full menu holds (`ownSetMenuOffer`,
+`apps/till/src/state/set-menus.ts`); it shows another full menu's declarations only once it takes
+that menu's version, as a price refresh makes it. A table takes a bill's recorded copies from each
+read of its bills, and the counter reads an open order's recorded copies again after it refreshes
+its offers. If that read fails for any reason but the order being gone, each later poll asks for the
+copies again; until one answers, their lines, saved ones included, keep the allergens the copies
+last gave. A dish, variant or extra none of these holds keeps its last open-view declaration until
+retrieval or reload. A line rebuilt from a saved draft is not reviewed where the menu no longer
+holds its variant, or, for a set-menu dish whose version's copy is neither sold now nor recorded on
+its bill, where the till cannot tell which full menu that version belongs to or that menu no longer
+holds the dish.
 
 ### Regional practice names
 

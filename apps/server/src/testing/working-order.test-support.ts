@@ -685,9 +685,9 @@ export async function insertContextlessLines(
 /** Attach a fresh one-product extras list to `dishId`, priced 0.50 at the reduced rate — the shape a
  *  line's `extras: [{ listId, picks: [{ productId }] }]` picks from, for the child-line tests.
  *
- *  The extra's OWN allergens and dietary labels live on the PRODUCT the list offers, which is where
- *  the kitchen and expo reads take them from. Omitted leaves `allergens` null and the declarations
- *  empty. */
+ *  The extra's OWN allergens and dietary labels are declared on the PRODUCT the list offers; the
+ *  kitchen and expo reads take them from the published menu. Omitted leaves `allergens` null and the
+ *  declarations empty. */
 export async function addExtra(
   tx: Transaction,
   dishId: string,

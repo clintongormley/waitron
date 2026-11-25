@@ -29,6 +29,7 @@ import {
   menusWithCopies,
   sentMenuDishes,
   type OrderingCopy,
+  type OwnSetMenuOffers,
 } from "../state/set-menus.js";
 import { lineGross } from "../state/order-line.js";
 import { lineProductName } from "../widgets/product-name.js";
@@ -283,6 +284,7 @@ export class TillCounterScreen extends LitElement {
   @property({ attribute: false }) diningChoice: DiningChoice | null = null;
   @property({ attribute: false }) setMenuBill?: BillSetMenuState;
   @property({ attribute: false }) setMenuCopies: readonly OrderingCopy[] = NO_ORDERING_COPIES;
+  @property({ attribute: false }) ownSetMenuOffer?: OwnSetMenuOffers;
   @property({ attribute: false }) setMenuCourses: Readonly<Record<string, string>> = {};
   @property({ attribute: false }) saveSetMenuCount?: (
     menuId: string,
@@ -325,6 +327,7 @@ export class TillCounterScreen extends LitElement {
       .menu=${menu}
       .setMenuBill=${copies.length === 0 ? undefined : this.setMenuBill}
       .setMenuCopies=${copies}
+      .ownSetMenuOffer=${this.ownSetMenuOffer}
       .setMenuCourses=${this.setMenuCourses}
       .setMenuDishNames=${new Map(
         this.store.lines.flatMap((line) =>
@@ -497,6 +500,7 @@ export class TillCounterScreen extends LitElement {
             .filters=${this.selectedFilters}
             .paymentWindow=${this.stage === "order" || this.paymentWindow}
             .store=${this.store}
+            .products=${this.products}
             .hasSetMenus=${(this.setMenuBill?.setMenus.length ?? 0) > 0}
             .sendingTender=${this.sendingTender}
             .busy=${this.busy || this.payHeld}

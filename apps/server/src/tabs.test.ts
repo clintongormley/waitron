@@ -707,6 +707,7 @@ describe("readTabLines", () => {
     await suite.db.execute(
       sql`update products set allergens = ${JSON.stringify({ eggs: {} })} where id = ${waterId}`,
     );
+    await asApp(republishMenus);
     const { tabId } = await asApp((tx) => openPartyTab(tx, cfg, { tableId }));
     await asApp((tx) =>
       addTabRound(tx, cfg, tabId, [
@@ -768,6 +769,7 @@ describe("readTabLines", () => {
     await db.execute(
       sql`update products set allergens = null, dietary_declarations = null where id = ${variantId}`,
     );
+    await asApp(republishMenus);
     await asApp((tx) =>
       addTabRound(tx, cfg, tabId, [{ menuItemId: coffeeOffer, variantId, quantity: "1" }]),
     );

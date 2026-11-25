@@ -52,7 +52,7 @@ import type { DocumentMember, DocumentTile } from "@waitron/shared";
 import "./modifier-picker.js";
 import "./tender-pay.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
-import type { TillProduct, TillZoneMenu } from "../api/client.js";
+import { menuOfferToTillProduct, type TillProduct, type TillZoneMenu } from "../api/client.js";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { countText, currentLocale, fill, t } from "../i18n/t.js";
@@ -64,7 +64,9 @@ import {
   draftMenuDishes,
   draftPlacementId,
   menusWithCopies,
+  setMenuLineOf,
   type OrderingCopy,
+  type OwnSetMenuOffers,
 } from "../state/set-menus.js";
 import { codeMessage } from "../i18n/codes.js";
 import { trackDialog } from "./track-dialog.js";
@@ -496,6 +498,7 @@ export class TillMenuBrowser extends LitElement {
   #pickerSetMenu?: { pick: MenuPick; target?: SetMenuTarget };
 
   @property({ attribute: false }) setMenuCopies: readonly OrderingCopy[] = [];
+  @property({ attribute: false }) ownSetMenuOffer?: OwnSetMenuOffers;
   @property({ attribute: false }) setMenuBill?: BillSetMenuState;
   @property({ attribute: false }) setMenuCourses: Readonly<Record<string, string>> = {};
   @property({ attribute: false }) addSetMenu?: (id: string) => Promise<string | undefined>;
@@ -587,6 +590,11 @@ export class TillMenuBrowser extends LitElement {
       if (id !== undefined && !this.setMenuCopies.some(({ copy }) => copy.menuId === id))
         this.setMenuFolder = undefined;
     }
+    if (this.pickerProduct && this.#pickerSetMenu !== undefined)
+      this.pickerProduct = this.#withOwnDeclarations(
+        this.pickerProduct,
+        this.#pickerSetMenu.pick.detail.setMenuId,
+      );
     if (this.#waitingForMenu()) {
       this.#pendingSection = undefined;
       this.query = "";
@@ -606,11 +614,15 @@ export class TillMenuBrowser extends LitElement {
       return;
     }
     if (this.infoProduct) this.infoProduct = this.#currentInfoOffer(this.infoProduct);
-    if (this.pickerProduct && this.#pickerSetMenu === undefined)
-      this.pickerProduct = refreshProductDeclarations(this.pickerProduct, [
-        ...(this.unfilteredProducts ?? this.products),
-        ...(this.unfilteredServedProducts ?? this.servedProducts),
-      ]);
+    if (this.pickerProduct && this.#pickerSetMenu === undefined) {
+      const { menuItemId } = this.pickerProduct;
+      const own = (product: TillProduct) => product.menuItemId === menuItemId;
+      this.pickerProduct = refreshProductDeclarations(
+        this.pickerProduct,
+        (this.unfilteredProducts ?? this.products).find(own) ??
+          (this.unfilteredServedProducts ?? this.servedProducts).find(own),
+      );
+    }
     if (this.menu === undefined) return;
     const pending = this.#pendingSection;
     if (pending !== undefined) {
@@ -711,8 +723,16 @@ export class TillMenuBrowser extends LitElement {
     }));
   }
 
+  #withOwnDeclarations(product: TillProduct, setMenuId: string): TillProduct {
+    const own = this.ownSetMenuOffer?.(setMenuLineOf({ product, setMenuId }));
+    return refreshProductDeclarations(product, own && menuOfferToTillProduct(own));
+  }
+
   #pickSetMenu(pick: MenuPick, target?: SetMenuTarget): void {
-    const product = pick.confirmed?.product ?? setMenuProduct(pick.detail);
+    const product = this.#withOwnDeclarations(
+      pick.confirmed?.product ?? setMenuProduct(pick.detail),
+      pick.detail.setMenuId,
+    );
     if (!hasSomethingToSell(product) || this.store.editsLocked) return;
     const bill = this.setMenuBill ?? EMPTY_SET_MENUS;
     const candidates = this.#pickCandidates(pick);
@@ -1390,6 +1410,7 @@ export class TillMenuBrowser extends LitElement {
               class="weigh"
               weighOnly
               .store=${this.store}
+              .products=${this.unfilteredServedProducts ?? this.servedProducts}
               .filters=${this.filters}
             ></till-tender-pay>`
           : nothing

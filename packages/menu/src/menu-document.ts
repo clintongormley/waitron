@@ -1,4 +1,3 @@
-import { productDeclarationValues, extraDeclarationValues } from "./product-declarations.js";
 import { alias } from "drizzle-orm/sqlite-core";
 import { navigateMenuChanges, pathKey } from "./menu-navigation.js";
 import { createHash } from "node:crypto";
@@ -603,9 +602,6 @@ interface LiveProductRow {
   available: boolean;
   courseId: string | null;
   category: string | null;
-  allergens: import("@waitron/shared").ProductAllergens | null;
-  dietOverride: unknown;
-  dietaryDeclarations: unknown;
 }
 
 /** The current rows behind some published offers. */
@@ -661,9 +657,6 @@ async function readLiveRows(
         available: products.available,
         courseId: effectiveProductColumns.courseId,
         category: categories.name,
-        allergens: effectiveProductColumns.allergens,
-        dietOverride: effectiveProductColumns.dietOverride,
-        dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
       })
       .from(products)
       .leftJoin(parentProducts, parentJoin)
@@ -712,7 +705,7 @@ function liveFieldsDigest({
 }: Pick<LiveRows, "products" | "missingLists" | "overrideCourses" | "setMenuProductIds">): string {
   const rows = [...products]
     .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([id, row]) => [id, row.courseId, row.category, productDeclarationValues(row)]);
+    .map(([id, row]) => [id, row.courseId, row.category]);
   const ordinary = missingLists.size === 0 ? rows : [rows, [...missingLists].sort()];
   // The till applies polled availability to ordinary offers. Copies refresh on a full read.
   const snapshot =
@@ -772,7 +765,7 @@ export async function readLiveState(
 
 /**
  * The documents' offers, per menu and in menu order, with the live fields taken from the current
- * rows: availability, declarations, course and reporting category.
+ * rows: availability, course and reporting category.
  * With `menuItemIds`, only the offers it names are read and returned, and `liveFields` digests
  * only their rows, so it is not comparable with {@link readLiveState}'s.
  *
@@ -848,7 +841,6 @@ function serveOffer(offer: FrozenOffer, rows: LiveRows): LiveOffer | undefined {
   if (dish === undefined) return;
   return {
     ...offer,
-    ...productDeclarationValues(dish),
     available: sellable(dish),
     courseId: dish.courseId,
     category: dish.category,
@@ -859,7 +851,6 @@ function serveOffer(offer: FrozenOffer, rows: LiveRows): LiveOffer | undefined {
         : [
             {
               ...variant,
-              ...productDeclarationValues(row),
               available: sellable(row),
               courseId: row.courseId,
               category: row.category,
@@ -890,7 +881,6 @@ function serveOffer(offer: FrozenOffer, rows: LiveRows): LiveOffer | undefined {
               : [
                   {
                     ...item,
-                    ...extraDeclarationValues(row),
                     available: sellable(row),
                   },
                 ];

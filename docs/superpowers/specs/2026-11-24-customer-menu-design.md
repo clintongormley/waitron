@@ -264,6 +264,9 @@ and reaches the till and the kitchen, the owner chose **published everywhere, wi
   screens disagree, which is what A1150 was for. For a dish already sent they keep reading what is live
   now: that is the menu's published version today, so a patched correction reaches a dish not yet cooked.
   A dish no longer on that version uses what it was ordered with (**my call**: both).
+  Replaced 2026-11-25 (the watcher's, not the owner's): a dish, variant, extra or set-menu dish no longer on
+  the live version uses the newest version that was live and held exactly it, down to the one it was ordered
+  from, so a published correction does not vanish when the dish is then taken off the menu.
 - **Patch live menu** gains allergens and diets for a dish, a variant and an extra.
 - **The safeguard**: saving a product whose allergens or diets changed, when a live menu holds it, asks
   "Update the live menus now?", naming them. Yes patches those fields on each, all or nothing. No leaves

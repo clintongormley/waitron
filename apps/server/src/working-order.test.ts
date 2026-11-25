@@ -590,7 +590,8 @@ describe("getHeldOrder", () => {
     // Give the product a customer name that DIFFERS from its staff name before parking, so the two
     // frozen halves below cannot be confused for one another.
     await db.execute(sql`
-      update products set customer_name = ${JSON.stringify({ [CONTENT_LANGUAGE]: "House espresso" })}
+      update products set customer_name = ${JSON.stringify({ [CONTENT_LANGUAGE]: "House espresso" })},
+          allergens = ${JSON.stringify({ sulphites: {} })}
       where id = ${coffeeId}`);
     await withTransaction(db, republishMenus);
     await parkOrder({ db }, cfg, {
@@ -643,14 +644,14 @@ describe("getHeldOrder", () => {
           unitPrice: "3.25",
           vatClass: "general",
           category: "ES drinks",
-          allergens: { milk: {} },
+          allergens: { sulphites: {} },
           menuName: "Premium menu",
         }),
       }),
     ]);
   });
 
-  it("shows the current product allergens when retrieving a held line", async () => {
+  it("shows the published product allergens when retrieving a held line", async () => {
     const { cfg, zoneId, coffeeId, premiumCoffeeOfferId } = await setupVenue();
     await db.execute(sql`
       update products set allergens = ${JSON.stringify({ gluten: { kinds: ["wheat" as const] } })}
@@ -673,7 +674,7 @@ describe("getHeldOrder", () => {
     const order = await getHeldOrder({ db }, id);
 
     expect(order.lines.map((line) => line.product?.allergens)).toEqual([
-      { milk: {}, sulphites: {} },
+      { gluten: { kinds: ["wheat"] } },
     ]);
   });
 

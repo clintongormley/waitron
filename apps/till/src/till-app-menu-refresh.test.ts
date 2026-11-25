@@ -13,7 +13,7 @@ import {
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
-import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
+import { DRAFT_SAVE_DELAY_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
@@ -23,6 +23,9 @@ import type { TillTenderPay } from "./widgets/tender-pay.js";
 import type { TillBasketRefreshDialog } from "./widgets/basket-refresh-dialog.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
+import { setMenuProduct } from "./widgets/product-pick.js";
+import type { WorkingOrderStore } from "./state/working-order.js";
+import { menuOfferToTillProduct } from "./api/client.js";
 import type {
   MenuState,
   DeviceEquipment,
@@ -33,7 +36,7 @@ import type {
   TillSaleResult,
   ZoneOffers,
 } from "./api/client.js";
-import { DEFAULT_HOME_ORDER, setMenuCopyOf } from "@waitron/shared";
+import { DEFAULT_HOME_ORDER, setMenuCopyOf, type SetMenuTerms } from "@waitron/shared";
 
 // Lunch is published as v1 and then as v2. Lemonade and Burger are on it; Burger offers an extras list
 // (cheese) and an options list (rare / medium).
@@ -1192,6 +1195,11 @@ const tableFormFactor: FormFactor = "till";
 const DINING = {
   ...V1,
   context: { ...V1.context, zoneId: "zone-dining", serviceMode: "table_tab" as const },
+};
+
+const DINING_V2 = {
+  ...DINING,
+  menus: DINING.menus.map((each) => ({ ...each, versionId: "v2" })),
 };
 
 const party = {
@@ -3177,9 +3185,15 @@ async function retrieveForRefresh(
   expect(counter(el).store.id).toBe("held-order");
 }
 
-it.each(["counter", "table", "held"] as const)(
-  "refreshes same-version declarations in the open %s without editing its lines",
-  async (kind) => {
+it.each([
+  ["counter", "3.00"],
+  ["counter", "99.00"],
+  ["table", "3.00"],
+  ["table", "99.00"],
+  ["held", "99.00"],
+] as const)(
+  "shows a new version's declarations in the open %s selling at %s, leaving a repriced line to its dialog and a saved line as it was",
+  async (kind, price) => {
     const { el } = await mountApp(kind === "table" ? tableStubs() : {});
     if (kind === "table") await toTable(el);
     else await toCounter(el);
@@ -3200,8 +3214,8 @@ it.each(["counter", "table", "held"] as const)(
     const saves = api.saveDraft?.mock.calls.length ?? 0;
     const updateWorkingOrder = vi.fn();
     api.updateWorkingOrder = updateWorkingOrder;
-    const changed = menu("v1", [
-      offer("offer-lemonade", "Lemonade", "99.00", {
+    const changed = menu("v2", [
+      offer("offer-lemonade", "Lemonade", price, {
         name: "Renamed",
         allergens: { eggs: {} },
         dietaryDeclarations: ["halal"],
@@ -3209,12 +3223,15 @@ it.each(["counter", "table", "held"] as const)(
       }),
       burgerOffer(),
     ]);
-    api.listZoneOffers.mockResolvedValue({ ...changed, liveFields: "changed" });
-    api.menuState.mockResolvedValue({ ...menuState("v1"), liveFields: "changed" });
+    const adopted = kind !== "held" && price === "3.00";
+    const asked = kind !== "held" && price === "99.00";
+    api.listZoneOffers.mockResolvedValue(changed);
+    api.menuState.mockResolvedValue(menuState("v2"));
     await poll(el);
     expect(store.lines[0]).toBe(line);
     expect(line.product).toMatchObject({
       ...product,
+      ...(adopted ? { name: "Renamed", menuVersionId: "v2" } : {}),
       allergens: { eggs: {} },
       dietaryDeclarations: ["halal"],
       diet: { vegan: "no", vegetarian: "yes", contains: [] },
@@ -3223,12 +3240,154 @@ it.each(["counter", "table", "held"] as const)(
     expect(store.lastAdded).toBe(last);
     expect(store.dirty).toBe(dirty);
     expect(store.total).toBe("3.00");
-    expect(dialog(el)).toBeNull();
+    expect(dialog(el) !== null).toBe(asked);
     await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 30));
-    expect(api.saveDraft?.mock.calls.length ?? 0).toBe(saves);
+    expect(api.saveDraft?.mock.calls.length ?? 0).toBe(
+      saves + (adopted && kind === "table" ? 1 : 0),
+    );
     expect(updateWorkingOrder).not.toHaveBeenCalled();
   },
 );
+
+it.each(["counter", "table"] as const)(
+  "a product save with no new version changes nothing on the till (%s)",
+  async (kind) => {
+    const { el } = await mountApp(kind === "table" ? tableStubs() : {});
+    if (kind === "table") await toTable(el);
+    else await toCounter(el);
+    const screen = kind === "table" ? tableScreen(el) : counter(el);
+    const shown = screen.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+    shown.store.addProduct(
+      shown.products.find((row) => row.productId === "Lemonade")!,
+      "1",
+    );
+    await flush(el);
+    const line = shown.store.lines[0]!;
+    const before = { ...line, product: { ...line.product } };
+    const reads = api.listZoneOffers.mock.calls.length;
+    const tabReads = api.getTabLines?.mock.calls.length ?? 0;
+    const polls = api.menuState.mock.calls.length;
+    api.listZoneOffers.mockResolvedValue(
+      menu("v1", [offer("offer-lemonade", "Lemonade", "3.00", { allergens: { fish: {} } })]),
+    );
+    await poll(el);
+    expect(api.menuState.mock.calls.length).toBeGreaterThan(polls);
+    expect(api.listZoneOffers.mock.calls.length).toBe(reads);
+    expect(api.getTabLines?.mock.calls.length ?? 0).toBe(tabReads);
+    expect(shown.store.lines[0]).toBe(line);
+    expect(line).toEqual(before);
+    expect(shown.products.find((row) => row.productId === "Lemonade")!.allergens).toBeNull();
+  },
+);
+
+it.each([
+  ["information", "counter"],
+  ["information", "table"],
+  ["extras choice", "counter"],
+  ["extras choice", "table"],
+] as const)("updates the open %s from a new version (%s)", async (window, kind) => {
+  const { el } = await mountApp(kind === "table" ? tableStubs() : {});
+  if (kind === "table") await toTable(el);
+  else await toCounter(el);
+  const screen = kind === "table" ? tableScreen(el) : counter(el);
+  const browser = screen.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+  const dish = [...browser.shadowRoot!.querySelectorAll<HTMLElement>('[data-kind="product"]')].find(
+    (row) => row.textContent!.includes("Burger"),
+  )!;
+  const next = burgerOffer();
+  next.allergens = { gluten: { kinds: ["wheat"] } };
+  const list = next.offeredModifiers[0]!;
+  if (list.kind !== "extras") throw new Error("expected extras");
+  list.items[0]!.addAllergens = { sesame: {} };
+  api.listZoneOffers.mockResolvedValue(
+    menu("v2", [offer("offer-lemonade", "Lemonade", "3.00"), next]),
+  );
+  if (window === "information") {
+    dish.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ContextMenu", bubbles: true, composed: true }),
+    );
+    await browser.updateComplete;
+    const info = browser.shadowRoot!.querySelector("till-product-info")!;
+    await info.updateComplete;
+    expect(info.shadowRoot!.textContent).not.toContain("Wheat");
+    api.menuState.mockResolvedValue(menuState("v2"));
+    await poll(el);
+    await info.updateComplete;
+    expect(browser.shadowRoot!.querySelector("till-product-info")).toBe(info);
+    expect(info.shadowRoot!.textContent).toContain("Wheat");
+  } else {
+    dish.click();
+    await browser.updateComplete;
+    const picker = browser.shadowRoot!.querySelector("till-modifier-picker")!;
+    await picker.updateComplete;
+    expect(picker.shadowRoot!.textContent).not.toContain("Sesame");
+    api.menuState.mockResolvedValue(menuState("v2"));
+    await poll(el);
+    await picker.updateComplete;
+    expect(browser.shadowRoot!.querySelector("till-modifier-picker")).toBe(picker);
+    expect(picker.shadowRoot!.textContent).toContain("Sesame");
+  }
+});
+
+it.each(["counter", "table"] as const)(
+  "takes a new version's allergens while a weighed dish is weighed and its choices are open (%s)",
+  async (kind) => {
+    const weighed = (version: string, allergens: TillMenuOffer["allergens"]) => {
+      const [, cooked] = burgerOffer().offeredModifiers;
+      const kilos = { ...unit, id: "unit-kg", precision: 3, hardwareUnit: "kg" as const };
+      const dish = offer("offer-ham", "Ham", "9.00", {
+        allergens,
+        unit: kilos,
+        offeredModifiers: [cooked!],
+      });
+      return menu(version, [dish]);
+    };
+    const { el, store, browser, serve } = await openSelling(
+      kind,
+      weighed("v1", {}),
+      menuState("v1"),
+    );
+    [...browser.shadowRoot!.querySelectorAll<HTMLElement>('[data-kind="product"]')]
+      .find((row) => row.textContent!.includes("Ham"))!
+      .click();
+    await flush(el);
+    const screen = kind === "table" ? browser : counter(el);
+    const pay = screen.shadowRoot!.querySelector<TillTenderPay>("till-tender-pay")!;
+    emit(pay.shadowRoot!.querySelector("till-numeric-pad")!, "wt-change", { value: "2" });
+    await pay.updateComplete;
+
+    await serve(weighed("v2", { milk: {} }), menuState("v2"));
+    pay.shadowRoot!.querySelector<HTMLElement>(".add")!.click();
+    await pay.updateComplete;
+    const picker = pay.shadowRoot!.querySelector("till-modifier-picker")!;
+    expect(picker.product.allergens).toEqual({ milk: {} });
+
+    await serve(weighed("v3", { sesame: {} }), menuState("v3"));
+    expect(pay.shadowRoot!.querySelector("till-modifier-picker")).toBe(picker);
+    emit(picker, "wt-modifier-confirm", { product: picker.product, extras: [] });
+    expect(store.lines).toHaveLength(1);
+    expect(store.lines[0]!.product).toMatchObject({
+      menuVersionId: "v1",
+      allergens: { sesame: {} },
+    });
+  },
+);
+
+it("reads the counter's offers again when only the live fields move", async () => {
+  const { el } = await mountApp();
+  await toCounter(el);
+  const reads = api.listZoneOffers.mock.calls.length;
+  const course = (id: string) => counter(el).products.find((row) => row.productId === id)!.courseId;
+  expect(course("Lemonade")).toBeNull();
+  api.listZoneOffers.mockResolvedValue({
+    ...menu("v1", [offer("offer-lemonade", "Lemonade", "3.00", { courseId: "mains" })]),
+    liveFields: "changed",
+  });
+  api.menuState.mockResolvedValue({ ...menuState("v1"), liveFields: "changed" });
+  await poll(el);
+  expect(api.listZoneOffers.mock.calls.length).toBe(reads + 1);
+  expect(course("Lemonade")).toBe("mains");
+});
 
 it.each([true, false])(
   "keeps a sent counter declaration when its listing is readable (%s)",
@@ -3241,17 +3400,17 @@ it.each([true, false])(
       "2026-11-15T10:00:00Z",
       readable,
     );
-    api.listZoneOffers.mockResolvedValue({
-      ...menu("v1", [offer("offer-lemonade", "Lemonade", "3.00", { allergens: { eggs: {} } })]),
-      liveFields: "changed",
-    });
-    api.menuState.mockResolvedValue({ ...menuState("v1"), liveFields: "changed" });
+    api.listZoneOffers.mockResolvedValue(
+      menu("v2", [offer("offer-lemonade", "Lemonade", "3.00", { allergens: { eggs: {} } })]),
+    );
+    api.menuState.mockResolvedValue(menuState("v2"));
     await poll(el);
+    expect(counter(el).products[0]!.allergens).toEqual({ eggs: {} });
     expect(counter(el).store.lines[0]!.product.allergens).toEqual({ milk: {} });
   },
 );
 
-it("refreshes the live declaration on an already-held table dish", async () => {
+it("refreshes an already-held table dish's declaration at a new version", async () => {
   const held = {
     ...tabLemonade,
     id: "held-table-line",
@@ -3268,8 +3427,8 @@ it("refreshes the live declaration on an already-held table dish", async () => {
     lines: [{ ...held, nutrition: { allergens: { eggs: {} }, dietaryDeclarations: [] } }],
     revision: 0,
   });
-  api.listZoneOffers.mockResolvedValue({ ...DINING, liveFields: "changed" });
-  api.menuState.mockResolvedValue({ ...menuState("v1"), liveFields: "changed" });
+  api.listZoneOffers.mockResolvedValue(DINING_V2);
+  api.menuState.mockResolvedValue(menuState("v2"));
   await poll(el);
   expect(tableScreen(el).lines[0]!.nutrition?.allergens).toEqual({ eggs: {} });
 });
@@ -3294,11 +3453,10 @@ it("refreshes declarations in the draft of a table without a seated party", asyn
   shown.store.addProduct(shown.products[0]!, "1");
   const line = shown.store.lines[0]!;
   expect(line.product.allergens).toBeNull();
-  api.listZoneOffers.mockResolvedValue({
-    ...menu("v1", [offer("offer-lemonade", "Lemonade", "3.00", { allergens: { eggs: {} } })]),
-    liveFields: "changed",
-  });
-  api.menuState.mockResolvedValue({ ...menuState("v1"), liveFields: "changed" });
+  api.listZoneOffers.mockResolvedValue(
+    menu("v2", [offer("offer-lemonade", "Lemonade", "3.00", { allergens: { eggs: {} } })]),
+  );
+  api.menuState.mockResolvedValue(menuState("v2"));
   await poll(el);
   expect(line.product.allergens).toEqual({ eggs: {} });
 });
@@ -3311,8 +3469,10 @@ it("keeps the displayed table bill after a declaration read fails and retries on
     nutrition: { allergens: { milk: {} }, dietaryDeclarations: [] },
   };
   const listGroups = vi.fn().mockResolvedValue({ groups: [], printProblems: [] });
+  const dining = { ...DINING, liveFields: "unchanged" };
   const { el } = await mountApp(
-    tableStubs(DINING, {
+    tableStubs(dining, {
+      listZoneOffers: vi.fn().mockResolvedValue(dining),
       getTabLines: vi.fn().mockResolvedValue({ lines: [held], revision: 0 }),
       listGroups,
     }),
@@ -3320,8 +3480,8 @@ it("keeps the displayed table bill after a declaration read fails and retries on
   await toTable(el);
   const groupsRead = listGroups.mock.calls.length;
   api.getTabLines.mockRejectedValue(new TypeError("offline"));
-  api.listZoneOffers.mockResolvedValue({ ...DINING, liveFields: "changed" });
-  api.menuState.mockResolvedValue({ ...menuState("v1"), liveFields: "changed" });
+  api.listZoneOffers.mockResolvedValue({ ...DINING_V2, liveFields: "unchanged" });
+  api.menuState.mockResolvedValue({ ...menuState("v2"), liveFields: "unchanged" });
   await poll(el);
   expect(tableScreen(el).lines).toHaveLength(1);
   expect(tableScreen(el).lines[0]!.nutrition?.allergens).toEqual({ milk: {} });
@@ -3333,6 +3493,1182 @@ it("keeps the displayed table bill after a declaration read fails and retries on
   await poll(el);
   expect(tableScreen(el).lines[0]!.nutrition?.allergens).toEqual({ eggs: {} });
   expect(listGroups.mock.calls.length).toBe(groupsRead);
+});
+
+/** `zone` with a second menu, Dinner, selling `offers`. */
+function withDinner(zone: ZoneOffers, offers: TillMenuOffer[], version = "d1"): ZoneOffers {
+  return {
+    ...zone,
+    menus: [
+      ...zone.menus,
+      { ...zone.menus[0]!, id: "dinner", name: "Dinner", isDefault: false, versionId: version },
+    ],
+    offers: [
+      ...offers.map((each) => ({ ...each, menuId: "dinner", menuName: "Dinner" })),
+      ...zone.offers,
+    ],
+  };
+}
+
+const withDinnerState = (state: MenuState) => ({
+  ...state,
+  menus: [
+    ...state.menus,
+    { menuId: "dinner", versionId: "d1", orderable: true, endedPeriodName: null },
+  ],
+});
+
+function hakeDish(allergens: TillMenuOffer["allergens"], price = "5.00") {
+  return {
+    ...offer("menu-hake", "Hake", price, { allergens, menuId: "daily" }),
+    ordering: "not_sold_separately" as const,
+    countsAsCourseId: null as string | null,
+    variantCountsAs: {},
+  };
+}
+
+function dailyCopy(dish: ReturnType<typeof hakeDish>, key = "daily-copy") {
+  return {
+    key,
+    menuId: "daily",
+    name: "Daily",
+    changedAt: "2026-11-19T08:00:00Z",
+    terms: {
+      price: "14.00",
+      vatClass: "reduced" as const,
+      takeawayVatClass: "reduced" as const,
+      names: {},
+      lines: [] as SetMenuTerms["lines"],
+    },
+    structure: { members: [] },
+    offers: [dish],
+  };
+}
+
+const onSale = (copy: ReturnType<typeof dailyCopy>, version: string) => ({
+  ...copy,
+  versionIds: [version],
+  orderable: true,
+  newestOnSale: true,
+});
+
+const recordedDaily = (copy: ReturnType<typeof dailyCopy>) => ({
+  setMenus: {
+    copies: [setMenuCopyOf(copy, "v1")],
+    recorded: { daily: "v1" },
+    exact: true,
+    setMenus: [],
+    dishes: [],
+  },
+  setMenuCopies: [copy],
+});
+
+const addHake = (store: WorkingOrderStore, dish: ReturnType<typeof hakeDish>) =>
+  store.addProduct(setMenuProduct({ offer: dish, setMenuId: "daily", versionId: "v1" }), "1", {
+    setMenu: { id: "daily" },
+  });
+
+type Surface = "counter" | "table";
+
+/** `el` at `kind`, every read of its zone answering `zone` until `serve` changes it. */
+async function openSelling(
+  kind: Surface,
+  zone: ZoneOffers,
+  state: MenuState,
+  overrides: Record<string, unknown> = {},
+) {
+  const served: ZoneOffers =
+    kind === "table"
+      ? { ...zone, context: DINING.context }
+      : {
+          ...zone,
+          context: {
+            ...zone.context,
+            dining: { policy: "till_choice", startsAs: "takeaway" },
+          },
+        };
+  const stubs = {
+    listDefaultZoneOffers: vi.fn().mockResolvedValue(served),
+    listZoneOffers: vi.fn().mockResolvedValue(served),
+    menuState: vi.fn().mockResolvedValue(state),
+    ...overrides,
+  };
+  const { el } = await mountApp(
+    kind === "table"
+      ? tableStubs(served, {
+          getPartyBills: vi.fn().mockResolvedValue([partyBillOf("party-a", "wo-7", 1)]),
+          ...stubs,
+        })
+      : stubs,
+  );
+  if (kind === "table") await toTable(el);
+  else await toCounter(el);
+  const screen = () => (kind === "table" ? tableScreen(el) : counter(el));
+  const browser = screen().shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
+  const serve = async (next: ZoneOffers, nextState: MenuState & { liveFields?: string }) => {
+    const reads = api.listZoneOffers.mock.calls.length;
+    api.listZoneOffers.mockResolvedValue({
+      ...next,
+      context: served.context,
+      liveFields: nextState.liveFields,
+    });
+    api.menuState.mockResolvedValue(nextState);
+    await poll(el);
+    expect(api.listZoneOffers.mock.calls.length).toBeGreaterThan(reads);
+  };
+  return { el, store: browser.store, browser, serve };
+}
+
+it.each(["counter", "table"] as const)(
+  "keeps a drafted set-menu dish's own allergens when another menu lists its product differently (%s)",
+  async (kind) => {
+    const hake = hakeDish({ fish: {} });
+    const zone = withDinner({ ...V1, setMenus: [onSale(dailyCopy(hake), "v1")] }, [
+      offer("offer-hake", "Hake", "12.00", { allergens: null }),
+    ]);
+    const { el, store, browser, serve } = await openSelling(
+      kind,
+      zone,
+      withDinnerState(menuState("v1")),
+    );
+    addHake(store, hake);
+    await flush(el);
+    const line = store.lines[0]!;
+    expect(line.product.allergens).toEqual({ fish: {} });
+
+    await serve(
+      withDinner({ ...V1, setMenus: zone.setMenus }, [
+        offer("offer-hake", "Hake", "12.00", { allergens: { milk: {} } }),
+      ]),
+      { ...withDinnerState(menuState("v1")), liveFields: "changed" },
+    );
+
+    expect(
+      browser.servedProducts.find(({ menuItemId }) => menuItemId === "offer-hake")!.allergens,
+    ).toEqual({ milk: {} });
+    expect(store.lines[0]).toBe(line);
+    expect(line.product.allergens).toEqual({ fish: {} });
+    expect(line.blocked).toBeUndefined();
+    expect(dialog(el)).toBeNull();
+  },
+);
+
+it.each([
+  ["counter", true],
+  ["counter", false],
+  ["table", true],
+  ["table", false],
+] as const)(
+  "keeps the allergens of a dish its own menu dropped (%s), another menu listing its product: %s",
+  async (kind, elsewhere) => {
+    const zone = menu("v1", [
+      offer("offer-lemonade", "Lemonade", "3.00", { allergens: { fish: {} } }),
+      burgerOffer(),
+    ]);
+    const { el, store, serve } = await openSelling(
+      kind,
+      withDinner(zone, []),
+      withDinnerState(menuState("v1")),
+    );
+    store.addProduct(menuOfferToTillProduct(zone.offers[0]!, "v1"), "1");
+    await flush(el);
+    const line = store.lines[0]!;
+
+    await serve(
+      withDinner(
+        menu("v2", [burgerOffer()]),
+        elsewhere
+          ? [offer("dinner-lemonade", "Lemonade", "4.00", { allergens: { milk: {} } })]
+          : [],
+      ),
+      withDinnerState(menuState("v2")),
+    );
+
+    expect(line.blocked).toBe("removed");
+    expect(line.product.allergens).toEqual({ fish: {} });
+  },
+);
+
+it.each([
+  ["counter", "5.00"],
+  ["counter", "6.00"],
+  ["table", "5.00"],
+  ["table", "6.00"],
+] as const)(
+  "shows a drafted set-menu dish's new allergens from its republished copy (%s, at %s)",
+  async (kind, price) => {
+    const hake = hakeDish({ fish: {} });
+    const { el, store, serve } = await openSelling(
+      kind,
+      { ...V1, setMenus: [onSale(dailyCopy(hake), "v1")] },
+      menuState("v1"),
+    );
+    addHake(store, hake);
+    await flush(el);
+    const line = store.lines[0]!;
+
+    await serve(
+      {
+        ...menu("v2", V1.offers),
+        setMenus: [onSale(dailyCopy(hakeDish({ fish: {}, eggs: {} }, price), "copy-2"), "v2")],
+      },
+      menuState("v2"),
+    );
+
+    expect(store.lines[0]).toBe(line);
+    expect(line.product.allergens).toEqual({ fish: {}, eggs: {} });
+    expect(line.product.unitPrice).toBe("5.00");
+    expect(line.product.menuVersionId).toBe(price === "5.00" ? "v2" : "v1");
+    expect(dialog(el) !== null).toBe(price !== "5.00");
+  },
+);
+
+/** Daily sold by Lunch and by Dinner, each menu's copy declaring the dish its own way. */
+const lunchDaily = (dish: ReturnType<typeof hakeDish>, version: string, newestOnSale: boolean) => ({
+  ...onSale(dailyCopy(dish, `lunch-${version}`), version),
+  newestOnSale,
+});
+const dinnerDaily = (price: string, newestOnSale: boolean) => ({
+  ...onSale(dailyCopy(hakeDish({ fish: {} }, price), "dinner-copy"), "d1"),
+  newestOnSale,
+});
+const bothDaily = (price: string): ZoneOffers => ({
+  ...withDinner(V1, []),
+  setMenus: [lunchDaily(hakeDish({}), "v1", true), dinnerDaily(price, false)],
+});
+/** Lunch's v2, with Daily declared as `lunch` says or dropped, while Dinner's is the one on sale. */
+const dinnerNewest = (
+  price: string,
+  lunch: TillMenuOffer["allergens"] | "dropped",
+): ZoneOffers => ({
+  ...withDinner(menu("v2", V1.offers), []),
+  setMenus: [
+    ...(lunch === "dropped" ? [] : [lunchDaily(hakeDish(lunch), "v2", false)]),
+    dinnerDaily(price, true),
+  ],
+});
+
+it.each([
+  ["counter", "dropped", {}],
+  ["counter", { milk: {} }, { milk: {} }],
+  ["table", "dropped", {}],
+  ["table", { milk: {} }, { milk: {} }],
+] as const)(
+  "shows a drafted set-menu dish its own menu's allergens until it is sold from another menu's copy (%s, Lunch's: %j)",
+  async (kind, lunch, own) => {
+    const { el, store, serve } = await openSelling(
+      kind,
+      bothDaily("6.00"),
+      withDinnerState(menuState("v1")),
+    );
+    addHake(store, hakeDish({}));
+    await flush(el);
+    const line = store.lines[0]!;
+
+    await serve(dinnerNewest("6.00", lunch), withDinnerState(menuState("v2")));
+    expect(dialog(el)).not.toBeNull();
+    expect(line.product).toMatchObject({ menuVersionId: "v1", unitPrice: "5.00" });
+    expect(line.product.allergens).toEqual(own);
+
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-confirm]")!.click();
+    await flush(el);
+    expect(store.lines[0]!.product).toMatchObject({ menuVersionId: "d1", unitPrice: "6.00" });
+    expect(store.lines[0]!.product.allergens).toEqual({ fish: {} });
+  },
+);
+
+it.each(["counter", "table"] as const)(
+  "shows a drafted set-menu dish another menu's allergens once it is sold from that copy at the same price (%s)",
+  async (kind) => {
+    const { el, store, serve } = await openSelling(
+      kind,
+      bothDaily("5.00"),
+      withDinnerState(menuState("v1")),
+    );
+    addHake(store, hakeDish({}));
+    await flush(el);
+
+    await serve(dinnerNewest("5.00", "dropped"), withDinnerState(menuState("v2")));
+
+    expect(dialog(el)).toBeNull();
+    expect(store.lines[0]!.product.menuVersionId).toBe("d1");
+    expect(store.lines[0]!.product.allergens).toEqual({ fish: {} });
+  },
+);
+
+it.each([
+  ["dropped", {}],
+  [{ milk: {} }, { milk: {} }],
+] as const)(
+  "shows a saved unsent set-menu dish only its own menu's allergens (Lunch's: %j)",
+  async (lunch, own) => {
+    const { el, store, serve } = await openSelling(
+      "counter",
+      bothDaily("5.00"),
+      withDinnerState(menuState("v1")),
+      {
+        retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          ...heldDaily(dailyCopy(hakeDish({}))),
+          setMenus: undefined,
+          setMenuCopies: undefined,
+        }),
+        getTabLines: vi.fn().mockResolvedValue({
+          revision: 7,
+          lines: [{ ...tabLemonade, id: "held-line", productId: "Hake", sentAt: null }],
+        }),
+        getBillBalance: vi.fn().mockRejectedValue(new Error("not under test")),
+      },
+    );
+    emit(counter(el), "retrieve-order", { id: "held-order" });
+    await flush(el);
+
+    await serve(dinnerNewest("5.00", lunch), withDinnerState(menuState("v2")));
+
+    expect(store.lines[0]!.product.menuVersionId).toBe("v1");
+    expect(store.lines[0]!.product.allergens).toEqual(own);
+  },
+);
+
+it("follows its own menu for a saved set-menu dish whose version this till never saw live", async () => {
+  const held = heldDaily(dailyCopy(hakeDish({})));
+  const { el, store, serve } = await openSelling(
+    "counter",
+    dinnerNewest("5.00", {}),
+    withDinnerState(menuState("v2")),
+    {
+      retrieveWorkingOrder: vi.fn().mockResolvedValue({
+        ...held,
+        setMenus: undefined,
+        setMenuCopies: undefined,
+      }),
+      getTabLines: vi.fn().mockResolvedValue({
+        revision: 7,
+        lines: [{ ...tabLemonade, id: "held-line", productId: "Hake", sentAt: null }],
+      }),
+      getBillBalance: vi.fn().mockRejectedValue(new Error("not under test")),
+    },
+  );
+  emit(counter(el), "retrieve-order", { id: "held-order" });
+  await flush(el);
+
+  await serve(
+    {
+      ...withDinner(menu("v3", V1.offers), []),
+      setMenus: [lunchDaily(hakeDish({ milk: {} }), "v3", false), dinnerDaily("5.00", true)],
+    },
+    withDinnerState(menuState("v3")),
+  );
+
+  expect(store.lines[0]!.product.menuVersionId).toBe("v1");
+  expect(store.lines[0]!.product.allergens).toEqual({ milk: {} });
+});
+
+it.each([
+  ["dropped", null],
+  [{ milk: {} }, { sesame: {} }],
+] as const)(
+  "opens a set-menu dish whose copy no bill records with only its own menu's extras' allergens (Lunch's: %j)",
+  async (lunch, own) => {
+    const withCheese = <T extends object>(dish: T, addAllergens: TillMenuOffer["allergens"]) => {
+      const [extras] = burgerOffer().offeredModifiers;
+      if (extras?.kind !== "extras") throw new Error("extras");
+      const items = extras.items.map((item) => ({ ...item, addAllergens }));
+      return { ...dish, offeredModifiers: [{ ...extras, items }] };
+    };
+    const zone = dinnerNewest("5.00", lunch);
+    const served = {
+      ...zone,
+      setMenus: zone.setMenus!.map((copy) => ({
+        ...copy,
+        offers: copy.offers.map((dish) =>
+          withCheese(dish, copy.key === "dinner-copy" ? {} : { sesame: {} }),
+        ),
+      })),
+    };
+    const held = heldDaily(dailyCopy(hakeDish({})));
+    const { el, store } = await openSelling(
+      "counter",
+      served as ZoneOffers,
+      withDinnerState(menuState("v2")),
+      {
+        retrieveWorkingOrder: vi.fn().mockResolvedValue({
+          ...held,
+          setMenus: undefined,
+          setMenuCopies: undefined,
+        }),
+        getTabLines: vi.fn().mockResolvedValue({ revision: 7, lines: [] }),
+        getBillBalance: vi.fn().mockRejectedValue(new Error("not under test")),
+      },
+    );
+    emit(counter(el), "retrieve-order", { id: "held-order" });
+    await flush(el);
+
+    const [extras] = store.lines[0]!.product.offeredModifiers!;
+    expect(extras?.kind === "extras" && extras.items[0]!.addAllergens).toEqual(own);
+  },
+);
+
+it("shows a drafted set-menu dish's correction when its bill's recorded copy is read again", async () => {
+  const hake = hakeDish({ fish: {} });
+  const bill = (allergens: TillMenuOffer["allergens"]) =>
+    partyBillOf("party-a", "wo-7", 1, recordedDaily(dailyCopy(hakeDish(allergens))));
+  const stream = liveReadFixture();
+  const { el, store } = await openSelling("table", V1, menuState("v1"), {
+    getPartyBills: vi.fn().mockResolvedValue([bill({ fish: {} })]),
+    readLiveEvents: stream.read,
+  });
+  stream.event("ready");
+  addHake(store, hake);
+  await flush(el);
+  await vi.waitFor(() => expect(api.saveDraft).toHaveBeenCalled());
+  await flush(el);
+  const line = store.lines[0]!;
+  const saves = api.saveDraft!.mock.calls.length;
+
+  api.getPartyBills!.mockResolvedValue([bill({ fish: {}, eggs: {} })]);
+  stream.event("change", JSON.stringify([{ type: "menu_versions" }]));
+  await vi.waitFor(() => expect(line.product.allergens).toEqual({ fish: {}, eggs: {} }));
+
+  expect(store.lines[0]).toBe(line);
+  expect(dialog(el)).toBeNull();
+  await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 30));
+  expect(api.saveDraft!.mock.calls.length).toBe(saves);
+});
+
+/** An open counter order holding one saved Hake from Daily, its recorded copy being `copy`. */
+const heldDaily = (copy: ReturnType<typeof dailyCopy>) => ({
+  id: "held-order",
+  zoneId: null,
+  revision: 7,
+  label: "Lunch",
+  expectedEdit: null,
+  dining: "takeaway",
+  diningChoice: "locked",
+  kitchenNote: {
+    scope: { workingOrderId: "held-order" },
+    note: null,
+    revision: 0,
+    ownerRevision: 0,
+  },
+  ...recordedDaily(copy),
+  lines: [
+    {
+      product: {
+        ...setMenuProduct({ offer: copy.offers[0]!, setMenuId: "daily", versionId: "v1" }),
+        menuId: "lunch",
+      },
+      productId: "Hake",
+      menuItemId: "menu-hake",
+      menuVersionId: "v1",
+      setMenuId: "daily",
+      workingOrderLineId: "held-line",
+      quantity: "1.000",
+    },
+  ],
+});
+
+async function openHeldDaily(sentAt: string | null, overrides: Record<string, unknown> = {}) {
+  const opened = await openSelling("counter", V1, menuState("v1"), {
+    retrieveWorkingOrder: vi.fn().mockResolvedValue(heldDaily(dailyCopy(hakeDish({ fish: {} })))),
+    getTabLines: vi.fn().mockResolvedValue({
+      revision: 7,
+      lines: [{ ...tabLemonade, id: "held-line", productId: "Hake", sentAt }],
+    }),
+    getBillBalance: vi.fn().mockRejectedValue(new Error("not under test")),
+    ...overrides,
+  });
+  const retrieve = async () => {
+    emit(counter(opened.el), "retrieve-order", { id: "held-order" });
+    await flush(opened.el);
+  };
+  return { ...opened, retrieve };
+}
+
+it.each([
+  ["unsent", "answers", null, { fish: {}, eggs: {} }],
+  ["sent", "answers", "2026-11-15T10:00:00Z", { fish: {} }],
+  ["unsent", "fails at first", null, { fish: {}, eggs: {} }],
+] as const)(
+  "reads an open counter order's recorded set-menu copies again at a new version: a saved %s dish, the read %s",
+  async (_state, read, sentAt, allergens) => {
+    const { el, store, serve, retrieve } = await openHeldDaily(sentAt);
+    await retrieve();
+    const line = store.lines[0]!;
+    expect(line.workingOrderLineId).toBe("held-line");
+    addHake(store, hakeDish({ fish: {} }));
+    const added = store.lines[1]!;
+
+    api.retrieveWorkingOrder!.mockResolvedValue(
+      heldDaily(dailyCopy(hakeDish({ fish: {}, eggs: {} }))),
+    );
+    if (read === "fails at first")
+      api.retrieveWorkingOrder!.mockRejectedValueOnce(new Error("offline"));
+    await serve(menu("v2", V1.offers), { ...menuState("v2"), liveFields: "same" });
+    if (read === "fails at first") {
+      expect(line.product.allergens).toEqual({ fish: {} });
+      await poll(el);
+    }
+    const reads = api.retrieveWorkingOrder!.mock.calls.length;
+    await poll(el);
+
+    expect(api.retrieveWorkingOrder!.mock.calls.length).toBe(reads);
+    expect(store.lines).toEqual([line, added]);
+    expect(line.product.allergens).toEqual(allergens);
+    expect(added.product.allergens).toEqual({ fish: {}, eggs: {} });
+    expect(store.revision).toBe(7);
+  },
+);
+
+it("drops a late answer about the copies of an order opened again since", async () => {
+  const { el, store, serve, retrieve } = await openHeldDaily(null);
+  await retrieve();
+  const late = deferred<ReturnType<typeof heldDaily>>();
+  api.retrieveWorkingOrder!.mockReturnValueOnce(late.promise);
+  await serve(menu("v2", V1.offers), menuState("v2"));
+  api.retrieveWorkingOrder!.mockResolvedValue(
+    heldDaily(dailyCopy(hakeDish({ fish: {}, sesame: {} }))),
+  );
+  await retrieve();
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, sesame: {} });
+
+  late.resolve(heldDaily(dailyCopy(hakeDish({ fish: {} }))));
+  await flush(el);
+
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, sesame: {} });
+});
+
+/** Daily with a place for a main, whose Hake offers an extra: `allergens` are the dish's and the
+ * extra's. */
+function chosenDaily(allergens: TillMenuOffer["allergens"], menuId = "daily") {
+  const [extras] = burgerOffer().offeredModifiers;
+  if (extras?.kind !== "extras") throw new Error("extras");
+  const copy = dailyCopy({
+    ...hakeDish(allergens),
+    offeredModifiers: [
+      { ...extras, items: extras.items.map((item) => ({ ...item, addAllergens: allergens })) },
+    ],
+    countsAsCourseId: "mains",
+  });
+  return {
+    ...copy,
+    key: `${menuId}-copy`,
+    menuId,
+    name: menuId === "daily" ? "Daily" : "Special",
+    terms: { ...copy.terms, lines: [{ id: "main", count: 1, courseIds: ["mains"] }] },
+  };
+}
+
+/** A bill holding one of `copy`'s set menu, with nothing ordered on it. */
+const oneOf = (copy: ReturnType<typeof chosenDaily>) => ({
+  setMenus: {
+    copies: [setMenuCopyOf(copy, "v1")],
+    recorded: { [copy.menuId]: "v1" },
+    exact: true,
+    setMenus: [{ lineId: "held-menu", copyId: copy.key, lineNo: 1 }],
+    dishes: [],
+  },
+  setMenuCopies: [copy],
+});
+
+/** A bill recording two copies of Daily (D26): Lunch's, older, and Dinner's, the one it orders from;
+ * each full menu declares the Hake, and its extra, as given. */
+function twoDailies(lunch: TillMenuOffer["allergens"], dinner: TillMenuOffer["allergens"]) {
+  const copies = [
+    { copy: { ...chosenDaily(dinner), key: "dinner-daily" }, versionId: "d1" },
+    { copy: { ...chosenDaily(lunch), key: "lunch-daily" }, versionId: "v1" },
+  ];
+  return {
+    setMenus: {
+      copies: copies.map(({ copy, versionId }) => setMenuCopyOf(copy, versionId)),
+      recorded: { daily: "d1" },
+      exact: true,
+      setMenus: copies.map(({ copy }, index) => ({
+        lineId: `held-menu-${index}`,
+        copyId: copy.key,
+        lineNo: index + 1,
+      })),
+      dishes: [],
+    },
+    setMenuCopies: copies.map(({ copy }) => copy),
+  };
+}
+
+const DINNER_ONLY_DAILY: ZoneOffers = {
+  ...withDinner(menu("v2", V1.offers), []),
+  setMenus: [
+    {
+      ...onSale({ ...chosenDaily({ milk: {} }), key: "dinner-daily" }, "d1"),
+      newestOnSale: true,
+    },
+  ],
+};
+
+const extrasAllergens = (product: TillProduct) => {
+  const [extras] = product.offeredModifiers!;
+  return extras?.kind === "extras" ? extras.items[0]!.addAllergens : undefined;
+};
+
+it("shows each saved dish of an order recording two versions of Daily its own menu's allergens, and their corrections", async () => {
+  const held = (lunch: TillMenuOffer["allergens"], dinner: TillMenuOffer["allergens"]) => {
+    const bill = twoDailies(lunch, dinner);
+    const order = heldDaily(dailyCopy(hakeDish({})));
+    const line = (
+      versionId: string,
+      menuId: string,
+      copy: (typeof bill.setMenuCopies)[number],
+    ) => ({
+      ...order.lines[0]!,
+      product: {
+        ...setMenuProduct({ offer: copy.offers[0]!, setMenuId: "daily", versionId }),
+        menuId,
+      },
+      menuVersionId: versionId,
+      workingOrderLineId: `line-${versionId}`,
+    });
+    return {
+      ...order,
+      ...bill,
+      lines: [
+        line("v1", "lunch", bill.setMenuCopies[1]!),
+        line("d1", "dinner", bill.setMenuCopies[0]!),
+      ],
+    };
+  };
+  const { el, store, serve } = await openSelling(
+    "counter",
+    DINNER_ONLY_DAILY,
+    withDinnerState(menuState("v2")),
+    {
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(held({ fish: {} }, { milk: {} })),
+      getTabLines: vi.fn().mockResolvedValue({
+        revision: 7,
+        lines: ["v1", "d1"].map((versionId) => ({
+          ...tabLemonade,
+          id: `line-${versionId}`,
+          productId: "Hake",
+          sentAt: null,
+        })),
+      }),
+      getBillBalance: vi.fn().mockRejectedValue(new Error("not under test")),
+    },
+  );
+  emit(counter(el), "retrieve-order", { id: "held-order" });
+  await flush(el);
+  const shown = () =>
+    store.lines.map(({ product }) => [
+      product.menuVersionId,
+      product.allergens,
+      extrasAllergens(product),
+    ]);
+  expect(shown()).toEqual([
+    ["v1", { fish: {} }, { fish: {} }],
+    ["d1", { milk: {} }, { milk: {} }],
+  ]);
+
+  const corrected = [
+    ["v1", { fish: {}, eggs: {} }, { fish: {}, eggs: {} }],
+    ["d1", { milk: {}, sesame: {} }, { milk: {}, sesame: {} }],
+  ];
+  api.retrieveWorkingOrder!.mockResolvedValue(
+    held({ fish: {}, eggs: {} }, { milk: {}, sesame: {} }),
+  );
+  await serve(DINNER_ONLY_DAILY, { ...withDinnerState(menuState("v2")), liveFields: "moved" });
+  expect(shown()).toEqual(corrected);
+});
+
+it("shows a drafted dish from the older of a bill's two versions of Daily its own menu's allergens, and their correction", async () => {
+  const bill = (lunch: TillMenuOffer["allergens"], dinner: TillMenuOffer["allergens"]) =>
+    partyBillOf("party-a", "wo-7", 1, twoDailies(lunch, dinner));
+  drafts.drafts.push({
+    id: "draft-1",
+    partyId: "party-a",
+    billId: "wo-7",
+    ownerId: "p1",
+    ownerName: "Ana",
+    revision: 1,
+    takenOverFrom: null,
+    lines: ["v1", "d1"].map((menuVersionId, slot) => ({
+      id: `hake-${menuVersionId}`,
+      sourceLineId: null,
+      source: null,
+      menuItemId: "menu-hake",
+      menuVersionId,
+      setMenuId: "daily",
+      setMenuReservedLineId: null,
+      setMenuReservedPlace: null,
+      quantity: "1",
+      variantId: null,
+      courseId: null,
+      slot,
+      joinGroupId: null,
+      afterGroupId: null,
+      note: null,
+      options: [],
+      extras: [],
+      noMerge: true,
+      unavailable: false,
+    })),
+  });
+  const stream = liveReadFixture();
+  const { store } = await openSelling(
+    "table",
+    DINNER_ONLY_DAILY,
+    withDinnerState(menuState("v2")),
+    {
+      getPartyBills: vi.fn().mockResolvedValue([bill({ fish: {} }, { milk: {} })]),
+      readLiveEvents: stream.read,
+    },
+  );
+  stream.event("ready");
+  const shown = () =>
+    store.lines.map(({ product }) => [product.allergens, extrasAllergens(product)]);
+  await vi.waitFor(() =>
+    expect(shown()).toEqual([
+      [{ fish: {} }, { fish: {} }],
+      [{ milk: {} }, { milk: {} }],
+    ]),
+  );
+
+  api.getPartyBills!.mockResolvedValue([bill({ fish: {}, eggs: {} }, { milk: {} })]);
+  stream.event("change", JSON.stringify([{ type: "menu_versions" }]));
+  await vi.waitFor(() =>
+    expect(shown()).toEqual([
+      [
+        { fish: {}, eggs: {} },
+        { fish: {}, eggs: {} },
+      ],
+      [{ milk: {} }, { milk: {} }],
+    ]),
+  );
+});
+
+/** The till at `kind` on a bill whose set menus are `bill`, with Hake's extras open from the folders
+ * named `path`. */
+async function openHakeChoices(
+  kind: Surface,
+  zone: ZoneOffers,
+  bill: ReturnType<typeof oneOf>,
+  path: string[],
+) {
+  const stream = liveReadFixture();
+  const order = (held: ReturnType<typeof oneOf>) => ({
+    ...heldDaily(dailyCopy(hakeDish({}))),
+    ...held,
+    lines: [],
+  });
+  const opened = await openSelling(kind, zone, menuState("v1"), {
+    retrieveWorkingOrder: vi.fn().mockResolvedValue(order(bill)),
+    getTabLines: vi.fn().mockResolvedValue({ revision: 7, lines: [] }),
+    getBillBalance: vi.fn().mockRejectedValue(new Error("not under test")),
+    getPartyBills: vi.fn().mockResolvedValue([partyBillOf("party-a", "wo-7", 1, bill)]),
+    readLiveEvents: stream.read,
+  });
+  const { el, browser } = opened;
+  stream.event("ready");
+  if (kind === "counter") emit(counter(el), "retrieve-order", { id: "held-order" });
+  await flush(el);
+  for (const name of path) {
+    [...browser.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")]
+      .find((button) => button.querySelector(".name")?.textContent === name)!
+      .click();
+    await browser.updateComplete;
+  }
+  const folder = browser.shadowRoot!.querySelector("till-set-menu-folder")!;
+  await folder.updateComplete;
+  [...folder.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")]
+    .find((button) => button.textContent!.includes("Hake"))!
+    .click();
+  await browser.updateComplete;
+  const picker = browser.shadowRoot!.querySelector("till-modifier-picker")!;
+  await picker.updateComplete;
+  const shown = () => picker.shadowRoot!.textContent;
+  expect(shown()).not.toContain("Milk");
+  return {
+    ...opened,
+    shown,
+    /** The bill's recorded copies read again as `held`, Lunch having been published. */
+    correct: async (held: ReturnType<typeof oneOf>) => {
+      api.retrieveWorkingOrder!.mockResolvedValue(order(held));
+      api.getPartyBills!.mockResolvedValue([partyBillOf("party-a", "wo-7", 1, held)]);
+      if (kind === "counter") await opened.serve(menu("v2", V1.offers), menuState("v2"));
+      else stream.event("change", JSON.stringify([{ type: "menu_versions" }]));
+      await vi.waitFor(async () => {
+        await flush(el);
+        expect(shown()).toContain("Milk");
+      });
+    },
+    confirm: async () => {
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      await flush(el);
+      expect(browser.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
+    },
+  };
+}
+
+it.each(["counter", "table"] as const)(
+  "shows, and adds with, a correction to the copy its bill recorded that arrives while a set-menu dish's choices are open (%s)",
+  async (kind) => {
+    const { store, correct, confirm } = await openHakeChoices(kind, V1, oneOf(chosenDaily({})), [
+      t("set_menu.folders"),
+      "Daily",
+    ]);
+
+    await correct(oneOf(chosenDaily({ milk: {} })));
+    await confirm();
+
+    expect(store.lines).toHaveLength(1);
+    const { product } = store.lines[0]!;
+    expect(product.allergens).toEqual({ milk: {} });
+    const [extras] = product.offeredModifiers!;
+    expect(extras?.kind === "extras" && extras.items[0]!.addAllergens).toEqual({ milk: {} });
+  },
+);
+
+it.each(["counter", "table"] as const)(
+  "shows the republished copy's allergens in a set-menu dish's open choices, and adds nothing at the old version (%s)",
+  async (kind) => {
+    const selling = (allergens: TillMenuOffer["allergens"], version: string): ZoneOffers => ({
+      ...menu(version, V1.offers),
+      menus: menu(version, V1.offers).menus.map((each) => ({
+        ...each,
+        structure: { members: [{ kind: "set_menu", menuId: "daily", name: "Daily" }] },
+      })),
+      setMenus: [onSale(chosenDaily(allergens), version)],
+    });
+    // The dish is picked from Daily, which no bill records, into the bill's Special.
+    const { el, store, serve, shown, confirm } = await openHakeChoices(
+      kind,
+      selling({}, "v1"),
+      oneOf(chosenDaily({}, "special")),
+      ["Daily"],
+    );
+
+    await serve(selling({ milk: {} }, "v2"), menuState("v2"));
+    await flush(el);
+
+    expect(shown()).toContain("Milk");
+    await confirm();
+    expect(store.lines).toEqual([]);
+  },
+);
+
+/** A held Daily order opened, and a re-read of its copies still out after Lunch was published. */
+async function rereadOut(
+  overrides: Record<string, unknown> = {},
+  setMenus: ReturnType<typeof onSale>[] = [],
+) {
+  const opened = await openHeldDaily(null, overrides);
+  await opened.retrieve();
+  const asked = deferred<ReturnType<typeof heldDaily>>();
+  api.retrieveWorkingOrder!.mockReturnValueOnce(asked.promise);
+  await opened.serve(
+    { ...menu("v2", V1.offers), setMenus },
+    { ...menuState("v2"), liveFields: "v2" },
+  );
+  const answer = async (copy: ReturnType<typeof dailyCopy>) => {
+    asked.resolve(heldDaily(copy));
+    await flush(opened.el);
+  };
+  return { ...opened, answer };
+}
+
+const recordedOf = (el: TillApp) => counter(el).setMenuCopies.map(({ copy }) => copy);
+
+it("changes only the allergens shown when an open counter order's copies are read again", async () => {
+  const { el, store, answer } = await rereadOut();
+  addHake(store, hakeDish({ fish: {} }));
+  store.setLineQuantity(1, "3");
+  store.setLineExtras(1, { note: "no lemon" });
+  const before = structuredClone(store.lines);
+
+  await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} }, "9.00")));
+
+  expect(store.lines).toEqual(
+    before.map((line) => ({
+      ...line,
+      product: { ...line.product, allergens: { fish: {}, eggs: {} } },
+    })),
+  );
+  expect(store.revision).toBe(7);
+  expect(recordedOf(el)[0]!.offers[0]!.allergens).toEqual({ fish: {}, eggs: {} });
+});
+
+it("takes nothing from a copy of another menu's version that shares a recorded copy's key", async () => {
+  const { el, store, answer } = await rereadOut();
+  const other = heldDaily(dailyCopy(hakeDish({ milk: {} })));
+  other.setMenus.copies[0]!.versionId = "d1";
+  other.setMenus.recorded.daily = "d1";
+  api.retrieveWorkingOrder!.mockResolvedValue(other);
+  await answer(dailyCopy(hakeDish({ fish: {} })));
+  api.menuState!.mockResolvedValue({ ...menuState("v2"), liveFields: "v3" });
+  await poll(el);
+  await poll(el);
+
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {} });
+  expect(recordedOf(el)[0]!.offers[0]!.allergens).toEqual({ fish: {} });
+});
+
+it("keeps a newer re-read of the copies when an earlier one answers after it", async () => {
+  const { el, store, serve, answer } = await rereadOut();
+  api.retrieveWorkingOrder!.mockResolvedValue(
+    heldDaily(dailyCopy(hakeDish({ fish: {}, sesame: {} }))),
+  );
+  await serve(menu("v3", V1.offers), { ...menuState("v3"), liveFields: "v3" });
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, sesame: {} });
+
+  await answer(dailyCopy(hakeDish({ fish: {} })));
+
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, sesame: {} });
+  expect(recordedOf(el)[0]!.offers[0]!.allergens).toEqual({ fish: {}, sesame: {} });
+});
+
+it.each(["paid and cleared", "left for another operator"])(
+  "drops a late answer about the copies of an order %s",
+  async (end) => {
+    const { el, store, answer } = await rereadOut();
+    if (end === "paid and cleared") store.clear();
+    else {
+      emit(counter(el), "logout");
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", permissions: [] });
+      await flush(el);
+    }
+    const lines = structuredClone(counter(el).store.lines);
+    const reads = api.listZoneOffers.mock.calls.length;
+
+    await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} })));
+
+    expect(counter(el).store.lines).toEqual(lines);
+    expect(
+      recordedOf(el).flatMap(({ offers }) => offers.map((dish) => dish.allergens)),
+    ).not.toContainEqual({
+      fish: {},
+      eggs: {},
+    });
+    await poll(el);
+    expect(api.listZoneOffers.mock.calls.length).toBe(reads);
+  },
+);
+
+it("keeps the correction, and the copy recorded meanwhile, when a set-menu change was out as the copies were read", async () => {
+  const special = { ...dailyCopy(hakeDish({ milk: {} }), "special-copy"), menuId: "special" };
+  const saved = deferred<unknown>();
+  const { el, store, answer } = await rereadOut(
+    {
+      setSetMenuCount: vi.fn().mockReturnValue(saved.promise),
+    },
+    [onSale(special, "v2")],
+  );
+  const held = heldDaily(dailyCopy(hakeDish({ fish: {} })));
+  const changed = counter(el).saveSetMenuCount!("special", 1);
+  await flush(el);
+  expect(api.setSetMenuCount).toHaveBeenCalledOnce();
+  await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} })));
+  saved.resolve({
+    setMenus: {
+      ...held.setMenus,
+      copies: [...held.setMenus.copies, setMenuCopyOf(special, "v2")],
+      recorded: { daily: "v1", special: "v2" },
+    },
+    partyRevision: 8,
+  });
+  await changed;
+  await flush(el);
+
+  expect(store.revision).toBe(8);
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, eggs: {} });
+  expect(recordedOf(el).map(({ key, offers }) => [key, offers[0]!.allergens])).toEqual([
+    ["daily-copy", { fish: {}, eggs: {} }],
+    ["special-copy", { milk: {} }],
+  ]);
+});
+
+it("keeps a copy the order recorded after its copies were asked for again", async () => {
+  const special = { ...dailyCopy(hakeDish({ milk: {} }), "special-copy"), menuId: "special" };
+  const { el, answer } = await rereadOut(
+    {
+      setSetMenuCount: vi.fn().mockImplementation(async () => {
+        const { setMenus } = heldDaily(dailyCopy(hakeDish({ fish: {} })));
+        return {
+          setMenus: {
+            ...setMenus,
+            copies: [...setMenus.copies, setMenuCopyOf(special, "v2")],
+            recorded: { daily: "v1", special: "v2" },
+          },
+          partyRevision: 8,
+        };
+      }),
+    },
+    [onSale(special, "v2")],
+  );
+  await counter(el).saveSetMenuCount!("special", 1);
+
+  await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} })));
+
+  expect(recordedOf(el).map(({ key, offers }) => [key, offers[0]!.allergens])).toEqual([
+    ["daily-copy", { fish: {}, eggs: {} }],
+    ["special-copy", { milk: {} }],
+  ]);
+});
+
+it("drops an answer about the copies of an order placed since they were asked for", async () => {
+  const { el, store, answer } = await rereadOut({
+    placeOrder: vi.fn().mockResolvedValue({}),
+    updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 7 }),
+  });
+  emit(counter(el), "place-order");
+  await vi.waitFor(() => expect(counter(el).stage).toBe("collect"));
+  const line = store.lines[0]!;
+  expect(line.product.allergens).toEqual({ fish: {} });
+
+  await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} })));
+
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {} });
+});
+
+it.each([
+  ["cannot be reached", new Error("offline"), true],
+  ["is gone", { code: "working_order.not_found", status: 404 }, false],
+])(
+  "asks again about an order's copies at the next poll when it %s: %s",
+  async (_end, error, asks) => {
+    const { el, serve, retrieve } = await openHeldDaily(null);
+    await retrieve();
+    api.retrieveWorkingOrder!.mockRejectedValue(error);
+    await serve(menu("v2", V1.offers), { ...menuState("v2"), liveFields: "v2" });
+    const reads = api.retrieveWorkingOrder!.mock.calls.length;
+    await poll(el);
+    expect(api.retrieveWorkingOrder!.mock.calls.length).toBe(reads + (asks ? 1 : 0));
+  },
+);
+
+it("asks only for the order's copies again while that read keeps failing, leaving a dismissed price dialog shut", async () => {
+  const { el, store, serve, retrieve } = await openHeldDaily(null);
+  await retrieve();
+  add(el, "Lemonade");
+  api.retrieveWorkingOrder!.mockRejectedValue(new Error("offline"));
+  const published = menu("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]);
+  await serve(published, { ...menuState("v2"), liveFields: "v2" });
+  expect(dialogText(el)).toContain("Lemonade €3.00 → €2.50");
+  dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+  await flush(el);
+
+  const zoneReads = api.listZoneOffers.mock.calls.length;
+  const copyReads = api.retrieveWorkingOrder!.mock.calls.length;
+  const dialogs: boolean[] = [];
+  for (let polls = 0; polls < 4; polls++) {
+    await poll(el);
+    dialogs.push(dialog(el) !== null);
+  }
+  expect(dialogs).toEqual([false, false, false, false]);
+  expect(api.listZoneOffers.mock.calls.length).toBe(zoneReads);
+  expect(api.retrieveWorkingOrder!.mock.calls.length).toBe(copyReads + 4);
+
+  api.retrieveWorkingOrder!.mockResolvedValue(
+    heldDaily(dailyCopy(hakeDish({ fish: {}, eggs: {} }))),
+  );
+  await poll(el);
+  await poll(el);
+  expect(api.retrieveWorkingOrder!.mock.calls.length).toBe(copyReads + 5);
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, eggs: {} });
+});
+
+it("asks for an order's copies again while a price dialog waits over it", async () => {
+  const { el, store, serve, retrieve } = await openHeldDaily(null);
+  await retrieve();
+  add(el, "Lemonade");
+  api.retrieveWorkingOrder!.mockRejectedValueOnce(new Error("offline"));
+  const published = menu("v2", [offer("offer-lemonade", "Lemonade", "2.50"), burgerOffer()]);
+  await serve(published, { ...menuState("v2"), liveFields: "v2" });
+  api.retrieveWorkingOrder!.mockResolvedValue(
+    heldDaily(dailyCopy(hakeDish({ fish: {}, eggs: {} }))),
+  );
+  await poll(el);
+  expect(dialog(el)).not.toBeNull();
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, eggs: {} });
+});
+
+it.each(["cleared", "opened again", "left for another operator", "sent unpaid", "read elsewhere"])(
+  "does not ask again about the copies of an order %s since the read failed",
+  async (end) => {
+    const { el, store, serve, retrieve } = await openHeldDaily(null, {
+      placeOrder: vi.fn().mockResolvedValue({}),
+      updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 7 }),
+    });
+    await retrieve();
+    api.retrieveWorkingOrder!.mockRejectedValueOnce(new Error("offline"));
+    await serve(menu("v2", V1.offers), { ...menuState("v2"), liveFields: "v2" });
+    if (end === "cleared") store.clear();
+    else if (end === "opened again") await retrieve();
+    else if (end === "sent unpaid") {
+      emit(counter(el), "place-order");
+      await vi.waitFor(() => expect(counter(el).stage).toBe("collect"));
+    } else if (end === "read elsewhere") el.api = { ...el.api } as unknown as TillApi;
+    else {
+      emit(counter(el), "logout");
+      await flush(el);
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", permissions: [] });
+    }
+    await flush(el);
+    const reads = api.retrieveWorkingOrder!.mock.calls.length;
+    const polls = api.menuState.mock.calls.length;
+
+    await poll(el);
+
+    expect(api.menuState.mock.calls.length).toBeGreaterThan(polls);
+    expect(api.retrieveWorkingOrder!.mock.calls.length).toBe(reads);
+  },
+);
+
+it("drops a late answer about an order's copies from a connection the till has left", async () => {
+  const { el, store, answer } = await rereadOut();
+  el.api = { ...el.api } as unknown as TillApi;
+  await flush(el);
+
+  await answer(dailyCopy(hakeDish({ fish: {}, eggs: {} })));
+
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {} });
+  expect(recordedOf(el)[0]!.offers[0]!.allergens).toEqual({ fish: {} });
+});
+
+it("gives up a read of an order's copies that hangs, and asks again at the next poll", async () => {
+  const { el, store, serve, retrieve } = await openHeldDaily(null);
+  await retrieve();
+  const timers = vi.spyOn(window, "setTimeout");
+  api.retrieveWorkingOrder!.mockImplementationOnce(
+    (_id: string, options: { signal?: AbortSignal } = {}) =>
+      new Promise((_resolve, reject) =>
+        options.signal?.addEventListener("abort", () => reject(options.signal!.reason)),
+      ),
+  );
+  await serve(menu("v2", V1.offers), { ...menuState("v2"), liveFields: "v2" });
+  api.retrieveWorkingOrder!.mockResolvedValue(
+    heldDaily(dailyCopy(hakeDish({ fish: {}, eggs: {} }))),
+  );
+  await poll(el);
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {} });
+
+  for (const [handler, delay] of timers.mock.calls)
+    if (delay === TABLE_REQUEST_LIMIT_MS && typeof handler === "function") handler();
+  timers.mockRestore();
+  await flush(el);
+  await poll(el);
+
+  expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, eggs: {} });
+});
+
+it("does not read an order sent unpaid as an open one when the menu changes", async () => {
+  const { el, store, serve } = await openHeldDaily("2026-11-15T10:00:00Z", {
+    retrievePlacedOrder: vi.fn().mockResolvedValue(heldDaily(dailyCopy(hakeDish({ fish: {} })))),
+  });
+  emit(counter(el), "pay-waiting-order", { id: "held-order" });
+  await flush(el);
+  expect(counter(el).stage).toBe("collect");
+  expect(store.lines).toHaveLength(1);
+
+  await serve(menu("v2", V1.offers), menuState("v2"));
+
+  expect(api.retrieveWorkingOrder).not.toHaveBeenCalled();
 });
 
 it.each(["recorded", "live"] as const)(

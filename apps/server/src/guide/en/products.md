@@ -266,6 +266,8 @@ options list does not: an option such as _rare_ or _well done_ carries no allerg
 suitability of its own, because it is a way of asking for the same dish rather than something extra
 to eat. The till and station show each item's own list.
 
+Allergens and diet labels are part of the published menu: publish the menu to put a change live.
+
 In the Products list, **Not reviewed**, **None** and **Declared** distinguish a dish you have not
 checked from one you have checked. A variant shows the status of the allergens it uses.
 Grey means it follows its parent. The Allergens filter uses the same status. The **Allergens** and
@@ -280,13 +282,13 @@ the publication. Cancelling the scheduled confirmation keeps the date and time y
 
 While someone at the till uses **Filter** to hide an allergen, unreviewed dishes and sizes are
 hidden too. Review the declarations for each size you sell, or choose **Contains none of the 14**,
-then save. You do not need to publish the menu.
+save, then publish the menu.
 
 With a diet chosen in the till's **Filter**, only dishes with that tick under **Dietary** are shown,
 so tick **No meat** or **No fish** on the dishes that qualify.
 
-Existing purchasing data and recorded order facts remain available, but you maintain live
-product allergens and dietary suitability in **Products**.
+Existing purchasing data and recorded order facts remain available, but you maintain product
+allergens and dietary suitability in **Products**.
 
 ## Put a new product on your menus {#menus}
 
@@ -403,7 +405,8 @@ section shown inside an included menu's folder keeps any name or picture that fo
 and a language's name that the folders set in every place the section appears is shown greyed out,
 with **The included folder sets this name.** under it, and cannot be changed here.
 
-A patch cannot change anything else. Allergens and diet labels are declared on the product itself;
+A patch cannot change anything else. Allergens and diet labels are declared on the product itself
+and go live when you publish the menu;
 see [Declare allergens and dietary suitability directly](products.md#allergens). Nor can it change
 the unit, availability, course or category, the order of items, colours, or which items and
 sections the menu holds.
@@ -491,14 +494,14 @@ order** to select the dish, or **Close** to return without adding it.
 
 Order lines show nutrition icons after the dish’s name. An unreviewed dish shows no icons; check its
 information window rather than treating the absence of icons as a declaration. Extras keep their
-own nutrition separate from the dish. When you choose a dish’s extras, each extra shows the
-allergens its product declares before you add it. An unreviewed extra shows none, which does not
+own nutrition separate from the dish. When you choose a dish’s extras, each extra shows its own
+allergens before you add it. An unreviewed extra shows none, which does not
 establish that it is suitable. There is no separate Allergens screen or printed allergen sheet in
 the till.
 
 Open a sent dish's details to check **Recorded when sent**. These declarations describe the dish
-when you sent it, even if you edit the product later. Dishes on hold keep their current
-declarations until you release them. Use the station's current information when preparing food.
+when you sent it, even if a correction is published later. Dishes on hold show what is published now
+until you release them. Use the station's current information when preparing food.
 To review an earlier bill, open its details in **Orders**. The saved declarations appear beneath
 each dish and extra.
 

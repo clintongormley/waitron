@@ -516,12 +516,13 @@ detalles de la fila, cambia todos los platos de la fila y permite aumentar la ca
 Para reducirla, usa **Cancelar…**. Elige **Marchar ya** en los detalles de una fila en espera
 para enviar todos sus platos con sus extras.
 
-Los alérgenos y las etiquetas dietéticas se actualizan desde el producto mientras mantienes el
-pedido abierto. No necesitas publicar la carta ni guardar el pedido.
+Los alérgenos y las etiquetas dietéticas vienen de la carta publicada. Los detalles de un plato
+enviado conservan, en la caja, los que tenía al enviarlo; las pantallas de cocina y la comprobación
+de alergias de la mesa muestran cualquier corrección publicada desde entonces.
 
 Para consultar los alérgenos y las etiquetas dietéticas de un plato enviado, abre sus detalles y
-lee **Registrado al enviar**. Un plato en espera sigue mostrando su declaración actual hasta que
-lo liberas.
+lee **Registrado al enviar**. Un plato en espera muestra lo que está publicado ahora hasta que lo
+liberas.
 
 Un plato al peso es distinto, porque cada uno se pesa por separado: si añades dos veces el mismo
 plato al peso tienes dos líneas, no una del doble de peso, y un plato al peso pasa entero a otra

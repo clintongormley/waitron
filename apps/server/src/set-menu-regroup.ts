@@ -32,7 +32,7 @@ type Calculate = (input: SetMenuGroupingInput) => SetMenuGrouping;
 export async function readGroupingCopies(tx: Transaction, billId: string): Promise<GroupingCopy[]> {
   const requests = await readBillSetMenuVersions(tx, billId);
   if (requests.length === 0) return [];
-  const served = await serveRecordedSetMenus(tx, requests);
+  const served = await serveRecordedSetMenus(tx, requests, "recorded");
   return served.map((copy, index) => ({ copy, versionId: requests[index]!.versionId }));
 }
 

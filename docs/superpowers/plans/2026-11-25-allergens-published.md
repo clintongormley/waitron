@@ -390,6 +390,11 @@ that an unpublished product edit does not show; it does not repeat the patched c
 - [ ] **Step 3: Implement** as the Interfaces block says; batches through the package's `batches`.
 - [ ] **Step 4: Run** again; PASS. Commit `-s`.
 
+Changed in review (2026-11-25): a line its menu's live version lacks reads the newest earlier
+version that was once live and holds it, and its own version last, so a published correction
+outlives a later drop. This replaces "else its own version" above, in Architecture and in Review
+Focus 1.
+
 ### Task 2.2: Kitchen tickets, the allergy check and the first-send capture use it
 
 **Files:**
@@ -466,6 +471,17 @@ that an unpublished product edit does not show; it does not repeat the patched c
 - [ ] **Step 1: Failing test:** the kitchen subscription names `menu_versions` and `menu_releases`.
 - [ ] **Step 2–4:** run, implement, run (`pnpm --filter @waitron/till exec vitest run src/api/live-connection.test.ts`,
   the root guard, `src/guide-content.test.ts`). Commit `-s`.
+
+As built (2026-11-25): `readPublishedDeclarations` is one walk, newest first, over
+`onceLiveVersionsAfter` and then the line's own version; it calls neither `readLiveDocuments` nor
+`menusOfVersions`.
+`readProductDeclarationValues` is left for PR 3a, with its first caller. Recorded set-menu copies
+(Task 2.3) take their declarations from `readPublishedDeclarations`. Every draft line of the party's
+allergy screen that names a menu version reads the same way, a set-menu dish among them, which had
+no name and no allergens there before. The till matches an open line by menu item and an extra by
+list and product; a set-menu line follows its own version's copy or its own full menu's live copy;
+the counter reads an open order's recorded copies again after a publish. Order details in the
+dashboard expand a dish's diet labels, since an extra's arrive expanded.
 
 ---
 

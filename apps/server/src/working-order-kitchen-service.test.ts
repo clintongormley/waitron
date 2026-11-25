@@ -423,7 +423,7 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
     });
   });
 
-  // A dish whose OWN allergens are unreviewed (products.allergens NULL) stays `pending` — the dish
+  // A dish whose OWN allergens are unreviewed in the published menu stays `pending` — the dish
   // shows only its own (unknown) allergens, and an attached option never changes that.
   it("marks the as-served profile pending when the dish's base allergens are unreviewed", async () => {
     const { cfg } = await setupVenue();
@@ -444,7 +444,7 @@ describe("advanceTicketItem / listStationQueue (bump + queue)", () => {
     });
   });
 
-  // A PLAIN, modifier-less dish whose base is unreviewed (products.allergens NULL, NO options at all)
+  // A PLAIN, modifier-less dish whose base is unreviewed in the published menu (NO options at all)
   // still gets an as-served profile attached to its parent line — the server errs safe and marks the
   // plate `pending` so the KDS shows it unverified. (Divergence from the till, which SUPPRESSES the row
   // for this same case — pinned in basket.test.ts. Kept as-is: the KDS is deliberately the cautious one.)

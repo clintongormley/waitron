@@ -79,7 +79,7 @@ function republishDaily(change: {
 async function readWatchingPublishOrder(billId: string) {
   return inTx(spec.venue, async (tx: Transaction) => {
     const select = vi.spyOn(tx, "select");
-    const read = (await readBillsSetMenus(tx, [billId])).get(billId)!;
+    const read = (await readBillsSetMenus(tx, [billId], "published")).get(billId)!;
     const publishOrderReads = select.mock.calls.filter(
       ([fields]) => (fields as Record<string, unknown> | undefined)?.id === menuVersions.id,
     ).length;
@@ -214,7 +214,11 @@ it("groups a Daily rung on a bill holding two versions under the cheaper one (D2
 
 function dailyCopy(versionId: string) {
   return inTx(spec.venue, async (tx) => {
-    const [copy] = await serveRecordedSetMenus(tx, [{ menuId: spec.daily.menuId, versionId }]);
+    const [copy] = await serveRecordedSetMenus(
+      tx,
+      [{ menuId: spec.daily.menuId, versionId }],
+      "recorded",
+    );
     return copy!;
   });
 }
@@ -282,9 +286,9 @@ it("names the copy changed last as newest even when the other version's release 
   // As if the older copy came from another full menu whose release was scheduled to go live later.
   await setOlderAt(new Date((await activatesAt(newer)).getTime() + 3_600_000));
   try {
-    const read = (await inTx(venue, (tx) => readBillsSetMenus(tx, [second.tabId]))).get(
-      second.tabId,
-    )!;
+    const read = (
+      await inTx(venue, (tx) => readBillsSetMenus(tx, [second.tabId], "published"))
+    ).get(second.tabId)!;
     expect(read.setMenus.recorded[daily.menuId]).toBe(newer);
   } finally {
     await setOlderAt(olderAt);
@@ -386,7 +390,9 @@ async function whatTheBillShows(billId: string) {
     .select({ exact: workingOrders.setMenusExact })
     .from(workingOrders)
     .where(eq(workingOrders.id, billId));
-  const read = (await inTx(spec.venue, (tx) => readBillsSetMenus(tx, [billId]))).get(billId)!;
+  const read = (await inTx(spec.venue, (tx) => readBillsSetMenus(tx, [billId], "published"))).get(
+    billId,
+  )!;
   const { copies, recorded, setMenus, dishes } = read.setMenus;
   const offer = (copyId: string) => {
     const copy = copies.find(({ id }) => id === copyId)!;
@@ -466,9 +472,9 @@ it("shows a bill holding two copies of Daily that differ only in a dish's allerg
   expect(shown).toEqual(await whatTheBillShows(control.second.tabId));
   expect(shown.exact).toBe(true);
   expect(shown.till.setMenus).toHaveLength(2);
-  const read = (await inTx(venue, (tx) => readBillsSetMenus(tx, [corrected.second.tabId]))).get(
-    corrected.second.tabId,
-  )!;
+  const read = (
+    await inTx(venue, (tx) => readBillsSetMenus(tx, [corrected.second.tabId], "published"))
+  ).get(corrected.second.tabId)!;
   expect(
     read.setMenuCopies
       .filter(({ menuId }) => menuId === daily.menuId)

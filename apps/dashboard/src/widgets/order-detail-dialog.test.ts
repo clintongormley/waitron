@@ -144,6 +144,34 @@ it("shows the bill's items, invoices, payments, party, departure and copies", as
   expect(api.getOrder).toHaveBeenCalledWith("bill-1");
 });
 
+it("reads a vegan dish's saved labels and a vegan extra's the same", async () => {
+  const diets = [["vegan"], ["vegan", "vegetarian", "no_meat", "no_fish"]];
+  const api = {
+    getOrder: vi.fn().mockResolvedValue({
+      ...detail,
+      lines: diets.map((dietaryDeclarations, at) => ({
+        ...detail.lines[0]!,
+        lineNo: at + 1,
+        sentNutrition: { allergens: {}, dietaryDeclarations },
+      })),
+    }),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Soup"));
+  const labels = (["vegan", "vegetarian", "no_meat", "no_fish"] as const)
+    .map((label) => t(`editor.diet.${label}`))
+    .join(", ");
+  expect(
+    [...el.shadowRoot!.querySelectorAll("[data-sent-nutrition]")].map((node) =>
+      node.lastElementChild!.textContent!.trim().replace(/\s+/g, " "),
+    ),
+  ).toEqual([`${t("product.dietary_info")}: ${labels}`, `${t("product.dietary_info")}: ${labels}`]);
+});
+
 it.each(["en-GB", "es-ES"])(
   "shows saved declarations and their review state in %s",
   async (locale) => {

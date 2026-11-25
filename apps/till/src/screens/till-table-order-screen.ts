@@ -3,6 +3,7 @@ import {
   draftPlacements,
   sentMenuDishes,
   type OrderingCopy,
+  type OwnSetMenuOffers,
   type SetMenuChange,
 } from "../state/set-menus.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
@@ -1847,6 +1848,7 @@ export class TillTableOrderScreen extends LitElement {
   @state() private payUnsentFor: { billId: string | undefined } | null = null;
 
   @property({ attribute: false }) setMenuCopies: readonly OrderingCopy[] = [];
+  @property({ attribute: false }) ownSetMenuOffer?: OwnSetMenuOffers;
   @property({ attribute: false }) changeSetMenu?: (
     change: SetMenuChange,
   ) => Promise<string | undefined>;
@@ -3071,6 +3073,7 @@ export class TillTableOrderScreen extends LitElement {
       .menu=${menu}
       .setMenuBill=${this.#setMenus}
       .setMenuCopies=${this.setMenuCopies}
+      .ownSetMenuOffer=${this.ownSetMenuOffer}
       .setMenuCourses=${this.#menuCourseNames}
       .setMenuDishNames=${this.#menuDishNames}
       .filters=${this.selectedFilters}

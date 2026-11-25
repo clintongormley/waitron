@@ -420,10 +420,9 @@ Six things it is worth knowing about that payload:
   a following CHILD LINE uses on the kitchen and expo screens — `addAllergens` and `suitableFor`,
   the field names `readQueueSubItems` (`apps/server/src/working-order-station-queue.ts`) hands those screens —
   because a pick is what becomes such a line. A split-off child puts those same marks on the
-  dish's cross-reference. That kitchen read took the product's RAW columns until #537
-  (variants Task 5), so before it an extra that is a variant inheriting its parent's declarations
-  showed none there. Shown beside the dish's own, never folded
-  into them.
+  dish's cross-reference. Shown beside the dish's own, never folded
+  into them. The menu freezes both fields when it is published, and a child line's marks are the
+  published ones ([products.md](products.md#published-declarations)).
 
 ## On the filed sale
 

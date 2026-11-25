@@ -1,10 +1,14 @@
 import { columnsFromOverrides } from "./include-folder.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import type {
+  DietaryLabel,
+  DietOverride,
   DocumentMember,
+  LiveOffer,
   MenuChange,
   MenuChangeBody,
   IncludeFolderInput,
+  ProductAllergens,
 } from "@waitron/shared";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,7 +32,7 @@ import {
   expandDietaryDeclarations,
   shownMembers,
 } from "@waitron/shared";
-import { previewMenu, publishMenu } from "./menu-publication.js";
+import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { plantStoredCategory, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import {
   menusFixture,
@@ -100,7 +104,7 @@ afterEach(() => vi.restoreAllMocks());
 const app = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(fx.db, fn);
 const build = async (menuId: string) => (await app((tx) => buildMenuDocument(tx, menuId))).document;
 
-it("serves current declarations for a dish, its variant and its extra, retaining kinds", async () => {
+it("serves the document's declarations for a dish, its variant and its extra, retaining kinds", async () => {
   const f = await menusFixture(fx.db);
   await app(async (tx) => {
     await updateProduct(tx, f.lemonade, {
@@ -112,30 +116,34 @@ it("serves current declarations for a dish, its variant and its extra, retaining
     });
   });
   const document = await build(f.dinner);
-  await app((tx) =>
-    updateProduct(tx, f.lemonade, {
-      allergens: { eggs: {} },
-      dietaryDeclarations: ["vegetarian"],
-      dietOverride: { vegan: "no" },
-    }),
-  );
+  await app(async (tx) => {
+    const edited = {
+      dietaryDeclarations: ["vegetarian" as const],
+      dietOverride: { vegan: "no" as const },
+    };
+    await updateProduct(tx, f.lemonade, { allergens: { eggs: {} }, ...edited });
+    await updateProduct(tx, f.large, { allergens: { fish: {} }, ...edited });
+    await updateProduct(tx, f.extraLemon, { allergens: { celery: {} }, ...edited });
+  });
   const state = await app((tx) => applyLiveFields(tx, [document]));
   const offer = state.offers.get(f.dinner)!.find((offer) => offer.productId === f.lemonade)!;
   expect(document.offers[offer.id]!.allergens).toEqual({
     gluten: { kinds: ["oats", "wheat"] },
     milk: {},
   });
-  expect(offer.dietaryDeclarations).toEqual(["vegetarian"]);
-  expect(offer.diet!.vegan).toBe("no");
-  expect(offer.allergens).toEqual({ eggs: {} });
-  expect(offer.variants.find((variant) => variant.id === f.large)!.allergens).toEqual({
-    nuts: { kinds: ["walnuts"] },
-  });
+  expect(offer.dietaryDeclarations).toEqual([]);
+  expect(offer.diet!.vegan).toBe("unknown");
+  expect(offer.dietOverride).toBeNull();
+  expect(offer.allergens).toEqual({ gluten: { kinds: ["oats", "wheat"] }, milk: {} });
+  const variant = offer.variants.find((variant) => variant.id === f.large)!;
+  expect(variant.allergens).toEqual({ nuts: { kinds: ["walnuts"] } });
+  expect(variant.dietaryDeclarations).toEqual([]);
+  expect(variant.diet!.vegan).toBe("unknown");
+  expect(variant.dietOverride).toBeNull();
   const extras = offer.offeredModifiers.find((modifier) => modifier.kind === "extras")!;
-  expect(extras.items.find((extra) => extra.productId === f.extraLemon)!.addAllergens).toEqual({
-    gluten: { kinds: ["barley"] },
-    sesame: {},
-  });
+  const extra = extras.items.find((extra) => extra.productId === f.extraLemon)!;
+  expect(extra.addAllergens).toEqual({ gluten: { kinds: ["barley"] }, sesame: {} });
+  expect(extra.suitableFor).toEqual([]);
 });
 
 describe("declarations in the published document", () => {
@@ -179,6 +187,68 @@ describe("declarations in the published document", () => {
     expect(extra.addAllergens).toEqual({ eggs: {} });
     expect(extra.suitableFor).toEqual(expandDietaryDeclarations(["vegan"]));
     expect(extra.suitableFor.length).toBeGreaterThan(1);
+  });
+
+  it("serves the published declarations, not the product's", async () => {
+    const f = await menusFixture(fx.db);
+    const edit = (allergens: ProductAllergens, dietary: DietaryLabel[], override: DietOverride) =>
+      app(async (tx) => {
+        for (const id of [f.lemonade, f.large, f.extraLemon])
+          await updateProduct(tx, id, {
+            allergens,
+            dietaryDeclarations: dietary,
+            dietOverride: override,
+          });
+      });
+    const served = async () => {
+      const { document } = (await app((tx) => readLiveDocuments(tx, [f.dinner]))).get(f.dinner)!;
+      const offer = (await app((tx) => applyLiveFields(tx, [document]))).offers
+        .get(f.dinner)!
+        .find((each) => each.productId === f.lemonade)!;
+      const extras = offer.offeredModifiers.find((modifier) => modifier.kind === "extras")!;
+      const variant = offer.variants.find((each) => each.id === f.large)!;
+      const extra = extras.items.find((item) => item.productId === f.extraLemon)!;
+      const { addAllergens, suitableFor } = extra;
+      return {
+        dish: productDeclarations(offer),
+        variant: productDeclarations(variant),
+        extra: { addAllergens, suitableFor },
+      };
+    };
+    const productDeclarations = (row: LiveOffer | LiveOffer["variants"][number]) => ({
+      allergens: row.allergens,
+      dietaryDeclarations: row.dietaryDeclarations,
+      dietOverride: row.dietOverride,
+      vegetarian: row.diet!.vegetarian,
+    });
+
+    await edit({ milk: {} }, ["vegan"], { vegetarian: "yes" });
+    await publish(f.dinner);
+    await edit({ fish: {} }, ["halal"], { vegetarian: "no" });
+    const published = {
+      allergens: { milk: {} },
+      dietaryDeclarations: ["vegan"],
+      dietOverride: { vegetarian: "yes" },
+      vegetarian: "yes",
+    };
+    expect(await served()).toEqual({
+      dish: published,
+      variant: published,
+      extra: { addAllergens: { milk: {} }, suitableFor: expandDietaryDeclarations(["vegan"]) },
+    });
+
+    await publish(f.dinner);
+    const republished = {
+      allergens: { fish: {} },
+      dietaryDeclarations: ["halal"],
+      dietOverride: { vegetarian: "no" },
+      vegetarian: "no",
+    };
+    expect(await served()).toEqual({
+      dish: republished,
+      variant: republished,
+      extra: { addAllergens: { fish: {} }, suitableFor: expandDietaryDeclarations(["halal"]) },
+    });
   });
 });
 
@@ -980,10 +1050,10 @@ describe("the live-fields digest", () => {
     expect(await fromApply(lunch)).not.toBe(before);
   });
 
-  it("moves for live parent, variant and extra declarations, including reviewed-empty to unknown", async () => {
+  it("a declaration change leaves the live-fields digest alone, on a dish, a variant or an extra", async () => {
     const f = await menusFixture(fx.db);
     const document = await build(f.dinner);
-    let before = await fromApply(document);
+    const before = await fromApply(document);
     for (const [id, change] of [
       [f.lemonade, { allergens: { milk: {} } }],
       [f.large, { dietOverride: { vegan: "no" } }],
@@ -992,11 +1062,17 @@ describe("the live-fields digest", () => {
       [f.lemonade, { allergens: null }],
     ] as const) {
       await app((tx) => updateProduct(tx, id, change));
-      const after = await fromApply(document);
-      expect(after).not.toBe(before);
-      expect(after).toBe((await app((tx) => readLiveState(tx, [document]))).liveFields);
-      before = after;
+      expect(await fromApply(document)).toBe(before);
+      expect((await app((tx) => readLiveState(tx, [document]))).liveFields).toBe(before);
     }
+    await app((tx) => updateProduct(tx, f.lemonade, { available: false }));
+    expect((await app((tx) => readLiveState(tx, [document]))).unavailable.products).toContain(
+      f.lemonade,
+    );
+    await app((tx) => updateProduct(tx, f.lemonade, { categoryId: f.coldDrinks }));
+    const moved = (await app((tx) => readLiveState(tx, [document]))).liveFields;
+    expect(moved).not.toBe(before);
+    expect(await fromApply(document)).toBe(moved);
   });
 
   it("stays when only availability changes", async () => {

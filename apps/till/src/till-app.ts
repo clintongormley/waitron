@@ -127,15 +127,8 @@ import { startBatteryReport, type BatteryLike } from "./api/battery-report.js";
 import { quantityText, trimQuantity } from "./widgets/dish-format.js";
 import type { SaveKitchenNoteDetail, TillOrderKitchenNote } from "./widgets/order-kitchen-note.js";
 import { WorkingOrderStore } from "./state/working-order.js";
-import {
-  displayQuantity,
-  offeredListsOf,
-  toWireLineExtras,
-  toWireModifiers,
-  toWireProductIdentity,
-} from "./state/order-line.js";
-import { deriveExtraSelections } from "./state/held-extras.js";
-import { deriveOptionSelections } from "./state/held-options.js";
+import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "./state/order-line.js";
+import { basketLinesOf } from "./state/held-order.js";
 import {
   DRAFT_REFUSALS,
   DraftSync,
@@ -517,9 +510,12 @@ import {
   refreshBasket,
   repriceRebuilt,
 } from "./state/menu-refresh.js";
+import { CounterCopiesRead, isOrderGone } from "./state/counter-copies-read.js";
 import {
   NO_ORDERING_COPIES,
+  withCopiesRead,
   type OrderingCopy,
+  type OwnSetMenuOffers,
   type SetMenuChange,
   type SetMenuOfferLookup,
 } from "./state/set-menus.js";
@@ -1077,10 +1073,6 @@ function refusedSplitSide(
 
 function guestField(count: number | null): string {
   return count === null ? "" : String(count);
-}
-
-function isOrderGone(error: unknown): boolean {
-  return (error as { code?: string } | undefined)?.code === "working_order.not_found";
 }
 
 function heldOrderLoadRefusal(error: unknown): CounterError {
@@ -3385,6 +3377,7 @@ export class TillApp extends LitElement {
   /** Live offers drive refusal and refresh checks; a boundary's grid waits for an empty order. */
   readonly #counterOffers = new ZoneOfferIndex();
   #counterSetMenuBill?: Pick<HeldOrder, "id" | "setMenus" | "setMenuCopies">;
+  readonly #counterCopiesRead = new CounterCopiesRead();
   @state() private counterSetMenuSaving = false;
 
   get #currentCounterSetMenuBill() {
@@ -3400,6 +3393,8 @@ export class TillApp extends LitElement {
   #counterSetMenuLookup(): SetMenuOfferLookup {
     return this.#counterOffers.setMenuLookup(this.#currentCounterSetMenuBill);
   }
+  readonly #ownCounterSetMenuOffer: OwnSetMenuOffers = (line) =>
+    this.#counterOffers.ownSetMenuLookup(this.#currentCounterSetMenuBill)(line);
   readonly #counterGridOffers = new ZoneOfferIndex();
   readonly #tableOffers = new ZoneOfferIndex();
   readonly #tableGridOffers = new ZoneOfferIndex();
@@ -7057,19 +7052,48 @@ export class TillApp extends LitElement {
     this.counterDepartmentName = loaded ? (zoneOffers.context?.departmentName ?? "") : "";
     if (loaded && zoneOffers.context !== undefined)
       this.#store.setDiningStart(zoneOffers.context.dining ?? null);
-    if (loaded) {
-      const known = this.counterLines?.orderId === this.#store.id ? this.counterLines.lines : null;
-      const keep = new Set(
-        this.#store.lines.flatMap((line) => {
-          const id = line.workingOrderLineId;
-          return id === undefined || known?.some((row) => row.id === id && row.sentAt === null)
-            ? []
-            : [id];
-        }),
-      );
-      this.#store.refreshDeclarations(this.#counterOffers.products(), keep);
-    }
+    if (loaded) this.#refreshCounterDeclarations();
     this.#showCounterOffers();
+  }
+
+  #refreshCounterDeclarations(): void {
+    const known = this.counterLines?.orderId === this.#store.id ? this.counterLines.lines : null;
+    const keep = new Set(
+      this.#store.lines.flatMap((line) => {
+        const id = line.workingOrderLineId;
+        return id === undefined || known?.some((row) => row.id === id && row.sentAt === null)
+          ? []
+          : [id];
+      }),
+    );
+    this.#store.refreshDeclarations(
+      this.#counterOffers.products(),
+      this.#counterOffers.ownSetMenuLookup(this.#currentCounterSetMenuBill),
+      keep,
+    );
+  }
+
+  #rereadCounterSetMenuCopies(): void {
+    const id = this.#currentCounterSetMenuBill?.id;
+    if (id === undefined || this.stage === "collect") return;
+    const visit = this.#store.loadGeneration;
+    const session = this.#operatorSession;
+    const api = this.api;
+    void this.#counterCopiesRead.read(
+      () =>
+        visit === this.#store.loadGeneration &&
+        session === this.#operatorSession &&
+        api === this.api &&
+        this.stage !== "collect",
+      (signal) => api.retrieveWorkingOrder(id, { signal }),
+      (read) => {
+        const bill = this.#currentCounterSetMenuBill;
+        if (bill === undefined) return;
+        this.#counterSetMenuBill = withCopiesRead(bill, read);
+        this.#refreshCounterDeclarations();
+        this.requestUpdate();
+      },
+    );
   }
 
   #showCounterOffers(): void {
@@ -7128,12 +7152,18 @@ export class TillApp extends LitElement {
     const { versions } = this.#tableOffers;
     if (versions.size !== before.size || [...versions].some(([id, v]) => before.get(id) !== v))
       this.#draftRefreshDue = true;
-    const sync = this.#draftSync;
     this.#reshowDraftOffers();
-    sync?.store.refreshDeclarations(this.#tableOffers.products());
-    this.#partylessDraft.refreshDeclarations(this.#tableOffers.products());
+    const products = this.#tableOffers.products();
+    this.#refreshDraftDeclarations(products);
+    this.#partylessDraft.refreshDeclarations(products);
     this.#markRounds(true);
     this.#markDraft("zone");
+  }
+
+  #refreshDraftDeclarations(products?: readonly TillProduct[]): void {
+    const sync = this.#draftSync;
+    const bill = this.partyBills.find((row) => row.workingOrderId === sync?.billId);
+    sync?.store.refreshDeclarations(products, this.#tableOffers.ownSetMenuLookup(bill));
   }
 
   /** A round refused because a dish in it cannot be sold as it stands is marked against the table's
@@ -7262,7 +7292,10 @@ export class TillApp extends LitElement {
       }
       if ((counterMoved || serviceMoved) && !busy && this.basketRefresh === undefined)
         void this.#refreshBasket("automatic").then(() => this.#followDefault());
-      else this.#followDefault();
+      else {
+        this.#followDefault();
+        if (this.#counterCopiesRead.due) this.#rereadCounterSetMenuCopies();
+      }
     }
     if (zoneId === this.#tableZoneId && !this.#tableOpenUnclaimed()) {
       if (state.dining !== undefined) this.#tableDining = state.dining;
@@ -7568,6 +7601,7 @@ export class TillApp extends LitElement {
         }
         this.#counterOffersDue = false;
         this.#loadCounterOffers(zoneOffers);
+        this.#rereadCounterSetMenuCopies();
       } catch {
         return "failed";
       }
@@ -8940,7 +8974,12 @@ export class TillApp extends LitElement {
       this.errorKey = "held.reread_failed";
       return false;
     }
-    const { lines, banner } = this.#basketLinesOf(order, listed, zone.offered);
+    const { lines, banner } = basketLinesOf(
+      order,
+      listed,
+      zone.offered ?? this.products,
+      this.#counterOffers.setMenuLookup(order),
+    );
     if (banner !== undefined) this.errorKey = banner;
     this.#store.adoptSaved(
       foldRetrievedPortions(lines, listed, this.#holdsMoney(id)),
@@ -10448,10 +10487,16 @@ export class TillApp extends LitElement {
     const copies = this.#counterOffers.ordering(this.#currentCounterSetMenuBill);
     const apply = (revision: number, setMenus: NonNullable<HeldOrder["setMenus"]>) => {
       const keys = new Set(setMenus.copies.map(({ id }) => id));
+      // The recorded copies may have been read again since this change was sent.
+      const held = new Map(
+        this.#currentCounterSetMenuBill?.setMenuCopies?.map((copy) => [copy.key, copy]),
+      );
       this.#counterSetMenuBill = {
         id,
         setMenus,
-        setMenuCopies: copies.map(({ copy }) => copy).filter(({ key }) => keys.has(key)),
+        setMenuCopies: copies
+          .map(({ copy }) => held.get(copy.key) ?? copy)
+          .filter(({ key }) => keys.has(key)),
       };
       store.markSaved(revision);
     };
@@ -10745,7 +10790,12 @@ export class TillApp extends LitElement {
       order.setMenus === undefined
         ? undefined
         : { id: order.id, setMenus: order.setMenus, setMenuCopies: order.setMenuCopies };
-    const { lines, banner } = this.#basketLinesOf(order, listed, offered);
+    const { lines, banner } = basketLinesOf(
+      order,
+      listed,
+      offered,
+      this.#counterOffers.setMenuLookup(order),
+    );
     if (banner !== undefined) this.errorKey = banner;
     this.#store.loadFrom(
       order.id,
@@ -10777,102 +10827,6 @@ export class TillApp extends LitElement {
     this.#clearUnlistedCounterStations();
     this.counterLines = listed;
     this.#setSavedCounterFlow(order.serviceMode);
-  }
-
-  /** `order`'s lines rebuilt against `offered`, and the one banner that says what the rebuild
-   * changed. */
-  #basketLinesOf(
-    order: HeldOrder,
-    listed: StoredLines | null,
-    offered: readonly TillProduct[] = this.products,
-  ): { lines: OrderLine[]; banner?: StringKey } {
-    const lines: OrderLine[] = [];
-    let droppedAProduct = false;
-    let extraNotOffered = false;
-    let mustChooseAgain = false;
-    let mustChooseOnWithdrawnDish = false;
-    const liveByMenuItem = new Map<string, TillProduct>();
-    for (const candidate of offered) {
-      if (candidate.menuItemId !== undefined && !liveByMenuItem.has(candidate.menuItemId))
-        liveByMenuItem.set(candidate.menuItemId, candidate);
-    }
-    const sentLines = new Set(
-      (listed?.lines ?? [])
-        .filter((row) => row.sentAt !== null || row.firedAt !== null)
-        .map((row) => row.id),
-    );
-    const setMenuOffer = this.#counterOffers.setMenuLookup(order);
-    for (const line of order.lines) {
-      // Edits to a set-menu dish answer the recorded offer's lists, even after a republish.
-      const recorded =
-        line.setMenuId === undefined
-          ? undefined
-          : setMenuOffer({
-              setMenuId: line.setMenuId,
-              menuItemId: line.menuItemId ?? "",
-              menuVersionId: line.menuVersionId ?? null,
-            });
-      const live =
-        line.setMenuId !== undefined
-          ? recorded && menuOfferToTillProduct(recorded.offer, recorded.versionId)
-          : line.menuItemId === undefined
-            ? undefined
-            : liveByMenuItem.get(line.menuItemId);
-      const stored = line.product;
-      const product =
-        stored === undefined
-          ? live
-          : {
-              ...stored,
-              ...(recorded === undefined ? {} : { unit: recorded.offer.unit }),
-              ...(line.menuVersionId === undefined ? {} : { menuVersionId: line.menuVersionId }),
-              ...(live === undefined ? {} : { offeredModifiers: offeredListsOf(live) }),
-            };
-      if (product === undefined) {
-        droppedAProduct = true;
-        continue;
-      }
-      // Each pick goes back to the list it was taken from, if the live offer still has it there.
-      const picks = deriveExtraSelections(product.offeredModifiers ?? [], line.extras);
-      if (picks.notOffered.length > 0) extraNotOffered = true;
-      const answers = deriveOptionSelections(product.offeredModifiers ?? [], line.optionSnapshots);
-      const sent = line.workingOrderLineId !== undefined && sentLines.has(line.workingOrderLineId);
-      if (answers.unanswered.length > 0 && !sent) {
-        mustChooseAgain = true;
-        if (live === undefined && line.setMenuId === undefined) mustChooseOnWithdrawnDish = true;
-      }
-      lines.push({
-        product,
-        ...(line.setMenuId === undefined ? {} : { setMenuId: line.setMenuId }),
-        quantity: displayQuantity(product, line.quantity),
-        ...(line.workingOrderLineId === undefined
-          ? {}
-          : { workingOrderLineId: line.workingOrderLineId }),
-        ...(live === undefined ? { notOffered: true as const } : {}),
-        ...(picks.extras.length === 0 ? {} : { extras: picks.extras }),
-        ...(picks.notOffered.length === 0 ? {} : { notOfferedExtras: picks.notOffered }),
-        ...(answers.options.length === 0 ? {} : { options: answers.options }),
-        ...(line.optionSnapshots === undefined ? {} : { optionSnapshots: line.optionSnapshots }),
-        ...(line.note === undefined ? {} : { note: line.note }),
-        ...(line.makeAt == null ? {} : { makeAt: line.makeAt }),
-      });
-    }
-    // One banner, so a DROPPED product is reported first: it has already changed what the basket
-    // will bill, where the others change nothing until the operator edits the order. Without the
-    // stored lines the till cannot tell a sent line from one not sent, and choosing again on a sent
-    // dish would recall it or be refused, so the operator is asked to read the order again first.
-    const banner: StringKey | undefined = droppedAProduct
-      ? "held.product_gone"
-      : mustChooseAgain && listed === null
-        ? "held.reread_failed"
-        : mustChooseOnWithdrawnDish
-          ? "held.options_changed"
-          : extraNotOffered
-            ? "held.extra_not_offered"
-            : mustChooseAgain
-              ? "held.options_changed"
-              : undefined;
-    return banner === undefined ? { lines } : { lines, banner };
   }
 
   #holdsMoney(orderId: string): boolean {
@@ -14633,6 +14587,11 @@ export class TillApp extends LitElement {
     );
   }
 
+  readonly #ownTableSetMenuOffer: OwnSetMenuOffers = (line) =>
+    this.#tableOffers.ownSetMenuLookup(
+      this.partyBills.find((bill) => bill.workingOrderId === this.activeTabId),
+    )(line);
+
   #reshowDraftOffers(): void {
     const sync = this.#draftSync;
     if (sync === undefined || !this.#tableOffers.loaded) return;
@@ -15125,6 +15084,7 @@ export class TillApp extends LitElement {
         this.#syncDraftBillStatus();
         if (this.#draftSync?.store.lines.some((line) => line.setMenuId !== undefined)) {
           this.#reshowDraftOffers();
+          this.#refreshDraftDeclarations();
           this.#markDraft("bill");
         }
         answer.balance = this.#loadBillBalance(balance);
@@ -24665,6 +24625,7 @@ export class TillApp extends LitElement {
         .sumUpConnected=${this.sumUpConnected}
         .setMenuBill=${bill?.setMenus}
         .setMenuCopies=${copies}
+        .ownSetMenuOffer=${this.#ownCounterSetMenuOffer}
         .setMenuCourses=${copies.length === 0 ? {} : Object.fromEntries(this.courses.map(({ id, name }) => [id, name]))}
         .saveSetMenuCount=${this.#saveCounterSetMenuCount}
         .moveSetMenuDishes=${this.#moveCounterSetMenuDishes}
@@ -24780,6 +24741,7 @@ export class TillApp extends LitElement {
       .draftActionsAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "", true)}
       .productSelectable=${this.#tableProductSelectable}
       .setMenuCopies=${this.#tableSetMenuCopies()}
+      .ownSetMenuOffer=${this.#ownTableSetMenuOffer}
       .changeSetMenu=${this.#changeSetMenu}
       .loading=${this.tableOpening}
       embedded
@@ -24995,6 +24957,7 @@ export class TillApp extends LitElement {
           .draftActionsAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "", true)}
           .productSelectable=${this.#tableProductSelectable}
           .setMenuCopies=${this.#tableSetMenuCopies()}
+          .ownSetMenuOffer=${this.#ownTableSetMenuOffer}
           .changeSetMenu=${this.#changeSetMenu}
           .loading=${this.tableOpening}
           slot="drill"

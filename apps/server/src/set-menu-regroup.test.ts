@@ -205,7 +205,8 @@ async function exactOf(billId: string) {
 
 /** The bill's set menus as the till's read of a party's bills carries them. */
 async function setMenusAnswer(billId: string) {
-  return (await inTx(venue, (tx) => readBillsSetMenus(tx, [billId]))).get(billId)!.setMenus;
+  return (await inTx(venue, (tx) => readBillsSetMenus(tx, [billId], "published"))).get(billId)!
+    .setMenus;
 }
 
 function menuRows(shaped: Awaited<ReturnType<typeof shape>>) {

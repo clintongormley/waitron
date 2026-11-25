@@ -3,9 +3,11 @@ import {
   staffPresentationName,
   compareDecimal,
   decimal,
+  expandDietaryDeclarations,
   formatMoney,
   multiplyDecimal,
   toScale,
+  type DietaryLabel,
 } from "@waitron/shared";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -406,7 +408,16 @@ export class OrderDetailDialog extends LitElement {
     return html`<div class="nutrition" data-sent-nutrition>
       <div>${t("orders.detail.recorded_when_sent")}</div>
       <div>${t("product.allergens")}: ${allergens}</div>
-      ${nutrition.dietaryDeclarations.length === 0 ? nothing : html`<div>${t("product.dietary_info")}: ${nutrition.dietaryDeclarations.map((label) => t(`editor.diet.${label}` as StringKey)).join(", ")}</div>`}
+      ${
+        nutrition.dietaryDeclarations.length === 0
+          ? nothing
+          : html`<div>
+              ${t("product.dietary_info")}:
+              ${expandDietaryDeclarations(nutrition.dietaryDeclarations as DietaryLabel[])
+                .map((label) => t(`editor.diet.${label}`))
+                .join(", ")}
+            </div>`
+      }
     </div>`;
   }
 

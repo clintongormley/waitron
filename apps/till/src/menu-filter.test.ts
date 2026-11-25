@@ -388,9 +388,9 @@ it("A738 counts selected allergen groups once and ignores an empty kinds list", 
 it.each(["vegan", "vegetarian", "no-meat", "no-fish"] as const)(
   "uses refreshed declarations for the %s filter",
   (filter) => {
-    const old = dietProduct("dish", ["vegan"]);
+    const old = { ...dietProduct("dish", ["vegan"]), menuItemId: "offer-dish" };
     expect(filterProductsByDiet([old], filter)).toHaveLength(1);
-    const updated = refreshProductDeclarations(old, [{ ...old, dietaryDeclarations: [] }]);
+    const updated = refreshProductDeclarations(old, { ...old, dietaryDeclarations: [] });
     expect(filterProductsByDiet([updated], filter)).toEqual([]);
   },
 );

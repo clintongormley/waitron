@@ -13,6 +13,8 @@ interface DeclarationRow {
   dietaryDeclarations: unknown;
 }
 
+export type DeclarationValues = ReturnType<typeof productDeclarationValues>;
+
 export function productDeclarationValues(row?: DeclarationRow) {
   const dietOverride = (row?.dietOverride ?? null) as DietOverride | null;
   return {

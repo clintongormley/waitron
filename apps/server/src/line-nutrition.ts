@@ -1,13 +1,21 @@
 import { VENUE_SERVICE } from "./modules.js";
-import { inArray, eq } from "drizzle-orm";
-import { workingOrderLines, products, type Transaction } from "@waitron/db";
+import { inArray } from "drizzle-orm";
+import { workingOrderLines, type Transaction } from "@waitron/db";
 import {
   productDeclarationValues,
-  effectiveProductColumns,
-  parentJoin,
-  parentProducts,
+  readPublishedDeclarations,
   type ProductAllergens,
+  type PublishedLine,
 } from "@waitron/menu";
+
+/** What {@link readPublishedDeclarations} reads of a stored line. */
+export const publishedLineColumns = {
+  id: workingOrderLines.id,
+  menuVersionId: workingOrderLines.menuVersionId,
+  menuItemId: workingOrderLines.menuItemId,
+  productId: workingOrderLines.productId,
+  extraListId: workingOrderLines.extraListId,
+} satisfies Record<keyof PublishedLine, unknown>;
 
 export interface LineNutrition {
   allergens: ProductAllergens | null;
@@ -18,7 +26,7 @@ export async function readLineNutrition(
   tx: Transaction,
   lineIds: readonly string[],
 ): Promise<Map<string, LineNutrition>> {
-  const declarations = await currentLineDeclarations(tx, lineIds);
+  const declarations = await publishedLineDeclarations(tx, lineIds);
   return new Map(
     [...declarations].filter(
       ([, row]) =>
@@ -32,7 +40,7 @@ export async function readDisplayLineNutrition(
   tx: Transaction,
   lines: readonly { id: string; sentAt: string | null }[],
 ): Promise<Map<string, LineNutrition>> {
-  const live = await readLineNutrition(
+  const unsent = await readLineNutrition(
     tx,
     lines.filter((line) => line.sentAt === null).map((line) => line.id),
   );
@@ -40,61 +48,35 @@ export async function readDisplayLineNutrition(
     tx,
     lines.filter((line) => line.sentAt !== null).map((line) => line.id),
   );
-  return new Map([...live, ...saved]);
+  return new Map([...unsent, ...saved]);
 }
 
 export async function captureSentLineNutrition(
   tx: Transaction,
   lineIds: readonly string[],
 ): Promise<void> {
-  const declarations = await currentLineDeclarations(tx, lineIds);
+  const declarations = await publishedLineDeclarations(tx, lineIds);
   await VENUE_SERVICE.recordSentLineNutrition(
     tx,
     [...declarations].map(([lineId, nutrition]) => ({ lineId, nutrition })),
   );
 }
 
-async function currentLineDeclarations(
+/** The published declarations of each line; a line no menu version holds is not reviewed. */
+async function publishedLineDeclarations(
   tx: Transaction,
   lineIds: readonly string[],
 ): Promise<Map<string, LineNutrition>> {
   if (lineIds.length === 0) return new Map();
-  const rows = await tx
-    .select({
-      lineId: workingOrderLines.id,
-      allergens: effectiveProductColumns.allergens,
-      dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
-    })
+  const lines = await tx
+    .select(publishedLineColumns)
     .from(workingOrderLines)
-    .leftJoin(products, eq(products.id, workingOrderLines.productId))
-    .leftJoin(parentProducts, parentJoin)
     .where(inArray(workingOrderLines.id, [...lineIds]));
+  const published = await readPublishedDeclarations(tx, lines);
   return new Map(
-    rows.map((row) => [
-      row.lineId,
-      {
-        allergens: row.allergens as ProductAllergens | null,
-        dietaryDeclarations: (row.dietaryDeclarations as string[] | null) ?? [],
-      },
-    ]),
+    lines.map(({ id }) => {
+      const { allergens, dietaryDeclarations } = productDeclarationValues(published.get(id));
+      return [id, { allergens, dietaryDeclarations }];
+    }),
   );
-}
-
-export async function readProductDeclarations(tx: Transaction, productIds: readonly string[]) {
-  const result = new Map<string, ReturnType<typeof productDeclarationValues>>();
-  const ids = [...new Set(productIds)];
-  for (let offset = 0; offset < ids.length; offset += 1000) {
-    const rows = await tx
-      .select({
-        id: products.id,
-        allergens: effectiveProductColumns.allergens,
-        dietOverride: effectiveProductColumns.dietOverride,
-        dietaryDeclarations: effectiveProductColumns.dietaryDeclarations,
-      })
-      .from(products)
-      .leftJoin(parentProducts, parentJoin)
-      .where(inArray(products.id, ids.slice(offset, offset + 1000)));
-    for (const row of rows) result.set(row.id, productDeclarationValues(row));
-  }
-  return result;
 }

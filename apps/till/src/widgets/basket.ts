@@ -736,8 +736,8 @@ export class TillBasket extends LitElement {
   }
 
   /**
-   * A pick's own allergens and diet, read live from the dish's offer rather than frozen onto the line.
-   * `undefined` when no offered list names the product, so the row claims no empty declaration.
+   * A pick's own allergens and diet: as saved for a sent dish, otherwise from the list it was taken
+   * from. `undefined` when that list does not offer it, so the row claims no empty declaration.
    */
   #extraOwnNutrition(
     line: OrderLine,
@@ -761,7 +761,7 @@ export class TillBasket extends LitElement {
           };
     }
     const item = (line.product.offeredModifiers ?? [])
-      .flatMap((entry) => (entry.kind === "extras" ? entry.items : []))
+      .flatMap((entry) => (entry.kind === "extras" && entry.id === extra.listId ? entry.items : []))
       .find((candidate) => candidate.productId === extra.productId);
     return item === undefined
       ? undefined
@@ -780,9 +780,10 @@ export class TillBasket extends LitElement {
       this.#syncPausedNote();
     }
     if (this.#modifierProduct && this.modifierLine)
-      this.#modifierProduct = refreshProductDeclarations(this.#modifierProduct, [
+      this.#modifierProduct = refreshProductDeclarations(
+        this.#modifierProduct,
         this.modifierLine.product,
-      ]);
+      );
     if (changed.has("nutritionLines") || changed.has("storedLines")) {
       const nutritionRows = (this.nutritionLines ?? this.storedLines)?.lines ?? [];
       this.#nutritionById = new Map(nutritionRows.map((row) => [row.id, row]));

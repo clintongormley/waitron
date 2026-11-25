@@ -333,7 +333,11 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
   correcting a version still waiting for its date (that is fixed the normal way: change the
   products, cancel it and queue it again), and nothing flows back into the products, queued
   versions or other menus. Open orders keep their price and VAT. Unit is not patchable, and
-  allergens and diet labels are always read from the live product.
+  allergens and diet labels are always read from the live product. Replaced 2026-11-25: they are
+  published with the menu
+  ([ALLERGENS-PUBLISHED](../superpowers/plans/2026-11-25-allergens-published.md)). Owner,
+  2026-11-25, "Ask, menu by menu": an allergen or diet correction may also change scheduled
+  versions; the rest of A1151 stands. Planned in that plan's PRs 3a and 3b.
 
 - **WT-TABLE-NARROW, 2026-11-17:** Products' root count uses BODY as its positioning ancestor,
   but long-name probes at 390/600/700 px in English and Spanish kept the page within its viewport.
@@ -355,16 +359,20 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
 
 - **Prep stations at phone width (watcher, 2026-11-13 23:51).** Use the existing whole-table wrapping; no per-column heading API. Remaining Spanish horizontal scrolling is accepted. The 390 px read-outs cases in `station-table.test.ts` check that headings wrap, names and read-outs stay within their cells, and Actions stays reachable; they do not pin a width or promise no scrolling for arbitrary names.
 
-- **Live declarations (A1150, owner 2026-10-27; to be replaced by published ones, owner 2026-11-24,
-  [section 8](../superpowers/specs/2026-11-24-customer-menu-design.md)).** Allergens and diet labels take their source
-  from the live product without publishing the menu. Sent till/history declarations follow A1517
-  decision 6 below. [Design](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md).
+- **Published declarations (owner, 2026-11-24,
+  [section 8](../superpowers/specs/2026-11-24-customer-menu-design.md#8-allergens-and-diets-are-published)).**
+  Tills, kitchen screens, tickets and the allergy check read allergens and diet labels from the
+  published menu. Sent till/history declarations follow A1517 decision 6 below. Until 2026-11-25
+  they came from the live product (A1150, owner 2026-10-27;
+  [design](https://github.com/clintongormley/waitron/blob/0baa2c3869d2a4b5e4f7e632c081ad0b8da7a2ec/docs/superpowers/specs/2026-11-15-a1150-live-product-declarations-design.md)).
 
 - **Sent declarations (A1517 decision 6, owner 2026-11-11, “As recommended”).** Sent till dishes and
   Orders history detail use declarations captured at the first send, including each extra's own
   declaration. Held dishes stay live until released. Kitchen screens, paper and guest-clash checks
   retain their live source. This is the sent-order/history exception to A1150; see the
   [recorded owner decision](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11).
+  2026-11-25: for held dishes and the kitchen, "live" is now the published menu (Published
+  declarations, above).
 
 - **Till sold-out choices (A1516, owner 2026-11-11, “All four as recommended”).** Anyone signed in
   on a take-orders device can stop and restore availability, with no new permission. Restoration
@@ -381,7 +389,8 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
   [customer menu design](../superpowers/specs/2026-11-24-customer-menu-design.md); label extras before selection; keep
   sent-order/history declarations as sent while kitchen and guest-clash checks stay current.
   Option-list labels carry no allergen declarations and remain unfiltered; new-dish filtering covers
-  sizes and extra products, while saved dishes keep their choices.
+  sizes and extra products, while saved dishes keep their choices. 2026-11-25: "live" and "current"
+  declarations are now the published menu's (Published declarations, above).
   [Decision record](../superpowers/specs/2026-11-11-a1517-allergen-proposal.md#owner-decisions-2026-11-11).
 
 - **Menu copies (A1172, owner 2026-10-28).** Copy… asks for an empty, required new name before

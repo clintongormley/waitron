@@ -334,5 +334,6 @@ export {
 export { MENU_BACKUP_VERIFICATION } from "./backup-verification.js";
 
 export { productDeclarationValues, extraDeclarationValues } from "./product-declarations.js";
+export { readPublishedDeclarations, type PublishedLine } from "./published-declarations.js";
 
 export { MENU_PERSONAL_DATA } from "./personal-data.js";

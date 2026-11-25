@@ -161,10 +161,16 @@ function answeredLabelName(line: OrderLine, labelId: string): string {
   return labelId;
 }
 
-/** `line` as `offer` sells it now: its dish or variant, and each pick, at the live price. */
-function adoptLine(line: OrderLine, offer: TillMenuOffer, menuVersionId: string): OrderLine {
+/** `line` as `offer` sells it now: its dish or variant, and each pick, at the live price. `undefined`
+ * when the offer no longer holds its variant: the dish is never sold in a variant's place. */
+function adoptLine(
+  line: OrderLine,
+  offer: TillMenuOffer,
+  menuVersionId: string,
+): OrderLine | undefined {
   const dish = menuOfferToTillProduct(offer, menuVersionId);
   const variant = dish.variants?.find((candidate) => candidate.id === line.product.variantId);
+  if (variant === undefined && line.product.variantId !== undefined) return undefined;
   const product = variant === undefined ? dish : productAsVariant(dish, variant);
   const extrasLists = takesExtras(product) ? offer.offeredModifiers : [];
   const extras = line.extras?.map((pick) => {
@@ -205,9 +211,9 @@ export function repriceRebuilt(
         ? offerById.get(menuItemId ?? "")
         : lookupSetMenuLine(line, setMenuOffer)?.offer;
     if (offer === undefined || menuVersionId === undefined) return;
-    const reason = lineBlock(line, offer)?.reason;
-    if (reason === "variant_removed" || reason === "unit_changed") return;
-    repriced.set(index, adoptLine(line, offer, menuVersionId));
+    if (lineBlock(line, offer)?.reason === "unit_changed") return;
+    const adopted = adoptLine(line, offer, menuVersionId);
+    if (adopted !== undefined) repriced.set(index, adopted);
   });
   return repriced;
 }
@@ -260,11 +266,11 @@ export function refreshBasket(
       offer === undefined ||
       live === undefined ||
       block?.reason === "removed" ||
-      block?.reason === "variant_removed" ||
       block?.reason === "unit_changed"
     )
       return;
     const adopted = adoptLine(line, offer, live);
+    if (adopted === undefined) return;
     outcome.adopted.set(index, adopted);
     const to = lineGross(adopted);
     if (line.earlierPriceUnknown === true) {
@@ -310,19 +316,63 @@ function partsRepriced(line: OrderLine, adopted: OrderLine, lineNo: number): Cha
     .map((part) => ({ lineNo, ...part, units }));
 }
 
+const NOT_REVIEWED = {
+  allergens: null,
+  diet: undefined,
+  dietOverride: undefined,
+  dietaryDeclarations: undefined,
+} satisfies Partial<TillProduct>;
+
+/** `product` claiming nothing of its own allergens and diet. */
+export function notReviewed<
+  T extends Pick<TillProduct, "allergens" | "diet" | "dietOverride" | "dietaryDeclarations">,
+>(product: T): T {
+  return { ...product, ...NOT_REVIEWED };
+}
+
+/**
+ * The dish `sold` offers a set-menu line naming `menuVersionId`. From a copy of another version it
+ * says only what `own`, the offer its line's own menu holds, says: a dish, variant or extra that
+ * `own` does not hold is not reviewed.
+ */
+export function setMenuDish(
+  sold: NonNullable<ReturnType<SetMenuOfferLookup>>,
+  menuVersionId: string | null,
+): TillProduct {
+  const dish = menuOfferToTillProduct(sold.offer, menuVersionId ?? undefined);
+  if (sold.versionId === menuVersionId) return dish;
+  const modifiers = <T extends NonNullable<TillProduct["offeredModifiers"]>[number]>(
+    entries: T[] | undefined,
+  ): T[] | undefined =>
+    entries?.map((entry) =>
+      entry.kind !== "extras"
+        ? entry
+        : {
+            ...entry,
+            items: entry.items.map((item) => ({ ...item, addAllergens: null, suitableFor: [] })),
+          },
+    );
+  return refreshProductDeclarations(
+    {
+      ...notReviewed(dish),
+      variants: dish.variants?.map(notReviewed),
+      offeredModifiers: modifiers(dish.offeredModifiers),
+      modifierAvailability: modifiers(dish.modifierAvailability),
+    },
+    sold.own && menuOfferToTillProduct(sold.own),
+  );
+}
+
+/**
+ * `product` with the declarations of `live`, its own menu item as offered now. Never those of another
+ * menu's offer of the same product, whose published allergens can differ: a dish, variant or extra
+ * that its own menu item does not hold keeps what it says.
+ */
 export function refreshProductDeclarations(
   product: TillProduct,
-  liveProducts: readonly TillProduct[],
+  live: TillProduct | undefined,
 ): TillProduct {
-  const live =
-    liveProducts.find(
-      (candidate) =>
-        candidate.menuItemId !== undefined && candidate.menuItemId === product.menuItemId,
-    ) ??
-    liveProducts.find(
-      (candidate) => (candidate.productId ?? candidate.id) === (product.productId ?? product.id),
-    );
-  if (live === undefined) return product;
+  if (live?.menuItemId === undefined || live.menuItemId !== product.menuItemId) return product;
   const own =
     product.variantId === undefined || product.variantId === live.variantId
       ? live
@@ -345,7 +395,9 @@ export function refreshProductDeclarations(
             ...entry,
             items: entry.items.map((item) => {
               const current = (live.modifierAvailability ?? live.offeredModifiers)
-                ?.flatMap((list) => (list.kind === "extras" ? list.items : []))
+                ?.flatMap((list) =>
+                  list.kind === "extras" && list.id === entry.id ? list.items : [],
+                )
                 .find((candidate) => candidate.productId === item.productId);
               return current === undefined
                 ? item

@@ -130,8 +130,9 @@ quítala del grupo Modificadores de ese producto concreto.
 ## Alérgenos e información dietética {#allergens}
 
 Un elemento de extras declara sus alérgenos y su aptitud dietética a través del producto que nombra, así
-que los mantienes en ese producto, en **Productos**, no aquí. Guarda el producto para corregir sus
-declaraciones sin publicar. Las opciones son texto y no llevan declaraciones.
+que los mantienes en ese producto, en **Productos**, no aquí. Los alérgenos y las etiquetas dietéticas
+forman parte de la carta publicada: publica la carta para que un cambio entre en vigor. Las opciones
+son texto y no llevan declaraciones.
 
 ## Qué hace la caja con una lista {#till}
 
@@ -141,7 +142,7 @@ pregunta primero la cantidad y después muestra solo sus listas de opciones: no 
 extras. Un plato en una unidad con **Mide una cantidad (ml, g…) — sin extras** activado también muestra
 solo sus listas de opciones. Una lista de extras muestra el precio por porción de cada elemento, con una casilla para cada
 uno, o un selector de cantidad donde permitiste más de uno. Bajo el nombre de cada elemento
-aparecen los alérgenos que declara su producto. Una lista que hiciste obligatoria mantiene
+aparecen sus propios alérgenos. Una lista que hiciste obligatoria mantiene
 **Añadir** desactivado hasta que se elige algo. Una lista de opciones muestra sus opciones disponibles
 como botones de opción, para elegir exactamente una, con tu opción predeterminada ya elegida. Mientras la
 opción predeterminada está desactivada, se elige en su lugar la primera opción disponible. Si no hay

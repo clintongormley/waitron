@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { DietaryLabel } from "@waitron/shared";
 import {
   fromDraftLine,
   orderLineMergeKey,
@@ -8,6 +9,8 @@ import {
 import { lineBlock } from "./menu-refresh.js";
 import { draftLayout } from "./draft-layout.js";
 import { productAsVariant } from "./order-line.js";
+import { asServedAllergens, asServedDiet } from "./as-served.js";
+import { nutritionDietLabels } from "../diet-labels.js";
 import { WorkingOrderStore, type OrderLine } from "./working-order.js";
 import type { Place } from "./draft-place.js";
 import {
@@ -487,6 +490,55 @@ describe("fromDraftLine", () => {
     expect(rebuilt.optionSnapshots).toBeUndefined();
   });
 
+  it.each([
+    ["reviewed as containing none", {}],
+    ["reviewed as containing milk", { milk: {} }],
+  ])(
+    "says a variant the offer no longer holds is not reviewed when the dish is %s",
+    (_declared, allergens) => {
+      const parent = {
+        allergens,
+        diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+        dietOverride: { vegan: "yes" },
+        dietaryDeclarations: ["vegan"],
+      } satisfies Partial<TillMenuOffer>;
+      const dish = { ...burger, ...parent };
+      const withoutVariant = new Map([[dish.id, { ...dish, variants: [] }]]);
+      const line = fromDraftLine(saved(toDraftLineInput(burgerLine()), "2.000"), withoutVariant);
+      const declared = () => {
+        const { allergens, diet, dietOverride, dietaryDeclarations } = line.product;
+        return { allergens, diet, dietOverride, dietaryDeclarations };
+      };
+      const notReviewed = {
+        allergens: null,
+        diet: undefined,
+        dietOverride: undefined,
+        dietaryDeclarations: undefined,
+      };
+      expect(line.product.variantId).toBe("v-double");
+      expect(declared()).toEqual(notReviewed);
+      expect(asServedAllergens(line).pending).toBe(true);
+      expect(nutritionDietLabels(asServedDiet(line), line.product.dietaryDeclarations)).toEqual([]);
+      expect(lineBlock(line, withoutVariant.get(dish.id))).toMatchObject({
+        reason: "variant_removed",
+      });
+
+      const store = new WorkingOrderStore();
+      store.loadFrom("draft", [line]);
+      store.refreshDeclarations([menuOfferToTillProduct(withoutVariant.get(dish.id)!, VERSION)]);
+      expect(store.lines[0]).toBe(line);
+      expect(declared()).toEqual(notReviewed);
+
+      store.refreshDeclarations([
+        menuOfferToTillProduct(
+          { ...dish, variants: [{ ...variant("v-double", "15.00"), allergens: { fish: {} } }] },
+          VERSION,
+        ),
+      ]);
+      expect(store.lines[0]!.product.allergens).toEqual({ fish: {} });
+    },
+  );
+
   describe("a pick on a variant whose unit no longer takes extras", () => {
     /** The live burger, whose Double is sold by `unit`. */
     const soldBy = (unit: typeof each & { measure?: true }) => {
@@ -846,4 +898,119 @@ it("restores a set-menu draft line from its recorded offer and preserves its wir
     setMenuReservedPlace: 0,
   });
   expect(orderLineMergeKey(restored)).toBeNull();
+});
+
+describe("a set-menu draft line whose own version is not the copy on sale", () => {
+  const toppings = (
+    ...items: [id: string, addAllergens: TillMenuOffer["allergens"], suitableFor: DietaryLabel[]][]
+  ): LiveModifier => ({
+    id: "toppings",
+    name: "toppings",
+    customerName: null,
+    kitchenName: null,
+    minPicks: 0,
+    maxPicks: null,
+    kind: "extras",
+    items: items.map(([id, addAllergens, suitableFor]) => ({
+      ...extraItem(id, "1.00"),
+      addAllergens,
+      suitableFor,
+    })),
+  });
+  const onSale = offer({
+    id: "hake",
+    productId: "hake",
+    menuId: "daily",
+    allergens: {},
+    diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+    dietOverride: { vegan: "yes" },
+    dietaryDeclarations: ["vegan"],
+    variants: [
+      { ...variant("v-small", "5.00"), allergens: {}, dietaryDeclarations: ["vegan"] },
+      { ...variant("v-large", "7.00"), allergens: { eggs: {} } },
+    ],
+    offeredModifiers: [toppings(["p-cheese", {}, ["vegetarian"]], ["p-bacon", { eggs: {} }, []])],
+  });
+  const line = (variantId: string | null): FreshDraftLine => ({
+    ...saved(
+      toDraftLineInput({ product: menuOfferToTillProduct(onSale, "v1"), quantity: "1" }),
+      "1.000",
+    ),
+    variantId,
+    setMenuId: "daily",
+  });
+  const shown = (restored: OrderLine) => ({
+    dish: restored.product.allergens,
+    labels: nutritionDietLabels(asServedDiet(restored), restored.product.dietaryDeclarations),
+    variants: restored.product.variants!.map(({ id, allergens }) => [id, allergens]),
+    extras: [restored.product.offeredModifiers!, restored.product.modifierAvailability!].map(
+      (lists) =>
+        lists.flatMap((list) =>
+          list.kind === "extras"
+            ? list.items.map((item) => [item.addAllergens, item.suitableFor])
+            : [],
+        ),
+    ),
+  });
+  const unknown = [null, []];
+
+  it.each([null, "v-small"])(
+    "is not reviewed, with its extras, when its own menu's dish is not known (variant %s)",
+    (variantId) => {
+      const restored = fromDraftLine(line(variantId), new Map(), undefined, () => ({
+        offer: onSale,
+        versionId: "d1",
+      }));
+      expect(restored.product.menuVersionId).toBe("v1");
+      expect(restored.earlierPriceUnknown).toBe(true);
+      expect(shown(restored)).toEqual({
+        dish: null,
+        labels: [],
+        variants: [
+          ["v-small", null],
+          ["v-large", null],
+        ],
+        extras: [
+          [unknown, unknown],
+          [unknown, unknown],
+        ],
+      });
+      expect(onSale.allergens).toEqual({});
+    },
+  );
+
+  it.each([
+    [null, { milk: {} }],
+    ["v-small", { fish: {} }],
+    ["v-large", null],
+  ] as const)(
+    "says what its own menu's dish says, and is not reviewed where that holds nothing (variant %s)",
+    (variantId, dish) => {
+      const own = {
+        ...onSale,
+        allergens: { milk: {} },
+        dietaryDeclarations: ["kosher"],
+        variants: [{ ...variant("v-small", "5.00"), allergens: { fish: {} } }],
+        offeredModifiers: [toppings(["p-cheese", { milk: {} }, ["kosher"]])],
+      } satisfies TillMenuOffer;
+      const restored = fromDraftLine(line(variantId), new Map(), undefined, () => ({
+        offer: onSale,
+        versionId: "d1",
+        own,
+      }));
+      const cheese = [{ milk: {} }, ["kosher"]];
+      expect(shown(restored)).toEqual({
+        dish,
+        labels: variantId === null ? ["kosher"] : [],
+        variants: [
+          ["v-small", { fish: {} }],
+          ["v-large", null],
+        ],
+        extras: [
+          [cheese, unknown],
+          [cheese, unknown],
+        ],
+      });
+    },
+  );
 });
