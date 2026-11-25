@@ -5,6 +5,7 @@ export const GUIDE_LINKS = {
   "staff.access-roles": { page: "staff", section: "access-roles" },
   "servers.reconciliation": { page: "servers", section: "reconciliation" },
   "modules.set-up": { page: "modules", section: "set-up" },
+  "modules.resolve-held-payment": { page: "modules", section: "resolve-held-payment" },
   "servers.handover": { page: "servers", section: "hand-over" },
   "servers.handed-over": { page: "servers", section: "handed-over" },
   "email.set-up": { page: "email", section: "set-up" },

@@ -51,6 +51,7 @@ import type {
   HeldOutcome,
   HeldPaymentRow,
 } from "../api/client.js";
+import { guideHref } from "../help-guide.js";
 import { dashboardPath } from "../navigation.js";
 import { CARD_PROVIDERS_FROM_READERS_PATH } from "./modules-screen.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -1677,6 +1678,11 @@ export class PaymentsScreen extends LitElement {
         ?disabled=${this.billBusy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => change("pin", event.detail.value)}
       ></wt-input>
+      <p>
+        <a href=${guideHref("modules.resolve-held-payment")} target="_blank" rel="noopener"
+          >${t("payments.held.guide")}</a
+        >
+      </p>
       <wt-form-actions slot="footer" .error=${bottom}>
         <wt-button
           slot="cancel"

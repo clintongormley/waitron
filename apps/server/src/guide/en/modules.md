@@ -79,8 +79,9 @@ In Reporting, open **Check card payments** and find the payment under **Held: pa
 Check how much the customer was charged and how much you still hold in your card provider's dashboard.
 
 - **Refunded.** Refund the held amount in the provider's dashboard and confirm the refund there.
-- **Put on a bill.** Ring up the dishes again on a new bill. Record the existing charge using
-  **Other card machine**. Choose **Paid outside Waitron** where offered. Apply the amount the
+- **Put on a bill.** Ring up the dishes again on a new bill. Use a till whose profile allows
+  payments on a separate card terminal. To record the existing charge, choose **Other card machine**,
+  or **Card** on a till without a reader. Choose **Paid outside Waitron** where offered. Apply the amount the
   provider confirms you still hold, up to the amount due. Leave any unpaid balance due or collect
   it separately. Check any excess with your provider before recording the outcome. Do not charge the card again.
 

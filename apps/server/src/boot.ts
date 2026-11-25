@@ -4751,7 +4751,7 @@ async function bootServer(
             ),
           ),
         onHeldRefreshFailure: (error) =>
-          log("warn", "payments.held_alert_refresh_failed", { errorCode: codeOf(error) }),
+          log("warn", "payment.held_alert_refresh_failed", { errorCode: codeOf(error) }),
         credentialProvisioned: (purpose) => credentialProvisioned(db, purpose),
         runDue: (at, duties) =>
           runDue(

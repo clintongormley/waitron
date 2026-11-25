@@ -82,11 +82,12 @@ En Informes, abre **Comprobar pagos con tarjeta** y busca el pago en **Retenidos
 Comprueba cuánto se cobró al cliente y qué importe conservas en el panel de tu proveedor de tarjetas.
 
 - **Devuelto.** Devuelve el importe retenido desde el panel del proveedor y confirma allí la devolución.
-- **Añadido a una cuenta.** Vuelve a registrar los platos en una cuenta nueva. Registra el cobro
-  existente con **Otro datáfono**. Elige **Cobrado fuera de Waitron** si aparece esa opción.
+- **Añadido a una cuenta.** Vuelve a registrar los platos en una cuenta nueva. Usa una caja cuyo
+  perfil permita anotar cobros en un datáfono aparte. Para registrar el cobro existente, elige
+  **Otro datáfono**, o **Tarjeta** en una caja sin lector. Elige **Cobrado fuera de Waitron** si aparece.
   Aplica el importe que el proveedor confirma que conservas, hasta cubrir lo que se debe.
   Deja pendiente cualquier saldo restante o cóbralo por separado. Consulta al proveedor sobre
   cualquier exceso antes de registrar el resultado. No vuelvas a cobrar la tarjeta.
 
 En el pago retenido, elige **Registrar resultado** y selecciona lo que hiciste. Añade una nota
-si te resulta útil, introduce tu PIN de responsable y pulsa **Registrar**.
+si te resulta útil, introduce tu PIN de encargado y pulsa **Registrar**.

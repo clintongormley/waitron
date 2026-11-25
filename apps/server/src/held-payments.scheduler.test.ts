@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { credentialProvisioned } from "@waitron/credentials";
+import type { Alert } from "@waitron/module";
 import { currentIncidentsOf, markIncidentHandled, recordIncidentOnce } from "@waitron/core";
 import { persons, withTransaction, withFoldedPersonKeys } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -22,7 +24,19 @@ import type {
 import { FakeReconciler } from "@waitron/payments/src/testing/fake-reconciler.js";
 import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { decimal, deviceOrigin, jobOrigin } from "@waitron/shared";
-import { reconcilePassFor, reconcilerAsDuty } from "./reconcile-duty.js";
+import { reconcilerAsDuty } from "./reconcile-duty.js";
+import {
+  ephemeralServerFixture,
+  withTradingBootServer,
+} from "./testing/ephemeral-server-fixture.js";
+import { setupVenue } from "./testing/venue-fixtures.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
@@ -109,29 +123,43 @@ async function handleOpenAlert(at: Date): Promise<void> {
 }
 
 describe("held card payments on the real scheduler", () => {
-  it("brings back every unresolved payment when a pass has no Stripe credential", async () => {
+  it("brings back every unresolved payment on a real start without Stripe credentials", async () => {
+    const venue = await setupVenue(suite.db);
+    beforeServerStarts();
     const records = [await heldPayment("p1", JUL_1_NOON), await heldPayment("p2", JUL_2_NOON)];
-    const { reconciler, tick } = scheduler(records);
+    const { tick } = scheduler(records);
     await tick(new Date("2026-07-02T06:00:00Z"));
     await tick(new Date("2026-07-03T06:00:00Z"));
     expect(await openAlertNames()).toEqual(["p1", "p2"]);
     await handleOpenAlert(new Date("2026-07-03T08:00:00Z"));
+    expect(await credentialProvisioned(suite.db, "payments.stripe")).toBe(false);
 
-    const pass = reconcilePassFor({
-      paymentsInstalled: true,
-      duties: [{ duty: reconcilerAsDuty(reconciler), credentialPurpose: "payments.stripe" }],
-      refreshHeld: (now: Date) =>
-        withTransaction(suite.db, (tx) => refreshHeldAlert(tx, heldAlerts, { now, by: null })),
-      onHeldRefreshFailure: (error: unknown) => {
-        throw error;
+    await withTradingBootServer(
+      {
+        db: suite.db,
+        nodeId: venue.cfg.nodeId,
+        scratchPrefix: "waitron-held-reminder-",
+        start: (env) => startServer(env, env),
+        httpPort,
       },
-      credentialProvisioned: async () => false,
-      runDue: async () => {
-        throw new Error("No provider duty has a credential");
+      async (base) => {
+        await vi.waitFor(async () => {
+          const response = await fetch(`${base}/management-api/alerts`, {
+            headers: { cookie: venue.managerCookie },
+          });
+          expect(response.status).toBe(200);
+          const { alerts } = (await response.json()) as { alerts: Alert[] };
+          expect(
+            alerts.filter((alert) => alert.code === HELD).map((alert) => alert.params),
+          ).toEqual([
+            expect.objectContaining({
+              count: 2,
+              payments: ["p1", "p2"].map((paymentRef) => expect.objectContaining({ paymentRef })),
+            }),
+          ]);
+        });
       },
-    });
-    expect((await pass(new Date("2026-07-04T06:00:00Z"))).ran).toEqual([]);
-    expect(await openAlertNames()).toEqual(["p1", "p2"]);
+    );
   });
 
   it("recording the outcome of each ends the alert and the daily re-check", async () => {

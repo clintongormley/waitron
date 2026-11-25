@@ -239,7 +239,7 @@ Remaining Stripe qualification and maintenance.
   env4 left them as they are (owner, 2026-11-09: "Leave this for when we test Stripe"): decide then
   whether to move them to the payments settings document or stop collecting them.
 - A refund recorded while the Stripe report is being fetched can be missed by that check's
-  earlier read, so it can still try to hold the payment (A846 point 17).
+  earlier read, so the sweep can hold the refunded payment and raise its alert (A846 point 17).
 
 ## Bundle: Tap to pay restore
 

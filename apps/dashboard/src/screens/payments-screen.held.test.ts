@@ -164,6 +164,12 @@ describe("held card payments on the Payments screen", () => {
     const el = await mount();
     expect(q(el, "[data-test=bill-recovery]")).not.toBeNull();
     expect(q(el, "[data-test=bill-recovery]")!.classList.contains("pending")).toBe(true);
+    expect(q(el, "[data-test=held-payments] > p")?.textContent).toBe(
+      "Review these payments and record how you resolved each one.",
+    );
+    expect(q(el, "[data-test=bill-recovery]")!.textContent).not.toContain(
+      "Check with the card provider before recording an outcome.",
+    );
     expect(q(el, "[data-test=bill-load-error]")).toBeNull();
   });
 
@@ -200,6 +206,9 @@ describe("held card payments on the Payments screen", () => {
     );
     expect(q(el, "[data-test=bill-recovery]")).not.toBeNull();
     expect(q(el, "[data-test=held-payments]")).toBeNull();
+    expect(q(el, "[data-test=bill-recovery]")!.textContent).toContain(
+      "Check with the card provider before recording an outcome.",
+    );
   });
 
   it("drops a held payment whose outcome is recorded when the live query refreshes", async () => {
@@ -333,7 +342,12 @@ describe("the Record what was done dialog", () => {
     expect(text).toContain("Charged here €10.00");
     expect(text).toContain("Stripe paid out €12.50");
     expect(text).toContain("Refunded. Refund the payment in your card provider’s dashboard.");
-    expect(text).toContain("Put on a bill. Ring up the dishes again and record the card payment.");
+    expect(text).toContain(
+      "Put on a bill. Ring up the dishes again and record the existing charge as taken on another card machine.",
+    );
+    expect(box.querySelector("a")?.getAttribute("href")).toBe(
+      "/help/en/modules#resolve-held-payment",
+    );
     expect(field(el, "outcome").label).toBe("Outcome");
     expect(field(el, "outcome").required).toBe(true);
     expect(
@@ -366,7 +380,10 @@ describe("the Record what was done dialog", () => {
       "Devuelto. Devuelve el pago desde el panel de tu proveedor de tarjetas.",
     );
     expect(text).toContain(
-      "Añadido a una cuenta. Vuelve a registrar los platos y anota el pago con tarjeta.",
+      "Añadido a una cuenta. Vuelve a registrar los platos y anota el cobro ya hecho como pago en otro datáfono.",
+    );
+    expect(box.querySelector("a")?.getAttribute("href")).toBe(
+      "/help/es/modules#resolve-held-payment",
     );
     expect(field(el, "outcome").label).toBe("Resultado");
     expect(
@@ -447,7 +464,11 @@ describe("the Record what was done dialog", () => {
   });
 
   it("shows any other refusal at the bottom and keeps the dialog open", async () => {
-    const recordHeldOutcome = vi.fn().mockRejectedValue({ code: "authorization.not_permitted" });
+    const retry = Promise.withResolvers<never>();
+    const recordHeldOutcome = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
+      .mockReturnValueOnce(retry.promise);
     const el = await mount(stubApi({ recordHeldOutcome }));
     await open(el);
     await chooseOption(field(el, "outcome"), "put_on_bill");
@@ -457,6 +478,12 @@ describe("the Record what was done dialog", () => {
     expect(dialog(el)).not.toBeNull();
     expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted"));
     expect(field(el, "pin").error).toBe("");
+    await submit(el);
+    expect(await bottom(el)).toBe("");
+    retry.reject({ code: "authorization.not_permitted" });
+    await vi.waitFor(async () =>
+      expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted")),
+    );
   });
 
   it.each([

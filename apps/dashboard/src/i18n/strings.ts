@@ -3583,7 +3583,8 @@ export const en = {
   "payments.held.refunded_instruction":
     "Refunded. Refund the payment in your card provider’s dashboard.",
   "payments.held.put_on_bill_instruction":
-    "Put on a bill. Ring up the dishes again and record the card payment.",
+    "Put on a bill. Ring up the dishes again and record the existing charge as taken on another card machine.",
+  "payments.held.guide": "How to resolve a held card payment",
   "payments.held.note": "Note",
   "payments.held.confirm": "Record",
   "payments.held.outcome_required": "Choose what was done.",
@@ -8487,7 +8488,8 @@ export const es: Record<StringKey, string> = {
   "payments.held.refunded_instruction":
     "Devuelto. Devuelve el pago desde el panel de tu proveedor de tarjetas.",
   "payments.held.put_on_bill_instruction":
-    "Añadido a una cuenta. Vuelve a registrar los platos y anota el pago con tarjeta.",
+    "Añadido a una cuenta. Vuelve a registrar los platos y anota el cobro ya hecho como pago en otro datáfono.",
+  "payments.held.guide": "Cómo resolver un pago con tarjeta retenido",
   "payments.held.note": "Nota",
   "payments.held.confirm": "Registrar",
   "payments.held.outcome_required": "Elige qué se hizo.",
