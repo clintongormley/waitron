@@ -168,6 +168,46 @@ it("sends a press refused for a PIN again with the same ids once a PIN is given"
   );
 });
 
+it("keeps a press refused for its PIN while it is sent again with one, so reopening cannot forget it", async () => {
+  const api = fakeApi();
+  api.giveBack.mockRejectedValueOnce({ code: "authorization.not_permitted", status: 403 });
+  const session = new GiveBackSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toMatchObject({
+    code: "authorization.not_permitted",
+  });
+  let answer!: (value: GiveBackOutcome) => void;
+  api.giveBack.mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+  const out = session.submit("sale-1", ask, { personId: "boss", pin: "1234" });
+  const ids = sent(api, 0).submissionIds;
+
+  session.abandon("sale-1");
+  new GiveBackSession(scope, api).abandon("sale-1");
+  expect(session.read("sale-1")?.sent?.submissionIds).toEqual(ids);
+  await expect(
+    session.submit("sale-1", { ...ask, request: { ...request, amount: "19.00" } }),
+  ).rejects.toMatchObject({ kind: "busy" });
+  answer(outcome());
+  expect(await out).toEqual(outcome());
+  expect(await session.resend("sale-1", undefined, ids)).toEqual(outcome());
+  expect(api.giveBack).toHaveBeenCalledTimes(2);
+});
+
+it("marks a press refused again for its PIN as refused once more, so it may still be forgotten", async () => {
+  const api = fakeApi();
+  api.giveBack.mockRejectedValueOnce({ code: "authorization.not_permitted", status: 403 });
+  api.giveBack.mockRejectedValueOnce({ code: "pin.invalid", status: 403 });
+  const session = new GiveBackSession(scope, api);
+  await expect(session.submit("sale-1", ask)).rejects.toMatchObject({
+    code: "authorization.not_permitted",
+  });
+  await expect(
+    session.submit("sale-1", ask, { personId: "boss", pin: "0000" }),
+  ).rejects.toMatchObject({ code: "pin.invalid" });
+  expect(session.read("sale-1")?.sent?.firstSendRefused).toBe(true);
+  session.abandon("sale-1");
+  expect(session.read("sale-1")).toBeNull();
+});
+
 it("lets a first press refused for its PIN be changed", async () => {
   const api = fakeApi();
   api.giveBack.mockRejectedValueOnce({ code: "pin.invalid", status: 403 });

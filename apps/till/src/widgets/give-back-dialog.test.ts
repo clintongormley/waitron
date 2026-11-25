@@ -1515,6 +1515,21 @@ describe("sending", () => {
     await vi.waitFor(() => expect(outcomeText(el)).toContain(t("give_back.preview_failed")));
   });
 
+  it("says Check again waits while another send on the receipt is still out, asking nothing", async () => {
+    const api = fakeGiveBackApi();
+    withRest(api);
+    const el = await press(api, "card-1");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-check-again]")).not.toBeNull());
+    let release!: (value: { state: string }) => void;
+    api.getTenderRefund.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)));
+    const out = el.session.checkRest("sale-1");
+    root(el).querySelector<HTMLElement>("[data-check-again]")!.click();
+    await vi.waitFor(() => expect(outcomeText(el)).toContain(t("give_back.busy")));
+    expect(api.getTenderRefund).toHaveBeenCalledOnce();
+    release({ state: "pending" });
+    await out;
+  });
+
   it("tells the till the sign-in ended when Check again is refused for it, for the till to lock", async () => {
     const api = fakeGiveBackApi();
     withRest(api);
@@ -1682,6 +1697,33 @@ describe("sending", () => {
       expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
     );
     expect(api.giveBack).toHaveBeenCalledOnce();
+  });
+
+  it("opened while a press refused for its PIN is out again with one, opens on Send again, which shows that press's answer", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce({ code: "authorization.not_permitted", status: 403 });
+    const session = new GiveBackSession(SCOPE, api);
+    await expect(session.submit("sale-1", goodwillAsk)).rejects.toMatchObject({
+      code: "authorization.not_permitted",
+    });
+    const answer = holdNext(api);
+    const out = session.submit("sale-1", goodwillAsk, { personId: "boss", pin: "1234" });
+    const { el } = await mountWidget<TillGiveBackDialog>("till-give-back-dialog", {
+      api,
+      session,
+      saleId: "sale-1",
+      invoiceNumber: "A/1042",
+      namesLocale: "en",
+    });
+    await vi.waitFor(() => expect(root(el).querySelector("[data-send-again]")).not.toBeNull());
+    expect(choice(el, "goodwill")).toBeNull();
+    answer(sent(api, 1));
+    await out;
+    root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toContain("€5.00 given back in cash. Give it to the customer."),
+    );
+    expect(api.giveBack).toHaveBeenCalledTimes(2);
   });
 
   it("a press sent again and refused goes back to the choice with its sentence", async () => {
