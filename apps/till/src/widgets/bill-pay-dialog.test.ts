@@ -3955,6 +3955,31 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
     expect(confirming).toBeLessThanOrEqual(choosing);
   });
 
+  it("after a declined card on a printed bill, the credited line wraps rather than widening the window", async () => {
+    await page.viewport(1280, 800);
+    onTestFinished(() => page.viewport(414, 896));
+    const over = {
+      balance: balanceOf({ status: "open", outstanding: "120.00" }),
+      refusal: { code: "declined" },
+    };
+    const width = (el: TillBillPayDialog) =>
+      root(el)
+        .querySelector("wt-dialog")!
+        .shadowRoot!.querySelector("dialog")!
+        .getBoundingClientRect().width;
+    const plain = width(await mount(over));
+    cleanupWidgets();
+    const credited = fill(t("table.bill_credited"), { number: "R-0EDGJ/9", shown: "Bill 2" });
+    const el = await mount({ ...over, credited });
+    const line = root(el).querySelector("[data-pay-credited]")!;
+    expect(text(line)).toBe(credited);
+
+    expect(width(el)).toBeLessThanOrEqual(plain);
+    const below =
+      line.nextElementSibling!.getBoundingClientRect().top - line.getBoundingClientRect().bottom;
+    expect(below).toBeCloseTo(parseFloat(getComputedStyle(line.parentElement!).rowGap), 1);
+  });
+
   it("shows the preview's total for the chosen items", async () => {
     const el = await mount();
     await pick(el, "line", "1");

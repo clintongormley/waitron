@@ -288,11 +288,8 @@ export class TillBillPayDialog extends LitElement {
         margin-block-start: var(--wt-space-2);
       }
 
-      .credited {
-        margin: 0 0 var(--wt-space-3);
-      }
-
       /* Wraps within the width the window's choices and amounts set, never widening it. */
+      .credited,
       .scope,
       .own-bill {
         contain: inline-size;
