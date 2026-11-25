@@ -985,7 +985,7 @@ describe("declaration changes", () => {
         kind: "product_changed",
         productId: "soup",
         name: "Staff soup",
-        fields: ["variants"],
+        fields: ["diet", "variants"],
         source: "shared_product",
         targets: { before: expected, after: expected },
       },
@@ -1025,7 +1025,7 @@ describe("declaration changes", () => {
         kind: "product_changed",
         productId: "soup",
         name: "Staff soup",
-        fields: ["variants"],
+        fields: ["allergens", "variants"],
         source: "shared_product",
         targets: { before: expected, after: expected },
       },
@@ -1051,5 +1051,92 @@ describe("declaration changes", () => {
         targets: { before: expected, after: expected },
       },
     ]);
+  });
+
+  function withSetMenu(doc: MenuDocument): MenuDocument {
+    const { variants: _variants, ...hake } = offer("hake");
+    doc.root.members.push({ kind: "set_menu", menuId: "daily", name: "Daily menu" });
+    doc.setMenus = {
+      daily: {
+        name: "Daily menu",
+        terms: {
+          price: "15.00",
+          vatClass: "reduced",
+          takeawayVatClass: "reduced",
+          names: { en: "Daily menu" },
+          lines: [],
+        },
+        root: { members: [{ kind: "product", menuItemId: "mi-hake", productId: "hake" }] },
+        offers: {
+          "mi-hake": {
+            ...hake,
+            id: "mi-hake",
+            menuId: "daily",
+            countsAsCourseId: "mains",
+            courseOverrideId: null,
+            variants: [{ ...variant("large"), countsAsCourseId: "mains" }],
+            offeredModifiers: [extras("citrus")],
+          },
+        },
+        changedAt: "2026-11-24T12:00:00.000Z",
+      },
+    };
+    return doc;
+  }
+  const hake = (doc: MenuDocument) => doc.setMenus!.daily!.offers["mi-hake"]!;
+  const lemon = (doc: MenuDocument) => {
+    const list = hake(doc).offeredModifiers[0]!;
+    if (list.kind !== "extras") throw new Error("extras");
+    return list.items[0]!;
+  };
+  const atSetMenu = [{ kind: "set_menu", menuId: "daily", sectionIds: [] }];
+  const setMenuChange = (fields: string[]) => ({
+    kind: "set_menu_changed",
+    setMenu: { id: "daily", name: "Daily menu" },
+    fields,
+    source: "set_menu",
+    targets: { before: atSetMenu, after: atSetMenu },
+  });
+
+  it.each([
+    [
+      "dish's allergens",
+      (doc: MenuDocument) => (hake(doc).allergens = { milk: {} }),
+      ["allergens"],
+    ],
+    ["dish's diet", (doc: MenuDocument) => (hake(doc).dietaryDeclarations = ["vegan"]), ["diet"]],
+    [
+      "variant's allergens",
+      (doc: MenuDocument) => (hake(doc).variants[0]!.allergens = { fish: {} }),
+      ["allergens"],
+    ],
+    [
+      "variant's diet",
+      (doc: MenuDocument) => (hake(doc).variants[0]!.dietOverride = { vegan: "yes" }),
+      ["diet"],
+    ],
+    [
+      "extra's allergens",
+      (doc: MenuDocument) => (lemon(doc).addAllergens = { sulphites: {} }),
+      ["allergens"],
+    ],
+    ["extra's diet", (doc: MenuDocument) => (lemon(doc).suitableFor = ["vegan"]), ["diet"]],
+  ] as const)(
+    "lists a set-menu-only %s change as that declaration, not as its dishes",
+    async (_name, edit, fields) => {
+      const live = withSetMenu(document()),
+        proposed = withSetMenu(document());
+      edit(proposed);
+      expect(await changes(live, proposed)).toEqual([setMenuChange([...fields])]);
+    },
+  );
+
+  it("lists a set-menu dish's other edit as its dishes beside its declaration", async () => {
+    const live = withSetMenu(document()),
+      proposed = withSetMenu(document());
+    hake(proposed).allergens = { milk: {} };
+    hake(proposed).dietOverride = { vegan: "yes" };
+    hake(proposed).unitPrice = "3.00";
+    expect(await changes(live, proposed)).toEqual([setMenuChange(["allergens", "diet", "dishes"])]);
   });
 });

@@ -123,6 +123,8 @@ const SET_MENU_FIELDS: Record<SetMenuChangeField, StringKey> = {
   vat: "menu_preview.field_vat",
   names: "menu_preview.field_names",
   lines: "menu_preview.field_included",
+  allergens: "menu_preview.field_allergens",
+  diet: "menu_preview.field_diet",
   dishes: "menu_preview.field_dishes",
 };
 
