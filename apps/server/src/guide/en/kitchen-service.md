@@ -55,7 +55,8 @@ you receive an **Allergy changed** notice with the new block. Removing the assig
 its guest or choosing No allergies produces **Allergy removed** instead. Configured station
 printers receive a correction slip as well.
 
-Adding or removing an extra can change a dish's clash warning too. If the warning changes for work
+Adding or removing an extra, or correcting a dish's allergens with **Patch live menu**, can change a
+dish's clash warning too. If the warning changes for work
 your station still holds, you receive a correction while the original copy stays with the dish.
 
 Read the correction alongside the original dish before you acknowledge it. For example, changing

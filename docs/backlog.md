@@ -476,8 +476,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   the same design, section 8; it stands alone. PRs 1, 2, 3a and 3b of 5 landed: the published menu
   holds them again, Preview lists their changes, tills, kitchen screens, tickets and the allergy
   check read it, Patch live menu corrects them, and a route puts a saved product's values on every
-  menu still showing the old ones, printing the kitchen's correction slips. Left: 4, the "Update the
-  live menus now?" question that calls that route after a save, and Preview's warning.
+  live menu still showing the old ones and on the scheduled ones staff tick, printing the kitchen's
+  correction slips. Left: 4, the "Update the live menus now?" question that calls that route after
+  a save, and Preview's warning.
   [Plan](superpowers/plans/2026-11-25-allergens-published.md)
 
 - **Smaller things #379 surfaced and did not take.** Separating product and modifier rules.

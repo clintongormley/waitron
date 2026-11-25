@@ -498,9 +498,9 @@ a held row's details to send every dish in that row, with its extras.
 
 Allergens and diet labels come from the published menu. A sent dish's details on the till keep what
 it was sent with; the kitchen screens and the table's allergy check show any correction published
-since. **Update now**, offered after you save a product, and **Patch live menu** also print a
-correction slip when the correction adds or removes an allergen on a dish sent and not yet served,
-ticked for a guest with that allergy; an ordinary publish prints none.
+since. **Patch live menu** also prints a correction slip when the correction adds or removes an
+allergen on a dish sent and not yet served, ticked for a guest with that allergy; an ordinary
+publish prints none.
 
 To check a sent dish's allergens and diet labels, open its details and read **Recorded when
 sent**. A dish on hold shows what is published now until you release it.

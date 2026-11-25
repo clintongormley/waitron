@@ -58,7 +58,8 @@ recibes un aviso de **Alergia cambiada** con el bloque nuevo. Quitar la asignaci
 persona o elegir Sin alergias genera **Alergia eliminada**. Las impresoras de estación configuradas
 también reciben un ticket de corrección.
 
-Añadir o quitar un extra también puede cambiar el aviso de conflicto de un plato. Si cambia para
+Añadir o quitar un extra, o corregir los alérgenos de un plato con **Corregir la carta publicada**,
+también puede cambiar el aviso de conflicto de un plato. Si cambia para
 un trabajo que tu estación aún tiene pendiente, recibes una corrección y la copia original sigue
 acompañando al plato.
 

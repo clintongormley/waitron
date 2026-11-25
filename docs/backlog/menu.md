@@ -332,7 +332,7 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
   published with the menu
   ([ALLERGENS-PUBLISHED](../superpowers/plans/2026-11-25-allergens-published.md)). Owner,
   2026-11-25, "Ask, menu by menu": an allergen or diet correction may also change scheduled
-  versions, which Patch live menu does; the rest of A1151 stands. After a save: that plan's PRs 3b and 4.
+  versions, which Patch live menu does; the rest of A1151 stands. After a save: that plan's PR 4.
 
 - **WT-TABLE-NARROW, 2026-11-17:** Products' root count uses BODY as its positioning ancestor,
   but long-name probes at 390/600/700 px in English and Spanish kept the page within its viewport.
