@@ -477,7 +477,16 @@ export class MenuPricesTable extends LitElement {
     this.#tableSize.observe(this.#table()!);
   }
 
+  #unsent = false;
+
   protected override updated(changed: PropertyValues): void {
+    const unsent = this.saving || this.#changes().length > 0;
+    if (unsent !== this.#unsent) {
+      this.#unsent = unsent;
+      this.dispatchEvent(
+        new CustomEvent("price-draft-change", { detail: unsent, bubbles: true, composed: true }),
+      );
+    }
     const table = this.#table();
     const reshaped = RESHAPES.some((name) => changed.has(name));
     // Only the update carrying loaded rows may consume a navigation request.

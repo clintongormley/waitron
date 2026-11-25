@@ -67,7 +67,7 @@ function api(status: MenuStatus = changed): DashboardApi {
 }
 
 describe.each(["light", "dark"] as const)("menu editor heading (%s)", (theme) => {
-  it("accessible path, name, live version and starred Preview tab above the Structure tree", async () => {
+  it("accessible path, name, live version and Review and publish button above the Structure tree", async () => {
     history.replaceState(null, "", "/menus/menu/menu-lunch/view/structure");
     const { el, host } = await mountWidget<MenusScreen>(
       "dashboard-menus-screen",
@@ -76,10 +76,8 @@ describe.each(["light", "dark"] as const)("menu editor heading (%s)", (theme) =>
     );
     const root = el.shadowRoot!;
     await vi.waitFor(() => {
-      expect(
-        root.querySelector("wt-tabs")!.shadowRoot!.querySelector('[data-key="preview"] .mark'),
-      ).not.toBeNull();
-      expect(root.querySelector('[data-test="menu-status"]')!.textContent).toContain("(");
+      expect(root.querySelector('.heading [data-test="review-publish"]')).not.toBeNull();
+      expect(root.querySelector('[data-test="unpublished-changes"]')).not.toBeNull();
       expect(root.querySelector("dashboard-menu-structure-table")).not.toBeNull();
     });
     expect(root.querySelector('[data-test="menu-breadcrumb"] a')).not.toBeNull();

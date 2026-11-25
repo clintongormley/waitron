@@ -34,6 +34,7 @@ import { conjunctionList } from "../i18n/list.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import { scheduleAction, type MenuPublicationHeading } from "./menu-publication-actions.js";
 import { publishWarningStyles, renderPublishWarningConfirmation } from "./menu-publish-warnings.js";
 
 type Edition = MenuPublicationsAnswer["editions"][number];
@@ -248,6 +249,7 @@ export class MenuPublicationsPanel extends LitElement {
   @property() menuName = "";
   @property({ attribute: false }) lateRefusalFor?: (name: string) => () => void;
   @property({ attribute: false }) preview: MenuPreview | null = null;
+  @property({ attribute: false }) heading?: MenuPublicationHeading;
 
   @state() private answer: MenuPublicationsAnswer | null = null;
   @state() private readError: string | null = null;
@@ -274,7 +276,6 @@ export class MenuPublicationsPanel extends LitElement {
   /** A write that failed once its window had gone: nothing else would say so. */
   @state() private lateRefusal = false;
 
-  /** The menu whose editions are followed. */
   #watching: string | null = null;
   /** The menu last followed: unlike the watch, it survives a removal from the page. */
   #followed: string | null = null;
@@ -284,6 +285,8 @@ export class MenuPublicationsPanel extends LitElement {
   #shownRead = 0;
   /** A row menu's popover closes on the click, so the dialog hands focus back to its trigger. */
   #focusTarget: HTMLElement | null = null;
+  #scheduleOpener: HTMLElement | null = null;
+  #offeredPreview: MenuPreview | null = null;
   /** Replaced at each opening of the schedule form, so a late answer cannot reach a later one. */
   #opening = {};
   #scope?: DraftScope<ScheduleDraft>;
@@ -330,6 +333,19 @@ export class MenuPublicationsPanel extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("menuId")) this.#follow();
     if (changed.has("preview")) this.confirming = null;
+  }
+
+  override updated(): void {
+    const offered = this.#canSchedule() ? this.preview : null;
+    if (offered === this.#offeredPreview) return;
+    this.#offeredPreview = offered;
+    this.heading?.scheduleChanged(offered);
+  }
+
+  openSchedule(opener: HTMLElement, preview: MenuPreview): void {
+    if (this.preview !== preview || !this.#canSchedule() || this.scheduling) return;
+    this.#scheduleOpener = opener;
+    this.#openSchedule(null);
   }
 
   #follow(): void {
@@ -435,12 +451,14 @@ export class MenuPublicationsPanel extends LitElement {
   }
 
   #returnFocus(opener: HTMLElement | null = null): void {
-    const publish = this.renderRoot.querySelector("slot")?.assignedElements()[0] as
-      HTMLElement | undefined;
+    const fallback = this.heading
+      ? this.heading.focusFallback()
+      : ((this.renderRoot.querySelector("slot")?.assignedElements()[0] as
+          HTMLElement | undefined) ?? this);
     (opener?.isConnected
       ? opener
-      : (this.renderRoot.querySelector<HTMLElement>("h2") ?? publish ?? this)
-    ).focus();
+      : (this.renderRoot.querySelector<HTMLElement>("h2") ?? fallback)
+    )?.focus();
   }
 
   async #refreshAfterWrite(): Promise<void> {
@@ -519,15 +537,9 @@ export class MenuPublicationsPanel extends LitElement {
     this.scheduleBusy = false;
     this.#disposeDraft();
     this.scheduling = false;
-    const moved = this.moving !== null;
-    requestAnimationFrame(() => {
-      const opener = moved
-        ? this.#focusTarget?.isConnected
-          ? this.#focusTarget
-          : null
-        : this.renderRoot.querySelector<HTMLElement>('[data-test="schedule-open"]');
-      this.#returnFocus(opener);
-    });
+    const opener = this.moving !== null ? this.#focusTarget : this.#scheduleOpener;
+    this.#scheduleOpener = null;
+    requestAnimationFrame(() => this.#returnFocus(opener));
   }
 
   #scheduleDialog(): HTMLElementTagNameMap["wt-dialog"] {
@@ -914,19 +926,20 @@ export class MenuPublicationsPanel extends LitElement {
   override render(): TemplateResult {
     const queued = this.answer?.editions.filter((edition) => edition.state === "queued") ?? [];
     return html`<div class="content">
-        <div class="schedule">
-          ${
-            this.#canSchedule()
-              ? html`<wt-button
-                  variant="secondary"
-                  data-test="schedule-open"
-                  @click=${() => this.#openSchedule(null)}
-                  >${t("menu_publications.schedule")}</wt-button
-                >`
-              : nothing
-          }
-          <slot></slot>
-        </div>
+        ${
+          this.heading
+            ? nothing
+            : html`<div class="schedule">
+                ${
+                  this.#canSchedule()
+                    ? scheduleAction((event) => {
+                        this.openSchedule(event.currentTarget as HTMLElement, this.preview!);
+                      })
+                    : nothing
+                }
+                <slot></slot>
+              </div>`
+        }
         <slot name="publish-note"></slot>
         ${
           this.lateRefusal

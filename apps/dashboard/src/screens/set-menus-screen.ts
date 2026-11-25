@@ -30,6 +30,7 @@ import { dashboardPath, leftToBrowser } from "../navigation.js";
 import "../widgets/menu-copy-dialog.js";
 import "../widgets/menu-delete-dialog.js";
 import "../widgets/set-menu-editor.js";
+import { menuEditorHeading, menuEditorHeadingStyles } from "./menu-editor-heading.js";
 import { MenuListLayout, menuListStyles, type ListLayout } from "./menu-list-layout.js";
 
 @customElement("dashboard-set-menus-screen")
@@ -38,31 +39,10 @@ export class SetMenusScreen extends LitElement {
     baseStyles,
     pageTitleStyles,
     menuListStyles,
+    menuEditorHeadingStyles,
     css`
       :host {
         display: block;
-      }
-      .heading {
-        margin-bottom: var(--wt-space-4);
-      }
-      nav a {
-        display: inline-flex;
-        align-items: center;
-        min-block-size: var(--wt-tap-min);
-        color: var(--wt-color-primary-text);
-      }
-      .title {
-        display: flex;
-        align-items: baseline;
-        gap: var(--wt-space-2);
-      }
-      .title h1 {
-        margin: 0;
-        overflow-wrap: anywhere;
-      }
-      .sep {
-        color: var(--wt-color-primary-text);
-        margin-inline-start: var(--wt-space-1);
       }
       wt-data-table::part(price),
       wt-data-table::part(holders) {
@@ -88,7 +68,6 @@ export class SetMenusScreen extends LitElement {
         min-block-size: var(--wt-space-5);
         color: var(--wt-color-primary-text);
       }
-      nav a:focus-visible,
       wt-data-table::part(holder-link):focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
@@ -422,56 +401,43 @@ export class SetMenusScreen extends LitElement {
 
   #renderEditor(id: string) {
     const menu = this.rows.find((row) => row.id === id);
-    return html`<div class="heading">
-        <nav aria-label=${t("menus.menu_trail")} data-test="menu-breadcrumb">
-          <a
-            href="/set-menus"
-            data-test="back"
-            @click=${(event: MouseEvent) => {
-              if (leftToBrowser(event)) return;
-              event.preventDefault();
-              this.#open(null);
-            }}
-            >${t("nav.set_menus")}</a
-          ><span class="sep" aria-hidden="true">›</span>
-        </nav>
-        <div class="title">
-          <h1>${menu?.name ?? t("nav.set_menus")}</h1>
-          ${
-            menu
-              ? html`<wt-help-tooltip
-                  mode="help-mode"
-                  aria-label=${t("menus.set_menu_help_label")}
-                  guide-href=${guideHref("products.set-menus")}
-                  guide-label=${t("menus.set_menu_help_guide")}
-                  >${t("menus.set_menu_help")}</wt-help-tooltip
-                >`
-              : nothing
-          }
-        </div>
-      </div>
-      ${this.#renderLoadState()}
-      ${
-        menu
-          ? html`<wt-tabs
-              data-test="menu-tabs"
-              label=${menu.name}
-              value="set-menu"
-              .items=${[{ key: "set-menu", label: t("menus.set_menu_kind") }]}
-            >
-              <div slot="set-menu">
-                ${keyed(
-                  id,
-                  html`<dashboard-set-menu-editor
-                    .api=${this.api}
-                    .menuId=${id}
-                    @set-menu-terms-saved=${() => void this.#watchMenus()}
-                  ></dashboard-set-menu-editor>`,
-                )}
-              </div>
-            </wt-tabs>`
-          : nothing
-      }`;
+    return html`${menuEditorHeading({
+      href: "/set-menus",
+      parent: t("nav.set_menus"),
+      name: menu?.name ?? t("nav.set_menus"),
+      back: () => this.#open(null),
+      help: menu
+        ? html`<wt-help-tooltip
+            mode="help-mode"
+            aria-label=${t("menus.set_menu_help_label")}
+            guide-href=${guideHref("products.set-menus")}
+            guide-label=${t("menus.set_menu_help_guide")}
+            >${t("menus.set_menu_help")}</wt-help-tooltip
+          >`
+        : nothing,
+    })}
+    ${this.#renderLoadState()}
+    ${
+      menu
+        ? html`<wt-tabs
+            data-test="menu-tabs"
+            label=${menu.name}
+            value="set-menu"
+            .items=${[{ key: "set-menu", label: t("menus.set_menu_kind") }]}
+          >
+            <div slot="set-menu">
+              ${keyed(
+                id,
+                html`<dashboard-set-menu-editor
+                  .api=${this.api}
+                  .menuId=${id}
+                  @set-menu-terms-saved=${() => void this.#watchMenus()}
+                ></dashboard-set-menu-editor>`,
+              )}
+            </div>
+          </wt-tabs>`
+        : nothing
+    }`;
   }
 
   override render() {

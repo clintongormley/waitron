@@ -275,3 +275,21 @@ test("paints the badge from the tokens", async () => {
   expect(icon.getBoundingClientRect()).toMatchObject({ width: 30, height: 30 });
   expect(getComputedStyle(icon).backgroundColor).toBe("rgb(1, 2, 3)");
 });
+
+test("follows the badge guide link without closing the row menu", async () => {
+  const { menu, row, popup, badge } = await mountMenu();
+  row.setAttribute("guide-href", "/help/example");
+  row.setAttribute("guide-label", "Read the guide");
+  await row.updateComplete;
+  await turnHelp(true, badge());
+  await open(menu, popup);
+  const { button, box } = parts(badge()!);
+  await userEvent.click(button);
+  await vi.waitFor(() => expect(box.matches(":popover-open")).toBe(true));
+  const guide = box.querySelector("a");
+  expect(guide?.textContent).toBe("Read the guide");
+  expect(guide?.getAttribute("href")).toBe("/help/example");
+  guide!.addEventListener("click", (event) => event.preventDefault(), { once: true });
+  await userEvent.click(guide!);
+  expect(popup.matches(":popover-open")).toBe(true);
+});

@@ -1620,7 +1620,9 @@ straight away. A menu with clashing prices has a line after that: a "2 price cla
 its Price overrides tab filtered to the clashes (`/menus/menu/<id>/view/prices/filter/clashes`).
 Both links are a tap target tall, and a click on either with a modifier key is left to the browser.
 The Status filter starts on **All**. **Published** and **Requiring attention** narrow the list.
-Both kinds of menu offer **Copy…** and **Delete…** in their row actions. The Delete window names the menu,
+Both kinds of menu offer **Copy…** and **Delete…** in their row actions. A menu with a live
+version also offers **Patch live menu…**, with a help badge beside it and a guide link in the help
+bubble. The Delete window names the menu,
 counts its own products, asks for any menu replacements and names the menus that will drop it on their
 next publication. A deleted menu disappears from the list.
 
@@ -1661,8 +1663,8 @@ ignores it.
 
 **A menu's queued versions sit above Unpublished changes on its Preview tab.** The "Scheduled
 versions" heading and table appear only while a version is queued. The table lists waiting
-schedules soonest first, with their time on the venue's clock. Publish later and Publish now share
-a row above the list, in that order; each appears independently when its own conditions allow it.
+schedules soonest first, with their time on the venue's clock. Publish later and Publish now sit in
+the editor heading in that order, each when its own conditions allow it.
 Cancelled and activated editions stay in the API response but have no row or Status column here.
 The time adds its UTC offset only when the venue's clock shows that
 minute twice. The menus list does not show the queue: a menu whose only version is scheduled still
@@ -5885,25 +5887,20 @@ underlined link back to it, inside a `nav` landmark with its own name. The page'
 one `h1`, at the list page's heading size and outside the landmark, so no other heading repeats it;
 the page's tabs come under it. A one-word name longer than the screen breaks inside the `h1`. A
 short fact about the item sits in brackets after the `h1`, on its line where there is room, in
-normal muted text. A click on the parent link with a modifier key is left to the browser. The menu
-editor draws this pattern.
+normal muted text. A click on the parent link with a modifier key is left to the browser.
 
-The menu editor (`apps/dashboard/src/screens/menus-screen.ts`) reads "Menus ›" above the menu's
-name, then its live version in brackets — "(Live: version 2 · 1 hour ago)", the time read as the Menus list's (`wt-relative-time`'s `calendar` mode), or "(Unpublished)" for a
-menu never published. While the menu has a live version, a secondary "Patch live menu…" button
-follows those words, with a help-mode badge over its top trailing corner whose box links to the
-guide's patch section. The heading's wrapped rows leave half a badge's height between them, help on
-or off, so turning help on moves nothing. A state resolved on one of the page's own tabs marks that tab rather than
-adding a link to it: while a menu has unpublished changes, or has never been published, its
-Preview tab reads "Preview*", drawn
-in `--wt-color-primary-text` whether it is selected or not, and is named "Preview, unpublished
-changes" for a screen reader (`marked` on the `wt-tabs` item). A menu whose publishing waits on
-clashes says so on a line under the heading, as a link to its own Price overrides tab filtered to
-the clashes, in `--wt-color-danger`, and as plain words on the Price overrides tab itself. Guards:
+**The menu and set menu editors put the parent link beside the name.** The row is as tall as its
+list heading when its contents fit. The menu editor shows its live version and when it went live,
+or **Unpublished**. These words wrap below the title on a phone. A changed live menu adds a warning
+dot and **Unpublished changes**. A menu with changes to publish offers **Review and publish** in
+the heading. It is outlined while the prices have edits to save or a save is sending. On Preview,
+the heading offers **Publish later** and **Publish now** when each action is available. A menu with
+price clashes keeps the line that links to its Price overrides tab filtered to the clashes, in
+`--wt-color-danger`. On the Price overrides tab it uses plain words. See
 `apps/dashboard/src/screens/menus-screen.heading.test.ts` and `menus-screen.heading.a11y.test.ts`
-beside it; the patch button and its badge: "patching the live menu" in `menus-screen.test.ts`.
+beside it.
 
-The button opens the patch dialog (`apps/dashboard/src/widgets/menu-patch-dialog.ts`), a wide
+The row action opens the patch dialog (`apps/dashboard/src/widgets/menu-patch-dialog.ts`), a wide
 `wt-modal` headed "Patch version N of <menu>". Its edit step puts a search box above a tree of the
 live version's items on the leading side, and the picked item's form on the other side; the two
 stack where there is no room for both. The tree scrolls inside its own box, at most twelve

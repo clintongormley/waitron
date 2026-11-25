@@ -91,3 +91,23 @@ it("refreshes offering links when a placement is added and removed", async () =>
   await expect.element(unused).toBeVisible();
   expect(lunch.elements()).toHaveLength(0);
 });
+
+it("opens the set menu at list heading height with Back beside its name", async () => {
+  const [width, height] = [window.innerWidth, window.innerHeight];
+  onTestFinished(() => page.viewport(width, height));
+  await page.viewport(1280, 900);
+  const { table } = await mount([daily]);
+  const root = table.getRootNode() as ShadowRoot;
+  const listHeight = root.querySelector("h1")!.parentElement!.getBoundingClientRect().height;
+  await page.getByRole("button", { name: "Daily menu", exact: true }).click();
+  const name = page.getByRole("heading", { level: 1, name: "Daily menu" });
+  await expect.element(name).toBeVisible();
+  const title = name.element().getBoundingClientRect();
+  const back = page
+    .getByRole("link", { name: "Set menus", exact: true })
+    .element()
+    .getBoundingClientRect();
+  expect(back.right).toBeLessThan(title.left);
+  expect(back.bottom).toBeGreaterThan(title.top);
+  expect(root.querySelector(".heading")!.getBoundingClientRect().height).toBeCloseTo(listHeight, 0);
+});

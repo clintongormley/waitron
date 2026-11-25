@@ -45,6 +45,7 @@ it.each([
   ["breadcrumb", "/menus"],
   ["browser Back", structure],
   ["tab while saving", structure],
+  ["review", "/menus/menu/lunch/view/preview"],
 ])("handles leaving Price overrides by %s", async (via, destination) => {
   history.replaceState(null, "", structure);
   let finishSave!: () => void;
@@ -61,6 +62,7 @@ it.each([
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
     getMenuPrices: async () => [burger],
     getMenuRead: async () => ({}),
+    getMenuStatus: async () => ({ state: "unpublished", clashes: 0 }),
     updateMenuItem: write,
   };
   const { el: app } = await mountWidget<MenuPricesLeaveApp>("menu-prices-leave-test-app", {
@@ -84,10 +86,13 @@ it.each([
         ?.shadowRoot!.querySelector("input");
     await vi.waitFor(() => expect(field()).toBeInstanceOf(HTMLInputElement));
     await userEvent.fill(field()!, "11");
+    const review = () => screen.shadowRoot!.querySelector('wt-button[data-test="review-publish"]');
+    await vi.waitFor(() => expect(review()?.getAttribute("variant")).toBe("secondary"));
     const structureTab = tab().shadowRoot!.querySelector('[data-key="structure"]')!;
     if (via === "tab while saving") {
       await userEvent.click(prices()!.shadowRoot!.querySelector('[data-test="prices-save"]')!);
       expect(write).toHaveBeenCalledExactlyOnceWith("lunch", "burger", { grossPrice: "11" });
+      expect(review()?.getAttribute("variant")).toBe("secondary");
       expect(window.dispatchEvent(new Event("beforeunload", { cancelable: true }))).toBe(false);
       await userEvent.click(structureTab);
       await vi.waitFor(() => expect(location.pathname).toBe(destination));
@@ -100,7 +105,11 @@ it.each([
       if (via === "browser Back") history.back();
       else {
         const control =
-          via === "tab" ? structureTab : screen.shadowRoot!.querySelector('[data-test="back"]');
+          via === "review"
+            ? review()
+            : via === "tab"
+              ? structureTab
+              : screen.shadowRoot!.querySelector('[data-test="back"]');
         await userEvent.click(control!);
       }
       await vi.waitFor(() => expect(dialog.open).toBe(true));

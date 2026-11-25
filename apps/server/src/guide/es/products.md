@@ -387,7 +387,8 @@ las cartas incluidas siguen apuntando a las mismas cartas compartidas.
 
 ## Revisa los cambios de la carta antes de publicar {#preview-undo}
 
-Abre **Vista previa** para revisar tus cambios antes de publicar. Pulsa **Ver** junto a un cambio
+Elige **Revisar y publicar** en el encabezado de la carta. En **Vista previa**, usa **Publicar ahora** o
+**Publicar más tarde** en el encabezado cuando tengas todo listo. Pulsa **Ver** junto a un cambio
 para ver dónde aparece. Sigue el enlace **Editar** para abrir el producto o la carta incluida. Si
 cambió un precio, **Editar producto** abre el producto y el enlace **Editar** de la carta incluida
 abre su pestaña **Precios propios**. Tras publicar, comprueba la versión y la hora de publicación
@@ -400,9 +401,8 @@ mientras los productos ya tienen cambios para la próxima carta que todavía no 
 caja. Publicar llevaría también esos cambios. Una corrección cambia solo los valores que corriges,
 en la versión publicada de una carta.
 
-Abre la carta en **Productos y cartas → Cartas** y elige **Corregir la carta publicada…** junto a
-su versión publicada, en el encabezado. El botón aparece solo mientras la carta tiene una versión
-publicada, y puede usarlo cualquiera que pueda publicar la carta. La ventana muestra los elementos
+Busca la carta publicada en **Productos y cartas → Cartas**. Abre el menú de su fila y elige
+**Corregir la carta publicada…**. La ventana muestra los elementos
 de la carta publicada, con un buscador, y sus listas de extras y de opciones bajo **Extras y
 opciones**. Elige un elemento para ver lo que puedes cambiar:
 

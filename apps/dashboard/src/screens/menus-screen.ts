@@ -36,6 +36,7 @@ import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-icon-button.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
+import "@waitron/ui/src/components/wt-menu-row.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -59,6 +60,12 @@ import "../widgets/menu-patch-dialog.js";
 import "../widgets/menu-copy-dialog.js";
 import "../widgets/menu-delete-dialog.js";
 import { overtakeSentence } from "../widgets/menu-publications.js";
+import {
+  previewLiveVersion,
+  publishAction,
+  scheduleAction,
+  type MenuPublicationHeading,
+} from "../widgets/menu-publication-actions.js";
 import type { MenuPricesTable, PriceSave, PriceSaveResult } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
 import "../widgets/section-details-form.js";
@@ -96,6 +103,7 @@ import { fill, t } from "../i18n/t.js";
 import { guideHref } from "../help-guide.js";
 import { codeMessage, codeOf, fieldOf } from "../i18n/codes.js";
 import { homeDeviceName } from "../i18n/domain.js";
+import { menuEditorHeading, menuEditorHeadingStyles } from "./menu-editor-heading.js";
 
 const TABS = ["structure", "prices", "home", "preview"] as const;
 type Tab = (typeof TABS)[number];
@@ -353,6 +361,7 @@ export class MenusScreen extends LitElement {
     baseStyles,
     pageTitleStyles,
     menuListStyles,
+    menuEditorHeadingStyles,
     css`
       .field-error {
         color: var(--wt-color-danger);
@@ -384,58 +393,12 @@ export class MenusScreen extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
       }
-      .heading {
-        margin-bottom: var(--wt-space-4);
-      }
-      .heading nav {
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-      }
-      .heading .sep {
-        color: var(--wt-color-primary-text);
-      }
-      .title {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        column-gap: var(--wt-space-2);
-        /* Room for the half of the patch help badge that hangs above the button when it wraps, help
-           on or off, so turning help on moves nothing. */
-        row-gap: calc(var(--wt-help-badge-target) / 2);
-        min-width: 0;
-      }
-      /* The help badge hangs over this box's top trailing corner. */
-      .patch-action {
-        position: relative;
-        display: flex;
-        gap: var(--wt-space-1);
-        align-items: center;
-      }
-      .heading h1 {
-        margin: 0;
-        min-width: 0;
-        overflow-wrap: anywhere;
-      }
-      .live {
-        color: var(--wt-color-text-muted);
-      }
-      .live .time {
-        white-space: nowrap;
-      }
-      .heading a {
-        display: inline-flex;
-        align-items: center;
-        min-height: var(--wt-tap-min);
-        color: var(--wt-color-primary-text);
-      }
       /* Padding on an inline link makes its tap target a tap target tall without making its line
          taller, so the line keeps its height whether the label is a link or words. */
       .status-line a {
         padding-block: calc((var(--wt-tap-min) - 1lh) / 2);
         color: var(--wt-color-primary-text);
       }
-      .heading a:focus-visible,
       .status-line a:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
@@ -698,7 +661,23 @@ export class MenusScreen extends LitElement {
    * menu's name; "wide" otherwise, where it has a column. */
   @state() private layout: ListLayout = "wide";
   @state() private publishResult: PublishResult | null = null;
-  @state() private patching = false;
+  @state() private patching: { id: string; name: string } | null = null;
+  @state() private unsentPrices = false;
+  @state() private schedulePreview: MenuPreview | null = null;
+  readonly #publicationHeading: MenuPublicationHeading = {
+    scheduleChanged: (preview) => {
+      this.schedulePreview = preview;
+    },
+    focusFallback: () => {
+      if (this.view !== "preview") return null;
+      return (
+        this.renderRoot.querySelector<HTMLElement>(
+          'wt-button[data-test="publish"]:not([disabled])',
+        ) ?? this.renderRoot.querySelector<HTMLElement>(".heading h1")
+      );
+    },
+  };
+  #patchOpener: HTMLElement | null = null;
 
   /** Null while closed; `id` is null while creating. */
   @state() private menuForm: { id: string | null; name: string } | null = null;
@@ -1223,6 +1202,10 @@ export class MenusScreen extends LitElement {
     this.statuses = null;
     this.statusesError = false;
     this.statusesResetRequired = false;
+    this.#watchListStatuses();
+  }
+
+  #watchListStatuses(): void {
     void this.#statusQueries
       .watch("getMenuStatuses", [], (value) => {
         this.statuses = value;
@@ -1330,7 +1313,8 @@ export class MenusScreen extends LitElement {
     this.memberError = null;
     this.structureWriteError = null;
     this.publishResult = null;
-    this.patching = false;
+    this.patching = null;
+    this.#patchOpener = null;
     this.#releasePrices();
     this.#releasePreview();
     this.#releaseHome();
@@ -2446,7 +2430,11 @@ export class MenusScreen extends LitElement {
                 if (!this.copyingMenu) this.copyingMenu = menu;
               }}
               >${t("menus.copy")}</wt-button
-            >${rowActionTail(true, [
+            >${
+              typeof menu.status !== "string" && menu.status.state !== "unpublished"
+                ? this.#renderPatchAction(menu)
+                : nothing
+            }${rowActionTail(true, [
               html`<wt-button
                 icon="menu-delete"
                 variant="danger"
@@ -2666,7 +2654,7 @@ export class MenusScreen extends LitElement {
             </div>`
           : nothing
       }
-      ${this.#renderMenuForm()}
+      ${this.#renderMenuForm()} ${this.#renderPatchDialog()}
       <dashboard-menu-copy-dialog
         .open=${this.copyingMenu !== null}
         .menu=${this.copyingMenu}
@@ -3271,6 +3259,9 @@ export class MenusScreen extends LitElement {
           menuName=${this.#menuName()}
           .savePrices=${this.#savePrices}
           .refreshPrices=${this.#refreshPrices}
+          @price-draft-change=${(event: CustomEvent<boolean>) => {
+            this.unsentPrices = event.detail;
+          }}
         ></dashboard-menu-prices-table>
         ${
           this.pricesError
@@ -3300,6 +3291,7 @@ export class MenusScreen extends LitElement {
       .api=${this.api}
       .menuId=${this.menuId!}
       .lateRefusalFor=${this.#lateScheduleRefusalFor}
+      .heading=${this.#publicationHeading}
       menuName=${this.#menuName()}
       .includedBy=${this.structure?.includedBy ?? []}
       .status=${this.status}
@@ -3558,58 +3550,96 @@ export class MenusScreen extends LitElement {
       : this.status === null
         ? t("menus.status_loading")
         : liveWords(this.status, this.now);
-    const live =
-      !this.statusError && (this.status?.state === "current" || this.status?.state === "changed");
-    return html`<span class="live" data-test="menu-status">(${words})</span>${
-        live
-          ? html`<span class="patch-action"
-              ><wt-button
-                variant="secondary"
-                data-test="patch-live-menu"
-                @click=${() => {
-                  this.patching = true;
-                }}
-                >${t("menus.patch_live")}</wt-button
-              ><wt-help-tooltip
-                mode="help-mode"
-                data-test="patch-live-menu-help"
-                aria-label=${t("menus.patch_live_help_label")}
-                guide-href=${guideHref("products.patch-live-menu")}
-                guide-label=${t("menus.patch_live_help_guide")}
-                >${t("menus.patch_live_help")}</wt-help-tooltip
-              ></span
+    return html`<span class="live" data-test="menu-status">${words}</span>${
+        !this.statusError && this.status?.state === "changed"
+          ? html`<span class="unpublished" data-test="unpublished-changes"
+              >${t("menu_status.changed")}</span
             >`
           : nothing
       }`;
   }
 
-  #renderPatchDialog(menuId: string) {
+  #renderReviewAction() {
+    if (
+      this.statusError ||
+      (this.status?.state !== "changed" && this.status?.state !== "unpublished")
+    )
+      return nothing;
+    return html`<wt-button
+      data-test="review-publish"
+      variant=${this.unsentPrices ? "secondary" : "primary"}
+      @click=${() => {
+        if (!navigationGuardFor(window)) this.#showView("preview");
+        void this.#url.write({ view: "preview", section: null, "price-filter": null });
+      }}
+      >${t("menus.review_publish")}</wt-button
+    >`;
+  }
+
+  #renderPublicationActions(menuId: string, name: string) {
+    const preview = this.preview;
+    if (this.previewError || preview === null) return nothing;
+    const panel = () =>
+      this.view === "preview" &&
+      this.menuId === menuId &&
+      this.preview === preview &&
+      !this.previewError
+        ? this.renderRoot.querySelector("dashboard-menu-preview")
+        : null;
+    const schedule =
+      this.schedulePreview === preview
+        ? scheduleAction((event) =>
+            panel()
+              ?.shadowRoot?.querySelector("dashboard-menu-publications")
+              ?.openSchedule(event.currentTarget as HTMLElement, preview),
+          )
+        : nothing;
+    const publish =
+      previewLiveVersion(preview) === null
+        ? publishAction(preview, this.publishing.has(menuId), name, (event) =>
+            panel()?.requestPublish(event, preview),
+          )
+        : nothing;
+    return schedule === nothing && publish === nothing ? nothing : html`${schedule}${publish}`;
+  }
+
+  #renderPatchAction(menu: MenuRow) {
+    return html`<wt-menu-row
+      help=${t("menus.patch_live_help")}
+      help-label=${t("menus.patch_live_help_label")}
+      guide-href=${guideHref("products.patch-live-menu")}
+      guide-label=${t("menus.patch_live_help_guide")}
+      ><wt-button
+        icon="menu-rename"
+        data-test=${`patch-${menu.id}`}
+        @click=${(event: Event) => {
+          this.#patchOpener = (event.currentTarget as HTMLElement).closest("wt-row-actions");
+          this.patching = { id: menu.id, name: menu.name };
+        }}
+        >${t("menus.patch_live")}</wt-button
+      ></wt-menu-row
+    >`;
+  }
+
+  #renderPatchDialog() {
     return html`<dashboard-menu-patch-dialog
       .api=${this.api}
-      menuId=${menuId}
-      menuName=${this.#menuName()}
-      .open=${this.patching}
+      menuId=${this.patching?.id ?? ""}
+      menuName=${this.patching?.name ?? ""}
+      .open=${this.patching !== null}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
-        // The picture picker's modal inside the dialog closes with a composed wt-close too.
-        this.patching = (
-          event.currentTarget as HTMLElementTagNameMap["dashboard-menu-patch-dialog"]
-        ).open;
+        const dialog = event.currentTarget as HTMLElementTagNameMap["dashboard-menu-patch-dialog"];
+        if (dialog.open) return;
+        this.patching = null;
+        this.#patchOpener?.focus();
+        this.#patchOpener = null;
       }}
       @wt-menu-patched=${(event: Event) => {
         event.stopPropagation();
-        // The patch is not this screen's working state, so the status is read rather than set.
-        this.#followStatus(true);
+        this.#watchListStatuses();
       }}
     ></dashboard-menu-patch-dialog>`;
-  }
-
-  /** A menu never published has none of it live, so it is marked as well. */
-  #marksPreview(): boolean {
-    return (
-      !this.statusError &&
-      (this.status?.state === "changed" || this.status?.state === "unpublished")
-    );
   }
 
   /** On the Prices tab the clash words stay plain words: the tab's own Show clashes does what the link would. */
@@ -3967,26 +3997,19 @@ export class MenusScreen extends LitElement {
   #renderEditor(menuId: string) {
     const menu = this.#selectedMenu();
     const name = menu?.name ?? "";
-    return html`<div class="heading">
-        <nav aria-label=${t("menus.menu_trail")} data-test="menu-breadcrumb">
-          <a
-            data-test="back"
-            href="/menus"
-            @click=${(event: MouseEvent) => {
-              if (leftToBrowser(event)) return;
-              event.preventDefault();
-              this.#backToList();
-            }}
-            >${t("menus.title")}</a
-          ><span class="sep" aria-hidden="true">›</span>
-        </nav>
-        <div class="title">
-          <h1>${name || t("menus.title")}</h1>
-          ${this.#renderLiveWords()}
-        </div>
-      </div>
-      ${this.#renderLoadState()} ${this.#renderMemberError()}
-      ${this.#renderFullMenuEditor(menuId, name)}`;
+    return html`${menuEditorHeading({
+      href: "/menus",
+      parent: t("menus.title"),
+      name: name || t("menus.title"),
+      back: () => this.#backToList(),
+      status: this.#renderLiveWords(),
+      actions:
+        this.view === "preview"
+          ? this.#renderPublicationActions(menuId, name)
+          : this.#renderReviewAction(),
+    })}
+    ${this.#renderLoadState()} ${this.#renderMemberError()}
+    ${this.#renderFullMenuEditor(menuId, name)}`;
   }
 
   #renderFullMenuEditor(menuId: string, name: string) {
@@ -4000,11 +4023,7 @@ export class MenusScreen extends LitElement {
           { key: "structure", label: t("menus.tab_structure") },
           { key: "prices", label: t("menus.tab_prices") },
           { key: "home", label: t("menus.tab_home") },
-          {
-            key: "preview",
-            label: t("menus.tab_preview"),
-            marked: this.#marksPreview() ? t("menus.tab_preview_unpublished") : undefined,
-          },
+          { key: "preview", label: t("menus.tab_preview") },
         ]}
         @wt-tab-change=${(event: CustomEvent<{ value: string }>) => {
           if (event.target !== event.currentTarget || !isTab(event.detail.value)) return;
@@ -4025,7 +4044,7 @@ export class MenusScreen extends LitElement {
         <div slot="preview">${this.#renderPreview()}</div>
       </wt-tabs>
       ${this.#renderNewSection()} ${this.#renderIncludeEdit()} ${this.#renderAddProducts()}
-      ${this.#renderShortcutPicker()} ${this.#renderPatchDialog(menuId)}`;
+      ${this.#renderShortcutPicker()}`;
   }
 
   override render() {
