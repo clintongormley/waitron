@@ -398,8 +398,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta cuenta ya ha recibido pagos, por lo que no se puede añadir a otra cuenta.",
   },
   "bill.has_advance": {
-    en: "Part of this bill was paid with its own receipt, so it cannot be reopened to split. Take the rest of the payment on this bill by amount or in equal shares.",
-    es: "Parte de esta cuenta se pagó con su propio ticket, así que no se puede reabrir para dividirla. Cobra el resto en esta cuenta por importe o a partes iguales.",
+    en: "Part of this bill was paid with its own receipt, so it cannot be split. Take the rest of the payment on this bill with An amount or Split equally.",
+    es: "Parte de esta cuenta se pagó con su propio ticket, así que no se puede dividir. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
   },
   "bill.merge_invoice_choice_required": {
     en: "The bills' invoice details have changed. Check them and merge again.",

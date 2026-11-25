@@ -2,30 +2,29 @@ import type { BillBalance, BillEditExpected, BillPaymentResult, PartyBill } from
 import { fill, t } from "../i18n/t.js";
 import { billLabel } from "./bill-state.js";
 
-/** The table's bill a Pay for items answer carries, when it is not the bill the Pay window paid
- * from: on a printed bill the server reopens it, and the answer names the reopened bill. */
-export function reopenedBill(
-  paidFrom: string,
-  sourceBalance: BillBalance | undefined,
-): BillBalance | undefined {
-  return sourceBalance === undefined || sourceBalance.workingOrderId === paidFrom
-    ? undefined
-    : sourceBalance;
-}
-
 /** Where a Pay for items answer leaves the table, when not on the bill the Pay window paid from:
- * the reopened bill, unless a card that charged nothing left the chosen dishes on their own bill,
- * still open there (`kept`), because the server could not put them back on it. */
+ * the reopened bill, which the answer names as the table's bill when the server reopened a printed
+ * bill, unless the dishes were {@link keptOnOwnBill} (`kept`). */
 export function billAfterItems(
   paidFrom: string,
   result: Pick<BillPaymentResult, "balance"> & { paidOn?: string; sourceBalance?: BillBalance },
   notCharged: boolean,
 ): { balance: BillBalance; kept: boolean } | undefined {
-  const reopened = reopenedBill(paidFrom, result.sourceBalance);
-  if (reopened === undefined) return undefined;
+  const reopened = result.sourceBalance;
+  if (reopened === undefined || reopened.workingOrderId === paidFrom) return undefined;
   const own = result.balance;
-  const kept = notCharged && own.workingOrderId === result.paidOn && own.status === "open";
+  const kept = keptOnOwnBill(own, result.paidOn, notCharged);
   return kept ? { balance: own, kept } : { balance: reopened, kept };
+}
+
+/** Whether a card that charged nothing left the chosen dishes on `own`, the bill Pay for items made
+ * for them (`paidOn`), still open there because the server could not put them back. */
+export function keptOnOwnBill(
+  own: BillBalance,
+  paidOn: string | undefined,
+  notCharged: boolean,
+): boolean {
+  return notCharged && own.workingOrderId === paidOn && own.status === "open";
 }
 
 /** The Pay window `open` moved to the bill `balance` names. That bill has no receipt, and the edit
@@ -66,13 +65,20 @@ export function creditedNotice(
 ): BillNotice | null {
   const shown = bills.find((bill) => bill.workingOrderId === reopen.to);
   if (shown === undefined) return null;
-  const corrective = bills.find((bill) => bill.workingOrderId === reopen.from)?.correctives?.at(-1);
   return {
     kind: "credited",
-    corrective: corrective ?? null,
+    corrective: latestCorrectiveOf(bills, reopen.from),
     shown: refOf(shown),
     ...(reopen.kept === true ? { kept: true as const } : {}),
   };
+}
+
+/** The latest corrective a read of the party's bills shows on bill `billId`. */
+export function latestCorrectiveOf(
+  bills: readonly PartyBill[] | null,
+  billId: string,
+): string | null {
+  return bills?.find((row) => row.workingOrderId === billId)?.correctives?.at(-1) ?? null;
 }
 
 /** `notice` worded in the language shown now. */

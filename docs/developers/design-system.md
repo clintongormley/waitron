@@ -1222,7 +1222,11 @@ Tab button and no side drawer.
 - **A vanished bill.** When a bills read no longer holds the bill on screen, the screen shows the
   lowest-numbered bill still owing, else the lowest-numbered listed bill, and a `role="status"` line
   says "Bill 2 is no longer at this table. Now showing Bill 1." Choosing another bill or opening another table
-  clears it. A bill paid elsewhere is not vanished: it stays on screen, with no line.
+  clears it. A bill paid elsewhere is not vanished: it stays on screen, with no line. When the
+  bill that vanished is a printed bill whose receipt Pay > Items credited, the screen shows the bill
+  it was reopened as, or the chosen dishes' own bill when a card that charged nothing left them
+  there (`billAfterItems`), once the read lists it, and the line says the receipt is credited,
+  naming the corrective when the read lists one, and which bill holds the dishes still to pay.
 - **The ⋮** is a `wt-row-actions` (label "Table actions", `align="end"`, `opens-below`) holding two
   `role="group"` sections, each named by its visible heading through `aria-labelledby` and split by
   a rule. The bill section, headed with the bill on screen's short label and left out when no bill
@@ -7079,8 +7083,14 @@ Counter bills use the same window for their first and remaining payments.
 Whole bill asks the server for one share of the current balance. Its confirmation heading and
 receipt guest-count prompt use that preview, even while the opening balance is still shown.
 Items groups matching whole portions with the bill screen's grouping key and a count control;
-the request carries the selected members' line numbers on a printed bill, and their line ids
-(`ItemPick.lineId`) on any other, where Pay for items moves them to a bill of their own. Successful table-bill reads refresh idle
+the request carries the selected members' line ids (`ItemPick.lineId`), and Pay for items moves
+them to a bill of their own; on a printed bill the server first reopens it, crediting its receipt,
+and a window still open after the answer moves to the bill the screen moves to (see **A vanished
+bill**). Items is shown disabled, with its reason in a line below
+the choices (`data-pay-items-reason`, joined to the radio by `aria-describedby`), on a Counter
+order sent to the kitchen, also once moved to a table, and on a printed table bill opened from Find
+a bill. Once Pay > Items has credited a printed bill's receipt, a `role="status"` line
+(`data-pay-credited`) above every step of the window repeats the screen's credited line. Successful table-bill reads refresh idle
 item choices, retaining valid selections and tender input. A selected member that leaves is dropped,
 never replaced by another portion. Idle Pay closes when its bill moves or merges away, including
 its refund child. A pending card or payment/refund send keeps its window on the original bill. Unanswered

@@ -820,7 +820,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     expect(server.splitAfterPrint).toHaveBeenCalledOnce();
   });
 
-  it("a bill with an advance says to take the rest by amount or in shares", async () => {
+  it("a bill with an advance says to take the rest with An amount or Split equally", async () => {
     const server = billServer(async () => {
       throw { code: "bill.has_advance", status: 409, workingOrderId: "wo-check" };
     });
@@ -828,7 +828,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     await confirmSplit(el);
 
     expect(bottom(el)).toBe(t("split.refused_advance"));
-    expect(bottom(el)).toContain("by amount or in equal shares");
+    expect(bottom(el)).toContain("with An amount or Split equally");
     expect(doneText(el)).toBeNull();
   });
 
@@ -840,7 +840,7 @@ describe("till-app: reopening a printed bill to split it", () => {
     await confirmSplit(el);
 
     expect(bottom(el)).toBe(
-      "Part of this bill was paid for by item, so it cannot be reopened to split. Take the rest of the payment on this bill by amount or in equal shares.",
+      "Part of this bill was paid for by item, so it cannot be reopened to split. Take the rest of the payment on this bill with An amount or Split equally.",
     );
     expect(doneText(el)).toBeNull();
   });

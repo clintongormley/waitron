@@ -459,7 +459,7 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
   it.each([
     [
       "bill.payments_received",
-      "Part of this bill was paid for by item, so it cannot be reopened to split. Take the rest of the payment on this bill by amount or in equal shares.",
+      "Part of this bill was paid for by item, so it cannot be reopened to split. Take the rest of the payment on this bill with An amount or Split equally.",
     ],
     [
       "bill.left_unpaid",
@@ -543,7 +543,7 @@ describe("till-cancel-credit-dialog: Reopen to split", () => {
     el.refusal = { code: "bill.payments_received" };
     await el.updateComplete;
     expect(actions(el).error).toBe(
-      "Parte de esta cuenta se pagó por artículos, así que no se puede reabrir para dividirla. Cobra el resto en esta cuenta por importe o a partes iguales.",
+      "Parte de esta cuenta se pagó por artículos, así que no se puede reabrir para dividirla. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
     );
 
     el.done = { corrective: "R/3", creditedElsewhere: true };

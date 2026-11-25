@@ -8,7 +8,7 @@ import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitr
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { trackDialog } from "./track-dialog.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, type DialogRefusal } from "../state/bill-payment.js";
@@ -254,13 +254,11 @@ export class TillCancelCreditDialog extends LitElement {
     const text = TEXT[this.mode];
     const scope =
       this.invoiceNumber === null
-        ? t(text.scopeUnnumbered).replace("{amount}", () => amount)
-        : t(text.scope)
-            .replace("{invoice}", () => this.invoiceNumber!)
-            .replace("{amount}", () => amount);
+        ? fill(t(text.scopeUnnumbered), { amount })
+        : fill(t(text.scope), { invoice: this.invoiceNumber, amount });
     if (this.mode !== "split" || this.paid === null) return scope;
     const paid = formatMoney(this.paid, currentLocale());
-    return `${scope} ${t("split.scope_paid").replace("{paid}", () => paid)}`;
+    return `${scope} ${fill(t("split.scope_paid"), { paid })}`;
   }
 
   #doneText(done: CancelCreditDone): string {

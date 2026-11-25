@@ -2278,13 +2278,13 @@ export const en = {
     "Reopen to split got no answer, so it may have been made. Check the table's bills before trying again.",
   "split.scope_paid": "{paid} already paid counts towards the new bill.",
   "split.refused_payments":
-    "Part of this bill was paid for by item, so it cannot be reopened to split. Take the rest of the payment on this bill by amount or in equal shares.",
+    "Part of this bill was paid for by item, so it cannot be reopened to split. Take the rest of the payment on this bill with An amount or Split equally.",
   "split.refused_left_unpaid":
     "This bill was recorded as left unpaid, so its guests have gone and there is nothing to split.",
   "split.refused_not_at_table": "Only a table's bill can be split this way. Nothing was credited.",
   "split.refused_not_issued": "This bill has no receipt yet, so nothing was credited.",
   "split.refused_advance":
-    "Part of this bill was paid with its own receipt, so it cannot be reopened to split. Nothing was credited. Take the rest of the payment on this bill by amount or in equal shares.",
+    "Part of this bill was paid with its own receipt, so it cannot be reopened to split. Nothing was credited. Take the rest of the payment on this bill with An amount or Split equally.",
   "split.refused_payment_in_flight":
     "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it. If it was not taken, choose Reopen to split again.",
   "split.done":
@@ -4749,14 +4749,14 @@ export const es: Record<StringKey, string> = {
     "Reabrir para dividir no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",
   "split.scope_paid": "Lo ya pagado ({paid}) cuenta para la cuenta nueva.",
   "split.refused_payments":
-    "Parte de esta cuenta se pagó por artículos, así que no se puede reabrir para dividirla. Cobra el resto en esta cuenta por importe o a partes iguales.",
+    "Parte de esta cuenta se pagó por artículos, así que no se puede reabrir para dividirla. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
   "split.refused_left_unpaid":
     "Esta cuenta se registró como no pagada: los clientes se han ido y no hay nada que dividir.",
   "split.refused_not_at_table":
     "Solo la cuenta de una mesa se puede dividir así. No se ha abonado nada.",
   "split.refused_not_issued": "Esta cuenta aún no tiene ticket, así que no se ha abonado nada.",
   "split.refused_advance":
-    "Parte de esta cuenta se pagó con su propio ticket, así que no se puede reabrir para dividirla. No se ha abonado nada. Cobra el resto en esta cuenta por importe o a partes iguales.",
+    "Parte de esta cuenta se pagó con su propio ticket, así que no se puede reabrir para dividirla. No se ha abonado nada. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
   "split.refused_payment_in_flight":
     "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo. Si no se cobró, vuelve a elegir Reabrir para dividir.",
   "split.done":

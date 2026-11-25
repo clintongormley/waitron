@@ -524,6 +524,26 @@ describe("till-app: Pay for items on a bill of their own", () => {
     expect(api.takeBillPayment).not.toHaveBeenCalled();
   });
 
+  it("a printed bill holding an advance says it cannot be split and names the Pay window's other buttons", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([printedWo4]),
+      getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
+      previewItemPayment: vi.fn().mockRejectedValue({ code: "bill.has_advance", status: 409 }),
+    });
+    await choosePrintedItems(el, [4]);
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+
+    expect(formError(el)).toBe(codeMessage("bill.has_advance"));
+    expect(formError(el)).toContain("so it cannot be split.");
+    expect(formError(el)).toContain("with An amount or Split equally");
+    expect(api.payForItems).not.toHaveBeenCalled();
+    onTestFinished(() => setLocale("en"));
+    setLocale("es");
+    expect(codeMessage("bill.has_advance", "es")).toContain(t("bill_pay.way_contribution"));
+    expect(codeMessage("bill.has_advance", "es")).toContain(t("bill_pay.way_share"));
+  });
+
   it("the advances refusal names its amount", async () => {
     const { el } = await mountApp({
       previewItemPayment: vi
@@ -913,6 +933,97 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       state: "off",
       reason: "deferred_close.payment_unconfirmed",
     });
+  });
+
+  it("on a phone, a card pending on a printed bill then declined, its dishes kept on their own bill, shows that bill", async () => {
+    let paid = false;
+    let declined = false;
+    const pendingOn9 = balanceOf({
+      workingOrderId: "wo-9",
+      total: "30.00",
+      reserved: "30.00",
+      outstanding: "0.00",
+      payments: [paymentOf({ id: "pay-1", method: "card", entry: "reader", state: "pending" })],
+    });
+    // While the card was out the reopened bill wo-5 was printed again, so the dishes stay on wo-9.
+    const declinedOn9 = {
+      ...pendingOn9,
+      status: "open" as const,
+      reserved: "0.00",
+      outstanding: "30.00",
+      payments: [{ ...pendingOn9.payments[0]!, state: "failed" as const }],
+    };
+    const getBillBalance = vi.fn(async (billId: string) =>
+      billId === "wo-9"
+        ? declined
+          ? declinedOn9
+          : pendingOn9
+        : balanceOf({ status: "placed", workingOrderId: billId }),
+    );
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({
+        ...till,
+        formFactor: "phone-portrait",
+        capabilities: ["print-receipt", "integrated-card-payment", "take-cash"],
+        cardProvider: "sumup_cloud",
+        activeReaders: [{ id: "r2", name: "Lector 2", provider: "sumup_cloud" }],
+        defaultReaderId: "r2",
+      }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", name: "Phone", formFactor: "phone-portrait" }),
+      getDeviceEquipment: vi.fn().mockResolvedValue(equipmentWith(SECOND_READER)),
+      getPartyBills: vi.fn(async () =>
+        !paid
+          ? [printedWo4]
+          : declined
+            ? [
+                creditedWo4,
+                billOf({
+                  workingOrderId: "wo-5",
+                  billNumber: 2,
+                  status: "placed",
+                  invoiceNumber: "A-1/406",
+                }),
+                billOf({
+                  workingOrderId: "wo-9",
+                  billNumber: 3,
+                  total: "30.00",
+                  outstanding: "30.00",
+                }),
+              ]
+            : [creditedWo4, billOf({ workingOrderId: "wo-5", billNumber: 2 })],
+      ),
+      getBillBalance,
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
+      payForItems: vi.fn(async () => {
+        paid = true;
+        return {
+          ...onWo9("timeout", "pending", { reserved: "30.00", outstanding: "0.00" }),
+          sourceBalance: balanceOf({ workingOrderId: "wo-5" }),
+        };
+      }),
+    });
+    await choosePrintedItems(el, [4, 5]);
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, "[data-pay-continue]");
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    await press(el, "[data-pay-confirm]");
+    await vi.waitFor(() => expect(tableOrder(el).orderId).toBe("wo-5"));
+    await flush(el);
+    expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-gone]"))).toBe(
+      creditedNotice("Bill 2"),
+    );
+
+    declined = true;
+    await vi.advanceTimersByTimeAsync(5_000);
+    await flush(el, 6);
+
+    const kept = fill(t("table.bill_credited_kept"), { number: "R-1/4", shown: "Bill 3" });
+    expect(tableOrder(el).orderId).toBe("wo-9");
+    expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-gone]"))).toBe(kept);
+    expect(windowCredited(el)).toBe(kept);
+    expect(dialog(el)!.balance?.workingOrderId).toBe("wo-9");
   });
 
   it("Cancel payment stops the reader under the table's bill", async () => {
