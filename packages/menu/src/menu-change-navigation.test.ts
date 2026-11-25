@@ -1012,4 +1012,44 @@ describe("declaration changes", () => {
       },
     ]);
   });
+
+  it("lists a variant's allergen change", async () => {
+    const live = document(),
+      proposed = document();
+    soup(live).variants = [variant("large")];
+    soup(proposed).variants = [variant("large")];
+    soup(proposed).variants[0]!.allergens = { milk: {} };
+    const expected = repeated({ kind: "allergens" }, { variantId: "large" });
+    expect(await changes(live, proposed)).toEqual([
+      {
+        kind: "product_changed",
+        productId: "soup",
+        name: "Staff soup",
+        fields: ["variants"],
+        source: "shared_product",
+        targets: { before: expected, after: expected },
+      },
+    ]);
+  });
+
+  it("lists an extra's diet change", async () => {
+    const live = document(),
+      proposed = document();
+    soup(live).offeredModifiers = [extras("citrus")];
+    soup(proposed).offeredModifiers = [extras("citrus")];
+    const list = soup(proposed).offeredModifiers[0]!;
+    if (list.kind !== "extras") throw new Error("extras");
+    list.items[0]!.suitableFor = ["vegan"];
+    const expected = repeated({ kind: "diet" }, { listId: "citrus", extraProductId: "lemon" });
+    expect(await changes(live, proposed)).toEqual([
+      {
+        kind: "product_changed",
+        productId: "lemon",
+        name: "Staff lemon",
+        fields: ["diet"],
+        source: "shared_product",
+        targets: { before: expected, after: expected },
+      },
+    ]);
+  });
 });
