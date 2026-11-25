@@ -126,18 +126,16 @@ export class TillGiveBackUnderWay extends LitElement {
       // Unreadable storage: Check again or the next press says so.
     }
   }
-  /** A card refund Refund a payment saved on this receipt whose answer was lost, which Check
-   * again here does not ask about. */
-  #elsewhereLost(): boolean {
+  /** Any card refund this till saved on the receipt, for this correction or not. */
+  #savedOnReceipt(): SavedTenderRefund | null {
     try {
-      const saved = this.refunds.read(this.saleId);
-      return saved !== null && saved.refundId === null && this.#savedCard() === null;
+      return this.refunds.read(this.saleId);
     } catch {
-      return false;
+      return null;
     }
   }
   #lostCard(): SavedTenderRefund | null {
-    const saved = this.#savedCard();
+    const saved = this.#savedOnReceipt();
     return saved?.refundId === null ? saved : null;
   }
   async #refresh(): Promise<void> {
@@ -154,7 +152,7 @@ export class TillGiveBackUnderWay extends LitElement {
   /** Check again: a card part waiting for the card company is asked first, so its saved request
    * is settled before the correction is read. */
   async #checkAgain(): Promise<void> {
-    if (this.#savedCard()?.refundId) this.#cardDone(await this.refunds.resume(this.saleId));
+    if (this.#savedOnReceipt()?.refundId) this.#cardDone(await this.refunds.resume(this.saleId));
     await this.#refresh();
   }
   /** Runs `step`, asking for an approver when the person signed in may not, and running it again
@@ -186,10 +184,7 @@ export class TillGiveBackUnderWay extends LitElement {
       if (error.kind === "storage" || error.kind === "invalid")
         this.message = t("give_back.storage");
       else if (error.kind === "mismatch") this.message = t("give_back.uw_unknown");
-      else if (this.lostCard === null)
-        this.message = t(
-          this.#elsewhereLost() ? "give_back.uw_card_elsewhere" : "give_back.uw_card_waiting",
-        );
+      else if (this.lostCard === null) this.message = t("give_back.uw_card_waiting");
       return;
     }
     const refusal = refusalOf(error);

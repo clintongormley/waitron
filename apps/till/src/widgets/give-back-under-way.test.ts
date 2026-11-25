@@ -904,7 +904,7 @@ describe("only a card's part with no answer counts as lost", () => {
     expect(shown(el, "cancel")).toBe(true);
   });
 
-  it("leaves out a card refund saved for something other than this correction", async () => {
+  it("offers Send again for a card refund saved elsewhere on the receipt with no answer, resending it under the same submission id", async () => {
     const api = fakeApi();
     api.refundTransaction.mockRejectedValueOnce(lost());
     await new TenderRefundSession(SCOPE, api)
@@ -915,34 +915,45 @@ describe("only a card's part with no answer counts as lost", () => {
         reason: "Overcharged",
       })
       .catch(() => {});
+    const first = api.refundTransaction.mock.calls[0]![1];
     const { el } = await mount(OPEN, api);
 
-    expect(root(el).querySelector("[data-lost]")).toBeNull();
-    expect(root(el).querySelector("[data-send-again]")).toBeNull();
+    expect(text(root(el).querySelector("[data-lost]"))).toBe(t("give_back.lost"));
+    expect(shown(el, "card")).toBe(false);
+    expect(shown(el, "cancel")).toBe(false);
     api.getInvoiceCorrection.mockResolvedValue({ ...OPEN, moneyBack: "1.00", left: "5.05" });
-    press(el, "check");
+    root(el).querySelector<HTMLElement>("[data-send-again]")!.click();
     await vi.waitFor(() => expect(text(root(el).querySelector("[data-left]"))).toContain("€5.05"));
-    expect(api.refundTransaction).toHaveBeenCalledOnce();
+    expect(api.refundTransaction).toHaveBeenCalledTimes(2);
+    expect(api.refundTransaction.mock.calls[1]![1]).toEqual(first);
     expect(root(el).querySelector("[data-send-again]")).toBeNull();
+    expect(new TenderRefundSession(SCOPE, api).read("sale-1")).toBeNull();
   });
 
-  it("says to finish a card refund with no answer from Refund a payment, which Check again here does not ask about", async () => {
+  it("settles a card refund saved elsewhere on the receipt that waits for the card company on Check again, sending nothing new", async () => {
     const api = fakeApi();
-    api.refundTransaction.mockRejectedValueOnce(lost());
-    await new TenderRefundSession(SCOPE, api)
-      .submit("sale-1", {
-        tenderId: "card-1",
-        appliedAmount: "1.00",
-        tipAmount: "0.00",
-        reason: "Overcharged",
-      })
-      .catch(() => {});
+    api.refundTransaction.mockImplementationOnce(async (saleId, request) =>
+      refundOf(saleId, request, "pending"),
+    );
+    await new TenderRefundSession(SCOPE, api).submit("sale-1", {
+      tenderId: "card-1",
+      appliedAmount: "1.00",
+      tipAmount: "0.00",
+      reason: "Overcharged",
+    });
+    api.getTenderRefund.mockResolvedValue(
+      refundOf("sale-1", api.refundTransaction.mock.calls[0]![1]),
+    );
     const { el } = await mount(OPEN, api);
 
-    press(el, "card");
-    await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_card_elsewhere")));
+    press(el, "check");
+    await vi.waitFor(() => expect(api.getTenderRefund).toHaveBeenCalledWith("refund-1"));
+    await vi.waitFor(() => expect(idle(el)).toBe(true));
     expect(api.refundTransaction).toHaveBeenCalledOnce();
-    expect(root(el).querySelector("[data-send-again]")).toBeNull();
+    expect(new TenderRefundSession(SCOPE, api).read("sale-1")).toBeNull();
+    press(el, "card");
+    await vi.waitFor(() => expect(api.refundTransaction).toHaveBeenCalledTimes(2));
+    expect(api.refundTransaction.mock.calls[1]![1].invoiceCorrectionId).toBe("correction-1");
   });
 
   it("keeps a refused card refund Refund a payment saved when this window closes", async () => {

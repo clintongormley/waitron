@@ -26312,7 +26312,6 @@ describe("A737 Find a bill page", () => {
     expect(getRefundableTenders).not.toHaveBeenCalled();
     expect(ticket(el)).toBeNull();
     expect(refundView(el)!.shadowRoot!.querySelector("[data-give-back]")).toBeNull();
-    emit(refundView(el)!, "give-back-open");
     emit(refundView(el)!, "tender-refund-open");
     await flush(el);
     expect(el.shadowRoot!.querySelector("till-give-back-dialog")).toBeNull();
@@ -27446,6 +27445,49 @@ describe("A737 post-invoice refund integration", () => {
       emit(ticket(el)!, "back-to-find-bill");
       await flush(el);
       expect(ticket(el)).toBeNull();
+      expect(giveBack(el)).toBeNull();
+    });
+
+    it("reads what this device saved only when the receipt's payments or windows change, not on every redraw", async () => {
+      const { el, view } = await open({
+        readGiveBack: vi.fn().mockResolvedValue(VIEW),
+        getRefundableTenders: vi.fn().mockResolvedValue([]),
+      });
+      const read = vi.spyOn(GiveBackSession.prototype, "read");
+      try {
+        el.requestUpdate();
+        await flush(el);
+        expect(read).not.toHaveBeenCalled();
+        emit(ticket(el)!, "back-to-find-bill");
+        await flush(el);
+        emit(view, "find-transaction-open", { row: transactionRow() });
+        await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
+        await flush(el);
+        expect(read).toHaveBeenCalledWith("sale-1");
+        expect(giveBackButton(el)).toBeNull();
+      } finally {
+        read.mockRestore();
+      }
+    });
+
+    it("closes the window when the person signs out", async () => {
+      const { el } = await open({ readGiveBack: vi.fn().mockResolvedValue(VIEW) });
+      await openGiveBack(el);
+      emit(shell(el)!, "logout");
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      expect(giveBack(el)).toBeNull();
+    });
+
+    it("closes the window when the device locks and another person signs in", async () => {
+      const activity = fakeSessionActivity();
+      const { el } = await open({ readGiveBack: vi.fn().mockResolvedValue(VIEW) }, "F2", activity);
+      await openGiveBack(el);
+      (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
+      await flush(el);
+      expect(lock(el)).not.toBeNull();
+      emit(lock(el)!, "logged-in", { personId: "p2", displayName: "Bea", permissions: [] });
+      await flush(el);
       expect(giveBack(el)).toBeNull();
     });
 

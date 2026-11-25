@@ -4033,6 +4033,8 @@ export class TillApp extends LitElement {
     legsRevision: number;
     cardNotice: { key: StringKey } | null;
   } | null = null;
+  /** Whether the receipt offers Give money back: read when its payments or windows change. */
+  @state() private giveBackOffered = false;
   @state() private givingBack: {
     saleId: string;
     session: GiveBackSession;
@@ -5484,6 +5486,12 @@ export class TillApp extends LitElement {
     // carries on without the dialog; #applyAdjustment says what its answer does then.
     const open = this.adjusting;
     if (open !== null && this.#hasLeftAdjusted(open)) this.#closeAdjust();
+    if (
+      ["refundableTenders", "historicalReceipt", "givingBack", "tenderRefunding", "api"].some(
+        (key) => changed.has(key),
+      )
+    )
+      this.giveBackOffered = this.#offersGiveBack();
   }
 
   #contentLanguageGeneration = 0;
@@ -9875,7 +9883,7 @@ export class TillApp extends LitElement {
   }
 
   /** Offered while money is left to give back, or while a press or rest is saved on this device. */
-  #giveBackOffered(): boolean {
+  #offersGiveBack(): boolean {
     if (this.#hasRefundableTenders()) return true;
     const receipt = this.historicalReceipt;
     if (receipt?.kind !== "invoice" || this.#tenderRefundScope === undefined) return false;
@@ -9899,7 +9907,7 @@ export class TillApp extends LitElement {
       this.givingBack ||
       scope === undefined ||
       refunds === undefined ||
-      (!underWay && !this.#giveBackOffered())
+      (!underWay && !this.giveBackOffered)
     )
       return;
     this.givingBack = {
@@ -9932,7 +9940,7 @@ export class TillApp extends LitElement {
   }
 
   /** With `correctionId`, carries on with that open correction, which may have nothing left to
-   * refund. */
+   * refund. Only the old window's tests send one now; it goes with that window in PR 3. */
   #openInvoiceCorrection(correctionId = ""): void {
     const receipt = this.historicalReceipt;
     if (
@@ -25129,7 +25137,7 @@ export class TillApp extends LitElement {
             @back-to-find-bill=${() => this.#backToFindBill()}
           ></till-refund-acknowledgment>`;
         return html`<till-ticket-view
-          .refundable=${this.#giveBackOffered()}
+          .refundable=${this.giveBackOffered}
           @give-back-open=${() => this.#openGiveBack()}
           @tender-refund-open=${() => this.#openTenderRefund()}
           @invoice-correction-open=${(event: CustomEvent<{ correctionId?: string } | null>) =>
