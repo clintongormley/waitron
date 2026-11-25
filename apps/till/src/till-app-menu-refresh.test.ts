@@ -4070,6 +4070,178 @@ const oneOf = (copy: ReturnType<typeof chosenDaily>) => ({
   setMenuCopies: [copy],
 });
 
+/** A bill recording two copies of Daily (D26): Lunch's, older, and Dinner's, the one it orders from;
+ * each full menu declares the Hake, and its extra, as given. */
+function twoDailies(lunch: TillMenuOffer["allergens"], dinner: TillMenuOffer["allergens"]) {
+  const copies = [
+    { copy: { ...chosenDaily(dinner), key: "dinner-daily" }, versionId: "d1" },
+    { copy: { ...chosenDaily(lunch), key: "lunch-daily" }, versionId: "v1" },
+  ];
+  return {
+    setMenus: {
+      copies: copies.map(({ copy, versionId }) => setMenuCopyOf(copy, versionId)),
+      recorded: { daily: "d1" },
+      exact: true,
+      setMenus: copies.map(({ copy }, index) => ({
+        lineId: `held-menu-${index}`,
+        copyId: copy.key,
+        lineNo: index + 1,
+      })),
+      dishes: [],
+    },
+    setMenuCopies: copies.map(({ copy }) => copy),
+  };
+}
+
+const DINNER_ONLY_DAILY: ZoneOffers = {
+  ...withDinner(menu("v2", V1.offers), []),
+  setMenus: [
+    {
+      ...onSale({ ...chosenDaily({ milk: {} }), key: "dinner-daily" }, "d1"),
+      newestOnSale: true,
+    },
+  ],
+};
+
+const extrasAllergens = (product: TillProduct) => {
+  const [extras] = product.offeredModifiers!;
+  return extras?.kind === "extras" ? extras.items[0]!.addAllergens : undefined;
+};
+
+it("shows each saved dish of an order recording two versions of Daily its own menu's allergens, and their corrections", async () => {
+  const held = (lunch: TillMenuOffer["allergens"], dinner: TillMenuOffer["allergens"]) => {
+    const bill = twoDailies(lunch, dinner);
+    const order = heldDaily(dailyCopy(hakeDish({})));
+    const line = (
+      versionId: string,
+      menuId: string,
+      copy: (typeof bill.setMenuCopies)[number],
+    ) => ({
+      ...order.lines[0]!,
+      product: {
+        ...setMenuProduct({ offer: copy.offers[0]!, setMenuId: "daily", versionId }),
+        menuId,
+      },
+      menuVersionId: versionId,
+      workingOrderLineId: `line-${versionId}`,
+    });
+    return {
+      ...order,
+      ...bill,
+      lines: [
+        line("v1", "lunch", bill.setMenuCopies[1]!),
+        line("d1", "dinner", bill.setMenuCopies[0]!),
+      ],
+    };
+  };
+  const { el, store, serve } = await openSelling(
+    "counter",
+    DINNER_ONLY_DAILY,
+    withDinnerState(menuState("v2")),
+    {
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(held({ fish: {} }, { milk: {} })),
+      getTabLines: vi.fn().mockResolvedValue({
+        revision: 7,
+        lines: ["v1", "d1"].map((versionId) => ({
+          ...tabLemonade,
+          id: `line-${versionId}`,
+          productId: "Hake",
+          sentAt: null,
+        })),
+      }),
+      getBillBalance: vi.fn().mockRejectedValue(new Error("not under test")),
+    },
+  );
+  emit(counter(el), "retrieve-order", { id: "held-order" });
+  await flush(el);
+  const shown = () =>
+    store.lines.map(({ product }) => [
+      product.menuVersionId,
+      product.allergens,
+      extrasAllergens(product),
+    ]);
+  expect(shown()).toEqual([
+    ["v1", { fish: {} }, { fish: {} }],
+    ["d1", { milk: {} }, { milk: {} }],
+  ]);
+
+  const corrected = [
+    ["v1", { fish: {}, eggs: {} }, { fish: {}, eggs: {} }],
+    ["d1", { milk: {}, sesame: {} }, { milk: {}, sesame: {} }],
+  ];
+  api.retrieveWorkingOrder!.mockResolvedValue(
+    held({ fish: {}, eggs: {} }, { milk: {}, sesame: {} }),
+  );
+  await serve(DINNER_ONLY_DAILY, { ...withDinnerState(menuState("v2")), liveFields: "moved" });
+  expect(shown()).toEqual(corrected);
+});
+
+it("shows a drafted dish from the older of a bill's two versions of Daily its own menu's allergens, and their correction", async () => {
+  const bill = (lunch: TillMenuOffer["allergens"], dinner: TillMenuOffer["allergens"]) =>
+    partyBillOf("party-a", "wo-7", 1, twoDailies(lunch, dinner));
+  drafts.drafts.push({
+    id: "draft-1",
+    partyId: "party-a",
+    billId: "wo-7",
+    ownerId: "p1",
+    ownerName: "Ana",
+    revision: 1,
+    takenOverFrom: null,
+    lines: ["v1", "d1"].map((menuVersionId, slot) => ({
+      id: `hake-${menuVersionId}`,
+      sourceLineId: null,
+      source: null,
+      menuItemId: "menu-hake",
+      menuVersionId,
+      setMenuId: "daily",
+      setMenuReservedLineId: null,
+      setMenuReservedPlace: null,
+      quantity: "1",
+      variantId: null,
+      courseId: null,
+      slot,
+      joinGroupId: null,
+      afterGroupId: null,
+      note: null,
+      options: [],
+      extras: [],
+      noMerge: true,
+      unavailable: false,
+    })),
+  });
+  const stream = liveReadFixture();
+  const { store } = await openSelling(
+    "table",
+    DINNER_ONLY_DAILY,
+    withDinnerState(menuState("v2")),
+    {
+      getPartyBills: vi.fn().mockResolvedValue([bill({ fish: {} }, { milk: {} })]),
+      readLiveEvents: stream.read,
+    },
+  );
+  stream.event("ready");
+  const shown = () =>
+    store.lines.map(({ product }) => [product.allergens, extrasAllergens(product)]);
+  await vi.waitFor(() =>
+    expect(shown()).toEqual([
+      [{ fish: {} }, { fish: {} }],
+      [{ milk: {} }, { milk: {} }],
+    ]),
+  );
+
+  api.getPartyBills!.mockResolvedValue([bill({ fish: {}, eggs: {} }, { milk: {} })]);
+  stream.event("change", JSON.stringify([{ type: "menu_versions" }]));
+  await vi.waitFor(() =>
+    expect(shown()).toEqual([
+      [
+        { fish: {}, eggs: {} },
+        { fish: {}, eggs: {} },
+      ],
+      [{ milk: {} }, { milk: {} }],
+    ]),
+  );
+});
+
 /** The till at `kind` on a bill whose set menus are `bill`, with Hake's extras open from the folders
  * named `path`. */
 async function openHakeChoices(

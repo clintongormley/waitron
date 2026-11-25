@@ -1068,7 +1068,8 @@ In an open till view, the existing menu-state poll reads the menu again when the
 moves and refreshes declarations in open lines and choices, without editing saved orders or their
 prices. Sent details continue to show first-send captures. An ordinary line follows its own menu
 item and never another menu's offer of the same product; an extra follows its own list. A set-menu
-line, or a set-menu dish whose choices are open, follows the copy its own menu version names, else
+line, or a set-menu dish whose choices are open, follows the copy its own menu version names, sold
+now or recorded on its bill (which can record two versions of one set menu), else
 the copy the live version of its own full menu holds (`ownSetMenuOffer`,
 `apps/till/src/state/set-menus.ts`); it shows another full menu's declarations only once it takes
 that menu's version, as a price refresh makes it. A table takes a bill's recorded copies from each
@@ -1077,8 +1078,9 @@ its offers. If that read fails for any reason but the order being gone, each lat
 copies again; until one answers, their lines, saved ones included, keep the allergens the copies
 last gave. A dish, variant or extra none of these holds keeps its last open-view declaration until
 retrieval or reload. A line rebuilt from a saved draft is not reviewed where the menu no longer
-holds its variant, or, for a set-menu dish, where the till cannot tell which full menu its version
-belongs to or that menu no longer holds the dish.
+holds its variant, or, for a set-menu dish whose version's copy is neither sold now nor recorded on
+its bill, where the till cannot tell which full menu that version belongs to or that menu no longer
+holds the dish.
 
 ### Regional practice names
 

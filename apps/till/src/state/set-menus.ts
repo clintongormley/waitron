@@ -53,14 +53,30 @@ export type SetMenuOfferLookup = (
   line: SetMenuLine,
 ) => { offer: TillMenuOffer; versionId: string; own?: TillMenuOffer } | undefined;
 
+/** The dish as `bill` records it at the line's own version, which need not be the one the bill
+ * orders from: a bill can record two versions of a set menu (D26). */
+function recordedSetMenuOffer(
+  line: SetMenuLine,
+  bill: BillCopies | undefined,
+): TillMenuOffer | undefined {
+  const named = bill?.setMenus?.copies.find(
+    ({ setMenuId, versionId }) => setMenuId === line.setMenuId && versionId === line.menuVersionId,
+  );
+  return bill?.setMenuCopies
+    ?.find(({ key }) => key === named?.id)
+    ?.offers.find(({ id }) => id === line.menuItemId);
+}
+
 /**
- * The offer whose declarations are the line's: the copy its own version names, else the one the live
- * version of its own full menu holds, as the kitchen reads them. Undefined when neither holds the
- * dish, or that menu is not known: another full menu's copy can declare it differently.
+ * The offer whose declarations are the line's: the copy its own version names, sold or recorded on
+ * its bill, else the one the live version of its own full menu holds, as the kitchen reads them.
+ * Undefined when none holds the dish, or that menu is not known: another full menu's copy can
+ * declare it differently.
  */
 export function ownSetMenuOffer(
   line: SetMenuLine,
   sold: { offer: TillMenuOffer; versionId: string } | undefined,
+  bill: BillCopies | undefined,
   zone: {
     setMenus: readonly ServedSetMenu[];
     versions: ReadonlyMap<string, string>;
@@ -69,6 +85,8 @@ export function ownSetMenuOffer(
   },
 ): TillMenuOffer | undefined {
   if (sold !== undefined && sold.versionId === line.menuVersionId) return sold.offer;
+  const recorded = recordedSetMenuOffer(line, bill);
+  if (recorded !== undefined) return recorded;
   const menuId = zone.menuOfVersion.get(line.menuVersionId ?? "") ?? line.menuId;
   const live = zone.versions.get(menuId ?? "");
   if (live === undefined) return undefined;

@@ -158,11 +158,11 @@ it("finds a line's own menu's dish, and never another full menu's", () => {
     ...(menuId === undefined ? {} : { menuId }),
   });
   const named = (...args: Parameters<typeof line>) =>
-    ownSetMenuOffer(line(...args), sold, zone)?.name;
+    ownSetMenuOffer(line(...args), sold, undefined, zone)?.name;
 
   expect(named("d1")).toBe("Dinner's");
   expect(named("l1")).toBe("Lunch's");
-  expect(ownSetMenuOffer(line("l1"), undefined, zone)?.name).toBe("Lunch's");
+  expect(ownSetMenuOffer(line("l1"), undefined, undefined, zone)?.name).toBe("Lunch's");
   expect(named("l1", undefined, "cod")).toBeUndefined();
   // A version this till never saw: only the full menu a line read back names can place it.
   expect(named("l0")).toBeUndefined();
@@ -170,7 +170,37 @@ it("finds a line's own menu's dish, and never another full menu's", () => {
   expect(named("l0", "lunch")).toBe("Lunch's");
   expect(named(null)).toBeUndefined();
   const dropped = { ...zone, setMenus: [selling("d1", "Dinner's")] };
-  expect(ownSetMenuOffer(line("l1"), sold, dropped)).toBeUndefined();
+  expect(ownSetMenuOffer(line("l1"), sold, undefined, dropped)).toBeUndefined();
   const left = { ...zone, versions: new Map([["dinner", "d1"]]) };
-  expect(ownSetMenuOffer(line("l1"), sold, left)).toBeUndefined();
+  expect(ownSetMenuOffer(line("l1"), sold, undefined, left)).toBeUndefined();
+
+  // A bill recording two versions of Daily names each, though it orders from Dinner's alone.
+  const lunchCopy = selling("l1", "Lunch's as recorded");
+  const dinnerCopy = selling("d1", "Dinner's");
+  const recording = (copies: ServedSetMenu[], named: [ServedSetMenu, string][]) => ({
+    setMenus: {
+      recorded: { Daily: "d1" },
+      exact: true,
+      copies: named.map(([held, versionId]) => ({
+        ...setMenuCopyOf({ ...held, offers: [] }, versionId),
+      })),
+      setMenus: [],
+      dishes: [],
+    },
+    setMenuCopies: copies,
+  });
+  const both = recording(
+    [dinnerCopy, lunchCopy],
+    [
+      [dinnerCopy, "d1"],
+      [lunchCopy, "l1"],
+    ],
+  );
+  expect(ownSetMenuOffer(line("l1"), sold, both, left)?.name).toBe("Lunch's as recorded");
+  expect(ownSetMenuOffer(line("l1"), sold, both, zone)?.name).toBe("Lunch's as recorded");
+  expect(ownSetMenuOffer(line("l1", undefined, "cod"), sold, both, left)).toBeUndefined();
+  // Two full menus' copies sharing a key are named once, at the version the bill names.
+  const shared = recording([dinnerCopy], [[dinnerCopy, "d1"]]);
+  expect(ownSetMenuOffer(line("l1"), sold, shared, left)).toBeUndefined();
+  expect(ownSetMenuOffer(line("l1"), sold, shared, zone)?.name).toBe("Lunch's");
 });

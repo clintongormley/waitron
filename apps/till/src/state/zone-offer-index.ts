@@ -135,14 +135,14 @@ export class ZoneOfferIndex {
       const offer = selected?.copy.offers.find((dish) => dish.id === menuItemId);
       if (selected === undefined || offer === undefined) return undefined;
       const sold = { offer, versionId: selected.versionId };
-      return { ...sold, own: ownSetMenuOffer(line, sold, this) };
+      return { ...sold, own: ownSetMenuOffer(line, sold, bill, this) };
     };
   }
 
   /** For the declarations a line shows, whether or not it can still be sold. */
   ownSetMenuLookup(bill?: Parameters<typeof orderingCopies>[0]): OwnSetMenuOffers {
     const lookup = this.setMenuLookup(bill);
-    return (line) => ownSetMenuOffer(line, lookup(line), this);
+    return (line) => ownSetMenuOffer(line, lookup(line), bill, this);
   }
 
   /** Why each line cannot be sold as it stands. A line with no menu version is the server's to price
