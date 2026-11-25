@@ -2,7 +2,7 @@ import { recoveryLink, recoveryRefusalText } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { compareDecimal, decimal, formatMoney } from "@waitron/shared";
+import { formatMoney } from "@waitron/shared";
 import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -12,7 +12,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, type DialogRefusal } from "../state/bill-payment.js";
-import type { MealEndUnservedDish } from "../api/client.js";
+import type { MealEndUnservedDish, PartyBill } from "../api/client.js";
 import { servableDishes, serveListed, unservedDishText } from "./dish-format.js";
 
 /** `cancel` credits the receipt and cancels the bill; `split` also puts its dishes on a new bill. */
@@ -46,26 +46,15 @@ export function cancelCreditRefusalOf(error: unknown, refusal: DialogRefusal): C
   return { ...refusal, dishes: dishes as MealEndUnservedDish[], canStop: canStop === true };
 }
 
-/**
- * Whether a reopen that got no answer, finding the printed bill credited, was credited some other
- * way: no open bill appeared that it could have opened. Only its own bill holds copies of the
- * dishes, at the printed `total` unless it stopped dishes; a credit elsewhere may open an empty one.
- */
+/** Whether a reopen that got no answer, finding the printed bill credited, was credited some other
+ * way: no open bill names it as the bill it was reopened from. */
 export function creditedElsewhere(
-  sent: { mode: CancelCreditMode; billsBefore: readonly string[]; stopUnserved?: true | undefined },
-  bills: readonly { workingOrderId: string; status: string; total: string }[],
-  total: string,
+  sent: { mode: CancelCreditMode; workingOrderId: string },
+  bills: readonly Pick<PartyBill, "status" | "reopenedFrom">[],
 ): boolean {
   return (
     sent.mode === "split" &&
-    !bills.some(
-      (row) =>
-        row.status === "open" &&
-        !sent.billsBefore.includes(row.workingOrderId) &&
-        (sent.stopUnserved === true
-          ? compareDecimal(decimal(row.total), decimal("0")) > 0
-          : compareDecimal(decimal(row.total), decimal(total)) === 0),
-    )
+    !bills.some((row) => row.status === "open" && row.reopenedFrom === sent.workingOrderId)
   );
 }
 

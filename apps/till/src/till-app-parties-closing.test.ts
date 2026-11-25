@@ -684,7 +684,14 @@ describe("till-app: reopening a printed bill", () => {
     outstanding: "0.00",
     correctives: ["R/3"],
   };
-  const reopened: PartyBill = { ...checkBill, workingOrderId: "wo-split", billNumber: 3 };
+  const reopened: PartyBill = {
+    ...checkBill,
+    workingOrderId: "wo-split",
+    billNumber: 3,
+    reopenedFrom: "wo-check",
+  };
+  /** A bill that opened at the table some other way than by reopening the printed one. */
+  const unrelated: PartyBill = { ...checkBill, workingOrderId: "wo-new", billNumber: 3 };
   const unserved = [
     { lineId: "l-1", dishName: "Steak", quantity: "1", released: true },
     { lineId: "l-2", dishName: "Tarta", quantity: "1", released: false },
@@ -725,6 +732,14 @@ describe("till-app: reopening a printed bill", () => {
       stoppedBehindTheScenes: () => {
         bills = [tabBill, cancelled, { ...reopened, total: "18.00", outstanding: "18.00" }];
       },
+      /** A reopen that stopped every charged dish landed: its new bill holds nothing to pay. */
+      stoppedToNothingBehindTheScenes: () => {
+        bills = [tabBill, cancelled, { ...reopened, total: "0.00", outstanding: "0.00" }];
+      },
+      /** Cancel and credit made on another till, and another bill opened at the table since. */
+      cancelledElsewhereThenNewBill: (total = "18.00") => {
+        bills = [tabBill, cancelled, { ...unrelated, total, outstanding: total }];
+      },
       /** Cancel and credit made on another till: the bill is credited and no new bill opens. */
       cancelledElsewhere: () => {
         bills = [tabBill, cancelled];
@@ -732,7 +747,7 @@ describe("till-app: reopening a printed bill", () => {
       /** Cancel and credit on another till of the party's only bill in use: the server opens it a
        * fresh empty bill (`ensureFamilyBill`). */
       cancelledElsewhereLeavingEmptyBill: () => {
-        bills = [cancelled, { ...reopened, total: "0.00", outstanding: "0.00" }];
+        bills = [cancelled, { ...unrelated, total: "0.00", outstanding: "0.00" }];
       },
     };
   }
@@ -1095,10 +1110,10 @@ describe("till-app: reopening a printed bill", () => {
     expect(doneText(el)).toBe(ALREADY_CANCELLED);
   });
 
-  it("a reopen without the stop that got no answer does not take a smaller new bill for its own", async () => {
+  it("a reopen without the stop that got no answer does not take an unrelated new bill at the printed total for its own", async () => {
     const server = billServer();
     server.splitAfterPrint.mockImplementationOnce(async () => {
-      server.stoppedBehindTheScenes();
+      server.cancelledElsewhereThenNewBill(checkBill.total);
       throw new TypeError("Failed to fetch");
     });
     const { el } = await openSplit(server);
@@ -1106,6 +1121,32 @@ describe("till-app: reopening a printed bill", () => {
     await confirmSplit(el);
 
     expect(doneText(el)).toBe(ALREADY_CANCELLED);
+  });
+
+  it("a Stop these dishes and reopen that got no answer does not take an unrelated new bill for its own", async () => {
+    const server = unservedServer(true, async () => {
+      server.cancelledElsewhereThenNewBill();
+      throw new TypeError("Failed to fetch");
+    });
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+    stopButton(el)!.click();
+    await flush(el, 8);
+
+    expect(doneText(el)).toBe(ALREADY_CANCELLED);
+  });
+
+  it("when Stop these dishes and reopen got no answer and its new bill holds nothing to pay, says it reopened", async () => {
+    const server = unservedServer(true, async () => {
+      server.stoppedToNothingBehindTheScenes();
+      throw new TypeError("Failed to fetch");
+    });
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+    stopButton(el)!.click();
+    await flush(el, 8);
+
+    expect(doneText(el)).toBe(SPLIT_DONE);
   });
 
   it("a refusal of Stop these dishes and reopen is said as a reopen's is", async () => {

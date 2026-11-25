@@ -363,6 +363,22 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect(reopened).toEqual({ status: "open", reopenedFrom: party.tabId });
   });
 
+  it("the party's bills read names the bill each one was reopened from", async () => {
+    const party = await printed("Tarta");
+    const answer = await split(party.tabId, venue.cookie);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const bills = await send(venue.app, venue.cookie, "GET", `/api/parties/${party.partyId}/bills`);
+    expect(bills.status, JSON.stringify(bills.json)).toBe(200);
+    const byId = new Map(
+      (bills.json as unknown as { workingOrderId: string; reopenedFrom?: string }[]).map((bill) => [
+        bill.workingOrderId,
+        bill,
+      ]),
+    );
+    expect(byId.get(answer.json.billId as string)?.reopenedFrom).toBe(party.tabId);
+    expect(byId.get(party.tabId)).not.toHaveProperty("reopenedFrom");
+  });
+
   it("Cancel and credit still needs sale.rectify", async () => {
     const party = await printed("Tarta");
     const before = written();

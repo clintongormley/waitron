@@ -1768,10 +1768,6 @@ interface CancelCrediting {
   amount: string;
   /** The reason last pressed, which an approver's PIN is sent with. */
   reason: string;
-  /** The party's bills when the dialog opened. A split whose answer was lost shows itself as an
-   * open bill not among them; without one, the bill was credited some other way. */
-  billsBefore: readonly string[];
-  stopUnserved?: true | undefined;
   refusal: CancelCreditRefusal | null;
   busy: boolean;
   done: CancelCreditDone | null;
@@ -21199,7 +21195,6 @@ export class TillApp extends LitElement {
       invoiceNumber: bill.invoiceNumber ?? null,
       amount: bill.total,
       reason: "",
-      billsBefore: this.partyBills.map((row) => row.workingOrderId),
       refusal: null,
       busy: false,
       done: null,
@@ -21249,7 +21244,7 @@ export class TillApp extends LitElement {
       this.#closeCancelCrediting();
       return;
     }
-    const sending: CancelCrediting = { ...open, stopUnserved, refusal: null, busy: true };
+    const sending: CancelCrediting = { ...open, refusal: null, busy: true };
     this.cancelCrediting = sending;
     const sent = this.#sentNow();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
@@ -21391,7 +21386,7 @@ export class TillApp extends LitElement {
     if (!CANCEL_MAY_HAVE_LANDED.has(refusal.code) || bill?.status !== "abandoned") return;
     this.#showCancelCredited(open.id, {
       corrective: latestCorrectiveOf(bills, open.workingOrderId),
-      creditedElsewhere: creditedElsewhere(open, bills!, bill.total),
+      creditedElsewhere: creditedElsewhere(open, bills!),
     });
   }
 

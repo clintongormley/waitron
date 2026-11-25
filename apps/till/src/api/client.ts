@@ -2271,6 +2271,8 @@ export interface PartyBill {
   amountDue?: string;
   /** The bill was closed as a deferred payment: the customer pays outside Waitron. */
   deferred?: true;
+  /** The printed bill Reopen bill opened this one from; absent on a bill no reopen opened. */
+  reopenedFrom?: string;
 }
 
 export interface JoinMerge {
