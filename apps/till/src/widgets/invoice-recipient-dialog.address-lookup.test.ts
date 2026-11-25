@@ -181,6 +181,31 @@ describe("the invoice recipient dialog's address search", () => {
     expect(value(el, "address")).toBe("Calle Mía 5");
   });
 
+  it("shows search when availability returns after manual entry and a refused save", async () => {
+    let available!: (reply: { available: boolean }) => void;
+    const reply = new Promise<{ available: boolean }>((resolve) => {
+      available = resolve;
+    });
+    const lookupAddress = vi.fn(
+      (_operation: CloudAddressOperation, _signal?: AbortSignal) => reply,
+    );
+    const el = await mountDialog({ lookupAddress });
+    const saved = confirmed(el);
+    await fill(el, "taxId", "12345678Z");
+    await fill(el, "legalName", "Ana García");
+    await fill(el, "address", "Calle Mayor 1");
+    await fill(el, "postalCode", "28013");
+    await fill(el, "locality", "Madrid");
+    await fill(el, "province", "Madrid");
+    save(el).click();
+    expect(saved).toHaveLength(1);
+    el.refusal = "Try again";
+    available({ available: true });
+    await flush(el);
+    expect(lookupAddress.mock.calls[0]?.[1]?.aborted).toBe(false);
+    expect(lookup(el)!.hidden).toBe(false);
+  });
+
   it("is hidden without a provider, so the dialog is its manual fields alone", async () => {
     const el = await mountDialog({});
     expect(lookup(el)!.hidden).toBe(true);

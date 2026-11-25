@@ -141,7 +141,8 @@ export class TillInvoiceRecipientDialog extends LitElement {
   ) => Promise<CloudAddressReply>;
   @state() private cloudProvider?: AddressLookupProvider;
   @state() private addressAttribution?: { text: string };
-  #addressRequest?: { controller: AbortController; isAvailability: boolean };
+  #availabilityRequest?: AbortController;
+  #addressRequest?: AbortController;
   /** Offers a simplified invoice instead, for a bill already saved as a full one. */
   @property({ attribute: false }) offerSimplified = false;
   @state() private attempted = false;
@@ -274,7 +275,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
         if (scope?.isDirty()) return false;
       }
       this.active = false;
-      this.#cancelAddressSearch();
+      this.#stopAddressLookup();
       this.addressAttribution = undefined;
       scope?.dispose();
       this.#scope = undefined;
@@ -352,7 +353,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
           return canonical(a) === canonical(b);
         }),
       restore: (value) => {
-        this.#cancelAddressSearch({ keepAvailability: true });
+        this.#cancelAddressSearch();
         this.addressAttribution = undefined;
         Object.assign(this, value);
       },
@@ -364,20 +365,18 @@ export class TillInvoiceRecipientDialog extends LitElement {
   }
 
   #readAddressProvider(): void {
-    this.#cancelAddressSearch();
+    this.#stopAddressLookup();
     this.cloudProvider = undefined;
     const lookup = this.lookupAddress;
     if (this.countryCode !== "ES" || this.addressProvider || !lookup) return;
 
-    const availability = new AbortController();
-    this.#addressRequest = { controller: availability, isAvailability: true };
+    const availability = (this.#availabilityRequest = new AbortController());
     void cloudAddressProvider(
       (operation) => {
         if (operation.kind === "available") return lookup(operation, availability.signal);
-        this.#addressRequest?.controller.abort();
-        const controller = new AbortController();
-        this.#addressRequest = { controller, isAvailability: false };
-        return lookup(operation, controller.signal);
+        this.#addressRequest?.abort();
+        const request = (this.#addressRequest = new AbortController());
+        return lookup(operation, request.signal);
       },
       () => (currentLocale() === "es-ES" ? "es" : "en"),
     )
@@ -389,7 +388,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
 
   override disconnectedCallback(): void {
     this.#opening = {};
-    this.#cancelAddressSearch();
+    this.#stopAddressLookup();
     this.addressAttribution = undefined;
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -511,7 +510,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
     event.stopPropagation();
     if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
     this.active = false;
-    this.#cancelAddressSearch();
+    this.#stopAddressLookup();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.dispatchEvent(
@@ -528,11 +527,14 @@ export class TillInvoiceRecipientDialog extends LitElement {
     if (field === "identifierType")
       this.identifierType = event.detail.value as RecipientIdentifierType;
     else this[field] = event.detail.value;
-    if (SEARCH_FILLS.has(field) || field === "countryCode") {
-      this.#cancelAddressSearch({ keepAvailability: field !== "countryCode" });
+    if (SEARCH_FILLS.has(field)) {
+      this.#cancelAddressSearch();
       this.addressAttribution = undefined;
     }
-    if (field === "countryCode") this.foreignAddressCountry = undefined;
+    if (field === "countryCode") {
+      this.addressAttribution = undefined;
+      this.foreignAddressCountry = undefined;
+    }
     this.#scope?.changed();
     this.#edited(field === "streetAddress" ? "address" : field);
     if (field === "identifierType" && this.identifierType === "tax-number")
@@ -540,12 +542,16 @@ export class TillInvoiceRecipientDialog extends LitElement {
   }
 
   /** Free the box connection as well as invalidating the answer. */
-  #cancelAddressSearch({ keepAvailability = false } = {}): void {
-    if (!(keepAvailability && this.#addressRequest?.isAvailability)) {
-      this.#addressRequest?.controller.abort();
-      this.#addressRequest = undefined;
-    }
+  #cancelAddressSearch(): void {
+    this.#addressRequest?.abort();
+    this.#addressRequest = undefined;
     this.shadowRoot?.querySelector<WtAddressLookup>("wt-address-lookup")?.cancelSearch();
+  }
+
+  #stopAddressLookup(): void {
+    this.#availabilityRequest?.abort();
+    this.#availabilityRequest = undefined;
+    this.#cancelAddressSearch();
   }
 
   #onAddressChosen(event: CustomEvent<AddressChosenDetail>): void {
