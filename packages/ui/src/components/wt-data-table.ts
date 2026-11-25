@@ -29,6 +29,7 @@ import {
 
 import { tableMessage, tableMessageStyles } from "./wt-data-table-message.js";
 import { FilterExpansion, visibleTree } from "./wt-data-table-filter-expansion.js";
+import { mergeColumnOrder } from "./wt-data-table-column-order.js";
 
 registerIcons({
   "table-filter": "M1 2h14v1.5L10 9v5l-4 1.5V9L1 3.5z",
@@ -992,6 +993,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** What a column filter's open list says when its search matches no option. */
   @property() filterNoResultsLabel = "No results";
   @property() filtersLabel = "Filters";
+  @property({ type: Boolean, attribute: "keep-toolbar-when-empty" }) keepToolbarWhenEmpty = false;
   @property() filteredColumnLabel = "Filtered";
   @property() filtersClearAllLabel = "Clear all";
   @property() filtersCloseLabel = "Close filters";
@@ -1423,7 +1425,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     if (
       !this.#hasFilters() ||
       (this.serverPaging === undefined &&
-        ((this.rows.length === 0 && !this.#hasSlottedFilters()) ||
+        ((this.rows.length === 0 && !this.keepToolbarWhenEmpty && !this.#hasSlottedFilters()) ||
           this.loading ||
           this.errorMessage !== ""))
     )
@@ -1606,7 +1608,8 @@ export class WtDataTable<Row = unknown> extends LitElement {
     this.#releaseColumnWidths();
     const [moving] = movable.splice(from, 1);
     movable.splice(to, 0, moving!);
-    this.columnOrder = movable.map((column) => column.key);
+    const keys = movable.map((column) => column.key);
+    this.columnOrder = mergeColumnOrder(this.columnOrder, keys);
     if (focusedHandle) void this.updateComplete.then(() => focusedHandle.focus());
     this.columnMoveAnnouncement = `${moving!.label}, ${this.columnPositionLabel.replace("{position}", String(to + 2)).replace("{total}", String(this.columns.length))}`;
     if (this.viewKey) {
@@ -1927,6 +1930,18 @@ export class WtDataTable<Row = unknown> extends LitElement {
       );
     }
     this.clearFilters();
+  }
+
+  /** Saves the view without this column's filter or sort, even when restore skipped its sort. */
+  resetColumnView(key: string, defaultSortKey: string): void {
+    if (this.sortKey === key) {
+      this.sortKey = defaultSortKey;
+      this.sortDirection = "ascending";
+    }
+    const filters = { ...this.filterSelections };
+    delete filters[key];
+    this.filterSelections = filters;
+    this.#persistView();
   }
 
   /** Clears the choices on the table’s columns. */
@@ -3067,8 +3082,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     </div>`;
   }
 
-  /** Every branch with rows to filter draws this one template, so a choice that empties the rows
-   * or brings them back keeps the toolbar and the filters panel, and the focus inside them. */
+  /** Keep the same toolbar and filter panel mounted when a choice empties or restores the rows. */
   #withToolbar(content: unknown) {
     return html`${this.#renderToolbar()}<slot name="toolbar-bottom"></slot>${
         this.#hasFilters()
@@ -3246,9 +3260,11 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const { visible, ranks: searchRanks, filterMatches } = this.#searched();
     if (this.rows.length === 0) {
       const empty = tableMessage(this.emptyMessage, "empty-action");
-      return this.serverPaging === undefined && !this.#hasSlottedFilters()
-        ? empty
-        : this.#withToolbar(empty);
+      return this.keepToolbarWhenEmpty ||
+        this.serverPaging !== undefined ||
+        this.#hasSlottedFilters()
+        ? this.#withToolbar(empty)
+        : empty;
     }
 
     const label = this.ariaLabel || undefined;
@@ -3256,9 +3272,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
     const treeVisible = isTree ? this.#treeShown().shown : undefined;
     const renderedCount = isTree ? treeVisible!.rows.length : visible.length;
     if (renderedCount === 0)
-      return this.#withToolbar(
-        tableMessage(this.noMatchesMessage, searchRanks ? "no-matches-action" : undefined),
-      );
+      return this.#withToolbar(tableMessage(this.noMatchesMessage, "no-matches-action"));
 
     const shown = this.#shownColumns();
     const widths =

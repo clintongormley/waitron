@@ -18,6 +18,7 @@ afterEach(cleanupWidgets);
 beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
+  localStorage.setItem("waitron.products.view", "tree");
   setLocale("en-GB");
 });
 export const folder = (id: string, name: string, parentId: string | null): CategorySummary => ({
@@ -1111,6 +1112,238 @@ export async function chooseFilter(el: ProductBrowser, column: string, value: st
   else await chooseOptions(select, value);
   await table.updateComplete;
 }
+const viewControl = (el: ProductBrowser) => el.shadowRoot!.querySelector("wt-segmented-control")!;
+
+async function chooseView(el: ProductBrowser, view: "List" | "Tree") {
+  const control = viewControl(el);
+  const option = [...control.shadowRoot!.querySelectorAll("button")].find(
+    (button) => button.textContent?.trim() === view,
+  );
+  expect(option).toBeDefined();
+  await userEvent.click(option!);
+  await tableOf(el);
+}
+
+it("starts in List and remembers a view switch while leaving Category filters and ticks behind", async () => {
+  localStorage.removeItem("waitron.products.view");
+  const el = await mountBrowser({
+    products: PRODUCTS.map((row) => (row.id === "burger" ? { ...row, available: false } : row)),
+  });
+  expect(await rowKeys(el)).toEqual(["bread", "burger", "cola"]);
+  await chooseFilter(el, "available", "yes");
+  await chooseFilter(el, "category", "d");
+  await selectKeys(el, ["cola"]);
+  await typeSearch(el, "ola");
+  await chooseView(el, "Tree");
+  expect(await rowKeys(el)).toEqual(["cola"]);
+  expect(
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("wt-input[name=menu-search]")!
+      .value,
+  ).toBe("ola");
+  expect(count(el)).toBe("0 selected");
+  await typeSearch(el, "");
+  expect(await rowKeys(el)).not.toContain("burger");
+  await chooseView(el, "List");
+  expect(await rowKeys(el)).toEqual(["bread", "cola"]);
+  await chooseView(el, "Tree");
+  el.remove();
+  expect(await rowKeys(await mountBrowser())).toContain("folder:d");
+});
+
+it("searches product names in List and category names in Tree", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  const el = await mountBrowser();
+  await typeSearch(el, "Drinks");
+  expect(await rowKeys(el)).toEqual([]);
+  await expect
+    .element(page.getByRole("searchbox", { name: "Search products", exact: true }))
+    .toBeVisible();
+  await typeSearch(el, "Cola");
+  expect(await rowKeys(el)).toEqual(["cola"]);
+
+  await chooseView(el, "Tree");
+  await typeSearch(el, "Drinks");
+  expect(await rowKeys(el)).toContain("folder:d");
+  await expect
+    .element(page.getByRole("searchbox", { name: "Search products and categories", exact: true }))
+    .toBeVisible();
+});
+
+it("lets staff clear a Tree search after switching to an empty List", async () => {
+  const el = await mountBrowser({ products: [] });
+  await typeSearch(el, "Drinks");
+  await chooseView(el, "List");
+  const search = page.getByRole("searchbox", { name: "Search products", exact: true });
+  await expect.element(search).toHaveValue("Drinks");
+  await expect.element(search).toBeEnabled();
+  await expect.element(page.getByRole("button", { name: "Select", exact: true })).toBeDisabled();
+  await search.fill("");
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(viewControl(el)));
+  el.products = [PRODUCTS[0]!];
+  expect(await rowKeys(el)).toEqual(["cola"]);
+});
+
+it("returns focus to the view switch when clearing a search on an empty Tree", async () => {
+  const el = await mountBrowser({ categories: [], products: [PRODUCTS[0]!] });
+  await typeSearch(el, "Cola");
+  el.products = [];
+  await tableOf(el);
+  await page.getByRole("button", { name: "Clear search and filters" }).click();
+  await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(viewControl(el)));
+});
+
+it("forgets a Category sort when leaving List and restores Name after a reload", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  const el = await mountBrowser();
+  const table = await tableOf(el);
+  table.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="category"]')!.click();
+  await table.updateComplete;
+  expect(table.sortKey).toBe("category");
+  await chooseView(el, "Tree");
+  await chooseView(el, "List");
+  el.remove();
+  expect((await tableOf(await mountBrowser())).sortKey).toBe("name");
+});
+
+it("offers to clear an empty Category filter and then reveals the saved product", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  const el = await mountBrowser();
+  await chooseFilter(el, "category", "b");
+  const clear = () => page.getByRole("button", { name: "Clear search and filters" });
+  await expect.element(clear()).toBeVisible();
+  await el.showSavedProduct("bread", true);
+  expect(el.shadowRoot!.querySelector('[data-test="product-saved-hidden"]')?.textContent).toContain(
+    "Bread",
+  );
+  await clear().click();
+  expect(await rowKeys(el)).toEqual(["bread", "burger", "cola"]);
+});
+
+it("scrolls a newly saved top-level product into List", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  const el = await mountBrowser({
+    products: Array.from({ length: 25 }, (_, id) => product(`row-${id}`, `Dish ${id}`, null)),
+  });
+  el.style.setProperty("--wt-table-max", "220px");
+  const table = await tableOf(el);
+  const rows = table.shadowRoot!.querySelector<HTMLElement>(".scroll")!;
+  el.products = [...el.products, product("new", "Vegetable tart", null)];
+  await tableOf(el);
+  expect(rows.scrollTop).toBe(0);
+  await el.showSavedProduct("new", true);
+  await vi.waitFor(() => expect(rows.scrollTop).toBeGreaterThan(0));
+});
+
+it("opens a category link in Tree and stays there after closing its category", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  const el = await mountBrowser({ categoryId: "d" });
+  expect(await rowKeys(el)).toContain("cola");
+  el.addEventListener("open-category", (event) => {
+    el.categoryId = (event as CustomEvent<{ categoryId: string | null }>).detail.categoryId;
+  });
+  await toggleCategory(el, "d");
+  await el.updateComplete;
+  expect(el.categoryId).toBeNull();
+  expect(await rowKeys(el)).toContain("folder:d");
+  expect(viewControl(el).value).toBe("tree");
+  expect(localStorage.getItem("waitron.products.view")).toBe("list");
+});
+
+it.each(["with products", "empty"])(
+  "shows a category name refusal after switching to List (%s)",
+  async (contents) => {
+    const el = await mountBrowser(contents === "empty" ? { products: [] } : {});
+    vi.mocked(el.api.createCategory).mockRejectedValueOnce({ code: "category.name_taken" });
+    await menuAction(el, "add-category-root");
+    await nameBox(el);
+    await userEvent.keyboard("Drinks");
+    await chooseView(el, "List");
+    await expect
+      .element(page.getByRole("alert").filter({ hasText: codeMessage("category.name_taken") }))
+      .toBeVisible();
+  },
+);
+
+it("shows a refused Move ahead of a category refusal left over from Tree", async () => {
+  const el = await mountBrowser();
+  vi.mocked(el.api.createCategory).mockRejectedValueOnce({ code: "category.name_taken" });
+  vi.mocked(el.api.moveProductItems).mockRejectedValueOnce({ code: "category.parent_cycle" });
+  await menuAction(el, "add-category-root");
+  await nameBox(el);
+  await userEvent.keyboard("Drinks");
+  await chooseView(el, "List");
+  const notice = () => el.shadowRoot!.querySelector('[data-test="list-action-error"]');
+  await vi.waitFor(() =>
+    expect(notice()?.textContent).toContain(codeMessage("category.name_taken")),
+  );
+  await selectKeys(el, ["bread"]);
+  await press(el, "move");
+  await destination(el, "f");
+  await confirmDrop(el);
+  await vi.waitFor(() => expect(notice()?.textContent).toContain("Choose a parent outside"));
+});
+
+it("ends Select when the last List product goes away", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  const el = await mountBrowser({ products: [PRODUCTS[3]!] });
+  await selectKeys(el, ["bread"]);
+  el.products = [];
+  await tableOf(el);
+  el.products = [PRODUCTS[3]!];
+  const table = await tableOf(el);
+  expect(
+    table.shadowRoot!.querySelector('tr[data-row-key="bread"] input[type="checkbox"]'),
+  ).toBeNull();
+});
+
+it("drops only the Category filter when a fresh visit opens a category link in Tree", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  sessionStorage.setItem(
+    "waitron.products.table",
+    JSON.stringify({
+      sortKey: "price",
+      sortDirection: "descending",
+      filters: { category: "b", available: "yes" },
+    }),
+  );
+  const dishes = [
+    { ...PRODUCTS[0]!, unitPrice: "3.00" },
+    PRODUCTS[2]!,
+    { ...PRODUCTS[3]!, available: false },
+  ];
+  const linked = await mountBrowser({ categoryId: "d", products: dishes });
+  expect(await rowKeys(linked)).toContain("folder:d");
+  linked.remove();
+  expect(await rowKeys(await mountBrowser({ products: dishes }))).toEqual(["cola", "burger"]);
+});
+
+it("drops a stored Category sort when a fresh visit opens a category link in Tree", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  sessionStorage.setItem("waitron.products.table", JSON.stringify({ sortKey: "category" }));
+  const linked = await mountBrowser({ categoryId: "d" });
+  expect(await rowKeys(linked)).toContain("folder:d");
+  await chooseView(linked, "List");
+  linked.remove();
+  expect(await rowKeys(await mountBrowser())).toEqual(["bread", "burger", "cola"]);
+});
+
+it("offers no Category filter if the venue has no categories", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  const table = await tableOf(await mountBrowser({ categories: [] }));
+  expect(table.shadowRoot!.querySelector('wt-combobox[data-filter="category"]')).toBeNull();
+});
+
+it("keeps keyboard focus on the view switch when leaving an empty List", async () => {
+  localStorage.setItem("waitron.products.view", "list");
+  const el = await mountBrowser({ products: [] });
+  const control = viewControl(el);
+  expect(control.checkVisibility()).toBe(true);
+  control.focus();
+  await userEvent.keyboard("{ArrowRight}");
+  await tableOf(el);
+  expect(viewControl(el).shadowRoot!.activeElement?.textContent?.trim()).toBe("Tree");
+});
+
 it("shows top-level folders before unfiled products", async () => {
   expect(await rowKeys(await mountBrowser())).toEqual(["folder:d", "folder:f", "bread"]);
 });
@@ -1256,6 +1489,8 @@ it("searches a folder's own name and a product's variant names, never a product'
   await typeSearch(el, "drinks cola");
   expect(await rowKeys(el)).toEqual([]);
   await typeSearch(el, "cup");
+  expect(await rowKeys(el)).toEqual(["with-variants"]);
+  await chooseView(el, "List");
   expect(await rowKeys(el)).toEqual(["with-variants"]);
 });
 it("opens and closes a category from its row, and says which it will do", async () => {
@@ -4555,7 +4790,7 @@ it.each(
   await page.viewport(width, 844);
   onTestFinished(() => page.viewport(1280, 844));
   const el = await mountBrowser();
-  el.style.width = "100%";
+  el.style.width = `${width}px`;
   el.parentElement!.setAttribute("data-theme", theme);
   el.parentElement!.style.background = "var(--wt-color-bg)";
   el.parentElement!.style.color = "var(--wt-color-text)";
@@ -4567,12 +4802,28 @@ it.each(
   const search =
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>('[name="menu-search"]')!;
   await search.updateComplete;
-  const controls = [
-    table.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!,
-    selectButton(el),
-    search.shadowRoot!.querySelector<HTMLInputElement>("input")!,
-    table.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!,
-  ];
+  const switcher = viewControl(el);
+  await vi.waitFor(() =>
+    expect(switcher.slot).toBe(width <= 440 ? "above-table" : "toolbar-search"),
+  );
+  const selectedView = switcher.shadowRoot!.querySelector<HTMLButtonElement>(
+    'button[aria-checked="true"]',
+  )!;
+  const filters = table.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!;
+  const searchInput = search.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  const customise = table.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!;
+  const controls =
+    width <= 440
+      ? [selectedView, filters, selectButton(el), searchInput, customise]
+      : [filters, selectButton(el), searchInput, selectedView, customise];
+  if (width <= 440)
+    expect(switcher.getBoundingClientRect().bottom).toBeLessThan(
+      filters.getBoundingClientRect().top,
+    );
+  else
+    expect(switcher.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+      search.getBoundingClientRect().right,
+    );
   const before = document.createElement("button");
   before.textContent = "Before Products";
   el.before(before);

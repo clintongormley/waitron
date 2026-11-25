@@ -3409,7 +3409,7 @@ describe("the product list as a tree", () => {
     expect(sent).toEqual(["cancel", "cancel"]);
   });
 
-  it("opens the All products menu, without moving focus, when the menu loads empty, and only that once", async () => {
+  it("keeps the All products menu closed on an empty Tree until staff open it", async () => {
     const outside = document.createElement("button");
     document.body.append(outside);
     onTestFinished(() => outside.remove());
@@ -3417,14 +3417,17 @@ describe("the product list as a tree", () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [],
       categories: [],
-      loaded: true,
     });
     const menu = (await tableRoot(el)).querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
       '[data-test="actions-root"]',
     )!;
     const popup = () => menu.shadowRoot!.querySelector("[popover]")!;
-    await vi.waitFor(() => expect(popup().matches(":popover-open")).toBe(true));
+    await menu.updateComplete;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    expect(popup().matches(":popover-open")).toBe(false);
     expect(document.activeElement).toBe(outside);
+    await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+    expect(popup().matches(":popover-open")).toBe(true);
     menu.hide();
     el.products = [];
     await el.updateComplete;
@@ -3432,7 +3435,7 @@ describe("the product list as a tree", () => {
     expect(popup().matches(":popover-open")).toBe(false);
   });
 
-  it("leaves the menu closed before the menu has loaded, and for one with something in it", async () => {
+  it("leaves the All products menu closed as the first product appears", async () => {
     const { el } = await mountWidget<ProductList>("dashboard-product-list", {
       products: [],
       categories: [],
@@ -3444,7 +3447,6 @@ describe("the product list as a tree", () => {
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect((await popup()).matches(":popover-open")).toBe(false);
     el.products = [product()];
-    el.loaded = true;
     await el.updateComplete;
     await new Promise((resolve) => requestAnimationFrame(resolve));
     expect((await popup()).matches(":popover-open")).toBe(false);
@@ -3512,6 +3514,101 @@ describe("a product's variants in the list", () => {
     await vi.waitFor(() => expect(scroll.scrollWidth).toBe(scroll.clientWidth));
     await page.viewport(390, 844);
     await vi.waitFor(() => expect(table.wrapToFit).toBe(false));
+  });
+
+  it.each(["en-GB", "es-ES"])("shows the List defaults at 1180 px in %s", async (locale) => {
+    setLocale(locale);
+    await page.viewport(1180, 844);
+    const dish = cecina();
+    dish.name = "Iberian ham croquettes";
+    const { el, table } = await mountTree({
+      view: "list",
+      categories: [
+        { ...drinks, name: "Food and drinks served during the evening", color: "#123456" },
+        { id: "deli", name: "Cured meats from local producers", parentId: "d", color: null },
+        { ...food, name: "Fish" },
+      ],
+      products: [
+        dish,
+        product({ id: "fish", name: "Roast fish", primaryCategoryId: "f", variants: [bunVariant] }),
+      ],
+    });
+    el.parentElement!.style.width = "848px";
+    const root = await tableRoot(el);
+    expect(rowKeys(root)).toEqual(["cecina", "fish"]);
+    const headings = () =>
+      [...root.querySelectorAll("thead th")].map((th) =>
+        (th.getAttribute("aria-label") ?? th.textContent!).replace(/[▲▼]/g, "").trim(),
+      );
+    expect(headings().slice(0, 4)).toEqual([
+      t("product.name"),
+      t("product.category"),
+      t("product.price"),
+      t("editor.available"),
+    ]);
+    const category = cellUnder(root, "cecina", t("product.category"));
+    expect(category.textContent!.trim()).toBe(
+      "Food and drinks served during the evening › Cured meats from local producers",
+    );
+    expect(category.querySelector("button")).toBeNull();
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    const longName = nameCell(root, "cecina");
+    await vi.waitFor(() => {
+      expect(scroll.clientWidth).toBeGreaterThan(840);
+      expect(scroll.scrollWidth).toBe(scroll.clientWidth);
+      const swatch = category.querySelector('[part~="color-swatch"]')!;
+      const { width, height } = swatch.getBoundingClientRect();
+      expect(width).toBeCloseTo(height);
+      expect(getComputedStyle(swatch).backgroundColor).toBe("rgb(18, 52, 86)");
+      const photo = longName.querySelector('[part~="media-frame"]')!.getBoundingClientRect();
+      const name = longName.querySelector("strong")!.getBoundingClientRect();
+      expect(name.left).toBeGreaterThan(photo.right);
+      expect(name.top).toBeLessThan(photo.bottom);
+      const shortCategory = cellUnder(root, "fish", t("product.category"));
+      expect(shortCategory.closest("tr")!.offsetHeight).toBeLessThan(53);
+      const shortSwatch = shortCategory
+        .querySelector('[part~="color-swatch"]')!
+        .getBoundingClientRect();
+      const shortMedia = nameCell(root, "fish")
+        .querySelector('[part~="product-media"]')!
+        .getBoundingClientRect();
+      expect(
+        Math.abs(shortSwatch.top + shortSwatch.height / 2 - shortMedia.top - shortMedia.height / 2),
+      ).toBeLessThan(2);
+      const toggle = nameCell(root, "fish")
+        .querySelector('[part~="variant-toggle"]')!
+        .getBoundingClientRect();
+      expect(
+        Math.abs(toggle.top + toggle.height / 2 - shortMedia.top - shortMedia.height / 2),
+      ).toBeLessThan(2);
+    });
+    await openVariants(root, table, "cecina");
+    expect(cellUnder(root, "cecina:thin", t("product.category")).textContent?.trim()).toBe("");
+    el.parentElement!.style.width = "390px";
+    await vi.waitFor(() => expect(headings()).not.toContain(t("product.category")));
+    expect(root.querySelector('wt-combobox[data-filter="category"]')).not.toBeNull();
+  });
+
+  it("filters products through category descendants in List", async () => {
+    const { table, root } = await mountTree({ view: "list" });
+    await chooseOption(root.querySelector<WtCombobox>('wt-combobox[data-filter="category"]')!, "d");
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["cola", "lager"]);
+  });
+
+  it("sorts List products by Category with each variant still under its product", async () => {
+    const { table, root } = await mountTree({
+      view: "list",
+      products: [
+        product({ id: "apple", name: "Apple", primaryCategoryId: "f" }),
+        product({ id: "water", name: "Water", primaryCategoryId: "d", variants: [bunVariant] }),
+      ],
+    });
+    expect(rowKeys(root)).toEqual(["apple", "water"]);
+    await openVariants(root, table, "water");
+    root.querySelector<HTMLButtonElement>('button[data-sort="category"]')!.click();
+    await table.updateComplete;
+    expect(rowKeys(root)).toEqual(["water", `water:${bunVariant.id}`, "apple"]);
   });
 
   it("draws a small, muted arrow on a product with variants, at its arrow box's end", async () => {

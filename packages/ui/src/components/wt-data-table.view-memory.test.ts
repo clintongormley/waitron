@@ -1,4 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { chooseOption, chooseOptions, cleanup, mount } from "../test-helpers.js";
 import type { WtCombobox } from "./wt-combobox.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
@@ -128,6 +129,38 @@ test("a stored ascending sort overrides a table that sorts descending by default
   });
   expect(el.sortDirection).toBe("ascending");
   expect(shownKeys(el)).toEqual(["1", "2", "3"]);
+});
+
+test("keeps a temporarily absent column's position when reordering the current columns", async () => {
+  const status: DataTableColumn<Person> = { ...statusColumn({}), choosable: "shown" };
+  const city: DataTableColumn<Person> = {
+    key: "city",
+    label: "City",
+    choosable: "shown",
+    cell: () => "Leeds",
+  };
+  const role: DataTableColumn<Person> = {
+    key: "role",
+    label: "Role",
+    choosable: "shown",
+    cell: () => "Operator",
+  };
+  const all = [name, status, city, role];
+  localStorage.setItem("people.reorder:column-order", JSON.stringify(["role", "city", "status"]));
+  const el = await peopleTable({ viewKey: "people.reorder", columns: all });
+  const headings = () =>
+    [...el.shadowRoot!.querySelectorAll("thead th")].map((cell) => cell.textContent!.trim());
+  expect(headings()).toEqual(["Name", "Role", "City", "Status"]);
+  el.columns = [name, city, role];
+  await el.updateComplete;
+  await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>(".columns-trigger")!);
+  el.shadowRoot!.querySelector<HTMLElement>('[data-reorder="city"]')!.focus();
+  await userEvent.keyboard("{ArrowUp}");
+  await el.updateComplete;
+  expect(headings()).toEqual(["Name", "City", "Role"]);
+  el.columns = all;
+  await el.updateComplete;
+  expect(headings()).toEqual(["Name", "City", "Role", "Status"]);
 });
 
 type Node = { id: string; parent: string | null; name: string };

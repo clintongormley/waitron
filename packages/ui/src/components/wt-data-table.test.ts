@@ -2598,6 +2598,19 @@ test("an empty source table shows only its empty state, even with an initial fil
   expect(el.shadowRoot!.querySelector(".empty")!.textContent).toContain("No users yet");
 });
 
+test("a table that keeps its empty toolbar keeps an open Filters panel after its last row leaves", async () => {
+  const el = await tableS({ columns: withStatus, keepToolbarWhenEmpty: true });
+  const root = el.shadowRoot!;
+  const trigger = root.querySelector<HTMLButtonElement>(".filters-trigger")!;
+  trigger.click();
+  await el.updateComplete;
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  el.rows = [];
+  await el.updateComplete;
+  expect(trigger.getAttribute("aria-expanded")).toBe("true");
+  expect(root.querySelector(".filters-panel")!.matches(":popover-open")).toBe(true);
+});
+
 test("a filter on its initial choice counts in the panel badge and can be cleared", async () => {
   const status = withStatus[1]!;
   const el = await tableS({
@@ -3392,6 +3405,11 @@ test("noMatchesMessage shows when a filter, with nothing searched, hides every r
     rows: [rowsS[1]!],
     noMatchesMessage: "Hidden by a filter",
   });
+  const clear = document.createElement("button");
+  clear.slot = "no-matches-action";
+  clear.textContent = "Clear filters";
+  clear.addEventListener("click", () => el.clearFilters());
+  el.append(clear);
   expect(el.shadowRoot!.querySelector(".table-search")).toBeNull();
   await chooseOption(
     el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[data-filter="status"]')!,
@@ -3401,6 +3419,9 @@ test("noMatchesMessage shows when a filter, with nothing searched, hides every r
   expect(rowKeysS(el)).toEqual([]);
   expect(el.shadowRoot!.querySelector(".message")!.textContent).toBe("Hidden by a filter");
   expect(el.shadowRoot!.querySelector(".table-toolbar")).not.toBeNull();
+  expect(clear.getBoundingClientRect().width).toBeGreaterThan(0);
+  await userEvent.click(clear);
+  expect(rowKeysS(el)).toEqual(["2"]);
 });
 
 test("filter dropdowns render and narrow rows without a search box", async () => {

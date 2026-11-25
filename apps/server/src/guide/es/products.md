@@ -15,15 +15,19 @@ cada uno de sus grupos que tiene algo configurado, así ves lo que está configu
 encabezado para abrirla o cerrarla. Si contiene algo que tienes que corregir, se abre sola y sigue
 abierta hasta que lo corriges.
 
-Usa **Filtros** para acotar la lista de Productos. Al filtrar se abren las categorías con
-coincidencias y se cuentan también los productos de sus subcategorías. En **Disponible**, elige
-**No** para encontrar platos o variantes que no están a la venta. Un plato con una variante no
-disponible puede aparecer bajo **Sí** y **No**.
+En **Lista**, busca por nombre de producto o variante. Para encontrar platos de una categoría y
+sus subcategorías, elige una **Categoría** en **Filtros**. En **Disponible**, elige **No** para encontrar platos o
+variantes que no están a la venta. Un plato con una variante no disponible puede aparecer bajo
+**Sí** y **No**.
 
-Las categorías siguen en orden alfabético cuando ordenas los productos dentro de ellas. Busca por
-nombre para encontrar un plato o una categoría y ver dónde está. Si la búsqueda no encuentra nada u
-oculta un producto que acabas de guardar, elige **Borrar búsqueda y filtros**. Si una categoría
-vacía nueva desaparece al filtrar, elige **Borrar todo** en **Filtros**.
+Cambia a **Árbol** para recorrer u organizar las categorías. Las categorías siguen en orden
+alfabético cuando ordenas los productos y se abren si tienen coincidencias al filtrar. Para añadir
+un producto directamente en una categoría, elige **Añadir producto** en su menú ⋮. El botón junto al
+título de la página añade un producto sin categoría.
+
+Si no hay coincidencias o tus opciones ocultan un producto que acabas de guardar, elige **Borrar
+búsqueda y filtros**. Si una categoría vacía nueva desaparece al filtrar en Árbol, elige **Borrar
+todo** en **Filtros**.
 
 ## Cómo se cobra el IVA {#vat}
 
@@ -107,9 +111,10 @@ producto muestra la ruta completa de la categoría en la primera línea bajo el 
 ejemplo **Bebidas › Bebidas alcohólicas › Cócteles**, o **Sin categoría** cuando el producto no está en
 ninguna. Elige **Cambiar**, después de la ruta, para elegir otra: la lista empieza con **Sin
 categoría** y después muestra todas las categorías como un árbol sangrado, cada subcategoría bajo su
-categoría superior. También puedes mover el producto a otra categoría en la pantalla Productos,
-activando **Seleccionar** y arrastrándolo, o con **Mover a…**. La categoría principal también influye
-en qué estación de preparación recibe un plato, como se explica más abajo.
+categoría superior. También puedes mover el producto a otra categoría en la pantalla Productos.
+Activa **Seleccionar** y elige **Mover a…** en cualquiera de las dos vistas. Para arrastrar un
+producto a otra categoría, cambia primero a **Árbol**. La categoría principal también influye en
+qué estación de preparación recibe un plato, como se explica más abajo.
 
 Para soltar elementos en una subcategoría, abre las categorías superiores antes de empezar a arrastrar.
 Al soltar productos o categorías, se abre la ventana de **Mover a…** con el destino seleccionado.

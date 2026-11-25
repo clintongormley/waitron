@@ -14,15 +14,18 @@ Details is open when you add a product and closed when you edit one. While it is
 something set, so you can see what is set without opening it. Click its heading to open or close it. If
 it contains something you need to fix, it opens itself and stays open until you have fixed it.
 
-Use **Filters** to narrow the Products list. Matching categories open while you filter, with a
-count that includes products in their subcategories. Under **Available**, choose **No** to find
-dishes or variants that are off sale. A dish with an unavailable variant can appear under **Yes**
-and **No**.
+In **List**, search by product or variant name. To find dishes in a category and its subcategories,
+choose a **Category** in **Filters**. Under **Available**, choose **No** to find dishes or variants that are off sale.
+A dish with an unavailable variant can appear under **Yes** and **No**.
 
-Categories stay in alphabetical order when you sort the products within them. Search by name to
-find a dish or category and see where it belongs. If a search finds nothing or hides a product you
-just saved, choose **Clear search and filters**. If a new empty category disappears while you
-filter, choose **Clear all** in **Filters**.
+Switch to **Tree** to browse or organise categories. Categories stay in alphabetical order when
+you sort products, and matching categories open while you filter. To add directly in a category,
+choose **Add product** in that category's ⋮ menu. The button beside the page heading starts a product
+without a category.
+
+If no products match or your choices hide a product you just saved, choose **Clear search and
+filters**. If a new empty category disappears while you filter in Tree, choose **Clear all** in
+**Filters**.
 
 ## How VAT is charged {#vat}
 
@@ -102,8 +105,9 @@ category's full path on the first line under the window's title, such as
 **Drinks › Alcoholic drinks › Cocktails**, or **No category** when the product is in none. Choose
 **Change** after the path to pick another: the list starts with **No category** and then shows
 every category as an indented tree, each subcategory under its parent. You can also move the product
-to another category on the Products screen, by turning on **Select** and dragging it, or
-with **Move to…**. The main category also plays a part in choosing the prep station a dish goes
+to another category on the Products screen. Turn on **Select** and choose **Move to…** in either
+view. To drag products into a category, switch to **Tree** first. The main category also plays a
+part in choosing the prep station a dish goes
 to, as described below.
 
 To drop into a subcategory, open its parent categories before you start dragging.

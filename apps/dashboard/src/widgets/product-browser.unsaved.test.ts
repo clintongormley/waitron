@@ -1,5 +1,5 @@
 import { LitElement, html } from "lit";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -30,8 +30,10 @@ class ProductsLeaveApp extends LitElement {
   }
 }
 customElements.define("products-leave-test-app", ProductsLeaveApp);
+beforeEach(() => localStorage.setItem("waitron.products.view", "tree"));
 afterEach(() => {
   cleanupWidgets();
+  localStorage.removeItem("waitron.products.view");
   setLocale("en-GB");
 });
 const counts = { id: "d", folders: 1, products: 3, activeProducts: 2, routes: 1, ownRoutes: 1 };

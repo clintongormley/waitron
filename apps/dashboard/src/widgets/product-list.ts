@@ -59,6 +59,13 @@ import {
   type ProductAvailabilityChange,
 } from "./product-tree-availability.js";
 import { productRowLabels, productRowStyles, unavailableLabel } from "./product-list-row-parts.js";
+import {
+  PRODUCTS_PHONE_WIDTH,
+  productCategoryColumn,
+  productListCategoryStyles,
+} from "./product-list-category.js";
+
+export type ProductsView = "list" | "tree";
 
 export const ROOT_KEY = "root";
 
@@ -79,7 +86,7 @@ type CategoryCounts = { categories: number; products: number; unavailable: numbe
 interface ProductRow {
   kind: "product";
   key: string;
-  parentKey: string;
+  parentKey: string | null;
   product: Product;
   variant: Product["variants"][number] | null;
 }
@@ -340,8 +347,11 @@ export class ProductList extends LitElement {
     `,
     productMediaStyles,
     productRowStyles,
+    productListCategoryStyles,
   ];
 
+  @property({ attribute: false }) view: ProductsView = "tree";
+  @state() private phone = false;
   @property({ type: Boolean }) selecting = false;
   /** Whether rows carry grips and can be dragged. On by default, so a mount that wants a tree
    * without them passes `.reordering=${false}`. */
@@ -368,14 +378,11 @@ export class ProductList extends LitElement {
   /** Whether the box's colour chooser is open: it takes the cursor without the person leaving the
    * box. */
   @property({ type: Boolean }) choosingColor = false;
-  /** Whether the menu has loaded, so that an empty one is known to be empty. */
-  @property({ type: Boolean }) loaded = false;
 
   #listNames: ReadonlyMap<string, string> = new Map();
   #nameValue = "";
   /** Set once the box has sent its name or its cancel, until a refusal or a new box. */
   #nameSent = false;
-  #emptyChecked = false;
   /** Rebuilt in willUpdate only when a property #rows() reads changes, and a new read there joins
    * that list; kept otherwise so wt-data-table keeps the search text it prepared for each row. */
   #rowList: ListRow[] = [];
@@ -469,10 +476,7 @@ export class ProductList extends LitElement {
   });
   @state() private ghost: DragGhost | null = null;
 
-  readonly #tableResize = new ResizeObserver(([entry]) => {
-    this.#table()!.wrapToFit = entry!.contentRect.width >= 800;
-    this.#scheduleFit();
-  });
+  readonly #tableResize = new ResizeObserver(() => this.#scheduleFit());
   readonly #tableNarrow = new MutationObserver(() => this.#scheduleFit());
   #fitFrame = 0;
 
@@ -508,6 +512,7 @@ export class ProductList extends LitElement {
 
   /** Touch starts a drag at the grip so a gesture on the rest of the row can scroll. */
   readonly #pointerDown = (event: PointerEvent): void => {
+    if (this.view === "list") return;
     if (!this.reordering) return;
     const path = event
       .composedPath()
@@ -563,8 +568,9 @@ export class ProductList extends LitElement {
         ? row.key
         : row.variant === null
           ? row.parentKey
-          : (this.#rowByKey.get(row.parentKey)?.parentKey ?? ROOT_KEY);
+          : (this.#rowByKey.get(row.product.id)?.parentKey ?? ROOT_KEY);
     if (
+      target === null ||
       !acceptsMenuDrop(this.#dragged, target === ROOT_KEY ? null : target.slice(7), this.categories)
     )
       return undefined;
@@ -633,13 +639,14 @@ export class ProductList extends LitElement {
     if (changed.has("extraLists") || changed.has("optionLists"))
       this.#listNames = modifierListNames(this.extraLists, this.optionLists);
     if (changed.has("categories") || changed.has("products")) this.#counts = this.#count();
-    if (changed.has("categories") || changed.has("products") || changed.has("nameDraft")) {
+    if (["view", "categories", "products", "nameDraft"].some((key) => changed.has(key))) {
       this.#rowList = this.#rows();
       this.#rowByKey = new Map(this.#rowList.map((row) => [row.key, row]));
     }
     // The Course filter offers the courses, and has none while there are none.
-    if (changed.has("courses")) {
+    if (["view", "phone", "categories", "defaultColor", "courses"].some((key) => changed.has(key)))
       this.#columnLocale = "";
+    if (changed.has("courses")) {
       this.#courseOrder = new Map(this.courses.map((course, index) => [course.id, index]));
     }
     if (changed.has("categories")) {
@@ -659,10 +666,6 @@ export class ProductList extends LitElement {
   protected override updated(changed: PropertyValues<this>): void {
     if (changed.has("nameDraft") && this.nameDraft) void this.#revealNameBox(true);
     else if (changed.has("nameError") && this.nameError) void this.#revealNameBox(false);
-    if (this.loaded && !this.#emptyChecked) {
-      this.#emptyChecked = true;
-      if (this.products.length === 0 && this.categories.length === 0) void this.#openRootMenu();
-    }
   }
 
   async #revealNameBox(focus: boolean): Promise<void> {
@@ -687,19 +690,6 @@ export class ProductList extends LitElement {
       box.focus();
       box.select();
     }
-  }
-
-  /** `show()` moves no focus, so the person's place on the page is kept. */
-  async #openRootMenu(): Promise<void> {
-    const table = this.#table();
-    if (!table) return;
-    await table.updateComplete;
-    const menu = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-      '[data-test="actions-root"]',
-    );
-    if (!menu) return;
-    await menu.updateComplete;
-    menu.show();
   }
 
   #commitName(): void {
@@ -795,6 +785,12 @@ export class ProductList extends LitElement {
     if (this.#fitFrame) return;
     this.#fitFrame = requestAnimationFrame(() => {
       this.#fitFrame = 0;
+      const table = this.#table()!;
+      const width = table.clientWidth;
+      if (width > 0) {
+        this.phone = width <= PRODUCTS_PHONE_WIDTH;
+        table.wrapToFit = width >= 800;
+      }
       this.#fitNames();
     });
   }
@@ -850,28 +846,32 @@ export class ProductList extends LitElement {
     const keyOf = (id: string | null): string =>
       id !== null && known.has(id) ? `folder:${id}` : ROOT_KEY;
     return [
-      { kind: "root", key: ROOT_KEY, parentKey: null },
-      ...this.categories.map((folder): CategoryRow => ({
-        kind: "folder",
-        key: `folder:${folder.id}`,
-        parentKey: keyOf(folder.parentId),
-        folder,
-      })),
-      ...(this.nameDraft?.kind === "create"
-        ? [
-            {
-              kind: "draft",
-              key: DRAFT_KEY,
-              parentKey: keyOf(this.nameDraft.parentId),
-            } satisfies DraftRow,
-          ]
-        : []),
+      ...(this.view === "list"
+        ? []
+        : [
+            { kind: "root", key: ROOT_KEY, parentKey: null } satisfies RootRow,
+            ...this.categories.map((folder): CategoryRow => ({
+              kind: "folder",
+              key: `folder:${folder.id}`,
+              parentKey: keyOf(folder.parentId),
+              folder,
+            })),
+            ...(this.nameDraft?.kind === "create"
+              ? [
+                  {
+                    kind: "draft",
+                    key: DRAFT_KEY,
+                    parentKey: keyOf(this.nameDraft.parentId),
+                  } satisfies DraftRow,
+                ]
+              : []),
+          ]),
       ...this.products.flatMap((product): ProductRow[] =>
         [
           {
             kind: "product" as const,
             key: product.id,
-            parentKey: keyOf(product.primaryCategoryId),
+            parentKey: this.view === "tree" ? keyOf(product.primaryCategoryId) : null,
             product,
             variant: null,
           },
@@ -1063,7 +1063,7 @@ export class ProductList extends LitElement {
                   open: () => this.#send("edit-product", { productId: product.id, field: "image" }),
                 })}<span part="name-stack"
                   >${
-                    searchRoot
+                    searchRoot && this.view === "tree"
                       ? html`<span part="search-name-line"
                           ><span
                             ><strong>${product.name}</strong
@@ -1352,7 +1352,10 @@ export class ProductList extends LitElement {
   }
 
   #buildColumns(): DataTableColumn<ListRow>[] {
-    return this.#productColumns().map((column) => ({
+    const columns = this.#productColumns();
+    if (this.view === "list")
+      columns.splice(1, 0, productCategoryColumn(this.categories, this.defaultColor, this.phone));
+    return columns.map((column) => ({
       key: column.key,
       label: column.label,
       help: column.help,
@@ -1558,7 +1561,6 @@ export class ProductList extends LitElement {
       this.#send("category-toggle", { categoryId: key.slice(7), open: expanded });
   };
 
-  /** Opens the category and every category above it, and scrolls it into view. */
   async revealCategory(id: string): Promise<void> {
     await this.updateComplete;
     const table = this.#table();
@@ -1613,6 +1615,11 @@ export class ProductList extends LitElement {
     );
   }
 
+  resetCategoryView(): void {
+    const table = this.#table();
+    if (table) void table.updateComplete.then(() => table.resetColumnView("category", "name"));
+  }
+
   clearFilters(): void {
     this.#table()?.clearFilters();
   }
@@ -1627,15 +1634,19 @@ export class ProductList extends LitElement {
   }
 
   override render() {
-    return html`<wt-data-table
+    return html`<slot name="above-table"></slot
+      ><wt-data-table
         noMatchesMessage=${tableNoMatches()}
+        emptyMessage=${t("add_products.empty")}
         filterSearchPlaceholder=${t("categories.combobox_search")}
         filterNoResultsLabel=${t("categories.combobox_no_results")}
         aria-label=${t("products.title")}
         viewKey="waitron.products.table"
         rememberExpanded
         flatTreeSearch
+        keep-toolbar-when-empty
         dense-rows
+        ?data-list=${this.view === "list"}
         .filterCandidates=${this.#filterCandidates}
         .filterOpensBranch=${(row: ListRow) => row.kind === "root" || row.kind === "folder"}
         customiseColumnsLabel=${t("table.customise_columns")}
@@ -1660,7 +1671,7 @@ export class ProductList extends LitElement {
         collapseDescendants
         .rowInitiallyExpanded=${(row: ListRow) => row.kind === "root"}
         .searchTerm=${this.search}
-        .rowControls=${this.reordering ? (row: ListRow) => this.#rowControls(row) : undefined}
+        .rowControls=${this.view === "tree" && this.reordering ? (row: ListRow) => this.#rowControls(row) : undefined}
         rowControlsLabel=${t("folders.drag")}
         .selectable=${this.selecting}
         .selected=${this.selected}
@@ -1672,7 +1683,7 @@ export class ProductList extends LitElement {
             : row.kind === "product"
               ? (row.variant?.name ?? row.product.name)
               : ""}
-        .rowGroup=${this.#categoryGroups()}
+        .rowGroup=${this.view === "tree" ? this.#categoryGroups() : undefined}
         .rowJoinsParent=${(row: ListRow) => row.kind === "product" && row.variant !== null}
         .rowKeepsChildOrder=${(row: ListRow) => row.kind === "product" && row.variant === null}
         .rowActivation=${(row: ListRow) =>
@@ -1695,12 +1706,14 @@ export class ProductList extends LitElement {
         .rowClickLabel=${(row: ListRow) =>
           row.kind === "product" ? `${t("action.edit")}: ${(row.variant ?? row.product).name}` : ""}
         .rows=${this.#rowList}
+        .rowCellParts=${this.view === "list" ? () => "list-cell" : undefined}
         .columns=${this.#columns()}
         .rowKey=${(row: ListRow) => row.key}
         .rowParent=${(row: ListRow) => row.parentKey}
         @pointerdown=${this.#pointerDown}
         @click=${this.#clickAvailableCell}
         @wt-expand-change=${this.#expandChange}
+        ><slot name="empty-action" slot="empty-action"></slot
         ><slot name="no-matches-action" slot="no-matches-action"></slot
         ><slot name="toolbar-start" slot="toolbar-start"></slot
         ><slot name="toolbar-search" slot="toolbar-search"></slot
