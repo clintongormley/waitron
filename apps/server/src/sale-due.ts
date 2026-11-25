@@ -1,9 +1,10 @@
-import { inArray, sql } from "drizzle-orm";
-import { correctivesOf, sales } from "@waitron/db";
+import { eq, inArray, sql } from "drizzle-orm";
+import { correctivesOf, sales, saleVoids } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   addDecimal,
   centsToDecimal,
+  decimal,
   rawCentsToDecimal,
   saleId as brandSaleId,
 } from "@waitron/shared";
@@ -25,7 +26,7 @@ export interface IssuedSale {
 /**
  * The sale each named working order has already issued, with its language and what it owes:
  * `total + corrections`, the same `due` `settleSale` re-derives, so a card charged `amountDue + tip`
- * settles the sale exactly. An order with no sale is absent.
+ * settles the sale exactly; 0.00 once voided. An order with no sale is absent.
  */
 export async function readIssuedSales(
   tx: Transaction,
@@ -40,8 +41,10 @@ export async function readIssuedSales(
       total: sales.total,
       // Cast to text for `rawCentsToDecimal`, which refuses a number.
       corrections: sql<string>`cast(${correctionsCents} as text)`,
+      voidId: saleVoids.id,
     })
     .from(sales)
+    .leftJoin(saleVoids, eq(saleVoids.saleId, sales.id))
     .where(inArray(sales.workingOrderId, [...workingOrderIds]));
   return new Map(
     rows.map((row) => [
@@ -49,7 +52,10 @@ export async function readIssuedSales(
       {
         saleId: brandSaleId(row.id),
         locale: row.locale,
-        amountDue: addDecimal(centsToDecimal(row.total), rawCentsToDecimal(row.corrections)),
+        amountDue:
+          row.voidId === null
+            ? addDecimal(centsToDecimal(row.total), rawCentsToDecimal(row.corrections))
+            : decimal("0.00"),
       },
     ]),
   );
