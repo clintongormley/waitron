@@ -1,0 +1,157 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/print-api.ts",
+      "keep": ["PRINTER_MANAGE_PERMISSION", "mountPrintApi"],
+      "lift": {
+        "mount": "mountPrintApi",
+        "groups": {
+          "mountPrintAgentRoutes": {
+            "first": "post /print-api/agent/join",
+            "last": "post /print-api/agent/jobs/:id/result",
+            "parameters": {
+              "app": "Hono",
+              "deps": "PrintApiDeps",
+              "enrolLimiter": "EnrolRateLimiter",
+              "discovered": "Map<string, DiscoveredEntry>",
+              "keyOf": "(agentId: string, transport: string, locator: string) => string",
+              "description": "(entry: DiscoveredEntry | undefined, now: number) => { paired: boolean } | undefined",
+              "queueKeyOf": "(device: DiscoveredDeviceWire) => string | undefined",
+              "agentBluetooth": "ReadonlyMap<string, { value: AgentBluetooth; at: number }>",
+              "rememberAgentBluetooth": "(agentId: string, value: AgentBluetooth, at: number) => void",
+              "AGENT_BLUETOOTH_TTL_MS": "number",
+              "waitForJobs": "(agentId: string, visibleKeys: string[], initial: Awaited<ReturnType<typeof claimInvoicePrintJobs>>, wait: number, signal: AbortSignal) => ReturnType<typeof claimInvoicePrintJobs>",
+              "printerProbes": "ReturnType<typeof createPrinterProbes>",
+              "bluetoothCommands": "ReturnType<typeof createPrinterBluetoothCommands>",
+              "discoveryLeftMs": "() => number",
+              "log": "Logger"
+            }
+          },
+          "mountPrintAgentManagementRoutes": {
+            "first": "get /management-api/print-agents",
+            "last": "post /management-api/print-agents/:id/bluetooth/pair",
+            "parameters": {
+              "app": "Hono",
+              "deps": "PrintApiDeps",
+              "gated": "PrintPermissionGate",
+              "listedBluetooth": "(agentId: string, now: number) => AgentBluetooth | null",
+              "forgetAgentBluetooth": "(agentId: string) => void",
+              "requireAgentRow": "(tx: Transaction, id: string) => Promise<void>",
+              "reportedFresh": "(agentId: string, address: string, stamp: \"scannedAt\" | \"pairedAt\") => boolean",
+              "bluetoothCommands": "ReturnType<typeof createPrinterBluetoothCommands>",
+              "wakePulls": "(agentId?: string) => void",
+              "log": "Logger"
+            }
+          },
+          "mountPrintDiscoveryRoutes": {
+            "first": "post /management-api/printer-discovery/probe",
+            "last": "get /management-api/discovered-printers",
+            "parameters": {
+              "app": "Hono",
+              "gated": "PrintPermissionGate",
+              "discovered": "Map<string, DiscoveredEntry>",
+              "isListed": "(at: number | undefined, now: number) => boolean",
+              "addressOf": "(host: string, port: number | undefined) => string",
+              "queueKeyOf": "(device: DiscoveredDeviceWire) => string | undefined",
+              "printerProbes": "ReturnType<typeof createPrinterProbes>",
+              "bluetoothCommands": "ReturnType<typeof createPrinterBluetoothCommands>",
+              "wakePulls": "(agentId?: string) => void",
+              "log": "Logger"
+            }
+          },
+          "mountPrintPrintersRoutes": {
+            "first": "post /management-api/printers",
+            "last": "post /management-api/printers/:id/sample-receipt",
+            "parameters": {
+              "app": "Hono",
+              "deps": "PrintApiDeps",
+              "gated": "PrintPermissionGate",
+              "officeAddresses": "(now: number) => Set<string>",
+              "addressOf": "(host: string, port: number | undefined) => string",
+              "reportedFresh": "(agentId: string, address: string, stamp: \"scannedAt\" | \"pairedAt\") => boolean",
+              "bluetoothCommands": "ReturnType<typeof createPrinterBluetoothCommands>",
+              "wakePulls": "(agentId?: string) => void",
+              "log": "Logger"
+            }
+          },
+          "mountPrintJobsRoutes": {
+            "first": "get /management-api/print-jobs",
+            "last": "get /management-api/print-jobs/:id/preview",
+            "parameters": {
+              "app": "Hono",
+              "deps": "PrintApiDeps",
+              "gated": "PrintPermissionGate",
+              "visibleNow": "(now?: number) => Set<string>",
+              "seen": "(printer: { transport: string; localKey: string | null }, visible?: Set<string>) => boolean",
+              "testPages": "PageTestPages",
+              "log": "Logger"
+            }
+          },
+          "mountPrintAssignmentRoutes": {
+            "first": "post /management-api/stations/:sid/printers/:pid",
+            "last": "get /management-api/printer-stations",
+            "parameters": {
+              "app": "Hono",
+              "gated": "PrintPermissionGate",
+              "log": "Logger"
+            }
+          }
+        }
+      },
+      "targets": {
+        "apps/server/src/print-api-deps.ts": ["PrintApiDeps", "PrintPermissionGate"],
+        "apps/server/src/print-api-errors.ts": ["STATUS", "run", "runEquipmentLabel"],
+        "apps/server/src/print-discovery-types.ts": ["IppQueue", "DiscoveredEntry"],
+        "apps/server/src/print-request-fields.ts": [
+          "optionalString",
+          "nullableOptionalString",
+          "nullableOptionalInt",
+          "optionalBool"
+        ],
+        "apps/server/src/print-agent-reports.ts": [
+          "optionalAgentSetupUrl",
+          "optionalAgentSetupPort",
+          "VisibleDeviceWire",
+          "DiscoveredDeviceWire",
+          "PairedBluetoothWire",
+          "wireString",
+          "screenVisible",
+          "OFFICE_FORMATS",
+          "OFFICE_MEDIA",
+          "OFFICE_REFUSALS",
+          "MAX_ADVERTISED_FORMATS",
+          "MAX_FORMAT_LENGTH",
+          "MAX_RESOURCE_PATH_LENGTH",
+          "PRINTABLE_ASCII",
+          "oneOf",
+          "screenIppQueue",
+          "screenOfficeReport",
+          "screenScanned",
+          "screenPairedBluetooth",
+          "screenBluetoothOutcomes",
+          "AgentBluetooth",
+          "screenBluetooth"
+        ],
+        "apps/server/src/print-agent-routes.ts": ["readInvoicePrintClaim", "mountPrintAgentRoutes"],
+        "apps/server/src/print-agent-management-routes.ts": [
+          "requireBluetoothAddress",
+          "mountPrintAgentManagementRoutes"
+        ],
+        "apps/server/src/print-discovery-routes.ts": ["mountPrintDiscoveryRoutes"],
+        "apps/server/src/print-printers-routes.ts": [
+          "storedLocalKey",
+          "requirePickupRoles",
+          "mountPrintPrintersRoutes"
+        ],
+        "apps/server/src/print-jobs-routes.ts": ["RECENT_JOBS_LIMIT", "mountPrintJobsRoutes"],
+        "apps/server/src/print-assignments-routes.ts": [
+          "PROFILE_PRINTER_ROLE_ORDER",
+          "PrinterProfileUse",
+          "readPrinterProfileUses",
+          "mountPrintAssignmentRoutes"
+        ]
+      }
+    }
+  ]
+}

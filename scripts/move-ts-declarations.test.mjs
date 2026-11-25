@@ -369,6 +369,63 @@ describe("move-ts-declarations", () => {
     );
   });
 
+  it("keeps a moved route type out of the mount's runtime imports", async () => {
+    const compilerOptions = {
+      module: "ESNext",
+      moduleResolution: "Bundler",
+      verbatimModuleSyntax: true,
+    };
+    write("tsconfig.json", JSON.stringify({ compilerOptions }));
+    write(
+      "original.ts",
+      [
+        "interface Options {",
+        "  label: string;",
+        "}",
+        "",
+        "interface Router {",
+        "  post(path: string, handler: () => string): void;",
+        "}",
+        "",
+        "function readLabel(options: Options) {",
+        "  return options.label;",
+        "}",
+        "",
+        "export function mount(app: Router, options: Options) {",
+        '  app.post("/start", () => readLabel(options));',
+        "}",
+      ].join("\n"),
+    );
+    const withOptions = {
+      mount: "mount",
+      groups: {
+        mountStart: {
+          first: "post /start",
+          last: "post /start",
+          parameters: { app: "Router", options: "Options" },
+        },
+      },
+    };
+
+    await move(
+      "original.ts",
+      { "options.ts": ["Options", "Router", "readLabel"], "start.ts": ["mountStart"] },
+      ["mount"],
+      withOptions,
+    );
+
+    const program = ts.createProgram(
+      [join(root, "original.ts")],
+      ts.convertCompilerOptionsFromJson(compilerOptions, root).options,
+    );
+    const problems = ts
+      .getPreEmitDiagnostics(program)
+      .map(
+        ({ code, messageText }) => `${code}: ${ts.flattenDiagnosticMessageText(messageText, "\n")}`,
+      );
+    expect(problems).toEqual([]);
+  });
+
   it.each([
     ["missing", mount, "post /missing", /route anchor post \/missing, found 0/i],
     ["ambiguous", mount.replace(route, `${route}\n\n${route}`), "post /start", /found 2/i],

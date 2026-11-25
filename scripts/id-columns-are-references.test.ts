@@ -28,7 +28,7 @@ import { scratchParent } from "./scratch-dir.mjs";
 /** Id-shaped columns that hold no id of a transferred row, each with the reason. */
 const NOT_REFERENCES: Readonly<Record<string, string>> = {
   "printers.poll_id":
-    "free text the operator types for a cloud-poll printer (`apps/server/src/print-api.ts`), no row's id",
+    "free text the operator types for a cloud-poll printer (`apps/server/src/print-printers-routes.ts`), no row's id",
 };
 
 const ID_SHAPED = /_ids?$/;

@@ -690,7 +690,7 @@ button. Weaker than the rule: each holds only the routes it names, so a new rout
 without `drawerPrinter`, or takes cash without `assertTakesCash`, is seen by nothing.
 
 One path is outside the rule: the dashboard's "Test open drawer" calibration,
-`POST /management-api/printers/:id/test-drawer` (`apps/server/src/print-api.ts`), opens any
+`POST /management-api/printers/:id/test-drawer` (`apps/server/src/print-printers-routes.ts`), opens any
 active printer's drawer for a manager holding both `hardware.manage` and `cash.drawer`, with no
 device behind it: its audit row names the printer and the manager and no device. The owner chose to
 leave it as it is (2026-10-02, B29).
@@ -2420,7 +2420,7 @@ USB or Bluetooth printer no agent sees, may be moved to another printer the same
 in the transaction that queues the reprint.
 
 For retries, the dashboard combines `canResendPrintJob`, or a waiting job's `stuck`, with a
-sale-wide reservation read in `print-api.ts` that skips the job itself. For a completed thermal
+sale-wide reservation read in `print-jobs-routes.ts` that skips the job itself. For a completed thermal
 original, Reprint is a copy request. An outstanding full-invoice delivery can refuse it with
 `invoice_delivery.active`. The open physical-delivery limit is in
 [the fiscal backlog](../backlog/fiscal.md#uncertain-receipt-delivery).
