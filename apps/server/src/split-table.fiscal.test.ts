@@ -255,7 +255,7 @@ async function split(
 }
 
 describe("A803 split: issuance", () => {
-  it("a loose pick of the one dish a part payment does not cover issues the bill's one invoice, on the staying party", async () => {
+  it("a loose pick that leaves the bill exactly paid issues its one invoice, on the staying party", async () => {
     const { partyId, tabId, first, leaving } = await atTwoTables("Seafood rice", "Small beer");
     await contribute(tabId, "35.00");
     const [, beerLineId] = lineIdsOf(tabId);

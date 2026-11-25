@@ -417,7 +417,7 @@ describe("A803 move dishes route:", () => {
     ["a hand-keyed card", { method: "card", entry: "manual" }],
     ["a reader card", { method: "card", entry: "reader" }],
   ])(
-    "a dish moved onto a bill holding a part payment of its Seafood rice's price in %s leaves that payment as it was, and paying the rest files one invoice holding the moved dish and both payments",
+    "a dish moved onto a bill holding a part payment of 35.00 in %s leaves that payment as it was, and paying the rest files one invoice holding the moved dish and both payments",
     async (_, tender) => {
       const { partyId, tabId } = await seated("Seafood rice", "Small beer", "Steak", "Tarta");
       const { billId: destination } = await inTx(venue, (tx) =>
