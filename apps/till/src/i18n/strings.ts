@@ -2229,9 +2229,9 @@ export const en = {
   "cancel_credit.action": "Cancel and credit",
   "cancel_credit.title": "Cancel and credit",
   "cancel_credit.scope":
-    "Invoice {invoice} ({amount}) will be credited in full: a corrective invoice is issued and the bill is cancelled.",
+    "Invoice {invoice} ({amount}) will be credited in full: a money back receipt is issued and the bill is cancelled.",
   "cancel_credit.scope_unnumbered":
-    "This bill's invoice ({amount}) will be credited in full: a corrective invoice is issued and the bill is cancelled.",
+    "This bill's invoice ({amount}) will be credited in full: a money back receipt is issued and the bill is cancelled.",
   "cancel_credit.reason": "Reason",
   "cancel_credit.reason_invalid": "Say why the bill is cancelled",
   "cancel_credit.reason_long": "Keep the reason to 500 characters or fewer",
@@ -2248,8 +2248,8 @@ export const en = {
     "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it before cancelling.",
   "cancel_credit.refused_not_permitted":
     "The person who approved this cannot issue corrective invoices. Choose someone who can.",
-  "cancel_credit.done": "Corrective invoice {number} issued. The bill is cancelled.",
-  "cancel_credit.done_unnumbered": "A corrective invoice was issued and the bill is cancelled.",
+  "cancel_credit.done": "Money back receipt {number} issued. The bill is cancelled.",
+  "cancel_credit.done_unnumbered": "A money back receipt was issued and the bill is cancelled.",
   "cancel_credit.done_action": "Done",
   // Reopen bill: a printed receipt is credited in full and its dishes go onto a new open bill
   "split.action": "Reopen bill",
@@ -4684,9 +4684,9 @@ export const es: Record<StringKey, string> = {
   "cancel_credit.action": "Cancelar y abonar",
   "cancel_credit.title": "Cancelar y abonar",
   "cancel_credit.scope":
-    "La factura {invoice} ({amount}) se abona por completo: se emite una factura rectificativa y se cancela la cuenta.",
+    "La factura {invoice} ({amount}) se abona por completo: se emite un ticket de devolución y se cancela la cuenta.",
   "cancel_credit.scope_unnumbered":
-    "La factura de esta cuenta ({amount}) se abona por completo: se emite una factura rectificativa y se cancela la cuenta.",
+    "La factura de esta cuenta ({amount}) se abona por completo: se emite un ticket de devolución y se cancela la cuenta.",
   "cancel_credit.reason": "Motivo",
   "cancel_credit.reason_invalid": "Indica por qué se cancela la cuenta",
   "cancel_credit.reason_long": "Usa 500 caracteres como mucho para el motivo",
@@ -4703,9 +4703,8 @@ export const es: Record<StringKey, string> = {
     "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo antes de cancelar.",
   "cancel_credit.refused_not_permitted":
     "La persona que lo ha aprobado no puede emitir facturas rectificativas. Elige a alguien que pueda.",
-  "cancel_credit.done": "Factura rectificativa {number} emitida. La cuenta queda cancelada.",
-  "cancel_credit.done_unnumbered":
-    "Se emitió la factura rectificativa y la cuenta queda cancelada.",
+  "cancel_credit.done": "Ticket de devolución {number} emitido. La cuenta queda cancelada.",
+  "cancel_credit.done_unnumbered": "Se emitió el ticket de devolución y la cuenta queda cancelada.",
   "cancel_credit.done_action": "Hecho",
   "split.action": "Reabrir cuenta",
   "split.title": "Reabrir cuenta",
