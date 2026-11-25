@@ -216,7 +216,6 @@ what is left is below. The 25 November session queued A1578 (slow Bluetooth prin
 (looks around A4 printing) and A1584 (a shorter Delete printer window).
 
 - Verify live Google address completion during Cloud-connected Prepare setup on the owner's real box with Google lookup configured.
-- Show the owner how Orders could close **Print / Reprint** after accepting the print and confirm where it queued. The owner mentioned the window staying open on 25 November and has a choice to make about the proposed change.
 - **A739, two looks at paper.** The payment slip's new lines (#4337) after the box's next update, and, for a new
   reader payment whose first receipt has no card details, a receipt copy after the background lookup
   fills them in.

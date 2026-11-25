@@ -175,7 +175,9 @@ export class OrdersScreen extends LitElement {
     this,
     () => {
       if (this.#url.read("dashboard") !== "orders") return;
-      this.linkedOrder = this.#url.read("order");
+      const linkedOrder = this.#url.read("order");
+      if (linkedOrder !== null && linkedOrder !== this.linkedOrder) this.printNotice = null;
+      this.linkedOrder = linkedOrder;
       clearTimeout(this.#textTimer);
       const address = readOrdersFilter((key) => this.#url.read(key));
       // The address this screen just wrote leaves the Table field's own spelling, such as a space
@@ -389,6 +391,7 @@ export class OrdersScreen extends LitElement {
 
   override render() {
     const rows = this.page?.rows ?? [];
+    const detailOrderId = this.linkedOrder ?? this.openId;
     const errorFor = (field: string) => (this.refusal?.field === field ? this.refusal.message : "");
     return html`<div class="heading">
         <h1>${t("orders.title")}</h1>
@@ -516,7 +519,7 @@ export class OrdersScreen extends LitElement {
       ></wt-data-table>
       <dashboard-order-detail-dialog
         .api=${this.api}
-        .orderId=${this.linkedOrder ?? this.openId}
+        .orderId=${detailOrderId}
         .mayReprint=${(row: OrderRowDto) => this.#mayReprint(row)}
         .mayExport=${this.canExport}
         @order-reprint=${(event: CustomEvent<{ row: OrderRowDto }>) => {
@@ -529,7 +532,7 @@ export class OrdersScreen extends LitElement {
           this.openId = null;
           if (this.linkedOrder !== null) this.#url.write({ order: null }, true);
         }}
-        >${this.openId === null ? nothing : this.#printConfirmation()}</dashboard-order-detail-dialog
+        >${detailOrderId === null ? nothing : this.#printConfirmation()}</dashboard-order-detail-dialog
       >
       <dashboard-order-reprint-dialog
         .api=${this.api}
@@ -550,7 +553,7 @@ export class OrdersScreen extends LitElement {
           this.findingCustomer = false;
         }}
       ></dashboard-invoice-customer-dialog>
-      ${this.openId === null ? this.#printConfirmation() : nothing}`;
+      ${detailOrderId === null ? this.#printConfirmation() : nothing}`;
   }
 }
 

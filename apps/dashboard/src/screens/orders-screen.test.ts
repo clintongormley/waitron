@@ -778,6 +778,7 @@ describe("dashboard Orders", () => {
 
   it.each([
     ["en-GB", "menu", "Invoice A/12 queued for Office printer."],
+    ["en-GB", "linked", "Copy of invoice A/12 queued for Office printer."],
     [
       "es-ES",
       "details",
@@ -791,14 +792,16 @@ describe("dashboard Orders", () => {
       setLocale(locale);
       const full = { ...ROW, invoiceType: "F1" as const };
       const next = { ...full, id: "next-bill", invoiceNumber: "B/13" };
-      const detail = fullDetail(full);
+      if (via === "linked") history.replaceState(null, "", `/orders/order/${full.id}`);
       const api = stubApi({
         listOrdersPage: vi.fn().mockResolvedValue({ ...PAGE, rows: [full, next] }),
-        getOrder: vi.fn().mockResolvedValue(detail),
+        getOrder: vi
+          .fn()
+          .mockImplementation(async (id) => fullDetail(id === full.id ? full : next)),
         requestOrderPrintDelivery: vi.fn().mockResolvedValue({
           id: "delivery-1",
           medium: "a4",
-          designation: via === "details" ? "duplicate" : "original",
+          designation: via === "menu" ? "original" : "duplicate",
           status: "queued",
           failureCode: null,
           requestedAt: ROW.at,
@@ -813,8 +816,9 @@ describe("dashboard Orders", () => {
       const table = el.shadowRoot!.querySelector("wt-data-table")!;
       await expect.poll(() => table.rows).toHaveLength(2);
       const details = el.shadowRoot!.querySelector("dashboard-order-detail-dialog")!;
-      if (via === "details") {
-        table.shadowRoot!.querySelector<HTMLElement>("tbody .row-activate")!.click();
+      if (via !== "menu") {
+        if (via === "details")
+          table.shadowRoot!.querySelector<HTMLElement>("tbody .row-activate")!.click();
         await expect
           .poll(() => details.shadowRoot!.querySelector("[data-test=print-invoice]"))
           .not.toBeNull();
@@ -844,15 +848,35 @@ describe("dashboard Orders", () => {
       await expect
         .poll(() => notice.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim())
         .toBe(message);
-      expect(details.orderId).toBe(via === "details" ? full.id : null);
+      expect(details.orderId).toBe(via === "menu" ? null : full.id);
       if (via === "details") {
         await userEvent.click(notice.shadowRoot!.querySelector<HTMLButtonElement>("button.close")!);
         expect(details.orderId).toBe(full.id);
-      } else {
-        table.shadowRoot!.querySelectorAll<HTMLElement>("tbody .row-activate")[1]!.click();
-        await expect.poll(() => details.orderId).toBe(next.id);
-        expect(details.querySelector("wt-toast")!.open).toBe(false);
+        return;
       }
+      if (via === "linked") {
+        const closed = new Promise<void>((resolve) =>
+          details.addEventListener("wt-close", () => resolve(), { once: true }),
+        );
+        await userEvent.keyboard("{Escape}");
+        await closed;
+        await expect
+          .poll(() => {
+            const pageNotice = el.shadowRoot!.querySelector("wt-toast");
+            return pageNotice?.parentNode === el.shadowRoot
+              ? pageNotice.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim()
+              : null;
+          })
+          .toBe(message);
+        history.pushState(null, "", `/orders/order/${next.id}`);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      } else
+        table
+          .shadowRoot!.querySelectorAll("wt-row-actions")[1]!
+          .querySelector("wt-button")!
+          .click();
+      await expect.poll(() => details.orderId).toBe(next.id);
+      expect(details.querySelector("wt-toast")!.open).toBe(false);
     },
   );
 
