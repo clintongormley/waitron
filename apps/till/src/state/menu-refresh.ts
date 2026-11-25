@@ -161,10 +161,16 @@ function answeredLabelName(line: OrderLine, labelId: string): string {
   return labelId;
 }
 
-/** `line` as `offer` sells it now: its dish or variant, and each pick, at the live price. */
-function adoptLine(line: OrderLine, offer: TillMenuOffer, menuVersionId: string): OrderLine {
+/** `line` as `offer` sells it now: its dish or variant, and each pick, at the live price. `undefined`
+ * when the offer no longer holds its variant: the dish is never sold in a variant's place. */
+function adoptLine(
+  line: OrderLine,
+  offer: TillMenuOffer,
+  menuVersionId: string,
+): OrderLine | undefined {
   const dish = menuOfferToTillProduct(offer, menuVersionId);
   const variant = dish.variants?.find((candidate) => candidate.id === line.product.variantId);
+  if (variant === undefined && line.product.variantId !== undefined) return undefined;
   const product = variant === undefined ? dish : productAsVariant(dish, variant);
   const extrasLists = takesExtras(product) ? offer.offeredModifiers : [];
   const extras = line.extras?.map((pick) => {
@@ -205,9 +211,9 @@ export function repriceRebuilt(
         ? offerById.get(menuItemId ?? "")
         : lookupSetMenuLine(line, setMenuOffer)?.offer;
     if (offer === undefined || menuVersionId === undefined) return;
-    const reason = lineBlock(line, offer)?.reason;
-    if (reason === "variant_removed" || reason === "unit_changed") return;
-    repriced.set(index, adoptLine(line, offer, menuVersionId));
+    if (lineBlock(line, offer)?.reason === "unit_changed") return;
+    const adopted = adoptLine(line, offer, menuVersionId);
+    if (adopted !== undefined) repriced.set(index, adopted);
   });
   return repriced;
 }
@@ -260,11 +266,11 @@ export function refreshBasket(
       offer === undefined ||
       live === undefined ||
       block?.reason === "removed" ||
-      block?.reason === "variant_removed" ||
       block?.reason === "unit_changed"
     )
       return;
     const adopted = adoptLine(line, offer, live);
+    if (adopted === undefined) return;
     outcome.adopted.set(index, adopted);
     const to = lineGross(adopted);
     if (line.earlierPriceUnknown === true) {

@@ -824,6 +824,41 @@ describe("refreshBasket", () => {
     expect(outcome.adopted.get(1)!.product.menuVersionId).toBe("v2");
   });
 
+  it.each([
+    ["sold out", { available: false }, "unavailable"],
+    ["sold only as an extra", { ordering: "not_sold_separately" }, "not_sold_separately"],
+  ] as const)(
+    "does not adopt the dish for a line whose variant is gone from a dish that is %s",
+    (_state, changes, reason) => {
+      const line: OrderLine = {
+        product: {
+          ...menuOfferToTillProduct(wine, "v1"),
+          variantId: "bottle",
+          allergens: { sulphites: {} },
+        },
+        quantity: "1",
+      };
+      const withoutBottle = {
+        ...wine,
+        ...changes,
+        allergens: {},
+        variants: [variant("glass", "4.00")],
+      };
+      const outcome = refreshBasket([line], [withoutBottle], live);
+      expect(outcome.blocked).toEqual([{ lineNo: 1, name: "wine", reason }]);
+      expect(outcome.changed).toEqual([]);
+      expect(outcome.adopted).toEqual(new Map());
+
+      const rebuilt: OrderLine = {
+        ...line,
+        product: { ...line.product, menuVersionId: "v2" },
+        earlierPriceUnknown: true,
+      };
+      const byId = new Map([[withoutBottle.id, withoutBottle]]);
+      expect(repriceRebuilt([rebuilt], byId, live)).toEqual(new Map());
+    },
+  );
+
   it("shows the new price of a line it blocks too, so confirming never re-prices it unseen", () => {
     const cheese = {
       listId: "list-extras",

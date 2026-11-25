@@ -178,11 +178,21 @@ export function rebuildReturned(
   return rebuilt;
 }
 
-/** A variant the offer no longer holds keeps its id, sold under the dish's own names. */
+/** A variant the offer no longer holds keeps its id, sold under the dish's own names, and is not
+ * reviewed: the dish's own allergens and diet are not the variant's. */
 function asVariant(dish: TillProduct, variantId: string | null): TillProduct {
   if (variantId === null) return dish;
   const variant = dish.variants?.find((candidate) => candidate.id === variantId);
-  return variant === undefined ? { ...dish, variantId } : productAsVariant(dish, variant);
+  return variant === undefined
+    ? {
+        ...dish,
+        variantId,
+        allergens: null,
+        diet: undefined,
+        dietOverride: undefined,
+        dietaryDeclarations: undefined,
+      }
+    : productAsVariant(dish, variant);
 }
 
 /** The zero price, general rate and unit are placeholders: a draft line sends no price, and the

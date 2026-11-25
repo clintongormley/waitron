@@ -8,6 +8,8 @@ import {
 import { lineBlock } from "./menu-refresh.js";
 import { draftLayout } from "./draft-layout.js";
 import { productAsVariant } from "./order-line.js";
+import { asServedAllergens, asServedDiet } from "./as-served.js";
+import { nutritionDietLabels } from "../diet-labels.js";
 import { WorkingOrderStore, type OrderLine } from "./working-order.js";
 import type { Place } from "./draft-place.js";
 import {
@@ -486,6 +488,55 @@ describe("fromDraftLine", () => {
     ]);
     expect(rebuilt.optionSnapshots).toBeUndefined();
   });
+
+  it.each([
+    ["reviewed as containing none", {}],
+    ["reviewed as containing milk", { milk: {} }],
+  ])(
+    "says a variant the offer no longer holds is not reviewed when the dish is %s",
+    (_declared, allergens) => {
+      const parent = {
+        allergens,
+        diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+        dietOverride: { vegan: "yes" },
+        dietaryDeclarations: ["vegan"],
+      } satisfies Partial<TillMenuOffer>;
+      const dish = { ...burger, ...parent };
+      const withoutVariant = new Map([[dish.id, { ...dish, variants: [] }]]);
+      const line = fromDraftLine(saved(toDraftLineInput(burgerLine()), "2.000"), withoutVariant);
+      const declared = () => {
+        const { allergens, diet, dietOverride, dietaryDeclarations } = line.product;
+        return { allergens, diet, dietOverride, dietaryDeclarations };
+      };
+      const notReviewed = {
+        allergens: null,
+        diet: undefined,
+        dietOverride: undefined,
+        dietaryDeclarations: undefined,
+      };
+      expect(line.product.variantId).toBe("v-double");
+      expect(declared()).toEqual(notReviewed);
+      expect(asServedAllergens(line).pending).toBe(true);
+      expect(nutritionDietLabels(asServedDiet(line), line.product.dietaryDeclarations)).toEqual([]);
+      expect(lineBlock(line, withoutVariant.get(dish.id))).toMatchObject({
+        reason: "variant_removed",
+      });
+
+      const store = new WorkingOrderStore();
+      store.loadFrom("draft", [line]);
+      store.refreshDeclarations([menuOfferToTillProduct(withoutVariant.get(dish.id)!, VERSION)]);
+      expect(store.lines[0]).toBe(line);
+      expect(declared()).toEqual(notReviewed);
+
+      store.refreshDeclarations([
+        menuOfferToTillProduct(
+          { ...dish, variants: [{ ...variant("v-double", "15.00"), allergens: { fish: {} } }] },
+          VERSION,
+        ),
+      ]);
+      expect(store.lines[0]!.product.allergens).toEqual({ fish: {} });
+    },
+  );
 
   describe("a pick on a variant whose unit no longer takes extras", () => {
     /** The live burger, whose Double is sold by `unit`. */
