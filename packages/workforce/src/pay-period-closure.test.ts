@@ -441,6 +441,11 @@ it("carries a closed month's increase once and rolls back the carried minutes af
   expect(january.snapshot.adjustments).toEqual([
     { personId: worker, sourcePeriodStart: "2026-10-01", workedMinutes: -60 },
   ]);
+  const february = await close({
+    period: { start: "2027-02-01", end: "2027-03-01" },
+    now: "2027-03-01T05:00:00Z",
+  });
+  expect(february.snapshot).not.toHaveProperty("adjustments");
   expect(await close()).toEqual(october);
   expect(await close({ period: november, now: "2027-02-01T05:00:00Z" })).toEqual(novemberClose);
 });
@@ -677,4 +682,10 @@ it("freezes explicit paid-break totals and replays the saved closure unchanged",
   expect(record.sessions[0]).toMatchObject({ workedMinutes: 380, breakMinutes: 20 });
   expect(record.closedPeriodImpacts).toEqual([]);
   expect(await close({ paidBreakPolicy: null })).toEqual(saved);
+  const november = await close({
+    period: { start: "2026-11-01", end: "2026-12-01" },
+    now: "2026-12-01T05:00:00Z",
+    paidBreakPolicy: null,
+  });
+  expect(november.snapshot).not.toHaveProperty("adjustments");
 });

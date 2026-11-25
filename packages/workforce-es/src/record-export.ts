@@ -407,15 +407,22 @@ export function formatTimeRecordExport(
     for (const entryId of closure.snapshot.markedAutomaticEntryIds)
       marks.push({ closureId: closure.closureId, entryId });
   }
-  const adjustments = exported.cierres!.flatMap((closure) =>
-    (closure.snapshot.adjustments ?? []).map(({ personId, sourcePeriodStart, workedMinutes }) => ({
-      personId,
-      personName: name(personId),
-      sourceMonth: sourcePeriodStart.slice(0, 7),
-      carriedInMonth: closure.period.start.slice(0, 7),
-      adjustmentMinutes: workedMinutes > 0 ? `+${workedMinutes}` : String(workedMinutes),
-    })),
-  );
+  const firstExportMonth = `${input.period.start.slice(0, 7)}-01`;
+  const adjustments = exported
+    .cierres!.filter(
+      ({ period }) => period.start >= input.period.start && period.end <= input.period.end,
+    )
+    .flatMap(({ period, snapshot }) =>
+      (snapshot.adjustments ?? [])
+        .filter(({ sourcePeriodStart }) => sourcePeriodStart < firstExportMonth)
+        .map(({ personId, sourcePeriodStart, workedMinutes }) => ({
+          personId,
+          personName: name(personId),
+          sourceMonth: sourcePeriodStart.slice(0, 7),
+          carriedInMonth: period.start.slice(0, 7),
+          adjustmentMinutes: workedMinutes,
+        })),
+    );
   const sections = [
     section(
       "metadata",

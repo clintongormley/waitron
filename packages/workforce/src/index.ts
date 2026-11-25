@@ -143,7 +143,11 @@ export {
   readNextMonthlyPayPeriod,
 } from "./pay-periods.js";
 export type { PayPeriodSettings } from "./pay-periods.js";
-export { closePayPeriod, readPayPeriodClosures } from "./pay-period-close.js";
+export {
+  closePayPeriod,
+  preparePayPeriodAdjustments,
+  readPayPeriodClosures,
+} from "./pay-period-close.js";
 export type {
   ClockEntryKind,
   EntryAuthor,

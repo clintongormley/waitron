@@ -249,40 +249,45 @@ it("exports signed adjustments with names even when the workers did no work in t
       backend.approveCorrection(tx, { nodeId, correctionId, approverPersonId: manager }),
     );
   }
+  await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, other));
   const february = { start: "2026-02-01", end: "2026-03-01" };
   await close(february, "2026-03-01T06:00:00Z");
   const all = await doc({ period: february });
   expect(cells(all, "sessions")).toEqual([]);
   const adjustments = all.sections.find((section) => section.key === "adjustments");
-  expect(adjustments?.rows.map((row) => row.cells)).toEqual(
+  expect.soft(adjustments?.rows.map((row) => row.cells)).toEqual(
     expect.arrayContaining([
       {
         personId: worker,
         personName: "María Worker",
         sourceMonth: "2026-01",
         carriedInMonth: "2026-02",
-        adjustmentMinutes: "+60",
+        adjustmentMinutes: 60,
       },
       {
         personId: other,
         personName: "Other worker",
         sourceMonth: "2026-01",
         carriedInMonth: "2026-02",
-        adjustmentMinutes: "-30",
+        adjustmentMinutes: -30,
       },
     ]),
   );
   const own = await doc({ period: february, personId: worker, locale: "es" });
-  expect(cells(own, "adjustments")).toEqual([
+  expect.soft(cells(own, "adjustments")).toEqual([
     {
       personId: worker,
       personName: "María Worker",
       sourceMonth: "2026-01",
       carriedInMonth: "2026-02",
-      adjustmentMinutes: "+60",
+      adjustmentMinutes: 60,
     },
   ]);
   expect(JSON.stringify(own)).not.toContain("Other worker");
+  const both = await doc({ period: { start: "2026-01-15", end: "2026-03-01" } });
+  const slice = await doc({ period: { start: "2026-02-10", end: "2026-02-11" } });
+  expect.soft(both.sections.find((section) => section.key === "adjustments")).toBeUndefined();
+  expect.soft(slice.sections.find((section) => section.key === "adjustments")).toBeUndefined();
 });
 it("minimizes representatives live and frozen reasons and preserves authors", async () => {
   const target = await day();
