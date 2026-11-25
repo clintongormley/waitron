@@ -316,7 +316,8 @@ charges "the most economic solution" (spec, Why and Goals 1–2). Once 2a–2c l
 from any folder and every till, bill, receipt and invoice shows the cheapest grouping the server
 saved; there is no count and no "No place for this dish" question. Still unavailable afterwards: the
 till's summary, tags and preview (piece 4), comps and discounts that regroup (PR 3), moving discounted
-dishes (PR 4), set menus on takeaway (D14, until VAT piece B) and at the counter eaten in (piece 6).
+dishes (PR 4), set menus on takeaway (D14, until VAT piece B; dropped 2026-11-25 in Task 2b.8) and at
+the counter eaten in (piece 6).
 The simplest alternative, working the grouping out only when someone looks, is the spec's approach 2,
 which the owner rejected (two tills could disagree, a filed bill could change). What PR 2 adds beyond
 the need: 2a lands a writer nothing calls until 2b (a reviewer reads it without its callers), and one
@@ -632,6 +633,7 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
 4. **Order of checks:** the invoice-limit and payment invariants read the regrouped total; a cancel on
    a part-paid bill can now lower the total by more than the cancelled dish (D25; 2b Task 2b.3).
 5. **Takeaway stays payable:** a takeaway bill never holds a set-menu row (D14; 2a Task 2a.3).
+   _2026-11-25: D14 was dropped in Task 2b.8 (VAT-RATES B1 landed first): takeaway bills are grouped and the Counter shows set-menu folders._
 6. **A set menu moved with its dishes to a bill recording another version of it** brings its own
    copy: the target records both versions and groups over both (D26; 2b Task 2b.4).
 
@@ -989,6 +991,8 @@ No dining-switch path: `orderDiningLocked` refuses any order holding a sent line
 lines is a counter order, either eaten in (not a set-menu bill) or taken away (no set menus, D14), so a
 switch never changes a grouping.
 
+_2026-11-25: D14 was dropped in Task 2b.8 (VAT-RATES B1 landed first): takeaway bills are grouped and the Counter shows set-menu folders. A switch to takeaway, or a Counter order seated at a table, now links and regroups the bill; a switch or move that would leave set menus on an eat-in Counter bill is refused `set_menu.bill_holds_set_menus`. The codes `set_menu.no_place_on_target` and `set_menu.remove_from_summary` named in this plan were renamed `set_menu.moves_with_set_menu` and `set_menu.worked_out_by_bill` in 2b's review._
+
 #### Task 2b.4: Moves, merges, table splits and Pay for items regroup both bills
 
 **Files:**
@@ -1072,6 +1076,8 @@ switch never changes a grouping.
 - [ ] **Step 5: Commit** `git commit -s -m "Retire setting set-menu counts, removing set menus and moving dishes between them by hand"`.
 
 #### Task 2b.6: The till's change (D1, D14) and the "may not be the cheapest" note
+
+_2026-11-25: D14 was dropped in Task 2b.8 (VAT-RATES B1 landed first): takeaway bills are grouped and the Counter shows set-menu folders._
 
 **Files:** the "For lane C" list above; `apps/till/src/i18n/strings.ts` (`set_menu.not_cheapest`, English and Spanish).
 

@@ -573,7 +573,7 @@ cost. Tap the product to choose one and see its price.
 ## Set menus {#set-menus}
 
 Add the dishes the guests order, from any folder. The bill groups them into the cheapest set
-menus each time the order changes, and charges a dish that fits none à la carte. A set menu's
+menus it finds each time the order changes, and charges a dish that fits none à la carte. A set menu's
 folder shows which dishes it includes and which cost extra: open it from the grid, or type its
 name in **Search** and tap the result.
 
