@@ -21,6 +21,7 @@ import {
   waitingDeclarationMenus,
 } from "./declaration-correction.js";
 import { documentSetMenuOffers } from "./menu-document.js";
+import { declarationCopies } from "./menu-patch-declarations.js";
 import * as publication from "./menu-publication.js";
 import { patchLiveMenu, previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
 import { readMenuStructure } from "./menu-structure.js";
@@ -608,6 +609,11 @@ describe("which live versions and products a correction names", () => {
     const [change] = (await app((tx) => correctMenuDeclarations(tx, f.lemonade, PERSON)))
       .liveChanges;
     expect(change!.baseVersionId).toBe(v1);
+    const places = async (versionId: string) => {
+      const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
+      return declarationCopies(row!.document).map(({ target }) => target);
+    };
+    expect(await places(change!.versionId)).toEqual(await places(v1));
     expect(
       await app((tx) =>
         linesReadingChange(tx, { ...change!, productIds: [] }, [lemonade, soup, gone]),

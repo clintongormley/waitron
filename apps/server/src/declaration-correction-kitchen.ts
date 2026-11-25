@@ -38,21 +38,26 @@ export async function refreshCorrectedKitchenLines(
     );
   if (recorded.length === 0) return;
   const dishes = recorded.map((row) => row.dishId);
+  const candidates = await tx
+    .select({ ...publishedLineColumns, dishId, menuId: menuVersions.menuId })
+    .from(workingOrderLines)
+    .innerJoin(menuVersions, eq(menuVersions.id, workingOrderLines.menuVersionId))
+    .where(
+      and(
+        or(inIds(workingOrderLines.id, dishes), inIds(workingOrderLines.parentLineId, dishes)),
+        or(
+          ...changes.map(({ menuId, productIds }) =>
+            and(eq(menuVersions.menuId, menuId), inIds(workingOrderLines.productId, productIds)),
+          ),
+        ),
+      ),
+    );
   const hit = new Set<string>();
   for (const change of changes) {
-    const candidates = await tx
-      .select({ ...publishedLineColumns, dishId })
-      .from(workingOrderLines)
-      .innerJoin(menuVersions, eq(menuVersions.id, workingOrderLines.menuVersionId))
-      .where(
-        and(
-          or(inIds(workingOrderLines.id, dishes), inIds(workingOrderLines.parentLineId, dishes)),
-          eq(menuVersions.menuId, change.menuId),
-          inIds(workingOrderLines.productId, change.productIds),
-        ),
-      );
-    const changed = new Set(await linesReadingChange(tx, change, candidates));
-    for (const line of candidates) if (changed.has(line.id)) hit.add(line.dishId);
+    const lines = candidates.filter(({ menuId }) => menuId === change.menuId);
+    if (lines.length === 0) continue;
+    const changed = new Set(await linesReadingChange(tx, change, lines));
+    for (const line of lines) if (changed.has(line.id)) hit.add(line.dishId);
   }
   const byOrder = new Map<string, string[]>();
   for (const { orderId, dishId: id } of recorded)

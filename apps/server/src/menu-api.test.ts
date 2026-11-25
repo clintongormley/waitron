@@ -2401,9 +2401,9 @@ describe("mountMenuApi — products", () => {
   }
 
   // A variant is a `products` row. Its own page (the editor routes) reads and writes it, and the
-  // live menus' correction takes its id, since its save lists the live menus still showing old
-  // values; every other management route that reads or writes a product by id answers exactly what
-  // it answers for an id that names nothing.
+  // live menus' correction takes its id, since its save lists the menus whose live or scheduled
+  // versions still differ; every other management route that reads or writes a product by id
+  // answers exactly what it answers for an id that names nothing.
   it("refuses a variant's id on every product-by-id route but its own page and the live menus' correction, and accepts its parent's", async () => {
     const app = mountApp("es-ES");
     const variant = {

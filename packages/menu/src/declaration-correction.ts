@@ -246,8 +246,9 @@ export async function replacedLiveDeclarations(
 
 /**
  * The ids of `lines`, each taken from a version of `change`'s menu, that read other declarations
- * since the change. Its new version outnumbers every version of the menu ever live, so a line it
- * holds reads it, and a line it does not hold reads an older version the change left alone.
+ * since the change. `baseVersionId` and `versionId` are a patch apart, so they hold the same lines.
+ * Its new version outnumbers every version of the menu ever live, so a line it holds reads it, and a
+ * line it does not hold reads an older version the change left alone.
  */
 export async function linesReadingChange(
   tx: Transaction,
