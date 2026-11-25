@@ -189,8 +189,8 @@ printers. Both versions of a full invoice keep the recorded customer details.
 On a till with permission to print receipts, check **Last email address** before you resend a full
 invoice.
 
-Choose a printer from your device’s list. **Use default** follows the profile’s default; another
-choice is saved in **Equipment** for this device. If another device carries the receipt printer,
+Choose a printer from your device’s list. Choose **Inherit** to follow the profile. Any other choice
+is saved in **Equipment** for this device. If another device carries the receipt printer,
 Waitron asks before you take it over.
 
 Wait for **Print on {printer}** or **Print a copy on {printer}** to name your destination, then press
@@ -874,9 +874,9 @@ When a table shows **Needs moving**, move it and choose **Mark moved**.
 
 On a till, choose **More**, **Settings**, then **Equipment**. On a handheld, choose **More**,
 then **Equipment**. In each available list, choose the equipment you want this device to use,
-or **Use default** to follow its profile's choice.
+or **Inherit** to follow its profile's choice.
 
-If the profile's card reader says **Free to choose**, select **Use default** on the device
+If the profile's card reader says **Free to choose**, select **Inherit** on the device
 that will take payments with it. If another device holds it, Equipment shows which one.
 
 Where **Scan** is offered for a receipt printer, payment slip printer or card reader, use its

@@ -140,13 +140,13 @@ it("Edit draws the two fields, neither required, with Save quiet and disabled", 
   const email = input(el, "privacyEmail")!;
   expect(url.label).toBe("Privacy notice web page");
   expect(url.type).toBe("url");
-  expect(url.placeholder).toBe("https://example.com/privacy");
+  expect(url.placeholder).toBe("e.g. https://example.com/privacy");
   expect(url.required).toBe(false);
   expect(url.value).toBe("https://example.com/privacy");
   expect(email.label).toBe("Privacy email");
   expect(email.type).toBe("text");
   expect(email.autocomplete).toBe("off");
-  expect(email.placeholder).toBe("privacy@example.com");
+  expect(email.placeholder).toBe("e.g. privacy@example.com");
   expect(email.required).toBe(false);
   expect(email.value).toBe("privacy@example.com");
   expect(saveButton(el).disabled).toBe(true);

@@ -766,7 +766,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     const field = el.shadowRoot!.querySelector("wt-combobox")!;
     expect(field).not.toBeNull();
     expect(field.options.map((item) => [item.value, item.label])).toEqual([
-      ["", "Use default: Office"],
+      ["", "Inherit: Office"],
       ["p2", "Bar · receipt paper"],
     ]);
     expect(field.closest('[role="status"]')).toBeNull();
@@ -782,6 +782,47 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     expect(picks).toEqual([{ role: "invoice", selection: { id: "p2" }, via: "list" }]);
     expect(prints).toHaveLength(0);
     expect(button(el, "print-invoice")!.textContent!.trim()).toBe("Print on Office");
+  });
+
+  it("keeps the saved off-list printer fixed and lets staff retry a refused choice", async () => {
+    const old = {
+      id: "p1",
+      name: "Old office",
+      kind: "a4" as const,
+      available: false,
+      portable: false,
+      busy: false,
+      heldBy: null,
+    };
+    const { el } = await mountF1({
+      invoicePrintersEnabled: true,
+      invoiceEquipment: {
+        role: "invoice",
+        selection: "item",
+        chosenId: old.id,
+        chosen: old,
+        resolved: old,
+        default: null,
+        choices: [{ id: "p2", name: "Bar", kind: "receipt" }],
+      },
+    });
+    const picks = vi.fn();
+    el.addEventListener("equipment-change", picks);
+    await userEvent.click(button(el, "document-print-toggle")!);
+    await userEvent.click(button(el, "document-invoice")!);
+    const field = el.shadowRoot!.querySelector("wt-combobox")!;
+    expect(field.value).toBe("p1");
+    expect(field.options.at(-1)).toEqual({ value: "p1", label: "Old office · A4", fixed: true });
+    const pick = (value: string) =>
+      field.dispatchEvent(new CustomEvent("wt-change", { detail: { value }, bubbles: true }));
+    pick("p1");
+    expect(picks).not.toHaveBeenCalled();
+    pick("p2");
+    el.invoicePrinterValue = "p2";
+    el.invoicePrinterError = "Could not save";
+    await el.updateComplete;
+    pick("p2");
+    expect(picks).toHaveBeenCalledTimes(2);
   });
 
   it("shows the default and paper while keeping controls outside delivery announcements", async () => {
@@ -805,9 +846,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
     await el.updateComplete;
     const field = el.shadowRoot!.querySelector("wt-combobox")!;
     await field.updateComplete;
-    expect(field.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe(
-      "Use default: Office",
-    );
+    expect(field.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe("Office");
     expect(button(el, "delivery-status")!.closest('[role="status"]')).not.toBeNull();
     expect(
       button(el, "delivery-refused")!.closest('[role="status"], [role="alert"]'),
@@ -1980,6 +2019,28 @@ describe("A790 recorded document then printer", () => {
       expect(part(el, "print-receipt") !== null).toBe(expected === "print-receipt");
       expect(part(el, "reprint") !== null).toBe(expected === "reprint");
       if (_name === "failed") expect(part(el, "retry-receipt")).not.toBeNull();
+    },
+  );
+
+  it.each([null, { deviceId: "elsewhere", deviceName: "Patio till", personName: null }])(
+    "shows None when this device does not hold the profile’s portable printer (%o)",
+    async (heldBy) => {
+      const held = { ...bar, portable: true, heldBy };
+      const { el } = await mountChoice(
+        {
+          receiptEquipment: { ...roleOf("receipt", null, [held]), default: held },
+        },
+        "F2",
+      );
+      await press(el, "document-print-toggle");
+      const field = el.shadowRoot!.querySelector("wt-combobox")!;
+      expect(field.options[0]).toEqual({
+        value: "",
+        label: "Inherit: None",
+        valueLabel: "None",
+        inherited: true,
+      });
+      expect(field.inheritedSuffix).toBe("inherited");
     },
   );
 

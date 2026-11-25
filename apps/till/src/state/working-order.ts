@@ -618,6 +618,7 @@ export class WorkingOrderStore {
       if (update.course.value !== undefined) candidate.course = update.course.value;
     }
     if (this.#passesLimit(lineGross(line), lineGross(candidate))) return false;
+    const courseBefore = line.courseId ?? line.product.courseId ?? null;
     for (const key of [
       "extras",
       "notOfferedExtras",
@@ -629,8 +630,11 @@ export class WorkingOrderStore {
     ] as const)
       delete line[key];
     Object.assign(line, candidate);
-    if (update.course !== undefined) {
-      const placement = this.placer?.(update.course.id ?? line.product.courseId ?? null, index);
+    if (
+      update.course !== undefined &&
+      courseBefore !== (line.courseId ?? line.product.courseId ?? null)
+    ) {
+      const placement = this.placer?.(line.courseId ?? line.product.courseId ?? null, index);
       if (placement !== undefined) {
         if (placement.shift !== undefined) this.#shiftSlots(placement.shift.from);
         line.place = { ...placement.place };

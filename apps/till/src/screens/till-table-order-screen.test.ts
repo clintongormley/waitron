@@ -881,15 +881,13 @@ describe("till-table-order-screen", () => {
     expect(dialog.querySelector("[data-sent-course]")?.textContent?.trim()).toBe(course.name);
   });
 
-  it("renders a per-line course picker per round line, pre-selecting the product's default course", async () => {
+  it("opens the course picker on Inherit for a round line without an override", async () => {
     const { el } = await mount({ courses });
     // No round yet ⇒ no picker.
     expect(el.shadowRoot!.querySelector("[data-draft-sections]")).toBeNull();
     const [picker] = await ringAndPickers(el);
-    // One select for the one round line, pre-selected to the café's default course (Postres), with an
-    // option per active venue course plus the "use default" placeholder.
     expect(picker).not.toBeUndefined();
-    expect(picker!.value).toBe("postres");
+    expect(picker!.value).toBe("");
     const optionValues = picker!.options.map((o) => o.value);
     expect(optionValues).toEqual(["", "entrantes", "postres"]);
   });
@@ -906,19 +904,14 @@ describe("till-table-order-screen", () => {
     expect(picker!.getAttribute("search")).toBe("auto");
     expect(picker!.searchPlaceholder).toBe(t("form.combobox_search"));
     expect(picker!.noResultsLabel).toBe(t("form.combobox_no_results"));
-    expect(picker!.placeholder).toBe(t("table.course_default"));
-    expect(picker!.options).toEqual([
-      { value: "", label: t("table.course_default") },
-      { value: "entrantes", label: "Entrantes" },
-      { value: "postres", label: "Postres" },
-    ]);
-    expect(picker!.value).toBe("postres");
+    expect(picker!.placeholder).toBe(t("equipment.none"));
+    expect(picker!.value).toBe("");
 
-    await chooseOption(picker!, "entrantes");
+    await chooseOption(picker!, "postres");
     await el.updateComplete;
     const captured = await submitDraft(el, "fire-all");
     expect(captured!.detail.lines).toEqual([
-      { menuItemId: "menu-item-cafe", quantity: "1", courseId: "entrantes" },
+      { menuItemId: "menu-item-cafe", quantity: "1", courseId: "postres" },
     ]);
   });
 
@@ -1081,12 +1074,11 @@ describe("till-table-order-screen", () => {
     ]);
   });
 
-  it("picking the default placeholder clears the override back to the product default (omitted)", async () => {
+  it("picking Inherit clears the override and omits it from the order", async () => {
     const { el } = await mount({ courses });
     const [picker] = await ringAndPickers(el);
     await chooseOption(picker!, "entrantes");
     await el.updateComplete;
-    // Back to the "use default" placeholder ⇒ no override sent.
     await chooseOption(picker!, "");
     await el.updateComplete;
     const captured = await submitDraft(el, "fire-all");
@@ -2444,9 +2436,9 @@ describe("till-table-order-screen", () => {
     expect(picker.getAttribute("search")).toBe("auto");
     expect(picker.searchPlaceholder).toBe(t("form.combobox_search"));
     expect(picker.noResultsLabel).toBe(t("form.combobox_no_results"));
-    expect(picker.placeholder).toBe(t("table.course_default"));
+    expect(picker.placeholder).toBe("Postres");
     expect(picker.options).toEqual([
-      { value: "", label: t("table.course_default") },
+      { value: "", label: "Inherit: Postres", valueLabel: "Postres", inherited: true },
       { value: "entrantes", label: "Entrantes" },
       { value: "postres", label: "Postres" },
     ]);
@@ -2530,7 +2522,7 @@ describe("till-table-order-screen", () => {
       quantity: "1.000",
       courseId: null,
       note: null,
-      slot: 1,
+      slot: 0,
       joinGroupId: null,
       afterGroupId: null,
     });

@@ -10,13 +10,13 @@ import type {
 
 /** The reader a payment from this device would be charged on. */
 export type PayReader =
-  | { kind: "ready"; id: string; name: string; provider: TillReaderProvider; fromDefault: boolean }
+  | { kind: "ready"; id: string; name: string; provider: TillReaderProvider }
   | { kind: "switched_off"; id: string; name: string }
   | { kind: "none" };
 
 /** The printer a payment's receipt would print on. */
 export type PayPrinter =
-  | { kind: "ready"; id: string; name: string; fromDefault: boolean }
+  | { kind: "ready"; id: string; name: string }
   /** The printer the receipt role points at, switched off: the receipt waits until it is back on. */
   | { kind: "switched_off"; id: string; name: string }
   | { kind: "unset" }
@@ -44,7 +44,6 @@ export function payReaderOf(equipment: DeviceEquipment | null): PayReader {
         id: resolved.id,
         name: resolved.name,
         provider,
-        fromDefault: role!.selection === "default",
       };
 }
 
@@ -59,7 +58,6 @@ export function payPrinterOf(equipment: DeviceEquipment | null): PayPrinter {
           kind: "ready",
           id: resolved.id,
           name: resolved.name,
-          fromDefault: role!.selection === "default",
         }
       : { kind: "switched_off", id: resolved.id, name: resolved.name };
   }

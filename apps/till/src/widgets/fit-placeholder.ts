@@ -1,5 +1,6 @@
 import type { LitElement, ReactiveController } from "lit";
 import { TABLE_SEPARATOR } from "@waitron/shared";
+import type { WtInput } from "@waitron/ui";
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
@@ -40,7 +41,7 @@ export class PlaceholderFit implements ReactiveController {
    * reports it. */
   readonly #fontsLoaded = () => {
     const field = this.#field();
-    if (field) this.#measureField(field);
+    if (field) void this.#measureField(field);
   };
 
   constructor(
@@ -61,13 +62,15 @@ export class PlaceholderFit implements ReactiveController {
   }
 
   hostUpdated(): void {
-    // An update requested before the host was removed still runs after hostDisconnected; anything
-    // it started watching would never be stopped.
-    if (this.#resize || !this.host.isConnected) return;
+    if (!this.host.isConnected) return;
     const field = this.#field();
     if (!field) return;
-    this.#resize = new ResizeObserver(() => this.#measureField(field));
-    this.#resize.observe(field);
+    if (!this.#resize) {
+      this.#resize = new ResizeObserver(() => void this.#measureField(field));
+      this.#resize.observe(field);
+    }
+    // Clearing the name adds room for the arrow inside the input without resizing the host.
+    void this.#measureField(field);
   }
 
   hostDisconnected(): void {
@@ -76,11 +79,13 @@ export class PlaceholderFit implements ReactiveController {
     this.#resize = undefined;
   }
 
-  #field(): HTMLElement | null {
-    return this.host.renderRoot.querySelector<HTMLElement>("wt-input");
+  #field(): WtInput | null {
+    return this.host.renderRoot.querySelector<WtInput>("wt-input");
   }
 
-  #measureField(field: HTMLElement): void {
+  async #measureField(field: WtInput): Promise<void> {
+    await field.updateComplete;
+    if (!field.isConnected) return;
     const input = field.shadowRoot!.querySelector("input")!;
     const control = getComputedStyle(input);
     const placeholder = getComputedStyle(input, "::placeholder");

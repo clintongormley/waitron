@@ -579,7 +579,7 @@ export class TillBasket extends LitElement {
     this.#modifierCourse =
       this.lineDetails &&
       (this.courses.length > 0 || (line.course !== undefined && line.course.id === line.courseId))
-        ? (line.courseId ?? line.product.courseId ?? "")
+        ? (line.courseId ?? "")
         : undefined;
     this.modifierLine = line;
     this.#modifierProduct = line.product;
@@ -1111,17 +1111,8 @@ export class TillBasket extends LitElement {
                   : null
               }
               .initialCourse=${this.#modifierCourse}
-              .coursePlaceholder=${
-                this.modifierLine.course !== undefined &&
-                this.modifierLine.course.id === this.#modifierCourse &&
-                !this.courses.some((course) => course.id === this.#modifierCourse)
-                  ? this.modifierLine.course!.name
-                  : t("table.course_default")
-              }
-              .courseChoices=${[
-                { value: "", label: t("table.course_default") },
-                ...this.courses.map((course) => ({ value: course.id, label: course.name })),
-              ]}
+              .courseSnapshot=${this.modifierLine.course}
+              .courseChoices=${this.courses.map((course) => ({ value: course.id, label: course.name }))}
               .disabled=${this.store.sending || this.store.editsLocked || this.orderInFlight}
               .quantity=${this.modifierLine.quantity}
               .showTotal=${true}

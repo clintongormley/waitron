@@ -270,9 +270,7 @@ export class TillPayEquipment extends LitElement {
     const printer = payPrinterOf(this.equipment);
     let ticket: TemplateResult;
     if (printer.kind === "ready") {
-      const [before, after = ""] = t(
-        printer.fromDefault ? "pay_equipment.ticket_at_default" : "pay_equipment.ticket_at",
-      ).split("{printer}");
+      const [before, after = ""] = t("pay_equipment.ticket_at").split("{printer}");
       ticket = html`${before}<b>${printer.name}</b>${after}`;
     } else {
       ticket = html`${t(
@@ -339,7 +337,7 @@ export class TillPayEquipment extends LitElement {
 
   #field(
     role: PayEquipmentRole,
-    ready: { id: string; name: string; fromDefault: boolean } | null,
+    ready: { id: string; name: string } | null,
     choices: EquipmentItem[],
     warning: string | null = null,
   ): TemplateResult {
@@ -354,12 +352,7 @@ export class TillPayEquipment extends LitElement {
     }));
     if (ready !== null && !choices.some((choice) => choice.id === ready.id))
       options.unshift({ value: ready.id, fixed: true, label: ready.name });
-    const hint =
-      saving !== null
-        ? t("pay_equipment.saving")
-        : ready?.fromDefault
-          ? t("equipment.from_default")
-          : "";
+    const hint = saving === null ? "" : t("pay_equipment.saving");
     const error = this.fieldErrors[role] ?? "";
     // wt-combobox draws its hint for screen readers only; the note under the field is what is seen.
     return html`<div class="field">

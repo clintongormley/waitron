@@ -95,14 +95,14 @@ describe("till-party-name-dialog", () => {
   });
 
   it.each(["en", "es"])(
-    "shows the name the party has when left empty as the field's placeholder, in %s",
+    "shows the name the party has when left empty as the inherited value, in %s",
     async (locale) => {
       const previousLocale = currentLocale();
       try {
         setLocale(locale);
         const el = await mountDialog({ tables: "Table 4, 5", value: "" });
 
-        expect(field(el).placeholder).toBe("Table 4, 5");
+        expect(field(el).inherited).toEqual({ value: "Table 4, 5", suffix: t("inherit.suffix") });
         expect(field(el).hint).toBe("");
         expect(nativeInput(el).placeholder).toBe("Table 4, 5");
       } finally {
@@ -133,6 +133,7 @@ describe("till-party-name-dialog", () => {
 
         await vi.waitFor(() => expect(nativeInput(el).placeholder).toMatch(/, …$/));
         const { placeholder, width, textBox } = drawn(el);
+        expect(field(el).inherited?.value).toBe(placeholder);
         expect(width(tables)).toBeGreaterThan(textBox);
         expect(tables.startsWith(placeholder.slice(0, -"…".length))).toBe(true);
         expect(width(placeholder)).toBeLessThanOrEqual(textBox);
@@ -222,11 +223,12 @@ describe("till-party-name-dialog", () => {
         expect(drawn(el).width(before.placeholder)).toBeGreaterThan(before.textBox);
 
         document.fonts.dispatchEvent(new Event("loadingdone"));
-        await el.updateComplete;
 
-        const after = drawn(el);
-        expect(after.textBox).toBe(before.textBox);
-        expect(after.width(after.placeholder)).toBeLessThanOrEqual(after.textBox);
+        await vi.waitFor(() => {
+          const after = drawn(el);
+          expect(after.textBox).toBe(before.textBox);
+          expect(after.width(after.placeholder)).toBeLessThanOrEqual(after.textBox);
+        });
       } finally {
         await page.viewport(1280, 900);
       }

@@ -114,14 +114,14 @@ describe("till-pay-equipment", () => {
       expect(box(el, "cardReaderId")).toBeNull();
     });
 
-    it("marks a printer from the profile's default", async () => {
+    it("names the printer when it follows the profile", async () => {
       const el = await mount({
         equipment: equipment(
           byDefault(TERRACE_PRINTER, [BAR_PRINTER, TERRACE_PRINTER]),
           byDefault(L1, [L1]),
         ),
       });
-      expect(summary(el)).toBe("Lector 1 · ticket en Terraza (predeterminada)");
+      expect(summary(el)).toBe("Lector 1 · ticket en Terraza");
     });
 
     it("says sin ticket when the profile names no printer, sin lector without a reader", async () => {
@@ -159,7 +159,7 @@ describe("till-pay-equipment", () => {
         equipment: equipment(byDefault(TERRACE_PRINTER, [TERRACE_PRINTER]), chosen(L2, [L2])),
       });
       expect(q(el, "[data-pay-equipment-heading]")!.textContent!.trim()).toBe("Reader and printer");
-      expect(summary(el)).toBe("Lector 2 · ticket at Terraza (default)");
+      expect(summary(el)).toBe("Lector 2 · ticket at Terraza");
       expect(q(el, "[data-pay-equipment-change]")!.textContent!.trim()).toBe("Change");
       const none = await mount({ equipment: equipment({}, {}) });
       expect(summary(none)).toBe("no reader · no ticket");
@@ -246,7 +246,7 @@ describe("till-pay-equipment", () => {
       expect(free.disabled).toBeFalsy();
     });
 
-    it("leaves a field empty unless it is ready, and says when a ready one is the default", async () => {
+    it("leaves a field empty unless it is ready and selects the resolved reader", async () => {
       const off = item("p1", "Barra", { available: false });
       const el = await mount({
         open: true,
@@ -255,8 +255,8 @@ describe("till-pay-equipment", () => {
       expect(box(el, "receiptPrinterId")!.value).toBe("");
       expect(box(el, "receiptPrinterId")!.hint).toBe("");
       expect(box(el, "cardReaderId")!.value).toBe("r1");
-      expect(box(el, "cardReaderId")!.hint).toBe("Predeterminado del perfil");
-      expect(note(el, "card_terminal")).toBe("Predeterminado del perfil");
+      expect(box(el, "cardReaderId")!.hint).toBe("");
+      expect(note(el, "card_terminal")).toBeUndefined();
       expect(note(el, "receipt")).toBeUndefined();
       const none = await mount({ open: true, equipment: equipment({}, { choices: [L1] }) });
       expect(box(none, "cardReaderId")!.value).toBe("");

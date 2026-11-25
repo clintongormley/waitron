@@ -260,7 +260,7 @@ export class SetupEmailScreen extends LitElement {
       spellcheck="false"
       data-test=${field}
       label=${t(`email.${field}.label`)}
-      hint=${field === "port" ? (this.values.encryption === "tls" ? "465" : "587") : t(`email.${field}.hint`)}
+      hint=${field === "port" ? format("email.port.hint", { port: this.values.encryption === "tls" ? 465 : 587 }) : t(`email.${field}.hint`)}
       .value=${this.values[field]}
       type=${field === "password" ? (this.passwordVisible ? "text" : "password") : field === "from" ? "email" : "text"}
       inputmode=${field === "port" ? "numeric" : "text"}

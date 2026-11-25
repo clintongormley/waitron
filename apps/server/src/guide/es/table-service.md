@@ -202,8 +202,8 @@ completa conservan los datos del cliente registrados.
 En una caja con permiso para imprimir tickets, comprueba **Última dirección de correo** antes de
 reenviar una factura completa.
 
-Elige una impresora de la lista de tu dispositivo. **Usar el predeterminado** sigue la
-predeterminada del perfil; otra elección se guarda en **Equipo de este dispositivo**. Si otro
+Elige una impresora de la lista de tu dispositivo. Elige **Heredar** para seguir el perfil. Cualquier
+otra elección se guarda en **Equipo de este dispositivo**. Si otro
 dispositivo lleva la impresora de recibos, Waitron pregunta antes de que te la quedes.
 
 Espera a que **Imprimir en {printer}** o **Imprimir una copia en {printer}** nombre tu destino y
@@ -929,9 +929,9 @@ Cuando una mesa indique **Por mover**, muévela y elige **Marcar movida**.
 
 En un TPV, elige **Más**, **Ajustes** y **Equipo**. En un dispositivo de mano, elige **Más**
 y **Equipo**. En cada lista disponible, elige el equipo que quieres usar en este dispositivo,
-o **Usar el predeterminado** para seguir la elección de su perfil.
+o **Heredar** para seguir la elección de su perfil.
 
-Si el lector del perfil indica **Disponible para elegir**, selecciona **Usar el predeterminado**
+Si el lector del perfil indica **Disponible para elegir**, selecciona **Heredar**
 en el dispositivo con el que vas a cobrar. Si otro dispositivo tiene el lector, en **Equipo**
 verás cuál es.
 

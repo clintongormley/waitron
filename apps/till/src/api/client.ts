@@ -402,8 +402,7 @@ export interface TillProduct {
   category: string | null;
   /** EU-14 allergen declaration keyed by allergen code; null = not reviewed. */
   allergens: ProductAllergens | null;
-  /** The product's DEFAULT kitchen course, which the per-line course picker pre-selects; absent or null
-   * means no default course. */
+  /** The kitchen course a line inherits when it has no override. */
   courseId?: string | null;
   /** The menu this product is sold from; the till's menu filter shows only the selected menu's
    * products, and an absent value never matches one. */

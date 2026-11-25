@@ -9,12 +9,17 @@ import { PlaceholderFit, fitPlaceholder } from "./fit-placeholder.js";
 @customElement("placeholder-fit-probe")
 class PlaceholderFitProbe extends LitElement {
   @property() text = "";
+  @property() value = "";
   @property({ type: Boolean }) showField = true;
   readonly fit = new PlaceholderFit(this, () => this.text, TABLE_SEPARATOR);
 
   override render() {
     return this.showField
-      ? html`<wt-input style="width: 160px" .placeholder=${this.fit.placeholder}></wt-input>`
+      ? html`<wt-input
+          style="width: 160px"
+          .value=${this.value}
+          .inherited=${{ value: this.fit.placeholder, suffix: "inherited" }}
+        ></wt-input>`
       : nothing;
   }
 }
@@ -116,6 +121,28 @@ describe("PlaceholderFit", () => {
       expect(width(placeholder)).toBeLessThanOrEqual(textBox);
       expect(width(`W${placeholder}`)).toBeGreaterThan(textBox - 1);
     }
+  });
+
+  it("refits for the arrow when a focused fixed name is cleared", async () => {
+    const { el } = await mountWidget<PlaceholderFitProbe>("placeholder-fit-probe", {
+      text: "W".repeat(40),
+      value: "Window",
+    });
+    const field = el.shadowRoot!.querySelector("wt-input")!;
+    field.focus();
+    await measured();
+    const filled = drawn(el);
+    expect(filled.width(filled.placeholder)).toBeLessThanOrEqual(filled.textBox);
+
+    el.value = "";
+    await el.updateComplete;
+    await field.updateComplete;
+    await vi.waitFor(() => {
+      const empty = drawn(el);
+      expect(empty.textBox).toBeLessThan(filled.textBox);
+      expect(filled.width(filled.placeholder)).toBeGreaterThan(empty.textBox);
+      expect(empty.width(empty.placeholder)).toBeLessThanOrEqual(empty.textBox);
+    });
   });
 
   it("fits text between unequal padding and borders, leaving the spare pixel", async () => {

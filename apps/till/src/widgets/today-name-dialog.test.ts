@@ -43,7 +43,7 @@ function captured(el: TillTodayNameDialog) {
 }
 
 describe("till-today-name-dialog", () => {
-  it("shows the heading it is given, and one optional field todayName, capped at 40, showing the normal name as its placeholder", async () => {
+  it("shows the heading it is given, and one optional field todayName, capped at 40, showing the normal name as inherited", async () => {
     const el = await mountDialog({ normalName: "Bar+Window" });
 
     expect(el.shadowRoot!.querySelector("wt-dialog")!.heading).toBe("Rename Counter 4");
@@ -51,7 +51,7 @@ describe("till-today-name-dialog", () => {
     expect(nativeInput(el).maxLength).toBe(40);
     expect(field(el).required).toBe(false);
     expect(field(el).label).toBe("Name");
-    expect(field(el).placeholder).toBe("Bar+Window");
+    expect(field(el).inherited?.value).toBe("Bar+Window");
     expect(field(el).hint).toBe("");
     expect(save(el).textContent!.trim()).toBe("Save");
     expect(field(el).error).toBe("");
@@ -59,14 +59,14 @@ describe("till-today-name-dialog", () => {
   });
 
   it.each(["en", "es"])(
-    "shows the name the table or group goes back to when left empty as the field's placeholder, in %s",
+    "shows the name the table or group goes back to when left empty as the inherited value, in %s",
     async (locale) => {
       const previousLocale = currentLocale();
       try {
         setLocale(locale);
         const el = await mountDialog({ normalName: "Bar+Window", value: "" });
 
-        expect(field(el).placeholder).toBe("Bar+Window");
+        expect(field(el).inherited).toEqual({ value: "Bar+Window", suffix: t("inherit.suffix") });
         expect(field(el).hint).toBe("");
         expect(nativeInput(el).placeholder).toBe("Bar+Window");
       } finally {
@@ -104,6 +104,7 @@ describe("till-today-name-dialog", () => {
 
         await vi.waitFor(() => expect(nativeInput(el).placeholder).toMatch(/[^+]\+…$/));
         const { placeholder, width, textBox } = drawn(el);
+        expect(field(el).inherited?.value).toBe(placeholder);
         expect(width(longGroup)).toBeGreaterThan(textBox);
         expect(longGroup.startsWith(placeholder.slice(0, -"…".length))).toBe(true);
         expect(width(placeholder)).toBeLessThanOrEqual(textBox);
@@ -269,7 +270,7 @@ describe("till-today-name-dialog", () => {
     });
 
     expect(field(el).label).toBe("Nombre");
-    expect(field(el).placeholder).toBe("Table 4");
+    expect(field(el).inherited?.value).toBe("Table 4");
     expect(field(el).hint).toBe("");
     expect(save(el).textContent!.trim()).toBe("Guardar");
     expect(cancelButton(el).textContent!.trim()).toBe("Cancelar");

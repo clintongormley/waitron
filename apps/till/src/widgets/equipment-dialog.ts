@@ -10,7 +10,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./equipment-scanner.js";
 import { trackDialog } from "./track-dialog.js";
-import { optionLabel } from "./equipment-labels.js";
+import { inheritEquipmentOption, optionLabel } from "./equipment-labels.js";
 import { carriedText, fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -390,7 +390,7 @@ export class TillEquipmentDialog extends LitElement {
       : null;
   }
 
-  #context(equipment: RoleEquipment): string {
+  #context(equipment: RoleEquipment): string | null {
     const shown = equipment.selection === "item" ? equipment.chosen : equipment.default;
     if (shown?.heldBy)
       return carriedText(shown.name, shown.heldBy, "equipment.held_by", "equipment.held_by_person");
@@ -402,9 +402,7 @@ export class TillEquipmentDialog extends LitElement {
       return reader.busy
         ? fill(t("equipment.option_busy"), { item: reader.name })
         : t("equipment.free_to_choose");
-    return t(
-      equipment.selection === "default" ? "equipment.from_default" : "equipment.chosen_here",
-    );
+    return null;
   }
 
   #onPick(equipment: RoleEquipment, value: string): void {
@@ -433,11 +431,8 @@ export class TillEquipmentDialog extends LitElement {
     const equipment = this.#role(row.role);
     if (equipment === undefined) return nothing;
     const label = t(`equipment.${row.role}`);
-    const useDefault = fill(t("equipment.use_default"), {
-      name: equipment.default?.name ?? t("equipment.none"),
-    });
     const options: ComboboxOption[] = [
-      { value: "", label: useDefault },
+      inheritEquipmentOption(equipment),
       ...equipment.choices.map((choice) => ({ value: choice.id, label: optionLabel(choice) })),
     ];
     // A choice the device may not newly make (switched off, off the list) stays shown as chosen.
@@ -449,19 +444,24 @@ export class TillEquipmentDialog extends LitElement {
     )
       options.push({ value: chosen.id, fixed: true, label: optionLabel(chosen) });
     const error = this.#refusedField() === row.field ? codeMessage(this.error!.code) : "";
+    const context = this.#context(equipment);
     return html`<div class="row" data-equipment-row=${row.role}>
       <span class="label" data-equipment-label>${label}</span>
-      <span class="resolved" data-equipment-resolved
-        >${equipment.resolved?.name ?? this.#unheldDefaultReader(equipment)?.name ?? t("equipment.none")}</span
-      >
-      <span class="context" data-equipment-context>${this.#context(equipment)}</span>
+      ${
+        equipment.selection === "item" && equipment.resolved?.id !== equipment.chosenId
+          ? html`<span class="resolved" data-equipment-resolved
+              >${equipment.resolved?.name ?? t("equipment.none")}</span
+            >`
+          : nothing
+      }
+      ${context === null ? nothing : html`<span class="context" data-equipment-context>${context}</span>`}
       <div class="choose">
         <wt-combobox
           name=${row.field}
           search="auto"
           hide-label
           label=${label}
-          placeholder=${useDefault}
+          inherited-suffix=${t("inherit.suffix")}
           searchPlaceholder=${t("form.combobox_search")}
           noResultsLabel=${t("form.combobox_no_results")}
           .options=${options}

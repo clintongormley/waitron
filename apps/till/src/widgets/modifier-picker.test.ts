@@ -1,4 +1,5 @@
 import { page, userEvent } from "vitest/browser";
+import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatMoney, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
@@ -19,7 +20,12 @@ import {
   type TillZoneMenu,
 } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { currentContentLanguages, setContentLanguages, type WtTextarea } from "@waitron/ui";
+import {
+  currentContentLanguages,
+  setContentLanguages,
+  type WtCombobox,
+  type WtTextarea,
+} from "@waitron/ui";
 
 /**
  * Every fixture below gives a list, a label and a picked product THREE DIFFERENT texts for their
@@ -901,6 +907,36 @@ describe("till-modifier-picker", () => {
       glass!.click();
       await el.updateComplete;
       expect(addButton(el).disabled).toBe(false);
+    });
+
+    it("names the selected size's inherited course and can return to Inherit", async () => {
+      const { el } = await mountWidget<TillModifierPicker>("till-modifier-picker", {
+        product: productAsVariant(wineProduct, wineProduct.variants![1]!),
+        quantity: "1",
+        lineDetails: true,
+        initialSelections: {},
+        initialCourse: "",
+        courseChoices: [
+          { value: "125 ml course", label: "Starters" },
+          { value: "Wine 150 course", label: "Dessert" },
+        ],
+      });
+      const field = el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="course"]')!;
+      expect(field.inheritedSuffix).toBe("inherited");
+      expect(field.options[0]).toEqual({
+        value: "",
+        label: "Inherit: Starters",
+        valueLabel: "Starters",
+        inherited: true,
+      });
+      await chooseOption(field, "125 ml course");
+      radios(el)[2]!.click();
+      await el.updateComplete;
+      expect(field.value).toBe("125 ml course");
+      expect(field.options[0]?.valueLabel).toBe("Dessert");
+      await chooseOption(field, "");
+      await el.updateComplete;
+      expect(field.value).toBe("");
     });
 
     it("lists the variants only, never the parent, by their STAFF names", async () => {

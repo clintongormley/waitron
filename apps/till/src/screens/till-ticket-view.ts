@@ -1,4 +1,5 @@
 import { outsideCardSummary } from "../widgets/outside-card.js";
+import { inheritEquipmentOption } from "../widgets/equipment-labels.js";
 import { equipmentTakeover } from "../widgets/equipment-dialog.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -627,6 +628,16 @@ export class TillTicketView extends LitElement {
     if (!this.invoicePrintersEnabled || !this.canPrintReceipt) return nothing;
     const receipt = this.printDocument === "receipt";
     const role = receipt ? this.receiptEquipment : this.invoiceEquipment;
+    const offListChoice =
+      role?.selection === "item" &&
+      role.chosen &&
+      !role.choices.some((item) => item.id === role.chosenId)
+        ? role.chosen
+        : null;
+    const paperOption = (item: EquipmentItem) => ({
+      value: item.id,
+      label: `${item.name} · ${item.kind === "a4" ? "A4" : t("invoice.receipt_paper")}`,
+    });
     const printer =
       role?.choices.find((item) => item.id === role.resolved?.id) ??
       role?.chosen ??
@@ -660,22 +671,16 @@ export class TillTicketView extends LitElement {
                           name=${receipt ? "receiptPrinterId" : "invoicePrinterId"}
                           label=${t(receipt ? "equipment.receipt" : "equipment.invoice")}
                           search="auto"
-                          placeholder=${t("equipment.use_default").replace("{name}", () => role.default?.name ?? t("equipment.none"))}
+                          inherited-suffix=${t("inherit.suffix")}
                           searchPlaceholder=${t("form.combobox_search")}
                           noResultsLabel=${t("form.combobox_no_results")}
                           .value=${live(this.invoicePrinterValue ?? (role.selection === "default" ? "" : (role.chosenId ?? "")))}
                           .options=${[
-                            {
-                              value: "",
-                              label: t("equipment.use_default").replace(
-                                "{name}",
-                                () => role.default?.name ?? t("equipment.none"),
-                              ),
-                            },
-                            ...role.choices.map((item) => ({
-                              value: item.id,
-                              label: `${item.name} · ${item.kind === "a4" ? "A4" : t("invoice.receipt_paper")}`,
-                            })),
+                            inheritEquipmentOption(role),
+                            ...role.choices.map(paperOption),
+                            ...(offListChoice === null
+                              ? []
+                              : [{ ...paperOption(offListChoice), fixed: true }]),
                           ]}
                           .error=${this.invoicePrinterError}
                           .invalid=${this.invoicePrinterError !== ""}
@@ -683,6 +688,7 @@ export class TillTicketView extends LitElement {
                           @wt-change=${(event: CustomEvent<{ value: string }>) => {
                             event.stopPropagation();
                             const value = event.detail.value;
+                            if (value === offListChoice?.id) return;
                             const item = role.choices.find((choice) => choice.id === value);
                             const send = (takeOver?: boolean) =>
                               this.dispatchEvent(
