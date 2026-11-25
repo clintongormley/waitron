@@ -25849,16 +25849,14 @@ describe("A737 Find a bill page", () => {
   });
   it("shows the refused invoice email's address beside Send the email again in Bills", async () => {
     const { el, view } = await open({
-      getFindBill: vi
-        .fn()
-        .mockResolvedValue(
-          billRow({
-            orderStatus: "settled",
-            state: "paid-not-handed-over",
-            paid: "25.10",
-            stillOwed: "0.00",
-          }),
-        ),
+      getFindBill: vi.fn().mockResolvedValue(
+        billRow({
+          orderStatus: "settled",
+          state: "paid-not-handed-over",
+          paid: "25.10",
+          stillOwed: "0.00",
+        }),
+      ),
       getFiledTicket: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
       getInvoiceDeliveries: vi.fn().mockResolvedValue(emailDeliveryStatus),
       getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
