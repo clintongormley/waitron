@@ -467,7 +467,13 @@ async function writeMenuItemSettings(
   const { grossPrice } = patch;
   if (grossPrice === undefined) return;
   const [menu] = await tx.select({ kind: menus.kind }).from(menus).where(eq(menus.id, menuId));
-  if (grossPrice !== null && menu?.kind !== "set_menu") {
+  const cents =
+    grossPrice === null
+      ? null
+      : menu?.kind === "set_menu"
+        ? setMenuSurchargeCents(grossPrice)
+        : stringToCents(grossPrice);
+  if (cents !== null && menu?.kind !== "set_menu") {
     const [item] = await tx
       .select({ productId: menuItems.productId })
       .from(menuItems)
@@ -475,12 +481,6 @@ async function writeMenuItemSettings(
     if ((await parentsWithActiveVariants(tx, [item!.productId])).size > 0)
       throw new AppError("menu_item.has_variants", { menuItemId });
   }
-  const cents =
-    grossPrice === null
-      ? null
-      : menu?.kind === "set_menu"
-        ? setMenuSurchargeCents(grossPrice)
-        : stringToCents(grossPrice);
   await tx.update(menuItems).set({ grossPrice: cents }).where(eq(menuItems.id, menuItemId));
   await touchSetMenu(tx, menuId);
 }

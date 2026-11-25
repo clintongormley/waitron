@@ -102,6 +102,16 @@ const addGlassInEditor = (productId: string) =>
     );
   });
 
+/** Saves `productId` through the product editor with the variants `change` makes of its own. */
+const saveVariantsInEditor = (
+  productId: string,
+  change: (variants: readonly object[]) => readonly object[],
+) =>
+  app(async (tx) => {
+    const body = saveBodyOf(await readProductEditor(tx, productId));
+    await saveProductEditor(tx, productId, { ...body, variants: change(body.variants) }, "en");
+  });
+
 describe("the menu price writers", () => {
   it("refuse a price on an ordinary menu for a product with variants, and store nothing", async () => {
     await app((tx) => setProductVariants(tx, f.wine, [glass], "en"));
@@ -138,6 +148,22 @@ describe("the menu price writers", () => {
     expect(await stored(f.daily, f.wine)).toBe(200);
   });
 
+  it("refuse a malformed price as malformed before asking about variants", async () => {
+    await app((tx) => setProductVariants(tx, f.wine, [glass], "en"));
+    await expect(
+      app((tx) => updateMenuItem(tx, f.lunch, f.lunchWine, { grossPrice: "abc" })),
+    ).rejects.toMatchObject({ code: "shared.invalid_decimal" });
+  });
+
+  it("accept a price again once every variant is Inactive", async () => {
+    await addGlassInEditor(f.wine);
+    await saveVariantsInEditor(f.wine, (variants) =>
+      variants.map((variant) => ({ ...variant, active: false })),
+    );
+    await app((tx) => updateMenuItem(tx, f.lunch, f.lunchWine, { grossPrice: "7.00" }));
+    expect(await stored(f.lunch, f.wine)).toBe(700);
+  });
+
   it("still price a product without variants on an ordinary menu", async () => {
     await app((tx) => setProductVariants(tx, f.wine, [glass], "en"));
     const offer = await app((tx) =>
@@ -157,6 +183,14 @@ describe("a product's first variant", () => {
     expect(await stored(f.lunch, f.wine)).toBeNull();
     expect(await stored(f.dinner, f.wine)).toBeNull();
     expect(await stored(f.daily, f.wine)).toBe(150);
+  });
+
+  it("is not taken by a save that leaves the product without an Active variant", async () => {
+    await saveVariantsInEditor(f.wine, () => []);
+    expect(await stored(f.lunch, f.wine)).toBe(900);
+    await saveVariantsInEditor(f.wine, () => [{ ...glass, active: false }]);
+    expect(await stored(f.lunch, f.wine)).toBe(900);
+    expect(await stored(f.dinner, f.wine)).toBe(950);
   });
 
   it("does not bring the price back when the variants go", async () => {

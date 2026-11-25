@@ -350,6 +350,8 @@ describe("buildMenuDocument", () => {
       description: { en: "All about Lemonade" },
       image: libraryImageName("lemonade.jpg"),
       placements: [[f.drinks]],
+      grossPrice: null,
+      unitPrice: "3.00",
     });
     expect(document.offers[soup]).toMatchObject({
       productId: f.soup,

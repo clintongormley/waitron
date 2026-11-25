@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
 import {
   menuItems,
   menuItemVariantOverrides,
@@ -37,6 +37,18 @@ export async function dropProductMenuPrices(
       .update(menuItems)
       .set({ grossPrice: null })
       .where(and(inArray(menuItems.productId, batch), inArray(menuItems.menuId, ordinary)));
+}
+
+/** Deletes, on every ordinary menu, the price of every product that has an Active variant. */
+export async function dropMenuPricesOfProductsWithVariants(tx: Transaction): Promise<void> {
+  const parents = await tx
+    .selectDistinct({ id: products.parentId })
+    .from(products)
+    .where(and(isNotNull(products.parentId), eq(products.active, true)));
+  await dropProductMenuPrices(
+    tx,
+    parents.map((row) => row.id!),
+  );
 }
 
 /**

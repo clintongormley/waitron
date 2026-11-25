@@ -1427,7 +1427,79 @@ describe("configuration transfer database path", () => {
     `);
     expect(rows).toEqual([
       { name: "Gin", gross_price: null, overrides: 0 },
-      { name: "Tonic", gross_price: 550, overrides: 1 },
+      { name: "Tonic", gross_price: null, overrides: 1 },
+    ]);
+  });
+
+  it("clears an ordinary menu's price on a product with Active variants, keeping a set menu's and an all-Inactive one's", async () => {
+    const source = await applyVenue(planVenue(venue("B66778814"), ALL_MODULES), {
+      db: suite.db,
+      modules: ALL_MODULES,
+    });
+    await withTransaction(suite.db, async (tx) => {
+      const bar = await createMenu(tx, { name: "Bar menu" });
+      const daily = await createMenu(tx, {
+        name: "Daily menu",
+        kind: "set_menu",
+        setPrice: "14.00",
+      });
+      for (const [name, active] of [
+        ["Cola", true],
+        ["Water", false],
+      ] as const) {
+        const product = await createProduct(tx, {
+          categoryId: null,
+          name,
+          pricingUnit: "each",
+          unitPrice: "4",
+          vatClass: "general",
+        });
+        await addProductToMenu(tx, { menuId: bar.id, productId: product.id, grossPrice: "5.50" });
+        await addSetMenuDishes(tx, daily.id, [{ productId: product.id, excludedVariantIds: [] }]);
+        await tx
+          .update(menuItems)
+          .set({ grossPrice: 150 })
+          .where(and(eq(menuItems.menuId, daily.id), eq(menuItems.productId, product.id)));
+        await tx
+          .insert(products)
+          .values({ id: `${name}-single`, parentId: product.id, name: "Single", active });
+      }
+    });
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
+    const bundle = await buildConfigurationBundle(
+      suite.db,
+      source,
+      ALL_MODULES,
+      new Date("2026-10-05T12:00:00Z"),
+      versions,
+    );
+    expect(bundle.tables.menu_items!.map((row) => row.gross_price).sort()).toEqual([
+      150, 150, 550, 550,
+    ]);
+    await applyVenue(planVenue(venue("B99887714"), ALL_MODULES), {
+      db: targetSuite.db,
+      modules: ALL_MODULES,
+      beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
+    });
+    const { rows } = await targetSuite.db.execute<{
+      menu: string;
+      name: string;
+      gross_price: number | null;
+    }>(sql`
+      select m.name as menu, p.name, mi.gross_price
+      from menu_items mi
+      join products p on p.id = mi.product_id
+      join menus m on m.id = mi.menu_id
+      order by m.name, p.name
+    `);
+    expect(rows).toEqual([
+      { menu: "Bar menu", name: "Cola", gross_price: null },
+      { menu: "Bar menu", name: "Water", gross_price: 550 },
+      { menu: "Daily menu", name: "Cola", gross_price: 150 },
+      { menu: "Daily menu", name: "Water", gross_price: 150 },
     ]);
   });
 
