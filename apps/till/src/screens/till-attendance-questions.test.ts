@@ -163,17 +163,23 @@ describe("attendance questions before work", () => {
     );
   });
 
-  it("keeps details for breaks and corrections beside an ordinary clock-in", async () => {
+  it("keeps details for breaks, corrections and manager entries beside a worker clock-in", async () => {
     const [prompt] = attendanceMissingTimesPrompts();
     const [clockIn, clockOut, answer] = prompt.history;
     prompt.history = [
-      clockIn!,
-      { ...clockOut!, entryKind: "break_start" },
+      { ...clockIn!, extension: undefined },
+      { ...clockOut!, entryKind: "break_start", extension: clockIn!.extension },
       { ...answer!, entryKind: "correction", correctionReason: "Corrected the closing time" },
+      {
+        ...clockOut!,
+        entryId: "manager-out",
+        recordedByPersonId: "manager",
+        extension: { ...clockIn!.extension!, authorKind: "manager" },
+      },
     ];
     const { el } = await mount({ inbox: attendanceInbox([prompt]) });
     expect(Array.from(el.shadowRoot!.querySelectorAll("time"), (time) => time.textContent)).toEqual(
-      ["19:10", "2026-11-23 19:35 +01:00", "2026-11-23 19:35 +01:00"],
+      ["19:10", "2026-11-23 19:35 +01:00", "2026-11-23 19:35 +01:00", "2026-11-23 19:35 +01:00"],
     );
     expect(el.shadowRoot!.textContent).toContain("Corrected the closing time");
   });

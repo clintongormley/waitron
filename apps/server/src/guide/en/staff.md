@@ -214,8 +214,8 @@ starting screen, sign out and sign in again to open it.
 
 ## Hours and breaks {#hours}
 
-If **Check your times** appears, look at the recorded times for each day. Choose
-**Add missing times** to enter any times that are missing.
+If **Check your times** appears, look at the recorded times for each day. If a day has missing
+times, choose **Add missing times** to enter them.
 
 Use **Start break** and **End break** for a pause during your shift. Use **Clock out** when your work ends.
 
