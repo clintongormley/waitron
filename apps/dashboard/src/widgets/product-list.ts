@@ -496,7 +496,7 @@ export class ProductList extends LitElement {
     await box.updateComplete;
     if (this.nameDraft !== draft) return;
     // Fit before focusing so the input does not scroll the table sideways.
-    this.#fitNames();
+    this.#fitNameBox();
     if (focus) {
       box.focus();
       box.select();
@@ -597,43 +597,33 @@ export class ProductList extends LitElement {
       this.#fitFrame = 0;
       const table = this.#table()!;
       const width = table.clientWidth;
-      if (width > 0) this.phone = width <= PRODUCTS_PHONE_WIDTH;
-      this.#fitNames();
+      if (width > 0) {
+        this.phone = width <= PRODUCTS_PHONE_WIDTH;
+        table.toggleAttribute("data-compact-products", width < 800);
+      }
+      this.#fitNameBox();
     });
   }
 
-  /** Read widths before writing them so wrapped names do not trigger layout for each row. */
-  #fitNames(): void {
+  #fitNameBox(): void {
     const root = this.#table()!.shadowRoot!;
     const scroll = root.querySelector<HTMLElement>(".scroll");
-    if (!scroll) return;
     const box = root.querySelector<HTMLElement>('wt-input[name="category-name"]');
-    const names = [
-      ...root.querySelectorAll<HTMLElement>(
-        '[part~="folder-name"], [part~="name-stack"], [part~="variant-name"], [part~="search-name-line"], [part~="naming"]',
-      ),
-    ];
-    const fitted = box ? [...names, box] : names;
-    const scrolled = scroll.scrollLeft;
-    const rooms = fitted.map((element) => {
-      const cell = element.closest("td")!;
-      const end = cell
-        .closest("tr")!
-        .querySelector('td[data-pinned="end"]')!
-        .getBoundingClientRect().left;
-      const room =
-        Math.min(cell.getBoundingClientRect().right + scrolled, end) -
-        (element.getBoundingClientRect().left + scrolled) -
-        parseFloat(getComputedStyle(cell).paddingInlineEnd);
-      return `${Math.max(0, room)}px`;
-    });
-    fitted.forEach((element, index) => {
-      const [target, property] =
-        element === box ? [box.parentElement!, "--name-box-room"] : [element, "--name-room"];
-      if (target.style.getPropertyValue(property) !== rooms[index])
-        target.style.setProperty(property, rooms[index]!);
-    });
-    if (!box) return;
+    if (!scroll || !box) return;
+    const naming = box.parentElement!;
+    const cell = box.closest("td")!;
+    const pinned = cell.closest("tr")!.querySelector('td[data-pinned="end"]')!;
+    const end =
+      Math.min(
+        cell.getBoundingClientRect().right + scroll.scrollLeft,
+        pinned.getBoundingClientRect().left,
+      ) -
+      parseFloat(getComputedStyle(cell).paddingInlineEnd) -
+      scroll.scrollLeft;
+    const room = Math.max(0, end - naming.getBoundingClientRect().left);
+    const boxRoom = Math.max(0, end - box.getBoundingClientRect().left);
+    naming.style.setProperty("--name-room", `${room}px`);
+    naming.style.setProperty("--name-box-room", `${boxRoom}px`);
     const hidden = scroll.getBoundingClientRect().left - box.getBoundingClientRect().left;
     if (hidden > 0) scroll.scrollLeft -= hidden;
   }
@@ -814,7 +804,9 @@ export class ProductList extends LitElement {
     return path === "" ? nothing : html`<span part="search-path">${path}</span>`;
   }
 
-  #productColumns(inlineCategory?: DataTableColumn<ProductRow>): DataTableColumn<ProductRow>[] {
+  #productColumns(
+    inlineCategory?: ReturnType<typeof productCategoryColumn>,
+  ): DataTableColumn<ProductRow>[] {
     return [
       {
         key: "name",
@@ -834,6 +826,7 @@ export class ProductList extends LitElement {
         cell: (row, context) => {
           const { ancestorOnly, searchRoot } = context;
           const { product, variant } = row;
+          const category = variant ? undefined : inlineCategory?.categoryName(row);
           const { color, inheritedFrom } =
             product.color === null
               ? this.#inheritedColor(product.primaryCategoryId)
@@ -882,7 +875,11 @@ export class ProductList extends LitElement {
                           ><strong>${product.name}</strong
                           >${unavailableLabel(product.available)}</span
                         >`
-                  }${inlineCategory?.cell(row, context) ?? nothing}${productRowLabels(product)}</span
+                  }${
+                    category && !this.#table()?.isColumnShown("category")
+                      ? html`<span part="phone-category category-path-name">${category}</span>`
+                      : nothing
+                  }${productRowLabels(product)}</span
                 >
               </span>`;
         },
@@ -1381,7 +1378,7 @@ export class ProductList extends LitElement {
     await new Promise<void>((ready) =>
       requestAnimationFrame(() => requestAnimationFrame(() => ready())),
     );
-    this.#fitNames();
+    this.#fitNameBox();
     const root = table.shadowRoot!;
     const name = root.querySelector(`tr[data-row-key="${CSS.escape(key)}"] strong`);
     const header = root.querySelector("thead");

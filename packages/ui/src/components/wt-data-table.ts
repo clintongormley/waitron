@@ -1528,6 +1528,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
     return [first, ...ordered.map((key) => byKey.get(key)!), ...pinned];
   }
 
+  isColumnShown(key: string): boolean {
+    return this.#shownColumns().some((column) => column.key === key);
+  }
+
   /** The columns drawn, in the person's order; the first column stays shown. */
   #shownColumns(): DataTableColumn<Row>[] {
     const ordered = this.#orderedColumns();
@@ -2681,7 +2685,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                   ${this.rowControls ? html`<span class="visually-hidden">${this.rowControlsLabel}</span>` : nothing}
                   ${
                     this.selectable
-                      ? html`<span class="row-controls"
+                      ? html`<span class="row-controls" part="row-controls"
                           ><input
                             type="checkbox"
                             data-test="select-all"
@@ -2796,11 +2800,12 @@ export class WtDataTable<Row = unknown> extends LitElement {
       role=${isTree ? "gridcell" : nothing}
       part=${this.rowCellParts?.(row) || nothing}
     >
-      <span class="row-controls">
+      <span class="row-controls" part="row-controls">
         ${
           selectable
             ? html`<input
                 type="checkbox"
+                part="row-checkbox"
                 data-test=${`select-${key}`}
                 aria-label=${this.selectionLabel(row)}
                 .checked=${this.selected.includes(this.#selectionKey(row, key))}

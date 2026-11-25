@@ -2806,6 +2806,7 @@ describe("the product list as a tree", () => {
         setLocale(locale);
         await page.viewport(390, 844);
         const { el } = await mountWidget<ProductList>("dashboard-product-list", {
+          reordering: false,
           categories: [drinks, beer, { id: "k", name: "Kegs", parentId: "b", color: null }],
           products: [
             product({
@@ -2817,10 +2818,12 @@ describe("the product list as a tree", () => {
         });
         await el.revealCategory("k");
         const table = el.shadowRoot!.querySelector("wt-data-table")!;
-        expectRowMenusOnScreen(table, 5, 'wt-row-actions[data-test^="actions-"]');
-        // The table learns its width from a ResizeObserver, which reports after the next layout,
-        // and sets `narrow` a frame later.
-        await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+        await vi.waitFor(() => {
+          expect(table.hasAttribute("narrow")).toBe(true);
+          const scroll = table.shadowRoot!.querySelector(".scroll")!;
+          expect(scroll.scrollWidth).toBe(scroll.clientWidth);
+          expectRowMenusOnScreen(table, 5, 'wt-row-actions[data-test^="actions-"]', false);
+        });
         // The phone indent: half a step a level, measured where a 390 px screen puts the list.
         const indent = (key: string) =>
           getComputedStyle(
@@ -3509,6 +3512,45 @@ describe("a product's variants in the list", () => {
     await vi.waitFor(() => expect(scroll.scrollWidth).toBe(scroll.clientWidth));
   });
 
+  it("lays out a renamed List row the same as a fresh row with that name", async () => {
+    await page.viewport(768, 844);
+    const dish = cecina();
+    const other = product({ id: "bread", name: "Sourdough bread from the town bakery" });
+    const renamed = {
+      ...dish,
+      name: "Mushroom croquettes with roasted garlic and aged sheep cheese",
+    };
+    const categories = [{ ...food, id: "deli", name: "Cured meats from local producers" }];
+    const draw = (dish: Product) =>
+      mountTree({ view: "list", categories, products: [dish, other] });
+    const frames = async () => {
+      for (let frame = 0; frame < 3; frame++) await new Promise(requestAnimationFrame);
+    };
+    const existing = await draw(dish);
+    await frames();
+    existing.el.products = [renamed, other];
+    await existing.el.updateComplete;
+    await existing.table.updateComplete;
+    const fresh = await draw(renamed);
+    await frames();
+    expect(nameCell(existing.root, dish.id).getBoundingClientRect().width).toBeCloseTo(
+      nameCell(fresh.root, dish.id).getBoundingClientRect().width,
+      0,
+    );
+  });
+
+  it.each(["en-GB", "es-ES"])("fits the starting List columns at 560 px in %s", async (locale) => {
+    await page.viewport(560, 844);
+    setLocale(locale);
+    const { root } = await mountTree({
+      view: "list",
+      products: [cecina(), product({ id: "bread", name: "Sourdough bread" })],
+      categories: [{ ...food, id: "deli", name: "House cured meats and cheeses" }],
+    });
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    await vi.waitFor(() => expect(scroll.scrollWidth).toBe(scroll.clientWidth));
+  });
+
   it("keeps the availability switch clear of Actions in the filtered Spanish phone Tree", async () => {
     await page.viewport(390, 844);
     setLocale("es-ES");
@@ -3609,6 +3651,18 @@ describe("a product's variants in the list", () => {
         longName.querySelector("strong")!.getBoundingClientRect().bottom - 1,
       );
     });
+  });
+
+  it("shows Category once when a phone List has its Category column customised on", async () => {
+    await page.viewport(390, 844);
+    showColumns("category");
+    const { table, root } = await mountTree({ view: "list" });
+    await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(true));
+    const row = root.querySelector('tr[data-row-key="lager"]')!;
+    expect(cellUnder(root, "lager", t("product.category")).textContent!.trim()).toBe(
+      "Drinks › Beer",
+    );
+    expect(row.textContent!.match(/Drinks › Beer/g)).toHaveLength(1);
   });
 
   it("filters products through category descendants in List", async () => {
@@ -4244,13 +4298,12 @@ describe("the Products tree's Name column", () => {
       )!;
       const cell = name.closest("td")!;
       expect(root.querySelector<HTMLElement>(".scroll")!.scrollLeft).toBe(0);
-      const room =
-        cell.getBoundingClientRect().right -
-        name.getBoundingClientRect().left -
-        parseFloat(getComputedStyle(cell).paddingInlineEnd);
-      expect(Math.abs(parseFloat(getComputedStyle(name).maxInlineSize) - room)).toBeLessThanOrEqual(
-        1,
-      );
+      const right =
+        cell.getBoundingClientRect().right - parseFloat(getComputedStyle(cell).paddingInlineEnd);
+      const text = document.createRange();
+      text.selectNodeContents(name.querySelector("strong")!);
+      expect(text.getClientRects().length).toBeGreaterThan(1);
+      expect(text.getBoundingClientRect().right).toBeLessThanOrEqual(right + 1);
     });
 
     it.each([false, true])(
@@ -5201,6 +5254,7 @@ it.each([390, 1280])(
     table.setExpanded("folder:d", true);
     table.setExpanded("folder:b", true);
     await table.updateComplete;
+    await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(width === 390));
     const controls = ["folder:d", "folder:b", "cola", "lager"].map((key) => {
       const row = root.querySelector(`tr[data-row-key="${key}"]`)!;
       return {
@@ -5208,6 +5262,8 @@ it.each([390, 1280])(
         box: row.querySelector<HTMLElement>('input[type="checkbox"]')!,
       };
     });
+    const headerCheckbox = root.querySelector('[data-test="select-all"]')!.getBoundingClientRect();
+    const headerMiddle = headerCheckbox.left + headerCheckbox.width / 2;
     expect(controls[0]!.grip).not.toBeNull();
     for (const { grip, box } of controls) {
       expect(grip.getBoundingClientRect().left).toBeCloseTo(
@@ -5220,6 +5276,18 @@ it.each([390, 1280])(
       );
       expect(grip.closest("td")).toBe(box.closest("td"));
       expect(grip.closest("td")).toBe(grip.closest("tr")!.querySelector("td"));
+      const gripBounds = grip.getBoundingClientRect();
+      const boxBounds = box.getBoundingClientRect();
+      if (width === 390) {
+        expect(gripBounds.top).toBeGreaterThanOrEqual(boxBounds.bottom);
+        const gripMiddle = gripBounds.left + gripBounds.width / 2;
+        const boxMiddle = boxBounds.left + boxBounds.width / 2;
+        expect(Math.abs(headerMiddle - boxMiddle)).toBeLessThanOrEqual(1);
+        expect(Math.abs(gripMiddle - boxMiddle)).toBeLessThanOrEqual(1);
+      } else {
+        expect(gripBounds.left).toBeGreaterThanOrEqual(boxBounds.right);
+        expect(gripBounds.top).toBeLessThan(boxBounds.bottom);
+      }
     }
   },
 );

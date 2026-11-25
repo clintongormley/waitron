@@ -1586,8 +1586,8 @@ headings and cell text wrap at spaces first, so it scrolls only when even its lo
 anywhere wrapping on its name stacks. `--wt-table-cell-padding-inline` defaults to
 `--wt-space-3` at each cell, so a part-local spacing token applies there; Structure sets it to `--wt-space-1` at 440 px or less, for cells and the
 tree toggle’s reach, leaving vertical and toolbar spacing unchanged and the heading over the root name. The Menus
-and Products lists wrap at every width. Products fits names within the Name cell and uses
-`--wt-space-1` inline cell padding when narrow. Set `hideHeadingLabel` on a column to keep its
+and Products lists wrap at every width. Products uses `--wt-space-1` inline cell padding
+below 800 px and lets prices and units stack there. Set `hideHeadingLabel` on a column to keep its
 heading and sort control named while hiding the label. Products uses it for Available on phones. The primitive is checked by the `wrapToFit` case in
 `packages/ui/src/components/wt-data-table.head-and-cells.test.ts`.
 
@@ -2189,6 +2189,7 @@ nor be hidden, because the last shown movable column stays shown. So a list whos
 column sits between its name and its buttons draws no Customise button. A
 stored choice is kept meanwhile and applies again when the columns offer a choice; one that hides
 that single column leaves it shown. An open dialog closes when the columns stop offering a choice.
+`isColumnShown(key)` reads whether the column is displayed after applying the saved choices.
 The dialog lists every column in table order. A column the person can hide has an eye control. A
 column that can never be hidden — the first column, any
 `pinned: "end"` column, and a column with no `choosable` — has no eye: its row says
@@ -2292,8 +2293,8 @@ what its rows draw there. Supply `rowControls` to render controls in the leading
 selection checkboxes, outside tree indentation. Name that column with `rowControlsLabel`. Keep
 its default baseline alignment for Products' wrapped names; Structure uses
 `rowControlsAlign="center"` for its name-and-note stacks. In Select mode, the header's native
-checkbox and each row's checkbox share a leading inset, with the grip after the checkbox.
-Controls without selection keep their horizontal centering when `rowControlsAlign="center"`.
+checkbox and each row's checkbox line up. Grip and checkbox sit side by side in the wide Products
+Tree and stack at phone width. Controls without selection keep their horizontal centering when `rowControlsAlign="center"`.
 Put a full-width lower toolbar in the
 `toolbar-bottom` slot; Products forwards that slot for its selection bar. A control that is not
 a column's filter but belongs with the filters goes in the `filters-start` slot, at the top of the
@@ -2325,16 +2326,15 @@ moves with the mode, sits over the All products name. Each row's colour square s
 indent, one step in per level, rather than every square sharing one column (owner, 2026-10-08, A415).
 In Products a colour square, photo or placeholder draws at 36 px, or 30 px when the table is narrow.
 Its button or link is at least `--wt-tap-min` wide and runs from the top of the row to the bottom,
-including on All products and a category being named. In the phone List, the category path and
-labels go below the name. In the phone Tree the counts stay visible under category names. Price
+including on All products and a category being named. In the phone List, labels go below
+the name. The category path joins them when its column is hidden in Customise. In the phone Tree the counts stay visible under category names. Price
 ranges and units can wrap. When Select uses the leading column on a phone, the Name heading
 can move toward the leading edge to leave room for Price and the switch. The Structure tree uses `--wt-tap-min` squares and hides its section and
 product slots when narrow, except while naming a section.
 A variant's row draws no grip. Its photo and name sit one step further in than the product's.
 The square shows the variant's photo or the product's photo and opens the variant's editor at its
-photo. Products fits each name within the Name cell and keeps it clear of the pinned Actions when
-other columns make the table scroll. A category name box takes at least `--wt-tap-min`.
-On a phone, the name field sits beside the swatch, with the counts above the field. The grip stays in its leading column.
+photo. Names wrap within their cells. A category name box takes at least `--wt-tap-min`.
+On a phone, the name field sits beside the swatch, with the counts above the field. In the narrow Tree, Select stacks each grip below its checkbox in the leading column.
 The square shows the category's own colour, else the nearest coloured category above it or the
 venue's default. An inherited colour keeps its dashed border while the name is typed. The chooser
 starts on No colour when the category has no colour of its own. Tab moves on from the name field.

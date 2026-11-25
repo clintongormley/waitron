@@ -1,8 +1,10 @@
 import { css } from "lit";
 
 export const productListLayoutStyles = css`
-  wt-data-table[narrow] {
+  wt-data-table[data-compact-products] {
     --wt-table-cell-padding-inline: var(--wt-space-1);
+  }
+  wt-data-table[narrow] {
     --tree-arrow-width: var(--wt-space-6);
   }
   /* Cell templates are rendered in wt-data-table's shadow root, so ::part is the one boundary
@@ -115,7 +117,7 @@ export const productListLayoutStyles = css`
     flex-wrap: wrap;
     align-items: baseline;
     column-gap: var(--wt-space-2);
-    max-inline-size: var(--name-room);
+    min-inline-size: 0;
     overflow-wrap: anywhere;
   }
   wt-data-table::part(search-path) {
@@ -141,11 +143,10 @@ export const productListLayoutStyles = css`
     font-size: var(--wt-font-size-sm);
     white-space: nowrap;
   }
-  /* Each takes only the room #fitNames measures before the row's pinned cell, and wraps there. */
   wt-data-table::part(folder-name),
   wt-data-table::part(name-stack),
   wt-data-table::part(variant-name) {
-    max-inline-size: var(--name-room);
+    min-inline-size: 0;
     overflow-wrap: anywhere;
   }
   wt-data-table::part(name-box) {
@@ -209,10 +210,13 @@ export const fullRowProductsMediaStyles = css`
     inline-size: 100%;
     min-inline-size: var(--wt-tap-min);
   }
-  wt-data-table::part(folder-name),
-  wt-data-table::part(name-stack),
-  wt-data-table::part(variant-name) {
-    min-inline-size: 0;
+  wt-data-table[narrow]:not([data-list])::part(row-controls) {
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  wt-data-table[narrow]:not([data-list])::part(row-checkbox) {
+    margin-block: calc((var(--wt-tap-min) - var(--wt-space-4)) / 2);
   }
 
   wt-data-table::part(products-media-slot) {
@@ -267,15 +271,15 @@ export const fullRowProductsMediaStyles = css`
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
   }
-  wt-data-table[narrow]::part(price-layout) {
+  wt-data-table[data-compact-products]::part(price-layout) {
     grid-template-columns: minmax(0, auto);
   }
-  wt-data-table[narrow]::part(price-amount),
-  wt-data-table[narrow]::part(vat-note) {
+  wt-data-table[data-compact-products]::part(price-amount),
+  wt-data-table[data-compact-products]::part(vat-note) {
     white-space: normal;
     overflow-wrap: anywhere;
   }
-  wt-data-table[narrow]::part(price-unit) {
+  wt-data-table[data-compact-products]::part(price-unit) {
     text-align: end;
   }
 `;

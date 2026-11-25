@@ -42,7 +42,9 @@ export function productCategoryColumn(
   categories: readonly CategorySummary[],
   defaultColor: string | null,
   phone: boolean,
-): DataTableColumn<ProductCategory> {
+): DataTableColumn<ProductCategory> & {
+  categoryName: (row: ProductCategory) => string | undefined;
+} {
   const byId = new Map(categories.map((category) => [category.id, category]));
   const paths = new Map(
     categories.map((category) => [category.id, categoryAncestors(category, categories).reverse()]),
@@ -57,11 +59,12 @@ export function productCategoryColumn(
     key: "category",
     label: t("product.category"),
     choosable: phone ? "hidden" : "shown",
+    categoryName: name,
     cell: (row) => {
       const category = path(row)?.at(-1);
       if (row.variant !== null || !category) return nothing;
       const { color } = categoryColorSource(category.id, byId, defaultColor);
-      return html`<span part=${phone ? "category-path-cell phone-category" : "category-path-cell"}
+      return html`<span part="category-path-cell"
         >${swatchChip(color)}<span part="category-path-name">${name(row)}</span></span
       >`;
     },
