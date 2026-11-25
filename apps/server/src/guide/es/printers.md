@@ -91,6 +91,8 @@ Abre **Cola de impresión** para ver por qué espera un trabajo. Para añadir o 
 USB o Bluetooth, comprueba la conexión de la impresora y su agente de impresión. El mensaje de
 conexión puede aparecer junto al último error de impresión comunicado.
 
+Si la impresora tarda varios segundos en empezar a imprimir por Bluetooth, apágala y vuelve a encenderla.
+
 Si un trabajo en A4 indica que falta papel, añade papel y deja que termine. Si la cola indica
 **Puede haberse impreso**, revisa la impresora antes de volver a enviar la factura. Abre **Pedidos**
 para solicitar otra impresión en A4.

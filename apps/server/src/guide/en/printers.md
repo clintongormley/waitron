@@ -85,6 +85,8 @@ Open **Print Queue** to see why a job is waiting. To add or remove a computer th
 printer, check the printer connection and its print agent. A connection message can appear
 alongside the last reported printing error.
 
+If prints take several seconds to start over Bluetooth, switch the printer off and on again.
+
 If an A4 job says the printer is out of paper, add paper and let the job finish. If the queue says
 **May have printed**, check the printer before sending the invoice again. Open **Orders** to
 request another A4 print.

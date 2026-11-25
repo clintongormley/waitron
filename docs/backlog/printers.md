@@ -303,7 +303,11 @@ Reprint for A4 rows), A1584 (a shorter Delete printer window), A1585 (dragging b
   The owner confirmed both 60-line strips reached line 60, with immediate close and with
   close after five seconds. When the battery died and the printer was switched back on, connects
   took 3.0–3.5 s and channel lookups 3.1–3.6 s. Restarting again brought connects to 0.24–2.15 s.
-  The watcher reopened part 2 on 25 November at 20:17. Part 3 waits for part 2's measurements.
+  On the spare's printer, the delay appeared to depend on how the printer came up when switched on.
+  Switching it off and on restored faster connections twice. Keeping the connection open could
+  save connection time on a repeat print while the link is open. The first print still needs
+  a fresh connection. The watcher parked connection reuse and early connecting on 25 November
+  at 22:15. Revisit connection reuse if the owner still notices slow prints with the channel fix.
   [Plan](../superpowers/plans/2026-11-25-a1578-bluetooth-printing.md).
 
 - **Print jobs keep their rows; finished or abandoned jobs release their bytes after one week**
