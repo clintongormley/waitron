@@ -477,6 +477,12 @@ export async function priceOrderLines(
           ...cutoff.run,
           stationId: cutoff.route.stationId,
         });
+    } else if (
+      line[STORED_RISE] === true &&
+      selected?.fromRecordedCopy === true &&
+      periodOf.has(offer.menuId)
+    ) {
+      throw new AppError("menu_period.last_orders", { menuItemId: offer.id });
     } else if (period !== undefined) {
       if (!alsoSold.has(offeredKey(offer.productId, line.variantId ?? null))) {
         endedDishes.push({

@@ -23,6 +23,7 @@ import {
   updateMenuPeriod,
 } from "@waitron/venue-service";
 import { createStation } from "./kitchen.js";
+import { readBillEditState } from "./bill-editing.js";
 import { fireGroup } from "./order-group-release.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
@@ -31,6 +32,8 @@ import { send as tillRequest } from "./testing/bill-venue.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { submitDraft, type Draft } from "./order-drafts.js";
+import { readOrderRevision } from "./working-order-context.js";
+import { updateOrderLine } from "./working-order-held-write.js";
 import { expectedDraftEditForTest } from "./testing/draft-command-fixture.js";
 import {
   commandFor,
@@ -452,6 +455,32 @@ it("asks when neither period still sells a dish from a linked set menu", async (
     setMenuRole: "dish",
     latePeriodName: "Lunch",
   });
+});
+
+it("refuses to increase a dish from a linked set menu after its period's last orders", async () => {
+  const draft = await draftMenuDish(true, "14:00");
+  const { tabId, groups } = await send(draft, "fire");
+  const line = (await dishRow(groups[0]!.lineIds[0]!))!;
+  at("21:05");
+
+  await expect(
+    inTx(venue, async (tx) =>
+      updateOrderLine(
+        tx,
+        venue.cfg,
+        tabId,
+        line.lineNo,
+        { quantity: "2", portionLineNos: [] },
+        await readOrderRevision(tx, tabId),
+        {
+          admission: testTradingAdmission(),
+          operatorId: venue.operator.personId,
+          expectedEdit: await readBillEditState(tx, tabId),
+        },
+      ),
+    ),
+  ).rejects.toMatchObject({ code: "menu_period.last_orders" });
+  expect(await dishRow(line.id)).toMatchObject({ quantity: 1000 });
 });
 
 it("links the set menus on sale when the dish was priced, though the clock passes lunch's end before the link", async () => {
