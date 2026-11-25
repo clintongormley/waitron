@@ -181,6 +181,8 @@ const PRODUCT_KEYS = {
   image: ["image"],
   color: ["color"],
   unit: ["unit", "pricingUnit"],
+  allergens: ["allergens"],
+  diet: ["diet", "dietOverride", "dietaryDeclarations"],
   vat: ["vatClass", "takeawayVatClass"],
   ordering: ["ordering"],
 } as const;
@@ -256,7 +258,7 @@ function nestedFields(
         );
         continue;
       }
-      add(productFields(was, now, ["names", "image", "unit", "vat"]), {
+      add(productFields(was, now, ["names", "image", "unit", "allergens", "diet", "vat"]), {
         variantId: id,
       });
       if (was.unitPrice !== now.unitPrice) both({ kind: "price" }, { variantId: id });
@@ -359,6 +361,8 @@ function extraFields(
   const result: Fields = { before: [], after: [] };
   const keys = {
     image: ["image"],
+    allergens: ["addAllergens"],
+    diet: ["suitableFor"],
     vat: ["vatClass", "takeawayVatClass"],
   } as const;
   for (const field of fields) {

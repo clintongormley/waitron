@@ -292,7 +292,7 @@ describe("buildMenuDocument", () => {
     });
   });
 
-  it("leaves out availability, course and reporting category, and an extras item's availability", async () => {
+  it("leaves out availability, course and reporting category, and an extras item's or option label's availability", async () => {
     const f = await menusFixture(fx.db);
     const document = await build(f.lunch);
     const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
@@ -1333,11 +1333,19 @@ describe("diffMenuDocuments", () => {
     ]);
   });
 
-  it("leaves a declarations-only product edit out of publication changes", async () => {
+  it("lists a declarations-only product edit among publication changes", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.dinner);
     await app((tx) => updateProduct(tx, f.lemonade, { dietaryDeclarations: ["vegan"] }));
-    expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([]);
+    expect(changeBodies(diffMenuDocuments(live, await build(f.dinner)))).toEqual([
+      {
+        kind: "product_changed",
+        productId: f.lemonade,
+        name: "Lemonade",
+        fields: ["diet"],
+        source: "shared_product",
+      },
+    ]);
   });
 
   it("names the list and extra when its saved portion takes a new product unit", async () => {
@@ -1700,7 +1708,7 @@ describe("diffMenuDocuments", () => {
         kind: "product_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["names", "description", "image"],
+        fields: ["names", "description", "image", "allergens", "diet"],
         source: "shared_product",
       },
       {
@@ -1825,7 +1833,7 @@ describe("diffMenuDocuments", () => {
         kind: "product_changed",
         productId: f.extraLemon,
         name: "Lemon wedge",
-        fields: ["names"],
+        fields: ["names", "allergens", "diet"],
         source: "shared_product",
       },
     ]);

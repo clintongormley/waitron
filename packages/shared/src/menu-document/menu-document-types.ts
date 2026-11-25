@@ -362,6 +362,8 @@ export type ProductChangeField =
   | "image"
   | "color"
   | "unit"
+  | "allergens"
+  | "diet"
   | "vat"
   | "ordering"
   | "variants"

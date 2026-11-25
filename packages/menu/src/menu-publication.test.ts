@@ -1402,7 +1402,7 @@ describe("menuStatus", () => {
       expect(await states(f)).toEqual({ lunch: "changed", dinner: "current" });
     });
 
-    it("flags both menus for declaration-only changes and preserves recorded versions", async () => {
+    it("flags both menus for declaration-only changes, lists them, and preserves recorded versions", async () => {
       const f = await published();
       const recorded = (
         await fx.db.execute<{ document: string; content_hash: string }>(
@@ -1421,8 +1421,28 @@ describe("menuStatus", () => {
         });
       });
       expect(await states(f)).toEqual({ lunch: "changed", dinner: "changed" });
-      for (const menuId of [f.lunch, f.dinner])
-        expect((await app((tx) => previewMenu(tx, menuId))).changes).toEqual([]);
+      for (const [menuId, other] of [
+        [f.lunch, "Dinner Menu"],
+        [f.dinner, "Lunch Menu"],
+      ] as const)
+        expect(changeBodies((await app((tx) => previewMenu(tx, menuId))).changes)).toEqual([
+          {
+            kind: "product_changed",
+            productId: f.lemonade,
+            name: "Lemonade",
+            fields: ["allergens", "diet"],
+            source: "shared_product",
+            alsoOn: [other],
+          },
+          {
+            kind: "product_changed",
+            productId: f.extraLemon,
+            name: "Extra lemon",
+            fields: ["allergens", "diet"],
+            source: "shared_product",
+            alsoOn: [other],
+          },
+        ]);
       expect(
         (await fx.db.execute(sql`select document, content_hash from menu_versions order by id`))
           .rows,
@@ -2127,7 +2147,7 @@ describe("previewMenu", () => {
     });
   });
 
-  it("names VAT on Lemonade and its extra while declarations stay live", async () => {
+  it("names allergens and VAT on Lemonade and its extra", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
     await publish(f.dinner);
@@ -2147,7 +2167,7 @@ describe("previewMenu", () => {
         kind: "product_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["vat"],
+        fields: ["allergens", "vat"],
         source: "shared_product",
         alsoOn: ["Dinner Menu"],
       },
@@ -2155,7 +2175,7 @@ describe("previewMenu", () => {
         kind: "product_changed",
         productId: f.extraLemon,
         name: "Extra lemon",
-        fields: ["vat"],
+        fields: ["allergens", "vat"],
         source: "shared_product",
         alsoOn: ["Dinner Menu"],
       },

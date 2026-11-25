@@ -1056,6 +1056,8 @@ const PRODUCT_FIELD_ORDER: readonly ProductChangeField[] = [
   "image",
   "color",
   "unit",
+  "allergens",
+  "diet",
   "vat",
   "ordering",
   "variants",
@@ -1068,12 +1070,16 @@ const PRODUCT_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["names", ["name", "customerName", "kitchenName"]],
   ["image", ["image"]],
   ["unit", ["unit", "pricingUnit"]],
+  ["allergens", ["allergens"]],
+  ["diet", ["diet", "dietOverride", "dietaryDeclarations"]],
   ["vat", ["vatClass", "takeawayVatClass"]],
 ];
 
 const EXTRA_FACTS: readonly [ProductChangeField, readonly string[]][] = [
   ["names", ["name", "customerName", "kitchenName", "presentation"]],
   ["image", ["image"]],
+  ["allergens", ["addAllergens"]],
+  ["diet", ["suitableFor"]],
   ["vat", ["vatClass", "takeawayVatClass"]],
 ];
 

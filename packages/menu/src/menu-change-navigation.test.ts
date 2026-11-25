@@ -361,6 +361,20 @@ describe("navigateMenuChanges", () => {
       [{ kind: "unit" }],
     ],
     [
+      "allergens",
+      (o: FrozenOffer) => {
+        o.allergens = { milk: {} };
+      },
+      [{ kind: "allergens" }],
+    ],
+    [
+      "diet",
+      (o: FrozenOffer) => {
+        o.dietaryDeclarations = ["vegan"];
+      },
+      [{ kind: "diet" }],
+    ],
+    [
       "vat",
       (o: FrozenOffer) => {
         o.vatClass = "reduced";
@@ -929,4 +943,73 @@ it("keeps unresolved change rows distinct by their subject and fields without us
       bodies.map((body) => ("name" in body ? { ...body, name: "Renamed" } : body)),
     ).map((row) => row.id),
   ).toEqual(rows.map((row) => row.id));
+});
+
+describe("declaration changes", () => {
+  async function changes(live: MenuDocument, proposed: MenuDocument) {
+    const { diffMenuDocuments } = await import("./menu-document.js");
+    return diffMenuDocuments(live, proposed).map(({ id, ...rest }) => {
+      expect(id).toEqual(expect.any(String));
+      return rest;
+    });
+  }
+
+  it("lists a dish's allergen change", async () => {
+    const live = document(),
+      proposed = document();
+    soup(proposed).allergens = { milk: {} };
+    expect(await changes(live, proposed)).toEqual([
+      {
+        kind: "product_changed",
+        productId: "soup",
+        name: "Staff soup",
+        fields: ["allergens"],
+        source: "shared_product",
+        targets: {
+          before: repeated({ kind: "allergens" }),
+          after: repeated({ kind: "allergens" }),
+        },
+      },
+    ]);
+  });
+
+  it("lists a variant's diet change", async () => {
+    const live = document(),
+      proposed = document();
+    soup(live).variants = [variant("large")];
+    soup(proposed).variants = [variant("large")];
+    soup(proposed).variants[0]!.dietaryDeclarations = ["vegan"];
+    const expected = repeated({ kind: "diet" }, { variantId: "large" });
+    expect(await changes(live, proposed)).toEqual([
+      {
+        kind: "product_changed",
+        productId: "soup",
+        name: "Staff soup",
+        fields: ["variants"],
+        source: "shared_product",
+        targets: { before: expected, after: expected },
+      },
+    ]);
+  });
+
+  it("lists an extra's allergen change", async () => {
+    const live = document(),
+      proposed = document();
+    soup(live).offeredModifiers = [extras("citrus")];
+    soup(proposed).offeredModifiers = [extras("citrus")];
+    const list = soup(proposed).offeredModifiers[0]!;
+    if (list.kind !== "extras") throw new Error("extras");
+    list.items[0]!.addAllergens = { sulphites: {} };
+    const expected = repeated({ kind: "allergens" }, { listId: "citrus", extraProductId: "lemon" });
+    expect(await changes(live, proposed)).toEqual([
+      {
+        kind: "product_changed",
+        productId: "lemon",
+        name: "Staff lemon",
+        fields: ["allergens"],
+        source: "shared_product",
+        targets: { before: expected, after: expected },
+      },
+    ]);
+  });
 });

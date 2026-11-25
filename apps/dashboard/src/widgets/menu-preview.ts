@@ -102,6 +102,8 @@ const PRODUCT_FIELDS: Record<ProductChangeField, StringKey> = {
   image: "menu_preview.field_image",
   color: "menu_preview.field_color",
   unit: "menu_preview.field_unit",
+  allergens: "menu_preview.field_allergens",
+  diet: "menu_preview.field_diet",
   vat: "menu_preview.field_vat",
   ordering: "menu_preview.field_ordering",
   variants: "menu_preview.field_variants",

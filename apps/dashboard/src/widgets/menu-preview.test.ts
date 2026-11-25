@@ -575,6 +575,27 @@ it.each([
 });
 
 it.each([
+  ["en", "Lemonade: allergens, diet — shared product"],
+  ["es-ES", "Lemonade: alérgenos, dieta — producto compartido"],
+])("names a change to a product's allergens and diet (%s)", async (locale, line) => {
+  setLocale(locale);
+  const el = await mount({
+    preview: preview([
+      {
+        id: "fixture-src/widgets/menu-preview.test.ts-allergens",
+        targets: { before: [], after: [] },
+        kind: "product_changed",
+        productId: "p-lemonade",
+        name: "Lemonade",
+        fields: ["allergens", "diet"],
+        source: "shared_product",
+      },
+    ]),
+  });
+  expect(items(el, "changes")).toEqual([line]);
+});
+
+it.each([
   ["en", "Bacon: how it is sold — shared product"],
   ["es-ES", "Bacon: cómo se vende — producto compartido"],
 ])("names a change to who may order a product on its own (%s)", async (locale, line) => {
