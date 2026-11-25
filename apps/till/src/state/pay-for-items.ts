@@ -93,16 +93,17 @@ export function itemsAllocated(
 }
 
 /** Why the Pay window offers no Items: from Find a bill; or on a Counter order sent to the kitchen
- * (`placed` with no receipt), at the Counter or since moved to a table, which Pay for items refuses
- * (`bill.not_issued`); else null. */
+ * (`placed` in the Counter window, or with no receipt since moved to a table), which Pay for items
+ * refuses; else null. */
 export function itemsBarredReason(open: {
   found: boolean;
+  counter: boolean;
   counterCollect: boolean;
   printed: boolean;
   status: BillBalance["status"] | undefined;
 }): StringKey | null {
   if (open.found) return "bill_pay.items_barred_found";
-  if (open.counterCollect || (!open.printed && open.status === "placed"))
+  if (open.counterCollect || (open.status === "placed" && (open.counter || !open.printed)))
     return "bill_pay.items_barred_counter";
   return null;
 }

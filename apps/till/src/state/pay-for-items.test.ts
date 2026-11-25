@@ -17,6 +17,7 @@ import {
   itemsAsk,
   itemsChoiceOf,
   itemsRefusal,
+  itemsBarredReason,
   itemsRequestOf,
   previewPayment,
   takePayment,
@@ -59,6 +60,41 @@ const edit: BillEditExpected = {
   draftRevision: null,
 };
 const revisions = { expectedPartyRevision: 3, partyId: "v1" };
+
+describe("itemsBarredReason", () => {
+  const at = {
+    found: false,
+    counter: false,
+    counterCollect: false,
+    printed: false,
+    status: "open" as const,
+  };
+
+  it("bars Items on a Counter order sent to the kitchen, even once its receipt is issued", () => {
+    expect(itemsBarredReason({ ...at, counter: true, status: "placed" })).toBe(
+      "bill_pay.items_barred_counter",
+    );
+    expect(itemsBarredReason({ ...at, counter: true, printed: true, status: "placed" })).toBe(
+      "bill_pay.items_barred_counter",
+    );
+    expect(itemsBarredReason({ ...at, counter: true, counterCollect: true })).toBe(
+      "bill_pay.items_barred_counter",
+    );
+  });
+
+  it("bars Items on a table bill placed with no receipt, but not on a printed one or an open one", () => {
+    expect(itemsBarredReason({ ...at, status: "placed" })).toBe("bill_pay.items_barred_counter");
+    expect(itemsBarredReason({ ...at, printed: true, status: "placed" })).toBeNull();
+    expect(itemsBarredReason(at)).toBeNull();
+    expect(itemsBarredReason({ ...at, counter: true })).toBeNull();
+  });
+
+  it("bars Items from Find a bill with its own reason", () => {
+    expect(itemsBarredReason({ ...at, found: true, printed: true, status: "placed" })).toBe(
+      "bill_pay.items_barred_found",
+    );
+  });
+});
 
 describe("itemsChoiceOf", () => {
   it("every dish picked whole is the whole bill", () => {
