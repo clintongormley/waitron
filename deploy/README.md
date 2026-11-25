@@ -109,8 +109,9 @@ installed.
 On Debian, `install` also installs `firmware-realtek` if it is missing. That package provides
 firmware for USB Bluetooth adapters such as the TP-Link UB500. If the installer warns that it
 could not install the package, check your network connection and enable `non-free-firmware` in
-your Debian APT sources, then run the current installer again. If the adapter was already plugged
-in, unplug it and plug it back in so it can load the firmware.
+your Debian APT sources. To add just the firmware on an existing Debian box, run `sudo apt update`
+and `sudo apt install firmware-realtek` there. If the adapter was already plugged in, unplug it and
+plug it back in so it can load the firmware.
 
 On a box whose Bluetooth service runs under systemd (`bluetooth.service`), `install` also writes
 `/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf`. It runs the unit's own Bluetooth
@@ -239,9 +240,9 @@ sudo deploy/waitron.sh install
 ```
 
 An existing box uses the installer you ran for host package steps throughout its checked upgrade.
-Candidate preparation uses a retained script from the fixed driver revision. Download the current
-installer before upgrading. If you already upgraded using an older copy that skipped the firmware
-step, run the current installer or the updated retained copy at `/opt/waitron-host/waitron.sh`.
+Candidate preparation uses a retained script from the fixed driver revision. An older running copy
+can skip the new firmware step even when it fetches the updated retained script. Use the current
+installer with the ref you intend to deploy. `install` defaults to `main` if you omit the ref.
 
 Set `WAITRON_DIR` to install somewhere other than `/opt/waitron` (that is how the script is
 exercised on a developer machine without touching `/opt`).

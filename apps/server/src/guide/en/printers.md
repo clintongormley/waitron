@@ -9,8 +9,8 @@ and choose **Add** again. For a receipt printer, calibration opens next.
 A Bluetooth printer must be in pairing mode first. Choose **Pair and add** beside it, enter its
 PIN and choose **Pair and add** again. For a new printer, the name dialog opens: choose **Add**.
 
-If your Debian box does not detect a TP-Link UB500 USB Bluetooth adapter, run the current Waitron
-installer to add the adapter's firmware. Then unplug the adapter, plug it back in and try
+If your Debian box does not detect a TP-Link UB500 USB Bluetooth adapter, install the
+`firmware-realtek` package on the box. Then unplug the adapter, plug it back in and try
 **Add a printer** again.
 
 If a network printer is not found, open **Check a known address**, type its IP address and choose

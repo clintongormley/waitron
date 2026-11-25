@@ -252,10 +252,10 @@ Reprint for A4 rows), A1584 (a shorter Delete printer window) and A1587
   pre-production check page. The TM-T88III also prints a QR with its own command (seen 25 November).
 - **Printing over RFCOMM from INSIDE the print-agent container (A140).**
   [Detail](printers.md#printing-over-rfcomm-from-inside-the-print-agent-container-a140)
-- **A TP-Link UB500 Bluetooth stick does not come up on a box.** Debian's kernel asks for
-  `rtl_bt/rtl8761bu_fw.bin`, which the install does not have, so the adapter stays down; the owner's spare
-  prints through its built-in Intel radio. Install `firmware-realtek` from `waitron.sh`, and have
-  Add a printer say so where a stick still does not come up (seen 25 November 2026).
+- **A1590. A TP-Link UB500 Bluetooth stick does not come up on a box.** Debian's kernel asks for
+  `rtl_bt/rtl8761bu_fw.bin`, so the adapter stays down and the owner's spare prints through its
+  built-in Intel radio. Verify that adding `firmware-realtek` lets the stick pair and print on
+  the spare, and that the Intel-paired printer still prints with both radios present.
 
 ## Bundle: A print agent somewhere other than the box
 
