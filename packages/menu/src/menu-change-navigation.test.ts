@@ -1054,7 +1054,6 @@ describe("declaration changes", () => {
   });
 
   function withSetMenu(doc: MenuDocument): MenuDocument {
-    const { variants: _variants, ...hake } = offer("hake");
     doc.root.members.push({ kind: "set_menu", menuId: "daily", name: "Daily menu" });
     doc.setMenus = {
       daily: {
@@ -1069,7 +1068,7 @@ describe("declaration changes", () => {
         root: { members: [{ kind: "product", menuItemId: "mi-hake", productId: "hake" }] },
         offers: {
           "mi-hake": {
-            ...hake,
+            ...offer("hake"),
             id: "mi-hake",
             menuId: "daily",
             countsAsCourseId: "mains",

@@ -1785,7 +1785,7 @@ describe("diffMenuDocuments", () => {
     ]);
   });
 
-  it("names a change to one variant's own facts as the variants', not the dish's", async () => {
+  it("names a change to one variant's own facts as the variants', and its declarations on the dish too", async () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.dinner);
     await app((tx) =>
@@ -1801,7 +1801,7 @@ describe("diffMenuDocuments", () => {
         kind: "product_changed",
         productId: f.lemonade,
         name: "Lemonade",
-        fields: ["variants"],
+        fields: ["allergens", "diet", "variants"],
         source: "shared_product",
       },
     ]);
