@@ -1323,11 +1323,12 @@ describe("Reopen bill stopping the dishes that never came", () => {
   /**
    * Croquettes routed to a new Fryer station that prints held work and waits for the pass, and a
    * party whose steak with a croquette extra, and a beer, fire as one group: the steak and beer
-   * reach the kitchen while the croquettes wait at the Fryer, held. The beer is served.
+   * reach the kitchen while the croquettes wait at the Fryer, held. The beer is served. With
+   * `croquettesHeld: false` the Fryer does not wait for the pass, so the croquettes are sent too.
    */
   async function steakFiredCroquettesHeld(
     run: (party: Party, slips: () => Promise<(string | undefined)[]>) => Promise<void>,
-    steaks = "1",
+    { steaks = "1", croquettesHeld = true }: { steaks?: string; croquettesHeld?: boolean } = {},
   ) {
     const fryer = await inTx(venue, async (tx) => {
       const stationId = (await createStation(tx, { name: `Fryer ${randomUUID()}` })).id;
@@ -1366,7 +1367,7 @@ describe("Reopen bill stopping the dishes that never came", () => {
       expect(await slips()).toEqual([`*** ${words.hold} ***`]);
       const [steak] = await dishesOf(party.tabId);
       await inTx(venue, async (tx) => {
-        await setStationsWaitForPass(tx, true, [fryer.stationId]);
+        if (croquettesHeld) await setStationsWaitForPass(tx, true, [fryer.stationId]);
         await fireGroup(tx, venue.cfg, party.partyId, steak!.groupId!, {
           submissionId: randomUUID(),
           expectedPartyRevision: revisionOf(party.partyId),
@@ -1380,7 +1381,7 @@ describe("Reopen bill stopping the dishes that never came", () => {
       expect(kitchen).toEqual([
         ...Array.from({ length: Number(steaks) }, () => [
           { name: "Steak", fired: 1, requested: 1 },
-          { name: "Croquettes", fired: 0, requested: 1 },
+          { name: "Croquettes", fired: croquettesHeld ? 0 : 1, requested: 1 },
         ]).flat(),
         { name: "Small beer", fired: 1, requested: 1 },
       ]);
@@ -1449,32 +1450,65 @@ describe("Reopen bill stopping the dishes that never came", () => {
     });
   });
 
+  it("keeps a started dish's charge but takes off its extra sent to the kitchen and not started", async () => {
+    await steakFiredCroquettesHeld(
+      async (party) => {
+        venue.db.run(sql`update ticket_items set state = 'preparing' where working_order_line_id in
+          (select id from working_order_lines where working_order_id = ${party.tabId} and name = 'Steak')`);
+        expect((await printBill(party, party.tabId, true)).status).toBe(200);
+        const notices = () =>
+          venue.db.all<{ lineName: string; quantity: number; wasStarted: number }>(sql`
+            select line_name as lineName, quantity, was_started as wasStarted from kitchen_notices
+            where working_order_id = ${party.tabId} and kind = 'void' order by rowid`);
+        const before = notices().length;
+
+        const answer = await stop(party.tabId);
+
+        expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+        expect(notices().slice(before)).toEqual([
+          { lineName: "CHULETA", quantity: 1000, wasStarted: 1 },
+          { lineName: "CROQ", quantity: 1000, wasStarted: 0 },
+        ]);
+        const newBill = answer.json.billId as string;
+        const copies = await dishesOf(newBill);
+        expect(copies.map((line) => line.name)).toEqual(["Steak", "Small beer"]);
+        const reprinted = await printBill(party, newBill);
+        expect(reprinted.status, JSON.stringify(reprinted.json)).toBe(200);
+        expect(reprinted.json.total).toBe("28.00");
+      },
+      { croquettesHeld: false },
+    );
+  });
+
   it("takes off the extra of a started portion left unserved, keeping its served portion's", async () => {
-    await steakFiredCroquettesHeld(async (party) => {
-      const [, , stopped] = await dishesOf(party.tabId);
-      await serveSome(party, "Steak", "1");
-      venue.db.run(sql`update ticket_items set state = 'preparing'
+    await steakFiredCroquettesHeld(
+      async (party) => {
+        const [, , stopped] = await dishesOf(party.tabId);
+        await serveSome(party, "Steak", "1");
+        venue.db.run(sql`update ticket_items set state = 'preparing'
         where working_order_line_id = ${stopped!.id}`);
-      expect((await printBill(party, party.tabId, true)).status).toBe(200);
+        expect((await printBill(party, party.tabId, true)).status).toBe(200);
 
-      const answer = await stop(party.tabId);
+        const answer = await stop(party.tabId);
 
-      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-      const newBill = answer.json.billId as string;
-      const copies = await dishesOf(newBill);
-      expect(copies.map((line) => [line.name, line.servedQuantity])).toEqual([
-        ["Steak", 1000],
-        ["Croquettes", 1000],
-        ["Steak", 0],
-        ["Small beer", 1000],
-      ]);
-      expect(await keptCharges(copies.map((line) => line.id))).toEqual([
-        { lineId: copies[2]!.id, quantity: 1000 },
-      ]);
-      const reprinted = await printBill(party, newBill);
-      expect(reprinted.status, JSON.stringify(reprinted.json)).toBe(200);
-      expect(reprinted.json.total).toBe("54.00");
-    }, "2");
+        expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+        const newBill = answer.json.billId as string;
+        const copies = await dishesOf(newBill);
+        expect(copies.map((line) => [line.name, line.servedQuantity])).toEqual([
+          ["Steak", 1000],
+          ["Croquettes", 1000],
+          ["Steak", 0],
+          ["Small beer", 1000],
+        ]);
+        expect(await keptCharges(copies.map((line) => line.id))).toEqual([
+          { lineId: copies[2]!.id, quantity: 1000 },
+        ]);
+        const reprinted = await printBill(party, newBill);
+        expect(reprinted.status, JSON.stringify(reprinted.json)).toBe(200);
+        expect(reprinted.json.total).toBe("54.00");
+      },
+      { steaks: "2" },
+    );
   });
 
   it("a started dish's kept charge comes off the reopened bill with a Comp and its reason", async () => {
