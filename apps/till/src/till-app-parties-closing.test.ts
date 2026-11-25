@@ -977,7 +977,9 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       getTransactionReceipt: vi.fn().mockResolvedValue(saleResult),
       listRefundAuthorizers: vi.fn().mockResolvedValue([{ personId: "m1", displayName: "Marta" }]),
       refundTransaction: vi.fn(),
-      readGiveBack: vi.fn(async (saleId: string) => finishView([[`dish-${saleId}`, "5.50"]])),
+      readGiveBack: vi.fn(async (saleId: string) =>
+        finishView([[`dish-${saleId}`, "5.50", [saleId === "sale-wo-4" ? "adj-1" : "adj-2"]]]),
+      ),
       previewGiveBack: vi.fn(async (_saleId: string, request: GiveBackRequest) =>
         previewFor(request),
       ),
@@ -987,15 +989,16 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     });
   }
   /** A receipt as Give money back reads it: each `[line, owed]` a dish cancelled at Finish table. */
-  function finishView(owed: [string, string][]): GiveBackView {
+  function finishView(owed: [string, string, string[]][]): GiveBackView {
     return {
-      lines: owed.map(([id, money]) => ({
+      lines: owed.map(([id, money, cancelIds]) => ({
         id,
         descriptions: { en: id },
         quantity: "1.000",
         gross: money,
         left: money,
         cancelled: { quantity: "1.000", owed: money, back: "0.00" },
+        cancelIds,
         partOf: null,
         givenFree: false,
         available: true,
@@ -1709,8 +1712,8 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         ),
         readGiveBack: vi.fn().mockResolvedValue(
           finishView([
-            ["croquetas", "11.00"],
-            ["flan", "5.50"],
+            ["croquetas", "11.00", ["adj-c"]],
+            ["flan", "5.50", ["adj-1"]],
           ]),
         ),
       });
@@ -1754,7 +1757,9 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
             ? freeWater(row, ["line-1"])
             : { ...consent(row), refundValue: { quantity: "1.000", gross: "7.00" } };
         }),
-        readGiveBack: vi.fn().mockResolvedValue(finishView([["salad", "8.67"]])),
+        readGiveBack: vi
+          .fn()
+          .mockResolvedValue(finishView([["salad", "8.67", ["adj-w", "adj-1"]]])),
       });
       await openFinish(el);
       await choose(el, true);
@@ -1786,7 +1791,13 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
             : { ...consent(row), refundValue: { quantity: "1.000", gross: "7.00" } };
         }),
         getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, appliedRemaining: "7.00" }]),
-        readGiveBack: vi.fn().mockResolvedValue(finishView([["dish", "7.00"]])),
+        // The box still records the free water's cancel as owed once the money left is used up.
+        readGiveBack: vi.fn().mockResolvedValue(
+          finishView([
+            ["dish", "7.00", ["adj-1"]],
+            ["water", "1.67", ["adj-w"]],
+          ]),
+        ),
       });
       await openFinish(el);
       expect(finishDialog(el)!.refunds).toEqual({ "line-1": "7.00" });
@@ -1799,7 +1810,21 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         ["line-w", true],
       ]);
       await opened(el);
+      expect(giving(el)!.fill!.cancellationIds).toEqual(["adj-1"]);
+      expect(ticked(el)).toEqual(["dish"]);
       expect(amountOf(el)).toBe("7.00");
+      expect(
+        inForm<HTMLElementTagNameMap["wt-price-input"]>(el, "wt-price-input[name=amount]")!.error,
+      ).toBe("");
+      await giveBack(el);
+      await expect.poll(() => sent()).toHaveLength(1);
+      expect(sent()[0]!.request).toMatchObject({
+        lineIds: ["dish"],
+        amount: "7.00",
+        fromCancel: ["adj-1"],
+      });
+      expect(sent()[0]).not.toHaveProperty("override");
+      expect(api.listApprovers).not.toHaveBeenCalled();
     });
 
     it("fills in the dish's share of a comp on the whole bill as the box says it is owed", async () => {
@@ -1817,7 +1842,7 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
             refundLinks: [{ lineId: "line-1", adjustmentId: "adj-1" }],
           }),
         getCancellation: vi.fn().mockResolvedValue(read),
-        readGiveBack: vi.fn().mockResolvedValue(finishView([["flan", "3.00"]])),
+        readGiveBack: vi.fn().mockResolvedValue(finishView([["flan", "3.00", ["adj-1"]]])),
       });
       await openFinish(el);
       expect(finishDialog(el)!.refunds).toEqual({ "line-1": "3.00" });

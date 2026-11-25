@@ -873,6 +873,23 @@ describe("sending", () => {
     expect(approval(el)).toBeNull();
   });
 
+  it("shows a PIN lock-out in the prompt, sending nothing more and showing no outcome", async () => {
+    const api = fakeGiveBackApi();
+    answering(api, { needs: ["sale.refund"] });
+    api.giveBack.mockRejectedValueOnce({ code: "pin.throttled", retryAfterSeconds: 5 });
+    const el = await press(api);
+    await approve(el, "0000");
+    await vi.waitFor(() =>
+      expect(approval(el)!.error).toEqual({
+        code: "pin.throttled",
+        personId: "boss",
+        retryAfterSeconds: 5,
+      }),
+    );
+    expect(api.giveBack).toHaveBeenCalledOnce();
+    expect(root(el).querySelector("[data-outcome]")).toBeNull();
+  });
+
   it("shows a wrong PIN in place and sends the same press again under the same ids", async () => {
     const api = fakeGiveBackApi();
     answering(api, { needs: ["sale.refund"] });
@@ -1508,12 +1525,48 @@ describe("opened filled in after a cancel (D9)", () => {
     expect(api.previewGiveBack).not.toHaveBeenCalled();
   });
 
+  it("ticks only a dish whose cancels still owed are all the ones it was opened with", async () => {
+    const earlier = {
+      ...VIEW.lines[1]!,
+      id: "flan",
+      descriptions: { en: "Flan", es: "Flan" },
+      cancelled: { quantity: "1.000", owed: "5.00", back: "0.00" },
+      cancelIds: ["cancel-0"],
+    };
+    const { el } = await mountFilled(withView({ lines: [...VIEW.lines, earlier] }));
+    expect(dish(el, "paella")!.checked).toBe(true);
+    expect(dish(el, "flan")!.checked).toBe(false);
+    expect(amountField(el).value).toBe("20.00");
+  });
+
+  it("sends the cancel's ids only while the ticked dishes are the ones it opened with", async () => {
+    const { el, api } = await mountFilled();
+    await tick(el, "croquetas");
+    await vi.waitFor(() =>
+      expect(api.previewGiveBack.mock.lastCall![1].lineIds).toEqual(["paella", "croquetas"]),
+    );
+    expect(api.previewGiveBack.mock.lastCall![1]).not.toHaveProperty("fromCancel");
+    await tick(el, "croquetas");
+    await vi.waitFor(() =>
+      expect(api.previewGiveBack.mock.lastCall![1].fromCancel).toEqual(["cancel-1"]),
+    );
+    root(el).querySelector<HTMLElement>("[data-back]")!.click();
+    await el.updateComplete;
+    await choose(el, "dishes");
+    await tick(el, "croquetas");
+    await reason(el, "complaint");
+    await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    expect(api.previewGiveBack.mock.lastCall![1]).toMatchObject({ lineIds: ["croquetas"] });
+    expect(api.previewGiveBack.mock.lastCall![1]).not.toHaveProperty("fromCancel");
+  });
+
   it("sends no cancel ids from a window opened without them", async () => {
     const { el, api } = await mount();
     await choose(el, "dishes");
-    await tick(el, "paella");
+    await tick(el, "croquetas");
     await reason(el, "complaint");
     await vi.waitFor(() => expect(summary(el)).not.toBeNull());
+    expect(api.previewGiveBack.mock.lastCall![1]).toMatchObject({ lineIds: ["croquetas"] });
     expect(api.previewGiveBack.mock.lastCall![1]).not.toHaveProperty("fromCancel");
   });
 

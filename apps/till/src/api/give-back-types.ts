@@ -22,6 +22,8 @@ export interface GiveBackLine extends GiveBackAvailability {
   /** A cancelled dish's line counts its priced extras' lines too, so it can exceed `gross`. */
   left: string;
   cancelled: { quantity: string; owed: string; back: string } | null;
+  /** The cancels on this dish whose money is not all given back yet. */
+  cancelIds: string[];
   /** The cancelled dish's line this priced extra's line is given back with; never ticked itself. */
   partOf: string | null;
   givenFree: boolean;

@@ -32,6 +32,7 @@ const line = (over: Partial<GiveBackLine> & { id: string; name: string }): GiveB
     gross: "10.00",
     left: "10.00",
     cancelled: null,
+    cancelIds: [],
     partOf: null,
     givenFree: false,
     available: true,
@@ -50,6 +51,7 @@ export const LINES: GiveBackLine[] = [
     gross: "18.50",
     left: "20.00",
     cancelled: { quantity: "1.000", owed: "20.00", back: "0.00" },
+    cancelIds: ["cancel-1"],
   }),
   line({
     id: "aioli",

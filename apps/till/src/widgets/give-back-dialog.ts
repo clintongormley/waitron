@@ -148,6 +148,8 @@ export class TillGiveBackDialog extends LitElement {
   #previewRequest = 0;
   #lastStep = "";
   #filled = false;
+  /** The dishes the window opened ticked; the cancel's ids go only with exactly these. */
+  #filledLines: string[] = [];
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   readonly #beforeClose = async (reason: LeaveReason) =>
@@ -257,8 +259,11 @@ export class TillGiveBackDialog extends LitElement {
         line.partOf === null &&
         line.available &&
         line.cancelled !== null &&
-        positive(line.cancelled.owed),
+        positive(line.cancelled.owed) &&
+        line.cancelIds.length > 0 &&
+        line.cancelIds.every((id) => fill.cancellationIds.includes(id)),
     );
+    this.#filledLines = owed.map((line) => line.id);
     this.#choose("dishes", {
       lineIds: owed.map((line) => line.id),
       amount:
@@ -356,10 +361,19 @@ export class TillGiveBackDialog extends LitElement {
       amount: typedMoney(this.draft.amount)!,
       extra: this.#extra(),
       way: this.draft.way,
-      ...(this.purpose === "dishes" && this.#filled && this.fill!.cancellationIds.length > 0
-        ? { fromCancel: [...this.fill!.cancellationIds] }
-        : {}),
+      ...(this.#fromFill() ? { fromCancel: [...this.fill!.cancellationIds] } : {}),
     };
+  }
+  #fromFill(): boolean {
+    const ticked = this.draft.lineIds;
+    return (
+      this.purpose === "dishes" &&
+      this.fill !== null &&
+      this.fill.cancellationIds.length > 0 &&
+      this.#filledLines.length > 0 &&
+      ticked.length === this.#filledLines.length &&
+      ticked.every((id) => this.#filledLines.includes(id))
+    );
   }
   async #preview(): Promise<void> {
     const request = this.#request();

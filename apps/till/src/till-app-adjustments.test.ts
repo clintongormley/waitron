@@ -3302,7 +3302,11 @@ describe("till-app: service cancellation consent", () => {
       reason: null,
     };
     /** The receipt as Give money back reads it: its wine cancelled with `owed` still to give back. */
-    const owedView = (owed = "3.34", ways: GiveBackWay[] = [cashWay]): GiveBackView => ({
+    const owedView = (
+      owed = "3.34",
+      ways: GiveBackWay[] = [cashWay],
+      cancelIds: string[] = [cancelId],
+    ): GiveBackView => ({
       lines: [
         {
           id: "wine-line",
@@ -3311,6 +3315,7 @@ describe("till-app: service cancellation consent", () => {
           gross: "30.00",
           left: "30.00",
           cancelled: { quantity: "1.000", owed, back: "0.00" },
+          cancelIds,
           partOf: null,
           givenFree: false,
           available: true,
@@ -3347,6 +3352,12 @@ describe("till-app: service cancellation consent", () => {
     /** Gives €7.50 back with the cancel's reason, which asks for a note. */
     async function submitGiveBack(el: TillApp) {
       await filledForm(el);
+      const wine = inForm<HTMLElementTagNameMap["wt-switch"]>(
+        el,
+        'wt-switch[data-line="wine-line"]',
+      )!;
+      if (!wine.checked) wine.shadowRoot!.querySelector("input")!.click();
+      await giving(el)!.updateComplete;
       await typeAmount(el, "7.50");
       emit(inForm(el, '[name="note"]')!, "wt-change", { value: "Wine returned; customer request" });
       await giving(el)!.updateComplete;
@@ -3373,7 +3384,7 @@ describe("till-app: service cancellation consent", () => {
           getRefundableTenders: vi.fn().mockResolvedValue([cash]),
           refundTransaction: vi.fn().mockResolvedValue(refunded),
           listRefundAuthorizers: vi.fn().mockResolvedValue([]),
-          readGiveBack: vi.fn().mockResolvedValue(owedView()),
+          readGiveBack: vi.fn().mockResolvedValue(owedView("3.34", [cashWay], [])),
           previewGiveBack: vi.fn(async (_saleId: string, request: GiveBackRequest) =>
             previewFor(request),
           ),
@@ -3923,6 +3934,7 @@ describe("till-app: service cancellation consent", () => {
           refundLinks: [{ lineId: "line-1", adjustmentId: cancelId }],
         }),
         listAdjustmentReasons: vi.fn().mockResolvedValue([complaint, mistake, unserved]),
+        readGiveBack: vi.fn().mockResolvedValue(owedView()),
         ...more,
       });
     async function cancelAndRefundOne(el: TillApp) {
@@ -4101,7 +4113,9 @@ describe("till-app: service cancellation consent", () => {
             { lineId: "water-1", adjustmentId: waterCancelId },
           ],
         }),
-        readGiveBack: vi.fn().mockResolvedValue(owedView("10.00")),
+        readGiveBack: vi
+          .fn()
+          .mockResolvedValue(owedView("10.00", [cashWay], [cancelId, waterCancelId])),
       });
       const { el } = await mountApp(methods);
       await openTable4(el);

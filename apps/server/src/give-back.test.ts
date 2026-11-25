@@ -14,6 +14,7 @@ import {
   incidents,
   invoiceCorrectionRefunds,
   invoiceCorrections,
+  lineServiceCancellations,
   parties,
   refunds,
   readLiveSeriesIdTx,
@@ -371,6 +372,23 @@ async function cancel(b: Tab, name: Dish, quantity: string, refundHandoff: boole
   if (linked !== undefined) return linked;
   const rows = await venue.db.select().from(adjustments).where(eq(adjustments.lineId, lineId));
   return rows.filter((row) => row.action === "cancel").at(-1)!.id;
+}
+
+/** `b` with `name` pointing at its line that has not been cancelled yet, since a partial cancel
+ * moves the rest of a line onto a new line. */
+async function uncancelled(b: Tab, name: Dish): Promise<Tab> {
+  const rows = await venue.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, b.billId));
+  const cancelled = new Set(
+    (await venue.db.select().from(lineServiceCancellations)).map((row) => row.lineId),
+  );
+  const line = rows.find(
+    (row) =>
+      row.parentLineId === null && row.productId === productIds.get(name) && !cancelled.has(row.id),
+  )!;
+  return { ...b, line: (other) => (other === name ? line.id : b.line(other)) };
 }
 
 /** Gives the dish free before the bill is paid. */
@@ -2165,6 +2183,51 @@ describe("POST …/give-back: a cancel's approval covers its money only from the
     });
     expect(await give(saleId, body, holder.cookie)).toEqual(answer);
     expect(effects()).toEqual(after);
+  });
+
+  it("covers a later cancel on a line whose earlier cancel was given back, naming only the cancel still owed, with no PIN", async () => {
+    const b = await tab([["Croquetas", "3"], "Paella"]);
+    const saleId = await pay(b, [{ cash: "30.50" }]);
+    const first = await cancel(b, "Croquetas", "1", true);
+    const croquetas = lineOf(await read(saleId), "Croquetas");
+    expect(croquetas.cancelIds).toEqual([first]);
+    const given = await give(
+      saleId,
+      await giveBody(
+        saleId,
+        ask("dishes", "4.00", { lineIds: [croquetas.id], fromCancel: [first] }),
+      ),
+      venue.cookie,
+    );
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    const second = await cancel(await uncancelled(b, "Croquetas"), "Croquetas", "1", true);
+    expect(lineOf(await read(saleId), "Croquetas").cancelIds).toEqual([second]);
+    const body = await giveBody(
+      saleId,
+      ask("dishes", "4.00", { lineIds: [croquetas.id], fromCancel: [second] }),
+    );
+    const { answer, pins } = await pinsCheckedDuring(() => give(saleId, body, venue.cookie));
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(pins).toEqual([]);
+    expect((await refundRowsOf(saleId)).map((row) => row.appliedAmount)).toEqual([400, 400]);
+  });
+
+  it("still asks refund rights for that later cancel without fromCancel", async () => {
+    const b = await tab([["Croquetas", "3"], "Paella"]);
+    const saleId = await pay(b, [{ cash: "30.50" }]);
+    const first = await cancel(b, "Croquetas", "1", true);
+    const croquetas = lineOf(await read(saleId), "Croquetas").id;
+    const given = await give(
+      saleId,
+      await giveBody(saleId, ask("dishes", "4.00", { lineIds: [croquetas], fromCancel: [first] })),
+      venue.cookie,
+    );
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    await cancel(await uncancelled(b, "Croquetas"), "Croquetas", "1", true);
+    const body = await giveBody(saleId, ask("dishes", "4.00", { lineIds: [croquetas] }));
+    const before = effects();
+    const answer = await give(saleId, body, venue.cookie);
+    expectRefusedUnwritten(answer, "authorization.not_permitted", before);
   });
 
   it("asks refund rights for the same cancelled paella without fromCancel, writing nothing", async () => {

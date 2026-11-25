@@ -59,6 +59,9 @@ export interface GiveBackLine extends Availability {
   /** The cancels with Refund ticked on this dish, its priced extras included: a cancel's money is
    * owed for the dish and its extras together, so they are one selection. */
   cancelled: { quantity: string; owed: string; back: string } | null;
+  /** The cancels on this dish whose money is not all given back yet: those a give-back of the
+   * dish names, and the ones `fromCancel` must equal for the cancels' approval to cover it (D9). */
+  cancelIds: string[];
   /** The cancelled dish's line this extra's line is given back with; such a line is never ticked
    * itself, and its `left` is counted on the dish's. */
   partOf: string | null;
@@ -275,7 +278,7 @@ async function cancelsAndFreeByLine(
       owed: addDecimal(before.owed, centsToDecimal(Math.max(0, value - back))),
       back: addDecimal(before.back, centsToDecimal(back)),
     });
-    cancelIds.set(dish, [...(cancelIds.get(dish) ?? []), cancel.id]);
+    if (value > back) cancelIds.set(dish, [...(cancelIds.get(dish) ?? []), cancel.id]);
     const lines = members.get(dish) ?? new Set([dish]);
     for (const id of ids) lines.add(id);
     members.set(dish, lines);
@@ -402,7 +405,7 @@ interface GiveBackFacts {
   tenders: RefundableTender[];
   /** What Correct invoice could give back now, in cents, before the records are checked. */
   correctable: number;
-  /** The cancels with Refund ticked on each line. */
+  /** The cancels on each line whose money is not all given back yet. */
   cancelIds: ReadonlyMap<string, readonly string[]>;
   /** The lines a correction names for each ticked line: a cancelled dish's family, those of its
    * lines Correct invoice still holds money on. */
@@ -462,6 +465,7 @@ export async function readFacts(
       gross: centsToDecimal(line.lineGross ?? 0),
       left: centsToDecimal(dish === undefined ? Math.max(0, rest) : 0),
       cancelled: cancel ?? null,
+      cancelIds: [...(cancelIds.get(line.id) ?? [])],
       partOf: dish ?? null,
       givenFree: free.has(line.id),
     };
