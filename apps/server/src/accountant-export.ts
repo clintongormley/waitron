@@ -542,6 +542,8 @@ export async function readAccountantInvoices(
     voided = await query()
       .where(
         and(
+          // Without this the left join to the voids makes the read scan every sale.
+          inArray(sales.id, tx.select({ saleId: saleVoids.saleId }).from(saleVoids)),
           between(stampDate(saleVoids.voidedAt, sales.issuedOffsetMinutes), from, to),
           not(sales.replacesOriginal),
           not(substitutes),

@@ -56,7 +56,7 @@ const familyCases = [
   ["scripts", 4, "zone-script-callers.test.ts"],
   ["menu-allergens", 2, "menu-allergen-workflow.test.ts"],
   ["recorded-reporting", 3, "reporting-write-workflows.test.ts"],
-  ["core-only-emergency", 9, "void-issue-clock.test.ts"],
+  ["core-only-emergency", 7, "void-issue-clock.test.ts"],
 ] as const;
 
 type Family = (typeof familyCases)[number][0];

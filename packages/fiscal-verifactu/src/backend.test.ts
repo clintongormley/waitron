@@ -412,11 +412,18 @@ describe("recordVoid — date reconstruction", () => {
     };
   }
 
+  async function setVenueZone(timeZone: string): Promise<void> {
+    await suite.db.execute(
+      sql`update settings set doc = json_set(doc, '$.timeZone', ${timeZone}) where module = 'business_day'`,
+    );
+  }
+
   it("reconstructs the annulled invoice's calendar day exactly at +13:00", async () => {
     const { saleId } = await sell();
+    await setVenueZone("Pacific/Tongatapu");
     const voidBackend = new VerifactuBackend({
       deploymentEnvironment: "production",
-      clock: clockAt(780),
+      clock: clockAt(0),
       db: suite.db,
     });
     await withTransaction(suite.db, (tx) =>
@@ -432,11 +439,12 @@ describe("recordVoid — date reconstruction", () => {
     expect(anulacion?.fechaExpedicionFactura).toBe(alta?.fechaExpedicionFactura);
   });
 
-  it("reconstructs the annulled invoice's calendar day exactly at -13:00", async () => {
+  it("reconstructs the annulled invoice's calendar day exactly at -12:00", async () => {
     const { saleId } = await sell();
+    await setVenueZone("Etc/GMT+12");
     const voidBackend = new VerifactuBackend({
       deploymentEnvironment: "production",
-      clock: clockAt(-780),
+      clock: clockAt(0),
       db: suite.db,
     });
     await withTransaction(suite.db, (tx) =>
