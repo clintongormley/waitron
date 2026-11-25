@@ -1234,6 +1234,12 @@ opened ("1 A"). D3: a part-paid printed bill can be split, its money moving to t
 built, the refusal also covers a bill whose advance was given back in full (`refuseSplitMoney`,
 `apps/server/src/split-after-print-money.ts`), which the owner was not asked about._
 
+_2026-11-25: **Reopen bill** on a bill where something was served (or its charge kept) and other dishes
+never came offers **Stop these dishes and reopen** (CANCEL-UNSERVED PR 2, [plan](../superpowers/plans/2026-11-25-cancel-unserved.md) §4; the
+owner's "yes", lane L `questions.md`, 16:43). It stops those dishes in the kitchen and leaves them off
+the reopened bill, except a dish the kitchen had started or finished, which keeps its charge there
+(watcher, 22:42). It is not offered on a bill holding a received payment._
+
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)
 
 The recovery guide's **After a recovery** section (`apps/server/src/guide/en/backup-recovery.md`,

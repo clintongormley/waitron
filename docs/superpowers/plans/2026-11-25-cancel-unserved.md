@@ -1,7 +1,7 @@
 # CANCEL-UNSERVED: a receipt for a bill nobody was served and nobody paid is cancelled at AEAT
 
 Status: cleared 2026-11-25 by the watcher (16:41, five changes) and, for PR 2, by the owner (16:43, relayed).
-PR 1 is built (branch `feat/cancel-unserved-readers`); PRs 2 and 3 are not started.
+PR 1 landed as #4356; PR 2 is built (branch `feat/cancel-unserved-reopen`); PR 3 is not started.
 FISCAL: the owner lands every pull request (PR). Base: `main` at `bb1389b737`. "Run": a throwaway change in a detached
 worktree for this revision (server halves only; not the till, not the other-box refusal); "run (earlier)": a previous one.
 **Words.** *Receipt*: the simplified invoice (F2). *Cancellation*: the record telling AEAT the receipt should never have
