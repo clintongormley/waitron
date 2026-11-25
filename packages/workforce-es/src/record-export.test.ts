@@ -255,6 +255,7 @@ it("exports signed adjustments with names even when the workers did no work in t
   const all = await doc({ period: february });
   expect(cells(all, "sessions")).toEqual([]);
   const adjustments = all.sections.find((section) => section.key === "adjustments");
+  expect.soft(adjustments?.rows).toHaveLength(2);
   expect.soft(adjustments?.rows.map((row) => row.cells)).toEqual(
     expect.arrayContaining([
       {

@@ -260,6 +260,7 @@ cerrar a la hora de cambio de día del local el primer día del mes siguiente.
 Después del cierre, usa el **Total al cierre** del mes. Si corriges horas más adelante, **Cambio
 posterior al cierre** te muestra el total al cierre, el total actual y la diferencia.
 
-Para actualizar las cifras que ya enviaste de un mes anterior, abre la exportación del
-siguiente mes cerrado completo y busca las filas de ajustes. Un ajuste positivo aumenta
-el total anterior. Un ajuste negativo lo reduce.
+Para actualizar las cifras que ya enviaste de un mes anterior, exporta el primer mes
+completo que se cierre después del cambio. Busca **Ajustes de meses anteriores** en el PDF
+o las filas **adjustments** en Excel. Los minutos positivos aumentan el total anterior.
+Los minutos negativos lo reducen.

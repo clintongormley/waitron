@@ -649,9 +649,11 @@ describe("attendance runner job", () => {
       const job = attendanceJob({ ...deps(), now: () => at, maxSleepMs: 86_400_000 });
       const pass = () => job.pass({ now: at, signal: new AbortController().signal });
       await pass();
-      expect(await suite.db.select().from(payPeriodClosures)).toHaveLength(1);
-
       at = new Date("2026-03-05T04:00:00Z");
+      await pass();
+      expect(await suite.db.select().from(payPeriodClosures)).toHaveLength(2);
+
+      at = new Date("2026-04-07T04:00:00Z");
       const withWriteLock = suite.db.withWriteLock.bind(suite.db);
       let writing = false;
       const trackWrite = <T>(work: () => Promise<T>) =>
@@ -677,27 +679,38 @@ describe("attendance runner job", () => {
       }
       const all = StatementSync.prototype.all;
       const historicalRead: boolean[] = [];
+      const timerRanBetweenMonths: boolean[] = [];
+      let timerRan = false;
       const statements = vi.spyOn(StatementSync.prototype, "all").mockImplementation(function (
         this: StatementSync,
         ...args
       ) {
-        if (this.sourceSQL.includes("with recursive") && args.includes("2025-12-31T10:00:00.000Z"))
-          historicalRead.push(writing);
+        if (this.sourceSQL.includes("with recursive")) {
+          if (args.includes("2025-12-31T10:00:00.000Z")) {
+            historicalRead.push(writing);
+            timerRan = false;
+            setImmediate(() => {
+              timerRan = true;
+            });
+          }
+          if (args.includes("2026-01-31T10:00:00.000Z")) timerRanBetweenMonths.push(timerRan);
+        }
         return Reflect.apply(all, this, args) as ReturnType<typeof all>;
       });
       try {
         await pass();
-        const february = await suite.db
+        const march = await suite.db
           .select()
           .from(payPeriodClosures)
-          .where(eq(payPeriodClosures.periodStart, "2026-02-01"));
-        expect(february).toHaveLength(1);
-        expect(february[0]!.snapshot.adjustments).toEqual(
+          .where(eq(payPeriodClosures.periodStart, "2026-03-01"));
+        expect(march).toHaveLength(1);
+        expect(march[0]!.snapshot.adjustments).toEqual(
           recordLateShift
             ? [{ personId, sourcePeriodStart: "2026-01-01", workedMinutes: 480 }]
             : undefined,
         );
         expect(historicalRead).toEqual(recordLateShift ? [false, true] : [false]);
+        expect(timerRanBetweenMonths).toEqual(recordLateShift ? [true, true] : [true]);
       } finally {
         statements.mockRestore();
         lock.mockRestore();

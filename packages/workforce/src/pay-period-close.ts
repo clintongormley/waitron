@@ -45,7 +45,6 @@ export async function readPayPeriodClosures(
 async function readAdjustments(
   tx: Transaction,
   closingPeriod: Period,
-  yieldBetweenMonths = false,
 ): Promise<PayPeriodAdjustment[]> {
   const earlier = await readClosures(tx, { endingBy: closingPeriod.start });
   const balances = new Map<string, Map<string, number>>();
@@ -59,7 +58,7 @@ async function readAdjustments(
   }
   const adjustments: PayPeriodAdjustment[] = [];
   for (const closure of earlier.sort((a, b) => a.period.start.localeCompare(b.period.start))) {
-    if (yieldBetweenMonths) await setImmediate();
+    await setImmediate();
     const sourcePeriodStart = closure.period.start;
     const people = balances.get(sourcePeriodStart) ?? new Map<string, number>();
     const { closedPeriodImpacts } = await readTimeRecord(tx, { period: closure.period }, null, [
@@ -85,7 +84,7 @@ export async function preparePayPeriodAdjustments(db: Database, period: Period) 
   return {
     periodStart: period.start,
     revision: await adjustmentRevision(db),
-    rows: await readAdjustments(db, period, true),
+    rows: await readAdjustments(db, period),
   };
 }
 export async function closePayPeriod(
