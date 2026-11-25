@@ -872,6 +872,11 @@ describe("readDeviceEquipment", () => {
 });
 
 describe("printer pick-up sets", () => {
+  const pickUpPrinter = (deviceId: string, id: string) =>
+    inTx((tx) =>
+      selectDeviceEquipment(tx, { deviceId, kind: "printer", selection: { id }, via: "scan" }),
+    );
+
   it("an empty set still requires the profile to offer the printer for a pick-up role", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
@@ -881,24 +886,17 @@ describe("printer pick-up sets", () => {
       .update(printers)
       .set({ picksUpReceipts: false, picksUpPaymentSlips: false })
       .where(eq(printers.id, printer));
-    const pickup = () =>
-      inTx((tx) =>
-        selectDeviceEquipment(tx, {
-          deviceId: a,
-          kind: "printer",
-          selection: { id: printer },
-          via: "scan",
-        }),
-      );
-    await expect(pickup()).rejects.toMatchObject({
+    await expect(pickUpPrinter(a, printer)).rejects.toMatchObject({
       code: "device.binding_invalid",
       params: { field: "receiptPrinterId" },
     });
     await suite.db.update(printers).set({ hasCashDrawer: true }).where(eq(printers.id, printer));
     await printerLists(profile, { cashDrawerPrinterIds: [printer] });
-    await expect(pickup()).rejects.toMatchObject({ code: "device.binding_invalid" });
+    await expect(pickUpPrinter(a, printer)).rejects.toMatchObject({
+      code: "device.binding_invalid",
+    });
     await printerLists(profile, { paymentSlipPrinterIds: [printer] });
-    await pickup();
+    await pickUpPrinter(a, printer);
     expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
     expect(await printerHoldersOf([printer])).toEqual({});
   });
@@ -913,16 +911,7 @@ describe("printer pick-up sets", () => {
       .update(printers)
       .set({ picksUpReceipts: false, picksUpPaymentSlips: true, active: false })
       .where(eq(printers.id, printer));
-    await expect(
-      inTx((tx) =>
-        selectDeviceEquipment(tx, {
-          deviceId: a,
-          kind: "printer",
-          selection: { id: printer },
-          via: "scan",
-        }),
-      ),
-    ).rejects.toMatchObject({
+    await expect(pickUpPrinter(a, printer)).rejects.toMatchObject({
       code: "device.binding_invalid",
       params: { field: "paymentSlipPrinterId" },
     });
@@ -935,15 +924,6 @@ describe("printer pick-up sets", () => {
     const printer = await seedPrinter("Handheld", { portable: true });
     await printerLists(profile, { receiptPrinterIds: [printer] });
     const a = await enrol(venue, "A", profile);
-    const pickUp = () =>
-      inTx((tx) =>
-        selectDeviceEquipment(tx, {
-          deviceId: a,
-          kind: "printer",
-          selection: { id: printer },
-          via: "scan",
-        }),
-      );
     await suite.db
       .update(printers)
       .set({
@@ -953,7 +933,7 @@ describe("printer pick-up sets", () => {
         deletedAt: "2026-10-13T10:00:00.000Z",
       })
       .where(eq(printers.id, printer));
-    await expect(pickUp()).rejects.toMatchObject({
+    await expect(pickUpPrinter(a, printer)).rejects.toMatchObject({
       code: "printer.not_found",
       params: { id: printer },
     });
@@ -961,7 +941,7 @@ describe("printer pick-up sets", () => {
     expect(await printerHoldersOf([printer])).toEqual({});
   });
 
-  it("takes both roles from the prior holder, and rolls back both devices on a later role refusal", async () => {
+  it("takes both roles from the prior holder", async () => {
     const venue = await setupVenue(suite.db);
     const profile = await seedProfile();
     const handheld = await seedPrinter("Handheld", { portable: true });
@@ -972,34 +952,151 @@ describe("printer pick-up sets", () => {
     });
     const a = await enrol(venue, "A", profile);
     const b = await enrol(venue, "B", profile);
-    const pickUp = (deviceId: string) =>
-      inTx((tx) =>
-        selectDeviceEquipment(tx, {
-          deviceId,
-          kind: "printer",
-          selection: { id: handheld },
-          via: "scan",
-        }),
-      );
-    await pickUp(a);
+    await pickUpPrinter(a, handheld);
     expect(await columns(a)).toEqual({ receipt: handheld, slip: handheld, drawer: null });
-    await pickUp(b);
+    await pickUpPrinter(b, handheld);
     expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
     expect(await columns(b)).toEqual({ receipt: handheld, slip: handheld, drawer: null });
     expect(await printerHoldersOf([handheld])).toEqual({ [handheld]: b });
+  });
+
+  it.each([
+    [
+      "receipts",
+      { receiptList: ["handheld", "bar"], slipList: ["bar"], receipt: "handheld", slip: "bar" },
+    ],
+    [
+      "payment slips",
+      { receiptList: ["bar"], slipList: ["handheld", "bar"], receipt: "bar", slip: "handheld" },
+    ],
+  ] as const)(
+    "a tap sets only %s when the profile allows no other of its roles, taking it from its holder",
+    async (_allowed, { receiptList, slipList, receipt, slip }) => {
+      const venue = await setupVenue(suite.db);
+      const wide = await seedProfile();
+      const handheld = await seedPrinter("Handheld", { portable: true });
+      const bar = await seedPrinter("Bar");
+      const ids = { handheld, bar };
+      await printerLists(wide, {
+        receiptPrinterIds: [handheld, bar],
+        paymentSlipPrinterIds: [handheld, bar],
+      });
+      const narrowed = await seedProfile();
+      await printerLists(narrowed, {
+        receiptPrinterIds: receiptList.map((key) => ids[key]),
+        paymentSlipPrinterIds: slipList.map((key) => ids[key]),
+      });
+      const b = await enrol(venue, "B", wide);
+      const c = await enrol(venue, "C", narrowed);
+      await pickUpPrinter(b, handheld);
+      for (const role of ["receipt", "payment_slip"] as const) {
+        await inTx((tx) =>
+          selectDeviceEquipment(tx, { deviceId: c, role, selection: { id: bar }, via: "list" }),
+        );
+      }
+
+      await pickUpPrinter(c, handheld);
+
+      expect(await columns(c)).toEqual({ receipt: ids[receipt], slip: ids[slip], drawer: null });
+      expect(await columns(b)).toEqual({ receipt: null, slip: null, drawer: null });
+      expect(await printerHoldersOf([handheld])).toEqual({ [handheld]: c });
+    },
+  );
+
+  it("a tap of a receipts-only printer is refused, changing nothing, when the profile allows it only for payment slips", async () => {
+    const venue = await setupVenue(suite.db);
+    const wide = await seedProfile();
+    const handheld = await seedPrinter("Handheld", { portable: true });
+    const bar = await seedPrinter("Bar");
+    await printerLists(wide, {
+      receiptPrinterIds: [handheld],
+      paymentSlipPrinterIds: [handheld],
+    });
     const narrowed = await seedProfile();
     await printerLists(narrowed, {
-      receiptPrinterIds: [handheld, bar],
-      paymentSlipPrinterIds: [bar],
+      receiptPrinterIds: [bar],
+      paymentSlipPrinterIds: [handheld],
     });
+    const b = await enrol(venue, "B", wide);
     const c = await enrol(venue, "C", narrowed);
-    await expect(pickUp(c)).rejects.toMatchObject({
+    await pickUpPrinter(b, handheld);
+    await suite.db
+      .update(printers)
+      .set({ picksUpPaymentSlips: false })
+      .where(eq(printers.id, handheld));
+
+    await expect(pickUpPrinter(c, handheld)).rejects.toMatchObject({
       code: "device.binding_invalid",
-      params: { field: "paymentSlipPrinterId" },
+      params: { field: "receiptPrinterId" },
     });
     expect(await columns(c)).toEqual({ receipt: null, slip: null, drawer: null });
     expect(await columns(b)).toEqual({ receipt: handheld, slip: handheld, drawer: null });
     expect(await printerHoldersOf([handheld])).toEqual({ [handheld]: b });
+  });
+
+  it("a tap is refused, changing nothing, when the profile allows neither of the printer's two roles", async () => {
+    const venue = await setupVenue(suite.db);
+    const wide = await seedProfile();
+    const handheld = await seedPrinter("Handheld", { portable: true });
+    const bar = await seedPrinter("Bar");
+    await printerLists(wide, {
+      receiptPrinterIds: [handheld],
+      paymentSlipPrinterIds: [handheld],
+    });
+    const narrowed = await seedProfile();
+    await printerLists(narrowed, {
+      receiptPrinterIds: [bar],
+      paymentSlipPrinterIds: [bar],
+    });
+    const b = await enrol(venue, "B", wide);
+    const c = await enrol(venue, "C", narrowed);
+    await pickUpPrinter(b, handheld);
+
+    await expect(pickUpPrinter(c, handheld)).rejects.toMatchObject({
+      code: "device.binding_invalid",
+      params: { field: "receiptPrinterId" },
+    });
+    expect(await columns(c)).toEqual({ receipt: null, slip: null, drawer: null });
+    expect(await columns(b)).toEqual({ receipt: handheld, slip: handheld, drawer: null });
+    expect(await printerHoldersOf([handheld])).toEqual({ [handheld]: b });
+  });
+
+  it("a tap of a switched-off printer is refused whole where the profile allows one of its roles", async () => {
+    const venue = await setupVenue(suite.db);
+    const profile = await seedProfile();
+    const printer = await seedPrinter("Bar");
+    await printerLists(profile, { paymentSlipPrinterIds: [printer] });
+    const a = await enrol(venue, "A", profile);
+    await suite.db.update(printers).set({ active: false }).where(eq(printers.id, printer));
+    await expect(pickUpPrinter(a, printer)).rejects.toMatchObject({
+      code: "device.binding_invalid",
+      params: { field: "receiptPrinterId" },
+    });
+    expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
+  });
+
+  it("a scan for one row is refused when that role is not allowed, though a tap is accepted", async () => {
+    const venue = await setupVenue(suite.db);
+    const profile = await seedProfile();
+    const printer = await seedPrinter("Bar");
+    await printerLists(profile, { paymentSlipPrinterIds: [printer] });
+    const a = await enrol(venue, "A", profile);
+    await expect(
+      inTx((tx) =>
+        selectDeviceEquipment(tx, {
+          deviceId: a,
+          role: "receipt",
+          selection: { id: printer },
+          via: "scan",
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "device.binding_invalid",
+      params: { field: "receiptPrinterId" },
+    });
+    expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
+    await pickUpPrinter(a, printer);
+    expect(await columns(a)).toEqual({ receipt: null, slip: printer, drawer: null });
   });
 
   it("an empty pick-up set leaves choices alone but still refuses a disabled printer", async () => {
@@ -1015,20 +1112,11 @@ describe("printer pick-up sets", () => {
       .update(printers)
       .set({ picksUpReceipts: false, picksUpPaymentSlips: false })
       .where(eq(printers.id, handheld));
-    const pickup = () =>
-      inTx((tx) =>
-        selectDeviceEquipment(tx, {
-          deviceId: a,
-          kind: "printer",
-          selection: { id: handheld },
-          via: "scan",
-        }),
-      );
-    await pickup();
+    await pickUpPrinter(a, handheld);
     expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
     expect(await printerHoldersOf([handheld])).toEqual({});
     await suite.db.update(printers).set({ active: false }).where(eq(printers.id, handheld));
-    await expect(pickup()).rejects.toMatchObject({
+    await expect(pickUpPrinter(a, handheld)).rejects.toMatchObject({
       code: "device.binding_invalid",
       params: { field: "receiptPrinterId" },
     });
@@ -1051,16 +1139,7 @@ describe("printer pick-up sets", () => {
     );
     expect(await readerChoice(a)).toBe(reader);
     expect(await readerHoldersOf([reader])).toEqual({ [reader]: a });
-    await expect(
-      inTx((tx) =>
-        selectDeviceEquipment(tx, {
-          deviceId: a,
-          kind: "printer",
-          selection: { id: reader },
-          via: "scan",
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "printer.not_found" });
+    await expect(pickUpPrinter(a, reader)).rejects.toMatchObject({ code: "printer.not_found" });
     expect(await readerChoice(a)).toBe(reader);
   });
 });

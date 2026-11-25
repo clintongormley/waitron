@@ -147,12 +147,13 @@ On the OnePlus 13, open the installed till at `https://waitron.local`. In Equipm
 Allow NFC for that address's first permission grant. Close the dialog and tap a registered reader
 and portable printer from Counter, Floor, a table's order, payment, Station, Pass and My Schedule.
 Check the pick-up notice and Equipment's assignments. Try a printer with no pick-up roles;
-its notice must say that no printer role is selected. Try a foreign label and a reader with a
-payment already running; neither should change the assignment. Sign out, tap a registered sticker,
-and sign in normally: the selection must wait for sign-in. Open a row's QR camera, return to the
-list and close the dialog; NFC must resume without a second selection from the same tap. Lock the
-phone or leave the app and return, then tap again. Browser tests use simulated readers; these
-box-address checks remain unverified.
+its notice must say that no printer role is selected. Try a printer the profile allows for payment
+slips only; its notice must name payment slips and the chosen receipt printer must not change. Try a
+foreign label and a reader with a payment already running; neither should change the assignment.
+Sign out, tap a registered sticker, and sign in normally: the selection must wait for sign-in. Open
+a row's QR camera, return to the list and close the dialog; NFC must resume without a second
+selection from the same tap. Lock the phone or leave the app and return, then tap again. Browser
+tests use simulated readers; these box-address checks remain unverified.
 
 ## Check NFC sticker writing and locking on the box's address
 
@@ -392,9 +393,11 @@ Remaining Stripe qualification and maintenance.
 
 - **A printer's pick-up roles are a printer setting, never sticker content** (owner, 2026-10-12,
   W102 part 0). The QR label and NFC text carry only the equipment kind and id. A general pick-up
-  uses the saved set; a scan for one row uses only that row. The default is receipt and payment
-  slip. The cash drawer is outside this set. You can select None to leave assignments alone on a
-  general pick-up; row scans remain available.
+  uses the saved set, less each role the device's profile does not allow the printer for; when that
+  removes every role in it the pick-up is refused (owner, 2026-11-25). The till's message names the
+  role when the device then uses the printer for only one of the two. A scan for one row uses only
+  that row. The default is receipt and payment slip. The cash drawer is outside this set. You can
+  select None to leave assignments alone on a general pick-up; row scans remain available.
   When A508 adds the table-QR-code role, extend the printer setting's options and its multi-role
   summary together.
 

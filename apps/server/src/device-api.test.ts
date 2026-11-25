@@ -2976,7 +2976,7 @@ describe("a device's current printers", () => {
     expect(await chosenIds(unnamed)).toMatchObject({ receipt: t.bar, payment_slip: t.portable });
   });
 
-  it("an unnamed scan rolls back the first role when the second role is not permitted", async () => {
+  it("an unnamed scan sets the first role alone when the second role is not permitted", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
     const t = await listedTill(venue, app);
@@ -2985,12 +2985,10 @@ describe("a device's current printers", () => {
       cookie: `${t.jar}; ${t.session}`,
       body: { kind: "printer", selection: { id: t.counter }, via: "scan" },
     });
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({
-      error: { code: "device.binding_invalid", params: { field: "paymentSlipPrinterId" } },
-    });
+    expect(res.status).toBe(200);
+    expect(await chosenIds(res)).toMatchObject({ receipt: t.counter, payment_slip: t.portable });
     const after = await send(app, "GET", "/api/device/equipment", { cookie: t.jar });
-    expect(await chosenIds(after)).toMatchObject({ receipt: t.bar, payment_slip: t.portable });
+    expect(await chosenIds(after)).toMatchObject({ receipt: t.counter, payment_slip: t.portable });
   });
 
   it("unnamed pick-up still needs a staff session and refuses invalid scan shapes", async () => {

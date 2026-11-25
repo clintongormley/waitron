@@ -1,6 +1,11 @@
 import { fill, t } from "../i18n/t.js";
 import type { ComboboxOption } from "@waitron/ui";
-import type { EquipmentItem, RoleEquipment } from "../api/client.js";
+import type {
+  DeviceEquipment,
+  EquipmentChange,
+  EquipmentItem,
+  RoleEquipment,
+} from "../api/client.js";
 
 export function optionLabel(item: EquipmentItem): string {
   if (item.busy) return fill(t("equipment.option_busy"), { item: item.name });
@@ -26,4 +31,30 @@ export function inheritEquipmentOption(equipment: RoleEquipment): ComboboxOption
     label: fill(t("inherit.value"), { value: valueLabel }),
     valueLabel,
   };
+}
+
+export function pickedUpMessage(
+  change: EquipmentChange,
+  stored: DeviceEquipment,
+  item: string,
+): string {
+  const selection = change.selection;
+  const printer = "kind" in change && change.kind === "printer" && typeof selection === "object";
+  const printerFor = (name: "receipt" | "payment_slip") =>
+    printer &&
+    stored.roles.some(
+      (role) =>
+        role.role === name &&
+        (role.chosenId === selection.id || role.resolved?.id === selection.id),
+    );
+  const receipt = printerFor("receipt");
+  const slip = printerFor("payment_slip");
+  if (printer && !receipt && !slip) return t("equipment.no_printer_role");
+  const picked =
+    receipt === slip
+      ? "equipment.picked_up"
+      : receipt
+        ? "equipment.picked_up_receipt_only"
+        : "equipment.picked_up_slip_only";
+  return fill(t(picked), { item });
 }

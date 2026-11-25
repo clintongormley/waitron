@@ -8,6 +8,15 @@ now **Payment not confirmed** / **Cobro sin confirmar**, covering both network a
 The full-disk boundaries and reader-release limit clarified on 2026-11-07 are in
 [Payments — Decisions and deliberate limits](../../backlog/payments.md#decisions-and-deliberate-limits).
 
+**2026-11-25:** A switched-on printer's sticker now sets each of its pick-up roles that the device's
+profile allows the printer for, and is refused when it has pick-up roles and the profile allows none
+of them. This replaces the whole refusal in §2.1, §3 ("Scanning or tapping a sticker"), §4 and
+default 20. §4's "solo para justificantes de pago" and "Has recogido {item}" lines, its empty pick-up
+set included, are now "Has recogido {item} para justificantes de pago" where the device then uses the
+printer for payment slips and not receipts, "Has recogido {item} para tickets" where for receipts and
+not payment slips, and "Has recogido {item}" where for both. See
+[Payments — Decisions and deliberate limits](../../backlog/payments.md#decisions-and-deliberate-limits).
+
 Status: **design decided; no owner questions open (§9).**
 
 Built: #1921, 2026-10-20.

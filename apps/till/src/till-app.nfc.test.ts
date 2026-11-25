@@ -12,6 +12,7 @@ import type { TillApp } from "./till-app.js";
 import type { TillEquipmentDialog } from "./widgets/equipment-dialog.js";
 import { TillApi } from "./api/client.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
+import { es } from "./i18n/strings.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { BillPaymentRequest, BillPaymentResult, DeviceEquipment } from "./api/client.js";
@@ -61,10 +62,10 @@ async function signOut(el: TillApp) {
 
 describe("NFC throughout the till", () => {
   it.each([
-    ["receipt", "chosen", "Picked up Portable printer"],
-    ["receipt", "resolved", "Picked up Portable printer"],
-    ["payment_slip", "chosen", "slip only"],
-    ["payment_slip", "resolved", "slip only"],
+    ["receipt", "chosen", "Picked up Portable printer for receipts"],
+    ["receipt", "resolved", "Picked up Portable printer for receipts"],
+    ["payment_slip", "chosen", "Picked up Portable printer for payment slips"],
+    ["payment_slip", "resolved", "Picked up Portable printer for payment slips"],
     ["receipt+payment_slip", "chosen", "Picked up Portable printer"],
   ])("an accepted printer scan confirms its %s %s assignment", async (target, source, message) => {
     const stored = {
@@ -84,12 +85,29 @@ describe("NFC throughout the till", () => {
     });
     await signIn(el);
     (await reader()).read(`waitron-equipment:printer:${PRINTER_ID}`);
-    const expected =
-      message === "slip only"
-        ? t("equipment.picked_up_slip_only").replace("{item}", "Portable printer")
-        : message;
-    await vi.waitFor(() => expect(notice(el)?.message).toBe(expected));
+    await vi.waitFor(() => expect(notice(el)?.message).toBe(message));
     expect(notice(el)?.tone).toBe("info");
+  });
+  it.each([
+    ["receipt", es["equipment.picked_up_receipt_only"]],
+    ["payment_slip", es["equipment.picked_up_slip_only"]],
+  ])("in Spanish, an accepted printer scan names the %s role it set", async (target, message) => {
+    const stored = {
+      roles: NFC_EQUIPMENT.roles.map((role) =>
+        role.role === target
+          ? { ...role, selection: "item", chosenId: PRINTER_ID, chosen: role.choices[0]! }
+          : role,
+      ),
+    };
+    const setDeviceEquipment = vi.fn().mockResolvedValue(stored);
+    const { el } = await mountEquipmentApp({ setDeviceEquipment });
+    await signIn(el, "es-ES");
+    (await reader()).read(`waitron-equipment:printer:${PRINTER_ID}`);
+    await vi.waitFor(() =>
+      expect(notice(el)?.message).toBe(message.replace("{item}", "Portable printer")),
+    );
+    expect(notice(el)?.tone).toBe("info");
+    expect(setDeviceEquipment).toHaveBeenCalledTimes(1);
   });
   it.each(["none", "drawer-only"])(
     "an accepted printer scan with %s assignment reports no selected printer role",
