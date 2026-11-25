@@ -8271,6 +8271,10 @@ describe("till-app", () => {
     await userEvent.click(basket.shadowRoot!.querySelector<HTMLElement>('[data-line-detail="0"]')!);
     const picker = basket.shadowRoot!.querySelector("till-modifier-picker")!;
     await picker.updateComplete;
+    const displayedTotal = picker.shadowRoot!.querySelector(".running")!;
+    const breakdown = displayedTotal.previousElementSibling;
+    expect.soft(breakdown?.textContent?.replace(/\s+/g, " ").trim()).toBe("Leche extra 3,00 €");
+    expect.soft(breakdown?.querySelector("button, input")).toBeNull();
     expect
       .soft(picker.shadowRoot!.querySelector(".running-amount")!.textContent)
       .toBe(formatMoney("6.00", currentLocale()));

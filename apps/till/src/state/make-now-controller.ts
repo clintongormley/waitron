@@ -5,6 +5,7 @@ export class MakeNowController {
   readonly #host: ReactiveControllerHost;
   #source?: string | symbol;
   #items: MadeHereItem[] = [];
+  #unconfirmedItems: MadeHereItem[] = [];
 
   constructor(host: ReactiveControllerHost) {
     this.#host = host;
@@ -15,11 +16,20 @@ export class MakeNowController {
   }
 
   get items(): MadeHereItem[] {
-    return this.#items;
+    if (this.#unconfirmedItems.length === 0) return this.#items;
+    return [
+      ...this.#items,
+      ...this.#unconfirmedItems.filter(
+        (item) => !this.#items.some((saved) => saved.lineId === item.lineId),
+      ),
+    ];
   }
 
   selectDevice(source: string | symbol | undefined): void {
     if (this.#source === source) return;
+    // The first confirmation keeps visible instructions, but only the device's own items are saved.
+    this.#unconfirmedItems =
+      typeof this.#source === "symbol" && typeof source === "string" ? this.#items : [];
     this.#source = source;
     this.#replaceItems(typeof source === "string" ? this.#read(source) : []);
   }
@@ -124,6 +134,7 @@ export class MakeNowController {
   };
 
   readonly dismiss = (): void => {
+    this.#unconfirmedItems = [];
     this.#replaceItems([]);
     if (typeof this.#source === "string") this.#save(this.#source, []);
   };

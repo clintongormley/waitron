@@ -23,6 +23,7 @@ import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { compareDecimal, decimal, formatMoney, toScale } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import {
+  extraGross,
   lineGross,
   offeredListsOf,
   productAsVariant,
@@ -266,6 +267,23 @@ export class TillModifierPicker extends LitElement {
         gap: var(--wt-space-3);
         padding-top: var(--wt-space-3);
         border-top: 1px solid var(--wt-color-border);
+      }
+
+      .retained-extras {
+        margin: 0 0 var(--wt-space-2);
+      }
+
+      .retained-extras > div {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
+        overflow-wrap: anywhere;
+      }
+
+      .retained-extras dd {
+        margin: 0;
+        white-space: nowrap;
+        font-variant-numeric: tabular-nums;
       }
 
       .running-label {
@@ -657,15 +675,38 @@ export class TillModifierPicker extends LitElement {
     });
   }
 
-  get #runningPrice(): string {
-    if (this.lineDetails && this.#quantityInvalid()) return "—";
+  #renderTotal() {
+    const invalidQuantity = this.lineDetails && this.#quantityInvalid();
     const previewLine: OrderLine = {
       product: this.#selectedProduct,
       quantity: this.lineDetails ? this.editedQuantity : this.quantity,
       extras: this.#selectedExtras(),
       notOfferedExtras: this.retainedExtras,
     };
-    return formatMoney(lineGross(previewLine), currentLocale());
+    const locale = currentLocale();
+    return html`
+      ${
+        this.retainedExtras?.length
+          ? html`<dl class="retained-extras">
+              ${this.retainedExtras.map(
+                (extra) =>
+                  html`<div>
+                    <dt>${extra.name}</dt>
+                    <dd>
+                      ${invalidQuantity ? "—" : formatMoney(extraGross(previewLine, extra), locale)}
+                    </dd>
+                  </div>`,
+              )}
+            </dl>`
+          : nothing
+      }
+      <div class="running">
+        <span class="running-label">${t("label.total")}</span>
+        <span class="running-amount"
+          >${invalidQuantity ? "—" : formatMoney(lineGross(previewLine), locale)}</span
+        >
+      </div>
+    `;
   }
 
   #setCount(listId: string, productId: string, quantity: number): void {
@@ -1026,14 +1067,7 @@ export class TillModifierPicker extends LitElement {
                         },
                       })
               }
-              ${
-                this.showTotal && !this.inline
-                  ? html`<div class="running">
-                      <span class="running-label">${t("label.total")}</span>
-                      <span class="running-amount">${this.#runningPrice}</span>
-                    </div>`
-                  : nothing
-              }
+              ${this.showTotal && !this.inline ? this.#renderTotal() : nothing}
             `
       }
     </div>`;

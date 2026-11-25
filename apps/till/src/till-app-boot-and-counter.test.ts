@@ -1782,7 +1782,12 @@ describe("till-app receipt issuance", () => {
     };
     const client = new TillClient("", async () => Response.json({ madeHere: [item] }));
     const getDeviceIdentity = vi.fn().mockRejectedValue({ code: "server.internal", status: 500 });
-    if (check === "waiting") getDeviceIdentity.mockReturnValueOnce(new Promise(() => {}));
+    const identity = { deviceId: "till-dev", name: "Till", formFactor: "till" as const };
+    let confirm!: (device: typeof identity) => void;
+    if (check === "waiting")
+      getDeviceIdentity.mockReturnValueOnce(
+        new Promise<typeof identity>((resolve) => (confirm = resolve)),
+      );
     const { el } = await mountApp({
       ...(check === "ready" ? {} : { getDeviceIdentity }),
       onMadeHere: client.onMadeHere.bind(client),
@@ -1798,6 +1803,21 @@ describe("till-app receipt issuance", () => {
     const card = el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!;
     await vi.waitFor(() => expect(card.textContent).toContain("Lager"));
     expect(localStorage.getItem("waitron.makeNow.till-dev") !== null).toBe(check === "ready");
+    if (check === "waiting") {
+      const saved = { ...item, lineId: "previous", name: "Earlier drink" };
+      localStorage.setItem("waitron.makeNow.till-dev", JSON.stringify([saved]));
+      confirm(identity);
+      await vi.waitFor(() => expect(card.textContent).toContain("Earlier drink"));
+      expect(card.textContent).toContain("Lager");
+      expect(localStorage.getItem("waitron.makeNow.till-dev")).toBe(JSON.stringify([saved]));
+      await userEvent.click(ticket(el)!.shadowRoot!.querySelector("[data-settlement-done]")!);
+      await flush(el);
+      await userEvent.click(card.querySelector("button")!);
+      await flush(el);
+      expect(card.textContent).not.toContain("Lager");
+      expect(card.textContent).not.toContain("Earlier drink");
+      expect(localStorage.getItem("waitron.makeNow.till-dev")).toBeNull();
+    }
   });
 
   it("takes pay timing from the zone context when no zone chooser is supplied", async () => {

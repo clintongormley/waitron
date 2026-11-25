@@ -7,8 +7,14 @@ records the original proposal.
 **Watcher, 09:48 on 25 November.** Show instructions while the device is unconfirmed, using a
 temporary list with no saved device key.
 
-Staff can keep or dismiss Make now through a device recheck, answer a required choice on a recalled
-dish off the live menu, and tell two same-numbered kitchen groups apart after a join.
+**Watcher, 10:09 on 25 November.** Keep the visible temporary instructions through first
+confirmation until Done. Leave them out of storage and clear them on a device switch or enrolment.
+
+**Owner, quoted by the watcher at 10:21 on 25 November in Lane F `questions.md`.**
+"Land with the extra shown (Recommended)". Show its name and amount above the picker total.
+
+Staff can keep or dismiss Make now through a device recheck and answer a required choice on a
+recalled dish off the live menu.
 Lane F queue, TILL-KITCHEN-SMALL, 25 November 2026 at 04:47.
 Claude reviewed the plan. The watcher cleared two pull requests at 05:55, with kitchen first.
 
@@ -43,7 +49,6 @@ Claude reviewed the plan. The watcher cleared two pull requests at 05:55, with k
    table rename control. A rename after the join can leave a joined table's new name in the
    qualifier because the closed party records its old name. Keep the bill's current table heading.
 
-Two pull requests using this plan. Expect about 100 added production lines and 140 added test
-lines for the till work, and 55 production and 85 test lines for kitchen. Update the corresponding
-entries in `docs/backlog.md`, `docs/backlog/till.md` and `docs/backlog/kitchen.md`.
-Keep Task 6's printer-routing decision.
+The original estimates were 100 added product lines and 140 added test lines for the till, and
+55 product and 85 test lines for the proposed kitchen change. The till pull request updates the
+three backlog files and keeps Task 6's printer-routing decision.
