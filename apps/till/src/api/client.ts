@@ -2839,7 +2839,8 @@ export interface BoxClockConfirmed {
 }
 
 export class TillApi {
-  #madeHereListener?: (items: MadeHereItem[]) => void;
+  #madeHereListener?: (items: MadeHereItem[], deviceId: string) => void;
+  #madeHereDevice?: () => string | undefined;
   readonly #unansweredWholeBills = new Map<
     string,
     {
@@ -2849,8 +2850,12 @@ export class TillApi {
     }
   >();
 
-  onMadeHere(listener: (items: MadeHereItem[]) => void): void {
+  onMadeHere(
+    listener: (items: MadeHereItem[], deviceId: string) => void,
+    device: () => string | undefined,
+  ): void {
     this.#madeHereListener = listener;
+    this.#madeHereDevice = device;
   }
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
@@ -5726,6 +5731,7 @@ export class TillApi {
     if (headers !== undefined)
       init.headers = { ...(init.headers as Record<string, string> | undefined), ...headers };
     if (signal !== undefined) init.signal = signal;
+    const deviceId = this.#madeHereDevice?.();
     const res = await this.#fetchFor(person)(this.#baseUrl + path, init);
     if (!res.ok) {
       // The body is untrusted: it may not be JSON, and the literal `null` is valid JSON, so the parsed
@@ -5742,8 +5748,13 @@ export class TillApi {
     }
     const text = await res.text();
     const answer: unknown = text === "" ? undefined : JSON.parse(text);
-    if (isRecord(answer) && Array.isArray(answer.madeHere) && answer.madeHere.length > 0)
-      this.#madeHereListener?.(answer.madeHere as MadeHereItem[]);
+    if (
+      deviceId !== undefined &&
+      isRecord(answer) &&
+      Array.isArray(answer.madeHere) &&
+      answer.madeHere.length > 0
+    )
+      this.#madeHereListener?.(answer.madeHere as MadeHereItem[], deviceId);
     rememberInvoiceEvidence(answer);
     return answer as T;
   }

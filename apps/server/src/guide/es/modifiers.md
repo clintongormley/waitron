@@ -114,9 +114,9 @@ esos productos antes de que confirmes. No se puede deshacer.
 **Un pedido abierto no impide eliminarla, y nadie te pide que lo termines o lo anules.** Eliminarla
 no cambia por sí sola nada de un pedido abierto: una selección de extras es su propia línea del
 pedido, y una respuesta de opciones se guarda como el texto que se eligió. Un extra elegido de una
-lista eliminada sigue en un pedido aparcado de caja, con su cargo, hasta que el personal abra el
-plato que lo lleva y guarde un cambio, lo que lo quita; mientras tanto, + no puede aumentar la
-cantidad de ese plato.
+lista eliminada sigue en un pedido aparcado de caja con su cargo. Para quitarlo, abre el plato y
+guarda. Si el plato ya no está en la carta y pide una nueva elección, elígela y guarda. Luego vuelve
+a abrir el plato y guarda otra vez para quitar el extra.
 
 Para cambiar un plato ya enviado en una mesa, abre sus detalles en **Enviado**, cámbialo y pulsa
 **Cambiar plato**. Solo se guarda ese plato, y la estación recibe el cambio. Una fila de platos iguales

@@ -579,11 +579,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   redesign we should reach a happy state with small files, so anything left that is big should be
   refactored". The trial was #4261 (95 of `till-app.ts`'s about 26,000 lines in about 81 minutes).
 
-- **A Make now instruction can disappear or come back while the till checks its device again.**
-  [Detail](backlog/till.md#a-make-now-instruction-can-disappear-or-come-back-while-the-till-checks-its-device-again)
-
-- **Let staff answer a required list on a withdrawn dish.** [Detail](backlog/till.md#options-on-a-withdrawn-dish)
-
 - **Check the till above a tablet's own keyboard again (left open by A1563, typing on the till
   with a keyboard, #3986).** On 21 November the owner's Oppo phone passed, and so did the Pixel
   tablet in portrait. In landscape the tablet kept the page full height under its keyboard, so a

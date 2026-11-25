@@ -7,7 +7,11 @@ import {
   sales,
   products,
 } from "@waitron/db";
-import { productDeclarationValues, extraDeclarationValues } from "@waitron/menu";
+import {
+  productDeclarationValues,
+  extraDeclarationValues,
+  readOfferedModifiers,
+} from "@waitron/menu";
 import type { ServiceMode, KitchenNoteSnapshot } from "@waitron/module";
 import {
   type KitchenSignal,
@@ -15,6 +19,7 @@ import {
   type BillSetMenuState,
   type ServedSetMenuCopy,
   type OptionSnapshot,
+  type OfferedOptionsList,
   type ProductAllergens,
   type DietaryLabel,
   rawCentsToDecimal,
@@ -153,6 +158,7 @@ export interface HeldOrder {
         precision: number;
         hardwareUnit: "kg" | "g" | "mg" | null;
       };
+      offeredModifiers?: OfferedOptionsList[];
       unitPrice: string;
       vatClass: "general" | "reduced" | "super_reduced" | "zero";
       category: string | null;
@@ -338,6 +344,24 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       };
     });
 
+    const optionProductIds = new Set(
+      lineRows.flatMap((line) =>
+        line.productId !== null &&
+        line.parentLineId === null &&
+        line.setMenuId === null &&
+        line.sentAt === null
+          ? [line.productId]
+          : [],
+      ),
+    );
+    const ownModifiers =
+      optionProductIds.size === 0
+        ? new Map<string, OfferedOptionsList[]>()
+        : await readOfferedModifiers(
+            tx,
+            [...optionProductIds].map((productId) => ({ productId, menuItemId: null })),
+          );
+
     const declarationOf = (line: (typeof lineRows)[number]) => {
       if (line.sentAt === null) return declarations.get(line.variantId ?? line.productId!);
       const saved = captured.get(line.id);
@@ -374,6 +398,12 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
             ...(line.optionSnapshots.length ? { workingOrderLineId: line.id } : {}),
           };
         }
+        const options =
+          line.sentAt === null && line.setMenuId === null
+            ? ownModifiers
+                .get(line.productId.toLowerCase())
+                ?.filter((list) => list.kind === "options")
+            : undefined;
         const extras = (childrenByParent.get(line.id) ?? []).map((child) => ({
           productId: child.productId,
           name: child.name,
@@ -417,6 +447,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
               precision: context.unitPrecision,
               hardwareUnit: context.hardwareUnit,
             },
+            ...(options?.length ? { offeredModifiers: options } : {}),
             unitPrice: line.unitPriceGross,
             vatClass: context.vatClass as "general" | "reduced" | "super_reduced" | "zero",
             category: context.categoryName,

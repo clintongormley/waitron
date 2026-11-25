@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "./working-order.js";
 import { lineGross, productAsVariant, toWireProductIdentity } from "./order-line.js";
 import { toDraftLineInput } from "./draft-lines.js";
-import type { OrderLine, SelectedExtra } from "./working-order.js";
+import { optionSnapshotOf } from "./held-options.js";
+import type { LineSelection, OrderLine, SelectedExtra } from "./working-order.js";
 import { sellingValuesOf, type TillProduct } from "../api/client.js";
 
 const ROW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -1113,6 +1114,55 @@ describe("WorkingOrderStore", () => {
       edit(s);
       expect(s.lines[0]).not.toHaveProperty("notOfferedExtras");
       expect(lineGross(s.lines[0]!)).toBe("3.00");
+    });
+
+    it.each([
+      [
+        "setLineModifiers",
+        (s: WorkingOrderStore, selection: LineSelection) => s.setLineModifiers(0, { selection }),
+      ],
+      [
+        "setLineDetails",
+        (s: WorkingOrderStore, selection: LineSelection) =>
+          s.setLineDetails(0, { quantity: "2", note: "", selection }),
+      ],
+    ])("%s keeps the extra for the first missing choice on a withdrawn dish", (_, edit) => {
+      const s = new WorkingOrderStore();
+      const warm = {
+        id: "warm",
+        name: "Warm",
+        customerName: null,
+        kitchenName: null,
+        available: true,
+      };
+      const list = {
+        kind: "options" as const,
+        id: "list-temperature",
+        name: "Temperature",
+        customerName: null,
+        kitchenName: null,
+        defaultLabelId: null,
+        labels: [warm],
+      };
+      s.loadFrom("held-1", [
+        {
+          workingOrderLineId: "dish",
+          product: { ...coffee, offeredModifiers: [list] },
+          quantity: "2",
+          notOffered: true,
+          notOfferedExtras: [milk],
+        },
+      ]);
+      const selection = {
+        options: [{ listId: list.id, labelId: warm.id }],
+        optionSnapshots: [optionSnapshotOf(list, warm)],
+      };
+      expect(edit(s, selection)).toBe(true);
+      expect(s.lines[0]!.notOfferedExtras).toEqual([milk]);
+      expect(s.total).toBe("6.00");
+      expect(edit(s, selection)).toBe(true);
+      expect(s.lines[0]).not.toHaveProperty("notOfferedExtras");
+      expect(s.total).toBe("3.00");
     });
 
     it("refuses raising the count of the line that holds them, and keeps a lowering", () => {

@@ -43,6 +43,7 @@ import type { WtDialog, WtTextarea } from "@waitron/ui";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
   FloorZone,
+  MadeHereItem,
   PartyBill,
   Station,
   TabLine,
@@ -418,7 +419,7 @@ afterEach(() => {
 
 describe("till-app table ordering: the table's menus", () => {
   it("shows Make now after a table Send reports a drink", async () => {
-    let receive: ((items: unknown[]) => void) | undefined;
+    let receive: ((items: MadeHereItem[]) => void) | undefined;
     const submitDraft = vi.fn(async (...args: Parameters<TillApi["submitDraft"]>) => {
       const result = await drafts.submitDraft(args[0], args[1], args[2]);
       receive!([
@@ -437,7 +438,7 @@ describe("till-app table ordering: the table's menus", () => {
     });
     const { el } = await mountApp({
       onMadeHere: vi.fn((listener) => {
-        receive = listener;
+        receive = (items) => listener(items, "till-dev");
       }),
       submitDraft,
     });

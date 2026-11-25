@@ -36,8 +36,6 @@ Left open:
 
 Left open:
 
-- After joining parties with matching group numbers, both group labels can name the joined table.
-- Check whether the MOVED slip identifies the printed HOLD group when staff merge its bill after joining parties.
 - A group's HOLD paper is recorded per station, not per printer
   (`order_group_hold_stations`), so a correction after replacing the station's printer goes to
   the new printer. Reproduced on 2026-11-16 from `8d65e53f22`: HOLD on Grill/pass, then replace
@@ -77,6 +75,9 @@ server switch, shows the ordinary unnamed message.
   [Detail](kitchen.md#task-6-761-hold-tickets-in-advance)
 
 ## Decisions and deliberate limits
+
+- Joined parties with matching group numbers can both name the joined tables. The watcher kept this on 2026-11-25. Moving and reseating guests made the proposed split labels wrong. See Lane F `receipts/till-kitchen-small/kitchen-finish-review.md`.
+- MOVED slips can use the joined label for a printed HOLD group when bills merge. The watcher kept this on 2026-11-25. See Lane F `receipts/till-kitchen-small/kitchen-finish-review-second.md`.
 
 ### A dish that is Ready keeps ageing, and the pass keeps its own late colour (owner, 2026-11-24; A1139, A1250)
 

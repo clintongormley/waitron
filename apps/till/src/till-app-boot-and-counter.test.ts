@@ -44,6 +44,7 @@ import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { CapabilityFlag } from "./layout.js";
 import type {
   KitchenScreenKind,
+  MadeHereItem,
   ResolvedKitchenScreen,
   ServiceZoneSummary,
   TillApi,
@@ -1132,10 +1133,10 @@ describe("till-app session activity", () => {
   it("keeps a made-here instruction through navigation and restores it for the same device", async () => {
     setLocale("en-GB");
     localStorage.removeItem("waitron.makeNow.till-dev");
-    let receive: ((items: unknown[]) => void) | undefined;
+    let receive: ((items: MadeHereItem[]) => void) | undefined;
     const { el } = await mountApp({
       onMadeHere: vi.fn((listener) => {
-        receive = listener;
+        receive = (items) => listener(items, "till-dev");
       }),
     });
     await flush(el);
@@ -1179,6 +1180,48 @@ describe("till-app session activity", () => {
     ).not.toContain("2× Lager");
   });
 
+  const oldDrink = {
+    lineId: "old-drink",
+    name: "Old drink",
+    quantity: "1.000",
+    unitName: null,
+    soldInEach: true,
+    optionSnapshots: [],
+    extras: [],
+    note: null,
+  };
+
+  it("keeps new instructions and honours Done while the same device is checked again", async () => {
+    const identity = { deviceId: "till-dev", name: "Till 1", formFactor: "till" as const };
+    let confirm!: (device: typeof identity) => void;
+    const check = new Promise<typeof identity>((resolve) => (confirm = resolve));
+    let receive!: Parameters<TillApi["onMadeHere"]>[0];
+    const { el } = await mountApp({
+      getDeviceIdentity: vi.fn().mockResolvedValueOnce(identity).mockReturnValueOnce(check),
+      onMadeHere: vi.fn((listener) => {
+        receive = listener;
+      }),
+    });
+    await flush(el);
+    receive([oldDrink], identity.deviceId);
+    await flush(el);
+    emit(lock(el)!, "device-unauthorized");
+    await flush(el);
+    expect(lock(el)!.deviceName).toBeUndefined();
+    const card = el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!;
+    expect(card.textContent).toContain("Old drink");
+    await userEvent.click(card.querySelector("button")!);
+    await flush(el);
+    expect(localStorage.getItem("waitron.makeNow.till-dev")).toBeNull();
+    receive([{ ...oldDrink, lineId: "new-drink", name: "New drink" }], identity.deviceId);
+    confirm(identity);
+    await flush(el);
+    expect(lock(el)!.deviceName).toBe(identity.name);
+    expect(card.textContent).not.toContain("Old drink");
+    expect(card.textContent).toContain("New drink");
+    expect(localStorage.getItem("waitron.makeNow.till-dev")).toContain("new-drink");
+  });
+
   it("does not restore another device's instructions", async () => {
     localStorage.setItem(
       "waitron.makeNow.other-device",
@@ -1210,7 +1253,7 @@ describe("till-app session activity", () => {
       name: "Device",
       formFactor: "till",
     }));
-    let receive: ((items: unknown[]) => void) | undefined;
+    let receive!: Parameters<TillApi["onMadeHere"]>[0];
     const { el } = await mountApp({
       getDeviceIdentity: identity,
       getDevDevices: vi.fn().mockResolvedValue({ devices: [] }),
@@ -1219,18 +1262,7 @@ describe("till-app session activity", () => {
       }),
     });
     await flush(el);
-    receive!([
-      {
-        lineId: "old-line",
-        name: "Old drink",
-        quantity: "1.000",
-        unitName: null,
-        soldInEach: true,
-        optionSnapshots: [],
-        extras: [],
-        note: null,
-      },
-    ]);
+    receive([oldDrink], "till-dev");
     await flush(el);
     const widget = el.shadowRoot!.querySelector("till-make-now")!;
     expect(widget.shadowRoot!.textContent).toContain("Old drink");
@@ -1238,17 +1270,22 @@ describe("till-app session activity", () => {
     await flush(el);
     expect(el.shadowRoot!.querySelector("till-device-chooser")).not.toBeNull();
     expect(widget.shadowRoot!.textContent).not.toContain("Old drink");
-    expect(localStorage.getItem("waitron.makeNow.till-dev")).toContain("old-line");
+    expect(localStorage.getItem("waitron.makeNow.till-dev")).toContain("old-drink");
     sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "other-device");
     emit(el.shadowRoot!.querySelector(".app")!, "enrolled");
     await flush(el);
     expect(widget.shadowRoot!.textContent).not.toContain("Old drink");
+    receive([{ ...oldDrink, lineId: "late-drink", name: "Late drink" }], "till-dev");
+    await flush(el);
+    expect(widget.shadowRoot!.textContent).not.toContain("Late drink");
+    expect(localStorage.getItem("waitron.makeNow.other-device")).toBeNull();
     emit(el.shadowRoot!.querySelector(".app")!, "switch-device");
     await flush(el);
     sessionStorage.setItem(DEV_DEVICE_STORAGE_KEY, "till-dev");
     emit(el.shadowRoot!.querySelector(".app")!, "enrolled");
     await flush(el);
     expect(widget.shadowRoot!.textContent).toContain("Old drink");
+    expect(widget.shadowRoot!.textContent).toContain("Late drink");
   });
 
   it("clears old instructions on a same-app switch when localStorage access throws", async () => {
@@ -1261,7 +1298,7 @@ describe("till-app session activity", () => {
       },
     });
     try {
-      let receive: ((items: unknown[]) => void) | undefined;
+      let receive: ((items: MadeHereItem[]) => void) | undefined;
       const { el } = await mountApp({
         getDevDevices: vi.fn().mockResolvedValue({ devices: [] }),
         getDeviceIdentity: vi.fn(async () => ({
@@ -1270,7 +1307,7 @@ describe("till-app session activity", () => {
           formFactor: "till",
         })),
         onMadeHere: vi.fn((listener) => {
-          receive = listener;
+          receive = (items) => listener(items, "till-dev");
         }),
       });
       await flush(el);
@@ -1303,10 +1340,10 @@ describe("till-app session activity", () => {
 
   it("ignores a stored value that is not an item list", async () => {
     localStorage.setItem("waitron.makeNow.till-dev", "{}");
-    let receive: ((items: unknown[]) => void) | undefined;
+    let receive: ((items: MadeHereItem[]) => void) | undefined;
     const { el } = await mountApp({
       onMadeHere: vi.fn((listener) => {
-        receive = listener;
+        receive = (items) => listener(items, "till-dev");
       }),
     });
     await flush(el);
@@ -1403,8 +1440,13 @@ describe("till-app session activity", () => {
   });
 
   it("keeps Done usable when site data methods throw", async () => {
-    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-      throw new Error("blocked");
+    const getItem = Storage.prototype.getItem;
+    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+    ) {
+      if (this === localStorage) throw new Error("blocked");
+      return getItem.call(this, key);
     });
     const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new Error("blocked");
@@ -1413,10 +1455,10 @@ describe("till-app session activity", () => {
       throw new Error("blocked");
     });
     try {
-      let receive: ((items: unknown[]) => void) | undefined;
+      let receive: ((items: MadeHereItem[]) => void) | undefined;
       const { el } = await mountApp({
         onMadeHere: vi.fn((listener) => {
-          receive = listener;
+          receive = (items) => listener(items, "till-dev");
         }),
       });
       await flush(el);
@@ -1454,10 +1496,10 @@ describe("till-app session activity", () => {
       },
     });
     try {
-      let receive: ((items: unknown[]) => void) | undefined;
+      let receive: ((items: MadeHereItem[]) => void) | undefined;
       const { el } = await mountApp({
         onMadeHere: vi.fn((listener) => {
-          receive = listener;
+          receive = (items) => listener(items, "till-dev");
         }),
       });
       await flush(el);
@@ -1727,7 +1769,7 @@ describe("till-app content languages", () => {
 
 describe("till-app receipt issuance", () => {
   it("shows Make now after a counter cash payment reports a drink", async () => {
-    let receive: ((items: unknown[]) => void) | undefined;
+    let receive: ((items: MadeHereItem[]) => void) | undefined;
     const item = {
       lineId: "lager-pay",
       name: "Lager",
@@ -1740,7 +1782,7 @@ describe("till-app receipt issuance", () => {
     };
     const { el } = await mountApp({
       onMadeHere: vi.fn((listener) => {
-        receive = listener;
+        receive = (items) => listener(items, "till-dev");
       }),
       recordSale: vi.fn(async () => {
         receive!([item]);

@@ -18,6 +18,7 @@ import {
 import { assertQuantityPrecision } from "@waitron/menu/src/unit-validation.js";
 import type { Decimal, Dining, OptionSelection, OptionSnapshot } from "@waitron/shared";
 import { lineGross, takesExtras } from "./order-line.js";
+import { deriveOptionSelections } from "./held-options.js";
 import { orderLineMergeKey } from "./draft-lines.js";
 import { refreshProductDeclarations, type BlockReason } from "./menu-refresh.js";
 import type { EndedPeriod } from "./late-send.js";
@@ -235,6 +236,23 @@ function applySelection(line: OrderLine, selection: LineSelection | undefined): 
   if (selection?.extras?.length) line.extras = selection.extras;
   if (selection?.options?.length) line.options = selection.options;
   if (selection?.optionSnapshots?.length) line.optionSnapshots = selection.optionSnapshots;
+}
+
+function replaceLineSelection(line: OrderLine, selection: LineSelection): void {
+  const missing =
+    line.notOffered && line.setMenuId === undefined && line.notOfferedExtras?.length
+      ? deriveOptionSelections(line.product.offeredModifiers ?? [], line.optionSnapshots).unanswered
+      : [];
+  // Keep the extra while staff are forced to answer an option on a dish they can no longer add.
+  const kept = selection.options?.some((answer) => missing.includes(answer.listId))
+    ? line.notOfferedExtras?.filter((extra) => extra.listId !== null && extra.productId !== null)
+    : undefined;
+  delete line.extras;
+  delete line.notOfferedExtras;
+  delete line.options;
+  delete line.optionSnapshots;
+  applySelection(line, selection);
+  if (kept?.length) line.notOfferedExtras = kept;
 }
 
 export class WorkingOrderStore {
@@ -563,18 +581,13 @@ export class WorkingOrderStore {
     const product = withVariantOf(line, update.product);
     if (product !== line.product && this.#refusesSelection(product, line.setMenuId)) return false;
     const candidate: OrderLine = { ...line, product };
-    delete candidate.extras;
-    delete candidate.notOfferedExtras;
-    delete candidate.options;
-    delete candidate.optionSnapshots;
-    applySelection(candidate, update.selection);
+    replaceLineSelection(candidate, update.selection);
     if (this.#passesLimit(lineGross(line), lineGross(candidate))) return false;
     delete line.extras;
     delete line.notOfferedExtras;
     delete line.options;
     delete line.optionSnapshots;
-    applySelection(line, update.selection);
-    line.product = product;
+    Object.assign(line, candidate);
     this.#invalidatePricing();
     this.#markDirty();
     this.emit("changed");
@@ -603,11 +616,7 @@ export class WorkingOrderStore {
     if ((change > 0 || product !== line.product) && this.#refusesSelection(product, line.setMenuId))
       return false;
     const candidate: OrderLine = { ...line, product, quantity: update.quantity };
-    delete candidate.extras;
-    delete candidate.notOfferedExtras;
-    delete candidate.options;
-    delete candidate.optionSnapshots;
-    applySelection(candidate, update.selection);
+    replaceLineSelection(candidate, update.selection);
     const note = update.note.trim();
     if (note === "") delete candidate.note;
     else candidate.note = note;

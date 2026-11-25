@@ -3477,7 +3477,7 @@ export class TillApp extends LitElement {
   /** From the boot probe: the lock screen's heading, and the key for the remembered-operator default. */
   @state() private deviceName?: string;
   @state() private deviceId?: string;
-  readonly #makeNow = new MakeNowController(this, () => this.deviceId);
+  readonly #makeNow = new MakeNowController(this);
   /** Prefetched by the boot probe, so the station screen does not read `GET /api/device/station` again. */
   @state() private initialDeviceStation?: DeviceStationScreen;
   @state() private initialDevicePass?: DevicePassBoard;
@@ -5438,8 +5438,8 @@ export class TillApp extends LitElement {
     if (!this.#basketScope) this.#syncBasketDraft();
     this.#syncEditDeadEnds();
     if (changed.has("api")) {
-      this.api.onMadeHere?.(this.#makeNow.receive);
       const api = this.api;
+      api.onMadeHere?.(this.#makeNow.receive, () => this.#makeNow.deviceId);
       api.namePersonFrom?.(
         () => this.#tabPerson,
         (person) => {
@@ -5579,8 +5579,6 @@ export class TillApp extends LitElement {
       const identity = await this.api.getDeviceIdentity();
       if (overtaken()) return;
       if (!this.devTab && (await this.#openDevChooser(overtaken, false))) return;
-      if (previousDeviceId !== undefined && previousDeviceId !== identity.deviceId)
-        this.#makeNow.reset();
       this.deviceName = identity.name;
       this.deviceId = identity.deviceId;
       const nav = navigator as Navigator & { getBattery?: () => Promise<BatteryLike> };
@@ -5597,7 +5595,7 @@ export class TillApp extends LitElement {
       )
         this.#onKitchenLogout(false);
       this.#holdIdentity(identity);
-      this.#makeNow.restore();
+      this.#makeNow.selectDevice(identity.deviceId);
       this.#deviceKind = kind ?? "till";
       if (kind !== undefined && LIVE_STREAM_KINDS.includes(kind)) {
         if (
@@ -5701,6 +5699,7 @@ export class TillApp extends LitElement {
           }
           this.devTab = false;
         }
+        this.#makeNow.selectDevice(undefined);
         if (await this.#openDevChooser(overtaken)) return;
         this.frontDoor = "enrol";
       }
@@ -10434,7 +10433,7 @@ export class TillApp extends LitElement {
       this.errorKey = "boot.error";
       return;
     }
-    this.#makeNow.reset();
+    this.#makeNow.selectDevice(undefined);
     await this.#boot(undefined, true);
   }
 
@@ -10442,7 +10441,6 @@ export class TillApp extends LitElement {
     this.shadowRoot?.querySelector<TillProblemReport>("till-problem-report")?.close();
     this.#pauseLive();
     this.#live = undefined;
-    this.#makeNow.reset();
     await this.#boot();
   }
 
@@ -10823,6 +10821,7 @@ export class TillApp extends LitElement {
     let droppedAProduct = false;
     let extraNotOffered = false;
     let mustChooseAgain = false;
+    let mustChooseOnWithdrawnDish = false;
     const liveByMenuItem = new Map<string, TillProduct>();
     for (const candidate of offered) {
       if (candidate.menuItemId !== undefined && !liveByMenuItem.has(candidate.menuItemId))
@@ -10869,7 +10868,10 @@ export class TillApp extends LitElement {
       if (picks.notOffered.length > 0) extraNotOffered = true;
       const answers = deriveOptionSelections(product.offeredModifiers ?? [], line.optionSnapshots);
       const sent = line.workingOrderLineId !== undefined && sentLines.has(line.workingOrderLineId);
-      if (answers.unanswered.length > 0 && !sent) mustChooseAgain = true;
+      if (answers.unanswered.length > 0 && !sent) {
+        mustChooseAgain = true;
+        if (live === undefined && line.setMenuId === undefined) mustChooseOnWithdrawnDish = true;
+      }
       lines.push({
         product,
         ...(line.setMenuId === undefined ? {} : { setMenuId: line.setMenuId }),
@@ -10894,11 +10896,13 @@ export class TillApp extends LitElement {
       ? "held.product_gone"
       : mustChooseAgain && listed === null
         ? "held.reread_failed"
-        : extraNotOffered
-          ? "held.extra_not_offered"
-          : mustChooseAgain
-            ? "held.options_changed"
-            : undefined;
+        : mustChooseOnWithdrawnDish
+          ? "held.options_changed"
+          : extraNotOffered
+            ? "held.extra_not_offered"
+            : mustChooseAgain
+              ? "held.options_changed"
+              : undefined;
     return banner === undefined ? { lines } : { lines, banner };
   }
 

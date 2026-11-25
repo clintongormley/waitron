@@ -12,6 +12,7 @@ import type { OptionSelection } from "@waitron/shared";
 import { eq, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { createStation } from "./kitchen.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { readStoredOrder } from "./stored-order-lines.js";
 import {
   type OrderFlow,
@@ -1641,6 +1642,65 @@ describe("what a held-order edit preserves and what it replaces", () => {
       code: "options.label_required",
       params: { optionListId: cookingOptions.listId },
     });
+  });
+
+  it("reads the choices needed to save a recalled dish removed from the live menu", async () => {
+    const { cfg, zoneId, coffeeId, premiumCoffeeOfferId } = await setupVenue();
+    const id = randomUUID();
+    await parkOrder({ db }, cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: premiumCoffeeOfferId, quantity: "1" }],
+    });
+    const milk = await withTransaction(db, async (tx) => {
+      await addExtraList(tx, coffeeId, "Cream");
+      const list = await addOptionList(tx, coffeeId, "Milk", ["Oat"]);
+      const [offer] = await tx
+        .select({ menuId: menu.menuItems.menuId })
+        .from(menu.menuItems)
+        .where(eq(menu.menuItems.id, premiumCoffeeOfferId));
+      const root = await menu.requireMenuRoot(tx, offer!.menuId);
+      const [member] = await tx
+        .select({ id: menu.sectionMembers.id })
+        .from(menu.sectionMembers)
+        .where(eq(menu.sectionMembers.sectionId, root));
+      await menu.removeMember(tx, root, member!.id);
+      await republishMenus(tx);
+      return list;
+    });
+
+    const { offers } = await withTransaction(db, (tx) => VENUE_SERVICE.listZoneOffers(tx, zoneId));
+    expect(offers.map((offer) => offer.id)).not.toContain(premiumCoffeeOfferId);
+    const order = await getHeldOrder({ db }, id);
+    const line = order.lines[0]!;
+    const save = (options?: OptionSelection[], quantity = "1") =>
+      updateHeldOrder({ admission: testTradingAdmission(), db }, cfg, id, {
+        revision: order.revision,
+        lines: [
+          {
+            workingOrderLineId: line.workingOrderLineId!,
+            menuItemId: premiumCoffeeOfferId,
+            quantity,
+            options,
+          },
+        ],
+      });
+    await expect(save()).rejects.toMatchObject({
+      code: "options.label_required",
+      params: { optionListId: milk.listId },
+    });
+    expect
+      .soft(line.product?.offeredModifiers)
+      .toMatchObject([
+        { kind: "options", id: milk.listId, labels: [{ id: milk.labelIds[0], available: true }] },
+      ]);
+    const answers = [{ listId: milk.listId, labelId: milk.labelIds[0]! }];
+    await expect(save(answers, "2")).rejects.toMatchObject({
+      code: "service_zone.offer_not_allowed",
+    });
+    await save(answers);
+    const saved = await getHeldOrder({ db }, id);
+    expect(saved.lines[0]!.optionSnapshots).toMatchObject([{ listId: milk.listId }]);
   });
 
   it("accepts the same quantity-only edit on a dish carrying no options list", async () => {

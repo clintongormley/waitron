@@ -340,7 +340,7 @@ describe("TillApi", () => {
     },
   );
 
-  it("reports made-here items from a successful answer and ignores an answer without them", async () => {
+  it("reports made-here items to the device that sent the request", async () => {
     const item = {
       lineId: "line-1",
       name: "Lager",
@@ -351,16 +351,25 @@ describe("TillApi", () => {
       extras: [],
       note: null,
     };
+    let answer!: (response: Response) => void;
+    const response = new Promise<Response>((resolve) => (answer = resolve));
     const fetchStub = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ madeHere: [item] }))
+      .mockReturnValueOnce(response)
       .mockResolvedValueOnce(jsonResponse({ ok: true }));
     const api = new TillApi("", fetchStub);
     const received = vi.fn();
-    api.onMadeHere(received);
+    let deviceId: string | undefined;
+    api.onMadeHere(received, () => deviceId);
     await api.getTill();
+    deviceId = "first-till";
+    const pending = api.getTill();
+    deviceId = "second-till";
+    answer(jsonResponse({ madeHere: [item] }));
+    await pending;
     await api.getTill();
-    expect(received).toHaveBeenCalledExactlyOnceWith([item]);
+    expect(received).toHaveBeenCalledExactlyOnceWith([item], "first-till");
   });
 
   it("retries a fresh cash basket as the same single save-and-pay request", async () => {

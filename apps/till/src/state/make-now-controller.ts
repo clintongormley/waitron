@@ -3,20 +3,25 @@ import type { MadeHereItem } from "../api/client.js";
 
 export class MakeNowController {
   readonly #host: ReactiveControllerHost;
-  readonly #deviceId: () => string | undefined;
+  #deviceId?: string;
   #items: MadeHereItem[] = [];
 
-  constructor(host: ReactiveControllerHost, deviceId: () => string | undefined) {
+  constructor(host: ReactiveControllerHost) {
     this.#host = host;
-    this.#deviceId = deviceId;
+  }
+
+  get deviceId(): string | undefined {
+    return this.#deviceId;
   }
 
   get items(): MadeHereItem[] {
     return this.#items;
   }
 
-  reset(): void {
-    this.#replaceItems([]);
+  selectDevice(deviceId: string | undefined): void {
+    if (this.#deviceId === deviceId) return;
+    this.#deviceId = deviceId;
+    this.#replaceItems(deviceId === undefined ? [] : this.#read(deviceId));
   }
 
   #replaceItems(items: MadeHereItem[]): void {
@@ -24,29 +29,25 @@ export class MakeNowController {
     this.#host.requestUpdate();
   }
 
-  #key(): string | null {
-    const deviceId = this.#deviceId();
-    return deviceId === undefined ? null : `waitron.makeNow.${deviceId}`;
+  #key(deviceId: string): string {
+    return `waitron.makeNow.${deviceId}`;
   }
 
-  #save(): void {
-    const key = this.#key();
-    if (key === null) return;
+  #save(deviceId: string, items: MadeHereItem[]): void {
+    const key = this.#key(deviceId);
     try {
-      if (this.#items.length === 0) localStorage.removeItem(key);
-      else localStorage.setItem(key, JSON.stringify(this.#items));
+      if (items.length === 0) localStorage.removeItem(key);
+      else localStorage.setItem(key, JSON.stringify(items));
     } catch {
       /* Site data may be blocked; the on-screen list remains in memory. */
     }
   }
 
-  restore(): void {
-    const key = this.#key();
-    if (key === null) return;
+  #read(deviceId: string): MadeHereItem[] {
     try {
-      const stored = localStorage.getItem(key);
+      const stored = localStorage.getItem(this.#key(deviceId));
       const parsed: unknown = stored === null ? [] : JSON.parse(stored);
-      if (!Array.isArray(parsed)) return;
+      if (!Array.isArray(parsed)) return [];
       const textMap = (value: unknown): value is Record<string, string> =>
         typeof value === "object" &&
         value !== null &&
@@ -68,7 +69,7 @@ export class MakeNowController {
         (value.labelCustomerName === null || textMap(value.labelCustomerName)) &&
         "labelKitchenName" in value &&
         (value.labelKitchenName === null || typeof value.labelKitchenName === "string");
-      const items = parsed.filter(
+      return parsed.filter(
         (item): item is MadeHereItem =>
           typeof item === "object" &&
           item !== null &&
@@ -97,26 +98,28 @@ export class MakeNowController {
           ) &&
           (item.note === null || typeof item.note === "string"),
       );
-      this.#replaceItems(items);
     } catch {
-      /* A blocked or corrupt store leaves the in-memory list available. */
+      return [];
     }
   }
 
-  readonly receive = (items: MadeHereItem[]): void => {
-    const seen = new Set(this.#items.map((item) => item.lineId));
+  readonly receive = (items: MadeHereItem[], deviceId: string): void => {
+    const visible = deviceId === this.#deviceId;
+    const existing = visible ? this.#items : this.#read(deviceId);
+    const seen = new Set(existing.map((item) => item.lineId));
     const added: MadeHereItem[] = [];
     for (const item of items) {
       if (seen.has(item.lineId)) continue;
       seen.add(item.lineId);
       added.push(item);
     }
-    this.#replaceItems([...this.#items, ...added]);
-    this.#save();
+    const updated = [...existing, ...added];
+    if (visible) this.#replaceItems(updated);
+    this.#save(deviceId, updated);
   };
 
   readonly dismiss = (): void => {
-    this.reset();
-    this.#save();
+    this.#replaceItems([]);
+    if (this.#deviceId !== undefined) this.#save(this.#deviceId, []);
   };
 }
