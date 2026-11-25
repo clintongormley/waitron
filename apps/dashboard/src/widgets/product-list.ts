@@ -605,28 +605,36 @@ export class ProductList extends LitElement {
   }
 
   protected override updated(changed: PropertyValues<this>): void {
-    if (changed.has("nameDraft") && this.nameDraft) void this.#focusNameBox();
+    if (changed.has("nameDraft") && this.nameDraft) void this.#revealNameBox(true);
+    else if (changed.has("nameError") && this.nameError) void this.#revealNameBox(false);
     if (this.loaded && !this.#emptyChecked) {
       this.#emptyChecked = true;
       if (this.products.length === 0 && this.categories.length === 0) void this.#openRootMenu();
     }
   }
 
-  async #focusNameBox(): Promise<void> {
+  async #revealNameBox(focus: boolean): Promise<void> {
     const draft = this.nameDraft;
     const table = this.#table();
     if (!draft || !table) return;
+    const nameBox = () =>
+      table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+        'wt-input[name="category-name"]',
+      );
     await table.updateComplete;
+    if (!focus) await nameBox()?.updateComplete;
+    if (this.nameDraft !== draft) return;
     await table.revealRow(draft.kind === "create" ? DRAFT_KEY : `folder:${draft.categoryId}`);
-    const box = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-      'wt-input[name="category-name"]',
-    );
+    const box = nameBox();
     if (!box) return;
     await box.updateComplete;
-    // Fitted first, or focus scrolls the table sideways to show the whole uncapped box.
+    if (this.nameDraft !== draft) return;
+    // Fit before focusing so the input does not scroll the table sideways.
     this.#fitNames();
-    box.focus();
-    box.select();
+    if (focus) {
+      box.focus();
+      box.select();
+    }
   }
 
   /** `show()` moves no focus, so the person's place on the page is kept. */

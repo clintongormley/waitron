@@ -1,5 +1,6 @@
 import { LeaveController, NavigationGuard } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
+import { dashboardQuery } from "../api/live-queries.js";
 import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
@@ -309,6 +310,14 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
   return api;
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 async function flush(el: ProductsScreen): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await el.updateComplete;
@@ -365,6 +374,195 @@ describe("menu-screen", () => {
     expect(list(el).products).toEqual(products);
     expect(list(el).courses).toEqual([oneCourse]);
     expect(el.shadowRoot!.querySelector('select[name="product-menu"]')).toBeNull();
+  });
+
+  it("shows loading until products answer, then shows the count for a genuinely empty list", async () => {
+    const pending = deferred<Product[]>();
+    const api = stubApi({
+      listProducts: vi.fn().mockReturnValue(pending.promise),
+      listCategories: vi.fn().mockResolvedValue([]),
+    });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    const table = await productTable(el);
+    const count = table.shadowRoot!.querySelector('[data-test="count-root"]')!;
+    await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledOnce());
+    expect(count.checkVisibility()).toBe(false);
+    expect(el.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim()).toBe(
+      t("products.loading"),
+    );
+    pending.resolve([]);
+    await vi.waitFor(() => expect(count.checkVisibility()).toBe(true));
+    expect(count.textContent?.trim()).toContain("0 products");
+  });
+
+  it.each(["listUnits", "listProducts"] as const)(
+    "offers Try again when the first %s read fails before the table is ready",
+    async (read) => {
+      const api = stubApi();
+      vi.mocked(api[read]).mockRejectedValueOnce({ code: "connection.failed" });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+      const table = await productTable(el);
+      const retry = () => el.shadowRoot!.querySelector<HTMLElement>('[data-test="products-retry"]');
+      await vi.waitFor(() => {
+        expect(retry()).not.toBeNull();
+        const alerts = el.shadowRoot!.querySelectorAll("[role=alert]");
+        expect(alerts).toHaveLength(1);
+        expect(alerts[0]!.textContent).toContain(codeMessage("connection.failed"));
+        expect(table.checkVisibility()).toBe(false);
+      });
+      expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
+      retry()!.click();
+      await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
+      expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
+      expect(api[read]).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("retries a failed languages read that the dashboard shell still observes", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const shell = api.liveData.observe(dashboardQuery(api, "getContentLanguages", []), () => {});
+    onTestFinished(() => shell.unsubscribe());
+    await vi.waitFor(() => expect(shell.snapshot.status).toBe("ready"));
+    vi.mocked(api.getContentLanguages).mockRejectedValueOnce({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(shell.snapshot.status).toBe("error"));
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await flush(el);
+    const table = await productTable(el);
+    expect(table.checkVisibility()).toBe(false);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="products-retry"]')!.click();
+    await vi.waitFor(() => expect(shell.snapshot.status).toBe("ready"));
+    await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
+    expect(api.getContentLanguages).toHaveBeenCalledTimes(3);
+  });
+
+  it("shows a library refresh failure that arrived while products were still pending", async () => {
+    const pending = deferred<Product[]>();
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    vi.mocked(api.listProducts).mockReturnValueOnce(pending.promise);
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    const table = await productTable(el);
+    await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledOnce());
+    vi.mocked(api.listUnits).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listUnits).toHaveBeenCalledTimes(2));
+    await flush(el);
+    pending.resolve(products);
+    await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      codeMessage("connection.failed"),
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="products-retry"]')).toBeNull();
+  });
+
+  it("keeps loaded rows and retries only a failed table read when a library is also down", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await flush(el);
+    const table = await productTable(el);
+    vi.mocked(api.listCategories).mockRejectedValue({ code: "category.invalid" });
+    vi.mocked(api.listUnits).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    const retry = () =>
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        '[data-test="products-retry"]',
+      );
+    await vi.waitFor(() => expect(retry()).not.toBeNull());
+    expect(table.checkVisibility()).toBe(true);
+    expect(table.shadowRoot!.querySelector('tr[data-row-key="folder:c1"]')?.textContent).toContain(
+      "Appetizers",
+    );
+    const pending = deferred<CategorySummary[]>();
+    vi.mocked(api.listCategories).mockReturnValueOnce(pending.promise);
+    retry()!.click();
+    retry()!.click();
+    await vi.waitFor(() => expect(api.listCategories).toHaveBeenCalledTimes(3));
+    pending.resolve(categories);
+    await vi.waitFor(() => expect(retry()).toBeNull());
+    expect(table.checkVisibility()).toBe(true);
+    expect(api.listProducts).toHaveBeenCalledTimes(2);
+    expect(api.listUnits).toHaveBeenCalledTimes(2);
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      codeMessage("connection.failed"),
+    );
+  });
+
+  it("keeps table focus on failed refresh and returns focus from a finished retry", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await flush(el);
+    const select = list(el).shadowRoot!.querySelector<HTMLElement>('[data-test="select"]')!;
+    select.focus();
+    expect(list(el).shadowRoot!.activeElement).toBe(select);
+    vi.mocked(api.listProducts).mockRejectedValueOnce({ code: "connection.failed" });
+    api.liveData.refresh();
+    const retry = () => el.shadowRoot!.querySelector<HTMLElement>('[data-test="products-retry"]');
+    await vi.waitFor(() => expect(retry()).not.toBeNull());
+    expect(list(el).shadowRoot!.activeElement).toBe(select);
+    retry()!.focus();
+    expect(el.shadowRoot!.activeElement).toBe(retry());
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(el.shadowRoot!.activeElement?.localName).toBe("h1"));
+  });
+
+  it.each(["listCategories", "listProducts"] as const)(
+    "opens the linked editor when a failed first %s read recovers on its own",
+    async (read) => {
+      const before = location.href;
+      onTestFinished(() => history.replaceState(null, "", before));
+      history.replaceState(null, "", "/products/product/p1");
+      const api = Object.assign(stubApi(), { liveData: new LiveData() });
+      vi.mocked(api[read]).mockRejectedValueOnce({ code: "connection.failed" });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+      const retry = () => el.shadowRoot!.querySelector('[data-test="products-retry"]');
+      await vi.waitFor(() => expect(retry()).not.toBeNull());
+      expect(editor(el).open).toBe(false);
+
+      api.liveData.refresh();
+      await vi.waitFor(() => expect(editor(el).open).toBe(true));
+      expect(editor(el).value?.id).toBe("p1");
+      expect((await productTable(el)).checkVisibility()).toBe(true);
+      expect(retry()).toBeNull();
+    },
+  );
+
+  it("reveals a deep-linked category when the list first becomes visible", async () => {
+    const before = location.href;
+    onTestFinished(() => history.replaceState(null, "", before));
+    history.replaceState(null, "", "/products/category/child");
+    const pending = deferred<Product[]>();
+    const api = stubApi({
+      listProducts: vi.fn().mockReturnValue(pending.promise),
+      listCategories: vi.fn().mockResolvedValue([
+        ...categories,
+        ...Array.from({ length: 20 }, (_, index) => ({
+          id: `earlier-${index}`,
+          name: `Earlier category ${index}`,
+          parentId: "c1",
+          color: null,
+        })),
+        { id: "child", name: "Zested dishes", parentId: "c1", color: null },
+      ]),
+    });
+    const { el, host } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    host.style.setProperty("--wt-table-max", "280px");
+    const table = await productTable(el);
+    await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledOnce());
+    expect(table.checkVisibility()).toBe(false);
+    await new Promise(requestAnimationFrame);
+    pending.resolve(products);
+    await vi.waitFor(() => {
+      const root = table.shadowRoot!;
+      const name = root.querySelector('tr[data-row-key="folder:child"] strong');
+      expect(name?.checkVisibility()).toBe(true);
+      expect(name!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        root.querySelector("thead th")!.getBoundingClientRect().bottom,
+      );
+      expect(name!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        root.querySelector(".scroll")!.getBoundingClientRect().bottom + 1,
+      );
+    });
+    expect(table.isExpanded("folder:child")).toBe(true);
   });
 
   it("shows a product's new takeaway rate when its rates change", async () => {

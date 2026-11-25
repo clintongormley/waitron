@@ -3704,6 +3704,36 @@ describe("the product list with sticky headings", () => {
     expect(hit !== null && name.contains(hit)).toBe(true);
   });
 
+  it("brings a refused name back below the headings and preserves the caret for retry", async () => {
+    const { el, root, scroll } = await mountBounded();
+    const sent: unknown[] = [];
+    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
+    el.nameDraft = { kind: "rename", categoryId: "d" };
+    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
+    await userEvent.keyboard("New name{ArrowLeft}{Enter}");
+    const box = root.querySelector('wt-input[name="category-name"]')!;
+    const input = box.shadowRoot!.querySelector("input")!;
+    const heading = root.querySelector("thead th")!;
+    scroll.scrollTop = scroll.scrollHeight;
+    await frame();
+    expect(input.getBoundingClientRect().bottom).toBeLessThan(
+      heading.getBoundingClientRect().bottom,
+    );
+    el.nameError = "That name is taken.";
+    await vi.waitFor(() => {
+      expect(input.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        heading.getBoundingClientRect().bottom,
+      );
+      expect(
+        box.shadowRoot!.querySelector("[data-error]")!.getBoundingClientRect().bottom,
+      ).toBeLessThanOrEqual(scroll.getBoundingClientRect().bottom);
+    });
+    expect(input.value).toBe("New name");
+    expect(input.selectionStart).toBe(7);
+    await userEvent.keyboard("{Enter}");
+    expect(sent).toEqual([{ name: "New name" }, { name: "New name" }]);
+  });
+
   it("reveals a product below the headings, not under them", async () => {
     const { el, root, scroll } = await mountBounded();
     scroll.scrollTop = scroll.scrollHeight;

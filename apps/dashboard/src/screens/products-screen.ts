@@ -1,5 +1,5 @@
 import type { MenuSettingsAnswer, ProductSaveBody } from "../api/client.js";
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
 import type { RoutingModel } from "@waitron/venue-service/routing";
@@ -52,6 +52,10 @@ import type { CourseList } from "../widgets/course-list.js";
 import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js";
 import { deleteExtraListWarning } from "../widgets/delete-extra-lists.js";
 import { refusalText } from "../widgets/delete-refusal.js";
+import {
+  productsListLoadFeedback,
+  restartSharedLanguagesRead,
+} from "./products-list-load-feedback.js";
 
 @customElement("dashboard-products-screen")
 export class ProductsScreen extends LitElement {
@@ -92,6 +96,10 @@ export class ProductsScreen extends LitElement {
   @state() private optionLists: OptionList[] = [];
   @state() private products: Product[] = [];
   @state() private productsLoaded = false;
+  @state() private initialLoadError: string | null = null;
+  @state() private productsReadError: string | null = null;
+  @state() private categoriesReadError: string | null = null;
+  @state() private retrying = false;
   @state() private routing: RoutingModel | null = null;
   @state() private routingFailed = false;
   @state() private courses: Course[] = [];
@@ -99,7 +107,7 @@ export class ProductsScreen extends LitElement {
   @state() private editorValue: ProductEditorValue | null = null;
   @state() private busy = false;
   @state() private errorKey: string | null = null;
-  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
+  /** A read's recovery clears only a read's error. */
   #readErrorShown = false;
   @state() private refusalParams: unknown = null;
   @state() private deletingProduct: { id: string; name: string; isVariant: boolean } | null = null;
@@ -158,16 +166,35 @@ export class ProductsScreen extends LitElement {
   /** The editor generation whose courses window is waiting on its saves to close. */
   #closingCourses: number | null = null;
 
+  #loading = false;
+  readonly #resumeInitialLoad = (): void => {
+    if (!this.productsLoaded && this.initialLoadError !== null) void this.#load();
+  };
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
     (error) => this.#showReadError(error),
     () => {
       if (this.#readErrorShown) this.#showError(null);
-      if (this.#loadFailed) void this.#load();
+      this.#resumeInitialLoad();
     },
   );
-  #loadFailed = false;
+  readonly #categoriesQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.categoriesReadError = codeOf(error);
+    },
+    this.#resumeInitialLoad,
+  );
+  readonly #productsQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => {
+      this.productsReadError = codeOf(error);
+    },
+    () => void this.#openLinkedProduct(),
+  );
   readonly #routingQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -233,7 +260,8 @@ export class ProductsScreen extends LitElement {
   }
 
   async #load(): Promise<void> {
-    this.#loadFailed = false;
+    if (this.#loading) return;
+    this.#loading = true;
     try {
       await Promise.all([
         this.#queries.watch("getMenuSettings", [], (value) => {
@@ -243,9 +271,7 @@ export class ProductsScreen extends LitElement {
           this.contentLanguages = value;
           setContentLanguages(value);
         }),
-        this.#queries.watch("listCategories", [], (value) => {
-          this.categories = value;
-        }),
+        this.#watchCategories(),
         this.#routingQueries
           .watch("getFolderRouting", [], (value) => {
             this.routing = value;
@@ -268,10 +294,42 @@ export class ProductsScreen extends LitElement {
         }),
       ]);
       await this.#reloadProducts();
-      this.productsLoaded = true;
+      this.initialLoadError = null;
     } catch (error) {
-      this.#loadFailed = true;
-      this.#showReadError(error);
+      if (!this.productsLoaded) this.initialLoadError = codeOf(error);
+    } finally {
+      this.#loading = false;
+    }
+  }
+
+  #watchCategories(): Promise<void> {
+    return this.#categoriesQueries.watch("listCategories", [], (value) => {
+      this.categories = value;
+    });
+  }
+
+  #tableReadError(): string | null {
+    if (this.#productsQueries.failing("listProducts")) return this.productsReadError;
+    if (this.#categoriesQueries.failing("listCategories")) return this.categoriesReadError;
+    return this.productsLoaded ? null : this.initialLoadError;
+  }
+
+  async #retryTable(): Promise<void> {
+    if (this.retrying) return;
+    this.retrying = true;
+    try {
+      if (!this.productsLoaded) {
+        if (this.#queries.failing("getContentLanguages"))
+          await restartSharedLanguagesRead(this.api);
+        await this.#load();
+      } else {
+        await Promise.allSettled([
+          this.#productsQueries.failing("listProducts") && this.#reloadProducts(),
+          this.#categoriesQueries.failing("listCategories") && this.#watchCategories(),
+        ]);
+      }
+    } finally {
+      this.retrying = false;
     }
   }
 
@@ -286,11 +344,17 @@ export class ProductsScreen extends LitElement {
     if (this.errorKey === null || this.#readErrorShown) this.#showError(codeOf(error), true);
   }
 
-  async #reloadProducts(): Promise<void> {
-    await this.#queries.watch("listProducts", [], (products) => {
-      this.products = products;
-    });
+  async #reloadProducts(): Promise<boolean> {
+    try {
+      await this.#productsQueries.watch("listProducts", [], (products) => {
+        this.products = products;
+        this.productsLoaded = true;
+      });
+    } catch {
+      return false;
+    }
     await this.#openLinkedProduct();
+    return true;
   }
 
   /** Drops everything that belonged to the editor's previous product — a half-finished nested
@@ -412,13 +476,8 @@ export class ProductsScreen extends LitElement {
       return;
     }
     this.#closeDelete();
-    try {
-      await this.#reloadProducts();
-    } catch (error) {
-      this.#showReadError(error);
-    } finally {
-      this.busy = false;
-    }
+    await this.#reloadProducts();
+    this.busy = false;
   }
 
   #closeEditor(writeUrl = true): void {
@@ -450,8 +509,8 @@ export class ProductsScreen extends LitElement {
       this.#editor()?.closeSaved(event.detail.value);
       this.#closeEditor();
       if (created) void this.#openPlacement(created);
-      await this.#reloadProducts();
-      if (created) {
+      const refreshed = await this.#reloadProducts();
+      if (created && refreshed) {
         await this.updateComplete;
         await this.#browser()?.revealProduct(created.id);
       }
@@ -675,15 +734,32 @@ export class ProductsScreen extends LitElement {
     this.#child.cancel();
   }
 
+  override update(changed: PropertyValues): void {
+    const leavingRetry =
+      this.shadowRoot?.activeElement?.matches('[data-test="products-retry"]') &&
+      this.#tableReadError() === null;
+    super.update(changed);
+    if (leavingRetry) this.renderRoot.querySelector("h1")?.focus();
+  }
+
   override render() {
+    const readError = this.#tableReadError();
+    const tableHidden = !this.productsLoaded;
     const locales = this.contentLanguages?.languages ?? [];
     const refusals = this.#childRefusalErrors();
-    const errorText = this.errorKey ? refusalText(this.errorKey, this.refusalParams) : "";
+    const error = this.productsLoaded || !this.#readErrorShown ? this.errorKey : null;
+    const errorText = error ? refusalText(error, this.refusalParams) : "";
     return html`
       <div class="header">
-        <h1>${t("nav.products")}</h1>
+        <h1 tabindex="-1">${t("nav.products")}</h1>
       </div>
+      ${
+        tableHidden || readError !== null
+          ? productsListLoadFeedback(readError, this.retrying, () => void this.#retryTable())
+          : nothing
+      }
       <dashboard-product-browser
+        .tableHidden=${tableHidden}
         .api=${this.api}
         .categoryId=${this.categoryId}
         @open-category=${(event: CustomEvent<{ categoryId: string | null }>) => {
@@ -716,7 +792,7 @@ export class ProductsScreen extends LitElement {
           this.#openDelete(event.detail.productId);
         }}
       ></dashboard-product-browser>
-      ${this.errorKey ? html`<p class="error" role="alert">${errorText}</p>` : nothing}
+      ${errorText ? html`<p class="error" role="alert">${errorText}</p>` : nothing}
       <dashboard-product-editor
         @wt-close=${() => {
           if (!this.editorOpen && this.placing === null) this.#refocusAdd();
