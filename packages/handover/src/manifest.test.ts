@@ -7,7 +7,7 @@ describe("the node-local manifest", () => {
     expect(new Set(items).size).toBe(items.length);
   });
 
-  it("places and classes the original rows as the plan's table decides", () => {
+  it("reports the listed items in their agreed locations and classes", () => {
     const decisions = [
       "box|node.db|destination-owned",
       "node_pair_link|node.db|destination-owned",
@@ -33,6 +33,8 @@ describe("the node-local manifest", () => {
       "settings:modules|venue.db|transferred",
       "module-records/<module>.json#prepared|state|transferred",
       "module-records/<module>.json#retained|state|source-only",
+      "replaced-reset.json|state|destination-owned",
+      "identity-change.json|state|destination-owned",
       ".venue.db-litestream/|venue-folder|rebuildable",
     ];
     const actual = NODE_LOCAL_MANIFEST.map((row) => `${row.item}|${row.where}|${row.class}`);
