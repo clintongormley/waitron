@@ -18,8 +18,9 @@ import "@waitron/ui/src/components/wt-switch.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { trackDialog } from "./track-dialog.js";
 import { giveBackStyles } from "./give-back-styles.js";
+import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { currentLocale, t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, giveBackReasonMessage } from "../i18n/codes.js";
 import type { AdjustmentReason, StaffMember, TillApi } from "../api/client.js";
 import type {
   GiveBackAsk,
@@ -113,7 +114,7 @@ const startOf = (line: GiveBackLine) =>
 
 @customElement("till-give-back-dialog")
 export class TillGiveBackDialog extends LitElement {
-  static override styles = [baseStyles, giveBackStyles];
+  static override styles = [baseStyles, giveBackStyles, helpAnchorStyles];
   @property({ attribute: false }) api!: GiveBackApi;
   /** Saves each press before sending it. */
   @property({ attribute: false }) session!: GiveBackSession;
@@ -224,7 +225,7 @@ export class TillGiveBackDialog extends LitElement {
     return formatMoney(value, currentLocale());
   }
   #reasonText(reason: GiveBackWaitReason): string {
-    return codeMessage(reason.code, currentLocale(), reason.params);
+    return giveBackReasonMessage(reason.code, currentLocale(), reason.params);
   }
   /** The payments this purpose can give back from: those holding money, or for the extra, an extra. */
   #offered(purpose: GiveBackPurpose): GiveBackWay[] {
@@ -937,7 +938,11 @@ export class TillGiveBackDialog extends LitElement {
           @keydown=${(event: KeyboardEvent) =>
             submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-submit]"))}
         >
-          <p class="muted">${this.invoiceNumber}</p>
+          <p class="muted help-anchor">
+            ${this.invoiceNumber}${helpBadge("help.give_money_back", t("give_back.title"), {
+              guide: "table-service.correct-invoice",
+            })}
+          </p>
           ${this.#body()}
         </div> </wt-dialog
       >${

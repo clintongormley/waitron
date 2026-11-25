@@ -53,6 +53,12 @@ interface Terminal {
   attempted: boolean;
 }
 const PIN_REFUSALS = new Set(["pin.invalid", "pin.throttled", "authorization.not_permitted"]);
+/** Refusals saying the shown correction is out of date: it is read again, so the right step shows. */
+const REREAD_AFTER = new Set([
+  "invoice_correction.split_changed",
+  "invoice_correction.still_correctable",
+  "invoice_correction.nothing_back",
+]);
 const positive = (value: string) => compareDecimal(decimal(value), decimal("0")) > 0;
 const least = (a: string, b: string) => (compareDecimal(decimal(a), decimal(b)) < 0 ? a : b);
 
@@ -214,7 +220,7 @@ export class TillGiveBackUnderWay extends LitElement {
       return;
     }
     this.message = codeMessage(refusal.code, currentLocale(), refusal);
-    if (refusal.code === "invoice_correction.split_changed") await this.#refreshAfter();
+    if (REREAD_AFTER.has(refusal.code)) await this.#refreshAfter();
   }
   async #askApprover(right: GiveBackRight): Promise<void> {
     this.#override = undefined;

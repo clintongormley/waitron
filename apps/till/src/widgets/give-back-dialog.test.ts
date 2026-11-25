@@ -4,6 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { es } from "../i18n/strings.js";
+import { guideHref } from "../help-guide.js";
 import { formatMoney } from "@waitron/shared";
 import type {
   GiveBackPreview,
@@ -135,12 +136,38 @@ describe("the choice", () => {
     expect(goodwill.tagName).not.toBe("WT-CHOICE-ROW");
     expect(goodwill.getAttribute("aria-disabled")).toBe("true");
     expect(text(root(el).querySelector("[data-choice-reason=goodwill]"))).toBe(
-      codeMessage(refused.code, "en", refused.params),
+      "The tax agency refused this receipt, so money for dishes or goodwill cannot go back until the receipt is fixed in Fiscal filing, on the dashboard. Money owed for cancelled dishes and the extra paid on top can still go back.",
     );
     await choose(el, "goodwill");
     expect(root(el).querySelector("[data-purpose]")).toBeNull();
     await choose(el, "extra");
     expect(text(root(el).querySelector("[data-purpose]"))).toBe("Extra paid on top of the bill");
+  });
+
+  it("says on a dish line held by a refused receipt what can still go back", async () => {
+    const refused = { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } };
+    const { el } = await mount(
+      withView({
+        lines: VIEW.lines.map((line) =>
+          line.id === "croquetas" ? { ...line, available: false, reason: refused } : line,
+        ),
+      }),
+    );
+    await choose(el, "dishes");
+    expect(text(root(el).querySelector("[data-line-reason=croquetas]"))).toBe(
+      "The tax agency refused this receipt, so money for dishes or goodwill cannot go back until the receipt is fixed in Fiscal filing, on the dashboard. Money owed for cancelled dishes and the extra paid on top can still go back.",
+    );
+  });
+
+  it("carries a help-mode badge saying what the window does, linked to its guide section", async () => {
+    const { el } = await mount();
+    const badge = root(el).querySelector("wt-help-tooltip")!;
+    expect(badge.getAttribute("mode")).toBe("help-mode");
+    expect(badge.getAttribute("aria-label")).toBe("Help: Give money back");
+    expect(text(badge)).toBe(
+      "Give money back to a guest: for a dish, as goodwill, or the extra paid on top. Waitron records it the right way.",
+    );
+    expect(badge.getAttribute("guide-href")).toBe(guideHref("table-service.correct-invoice"));
   });
 
   it("shows a choice with nothing to give back quiet, with no line", async () => {

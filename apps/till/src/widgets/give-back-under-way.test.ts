@@ -338,6 +338,34 @@ describe("ending it", () => {
     expect(bottom(el)).toBe(codeMessage("invoice_correction.split_changed"));
   });
 
+  it("reads the correction again when Cancel is refused because money went back, drawing Stop here", async () => {
+    const api = fakeApi();
+    api.getInvoiceCorrection.mockResolvedValue(FILING);
+    api.closeInvoiceCorrection.mockRejectedValueOnce(
+      refused("invoice_correction.still_correctable"),
+    );
+    const { el } = await mount(OPEN, api);
+
+    press(el, "cancel");
+    await vi.waitFor(() => expect(shown(el, "stop")).toBe(true));
+    expect(shown(el, "cancel")).toBe(false);
+    expect(bottom(el)).toBe(
+      "Money has gone back and it can still be recorded. Press Finish or Stop here.",
+    );
+  });
+
+  it("reads the correction again when Stop here is refused because nothing went back, drawing Cancel this money back", async () => {
+    const api = fakeApi();
+    api.getInvoiceCorrection.mockResolvedValue(OPEN);
+    api.fileInvoiceCorrection.mockRejectedValueOnce(refused("invoice_correction.nothing_back"));
+    const { el } = await mount(FILING, api);
+
+    press(el, "stop");
+    await vi.waitFor(() => expect(shown(el, "cancel")).toBe(true));
+    expect(shown(el, "stop")).toBe(false);
+    expect(bottom(el)).toBe(codeMessage("invoice_correction.nothing_back"));
+  });
+
   it("says a lost filing answer needs checking, not that the same request goes again", async () => {
     const api = fakeApi();
     api.fileInvoiceCorrection.mockRejectedValueOnce(lost());
