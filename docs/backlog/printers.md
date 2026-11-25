@@ -205,9 +205,9 @@ every unpaired device from the list).
 
 The spare printed a payment slip and receipt through its print agent on 25 November. The
 session measured channel discovery at 3.24–3.34 seconds against that build's three-second limit.
-A1578 still needs a print using the discovered channel and a comparison of the same long receipt
-with immediate and delayed socket close. The helper's 20-second connect and send timeouts and the
-agent's five-second grace also await a box measurement.
+The [A1578 plan](../superpowers/plans/2026-11-25-a1578-bluetooth-printing.md) lists the remaining
+print measurements. The helper's 20-second connect and send timeouts and the agent's five-second
+grace also await a box measurement.
 
 ## The owner's Bluetooth printer was listed only under Show all devices (A137) — the cause on the box is not confirmed
 
@@ -378,15 +378,18 @@ Hardware and inbox checks to complete in the owner session.
   and once joined the page answers only its own machine. Revisit only if the page ever asks for a
   password.
 - **Bluetooth command limits (watcher, 2026-11-16 03:02).** One pending operation per agent;
-  exact retries keep their ID and deadline. The agent gives channel discovery five seconds and
-  remembers the channel after a successful send, including channel 1 after a failed lookup. Success
-  means the kernel accepted the bytes. If paper never comes out, the agent still keeps the channel
-  until a send fails or the agent restarts. The server remembers only the last eight expired unpair
+  exact retries keep their ID and deadline. The server remembers only the last eight expired unpair
   command IDs across all agents, until accepted or evicted. A late result can clear the discovery
   pairing report while that command is remembered.
   **Delete** ends waiting jobs immediately. If a printer was unpaired outside Waitron, delete
   it to end its waiting jobs.
   [Plan](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-bluetooth-pairing-commands.md).
+
+- **Bluetooth print channels (A1578, 2026-11-25).** The agent gives channel discovery five seconds
+  and remembers the channel after a successful send, including channel 1 after a failed lookup.
+  Success means the kernel accepted the bytes. If paper never comes out, the agent still keeps the
+  channel until a send fails or the agent restarts.
+  [Plan](../superpowers/plans/2026-11-25-a1578-bluetooth-printing.md).
 
 - **Print jobs keep their rows; finished or abandoned jobs release their bytes after one week**
   (owner, 2026-11-14 17:02, “a week is fine”; watcher cleared all printouts at 17:37 and the

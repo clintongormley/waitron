@@ -311,6 +311,7 @@ describe("RfcommTransport", () => {
     const bytes = new Uint8Array([0x41]);
     process.env.WT_SDP_RESPONSE = "Channel: 7";
     await transport.send(target(), bytes);
+    await rm(join(out, "pid"));
     process.env.WT_RFCOMM_HANG = "1";
     const started = Date.now();
     await expect(transport.send(target(), bytes)).rejects.toThrow(

@@ -769,7 +769,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **Measure one-job print pulls on the box.** Physical throughput, authentication and large retained queues remain unmeasured. [Detail](backlog/printers.md#measure-one-job-print-pulls-on-the-box)
 
-- **A1578. Measure the remaining Bluetooth print delay on the spare.** Compare slips and receipts on both builds, from queue to visible paper and to the agent's result, on the first print and at about 5, 30 and 60 seconds. Compare immediate and delayed close on a long receipt. Use the timings to decide whether to keep connections open or connect during discovery or payment. [Plan](superpowers/plans/2026-11-25-a1578-bluetooth-printing.md)
+- **A1578. Measure the remaining Bluetooth print delay on the spare.** Compare both builds, including cold connects with and without a channel lookup. Use the timings and paper checks to decide whether to keep connections open or connect early when a device picks up a Bluetooth printer or opens Pay. [Plan](superpowers/plans/2026-11-25-a1578-bluetooth-printing.md)
 
 - **Waitron carries two QR encoders; consolidate on `qrcode-generator`** — Small.
   [Detail](backlog/printers.md#waitron-carries-two-qr-encoders-consolidate-on-qrcode-generator)
