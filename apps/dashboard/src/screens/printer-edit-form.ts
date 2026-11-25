@@ -1,6 +1,6 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import { encodePathSegment, leftToBrowser } from "@waitron/ui";
-import type { Printer } from "../api/client.js";
+import type { Printer } from "../api/printing-api.js";
 import { t } from "../i18n/t.js";
 
 export type ReceiptPrinterSettings = Pick<
