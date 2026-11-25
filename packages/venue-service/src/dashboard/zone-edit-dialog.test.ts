@@ -54,10 +54,11 @@ it("leaves room above and below the Zone editor on a tall desktop", async () => 
   const oldHeight = window.innerHeight;
   try {
     await page.viewport(1280, 900);
-    const { el, modal } = await mountZoneEditor();
-    const dialog = modal.shadowRoot!.querySelector("dialog")!.getBoundingClientRect();
-    expect(dialog.height).toBeLessThan(600);
-    expect(zoneSave(el).getBoundingClientRect().bottom).toBeLessThan(dialog.bottom);
+    const { modal } = await mountZoneEditor();
+    const dialog = modal.shadowRoot!.querySelector("dialog")!;
+    const body = modal.shadowRoot!.querySelector('[part="body"]')!;
+    expect(dialog.getBoundingClientRect().height).toBeLessThan(600);
+    expect(body.scrollHeight).toBeLessThanOrEqual(body.clientHeight);
   } finally {
     await page.viewport(oldWidth, oldHeight);
   }
