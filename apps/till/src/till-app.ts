@@ -7185,7 +7185,7 @@ export class TillApp extends LitElement {
     this.#markDraft("zone");
   }
 
-  #refreshDraftDeclarations(products: readonly TillProduct[]): void {
+  #refreshDraftDeclarations(products?: readonly TillProduct[]): void {
     const sync = this.#draftSync;
     sync?.store.refreshDeclarations(products, this.#tableSetMenuLookup(sync.billId));
   }
@@ -15186,7 +15186,7 @@ export class TillApp extends LitElement {
         this.#syncDraftBillStatus();
         if (this.#draftSync?.store.lines.some((line) => line.setMenuId !== undefined)) {
           this.#reshowDraftOffers();
-          this.#refreshDraftDeclarations([]);
+          this.#refreshDraftDeclarations();
           this.#markDraft("bill");
         }
         answer.balance = this.#loadBillBalance(balance);

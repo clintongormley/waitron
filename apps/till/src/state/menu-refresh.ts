@@ -317,19 +317,15 @@ function partsRepriced(line: OrderLine, adopted: OrderLine, lineNo: number): Cha
 }
 
 /**
- * `product` with the declarations of the one of `liveProducts` that is its own menu item. Never
- * those of another menu's offer of the same product, whose published allergens can differ: a
- * dish, variant or extra that its own menu item does not hold keeps what it says.
+ * `product` with the declarations of `live`, its own menu item as offered now. Never those of another
+ * menu's offer of the same product, whose published allergens can differ: a dish, variant or extra
+ * that its own menu item does not hold keeps what it says.
  */
 export function refreshProductDeclarations(
   product: TillProduct,
-  liveProducts: readonly TillProduct[],
+  live: TillProduct | undefined,
 ): TillProduct {
-  const live = liveProducts.find(
-    (candidate) =>
-      candidate.menuItemId !== undefined && candidate.menuItemId === product.menuItemId,
-  );
-  if (live === undefined) return product;
+  if (live?.menuItemId === undefined || live.menuItemId !== product.menuItemId) return product;
   const own =
     product.variantId === undefined || product.variantId === live.variantId
       ? live

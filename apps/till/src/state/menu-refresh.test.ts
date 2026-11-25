@@ -8,7 +8,7 @@ import {
   refreshProductDeclarations,
 } from "./menu-refresh.js";
 import { menuOfferToTillProduct, type TillMenuOffer, type TillProduct } from "../api/client.js";
-import type { OrderLine } from "./working-order.js";
+import { WorkingOrderStore, type OrderLine } from "./working-order.js";
 
 type LiveModifier = TillMenuOffer["offeredModifiers"][number];
 type LiveVariant = TillMenuOffer["variants"][number];
@@ -1074,7 +1074,7 @@ describe("refreshProductDeclarations", () => {
       },
       "v2",
     );
-    const next = refreshProductDeclarations(chosen, [live]);
+    const next = refreshProductDeclarations(chosen, live);
     expect(next).toEqual({
       ...chosen,
       allergens: { eggs: {} },
@@ -1131,12 +1131,12 @@ describe("refreshProductDeclarations", () => {
       { ...burger, id: "another-offer", menuId: "dinner", allergens: { fish: {} } },
       "v2",
     );
-    const next = refreshProductDeclarations(before, [otherMenu, own]);
+    const next = refreshProductDeclarations(before, own);
     expect(next.allergens).toBeNull();
     expect(next.dietaryDeclarations).toEqual([]);
     expect(next.menuItemId).toBe("offer-burger");
-    expect(refreshProductDeclarations(before, [otherMenu])).toBe(before);
-    expect(refreshProductDeclarations(before, [])).toBe(before);
+    expect(refreshProductDeclarations(before, otherMenu)).toBe(before);
+    expect(refreshProductDeclarations(before, undefined)).toBe(before);
   });
 
   it("keeps a variant's declarations when its offer no longer holds that variant", () => {
@@ -1147,7 +1147,7 @@ describe("refreshProductDeclarations", () => {
       allergens: { fish: {} },
     };
     const live = menuOfferToTillProduct({ ...dish, variants: [variant("large", "9.00")] }, "v2");
-    expect(refreshProductDeclarations(before, [live]).allergens).toEqual({ fish: {} });
+    expect(refreshProductDeclarations(before, live).allergens).toEqual({ fish: {} });
   });
 
   it("refreshes an extra offered by two lists from the item of its own list", () => {
@@ -1186,13 +1186,13 @@ describe("refreshProductDeclarations", () => {
       ["sides", { sesame: {} }],
     ];
     expect(
-      shown(refreshProductDeclarations(before, [listing({ fish: {} }, { sesame: {} })])),
+      shown(refreshProductDeclarations(before, listing({ fish: {} }, { sesame: {} }))),
     ).toEqual([both, both]);
     const dropped = [
       ["toppings", { fish: {} }],
       ["sides", { eggs: {} }],
     ];
-    expect(shown(refreshProductDeclarations(before, [listing({ fish: {} }, undefined)]))).toEqual([
+    expect(shown(refreshProductDeclarations(before, listing({ fish: {} }, undefined)))).toEqual([
       dropped,
       dropped,
     ]);
@@ -1215,8 +1215,29 @@ it.each([false, true])(
       },
       "v1",
     );
-    const next = refreshProductDeclarations(before, reverse ? [current, other] : [other, current]);
-    const list = next.offeredModifiers![0]!;
+    const store = new WorkingOrderStore();
+    store.addProduct(before, "1");
+    store.refreshDeclarations(reverse ? [current, other] : [other, current]);
+    const list = store.lines[0]!.product.offeredModifiers![0]!;
     expect(list.kind === "extras" && list.items[0]!.addAllergens).toEqual({ milk: {} });
   },
 );
+
+it("refreshes a line from the first product of its menu item, and one with no menu item from none", () => {
+  const dish = menuOfferToTillProduct(burger, "v1");
+  const unnamed = { ...dish, id: "unnamed", menuItemId: undefined };
+  const store = new WorkingOrderStore();
+  store.addProduct(dish, "1");
+  store.addProduct(unnamed, "1");
+
+  store.refreshDeclarations([
+    { ...unnamed, allergens: { fish: {} } },
+    { ...dish, allergens: { milk: {} } },
+    { ...dish, allergens: { eggs: {} } },
+  ]);
+
+  expect(store.lines.map(({ product }) => product.allergens)).toEqual([{ milk: {} }, null]);
+  expect(refreshProductDeclarations(unnamed, { ...unnamed, allergens: { fish: {} } })).toBe(
+    unnamed,
+  );
+});

@@ -417,7 +417,7 @@ export interface TillProduct {
   menuName?: string;
   /**
    * The ordered extras and options lists this dish offers, in the product's own attachment order. The
-   * basket resolves a pick's allergens and dietary labels off it BY PRODUCT ID.
+   * basket resolves a pick's allergens and dietary labels off it by list and product id.
    *
    * Absent on a product synthesised from a retrieved held line, so a surface reading this treats absent
    * as "offers nothing" rather than "not loaded yet".

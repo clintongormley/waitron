@@ -886,21 +886,23 @@ export class WorkingOrderStore {
 
   /** A set-menu line follows its own copy, found by `setMenuOffer`, and never `products`. */
   refreshDeclarations(
-    products: readonly TillProduct[],
+    products: readonly TillProduct[] = [],
     setMenuOffer?: SetMenuOfferLookup,
     keep: ReadonlySet<string> = new Set(),
   ): void {
+    const byMenuItem = new Map<string, TillProduct>();
+    for (const product of products)
+      if (product.menuItemId !== undefined && !byMenuItem.has(product.menuItemId))
+        byMenuItem.set(product.menuItemId, product);
+    const liveOf = (line: OrderLine): TillProduct | undefined => {
+      if (line.setMenuId === undefined) return byMenuItem.get(line.product.menuItemId ?? "");
+      const copied = lookupSetMenuLine(line, setMenuOffer);
+      return copied && menuOfferToTillProduct(copied.offer, copied.versionId);
+    };
     let changed = false;
     for (const line of this.#lines) {
       if (line.workingOrderLineId !== undefined && keep.has(line.workingOrderLineId)) continue;
-      const copied = lookupSetMenuLine(line, setMenuOffer);
-      const live =
-        line.setMenuId === undefined
-          ? products
-          : copied === undefined
-            ? []
-            : [menuOfferToTillProduct(copied.offer, copied.versionId)];
-      const product = refreshProductDeclarations(line.product, live);
+      const product = refreshProductDeclarations(line.product, liveOf(line));
       if (product === line.product) continue;
       line.product = product;
       changed = true;

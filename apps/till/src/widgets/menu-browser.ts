@@ -606,11 +606,15 @@ export class TillMenuBrowser extends LitElement {
       return;
     }
     if (this.infoProduct) this.infoProduct = this.#currentInfoOffer(this.infoProduct);
-    if (this.pickerProduct && this.#pickerSetMenu === undefined)
-      this.pickerProduct = refreshProductDeclarations(this.pickerProduct, [
-        ...(this.unfilteredProducts ?? this.products),
-        ...(this.unfilteredServedProducts ?? this.servedProducts),
-      ]);
+    if (this.pickerProduct && this.#pickerSetMenu === undefined) {
+      const { menuItemId } = this.pickerProduct;
+      const own = (product: TillProduct) => product.menuItemId === menuItemId;
+      this.pickerProduct = refreshProductDeclarations(
+        this.pickerProduct,
+        (this.unfilteredProducts ?? this.products).find(own) ??
+          (this.unfilteredServedProducts ?? this.servedProducts).find(own),
+      );
+    }
     if (this.menu === undefined) return;
     const pending = this.#pendingSection;
     if (pending !== undefined) {
