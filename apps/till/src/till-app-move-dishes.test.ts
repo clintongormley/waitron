@@ -759,6 +759,7 @@ describe("A803 move dishes app:", () => {
     expect(
       picker.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="line-1"]')!.disabled,
     ).toBe(true);
+    expect(picker.rows[0]!.blocked).toEqual({ reason: "floor", kept: "3.00" });
     expect(api.moveDishes).not.toHaveBeenCalled();
   });
 

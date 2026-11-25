@@ -2448,6 +2448,7 @@ describe("A803 split: a read and a selected bill", () => {
     await pickDish(el, "b1", "soup");
     el.splitRead = withoutSalad();
     await settled(el);
+    expect([...ticked(el).picks.get("b1")!]).toEqual(["soup"]);
     el.splitRead = withoutBills("b1");
     await settled(el);
 

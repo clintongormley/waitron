@@ -203,12 +203,7 @@ export class TillPortionPicker extends LitElement {
     const count = this.whole ? row.members.length : pickedCount(row, this.picks);
     const stepped = row.counted && count > 0 && !this.whole;
     const off = row.blocked !== null && (count === 0 || this.whole);
-    const look =
-      row.blocked?.reason === "presented" || (this.whole && off)
-        ? "pale"
-        : this.whole
-          ? "quiet"
-          : "";
+    const look = row.blocked?.reason === "presented" ? "pale" : this.whole ? "quiet" : "";
     const dish = this.#what(row.members[0]!);
     const extras = row.extras.map((extra) => this.#what(extra));
     const name = [dish, ...extras].join(", ");

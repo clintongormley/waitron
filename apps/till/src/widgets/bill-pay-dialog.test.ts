@@ -620,6 +620,70 @@ describe("till-bill-pay-dialog: confirming cash", () => {
     expect(button(el, "[data-pay-confirm]").disabled).toBe(false);
   });
 
+  async function contributed() {
+    const el = await mount({ way: "contribution", amount: "35.00" });
+    await type(el, "tendered", "50");
+    const first = await previewed(el, cashPreview("35.00", "15.00"));
+    return { el, first };
+  }
+
+  /** 10.00 of change, with 5.00 of it already shown as the tip. */
+  async function tipShown() {
+    const { el, first } = await contributed();
+    const asked = capture<PayRequest>(el, "bill-pay-preview");
+    await pick(el, "leaveTip", "part");
+    await type(el, "tipAmount", "5");
+    await click(el, "[data-pay-confirm]");
+    el.asked = asked[0]!;
+    el.preview = cashPreview("35.00", "10.00", "5.00");
+    await el.updateComplete;
+    asked.length = 0;
+    return { el, first, asked };
+  }
+
+  it("refuses a tip of nothing beside the tip, and holds the payment", async () => {
+    const { el } = await contributed();
+    const asked = capture(el, "bill-pay-preview");
+    const confirmed = capture(el, "bill-pay-confirm");
+
+    await pick(el, "leaveTip", "part");
+    await type(el, "tipAmount", "0");
+    await click(el, "[data-pay-confirm]");
+
+    expect(field(el, "tipAmount")!.error).toBe(
+      t("bill_pay.tip_amount_invalid").replace("{amount}", money("15.00")),
+    );
+    expect(button(el, "[data-pay-confirm]").disabled).toBe(true);
+    expect(asked).toEqual([]);
+    expect(confirmed).toEqual([]);
+  });
+
+  it("with a tip already shown, part takes up to the change and that tip together", async () => {
+    const { el, first, asked } = await tipShown();
+
+    await type(el, "tipAmount", "15");
+    await click(el, "[data-pay-confirm]");
+    expect(asked).toEqual([{ ...first, pay: { method: "cash", tendered: "50", addedTip: "15" } }]);
+
+    await type(el, "tipAmount", "15.01");
+    expect(field(el, "tipAmount")!.error).toBe(
+      t("bill_pay.tip_amount_invalid").replace("{amount}", money("15.00")),
+    );
+    expect(button(el, "[data-pay-confirm]").disabled).toBe(true);
+    await click(el, "[data-pay-confirm]");
+    expect(asked).toHaveLength(1);
+  });
+
+  it("with a tip already shown, all of the change asks for the change and that tip together", async () => {
+    const { el, first, asked } = await tipShown();
+
+    await pick(el, "leaveTip", "all");
+
+    expect(asked).toEqual([
+      { ...first, pay: { method: "cash", tendered: "50", addedTip: "15.00" } },
+    ]);
+  });
+
   it("takes the payment it showed", async () => {
     const el = await mount();
     await toConfirm(el, cashPreview("35.00", "15.00"));

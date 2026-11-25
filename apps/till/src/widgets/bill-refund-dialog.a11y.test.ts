@@ -85,6 +85,14 @@ describe.each(["light", "dark"] as const)("till-bill-refund-dialog a11y (%s them
     await expectNoA11yViolations(host);
   });
 
+  it("has no violations giving a contribution back, with a refusal above the action", async () => {
+    const { host } = await mount({
+      payment: { ...card, method: "cash", tip: "0.00" },
+      refusal: { code: "bill.refund_in_progress" },
+    });
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations asking to give a card back on its terminal, while it is sent", async () => {
     const { host } = await mount({ terminal: true, busy: true });
     await expectNoA11yViolations(host);

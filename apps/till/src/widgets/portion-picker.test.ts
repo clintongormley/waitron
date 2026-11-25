@@ -621,6 +621,7 @@ describe("till-portion-picker whole", () => {
     await el.updateComplete;
     expect(tick(el, "c1").checked).toBe(true);
     expect(tick(el, "c1").disabled).toBe(true);
+    expect(getComputedStyle(q(el, '[data-pick-row="c1"] .name')!).opacity).toBe("0.5");
   });
 
   it("outside a whole bill a row is not pale", async () => {
