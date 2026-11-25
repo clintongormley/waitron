@@ -517,8 +517,7 @@ function menuHome(): MenuHome {
       tile("t-drinks", 1, { kind: "section", sectionId: "s-drinks" }, "Drinks"),
       tile("t-chips", 2, { kind: "product", productId: "p-chips" }, "Chips"),
     ],
-    handheld: { columns: 3, tiles: "colours", order: "home_first" },
-    till: { columns: 6, tiles: "colours", order: "home_first" },
+    order: "home_first",
   };
 }
 
@@ -9606,13 +9605,12 @@ describe("publishing", () => {
         },
       },
       {
-        id: "home-columns",
+        id: "home-order",
         kind: "home_display_changed",
-        device: "handheld",
         source: "this_menu",
         targets: {
-          before: [{ kind: "home", device: "handheld", field: "columns" }],
-          after: [{ kind: "home", device: "handheld", field: "columns" }],
+          before: [{ kind: "home", field: "order" }],
+          after: [{ kind: "home", field: "order" }],
         },
       },
     ];
@@ -9640,7 +9638,7 @@ describe("publishing", () => {
       `a[data-change-id="${id}"]`,
     )!;
     expect(link).not.toBeNull();
-    if (id === "home-columns") {
+    if (id === "home-order") {
       expect(link.getAttribute("href")).toBe("/menus/menu/menu-lunch/view/home");
       return;
     }
@@ -9683,7 +9681,7 @@ describe("publishing", () => {
       treeRows(renderer).querySelector('[aria-current="true"]')!.closest("tr")!.dataset.rowKey,
     ).toBe("root");
     expect(renderer.document).toBe(snapshot.document);
-    await followChange(el, "home-columns");
+    await followChange(el, "home-order");
     expect(client.getMenuPreview.mock.calls.length).toBe(reads);
     expect(writeCalls(client)).toEqual([]);
     expect(JSON.stringify(snapshot)).toBe(original);
@@ -9934,7 +9932,7 @@ describe("publishing", () => {
         element: menuPane,
         path: `__screenshots__/w95-final-screen/${locale}-${theme}-${width}-removed.png`,
       });
-      await followChange(el, "home-columns");
+      await followChange(el, "home-order");
       checkWidth();
       await expectNoA11yViolations(el.parentElement!);
       expect(client.getMenuPreview).toHaveBeenCalledTimes(1);
@@ -11070,15 +11068,13 @@ describe("patching the live menu", () => {
 });
 
 describe("the Home page tab", () => {
-  type Slider = HTMLElementTagNameMap["wt-slider"];
   type Preview = HTMLElementTagNameMap["dashboard-device-home-preview"];
 
-  function slider(el: MenusScreen): Slider {
-    return q<Slider>(el, 'wt-slider[name="home-columns"]')!;
-  }
-
-  function radio(el: MenusScreen, name: string, value: string): HTMLInputElement {
-    return q<HTMLInputElement>(el, `input[name="${name}"][value="${value}"]`)!;
+  function control(el: MenusScreen) {
+    return q<HTMLElementTagNameMap["wt-segmented-control"]>(
+      el,
+      'wt-segmented-control[name="home-order"]',
+    )!;
   }
 
   function preview(el: MenusScreen): Preview | null {
@@ -11088,23 +11084,9 @@ describe("the Home page tab", () => {
   /** Opens Lunch's Home page tab from its address and waits for its controls. */
   async function mountHome(client: Api = api()) {
     const el = await mount(client, HOME_PATH);
-    await vi.waitFor(() => expect(slider(el)).not.toBeNull());
-    await slider(el).updateComplete;
+    await vi.waitFor(() => expect(control(el)).not.toBeNull());
+    await control(el).updateComplete;
     return el;
-  }
-
-  /** Moves the slider to `value` the way a person's release does. */
-  async function slide(el: MenusScreen, value: number): Promise<void> {
-    const input = slider(el).shadowRoot!.querySelector<HTMLInputElement>('input[type="range"]')!;
-    input.value = String(value);
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    await el.updateComplete;
-  }
-
-  async function choose(el: MenusScreen, name: string, value: string): Promise<void> {
-    radio(el, name, value).click();
-    await el.updateComplete;
-    await slider(el).updateComplete;
   }
 
   it("puts the Home page tab between Prices and Preview, keeps it in the address, and reads the home and the preview only while it shows", async () => {
@@ -11118,7 +11100,7 @@ describe("the Home page tab", () => {
     expect(client.getMenuPreview).not.toHaveBeenCalled();
     await chooseTab(el, "home");
     expect(location.pathname).toBe(HOME_PATH);
-    await vi.waitFor(() => expect(slider(el)).not.toBeNull());
+    await vi.waitFor(() => expect(control(el)).not.toBeNull());
     expect(client.getMenuHome).toHaveBeenCalledWith("menu-lunch");
     expect(client.getMenuPreview).toHaveBeenCalledWith("menu-lunch");
     // The tab's state comes with the preview, as on the Preview tab, so no query of its own
@@ -11142,283 +11124,6 @@ describe("the Home page tab", () => {
     await vi.waitFor(() => expect(tabs.value).toBe("home"));
   });
 
-  it("chooses Handheld or Till, each with its own controls", async () => {
-    const home = menuHome();
-    home.handheld = { columns: 3, tiles: "thumbnails", order: "home_first" };
-    home.till = { columns: 9, tiles: "colours", order: "menu_first" };
-    const el = await mountHome(api({ getMenuHome: vi.fn().mockResolvedValue(home) }));
-    expect(radio(el, "home-device", "handheld").checked).toBe(true);
-    expect(radio(el, "home-device", "till").checked).toBe(false);
-    expect([slider(el).min, slider(el).max, slider(el).value]).toEqual([2, 3, 3]);
-    expect(slider(el).label).toBe(t("home.columns"));
-    expect(q(el, 'input[name="home-tiles"]')).toBeNull();
-    expect(radio(el, "home-order", "home_first").checked).toBe(true);
-    await vi.waitFor(() => expect(preview(el)).not.toBeNull());
-    expect(preview(el)!.device).toBe("handheld");
-    await choose(el, "home-device", "till");
-    expect([slider(el).min, slider(el).max, slider(el).value]).toEqual([4, 10, 9]);
-    expect(q(el, 'input[name="home-tiles"]')).toBeNull();
-    expect(radio(el, "home-order", "menu_first").checked).toBe(true);
-    expect(preview(el)!.device).toBe("till");
-  });
-
-  it.each(["en", "es-ES"])(
-    "says under the slider that narrow screens show fewer columns (%s)",
-    async (locale) => {
-      const before = currentLocale();
-      setLocale(locale);
-      onTestFinished(() => setLocale(before));
-      const home = menuHome();
-      home.handheld = { ...home.handheld, columns: 2 };
-      const client = api({ getMenuHome: vi.fn().mockResolvedValue(home) });
-      const el = await mountHome(client);
-      const note = () => slider(el).nextElementSibling as HTMLElement;
-      expect(note().dataset.test).toBe("columns-note");
-      expect(text(note())).toBe(t("home.columns_note_handheld"));
-      await vi.waitFor(() => expect(preview(el)).not.toBeNull());
-      await preview(el)!.updateComplete;
-      const frame = () => preview(el)!.shadowRoot!.querySelector<HTMLElement>(".frame")!;
-      const phone = frame().getBoundingClientRect().width;
-      await slide(el, 3);
-      await vi.waitFor(() =>
-        expect(client.setHomeDisplay).toHaveBeenCalledWith("menu-lunch", "handheld", {
-          columns: 3,
-        }),
-      );
-      await preview(el)!.updateComplete;
-      expect(frame().getBoundingClientRect().width).toBe(phone);
-      await choose(el, "home-device", "till");
-      expect(text(note())).toBe(t("home.columns_note_till"));
-      expect(note().dataset.test).toBe("columns-note");
-    },
-  );
-
-  it("saves each control as it changes, for the device shown", async () => {
-    const out = deferred<void>();
-    const client = api();
-    const el = await mountHome(client);
-    client.setHomeDisplay.mockImplementationOnce(() => out.promise);
-    const saved = menuHome();
-    saved.handheld = { ...saved.handheld, columns: 2 };
-    client.getMenuHome.mockResolvedValue(saved);
-    await slide(el, 2);
-    expect(client.setHomeDisplay).toHaveBeenLastCalledWith("menu-lunch", "handheld", {
-      columns: 2,
-    });
-    await slider(el).updateComplete;
-    expect(slider(el).disabled).toBe(true);
-    expect(radio(el, "home-order", "menu_first").disabled).toBe(true);
-    out.resolve();
-    await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
-    expect(slider(el).value).toBe(2);
-    await choose(el, "home-order", "menu_first");
-    await vi.waitFor(() =>
-      expect(client.setHomeDisplay).toHaveBeenLastCalledWith("menu-lunch", "handheld", {
-        order: "menu_first",
-      }),
-    );
-    await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
-    await choose(el, "home-device", "till");
-    await slide(el, 9);
-    await vi.waitFor(() =>
-      expect(client.setHomeDisplay).toHaveBeenLastCalledWith("menu-lunch", "till", {
-        columns: 9,
-      }),
-    );
-    expect(writeCalls(client)).toEqual(["setHomeDisplay", "setHomeDisplay", "setHomeDisplay"]);
-  });
-
-  it("never reads a change from the preview's search as a setting", async () => {
-    const client = api();
-    const el = await mountHome(client);
-    await vi.waitFor(() => expect(preview(el)).not.toBeNull());
-    emit(preview(el)!, "wt-change", { value: "5" });
-    const search = preview(el)!.shadowRoot!.querySelector('wt-input[name="home-preview-search"]')!;
-    type(search, "bur");
-    await el.updateComplete;
-    expect(client.setHomeDisplay).not.toHaveBeenCalled();
-  });
-
-  it("puts a refused setting under its control, and any other refusal above the controls", async () => {
-    const client = api();
-    const el = await mountHome(client);
-    client.setHomeDisplay.mockRejectedValueOnce({
-      code: "menu.home_display_invalid",
-      params: { device: "handheld", field: "columns" },
-    });
-    await slide(el, 2);
-    await vi.waitFor(() => expect(slider(el).error).toBe(codeMessage("menu.home_display_invalid")));
-    expect(q(el, '[data-test="home-error"]')).toBeNull();
-
-    client.setHomeDisplay.mockRejectedValueOnce({
-      code: "menu.home_display_invalid",
-      params: { device: "handheld", field: "order" },
-    });
-    await choose(el, "home-order", "menu_first");
-    await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="home-order-error"]'))).toBe(
-        codeMessage("menu.home_display_invalid"),
-      ),
-    );
-    expect(q(el, '[data-test="home-error"]')).toBeNull();
-
-    client.setHomeDisplay.mockRejectedValueOnce({ code: "server.internal" });
-    await choose(el, "home-order", "menu_first");
-    await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="home-error"]'))).toBe(codeMessage("server.internal")),
-    );
-    expect(q(el, '[data-test="home-order-error"]')).toBeNull();
-
-    // A refusal naming the other device is not about a control on screen.
-    const late = deferred<void>();
-    client.setHomeDisplay.mockImplementationOnce(() => late.promise);
-    await slide(el, 2);
-    await choose(el, "home-device", "till");
-    late.reject({
-      code: "menu.home_display_invalid",
-      params: { device: "handheld", field: "columns" },
-    });
-    await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="home-error"]'))).toBe(
-        codeMessage("menu.home_display_invalid"),
-      ),
-    );
-    expect(slider(el).error).toBe("");
-  });
-
-  it("shows the saved choice again after a refused setting, so the same choice can be sent again", async () => {
-    const client = api();
-    const el = await mountHome(client);
-    client.setHomeDisplay.mockRejectedValueOnce({ code: "server.internal" });
-    await choose(el, "home-order", "menu_first");
-    await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="home-error"]'))).toBe(codeMessage("server.internal")),
-    );
-    await el.updateComplete;
-    expect(radio(el, "home-order", "home_first").checked).toBe(true);
-    expect(radio(el, "home-order", "menu_first").checked).toBe(false);
-    await choose(el, "home-order", "menu_first");
-    await vi.waitFor(() => expect(client.setHomeDisplay).toHaveBeenCalledTimes(2));
-    expect(client.setHomeDisplay).toHaveBeenLastCalledWith("menu-lunch", "handheld", {
-      order: "menu_first",
-    });
-  });
-
-  it("shows the order choice while its save is out, and keeps it once saved", async () => {
-    const out = deferred<void>();
-    const client = api();
-    const el = await mountHome(client);
-    client.setHomeDisplay.mockImplementationOnce(() => out.promise);
-    const after = menuHome();
-    after.handheld = { ...after.handheld, order: "menu_first" };
-    client.getMenuHome.mockResolvedValue(after);
-    await choose(el, "home-order", "menu_first");
-    expect(client.setHomeDisplay).toHaveBeenCalledTimes(1);
-    expect(radio(el, "home-order", "menu_first").checked).toBe(true);
-    expect(radio(el, "home-order", "home_first").checked).toBe(false);
-    out.resolve();
-    await vi.waitFor(() => expect(radio(el, "home-order", "menu_first").disabled).toBe(false));
-    expect(radio(el, "home-order", "menu_first").checked).toBe(true);
-    expect(radio(el, "home-order", "home_first").checked).toBe(false);
-  });
-
-  it("shows the choice just made while its save is out, and the saved one again once it is refused", async () => {
-    const out = deferred<void>();
-    const client = api();
-    const el = await mountHome(client);
-    client.setHomeDisplay.mockImplementationOnce(() => out.promise);
-    await choose(el, "home-order", "menu_first");
-    expect(radio(el, "home-order", "menu_first").checked).toBe(true);
-    out.reject({ code: "server.internal" });
-    await vi.waitFor(() => expect(radio(el, "home-order", "menu_first").disabled).toBe(false));
-    expect(radio(el, "home-order", "home_first").checked).toBe(true);
-    expect(radio(el, "home-order", "menu_first").checked).toBe(false);
-  });
-
-  it("shows the column count just chosen while its save is out, and the saved one again once it is refused", async () => {
-    const out = deferred<void>();
-    const client = api();
-    const el = await mountHome(client);
-    client.setHomeDisplay.mockImplementationOnce(() => out.promise);
-    await slide(el, 2);
-    await slider(el).updateComplete;
-    const shadow = slider(el).shadowRoot!;
-    expect(slider(el).value).toBe(2);
-    expect(shadow.querySelector<HTMLInputElement>('input[type="range"]')!.value).toBe("2");
-    expect(text(shadow.querySelector('[part="value"]'))).toBe("2");
-    out.reject({ code: "server.internal" });
-    await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
-    await slider(el).updateComplete;
-    expect(slider(el).value).toBe(3);
-    expect(shadow.querySelector<HTMLInputElement>('input[type="range"]')!.value).toBe("3");
-  });
-
-  it("writes a refusal under a group of choices as the slider writes its own", async () => {
-    const client = api();
-    const el = await mountHome(client);
-    for (const field of ["columns", "order"])
-      client.setHomeDisplay.mockRejectedValueOnce({
-        code: "menu.home_display_invalid",
-        params: { device: "handheld", field },
-      });
-    await slide(el, 2);
-    await vi.waitFor(() => expect(slider(el).error).not.toBe(""));
-    await choose(el, "home-order", "menu_first");
-    await vi.waitFor(() => expect(q(el, '[data-test="home-order-error"]')).not.toBeNull());
-    await slider(el).updateComplete;
-    const sliderError = getComputedStyle(slider(el).shadowRoot!.querySelector(".error")!);
-    const choiceError = getComputedStyle(q(el, '[data-test="home-order-error"]')!);
-    for (const property of ["font-size", "font-weight", "color", "margin"] as const)
-      expect(choiceError.getPropertyValue(property), property).toBe(
-        sliderError.getPropertyValue(property),
-      );
-  });
-
-  it("shows the saved column count again after a refused change", async () => {
-    const client = api();
-    const el = await mountHome(client);
-    client.setHomeDisplay.mockRejectedValueOnce({
-      code: "menu.home_display_invalid",
-      params: { device: "handheld", field: "columns" },
-    });
-    await slide(el, 2);
-    await vi.waitFor(() => expect(slider(el).error).toBe(codeMessage("menu.home_display_invalid")));
-    await slider(el).updateComplete;
-    expect(slider(el).value).toBe(3);
-    const shadow = slider(el).shadowRoot!;
-    expect(shadow.querySelector<HTMLInputElement>('input[type="range"]')!.value).toBe("3");
-    expect(text(shadow.querySelector('[part="value"]'))).toBe("3");
-  });
-
-  it("keeps the other device's refusals off the controls once the device is switched", async () => {
-    const client = api();
-    const el = await mountHome(client);
-    client.setHomeDisplay.mockRejectedValueOnce({
-      code: "menu.home_display_invalid",
-      params: { device: "handheld", field: "order" },
-    });
-    await choose(el, "home-order", "menu_first");
-    await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="home-order-error"]'))).toBe(
-        codeMessage("menu.home_display_invalid"),
-      ),
-    );
-    await choose(el, "home-device", "till");
-    expect(q(el, '[data-test="home-order-error"]')).toBeNull();
-  });
-
-  it("keeps showing a saved setting when the read after the save fails", async () => {
-    const client = api();
-    const el = await mountHome(client);
-    client.getMenuHome.mockRejectedValueOnce(new Error("offline"));
-    await choose(el, "home-order", "menu_first");
-    await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).not.toBeNull());
-    await choose(el, "home-device", "till");
-    await choose(el, "home-device", "handheld");
-    expect(radio(el, "home-order", "menu_first").checked).toBe(true);
-    expect(radio(el, "home-order", "home_first").checked).toBe(false);
-  });
-
   it("draws the preview from the draft preview's document", async () => {
     const pending = deferred<MenuPreview>();
     const client = api({ getMenuPreview: vi.fn(() => pending.promise) });
@@ -11428,7 +11133,6 @@ describe("the Home page tab", () => {
     pending.resolve(lunchPreview());
     await vi.waitFor(() => expect(preview(el)).not.toBeNull());
     expect(preview(el)!.document).toEqual(lunchDocument());
-    expect(preview(el)!.device).toBe("handheld");
     expect(q(el, '[data-test="home-preview-loading"]')).toBeNull();
   });
 
@@ -11456,9 +11160,9 @@ describe("the Home page tab", () => {
     const el = await mount(client, HOME_PATH);
     await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).not.toBeNull());
     expect(text(q(el, '[data-test="home-load-error"]'))).toBe(t("home.error"));
-    expect(slider(el)).toBeNull();
+    expect(control(el)).toBeNull();
     await click(el, "home-retry");
-    await vi.waitFor(() => expect(slider(el)).not.toBeNull());
+    await vi.waitFor(() => expect(control(el)).not.toBeNull());
     expect(q(el, '[data-test="home-load-error"]')).toBeNull();
   });
 
@@ -11468,15 +11172,15 @@ describe("the Home page tab", () => {
     const el = await mount(client, HOME_PATH);
     await vi.waitFor(() => expect(q(el, '[data-test="home-loading"]')).not.toBeNull());
     expect(text(q(el, '[data-test="home-loading"]'))).toBe(t("home.loading"));
-    expect(slider(el)).toBeNull();
+    expect(control(el)).toBeNull();
     pending.resolve(menuHome());
-    await vi.waitFor(() => expect(slider(el)).not.toBeNull());
+    await vi.waitFor(() => expect(control(el)).not.toBeNull());
   });
 
   it("never shows another menu's home after the person has gone to it", async () => {
     const lunchRead = deferred<MenuHome>();
     const dinner = emptyHome();
-    dinner.handheld = { ...dinner.handheld, columns: 2 };
+    dinner.order = "menu_first";
     const client = api({
       getMenuHome: vi.fn((id: string) =>
         id === "menu-lunch" ? lunchRead.promise : Promise.resolve(dinner),
@@ -11486,84 +11190,44 @@ describe("the Home page tab", () => {
     history.pushState(null, "", "/menus/menu/menu-dinner/view/home");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await vi.waitFor(() => expect(client.getMenuHome).toHaveBeenCalledWith("menu-dinner"));
-    await vi.waitFor(() => expect(slider(el)?.value).toBe(2));
+    await vi.waitFor(() => expect(control(el)?.value).toBe("menu_first"));
     lunchRead.resolve(menuHome());
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(slider(el).value).toBe(2);
+    expect(control(el).value).toBe("menu_first");
   });
 
   async function goToDinnerHome(el: MenusScreen, client: Api): Promise<void> {
     history.pushState(null, "", "/menus/menu/menu-dinner/view/home");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await vi.waitFor(() => expect(client.getMenuHome).toHaveBeenCalledWith("menu-dinner"));
-    await vi.waitFor(() => expect(slider(el)?.value).toBe(2));
+    await vi.waitFor(() => expect(control(el)?.value).toBe("menu_first"));
   }
 
-  function dinnerAtTwo(lunchColumns = 3): Api {
-    const dinner = emptyHome();
-    dinner.handheld = { ...dinner.handheld, columns: 2 };
-    return api({
-      getMenuHome: vi.fn(async (id: string) =>
-        id === "menu-lunch"
-          ? { ...menuHome(), handheld: { ...menuHome().handheld, columns: lunchColumns } }
-          : dinner,
-      ),
-    });
-  }
-
-  it("sends no second setting while one is still being saved, even when a control reports a change", async () => {
-    const out = deferred<void>();
-    const client = api();
-    const el = await mountHome(client);
-    client.setHomeDisplay.mockImplementationOnce(() => out.promise);
-    await slide(el, 2);
-    emit(slider(el), "wt-change", { value: 3 });
-    await el.updateComplete;
-    out.resolve();
-    await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
-    expect(client.setHomeDisplay).toHaveBeenCalledExactlyOnceWith("menu-lunch", "handheld", {
-      columns: 2,
-    });
-  });
-
-  it("drops a refused setting quietly once the person has gone to another menu", async () => {
-    const out = deferred<void>();
-    const client = dinnerAtTwo();
-    const el = await mountHome(client);
-    client.setHomeDisplay.mockImplementationOnce(() => out.promise);
-    await choose(el, "home-order", "menu_first");
-    await goToDinnerHome(el, client);
-    out.reject({
-      code: "menu.home_display_invalid",
-      params: { device: "handheld", field: "order" },
-    });
-    await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
-    await el.updateComplete;
-    expect(q(el, '[data-test="home-error"]')).toBeNull();
-    expect(q(el, '[data-test="home-order-error"]')).toBeNull();
-    expect(radio(el, "home-order", "home_first").checked).toBe(true);
-  });
-
-  it("keeps a setting saved after the person went to another menu off that menu's controls, and reads only that menu's home", async () => {
-    const out = deferred<void>();
-    const client = dinnerAtTwo(2);
-    const el = await mountHome(client);
-    client.setHomeDisplay.mockImplementationOnce(() => out.promise);
-    await slide(el, 3);
-    await goToDinnerHome(el, client);
-    const lunchReads = () =>
-      client.getMenuHome.mock.calls.filter(([id]) => id === "menu-lunch").length;
-    const before = lunchReads();
-    out.resolve();
-    await vi.waitFor(() => expect(slider(el).disabled).toBe(false));
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    await slider(el).updateComplete;
-    expect(slider(el).value).toBe(2);
-    expect(lunchReads()).toBe(before);
-    expect(client.setHomeDisplay).toHaveBeenCalledExactlyOnceWith("menu-lunch", "handheld", {
-      columns: 3,
-    });
-  });
+  it.each(["save", "refusal"])(
+    "keeps a late %s off a different menu's controls",
+    async (outcome) => {
+      const pending = deferred<void>();
+      const client = api({
+        getMenuHome: vi.fn(async () => ({
+          ...menuHome(),
+          order: "menu_first" as const,
+        })),
+      });
+      const el = await mountHome(client);
+      client.setHomeDisplay.mockImplementationOnce(() => pending.promise);
+      emit(control(el), "wt-change", { value: "home_first" });
+      emit(control(el), "wt-change", { value: "menu_first" });
+      expect(client.setHomeDisplay).toHaveBeenCalledExactlyOnceWith("menu-lunch", "home_first");
+      await goToDinnerHome(el, client);
+      const reads = client.getMenuHome.mock.calls.length;
+      if (outcome === "save") pending.resolve();
+      else pending.reject({ code: "server.internal" });
+      await vi.waitFor(() => expect(control(el).disabled).toBe(false));
+      expect(control(el).value).toBe("menu_first");
+      expect(q(el, '[data-test="home-error"]')).toBeNull();
+      expect(client.getMenuHome.mock.calls.length).toBe(reads);
+    },
+  );
 
   it("reads the preview no second time when the person goes from the Preview tab to the Home page tab", async () => {
     const client = api();
@@ -12451,9 +12115,12 @@ describe("after the server comes back", () => {
     live.refresh();
 
     await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).toBeNull());
-    expect(q<HTMLElementTagNameMap["wt-slider"]>(el, 'wt-slider[name="home-columns"]')?.value).toBe(
-      3,
-    );
+    expect(
+      q<HTMLElementTagNameMap["wt-segmented-control"]>(
+        el,
+        'wt-segmented-control[name="home-order"]',
+      )?.value,
+    ).toBe("home_first");
   });
 });
 
@@ -12659,7 +12326,7 @@ describe("one menu read after an edit", () => {
               ...home,
               shortcuts: home.shortcuts.filter(({ memberId }) => memberId !== "t-burger"),
             };
-          else home = { ...home, handheld: { ...home.handheld, columns: 2 } };
+          else home = { ...home, order: "menu_first" };
           if (notification === "before") {
             client.liveData.invalidate([{ type: view === "home" ? "menus" : "section_members" }]);
             await new Promise((resolve) => setTimeout(resolve, 25));
@@ -12711,7 +12378,7 @@ describe("one menu read after an edit", () => {
       await vi.waitFor(() => {
         expect(structure(el)).not.toBeNull();
         if (view === "structure") expect(rowOf(el, "m-burger")).not.toBeNull();
-        else expect(q(el, 'wt-slider[name="home-columns"]')).not.toBeNull();
+        else expect(q(el, 'wt-segmented-control[name="home-order"]')).not.toBeNull();
         if (view === "shortcut") expect(homePreview()?.shortcuts).toBeTruthy();
       });
       await structure(el).updateComplete;
@@ -12721,11 +12388,9 @@ describe("one menu read after an edit", () => {
       } else if (view === "shortcut") {
         emit(homePreview()!, "wt-shortcut-remove", { memberId: "t-burger" });
       } else {
-        const slider = q<HTMLElementTagNameMap["wt-slider"]>(el, 'wt-slider[name="home-columns"]')!;
-        await slider.updateComplete;
-        const input = slider.shadowRoot!.querySelector<HTMLInputElement>('input[type="range"]')!;
-        input.value = "2";
-        input.dispatchEvent(new Event("change", { bubbles: true }));
+        emit(q(el, 'wt-segmented-control[name="home-order"]')!, "wt-change", {
+          value: "menu_first",
+        });
       }
       await vi.waitFor(() => expect(writes).toHaveLength(1));
       // The stream notifies the screen of the accepted write's changed table.
@@ -12746,8 +12411,11 @@ describe("one menu read after an edit", () => {
           expect(homePreview()!.busy).toBe(false);
         } else
           expect(
-            q<HTMLElementTagNameMap["wt-slider"]>(el, 'wt-slider[name="home-columns"]')!.value,
-          ).toBe(2);
+            q<HTMLElementTagNameMap["wt-segmented-control"]>(
+              el,
+              'wt-segmented-control[name="home-order"]',
+            )!.value,
+          ).toBe("menu_first");
       });
       await new Promise((resolve) => setTimeout(resolve, 200));
       const menuReads = reads.filter((path) =>
@@ -12763,7 +12431,7 @@ describe("one menu read after an edit", () => {
               }
             : {
                 path: "/management-api/menus/menu-lunch/home-display",
-                body: { device: "handheld", columns: 2 },
+                body: { order: "menu_first" },
               },
       );
       expect(menuReads, JSON.stringify(menuReads)).toHaveLength(1);
@@ -13474,7 +13142,7 @@ it.each(retirementLooks)(
       setLocale(locale);
       await page.viewport(width, 900);
       const el = await mount(api(), HOME_PATH, theme);
-      await expect.poll(() => q(el, 'wt-slider[name="home-columns"]')).not.toBeNull();
+      await expect.poll(() => q(el, 'wt-segmented-control[name="home-order"]')).not.toBeNull();
       await expect.poll(() => q(el, "dashboard-device-home-preview")).not.toBeNull();
       expect(window.innerWidth).toBe(width);
       await page.screenshot({

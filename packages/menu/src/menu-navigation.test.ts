@@ -17,15 +17,14 @@ function section(id: string, members: DocumentMember[] = []): DocumentMember {
 
 function document(members: DocumentMember[]): MenuDocument {
   return {
-    format: 5,
+    format: 6,
     menuId: "lunch",
     menuName: "Lunch",
     root: { members },
     offers: {},
     home: {
       shortcuts: [],
-      handheld: { columns: 3, tiles: "colours", order: "home_first" },
-      till: { columns: 4, tiles: "thumbnails", order: "menu_first" },
+      order: "menu_first",
     },
   };
 }
@@ -231,16 +230,14 @@ describe("menuTargetKey", () => {
       menuTargetKey({ kind: "title", menuId: "lunch" }),
       menuTargetKey({ kind: "list", sectionIds: [] }),
       menuTargetKey({ kind: "section", sectionIds: ["drinks"], field: { kind: "image" } }),
-      menuTargetKey({ kind: "home", device: "till", field: "columns" }),
-      menuTargetKey({ kind: "home", device: "handheld", field: "columns" }),
-      menuTargetKey({ kind: "home", device: "till", field: "tiles" }),
+      menuTargetKey({ kind: "home", field: "order" }),
+      menuTargetKey({ kind: "home", field: "shortcuts" }),
     ]).toEqual([
       '["title","lunch"]',
       '["list",[]]',
       '["section",["drinks"],["image"]]',
-      '["home","till","columns"]',
-      '["home","handheld","columns"]',
-      '["home","till","tiles"]',
+      '["home","order"]',
+      '["home","shortcuts"]',
     ]);
   });
 });

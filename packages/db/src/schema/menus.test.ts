@@ -1,7 +1,7 @@
 // What the column-shape cases do NOT check: a column's type. On this engine a json column and a
 // plain text one both report `TEXT`, so the cases check only that a column exists, whether it is
 // NOT NULL, and, in the `descriptions` case, that a column is absent.
-import { HOME_COLUMN_RANGE } from "@waitron/shared";
+import { HOME_ORDERS } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -245,43 +245,18 @@ describe("menu display and root checks", () => {
     suite.db.run(
       sql`insert into menus(id,name,created_at,updated_at) values (${id},${id},${AT},${AT})`,
     );
-  it.each([
-    ["handheld_columns", 4, [2, 3]],
-    ["till_columns", 3, [4, 10]],
-    ["till_columns", 11, [4, 10]],
-    ["handheld_tiles", "unknown", ["colours", "thumbnails"]],
-    ["till_tiles", "unknown", ["colours", "thumbnails"]],
-    ["handheld_order", "unknown", ["home_first", "menu_first"]],
-    ["till_order", "unknown", ["home_first", "menu_first"]],
-  ] as const)(
-    "refuses invalid %s %s and accepts its bounds or enum values",
-    async (column, bad, good) => {
-      await insertMenu("display");
-      const update = (value: string | number) =>
-        suite.db.run(
-          sql`update menus set ${sql.identifier(column)} = ${value} where id = 'display'`,
-        );
-      expect(checkFailed(await captureError(() => update(bad)), `menus_${column}_ck`)).toBe(true);
-      for (const value of good) {
-        await update(value);
-        expect(
-          suite.db.get(
-            sql`select ${sql.identifier(column)} as value from menus where id = 'display'`,
-          ),
-        ).toEqual({ value });
-      }
-    },
-  );
-  it("pins the column ranges to HOME_COLUMN_RANGE", () => {
-    const row = suite.db.get<{ sql: string }>(
-      sql`select sql from sqlite_master where name = 'menus'`,
-    )!;
-    for (const device of ["handheld", "till"] as const) {
-      const bounds = row.sql.match(new RegExp(`${device}_columns" between (\\d+) and (\\d+)`));
-      expect(bounds?.slice(1).map(Number)).toEqual([
-        HOME_COLUMN_RANGE[device].min,
-        HOME_COLUMN_RANGE[device].max,
-      ]);
+  it("refuses a home order outside the two choices", async () => {
+    await insertMenu("display");
+    const update = (value: string) =>
+      suite.db.run(sql`update menus set home_order = ${value} where id = 'display'`);
+    expect(checkFailed(await captureError(() => update("unknown")), "menus_home_order_ck")).toBe(
+      true,
+    );
+    for (const value of HOME_ORDERS) {
+      await update(value);
+      expect(suite.db.get(sql`select home_order from menus where id = 'display'`)).toEqual({
+        home_order: value,
+      });
     }
   });
   it.each(["menu_root", "home_layout"] as const)(

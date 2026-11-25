@@ -1,49 +1,13 @@
 import { isStoredColor } from "./color-inheritance.js";
-import type {
-  DocumentMember,
-  HomeDevice,
-  HomeDisplay,
-  HomeOrder,
-  HomeTileMode,
-} from "./menu-document-types.js";
+import type { DocumentMember, HomeOrder } from "./menu-document-types.js";
 
 /**
  * How a menu's Device Home Page is presented, shared by the server's checks, the till's menu
  * browser and the dashboard's preview. Browser-safe: it imports no database or server code.
  */
 
-export const HOME_DEVICES = ["handheld", "till"] as const satisfies readonly HomeDevice[];
-export const HOME_TILE_MODES = ["colours", "thumbnails"] as const satisfies readonly HomeTileMode[];
 export const HOME_ORDERS = ["home_first", "menu_first"] as const satisfies readonly HomeOrder[];
-
-export const HOME_DISPLAY_DEFAULTS: Readonly<Record<HomeDevice, Readonly<HomeDisplay>>> = {
-  handheld: { columns: 3, tiles: "colours", order: "home_first" },
-  till: { columns: 6, tiles: "colours", order: "home_first" },
-};
-
-export const HOME_COLUMN_RANGE: Readonly<Record<HomeDevice, { min: number; max: number }>> = {
-  handheld: { min: 2, max: 3 },
-  till: { min: 4, max: 10 },
-};
-
-/** A key of `patch` holding a value `device` cannot take, or null. An absent key is not
- * checked. */
-export function homeDisplayProblem(
-  device: HomeDevice,
-  patch: { columns?: unknown; tiles?: unknown; order?: unknown },
-): keyof HomeDisplay | null {
-  const { min, max } = HOME_COLUMN_RANGE[device];
-  const { columns, tiles, order } = patch;
-  if (
-    columns !== undefined &&
-    !(typeof columns === "number" && Number.isInteger(columns) && columns >= min && columns <= max)
-  )
-    return "columns";
-  if (tiles !== undefined && !(HOME_TILE_MODES as readonly unknown[]).includes(tiles))
-    return "tiles";
-  if (order !== undefined && !(HOME_ORDERS as readonly unknown[]).includes(order)) return "order";
-  return null;
-}
+export const DEFAULT_HOME_ORDER: HomeOrder = "home_first";
 
 export type HomeBlock = "shortcuts" | "menu";
 
@@ -205,7 +169,6 @@ export function indexDocument<P>(
   return index;
 }
 
-/** Up to `--columns` tracks, fewer wherever a tile would be narrower than its minimum. auto-fill
- * keeps a track's width the same however many tiles there are, so tiles fill row by row. */
+/** Keep empty tracks so a short last row uses the same width and order as the other rows. */
 export const HOME_GRID_COLUMNS =
-  "repeat(auto-fill, minmax(max(var(--home-tile-min, calc(var(--wt-tap-min) * 2 + var(--wt-space-4))), calc((100% - (var(--columns) - 1) * var(--wt-space-3)) / var(--columns))), 1fr))";
+  "repeat(auto-fill, minmax(min(100%, max(clamp(100px, 15%, 160px), calc((100% - 6 * var(--wt-space-3)) / 7))), 1fr))";

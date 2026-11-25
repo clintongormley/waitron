@@ -12,7 +12,7 @@ import {
 } from "@waitron/db";
 import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, product, section, type MenusFixture } from "../test/menus-fixture.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 import {
   addShortcut,
   moveShortcut,
@@ -70,7 +70,7 @@ async function displayRow(menuId: string) {
 }
 
 describe("the Device Home Page", () => {
-  it("reads the menu's Device Home Page: its section, its shortcuts in order with names and reach, and both display settings at their defaults", async () => {
+  it("reads the menu's Device Home Page: its section, its shortcuts in order with names and reach, and the default display order", async () => {
     const f = await menusFixture(fx.db);
     const { homeSectionId } = await displayRow(f.lunch);
     const [owned] = await fx.db.select().from(sections).where(eq(sections.id, homeSectionId));
@@ -103,8 +103,7 @@ describe("the Device Home Page", () => {
           missingName: null,
         },
       ],
-      handheld: HOME_DISPLAY_DEFAULTS.handheld,
-      till: HOME_DISPLAY_DEFAULTS.till,
+      order: DEFAULT_HOME_ORDER,
     });
     await app((tx) => addMember(tx, f.lunchRoot, product(f.soup)));
     expect((await app((tx) => readMenuHome(tx, f.lunch))).shortcuts[0]!.reachable).toBe(true);
@@ -145,7 +144,7 @@ describe("the Device Home Page", () => {
     const member = (await app((tx) => addShortcut(tx, f.lunch, product(f.soup)))).id;
     const calls: (() => Promise<unknown>)[] = [
       () => app((tx) => readMenuHome(tx, MISSING)),
-      () => app((tx) => setHomeDisplay(tx, MISSING, "till", { columns: 8 })),
+      () => app((tx) => setHomeDisplay(tx, MISSING, "menu_first")),
       () => app((tx) => addShortcut(tx, MISSING, product(f.soup))),
       () => app((tx) => replaceShortcut(tx, MISSING, member, product(f.lager))),
       () => app((tx) => removeShortcut(tx, MISSING, member)),
@@ -161,57 +160,11 @@ describe("the Device Home Page", () => {
 });
 
 describe("setHomeDisplay", () => {
-  it("stores each setting for its device alone", async () => {
+  it("stores one home order for the chosen menu", async () => {
     const f = await menusFixture(fx.db);
-    await app((tx) => setHomeDisplay(tx, f.lunch, "till", { columns: 8, order: "menu_first" }));
-    const once = await app((tx) => readMenuHome(tx, f.lunch));
-    expect(once.till).toEqual({ columns: 8, tiles: "colours", order: "menu_first" });
-    expect(once.handheld).toEqual(HOME_DISPLAY_DEFAULTS.handheld);
-    await app((tx) => setHomeDisplay(tx, f.lunch, "handheld", { tiles: "thumbnails" }));
-    const twice = await app((tx) => readMenuHome(tx, f.lunch));
-    expect(twice.handheld).toEqual({ columns: 3, tiles: "thumbnails", order: "home_first" });
-    expect(twice.till).toEqual({ columns: 8, tiles: "colours", order: "menu_first" });
-    await app((tx) => setHomeDisplay(tx, f.lunch, "till", {}));
-    expect((await app((tx) => readMenuHome(tx, f.lunch))).till).toEqual(twice.till);
-    expect((await app((tx) => readMenuHome(tx, f.dinner))).till).toEqual(
-      HOME_DISPLAY_DEFAULTS.till,
-    );
-  });
-
-  it("refuses a value its device cannot take, writing nothing", async () => {
-    const f = await menusFixture(fx.db);
-    const before = await displayRow(f.lunch);
-    const refusals: ["handheld" | "till", Record<string, unknown>, string][] = [
-      ["handheld", { columns: 1 }, "columns"],
-      ["handheld", { columns: 4 }, "columns"],
-      ["till", { columns: 3 }, "columns"],
-      ["till", { columns: 11 }, "columns"],
-      ["till", { columns: 6.5 }, "columns"],
-      ["till", { columns: "8" }, "columns"],
-      ["handheld", { tiles: "pictures" }, "tiles"],
-      ["till", { tiles: "pictures" }, "tiles"],
-      ["handheld", { order: "first" }, "order"],
-      ["till", { order: "first" }, "order"],
-      ["till", { columns: 8, tiles: "pictures" }, "tiles"],
-    ];
-    for (const [device, patch, field] of refusals)
-      expect(
-        await captureError(() => app((tx) => setHomeDisplay(tx, f.lunch, device, patch))),
-      ).toMatchObject({ code: "menu.home_display_invalid", params: { device, field } });
-    expect(await displayRow(f.lunch)).toEqual(before);
-  });
-
-  it("accepts each range's ends", async () => {
-    const f = await menusFixture(fx.db);
-    for (const [device, columns] of [
-      ["handheld", 2],
-      ["handheld", 3],
-      ["till", 4],
-      ["till", 10],
-    ] as const) {
-      await app((tx) => setHomeDisplay(tx, f.lunch, device, { columns }));
-      expect((await app((tx) => readMenuHome(tx, f.lunch)))[device].columns).toBe(columns);
-    }
+    await app((tx) => setHomeDisplay(tx, f.lunch, "menu_first"));
+    expect(await app((tx) => readMenuHome(tx, f.lunch))).toMatchObject({ order: "menu_first" });
+    expect(await app((tx) => readMenuHome(tx, f.dinner))).toMatchObject({ order: "home_first" });
   });
 });
 
@@ -562,18 +515,17 @@ describe("publishing the Device Home Page", () => {
     await app((tx) => publishMenu(tx, menuId, hash, "person-1"));
   }
 
-  it("carries the shortcuts in order and both devices' display settings", async () => {
+  it("carries the shortcuts in order and the shared display order", async () => {
     const f: MenusFixture = await menusFixture(fx.db);
     await app(async (tx) => {
       await addShortcut(tx, f.lunch, section(f.beer));
       await addShortcut(tx, f.lunch, product(f.soup));
-      await setHomeDisplay(tx, f.lunch, "till", { columns: 8, order: "menu_first" });
+      await setHomeDisplay(tx, f.lunch, "menu_first");
     });
     const { document } = await app((tx) => previewMenu(tx, f.lunch));
     expect(document.home).toEqual({
       shortcuts: [section(f.beer), product(f.soup)],
-      handheld: HOME_DISPLAY_DEFAULTS.handheld,
-      till: { columns: 8, tiles: "colours", order: "menu_first" },
+      order: "menu_first",
     });
   });
 
@@ -606,30 +558,22 @@ describe("publishing the Device Home Page", () => {
           null,
           null,
           null,
-          null,
-          ['["home","handheld","shortcuts"]', '["home","till","shortcuts"]'],
-          ['["home","handheld","shortcuts"]', '["home","till","shortcuts"]'],
+          ['["home","shortcuts"]'],
+          ['["home","shortcuts"]'],
         ]),
         targets: {
-          before: [
-            { kind: "home", device: "handheld", field: "shortcuts" },
-            { kind: "home", device: "till", field: "shortcuts" },
-          ],
-          after: [
-            { kind: "home", device: "handheld", field: "shortcuts" },
-            { kind: "home", device: "till", field: "shortcuts" },
-          ],
+          before: [{ kind: "home", field: "shortcuts" }],
+          after: [{ kind: "home", field: "shortcuts" }],
         },
       },
     ]);
     await app((tx) => moveShortcut(tx, f.lunch, soup!.memberId, 0));
     expect(await state()).toBe("current");
-    await app((tx) => setHomeDisplay(tx, f.lunch, "till", { columns: 7 }));
+    await app((tx) => setHomeDisplay(tx, f.lunch, "menu_first"));
     expect(await state()).toBe("changed");
     expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
       {
         kind: "home_display_changed",
-        device: "till",
         source: "this_menu",
         id: JSON.stringify([
           f.lunch,
@@ -641,35 +585,34 @@ describe("publishing the Device Home Page", () => {
           null,
           null,
           null,
-          "till",
           null,
-          ['["home","till","columns"]'],
-          ['["home","till","columns"]'],
+          ['["home","order"]'],
+          ['["home","order"]'],
         ]),
         targets: {
-          before: [{ kind: "home", device: "till", field: "columns" }],
-          after: [{ kind: "home", device: "till", field: "columns" }],
+          before: [{ kind: "home", field: "order" }],
+          after: [{ kind: "home", field: "order" }],
         },
       },
     ]);
-    await app((tx) => setHomeDisplay(tx, f.lunch, "till", { columns: 6 }));
+    await app((tx) => setHomeDisplay(tx, f.lunch, "home_first"));
     expect(await state()).toBe("current");
     // Dinner's status is untouched by Lunch's Device Home Page.
     await publish(f.dinner);
     await app((tx) => moveShortcut(tx, f.lunch, soup!.memberId, 1));
-    await app((tx) => setHomeDisplay(tx, f.lunch, "handheld", { order: "menu_first" }));
+    await app((tx) => setHomeDisplay(tx, f.lunch, "menu_first"));
     expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.state).toBe("current");
   });
 
   it("a draft display change leaves the live version as it was", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
-    await app((tx) => setHomeDisplay(tx, f.lunch, "till", { columns: 9 }));
-    const liveTill = async () =>
-      (await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!.document.home.till;
-    expect((await liveTill()).columns).toBe(6);
+    await app((tx) => setHomeDisplay(tx, f.lunch, "menu_first"));
+    const liveOrder = async () =>
+      (await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!.document.home.order;
+    expect(await liveOrder()).toBe("home_first");
     expect((await app((tx) => menuStatus(tx, [f.lunch]))).get(f.lunch)!.state).toBe("changed");
     await publish(f.lunch);
-    expect((await liveTill()).columns).toBe(9);
+    expect(await liveOrder()).toBe("menu_first");
   });
 });

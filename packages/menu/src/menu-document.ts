@@ -14,7 +14,7 @@ import {
   sections,
   type Transaction,
 } from "@waitron/db";
-import { AppError, effectiveColor, HOME_DEVICES, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { AppError, effectiveColor, DEFAULT_HOME_ORDER } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { listCategories } from "./categories.js";
 import { readMenuDefaultColor } from "./settings.js";
@@ -47,7 +47,6 @@ import type {
 } from "@waitron/shared";
 import { listMenuOffers } from "./operations.js";
 import { effectiveDefaultLabelId } from "./option-default.js";
-import { homeDisplaysOf } from "./menu-home.js";
 import {
   FOLLOWING_FOLDER,
   fixedNameLanguages,
@@ -70,10 +69,7 @@ export type {
   DocumentMember,
   DocumentList,
   DocumentTile,
-  HomeDevice,
-  HomeTileMode,
   HomeOrder,
-  HomeDisplay,
   DeviceHome,
   MenuDocument,
   LiveExtraItem,
@@ -102,7 +98,7 @@ export type {
   MenuState,
 } from "@waitron/shared";
 
-export const MENU_DOCUMENT_FORMAT = 5;
+export const MENU_DOCUMENT_FORMAT = 6;
 
 export interface OmittedShortcut {
   ref: TileRef;
@@ -194,12 +190,7 @@ export async function buildMenuDocuments(
         menuId: menus.id,
         rootSectionId: root.id,
         homeSectionId: home.id,
-        handheldColumns: menus.handheldColumns,
-        handheldTiles: menus.handheldTiles,
-        handheldOrder: menus.handheldOrder,
-        tillColumns: menus.tillColumns,
-        tillTiles: menus.tillTiles,
-        tillOrder: menus.tillOrder,
+        homeOrder: menus.homeOrder,
         menuName: menus.name,
         names: root.names,
         setPrice: menus.setPrice,
@@ -428,7 +419,7 @@ export async function buildMenuDocuments(
         offers: Object.fromEntries([...onMenu.values()].map((offer) => [offer.id, offer])),
         ...(Object.keys(setMenus).length === 0 ? {} : { setMenus }),
         priceOrigins: priceOriginsOf(combined.values()),
-        home: { shortcuts, ...homeDisplaysOf(row) },
+        home: { shortcuts, order: row.homeOrder },
       },
     } satisfies Omit<BuiltMenu, "workingHash">;
     menuRows.set(row.menuId, { ...built, workingHash: menuDocumentHash(built.document) });
@@ -1643,9 +1634,8 @@ export function diffEntries(
       ? proposed.home.shortcuts.length > 0
       : !same(live.home.shortcuts, proposed.home.shortcuts);
   if (shortcutsChanged) push({ kind: "home_shortcuts_changed", source: "this_menu" });
-  for (const device of HOME_DEVICES)
-    if (!same(live?.home[device] ?? HOME_DISPLAY_DEFAULTS[device], proposed.home[device]))
-      push({ kind: "home_display_changed", device, source: "this_menu" });
+  if ((live?.home.order ?? DEFAULT_HOME_ORDER) !== proposed.home.order)
+    push({ kind: "home_display_changed", source: "this_menu" });
   return entries;
 }
 

@@ -15,7 +15,7 @@ import type {
   TillSaleResult,
   ZoneOffers,
 } from "./api/client.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 
 interface Menu {
   id: string;
@@ -112,8 +112,7 @@ function offers(
       },
       home: {
         shortcuts: [],
-        handheld: HOME_DISPLAY_DEFAULTS.handheld,
-        till: HOME_DISPLAY_DEFAULTS.till,
+        order: DEFAULT_HOME_ORDER,
       },
     })),
     offers: menus.map(offer),

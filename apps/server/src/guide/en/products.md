@@ -344,13 +344,10 @@ set menu to the tills. Each later edit reaches the tills when you publish the fu
 
 ## Check the menu's home page {#menu-home}
 
-Open a menu's **Home page** tab to arrange its shortcuts, choose how many columns to show and
-set what appears first.
-Look for the folder icon to open a section in the preview. On a product tile, a range shows the
-prices of its variants.
-Choose **Till** to check the **Table order preview**: it represents a till as wide as the frame,
-with space reserved for the order. Use it to judge how many columns fit beside the order.
-At narrower widths, the menu takes the full frame, as it does when the till shows Menu on its own.
+Open a menu's **Home page** tab to arrange its shortcuts. Under **Shown first**, choose
+**Shortcuts** or **Full menu**. Publish the menu to send the new order to all devices.
+The columns fit each device's screen. In the preview, look for the folder icon to open a section.
+A range on a product tile shows the prices of its variants.
 
 To replace a shortcut marked **Not shown**, remove it with its bin button, then add a product or section
 that this menu shows.

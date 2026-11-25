@@ -734,13 +734,9 @@ variant never has a button: it is listed only nested under its parent's offer
 (`LiveOffer.variants`). The till reads its offers from the zone
 (`GET /api/default-service-zone/offers`, `GET /api/service-zones/:zoneId/offers`).
 
-Under search, the till shows the menu's Device Home Page shortcuts and the menu's own structure as
-two blocks, in the order the menu's display for that kind of device sets: a handheld (a phone or a
-tablet) uses the menu's Handheld display and every other device its Till display. "Device Home Page
-first" puts the shortcuts first and "Menu first" the structure; neither reorders anything inside a
-block. A divider naming the second block sits between them, and a block with nothing to show is
-left out with no divider. The display's column count is the most a grid shows: a grid shows fewer
-where a tile would be narrower than its minimum, so a phone held upright shows two or three.
+Under search, every device follows the menu's **Shown first** choice for the shortcuts and the
+full menu. A divider identifies the second block when both have tiles. The grid chooses the
+number of columns from the available width and preserves the order inside each block.
 Each tile uses its colour (_Colour_, above) or the plain fill. A shortcut whose target the till
 does not show keeps its place as an empty slot, so the shortcuts after it do not move. A
 shortcut to a section a diet filter emptied shows that section's faded tile in the slot instead. The

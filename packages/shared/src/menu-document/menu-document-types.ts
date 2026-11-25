@@ -80,20 +80,11 @@ export type DocumentTile =
   | { kind: "section"; sectionId: string }
   | { kind: "empty" };
 
-export type HomeDevice = "handheld" | "till";
-export type HomeTileMode = "colours" | "thumbnails";
 export type HomeOrder = "home_first" | "menu_first";
-
-export interface HomeDisplay {
-  columns: number;
-  tiles: HomeTileMode;
-  order: HomeOrder;
-}
 
 export interface DeviceHome {
   shortcuts: DocumentTile[];
-  handheld: HomeDisplay;
-  till: HomeDisplay;
+  order: HomeOrder;
 }
 
 export type SetMenuOfferVariant = FrozenOfferVariant & { countsAsCourseId: string };
@@ -118,7 +109,7 @@ type MenuPriceOrigin =
   { kind: "product" } | { kind: "this_menu" } | { kind: "included_menu"; id: string; name: string };
 
 export interface MenuDocument {
-  format: 5;
+  format: 6;
   /** Direct active inclusions' working hashes. */
   includedMenuHashes?: Record<string, string>;
   menuId: string;
@@ -250,8 +241,7 @@ export type MenuTarget =
     }
   | {
       kind: "home";
-      device: "handheld" | "till";
-      field: "shortcuts" | "columns" | "tiles" | "order";
+      field: "shortcuts" | "order";
     };
 
 export interface MenuOccurrence {
@@ -347,7 +337,7 @@ export type MenuChangeBody = {
   | { kind: "section_changed"; sectionId: string; name: string; fields: SectionChangeField[] }
   | { kind: "order_changed"; listSectionId: string | null; list: string[] }
   | { kind: "home_shortcuts_changed" }
-  | { kind: "home_display_changed"; device: HomeDevice }
+  | { kind: "home_display_changed" }
   | { kind: "menu_renamed"; from: string; to: string }
 );
 

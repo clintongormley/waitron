@@ -1,54 +1,37 @@
 import { afterEach, expect, it } from "vitest";
-import { page } from "vitest/browser";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
+import { applyTokens } from "@waitron/ui";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountWidget,
+  pageAt,
+  resetPage,
+} from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
 
 afterEach(cleanupWidgets);
 
-const cases = [360, 390].flatMap((width) =>
-  [2, 3].flatMap((columns) =>
-    (["light", "dark"] as const).map((theme) => ({
-      width,
-      columns,
-      theme,
-      handheld: true,
-      wantedTracks: columns,
-    })),
-  ),
-);
+const cases = [
+  { width: 360, columns: 3, theme: "light" },
+  { width: 390, columns: 3, theme: "dark" },
+  { width: 792, columns: 6, theme: "light" },
+  { width: 1440, columns: 7, theme: "dark" },
+] as const;
 
-cases.push(
-  ...(["light", "dark"] as const).map((theme) => ({
-    width: 1024,
-    columns: 4,
-    theme,
-    handheld: false,
-    wantedTracks: 4,
-  })),
-);
-
-cases.push(
-  ...[360, 390].map((width) => ({
-    width,
-    columns: 6,
-    theme: "light" as const,
-    handheld: false,
-    wantedTracks: 2,
-  })),
-);
-
-it.each(cases)(
-  "fits $wantedTracks columns at $width px ($theme, handheld=$handheld)",
-  async ({ width, columns, theme, handheld, wantedTracks }) => {
+it.each(cases.flatMap((size) => [100, 130].map((scale) => ({ ...size, scale }))))(
+  "fits $columns automatic columns at $width px and $scale% text",
+  async ({ width, columns, theme, scale }) => {
     const locale = currentLocale();
     setLocale("es-ES");
+    const pageRoot = document.documentElement;
+    const hadPageTokens = pageRoot.hasAttribute("data-wt-theme-root");
+    applyTokens(pageRoot);
     try {
-      await page.viewport(width, 844);
+      await pageAt(width === 792 ? 1280 : width, 844, scale);
       const products: TillProduct[] = [
         "Pollo asado con patatas y verduras",
         "Extraordinariamenteextralargapalabra",
@@ -126,8 +109,7 @@ it.each(cases)(
         },
         home: {
           shortcuts: [],
-          handheld: { ...HOME_DISPLAY_DEFAULTS.handheld, columns, order: "menu_first" },
-          till: { ...HOME_DISPLAY_DEFAULTS.till, columns },
+          order: "menu_first",
         },
       };
       const { el, host } = await mountWidget<TillMenuBrowser>(
@@ -135,21 +117,19 @@ it.each(cases)(
         {
           menu,
           products,
-          handheld,
           store: new WorkingOrderStore(),
         },
         theme,
       );
-      host.style.width = `${width}px`;
-      host.style.boxSizing = "border-box";
-      host.style.paddingInline = "calc(var(--wt-space-5) + var(--wt-space-4))";
+      if (width === 792) host.style.width = "792px";
       await new Promise((resolve) => requestAnimationFrame(resolve));
       const grid = el.shadowRoot!.querySelector<HTMLElement>(".grid")!;
-      expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(wantedTracks);
+      if (width <= 390) expect(grid.getBoundingClientRect().width).toBeCloseTo(width - 16);
+      expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(columns);
       expect(grid.querySelectorAll(".tile")).toHaveLength(4);
       for (const tile of grid.querySelectorAll<HTMLElement>(".tile")) {
         const box = tile.getBoundingClientRect();
-        expect(box.width).toBeGreaterThanOrEqual(handheld ? 44 : 104);
+        expect(box.width).toBeGreaterThanOrEqual(100);
         expect(box.height).toBeGreaterThanOrEqual(44);
         for (const content of tile.querySelectorAll<HTMLElement>(".name, .price, .kind, wt-icon")) {
           const bounds = content.getBoundingClientRect();
@@ -181,7 +161,7 @@ it.each(cases)(
       const words = document.createRange();
       words.selectNodeContents(measuredName);
       const lines = [...words.getClientRects()];
-      if (handheld && width === 390 && columns === 3) expect(lines.length).toBeGreaterThan(1);
+      if (width === 390) expect(lines.length).toBeGreaterThan(1);
       for (const line of lines) {
         expect(
           Math.abs(line.left + line.width / 2 - (measuredTile.left + measuredTile.width / 2)),
@@ -191,10 +171,11 @@ it.each(cases)(
         "12,50\u00a0€–85,00\u00a0€/kg",
       );
       expect(grid.querySelector('[data-kind="section"] wt-icon')).not.toBeNull();
-      if (width === 360 && columns === 3) await expectNoA11yViolations(host);
+      if (width === 360) await expectNoA11yViolations(host);
     } finally {
+      if (!hadPageTokens) pageRoot.removeAttribute("data-wt-theme-root");
       setLocale(locale);
-      await page.viewport(1024, 768);
+      await resetPage();
     }
   },
 );

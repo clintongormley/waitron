@@ -35,8 +35,7 @@ Left open:
 - The dashboard's Home page preview (`apps/dashboard/src/widgets/device-home-preview.ts`) still
   copies the till's tile and breadcrumb markup, paint helper and CSS
   (`apps/till/src/widgets/menu-browser.ts`). Grid sizing, arrangement, trails and indexing already
-  use shared rules. The preview also copies table ordering's width switch, flex share, gap and
-  inset. A shared presentation boundary would need adapters for the till's ordering state and
+  use shared rules. A shared presentation boundary would need adapters for the till's ordering state and
   the dashboard's shortcut controls. Even a partial extraction (sharing only the CSS and paint helper) was deferred: it would add a cross-package interface while leaving both renderers
   (watcher, 2026-11-14 08:56, MENU-HOME-TAB).
 
@@ -764,7 +763,7 @@ From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
 
 _2026-11-24: Menus, set menus, products and variants use permanent Delete. [Owner’s design](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
 
-_2026-11-25: The [menu editor redesign](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md) has its new heading and the live menu’s Patch action in the list. Preview and the single draft, table and Save are still to come. The remaining [Device home page work](../superpowers/specs/2026-11-24-device-home-page-design.md#delivery) is one display without column settings or a stored tile mode, then one tab that saves the settings and shortcuts together. The guest menu preview becomes the [customer menu](../superpowers/specs/2026-11-24-customer-menu-design.md), approved the same day._
+_2026-11-25: The [menu editor redesign](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md) has its new heading and the live menu’s Patch action in the list. Preview and the single draft, table and Save are still to come. The remaining [Device home page work](../superpowers/specs/2026-11-24-device-home-page-design.md#delivery) is one tab that saves the order and shortcuts together. The guest menu preview becomes the [customer menu](../superpowers/specs/2026-11-24-customer-menu-design.md), approved the same day._
 
 _2026-11-24: The owner reworked set menus in [set menus worked out by the bill](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md). The waiter only adds dishes. The bill groups them at the cheapest price it finds on every change, and each dish keeps its own course. Paying for items moves them to a bill of their own. The remaining work connects the shared calculation to the server and till, updates the dashboard and checks the whole flow._
 

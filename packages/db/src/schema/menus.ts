@@ -16,9 +16,7 @@ import {
 } from "./columns.js";
 import {
   PRODUCT_ORDERINGS,
-  HOME_DISPLAY_DEFAULTS,
-  HOME_COLUMN_RANGE,
-  HOME_TILE_MODES,
+  DEFAULT_HOME_ORDER,
   HOME_ORDERS,
   type AllergenMap,
 } from "@waitron/shared";
@@ -28,9 +26,7 @@ import { uniqueIndex } from "drizzle-orm/sqlite-core";
 
 const menuKind = enumType(["menu", "set_menu"]);
 const vatClasses = sql`('general','reduced','super_reduced','zero')`;
-const homeTiles = enumType(HOME_TILE_MODES);
 const homeOrder = enumType(HOME_ORDERS);
-const { handheld, till } = HOME_DISPLAY_DEFAULTS;
 
 export const menus = table(
   "menus",
@@ -41,30 +37,14 @@ export const menus = table(
     isDefault: flag("is_default").notNull().default(false),
     createdAt: ts("created_at").notNull().$defaultFn(now),
     updatedAt: ts("updated_at").notNull().$defaultFn(now),
-    handheldColumns: count("handheld_columns").notNull().default(handheld.columns),
-    handheldTiles: homeTiles("handheld_tiles").notNull().default(handheld.tiles),
-    handheldOrder: homeOrder("handheld_order").notNull().default(handheld.order),
-    tillColumns: count("till_columns").notNull().default(till.columns),
-    tillTiles: homeTiles("till_tiles").notNull().default(till.tiles),
-    tillOrder: homeOrder("till_order").notNull().default(till.order),
+    homeOrder: homeOrder("home_order").notNull().default(DEFAULT_HOME_ORDER),
     kind: menuKind("kind").notNull().default("menu"),
     setPrice: money("set_price"),
     setVatClass: label("set_vat_class"),
     setTakeawayVatClass: label("set_takeaway_vat_class"),
   },
   (t) => [
-    check(
-      "menus_handheld_columns_ck",
-      sql`${t.handheldColumns} between ${sql.raw(String(HOME_COLUMN_RANGE.handheld.min))} and ${sql.raw(String(HOME_COLUMN_RANGE.handheld.max))}`,
-    ),
-    check(
-      "menus_till_columns_ck",
-      sql`${t.tillColumns} between ${sql.raw(String(HOME_COLUMN_RANGE.till.min))} and ${sql.raw(String(HOME_COLUMN_RANGE.till.max))}`,
-    ),
-    check("menus_handheld_tiles_ck", enumCheck(t.handheldTiles)),
-    check("menus_handheld_order_ck", enumCheck(t.handheldOrder)),
-    check("menus_till_tiles_ck", enumCheck(t.tillTiles)),
-    check("menus_till_order_ck", enumCheck(t.tillOrder)),
+    check("menus_home_order_ck", enumCheck(t.homeOrder)),
     check("menus_kind_ck", enumCheck(t.kind)),
     check(
       "menus_set_terms_ck",

@@ -800,12 +800,12 @@ async function liveAsCopy(
   return copy!.id;
 }
 
-describe("a live version in format 4, before declarations were frozen again", () => {
-  it("refuses it with the venue-reset code", async () => {
+describe("a live version from before the shared Home page order", () => {
+  it.each([4, 5])("refuses format %i with the venue-reset code", async (format) => {
     const f = await menusFixture(fx.db);
     const versionId = await liveAsCopy(
       f.lunch,
-      (published) => ({ ...published, format: 4 }) as unknown as MenuDocument,
+      (published) => ({ ...published, format }) as unknown as MenuDocument,
     );
     await expect(app((tx) => readRecordedDocuments(tx, [versionId]))).rejects.toMatchObject({
       code: "menu.reset_required",

@@ -519,7 +519,7 @@ it("each panel shows a till button and a bill line", async () => {
     const price = button.querySelector<HTMLElement>(".tile-price")!;
     expect(tileName.textContent).toBe(name);
     expect(price.textContent).toBe(formatMoney("2.20", currentLocale()));
-    expect(button.getBoundingClientRect().width).toBe(104);
+    expect(button.getBoundingClientRect().width).toBe(100);
     expect(getComputedStyle(tileName).fontWeight).toBe(
       getComputedStyle(button).getPropertyValue("--wt-font-weight-bold").trim(),
     );

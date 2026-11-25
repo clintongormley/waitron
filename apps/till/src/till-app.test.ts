@@ -19,7 +19,7 @@ import { type WtInput, type WtCombobox, applyTokens, currentContentLanguages } f
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import indexHtml from "../index.html?raw";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { formatMoney, HOME_DISPLAY_DEFAULTS, UNDECLARED_DIET } from "@waitron/shared";
+import { formatMoney, DEFAULT_HOME_ORDER, UNDECLARED_DIET } from "@waitron/shared";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
 import {
   adjustmentStubs,
@@ -355,8 +355,7 @@ function servedAs(menuItemId: string, productId: string) {
     structure: { members: [{ kind: "product" as const, menuItemId, productId }] },
     home: {
       shortcuts: [],
-      handheld: HOME_DISPLAY_DEFAULTS.handheld,
-      till: HOME_DISPLAY_DEFAULTS.till,
+      order: DEFAULT_HOME_ORDER,
     },
   };
 }
@@ -2748,8 +2747,7 @@ describe("till-app", () => {
       return el;
     }
 
-    /** The default menu with one shortcut, its Handheld display at 2 columns Menu first and its Till
-     * display at 8. */
+    /** The default menu with one shortcut and the full menu shown first. */
     const displayedMenus = (): Record<string, unknown> => {
       const served = fixtureOffers({ menus: [defaultMenu], products: [coffee] });
       const offers = {
@@ -2758,12 +2756,7 @@ describe("till-app", () => {
           ...menu,
           home: {
             shortcuts: [{ kind: "product" as const, productId: "cafe" }],
-            handheld: {
-              ...HOME_DISPLAY_DEFAULTS.handheld,
-              columns: 2,
-              order: "menu_first" as const,
-            },
-            till: { ...HOME_DISPLAY_DEFAULTS.till, columns: 8 },
+            order: "menu_first" as const,
           },
         })),
       };
@@ -2774,23 +2767,15 @@ describe("till-app", () => {
       };
     };
 
-    async function menuHome(
-      screen: HTMLElement,
-    ): Promise<{ regions: string[]; columns: string[] }> {
+    async function menuOrder(screen: HTMLElement): Promise<string[]> {
       const browser = screen.shadowRoot!.querySelector<TillMenuBrowser>("till-menu-browser")!;
       await browser.updateComplete;
-      const shadow = browser.shadowRoot!;
-      return {
-        regions: [...shadow.querySelectorAll<HTMLElement>("[data-region]")].map(
-          (region) => region.dataset.region!,
-        ),
-        columns: [...shadow.querySelectorAll<HTMLElement>(".grid")].map((grid) =>
-          getComputedStyle(grid).getPropertyValue("--columns").trim(),
-        ),
-      };
+      return [...browser.shadowRoot!.querySelectorAll<HTMLElement>("[data-region]")].map(
+        (region) => region.dataset.region!,
+      );
     }
 
-    it("shows the menu's handheld display, not the till's", async () => {
+    it("shows the shared menu order on a handheld", async () => {
       const { el } = await mountApp({
         ...displayedMenus(),
         getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "phone-portrait" }),
@@ -2805,21 +2790,15 @@ describe("till-app", () => {
       emit(floor(el)!, "open-table", { tableId: openTable.id, seated: true });
       await flush(el);
       expect(tableOrder(el)).not.toBeNull();
-      expect(await menuHome(tableOrder(el)!)).toEqual({
-        regions: ["search", "structure", "shortcuts"],
-        columns: ["2", "2"],
-      });
+      expect(await menuOrder(tableOrder(el)!)).toEqual(["search", "structure", "shortcuts"]);
     });
 
-    it("on a till, shows the menu's till display", async () => {
+    it("shows the shared menu order on a till", async () => {
       const { el } = await mountApp(displayedMenus());
       await flush(el);
       emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
       await flush(el);
-      expect(await menuHome(counter(el)!)).toEqual({
-        regions: ["search", "shortcuts", "structure"],
-        columns: ["8", "8"],
-      });
+      expect(await menuOrder(counter(el)!)).toEqual(["search", "structure", "shortcuts"]);
     });
 
     it("loads the counter's lists at login and shows held orders on fixed Counter", async () => {
@@ -9344,8 +9323,7 @@ describe("till-app", () => {
       structure: { members: [] },
       home: {
         shortcuts: [],
-        handheld: HOME_DISPLAY_DEFAULTS.handheld,
-        till: HOME_DISPLAY_DEFAULTS.till,
+        order: DEFAULT_HOME_ORDER,
       },
     };
     const zoneOffers = {

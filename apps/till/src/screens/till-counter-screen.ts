@@ -281,8 +281,6 @@ export class TillCounterScreen extends LitElement {
   /** Whether the server still lets {@link store}'s saved order switch its way; ignored while the
    * order is an unsaved draft, and read as `"none"` when not known. */
   @property({ attribute: false }) diningChoice: DiningChoice | null = null;
-  /** A handheld form factor, whose menu browser shows the menu's handheld display. */
-  @property({ type: Boolean }) handheld = false;
   @property({ attribute: false }) setMenuBill?: BillSetMenuState;
   @property({ attribute: false }) setMenuCopies: readonly OrderingCopy[] = NO_ORDERING_COPIES;
   @property({ attribute: false }) setMenuCourses: Readonly<Record<string, string>> = {};
@@ -342,7 +340,6 @@ export class TillCounterScreen extends LitElement {
       .servedProducts=${this.#searchProducts(served, "", this.selectedFilters)}
       .unfilteredServedProducts=${this.#unfilteredSearchProducts(served, "", EMPTY_MENU_FILTERS)}
       .store=${this.store}
-      .handheld=${this.handheld}
     >
       ${
         hasMenuPicker

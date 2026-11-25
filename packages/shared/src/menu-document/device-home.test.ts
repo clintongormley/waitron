@@ -1,10 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { tilePrice } from "./customer-menu-presentation.js";
 import {
-  HOME_COLUMN_RANGE,
-  HOME_DISPLAY_DEFAULTS,
   arrangeHome,
-  homeDisplayProblem,
   indexDocument,
   openedSection,
   sectionTrail,
@@ -44,37 +41,6 @@ describe("tile price", () => {
     expect(tilePrice("4.00", [{ unitPrice: "12.50" }, { unitPrice: "85.00" }], "kg", "es-ES")).toBe(
       "12,50\u00a0€–85,00\u00a0€/kg",
     );
-  });
-});
-
-describe("display settings", () => {
-  it("defaults a handheld to three columns and a till to six, colours, Device Home Page first", () => {
-    expect(HOME_DISPLAY_DEFAULTS).toEqual({
-      handheld: { columns: 3, tiles: "colours", order: "home_first" },
-      till: { columns: 6, tiles: "colours", order: "home_first" },
-    });
-    expect(HOME_COLUMN_RANGE).toEqual({ handheld: { min: 2, max: 3 }, till: { min: 4, max: 10 } });
-  });
-  it.each([
-    ["handheld", 2, null],
-    ["handheld", 3, null],
-    ["handheld", 1, "columns"],
-    ["handheld", 4, "columns"],
-    ["till", 4, null],
-    ["till", 10, null],
-    ["till", 3, "columns"],
-    ["till", 11, "columns"],
-    ["till", 6.5, "columns"],
-    ["till", "8", "columns"],
-    ["till", null, "columns"],
-  ] as const)("on a %s, %j columns is %s", (device, columns, problem) =>
-    expect(homeDisplayProblem(device, { columns })).toBe(problem),
-  );
-  it("refuses a tile mode or an order outside its list, and checks no absent key", () => {
-    expect(homeDisplayProblem("till", { tiles: "pictures" })).toBe("tiles");
-    expect(homeDisplayProblem("till", { order: "first" })).toBe("order");
-    expect(homeDisplayProblem("handheld", { tiles: "thumbnails", order: "menu_first" })).toBeNull();
-    expect(homeDisplayProblem("handheld", {})).toBeNull();
   });
 });
 

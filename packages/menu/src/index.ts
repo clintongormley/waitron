@@ -138,13 +138,9 @@ export * from "./include-folder-presentation.js";
 export { setIncludeFolder, columnsFromOverrides, overridesFromRow } from "./include-folder.js";
 export * from "./menu-home.js";
 export {
-  HOME_DEVICES,
-  HOME_TILE_MODES,
   HOME_ORDERS,
-  HOME_DISPLAY_DEFAULTS,
-  HOME_COLUMN_RANGE,
+  DEFAULT_HOME_ORDER,
   HOME_GRID_COLUMNS,
-  homeDisplayProblem,
   arrangeHome,
   tileFill,
   shownMembers,
@@ -202,10 +198,7 @@ export type {
   DocumentMember,
   DocumentList,
   DocumentTile,
-  HomeDevice,
-  HomeTileMode,
   HomeOrder,
-  HomeDisplay,
   DeviceHome,
   MenuDocument,
   LiveExtraItem,

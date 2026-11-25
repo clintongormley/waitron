@@ -9557,9 +9557,8 @@ it.each(["home", "clash"] as const)(
         {
           id: "home",
           kind: "home_display_changed",
-          device: "handheld",
           source: "this_menu",
-          targets: { before: [], after: [{ kind: "home", device: "handheld", field: "columns" }] },
+          targets: { before: [], after: [{ kind: "home", field: "order" }] },
         },
       ],
       clashes: [

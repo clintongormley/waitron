@@ -1,4 +1,3 @@
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
 import { fixedNameLanguages } from "./include-folder-presentation.js";
 import type {
   DocumentMember,
@@ -76,7 +75,7 @@ export function menuTargetKey(target: MenuTarget): string {
     case "section":
       return JSON.stringify([target.kind, target.sectionIds, fieldKey(target.field)]);
     case "home":
-      return JSON.stringify([target.kind, target.device, target.field]);
+      return JSON.stringify([target.kind, target.field]);
     case "product":
       return JSON.stringify([
         target.kind,
@@ -504,25 +503,12 @@ export function navigateMenuChanges(
         targets.after.push({ kind: "title", menuId: proposed.menuId });
         break;
       case "home_shortcuts_changed":
-      case "home_display_changed":
-        for (const device of change.kind === "home_shortcuts_changed"
-          ? (["handheld", "till"] as const)
-          : [change.device])
-          for (const field of change.kind === "home_shortcuts_changed"
-            ? (["shortcuts"] as const)
-            : (["columns", "tiles", "order"] as const)) {
-            if (
-              field !== "shortcuts" &&
-              same(
-                live?.home[device][field] ?? HOME_DISPLAY_DEFAULTS[device][field],
-                proposed.home[device][field],
-              )
-            )
-              continue;
-            if (live !== null) targets.before.push({ kind: "home", device, field });
-            targets.after.push({ kind: "home", device, field });
-          }
+      case "home_display_changed": {
+        const field = change.kind === "home_shortcuts_changed" ? "shortcuts" : "order";
+        if (live !== null) targets.before.push({ kind: "home", field });
+        targets.after.push({ kind: "home", field });
         break;
+      }
       case "section_changed": {
         if (live === null) break;
         const copies = (occurrences: readonly MenuTarget[]) =>
@@ -673,7 +659,6 @@ export function navigateMenuChanges(
       "listId" in change ? change.listId : null,
       "listSectionId" in change ? change.listSectionId : null,
       "parentSectionIds" in change ? change.parentSectionIds : null,
-      "device" in change ? change.device : null,
       "fields" in change ? [...new Set(change.fields)].sort() : null,
       keys("before"),
       keys("after"),

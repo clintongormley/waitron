@@ -264,7 +264,7 @@ describe("media backup evidence", () => {
     "judges only retained photos for a %s release",
     async (state) => {
       const document: MenuDocument = {
-        format: 5,
+        format: 6,
         menuId: menu,
         menuName: "Old menu",
         root: {
@@ -283,8 +283,7 @@ describe("media backup evidence", () => {
         offers: {},
         home: {
           shortcuts: [],
-          handheld: { columns: 2, tiles: "colours", order: "home_first" },
-          till: { columns: 3, tiles: "colours", order: "home_first" },
+          order: "home_first",
         },
       };
       for (const suite of [original, restored]) {

@@ -132,29 +132,6 @@ describe("fixed Counter menu browser", () => {
     expect(browser().products).toEqual([salad, steak]);
   });
 
-  it("uses the menu's display for each device kind", async () => {
-    const menu = {
-      ...lunchMenu,
-      home: {
-        ...lunchMenu.home,
-        till: { ...lunchMenu.home.till, columns: 8 },
-        handheld: { ...lunchMenu.home.handheld, columns: 2 },
-      },
-    };
-    const { el, browser } = await mountBrowser({ menus: [menu, drinksMenu] });
-    const columns = () =>
-      getComputedStyle(browser().shadowRoot!.querySelector(".grid")!)
-        .getPropertyValue("--columns")
-        .trim();
-    expect(columns()).toBe("8");
-    expect(browser().handheld).toBe(false);
-    el.handheld = true;
-    await el.updateComplete;
-    await browser().updateComplete;
-    expect(columns()).toBe("2");
-    expect(browser().handheld).toBe(true);
-  });
-
   it("hides a product the diet lens rejects, and greys in place a section it leaves with nothing", async () => {
     const { browser } = await mountBrowser({ selectedFilters: { diets: ["vegan"], exclude: {} } });
     expect(browser().products).toEqual([salad]);

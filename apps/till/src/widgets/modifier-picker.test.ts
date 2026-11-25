@@ -1,7 +1,7 @@
 import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { formatMoney, HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { formatMoney, DEFAULT_HOME_ORDER } from "@waitron/shared";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { productAsVariant } from "../state/order-line.js";
 import { cleanupWidgets, measured, mountWidget } from "./test-helpers.js";
@@ -200,8 +200,7 @@ async function mountBrowser(product: TillProduct, store: WorkingOrderStore) {
     },
     home: {
       shortcuts: [],
-      handheld: HOME_DISPLAY_DEFAULTS.handheld,
-      till: HOME_DISPLAY_DEFAULTS.till,
+      order: DEFAULT_HOME_ORDER,
     },
   };
   return mountWidget<TillMenuBrowser>("till-menu-browser", { menu, products: [product], store });

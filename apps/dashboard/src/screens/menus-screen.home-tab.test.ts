@@ -208,8 +208,7 @@ function menuHome(): MenuHome {
       tile("t-drinks", 1, { kind: "section", sectionId: "s-drinks" }, "Drinks"),
       tile("t-chips", 2, { kind: "product", productId: "p-chips" }, "Chips"),
     ],
-    handheld: { columns: 3, tiles: "colours", order: "home_first" },
-    till: { columns: 6, tiles: "colours", order: "home_first" },
+    order: "home_first",
   };
 }
 
@@ -554,7 +553,13 @@ describe("the Home page tab's shortcuts", () => {
           emit(preview(el)!, "wt-shortcut-move", { memberId: "t-drinks", to: 0 });
         } else {
           client.setHomeDisplay.mockImplementationOnce(() => save.promise);
-          emit(q(el, 'wt-slider[name="home-columns"]')!, "wt-change", { value: 2 });
+          const control = q<HTMLElementTagNameMap["wt-segmented-control"]>(
+            el,
+            'wt-segmented-control[name="home-order"]',
+          )!;
+          emit(control, "wt-change", {
+            value: control.value === "home_first" ? "menu_first" : "home_first",
+          });
         }
         await el.updateComplete;
         await preview(el)!.updateComplete;
@@ -752,54 +757,78 @@ describe("the Home page tab's shortcuts", () => {
     });
   });
 
-  describe("layout", () => {
-    async function atWidth(width: number) {
-      const frame = { width: window.innerWidth, height: window.innerHeight };
+  it.each([360, 390, 768, 769, 1280])(
+    "places Shown first above the preview at %s px",
+    async (width) => {
+      const viewport = { width: window.innerWidth, height: window.innerHeight };
       await page.viewport(width, 900);
-      onTestFinished(() => page.viewport(frame.width, frame.height));
+      onTestFinished(() => page.viewport(viewport.width, viewport.height));
       const el = await mountHome();
-      const previewBox = q(el, '[data-test="home-preview-pane"]')!.getBoundingClientRect();
-      const settingsBox = q(el, '[data-test="home-settings"]')!.getBoundingClientRect();
-      return { el, previewBox, settingsBox };
-    }
+      const control = q<HTMLElementTagNameMap["wt-segmented-control"]>(
+        el,
+        'wt-segmented-control[name="home-order"]',
+      )!;
+      const widget = preview(el)!;
+      await widget.updateComplete;
+      await control.updateComplete;
+      expect(control.getBoundingClientRect().bottom).toBeLessThan(
+        widget.getBoundingClientRect().top,
+      );
+      const grid = widget.shadowRoot!.querySelector(".grid")!;
+      const tracks = getComputedStyle(grid).gridTemplateColumns.split(" ");
+      expect(tracks).toHaveLength(width >= 768 ? 6 : 3);
+      const label = control.shadowRoot!.querySelector(".label")!.getBoundingClientRect();
+      const row = control.shadowRoot!.querySelector('[role="radiogroup"]')!.getBoundingClientRect();
+      if (width > 768) {
+        expect(row.width).toBeLessThan(350);
+        expect(label.right).toBeLessThan(row.left);
+        expect(label.top + label.height / 2).toBeCloseTo(row.top + row.height / 2, 1);
+      }
+      if (width === 768) expect(row.width).toBeLessThanOrEqual(576);
+      if (width <= 390) {
+        expect(label.bottom).toBeLessThan(row.top);
+        const buttons = [...control.shadowRoot!.querySelectorAll("button")];
+        const [first, second] = buttons.map((button) => button.getBoundingClientRect().width);
+        expect(first).toBeCloseTo(second!, 1);
+        expect(widget.getBoundingClientRect().width).toBeCloseTo(
+          control.getBoundingClientRect().width,
+        );
+      }
+    },
+  );
 
-    it("puts the preview on the left and the settings on the right on a wide screen", async () => {
-      const { previewBox, settingsBox } = await atWidth(1280);
-      expect(previewBox.right).toBeLessThanOrEqual(settingsBox.left);
-      expect(previewBox.width).toBeGreaterThan(settingsBox.width);
-      expect(Math.abs(previewBox.top - settingsBox.top)).toBeLessThan(1);
-    });
-
-    it("stacks the preview above the settings on a phone", async () => {
-      const { previewBox, settingsBox } = await atWidth(390);
-      expect(previewBox.bottom).toBeLessThanOrEqual(settingsBox.top);
-      expect(Math.abs(previewBox.left - settingsBox.left)).toBeLessThan(1);
-    });
-
-    const frameOf = (el: MenusScreen) => preview(el)!.shadowRoot!.querySelector(".frame")!;
-
-    it("fits the till's menu beside the reserved order space inside its frame", async () => {
-      const { el } = await atWidth(1280);
-      q<HTMLInputElement>(el, 'input[name="home-device"][value="till"]')!.click();
-      await el.updateComplete;
-      await preview(el)!.updateComplete;
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-      expect(preview(el)!.device).toBe("till");
-      const grids = frameOf(el).querySelectorAll<HTMLElement>(".grid");
-      expect(grids).toHaveLength(2);
-      for (const grid of grids)
-        expect(getComputedStyle(grid).gridTemplateColumns.split(" ")).toHaveLength(4);
-    });
-
-    it("puts the settings just beside the handheld's frame 1280 px wide", async () => {
-      const { el, settingsBox } = await atWidth(1280);
-      expect(preview(el)!.device).toBe("handheld");
-      const gap = parseFloat(getComputedStyle(q(el, ".home-columns")!).columnGap);
-      expect(gap).toBeGreaterThan(0);
-      const frameBox = frameOf(el).getBoundingClientRect();
-      expect(frameBox.right).toBeLessThanOrEqual(settingsBox.left);
-      expect(settingsBox.left - frameBox.right).toBeLessThanOrEqual(gap * 2);
-    });
+  it("keeps the saved order when reloading fails and restores it after a refused change", async () => {
+    const client = api();
+    const el = await mountHome(client);
+    const control = q<HTMLElementTagNameMap["wt-segmented-control"]>(
+      el,
+      'wt-segmented-control[name="home-order"]',
+    )!;
+    const choose = (index: number) =>
+      control.shadowRoot!.querySelectorAll("button")[index]!.click();
+    const blocks = () =>
+      [...preview(el)!.shadowRoot!.querySelectorAll<HTMLElement>("[data-region]")].map(
+        (block) => block.dataset.region,
+      );
+    const save = deferred<void>();
+    client.setHomeDisplay.mockImplementationOnce(() => save.promise);
+    client.getMenuHome.mockRejectedValueOnce(new Error("offline"));
+    choose(1);
+    await vi.waitFor(() => expect(control.disabled).toBe(true));
+    expect(control.value).toBe("menu_first");
+    expect(client.setHomeDisplay).toHaveBeenCalledExactlyOnceWith("menu-lunch", "menu_first");
+    await vi.waitFor(() => expect(blocks()).toEqual(["search", "structure", "shortcuts"]));
+    save.resolve();
+    await vi.waitFor(() => expect(q(el, '[data-test="home-load-error"]')).not.toBeNull());
+    expect(control.value).toBe("menu_first");
+    expect(blocks()).toEqual(["search", "structure", "shortcuts"]);
+    client.setHomeDisplay.mockRejectedValueOnce({ code: "server.internal" });
+    choose(0);
+    await vi.waitFor(() =>
+      expect(q(el, '[data-test="home-error"]')?.textContent).toBe(codeMessage("server.internal")),
+    );
+    expect(control.value).toBe("menu_first");
+    expect(blocks()).toEqual(["search", "structure", "shortcuts"]);
   });
 });
 

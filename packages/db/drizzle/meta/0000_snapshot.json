@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "56b22dd3-eb22-4748-801e-40006036ea1f",
+  "id": "176db347-e926-4194-b434-fe1ef0766cb3",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -7727,48 +7727,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "handheld_columns": {
-          "name": "handheld_columns",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 3
-        },
-        "handheld_tiles": {
-          "name": "handheld_tiles",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'colours'"
-        },
-        "handheld_order": {
-          "name": "handheld_order",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'home_first'"
-        },
-        "till_columns": {
-          "name": "till_columns",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 6
-        },
-        "till_tiles": {
-          "name": "till_tiles",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "'colours'"
-        },
-        "till_order": {
-          "name": "till_order",
+        "home_order": {
+          "name": "home_order",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -7819,29 +7779,9 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "menus_handheld_columns_ck": {
-          "name": "menus_handheld_columns_ck",
-          "value": "\"menus\".\"handheld_columns\" between 2 and 3"
-        },
-        "menus_till_columns_ck": {
-          "name": "menus_till_columns_ck",
-          "value": "\"menus\".\"till_columns\" between 4 and 10"
-        },
-        "menus_handheld_tiles_ck": {
-          "name": "menus_handheld_tiles_ck",
-          "value": "\"menus\".\"handheld_tiles\" in ('colours', 'thumbnails')"
-        },
-        "menus_handheld_order_ck": {
-          "name": "menus_handheld_order_ck",
-          "value": "\"menus\".\"handheld_order\" in ('home_first', 'menu_first')"
-        },
-        "menus_till_tiles_ck": {
-          "name": "menus_till_tiles_ck",
-          "value": "\"menus\".\"till_tiles\" in ('colours', 'thumbnails')"
-        },
-        "menus_till_order_ck": {
-          "name": "menus_till_order_ck",
-          "value": "\"menus\".\"till_order\" in ('home_first', 'menu_first')"
+        "menus_home_order_ck": {
+          "name": "menus_home_order_ck",
+          "value": "\"menus\".\"home_order\" in ('home_first', 'menu_first')"
         },
         "menus_kind_ck": {
           "name": "menus_kind_ck",

@@ -256,7 +256,6 @@ it("words every kind of change, each with where it came from", async () => {
         id: "fixture-src/widgets/menu-preview.test.ts-24",
         targets: { before: [], after: [] },
         kind: "home_display_changed",
-        device: "till",
         source: "this_menu",
       },
       {
@@ -287,7 +286,7 @@ it("words every kind of change, each with where it came from", async () => {
       "Order changed at the top level",
       "Order changed in Drinks — included menu",
       "Device Home Page shortcuts changed",
-      "Device Home Page display for Till changed",
+      "What appears first on the Device Home Page changed",
       "Menu renamed from Midday Menu to Lunch Menu",
     ].sort(),
   );
@@ -336,7 +335,6 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
         id: "fixture-src/widgets/menu-preview.test.ts-18",
         targets: { before: [], after: [] },
         kind: "home_display_changed",
-        device: "handheld",
         source: "this_menu",
       },
     ]),
@@ -347,7 +345,7 @@ it("words a change in Spanish, with the price in the Spanish money format", asyn
       "Ha cambiado el orden en el nivel principal",
       "Ha cambiado el precio de Burger de 12,00 € a 13,00 € — producto compartido, también en Dinner Menu y Terrace Menu",
       "Han cambiado los accesos directos de la página de inicio del dispositivo",
-      "Ha cambiado la presentación de la página de inicio del dispositivo en Terminal de mano",
+      "Ha cambiado lo que se muestra primero en la página de inicio del dispositivo",
     ].sort(),
   );
 });

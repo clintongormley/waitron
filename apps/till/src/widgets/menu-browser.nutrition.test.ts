@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
@@ -38,8 +38,7 @@ const menu: TillZoneMenu = {
   structure: { members: [{ kind: "product", productId: "dish", menuItemId: "offer" }] },
   home: {
     shortcuts: [],
-    till: HOME_DISPLAY_DEFAULTS.till,
-    handheld: HOME_DISPLAY_DEFAULTS.handheld,
+    order: DEFAULT_HOME_ORDER,
   },
 };
 

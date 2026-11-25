@@ -216,13 +216,13 @@ export class ThemePreview extends LitElement {
         gap: var(--wt-space-3);
         min-width: 0;
       }
-      /* A counter till's narrowest tile (HOME_GRID_COLUMNS). */
+      /* The minimum tile width in HOME_GRID_COLUMNS. */
       .tile {
         display: flex;
         flex-direction: column;
         align-items: center;
         box-sizing: border-box;
-        width: calc(var(--wt-tap-min) * 2 + var(--wt-space-4));
+        width: 100px;
         padding: var(--wt-space-2);
         border: 1px solid var(--wt-color-border);
         border-radius: var(--wt-radius-md);

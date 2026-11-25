@@ -163,7 +163,7 @@ changing that name must pass the check.
 
 `POST /management-api/menus/:id/duplicate`, with `{ name }`, makes a new menu holding a copy
 of this menu's working copy and answers 201 with the new menu (`{ id, name, active }`). It
-copies the menu's own sections and their members, its Home shortcuts, its display settings, its
+copies the menu's own sections and their members, its Home shortcuts, its home order, its
 products' menu prices and its variant prices (`duplicateMenu`,
 `packages/menu/src/menu-copy.ts`). An include, and a Home shortcut into an included menu,
 still name the other menu's sections. Published versions, scheduled publications and menu periods
@@ -221,9 +221,9 @@ fields that need a decision. `document` is the proposed published document, with
 structure and the Device Home Page as `home` (below); a shortcut whose target the document does not
 hold keeps its place as a `{ kind: "empty" }` slot. Each such shortcut gives a warning
 `{ kind: "shortcut_missing", name }`. Among the `changes`, a `home_shortcuts_changed` change says
-the shortcuts differ from the live version's, and a `home_display_changed` change, naming its
-`device`, that one device's display does. With no live version, the shortcuts count as changed when
-there are any, and a display when it differs from the default.
+the shortcuts differ from the live version's. A `home_display_changed` change says what appears
+first has changed. On a first publication, shortcuts count as changed when there are any, and the
+order counts as changed when the full menu appears first.
 
 `POST /management-api/menus/:id/publish`, with `{ expectedHash }`, gives
 `{ versionId, number, publishedAt }` (200). The time is the recorded release time in ISO 8601.
@@ -307,7 +307,7 @@ were.
   for a picture the image library does not hold). A patch that leaves the
   live version as it was answers `menu_patch.unchanged` (409, `menuId`).
 
-Tills sell from live versions of active menus. Reading a live version outside document format 5 refuses
+Tills sell from live versions of active menus. Reading a live version outside document format 6 refuses
 with `menu.reset_required`. Status reads check their requested menus; preview checks its own menu
 and other menus when comparing shared changes; publishing checks its own menu; serving checks
 the zone's assigned active menus. Reset the venue before using its
@@ -319,41 +319,35 @@ there are no per-menu extras publications or overrides.
 ### Device Home Page routes
 
 A menu has one Device Home Page: the shortcuts a handheld or a till shows under its search, beside
-the menu's own structure, and how each of the two kinds of device lays them out. A menu never
+the full menu, and which one appears first on every device. A menu never
 inherits another menu's. A shortcut points at a product or a section and adds no product, price or
 placement to the menu. The shortcut writer checks that the menu's working structure reaches the
 target, including targets in included menus. Use the shortcut routes to write it: the generic
 section writes refuse its section with `menu_section.wrong_role`.
 
-`GET /management-api/menus/:id/home` gives `{ homeSectionId, shortcuts, handheld, till }`. A
+`GET /management-api/menus/:id/home` gives `{ homeSectionId, shortcuts, order }`. A
 shortcut is `{ memberId, position, ref, name, reachable, missingName }`. Its `ref` names a product, a
 section, or a deleted target as `{ kind: "missing", name }`. `reachable` checks working membership;
 `missingName` is null for a reachable target and otherwise records its name or section path.
 Publishing keeps an empty slot for a target the document leaves out, so later shortcuts keep their
 positions.
 
-`handheld` and `till` are the two displays, each `{ columns, tiles, order }`. `columns` is a whole
-number from 2 to 3 for a handheld and from 4 to 10 for a till. The stored `tiles` field accepts
-`colours` or `thumbnails`. Both client renderers use colour, independent of that field. `order` is
-`home_first` (the shortcuts, then the menu) or `menu_first`. A new menu starts with
-3 columns on a handheld and 6 on a till, both `colours` and `home_first` (`HOME_DISPLAY_DEFAULTS`,
-`packages/shared/src/menu-document/device-home.ts`).
+The same `order` applies to every device. A new menu uses `home_first` and shows its shortcuts
+first. Choose `menu_first` to show the full menu first.
 
 | Route | Body and success | Refusals |
 | --- | --- | --- |
 | `GET /management-api/menus/:id/home` | 200, the Device Home Page, shortcuts in order, missing ones included | `menu.not_found` |
-| `PATCH /management-api/menus/:id/home-display` | `{ device, columns?, tiles?, order? }`, `device` being `handheld` or `till`; 204, changing only the fields given | `menu.not_found`, `management.request_invalid`, `menu.home_display_invalid` |
+| `PATCH /management-api/menus/:id/home-display` | `{ order }`, 204 | `menu.not_found`, `menu.deleted`, `management.request_invalid` |
 | `POST /management-api/menus/:id/home/shortcuts` | `{ ref, position? }`; 201, `{ id, position, ref }` | `menu.not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu_section.invalid`, `menu.shortcut_unreachable` |
 | `POST /management-api/menus/:id/home/shortcuts/:memberId/replace` | `{ ref }`; 200, the member, keeping its id and position | `menu.not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu.shortcut_unreachable` |
 | `DELETE /management-api/menus/:id/home/shortcuts/:memberId` | 204 | `menu.not_found`, `menu_section.not_found` |
 | `PUT /management-api/menus/:id/home/shortcuts/:memberId/position` | `{ to }`; 200, the shortcuts as members `{ id, position, ref }` in their new order, missing slots included | `menu.not_found`, `menu_section.not_found`, `menu_section.invalid` |
 
-Malformed ids answer `shared.invalid_id` (400) and malformed bodies `management.request_invalid`
-(400); on the display route that includes a `device` other than `handheld` or `till`
-(`field: "device"`). An unknown menu answers `menu.not_found` (404).
-`menu.home_display_invalid` (400, `device`, `field`) refuses a value that device cannot take,
-`field` being `columns`, `tiles` or `order`; with more than one wrong it names the first in that
-order. `menu.shortcut_unreachable` (400, `ref`) refuses a target outside the working structure,
+Malformed ids answer `shared.invalid_id` (400) and malformed bodies answer
+`management.request_invalid` (400). A missing or unrecognised display order names `field: "order"`.
+An unknown menu answers `menu.not_found` (404).
+`menu.shortcut_unreachable` (400, `ref`) refuses a target outside the working structure,
 including the menu's own root, and a deleted product, which no list holds. A shortcut to a product
 deleted later becomes a missing tile in its place, which publishes as an empty slot with a
 `shortcut_missing` warning. `menu_section.wrong_role` (400, `sectionId`, `role`) refuses a Device Home Page section,
@@ -363,27 +357,22 @@ section, 404 otherwise; a product target must be a stored top-level
 product or it answers `menu_section.membership_invalid` (400). A repeated target answers
 `menu_section.member_duplicate` (409), and a negative or fractional position answers
 `menu_section.invalid` (400, `field`). The dashboard adds, removes and moves shortcuts, and edits
-the displays, on a menu's Home page tab; it does not call the replace route.
-
-No device profile chooses anything here. A device uses `handheld` when its profile's form factor is
-a phone or a tablet (`kindOfFormFactor`, `apps/till/src/layout.ts`) and `till` otherwise.
+the order, on a menu's Home page tab; it does not call the replace route.
 
 **Storage.** Find the menu's Home section through `sections.owner_menu_id` and
-`role = 'home_layout'`; its root has `role = 'menu_root'`. A partial unique index permits one of
-each per menu. The six display columns live on `menus`: `handheld_columns`, `handheld_tiles`,
-`handheld_order`, `till_columns`, `till_tiles` and `till_order`. They have required defaults and
-CHECKs for their ranges and choices. A save checks them with `homeDisplayProblem` first so it can
-name the field. A configuration import refuses an invalid value with `setup.request_invalid`
-and a field such as `menus.till_columns`. It also refuses a menu that does not own exactly one root section
+`role = 'home_layout'`. Its root has `role = 'menu_root'`. A partial unique index permits one of
+each per menu. `menus.home_order` is required and checked against the two choices. A configuration
+import refuses an invalid value with `setup.request_invalid` and the field `menus.home_order`.
+It also refuses a menu that does not own exactly one root section
 and one Home section, with the field `sections.owner_menu_id`.
 
 **What a till is served.** A till reads the Device Home Page from each menu's live version, not
 from the working state. Both offers routes (`GET /api/default-service-zone/offers` and
 `GET /api/service-zones/:zoneId/offers`) give each menu its `structure` and its `home`, the live
-document's `{ shortcuts, handheld, till }`, where a shortcut is `{ kind: "product", productId }`,
+document's `{ shortcuts, order }`, where a shortcut is `{ kind: "product", productId }`,
 `{ kind: "section", sectionId }` or `{ kind: "empty" }`. `GET /api/menu-state` gives each menu
 `{ menuId, versionId }` beside `unavailable`. The served `home` is the live document's, the same
-whichever device asks; the till picks the display its form factor names. A shortcut or display changed since the last publish
+whichever device asks. A shortcut or order changed since the last publish
 reaches no device until the menu is published again (the case "a draft shortcut or display change
 reaches no device until the menu is published" in `apps/server/src/till-api.sell-published.test.ts`).
 
@@ -527,7 +516,7 @@ sending the removed `categoryIds` or `labelIds`, is refused with `product.invali
 ## Storage and development reset
 
 `categories` holds each category's name, parent and colour in core's set. Its parent key refuses
-deleting a category while a child still names it. `menus` holds its display settings, and
+deleting a category while a child still names it. `menus` holds its home order, and
 `sections` holds the root and Home roles. `deleteMenu` detaches a menu from working menus, keeps
 its Home positions as named missing shortcuts, and ends its own live and scheduled editions.
 `menu.deleted` records the menu name and person. The menu and recorded editions stay in the database.

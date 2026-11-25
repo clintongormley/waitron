@@ -3,7 +3,7 @@ import "../src/till-app.js";
 import { userEvent } from "vitest/browser";
 import type { AllergySendTarget, PartyAllergyRead } from "@waitron/module";
 import { deviceZonesFixture } from "./device-zones.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 import {
   floorPartyBills,
   draftServer,
@@ -106,8 +106,7 @@ export function menu(version: string, prices: Record<string, string> = {}): Zone
         },
         home: {
           shortcuts: [],
-          handheld: HOME_DISPLAY_DEFAULTS.handheld,
-          till: HOME_DISPLAY_DEFAULTS.till,
+          order: DEFAULT_HOME_ORDER,
         },
       },
     ],

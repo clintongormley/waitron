@@ -539,7 +539,8 @@ with **Send all** above them while you have dishes to send. After you send every
 stays on the table until you tap **Floor**. On a screen 720 px wide or more, such as a tablet's, the
 menu and the order sit side by side.
 
-Use the **Menu** field beside **Search** to switch between the menus available now.
+Use the **Menu** field beside **Search** to switch between the menus available now. Scroll past
+the first block to find the other one, **Shortcuts** or **Full menu**.
 Tap a tile with a folder to open that section. A price range shows what the different variants
 cost. Tap the product to choose one and see its price.
 

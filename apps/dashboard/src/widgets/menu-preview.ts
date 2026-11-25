@@ -16,7 +16,6 @@ import { formatMoney, contentLanguageDisplayName } from "@waitron/shared";
 import type { DashboardApi, MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { relativeTime } from "./relative-time.js";
 import { codeMessage } from "../i18n/codes.js";
-import { homeDeviceName } from "../i18n/domain.js";
 import { conjunctionList } from "../i18n/list.js";
 import {
   openProduct,
@@ -484,9 +483,7 @@ export class MenuPreviewPanel extends LitElement {
       case "home_shortcuts_changed":
         return t("menu_preview.home_shortcuts_changed");
       case "home_display_changed":
-        return fill("menu_preview.home_display_changed", {
-          device: homeDeviceName(change.device),
-        });
+        return t("menu_preview.home_display_changed");
       case "menu_renamed":
         return fill("menu_preview.menu_renamed", { from: change.from, to: change.to });
     }

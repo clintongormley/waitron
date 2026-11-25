@@ -7,7 +7,7 @@ import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi, DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
-import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 
 import type { MenuPreviewPanel } from "./menu-preview.js";
 import type { MenuPublicationsPanel } from "./menu-publications.js";
@@ -499,15 +499,14 @@ export function menuDocument(
   };
   walk(members);
   return {
-    format: 5,
+    format: 6,
     menuId: "menu-lunch",
     menuName,
     root: { members },
     offers,
     home: {
       shortcuts: [],
-      handheld: HOME_DISPLAY_DEFAULTS.handheld,
-      till: HOME_DISPLAY_DEFAULTS.till,
+      order: DEFAULT_HOME_ORDER,
     },
   };
 }

@@ -1501,7 +1501,7 @@ Owner, 2026-09-20: ship screens written in code rather than a designer venues dr
 ([service design §11](../superpowers/specs/2026-09-20-service-ordering-and-billing-design.md#11-screen-reuse-and-deferred-work)).
 Owner, 2026-10-08: "delete the canvases functionality. we provide prebuilt screens with
 configuration settings." Delete the designer before redesigning its default workflows. Menu
-Device Home Page and its Handheld/Till displays, receipt configuration and the floor-plan editor
+Device Home Page and its shared order, receipt configuration and the floor-plan editor
 remain separate. Part 2 landed in [#1800](https://github.com/clintongormley/waitron/pull/1800) on 2026-10-16; part 1's redesign
 remains open.
 [Retirement design](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/specs/2026-10-16-a182-2-retire-canvases-design.md) and

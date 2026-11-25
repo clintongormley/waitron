@@ -1527,8 +1527,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) partyDrafts: readonly PartyDraft[] = [];
   /** Who is signed in, which tells their own drafts from someone else's. */
   @property() personId = "";
-  /** A handheld form factor, whose menu browser shows the menu's handheld display and whose pay
-   * section opens the pay sheet. */
+  /** Handhelds open payment in a sheet. */
   @property({ type: Boolean }) handheld = false;
   /** The visible half of the app's guard against a second group command while one runs. */
   @property({ type: Boolean }) groupCommandBusy = false;
@@ -3094,7 +3093,6 @@ export class TillTableOrderScreen extends LitElement {
       )}
       .store=${store}
       .inOrder=${this.wide ? undefined : this.#inOrder(store)}
-      .handheld=${this.handheld}
       weighs
     >
       ${

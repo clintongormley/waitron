@@ -3350,7 +3350,6 @@ export class TillApp extends LitElement {
   #barTableInputs = "";
   /** An enrolled KDS display: no login, boots straight into its queue. Set only by {@link #boot}. */
   @state() private deviceMode = false;
-  /** An enrolled handheld: its menu browser shows the menu's handheld display. */
   @state() private handheldMode = false;
   @state() private frontDoor?: "chooser" | "enrol";
   @state() private devDevices?: DevDeviceList;
@@ -24723,7 +24722,6 @@ export class TillApp extends LitElement {
         .receiptLanguage=${this.#receiptLanguageShown(this.#store.id)}
         .asksGuests=${this.invoiceChoice?.orderId !== this.#store.id}
         .receiptGuests=${null}
-        .handheld=${this.handheldMode}
         .storedLines=${this.#basketStoredLines()}
         .nutritionLines=${this.counterLines}
         .stationMoveLines=${this.capabilities.includes("take-orders") ? this.counterLines : null}

@@ -222,9 +222,8 @@ it("routes Home View as a normal link to this menu's Home tab", async () => {
   const home: MenuChange = {
     id: "home",
     kind: "home_display_changed",
-    device: "handheld",
     source: "this_menu",
-    targets: { before: [], after: [{ kind: "home", device: "handheld", field: "columns" }] },
+    targets: { before: [], after: [{ kind: "home", field: "order" }] },
   };
   const el = await mount(fixture([home]));
   expect(link(el, "home")).not.toBeNull();
@@ -411,7 +410,6 @@ it("places every change kind in its named group and keeps the groups in working 
       ...shared,
       id: "home-display",
       kind: "home_display_changed",
-      device: "handheld",
     },
   };
   const el = await mount(fixture(Object.values(kinds).reverse()));

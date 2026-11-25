@@ -2593,8 +2593,7 @@ describe("without the Device Home Page", () => {
         reachable: true,
       },
     ],
-    handheld: { columns: 3, tiles: "colours", order: "home_first" },
-    till: { columns: 6, tiles: "colours", order: "home_first" },
+    order: "home_first",
   };
 
   it("draws the menu's members as the top-level rows, even when a home is handed to it", async () => {

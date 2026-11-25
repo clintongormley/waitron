@@ -365,14 +365,11 @@ posterior llega a las cajas cuando vuelves a publicar la carta completa.
 
 ## Revisa la página de inicio de la carta {#menu-home}
 
-Abre la pestaña **Página de inicio** de una carta para ordenar los accesos directos, elegir cuántas
-columnas se muestran y decidir qué aparece primero. Busca el icono de carpeta para abrir una
-sección en la vista previa. Si un producto muestra un intervalo, son los precios de sus variantes.
-
-Elige **Caja registradora** para consultar la **Vista previa del
-pedido de mesa**: representa una caja tan ancha como el marco y reserva espacio para el pedido.
-Úsala para comprobar cuántas columnas caben junto al pedido. Con menos anchura, la carta ocupa
-todo el marco, como cuando la caja muestra solo Carta.
+Abre la pestaña **Página de inicio** de una carta para ordenar sus accesos directos. En
+**Se muestra primero**, elige **Accesos directos** o **Carta completa**. Publica la carta para
+enviar el nuevo orden a todos los dispositivos. Las columnas se ajustan al ancho de cada pantalla.
+En la vista previa, pulsa una carpeta para abrir la sección. Si un producto muestra un intervalo,
+son los precios de sus variantes.
 
 Para sustituir un acceso directo marcado **No se muestra**, quítalo con su papelera y añade un producto o una
 sección que esta carta muestre.

@@ -19,6 +19,7 @@ import type {
   DiningPolicy,
   DiningStart,
   ServedSetMenu,
+  HomeOrder,
 } from "@waitron/shared";
 import type { PartyAllergySnapshot, TicketAllergyCopy } from "./party-allergy.js";
 import type { BillIdentity } from "./bill-identity.js";
@@ -345,23 +346,14 @@ export type ZoneMenuMember =
       readonly members: readonly ZoneMenuMember[];
     };
 
-/** How one kind of device presents a menu's Device Home Page. */
-export interface ZoneHomeDisplay {
-  readonly columns: number;
-  readonly tiles: "colours" | "thumbnails";
-  readonly order: "home_first" | "menu_first";
-}
-
-/** A Device Home Page as the live version holds it: its shortcuts in order, and each device's
- * display settings. */
+/** A published Device Home Page, including the order of its two blocks. */
 export interface ZoneDeviceHome {
   readonly shortcuts: readonly (
     | { readonly kind: "product"; readonly productId: string }
     | { readonly kind: "section"; readonly sectionId: string }
     | { readonly kind: "empty" }
   )[];
-  readonly handheld: ZoneHomeDisplay;
-  readonly till: ZoneHomeDisplay;
+  readonly order: HomeOrder;
 }
 
 /**
