@@ -9,7 +9,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { recordAdjustment } from "@waitron/adjustments";
-import { decimal } from "@waitron/shared";
+import { decimal, type ProductAllergens } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   addMember,
@@ -17,6 +17,7 @@ import {
   requireMenuRoot,
   saveSetMenuDishCourse,
   updateMenuDetails,
+  updateProduct,
 } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { listZoneOffers } from "@waitron/venue-service";
@@ -27,6 +28,7 @@ import {
 } from "./set-menu-bill.js";
 import { setMenuOfferLookup } from "./set-menu-offers.js";
 import { createCourse } from "./kitchen.js";
+import { getHeldOrder } from "./working-order-held-read.js";
 import {
   cashContribution,
   counterOrder,
@@ -171,6 +173,26 @@ it("returns one copy when the recorded copy and another full-menu version have t
     state.copies[0]!.id,
     state.copies[0]!.id,
   ]);
+});
+
+it("serves the retrieved bill's set menu at its recorded price with the allergens published since", async () => {
+  const id = await tableBill();
+  const publish = (allergens: ProductAllergens, setPrice: string) =>
+    inTx(venue, async (tx) => {
+      await updateProduct(tx, daily.productId, { allergens });
+      await updateMenuDetails(tx, daily.menuId, { setPrice });
+      return publishWorkingMenu(tx, daily.fullMenuId);
+    });
+  const retrieved = async () =>
+    (await getHeldOrder({ db: venue.db }, id)).setMenuCopies?.map(({ terms, offers }) => [
+      terms.price,
+      offers.map(({ allergens }) => allergens),
+    ]);
+  const versionId = await publish({ milk: {} }, "14.00");
+  await inTx(venue, (tx) => seedBillSetMenu(tx, id, { ...daily, versionId }, 1));
+  expect(await retrieved()).toEqual([["14.00", [{ milk: {} }]]]);
+  await publish({ eggs: {} }, "16.00");
+  expect(await retrieved()).toEqual([["14.00", [{ eggs: {} }]]]);
 });
 
 function observeMenuVersionReads() {
