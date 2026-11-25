@@ -63,21 +63,17 @@ export async function mountWidget<T extends HTMLElement>(
 
   const el = document.createElement(tag) as T;
   Object.assign(el, props);
-  if (el.localName === "dashboard-menu-preview")
-    attachPublishAction(el as HTMLElement as HTMLElementTagNameMap["dashboard-menu-preview"]);
-  if (el.localName === "dashboard-menu-publications")
-    attachScheduleAction(el as HTMLElement as HTMLElementTagNameMap["dashboard-menu-publications"]);
   host.appendChild(el);
   await (el as T & { updateComplete: Promise<unknown> }).updateComplete;
   return { el, host };
 }
 
-export function mountMenuPreview<T extends HTMLElement>(
+export async function mountMenuPreview<T extends MenuPreviewPanel>(
   tag: string,
   props: Partial<T>,
   theme?: Theme,
 ) {
-  return mountWidget<T>(
+  const mounted = await mountWidget<T>(
     tag,
     {
       menuId: "menu-fixture",
@@ -88,6 +84,21 @@ export function mountMenuPreview<T extends HTMLElement>(
     },
     theme,
   );
+  attachPublishAction(mounted.el);
+  mounted.el.requestUpdate();
+  await mounted.el.updateComplete;
+  return mounted;
+}
+
+export async function mountMenuPublications<T extends MenuPublicationsPanel>(
+  tag: string,
+  props: Partial<T>,
+  theme?: Theme,
+) {
+  const mounted = await mountWidget<T>(tag, props, theme);
+  attachScheduleAction(mounted.el);
+  await mounted.el.updateComplete;
+  return mounted;
 }
 
 // Standalone fixtures connect the screen-owned controls to the widget's actions.
@@ -110,6 +121,7 @@ function attachPublishAction(panel: MenuPreviewPanel): void {
 }
 
 export function attachScheduleAction(panel: MenuPublicationsPanel): void {
+  panel.tabIndex = -1;
   const outlet = document.createElement("div");
   panel.heading = {
     scheduleChanged: (available) => {

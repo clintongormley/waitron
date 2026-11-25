@@ -1480,7 +1480,9 @@ action in progress: it ignores presses (a click, or the click Enter or Space mak
 focusable, so a person who pressed Save keeps their focus on it; it sets `aria-busy`, and leads the
 label with a decorative
 `wt-spinner` while keeping the label readable — swap the label to what is happening ("Scanning…" /
-"Buscando…"), which is then the one thing announced. Existing `?disabled=${busy}` buttons predate
+"Buscando…"), which is then the one thing announced. **Publish now** keeps its label so a long
+menu name cannot push the action to a new line while it sends. It shows the spinner and supplies a
+localized description of what is happening. Existing `?disabled=${busy}` buttons predate
 this and are not yet migrated. `wt-spinner` on its own is for a region that is loading; there it is a
 `role="progressbar"` of unknown amount, not a live region (it has no text to announce), so give
 `label` the localized text.
@@ -5893,7 +5895,8 @@ normal muted text. A click on the parent link with a modifier key is left to the
 list heading when its contents fit. The menu editor shows its live version and when it went live,
 or **Unpublished**. These words wrap below the title on a phone. A changed live menu adds a warning
 dot and **Unpublished changes**. A menu with changes to publish offers **Review and publish** in
-the heading. It is outlined while the prices have edits to save or a save is sending. On Preview,
+the heading. On Price overrides, it is outlined while the prices have edits to save or a save is
+sending. On Preview,
 the heading offers **Publish later** and **Publish now** when each action is available. A menu with
 price clashes keeps the line that links to its Price overrides tab filtered to the clashes, in
 `--wt-color-danger`. On the Price overrides tab it uses plain words. See

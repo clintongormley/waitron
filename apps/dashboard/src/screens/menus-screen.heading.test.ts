@@ -411,68 +411,106 @@ describe("the menu editor's heading", () => {
     expect(q(el, '[data-test="unpublished-changes"]')).toBeNull();
   });
 
-  it("puts Publish later and Publish now in the heading on Preview", async () => {
-    const el = await mount(api(), PREVIEW_PATH);
-    const later = () => q(el, '.heading [data-test="schedule-open"]');
-    await vi.waitFor(() => expect(text(later())).toBe("Publish later"));
-    expect(text(q(el, '.heading [data-test="publish"]'))).toBe("Publish now");
-    expect(q(el, '[data-test="review-publish"]')).toBeNull();
-    const schedule = q(el, "dashboard-menu-preview")!.shadowRoot!.querySelector(
-      "dashboard-menu-publications",
-    )!;
-    await page.elementLocator(later()!).click();
-    const dialog = schedule.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
-      '[data-test="schedule-dialog"]',
-    );
-    await vi.waitFor(() => expect(dialog?.open).toBe(true));
-    const closed = new Promise<void>((resolve) =>
-      dialog!.addEventListener("wt-close", () => resolve(), { once: true }),
-    );
-    void dialog!.requestClose("cancel");
-    await closed;
-    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(later()));
-  });
-
-  it("returns focus to Publish later after a live refresh and Escape", async () => {
-    const live = new LiveData();
-    const client = api();
-    const publishMenu = vi.fn();
-    const getMenuRead = vi.fn(async (id: string) => ({
-      structure: { status: 200, body: await client.getMenuStructure(id) },
-      preview: { status: 200, body: await client.getMenuPreview(id) },
-    }));
-    Object.assign(client, { liveData: live, getMenuRead, publishMenu });
-    const el = await mount(client, PREVIEW_PATH);
-    const later = () => q(el, '[data-test="schedule-open"]');
-    await vi.waitFor(() => expect(later()).not.toBeNull());
-    const opener = later()!;
-    opener.focus();
-    await userEvent.keyboard("{Enter}");
-    const preview = q<HTMLElementTagNameMap["dashboard-menu-preview"]>(
-      el,
-      "dashboard-menu-preview",
-    )!;
-    const publications = preview.shadowRoot!.querySelector("dashboard-menu-publications")!;
-    const dialog = () =>
-      publications.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+  it.each([
+    [390, "en"],
+    [390, "es-ES"],
+    [1280, "en"],
+    [1280, "es-ES"],
+  ] as const)(
+    "puts Publish later before Publish now in the heading at %i px in %s",
+    async (width, locale) => {
+      const [beforeWidth, beforeHeight] = [window.innerWidth, window.innerHeight];
+      onTestFinished(() => page.viewport(beforeWidth, beforeHeight));
+      await page.viewport(width, 900);
+      setLocale(locale);
+      const el = await mount(api(), PREVIEW_PATH);
+      const later = () => q(el, '.heading [data-test="schedule-open"]');
+      await vi.waitFor(() => expect(text(later())).toBe(t("menu_publications.schedule")));
+      const now = q(el, '.heading [data-test="publish"]')!;
+      expect(text(now)).toBe(t("menu_preview.publish"));
+      const a = later()!.getBoundingClientRect();
+      const b = now.getBoundingClientRect();
+      expect(a.right).toBeLessThanOrEqual(b.left);
+      expect(a.top).toBeLessThan(b.bottom);
+      expect(b.top).toBeLessThan(a.bottom);
+      expect(q(el, '[data-test="review-publish"]')).toBeNull();
+      const schedule = q(el, "dashboard-menu-preview")!.shadowRoot!.querySelector(
+        "dashboard-menu-publications",
+      )!;
+      await page.elementLocator(later()!).click();
+      const dialog = schedule.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
         '[data-test="schedule-dialog"]',
       );
-    await vi.waitFor(() => expect(dialog()?.open).toBe(true));
-    const old = preview.preview;
-    live.invalidate([{ type: "menu_items" }]);
-    await vi.waitFor(() => expect(preview.preview).not.toBe(old));
-    await publications.updateComplete;
-    const closed = new Promise<void>((resolve) =>
-      dialog()!.addEventListener("wt-close", () => resolve(), { once: true }),
-    );
-    await userEvent.keyboard("{Escape}");
-    await closed;
-    await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(later()));
-    expect(later()).toBe(opener);
-    await userEvent.keyboard("{Enter}");
-    await vi.waitFor(() => expect(dialog()?.open).toBe(true));
-    expect(publishMenu).not.toHaveBeenCalled();
-  });
+      await vi.waitFor(() => expect(dialog?.open).toBe(true));
+      const closed = new Promise<void>((resolve) =>
+        dialog!.addEventListener("wt-close", () => resolve(), { once: true }),
+      );
+      void dialog!.requestClose("cancel");
+      await closed;
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(later()));
+    },
+  );
+
+  it.each([false, true])(
+    "restores focus after a live refresh and Escape (read failed: %s)",
+    async (failedFirst) => {
+      const live = new LiveData();
+      const client = api();
+      const publishMenu = vi.fn();
+      let failed = false;
+      const getMenuRead = vi.fn(async (id: string) => {
+        if (failed) throw { code: "server.internal" };
+        return {
+          structure: { status: 200, body: await client.getMenuStructure(id) },
+          preview: { status: 200, body: await client.getMenuPreview(id) },
+        };
+      });
+      Object.assign(client, { liveData: live, getMenuRead, publishMenu });
+      const el = await mount(client, PREVIEW_PATH);
+      const later = () => q(el, '[data-test="schedule-open"]');
+      await vi.waitFor(() => expect(later()).not.toBeNull());
+      const opener = later()!;
+      opener.focus();
+      await userEvent.keyboard("{Enter}");
+      const preview = q<HTMLElementTagNameMap["dashboard-menu-preview"]>(
+        el,
+        "dashboard-menu-preview",
+      )!;
+      const publications = preview.shadowRoot!.querySelector("dashboard-menu-publications")!;
+      const dialog = () =>
+        publications.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+          '[data-test="schedule-dialog"]',
+        );
+      await vi.waitFor(() => expect(dialog()?.open).toBe(true));
+      if (failedFirst) {
+        failed = true;
+        live.invalidate([{ type: "menu_items" }]);
+        await vi.waitFor(() => expect(later()).toBeNull());
+        failed = false;
+      }
+      const old = preview.preview;
+      live.invalidate([{ type: "menu_items" }]);
+      await vi.waitFor(() => {
+        expect(preview.preview).not.toBe(old);
+        expect(later()).not.toBeNull();
+      });
+      await publications.updateComplete;
+      const closed = new Promise<void>((resolve) =>
+        dialog()!.addEventListener("wt-close", () => resolve(), { once: true }),
+      );
+      await userEvent.keyboard("{Escape}");
+      await closed;
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.activeElement).toBe(failedFirst ? q(el, "h1") : later()),
+      );
+      await userEvent.keyboard("{Enter}");
+      if (!failedFirst) {
+        expect(later()).toBe(opener);
+        await vi.waitFor(() => expect(dialog()?.open).toBe(true));
+      }
+      expect(publishMenu).not.toHaveBeenCalled();
+    },
+  );
 
   it("leaves Publish now disabled and offers no scheduling while prices clash", async () => {
     const client = api(async () => ({ ...CHANGED, clashes: 1 }));

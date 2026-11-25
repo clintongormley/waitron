@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import type { DataTableColumn } from "@waitron/ui";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountMenuPublications as mountWidget,
+} from "./test-helpers.js";
 import "./menu-publications.js";
 import { overtakeSentence, type MenuPublicationsPanel } from "./menu-publications.js";
 import type {

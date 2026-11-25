@@ -308,7 +308,6 @@ export class MenuPublicationsPanel extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.tabIndex = -1;
     this.#follow();
   }
 

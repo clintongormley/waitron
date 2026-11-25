@@ -1158,9 +1158,6 @@ it.each([
       }
       expect(documentPane!.contains(q(el, '[data-test="document"]'))).toBe(true);
       expect(changesPane!.contains(q(el, '[data-test="changes"]'))).toBe(true);
-      const publish = q(el, '[data-test="publish"]')!;
-      expect(documentPane!.contains(publish)).toBe(false);
-      expect(changesPane!.contains(publish)).toBe(false);
       expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
       expect(getComputedStyle(documentPane!).overflowY).toBe("auto");
       expect(getComputedStyle(changesPane!).overflowY).toBe("auto");
@@ -1170,7 +1167,7 @@ it.each([
   },
 );
 
-it("makes overflowing pane regions keyboard reachable without scrolling the publication action", async () => {
+it("makes overflowing pane regions keyboard reachable", async () => {
   await page.viewport(1280, 850);
   try {
     const document = menuDocument(
@@ -1186,8 +1183,6 @@ it("makes overflowing pane regions keyboard reachable without scrolling the publ
       source: "this_menu",
     }));
     const el = await mount({ preview: { ...preview(changes), document } });
-    const publish = q(el, '[data-test="publish"]')!;
-    const actionTop = publish.getBoundingClientRect().top;
     for (const name of ["document", "changes"]) {
       const pane = q(el, `[data-test="${name}-pane"]`)!;
       expect(pane.scrollHeight).toBeGreaterThan(pane.clientHeight);
@@ -1198,7 +1193,6 @@ it("makes overflowing pane regions keyboard reachable without scrolling the publ
       expect(el.shadowRoot!.activeElement).toBe(pane);
       pane.scrollTop = pane.scrollHeight;
       expect(pane.scrollTop).toBeGreaterThan(0);
-      expect(publish.getBoundingClientRect().top).toBe(actionTop);
     }
   } finally {
     await page.viewport(414, 850);

@@ -129,11 +129,17 @@ it.each([
     await userEvent.click(dialog.shadowRoot!.querySelector('[data-choice="keep"]')!);
     await vi.waitFor(() => expect(dialog.open).toBe(false));
     expect(field()?.value).toBe("11");
+    if (via === "review")
+      await vi.waitFor(() => expect(screen.shadowRoot!.activeElement).toBe(review()));
 
     await leave();
     await userEvent.click(dialog.shadowRoot!.querySelector('[data-choice="discard"]')!);
     await vi.waitFor(() => expect(location.pathname).toBe(destination));
     expect(prices()).toBeNull();
+    if (via === "review")
+      await vi.waitFor(() =>
+        expect(screen.shadowRoot!.activeElement).toBe(screen.shadowRoot!.querySelector("h1")),
+      );
     expect(write).not.toHaveBeenCalled();
     await guard.write(priceOverrides);
     await vi.waitFor(() => expect(field()?.value).toBe(""));

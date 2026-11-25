@@ -9482,6 +9482,10 @@ describe("publishing", () => {
         }),
       });
       const el = await mount(client, PREVIEW_PATH);
+      if (!changed) {
+        await vi.waitFor(() => expect(inPanel(el, "schedule-open")).not.toBeNull());
+        expect(inPanel(el, "publish")).toBeNull();
+      }
       const schedule = panel(el).shadowRoot!.querySelector("dashboard-menu-publications")!;
       const cancel = () =>
         schedule
@@ -10988,11 +10992,17 @@ describe("patching the live menu", () => {
   });
 
   it("leaves the list's Patch dialog closed when returning from an editor", async () => {
-    const el = await mount(api());
+    const client = api();
+    const el = await mount(client);
     await openPatch(el);
+    const oldDialog = dialog(el);
     history.pushState(null, "", LUNCH_PATH);
     window.dispatchEvent(new PopStateEvent("popstate"));
     await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Lunch Menu"));
+    const listReads = client.getMenuStatuses.mock.calls.length;
+    oldDialog.dispatchEvent(new CustomEvent("wt-menu-patched", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(client.getMenuStatuses).toHaveBeenCalledTimes(listReads);
     await click(el, "back");
     await vi.waitFor(() => expect(patch(el)).not.toBeNull());
     expect(dialog(el).open).toBe(false);

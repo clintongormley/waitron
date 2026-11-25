@@ -7,7 +7,7 @@ import {
   closeReportsDelivered,
   expectNoA11yViolations,
   menuDocument,
-  mountWidget,
+  mountMenuPublications as mountWidget,
 } from "./test-helpers.js";
 import { MenuPublicationsPanel } from "./menu-publications.js";
 
