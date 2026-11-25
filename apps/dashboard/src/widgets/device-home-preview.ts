@@ -346,6 +346,8 @@ export class DeviceHomePreview extends LitElement {
       wt-button.add {
         align-self: start;
         width: 100%;
+        /* Match the faces in a shared row without reserving a grip strip in an Add-only row. */
+        block-size: calc(100% - var(--wt-tap-min));
         min-height: calc(var(--wt-tap-min) * 1.5);
       }
 

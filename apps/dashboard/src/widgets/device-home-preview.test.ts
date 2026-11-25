@@ -1065,6 +1065,24 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(heading.top - lastAdd.bottom).toBeCloseTo(sectionGap);
   });
 
+  it("matches taller shortcut tiles in a shared row and places Full menu beneath its controls", async () => {
+    const missing = shortcut("sc-gone", { kind: "missing", name: "Soup" }, "Soup", {
+      missingName: "Soup with roasted carrots and winter vegetables from the market",
+    });
+    const { el, host } = await mount({ shortcuts: [missing] });
+    await widen(host, 374);
+
+    const face = tiles(el, "shortcuts")[0]!.getBoundingClientRect();
+    const addFace = add(el, "section").getBoundingClientRect();
+    const controls = root(el).querySelector(".controls")!.getBoundingClientRect();
+    const heading = root(el).querySelector(".divider")!.getBoundingClientRect();
+    expect(face.height).toBeGreaterThan(66);
+    expect(addFace.bottom).toBeCloseTo(face.bottom);
+    expect(heading.top - controls.bottom).toBeCloseTo(
+      parseFloat(getComputedStyle(frame(el)).rowGap),
+    );
+  });
+
   it("draws the add tiles in the primary colour, dashed and unfilled, as tall as a shortcut tile", async () => {
     const { el } = await mount({ shortcuts: [LEMONADE, HAM] });
     const token = (name: string) => {
