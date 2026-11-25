@@ -71,7 +71,6 @@ import {
   type RetainedHttpListener,
 } from "./testing/retained-http-listener.js";
 import { INVOICE_EMAIL_NOTICE_WORDS } from "./i18n/invoice-email-notice.js";
-import { receiptLabelsFor } from "@waitron/country-packs";
 import { savePrivacyContact } from "@waitron/provisioning";
 
 vi.mock("@hono/node-server", async () => {
@@ -591,9 +590,9 @@ describe("invoice mail at trading boot", () => {
         attempts: 1,
       });
       expect(textPart(smtp.messages[0]!)).toBe(
-        `${receiptLabelsFor("es-ES").simplifiedInvoice} S/1`,
+        "Adjuntamos la factura simplificada S/1, de 1,00 €. Test SL",
       );
-      expect(smtp.messages[0]).toContain("filename=receipt.pdf");
+      expect(smtp.messages[0]).toContain("filename=S-1.pdf");
       const text = await pdfText(smtp.messages[0]!);
       expect(text).toContain("S/1");
       expect(text).toContain("1,00");
