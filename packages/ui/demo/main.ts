@@ -153,10 +153,10 @@ const panel = (theme: "light" | "dark") => `
         ></wt-combobox>
       </div>
       <wt-address-lookup
-        label="Find the address"
+        label="Street address"
+        name="streetAddress"
         placeholder="Street and number"
         country-code="ES"
-        no-results-label="No address found."
         unavailable-label="Suggestions are not available."
         class="demo-address-lookup"
         style="margin-top:16px"
@@ -524,7 +524,9 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   ];
   const single = el.querySelector<HTMLElementTagNameMap["wt-combobox"]>(".demo-combobox")!;
   single.options = DEMO_TAGS;
-  el.querySelector<HTMLElementTagNameMap["wt-address-lookup"]>(".demo-address-lookup")!.provider = {
+  const address =
+    el.querySelector<HTMLElementTagNameMap["wt-address-lookup"]>(".demo-address-lookup")!;
+  address.provider = {
     suggest: async ({ query }) => [
       { id: "1", label: `${query} 1`, secondaryLabel: "28013 Madrid" },
       { id: "2", label: `${query} 2`, secondaryLabel: "28013 Madrid" },
@@ -537,6 +539,12 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
       countryCode: "ES",
     }),
   };
+  address.addEventListener("wt-address-chosen", (event) => {
+    const { lines } = (
+      event as CustomEvent<import("../src/components/wt-address-lookup.js").AddressChosenDetail>
+    ).detail.address;
+    address.value = lines.join(", ");
+  });
   // A property, not a `search-placeholder` attribute: only `allowAdd` declares a kebab-case
   // attribute name, so lit would look for `searchplaceholder` and silently keep the default.
   single.searchPlaceholder = "Search or add new";

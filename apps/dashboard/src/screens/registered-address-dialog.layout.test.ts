@@ -83,7 +83,7 @@ it.each([375, 1280])(
         new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),
       );
     await (host as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
-    expect(dialog.querySelector("[name=registeredStreet]")).toBeNull();
+    expect(dialog.querySelector("[name=registeredStreet]")?.hasAttribute("hidden")).toBe(true);
     expect(native.getBoundingClientRect().width).toBe(off);
     const hint = box(dialog, "[data-test=registered-same-hint]");
     const note = box(dialog, ".note");

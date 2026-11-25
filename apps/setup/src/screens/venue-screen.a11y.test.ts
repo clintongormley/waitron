@@ -77,7 +77,9 @@ describe.each(["light", "dark"] as const)("setup-venue-screen a11y (%s theme)", 
       "[data-test=registeredSameAsVenue]",
     )!;
     expect(same.checked).toBe(true);
-    expect(el.shadowRoot!.querySelector("[data-test=registeredStreet]")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("[data-test=registeredStreet]")!.hasAttribute("hidden"),
+    ).toBe(true);
     expect(await bottomOf(el)).toBe(t("venue.error.registered_same_refused"));
     await expectNoA11yViolations(host);
   });

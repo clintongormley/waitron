@@ -79,6 +79,25 @@ const wholeCashOfFive = {
 };
 
 describe("TillApi", () => {
+  it("posts address lookup with the signed-in person and device cookies", async () => {
+    const fetchStub = vi.fn(async () => jsonResponse({ available: true }));
+    const api = new TillApi("", fetchStub);
+    api.namePersonFrom(() => ({ personId: "cashier" }), vi.fn());
+
+    const signal = new AbortController().signal;
+    expect(await api.addressLookup({ kind: "available" }, signal)).toEqual({ available: true });
+    expect(fetchStub).toHaveBeenCalledExactlyOnceWith(
+      "/api/address-lookup",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({ kind: "available" }),
+        signal,
+        headers: { "content-type": "application/json", [PERSON_HEADER]: "cashier" },
+      }),
+    );
+  });
+
   describe("checking the box's time", () => {
     it("asks for a challenge, saying when an administrator asks", async () => {
       const fetchStub = vi

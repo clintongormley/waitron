@@ -116,9 +116,6 @@ export abstract class TaxpayerFieldDialog<Draft = string, V = string> extends Li
   /** When the dialog opens and when its draft is restored. */
   protected reset(): void {}
 
-  /** After the person changes a field. */
-  protected typed(): void {}
-
   protected abstract renderFields(view: TaxpayerFieldsView<Draft>): TemplateResult;
 
   static override styles = [
@@ -223,7 +220,7 @@ export abstract class TaxpayerFieldDialog<Draft = string, V = string> extends Li
   }
 
   #change(draft: Draft): void {
-    if (this.replaceDraft(() => draft)) this.typed();
+    this.replaceDraft(() => draft);
   }
 
   /** Replaces the draft, as a person's change does, unless it cannot change now. Any refusal
@@ -311,7 +308,9 @@ export abstract class TaxpayerFieldDialog<Draft = string, V = string> extends Li
   async #focusField(name: string): Promise<void> {
     await this.updateComplete;
     this.#dialog()
-      ?.querySelector<HTMLElement>(`:is(wt-input,wt-combobox,wt-switch)[name=${name}]`)
+      ?.querySelector<HTMLElement>(
+        `:is(wt-input,wt-address-lookup,wt-combobox,wt-switch)[name=${name}]`,
+      )
       ?.focus();
   }
 

@@ -2599,15 +2599,14 @@ missing SQL dependencies, disabled-module combinations and a list passed in by v
 These excerpts retain the root instruction receipts from `CLAUDE.md` at
 `a8ce834d69f298f7e062aaf1cd8b587e62be0171`. They are not new measurements.
 
-### Postal address field guard
+### Former postal address field guard
 
-- **A form that asks for a postal address puts `wt-address-lookup` above its address fields**
-  (the owner's ask, 2026-10-28, A1171); it stays hidden until the form is handed an address
-  provider. Guard: `scripts/address-lookup-forms.test.ts`, weaker than its name: it reads text
-  under `apps/*/src` only, finds forms by the literals `"addressLine1"`/`"streetAddress"`, and checks
-  that the tag is present, not where or with a provider. Limits:
-  [design-system.md](design-system.md). Since 2026-11-20 the guard also finds
-  `"taxpayerDomicile"`; its current limits are in [design-system.md](design-system.md#addresses).
+The owner moved suggestions into the street field on 25 November 2026: “i don't think we need a
+separate find the address field. the user just starts typing the street name and address, and if
+address find is enabled then it finds it automatically”. [Current address fields](design-system.md#addresses).
+
+The 31 October receipt described a separate search field above the address. Its text-scanning
+guard checked the presence of the tag in app screens. The street-field revision removes that guard.
 
 ## Root receipts moved on 2026-11-02
 

@@ -1240,7 +1240,7 @@ it("a registered-address change refused after Back and Discard closed its dialog
   const host = panel.shadowRoot!.querySelector("dashboard-registered-address-dialog")!;
   await host.updateComplete;
   const dialog = host.shadowRoot!.querySelector("wt-dialog")!;
-  const input = dialog.querySelector<WtInput>("wt-input[name=registeredStreet]")!;
+  const input = dialog.querySelector<WtInput>("wt-address-lookup[name=registeredStreet]")!;
   await input.updateComplete;
   await userEvent.fill(
     page.elementLocator(input.shadowRoot!.querySelector("input")!),

@@ -575,10 +575,15 @@ it.each(["temporary-recipient-refused", "temporary-data-refused"] as const)(
 
 describe("invoice email privacy notice", () => {
   const venue = "Charcutería La Buena SL";
+  const addressSearch = {
+    en: "If address suggestions were on, Waitron Cloud may have sent the street address staff typed, and any suggestion they chose, to Google Maps.",
+    es: "Si las sugerencias de dirección estaban activadas, Waitron Cloud pudo enviar a Google Maps la dirección que escribió el personal y la sugerencia que eligió, si eligió alguna.",
+  };
   const notice = (language: "en" | "es", taxRecord: boolean, contacts: string): string => {
     const words = INVOICE_EMAIL_NOTICE_WORDS[language];
     return [
       (taxRecord ? words.purposeWithRecord : words.purpose).replace("{venue}", () => venue),
+      addressSearch[language],
       words.contact.replace("{contacts}", () => contacts),
     ].join("\n");
   };
@@ -609,6 +614,7 @@ describe("invoice email privacy notice", () => {
     ["eu-ES", email, null, false, "Faktura", notice("es", false, email)],
     ["ca-ES", email, page, true, "Factura", notice("es", true, `${email}, ${page}`)],
     ["en-GB", email, page, false, "Invoice", notice("en", false, `${email}, ${page}`)],
+    ["en-GB", email, page, true, "Invoice", notice("en", true, `${email}, ${page}`)],
     ["es-ES", null, null, true, "Factura", undefined],
   ] as const)(
     "a %s invoice with email %s and page %s (tax record %s) carries its notice in the text",
@@ -638,7 +644,7 @@ describe("invoice email privacy notice", () => {
         privacy: { privacyEmail: email, privacyNoticeUrl: null, taxRecord: false },
       }),
     ).toBe(
-      `Factura FF/1\n\n${words.purpose.split("{venue}").join(typed)}\n${words.contact.split("{contacts}").join(email)}`,
+      `Factura FF/1\n\n${words.purpose.split("{venue}").join(typed)}\n${addressSearch.es}\n${words.contact.split("{contacts}").join(email)}`,
     );
   });
 

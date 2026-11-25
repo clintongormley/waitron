@@ -830,7 +830,9 @@ describe("setup-app", () => {
           "[data-test=registeredSameAsVenue]",
         )!.checked,
       ).toBe(true);
-      expect(venue.shadowRoot!.querySelector("[data-test=registeredStreet]")).toBeNull();
+      expect(
+        venue.shadowRoot!.querySelector("[data-test=registeredStreet]")?.hasAttribute("hidden"),
+      ).toBe(true);
       // Behind the switch, the parts hold nothing of the old taxpayer's registered address.
       venue.shadowRoot!.querySelector("[data-test=registeredSameAsVenue]")!.dispatchEvent(
         new CustomEvent("wt-change", {

@@ -4285,7 +4285,7 @@ describe("till-app", () => {
       ["province", "Madrid"],
     ]) {
       const input = form
-        .shadowRoot!.querySelector(`wt-input[name=${name}]`)!
+        .shadowRoot!.querySelector(`:is(wt-input,wt-address-lookup)[name=${name}]`)!
         .shadowRoot!.querySelector<HTMLInputElement>("input")!;
       input.value = value!;
       input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
@@ -4447,7 +4447,7 @@ describe("till-app", () => {
       ["province", "Madrid"],
     ]) {
       const input = dialog
-        .shadowRoot!.querySelector(`wt-input[name=${name}]`)!
+        .shadowRoot!.querySelector(`:is(wt-input,wt-address-lookup)[name=${name}]`)!
         .shadowRoot!.querySelector<HTMLInputElement>("input")!;
       input.value = value;
       input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));

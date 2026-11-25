@@ -105,6 +105,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
   @property({ attribute: false }) venueAddress?: VenueDetailValues;
 
   @state() private foreignAddress = false;
+  @state() private addressAttribution?: string;
 
   #provinces?: { countryCode: string; options: { value: string; label: string }[] };
 
@@ -227,10 +228,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
 
   protected override reset(): void {
     this.foreignAddress = false;
-    this.#cancelAddressSearch();
-  }
-
-  protected override typed(): void {
+    this.addressAttribution = undefined;
     this.#cancelAddressSearch();
   }
 
@@ -246,6 +244,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
     const pack = this.#pack();
     this.foreignAddress = pack === undefined || address.countryCode !== pack.countryCode;
     if (pack === undefined || this.foreignAddress) return;
+    this.addressAttribution = address.attribution;
     const area = areaOfChosenAddress(pack, address);
     const [street = "", ...later] = address.lines;
     const rest = later.filter((line) => line.trim() !== "");
@@ -260,14 +259,26 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
     }));
   }
 
-  #addressSearch(busy: boolean, sameAsVenue: boolean): TemplateResult {
+  #street(view: TaxpayerFieldsView<RegisteredAddressDraft>): TemplateResult {
+    const name = NAMES.street;
+    const { sameAsVenue, street } = view.draft;
     return html`<wt-address-lookup
-      name="domicile-search"
+      name=${name}
+      autocomplete=${AUTOCOMPLETE.street}
+      label=${t(LABELS.street)}
+      .value=${street}
+      required
+      .error=${view.errors[name] ?? ""}
+      ?hidden=${sameAsVenue}
+      .appliedAttribution=${sameAsVenue ? undefined : this.addressAttribution}
       .provider=${sameAsVenue ? undefined : this.addressProvider}
       country-code=${this.countryCode}
-      label=${t("venue_details.address_lookup.label")}
-      placeholder=${t("venue_details.address_lookup.placeholder")}
-      no-results-label=${t("venue_details.address_lookup.no_results")}
+      .ignoredSearchWords=${this.#pack()?.addressSearchIgnoredWords}
+      @keydown=${view.submitOnEnter}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => {
+        event.stopPropagation();
+        this.#changePart(view, "street", event.detail.value);
+      }}
       unavailable-label=${t("venue_details.address_lookup.unavailable")}
       .message=${
         this.foreignAddress
@@ -278,7 +289,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
             })
           : ""
       }
-      ?disabled=${busy}
+      ?disabled=${view.busy}
       @wt-address-chosen=${(event: CustomEvent<AddressChosenDetail>) => this.#addressChosen(event)}
     ></wt-address-lookup>`;
   }
@@ -296,6 +307,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
   }
 
   #changePart(view: TaxpayerFieldsView<RegisteredAddressDraft>, part: Part, value: string): void {
+    this.addressAttribution = undefined;
     const next = { ...view.draft, [part]: value };
     if (part === "postalCode") {
       const area = provinceOfPostalCode(this.#pack(), value);
@@ -308,6 +320,7 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
     const name = NAMES[part];
     const change = (event: CustomEvent<{ value: string }>) => {
       event.stopPropagation();
+      this.#cancelAddressSearch();
       this.#changePart(view, part, event.detail.value);
     };
     const pack = this.#pack();
@@ -349,15 +362,16 @@ export class RegisteredAddressDialog extends TaxpayerFieldDialog<RegisteredAddre
         ?disabled=${view.busy}
         @wt-change=${(event: CustomEvent<{ checked: boolean }>) => {
           event.stopPropagation();
+          this.#cancelAddressSearch();
           view.change({ ...view.draft, sameAsVenue: event.detail.checked });
         }}
       ></wt-switch>
       <p class="switch-hint" aria-hidden="true" data-test="registered-same-hint">${hint}</p>
-      ${this.#addressSearch(view.busy, view.draft.sameAsVenue)}
+      ${this.#street(view)}
       ${
         view.draft.sameAsVenue
           ? nothing
-          : html`${this.#field(view, "street")} ${this.#field(view, "line2")}
+          : html`${this.#field(view, "line2")}
               <div class="pair">
                 ${this.#field(view, "postalCode")} ${this.#field(view, "city")}
               </div>

@@ -99,15 +99,17 @@ Copia y adapta el párrafo siguiente:
 
 **Protección de datos.** _Razón social del local_ trata su nombre, NIF y dirección para emitir esta
 factura y cumplir sus obligaciones fiscales, incluida la remisión a la Agencia Tributaria de un
-registro de la factura con su nombre y su NIF. Derechos
-y más información: _correo de privacidad del local_, _dirección de la página de privacidad_.
+registro de la factura con su nombre y su NIF. Si las sugerencias de dirección estaban activadas,
+Waitron Cloud pudo enviar a Google Maps la dirección que escribió el personal y la sugerencia que
+eligió, si eligió alguna. Derechos y más
+información: _correo de privacidad del local_, _dirección de la página de privacidad_.
 
 Cuando Waitron envía por correo una factura completa, el correo lleva este aviso, con la razón
 social de tu local y el correo y la página de privacidad de la tarjeta **Privacidad**. El aviso va en
 español salvo que la factura esté en inglés, y lleva la parte sobre la Agencia Tributaria solo en una
-factura de la que el servidor envía un registro. Si no hay ni correo ni página de privacidad, el correo no lleva aviso. El
-correo llega al cliente después de que el personal haya tomado los datos, así que muestra el aviso
-también donde los toma, por ejemplo en un cartel junto a la caja.
+factura de la que el servidor envía un registro. Incluye la frase condicional sobre las sugerencias de dirección. Si no hay ni correo ni página de privacidad,
+el correo no lleva aviso. El correo llega al cliente después de que el personal haya tomado los
+datos, así que muestra el aviso también donde los toma, por ejemplo en un cartel junto a la caja.
 
 Si también lo quieres en papel, puedes escribir una versión breve en el **Mensaje de pie** del
 recibo. En **Departamentos y zonas**, abre el departamento y elige su pestaña **Recibos**. Lo que
@@ -167,7 +169,9 @@ y los que tienen alergias. Para cada grupo, la ley pide que el aviso diga:
 - cuando un uso se basa en intereses legítimos, los intereses que persigues tú o un tercero;
 - quién recibe los datos, o qué categorías de destinatarios, si alguien los recibe, como la Agencia
   Tributaria para las facturas, tu proveedor de correo y el proveedor de tu almacenamiento de copias
-  de seguridad. Si tu personal puede enviar informes sobre problemas, incluye a Waitron como
+  de seguridad. Si el personal busca la dirección de un cliente para una factura, incluye a
+  Waitron Cloud y Google Maps como destinatarios del texto de la búsqueda y la sugerencia
+  seleccionada. Si tu personal puede enviar informes sobre problemas, incluye a Waitron como
   destinatario a través de Waitron Cloud. Recibe los códigos de error, sus orígenes, la versión de
   Waitron, la fecha del informe y datos básicos de la instalación vinculados al registro de tu
   servidor en Cloud, además de las descripciones que envíe un administrador. Si activas los
@@ -346,9 +350,11 @@ datos, y Waitron puede enviarle la factura por correo.
 - Interesados: los clientes con factura que son personas, también los autónomos.
 - Datos: nombre, NIF, dirección y país, y la dirección de correo a la que se envió una factura.
 - Destinatarios: la Agencia Tributaria, que recibe con cada registro de factura el nombre y el NIF
-  del cliente, pero no su dirección; tu proveedor de correo, por cada factura que envías por correo,
-  que lleva la factura en PDF con el nombre, el NIF y la dirección del cliente; y tu gestor, cuando
-  compartes el archivo de **Descargar para tu gestor (XLSX)** en **Ventas y recaudación**. La
+  del cliente, pero no su dirección. Cuando las sugerencias de dirección están activadas, Waitron
+  Cloud envía a Google Maps el texto que busca y la sugerencia que elija el personal, si elige alguna.
+  Tu proveedor de correo gestiona cada factura que envías por correo, con el PDF que contiene el
+  nombre, el NIF y la dirección del cliente. Tu gestor recibe el archivo de **Descargar para tu
+  gestor (XLSX)** en **Ventas y recaudación** si lo compartes. La
   hoja de facturas emitidas incluye el nombre, el NIF y la dirección registrados. Las hojas de
   pagos aplazados y devoluciones pueden incluir el nombre y el NIF. Comparte el archivo solo con
   su destinatario.

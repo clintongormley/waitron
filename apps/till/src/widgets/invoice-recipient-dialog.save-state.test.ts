@@ -22,7 +22,9 @@ function saveButton(el: TillInvoiceRecipientDialog) {
   return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-invoice-save]")!;
 }
 function field(el: TillInvoiceRecipientDialog, name: string) {
-  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`wt-input[name=${name}]`)!;
+  return el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
+    `:is(wt-input,wt-address-lookup)[name=${name}]`,
+  )!;
 }
 function bottom(el: TillInvoiceRecipientDialog) {
   return el.shadowRoot!.querySelector("wt-form-actions")!;
@@ -113,3 +115,67 @@ it("opened with a server refusal but untouched, Save is quiet and the refusal st
   expect(await saveState(el)).toEqual(quiet);
   expect(bottom(el).error).toBe("The server could not be reached");
 });
+
+const addressLookup = (el: TillInvoiceRecipientDialog) =>
+  el.shadowRoot!.querySelector("wt-address-lookup")!;
+
+const credit = (el: TillInvoiceRecipientDialog) =>
+  addressLookup(el).shadowRoot!.querySelector('[part="attribution"]')?.textContent;
+
+async function chooseAddress(el: TillInvoiceRecipientDialog, street: string) {
+  addressLookup(el).dispatchEvent(
+    new CustomEvent("wt-address-chosen", {
+      detail: {
+        address: {
+          lines: [street],
+          locality: "Madrid",
+          postalCode: "28013",
+          countryCode: "ES",
+          attribution: "Google Maps",
+        },
+      },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await el.updateComplete;
+}
+
+it("keeps the filled-address credit after a refused save and clears it after a manual edit", async () => {
+  const el = await mount();
+  const sent = confirmations(el);
+  await type(el, "taxId", "12345678Z");
+  await type(el, "legalName", "Test Customer");
+  await chooseAddress(el, "Main Street 2");
+  expect(credit(el)).toBe("Google Maps");
+  saveButton(el).click();
+  expect(sent).toHaveLength(1);
+  el.refusal = "Try again";
+  el.refusalField = "address";
+  await el.updateComplete;
+  expect(credit(el)).toBe("Google Maps");
+  await type(el, "address", "Main Street 3");
+  expect(credit(el)).toBeUndefined();
+});
+
+it.each([
+  ["name", undefined],
+  ["address", "Google Maps"],
+] as const)(
+  "after a save, keeps credit only for a new choice when the %s changed",
+  async (field, expected) => {
+    const el = await mount();
+    const sent = confirmations(el);
+    await type(el, "taxId", "12345678Z");
+    await type(el, "legalName", "Test Customer");
+    await chooseAddress(el, "Main Street 2");
+    saveButton(el).click();
+    expect(sent).toHaveLength(1);
+    const finish = el.writeCompletion();
+    if (field === "name") await type(el, "legalName", "Changed Customer");
+    else await chooseAddress(el, "Main Street 12");
+    expect(finish()).toBe(false);
+    await el.updateComplete;
+    expect(credit(el)).toBe(expected);
+  },
+);

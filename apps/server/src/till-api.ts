@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Transaction } from "@waitron/db";
 import { createPinThrottle } from "@waitron/identity";
 import { codeOf } from "@waitron/server-kit";
+import { mountAddressLookupApi } from "./address-lookup-api.js";
 import type { Logger } from "./logger.js";
 import { mountTillClockApi } from "./till-clock-api.js";
 import { mountTillAttendanceApi } from "./till-attendance-api.js";
@@ -43,7 +44,8 @@ import { mountTillDraftRoutes } from "./till-draft-routes.js";
 import { mountTillOrderLineRoutes } from "./till-order-line-routes.js";
 import { mountTillBillMoveRoutes } from "./till-bill-move-routes.js";
 import type { TillApiDeps } from "./till-api-deps.js";
-import { run } from "./till-api-errors.js";
+import { run, STATUS } from "./till-api-errors.js";
+import { requireSession } from "./till-session.js";
 import { overridePinAttempts } from "./till-request-fields.js";
 
 /** Open while a full-disk stop holds; each still fails by itself if its own save does not fit. */
@@ -74,6 +76,14 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
   const catchUpFloor = (tx: Transaction) =>
     ensureToday(tx, deps.tableRemovals ?? [], deps.clock.now().instant);
   app.use("/api/*", madeHereAnswer(deps.db));
+  mountAddressLookupApi(
+    app,
+    "/api/address-lookup",
+    deps.addressLookup ?? { isPrimary: () => true },
+    (c, passive) => requireSession(deps, c, { action: "take-orders", passive }),
+    STATUS,
+    log,
+  );
   if (deps.boxClock !== undefined)
     mountTillBoxClockApi(
       app,

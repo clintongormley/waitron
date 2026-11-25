@@ -122,7 +122,9 @@ it("draws semantic shared fields, explicit unset text and a locked province expl
   setLocale("en-GB");
   const el = await editing(rig(venueDetailsFixture({ province: null, addressLine2: null })).api);
   expect(
-    [...el.shadowRoot!.querySelectorAll("wt-input")].map((input) => input.getAttribute("name")),
+    [...el.shadowRoot!.querySelectorAll("wt-input, wt-address-lookup")].map((input) =>
+      input.getAttribute("name"),
+    ),
   ).toEqual(["venueName", "addressLine1", "addressLine2", "city"]);
   expect(q(el, "[data-test=locked-province]")?.textContent).toContain("Not set");
   expect(q(el, "[data-test=locked-postalCode]")?.textContent).toContain("28001");
@@ -493,7 +495,9 @@ it("shows a refusal without a visible field at the bottom without disabling retr
   expect(actions(el).error).toBe("You don't have permission to do that");
   expect(save(el).disabled).toBe(false);
   expect(
-    [...el.shadowRoot!.querySelectorAll<WtInput>("wt-input")].every((field) => field.error === ""),
+    [...el.shadowRoot!.querySelectorAll<WtInput>("wt-input, wt-address-lookup")].every(
+      (field) => field.error === "",
+    ),
   ).toBe(true);
 });
 
@@ -847,7 +851,7 @@ it("keeps every field within the form width token on a wide window", async () =>
     expect(
       q(el, "section.settings-card[data-editing]")!.getBoundingClientRect().width,
     ).toBeGreaterThan(form);
-    const fields = [...el.shadowRoot!.querySelectorAll("wt-input, wt-combobox")];
+    const fields = [...el.shadowRoot!.querySelectorAll("wt-input, wt-combobox, wt-address-lookup")];
     expect(fields.length).toBeGreaterThan(0);
     for (const input of fields)
       expect(input.getBoundingClientRect().width).toBeLessThanOrEqual(form);

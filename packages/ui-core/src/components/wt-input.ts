@@ -33,6 +33,13 @@ export type InputFieldDecoration = {
   autocomplete?: string;
   placeholder?: string | typeof nothing;
   extraDescriptionIds?: string[];
+  listbox?: {
+    id: string;
+    expanded: boolean;
+    activeId?: string;
+    onKeydown: (event: KeyboardEvent) => void;
+    onBlur: () => void;
+  };
   /** Give the end slot its own layout class so the shared overlay leaves it alone. */
   endClass?: string;
   end?: TemplateResult;
@@ -151,7 +158,10 @@ export class WtInput extends LitElement {
     // A host may put back its own form of what was typed, such as a key in groups of four.
     this.#typedValue = this.value;
     if (!this.value) this.maskPassword();
+    this.afterInput();
   }
+
+  protected afterInput(): void {}
 
   private onEndSlotChange(event: Event): void {
     this.hasEnd = (event.target as HTMLSlotElement).assignedElements().length > 0;
@@ -200,6 +210,7 @@ export class WtInput extends LitElement {
 
   override render() {
     const decoration = this.fieldDecoration;
+    const listbox = decoration?.listbox;
     const locale = this.inputLocale;
     const hasError = this.error !== "";
     const hasHint = this.hint !== "";
@@ -248,7 +259,14 @@ export class WtInput extends LitElement {
         ?readonly=${this.readonly}
         aria-invalid=${this.invalid || hasError}
         aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
+        role=${listbox ? "combobox" : nothing}
+        aria-autocomplete=${listbox ? "list" : nothing}
+        aria-expanded=${listbox ? String(listbox.expanded) : nothing}
+        aria-controls=${listbox?.id ?? nothing}
+        aria-activedescendant=${listbox?.activeId ?? nothing}
         @input=${this.onInput}
+        @keydown=${listbox?.onKeydown}
+        @blur=${listbox?.onBlur}
       />
       ${inherited && !inherited.inTable ? this.renderInheritedCue() : nothing}
     `;

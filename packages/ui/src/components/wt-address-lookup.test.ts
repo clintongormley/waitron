@@ -58,7 +58,7 @@ async function mountLookup(
   delay = 0,
 ): Promise<WtAddressLookup> {
   const markup =
-    '<wt-address-lookup label="Find the address" placeholder="Street and number" country-code="ES" no-results-label="No address found." unavailable-label="Suggestions are not available."></wt-address-lookup>';
+    '<wt-address-lookup label="Street address" placeholder="Street and number" autocomplete="address-line1" country-code="ES" unavailable-label="Suggestions are not available."></wt-address-lookup>';
   const el = (await (inShadow ? mountInShadowRoot(markup) : mount(markup))) as WtAddressLookup;
   el.provider = provider ?? undefined;
   el.delay = delay;
@@ -85,16 +85,25 @@ async function settle(el: WtAddressLookup): Promise<void> {
   await el.updateComplete;
 }
 
-test("without a provider it is hidden and draws nothing", async () => {
+test("without a provider the labelled street stays editable and supports address autofill", async () => {
   const el = await mountLookup(null);
-  expect(el.hidden).toBe(true);
-  expect(el.getBoundingClientRect().height).toBe(0);
+  expect(input(el).getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(input(el).getAttribute("role")).toBeNull();
+  expect(input(el).getAttribute("autocomplete")).toBe("address-line1");
+  await userEvent.fill(input(el), "Main Street");
+  expect(el.value).toBe("Main Street");
 });
 
-test("stays hidden when the page around it gives it a display", async () => {
-  const el = await mountLookup(null);
-  el.style.display = "block";
-  expect(el.getBoundingClientRect().height).toBe(0);
+test("keeps the applied address credit visible when the provider disappears", async () => {
+  const el = await mountLookup();
+  el.appliedAttribution = "Google Maps";
+  el.provider = undefined;
+  await el.updateComplete;
+
+  const credit = el.shadowRoot!.querySelector('[part="attribution"]')!;
+  expect(credit?.textContent).toBe("Google Maps");
+  expect(credit.getBoundingClientRect().height).toBeGreaterThan(0);
+  expect(input(el).getBoundingClientRect().height).toBeGreaterThan(0);
 });
 
 test("with a provider it shows a labelled search field", async () => {
@@ -102,127 +111,148 @@ test("with a provider it shows a labelled search field", async () => {
   expect(el.hidden).toBe(false);
   expect(el.getBoundingClientRect().height).toBeGreaterThan(0);
   expect(input(el).getAttribute("role")).toBe("combobox");
-  expect(el.shadowRoot!.querySelector("label")!.textContent).toContain("Find the address");
+  expect(el.shadowRoot!.querySelector("label")!.textContent).toContain("Street address");
 });
 
-test("removing the provider hides it again", async () => {
+test("changing provider availability preserves the street and changes autocomplete", async () => {
   const el = await mountLookup();
+  el.value = "Main Street";
+  await el.updateComplete;
+  expect(input(el).getAttribute("autocomplete")).toBe("off");
   el.provider = undefined;
   await el.updateComplete;
-  expect(el.hidden).toBe(true);
+  expect(input(el).value).toBe("Main Street");
+  expect(input(el).getAttribute("autocomplete")).toBe("address-line1");
 });
 
-test("waits 600 ms after the last input before asking with the country and a session token", async () => {
+test("waits for a word break or a one-second pause after typing", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const provider = fakeProvider();
-  const el = await mountLookup(provider, false, 600);
-  type(el, "Calle M");
-  vi.advanceTimersByTime(350);
-  type(el, "Calle Ma");
-  vi.advanceTimersByTime(599);
+  const el = await mountLookup(provider, false, 1000);
+  type(el, "Mai");
+  await vi.advanceTimersByTimeAsync(750);
+  type(el, "Main");
+  await vi.advanceTimersByTimeAsync(999);
   expect(provider.calls.suggest).toHaveLength(0);
-  vi.advanceTimersByTime(1);
-  expect(provider.calls.suggest).toHaveLength(1);
-  expect(provider.calls.suggest[0]!.query).toBe("Calle Ma");
-  expect(provider.calls.suggest[0]!.countryCode).toBe("ES");
-  expect(provider.calls.suggest[0]!.sessionToken).toMatch(/^[0-9a-f]{32}$/);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(provider.calls.suggest[0]).toEqual({
+    query: "Main",
+    countryCode: "ES",
+    sessionToken: expect.stringMatching(/^[0-9a-f]{32}$/),
+  });
+
+  type(el, "Main Street,");
+  await vi.advanceTimersByTimeAsync(0);
+  expect(provider.calls.suggest.map(({ query }) => query)).toEqual(["Main", "Main Street"]);
+  type(el, "Main Street, ");
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(provider.calls.suggest).toHaveLength(2);
+  expect(options(el)).toHaveLength(2);
 });
 
-test("the pause is 600 ms unless set", async () => {
-  const el = document.createElement("wt-address-lookup");
-  expect(el.delay).toBe(600);
+test("shows a search answer during continued typing and skips added joining words", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const queries: string[] = [];
+  const answers: ((suggestions: AddressLookupSuggestion[]) => void)[] = [];
+  const el = await mountLookup(
+    fakeProvider([], {
+      suggest: ({ query }) => {
+        queries.push(query);
+        return new Promise((resolve) => answers.push(resolve));
+      },
+    }),
+    false,
+    1000,
+  );
+  el.ignoredSearchWords = ["avenue", "of", "the"];
+  type(el, "Avenue of Saint ");
+  await vi.advanceTimersByTimeAsync(0);
+  type(el, "Avenue of Saint Jo");
+  answers[0]!([MAYOR]);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(options(el)).toHaveLength(1);
+
+  type(el, "Avenue of Saint John ");
+  await vi.advanceTimersByTimeAsync(0);
+  expect(options(el)).toHaveLength(0);
+  answers[1]!([MAYOR]);
+  await vi.advanceTimersByTimeAsync(0);
+  input(el).dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
+  await el.updateComplete;
+  expect(input(el).hasAttribute("aria-activedescendant")).toBe(true);
+  type(el, "Avenue of Saint John of the ");
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(options(el)).toHaveLength(1);
+  expect(input(el).hasAttribute("aria-activedescendant")).toBe(false);
+  expect(queries).toEqual(["Avenue of Saint", "Avenue of Saint John"]);
+
+  type(el, "Avenue of Saint John of the Cross 3");
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(queries.at(-1)).toBe("Avenue of Saint John of the Cross 3");
 });
 
-test("asks nothing for fewer than four characters, and a shorter text closes the list", async () => {
+test("the pause is one second unless set", () => {
+  expect(document.createElement("wt-address-lookup").delay).toBe(1000);
+});
+
+test("a bare number and ignored words spend no search before or after a pause", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const provider = fakeProvider();
   const el = await mountLookup(provider);
-  type(el, " Cal ");
-  await settle(el);
+  el.ignoredSearchWords = ["street", "of", "the"];
+  await el.updateComplete;
+  for (const text of ["42", "Street of the ", "42 STREET-", "123 Street"]) {
+    type(el, text);
+    await vi.advanceTimersByTimeAsync(1000);
+  }
   expect(provider.calls.suggest).toHaveLength(0);
-  type(el, "Call");
-  await settle(el);
-  expect(options(el)).toHaveLength(2);
-  type(el, "  C  ");
-  await settle(el);
-  expect(options(el)).toHaveLength(0);
-  expect(input(el).getAttribute("aria-expanded")).toBe("false");
+
+  type(el, "Oak ");
+  await vi.advanceTimersByTimeAsync(0);
+  expect(provider.calls.suggest.map(({ query }) => query)).toEqual(["Oak"]);
+  type(el, "42 ");
+  await vi.advanceTimersByTimeAsync(1000);
   expect(provider.calls.suggest).toHaveLength(1);
+  expect(options(el)).toHaveLength(0);
 });
 
-test("after five automatic searches, Enter searches the edited text without submitting the form", async () => {
+test("a replacement street drops a queued search and closes already visible suggestions", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const provider = fakeProvider();
+  const el = await mountLookup(provider, false, 1000);
+  type(el, "Main Street");
+  el.value = "Oak Road";
+  await el.updateComplete;
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(provider.calls.suggest).toHaveLength(0);
+
+  type(el, "Oak Road ");
+  await vi.advanceTimersByTimeAsync(0);
+  expect(options(el)).toHaveLength(2);
+  el.value = "Pine Road";
+  await el.updateComplete;
+  expect(options(el)).toHaveLength(0);
+  expect(provider.calls.suggest.map(({ query }) => query)).toEqual(["Oak Road"]);
+});
+
+test("after five automatic searches, Enter can save the typed street without another search", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const provider = fakeProvider();
   const el = await mountLookup(provider);
   const automatic = ["Main", "Main S", "Main St", "Main Street", "Main Street 1"];
   for (const query of automatic) {
     type(el, query);
-    vi.advanceTimersByTime(600);
-  }
-  expect(provider.calls.suggest.map(({ query }) => query)).toEqual(automatic);
-
-  el.cancelSearch();
-  type(el, "Main Street 12");
-  vi.advanceTimersByTime(600);
-  expect(provider.calls.suggest).toHaveLength(5);
-
-  const field = input(el);
-  const composing = new KeyboardEvent("keydown", { key: "Enter", isComposing: true });
-  field.dispatchEvent(composing);
-  expect(provider.calls.suggest).toHaveLength(5);
-
-  let complete!: (suggestions: readonly AddressLookupSuggestion[]) => void;
-  const pending = new Promise<readonly AddressLookupSuggestion[]>(
-    (resolve) => (complete = resolve),
-  );
-  const suggest = provider.suggest;
-  vi.spyOn(provider, "suggest").mockImplementationOnce((request) => {
-    void suggest(request);
-    return pending;
-  });
-  const enter = new KeyboardEvent("keydown", { key: "Enter", cancelable: true });
-  field.dispatchEvent(enter);
-  expect(enter.defaultPrevented).toBe(true);
-  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
-  expect(provider.calls.suggest.map(({ query }) => query)).toEqual([
-    ...automatic,
-    "Main Street 12",
-  ]);
-  expect(field.getAttribute("enterkeyhint")).toBe("search");
-  complete([MAYOR]);
-  await pending;
-  await el.updateComplete;
-  expect(options(el)).toHaveLength(1);
-
-  type(el, "Mai");
-  field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
-  vi.advanceTimersByTime(600);
-  expect(provider.calls.suggest).toHaveLength(6);
-});
-
-test("Enter can search again after a chosen suggestion fails to resolve at the limit", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  const provider = fakeProvider([MAYOR], {
-    resolve: async () => {
-      throw new Error("unavailable");
-    },
-  });
-  const el = await mountLookup(provider);
-  for (const query of ["Main", "Main S", "Main St", "Main Street", "Main Street 1"]) {
-    type(el, query);
     await vi.advanceTimersByTimeAsync(600);
   }
-  const key = (name: string) =>
-    input(el).dispatchEvent(new KeyboardEvent("keydown", { key: name, cancelable: true }));
-  key("ArrowDown");
-  key("Enter");
-  await Promise.resolve();
-  await el.updateComplete;
-  expect(status(el)).toBe("Suggestions are not available.");
-  key("Enter");
-  await Promise.resolve();
-  await el.updateComplete;
-  expect(provider.calls.suggest).toHaveLength(6);
-  expect(options(el)).toHaveLength(1);
+  el.cancelSearch();
+  type(el, "Main Street 12");
+  await vi.advanceTimersByTimeAsync(600);
+
+  const enter = new KeyboardEvent("keydown", { key: "Enter", cancelable: true });
+  input(el).dispatchEvent(enter);
+  expect(enter.defaultPrevented).toBe(false);
+  expect(provider.calls.suggest.map(({ query }) => query)).toEqual(automatic);
+  expect(input(el).value).toBe("Main Street 12");
 });
 
 test("lists each suggestion with its second line and opens the field", async () => {
@@ -286,7 +316,7 @@ test("Down then Enter resolves the active suggestion and sends wt-address-chosen
   }
 });
 
-test("a click chooses a suggestion, then the text clears and the list closes", async () => {
+test("a click chooses a suggestion and keeps the typed street until the form fills it", async () => {
   const provider = fakeProvider();
   const el = await mountLookup(provider);
   const chosen = vi.fn();
@@ -298,7 +328,7 @@ test("a click chooses a suggestion, then the text clears and the list closes", a
   await settle(el);
   expect(provider.calls.resolve[0]!.suggestionId).toBe("s2");
   expect(chosen).toHaveBeenCalledOnce();
-  expect(input(el).value).toBe("");
+  expect(input(el).value).toBe("Calle Mayor");
   expect(options(el)).toHaveLength(0);
 });
 
@@ -343,7 +373,7 @@ test("Escape closes an open list and does not reach the page", async () => {
   expect(outside).not.toHaveBeenCalled();
 });
 
-test("Enter in the field never submits the form around it", async () => {
+test("Enter without an active suggestion keeps the surrounding form's action", async () => {
   const el = await mountLookup();
   const seen: boolean[] = [];
   host.addEventListener("keydown", (event) => seen.push(event.defaultPrevented));
@@ -351,7 +381,7 @@ test("Enter in the field never submits the form around it", async () => {
   type(el, "Calle Mayor");
   await settle(el);
   await userEvent.keyboard("{Enter}");
-  expect(seen).toEqual([true]);
+  expect(seen).toEqual([false]);
 });
 
 test("leaving the field closes the list", async () => {
@@ -364,37 +394,32 @@ test("leaving the field closes the list", async () => {
   expect(options(el)).toHaveLength(0);
 });
 
-test("typing does not send input or wt-change out of the field", async () => {
-  const el = await mountLookup();
-  const outside = vi.fn();
-  host.addEventListener("input", outside);
-  host.addEventListener("wt-change", outside);
-  input(el).focus();
-  await userEvent.keyboard("Calle");
-  expect(outside).not.toHaveBeenCalled();
+test("typing sends one ordinary field change before searching", async () => {
+  const provider = fakeProvider();
+  const el = await mountLookup(provider);
+  const native = vi.fn();
+  const changes: string[] = [];
+  host.addEventListener("input", native);
+  host.addEventListener("wt-change", (event) => {
+    changes.push((event as CustomEvent<{ value: string }>).detail.value);
+    el.cancelSearch();
+  });
+  await userEvent.fill(input(el), "Calle Mayor");
+  await settle(el);
+  expect(native).not.toHaveBeenCalled();
+  expect(changes).toEqual(["Calle Mayor"]);
+  expect(provider.calls.suggest.map(({ query }) => query)).toEqual(["Calle Mayor"]);
 });
 
-test("no suggestions says so", async () => {
+test("no suggestions leaves manual typing quiet", async () => {
   const el = await mountLookup(fakeProvider([]));
   type(el, "Nowhere street");
   await settle(el);
-  expect(status(el)).toBe("No address found.");
+  expect(status(el)).toBe("");
   expect(input(el).getAttribute("aria-expanded")).toBe("false");
 });
 
-test("the no-results line is spoken by changing the text of a status line already in the page", async () => {
-  const el = await mountLookup(fakeProvider([]));
-  const before = el.shadowRoot!.querySelector<HTMLElement>('[role="status"]');
-  expect(before).not.toBeNull();
-  expect(before!.getBoundingClientRect().height).toBe(0);
-  expect(getComputedStyle(before!).marginTop).toBe("0px");
-  type(el, "Nowhere street");
-  await settle(el);
-  expect(el.shadowRoot!.querySelector('[role="status"]')).toBe(before);
-  expect(before!.textContent!.trim()).toBe("No address found.");
-});
-
-test("a refused or throwing search says suggestions are unavailable", async () => {
+test("a refused or throwing search leaves manual typing quiet", async () => {
   for (const suggest of [
     () => Promise.reject(new Error("down")),
     () => {
@@ -404,10 +429,31 @@ test("a refused or throwing search says suggestions are unavailable", async () =
     const el = await mountLookup(fakeProvider([], { suggest }));
     type(el, "Calle Mayor");
     await settle(el);
-    expect(status(el)).toBe("Suggestions are not available.");
+    expect(status(el)).toBe("");
     expect(options(el)).toHaveLength(0);
     cleanup();
   }
+});
+
+test("Enter reaches the form again as soon as a chosen address is refused", async () => {
+  let refuse!: (reason: Error) => void;
+  const pending = new Promise<never>((_, reject) => (refuse = reject));
+  const el = await mountLookup(fakeProvider([MAYOR], { resolve: () => pending }));
+  const enters = vi.fn();
+  host.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") enters(event);
+  });
+  await userEvent.fill(input(el), "Calle Mayor");
+  await settle(el);
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+  await userEvent.keyboard("{Enter}");
+  expect(enters).not.toHaveBeenCalled();
+
+  refuse(new Error("unavailable"));
+  await settle(el);
+  expect(status(el)).toBe("Suggestions are not available.");
+  await userEvent.keyboard("{Enter}");
+  expect(enters).toHaveBeenCalledOnce();
 });
 
 test("a refused resolve says suggestions are unavailable and sends nothing", async () => {
@@ -425,10 +471,10 @@ test("a refused resolve says suggestions are unavailable and sends nothing", asy
 });
 
 test("new typing clears an earlier line", async () => {
-  const el = await mountLookup(fakeProvider([]));
-  type(el, "Nowhere street");
-  await settle(el);
-  expect(status(el)).not.toBe("");
+  const el = await mountLookup();
+  el.message = "That address is in another country.";
+  await el.updateComplete;
+  expect(status(el)).toBe("That address is in another country.");
   type(el, "No");
   await el.updateComplete;
   expect(status(el)).toBe("");
@@ -513,19 +559,26 @@ test("a resolve that throws at once says suggestions are unavailable", async () 
   expect(status(el)).toBe("Suggestions are not available.");
 });
 
-test("a resolve answer is dropped once a newer search began or the field left the page", async () => {
-  for (const after of ["typing", "removed"] as const) {
+test("a resolve answer is dropped when the street is edited or the field leaves the page", async () => {
+  for (const after of ["typing a new street", "typing a comma", "removed"] as const) {
     const answers: ((address: AddressLookupResult) => void)[] = [];
+    let pending: AbortSignal | undefined;
     const el = await mountLookup(
-      fakeProvider([MAYOR], { resolve: () => new Promise((resolve) => answers.push(resolve)) }),
+      fakeProvider([MAYOR], {
+        resolve: (_input, signal?: AbortSignal) => {
+          pending = signal;
+          return new Promise((resolve) => answers.push(resolve));
+        },
+      }),
     );
     const chosen = vi.fn();
     el.addEventListener("wt-address-chosen", chosen);
     type(el, "Calle Mayor");
     await settle(el);
     await userEvent.click(options(el)[0]!);
-    if (after === "typing") type(el, "Calle Real");
-    else el.remove();
+    if (after === "removed") el.remove();
+    else type(el, after === "typing a comma" ? "Calle Mayor," : "Calle Real");
+    expect(pending?.aborted, after).toBe(true);
     answers[0]!(RESOLVED);
     await settle(el);
     expect(chosen, after).not.toHaveBeenCalled();
@@ -739,15 +792,6 @@ test("cancelSearch drops a chosen suggestion still on its way and the open list,
   el.cancelSearch();
   await el.updateComplete;
   expect(options(el)).toHaveLength(0);
-
-  el.provider = fakeProvider([]);
-  await el.updateComplete;
-  type(el, "Nowhere street");
-  await settle(el);
-  expect(status(el)).toBe("No address found.");
-  el.cancelSearch();
-  await el.updateComplete;
-  expect(status(el)).toBe("");
 });
 
 test("Enter on an active suggestion stops at the field; Enter with none active reaches the page", async () => {
@@ -801,7 +845,7 @@ test("a named search field uses its name as its input's id, as wt-input does, an
   expect(el.shadowRoot?.querySelector("label")?.htmlFor).toBe("domicile-search");
 });
 
-test("a new search hides the form's line about the last choice, and the search's own line shows", async () => {
+test("a new search hides the form's line about the last choice", async () => {
   const provider = fakeProvider([MAYOR]);
   const el = await mountLookup(provider);
   el.message = "That address is in another country.";
@@ -813,7 +857,7 @@ test("a new search hides the form's line about the last choice, and the search's
   await el.updateComplete;
   type(el, "Nowhere street");
   await settle(el);
-  expect(status(el)).toBe("No address found.");
+  expect(status(el)).toBe("");
   el.message = "That address is in another province.";
   await el.updateComplete;
   expect(status(el)).toBe("That address is in another province.");

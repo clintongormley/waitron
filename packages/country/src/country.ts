@@ -201,6 +201,7 @@ export interface CountryPack {
   readonly demo?: CountryDemoIdentity;
   /** Completeness of a recipient postal address stored separately from its country code. */
   readonly postalAddress?: { isComplete(address: string): boolean };
+  readonly addressSearchIgnoredWords?: readonly string[];
   readonly countryNames?: Readonly<Record<string, string>>;
   readonly taxIdentifier?: ValueValidator<string>;
   readonly postalCode?: ValueValidator<"postal-code">;
@@ -215,6 +216,7 @@ export interface AddressSuggestion {
 }
 
 export interface ResolvedAddress {
+  readonly attribution?: string;
   readonly lines: readonly string[];
   readonly locality: string;
   readonly administrativeAreaCode?: string;
@@ -224,15 +226,18 @@ export interface ResolvedAddress {
 
 /** A browser-facing seam; provider credentials stay behind whichever implementation supplies it. */
 export interface AddressAutocompleteProvider {
-  suggest(input: {
-    readonly query: string;
-    readonly countryCode: string;
-    readonly sessionToken: string;
-  }): Promise<readonly AddressSuggestion[]>;
-  resolve(input: {
-    readonly suggestionId: string;
-    readonly sessionToken: string;
-  }): Promise<ResolvedAddress>;
+  suggest(
+    input: {
+      readonly query: string;
+      readonly countryCode: string;
+      readonly sessionToken: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<readonly AddressSuggestion[]>;
+  resolve(
+    input: { readonly suggestionId: string; readonly sessionToken: string },
+    signal?: AbortSignal,
+  ): Promise<ResolvedAddress>;
 }
 
 function comparisonKey(value: string): string {

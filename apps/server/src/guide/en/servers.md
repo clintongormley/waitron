@@ -382,10 +382,11 @@ or when starting empty in a development rehearsal of **Start a new restaurant**.
 and sign in or create an account. Setup resumes at the venue form in the same tab. Waitron files
 the venue after you save it and the box restarts. Check **System → Cloud services** for the connection.
 
-If your test Cloud account has one Spanish business with no tax number or venues, choose a
-suggestion in **Find the registered address** or **Find the address**. Check the filled fields
-and correct them before continuing. If you add a venue to an existing Cloud business or the
-search is unavailable, enter the addresses by hand.
+If your test Cloud account has one Spanish business with no tax number or venues, type the street
+and number in **Address line 1** and choose a suggestion. If the business uses a separate
+registered address, turn off **Same as the venue's address** and type into its **Address line 1**
+as well. Check the filled fields before continuing. If suggestions are unavailable, enter the
+addresses by hand.
 
 In Prepare, [choose Cloud for staff email](email.md#cloud-staff-email) to continue with the mail
 server blank. If you choose **Skip** before opening Cloud or import a configuration, fill in the

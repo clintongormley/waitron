@@ -389,8 +389,8 @@ export class SetupVenueScreen extends LitElement {
   ];
 
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
-  /** Address suggestions; without one the address search fields stay hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
+  @state() private addressCredits: Partial<Record<AddressSearch, string>> = {};
 
   constructor() {
     super();
@@ -524,6 +524,7 @@ export class SetupVenueScreen extends LitElement {
         return (Object.keys(left) as ComparableKey[]).every((key) => left[key] === right[key]);
       },
       restore: (form) => {
+        this.addressCredits = {};
         this.staffLanguage = form.staffLanguage;
         this.#demoVenueNameSource = form.demoVenueNameSource;
         this.values = form.values;
@@ -575,10 +576,10 @@ export class SetupVenueScreen extends LitElement {
     const field = this.shadowRoot!.querySelector<
       HTMLElement & { updateComplete?: Promise<unknown> }
     >(
-      `:is(wt-input,wt-combobox)[name=${this.serverInvalid.key === "taxpayerDomicile" ? "registeredStreet" : this.serverInvalid.key}]`,
+      `:is(wt-input,wt-combobox,wt-address-lookup)[name=${this.serverInvalid.key === "taxpayerDomicile" ? "registeredStreet" : this.serverInvalid.key}]`,
     );
     if (field === null) return;
-    // Wait for the `wt-input`'s own render: until then the native input its focus is delegated to
+    // Wait for the field's own render: until then the native input its focus is delegated to
     // does not exist, and focusing the host does nothing. The screen may be gone by then.
     void Promise.resolve(field.updateComplete).then(() => {
       if (this.isConnected) field.focus();
@@ -682,7 +683,10 @@ export class SetupVenueScreen extends LitElement {
     )
       this.serverInvalid = undefined;
     const value = event.detail.value;
-    this.#cancelAddressSearch(SEARCH_FILLS[key]);
+    this.#cancelAddressSearch(
+      SEARCH_FILLS[key],
+      key !== "addressLine1" && key !== "registeredStreet",
+    );
     if (key === "name") this.#demoVenueNameSource = "custom";
     if (key === "registeredPostalCode") {
       const area = provinceOfPostalCode(this.#pack(), value);
@@ -714,9 +718,15 @@ export class SetupVenueScreen extends LitElement {
   }
 
   /** So an address still on its way cannot overwrite what the person typed or switched. */
-  #cancelAddressSearch(which: AddressSearch | undefined): void {
+  #cancelAddressSearch(which: AddressSearch | undefined, cancelPending = true): void {
     if (which === undefined) return;
-    this.shadowRoot!.querySelector<WtAddressLookup>(`[data-test=${which}-lookup]`)?.cancelSearch();
+    this.addressCredits = { ...this.addressCredits, [which]: undefined };
+    if (cancelPending) this.#streetField(which)?.cancelSearch();
+  }
+
+  #streetField(which: AddressSearch): WtAddressLookup | null {
+    const name = which === "address" ? "addressLine1" : "registeredStreet";
+    return this.shadowRoot!.querySelector<WtAddressLookup>(`[name=${name}]`);
   }
 
   #onAddressChosen(which: AddressSearch, event: CustomEvent<AddressChosenDetail>): void {
@@ -728,11 +738,11 @@ export class SetupVenueScreen extends LitElement {
       return;
     }
     if (this.foreignAddress?.which === which) this.foreignAddress = undefined;
+    this.addressCredits = { ...this.addressCredits, [which]: address.attribution };
     const area = areaOfChosenAddress(pack, address);
     const [addressLine1 = "", ...later] = address.lines;
     const rest = later.filter((line) => line.trim() !== "");
     if (which === "domicile") {
-      this.sameAsVenue = false;
       this.#fill({
         registeredStreet: addressLine1,
         ...(rest.length > 0 ? { registeredLine2: rest.join(", ") } : {}),
@@ -765,7 +775,7 @@ export class SetupVenueScreen extends LitElement {
 
   #onSameAsVenue(event: CustomEvent<{ checked: boolean }>): void {
     event.stopPropagation();
-    this.#cancelAddressSearch("domicile");
+    this.#streetField("domicile")?.cancelSearch();
     this.sameAsVenue = event.detail.checked;
     this.#scope?.changed();
   }
@@ -785,6 +795,7 @@ export class SetupVenueScreen extends LitElement {
   #onCountry(event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     const country = event.detail.value;
+    this.addressCredits = {};
     const pack = getVenueSetupCountryPack(country);
     this.values = {
       ...this.values,
@@ -1036,6 +1047,7 @@ export class SetupVenueScreen extends LitElement {
       },
     };
     dispatchSetupPatch(this, patch);
+    this.addressCredits = {};
     this.#baseline = this.#snapshot(this.#current());
     this.#scope?.commit(this.#baseline);
 
@@ -1072,17 +1084,34 @@ export class SetupVenueScreen extends LitElement {
     >`;
   }
 
-  #addressSearch(which: AddressSearch, pack: CountryPack | undefined): TemplateResult {
+  #street(which: AddressSearch, pack: CountryPack | undefined): TemplateResult {
+    const key = which === "address" ? "addressLine1" : "registeredStreet";
+    const shown = which === "address" || !this.sameAsVenue;
+    const error = shown
+      ? (this.#errors.get(key) ??
+        (key === "registeredStreet" ? this.#errors.get("taxpayerDomicile") : undefined) ??
+        "")
+      : "";
     const foreign = this.foreignAddress?.which === which ? this.foreignAddress : undefined;
     return html`<wt-address-lookup
       class="field"
-      data-test=${`${which}-lookup`}
-      name=${`${which}-search`}
-      .provider=${pack?.countryCode === "ES" ? this.addressProvider : undefined}
+      data-test=${key}
+      name=${key}
+      autocomplete=${FIELD_AUTOCOMPLETE[key]}
+      label=${t("venue.label.address_line1")}
+      hint=${t("venue.hint.address_line1")}
+      .value=${this.values[key]}
+      required
+      ?invalid=${error !== ""}
+      error=${error}
+      ?hidden=${!shown}
+      .appliedAttribution=${shown ? this.addressCredits[which] : undefined}
+      .provider=${shown && pack?.countryCode === "ES" ? this.addressProvider : undefined}
       country-code=${pack?.countryCode ?? ""}
-      label=${t(which === "address" ? "venue.address_lookup.label" : "venue.address_lookup.domicile_label")}
-      placeholder=${t("venue.address_lookup.placeholder")}
-      no-results-label=${t("venue.address_lookup.no_results")}
+      .ignoredSearchWords=${pack?.addressSearchIgnoredWords}
+      @keydown=${(event: KeyboardEvent) =>
+        submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-test=next]"))}
+      @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onField(key, event)}
       unavailable-label=${t("venue.address_lookup.unavailable")}
       .message=${
         foreign === undefined
@@ -1096,10 +1125,7 @@ export class SetupVenueScreen extends LitElement {
   }
 
   #field(label: string, key: TextField, type = "text"): TemplateResult {
-    const error =
-      this.#errors.get(key) ??
-      (key === "registeredStreet" ? this.#errors.get("taxpayerDomicile") : undefined) ??
-      "";
+    const error = this.#errors.get(key) ?? "";
     const demoName = this.#demo && key === "name";
     const help = !hasHint(key) ? this.#help(key) : demoName ? this.#help("name") : nothing;
     const code = CODE_FIELDS.has(key);
@@ -1131,7 +1157,6 @@ export class SetupVenueScreen extends LitElement {
       pack === undefined ? undefined : findAdministrativeArea(pack, this.values.registeredProvince);
     return html`<fieldset class="registered" data-test="registered-address">
       <legend>${t("venue.label.taxpayer_domicile")}</legend>
-      ${this.#addressSearch("domicile", pack)}
       <wt-switch
         class=${this.sameAsVenue ? "field with-hint" : "field"}
         data-test="registeredSameAsVenue"
@@ -1148,11 +1173,11 @@ export class SetupVenueScreen extends LitElement {
             </p>`
           : nothing
       }
+      ${this.#street("domicile", pack)}
       ${
         this.sameAsVenue
           ? nothing
-          : html`${this.#field(t("venue.label.address_line1"), "registeredStreet")}
-              ${this.#field(t("venue.label.address_line2"), "registeredLine2")}
+          : html`${this.#field(t("venue.label.address_line2"), "registeredLine2")}
               <div class="pair">
                 ${this.#field(t("venue.label.postal_code"), "registeredPostalCode")}
                 ${this.#field(t("venue.label.city"), "registeredCity")}
@@ -1255,8 +1280,7 @@ export class SetupVenueScreen extends LitElement {
           >${t("venue.staff_language.help")}</wt-help-tooltip
         ></wt-combobox
       >
-      ${this.#addressSearch("address", pack)}
-      ${this.#field(t("venue.label.address_line1"), "addressLine1")}
+      ${this.#street("address", pack)}
       ${this.#field(t("venue.label.address_line2"), "addressLine2")}
       <div class="pair">
         ${this.#field(t("venue.label.postal_code"), "postalCode")}

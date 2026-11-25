@@ -173,17 +173,21 @@ opcionales en otros países. Por ejemplo, una dirección francesa puede ser **2 
 impresa y el ticket en la pantalla de caja muestran el país en el idioma del ticket. El detalle
 del pedido lo muestra en el idioma de tu pantalla.
 
+Para una dirección española, escribe en **Calle y número del cliente**. Si aparecen sugerencias,
+elige una y revisa la dirección rellenada antes de guardar. También puedes introducir toda la
+dirección a mano. Cuando las sugerencias están activadas, Waitron Cloud envía a Google Maps el
+texto que busca y la sugerencia que elijas, si eliges alguna.
+
 Cada factura completa muestra el domicilio fiscal de tu negocio. Si es incorrecto o está
 incompleto, corrígelo en **Ajustes del local → Datos del local**: elige **Cambiar domicilio
 fiscal** en la tarjeta **Negocio**. Si usas **Igual que la dirección del local**, corrige antes la dirección del
 local. Las facturas que se emitan después
 muestran el nuevo domicilio; las ya emitidas conservan el que tenían al emitirse.
 
-Cuando aparezca **Buscar la dirección** en cualquiera de los dos formularios, empieza a escribir
-la calle y el número, elige una sugerencia, revisa la dirección y guárdala. Si las sugerencias
-dejan de actualizarse al escribir, pulsa Intro en el buscador. Waitron Cloud envía a Google lo
-que escribes en el buscador y la sugerencia que eliges. También puedes escribir directamente en
-los campos de la dirección.
+En cualquiera de los dos formularios, empieza a escribir la calle y el número en **Dirección**.
+Si aparecen sugerencias, elige una, revisa la dirección y guárdala. Cuando las sugerencias están
+activadas, Waitron Cloud envía a Google Maps el texto que busca y la sugerencia que elijas, si
+eliges alguna.
 
 Para las cuentas cerradas como [pago aplazado](table-service.md#deferred-payment), indica tu cuenta bancaria con
 **Cambiar cuenta bancaria** en la misma tarjeta **Negocio**: introduce el **IBAN** y, si quieres,

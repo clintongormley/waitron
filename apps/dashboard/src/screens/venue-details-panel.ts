@@ -193,6 +193,7 @@ export class VenueDetailsPanel extends LitElement {
   @state() private registeredAddressProvider?: AddressLookupProvider;
   #registeredAddressLoad?: Promise<AddressLookupProvider | undefined>;
   @state() private cloudAddressProvider?: AddressLookupProvider;
+  @state() private addressAttribution?: string;
   @state() private model?: VenueDetailsModel;
   @state() private draft?: VenueDetailValues;
   @state() private submitting = false;
@@ -340,6 +341,7 @@ export class VenueDetailsPanel extends LitElement {
     this.#expected = { ...this.model.details };
     this.draft = { ...this.model.details };
     this.refusedAddress = undefined;
+    this.addressAttribution = undefined;
     this.errors = {};
     this.#feedback.reset();
     this.actionError = "";
@@ -365,6 +367,7 @@ export class VenueDetailsPanel extends LitElement {
       equal: (a, b) => Object.keys(venueDetailPatch(a, b)).length === 0,
       restore: (value) => {
         this.#cancelAddressSearch();
+        this.addressAttribution = undefined;
         this.draft = value;
         this.errors = {};
         this.actionError = "";
@@ -536,7 +539,10 @@ export class VenueDetailsPanel extends LitElement {
   }
   #change(field: VenueDetailField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
-    if (SEARCH_FILLS.includes(field)) this.#cancelAddressSearch();
+    if (SEARCH_FILLS.includes(field)) {
+      if (field !== "addressLine1") this.#cancelAddressSearch();
+      this.addressAttribution = undefined;
+    }
     this.#apply({ [field]: event.detail.value });
   }
   /** So an address still on its way cannot overwrite what the person typed or restored. */
@@ -555,6 +561,7 @@ export class VenueDetailsPanel extends LitElement {
     else if (chosen && chosen.code !== current?.code) this.refusedAddress = "province";
     else {
       this.refusedAddress = undefined;
+      this.addressAttribution = address.attribution;
       const [addressLine1 = "", ...rest] = address.lines;
       this.#apply({
         addressLine1,
@@ -704,6 +711,10 @@ export class VenueDetailsPanel extends LitElement {
     const required =
       field !== "addressLine2" &&
       (this.#expected![field] !== null || this.#patch()[field] !== undefined);
+    if (field === "addressLine1")
+      return html`<div class="field">
+        ${this.#street(value, required, change)} ${this.#lockReason(field)}
+      </div>`;
     if (field === "timeZone") {
       const choice = this.#timeZoneChoice(value);
       return html`<div class="field">
@@ -752,17 +763,25 @@ export class VenueDetailsPanel extends LitElement {
   #isLockedRow(field: VenueDetailField): boolean {
     return this.model!.policy[field].decision === "refuse" && this.#patch()[field] === undefined;
   }
-  #addressSearch(): TemplateResult | typeof nothing {
+  #street(
+    value: string,
+    required: boolean,
+    change: (event: CustomEvent<{ value: string }>) => void,
+  ): TemplateResult {
     const model = this.model!;
-    if (SEARCH_FILLS.some((field) => model.policy[field].decision === "refuse")) return nothing;
+    const locked = SEARCH_FILLS.some((field) => model.policy[field].decision === "refuse");
     return html`<wt-address-lookup
-      class="field"
-      name="address-search"
-      .provider=${this.addressProvider ?? this.cloudAddressProvider}
+      name="addressLine1"
+      autocomplete=${AUTOCOMPLETE.addressLine1}
+      label=${t(LABELS.addressLine1)}
+      .value=${value}
+      ?required=${required}
+      .error=${this.errors.addressLine1 ?? ""}
+      .appliedAttribution=${this.addressAttribution}
+      .provider=${locked ? undefined : (this.addressProvider ?? this.cloudAddressProvider)}
       country-code=${model.issuer.country}
-      label=${t("venue_details.address_lookup.label")}
-      placeholder=${t("venue_details.address_lookup.placeholder")}
-      no-results-label=${t("venue_details.address_lookup.no_results")}
+      .ignoredSearchWords=${getCountryPack(model.issuer.country)?.addressSearchIgnoredWords}
+      @wt-change=${change}
       unavailable-label=${t("venue_details.address_lookup.unavailable")}
       .message=${
         this.refusedAddress === "country"
@@ -782,8 +801,7 @@ export class VenueDetailsPanel extends LitElement {
   #fields(): TemplateResult {
     const pair = !this.#isLockedRow("postalCode") && !this.#isLockedRow("city");
     return html`<div class="fields">
-      ${this.#field("name")} ${this.#addressSearch()} ${this.#field("addressLine1")}
-      ${this.#field("addressLine2")}
+      ${this.#field("name")} ${this.#field("addressLine1")} ${this.#field("addressLine2")}
       ${
         pair
           ? html`<div class="pair">${this.#field("postalCode")} ${this.#field("city")}</div>`

@@ -101,7 +101,9 @@ const dialog = (panel: Panel) =>
     "wt-dialog[data-test=taxpayer-domicile-dialog]",
   )!;
 const part = (panel: Panel, name: Part) =>
-  dialog(panel).querySelector<WtInput | WtCombobox>(`:is(wt-input,wt-combobox)[name=${name}]`)!;
+  dialog(panel).querySelector<WtInput | WtCombobox>(
+    `:is(wt-input,wt-combobox,wt-address-lookup)[name=${name}]`,
+  )!;
 const values = (panel: Panel) => PARTS.map((name) => part(panel, name).value);
 const errors = (panel: Panel) => PARTS.map((name) => part(panel, name).error);
 const save = (panel: Panel) =>
@@ -109,7 +111,8 @@ const save = (panel: Panel) =>
 const same = (panel: Panel) =>
   dialog(panel).querySelector<WtSwitch>("wt-switch[name=registeredSameAsVenue]")!;
 const shownParts = (panel: Panel) =>
-  dialog(panel).querySelectorAll(PARTS.map((name) => `[name=${name}]`).join(",")).length;
+  dialog(panel).querySelectorAll(PARTS.map((name) => `[name=${name}]:not([hidden])`).join(","))
+    .length;
 const actions = (panel: Panel) => dialog(panel).querySelector<WtFormActions>("wt-form-actions")!;
 
 async function open(panel: Panel): Promise<void> {
@@ -850,9 +853,9 @@ it("checks Cloud as the registered address opens and loads the search into that 
   expect(addressLookup).toHaveBeenCalledTimes(2);
   answers[0]!({ available: true });
   await new Promise((resolve) => setTimeout(resolve, 0));
-  expect(search(panel)!.hidden).toBe(true);
+  expect(search(panel)!.provider).toBeUndefined();
   answers[1]!({ available: true });
-  await expect.poll(() => search(panel)?.hidden).toBe(false);
+  await expect.poll(() => search(panel)?.provider).toBeDefined();
 });
 
 it("keeps the search limit when the separate address is hidden and shown again", async () => {
@@ -863,8 +866,7 @@ it("keeps the search limit when the separate address is hidden and shown again",
   lookup.delay = 0;
   for (const query of ["Main", "Main S", "Main St", "Main Street", "Main Street 1"]) {
     const input = lookup.shadowRoot!.querySelector("input")!;
-    input.value = query;
-    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await userEvent.fill(input, query);
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
   await turn(panel, true);
@@ -872,8 +874,7 @@ it("keeps the search limit when the separate address is hidden and shown again",
   const reopened = search(panel)!;
   reopened.delay = 0;
   const input = reopened.shadowRoot!.querySelector("input")!;
-  input.value = "Main Street 12";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await userEvent.fill(input, "Main Street 12");
   await new Promise((resolve) => setTimeout(resolve, 0));
   expect(suggest.mock.calls.map(([request]) => request.query)).toEqual([
     "Main",
@@ -884,28 +885,75 @@ it("keeps the search limit when the separate address is hidden and shown again",
   ]);
 });
 
-it("aligns the address search with the street field, below the switch and its hint", async () => {
+it("puts the registered street below the switch and its hint", async () => {
   const panel = await mountSearching(stubApi());
   await open(panel);
   const lookup = search(panel)!;
   await lookup.updateComplete;
   expect(lookup.hidden).toBe(false);
   expect(lookup.countryCode).toBe("ES");
-  expect(lookup.label).toBe("Find the address");
+  expect(lookup.label).toBe(t("venue_details.addressLine1"));
   const order = [
     ...dialog(panel).querySelectorAll(
       "wt-address-lookup, wt-switch, [data-test=registered-same-hint], wt-input, wt-combobox",
     ),
   ].map((node) => node.getAttribute("name") ?? node.getAttribute("data-test"));
-  expect(order).toEqual([
-    "registeredSameAsVenue",
-    "registered-same-hint",
-    "domicile-search",
-    ...PARTS,
-  ]);
-  const street = part(panel, "registeredStreet").getBoundingClientRect();
-  expect(lookup.getBoundingClientRect().width).toBeCloseTo(street.width);
-  expect(lookup.getBoundingClientRect().left).toBeCloseTo(street.left);
+  expect(order).toEqual(["registeredSameAsVenue", "registered-same-hint", ...PARTS]);
+  expect(lookup).toBe(part(panel, "registeredStreet"));
+});
+
+it("keeps the credit with the chosen registered address until the address is edited", async () => {
+  const panel = await mountSearching(stubApi(VENUE));
+  await open(panel);
+  await turn(panel, false);
+  await choose(panel, { ...MADRID, attribution: "Google Maps" });
+  const credit = () =>
+    search(panel)?.shadowRoot!.querySelector('[part="attribution"]')?.textContent;
+  expect(credit()).toBe("Google Maps");
+  await turn(panel, true);
+  expect(credit()).toBeUndefined();
+  await turn(panel, false);
+  expect(credit()).toBe("Google Maps");
+  await type(panel, { registeredCity: "Alcobendas" });
+  expect(credit()).toBeUndefined();
+});
+
+it("offers a suggestion from the registered street and saves a hand-edited street on Enter", async () => {
+  const api = stubApi();
+  const panel = await mountSearching(api);
+  await open(panel);
+  const street = part(panel, "registeredStreet") as WtAddressLookup;
+  street.delay = 0;
+  const input = street.shadowRoot!.querySelector("input")!;
+  await userEvent.fill(input, "Calle Mayo");
+  const option = () => street.shadowRoot!.querySelector<HTMLElement>('[role="option"]');
+  await expect.poll(option).not.toBeNull();
+  await userEvent.click(option()!);
+  await expect.poll(() => street.value).toBe("Calle Mayor 1");
+  await userEvent.fill(input, "Calle Mayor 8");
+  await userEvent.keyboard("{Enter}");
+  expect(api.changeTaxpayerDomicile).toHaveBeenCalledExactlyOnceWith({
+    taxpayerDomicile: "Calle Mayor 8, 3º B, 28013 Madrid, Madrid",
+    expected: OLD,
+  });
+});
+
+it("saves a manually entered street on the first click while suggestions are visible", async () => {
+  const api = stubApi();
+  const panel = await mountSearching(api);
+  await open(panel);
+  await choose(panel, MADRID);
+  const street = part(panel, "registeredStreet") as WtAddressLookup;
+  street.delay = 0;
+  await userEvent.fill(street.shadowRoot!.querySelector("input")!, "Calle Mayor 8");
+  await expect.poll(() => street.shadowRoot!.querySelector('[role="option"]')).not.toBeNull();
+
+  await userEvent.click(save(panel));
+
+  expect(api.changeTaxpayerDomicile).toHaveBeenCalledExactlyOnceWith({
+    taxpayerDomicile: "Calle Mayor 8, 3º B, 28013 Madrid, Madrid",
+    expected: OLD,
+  });
 });
 
 it("fills the parts from a chosen address, its second line into Line 2, and Save sends them joined", async () => {
@@ -931,7 +979,7 @@ it("shows search only for a separate address, keeps a typed Line 2 and takes the
   expect(same(panel).checked).toBe(true);
   await expect.poll(() => search(panel)?.getBoundingClientRect().height).toBe(0);
   await turn(panel, false);
-  await expect.poll(() => search(panel)?.hidden).toBe(false);
+  await expect.poll(() => search(panel)?.provider).toBeDefined();
   await choose(panel, {
     lines: ["Carrer de Mallorca 1"],
     locality: "Barcelona",
@@ -978,7 +1026,7 @@ it("fills nothing from an address in another country, and says why on the search
   await choose(panel, { ...MADRID, countryCode: "PT", postalCode: "1100-148" });
   expect(values(panel)).toEqual(["Calle Fiscal 8", "", "28013", "Madrid", "Madrid"]);
   expect(search(panel)!.message).toBe(
-    "That address is not in Spain. Choose another or type it below.",
+    "That address is not in Spain. Choose another or edit the street address.",
   );
   await choose(panel, MADRID);
   expect(search(panel)!.message).toBe("");
@@ -1003,8 +1051,7 @@ it("keeps the latest switch choice when a chosen address arrives after it", asyn
   const lookup = search(panel)!;
   lookup.delay = 0;
   const input = lookup.shadowRoot!.querySelector("input")!;
-  input.value = "Calle Mayor";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await userEvent.fill(input, "Calle Mayor");
   await vi.waitFor(() =>
     expect(lookup.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(1),
   );
@@ -1015,16 +1062,16 @@ it("keeps the latest switch choice when a chosen address arrives after it", asyn
   await dialogHost(panel).updateComplete;
   expect(same(panel).checked).toBe(true);
   await turn(panel, false);
-  expect(values(panel)).toEqual(["Calle Fiscal 8", "", "28013", "Madrid", "Madrid"]);
+  expect(values(panel)).toEqual(["Calle Mayor", "", "28013", "Madrid", "Madrid"]);
 });
 
-it("shows no address search without a provider, and none in the legal-name dialog", async () => {
+it("keeps a manual street without a provider, and no street in the legal-name dialog", async () => {
   const panel = await mountSearching(stubApi(), null);
   await open(panel);
   const lookup = search(panel)!;
   await lookup.updateComplete;
-  expect(lookup.hidden).toBe(true);
-  expect(lookup.getBoundingClientRect().height).toBe(0);
+  expect(lookup.provider).toBeUndefined();
+  expect(lookup.getBoundingClientRect().height).toBeGreaterThan(0);
   const withProvider = await mountSearching(stubApi());
   withProvider.shadowRoot!.querySelector<HTMLElement>("[data-test=change-legal-name]")!.click();
   const legal = withProvider.shadowRoot!.querySelector("dashboard-legal-name-dialog")!;

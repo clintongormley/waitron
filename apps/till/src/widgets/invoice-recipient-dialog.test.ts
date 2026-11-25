@@ -19,7 +19,9 @@ async function mountDialog() {
 }
 
 async function fill(el: TillInvoiceRecipientDialog, name: string, value: string) {
-  const field = el.shadowRoot!.querySelector<HTMLElement>(`wt-input[name=${name}]`)!;
+  const field = el.shadowRoot!.querySelector<HTMLElement>(
+    `:is(wt-input,wt-address-lookup)[name=${name}]`,
+  )!;
   const input = field.shadowRoot!.querySelector<HTMLInputElement>("input")!;
   input.value = value;
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
@@ -56,7 +58,7 @@ describe("till-invoice-recipient-dialog", () => {
         await Promise.all(
           [
             ...el.shadowRoot!.querySelectorAll<HTMLElement & { updateComplete: Promise<boolean> }>(
-              "wt-input, wt-form-actions",
+              "wt-input, wt-address-lookup, wt-form-actions",
             ),
           ].map((child) => child.updateComplete),
         );
@@ -259,8 +261,9 @@ describe("till-invoice-recipient-dialog", () => {
         .error,
     ).not.toBe("");
     expect(
-      el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-input[name=address]")!
-        .error,
+      el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+        "wt-address-lookup[name=address]",
+      )!.error,
     ).not.toBe("");
     expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
     expect(
@@ -668,7 +671,7 @@ describe("till-invoice-recipient-dialog email delivery", () => {
     const autocomplete: Record<string, string | null> = {};
     for (const name of names) {
       const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
-        `wt-input[name=${name}]`,
+        `:is(wt-input,wt-address-lookup)[name=${name}]`,
       )!;
       await field.updateComplete;
       autocomplete[name] = field.shadowRoot!.querySelector("input")!.getAttribute("autocomplete");
@@ -940,8 +943,9 @@ describe("till-invoice-recipient-dialog Spanish locality and province commas", (
       const errors = Object.fromEntries(
         ["address", "postalCode", "locality", "province"].map((name) => [
           name,
-          el.shadowRoot!.querySelector<HTMLElement & { error: string }>(`wt-input[name=${name}]`)!
-            .error,
+          el.shadowRoot!.querySelector<HTMLElement & { error: string }>(
+            `:is(wt-input,wt-address-lookup)[name=${name}]`,
+          )!.error,
         ]),
       );
       expect(errors).toEqual({
@@ -976,7 +980,9 @@ describe("till-invoice-recipient-dialog Enter in an address or email field", () 
       await fillValid(el);
       await chooseDelivery(el, "email");
       await fill(el, "email", "ana@example.com");
-      const field = el.shadowRoot!.querySelector<HTMLElement>(`wt-input[name=${name}]`)!;
+      const field = el.shadowRoot!.querySelector<HTMLElement>(
+        `:is(wt-input,wt-address-lookup)[name=${name}]`,
+      )!;
       field.shadowRoot!.querySelector<HTMLInputElement>("input")!.focus();
       await userEvent.keyboard("{Enter}");
       expect(sent).toEqual([

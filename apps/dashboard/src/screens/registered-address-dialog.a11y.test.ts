@@ -91,14 +91,14 @@ it.each(cases)(
     await dialogHost.updateComplete;
     const dialog = dialogHost.shadowRoot!.querySelector<WtDialog>("wt-dialog")!;
     await expect.poll(() => dialog.open).toBe(true);
-    const input = dialog.querySelector<WtInput>("wt-input[name=registeredStreet]")!;
+    const input = dialog.querySelector<WtInput>("wt-address-lookup[name=registeredStreet]")!;
     const actions = dialog.querySelector<WtFormActions>("wt-form-actions")!;
     const same = dialog.querySelector<WtSwitch>("wt-switch[name=registeredSameAsVenue]")!;
     const save = () =>
       dialog.querySelector<HTMLElement>("wt-button[data-test=save-taxpayer-domicile]")!.click();
     if (state === "same") {
       expect(same.checked).toBe(true);
-      expect(dialog.querySelector("wt-input[name=registeredStreet]")).toBeNull();
+      expect(input.hidden).toBe(true);
     } else if (state === "sameRefused") {
       same.dispatchEvent(
         new CustomEvent("wt-change", { detail: { checked: true }, bubbles: true, composed: true }),

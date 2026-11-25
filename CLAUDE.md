@@ -257,10 +257,9 @@ Receipts moved on 2026-11-24 are in [conventions-ui](docs/developers/conventions
 - **A screen does not draw its own form field**: a `<select>`, a `<textarea>`, or a text or file
   `<input>` comes from a field primitive; where none fits, add to one or add one (owner,
   2026-10-01). Guard: `scripts/native-form-fields.test.ts`, weaker than its name.
-- **A form that asks for a postal address puts `wt-address-lookup` above its address fields**
-  (the owner's ask, 2026-10-28, A1171); it stays hidden until the form is handed an address
-  provider. Guard: `scripts/address-lookup-forms.test.ts`, weaker than its name.
-  [Limits](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-10-31).
+- **An address form offers suggestions in its street field through `wt-address-lookup`** when it
+  has a provider. The field stays editable without one (owner, 2026-11-25).
+  [Addresses](docs/developers/design-system.md#addresses).
 - **A `wt-help-tooltip` outside the setup wizard carries `mode="help-mode"`**, so it shows only while
   help is on (owner, 2026-10-18, A582 design §7). Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name. What it misses is in [conventions-ui.md](docs/developers/conventions-ui.md).
 - **A help bubble orients: the main points in a few short sentences, anything people would not find

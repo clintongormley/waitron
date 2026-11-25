@@ -1,12 +1,13 @@
-import { countryNameFor, getCountryPack } from "@waitron/country-packs";
+import { countryNameFor, getCountryPack, type CloudAddressOperation } from "@waitron/country-packs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import type {
   AddressLookupProvider,
   AddressLookupResult,
   WtAddressLookup,
 } from "@waitron/ui/src/components/wt-address-lookup.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, resetPage } from "./test-helpers.js";
+import { TillApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import "./invoice-recipient-dialog.js";
@@ -53,7 +54,9 @@ const flush = async (el: Dialog) => {
 };
 
 async function fill(el: Dialog, name: string, text: string) {
-  const input = q(el, `wt-input[name=${name}]`)!.shadowRoot!.querySelector("input")!;
+  const input = q(el, `:is(wt-input,wt-address-lookup)[name=${name}]`)!.shadowRoot!.querySelector(
+    "input",
+  )!;
   input.value = text;
   input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
   await el.updateComplete;
@@ -81,13 +84,11 @@ function confirmed(el: Dialog): InvoiceRecipientDetail[] {
   return saved;
 }
 
-async function startChoosing(el: Dialog) {
+async function startChoosing(el: Dialog, query = "Calle Mayor") {
   const search = lookup(el)!;
   search.delay = 0;
   const input = search.shadowRoot!.querySelector("input")!;
-  input.focus();
-  input.value = "Calle Mayor";
-  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await userEvent.fill(input, query);
   await vi.waitFor(() =>
     expect(search.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(1),
   );
@@ -104,17 +105,129 @@ function deferredProvider() {
 }
 
 describe("the invoice recipient dialog's address search", () => {
-  it("is hidden without a provider, so the dialog is its manual fields alone", async () => {
-    const el = await mountDialog({});
-    expect(lookup(el)!.hidden).toBe(true);
-    expect(lookup(el)!.getBoundingClientRect().height).toBe(0);
+  it("keeps suggestions off if a Spanish availability answer arrives in another country", async () => {
+    let answer!: (reply: { available: boolean }) => void;
+    const availability = new Promise<{ available: boolean }>((resolve) => {
+      answer = resolve;
+    });
+    const lookupAddress = vi.fn<NonNullable<Dialog["lookupAddress"]>>(() => availability);
+    const el = await mountDialog({ lookupAddress });
+    await vi.waitFor(() => expect(lookupAddress.mock.calls[0]?.[0]).toEqual({ kind: "available" }));
+    await chooseCountry(el, "FR");
+    expect(lookupAddress.mock.calls[0]?.[1]?.aborted).toBe(true);
+    answer({ available: true });
+    await flush(el);
+    expect(lookup(el)!.provider).toBeUndefined();
+    await fill(el, "address", "2 Rue de Rivoli");
+    expect(value(el, "address")).toBe("2 Rue de Rivoli");
   });
 
-  it("names the chosen country in its label", async () => {
+  it("frees the box connection when a newer search starts and before Save sends the invoice", async () => {
+    const pending: (AbortSignal | null | undefined)[] = [];
+    const api = new TillApi("", async (_url, options) => {
+      const operation = JSON.parse(options?.body as string) as CloudAddressOperation;
+      if (operation.kind === "available") return Response.json({ available: true });
+      const signal = options?.signal;
+      pending.push(signal);
+      return new Promise((_, reject) => {
+        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    });
+    const el = await mountDialog({ lookupAddress: api.addressLookup.bind(api) });
+    const search = lookup(el)!;
+    await vi.waitFor(() => expect(search.provider).toBeDefined());
+    await fill(el, "taxId", "12345678Z");
+    await fill(el, "legalName", "Ana García");
+    await choose(el, MADRID);
+    const input = search.shadowRoot!.querySelector("input")!;
+    search.delay = 0;
+    input.focus();
+    for (const [index, query] of ["Calle Mayor", "Calle Mayor 1"].entries()) {
+      input.value = query;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await vi.waitFor(() => expect(pending).toHaveLength(index + 1));
+    }
+    expect(pending[0]?.aborted).toBe(true);
+    expect(pending[1]?.aborted).toBe(false);
+    const abortedWhenSaving: (boolean | undefined)[] = [];
+    el.addEventListener("invoice-recipient-confirm", () =>
+      abortedWhenSaving.push(pending[1]?.aborted),
+    );
+    save(el).click();
+    await el.updateComplete;
+    expect(abortedWhenSaving).toEqual([true]);
+  });
+
+  it("frees the suggestion request when staff leave Street address", async () => {
+    let pending: AbortSignal | null | undefined;
+    const api = new TillApi("", async (_url, options) => {
+      const operation = JSON.parse(options?.body as string) as CloudAddressOperation;
+      if (operation.kind === "available") return Response.json({ available: true });
+      pending = options?.signal;
+      return new Promise((_, reject) => {
+        pending?.addEventListener("abort", () => reject(pending?.reason), { once: true });
+      });
+    });
+    const el = await mountDialog({ lookupAddress: api.addressLookup.bind(api) });
+    const street = lookup(el)!;
+    street.delay = 0;
+    await vi.waitFor(() => expect(street.provider).toBeDefined());
+    await userEvent.fill(street.shadowRoot!.querySelector("input")!, "Calle Mayor");
+    await vi.waitFor(() => expect(pending?.aborted).toBe(false));
+
+    await userEvent.keyboard("{Tab}");
+
+    expect(pending?.aborted).toBe(true);
+  });
+
+  it("removes the Google Maps credit when the country changes", async () => {
     const el = await mountDialog();
-    expect(lookup(el)!.label).toBe("Find the address (Spain)");
+    await choose(el, { ...MADRID, attribution: "Google Maps" });
+    const credit = () => lookup(el)!.shadowRoot!.querySelector('[part="attribution"]')?.textContent;
+    expect(credit()).toBe("Google Maps");
     await chooseCountry(el, "FR");
-    expect(lookup(el)!.label).toBe("Find the address (France)");
+    expect(credit()).toBeUndefined();
+  });
+
+  it("leaves manual entry available when the box refuses the availability check", async () => {
+    const lookupAddress = vi.fn().mockRejectedValue({ code: "cloud.unavailable" });
+    const el = await mountDialog({ lookupAddress });
+    await vi.waitFor(() =>
+      expect(lookupAddress).toHaveBeenCalledWith({ kind: "available" }, expect.any(AbortSignal)),
+    );
+    await flush(el);
+    expect(lookup(el)!.provider).toBeUndefined();
+    await fill(el, "address", "Calle Mía 5");
+    expect(value(el, "address")).toBe("Calle Mía 5");
+  });
+
+  it("shows search when availability returns after manual entry and a refused save", async () => {
+    let available!: (reply: { available: boolean }) => void;
+    const reply = new Promise<{ available: boolean }>((resolve) => {
+      available = resolve;
+    });
+    const lookupAddress = vi.fn<NonNullable<Dialog["lookupAddress"]>>(() => reply);
+    const el = await mountDialog({ lookupAddress });
+    const saved = confirmed(el);
+    await fill(el, "taxId", "12345678Z");
+    await fill(el, "legalName", "Ana García");
+    await fill(el, "address", "Calle Mayor 1");
+    await fill(el, "postalCode", "28013");
+    await fill(el, "locality", "Madrid");
+    await fill(el, "province", "Madrid");
+    save(el).click();
+    expect(saved).toHaveLength(1);
+    el.refusal = "Try again";
+    available({ available: true });
+    await flush(el);
+    expect(lookupAddress.mock.calls[0]?.[1]?.aborted).toBe(false);
+    expect(lookup(el)!.provider).toBeDefined();
+  });
+
+  it("keeps a manual street field without a provider", async () => {
+    const el = await mountDialog({});
+    expect(lookup(el)!.provider).toBeUndefined();
+    expect(lookup(el)!.getBoundingClientRect().height).toBeGreaterThan(0);
   });
 
   it("Escape closes an open list and leaves the dialog open", async () => {
@@ -123,8 +236,7 @@ describe("the invoice recipient dialog's address search", () => {
     el.addEventListener("invoice-recipient-cancel", () => (cancelled = true));
     const search = lookup(el)!;
     search.delay = 0;
-    search.shadowRoot!.querySelector("input")!.focus();
-    await userEvent.keyboard("Calle Mayor");
+    await userEvent.fill(search.shadowRoot!.querySelector("input")!, "Calle Mayor");
     await vi.waitFor(() =>
       expect(search.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(1),
     );
@@ -135,14 +247,71 @@ describe("the invoice recipient dialog's address search", () => {
     expect(q(el, "wt-dialog")!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
   });
 
-  it("sits directly above the street field and asks in the chosen country", async () => {
+  it("uses Street address and asks in the chosen country", async () => {
     const el = await mountDialog();
     const search = lookup(el)!;
-    expect(search.hidden).toBe(false);
+    expect(search.provider).toBeDefined();
     expect(search.countryCode).toBe("ES");
-    expect(search.nextElementSibling?.getAttribute("name")).toBe("address");
+    expect(search.name).toBe("address");
     await chooseCountry(el, "FR");
     expect(search.countryCode).toBe("FR");
+  });
+
+  it("offers a suggestion from Street address and saves a hand-edited street on Enter", async () => {
+    const el = await mountDialog();
+    const saved = confirmed(el);
+    await fill(el, "taxId", "12345678Z");
+    await fill(el, "legalName", "Ana García");
+    const street = q<WtAddressLookup>(el, '[name="address"]')!;
+    street.delay = 0;
+    const input = street.shadowRoot!.querySelector("input")!;
+    await userEvent.fill(input, "Calle Mayo");
+    const option = () => street.shadowRoot!.querySelector<HTMLElement>('[role="option"]');
+    await expect.poll(option).not.toBeNull();
+    await userEvent.click(option()!);
+    await expect.poll(() => street.value).toBe("Calle Mayor 1");
+    await userEvent.fill(input, "Calle Mayor 8");
+    await userEvent.keyboard("{Enter}");
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.recipient).toMatchObject({ address: "Calle Mayor 8, 28013 Madrid, Madrid" });
+  });
+
+  it("keeps Save tappable on a phone while all five suggestions are visible", async () => {
+    await page.viewport(390, 844);
+    try {
+      const el = await mountDialog({
+        addressProvider: {
+          ...provider,
+          suggest: async () =>
+            [1, 2, 3, 4, 5].map((number) => ({
+              id: String(number),
+              label: `Calle Mayor ${number}`,
+              secondaryLabel: "28013 Madrid",
+            })),
+        },
+      });
+      const saved = confirmed(el);
+      await fill(el, "taxId", "12345678Z");
+      await fill(el, "legalName", "Ana García");
+      await fill(el, "postalCode", "28013");
+      await fill(el, "locality", "Madrid");
+      await fill(el, "province", "Madrid");
+      const street = lookup(el)!;
+      street.delay = 0;
+      await userEvent.fill(street.shadowRoot!.querySelector("input")!, "Calle Mayor 8");
+      await expect
+        .poll(() => street.shadowRoot!.querySelectorAll('[role="option"]').length)
+        .toBe(5);
+
+      await commands.touchGesture({ at: "[data-invoice-save]" });
+
+      await expect
+        .poll(() => saved.map(({ recipient }) => recipient.address))
+        .toEqual(["Calle Mayor 8, 28013 Madrid, Madrid"]);
+    } finally {
+      await commands.parkTouch();
+      await resetPage();
+    }
   });
 
   it("fills the street, postcode, locality and province, and Save choice sends them", async () => {
@@ -232,7 +401,7 @@ describe("the invoice recipient dialog's address search", () => {
     expect(value(el, "address")).toBe("Calle Mía 5");
     expect(value(el, "postalCode")).toBe("");
     expect(lookup(el)!.message).toBe(
-      "That address is not in Spain. Choose another or type it below.",
+      "That address is not in Spain. Choose another or edit the street address.",
     );
     await chooseCountry(el, "PT");
     expect(lookup(el)!.message).toBe("");
@@ -250,7 +419,7 @@ describe("the invoice recipient dialog's address search", () => {
     const spain = countryNameFor("ES", "es-ES");
     expect(spain).not.toBe(countryNameFor("ES", "en"));
     const el = await mountDialog();
-    expect(lookup(el)!.label).toBe(es["invoice.address_lookup.label"].replace("{country}", spain));
+    expect(lookup(el)!.label).toBe(es["invoice.street_address"]);
     await choose(el, { ...MADRID, countryCode: "PT" });
     expect(lookup(el)!.message).toBe(
       es["invoice.address_lookup.other_country"].replace("{country}", spain),
@@ -301,7 +470,7 @@ describe("the invoice recipient dialog's address search", () => {
       answers[0]!(MADRID);
       await flush(el);
       expect(value(el, field)).toBe("Typed");
-      expect(value(el, "address")).toBe(field === "address" ? "Typed" : "");
+      expect(value(el, "address")).toBe(field === "address" ? "Typed" : "Calle Mayor");
     },
   );
 
@@ -311,15 +480,14 @@ describe("the invoice recipient dialog's address search", () => {
     const saved = confirmed(el);
     await fill(el, "taxId", "12345678Z");
     await fill(el, "legalName", "Ana García");
-    await fill(el, "address", "Calle Mía 5");
     await fill(el, "postalCode", "28001");
     await fill(el, "locality", "Madrid");
     await fill(el, "province", "Madrid");
-    await startChoosing(el);
+    await startChoosing(el, "Calle Mía 5");
     await vi.waitFor(() => expect(answers).toHaveLength(1));
     save(el).click();
     await el.updateComplete;
-    expect(saved).toHaveLength(1);
+    expect(saved[0]?.recipient.address).toBe("Calle Mía 5, 28001 Madrid, Madrid");
     answers[0]!(MADRID);
     await flush(el);
     expect(value(el, "address")).toBe("Calle Mía 5");
@@ -336,7 +504,7 @@ describe("the invoice recipient dialog's address search", () => {
     expect(sent).toBe(1);
     answers[0]!(MADRID);
     await flush(el);
-    expect(value(el, "address")).toBe("");
+    expect(value(el, "address")).toBe("Calle Mayor");
   });
 
   it("ignores a chosen address once the dialog has closed", async () => {
@@ -356,8 +524,7 @@ describe("the invoice recipient dialog's address search", () => {
     await fill(el, "legalName", "Ana García");
     const search = lookup(el)!;
     search.delay = 0;
-    search.shadowRoot!.querySelector("input")!.focus();
-    await userEvent.keyboard("Calle Mayor");
+    await userEvent.fill(search.shadowRoot!.querySelector("input")!, "Calle Mayor");
     await vi.waitFor(() =>
       expect(search.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(1),
     );
@@ -365,5 +532,31 @@ describe("the invoice recipient dialog's address search", () => {
     await userEvent.keyboard("{Enter}");
     await vi.waitFor(() => expect(value(el, "address")).toBe("Calle Mayor 1"));
     expect(saved).toEqual([]);
+  });
+
+  it("waits for a chosen suggestion before Enter confirms an invoice", async () => {
+    const { resolving, answers } = deferredProvider();
+    const el = await mountDialog({ addressProvider: resolving });
+    const saved = confirmed(el);
+    await fill(el, "taxId", "12345678Z");
+    await fill(el, "legalName", "Ana García");
+    await fill(el, "postalCode", "08001");
+    await fill(el, "locality", "Barcelona");
+    await fill(el, "province", "Barcelona");
+
+    const street = lookup(el)!;
+    street.delay = 0;
+    const input = street.shadowRoot!.querySelector("input")!;
+    await userEvent.fill(input, "Calle May");
+    await expect.poll(() => street.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(1);
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    await expect.poll(() => answers).toHaveLength(1);
+    await userEvent.keyboard("{Enter}");
+    expect(saved).toEqual([]);
+
+    answers[0]!(MADRID);
+    await expect.poll(() => street.value).toBe("Calle Mayor 1");
+    await userEvent.keyboard("{Enter}");
+    expect(saved[0]?.recipient.address).toBe("Calle Mayor 1, 28013 Madrid, Madrid");
   });
 });
