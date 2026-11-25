@@ -11,3 +11,5 @@ The owner said “Build it” and “Split it” on 25 November 2026, recorded u
 5. Update `apps/server/src/guide/{en,es}/till-notices.md`, including the difference between the staff-notice list and the connection line on a prep display. Remove the finished A1574 entries from `docs/backlog.md` and `docs/backlog/till.md`, and point PR 1's link at this plan. Leave the equipment dialog and PR 1's reconnect page and phone wording alone. This slice needs no new poll, server route or recovery workflow.
 
 Expected size is 60–105 added product lines and 100–175 added test lines, including moved code, plus guides and backlog.
+
+The watcher asked at 23:09 on 25 November to use the same top connection banner on the roster and PIN steps, with Check again inside it. Check the phone and tablet views and how it fits the A1591 PIN layout. Send the updated pictures before landing.

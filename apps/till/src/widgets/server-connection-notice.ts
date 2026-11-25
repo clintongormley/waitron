@@ -1,4 +1,4 @@
-import { css, html } from "lit";
+import { css, html, nothing, type TemplateResult } from "lit";
 import { t } from "../i18n/t.js";
 
 export const serverConnectionNoticeStyles = css`
@@ -11,10 +11,23 @@ export const serverConnectionNoticeStyles = css`
     color: var(--wt-color-text-muted);
     text-align: center;
   }
+
+  .banner-with-action {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--wt-space-2);
+  }
 `;
 
-export function serverConnectionNotice(noBoxAnswering: boolean) {
-  return html`<p class="banner" role="status">
-    ${t(noBoxAnswering ? "server.none_answering" : "server.waiting_sales")}
-  </p>`;
+export function serverConnectionNotice(noBoxAnswering: boolean, action?: TemplateResult) {
+  return html`<div
+    class=${action ? "banner banner-with-action" : "banner"}
+    role="status"
+    data-server-status=${action ? "" : nothing}
+  >
+    <span>${t(noBoxAnswering ? "server.none_answering" : "server.waiting_sales")}</span>
+    ${action}
+  </div>`;
 }

@@ -77,18 +77,22 @@ describe.each(["light", "dark"] as const)("till-lock-screen a11y (%s theme)", (t
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations on the server-status line (waiting sentence and Check again, role=status)", async () => {
-    const { el, host } = await mountWidget<TillLockScreen>(
-      "till-lock-screen",
-      {
-        api: stubApi(),
-        serverWaiting: true,
-      },
-      theme,
-    );
-    await flush(el);
-    await expectNoA11yViolations(host);
-  });
+  it.each([false, true])(
+    "has no violations on the server status and Check again (all boxes silent: %s)",
+    async (noBoxAnswering) => {
+      const { el, host } = await mountWidget<TillLockScreen>(
+        "till-lock-screen",
+        {
+          api: stubApi(),
+          serverWaiting: true,
+          noBoxAnswering,
+        },
+        theme,
+      );
+      await flush(el);
+      await expectNoA11yViolations(host);
+    },
+  );
 
   it.each([
     ["with the switch to the spare", true],

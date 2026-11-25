@@ -6933,7 +6933,8 @@ primitive.
 - **Announcing.** The strip is `role="alert"`; the counting line is `aria-live="off"`, so it is not
   read out every second.
 - **Before a recovery panel applies.** A compact line tells staff to check the venue's WiFi when
-  no known box answers. Enrolment, device choice, clock-in and attendance use only the compact
+  no known box answers. On the roster and PIN steps the line appears above the sign-in content,
+  with **Check again** inside it. Enrolment, device choice, clock-in and attendance use only the compact
   line. If Retry in Check your times was refused during that silence, the message appears beside
   Retry instead.
 

@@ -21,6 +21,8 @@ import {
   expectChooserFaces,
   cleanupWidgets,
   mountWidget,
+  pageAt,
+  resetPage,
   textFieldsIn,
   tokenColour,
 } from "../widgets/test-helpers.js";
@@ -1003,6 +1005,35 @@ describe("till-lock-screen", () => {
     (el.shadowRoot!.querySelector("[data-check-again]") as HTMLElement).click();
     expect(again).toHaveBeenCalledTimes(1);
   });
+
+  it.each([390, 820])(
+    "puts the connection banner above roster and PIN content at %i px",
+    async (width) => {
+      await pageAt(width, 844);
+      onTestFinished(resetPage);
+      const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
+        api: stubApi(),
+        serverWaiting: true,
+        noBoxAnswering: true,
+      });
+      await flush(el);
+      const checkBanner = (content: Element) => {
+        const banner = query(el, "[data-server-status]")!;
+        const again = banner.querySelector("[data-check-again]")!;
+        const box = banner.getBoundingClientRect();
+        const button = again.getBoundingClientRect();
+        expect(box.bottom).toBeLessThanOrEqual(content.getBoundingClientRect().top);
+        expect(box.left).toBeCloseTo(el.getBoundingClientRect().left);
+        expect(box.right).toBeCloseTo(el.getBoundingClientRect().right);
+        expect(button.left).toBeGreaterThan(box.left);
+        expect(button.right).toBeLessThan(box.right);
+      };
+      checkBanner(query(el, ".roster")!);
+      click(el, '[data-person="p1"]');
+      await el.updateComplete;
+      checkBanner(query(el, "till-numeric-pad")!);
+    },
+  );
 
   it("shows the main-server strip, with the switch, in place of the waiting sentence", async () => {
     const { el } = await mountWidget<TillLockScreen>("till-lock-screen", {
