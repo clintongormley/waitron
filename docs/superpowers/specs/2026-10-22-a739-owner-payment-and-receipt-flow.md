@@ -413,6 +413,8 @@ The following are **builder proposals**, not owner answers or current runtime cl
   unknown email or uncertain paper. Warn before an explicitly permitted further attempt that the
   earlier delivery may still arrive. A request retry is not proof of exactly one piece of paper.
   Retain A554's no-address status/empty later-email entry and keep customer details out of logs.
+  On 25 November 2026, [A554](../plans/2026-11-25-a554-invoice-email-shown.md) superseded the
+  no-address decision for staff who can email a full invoice from Find a bill or Orders.
 - Proposed pending policy suppresses automatic final-document zone delivery while awaiting an
   answer, because the traced context-free edit route otherwise reaches that policy [P4]. This
   suppression/recovery remains **unapproved**, not a new default silently installed. Collection

@@ -1750,7 +1750,7 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       expect(dialog(el)).toBeNull();
     });
 
-    it("never shows the address an email went to", async () => {
+    it("keeps the email status when no address was returned", async () => {
       const { el } = await mountF1({
         deliveries: statusOf(attempt({ medium: "email", status: "sent" }), {
           email: { designation: "duplicate" },
@@ -1759,6 +1759,35 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       expect(line(el)).toBe("Sent by email.");
       expect(text(el)).not.toContain("@");
     });
+
+    it.each([
+      ["F1", true, "guest@example.test"],
+      ["F1", false, null],
+      ["F2", true, null],
+    ] as const)(
+      "shows the last email address for %s with print capability %s",
+      async (invoiceType, canPrintReceipt, address) => {
+        const printed = attempt({ medium: "receipt", status: "sent" });
+        const lastEmail = {
+          ...attempt({ id: "d2", medium: "email", status: "failed" }),
+          invoiceRecipientEmail: "guest@example.test",
+        };
+        const olderEmail = { ...lastEmail, id: "d3", invoiceRecipientEmail: "older@example.test" };
+        const { el } = await mountF1(
+          {
+            canPrintReceipt,
+            historicalDelivery: true,
+            deliveries: { ...statusOf(printed), history: [printed, lastEmail, olderEmail] },
+          },
+          { invoiceType },
+        );
+        expect(button(el, "original-delivery")).not.toBeNull();
+        expect(label(el, "delivery-email-address") ?? null).toBe(
+          address === null ? null : `Last email address: ${address}`,
+        );
+        expect(text(el)).not.toContain(olderEmail.invoiceRecipientEmail);
+      },
+    );
   });
 });
 

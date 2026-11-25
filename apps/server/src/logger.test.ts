@@ -99,6 +99,7 @@ describe("createLogger personal data", () => {
 
   it.each([
     ["email", "martha.spencer@example.test", "m***r@e***e.test"],
+    ["invoiceRecipientEmail", "martha.spencer@example.test", "m***r@e***e.test"],
     ["displayName", "Martha Spencer", "M***a S***r"],
     ["ownerName", "Martha Spencer", "M***a S***r"],
     ["editorName", "Martha Spencer", "M***a S***r"],
@@ -230,6 +231,7 @@ describe("stringifyMasked", () => {
   // A key added to the list without an entry here fails, so its rule is chosen on purpose.
   const MARTHA_SPENCER_UNDER: Record<string, string> = {
     email: "M***r",
+    invoiceRecipientEmail: "M***r",
     displayName: "M***a S***r",
     ownerName: "M***a S***r",
     editorName: "M***a S***r",

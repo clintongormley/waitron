@@ -330,7 +330,8 @@ details, and Waitron can email them the invoice.
   keeps every receipt and ticket it sends to a receipt or station printer and deletes none of them,
   so the customer's details on an invoice printed at the till stay in the database too. An A4
   invoice is made again each time it is printed, and that printed copy is not kept.
-- Security: as for every entry. Printed copies are yours to look after.
+- Security: as for every entry. Only staff who can email a full invoice can see its recorded email
+  address in **Find a bill** or **Orders**. Look after printed copies.
 
 **Supplier invoices from sole traders.** When you enter a supplier's invoice in **Purchases**, the
 supplier's name and tax number are personal data if the supplier is a sole trader.
@@ -579,6 +580,6 @@ what was done under the account: download the person's copy of their data, and c
 See [Account access](staff.md#account-access).
 
 **An invoice emailed to the wrong address.** The email carries the invoice as a PDF, which shows
-the customer's name, tax number and address and what they bought. On **Orders**, **View details**
-lists when the invoice was sent by email and who asked for it, but not the address it went to, so
-ask the person who sent it. You can send it to the right address from the same place.
+the customer's name, tax number and address and what they bought. In **Orders**, choose **View
+details** and check the address, time and person on the delivery entry. If you can email the
+invoice, send it to the correct address from the same detail.

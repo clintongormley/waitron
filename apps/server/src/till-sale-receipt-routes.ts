@@ -1,5 +1,6 @@
 import { type Transaction, sales, withTransaction } from "@waitron/db";
-import { readJsonBody, requireBodyUuid } from "@waitron/server-kit";
+import { profileAllows } from "@waitron/layouts";
+import { codeOf, readJsonBody, requireBodyUuid } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import type { Hono } from "hono";
@@ -202,9 +203,20 @@ export function mountTillSaleReceiptRoutes(
     run(c, log, async () => {
       const session = await requireSession(deps, c);
       const id = requireUuidId(c.req.param("id"), "working_order.not_found");
+      const receiptEmail = c.req.query("medium") === "email";
+      const includeInvoiceRecipientEmail =
+        !receiptEmail &&
+        profileAllows(session.device, "print-receipt") &&
+        (await assertRequestDevice(deps, c, session).then(
+          () => true,
+          (error: unknown) => {
+            if (codeOf(error) === "device.unauthorized") return false;
+            throw error;
+          },
+        ));
       const read = async (tx: Transaction, saleId: string) => {
         const transport = await readEmailTransport(tx);
-        if (c.req.query("medium") === "email") {
+        if (receiptEmail) {
           return readReceiptEmailDeliveries(tx, saleId, {
             emailAvailable: await canEmailInvoice(tx, { kind: "sale", saleId }, transport),
           });
@@ -212,6 +224,7 @@ export function mountTillSaleReceiptRoutes(
         return readInvoiceDeliveries(tx, saleId, {
           emailAvailable: (sale) =>
             canEmailInvoice(tx, { kind: "sale", saleId: sale.id }, transport),
+          includeInvoiceRecipientEmail,
           printers: () => tillInvoicePrinters(tx, session),
           testPages: deps.testPages,
         });

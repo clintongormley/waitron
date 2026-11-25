@@ -269,14 +269,17 @@ describe("the full invoice's delivery status", () => {
     });
     const history = [
       current,
-      attempt({
-        id: "delivery-1",
-        medium: "email",
-        status: "failed",
-        failureCode: "transport_failed",
-        personName: null,
-        personId: "gone",
-      }),
+      {
+        ...attempt({
+          id: "delivery-1",
+          medium: "email",
+          status: "failed",
+          failureCode: "transport_failed",
+          personName: null,
+          personId: "gone",
+        }),
+        invoiceRecipientEmail: "guest@example.test",
+      },
       attempt({ id: null, medium: "receipt", status: "sent", personId: null, personName: null }),
     ];
     const el = await open(
@@ -297,9 +300,18 @@ describe("the full invoice's delivery status", () => {
     expect(lines[1]).toMatch(/^12 Oct 2026, \d\d:00: PDF downloaded by Rosa$/);
     expect(lines[2]).toMatch(/^12 Oct 2026, \d\d:00 · A4 · Copy · Delivered · Requested by Luis$/);
     expect(lines[3]).toMatch(
-      /^12 Oct 2026, \d\d:00 · Email · Original · Not delivered · Requested by Unknown person$/,
+      /^12 Oct 2026, \d\d:00 · Email · Original · Not delivered · Requested by Unknown person · To guest@example\.test$/,
     );
     expect(lines[4]).toMatch(/^12 Oct 2026, \d\d:00 · Receipt printer · Original · Delivered$/);
+  });
+
+  it("hides the recorded destination without permission to email the invoice", async () => {
+    const email = {
+      ...attempt({ medium: "email", status: "sent" }),
+      invoiceRecipientEmail: "guest@example.test",
+    };
+    const el = await open(stubApi(f1(deliveries(email))), { mayExport: false });
+    expect(find(el, "delivery-history")!.textContent).not.toContain(email.invoiceRecipientEmail);
   });
 
   it("puts each PDF download among the attempts by its time; at the same time an attempt comes first, and each kind keeps the order the server sent", async () => {

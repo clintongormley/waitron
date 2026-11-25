@@ -570,6 +570,39 @@ it.each<[string, Partial<TillSettlementDocumentDialog>]>([
   }
 });
 
+it("keeps the recorded email address off the full-invoice dialog after payment", async () => {
+  const email = {
+    id: "email-original",
+    medium: "email" as const,
+    designation: "original" as const,
+    status: "sent" as const,
+    failureCode: null,
+    requestedAt: "2026-11-11T12:00:00.000Z",
+    at: "2026-11-11T12:00:01.000Z",
+    personId: "p1",
+    printerHold: null,
+    lateSuccess: false,
+    invoiceRecipientEmail: "guest@example.test",
+  };
+  const props = closingProps("prints");
+  const { el } = await mountWidget<TillSettlementDocumentDialog>(
+    "till-settlement-document-dialog",
+    {
+      ...props,
+      result: invoiceOf("30.00"),
+      deliveries: {
+        ...props.deliveries,
+        current: email,
+        history: [email],
+        originalCompleted: true,
+      },
+    },
+  );
+  const status = el.shadowRoot!.querySelector("[data-test=original-delivery]")!;
+  expect(status.textContent).toContain(t("invoice.delivery_sent_email"));
+  expect(status.textContent).not.toContain(email.invoiceRecipientEmail);
+});
+
 it("says nothing about closing until the receipt printer is known", async () => {
   const { el } = await mountWidget<TillSettlementDocumentDialog>(
     "till-settlement-document-dialog",

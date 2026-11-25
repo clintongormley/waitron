@@ -105,6 +105,9 @@ email address and press **Send**. Printing and email are separate actions. If th
 look at the printer first. If sending fails, or the customer does not have it, use **Send the email
 again** to retry the same address, or choose another address.
 
+Before resending a full invoice, open it in **Find a bill** and check **Last email address**. You can
+see it on a till that can email invoices.
+
 Press **Done** or close the window to carry on. Unless you emailed it, the receipt prints when you
 close. If the printer is switched off or not working, it prints by itself when it is back; if it has
 not printed by the next day, print it from the sale. If the device has no receipt printer, choose one

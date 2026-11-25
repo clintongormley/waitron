@@ -879,7 +879,7 @@ describe("dashboard email", () => {
     email.transport = true;
   });
 
-  it("puts the customer's address in no response and no log line", async () => {
+  it("shows the recorded address in an authorized read, keeping writes, restricted reads and logs address-free", async () => {
     email.transport = true;
     logged.length = 0;
     const { billId, saleId } = await fullInvoice();
@@ -900,14 +900,18 @@ describe("dashboard email", () => {
         .where(eq(invoiceDeliveries.id, id)),
     );
     email.transport = new Error("credentials unreadable");
-    answers.push(
-      await send(emailOrders, venue.adminDashboard, "GET", `/management-api/orders/${billId}`),
-    );
+    const path = `/management-api/orders/${billId}`;
+    const authorized = await send(emailOrders, venue.adminDashboard, "GET", path);
+    const restricted = await send(emailOrders, venue.supervisorDashboard, "GET", path);
     email.transport = true;
+    const failedAttempt = { id, status: "failed", invoiceRecipientEmail: CUSTOMER_EMAIL };
+    expect(authorized).toMatchObject({
+      status: 200,
+      json: { deliveries: { current: failedAttempt, history: [failedAttempt] } },
+    });
+    answers.push(restricted);
     answers.push(await retry(venue.adminDashboard, billId, id));
-    answers.push(
-      await send(emailOrders, venue.adminDashboard, "GET", `/management-api/orders/${billId}`),
-    );
+    answers.push(await send(emailOrders, venue.supervisorDashboard, "GET", path));
     expect(answers.map((answer) => answer.status)).toEqual([200, 409, 409, 200, 200, 200]);
     const responses = JSON.stringify(answers);
     const logs = JSON.stringify(logged);

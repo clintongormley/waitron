@@ -61,6 +61,10 @@ export class TillSettlementDocumentDialog extends TillTicketView {
     return state === "prints" || state === "switched-off";
   }
 
+  protected override lastInvoiceEmailAddress(): undefined {
+    return undefined;
+  }
+
   #closingLine() {
     const state = this.#closingState();
     if (state === null) return nothing;

@@ -25686,6 +25686,26 @@ describe("till-app: a box update while a kitchen display's dish move still waits
 describe("A737 Find a bill page", () => {
   const pageOf = (el: TillApp) =>
     el.shadowRoot!.querySelector<TillFindBillScreen>("till-find-bill-screen");
+  const refusedEmail = {
+    id: "d1",
+    medium: "email",
+    designation: "original",
+    status: "failed",
+    failureCode: "transport_failed",
+    requestedAt: "2026-08-05T12:35:00.000Z",
+    at: "2026-08-05T12:35:01.000Z",
+    personId: "p1",
+    printerHold: null,
+    lateSuccess: false,
+    invoiceRecipientEmail: "guest@example.test",
+  } as const;
+  const emailDeliveryStatus = {
+    current: refusedEmail,
+    originalCompleted: false,
+    originalPrinterId: null,
+    actions: { email: null, print: null, receiptInstead: null, retryOriginal: { medium: "email" } },
+    history: [refusedEmail],
+  } satisfies InvoiceDeliveryStatus;
   async function open(overrides: Record<string, unknown> = {}) {
     const { el } = await mountApp({
       findBillOptions: vi.fn().mockResolvedValue(billOptions),
@@ -25826,6 +25846,31 @@ describe("A737 Find a bill page", () => {
     emit(view, "find-bill-open", { row: billRow() });
     await vi.waitFor(() => expect(ticket(el)?.result).toEqual(saleResult));
     expect(currentApi.markCollected).not.toHaveBeenCalled();
+  });
+  it("shows the refused invoice email's address beside Send the email again in Bills", async () => {
+    const { el, view } = await open({
+      getFindBill: vi
+        .fn()
+        .mockResolvedValue(
+          billRow({
+            orderStatus: "settled",
+            state: "paid-not-handed-over",
+            paid: "25.10",
+            stillOwed: "0.00",
+          }),
+        ),
+      getFiledTicket: vi.fn().mockResolvedValue({ ...saleResult, invoiceType: "F1" }),
+      getInvoiceDeliveries: vi.fn().mockResolvedValue(emailDeliveryStatus),
+      getReceiptPrintStatus: vi.fn().mockResolvedValue({ status: "not_queued" }),
+    });
+    emit(view, "find-bill-open", { row: billRow() });
+    await vi.waitFor(() => {
+      const delivery = ticket(el)?.shadowRoot!.querySelector("[data-test=original-delivery]");
+      expect(delivery?.querySelector("[data-test=email-again]")?.textContent?.trim()).toBe(
+        t("invoice.email_again"),
+      );
+      expect(delivery?.textContent).toContain(refusedEmail.invoiceRecipientEmail);
+    });
   });
   it("Find gate cannot show a paid receipt answered after Back", async () => {
     let finish!: (result: TillSaleResult) => void;
@@ -26575,6 +26620,7 @@ describe("A737 Find a bill page", () => {
     const { el, view } = await open({
       getTransactionReceipt: vi.fn().mockResolvedValue(filed),
       getReceiptPrintStatus,
+      getInvoiceDeliveries: vi.fn().mockResolvedValue(emailDeliveryStatus),
     });
     emit(view, "find-transaction-open", { row: transactionRow({ workingOrderId: "wo-filed" }) });
     await vi.waitFor(() =>
@@ -26584,6 +26630,9 @@ describe("A737 Find a bill page", () => {
     expect(getReceiptPrintStatus).toHaveBeenCalledWith("wo-filed");
     await showTicketDocument(el, "receipt");
     expect(ticket(el)!.shadowRoot!.querySelector("[data-test=print-receipt]")).not.toBeNull();
+    await vi.waitFor(() =>
+      expect(ticket(el)!.shadowRoot!.textContent).toContain(refusedEmail.invoiceRecipientEmail),
+    );
     expect(currentApi.collectOrder).not.toHaveBeenCalled();
     expect(currentApi.recordSale).not.toHaveBeenCalled();
   });

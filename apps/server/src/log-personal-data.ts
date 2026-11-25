@@ -31,6 +31,7 @@ function maskEmail(value: string): string {
 // A tax number is masked as one piece.
 const PERSONAL_LOG_RULES: ReadonlyMap<string, (value: string) => string> = new Map([
   ["email", maskEmail],
+  ["invoiceRecipientEmail", maskEmail],
   ["displayName", maskName],
   ["ownerName", maskName],
   ["editorName", maskName],

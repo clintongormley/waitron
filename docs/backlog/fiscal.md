@@ -119,13 +119,6 @@ rule in [Q18(b)](../compliance/asesor-questions.md): the same supplier's number 
 one issue year and accepted in another with a warning. The receipt date still sets the VAT
 reporting period.
 
-## A554. Find a bill and Orders show the address an invoice was emailed to
-
-Queued as INVOICE-EMAIL-SHOWN (lane I). The owner picked, 2026-11-24, "Yes, in Find a bill and Orders
-(Recommended)", to people who may send it again. Today the delivery status the till and the dashboard
-read carries no address, and both email forms open empty. The address is personal data: the log rule and
-the privacy documents' lists apply to it. Left open by A231q.
-
 ## The reconcile sweep may raise a second "accepted with errors" warning
 
 This can happen when it corrects a record the drain is still sending

@@ -111,6 +111,9 @@ ya se haya entregado: pregunta al cliente o mira la impresora antes. Si falla el
 no lo tiene, pulsa **Volver a enviar el correo** para repetirlo a la misma dirección o elige otra
 dirección.
 
+Antes de reenviar una factura completa, ábrela en **Buscar cuenta** y comprueba **Última dirección
+de correo**. Puedes verla en una caja que pueda enviar facturas por correo.
+
 Pulsa **Listo** o cierra la ventana para continuar. Salvo que lo hayas enviado por correo
 electrónico, el recibo se imprime al cerrar. Si la impresora está desactivada o no funciona, se
 imprime por sí solo cuando vuelva a funcionar; si al día siguiente no se ha impreso, imprímelo desde la

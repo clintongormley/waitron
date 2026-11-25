@@ -62,6 +62,7 @@ export interface InvoiceDeliveryAttempt {
    */
   printerHold: A4HoldCode | null;
   printerName?: string;
+  invoiceRecipientEmail?: string;
   /**
    * The agent reported success but the attempt kept its status: a newer attempt had started, or
    * its receipt printer had been deleted.
@@ -114,6 +115,7 @@ export type PrinterOffer = (sale: InvoiceDeliverySale) => Promise<OfferedPrinter
 
 export type InvoiceDeliverySaleReadOptions = {
   emailAvailable: boolean | ((sale: InvoiceDeliverySale) => Promise<boolean>);
+  includeInvoiceRecipientEmail?: boolean;
   printers?: PrinterOffer;
   testPages?: Pick<PageTestPages, "holdOn">;
 };
@@ -268,7 +270,15 @@ async function readStates(
     const saleRows = rowsOf.get(sale.id) ?? [];
     const saleJobs = jobsOf.get(sale.id) ?? [];
     const withdrawn = receiptPrinterWithdrawn(saleRows, saleJobs, receipt, printers);
-    const status = deliveryStatus(saleRows, saleJobs, receipt, withdrawn, printers, emailable);
+    const status = deliveryStatus(
+      saleRows,
+      saleJobs,
+      receipt,
+      withdrawn,
+      printers,
+      emailable,
+      full && options.includeInvoiceRecipientEmail === true,
+    );
     const latest = saleRows[0];
     if (latest?.medium === "a4" && latest.status === "queued" && latest.printerId !== null) {
       status.current!.printerHold = pagePrinterHold(
@@ -339,8 +349,14 @@ function deliveryStatus(
   receiptWithdrawn: boolean,
   printers: OfferedPrinter[],
   emailAvailable: boolean,
+  includeInvoiceRecipientEmail: boolean,
 ): InvoiceDeliveryStatus {
-  const history = rows.map(rowAttempt);
+  const history = rows.map((row) => ({
+    ...rowAttempt(row),
+    ...(includeInvoiceRecipientEmail && row.medium === "email" && row.recipient !== null
+      ? { invoiceRecipientEmail: row.recipient }
+      : {}),
+  }));
   const jobPrinter = (jobId: string | null) =>
     jobs.find((candidate) => candidate.id === jobId)?.printerId ?? null;
   const originals = rows

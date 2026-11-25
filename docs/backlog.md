@@ -279,10 +279,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   An unpaid departure, Print the bill or the close of the business day that issues the invoice of a presented bill loses the table name on it: `issueUnpaidInvoice` saves it only on an open bill (`apps/server/src/working-order-invoice.ts`), and neither `settleIssuedOwingNothing` nor the later collection sets it. A deferred-payment close (`closeBillDeferredTx`, `apps/server/src/deferred-close.ts`) now passes it to `settleIssuedOrder` (A275); a bill that leaves owing needs a decision on when to save it.
   [Issuance and remaining limits](backlog/fiscal.md#a231-full-invoices-at-the-till)
 
-- **A554. Find a bill and Orders show the address an invoice was emailed to** — queued as
-  INVOICE-EMAIL-SHOWN (lane I). Owner, 2026-11-24, picker: "Yes, in Find a bill and Orders (Recommended)".
-  [Detail](backlog/fiscal.md#a554-find-a-bill-and-orders-show-the-address-an-invoice-was-emailed-to)
-
 - **A556. A full invoice that later replaces a bill's simplified one would not be delivered through
   the bill.** Nothing issues an F3 today: no route calls `recordSubstitution`.
   [Detail](backlog/fiscal.md#a556-a-full-invoice-that-later-replaces-a-bills-simplified-one-would-not-be-delivered-through-the-bill)
