@@ -251,6 +251,45 @@ describe("A669 release matrix", () => {
       expect(frozen()).toEqual(before);
     });
   }
+  it("saves the allergy tick on the second portion when firing a held row", async () => {
+    const p = await fixture();
+    const ask = await command(p, {
+      party: {
+        answer: "allergies",
+        guests: [{ who: "Alex", allergens: { milk: {} }, note: null }],
+      },
+      ticks: [{ line: { kind: "working", id: p.otherLineId }, guestIndex: 0 }],
+    });
+    await inTx(v, (tx) =>
+      fireHeldLine(tx, v.cfg, p.partyId, p.lineId, {
+        ...ask,
+        lineIds: [p.lineId, p.otherLineId],
+      }),
+    );
+    const saved = await inTx(v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId));
+    expect(saved.ticks).toEqual([
+      { draftLineId: null, workingLineId: p.otherLineId, guestId: saved.guests[0]!.id },
+    ]);
+  });
+
+  it("refuses to fire members of one held group from different bills", async () => {
+    const p = await fixture(false, true);
+    const ask = await command(p, none);
+    const before = frozen();
+    await expect(
+      inTx(v, (tx) =>
+        fireHeldLine(tx, v.cfg, p.partyId, p.lineId, {
+          ...ask,
+          lineIds: [p.lineId, p.otherLineId],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "management.request_invalid",
+      params: { field: "lineIds" },
+    });
+    expect(frozen()).toEqual(before);
+  });
+
   for (const path of ["line", "all", "group", "held-line", "cross-bill-group"]) {
     it(`${path} saves answer and ticks atomically and exact replay writes nothing`, async () => {
       const p = await fixture(path === "line" || path === "all", path === "cross-bill-group");

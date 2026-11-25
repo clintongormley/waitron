@@ -143,7 +143,7 @@ export async function fireHeldLine(
 ): Promise<{ revision: number }> {
   const routing = routingOnce(tx, new Date());
   if (args.allergy !== undefined) args = { ...args, allergy: normaliseAllergyPatch(args.allergy) };
-  const named = args.lineIds?.toSorted();
+  const named = args.lineIds === undefined ? undefined : [...args.lineIds].sort();
   if (named !== undefined && (!named.includes(lineId) || new Set(named).size !== named.length))
     throw new AppError("management.request_invalid", { field: "lineIds" });
   const lineIds = named ?? [lineId];

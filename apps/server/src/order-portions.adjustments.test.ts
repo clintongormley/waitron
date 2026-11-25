@@ -3318,7 +3318,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
               quantity: dish.quantity,
               expectedBillRevision: dish.billRevision,
               expectedContext: dish.context,
-              preparationStarted: false,
+              preparationStarted: !hold && dish.lineId === members[1],
               reasonId: venue.reasonId.houseVoid,
             })),
           }),
@@ -3342,6 +3342,23 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
           .map((job) => job.filter((printed) => printed.includes("BURG")))
           .filter((job) => job.length > 0),
       ).toEqual([burgerLines]);
+      if (!hold) {
+        const notices = await inTx(venue, (tx) => listStationNotices(tx, venue.stationId));
+        expect(
+          notices
+            .filter(
+              (notice) =>
+                notice.workingOrderId === bill.billId &&
+                notice.kind === "void" &&
+                notice.lineName === "BURG",
+            )
+            .map(({ quantity, wasStarted }) => [quantity, wasStarted])
+            .sort(),
+        ).toEqual([
+          ["1.000", true],
+          ["2.000", false],
+        ]);
+      }
     },
   );
 });

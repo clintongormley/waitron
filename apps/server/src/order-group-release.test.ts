@@ -28,6 +28,7 @@ import {
   groupsOf,
   COURSES,
   linesOf,
+  linesOfBill,
   firedTicketLineIds,
   printed,
   DISHES,
@@ -911,41 +912,54 @@ describe("Fire now on one held dish", () => {
     expect(await firedTicketLineIds(s.partyId)).toContain(steak.id);
   });
 
-  it("fires both portions of a held row together, with their extras and one ticket per station", async () => {
-    const { v, s, held, rows, fish } = await fixture(false);
+  it("fires the portions and extras off a printed HOLD together", async () => {
+    const { v, s, held, rows, fish } = await fixture(true);
     const steaks = rows.filter((row) => row.productId === v.productId.steak).map((row) => row.id);
     const extras = rows.filter((row) => row.parentLineId !== null).map((row) => row.id);
     const command = { ...(await args(s.partyId)), lineIds: steaks };
     const beforePrint = (await printed(v)).length;
     await inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steaks[0]!, command));
-    expect((await groupsOf(s.partyId)).groups.map((group) => [group.state, group.lineIds])).toEqual(
-      [
-        ["held", [fish.id]],
-        ["fired", steaks],
-      ],
+    const { groups } = await groupsOf(s.partyId);
+    expect(groups.map((group) => [group.state, group.lineIds])).toEqual([
+      ["held", [fish.id]],
+      ["fired", steaks],
+    ]);
+    expect(groups[0]?.id).toBe(held.id);
+    const saved = await linesOfBill(s.tabId);
+    expect(saved.map(({ id, groupId }) => [id, groupId])).toEqual(
+      rows.map(({ id }) => [id, id === fish.id ? held.id : groups[1]!.id]),
     );
     expect(await firedTicketLineIds(s.partyId)).toEqual([...steaks, ...extras].sort());
     const tickets = (await printed(v)).slice(beforePrint);
-    expect(tickets.filter((ticket) => ticket.includes("K-STEAK"))).toHaveLength(1);
-    expect(tickets.filter((ticket) => ticket.includes("K-FISH"))).toHaveLength(0);
-    expect((await groupsOf(s.partyId)).groups[0]?.id).toBe(held.id);
+    const corrections = tickets.filter((ticket) => ticket.includes("HOLD CHANGED")).join("\n");
+    expect(corrections).toContain("-2 x K-STEAK");
+    expect(corrections).toContain("-2 x K-PEPPER");
+    const fires = tickets.filter((ticket) => ticket.includes("*** FIRE ***"));
+    expect(fires.filter((ticket) => ticket.includes("K-STEAK"))).toHaveLength(1);
+    expect(fires.filter((ticket) => ticket.includes("K-PEPPER"))).toHaveLength(1);
+    expect(tickets.some((ticket) => ticket.includes("K-FISH"))).toBe(false);
   });
 
-  it("refuses a wholly cancelled held dish", async () => {
-    const { v, s, steak } = await fixture(false);
+  it.each([false, true])("refuses a cancelled held portion (grouped=%s)", async (grouped) => {
+    const { v, s, rows, steak } = await fixture(false);
+    const steaks = rows.filter((row) => row.productId === v.productId.steak);
+    const cancelled = grouped ? steaks[1]! : steak;
     await db.insert(lineServiceCancellations).values({
-      lineId: steak.id,
-      quantity: steak.quantity,
+      lineId: cancelled.id,
+      quantity: cancelled.quantity,
       cancelledAt: "2026-10-17T10:00:00.000Z",
       wasStarted: false,
       actorId: ALEX,
     });
-    const command = await args(s.partyId);
+    const command = {
+      ...(await args(s.partyId)),
+      ...(grouped ? { lineIds: steaks.map((row) => row.id) } : {}),
+    };
     await expectRefusedWithNothingWritten(
       v,
       s.partyId,
       () => inTx((tx) => fireHeldLine(tx, v.cfg, s.partyId, steak.id, command)),
-      { code: "group.line_cancelled", params: { lineId: steak.id } },
+      { code: "group.line_cancelled", params: { lineId: cancelled.id } },
     );
   });
 

@@ -2570,7 +2570,9 @@ describe("POST one held dish's Fire now", () => {
     expect(fired.map((line) => line.groupId)).toEqual([fired[0]!.groupId, fired[0]!.groupId]);
     expect(fired[0]!.groupId).not.toBe(group!.id);
     const before = await snapshot(party);
-    expect(await call("POST", path, { ...command, lineIds: lineIds.toReversed() })).toEqual(answer);
+    expect(await call("POST", path, { ...command, lineIds: [...lineIds].reverse() })).toEqual(
+      answer,
+    );
     expect(await snapshot(party)).toEqual(before);
   });
 
