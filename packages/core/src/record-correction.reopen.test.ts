@@ -7,6 +7,7 @@ import {
   sales,
   tillSessions,
   withTransaction,
+  workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -66,7 +67,24 @@ beforeEach(async () => {
   seed = await seedTaxpayer(suite.db);
   correctiveSeriesId = await seedCorrectiveSeries(suite.db, seed.nodeId);
   await withTransaction(suite.db, (tx) => backend.registerNode(tx, seed.nodeId));
-  printedBillId = await bill("placed");
+  printedBillId = await bill("open");
+  await suite.db.insert(workingOrderLines).values(
+    ["Coffee", "Tea"].map((name, index) => ({
+      workingOrderId: printedBillId,
+      lineNo: index + 1,
+      name,
+      descriptions: { "es-ES": name, "ca-ES": name },
+      quantity: 1000,
+      unitPriceGross: 605,
+      lineTotal: 605,
+      vatClass: "general",
+      takeawayVatClass: "general",
+    })),
+  );
+  await suite.db
+    .update(workingOrders)
+    .set({ status: "placed" })
+    .where(eq(workingOrders.id, printedBillId));
   ticketId = await issueTicket(printedBillId);
   const [staff] = await seedPersons(suite.db, {
     displayName: "Staff without sale.rectify",
@@ -121,9 +139,19 @@ async function issueTicket(billId: string): Promise<SaleId> {
   return saleId;
 }
 
-async function reopen(from: string): Promise<string> {
+/** Opens a bill reopened from `from` holding a copy of each of its dishes but the first `leaveOut`. */
+async function reopen(from: string, leaveOut = 0): Promise<string> {
   const reopened = await bill("open");
   await suite.db.run(sql`update working_orders set reopened_from = ${from} where id = ${reopened}`);
+  const dishes = await suite.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, from))
+    .orderBy(workingOrderLines.lineNo);
+  const copies = dishes
+    .slice(leaveOut)
+    .map((dish) => ({ ...dish, id: crypto.randomUUID(), workingOrderId: reopened }));
+  if (copies.length > 0) await suite.db.insert(workingOrderLines).values(copies);
   return reopened;
 }
 
@@ -213,6 +241,35 @@ it("refuses when no open bill was reopened from the ticket's bill", async () => 
     await wholeCredit(),
     { reopenedBillId: unknown, sessionId: staffSessionId },
     reopenInvalid(unknown, "no_reopened_bill"),
+  );
+});
+
+it("refuses when the reopened bill holds no copy of the ticket's dishes", async () => {
+  const empty = await reopen(printedBillId, 2);
+  await expectRefused(
+    await wholeCredit(),
+    { reopenedBillId: empty, sessionId: staffSessionId },
+    reopenInvalid(empty, "dishes_missing"),
+  );
+});
+
+it("refuses when the reopened bill is missing one of the ticket's dishes", async () => {
+  const reopenedBillId = await reopen(printedBillId, 1);
+  await suite.db.insert(workingOrderLines).values({
+    workingOrderId: reopenedBillId,
+    lineNo: 3,
+    name: "Tea",
+    descriptions: { "es-ES": "Tea", "ca-ES": "Tea" },
+    quantity: 1000,
+    unitPriceGross: 605,
+    lineTotal: 605,
+    vatClass: "general",
+    takeawayVatClass: "general",
+  });
+  await expectRefused(
+    await wholeCredit(),
+    { reopenedBillId, sessionId: staffSessionId },
+    reopenInvalid(reopenedBillId, "dishes_missing"),
   );
 });
 
