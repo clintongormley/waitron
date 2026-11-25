@@ -402,46 +402,15 @@ describe("readVenueTheme", () => {
     expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual(GREEN);
   });
 
-  it("the first read after a start takes the start-up fetch's answer instead of asking again", async () => {
+  it("a start-up answer that arrives after a later read's does not bring the older theme back", async () => {
     const { fetchImpl, calls } = byHand();
     startVenueTheme(document.documentElement, { fetchImpl });
-    const read = vi.fn(() => Promise.resolve(LEMON));
-    const pending = readVenueTheme(read);
-    calls[0]!.answer(GREEN);
-    expect((await pending).answer).toEqual(GREEN);
-    expect(read).not.toHaveBeenCalled();
-    expect(bg()).toBe(GREEN_LIGHT_BG);
-    expect((await readVenueTheme(read)).answer).toEqual(LEMON);
-    expect(read).toHaveBeenCalledOnce();
-  });
-
-  it.each([
-    ["failed", (call: { refuse: () => void }) => call.refuse()],
-    [
-      "answered with the wrong shape",
-      (call: { answer: (body: unknown) => void }) => call.answer({ hash: "h" }),
-    ],
-  ])("a read asks itself when the start-up fetch %s", async (_, end) => {
-    const { fetchImpl, calls } = byHand();
-    startVenueTheme(document.documentElement, { fetchImpl });
-    const read = vi.fn(() => Promise.resolve(LEMON));
-    const pending = readVenueTheme(read);
-    end(calls[0]!);
-    const reading = await pending;
-    expect(read).toHaveBeenCalledOnce();
+    const reading = await readVenueTheme(() => Promise.resolve(LEMON));
     applyVenueTheme(reading.answer, reading.sentAt);
+    calls[0]!.answer(GREEN);
+    await macrotask();
+    await macrotask();
     expect(bg()).toBe(LEMON_LIGHT_BG);
-  });
-
-  it("a read asks itself when the start-up fetch was dropped by a restart", async () => {
-    const first = byHand();
-    startVenueTheme(document.documentElement, { fetchImpl: first.fetchImpl });
-    const read = vi.fn(() => Promise.resolve(LEMON));
-    const pending = readVenueTheme(read);
-    startVenueTheme(document.documentElement, { fetchImpl: never });
-    first.calls[0]!.answer(GREEN);
-    expect((await pending).answer).toEqual(LEMON);
-    expect(read).toHaveBeenCalledOnce();
   });
 });
 

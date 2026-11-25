@@ -199,6 +199,42 @@ describe("the card-provider notice in the running server", () => {
     );
   });
 
+  it("opens a dashboard's live updates from the position its sign-in check was given", async () => {
+    await withServer({ WAITRON_ONBOARDING_INTENT: "prepare" }, async ({ venue }) => {
+      const headers = { cookie: venue.managerCookie };
+      const resources = JSON.stringify([{ type: "settings.payments" }, { type: "printers" }]);
+      const position = async () =>
+        (
+          (await (await fetch(url("/management-api/session/me"), { headers })).json()) as {
+            changePosition: string;
+          }
+        ).changePosition;
+      const firstEvent = async (since: string) => {
+        const events = await fetch(
+          url(`/management-api/events?${new URLSearchParams({ resources, since })}`),
+          { headers },
+        );
+        const reader = events.body!.getReader();
+        try {
+          return new TextDecoder().decode((await reader.read()).value);
+        } finally {
+          await reader.cancel();
+        }
+      };
+      const before = await position();
+      const saved = await fetch(url("/management-api/payments/settings"), {
+        method: "PUT",
+        headers: { ...headers, origin: TRUSTED, "content-type": "application/json" },
+        body: JSON.stringify({ tipsEnabled: true, testProviders: false, revision: 0 }),
+      });
+      expect(saved.status).toBe(200);
+      expect(await firstEvent(before)).toContain(
+        'event: ready\ndata: {"missed":[{"type":"settings.payments"}]}\n',
+      );
+      expect(await firstEvent(await position())).toContain('event: ready\ndata: {"missed":[]}\n');
+    });
+  });
+
   it("switches new practice collections and the dashboard notice without restarting", async () => {
     await withServer({ WAITRON_ONBOARDING_INTENT: "prepare" }, async ({ venue }) => {
       const cookie = venue.managerCookie;

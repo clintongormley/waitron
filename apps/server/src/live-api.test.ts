@@ -79,7 +79,9 @@ describe("management live events", () => {
       bus.publish({ resources: [{ type: "printers", id: "p2" }] });
       bus.publish({ resources: [{ type: "printers", id: "p1" }] });
       const message = new TextDecoder().decode((await reader.read()).value);
-      expect(message).toBe('event: change\ndata: [{"type":"printers","id":"p1"}]\n\n');
+      expect(message).toBe(
+        `event: change\ndata: [{"type":"printers","id":"p1"}]\nid: ${bus.position}\n\n`,
+      );
     } finally {
       await reader.cancel();
     }
@@ -94,7 +96,24 @@ describe("management live events", () => {
     try {
       expect(new TextDecoder().decode((await reader.read()).value)).toContain("event: ready");
       expect(new TextDecoder().decode((await reader.read()).value)).toBe(
-        'event: change\ndata: [{"type":"printers","id":"p1"}]\n\n',
+        `event: change\ndata: [{"type":"printers","id":"p1"}]\nid: ${bus.position}\n\n`,
+      );
+    } finally {
+      await reader.cancel();
+    }
+  });
+
+  it("opens by naming what changed after the position the dashboard gives", async () => {
+    const { app, path, cookie, bus } = await fixture();
+    const since = bus.position;
+    bus.publish({ resources: [{ type: "printers", id: "p1" }, { type: "print_jobs" }] });
+    const response = await app.request(`${path}&since=${encodeURIComponent(since)}`, {
+      headers: { cookie },
+    });
+    const reader = response.body!.getReader();
+    try {
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+        `event: ready\ndata: {"missed":[{"type":"printers"}]}\nid: ${bus.position}\n\n`,
       );
     } finally {
       await reader.cancel();
@@ -343,7 +362,7 @@ describe("the change subscriber", () => {
 });
 
 it("writes a keepalive while another caller holds the write lock", async () => {
-  const { app, path, cookie } = await fixture();
+  const { app, path, cookie, bus } = await fixture();
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   const response = await app.request(path, { headers: { cookie } });
   const reader = response.body!.getReader();
@@ -366,7 +385,9 @@ it("writes a keepalive while another caller holds the write lock", async () => {
       message = new TextDecoder().decode(chunk.value);
     });
     await vi.advanceTimersByTimeAsync(15_000);
-    await expect.poll(() => message, { timeout: 250 }).toBe("event: keepalive\ndata: []\n\n");
+    await expect
+      .poll(() => message, { timeout: 250 })
+      .toBe(`event: keepalive\ndata: []\nid: ${bus.position}\n\n`);
     await next;
   } finally {
     release();
@@ -406,7 +427,7 @@ it("delivers a write made outside withTransaction on the next transaction the pr
     expect(waiting.rows[0]!.n).toBe(2);
     await vi.advanceTimersByTimeAsync(15_000);
     expect(new TextDecoder().decode((await reader.read()).value)).toBe(
-      "event: keepalive\ndata: []\n\n",
+      `event: keepalive\ndata: []\nid: ${bus.position}\n\n`,
     );
     const stillWaiting = await suite.db.execute<{ n: number }>(
       sql`select count(*) as n from change_log`,

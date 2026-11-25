@@ -26,6 +26,7 @@ interface Entry {
   snapshot: ResourceSnapshot<unknown>;
   listeners: Set<() => void>;
   dirty: boolean;
+  retryOnFailure: boolean;
   scheduled: boolean;
   active: boolean;
   timer?: ReturnType<typeof setInterval>;
@@ -75,6 +76,7 @@ export class LiveData {
         snapshot: { value: undefined, error: undefined, loading: false, status: "pending" },
         listeners: new Set(),
         dirty: true,
+        retryOnFailure: false,
         scheduled: false,
         active: true,
       };
@@ -169,6 +171,20 @@ export class LiveData {
     }
   }
 
+  /** Bring reads up to date from what changed while no stream was open; failed reads are read again. */
+  catchUp(missed: readonly ResourceIdentity[]): void {
+    this.invalidate(missed);
+    for (const entry of this.#entries.values()) {
+      if (entry.snapshot.loading) {
+        entry.retryOnFailure = true;
+        continue;
+      }
+      if (entry.snapshot.status !== "error") continue;
+      entry.dirty = true;
+      this.#schedule(entry);
+    }
+  }
+
   #schedule(entry: Entry): void {
     if (this.#paused || !entry.active || !entry.dirty || entry.scheduled || entry.snapshot.loading)
       return;
@@ -190,7 +206,9 @@ export class LiveData {
     } catch (error) {
       if (!entry.active) return;
       entry.snapshot = { ...entry.snapshot, error, loading: false, status: "error" };
+      entry.dirty ||= entry.retryOnFailure;
     }
+    entry.retryOnFailure = false;
     for (const listener of entry.listeners) listener();
     this.#schedule(entry);
   }

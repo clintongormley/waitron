@@ -15,6 +15,8 @@ export interface LiveStreamOptions {
   log: Logger;
   /** Transfer invalidation retains no identities and carries an empty object. */
   invalidationOnly?: boolean;
+  /** Stamps events with the bus position, and opens by naming what changed after `since`. */
+  catchUp?: { since: string | undefined };
 }
 
 export function parseInterests(
@@ -92,7 +94,10 @@ export function liveStreamResponse(c: Context, options: LiveStreamOptions): Resp
     };
     stream.onAbort(cleanup);
     try {
-      await stream.writeSSE({ event: "ready", data: "{}" });
+      const stamp = (): { id?: string } => (options.catchUp ? { id: options.bus.position } : {});
+      const missed =
+        options.catchUp && options.bus.changedSince(options.catchUp.since, options.interests);
+      await stream.writeSSE({ event: "ready", data: JSON.stringify({ missed }), ...stamp() });
       while (!closed && !stream.aborted) {
         if (!reset && pending.size === 0 && !invalidated)
           await new Promise<void>((resolve) => {
@@ -121,6 +126,7 @@ export function liveStreamResponse(c: Context, options: LiveStreamOptions): Resp
         await stream.writeSSE({
           event,
           data: options.invalidationOnly ? "{}" : JSON.stringify(identities),
+          ...stamp(),
         });
       }
     } catch (error) {

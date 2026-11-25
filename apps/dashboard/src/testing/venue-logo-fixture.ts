@@ -1,6 +1,5 @@
 import { vi, type Mock } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
-import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import type { DashboardApi, SalesOverview } from "../api/client.js";
 
 export { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
@@ -43,7 +42,8 @@ export function stubShellApi(signedIn: boolean, locale: ShellLocale = "es-ES"): 
           modules: [],
         })
       : vi.fn().mockRejectedValue({ code: "management_session.required" }),
-    getVenueTheme: vi.fn().mockResolvedValue(FIXTURE_ANSWER),
+    // Pending, so the theme a test stored or answered is not replaced by this stub.
+    getVenueTheme: vi.fn(() => new Promise<unknown>(() => {})),
     getLegalAbout: vi.fn().mockResolvedValue({ release: null, build: "test" }),
     getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }),
     listAlerts: async () => ({ visible: false, alerts: [] }),

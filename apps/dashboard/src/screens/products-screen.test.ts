@@ -3826,6 +3826,22 @@ describe("menu-screen", () => {
     );
   });
 
+  it("opens the product named in the address only once every read has answered", async () => {
+    const before = location.href;
+    onTestFinished(() => history.replaceState(null, "", before));
+    history.replaceState(null, "", "/products/product/p1");
+    let resolveUnits!: (value: never[]) => void;
+    const api = stubApi({
+      listUnits: vi.fn(() => new Promise<never[]>((resolve) => (resolveUnits = resolve))),
+    });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await vi.waitFor(() => expect(list(el).products).toEqual(products));
+    await flush(el);
+    expect(api.getProductEditor).not.toHaveBeenCalled();
+    resolveUnits([]);
+    await vi.waitFor(() => expect(api.getProductEditor).toHaveBeenCalledWith("p1"));
+  });
+
   it("tells the product list the menu has loaded only once its products have", async () => {
     const pending: ((value: Product[]) => void)[] = [];
     const api = stubApi({

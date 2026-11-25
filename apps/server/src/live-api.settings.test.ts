@@ -98,7 +98,7 @@ it("a save to one module's document wakes only that module's subscribers", async
       }),
     );
     expect(await readWithin(readers[1]!)).toBe(
-      'event: change\ndata: [{"type":"settings.menu"}]\n\n',
+      `event: change\ndata: [{"type":"settings.menu"}]\nid: ${bus.position}\n\n`,
     );
     await withTransaction(suite.db, (tx) =>
       saveSettings(tx, VENUE_SETTINGS, {
@@ -108,7 +108,7 @@ it("a save to one module's document wakes only that module's subscribers", async
       }),
     );
     expect(await readWithin(readers[0]!)).toBe(
-      'event: change\ndata: [{"type":"settings.venue"}]\n\n',
+      `event: change\ndata: [{"type":"settings.venue"}]\nid: ${bus.position}\n\n`,
     );
     await withTransaction(suite.db, (tx) =>
       saveSettings(tx, MODULES_SETTINGS, {
@@ -118,7 +118,7 @@ it("a save to one module's document wakes only that module's subscribers", async
       }),
     );
     expect(await readWithin(readers[2]!)).toBe(
-      'event: change\ndata: [{"type":"settings.modules"}]\n\n',
+      `event: change\ndata: [{"type":"settings.modules"}]\nid: ${bus.position}\n\n`,
     );
     await withTransaction(suite.db, (tx) =>
       saveSettings(tx, BACKUP_SETTINGS, {
@@ -131,7 +131,7 @@ it("a save to one module's document wakes only that module's subscribers", async
       }),
     );
     expect(await readWithin(readers[3]!)).toBe(
-      'event: change\ndata: [{"type":"settings.backup"}]\n\n',
+      `event: change\ndata: [{"type":"settings.backup"}]\nid: ${bus.position}\n\n`,
     );
   } finally {
     for (const reader of readers) await reader.cancel();
@@ -186,12 +186,12 @@ it.each(["dining_tables", "floor_zones"])(
         else await tx.update(floorZones).set({ todayRevision: 1 }).where(eq(floorZones.id, id));
       });
       expect(await readWithin(readers[1]!)).toBe(
-        `event: change\ndata: [{"type":"${type}.today","id":"${id}"}]\n\n`,
+        `event: change\ndata: [{"type":"${type}.today","id":"${id}"}]\nid: ${bus.position}\n\n`,
       );
       // The quiet event has arrived; this distinct control exposes an earlier unwanted base event.
       bus.publish({ resources: [{ type, id: "control" }] });
       expect(await readWithin(readers[0]!)).toBe(
-        `event: change\ndata: [{"type":"${type}","id":"control"}]\n\n`,
+        `event: change\ndata: [{"type":"${type}","id":"control"}]\nid: ${bus.position}\n\n`,
       );
     } finally {
       for (const reader of readers) await reader.cancel();

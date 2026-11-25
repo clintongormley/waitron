@@ -33,7 +33,6 @@ let wantedHash: string | null = null;
 // its read was sent.
 let clock = 0;
 let appliedAt = 0;
-let startupReading: Promise<VenueThemeReading | null> | null = null;
 
 const WAITING: VenueLogoState = { kind: "waiting" };
 const NONE: VenueLogoState = { kind: "none" };
@@ -157,7 +156,7 @@ function adopt(root: HTMLElement, sheet: CSSStyleSheet): void {
   }
 }
 
-async function fetchAnswer(): Promise<VenueThemeReading | null> {
+async function fetchAnswer(): Promise<void> {
   const controller = new AbortController();
   inFlight = controller;
   const sentAt = ++clock;
@@ -170,14 +169,12 @@ async function fetchAnswer(): Promise<VenueThemeReading | null> {
       cache: "no-store",
       signal: controller.signal,
     });
-    if (controller.signal.aborted || !response.ok) return null;
+    if (controller.signal.aborted || !response.ok) return;
     const answer: unknown = await response.json();
-    if (controller.signal.aborted || !isVenueThemeAnswer(answer)) return null;
+    if (controller.signal.aborted || !isVenueThemeAnswer(answer)) return;
     applyVenueTheme(answer, sentAt);
-    return { answer, sentAt };
   } catch {
     // A failed request, a cancelled one, or a body that is not JSON leaves the sheet as it is.
-    return null;
   } finally {
     clearTimeout(timer);
     endWait(controller);
@@ -204,16 +201,11 @@ export function startVenueTheme(root: HTMLElement, options: VenueThemeOptions = 
   fetchOptions = options;
   wantedHash = null;
   inFlight?.abort();
-  startupReading = fetchAnswer();
+  void fetchAnswer();
 }
 
-/** Numbers `read` when it is sent, for `applyVenueTheme`. The first call after a start takes the
- * start-up fetch's answer instead, when that fetch got one. */
+/** Numbers `read` when it is sent, for `applyVenueTheme`. */
 export async function readVenueTheme(read: () => Promise<unknown>): Promise<VenueThemeReading> {
-  const startup = startupReading;
-  startupReading = null;
-  const reused = startup === null ? null : await startup;
-  if (reused !== null) return reused;
   const sentAt = ++clock;
   return { answer: await read(), sentAt };
 }

@@ -113,3 +113,131 @@ describe("shared live stream", () => {
     },
   );
 });
+
+describe("catching up a management stream", () => {
+  const ready = (chunk: ReadableStreamReadResult<Uint8Array>) => {
+    const [, data, id] = /^event: ready\ndata: (.*)\nid: (.*)\n\n$/.exec(text(chunk)) ?? [];
+    return { id, data: JSON.parse(data!) as unknown };
+  };
+  async function open(
+    bus: LiveEvents,
+    since: string | undefined,
+    interests: LiveStreamOptions["interests"] = [{ type: "printers" }],
+  ) {
+    const app = new Hono();
+    app.get("/events", (c) =>
+      liveStreamResponse(c, {
+        bus,
+        interests,
+        recheck: async () => {},
+        invalidCodes: new Set(),
+        sendIds: true,
+        log: vi.fn(),
+        catchUp: { since },
+      }),
+    );
+    const reader = (await app.request("/events")).body!.getReader();
+    return { reader, first: ready(await reader.read()) };
+  }
+
+  it("names each watched type that changed after the given position, and no other", async () => {
+    const bus = new LiveEvents();
+    bus.publish({ resources: [{ type: "courses", id: "before" }] });
+    const since = bus.position;
+    bus.publish({ resources: [{ type: "printers", id: "p1" }, { type: "unwatched" }] });
+    bus.publish({ resources: [{ type: "printers", id: "p2" }] });
+    const { reader, first } = await open(bus, since, [
+      { type: "printers", id: "p9" },
+      { type: "printers" },
+      { type: "courses" },
+    ]);
+    try {
+      expect(first).toEqual({ id: bus.position, data: { missed: [{ type: "printers" }] } });
+    } finally {
+      await reader.cancel();
+    }
+  });
+
+  it("names nothing when nothing changed since", async () => {
+    const bus = new LiveEvents();
+    bus.publish({ resources: [{ type: "printers" }] });
+    const { reader, first } = await open(bus, bus.position);
+    try {
+      expect(first).toEqual({ id: bus.position, data: { missed: [] } });
+    } finally {
+      await reader.cancel();
+    }
+  });
+
+  it.each([
+    ["none was given", () => undefined],
+    ["it came from another run of the server", () => new LiveEvents().position],
+    ["it has no number", (bus: LiveEvents) => bus.position.split(":")[0]!],
+    ["its number is empty", (bus: LiveEvents) => `${bus.position.split(":")[0]!}:`],
+    ["its number is not whole", (bus: LiveEvents) => `${bus.position.split(":")[0]!}:0.5`],
+    ["it is ahead of the server", (bus: LiveEvents) => `${bus.position.split(":")[0]!}:2`],
+    ["it is not a position", () => "nonsense"],
+  ] as const)("does not claim to know what was missed when %s", async (_, position) => {
+    const bus = new LiveEvents();
+    bus.publish({ resources: [{ type: "printers" }] });
+    const { reader, first } = await open(bus, position(bus));
+    try {
+      expect(first).toEqual({ id: bus.position, data: {} });
+    } finally {
+      await reader.cancel();
+    }
+  });
+
+  it("stamps each change with a position that already covers it", async () => {
+    const bus = new LiveEvents();
+    const { reader } = await open(bus, undefined);
+    try {
+      bus.publish({ resources: [{ type: "printers", id: "p1" }] });
+      const changed = text(await reader.read());
+      expect(changed).toBe(
+        `event: change\ndata: [{"type":"printers","id":"p1"}]\nid: ${bus.position}\n\n`,
+      );
+      const next = await open(bus, /id: (.*)/.exec(changed)![1]!);
+      expect(next.first.data).toEqual({ missed: [] });
+      await next.reader.cancel();
+    } finally {
+      await reader.cancel();
+    }
+  });
+
+  it("stamps the position after a batch, not one a change still waiting has passed", async () => {
+    const bus = new LiveEvents();
+    let rechecking = false;
+    let release = (): void => {};
+    const app = new Hono();
+    app.get("/events", (c) =>
+      liveStreamResponse(c, {
+        bus,
+        interests: [{ type: "printers" }],
+        recheck: () =>
+          new Promise<void>((resolve) => {
+            rechecking = true;
+            release = resolve;
+          }),
+        invalidCodes: new Set(),
+        sendIds: true,
+        log: vi.fn(),
+        catchUp: { since: undefined },
+      }),
+    );
+    const reader = (await app.request("/events")).body!.getReader();
+    try {
+      await reader.read();
+      bus.publish({ resources: [{ type: "printers", id: "p1" }] });
+      await vi.waitFor(() => expect(rechecking).toBe(true));
+      bus.publish({ resources: [{ type: "printers", id: "p2" }] });
+      release();
+      expect(text(await reader.read())).toBe(
+        `event: change\ndata: [{"type":"printers","id":"p1"},{"type":"printers","id":"p2"}]\nid: ${bus.position}\n\n`,
+      );
+    } finally {
+      release();
+      await reader.cancel();
+    }
+  });
+});

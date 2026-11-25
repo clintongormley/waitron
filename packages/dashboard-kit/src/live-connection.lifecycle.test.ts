@@ -308,24 +308,28 @@ it("reconnects when a closed-stream error follows a temporary error before recov
   expect(streams).toHaveLength(2);
 });
 
-it("holds a replacement session's reads and stream if stopped and restarted while hidden", async () => {
-  page.dispatchEvent(new Event("pagehide"));
-  connection.stop();
-  data.observe(
-    { key: "replacement", dependencies: [{ type: "alerts" }], read: async () => values.push(50) },
-    () => {},
-  );
-  generation = 2;
-  connection.start();
-  await vi.advanceTimersByTimeAsync(0);
-  expect(values).toEqual([1]);
-  expect(streams).toHaveLength(1);
-  page.dispatchEvent(new Event("pageshow"));
-  await vi.advanceTimersByTimeAsync(0);
-  streams[1]!.dispatchEvent(new Event("open"));
-  await vi.advanceTimersByTimeAsync(0);
-  expect(values).toEqual([1, 50]);
-});
+it.each([undefined, "run:4"])(
+  "holds a replacement session's reads and stream if restarted while hidden (position %s)",
+  async (position) => {
+    page.dispatchEvent(new Event("pagehide"));
+    connection.stop();
+    data.observe(
+      { key: "replacement", dependencies: [{ type: "alerts" }], read: async () => values.push(50) },
+      () => {},
+    );
+    generation = 2;
+    connection.start(position);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(values).toEqual([1]);
+    expect(streams).toHaveLength(1);
+    page.dispatchEvent(new Event("pageshow"));
+    await vi.advanceTimersByTimeAsync(0);
+    streams[1]!.dispatchEvent(new Event("open"));
+    streams[1]!.send("ready", { missed: [] });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(values).toEqual([1, 50]);
+  },
+);
 
 it("restarts after a stopped hidden document returned before the next start", async () => {
   page.dispatchEvent(new Event("pagehide"));

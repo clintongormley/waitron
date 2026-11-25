@@ -184,7 +184,7 @@ it("streams a retained profile change while refusing the retired canvas subscrip
         .where(eq(deviceProfiles.id, profile!.id));
     });
     expect(new TextDecoder().decode((await reader.read()).value)).toBe(
-      `event: change\ndata: [{"type":"device_profiles","id":"${profile!.id}"}]\n\n`,
+      `event: change\ndata: [{"type":"device_profiles","id":"${profile!.id}"}]\nid: ${bus.position}\n\n`,
     );
     const retired = await app.request(
       `/management-api/events?resources=${encodeURIComponent('[{"type":"canvases"}]')}`,

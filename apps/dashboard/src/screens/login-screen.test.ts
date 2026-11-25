@@ -656,6 +656,63 @@ describe("login-screen", () => {
     expect(api.passkeyAuthOptions).toHaveBeenCalledTimes(1);
   });
 
+  it("prepares no way to sign in until the shell has checked for a session", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    vi.mocked(navigator.credentials.get).mockReturnValueOnce(new Promise(() => undefined));
+    const api = stubApi();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api,
+      checkingSession: true,
+    });
+    await flush(el);
+    await flush(el);
+    expect(api.getGoogleConfig).not.toHaveBeenCalled();
+    expect(api.passkeyAuthOptions).not.toHaveBeenCalled();
+
+    el.checkingSession = false;
+    await flush(el);
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalledOnce());
+    expect(api.getGoogleConfig).toHaveBeenCalledOnce();
+    expect(api.passkeyAuthOptions).toHaveBeenCalledOnce();
+  });
+
+  it("starts no passkey autofill after the check for a form already past the email", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const api = stubApi();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api,
+      checkingSession: true,
+    });
+    await openPasskey(el);
+    el.checkingSession = false;
+    await flush(el);
+    await vi.waitFor(() => expect(api.getGoogleConfig).toHaveBeenCalledOnce());
+    await flush(el);
+    expect(api.passkeyAuthOptions).not.toHaveBeenCalled();
+  });
+
+  it("prepares no way to sign in after the check when the box turns out to have been reset", async () => {
+    conditionalMediationAvailable.mockResolvedValue(true);
+    const api = stubApi();
+    const { el } = await mountWidget<LoginScreen>("dashboard-login-screen", {
+      api,
+      checkingSession: true,
+    });
+    el.noticeCode = "node.reset";
+    el.checkingSession = false;
+    await flush(el);
+    await flush(el);
+    expect(api.getGoogleConfig).not.toHaveBeenCalled();
+    expect(api.passkeyAuthOptions).not.toHaveBeenCalled();
+  });
+
+  it("reads an account link before the shell has checked for a session", async () => {
+    history.replaceState(null, "", "/account?token=setup&purpose=invitation");
+    const api = stubApi();
+    await mountWidget<LoginScreen>("dashboard-login-screen", { api, checkingSession: true });
+    await vi.waitFor(() => expect(api.inspectAccountAction).toHaveBeenCalledOnce());
+  });
+
   it("cancels a pending conditional ceremony before submitting a password", async () => {
     conditionalMediationAvailable.mockResolvedValue(true);
     vi.mocked(navigator.credentials.get).mockReturnValueOnce(new Promise(() => undefined));

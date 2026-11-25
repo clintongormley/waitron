@@ -1,6 +1,6 @@
 import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { VENUE_THEME_STORAGE_KEY, applyTokens, readVenueTheme, startVenueTheme } from "@waitron/ui";
+import { VENUE_THEME_STORAGE_KEY, applyTokens, startVenueTheme } from "@waitron/ui";
 import { themeSheet, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
 import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
@@ -49,7 +49,7 @@ beforeEach(async () => {
     Response.json({ hash: "h1", css: "", logo: null }),
   );
   startVenueTheme(document.documentElement, { fetchImpl });
-  await readVenueTheme(() => Promise.reject(new Error("the start-up reading is reused")));
+  await vi.waitFor(() => expect(localStorage.getItem(VENUE_THEME_STORAGE_KEY)).not.toBeNull());
 });
 
 afterEach(() => {

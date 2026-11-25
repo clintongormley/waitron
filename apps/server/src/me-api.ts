@@ -64,6 +64,7 @@ export interface MeApiDeps {
   venueLocale: string;
   onboardingIntent?: OnboardingIntent;
   simulatedCardPayments?: boolean;
+  changePosition?: () => string;
   /** The enabled module names, `core` included. */
   modules: string[];
   credentialKeyRing: KeyRing;
@@ -359,6 +360,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
   app.get("/management-api/session/me", admitsInspector, (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
+      const changePosition = deps.changePosition?.();
       const { personId, authority, email, locale, venue, expiresAt } = await deps.db.withWriteLock(
         async () => {
           const tx = deps.db;
@@ -392,6 +394,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
         simulatedCardPayments: deps.simulatedCardPayments === true,
         permissions: [...authority.permissions],
         modules: deps.modules,
+        changePosition,
         sessionExpiresInSeconds: Math.min(
           IDLE_TIMEOUT_MS / 1000,
           Math.max(0, Math.ceil((Date.parse(expiresAt) - Date.now()) / 1000)),

@@ -962,7 +962,7 @@ export class DashboardApp extends LitElement {
   @property({ attribute: false }) sessionEpoch: SessionEpoch = createSessionEpoch();
 
   @property({ attribute: false }) request!: DashboardRequest;
-  @property({ attribute: false }) liveUpdates?: { start(): void; stop(): void };
+  @property({ attribute: false }) liveUpdates?: { start(position?: string): void; stop(): void };
   @property({ attribute: false }) reload: () => void = () => location.reload();
   @property({ attribute: false }) startDownload: StartDownload = startBrowserDownload;
 
@@ -1073,6 +1073,7 @@ export class DashboardApp extends LitElement {
   @state() private myPersonId = "";
 
   @state() private sessionNoticeCode: string | null = null;
+  @state() private checkingSession = true;
   @state() private updateAvailable = false;
   readonly #onBuildChanged = (): void => {
     this.updateAvailable = true;
@@ -1148,6 +1149,7 @@ export class DashboardApp extends LitElement {
   #screenAccountEpoch = 0;
   #moduleAccountEpoch = 0;
   #liveAccountEpoch?: number;
+  #changePosition?: string;
   private sessionIdleTimeoutSeconds = 30 * 60;
   private get sessionGeneration(): number {
     return this.sessionEpoch.current();
@@ -1412,10 +1414,12 @@ export class DashboardApp extends LitElement {
       else history.replaceState(history.state, "", url);
     }
     if (url.searchParams.has("token")) {
+      this.checkingSession = false;
       await this.#seedLocale();
       return;
     }
     await this.#probeSession(preference);
+    this.checkingSession = false;
     if (googleCallback && this.sessionPersonId !== undefined) void signalAcceptedPasskeys(this.api);
     if (this.screen === "login") await this.#seedLocale();
   }
@@ -1502,6 +1506,7 @@ export class DashboardApp extends LitElement {
       venueCountry?: string;
       onboardingIntent?: "demo" | "prepare" | "live";
       simulatedCardPayments?: boolean;
+      changePosition?: string;
       sessionExpiresInSeconds?: number;
       sessionIdleTimeoutSeconds?: number;
       tradingAdmission?: TradingAdmissionView;
@@ -1561,6 +1566,8 @@ export class DashboardApp extends LitElement {
       this.screen = "zone-repair";
       return;
     }
+    // Only a position taken before the first watched read covers every one of them.
+    if (this.api.liveData?.interestKeys.length === 0) this.#changePosition = me.changePosition;
     this.#startLiveUpdates();
     this.#activate(me.modules);
     this.#applyRequestedScreen(this.#url.read("dashboard"));
@@ -1714,7 +1721,7 @@ export class DashboardApp extends LitElement {
     if (!this.contentLanguagesReady && this.contentLanguageError === null) return;
     if (this.#liveAccountEpoch === this.sessionGeneration) return;
     this.#liveAccountEpoch = this.sessionGeneration;
-    this.liveUpdates?.start();
+    this.liveUpdates?.start(this.#changePosition);
   }
 
   #watchVenueTheme(): void {
@@ -2273,6 +2280,7 @@ export class DashboardApp extends LitElement {
           <div class="body">
             <dashboard-login-screen
               .api=${this.api}
+              .checkingSession=${this.checkingSession}
               .noticeCode=${this.sessionNoticeCode}
               .sessionGeneration=${this.sessionEpoch.current}
               .authenticationSubmitted=${() => {
