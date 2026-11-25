@@ -863,20 +863,46 @@ describe("till-app: a refused adjustment", () => {
     ).toBe(false);
   });
 
-  it("shows a preview refused for passing the simplified-invoice limit in its own words on the form", async () => {
+  it("says a discount refused for raising the bill over the simplified-invoice limit can take more off, and asks again", async () => {
     const { el } = await mountApp({
-      previewAdjustment: vi.fn().mockRejectedValue({
-        code: "sale.total_exceeds_simplified_limit",
-        status: 409,
-        total: "20.40",
-        limit: "20.00",
-      }),
+      previewAdjustment: vi
+        .fn()
+        .mockRejectedValueOnce({
+          code: "sale.total_exceeds_simplified_limit",
+          status: 409,
+          total: "20.40",
+          limit: "20.00",
+        })
+        .mockResolvedValue(preview()),
     });
     const order = await openTable4(el);
-    await previewComp(el, order);
+    await requestComp(el, order, 1);
+    await chooseReason(el, "Complaint");
+    await press(el, inDialog(el, 'input[name="discountKind"][value="percent"]'));
+    const typePercent = async (value: string) => {
+      const input = inDialog(el, 'wt-input[name="percent"]').shadowRoot!.querySelector("input")!;
+      input.value = value;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await flush(el);
+    };
+    await typePercent("10");
+    await press(el, inDialog(el, "[data-adjust-continue]"));
 
-    expect(bottomMessage(el)).toBe(codeMessage("sale.total_exceeds_simplified_limit"));
+    expect(bottomMessage(el)).toBe(
+      "This would raise the bill above the limit for a simplified invoice. Take more off, or Close, choose Full invoice on the bill, and try again.",
+    );
     expect(dialog(el)!.shadowRoot!.querySelector("[data-adjust-confirm]")).toBeNull();
+    expect(
+      (inDialog(el, "[data-adjust-continue]") as HTMLElement & { disabled: boolean }).disabled,
+    ).toBe(false);
+
+    await typePercent("50");
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+    expect(api.previewAdjustment).toHaveBeenLastCalledWith(
+      "wo-4",
+      expect.objectContaining({ action: "discount_percent", percentBp: 5000 }),
+    );
+    expect(dialog(el)!.shadowRoot!.querySelector("[data-adjust-confirm]")).not.toBeNull();
     expect(api.applyAdjustment).not.toHaveBeenCalled();
   });
 

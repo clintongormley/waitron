@@ -861,6 +861,44 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(field(el, "percent").error).toBe("");
   });
 
+  it("says a discount over the simplified-invoice limit raises the bill, in both languages, and leaves the form usable", async () => {
+    const el = await mount({ kind: "comp" });
+    await chooseReason(el, "Complaint");
+    await choose(el, "discountKind", "percent");
+    await type(el, "percent", "10");
+    el.refusal = "sale.total_exceeds_simplified_limit";
+    await el.updateComplete;
+    expect(actions(el).error).toBe(
+      "This would raise the bill above the limit for a simplified invoice. Take more off, or Close, choose Full invoice on the bill, and try again.",
+    );
+    expect(shownMessages(el).filter((message) => message !== "")).toHaveLength(1);
+    expect(continueButton(el).disabled).toBe(false);
+    expect(field(el, "percent").hasAttribute("disabled")).toBe(false);
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(actions(el).error).toBe(
+      "Esto subiría la cuenta por encima del límite de una factura simplificada. Quita más, o pulsa Cerrar, elige Factura completa en la cuenta y vuelve a intentarlo.",
+    );
+  });
+
+  it("offers no more off when a free comp would pass the simplified-invoice limit, in both languages", async () => {
+    const el = await mount({ kind: "comp" });
+    await chooseReason(el, "Complaint");
+    el.refusal = "sale.total_exceeds_simplified_limit";
+    await el.updateComplete;
+    expect(actions(el).error).toBe(
+      "This would raise the bill above the limit for a simplified invoice. Close, choose Full invoice on the bill, and try again.",
+    );
+    expect(continueButton(el).disabled).toBe(false);
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(actions(el).error).toBe(
+      "Esto subiría la cuenta por encima del límite de una factura simplificada. Pulsa Cerrar, elige Factura completa en la cuenta y vuelve a intentarlo.",
+    );
+  });
+
   it("explains required approval in Spanish", async () => {
     setLocale("es");
     const el = await mount({

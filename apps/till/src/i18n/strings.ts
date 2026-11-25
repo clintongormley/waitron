@@ -1484,6 +1484,10 @@ export const en = {
   "adjust.percent_invalid": "Enter a percentage from 0.01 to 100",
   "adjust.amount_invalid": "Enter an amount, such as 2.50",
   "adjust.amount_too_large": "Enter no more than {total}",
+  "adjust.over_simplified_limit":
+    "This would raise the bill above the limit for a simplified invoice. Take more off, or Close, choose Full invoice on the bill, and try again.",
+  "adjust.over_simplified_limit_free":
+    "This would raise the bill above the limit for a simplified invoice. Close, choose Full invoice on the bill, and try again.",
   "adjust.no_reasons":
     "No reason allows this yet. One can be added in the dashboard, under Voids and comps.",
   "adjust.takes_off": "Takes {amount} off the bill",
@@ -3911,6 +3915,10 @@ export const es: Record<StringKey, string> = {
   "adjust.percent_invalid": "Introduce un porcentaje entre 0,01 y 100",
   "adjust.amount_invalid": "Introduce un importe, por ejemplo 2,50",
   "adjust.amount_too_large": "Introduce como máximo {total}",
+  "adjust.over_simplified_limit":
+    "Esto subiría la cuenta por encima del límite de una factura simplificada. Quita más, o pulsa Cerrar, elige Factura completa en la cuenta y vuelve a intentarlo.",
+  "adjust.over_simplified_limit_free":
+    "Esto subiría la cuenta por encima del límite de una factura simplificada. Pulsa Cerrar, elige Factura completa en la cuenta y vuelve a intentarlo.",
   "adjust.no_reasons":
     "Todavía no hay ningún motivo que lo permita. Se puede añadir uno en el panel, en Cancelaciones y descuentos.",
   "adjust.takes_off": "Quita {amount} de la cuenta",

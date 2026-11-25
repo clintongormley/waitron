@@ -473,8 +473,15 @@ export class TillAdjustmentDialog extends LitElement {
     const parts: string[] = [];
     if (fieldErrors.size > 0) parts.push(t("form.fix_fields"));
     if (this.shownRefusal !== null && this.#refusalField() === null)
-      parts.push(codeMessage(this.shownRefusal));
+      parts.push(this.#refusalMessage(this.shownRefusal));
     return parts.join(" ");
+  }
+
+  /** The code's own words, except where this window offers other choices than the code's. */
+  #refusalMessage(code: string): string {
+    if (code !== "sale.total_exceeds_simplified_limit") return codeMessage(code);
+    const free = this.kind === "comp" ? this.compKind === "free" : this.#billFree();
+    return t(free ? "adjust.over_simplified_limit_free" : "adjust.over_simplified_limit");
   }
 
   #changed(field: Field): void {
