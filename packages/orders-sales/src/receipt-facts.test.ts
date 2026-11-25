@@ -571,7 +571,7 @@ describe("receipt figure details", () => {
 
   it.each([
     ["two named portions", "2", "4", "2.00", "4"],
-    ["one dish", "1", "2", "2.00", undefined],
+    ["one dish", "1", "2", "2.00", "2"],
     ["two refunded portions", "-2", "-4", "-2.00", undefined],
   ] as const)(
     "carries the expected extra count for %s",

@@ -51,6 +51,28 @@ describe("tillReceiptPreview", () => {
     expect(text.some((t) => t.startsWith("Domicilio fiscal:"))).toBe(false);
   });
 
+  it("shows the count before a repeated extra on one dish", async () => {
+    await setupVenue(suite.db);
+    const sold: TillSaleResult = {
+      ...(await ticket("")),
+      invoiceType: "F2",
+      locale: "en-GB",
+      lines: [
+        { descriptions: { en: "Burger" }, quantity: "1", gross: "10.00" },
+        { descriptions: { en: "Extra cheese" }, quantity: "2", gross: "2.00", parentLineNo: 1 },
+      ],
+    };
+    const { receiptPreview } = await withTransaction(suite.db, (tx) =>
+      tillReceiptPreview(tx, randomUUID(), sold, false),
+    );
+    expect(receiptPreview).toContainEqual({
+      kind: "amount",
+      caption: "  2  Extra cheese",
+      amount: "2.00",
+      indent: { after: "  2  " },
+    });
+  });
+
   it("prints a different registered address labelled", async () => {
     await setupVenue(suite.db);
     await seedVenueSettings(suite.db, {

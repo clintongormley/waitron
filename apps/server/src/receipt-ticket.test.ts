@@ -1348,35 +1348,43 @@ describe("formatReceipt — the faithful, legally-complete customer receipt", ()
     expect(text).not.toMatch(/\b(ud|ea|u|gl\.|cop\.|kop\.)\s+(Agua|Vino)/u);
   });
 
-  it("prints a filed Each extra as a pick count in Spanish, regardless of its abbreviation", () => {
-    const result: TillSaleResult = {
-      ...FILED_SALE,
-      lines: [
-        { descriptions: { "es-ES": "Tostada" }, quantity: "1", gross: "2.00", parentLineNo: null },
-        {
-          descriptions: { "es-ES": "Queso" },
-          quantity: "3",
-          gross: "1.50",
-          parentLineNo: 1,
-          unitName: { es: "pzas" },
-          unitPrecision: 0,
-          soldInEach: true,
-        },
-      ],
-      total: "3.50",
-    };
-    const text = decodeTicket(
-      formatReceipt({
-        result,
-        issuer: ISSUER,
-        receipt: {},
-        invoiceLocale: "es-ES",
-        printer: PRINTER_80,
-      }),
-    );
-    expect(text).toContain("Queso x3");
-    expect(text).not.toContain("3 pzas");
-  });
+  it.each([PRINTER_58, PRINTER_80])(
+    "prints the count before an Each extra for one dish on $paperWidth",
+    (printer) => {
+      const result: TillSaleResult = {
+        ...FILED_SALE,
+        lines: [
+          {
+            descriptions: { "es-ES": "Tostada" },
+            quantity: "1",
+            gross: "2.00",
+            parentLineNo: null,
+          },
+          {
+            descriptions: { "es-ES": "Queso" },
+            quantity: "3",
+            gross: "1.50",
+            parentLineNo: 1,
+            unitName: { es: "pzas" },
+            unitPrecision: 0,
+            soldInEach: true,
+          },
+        ],
+        total: "3.50",
+      };
+      const text = decodeTicket(
+        formatReceipt({
+          result,
+          issuer: ISSUER,
+          receipt: {},
+          invoiceLocale: "es-ES",
+          printer,
+        }),
+      );
+      expect(text).toMatch(/^ {2}3 {2}Queso +1,50$/mu);
+      expect(text).not.toContain("3 pzas");
+    },
+  );
 
   it("keeps an integral volume amount and its unit when the stored identity is not Each", () => {
     const result: TillSaleResult = {

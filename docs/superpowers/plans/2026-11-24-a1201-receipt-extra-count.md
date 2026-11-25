@@ -27,3 +27,7 @@ the shared preview at 23:45 and named portions and dish-row spacing at 23:47.
    `docs/backlog/{printers,till}.md`. Redirect the old A960/A961 plan's link here.
 
 Expected size is about 20 production lines and 80 test lines, plus the backlog and link edits.
+
+On 25 November at 08:25, the owner approved landing after a single dish with a repeated counted
+extra adopts the grouped caption on paper and in the till preview. Both show `2  Queso extra`
+when the extra's total is two. The watcher relayed the picker answer in Lane I's questions log.

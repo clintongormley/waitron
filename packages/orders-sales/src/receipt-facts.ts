@@ -106,7 +106,6 @@ export interface FiledFigureRow {
 export interface WithVatOption {
   item: string;
   quantity: string;
-  /** A grouped dish's counted extra, for the receipt caption. */
   combinedCount?: string;
   amount: Decimal;
   rateLetter: string;
@@ -411,7 +410,9 @@ export function receiptFigures({
       } else if (option.unitName == null || option.soldInEach === true) {
         const perDish = perDishOptionQuantity(option.quantity, dish.quantity);
         quantity = perDish > 1 ? `x${perDish}` : "";
-        if (groupedCount) combinedCount = formatDecimalInput(option.quantity, locale);
+        if (groupedCount || (dishCount === 1 && perDish > 1)) {
+          combinedCount = formatDecimalInput(option.quantity, locale);
+        }
       } else {
         quantity = `${formatDecimalInput(option.quantity, locale)} ${resolveSnapshotText(option.unitName, namesLocale, namesLocale)}`;
       }
