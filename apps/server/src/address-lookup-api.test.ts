@@ -78,7 +78,7 @@ it("checks venue permission, the primary and the exact body before calling Cloud
 });
 
 it("offers manual entry without a Cloud connection and still validates requests", async () => {
-  const { managerCookie } = await setupVenue(venue.db);
+  const { managerCookie, staffCookie } = await setupVenue(venue.db);
   const app = new Hono();
   mountVenueSettingsApi(
     app,
@@ -89,12 +89,15 @@ it("offers manual entry without a Cloud connection and still validates requests"
     },
     () => {},
   );
-  const post = (body: unknown, contentType = "application/json") =>
+  const post = (body: unknown, contentType = "application/json", cookie = managerCookie) =>
     app.request(path, {
       method: "POST",
-      headers: { cookie: managerCookie, "content-type": contentType },
+      headers: { cookie, "content-type": contentType },
       body: JSON.stringify(body),
     });
+  const refused = await post(available, "application/json", staffCookie);
+  expect(refused.status).toBe(403);
+  expect(await refused.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
   const status = await post(available);
   expect(status.status).toBe(200);
   expect(await status.json()).toEqual({ available: false });

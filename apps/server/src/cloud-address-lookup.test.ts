@@ -525,6 +525,10 @@ it("accepts only the matching, complete Cloud validation reply", async () => {
       { ...valid, provider: "other" },
       { ...valid, fields: { ...fields, countryCode: "PT" } },
       { ...valid, fields: { ...fields, postalCode: 28013 } },
+      { ...valid, fields: { ...fields, addressLine1: null } },
+      { ...valid, fields: { ...fields, addressLine2: 4 } },
+      { ...valid, fields: { ...fields, city: null } },
+      { ...valid, fields: { ...fields, province: null } },
     ]) {
       reply = invalid;
       await expect(validate()).rejects.toMatchObject({ code: "cloud.unavailable" });

@@ -304,11 +304,27 @@ it.each(["restart sign-in", "retry callback"])(
       });
 
       const restarted = f.client();
-      if (retry === "restart sign-in")
-        await expect(restarted.startSignIn(binding, f.authorize)).resolves.toEqual({});
-      else
-        await expect(restarted.returnSignIn(binding, proof, f.authorize)).resolves.toBeUndefined();
-      expect(f.requests.map((request) => request[2])).toEqual(["start", "redeem", "status"]);
+      await expect(
+        restarted.startSignIn({ ...binding, tab: randomUUID() }, f.authorize),
+      ).rejects.toMatchObject({ code: "cloud.binding_conflict" });
+      const recover = (authorize: () => Promise<void>) =>
+        retry === "restart sign-in"
+          ? restarted.startSignIn(binding, authorize)
+          : restarted.returnSignIn(binding, proof, authorize);
+      await expect(
+        recover(async () => {
+          if (f.requests.at(-1)?.[2] === "status") throw new AppError("setup.owner_required", {});
+        }),
+      ).rejects.toMatchObject({ code: "setup.owner_required" });
+      await expect(recover(f.authorize)).resolves.toEqual(
+        retry === "restart sign-in" ? {} : undefined,
+      );
+      expect(f.requests.map((request) => request[2])).toEqual([
+        "start",
+        "redeem",
+        "status",
+        "status",
+      ]);
       await expect(
         restarted.setupAddressLookup(binding, undefined, f.authorize, new AbortController().signal),
       ).resolves.toEqual({ available: true });
