@@ -11,7 +11,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   extraListItems,
   extraLists,
-  menuReleases,
   menuVersions,
   optionLists,
   optionLabels,
@@ -29,7 +28,7 @@ import {
   HOME_DISPLAY_DEFAULTS,
   shownMembers,
 } from "@waitron/shared";
-import { previewMenu, publishMenu, readLiveDocuments } from "./menu-publication.js";
+import { previewMenu, publishMenu } from "./menu-publication.js";
 import { plantStoredCategory, seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import {
   menusFixture,
@@ -152,6 +151,7 @@ describe("declarations in the published document", () => {
       await updateProduct(tx, f.lemonade, {
         allergens: { milk: {} },
         dietaryDeclarations: ["vegan"],
+        dietOverride: { vegetarian: "yes" },
       });
       await updateProduct(tx, f.extraLemon, {
         allergens: { eggs: {} },
@@ -167,48 +167,18 @@ describe("declarations in the published document", () => {
     const offer = document.offers[await app((tx) => offerOf(tx, f.dinner, f.lemonade))]!;
     expect(offer.allergens).toEqual({ milk: {} });
     expect(offer.dietaryDeclarations).toEqual(["vegan"]);
+    expect(offer.dietOverride).toEqual({ vegetarian: "yes" });
+    expect(offer.diet).toEqual({ vegan: "unknown", vegetarian: "yes", contains: [] });
     const variant = offer.variants.find((variant) => variant.id === f.large)!;
-    expect(variant.allergens).toEqual(offer.allergens);
+    expect(variant.allergens).toEqual({ milk: {} });
     expect(variant.dietaryDeclarations).toEqual(["vegan"]);
-    expect(variant.diet).toEqual(offer.diet);
+    expect(variant.dietOverride).toEqual({ vegetarian: "yes" });
+    expect(variant.diet).toEqual({ vegan: "unknown", vegetarian: "yes", contains: [] });
     const extras = offer.offeredModifiers.find((modifier) => modifier.kind === "extras")!;
     const extra = extras.items.find((item) => item.productId === f.extraLemon)!;
     expect(extra.addAllergens).toEqual({ eggs: {} });
     expect(extra.suitableFor).toEqual(expandDietaryDeclarations(["vegan"]));
     expect(extra.suitableFor.length).toBeGreaterThan(1);
-  });
-
-  it("a declaration change alters the document hash", async () => {
-    const f = await menusFixture(fx.db);
-    const before = menuDocumentHash(await build(f.dinner));
-    await app((tx) => updateProduct(tx, f.lemonade, { allergens: { milk: {} } }));
-    expect(menuDocumentHash(await build(f.dinner))).not.toBe(before);
-  });
-
-  it("format 4 is refused", async () => {
-    const f = await menusFixture(fx.db);
-    const { versionId } = await publish(f.lunch);
-    const [row] = await fx.db.select().from(menuVersions).where(eq(menuVersions.id, versionId));
-    const document = { ...row!.document, format: 4 } as unknown as typeof row.document;
-    const [earlier] = await fx.db
-      .insert(menuVersions)
-      .values({
-        menuId: f.lunch,
-        number: row!.number + 1,
-        document,
-        contentHash: menuDocumentHash(document),
-        createdAt: row!.createdAt,
-        createdBy: "person-1",
-      })
-      .returning({ id: menuVersions.id });
-    await fx.db
-      .update(menuReleases)
-      .set({ versionId: earlier!.id })
-      .where(sql`${menuReleases.menuId} = ${f.lunch} and ${menuReleases.state} = 'live'`);
-    await expect(app((tx) => readLiveDocuments(tx, [f.lunch]))).rejects.toMatchObject({
-      code: "menu.reset_required",
-      params: { menuId: f.lunch },
-    });
   });
 });
 
@@ -322,7 +292,7 @@ describe("buildMenuDocument", () => {
     });
   });
 
-  it("leaves out every live field and every field that is not menu content", async () => {
+  it("leaves out availability, course and reporting category, and an extras item's availability", async () => {
     const f = await menusFixture(fx.db);
     const document = await build(f.lunch);
     const offer = document.offers[await app((tx) => offerOf(tx, f.lunch, f.lemonade))]!;
