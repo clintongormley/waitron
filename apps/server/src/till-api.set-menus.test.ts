@@ -13,7 +13,7 @@ import { placeGroups } from "./testing/group-submit-fixture.js";
 import { inTx, seatWithNoAllergies } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { sessionCookieForTest } from "./testing/session-device.js";
-import { seedBillSetMenu } from "./testing/set-menu-bill-fixture.js";
+import { seedBillSetMenu, setMenuOnFullMenu } from "./testing/set-menu-bill-fixture.js";
 import { setMenuBill, setupSetMenuReaders } from "./testing/set-menu-readers-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 
@@ -242,7 +242,7 @@ it("refuses Eat in on a counter bill with a set menu using the set-menu refusal"
     expectedEdit: null,
   });
   expect(switched.status).toBe(409);
-  expect(await switched.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
+  expect(await switched.json()).toMatchObject({ error: { code: "set_menu.bill_holds_set_menus" } });
   expect(await (await request("GET", path)).json()).toMatchObject({ dining: "takeaway", revision });
 });
 
@@ -282,4 +282,116 @@ it("keeps sending from the held-order edit on a seated bill that has started ser
     { role: null, sentAt: expect.any(String) },
     { role: null, sentAt: expect.any(String) },
   ]);
+});
+
+let counterMenu: Awaited<ReturnType<typeof setMenuOnFullMenu>> | undefined;
+
+/** A 4.00 set menu of Burger (12.00 a la carte) on the Counter's own menu. */
+async function counterSetMenu() {
+  const { venue } = fixture;
+  counterMenu ??= await inTx(venue, (tx) =>
+    setMenuOnFullMenu(tx, venue.counter.menuId, venue.productId("Burger"), "Counter menu", "4.00"),
+  );
+  return counterMenu;
+}
+
+async function freshBasket(dining: "takeaway" | "eat_in") {
+  const copy = await counterSetMenu();
+  const body = await counterTakeaway();
+  return {
+    ...body,
+    dining,
+    lines: [
+      {
+        menuItemId: copy.menuItemId,
+        menuVersionId: copy.versionId,
+        setMenuId: copy.menuId,
+        quantity: "1",
+      },
+    ],
+  };
+}
+
+function payWithBasket(
+  id: string,
+  dining: string,
+  basket: { lines: unknown[]; zoneId?: string; revision?: number },
+) {
+  return request("POST", `/api/working-orders/${id}/payments`, {
+    submissionId: crypto.randomUUID(),
+    kind: "share",
+    shareOf: 1,
+    method: "cash",
+    tendered: "20.00",
+    expectedEdit: null,
+    dining,
+    basket,
+  });
+}
+
+function sendFresh(mode: "park" | "pay", body: Awaited<ReturnType<typeof freshBasket>>) {
+  return mode === "park"
+    ? request("POST", "/api/working-orders", body)
+    : payWithBasket(body.id, body.dining, { lines: body.lines, zoneId: body.zoneId });
+}
+
+const billRows = (id: string) =>
+  fixture.venue.db
+    .select({
+      role: workingOrderLines.setMenuRole,
+      setMenuId: workingOrderLines.setMenuId,
+      price: workingOrderLines.unitPriceGross,
+    })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, id))
+    .orderBy(workingOrderLines.lineNo);
+
+it.each(["park", "pay"] as const)(
+  "can %s a fresh Counter takeaway holding a dish tapped in a set-menu folder, charging the set menu's price",
+  async (mode) => {
+    const copy = await counterSetMenu();
+    const body = await freshBasket("takeaway");
+    const response = await sendFresh(mode, body);
+    expect(response.status, JSON.stringify(await response.clone().json())).toBe(200);
+    expect(await billRows(body.id)).toEqual([
+      { role: "dish", setMenuId: copy.menuId, price: 0 },
+      { role: "set_menu", setMenuId: copy.menuId, price: 400 },
+    ]);
+    const balance = await (await request("GET", `/api/working-orders/${body.id}/payments`)).json();
+    expect(balance).toMatchObject({
+      total: "4.00",
+      received: mode === "pay" ? "4.00" : "0.00",
+    });
+  },
+);
+
+it.each(["park", "pay"] as const)(
+  "refuses to %s a fresh eat-in Counter basket holding a dish tapped in a set-menu folder",
+  async (mode) => {
+    const body = await freshBasket("eat_in");
+    const response = await sendFresh(mode, body);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: { code: "set_menu.not_seated" } });
+    expect(await billRows(body.id)).toEqual([]);
+  },
+);
+
+it("pays a held Counter takeaway whose basket now holds a dish tapped in a set-menu folder", async () => {
+  const copy = await counterSetMenu();
+  const body = await freshBasket("takeaway");
+  const held = {
+    ...body,
+    lines: [{ menuItemId: fixture.venue.counterItem("Flan"), quantity: "1" }],
+  };
+  expect((await request("POST", "/api/working-orders", held)).status).toBe(200);
+  const { revision } = await (await request("GET", `/api/working-orders/${body.id}`)).json();
+  const paid = await payWithBasket(body.id, body.dining, { lines: body.lines, revision });
+  expect(paid.status, JSON.stringify(await paid.clone().json())).toBe(200);
+  expect(await billRows(body.id)).toEqual([
+    { role: "dish", setMenuId: copy.menuId, price: 0 },
+    { role: "set_menu", setMenuId: copy.menuId, price: 400 },
+  ]);
+  expect(
+    await (await request("GET", `/api/working-orders/${body.id}/payments`)).json(),
+  ).toMatchObject({ total: "4.00", received: "4.00" });
 });

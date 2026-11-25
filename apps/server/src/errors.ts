@@ -31,6 +31,7 @@ declare module "@waitron/shared" {
     "set_menu.move_adjusted": { dishNames: string[] };
     "set_menu.remove_from_summary": Record<string, never>;
     "set_menu.not_seated": Record<string, never>;
+    "set_menu.bill_holds_set_menus": Record<string, never>;
     "module.not_prepared": { module: string };
     "module.providers_enabled": Record<string, never>;
     "module.disabled": { module: string };

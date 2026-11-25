@@ -4,6 +4,7 @@ import {
   menus,
   products,
   workingOrderLines,
+  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import type { ZoneSelling, ZoneSetMenus } from "@waitron/module";
@@ -116,6 +117,30 @@ export async function linkSetMenusFor(
         billSetMenuCopies.menuVersionId,
       ],
     });
+}
+
+/** {@link linkSetMenusFor} the dishes `billId` already holds, as its zone sells now. */
+export async function linkSetMenusForHeldDishes(tx: Transaction, billId: string): Promise<void> {
+  const [bill] = await tx
+    .select({ zoneId: workingOrders.zoneId })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, billId));
+  if (bill?.zoneId == null) return;
+  const productIds = topLevelProductIds(
+    await tx
+      .select({
+        productId: workingOrderLines.productId,
+        parentLineId: workingOrderLines.parentLineId,
+        setMenuRole: workingOrderLines.setMenuRole,
+      })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, billId)),
+  );
+  await linkSetMenusFor(tx, billId, {
+    zoneId: bill.zoneId,
+    selling: new Date(),
+    dishes: await listedDishes(tx, productIds),
+  });
 }
 
 /** The (set menu, version) pairs `billId` records whose copy lists one of the top-level dishes among

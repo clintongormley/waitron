@@ -13,6 +13,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Set menus are available at a seated table or on a takeaway or delivery order. Open one of those orders, or order dishes à la carte here.",
     es: "Los menús están disponibles en una mesa ocupada o en un pedido para llevar o a domicilio. Abre uno de esos pedidos o pide aquí los platos a la carta.",
   },
+  "set_menu.bill_holds_set_menus": {
+    en: "This bill holds set menus, which are only for a seated table or a takeaway or delivery order. Keep it as it is, or cancel or move the dishes in its set menus first.",
+    es: "Esta cuenta tiene menús, que solo son para una mesa ocupada o un pedido para llevar o a domicilio. Déjala como está, o anula o mueve antes los platos de sus menús.",
+  },
   "set_menu.not_selling": {
     en: "{setMenuName} is no longer on sale. Choose a set menu on sale or order dishes à la carte.",
     es: "{setMenuName} ya no está a la venta. Elige un menú a la venta o pide los platos a la carta.",

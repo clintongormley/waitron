@@ -287,6 +287,7 @@ export async function priceOrderLines(
   invalidMakeAt: "refuse" | "ignore" = "refuse",
   periodCheck: "added" | "none" = "added",
   lateSend?: LateSendConfirmation,
+  unwrittenBill?: Parameters<typeof refuseUnlessSetMenuBill>[2],
 ): Promise<{
   lineRows: WorkingOrderLineInsert[];
   /** Aligned with `lineRows`: a dish sold in whole portions, which may be split one per dish. */
@@ -343,7 +344,7 @@ export async function priceOrderLines(
       ? []
       : [{ ...line, setMenuId: draft.setMenuId, menuVersionId: line.menuVersionId ?? null }];
   });
-  if (setMenuLines.length > 0) await refuseUnlessSetMenuBill(tx, workingOrderId);
+  if (setMenuLines.length > 0) await refuseUnlessSetMenuBill(tx, workingOrderId, unwrittenBill);
   const setMenus = await setMenuOfferLookup(tx, workingOrderId, setMenuLines, offers.menus);
   const selectedSetMenu = (line: (typeof requestedLines)[number]) => {
     if (line[STORED_SET_MENU_OFFER] !== undefined) return line[STORED_SET_MENU_OFFER];

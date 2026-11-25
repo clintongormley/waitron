@@ -20,6 +20,8 @@ import { moveBillDraftsToParty } from "./order-drafts.js";
 import { seatMergeMembers } from "./floor-today-merges.js";
 import { storedOrderDining } from "./order-dining.js";
 import { hasBillSetMenuLines, hasDraftSetMenuLines } from "./set-menu-bill.js";
+import { linkSetMenusForHeldDishes } from "./set-menu-links.js";
+import { regroupBills } from "./set-menu-regroup.js";
 import {
   readPartyBillIds,
   requireRelocatableBillEditors,
@@ -189,13 +191,11 @@ async function moveBillOnce(
   ];
   await requireRelocatableBillEditors(tx, affected, options.operatorId, options.expectedEdits);
   const expectedEdit = options.expectedEdits.find((e) => e.billId === billId)!;
-  if (
-    destination.kind === "counter" &&
-    ((await hasBillSetMenuLines(tx, billId)) ||
-      (expectedEdit.draftId !== null && (await hasDraftSetMenuLines(tx, expectedEdit.draftId)))) &&
-    (await storedOrderDining(tx, billId)) !== "takeaway"
-  ) {
-    throw new AppError("set_menu.not_seated", {});
+  if (destination.kind === "counter" && (await storedOrderDining(tx, billId)) !== "takeaway") {
+    if (await hasBillSetMenuLines(tx, billId))
+      throw new AppError("set_menu.bill_holds_set_menus", {});
+    if (expectedEdit.draftId !== null && (await hasDraftSetMenuLines(tx, expectedEdit.draftId)))
+      throw new AppError("set_menu.not_seated", {});
   }
   const zoneId = destination.kind === "party" ? await partyZone(tx, destination.partyId) : null;
   const open = path.status === "open";
@@ -316,6 +316,10 @@ async function moveBillOnce(
   }
 
   if (source !== null) await ensureFamilyBill(tx, cfg, source.id);
+  else {
+    await linkSetMenusForHeldDishes(tx, billId);
+    await regroupBills(tx, [billId]);
+  }
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
 
   await printHoldTickets(tx, cfg, held);

@@ -10,6 +10,8 @@ import { requireOrderBillEditor, type OrderEditAuthority } from "./bill-editing.
 import { VENUE_SERVICE } from "./modules.js";
 import { captureOrderEdit, type OrderAttendance } from "./working-order-context.js";
 import { hasBillSetMenuLines } from "./set-menu-bill.js";
+import { linkSetMenusForHeldDishes } from "./set-menu-links.js";
+import { regroupBills } from "./set-menu-regroup.js";
 import "./errors.js";
 
 /** `dining` from a request body; absent, null or unknown, `management.request_invalid` names it. */
@@ -90,8 +92,10 @@ export async function storedOrderDining(tx: Transaction, workingOrderId: string)
  * Switch an open order between eaten here and takeaway at `revision`, moving its revision on. The
  * choice is the one the till's read offers ({@link readOrderDinings}): the order's own department,
  * not its zone's current one, must leave the way to the till, and nothing may be sent or paid. Lines
- * keep both their classes, so nothing else changes. A request for the way the order already has
- * changes nothing, not even the revision. Answers the order's revision after.
+ * keep both their classes. Taken away, the order records the set menus on sale that list its dishes
+ * and is grouped into its cheapest set menus; eaten here at the counter, it may hold none. A request
+ * for the way the order already has changes nothing, not even the revision. Answers the order's
+ * revision after.
  */
 export async function switchOrderDining(
   tx: Transaction,
@@ -126,13 +130,17 @@ export async function switchOrderDining(
     (order.partyId === null || order.serviceMode !== "table_tab") &&
     (await hasBillSetMenuLines(tx, workingOrderId))
   )
-    throw new AppError("set_menu.not_seated", {});
+    throw new AppError("set_menu.bill_holds_set_menus", {});
   const locked = await orderDiningLocked(tx, workingOrderId);
   if (locked !== null) throw new AppError("order.dining_locked", { reason: locked });
   await tx
     .update(workingOrders)
     .set({ dining, revision: revision + 1 })
     .where(eq(workingOrders.id, workingOrderId));
+  if (dining === "takeaway") {
+    await linkSetMenusForHeldDishes(tx, workingOrderId);
+    await regroupBills(tx, [workingOrderId]);
+  }
   await captureOrderEdit(
     tx,
     attendance,

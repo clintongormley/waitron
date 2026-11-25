@@ -77,11 +77,15 @@ export function isSetMenuBillRow(
   );
 }
 
+/** `unwritten`: the bill's row when this transaction has not written it yet. */
 export async function refuseUnlessSetMenuBill(
   tx: Transaction,
   workingOrderId: string,
+  unwritten?: Pick<typeof workingOrders.$inferSelect, "partyId" | "dining" | "serviceMode">,
 ): Promise<void> {
-  if (!(await isSetMenuBill(tx, workingOrderId))) throw new AppError("set_menu.not_seated", {});
+  const holds =
+    unwritten === undefined ? await isSetMenuBill(tx, workingOrderId) : isSetMenuBillRow(unwritten);
+  if (!holds) throw new AppError("set_menu.not_seated", {});
 }
 
 /** Every (set menu, version) the bill records: a moved set menu can bring a second version (D26). */

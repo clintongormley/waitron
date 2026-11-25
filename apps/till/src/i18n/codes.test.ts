@@ -1378,6 +1378,7 @@ it.each([
 
 it.each([
   ["set_menu.not_seated", "seated table", "mesa ocupada"],
+  ["set_menu.bill_holds_set_menus", "Keep it as it is", "Déjala como está"],
   ["set_menu.not_selling", "Daily", "Daily"],
   ["set_menu.holds_dishes", "Hake and Soup", "Hake y Soup"],
   ["set_menu.needed_by_draft", "Hake and Soup", "Hake y Soup"],

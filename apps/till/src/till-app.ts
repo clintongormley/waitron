@@ -10124,7 +10124,7 @@ export class TillApp extends LitElement {
   }
 
   /** An unsaved basket holds the way until its sale or save; a saved order is switched on the
-   * server, and is read again when the server says it can no longer switch. */
+   * server, and read again when refused as no longer switchable or once taken away unedited. */
   async #switchCounterDining(dining: Dining): Promise<void> {
     const store = this.#store;
     if (!store.persisted) {
@@ -10146,7 +10146,9 @@ export class TillApp extends LitElement {
         store.revision,
         this.#counterExpectedEdit(id),
       );
-      if (current()) store.adoptSwitchedDining(dining, revision);
+      if (!current()) return;
+      store.adoptSwitchedDining(dining, revision);
+      if (dining === "takeaway" && !store.dirty) await this.#reloadCounterOrder(id, session);
     } catch (error) {
       if (!current()) return;
       const code = (error as { code?: string } | undefined)?.code ?? "";

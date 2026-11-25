@@ -126,7 +126,10 @@ describe("the counter's way of selling (A1522)", () => {
 
   it("Take away on a saved order switches it on the server and shows the way it now sells", async () => {
     const { el, api, counter } = await counterApp({
-      retrieveWorkingOrder: vi.fn().mockResolvedValue(savedOrder("open")),
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(savedOrder("open"))
+        .mockResolvedValue({ ...savedOrder("open", 3), dining: "takeaway" }),
     });
     emit(counter(), "retrieve-order", { id: "wo-1" });
     await flush(el);
@@ -139,6 +142,43 @@ describe("the counter's way of selling (A1522)", () => {
     expect(counter().store.revision).toBe(3);
     expect(segmented(counter())!.value).toBe("takeaway");
     expect(banner(el)).toBeNull();
+  });
+
+  it("Take away on a saved order reads it again, so the set menus the server formed show", async () => {
+    const regrouped = { ...savedOrder("open", 3), dining: "takeaway" };
+    regrouped.lines = [{ ...regrouped.lines[0]!, quantity: "2.000" }];
+    const retrieveWorkingOrder = vi
+      .fn()
+      .mockResolvedValueOnce(savedOrder("open"))
+      .mockResolvedValue(regrouped);
+    const { el, counter } = await counterApp({ retrieveWorkingOrder });
+    emit(counter(), "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    expect(counter().store.total.toString()).toBe("1.80");
+
+    await chooseWay(el, counter(), "Take away");
+    await flush(el);
+
+    expect(retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+    expect(counter().store.total.toString()).toBe("3.60");
+    expect(counter().store.dining).toBe("takeaway");
+    expect(banner(el)).toBeNull();
+  });
+
+  it("Take away on a saved order with unsaved edits keeps the edits, reading nothing", async () => {
+    const retrieveWorkingOrder = vi.fn().mockResolvedValue(savedOrder("open"));
+    const { el, counter } = await counterApp({ retrieveWorkingOrder });
+    emit(counter(), "retrieve-order", { id: "wo-1" });
+    await flush(el);
+    counter().store.addProduct(cola, "1");
+    await flush(el);
+
+    await chooseWay(el, counter(), "Take away");
+    await flush(el);
+
+    expect(retrieveWorkingOrder).toHaveBeenCalledTimes(1);
+    expect(counter().store.total.toString()).toBe("3.60");
+    expect(counter().store.dining).toBe("takeaway");
   });
 
   it("a switch refused as locked is worded, and the order read again shows the stored way", async () => {
@@ -211,7 +251,10 @@ describe("the counter's way of selling (A1522)", () => {
   it("a second choice while a switch is out sends nothing more", async () => {
     const reply = deferred<{ revision: number }>();
     const { el, api, counter } = await counterApp({
-      retrieveWorkingOrder: vi.fn().mockResolvedValue(savedOrder("open")),
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(savedOrder("open"))
+        .mockResolvedValue({ ...savedOrder("open", 3), dining: "takeaway" }),
       switchDining: vi.fn(() => reply.promise),
     });
     emit(counter(), "retrieve-order", { id: "wo-1" });

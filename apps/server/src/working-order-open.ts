@@ -72,6 +72,7 @@ export interface ParkOrderRequest {
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
+    [SET_MENU_DRAFT_LINE]?: SetMenuDraftLine;
   } & LineExtras)[];
   zoneId?: string;
   label?: string;
@@ -100,6 +101,7 @@ export async function createOpenOrder(
     quantity: string;
     extras?: ExtraSelection[];
     options?: OptionSelection[];
+    [SET_MENU_DRAFT_LINE]?: SetMenuDraftLine;
   } & LineExtras)[],
   label: string | null,
   // `creditedTo` is the operator creating the order, whose sale its lines count as.
@@ -194,6 +196,13 @@ export async function createOpenOrder(
     copiedDining ??
     placement.keepDining ??
     (await VENUE_SERVICE.resolveOrderDining(tx, effectiveZoneId, placement.dining));
+  const unwrittenBill = lines.some((line) => line[SET_MENU_DRAFT_LINE] !== undefined)
+    ? {
+        partyId: placement.partyId ?? null,
+        dining,
+        serviceMode: (await VENUE_SERVICE.resolveZoneContext(tx, effectiveZoneId)).serviceMode,
+      }
+    : undefined;
   const pricedLines = await priceOrderLines(
     tx,
     cfg,
@@ -204,6 +213,7 @@ export async function createOpenOrder(
     placement.invalidMakeAt ?? "refuse",
     "added",
     placement.lateSend,
+    unwrittenBill,
   );
   const { gross, offers } = pricedLines;
   const expanded = expandPortionRows(
@@ -263,7 +273,14 @@ export async function createOpenOrder(
   await insertInChunks(
     tx,
     workingOrderLines,
-    lineRows.map((row) => ({ ...row, ...contextByLine.get(row.id!) })),
+    lineRows.map((row, index) => {
+      const setMenuId = lineContexts[index]!.setMenuId;
+      return {
+        ...row,
+        ...contextByLine.get(row.id!),
+        ...(setMenuId === undefined ? {} : { setMenuId }),
+      };
+    }),
   );
   await linkSetMenusFor(tx, id, pricedLines.setMenuLinks);
   const regrouped = (await regroupBills(tx, [id])).has(id);

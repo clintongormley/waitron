@@ -32,7 +32,7 @@ it("refuses to move an eat-in set-menu bill to the counter", async () => {
     inTx(venue, (tx) =>
       moveBill(tx, venue.cfg, source.billId, { counter: { zoneId: null } }, command),
     ),
-  ).rejects.toMatchObject({ code: "set_menu.not_seated" });
+  ).rejects.toMatchObject({ code: "set_menu.bill_holds_set_menus" });
   const [bill] = await venue.db
     .select({ partyId: workingOrders.partyId })
     .from(workingOrders)
