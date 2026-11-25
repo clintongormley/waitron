@@ -1083,7 +1083,6 @@ export class ProductList extends LitElement {
           const { id, name } = row.variant ?? row.product;
           return html`<wt-row-actions
             align="end"
-            part="product-row-menu"
             data-test=${`actions-${id}`}
             label=${`${t("staff.actions")}: ${name}`}
           >
@@ -1214,7 +1213,6 @@ export class ProductList extends LitElement {
           if (column.key === "actions")
             return html`<wt-row-actions
               align="end"
-              part="product-row-menu"
               data-test="actions-root"
               label=${`${t("staff.actions")}: ${t("folders.all_products")}`}
               >${this.#addItems(null)}</wt-row-actions
@@ -1263,7 +1261,6 @@ export class ProductList extends LitElement {
         if (column.key === "actions")
           return html`<wt-row-actions
             align="end"
-            part="product-row-menu"
             label=${`${t("staff.actions")}: ${folder.name}`}
             data-test=${`actions-folder-${folder.id}`}
             >${this.#addItems(folder.id)}

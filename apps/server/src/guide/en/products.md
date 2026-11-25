@@ -17,7 +17,7 @@ it contains something you need to fix, it opens itself and stays open until you 
 In **List**, search by product or variant name. To find dishes in a category and its subcategories,
 choose a **Category** in **Filters**. Under **Available**, choose **No** to find dishes or variants that are off sale.
 A dish with an unavailable variant can appear under **Yes** and **No**. On a phone, look under
-the product name for its category, if it has one. The switch beside the price controls availability. On a phone,
+the product name for its category. The switch beside the price controls availability. On a phone,
 exit **Select** to see the price and switch again.
 
 Switch to **Tree** to browse or organise categories. Categories stay in alphabetical order when

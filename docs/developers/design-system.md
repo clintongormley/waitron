@@ -6181,8 +6181,9 @@ in place. A refusal names the item above the table and restores the switch.
 List starts with Name, Category, Price, Available and row actions. Tree starts with Name, Price,
 Available and row actions. The photo or colour square, row controls and visible columns line up
 with the first line of the name when it wraps. The photo and colour square can be pressed anywhere
-along their side of the row. In List on a phone, you see the category under the product name.
-You can show its own column in Customise. Open Customise for
+along their side of the row. In List on a phone, choose a Category in Filters. You see the product's
+category under its name while the Category column is hidden. You can show its column in Customise.
+Open Customise for
 Course, Modifiers, Standalone, Allergens and Dietary info. Off products and variants carry a red
 outlined **Unavailable** label beside their names. A closed category counts each of its direct
 products once when that product or one of its active variants is unavailable.

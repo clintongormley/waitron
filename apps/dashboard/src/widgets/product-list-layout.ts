@@ -9,12 +9,6 @@ export const productListLayoutStyles = css`
   }
   /* Cell templates are rendered in wt-data-table's shadow root, so ::part is the one boundary
      crossing used for their presentation. */
-  /* The name box's room is a flex basis; the phone's grid rule below still wins. */
-  wt-data-table::part(naming) {
-    display: flex;
-    max-inline-size: var(--name-room);
-    align-items: center;
-  }
   wt-data-table::part(folder-frame) {
     display: inline-flex;
     flex: none;
@@ -180,6 +174,10 @@ export const fullRowProductsMediaStyles = css`
     align-items: start;
     min-inline-size: 0;
   }
+  wt-data-table::part(naming) {
+    max-inline-size: var(--name-room);
+    align-items: center;
+  }
   wt-data-table::part(name-stack),
   wt-data-table::part(variant-name),
   wt-data-table::part(folder-name),
@@ -188,8 +186,7 @@ export const fullRowProductsMediaStyles = css`
   }
   wt-data-table::part(price-layout),
   wt-data-table::part(availability-switch),
-  wt-data-table::part(product-detail),
-  wt-data-table::part(product-row-menu) {
+  wt-data-table::part(product-detail) {
     vertical-align: top;
   }
   wt-data-table::part(product-detail) {
@@ -198,12 +195,9 @@ export const fullRowProductsMediaStyles = css`
   wt-data-table::part(product-detail-text) {
     display: inline-block;
   }
-  wt-data-table::part(row-controls) {
-    min-block-size: var(--wt-tap-min);
-    align-items: center;
-  }
   wt-data-table::part(row-checkbox) {
-    margin-block: 0;
+    align-self: center;
+    margin-block: calc((var(--wt-tap-min) - var(--wt-space-4)) / 2);
   }
   wt-data-table[narrow]::part(naming) {
     display: grid;
@@ -234,9 +228,6 @@ export const fullRowProductsMediaStyles = css`
     flex-direction: column;
     align-items: center;
     gap: 0;
-  }
-  wt-data-table[narrow]:not([data-list])::part(row-checkbox) {
-    margin-block: calc((var(--wt-tap-min) - var(--wt-space-4)) / 2);
   }
 
   wt-data-table::part(products-media-slot) {

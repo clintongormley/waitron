@@ -3547,6 +3547,7 @@ describe("a product's variants in the list", () => {
       await menu.updateComplete;
       const controls = {
         photo,
+        arrow: row.querySelector('[part~="variant-toggle"]')!,
         menu: menu.shadowRoot!.querySelector("button")!,
         ...(selecting && { checkbox: row.querySelector('input[type="checkbox"]')! }),
         ...(width >= 440 || !selecting ? { available: row.querySelector("wt-switch")! } : {}),
@@ -3708,6 +3709,8 @@ describe("a product's variants in the list", () => {
       const row = root.querySelector('tr[data-row-key="ale"]')!;
       const price = () => row.querySelector('[data-test="price"]');
       const available = () => row.querySelector("wt-switch");
+      const headingHeight = () => root.querySelector("thead")!.getBoundingClientRect().height;
+      const normalHeadingHeight = headingHeight();
       expect(price()).not.toBeNull();
       expect(available()).not.toBeNull();
 
@@ -3716,6 +3719,7 @@ describe("a product's variants in the list", () => {
       await table.updateComplete;
       expect(price()).toBeNull();
       expect(available()).toBeNull();
+      expect(headingHeight() - normalHeadingHeight).toBeLessThanOrEqual(8);
       expect(table.filterValues("available")).toEqual(["no"]);
       expect(rowKeys(root).filter((key) => !key.startsWith("folder:"))).toEqual(["ale"]);
       expect(JSON.parse(localStorage.getItem("waitron.products.table:columns")!)).toEqual({
@@ -7250,6 +7254,13 @@ it.each(
       const markers = [...row.querySelectorAll<HTMLElement>(selectors)];
       expect(markers).toHaveLength(width === 390 ? 1 : 2);
       for (const marker of markers) {
+        if (width !== 390) {
+          const name = row.querySelector('wt-input[name="category-name"]')!.getBoundingClientRect();
+          const label = marker.getBoundingClientRect();
+          expect(
+            Math.abs((label.top + label.bottom - name.top - name.bottom) / 2),
+          ).toBeLessThanOrEqual(2);
+        }
         const range = document.createRange();
         range.selectNodeContents(marker);
         for (const rect of range.getClientRects())
