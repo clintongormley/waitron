@@ -338,7 +338,7 @@ import {
   takePayment,
   withItems,
 } from "./state/pay-for-items.js";
-import { movedToBill, reopenedBill } from "./state/reopened-bill.js";
+import { creditedNotice, movedToBill, reopenedBill } from "./state/reopened-bill.js";
 import "./widgets/basket-refresh-dialog.js";
 import "./widgets/late-send-dialog.js";
 import type { LateSendDish, LateSendPurpose } from "./widgets/late-send-dialog.js";
@@ -3733,6 +3733,8 @@ export class TillApp extends LitElement {
   /** Failed split follow-up reads leave the shown bill's fate unknown until a successful read on
    * this visit. An explicit bill choice ends that wait. */
   #billAfterSplit?: { partyId: string; visit: number; billId?: string };
+  /** The printed bill the last Pay for items answer credited, and the bill it reopened as. */
+  #reopenedByItems?: { from: string; to: string };
   /** This till's own merges, moves and splits holding the window ({@link #ownBillsChange}), and how
    * many times one has taken it: a background bills read neither starts while one holds it nor
    * counts if one took it while the read was out, so it cannot say the bill this till itself moved
@@ -15203,13 +15205,16 @@ export class TillApp extends LitElement {
       );
       const numbered = was !== undefined;
       const shown = bills.find((bill) => bill.workingOrderId === next);
+      const reopen = this.#reopenedByItems;
       this.billGone =
-        shown === undefined || paidAfterSplit
-          ? null
-          : fill(t(numbered ? "table.bill_gone" : "table.bill_gone_unnumbered"), {
-              gone: numbered ? billLabel(was) : "",
-              shown: billLabel(shown),
-            });
+        reopen?.from === gone
+          ? creditedNotice(bills, reopen)
+          : shown === undefined || paidAfterSplit
+            ? null
+            : fill(t(numbered ? "table.bill_gone" : "table.bill_gone_unnumbered"), {
+                gone: numbered ? billLabel(was) : "",
+                shown: billLabel(shown),
+              });
       if (sync !== undefined && sync.billId === gone) {
         this.#dropDraft();
         this.#leftBillDrafts.set(
@@ -23677,6 +23682,8 @@ export class TillApp extends LitElement {
     // Pay for items answers the new bill's balance, never the table's.
     const own = result.paidOn === undefined ? result.balance : undefined;
     const shown = own === undefined ? {} : { balance: own };
+    const to = own === undefined ? reopenedBill(open.billId, result.sourceBalance) : undefined;
+    this.#reopenedByItems = to && { from: open.billId, to: to.workingOrderId };
     if (this.activeTabId === open.billId && own !== undefined) this.billBalance = own;
     const held = this.#unansweredPayments.get(open.billId);
     if (result.payment.state === "pending" && held?.pendingRefusal !== undefined) {
@@ -23789,6 +23796,14 @@ export class TillApp extends LitElement {
     if (!(await this.#switchToBill(reopened.workingOrderId))) return;
     this.billBalance = reopened;
     await this.#rereadPayingOrder(movedToBill(open, reopened), reopened);
+    this.#showCredited(reopened.workingOrderId);
+  }
+
+  /** On bill `to`, once Pay for items reopened a printed bill as it, says its receipt was credited. */
+  #showCredited(to: string): void {
+    const reopen = this.#reopenedByItems;
+    if (reopen?.to === to && this.activeTabId === to)
+      this.billGone = creditedNotice(this.partyBills, reopen);
   }
 
   async #showPaidTicket(
@@ -24421,6 +24436,7 @@ export class TillApp extends LitElement {
         this.#rereadAmounts(this.activeTabId, visit, undefined, false),
       ]);
     else await this.#rereadAmounts(this.activeTabId, visit);
+    if (moved) this.#showCredited(next);
   }
 
   #onBackToCounter(): void {

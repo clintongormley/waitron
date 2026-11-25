@@ -90,6 +90,20 @@ const paidOnWo9 = (
 
 const formError = (el: TillApp) => inDialog(el, "wt-form-actions")!.error;
 
+/** The printed bill wo-4 as the bills read lists it once Pay for items has credited its receipt. */
+const creditedWo4 = billOf({
+  billNumber: null,
+  status: "abandoned",
+  invoiceNumber: "A-1/405",
+  correctives: ["R-1/4"],
+  outstanding: "0.00",
+  amountDue: "0.00",
+});
+
+/** The screen's notice once Pay for items credited wo-4's receipt, the rest on `shown`. */
+const creditedNotice = (shown: string) =>
+  fill(t("table.bill_credited"), { number: "R-1/4", shown });
+
 /** Pay > Items on wo-4, the dishes on `lineNos` chosen. */
 async function chooseItems(el: TillApp, lineNos: number[]): Promise<void> {
   await openTable(el);
@@ -340,6 +354,7 @@ describe("till-app: Pay for items on a bill of their own", () => {
       paid
         ? [
             owing,
+            creditedWo4,
             billOf({
               workingOrderId: "wo-5",
               billNumber: 2,
@@ -397,11 +412,68 @@ describe("till-app: Pay for items on a bill of their own", () => {
     await flush(el, 6);
     const order = tableOrder(el);
     expect(order.orderId).toBe("wo-5");
+    expect(text(order.shadowRoot!.querySelector("[data-bill-gone]"))).toBe(
+      creditedNotice("Bill 2"),
+    );
     expect(order.shadowRoot!.querySelector('[data-switch-bill="wo-4"]')).toBeNull();
     order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("till-presented-pay-dialog")).toBeNull();
     expect(dialog(el)).not.toBeNull();
+  });
+
+  it("on a phone, the bills read behind the receipt says the printed bill's receipt was credited", async () => {
+    let paid = false;
+    const getPartyBills = vi.fn(async () =>
+      paid
+        ? [
+            creditedWo4,
+            billOf({
+              workingOrderId: "wo-5",
+              billNumber: 2,
+              total: "108.00",
+              outstanding: "108.00",
+            }),
+            billOf({
+              workingOrderId: "wo-9",
+              billNumber: 3,
+              status: "settled",
+              outstanding: "0.00",
+            }),
+          ]
+        : [billOf({ status: "placed" })],
+    );
+    const { el } = await mountApp({
+      getTill: vi.fn().mockResolvedValue({ ...till, formFactor: "phone-portrait" }),
+      getDeviceIdentity: vi
+        .fn()
+        .mockResolvedValue({ deviceId: "d1", name: "Phone", formFactor: "phone-portrait" }),
+      getPartyBills,
+      getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
+      previewItemPayment: vi
+        .fn()
+        .mockResolvedValue(itemsPreview({ total: "12.00", applied: "12.00", change: "38.00" })),
+      payForItems: vi.fn(async () => {
+        paid = true;
+        return paidOnWo9(
+          { applied: "12.00", change: "38.00" },
+          { workingOrderId: "wo-5", total: "108.00", outstanding: "108.00" },
+        );
+      }),
+      getReceiptPrintStatus: vi.fn().mockRejectedValue({ code: "network" }),
+    });
+    await choosePrintedItems(el, [4]);
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await flush(el, 6);
+
+    expect(el.shadowRoot!.querySelector("till-settlement-document-dialog")).not.toBeNull();
+    const order = tableOrder(el);
+    expect(order.orderId).toBe("wo-5");
+    expect(text(order.shadowRoot!.querySelector("[data-bill-gone]"))).toBe(
+      creditedNotice("Bill 2"),
+    );
   });
 
   it("the preview's reopen refusal shows before any money", async () => {
@@ -579,9 +651,11 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     const reopened = balanceOf({ workingOrderId: "wo-5" });
     const { el } = await mountApp({
       ...withReader(),
-      getPartyBills: vi.fn(async () => [
-        paid ? billOf({ workingOrderId: "wo-5" }) : billOf({ status: "placed" }),
-      ]),
+      getPartyBills: vi.fn(async () =>
+        paid
+          ? [creditedWo4, billOf({ workingOrderId: "wo-5", billNumber: 2 })]
+          : [billOf({ status: "placed" })],
+      ),
       getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
       previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
       payForItems: vi.fn(async () => {
@@ -600,6 +674,9 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(formError(el)).toBe(t("bill_pay.card_declined"));
     expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
     expect(tableOrder(el).orderId).toBe("wo-5");
+    expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-gone]"))).toBe(
+      creditedNotice("Bill 2"),
+    );
     expect(tableOrder(el).billBalance).toEqual(reopened);
     expect(dialog(el)!.balance).toEqual(reopened);
     expect(vi.mocked(api.getTabLines).mock.calls).toContainEqual(["wo-5"]);
@@ -698,9 +775,11 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
         activeReaders: readers.map((reader) => ({ ...reader, provider: "stripe_terminal" })),
         defaultReaderId: readers[0]!.id,
       }),
-      getPartyBills: vi.fn(async () => [
-        paid ? billOf({ workingOrderId: "wo-5" }) : billOf({ status: "placed" }),
-      ]),
+      getPartyBills: vi.fn(async () =>
+        paid
+          ? [creditedWo4, billOf({ workingOrderId: "wo-5", billNumber: 2 })]
+          : [billOf({ status: "placed" })],
+      ),
       getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
       previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
       payForItems: vi.fn(async () => {
@@ -723,6 +802,9 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       t("bill_pay.card_pending").replace("{amount}", money("30.00")),
     );
     expect(tableOrder(el).orderId).toBe("wo-5");
+    expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-gone]"))).toBe(
+      creditedNotice("Bill 2"),
+    );
     expect(tableOrder(el).billBalance).toEqual(reopened);
     expect(dialog(el)!.balance).toEqual(reopened);
     expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toEqual([]);
