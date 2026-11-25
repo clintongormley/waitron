@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { formatEquipmentCode } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import "./equipment-scanner.js";
 import { cameraFilming } from "../../test/qr-camera.js";
 import type { TillEquipmentScanner } from "./equipment-scanner.js";
@@ -93,6 +94,17 @@ describe("till-equipment-scanner", () => {
 
     await expect.poll(() => message(el), { timeout: 10_000 }).toBe(t("equipment.scan_not_ours"));
     expect(scanned).toEqual([]);
+  });
+
+  it.each([
+    ["en", "That is not a Waitron equipment label"],
+    ["es", es["equipment.scan_not_ours"]],
+  ] as const)("a foreign QR is called a label, not a sticker (%s)", async (locale, words) => {
+    setLocale(locale);
+    film("https://example.com");
+    const { el } = await mountScanner("any");
+
+    await expect.poll(() => message(el), { timeout: 10_000 }).toBe(words);
   });
 
   it("a foreign QR emits nothing, says so, and keeps the camera on", async () => {

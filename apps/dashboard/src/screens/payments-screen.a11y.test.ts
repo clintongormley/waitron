@@ -402,7 +402,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     await expectNoA11yViolations(host);
   });
 
-  it("renders a reader's equipment label accessibly", async () => {
+  it("renders a reader's QR label accessibly", async () => {
     const { el, host } = await mountWidget<PaymentsScreen>(
       "dashboard-payments-screen",
       {
@@ -414,11 +414,11 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
     );
     await flush(el);
     el.shadowRoot!.querySelector("wt-data-table")!
-      .shadowRoot!.querySelector<HTMLElement>("[data-test=label-r-1]")!
+      .shadowRoot!.querySelector<HTMLElement>("[data-test=qr-label-r-1]")!
       .click();
     await flush(el);
     await vi.waitFor(() => {
-      const label = el.shadowRoot!.querySelector("dashboard-equipment-label");
+      const label = el.shadowRoot!.querySelector("dashboard-equipment-qr-label");
       if (!label?.shadowRoot?.querySelector("[data-test=equipment-label-qr]"))
         throw new Error("label");
     });

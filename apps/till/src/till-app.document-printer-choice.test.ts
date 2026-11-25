@@ -192,6 +192,45 @@ it("Equipment's Receipt save updates the open document row", async () => {
   expect(part(el, "print-receipt").textContent!.trim()).toBe("Print on Belt");
 });
 
+it.each(["saved", "refused"])(
+  "an armed Receipt tap over an open document is confirmed only when %s",
+  async (outcome) => {
+    const { el } = await sold("F2", {
+      setDeviceEquipment:
+        outcome === "saved"
+          ? vi.fn().mockResolvedValue(equipment(belt))
+          : vi.fn().mockRejectedValue({ code: "printer.not_found", status: 404 }),
+    });
+    emit(shell(el), "open-equipment");
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector("till-equipment-dialog")!;
+    const answered = vi.spyOn(dialog, "answered");
+    const change = { role: "receipt", selection: { id: "belt" }, via: "scan", takeOver: false };
+    emit(dialog, "equipment-change", change);
+    await flush(el);
+    await vi.waitFor(() => expect(answered).toHaveBeenCalledTimes(1));
+    expect(answered.mock.calls[0]![0]).toBe(change);
+    expect(answered.mock.calls[0]![1]).toEqual(
+      outcome === "saved" ? equipment(belt) : { error: expect.any(String) },
+    );
+  },
+);
+
+it("a stored Receipt tap is answered though a later choice replaced it", async () => {
+  const { el } = await sold("F2", {
+    setDeviceEquipment: vi.fn().mockResolvedValue(equipment(belt)),
+  });
+  emit(shell(el), "open-equipment");
+  await flush(el);
+  const dialog = el.shadowRoot!.querySelector("till-equipment-dialog")!;
+  const answered = vi.spyOn(dialog, "answered");
+  const change = { role: "receipt", selection: { id: "belt" }, via: "scan", takeOver: false };
+  emit(dialog, "equipment-change", change);
+  emit(dialog, "equipment-change", { ...change });
+  await vi.waitFor(() => expect(answered).toHaveBeenCalledTimes(2));
+  expect(answered.mock.calls.find(([each]) => each === change)![1]).toEqual(equipment(belt));
+});
+
 it.each([false, true, "orderless"])(
   "F1 Receipt copy refreshes both statuses and shows its domain refusal, history=%s",
   async (historical) => {

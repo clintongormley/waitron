@@ -10,7 +10,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./equipment-scanner.js";
 import { trackDialog } from "./track-dialog.js";
-import { inheritEquipmentOption, optionLabel } from "./equipment-labels.js";
+import { inheritEquipmentOption, optionLabel, pickedUpMessage } from "./equipment-labels.js";
 import { carriedText, fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
@@ -160,13 +160,16 @@ export class TillEquipmentDialog extends LitElement {
   @state() private qrScanning = false;
   @state() private nfcPermission: PermissionState | null = null;
   @state() private nfcMessage:
-    | "equipment.scan_not_ours"
+    | "equipment.nfc_not_ours"
     | "equipment.scan_not_printer"
     | "equipment.scan_not_reader"
     | "equipment.scan_not_available"
     | "equipment.nfc_read_error"
     | "equipment.nfc_unavailable"
+    | { pickedUp: string }
     | null = null;
+  /** The latest tap's choice, while the dialog still waits to show its answer. */
+  #tapped: { change: EquipmentChange; item: string } | null = null;
   #nfcAbort?: AbortController;
   #permissionAbort?: AbortController;
   #opening = 0;
@@ -193,6 +196,7 @@ export class TillEquipmentDialog extends LitElement {
     this.#permissionAbort = undefined;
     this.nfcPermission = null;
     this.nfcMessage = null;
+    this.#tapped = null;
   }
 
   async #discoverNfc(): Promise<void> {
@@ -251,6 +255,7 @@ export class TillEquipmentDialog extends LitElement {
       reader.addEventListener(
         "readingerror",
         () => {
+          this.#tapped = null;
           this.nfcMessage = "equipment.nfc_read_error";
         },
         { signal: abort.signal },
@@ -266,6 +271,7 @@ export class TillEquipmentDialog extends LitElement {
   }
 
   #readNfc(event: NfcReading): void {
+    this.#tapped = null;
     const codes = event.message.records.flatMap((record) => {
       if (record.recordType !== "text") return [];
       try {
@@ -279,7 +285,7 @@ export class TillEquipmentDialog extends LitElement {
     });
     const code = codes.length === 1 ? codes[0] : undefined;
     if (code === undefined) {
-      this.nfcMessage = "equipment.scan_not_ours";
+      this.nfcMessage = "equipment.nfc_not_ours";
       return;
     }
     const row = this.scanning;
@@ -288,7 +294,7 @@ export class TillEquipmentDialog extends LitElement {
         row.scan === "printer" ? "equipment.scan_not_printer" : "equipment.scan_not_reader";
       return;
     }
-    const permitted = this.equipment?.roles.some(
+    const permitted = this.equipment?.roles.find(
       (role) =>
         (row === null
           ? code.kind === "reader"
@@ -306,7 +312,19 @@ export class TillEquipmentDialog extends LitElement {
       row === null
         ? { kind: code.kind, selection: { id: code.id }, via: "scan" }
         : { role: row.role, selection: { id: code.id }, via: "scan", takeOver: false },
+      permitted.choices.find((item) => item.id === code.id)!.name,
     );
+  }
+
+  /** The app's answer to a choice this dialog reported: what the server stored, or why it did not. */
+  answered(change: EquipmentChange, answer: DeviceEquipment | { error: string } | undefined): void {
+    const tapped = this.#tapped;
+    if (tapped?.change !== change) return;
+    this.#tapped = null;
+    if (answer !== undefined && !("error" in answer))
+      this.nfcMessage = {
+        pickedUp: pickedUpMessage(change, answer, tapped.item, "equipment.no_pickup_role"),
+      };
   }
 
   #close(): void {
@@ -330,11 +348,13 @@ export class TillEquipmentDialog extends LitElement {
   }
 
   #renderNfc(): TemplateResult | typeof nothing {
-    if (this.nfcPermission === null || this.nfcPermission === "denied" || this.qrScanning)
-      return nothing;
+    if (this.nfcPermission === null || this.qrScanning) return nothing;
+    if (this.nfcPermission === "denied")
+      return html`<p data-equipment-nfc-blocked role="status">${t("equipment.nfc_blocked")}</p>`;
+    const message = this.nfcMessage;
     return html`<div class="scanning" data-equipment-nfc>
       <p data-equipment-nfc-message role="status">
-        ${this.nfcMessage === null ? t("equipment.nfc_hint") : t(this.nfcMessage)}
+        ${message === null ? t("equipment.nfc_hint") : typeof message === "string" ? t(message) : message.pickedUp}
       </p>
       ${this.nfcPermission === "prompt" ? html`<wt-button data-equipment-nfc-allow variant="primary" @click=${() => void this.#startNfc()}>${t("equipment.nfc_allow")}</wt-button>` : nothing}
     </div>`;
@@ -355,7 +375,10 @@ export class TillEquipmentDialog extends LitElement {
     this.dispatchEvent(new CustomEvent<T>(type, { detail, bubbles: true, composed: true }));
   }
 
-  #change(change: EquipmentChange): void {
+  /** `item` names what a tap chose. */
+  #change(change: EquipmentChange, item?: string): void {
+    if (typeof this.nfcMessage === "object") this.nfcMessage = null;
+    this.#tapped = item === undefined ? null : { change, item };
     this.#emit<EquipmentChange>("equipment-change", change);
   }
 

@@ -427,7 +427,7 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
   );
 
   it.each([390, 1280])(
-    "renders a portable printer's holder and its equipment label accessibly at %ipx",
+    "renders a portable printer's holder and its QR label accessibly at %ipx",
     async (width) => {
       await page.viewport(width, 900);
       const printers = await stubApi().listPrinters();
@@ -450,7 +450,9 @@ describe.each(["light", "dark"] as const)("printers-screen a11y (%s theme)", (th
       await flush(el);
       expect(q(el, "[data-test=printer-holder]")).not.toBeNull();
       await expectNoA11yViolations(host);
-      q(el, "[data-test=open-equipment-label]")!.click();
+      q(el, "[data-test=printer-details-close]")!.click();
+      await vi.waitFor(() => expect(q(el, "[data-test=printer-status]")).toBeNull());
+      q(el, `[data-test="qr-label-${portable.id}"]`)!.click();
       await flush(el);
       await vi.waitFor(() => expect(q(el, "[data-test=equipment-label-qr]")).not.toBeNull());
       await flush(el);

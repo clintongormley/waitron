@@ -1167,6 +1167,10 @@ export const en = {
   "equipment.nfc_allow": "Allow NFC",
   "equipment.nfc_hint": "Tap the equipment’s NFC sticker with your phone.",
   "equipment.nfc_read_error": "That sticker could not be read. Hold it still and try again.",
+  "equipment.nfc_not_ours":
+    "That sticker could not be read as Waitron equipment. Hold it still and try again.",
+  "equipment.nfc_blocked":
+    "NFC is blocked for Waitron. Allow it in this app’s or browser’s permissions. Meanwhile, scan the QR code or choose from the list.",
   "equipment.nfc_unavailable": "NFC is not available. Scan the QR code or choose from the list.",
   "equipment.scan_back": "Back to the list",
   "equipment.scan_hint": "Point the camera at the equipment's label.",
@@ -1188,6 +1192,7 @@ export const en = {
   "equipment.picked_up_receipt_only": "Picked up {item} for receipts",
   "equipment.picked_up_slip_only": "Picked up {item} for payment slips",
   "equipment.no_printer_role": "No printer role selected. Choose a role in Equipment.",
+  "equipment.no_pickup_role": "This printer has no pick-up role. Choose one above.",
   "pay_equipment.heading": "Reader and printer",
   "pay_equipment.change": "Change",
   "pay_equipment.qr": "QR",
@@ -3636,6 +3641,10 @@ export const es: Record<StringKey, string> = {
   "equipment.nfc_hint": "Acerca el teléfono a la pegatina NFC del equipo.",
   "equipment.nfc_read_error":
     "No se ha podido leer la pegatina. Mantenla quieta e inténtalo de nuevo.",
+  "equipment.nfc_not_ours":
+    "No se ha reconocido como equipo de Waitron. Mantén la pegatina quieta e inténtalo de nuevo.",
+  "equipment.nfc_blocked":
+    "NFC está bloqueado para Waitron. Permítelo en los permisos de esta aplicación o del navegador. Mientras tanto, escanea el código QR o elige de la lista.",
   "equipment.nfc_unavailable": "NFC no está disponible. Escanea el código QR o elige de la lista.",
   "equipment.scan_back": "Volver a la lista",
   "equipment.scan_hint": "Apunta la cámara a la etiqueta del equipo.",
@@ -3658,6 +3667,8 @@ export const es: Record<StringKey, string> = {
   "equipment.picked_up_slip_only": "Has recogido {item} para justificantes de pago",
   "equipment.no_printer_role":
     "No se ha seleccionado ninguna función de impresora. Elige una en Equipo.",
+  "equipment.no_pickup_role":
+    "Esta impresora no tiene ninguna función al recogerla. Elige una arriba.",
   "pay_equipment.heading": "Lector e impresora",
   "pay_equipment.change": "Cambiar",
   "pay_equipment.qr": "QR",

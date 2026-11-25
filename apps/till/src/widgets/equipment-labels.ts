@@ -1,4 +1,5 @@
 import { fill, t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
 import type { ComboboxOption } from "@waitron/ui";
 import type {
   DeviceEquipment,
@@ -37,6 +38,7 @@ export function pickedUpMessage(
   change: EquipmentChange,
   stored: DeviceEquipment,
   item: string,
+  noRole: StringKey = "equipment.no_printer_role",
 ): string {
   const selection = change.selection;
   const printer = "kind" in change && change.kind === "printer" && typeof selection === "object";
@@ -49,7 +51,7 @@ export function pickedUpMessage(
     );
   const receipt = printerFor("receipt");
   const slip = printerFor("payment_slip");
-  if (printer && !receipt && !slip) return t("equipment.no_printer_role");
+  if (printer && !receipt && !slip) return t(noRole);
   const picked =
     receipt === slip
       ? "equipment.picked_up"

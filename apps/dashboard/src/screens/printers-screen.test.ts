@@ -10248,7 +10248,7 @@ describe("Print test page in a printer's row menu", () => {
   );
 });
 
-describe("portable printers and their equipment label", () => {
+describe("portable printers, their QR label and their NFC sticker", () => {
   const PORTABLE_ID = "0b3f6c1e-2a4d-4e8f-9a1b-7c6d5e4f3a2b";
   const portable: Printer = {
     ...printers[0]!,
@@ -10334,48 +10334,157 @@ describe("portable printers and their equipment label", () => {
     );
   });
 
-  it("a portable printer nobody carries says so, and a fixed printer offers no label", async () => {
+  it("a portable printer nobody carries says so, and the details of neither kind offer a label", async () => {
     const free = { ...portable, holder: null };
     const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([free, printers[1]]) });
     const el = await openDetails(api, PORTABLE_ID);
     expect(text(el, "[data-test=printer-holder]")).toBe(t("equipment.holder_none"));
-    expect(q(el, "[data-test=open-equipment-label]")).not.toBeNull();
+    expect(q(el, "[data-test=printer-status]")!.querySelector("[data-test*=label]")).toBeNull();
     const fixed = await openDetails(stubApi(), "p1");
     expect(text(fixed, "[data-test=printer-portable]")).toBe(t("printers.no"));
     expect(q(fixed, "[data-test=printer-holder]")).toBeNull();
-    expect(q(fixed, "[data-test=open-equipment-label]")).toBeNull();
+  });
+
+  const menuOf = (el: PrintersScreen, id: string) =>
+    [
+      ...q(el, `[data-test="print-test-page-${id}"]`)!
+        .closest("dashboard-row-actions")!
+        .querySelectorAll<HTMLElement>("wt-button"),
+    ].map((button) => button.dataset["test"]!.replace(`-${id}`, ""));
+  async function mountPrinters(rows: Printer[]): Promise<PrintersScreen> {
+    const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", {
+      api: stubApi({ listPrinters: vi.fn().mockResolvedValue(rows) }),
+    });
+    await flush(el);
+    await selectTab(el, "printers");
+    return el;
+  }
+  async function pressMenu(el: PrintersScreen, key: string): Promise<HTMLButtonElement> {
+    const action = q(el, `[data-test="${key}-${PORTABLE_ID}"]`)!;
+    const opener = action
+      .closest("dashboard-row-actions")!
+      .shadowRoot!.querySelector<HTMLButtonElement>("button")!;
+    await userEvent.click(page.elementLocator(opener));
+    await userEvent.click(page.elementLocator(action.shadowRoot!.querySelector("button")!));
+    await flush(el);
+    return opener;
+  }
+  async function closedBackTo(el: PrintersScreen, close: string, opener: Element) {
+    q(el, `[data-test=${close}]`)!.click();
+    await vi.waitFor(() => expect(q(el, `[data-test=${close}]`)).toBeNull());
+    await vi.waitFor(() => {
+      let focused = document.activeElement;
+      while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+      expect(focused).toBe(opener);
+    });
+  }
+
+  it("the menu offers a portable printer its QR label, and an NFC sticker where the browser can write one", async () => {
+    vi.stubGlobal("NDEFReader", undefined);
+    try {
+      let el = await mountPrinters([portable, printers[1]!]);
+      expect(menuOf(el, PORTABLE_ID)).toEqual([
+        "edit-printer",
+        "print-test-page",
+        "qr-label",
+        "delete-printer",
+      ]);
+      expect(menuOf(el, printers[1]!.id)).toEqual([
+        "edit-printer",
+        "print-test-page",
+        "delete-printer",
+      ]);
+      vi.stubGlobal("NDEFReader", class {});
+      el = await mountPrinters([portable, printers[1]!]);
+      expect(menuOf(el, PORTABLE_ID)).toEqual([
+        "edit-printer",
+        "print-test-page",
+        "qr-label",
+        "nfc-sticker",
+        "delete-printer",
+      ]);
+      expect(text(el, `[data-test="qr-label-${PORTABLE_ID}"]`)).toBe(
+        t("equipment.qr_label_dialog"),
+      );
+      expect(text(el, `[data-test="nfc-sticker-${PORTABLE_ID}"]`)).toBe(
+        t("equipment.nfc_sticker_dialog"),
+      );
+      expect((q(el, `[data-test="qr-label-${PORTABLE_ID}"]`) as WtButton).icon).toBe(
+        "menu-equipment-label",
+      );
+      expect((q(el, `[data-test="nfc-sticker-${PORTABLE_ID}"]`) as WtButton).icon).toBe(
+        "menu-nfc-sticker",
+      );
+      expect(menuOf(el, printers[1]!.id)).toEqual([
+        "edit-printer",
+        "print-test-page",
+        "delete-printer",
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("the label modal shows the exact code text formatEquipmentCode gives for this printer, and its QR image decodes to that text", async () => {
-    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([portable, printers[1]]) });
-    const el = await openDetails(api, PORTABLE_ID);
-    q(el, "[data-test=open-equipment-label]")!.click();
-    await flush(el);
+    const el = await mountPrinters([portable, printers[1]!]);
+    const opener = await pressMenu(el, "qr-label");
     await vi.waitFor(() => expect(q(el, "[data-test=equipment-label-qr]")).not.toBeNull());
+    q(el, "[data-test=show-equipment-code]")!.click();
+    await flush(el);
     const code = formatEquipmentCode("printer", PORTABLE_ID);
     expect(text(el, "[data-test=equipment-label-code]")).toBe(code);
     expect(text(el, "[data-test=equipment-label-name]")).toBe("Floor handheld");
     const qr = q(el, "[data-test=equipment-label-qr]") as HTMLImageElement;
     expect(await decodeQrImage(qr.src)).toBe(code);
+    expect(q(el, "dashboard-equipment-nfc-sticker")).toBeNull();
+    await closedBackTo(el, "close-equipment-label", opener);
   });
 
   it("prints the label: its QR, its code and the printer's name", async () => {
-    const api = stubApi({ listPrinters: vi.fn().mockResolvedValue([portable, printers[1]]) });
-    const el = await openDetails(api, PORTABLE_ID);
-    q(el, "[data-test=open-equipment-label]")!.click();
-    await flush(el);
+    const el = await mountPrinters([portable, printers[1]!]);
+    await pressMenu(el, "qr-label");
     await vi.waitFor(() => expect(q(el, "[data-test=equipment-label-qr]")).not.toBeNull());
-    const label = q(el, "dashboard-equipment-label") as HTMLElement & {
+    await vi.waitFor(() =>
+      expect(q(el, "[data-test=print-label-on-this-computer]")).not.toBeNull(),
+    );
+    const label = q(el, "dashboard-equipment-qr-label") as HTMLElement & {
       print: (label: { qr: string; code: string; name: string }) => void;
     };
     const print = vi.fn();
     label.print = print;
-    q(el, "[data-test=print-equipment-label]")!.click();
+    q(el, "[data-test=print-label-on-this-computer]")!.click();
     expect(print).toHaveBeenCalledExactlyOnceWith({
       qr: (q(el, "[data-test=equipment-label-qr]") as HTMLImageElement).src,
       code: formatEquipmentCode("printer", PORTABLE_ID),
       name: "Floor handheld",
     });
+  });
+
+  it("NFC sticker writes at once, while the menu press still counts as the person's own act", async () => {
+    const writes: { data: string; active: boolean }[] = [];
+    vi.stubGlobal(
+      "NDEFReader",
+      class {
+        scan = () => Promise.resolve();
+        write(message: { records: { data: string }[] }) {
+          writes.push({
+            data: message.records[0]!.data,
+            active: navigator.userActivation.isActive,
+          });
+          return new Promise<void>(() => {});
+        }
+      },
+    );
+    try {
+      const el = await mountPrinters([portable, printers[1]!]);
+      const opener = await pressMenu(el, "nfc-sticker");
+      expect(writes).toEqual([{ data: formatEquipmentCode("printer", PORTABLE_ID), active: true }]);
+      expect(text(el, "[data-test=equipment-nfc-message]")).toBe(t("equipment.nfc_ready"));
+      expect(q(el, "dashboard-equipment-qr-label")).toBeNull();
+      await closedBackTo(el, "close-equipment-nfc", opener);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 
@@ -11379,28 +11488,28 @@ describe("Deleting a printer", () => {
     expect(api.updatePrinter).not.toHaveBeenCalled();
   });
 
-  it("a printer deleted in another tab closes its equipment label", async () => {
+  it("a printer deleted in another tab closes its QR label", async () => {
     const liveData = new LiveData();
     const portable = { ...printers[0]!, portable: true };
     const { api, el } = await mounted({
       liveData,
       listPrinters: vi.fn().mockResolvedValue([portable, ...printers.slice(1)]),
     } as Partial<DashboardApi>);
-    await openPrinterDetails(el, "p1");
-    q(el, "[data-test=open-equipment-label]")!.click();
+    await selectTab(el, "printers");
+    q(el, '[data-test="qr-label-p1"]')!.click();
     await flush(el);
-    expect(el.shadowRoot!.querySelector("dashboard-equipment-label")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-equipment-qr-label")).not.toBeNull();
 
     vi.mocked(api.listPrinters).mockResolvedValue(printers.slice(1));
     liveData.invalidate([{ type: "printers", id: "p1" }]);
     await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("dashboard-equipment-label")).toBeNull(),
+      expect(el.shadowRoot!.querySelector("dashboard-equipment-qr-label")).toBeNull(),
     );
     vi.mocked(api.listPrinters).mockResolvedValue([portable, ...printers.slice(1)]);
     liveData.invalidate([{ type: "printers", id: "p1" }]);
     await vi.waitFor(() => expect(api.listPrinters).toHaveBeenCalledTimes(3));
     await flush(el);
-    expect(el.shadowRoot!.querySelector("dashboard-equipment-label")).toBeNull();
+    expect(el.shadowRoot!.querySelector("dashboard-equipment-qr-label")).toBeNull();
   });
 
   it("a live read answering not-found while the delete is out leaves the answer to the delete", async () => {

@@ -4210,7 +4210,7 @@ export class TillApp extends LitElement {
   @state() private nfcNotice: { message: string; tone: "info" | "error" } | null = null;
   readonly #equipmentNfc = new EquipmentNfc(
     (code) => {
-      if (code === null) this.nfcNotice = { message: t("equipment.scan_not_ours"), tone: "error" };
+      if (code === null) this.nfcNotice = { message: t("equipment.nfc_not_ours"), tone: "error" };
       else {
         this.#onInteraction();
         if (this.operatorName === "" || this.#loginPending) this.#pendingNfc = code;
@@ -11395,7 +11395,9 @@ export class TillApp extends LitElement {
     }
   }
 
-  async #chooseInvoicePrinter(change: EquipmentChange): Promise<void> {
+  async #chooseInvoicePrinter(
+    change: EquipmentChange,
+  ): Promise<DeviceEquipment | { error: string } | undefined> {
     const target = this.#ticketDeliveryTarget();
     if (
       target === undefined ||
@@ -11418,11 +11420,11 @@ export class TillApp extends LitElement {
     const stored = await this.#onEquipmentChange(
       new CustomEvent("equipment-change", { detail: change }),
     );
-    if (!current()) return;
+    if (!current()) return stored;
     if (stored === undefined || "error" in stored) {
       this.invoicePrinterError = stored?.error ?? t("pay_equipment.not_saved");
       await this.#readInvoicePrinters(change.role);
-      return;
+      return stored;
     }
     this.invoiceEquipment = stored.roles.find((role) => role.role === "invoice");
     this.receiptEquipment = stored.roles.find((role) => role.role === "receipt");
@@ -11430,6 +11432,7 @@ export class TillApp extends LitElement {
     this.invoicePrinterValue = undefined;
     if (change.role === "receipt") this.invoicePrinterBlocked = false;
     else await this.#readInvoiceDeliveries(target, session, visit);
+    return stored;
   }
 
   /** Follows the last status read, so a failed read of a waiting attempt is tried again. */
@@ -25694,15 +25697,17 @@ export class TillApp extends LitElement {
                 .equipment=${this.deviceEquipment}
                 .error=${this.equipmentError}
                 @equipment-change=${(event: CustomEvent<EquipmentChange>) => {
-                  if (
+                  const dialog =
+                    event.currentTarget as HTMLElementTagNameMap["till-equipment-dialog"];
+                  const answer =
                     (event.detail.role === "receipt" ||
                       (event.detail.role === "invoice" && this.result?.invoiceType === "F1")) &&
                     this.capabilities.includes("print-receipt") &&
                     this.ticketWorkingOrderId !== undefined &&
                     (this.settlementDocument !== null || this.drill?.kind === "ticket")
-                  )
-                    void this.#chooseInvoicePrinter(event.detail);
-                  else void this.#onEquipmentChange(event);
+                      ? this.#chooseInvoicePrinter(event.detail)
+                      : this.#onEquipmentChange(event);
+                  void answer.then((stored) => dialog.answered(event.detail, stored));
                 }}
                 @close=${() => (this.equipmentOpen = false)}
               ></till-equipment-dialog>`

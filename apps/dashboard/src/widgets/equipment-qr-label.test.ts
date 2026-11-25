@@ -3,8 +3,8 @@ import { formatEquipmentCode } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { decodeQrImage } from "../testing/decode-qr.js";
 import { printEquipmentLabel } from "@waitron/ui/src/print-label.js";
-import "./equipment-label.js";
-import type { EquipmentLabel } from "./equipment-label.js";
+import "./equipment-qr-label.js";
+import type { EquipmentQrLabel } from "./equipment-qr-label.js";
 import { t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
@@ -14,9 +14,9 @@ const ID = "0b3f6c1e-2a4d-4e8f-9a1b-7c6d5e4f3a2b";
 const PIXEL =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
-describe("dashboard-equipment-label", () => {
+describe("dashboard-equipment-qr-label", () => {
   async function mount(kind: "printer" | "reader", itemId = ID) {
-    const { el } = await mountWidget<EquipmentLabel>("dashboard-equipment-label", {
+    const { el } = await mountWidget<EquipmentQrLabel>("dashboard-equipment-qr-label", {
       kind,
       itemId,
       name: "Dining room handheld",
@@ -34,6 +34,8 @@ describe("dashboard-equipment-label", () => {
       const code = formatEquipmentCode(kind, ID);
       const text = (selector: string) =>
         el.shadowRoot!.querySelector(selector)!.textContent!.trim();
+      el.shadowRoot!.querySelector<HTMLElement>("[data-test=show-equipment-code]")!.click();
+      await el.updateComplete;
       expect(text("[data-test=equipment-label-code]")).toBe(code);
       expect(text("[data-test=equipment-label-name]")).toBe("Dining room handheld");
       expect(qr.alt).toBe(t("equipment.label_qr_alt"));
@@ -42,14 +44,48 @@ describe("dashboard-equipment-label", () => {
   );
 
   it("puts a name holding a replacement pattern into its heading as written", async () => {
-    const { el } = await mountWidget<EquipmentLabel>("dashboard-equipment-label", {
+    const { el } = await mountWidget<EquipmentQrLabel>("dashboard-equipment-qr-label", {
       kind: "printer",
       itemId: ID,
       name: "Counter $&",
     });
     expect(
       el.shadowRoot!.querySelector("[data-test=equipment-label-modal]")!.getAttribute("heading"),
-    ).toBe(t("equipment.label_title").split("{name}").join("Counter $&"));
+    ).toBe("QR label: Counter $&");
+  });
+
+  it.each([
+    ["printer", "Stick it on the printer. Scanning it on a device picks the printer up."],
+    ["reader", "Stick it on the card reader. Scanning it on a device picks the card reader up."],
+  ] as const)("says where to stick a %s's label", async (kind, words) => {
+    const { el } = await mount(kind);
+    expect(el.shadowRoot!.querySelector(".hint")!.textContent!.trim()).toBe(words);
+  });
+
+  it("keeps the code and Copy code out of sight until Show code, and for each item anew", async () => {
+    const { el } = await mount("printer");
+    const find = <T extends Element>(test: string) =>
+      el.shadowRoot!.querySelector<T>(`[data-test=${test}]`);
+    const toggle = () => find<HTMLElementTagNameMap["wt-button"]>("show-equipment-code")!;
+    const press = async () => {
+      toggle().click();
+      await el.updateComplete;
+    };
+    expect(find("equipment-label-code")).toBeNull();
+    expect(find("copy-equipment-code")).toBeNull();
+    expect(toggle().textContent!.trim()).toBe("Show code");
+    expect(toggle().ariaExpanded).toBe("false");
+    await press();
+    expect(find("equipment-label-code")).not.toBeNull();
+    expect(find("copy-equipment-code")).not.toBeNull();
+    expect(toggle().textContent!.trim()).toBe("Hide code");
+    expect(toggle().ariaExpanded).toBe("true");
+    await press();
+    expect(find("equipment-label-code")).toBeNull();
+    await press();
+    el.itemId = "7d2c9a10-5b3e-4f61-8a2d-1c0e9b8a7f65";
+    await el.updateComplete;
+    expect(find("equipment-label-code")).toBeNull();
   });
 
   it("draws a new QR when it is given another item", async () => {
@@ -132,8 +168,8 @@ describe("dashboard-equipment-label", () => {
     "draws Print quiet like Close while the QR is being made, then blue (%s theme)",
     async (theme) => {
       let made!: (qr: string) => void;
-      const { el } = await mountWidget<EquipmentLabel>(
-        "dashboard-equipment-label",
+      const { el } = await mountWidget<EquipmentQrLabel>(
+        "dashboard-equipment-qr-label",
         {
           kind: "printer",
           itemId: ID,

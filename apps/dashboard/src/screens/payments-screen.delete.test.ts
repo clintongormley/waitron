@@ -745,12 +745,12 @@ describe("Deleting a card reader", () => {
     expect(api.saveReader).not.toHaveBeenCalled();
 
     vi.mocked(api.listReaders).mockResolvedValue([terrace, unpaired]);
-    cell(el, "[data-test=label-terrace]")!.click();
+    cell(el, "[data-test=qr-label-terrace]")!.click();
     await flush(el);
-    expect(q(el, "dashboard-equipment-label")).not.toBeNull();
+    expect(q(el, "dashboard-equipment-qr-label")).not.toBeNull();
     vi.mocked(api.listReaders).mockResolvedValue([unpaired]);
     api.liveData!.invalidate([{ type: "card_readers", id: "terrace" }]);
-    await vi.waitFor(() => expect(q(el, "dashboard-equipment-label")).toBeNull());
+    await vi.waitFor(() => expect(q(el, "dashboard-equipment-qr-label")).toBeNull());
   });
 
   it("discovery offers an available reader with Add, not Enable", async () => {

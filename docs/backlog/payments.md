@@ -151,8 +151,9 @@ changed nothing and said why; and printer and reader stickers while a card payme
 Still to check: taps from payment, Station, Pass and My Schedule; another device's reader with a
 payment running, which must not be taken; and, once on the box, the fixes made that day. Those are a
 printer the profile allows for payment slips only (the notice names payment slips and the chosen
-receipt printer does not change), the "Picked up" message and the blocked-NFC message inside
-Equipment, and the new words for a sticker that was not recognised.
+receipt printer does not change), the "Picked up" and blocked-NFC messages inside Equipment, the
+new wording inside Equipment for a printer with no pick-up role, and the new words for a sticker
+that was not recognised.
 
 ## Check NFC sticker writing and locking on the box's address
 

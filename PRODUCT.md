@@ -73,7 +73,7 @@ venue having to think about it.
   on the venue's network. The operator has no terminal access to the box; the web pages are their
   only window onto it.
 - **Documents people handle:** receipts and invoices (one for every sale), kitchen station tickets
-  on narrow thermal paper, A4 invoices, equipment labels and a printed recovery sheet.
+  on narrow thermal paper, A4 invoices, QR labels and a printed recovery sheet.
 - **Help:** short help bubbles on screen, switched on with help mode, link to a full guide in
   English and Spanish (`apps/server/src/guide/`).
 

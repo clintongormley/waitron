@@ -107,7 +107,7 @@ makes that happen more often.
 A saved text size reaches the dashboards and tills as a saved theme's colours do (see
 [Save a theme](appearance.md#save)).
 
-Printed paper keeps Waitron's sizes: receipts, station tickets and the equipment label. Google's
+Printed paper keeps Waitron's sizes: receipts, station tickets and QR labels. Google's
 sign-in button keeps Google's size.
 
 A size set by hand grows with the slider too, as [Set text by hand](appearance.md#text-by-hand)
