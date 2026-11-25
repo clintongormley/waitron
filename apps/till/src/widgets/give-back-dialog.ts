@@ -766,9 +766,11 @@ export class TillGiveBackDialog extends LitElement {
     const own = this.attempted ? this.#errors() : new Map<Field, string>();
     const errors = new Map(own);
     const refusal = this.#refusal();
-    const onAmount = refusal !== null && AMOUNT_REFUSALS.has(refusal.code);
-    if (refusal !== null && onAmount)
-      errors.set("amount", this.#refusalText(refusal, "give_back.preview_failed"));
+    const sent = this.sendRefusal;
+    const onAmount = (shown: Refusal | null) => shown !== null && AMOUNT_REFUSALS.has(shown.code);
+    if (onAmount(sent)) errors.set("amount", this.#sendRefusalText(sent!));
+    else if (onAmount(refusal))
+      errors.set("amount", this.#refusalText(refusal!, "give_back.preview_failed"));
     const answer = this.#answer();
     const way = this.#way();
     const amount = typedMoney(this.draft.amount);
@@ -829,17 +831,20 @@ export class TillGiveBackDialog extends LitElement {
       })}
       ${this.#ways(purpose)} ${answer === null ? nothing : this.#summary(answer)}
       <wt-form-actions
-        .error=${
-          own.size > 0
-            ? t("form.fix_fields")
-            : this.sendRefusal !== null
-              ? this.#sendRefusalText(this.sendRefusal)
-              : refusal !== null && !onAmount
-                ? this.#refusalText(refusal, "give_back.preview_failed")
-                : this.changedWhileChecking
-                  ? t("give_back.changed_while_checking")
-                  : ""
-        }
+        .error=${[
+          errors.size > 0 ? t("form.fix_fields") : "",
+          sent !== null
+            ? onAmount(sent)
+              ? ""
+              : this.#sendRefusalText(sent)
+            : refusal !== null && !onAmount(refusal)
+              ? this.#refusalText(refusal, "give_back.preview_failed")
+              : this.changedWhileChecking
+                ? t("give_back.changed_while_checking")
+                : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         ><wt-button slot="cancel" variant="secondary" data-back @click=${() => this.#back()}
           >${t("action.back")}</wt-button
         >

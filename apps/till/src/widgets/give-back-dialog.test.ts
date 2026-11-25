@@ -780,7 +780,8 @@ describe("pressing before the preview answered", () => {
     await vi.waitFor(() =>
       expect(amountField(el).error).toBe(codeMessage("invoice_correction.money_short", "en")),
     );
-    expect(bottom(el)).toBe("");
+    expect(bottom(el)).toBe(t("form.fix_fields"));
+    expect(submit(el).disabled).toBe(false);
   });
 });
 
@@ -1432,7 +1433,9 @@ describe("sending", () => {
     });
     const el = await press(api);
     const said = codeMessage("tender.refund_exceeds_payment", "en", { tenderId: "cash" } as never);
-    await vi.waitFor(() => expect(bottom(el)).toBe(said));
+    await vi.waitFor(() => expect(amountField(el).error).toBe(said));
+    expect(bottom(el)).toBe(t("form.fix_fields"));
+    expect(submit(el).disabled).toBe(false);
     await type(el, "4");
     await vi.waitFor(() =>
       expect(text(root(el).querySelector("[data-summary-way]"))).toContain("€4.00"),
