@@ -158,8 +158,8 @@ describe("till-table-order-screen: the last-added bar", () => {
     const add = () =>
       panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("wt-button.add")!;
     const input = panel
-      .shadowRoot!.querySelector("wt-price-input")
-      ?.shadowRoot!.querySelector("input")!;
+      .shadowRoot!.querySelector("wt-price-input")!
+      .shadowRoot!.querySelector("input")!;
     await userEvent.fill(input, "1,000");
     expect(add().disabled).toBe(true);
     await userEvent.fill(input, "250.5");
