@@ -304,7 +304,7 @@ describe.each(["light", "dark"] as const)("product editor accessibility (%s)", (
         field.shadowRoot!.querySelector<HTMLElement>(".trigger")!.click();
         await field.updateComplete;
         const rows = [...field.shadowRoot!.querySelectorAll<HTMLElement>('[role="option"]')];
-        expect(rows.map((row) => row.checkVisibility())).toEqual([true, true, true, true]);
+        expect(rows.map((row) => row.checkVisibility())).toEqual([true, true, true, true, true]);
       }
     }
     if (state === "variant-page") {

@@ -4,7 +4,7 @@ import { classMap } from "lit/directives/class-map.js";
 import { guard } from "lit/directives/guard.js";
 import { belongsToComposition } from "@waitron/ui-core/submit-on-enter";
 import { fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
-import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
+import { baseStyles } from "../base-styles.js";
 import { createLabelComparator, foldCache, foldForSearch, searchFor } from "@waitron/shared";
 import { ChangeObserver } from "../change-observer.js";
 import { subscribePageLanguage } from "../page-language.js";
@@ -26,6 +26,8 @@ export interface ComboboxOption {
   group?: string;
   /** A row that sends `wt-combobox-action` and never becomes the value. */
   action?: true;
+  /** Keeps an action above the matches and names it from the trimmed search. */
+  actionLabelForSearch?: (text: string) => string;
   /** Draws the row's label and icon in `--wt-color-primary-text` unless the row is disabled, so a
    * row that makes or opens something, rather than choosing a value, does not read as one more
    * item of the list. */
@@ -51,8 +53,6 @@ export interface ComboboxOption {
 function closedText(option: ComboboxOption): string {
   return option.valueLabel ?? option.label;
 }
-
-export type WtComboboxAppearance = "field" | "link";
 
 /** With `search="auto"`, the search box shows only when there are more options than this. */
 export const SEARCH_THRESHOLD = 7;
@@ -130,16 +130,12 @@ export class WtCombobox extends LitElement {
       .trigger {
         display: flex;
         align-items: center;
-        gap: var(--wt-space-2);
+        gap: var(--wt-space-1);
         text-align: start;
         cursor: pointer;
       }
 
-      .trigger:not(.link) {
-        gap: var(--wt-space-1);
-      }
-
-      :host([stable-width]:not([appearance="link"])) .trigger {
+      :host([stable-width]) .trigger {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
       }
@@ -367,48 +363,6 @@ export class WtCombobox extends LitElement {
       .add {
         font-weight: var(--wt-font-weight-bold);
       }
-
-      /* As wide as its words, so the list it opens starts under the value's first letter. */
-      .trigger.link {
-        width: fit-content;
-        min-width: var(--wt-tap-min);
-        max-width: 100%;
-        min-height: var(--wt-tap-min);
-        padding: 0;
-        border: 0;
-        background: none;
-        color: var(--wt-color-text-muted);
-        font: inherit;
-        font-size: var(--wt-font-size-sm);
-      }
-
-      /* Inline inside .link-text, so a long value wraps and the action word follows its last line. */
-      .trigger.link .value {
-        text-wrap: wrap;
-        overflow-wrap: anywhere;
-      }
-
-      .link-text {
-        min-width: 0;
-      }
-
-      .action {
-        margin-inline-start: var(--wt-space-2);
-        color: var(--wt-color-primary-text);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      .trigger.link:disabled {
-        cursor: not-allowed;
-      }
-
-      .trigger.link:disabled .action {
-        color: var(--wt-color-text-muted);
-      }
-
-      .link-name {
-        ${visuallyHiddenStyles}
-      }
     `,
   ];
 
@@ -436,8 +390,7 @@ export class WtCombobox extends LitElement {
   @property({ type: Boolean, attribute: "show-empty-option" }) showEmptyOption = false;
   /** Reserve the width of each option's closed-trigger text (`valueLabel`, else `label`), and in a
    * multiple choice every count text too: `countLabel(k)` for every k from 2 to the number of
-   * choosable options (not an action, not disabled, not the empty value). Ignored with
-   * `appearance="link"`. */
+   * choosable options (not an action, not disabled, not the empty value). */
   @property({ type: Boolean, reflect: true, attribute: "stable-width" }) stableWidth = false;
   @property({ attribute: false }) values: string[] = [];
   @property() placeholder = "";
@@ -455,13 +408,6 @@ export class WtCombobox extends LitElement {
   @property() hint = "";
   /** Puts `label` first in the trigger's name without drawing it, and makes the field compact. */
   @property({ type: Boolean, attribute: "hide-label" }) hideLabel = false;
-  /** `"link"` draws the trigger as inline text, the chosen value followed by `actionLabel`, with no
-   * field box, drawn label or chevron; `label` still names it, as hidden text before the value.
-   * `required` draws no marker in the link appearance. */
-  @property({ reflect: true }) appearance: WtComboboxAppearance = "field";
-  /** The action word a link trigger shows after its value, such as "Change". */
-  @property({ attribute: "action-label" }) actionLabel = "";
-
   @state() private expanded = false;
   @state() private searchText = "";
   @state() private activeIndex = -1;
@@ -552,10 +498,15 @@ export class WtCombobox extends LitElement {
   private filter(options: ComboboxOption[]): ComboboxOption[] {
     const inherited = this.isInheritedOption(options[0]) ? options[0] : undefined;
     const search = searchFor(this.searchText);
+    const actions: ComboboxOption[] = [];
     // Ranked inside each run of one group, so a group's heading is still drawn once.
     const runs: ComboboxOption[][] = [];
     for (const option of options) {
       if (option === inherited) continue;
+      if (option.actionLabelForSearch) {
+        actions.push(option);
+        continue;
+      }
       const run = runs.at(-1);
       if (run !== undefined && run[0]!.group === option.group) run.push(option);
       else runs.push([option]);
@@ -563,7 +514,7 @@ export class WtCombobox extends LitElement {
     const matches = runs.flatMap((run) =>
       search(run.map((option) => [option, this.foldedText(option)] as const)),
     );
-    return inherited ? [inherited, ...matches] : matches;
+    return [...actions, ...(inherited ? [inherited] : []), ...matches];
   }
 
   private get trimmedSearch(): string {
@@ -584,8 +535,13 @@ export class WtCombobox extends LitElement {
 
   private get firstRowIndex(): number {
     const options = this.filteredOptions;
-    const first = this.trimmedSearch && this.isInheritedOption(options[0]) ? 1 : 0;
-    return first < options.length + Number(this.showAddRow) ? first : -1;
+    const first = options.findIndex(
+      (option) =>
+        !option.actionLabelForSearch && !(this.trimmedSearch && this.isInheritedOption(option)),
+    );
+    if (first >= 0) return first;
+    if (this.showAddRow) return options.length;
+    return options.findIndex((option) => option.actionLabelForSearch);
   }
 
   private isInheritedOption(option: ComboboxOption | undefined): boolean {
@@ -661,12 +617,15 @@ export class WtCombobox extends LitElement {
 
   /** An action row is a command, not a choice: it announces itself and leaves the value alone. */
   // Guarded for the same reason as commitSelection.
-  private runAction(optionValue: string, sourceEvent: Event): void {
+  private runAction(option: ComboboxOption, sourceEvent: Event): void {
     if (this.disabled) return;
     sourceEvent.stopPropagation();
     this.dispatchEvent(
       new CustomEvent("wt-combobox-action", {
-        detail: { value: optionValue },
+        detail: {
+          value: option.value,
+          ...(option.actionLabelForSearch ? { text: this.trimmedSearch } : {}),
+        },
         bubbles: true,
         composed: true,
       }),
@@ -676,7 +635,7 @@ export class WtCombobox extends LitElement {
 
   private activateOption(option: ComboboxOption, sourceEvent: Event): void {
     if (option.disabled) return;
-    if (option.action) this.runAction(option.value, sourceEvent);
+    if (option.action) this.runAction(option, sourceEvent);
     else this.commitSelection(option.value, sourceEvent);
   }
 
@@ -1014,7 +973,8 @@ export class WtCombobox extends LitElement {
 
   private renderOptionText(option: ComboboxOption) {
     const text =
-      this.trimmedSearch && !this.isInheritedOption(option) ? closedText(option) : option.label;
+      option.actionLabelForSearch?.(this.trimmedSearch) ??
+      (this.trimmedSearch && !this.isInheritedOption(option) ? closedText(option) : option.label);
     if (!option.description) {
       return html`<span class="option-label">${text}</span>`;
     }
@@ -1169,7 +1129,7 @@ export class WtCombobox extends LitElement {
           <span
             id=${this.valueId}
             class=${classMap({ value: true, placeholder: !selectedText, muted })}
-            >${shownText}</span
+            ><slot name="value-prefix"></slot>${shownText}</span
           >
           ${guard([this.reservedTexts], () =>
             this.reservedTexts.map(
@@ -1224,43 +1184,6 @@ export class WtCombobox extends LitElement {
       : nothing;
   }
 
-  private renderLinkTrigger({
-    id: triggerId,
-    invalid,
-    describedBy,
-    selectedText,
-    shownText,
-  }: TriggerParts) {
-    const name = this.label || this.ariaLabel;
-    return html`<button
-      type="button"
-      id=${triggerId}
-      name=${this.name || nothing}
-      class="trigger link"
-      role="combobox"
-      aria-haspopup="listbox"
-      aria-expanded=${this.expanded}
-      aria-controls=${this.listboxId}
-      aria-required=${this.required ? "true" : nothing}
-      aria-labelledby=${this.triggerLabelledBy("")}
-      aria-invalid=${invalid}
-      aria-describedby=${describedBy.length ? describedBy.join(" ") : nothing}
-      popovertarget="panel"
-      ?disabled=${this.disabled}
-      @click=${this.onTriggerClick}
-      @keydown=${this.onTriggerKeydown}
-    >
-      ${this.renderIcon(this.chosenOption, false, `${this.valueId}-icon`)}<span
-        id=${this.valueId}
-        class="link-text"
-        >${name ? html`<span class="link-name">${name}: </span>` : nothing}<span
-          class=${selectedText ? "value" : "value placeholder"}
-          >${shownText}</span
-        >${this.actionLabel ? html` <span class="action">${this.actionLabel}</span>` : nothing}</span
-      >${this.renderIcon(this.chosenOption, true, `${this.valueId}-icon`)}
-    </button>`;
-  }
-
   override render() {
     const hasError = this.error !== "";
     const hasHint = this.hint !== "";
@@ -1281,7 +1204,7 @@ export class WtCombobox extends LitElement {
     };
     return html`
       <div class="row">
-        ${this.appearance === "link" ? this.renderLinkTrigger(trigger) : this.renderField(trigger)}
+        ${this.renderField(trigger)}
         <slot name="help"></slot>
       </div>
       <div

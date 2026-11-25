@@ -19,8 +19,6 @@ type Combobox = HTMLElement & {
   invalid: boolean;
   disabled: boolean;
   label: string;
-  appearance: string;
-  actionLabel: string;
   showEmptyOption: boolean;
 };
 
@@ -28,7 +26,6 @@ const fieldOf = (overrides: Partial<Parameters<typeof categoryPathField>[0]>) =>
   categoryPathField({
     name: "primary",
     label: "Category",
-    actionLabel: "Change",
     categories: [tapas, food, drinks],
     value: null,
     noneLabel: "Uncategorised",
@@ -72,8 +69,6 @@ it("offers none and then every category as a tree, each named by its own name an
   const combobox = await mount(fieldOf({ value: "tapas" }));
   expect(combobox.getAttribute("name")).toBe("primary");
   expect(combobox.label).toBe("Category");
-  expect(combobox.appearance).toBe("link");
-  expect(combobox.actionLabel).toBe("Change");
   expect(combobox.showEmptyOption).toBe(true);
   expect(combobox.options).toEqual([
     { value: "", label: "Uncategorised" },

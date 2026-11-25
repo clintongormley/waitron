@@ -7,7 +7,7 @@ copiar su nombre de estación de preparación, sus declaraciones dietéticas ni 
 Puedes añadir productos antes de crear una carta. Abre **Productos** en el panel de gestión y elige **Añadir producto**. Ponle un nombre al producto e
 introduce su precio.
 
-El editor tiene tres tarjetas. La primera reúne la categoría, el Nombre con su foto y **Disponible**.
+El editor tiene tres tarjetas. La primera reúne el nombre con su foto, **Categoría** y **Disponible**.
 La tercera reúne el precio, las variantes y los modificadores. Entre las dos, **Detalles** reúne el
 resto: la estación de preparación, cómo aparece el producto en la carta, los alérgenos y la dieta, el
 IVA y los pedidos. Detalles está abierta cuando añades un producto y cerrada cuando editas uno. Mientras está cerrada, muestra una línea por
@@ -115,19 +115,20 @@ la estación, y rellenar un nombre de estación de preparación no cambia lo que
 esté en blanco, su campo muestra el nombre que se usará en su lugar.
 
 También puedes añadir una descripción para el cliente, en **En la carta**, y una foto, que va junto al
-nombre, bajo la ruta de la categoría.
+nombre.
 
 ## Da al producto una categoría principal {#category}
 
-Cada producto tiene una categoría principal. Las categorías forman un árbol, así que el editor del
-producto muestra la ruta completa de la categoría en la primera línea bajo el título de la ventana, por
-ejemplo **Bebidas › Bebidas alcohólicas › Cócteles**, o **Sin categoría** cuando el producto no está en
-ninguna. Elige **Cambiar**, después de la ruta, para elegir otra: la lista empieza con **Sin
-categoría** y después muestra todas las categorías como un árbol sangrado, cada subcategoría bajo su
-categoría superior. También puedes mover el producto a otra categoría en la pantalla Productos.
-Activa **Seleccionar** y elige **Mover a…** en cualquiera de las dos vistas. Para arrastrar un
-producto a otra categoría, cambia primero a **Árbol**. La categoría principal también influye en
-qué estación de preparación recibe un plato, como se explica más abajo.
+El campo **Categoría** muestra la ruta completa, por ejemplo **Bebidas › Bebidas alcohólicas ›
+Cócteles**. Ábrelo para recorrer el árbol o buscar en él. Elige **Sin categoría** para dejar el
+producto sin clasificar. Para crear una categoría mientras editas, escribe su nombre y elige
+**Añadir categoría** al principio de la lista. Elige dónde va en **Dentro de**, selecciona un color
+si quieres y pulsa **Añadir categoría**. Si cancelas la edición del producto, la categoría queda
+guardada.
+
+En la pantalla Productos, activa **Seleccionar** y elige **Mover a…** para mover productos. Para
+arrastrar un producto a una categoría, cambia primero a **Árbol**. La categoría principal también
+influye en qué estación de preparación recibe un plato, como se explica más abajo.
 
 Para soltar elementos en una subcategoría, abre las categorías superiores antes de empezar a arrastrar.
 Al soltar productos o categorías, se abre la ventana de **Mover a…** con el destino seleccionado.
@@ -223,8 +224,7 @@ producto.
 
 **Abrir** te lleva a la página propia de la variante, donde puede tener su propio IVA para llevar, sus alérgenos y
 los demás datos del producto. Su categoría principal y su unidad son siempre las de su producto: la
-página muestra la ruta de categoría del producto como texto, sin **Cambiar**, y la unidad del producto
-como texto junto al precio, por ejemplo "por kg", o "Unidad" cuando el producto no tiene ninguna. Si
+página muestra como texto la ruta de categoría del producto y su unidad, que aparece junto al precio, por ejemplo "por kg", o "Unidad" cuando el producto no tiene ninguna. Si
 una forma de un producto necesita otra unidad, conviértela en un producto propio. Salvo los nombres,
 cada dato que dejas en blanco ahí muestra en gris el valor del producto como pista o, si el producto no
 tiene ninguno, lo que se usará, por ejemplo "Sin revisar todavía" para unos alérgenos que nadie ha

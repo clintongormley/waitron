@@ -48,7 +48,11 @@ import "./image-upload.js";
 import "./product-appearance.js";
 import "./variant-form.js";
 import "./variant-table.js";
-import { categoryPathField, categoryPathText } from "./classification-fields.js";
+import {
+  categoryPathField,
+  classificationFieldStyles,
+  variantCategoryPath,
+} from "./classification-fields.js";
 import { colorField, colorFieldStyles } from "./color-field.js";
 import {
   defaultLanguageHint,
@@ -220,6 +224,7 @@ export class ProductEditor extends LitElement {
     ReorderController.styles,
     ReorderController.tableStyles,
     colorFieldStyles,
+    classificationFieldStyles,
     css`
       :host {
         display: block;
@@ -240,10 +245,10 @@ export class ProductEditor extends LitElement {
       wt-modal {
         --wt-dialog-surface: var(--wt-color-bg);
       }
-      /* The identity and Details cards start with a row a tap target tall around one line of text;
+      /* The variant identity and Details cards start with a row a tap target tall around one line of text;
          lifting it by half the difference puts that text as near the card's edge as the price
          card's field. */
-      .form > wt-card[data-section="identity"] > :first-child,
+      .form > wt-card[data-section="identity"] > .variant-category,
       wt-disclosure[data-section="details"]::part(header) {
         margin-block-start: calc((1lh - var(--wt-tap-min)) / 2);
       }
@@ -317,16 +322,6 @@ export class ProductEditor extends LitElement {
         position: relative;
         inline-size: fit-content;
         padding-inline-end: calc(var(--wt-help-badge-target) / 2);
-      }
-      /* As tall as the product page's Change link, so the form below starts at the same height. */
-      .category-path {
-        display: flex;
-        align-items: center;
-        min-height: var(--wt-tap-min);
-        margin: 0;
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-        overflow-wrap: anywhere;
       }
       th {
         font-weight: var(--wt-font-weight-bold);
@@ -811,6 +806,7 @@ export class ProductEditor extends LitElement {
       this.unitPickerOpen = false;
     }
     if (kind === "courses") this.change("courseId", id);
+    if (kind === "categories") this.change("primaryCategoryId", id);
     if (kind === "extras" || kind === "options") {
       if (this.draft.modifiers.some((ref) => ref.kind === kind && ref.id === id)) return;
       this.change("modifiers", [...this.draft.modifiers, { kind, id }]);
@@ -828,9 +824,11 @@ export class ProductEditor extends LitElement {
       void this.returnUnitFocus();
       return;
     }
-    if (kind === "courses") {
+    if (kind === "categories" || kind === "courses") {
       void this.focusOnceEnabled(() =>
-        this.shadowRoot!.querySelector<HTMLElement>("[name=product-course]"),
+        this.shadowRoot!.querySelector<HTMLElement>(
+          kind === "categories" ? "[name=primary]" : "[name=product-course]",
+        ),
       );
       return;
     }
@@ -1034,36 +1032,6 @@ export class ProductEditor extends LitElement {
     this.change("variants", variants);
     this.shadowRoot!.querySelector("dashboard-variant-form")!.closeSaved(event.detail.value);
     void this.returnVariantFocus();
-  }
-
-  /** The product's category as a path, with Change; a variant's page shows its product's path,
-   * which it cannot change. */
-  private renderCategories() {
-    const parent = this.inherited;
-    if (parent) {
-      const path = parent.primaryCategoryId
-        ? categoryPathText(parent.primaryCategoryId, this.categories, t("editor.missing_choice"))
-        : t("categories.none");
-      return html`<div class="group" data-section="categories">
-        <p class="category-path" data-test="category-path">
-          <span class="visually-hidden">${t("editor.classification")}: </span>${path}
-        </p>
-      </div>`;
-    }
-    return html`<div class="group" data-section="categories">
-      ${categoryPathField({
-        name: "primary",
-        label: t("editor.classification"),
-        actionLabel: t("editor.change_category"),
-        categories: this.categories,
-        value: this.draft.primaryCategoryId,
-        noneLabel: t("categories.none"),
-        missingLabel: t("editor.missing_choice"),
-        error: this.error("primary"),
-        disabled: this.suspended,
-        change: (id) => this.change("primaryCategoryId", id),
-      })}
-    </div>`;
   }
 
   /** A field's entry on a closed line: its own value, else on a variant the value it inherits as
@@ -1935,8 +1903,41 @@ export class ProductEditor extends LitElement {
         }}
       >
         <div class="form">
-          <wt-card raised data-section="identity"
-            >${this.renderCategories()}${keyed(this.generation, this.renderName(fields))}${keyed(this.generation, this.renderAvailable())}</wt-card
+          <wt-card raised data-section="identity">
+            ${
+              this.inherited
+                ? variantCategoryPath(this.inherited.primaryCategoryId, this.categories)
+                : nothing
+            }${keyed(this.generation, this.renderName(fields))}${
+              this.inherited
+                ? nothing
+                : categoryPathField({
+                    name: "primary",
+                    label: t("editor.classification"),
+                    categories: this.categories,
+                    value: this.draft.primaryCategoryId,
+                    color: this.draft.primaryCategoryId
+                      ? categoryColor(
+                          this.draft.primaryCategoryId,
+                          this.#categoryNodes,
+                          this.defaultColor,
+                        )
+                      : null,
+                    noneLabel: t("categories.none"),
+                    missingLabel: t("editor.missing_choice"),
+                    error: this.error("primary"),
+                    disabled: this.suspended,
+                    change: (id) => this.change("primaryCategoryId", id),
+                    add: (text) =>
+                      this.dispatchEvent(
+                        new CustomEvent("wt-create-related", {
+                          detail: { kind: "categories", text },
+                          bubbles: true,
+                          composed: true,
+                        }),
+                      ),
+                  })
+            }${keyed(this.generation, this.renderAvailable())}</wt-card
           >
           ${this.renderDetails()}
           <wt-card raised data-section="price"

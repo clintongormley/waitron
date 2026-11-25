@@ -7,7 +7,7 @@ without copying its prep station name, dietary declarations or choices.
 You can add products before creating a menu. Open **Products** in the management dashboard and choose **Add product**. Give the product a name
 and enter its price.
 
-The editor holds three cards. The first holds the category, Name with its photo, and **Available**.
+The editor holds three cards. The first holds Name with its photo, **Category**, and **Available**.
 The third holds the price, the variants and the modifiers. Between them, **Details** holds the rest:
 the prep station, how the product appears on the menu, allergens and diet, VAT, and ordering.
 Details is open when you add a product and closed when you edit one. While it is closed, it shows a line for each of its groups that has
@@ -106,19 +106,19 @@ sees, and filling in a prep station name does not change what the diner reads. W
 blank, its field shows the name that will be used instead.
 
 You can also add a customer-facing description, under **On the menu**, and a photo, which sits
-beside the name, below the category path.
+beside the name.
 
 ## Give the product a main category {#category}
 
-Each product has one main category. Categories form a tree, so the product editor shows the
-category's full path on the first line under the window's title, such as
-**Drinks › Alcoholic drinks › Cocktails**, or **No category** when the product is in none. Choose
-**Change** after the path to pick another: the list starts with **No category** and then shows
-every category as an indented tree, each subcategory under its parent. You can also move the product
-to another category on the Products screen. Turn on **Select** and choose **Move to…** in either
-view. To drag products into a category, switch to **Tree** first. The main category also plays a
-part in choosing the prep station a dish goes
-to, as described below.
+The **Category** field shows the full path, such as **Drinks › Alcoholic drinks › Cocktails**.
+Open it to browse or search the category tree. Choose **No category** to leave the product
+uncategorised. To create a category while editing, type its name and choose **Add category** at the
+top of the list. Choose where it goes in **Inside**, pick a colour if you want one and select
+**Add category**. You can cancel the product edit and the new category stays saved.
+
+On the Products screen, turn on **Select** and choose **Move to…** to move products. To drag products
+into a category, switch to **Tree** first. The main category also helps choose the prep station a
+dish goes to, as described below.
 
 To drop into a subcategory, open its parent categories before you start dragging.
 When you drop products or categories, the Move window opens with the destination selected. Review
@@ -206,9 +206,8 @@ offers **Open**, **Edit** and **Delete** (**Remove** for a variant not yet saved
 in the table, including the Available switch, are saved when you save the product.
 
 **Open** takes you to the variant's own page, where it can have its own VAT when taken away, allergens and the other
-product details. Its main category and its unit are always its product's: the page shows the
-product's category path as plain text, with no **Change**, and the product's unit as plain text
-beside the price, such as "per kg", or "Each" when the product has none. If one form of a product
+product details. Its main category and its unit are always its product's: the page shows both
+as plain text. The unit sits beside the price, such as "per kg", or "Each" when the product has none. If one form of a product
 needs a different unit, make it a product of its own. Apart from the names, each detail you leave
 blank there shows the product's value greyed out as a hint or, where the product has none, what will
 be used, such as "Not yet reviewed" for allergens nobody has reviewed, and the variant uses the

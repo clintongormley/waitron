@@ -1,6 +1,6 @@
 import type { ReactiveController, ReactiveControllerHost } from "lit";
 /** What the product editor can create or edit without leaving itself. */
-export type ProductChildKind = "unit" | "extras" | "options" | "courses";
+export type ProductChildKind = "unit" | "extras" | "options" | "courses" | "categories";
 interface Effects {
   /** The row that was written. Only its `id` is read here. */
   accept(kind: ProductChildKind, value: { id: string }): void;
@@ -52,14 +52,17 @@ export class ProductChildCreate implements ReactiveController {
     await this.host.updateComplete;
     if (generation === this.#generation && this.kind === null) this.effects.focus(kind);
   }
-  async submit(write: () => Promise<{ id: string }>, committed?: () => void): Promise<void> {
+  async submit<T extends { id: string }>(
+    write: () => Promise<T>,
+    committed?: (value: T) => void,
+  ): Promise<void> {
     if (this.busy || this.kind === null) return;
     const generation = this.#generation;
     const kind = this.kind;
     this.busy = true;
     this.error = null;
     this.host.requestUpdate();
-    let value: { id: string };
+    let value: T;
     try {
       value = await write();
     } catch (error) {
@@ -71,7 +74,7 @@ export class ProductChildCreate implements ReactiveController {
       return;
     }
     if (generation !== this.#generation) return;
-    committed?.();
+    committed?.(value);
     this.kind = null;
     this.busy = false;
     this.host.requestUpdate();

@@ -65,9 +65,9 @@ A variant is always in its product's reporting category. Its effective category
 menus, sale classification and kitchen routing read, is the product's even where an
 older variant row still stores one of its own, and the product editor offers a variant no category
 choice. In the tree, variants sit under their product and move with
-it; you cannot select or drag a variant on its own. The product editor shows a product's category as
-its path, with a Change link that opens the category list as an indented tree
-([Products](products.md#the-editor-form)).
+it; you cannot select or drag a variant on its own. Open the product editor's Category field to see the category list as an indented tree. You can add
+a category there, choose its parent and colour, and apply it to the product draft. The category
+stays saved if you cancel the product edit. [Products](products.md#the-editor-form)
 
 Reports can use the classification recorded with each sale, or today's menu classification.
 Moving a product or renaming a category does not rewrite recorded sale lines. See

@@ -23,63 +23,52 @@ test("the dropdown chevron paints wide enough to read", async () => {
   expect(path.getBoundingClientRect().width).toBeGreaterThanOrEqual(13);
 });
 
-test.each(["field", "link"])(
-  "names and draws the picked icon in the %s trigger and option",
-  async (appearance) => {
-    registerIcons({ "test-station": "M1 1H15V15H1Z" });
-    const { el, trigger } = await mountCombobox(
-      `<wt-combobox label="Show" appearance="${appearance}"></wt-combobox>`,
-    );
-    el.options = [
-      { value: "station", label: "Bar", icon: "test-station", iconLabel: "Prep station" },
-    ];
-    el.value = "station";
-    await el.updateComplete;
-    expect(trigger.querySelector('wt-icon[name="test-station"]')).not.toBeNull();
-    await expect.element(trigger).toHaveAccessibleName(/Prep station.*Bar/);
-    trigger.click();
-    await el.updateComplete;
-    await expect
-      .element(el.shadowRoot!.querySelector<HTMLElement>('[role="option"]')!)
-      .toHaveAccessibleName(/Prep station.*Bar/);
-  },
-);
+test("names and draws the picked icon in the trigger and option", async () => {
+  registerIcons({ "test-station": "M1 1H15V15H1Z" });
+  const { el, trigger } = await mountCombobox(`<wt-combobox label="Show"></wt-combobox>`);
+  el.options = [
+    { value: "station", label: "Bar", icon: "test-station", iconLabel: "Prep station" },
+  ];
+  el.value = "station";
+  await el.updateComplete;
+  expect(trigger.querySelector('wt-icon[name="test-station"]')).not.toBeNull();
+  await expect.element(trigger).toHaveAccessibleName(/Prep station.*Bar/);
+  trigger.click();
+  await el.updateComplete;
+  await expect
+    .element(el.shadowRoot!.querySelector<HTMLElement>('[role="option"]')!)
+    .toHaveAccessibleName(/Prep station.*Bar/);
+});
 
-test.each(["field", "link"])(
-  "can put an icon after its label in the %s trigger and option",
-  async (appearance) => {
-    registerIcons({ "test-station": "M1 1H15V15H1Z" });
-    const { el, trigger } = await mountCombobox(
-      `<wt-combobox label="Show" appearance="${appearance}"></wt-combobox>`,
-    );
-    el.options = [
-      {
-        value: "station",
-        label: "Bar",
-        icon: "test-station",
-        iconLabel: "Prep station",
-        iconPosition: "end",
-      },
-    ];
-    el.value = "station";
-    await el.updateComplete;
-    const label = trigger.querySelector<HTMLElement>(".value")!;
-    const icon = trigger.querySelector<HTMLElement>(".icon")!;
-    expect(icon.getBoundingClientRect().left).toBeGreaterThanOrEqual(
-      label.getBoundingClientRect().right,
-    );
-    await expect.element(trigger).toHaveAccessibleName(/Bar.*Prep station/);
-    trigger.click();
-    await el.updateComplete;
-    const option = el.shadowRoot!.querySelector<HTMLElement>('[role="option"]')!;
-    expect(
-      option
-        .querySelector(".option-label")!
-        .compareDocumentPosition(option.querySelector(".icon")!) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    await expect.element(option).toHaveAccessibleName(/Bar.*Prep station/);
-  },
-);
+test("can put an icon after its label in the trigger and option", async () => {
+  registerIcons({ "test-station": "M1 1H15V15H1Z" });
+  const { el, trigger } = await mountCombobox(`<wt-combobox label="Show"></wt-combobox>`);
+  el.options = [
+    {
+      value: "station",
+      label: "Bar",
+      icon: "test-station",
+      iconLabel: "Prep station",
+      iconPosition: "end",
+    },
+  ];
+  el.value = "station";
+  await el.updateComplete;
+  const label = trigger.querySelector<HTMLElement>(".value")!;
+  const icon = trigger.querySelector<HTMLElement>(".icon")!;
+  expect(icon.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+    label.getBoundingClientRect().right,
+  );
+  await expect.element(trigger).toHaveAccessibleName(/Bar.*Prep station/);
+  trigger.click();
+  await el.updateComplete;
+  const option = el.shadowRoot!.querySelector<HTMLElement>('[role="option"]')!;
+  expect(
+    option.querySelector(".option-label")!.compareDocumentPosition(option.querySelector(".icon")!) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  await expect.element(option).toHaveAccessibleName(/Bar.*Prep station/);
+});
 
 test("the closed field gives its chevron a larger slot", async () => {
   const { el } = await mountCombobox();
@@ -1113,35 +1102,25 @@ describe("the closed trigger's accessible name is its label, then its own text",
 });
 
 describe("the closed trigger is a select-only combobox", () => {
-  test.each(["field", "link"])(
-    "a %s trigger is found by role combobox with its name, and controls the listbox",
-    async (appearance) => {
-      const el = await mountWith(
-        `<wt-combobox label="Dietary tags" appearance="${appearance}" value="vegan"></wt-combobox>`,
-      );
-      const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
-      const name = appearance === "field" ? "Dietary tags Vegan" : "Dietary tags: Vegan";
-      await expect.element(page.getByRole("combobox", { name, exact: true })).toBe(trigger);
-      const listbox = el.shadowRoot!.querySelector('[role="listbox"]')!;
-      expect(trigger.getAttribute("aria-controls")).toBe(listbox.id);
-      expect(trigger.getAttribute("aria-haspopup")).toBe("listbox");
-      expect(trigger.getAttribute("aria-expanded")).toBe("false");
-    },
-  );
+  test("the trigger is found by role combobox with its name, and controls the listbox", async () => {
+    const el = await mountWith(`<wt-combobox label="Dietary tags" value="vegan"></wt-combobox>`);
+    const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
+    const name = "Dietary tags Vegan";
+    await expect.element(page.getByRole("combobox", { name, exact: true })).toBe(trigger);
+    const listbox = el.shadowRoot!.querySelector('[role="listbox"]')!;
+    expect(trigger.getAttribute("aria-controls")).toBe(listbox.id);
+    expect(trigger.getAttribute("aria-haspopup")).toBe("listbox");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+  });
 
-  test.each(["field", "link"])(
-    "a %s trigger says it is required only when it is",
-    async (appearance) => {
-      const el = await mountWith(
-        `<wt-combobox label="Dietary tags" appearance="${appearance}" required></wt-combobox>`,
-      );
-      const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
-      expect(trigger.getAttribute("aria-required")).toBe("true");
-      el.required = false;
-      await el.updateComplete;
-      expect(trigger.hasAttribute("aria-required")).toBe(false);
-    },
-  );
+  test("the trigger says it is required only when it is", async () => {
+    const el = await mountWith(`<wt-combobox label="Dietary tags" required></wt-combobox>`);
+    const trigger = el.shadowRoot!.querySelector<HTMLButtonElement>(".trigger")!;
+    expect(trigger.getAttribute("aria-required")).toBe("true");
+    el.required = false;
+    await el.updateComplete;
+    expect(trigger.hasAttribute("aria-required")).toBe(false);
+  });
 
   test("open with a search box, the trigger stays expanded on the listbox the search box drives", async () => {
     const el = await mountWith('<wt-combobox label="Dietary tags" search="always"></wt-combobox>');
@@ -3692,184 +3671,6 @@ test("stable-width reserves the width of each option's closed text, its valueLab
   ]);
 });
 
-async function mountLink(attrs = 'value="cocktails"', options: ComboboxOption[] = TREE) {
-  const el = await mountWith(
-    `<wt-combobox label="Category" appearance="link" ${attrs}></wt-combobox>`,
-    options,
-  );
-  el.actionLabel = "Change";
-  await el.updateComplete;
-  const root = el.shadowRoot!;
-  return {
-    el,
-    trigger: root.querySelector<HTMLButtonElement>(".trigger")!,
-    value: root.querySelector<HTMLElement>(".value")!,
-    action: root.querySelector<HTMLElement>(".action")!,
-    popup: root.querySelector<HTMLElement>("[popover]")!,
-  };
-}
-
-test('appearance="link" draws the chosen value then the action word, with no field box, drawn label or chevron', async () => {
-  const { el, trigger, value, action } = await mountLink();
-  const root = el.shadowRoot!;
-  expect(root.querySelector(".field")).toBeNull();
-  expect(root.querySelector("label")).toBeNull();
-  expect(root.querySelector(".chevron")).toBeNull();
-  expect(trigger.contains(value)).toBe(true);
-  expect(trigger.contains(action)).toBe(true);
-  expect(value.textContent!.trim()).toBe("Drinks › Alcoholic drinks › Cocktails");
-  expect(action.textContent!.trim()).toBe("Change");
-  expect(action.getBoundingClientRect().left).toBeGreaterThanOrEqual(
-    value.getBoundingClientRect().right,
-  );
-  expect(getComputedStyle(trigger).backgroundColor).toBe("rgba(0, 0, 0, 0)");
-  expect(getComputedStyle(trigger).boxShadow).toBe("none");
-  expect(getComputedStyle(trigger).borderStyle).toBe("none");
-});
-
-test("the appearance property is reflected to its attribute, and defaults to the field", async () => {
-  const el = await mountWith('<wt-combobox label="Category" preserve-order></wt-combobox>', TREE);
-  expect(el.appearance).toBe("field");
-  el.appearance = "link";
-  await el.updateComplete;
-  expect(el.getAttribute("appearance")).toBe("link");
-  expect(el.shadowRoot!.querySelector(".field")).toBeNull();
-});
-
-test("a link trigger is named by its label and its visible words, with no aria-label replacing them", async () => {
-  const { trigger } = await mountLink();
-  expect(trigger.hasAttribute("aria-label")).toBe(false);
-  expect(trigger.getAttribute("aria-labelledby")).toBe(trigger.querySelector(".link-text")!.id);
-  await expect
-    .element(
-      page.getByRole("combobox", {
-        name: "Category: Drinks › Alcoholic drinks › Cocktails Change",
-      }),
-    )
-    .toBe(trigger);
-});
-
-test("a link trigger is at least --wt-tap-min tall", async () => {
-  const { trigger } = await mountLink();
-  host.style.setProperty("--wt-tap-min", "52px");
-  expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(52);
-  expect(trigger.getBoundingClientRect().width).toBeGreaterThanOrEqual(52);
-});
-
-test("a link trigger with an error shows it under the trigger and marks the trigger invalid", async () => {
-  const { el, trigger } = await mountLink('value="cocktails" error="Choose a category"');
-  const error = el.shadowRoot!.querySelector<HTMLElement>("[data-error]")!;
-  expect(error.textContent!.trim()).toBe("Choose a category");
-  expect(trigger.getAttribute("aria-invalid")).toBe("true");
-  expect(trigger.getAttribute("aria-describedby")).toBe(error.id);
-  expect(error.getBoundingClientRect().top).toBeGreaterThanOrEqual(
-    trigger.getBoundingClientRect().bottom,
-  );
-});
-
-test("a disabled link trigger is disabled and does not open", async () => {
-  const { trigger, popup, action } = await mountLink('value="cocktails" disabled');
-  host.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
-  expect(trigger.disabled).toBe(true);
-  expect(getComputedStyle(action).color).toBe("rgb(7, 8, 9)");
-  await userEvent.click(trigger, { force: true });
-  expect(popup.matches(":popover-open")).toBe(false);
-});
-
-test("a link trigger opens its list on a click, with the list's left edge at the value's", async () => {
-  const { el, trigger, value, popup } = await mountLink();
-  el.style.cssText = "position: fixed; left: 120px; top: 40px; width: 600px";
-  await el.updateComplete;
-  await userEvent.click(trigger);
-  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
-  await new Promise(requestAnimationFrame);
-  const box = popup.getBoundingClientRect();
-  expect(box.left).toBeCloseTo(trigger.getBoundingClientRect().left, 0);
-  expect(box.left).toBeCloseTo(value.getBoundingClientRect().left, 0);
-  expect(box.left).toBeCloseTo(120, 0);
-  expect(box.top).toBeCloseTo(trigger.getBoundingClientRect().bottom, 0);
-});
-
-test("a link trigger opens its list on Enter, with the chosen row active", async () => {
-  const { el, trigger, popup } = await mountLink();
-  trigger.focus();
-  await userEvent.keyboard("{Enter}");
-  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(true));
-  expect(el.shadowRoot!.querySelector(".option.active")!.textContent!.trim()).toBe("Cocktails");
-  await userEvent.keyboard("{Escape}");
-  await vi.waitFor(() => expect(popup.matches(":popover-open")).toBe(false));
-  expect(el.shadowRoot!.activeElement).toBe(trigger);
-});
-
-test("choosing a row from a link trigger shows the new value's valueLabel", async () => {
-  const { el, trigger, value } = await mountLink();
-  const changes: unknown[] = [];
-  el.addEventListener("wt-change", (event) => changes.push((event as CustomEvent).detail));
-  await userEvent.click(trigger);
-  await userEvent.click(optionRows(el).find((row) => row.textContent!.trim() === "Food")!);
-  expect(changes).toEqual([{ value: "food" }]);
-  expect(value.textContent!.trim()).toBe("Food");
-});
-
-test("a focused link trigger draws the focus ring, having no field line to mark focus with", async () => {
-  const { el, trigger } = await mountLink();
-  host.style.setProperty("--wt-color-focus", "rgb(1, 2, 3)");
-  trigger.focus();
-  await userEvent.keyboard("{Shift}");
-  expect(el.shadowRoot!.activeElement).toBe(trigger);
-  expect(getComputedStyle(trigger).outlineStyle).toBe("solid");
-  expect(getComputedStyle(trigger).outlineColor).toBe("rgb(1, 2, 3)");
-});
-
-test("a long value on a link trigger wraps at phone width rather than being cut", async () => {
-  const long = "Drinks › Alcoholic drinks › Cocktails › Classic cocktails › Stirred › Served short";
-  const short = await mountLink('value="food"');
-  host.style.width = "390px";
-  const { trigger, value, action } = await mountLink('value="long"', [
-    { value: "long", label: "Served short", valueLabel: long, depth: 5 },
-  ]);
-  host.style.width = "390px";
-  expect(value.textContent!.trim()).toBe(long);
-  expect(value.scrollWidth).toBeLessThanOrEqual(value.clientWidth);
-  expect(value.getBoundingClientRect().height).toBeGreaterThan(
-    short.value.getBoundingClientRect().height,
-  );
-  expect(trigger.getBoundingClientRect().right).toBeLessThanOrEqual(
-    host.getBoundingClientRect().right,
-  );
-  expect(action.getBoundingClientRect().right).toBeLessThanOrEqual(
-    host.getBoundingClientRect().right,
-  );
-});
-
-test("stable-width is ignored by a link trigger", async () => {
-  const { el, trigger } = await mountLink('value="food" stable-width');
-  expect(el.shadowRoot!.querySelectorAll(".width-option")).toHaveLength(0);
-  expect(getComputedStyle(trigger).display).not.toBe("grid");
-  expect(trigger.getBoundingClientRect().width).toBeLessThan(el.getBoundingClientRect().width);
-});
-
-describe.each(["light", "dark"] as const)("a link trigger's colours (%s theme)", (theme) => {
-  function tokenColour(token: string): string {
-    const probe = document.createElement("span");
-    probe.style.color = `var(${token})`;
-    host.append(probe);
-    const colour = getComputedStyle(probe).color;
-    probe.remove();
-    return colour;
-  }
-
-  test("the value paints --wt-color-text-muted and the action word --wt-color-primary-text", async () => {
-    const { value, action } = await mountLink();
-    host.setAttribute("data-theme", theme);
-    const muted = tokenColour("--wt-color-text-muted");
-    const primary = tokenColour("--wt-color-primary-text");
-    expect(muted).not.toBe(primary);
-    expect(getComputedStyle(value).color).toBe(muted);
-    expect(getComputedStyle(action).color).toBe(primary);
-  });
-});
-
 const ANY_TAG: ComboboxOption[] = [{ value: "", label: "Any tag" }, ...TAGS];
 
 test("a multiple choice with show-empty-option shows its empty option chosen, in value text, while nothing is chosen", async () => {
@@ -4347,48 +4148,45 @@ const inheritNone: ComboboxOption = {
 };
 const explicitNone = { value: "none", label: "Ninguno" };
 
-test.each(["field", "link"] as const)(
-  "the %s shows a distinct inherited choice even with a hidden label",
-  async (appearance) => {
-    const { el, trigger } = await mountCombobox(
-      `<wt-combobox label="Course" hide-label appearance="${appearance}" placeholder="Choose"></wt-combobox>`,
-    );
-    el.options = [explicitNone, inheritNone];
-    el.inheritedSuffix = "heredado";
-    await el.updateComplete;
-    const arrow = () => trigger.querySelector('wt-icon[name="inherit"]');
-    const description = () =>
-      trigger
-        .getAttribute("aria-describedby")
-        ?.split(" ")
-        .map((id) => el.shadowRoot!.getElementById(id)?.textContent?.trim());
-    expect(trigger.querySelector(".value")!.textContent!.trim()).toBe("Ninguno");
-    expect(arrow()?.checkVisibility()).toBe(true);
-    expect(arrow()?.getAttribute("aria-hidden")).toBe("true");
-    expect(getComputedStyle(arrow()!).color).toBe(mutedTokenColour());
-    expect(getComputedStyle(trigger.querySelector(".value")!).color).toBe(mutedTokenColour());
-    expect(description()).toEqual(["heredado"]);
+test("the trigger shows a distinct inherited choice even with a hidden label", async () => {
+  const { el, trigger } = await mountCombobox(
+    `<wt-combobox label="Course" hide-label placeholder="Choose"></wt-combobox>`,
+  );
+  el.options = [explicitNone, inheritNone];
+  el.inheritedSuffix = "heredado";
+  await el.updateComplete;
+  const arrow = () => trigger.querySelector('wt-icon[name="inherit"]');
+  const description = () =>
+    trigger
+      .getAttribute("aria-describedby")
+      ?.split(" ")
+      .map((id) => el.shadowRoot!.getElementById(id)?.textContent?.trim());
+  expect(trigger.querySelector(".value")!.textContent!.trim()).toBe("Ninguno");
+  expect(arrow()?.checkVisibility()).toBe(true);
+  expect(arrow()?.getAttribute("aria-hidden")).toBe("true");
+  expect(getComputedStyle(arrow()!).color).toBe(mutedTokenColour());
+  expect(getComputedStyle(trigger.querySelector(".value")!).color).toBe(mutedTokenColour());
+  expect(description()).toEqual(["heredado"]);
 
-    el.inTable = true;
-    await el.updateComplete;
-    expect(trigger.querySelector(".value")!.textContent!.trim()).toBe("Ninguno");
-    expect(arrow()?.checkVisibility() ?? false).toBe(false);
-    expect(description()).toEqual(["heredado"]);
-    await userEvent.click(trigger);
-    const inheritRow = optionRows(el)[0]!;
-    const rowArrow = inheritRow.querySelector('wt-icon[name="inherit"]')!;
-    expect(rowArrow.checkVisibility()).toBe(true);
-    expect(getComputedStyle(rowArrow).color).toBe(mutedTokenColour());
-    expect(getComputedStyle(inheritRow).color).toBe(mutedTokenColour());
-    await userEvent.keyboard("{Escape}");
-    el.inTable = false;
-    el.value = "none";
-    await el.updateComplete;
-    expect(trigger.querySelector(".value")!.textContent!.trim()).toBe("Ninguno");
-    expect(arrow()?.checkVisibility() ?? false).toBe(false);
-    expect(description()).toBeUndefined();
-  },
-);
+  el.inTable = true;
+  await el.updateComplete;
+  expect(trigger.querySelector(".value")!.textContent!.trim()).toBe("Ninguno");
+  expect(arrow()?.checkVisibility() ?? false).toBe(false);
+  expect(description()).toEqual(["heredado"]);
+  await userEvent.click(trigger);
+  const inheritRow = optionRows(el)[0]!;
+  const rowArrow = inheritRow.querySelector('wt-icon[name="inherit"]')!;
+  expect(rowArrow.checkVisibility()).toBe(true);
+  expect(getComputedStyle(rowArrow).color).toBe(mutedTokenColour());
+  expect(getComputedStyle(inheritRow).color).toBe(mutedTokenColour());
+  await userEvent.keyboard("{Escape}");
+  el.inTable = false;
+  el.value = "none";
+  await el.updateComplete;
+  expect(trigger.querySelector(".value")!.textContent!.trim()).toBe("Ninguno");
+  expect(arrow()?.checkVisibility() ?? false).toBe(false);
+  expect(description()).toBeUndefined();
+});
 
 test("keeps the inherit row first during search and Enter picks a matching ordinary choice", async () => {
   const { el, trigger } = await mountCombobox();
@@ -4455,3 +4253,38 @@ test.each([false, true])(
     expect(popup.matches(":popover-open")).toBe(!hasMatch);
   },
 );
+
+test("keeps a search action first without giving it Enter when a choice matches", async () => {
+  const { el, trigger } = await mountCombobox();
+  el.search = "always";
+  el.preserveOrder = true;
+  el.options = [
+    {
+      value: "new",
+      label: "Add category",
+      action: true,
+      actionLabelForSearch: (text: string) => (text ? `Add ${text}` : "Add category"),
+    },
+    { value: "tea", label: "Tea" },
+  ];
+  const action = vi.fn();
+  el.addEventListener("wt-combobox-action", action);
+  await el.updateComplete;
+  trigger.focus();
+  await userEvent.keyboard("T");
+  expect(optionRows(el).map((row) => row.textContent!.trim())).toEqual(["Add T", "Tea"]);
+  await userEvent.keyboard("{Enter}");
+  expect(el.value).toBe("tea");
+
+  await userEvent.keyboard("Tea");
+  expect(optionRows(el).map((row) => row.textContent!.trim())).toEqual(["Add Tea", "Tea"]);
+  await userEvent.keyboard("{Home}{Enter}");
+  expect(action.mock.calls.map(([event]) => event.detail)).toEqual([{ value: "new", text: "Tea" }]);
+
+  await userEvent.keyboard("Cocoa  {Enter}");
+  expect(action.mock.calls.map(([event]) => event.detail)).toEqual([
+    { value: "new", text: "Tea" },
+    { value: "new", text: "Cocoa" },
+  ]);
+  expect(el.value).toBe("tea");
+});
