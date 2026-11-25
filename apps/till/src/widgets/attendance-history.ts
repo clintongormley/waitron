@@ -50,79 +50,93 @@ function repeatedLocalTime(date: string, time: string, timeZone: string): boolea
   }
 }
 
-function questionTime(at: string, minutes: number, day: string | null, zone: string) {
+function questionTime(
+  at: string,
+  minutes: number,
+  day: string | null,
+  zone: string,
+  mixed = false,
+) {
   const stored = storedAttendanceTime(at, minutes);
   const date = stored.slice(0, 10);
   const time = stored.slice(11, 16);
-  const clock = repeatedLocalTime(date, time, zone) ? stored.slice(11) : time;
+  const clock = mixed || repeatedLocalTime(date, time, zone) ? stored.slice(11) : time;
   return html`<time class="short-time" datetime=${at}>${clock}</time>${
       date === day ? nothing : `, ${attendanceDateInWords(date)}`
     }`;
 }
 
+function withHourArticle(key: StringKey, at: string, offset: number) {
+  const one = storedAttendanceTime(at, offset).slice(11, 13) === "01";
+  return t(key).replace("{plural}", one ? "" : "s");
+}
+
 export function questionAttendanceHistory({ history, businessDay, timeZone }: AttendancePrompt) {
+  const mixed = new Set(history.map((entry) => entry.offsetMinutes)).size > 1;
   const show = (entry: AttendanceEntry) =>
-    questionTime(entry.eventAt, entry.offsetMinutes, businessDay, timeZone);
+    questionTime(entry.eventAt, entry.offsetMinutes, businessDay, timeZone, mixed);
   return history.map((entry, index) => {
     const author = entry.extension?.authorKind ?? "worker";
     const next = history[index + 1];
     if (entry.entryKind === "break_start" && next?.entryKind === "break_end") {
+      const recorder = author === "worker" ? (next.extension?.authorKind ?? author) : author;
       return html`<li>
-        ${t("attendance.break")} ${show(entry)} ${t("attendance.break_to")} ${show(next)}
+        ${t("attendance.break")} ${show(entry)} ${t("attendance.break_to")}
+        ${show(next)}${recorder === "worker" ? "" : ` · ${t(`attendance.author_${recorder}`)}`}
       </li>`;
     }
     if (entry.entryKind === "break_end" && history[index - 1]?.entryKind === "break_start")
       return nothing;
     if (
       entry.entryKind === "correction" &&
+      entry.correctsEntryId &&
       entry.extension?.direction === "worker_request" &&
       entry.correctionStatus === "requested"
     ) {
       return html`<li>
-        ${t("attendance.you_changed")} ${show(entry)}: ${entry.correctionReason}
+        ${withHourArticle("attendance.you_changed", entry.eventAt, entry.offsetMinutes)}
+        ${show(entry)}: ${entry.correctionReason}
       </li>`;
     }
-    const label =
-      entry.entryKind === "in"
-        ? "attendance.clocked_in"
-        : entry.entryKind === "out"
-          ? "attendance.clocked_out"
-          : entry.entryKind === "break_start"
-            ? "attendance.break_started"
-            : entry.entryKind === "break_end"
-              ? "attendance.break_ended"
-              : entry.entryKind === "confirmation" && author === "worker"
-                ? "attendance.you_answered"
-                : historyLabel(entry);
-    const note =
-      author === "manager"
-        ? "attendance.added_by_manager"
-        : author === "automatic"
-          ? "attendance.added_automatically"
-          : null;
+    const status = entry.correctionStatus;
+    if (entry.entryKind === "correction" && status && status !== "requested")
+      return html`<li>${attendanceStatus(status)} ${show(entry)}</li>`;
+    if (entry.entryKind === "confirmation" && author === "worker")
+      return html`<li>${t("attendance.you_answered")} ${show(entry)}</li>`;
+    if (entry.entryKind === "in" || entry.entryKind === "out") {
+      const note =
+        author === "manager" ? "attendance.added_by_manager" : "attendance.added_automatically";
+      return html`<li>
+        ${t(`attendance.clocked_${entry.entryKind}`)}
+        ${show(entry)}${
+          author === "worker" ? nothing : html`<span class="muted"> · ${t(note)}</span>`
+        }
+      </li>`;
+    }
+    const reason = entry.correctionReason ? `: ${entry.correctionReason}` : "";
     return html`<li>
-      ${t(label)}
-      ${show(entry)}${note ? html`<span class="muted"> · ${t(note)}</span>` : nothing}${
-        entry.correctionReason ? html`: ${entry.correctionReason}` : nothing
-      }
+      ${t(historyLabel(entry))}: ${show(entry)} · ${t(`attendance.author_${author}`)}${reason}
     </li>`;
   });
 }
 
 export function questionAttendanceProposal(item: CorrectionItem, timeZone: string) {
+  const mixed = new Set(item.history.map((entry) => entry.offsetMinutes)).size > 1;
   return item.changes.map(({ target, at, offsetMinutes }, index) => {
     const original =
       "entryId" in target && item.history.find((entry) => entry.entryId === target.entryId);
     const day = storedAttendanceTime(at, offsetMinutes).slice(0, 10);
+    const proposed = questionTime(at, offsetMinutes, day, timeZone, mixed);
+    const reason = index === item.changes.length - 1 && item.reason ? `: ${item.reason}` : "";
     return html`<li>
-      ${attendanceDateInWords(day)}. ${t("attendance.manager_proposed")}
-      ${questionTime(at, offsetMinutes, day, timeZone)}
+      ${attendanceDateInWords(day)}.
       ${
         original
-          ? html` ${t("attendance.instead_of")}
-            ${questionTime(original.eventAt, original.offsetMinutes, day, timeZone)}`
-          : nothing
-      }${index === item.changes.length - 1 && item.reason ? html`: ${item.reason}` : nothing}
+          ? html`${withHourArticle("attendance.manager_proposed", at, offsetMinutes)} ${proposed}
+            ${withHourArticle("attendance.instead_of", original.eventAt, original.offsetMinutes)}
+            ${questionTime(original.eventAt, original.offsetMinutes, day, timeZone, mixed)}`
+          : html`${t("attendance.proposed")}: ${proposed} · ${t("attendance.author_manager")}`
+      }${reason}
     </li>`;
   });
 }

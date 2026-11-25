@@ -98,22 +98,21 @@ export class TillAttendanceQuestions extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  #prompt(prompt: AttendancePrompt) {
+  #prompt(prompt: AttendancePrompt, pendingProposalEntries: ReadonlySet<string>) {
     const disabled = this.busy || this.reading || this.blocked;
     const item = this.inbox?.items.find((candidate) => candidate.id === prompt.itemId);
     const proposal = prompt.kind === "proposal";
     const pending = item?.direction === "manager_proposal" && item.status === "waiting-worker";
-    const day = prompt.businessDay;
-    const hasHistory = prompt.history.length > 0;
+    const history = prompt.history.filter((entry) => !pendingProposalEntries.has(entry.entryId));
     const lines =
       proposal && item
         ? questionAttendanceProposal(item, prompt.timeZone)
-        : questionAttendanceHistory(prompt);
+        : questionAttendanceHistory({ ...prompt, history });
     return html`<article data-prompt=${prompt.id}>
-      ${day ? html`<h2>${attendanceDateInWords(day)}</h2>` : nothing}
+      ${prompt.businessDay ? html`<h2>${attendanceDateInWords(prompt.businessDay)}</h2>` : nothing}
       ${prompt.kind === "automatic-out" ? html`<p>${t("attendance.automatic_counted")}</p>` : nothing}
       ${proposal && !item ? html`<p>${t("attendance.proposal")}</p>` : nothing}
-      ${prompt.kind === "missing-times" ? html`<p class="muted">${t(hasHistory ? "attendance.some_times_missing" : "attendance.no_times_recorded")}</p>` : nothing}
+      ${prompt.kind === "missing-times" ? html`<p class="muted">${t(history.length ? "attendance.some_times_missing" : "attendance.no_times_recorded")}</p>` : nothing}
       ${
         lines.length
           ? html`<ul role="list">
@@ -151,10 +150,15 @@ export class TillAttendanceQuestions extends LitElement {
   }
 
   override render() {
+    const pendingProposalEntries = new Set(
+      this.inbox?.items.flatMap((item) =>
+        item.status === "waiting-worker" ? item.requestEntryIds : [],
+      ),
+    );
     return html`<div class="content">
       <h1>${t("attendance.questions")}</h1>
       ${this.error ? html`<p role="status">${this.error}</p>` : this.reading ? html`<p role="status">${t("attendance.reading")}</p>` : nothing}
-      ${this.inbox?.prompts.map((prompt) => this.#prompt(prompt))}
+      ${this.inbox?.prompts.map((prompt) => this.#prompt(prompt, pendingProposalEntries))}
       <div class="actions">
         <wt-button
           data-cancel

@@ -153,19 +153,29 @@ describe("attendance questions before work", () => {
       endAt: "2026-10-25T23:00:00.000Z",
     };
     prompt.history = [
-      { ...prompt.history[0]!, eventAt: "2026-10-25T00:10:00.000Z", offsetMinutes: 120 },
+      { ...prompt.history[0]!, eventAt: "2026-10-24T23:30:00.000Z", offsetMinutes: 120 },
       attendanceEntry({ eventAt: "2026-10-25T01:35:00.000Z", offsetMinutes: 60 }),
     ];
     const { el } = await mount({ inbox: attendanceInbox([prompt]) });
     expect(Array.from(el.shadowRoot!.querySelectorAll("time"), words)).toEqual([
-      "02:10 +02:00",
+      "01:30 +02:00",
       "02:35 +01:00",
     ]);
   });
 
-  it("shows the break range, worker correction and manager entry in plain words", async () => {
+  it("shows the break range, manager entry and worker correction with its decline", async () => {
     const [prompt] = attendanceMissingTimesPrompts();
     const [clockIn, clockOut, answer] = prompt.history;
+    const correction = attendanceEntry({
+      ...answer!,
+      entryKind: "correction",
+      eventAt: "2026-11-23T18:45:00.000Z",
+      correctsEntryId: clockOut!.entryId,
+      correctionStatus: "requested",
+      correctionReason: "Finished the stock count",
+      correctionActorId: "worker",
+      extension: { ...clockIn!.extension!, direction: "worker_request" },
+    });
     prompt.history = [
       { ...clockIn!, extension: undefined },
       {
@@ -185,16 +195,19 @@ describe("attendance questions before work", () => {
         recordedByPersonId: "manager",
         extension: { ...clockIn!.extension!, authorKind: "manager" },
       },
-      {
-        ...answer!,
-        entryKind: "correction",
-        eventAt: "2026-11-23T18:45:00.000Z",
-        correctsEntryId: clockOut!.entryId,
-        correctionStatus: "requested",
-        correctionReason: "Finished the stock count",
-        correctionActorId: "worker",
-        extension: { ...clockIn!.extension!, direction: "worker_request" },
-      },
+      correction,
+      attendanceEntry({
+        ...correction,
+        entryId: "decline",
+        correctionStatus: "declined",
+        correctionActorId: "manager",
+        recordedByPersonId: "manager",
+        extension: {
+          ...correction.extension!,
+          authorKind: "manager",
+          respondsToEntryId: correction.entryId,
+        },
+      }),
     ];
     const { el } = await mount({ inbox: attendanceInbox([prompt]) });
     expect(Array.from(el.shadowRoot!.querySelectorAll("li"), words)).toEqual([
@@ -202,6 +215,7 @@ describe("attendance questions before work", () => {
       "Break 19:15 to 19:30",
       "Clocked out 19:35 · added by a manager",
       "You changed it to 19:45: Finished the stock count",
+      "Declined 19:45",
     ]);
   });
 
@@ -218,10 +232,12 @@ describe("attendance questions before work", () => {
       automaticEntryId: null,
       history: item.history,
     });
-    const { el } = await mount({ inbox: attendanceInbox([prompt], [item]) });
-    expect(words(el.shadowRoot!.querySelector("article")!)).toBe(
+    const question = attendancePrompt({ history: item.history });
+    const { el } = await mount({ inbox: attendanceInbox([question, prompt], [item]) });
+    expect(words(el.shadowRoot!.querySelector('[data-prompt="proposal"]')!)).toBe(
       "Tuesday 13 October. A manager proposed 18:00 instead of 17:00: Finished the stock count Accept Disagree",
     );
+    expect(el.shadowRoot!.textContent!.split(item.reason)).toHaveLength(2);
     const decisions = watch(el, "attendance-decide");
     await userEvent.click(button(el, "[data-accept]"));
     await userEvent.click(button(el, "[data-disagree]"));
@@ -229,7 +245,7 @@ describe("attendance questions before work", () => {
       [{ itemId: "proposal", action: "accept" }, true, true],
       [{ itemId: "proposal", action: "disagree" }, true, true],
     ]);
-    expect(el.shadowRoot!.querySelector("[data-confirm]")).toBeNull();
+    expect(el.shadowRoot!.querySelector('[data-prompt="proposal"] [data-confirm]')).toBeNull();
   });
 
   it("a sequence-blocked proposal can be disputed but cannot be accepted", async () => {

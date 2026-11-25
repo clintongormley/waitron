@@ -160,8 +160,8 @@ The owner chose the Suggested panel in `.impeccable/shots/mock-check-times.png` 
 2026 (“Build it that way”), as recorded at `b5425d2ba9`. The card shows the work date in words,
 short recorded times, and one **Add missing times** button for a day with missing times. After
 seeing the other examples, the owner chose plain wording for breaks, corrections, manager entries
-and proposals, with a date in words for an overnight finish and offsets for repeated clock times
-(watcher, 25 November 2026 at 20:39 CET).
+and proposals, with a date in words for an overnight finish. Offsets identify repeated clock
+times and changes of offset within one card (watcher, 25 November 2026 at 20:39 and 21:15 CET).
 
 ### A1268 corrections after a backward clock step
 
