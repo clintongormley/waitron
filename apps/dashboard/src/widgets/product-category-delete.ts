@@ -251,7 +251,7 @@ export function categoryDeleteRouting(
   const zones = routing?.zones.length ? routing.zones.map(({ id }) => id) : [null];
   return html`<div class="category-delete-routing">
     ${groups.map(({ move, moves, products }) => {
-      const unscoped =
+      const baselineAcrossZones =
         routing !== null &&
         moves.every(({ periodIds }) => periodIds === null) &&
         [...products].every((id) =>
@@ -262,15 +262,22 @@ export function categoryDeleteRouting(
             ),
           ),
         );
+      const asExtra = moves.some(({ dish }) => dish !== undefined);
+      const ordinary = baselineAcrossZones && !asExtra;
       const all =
-        unscoped &&
+        ordinary &&
         groups.length === 1 &&
         products.size > 1 &&
         products.size === kept?.size &&
         [...products].every((id) => kept.has(id));
       const from = previewFrom(move, targetName);
       const to = previewTo(move, targetName);
-      const scope = unscoped ? "" : t("folders.station_scoped");
+      const scope = asExtra
+        ? t("folders.station_order")
+        : ordinary
+          ? ""
+          : t("folders.station_scoped");
+      const usually = ordinary ? t("folders.station_usually") : "";
       const count = String(products.size);
       const stationPair = move.from?.kind === "station" && move.to?.kind === "station";
       const key = stationPair
@@ -279,9 +286,11 @@ export function categoryDeleteRouting(
           : products.size === 1
             ? "folders.station_one"
             : "folders.station_many"
-        : "folders.station_other";
+        : ordinary
+          ? "folders.station_other_usual"
+          : "folders.station_other";
       return html`<p data-test="category-delete-station">
-        ${fill(key, { count, from, to, scope })}
+        ${fill(key, { count, from, to, scope, usually })}
       </p>`;
     })}
     <wt-disclosure heading=${t("folders.station_details")}

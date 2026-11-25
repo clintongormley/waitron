@@ -5236,11 +5236,25 @@ const categoryDeleteMove = (
 });
 
 it.each([
-  [true, "All 2 will be made in Kitchen instead of Bar."],
-  [false, "2 products will be made in Kitchen instead of Bar in some zones or at some times."],
+  ["en-GB", true, false, "All 2 will usually be made in Kitchen instead of Bar."],
+  [
+    "en-GB",
+    false,
+    false,
+    "2 products will be made in Kitchen instead of Bar in some zones or at some times.",
+  ],
+  [
+    "en-GB",
+    true,
+    true,
+    "2 products will be made in Kitchen instead of Bar depending on the order.",
+  ],
+  ["es", true, false, "Los 2 se prepararán normalmente en Kitchen en vez de en Bar."],
+  ["es", true, true, "2 productos se prepararán en Kitchen en vez de en Bar según el pedido."],
 ] as const)(
-  "describes a pair of station moves when the second zone also moves (%s)",
-  async (bothZones, sentence) => {
+  "describes station moves in %s with every zone moving (%s) and the moves for extras only (%s)",
+  async (locale, bothZones, extrasOnly, sentence) => {
+    setLocale(locale);
     const zones = [
       { id: "patio", name: "Patio", departmentId: null },
       { id: "bar", name: "Bar", departmentId: null },
@@ -5253,16 +5267,17 @@ it.each([
       stations: categoryDeleteStations,
       periods: [],
       moves: zones.flatMap((zone) =>
-        (zone.id === "bar" && !bothZones ? [cola] : [cola, tea]).map((item) =>
-          categoryDeleteMove(item, zone),
-        ),
+        (zone.id === "bar" && !bothZones ? [cola] : [cola, tea]).map((item) => ({
+          ...categoryDeleteMove(item, zone),
+          ...(extrasOnly ? { dish: { productId: "cake", productName: "Cake" } } : {}),
+        })),
       ),
     });
     await selectKeys(el, ["folder:d"]);
     await press(el, "delete");
     await vi.waitFor(() => expect(dialog(el)?.textContent).toContain(sentence));
     const details = dialog(el)!.querySelector("wt-disclosure")!;
-    expect(details.heading).toBe("Details");
+    expect(details.heading).toBe(locale === "es" ? "Detalles" : "Details");
     expect(details.open).toBe(false);
     await userEvent.click(details.shadowRoot!.querySelector<HTMLButtonElement>(".header")!);
     expect(details.open).toBe(true);
@@ -5300,9 +5315,9 @@ it("keeps pairs with only one station in common distinct", async () => {
         line.textContent.trim(),
       ),
     ).toEqual([
-      "1 product will be made in Kitchen instead of Bar.",
-      "1 product will be made in Pass instead of Bar.",
-      "1 product will be made in Kitchen instead of Deli prep.",
+      "1 product will usually be made in Kitchen instead of Bar.",
+      "1 product will usually be made in Pass instead of Bar.",
+      "1 product will usually be made in Kitchen instead of Deli prep.",
     ]),
   );
 });
