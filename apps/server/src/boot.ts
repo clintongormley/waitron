@@ -3428,7 +3428,7 @@ async function bootServer(
     app,
     {
       db,
-
+      venueCfg: tradingContext,
       managementOrigin: config.managementOrigin,
       contentLanguageRules,
       venueLocale,

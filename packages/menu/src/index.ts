@@ -248,6 +248,7 @@ export type {
   QueuedDeclarationDrift,
 } from "./menu-patch-types.js";
 export { assertPatchReviewed, readPatchDraft } from "./menu-patch-draft.js";
+export { declarationProductIds, parseMenuPatch } from "./menu-patch.js";
 export {
   correctMenuDeclarations,
   declarationChanges,

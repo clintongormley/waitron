@@ -11,6 +11,7 @@ import { startManagementSession } from "@waitron/identity";
 import type { LiveMenu, MenuPatchResult, MenuPreview, PatchDraftAnswer } from "@waitron/menu";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
+import type { TradingContext } from "./trading-context.js";
 import { mountMenuApi } from "./menu-api.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
@@ -70,7 +71,8 @@ const noopLog: Logger = () => {};
 
 function mountApp(): Hono {
   const app = new Hono();
-  mountMenuApi(app, { db: suite.db, venueLocale: "es" }, noopLog);
+  // No order is ever sent here, so the kitchen correction never reads the trading context.
+  mountMenuApi(app, { db: suite.db, venueLocale: "es", venueCfg: {} as TradingContext }, noopLog);
   return app;
 }
 

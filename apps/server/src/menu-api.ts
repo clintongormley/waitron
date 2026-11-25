@@ -133,6 +133,7 @@ import {
   type ProductAllergens,
   type ProductEditorValue,
   type ProductRouting,
+  correctMenuDeclarations,
 } from "@waitron/menu";
 import { authorizeManager, type Permission } from "@waitron/identity";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -141,6 +142,11 @@ import { requireManagementSession } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { setProductCourse } from "./kitchen.js";
+import {
+  refreshCorrectedKitchenLines,
+  refreshPatchedKitchenLines,
+} from "./declaration-correction-kitchen.js";
+import type { TradingContext } from "./trading-context.js";
 
 import type { Logger } from "./logger.js";
 import { activationInstant, checkedTimeZone, localTimeOf } from "./menu-publication-time.js";
@@ -167,6 +173,14 @@ export interface MenuApiDeps {
   contentLanguageRules?: ContentLanguageRules;
   db: Database;
   venueLocale?: string;
+  /** Required by the routes that correct a live menu's allergens, which print kitchen slips. */
+  venueCfg?: TradingContext;
+}
+
+function requireVenueCfg(deps: MenuApiDeps): TradingContext {
+  if (deps.venueCfg === undefined)
+    throw new Error("mountMenuApi: venueCfg is required to correct a live menu's allergens");
+  return deps.venueCfg;
 }
 
 /** The one permission that gates every `/management-api` menu route. */
@@ -1413,16 +1427,40 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       )
         ? requireString(body.reviewed, "reviewed")
         : undefined;
+      const cfg = reviewed === undefined ? undefined : requireVenueCfg(deps);
       return c.json(
         await gated(c, sessionId, async (tx, personId) => {
           const at = now();
           if (reviewed !== undefined)
             await assertPatchReviewed(tx, menuId, baseVersionId, reviewed, at);
-          return patchLiveMenu(tx, menuId, baseVersionId, changes, personId, {
+          const result = await patchLiveMenu(tx, menuId, baseVersionId, changes, personId, {
             at,
             fallbackLanguage: deps.venueLocale ?? FALLBACK_LOCALE,
             queued,
           });
+          if (cfg !== undefined) await refreshPatchedKitchenLines(tx, cfg, baseVersionId, changes);
+          return result;
+        }),
+      );
+    }),
+  );
+
+  app.post("/management-api/products/:id/live-declarations", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const productId = requireUuidParam(c.req.param("id"), "ProductId");
+      const body = await readJsonBody<{ queued?: unknown }>(c);
+      const queued =
+        body.queued === undefined ? [] : idList(body.queued, "queued", "MenuVersionId");
+      const cfg = requireVenueCfg(deps);
+      return c.json(
+        await gated(c, sessionId, async (tx, personId) => {
+          const { menus, productIds } = await correctMenuDeclarations(tx, productId, personId, {
+            fallbackLanguage: deps.venueLocale ?? FALLBACK_LOCALE,
+            queued,
+          });
+          await refreshCorrectedKitchenLines(tx, cfg, productIds);
+          return { menus };
         }),
       );
     }),
