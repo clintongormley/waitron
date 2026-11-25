@@ -1,6 +1,6 @@
-import { and, eq, exists, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { billAdvances, billPayments, type Transaction } from "@waitron/db";
-import { payments } from "@waitron/payments";
+import { carryProviderRows } from "@waitron/payments";
 import { AppError } from "@waitron/shared";
 import { ordersWithUnfiledPayment } from "./till-sale.js";
 import { refusePendingPartPayment, refuseRefundInProgress } from "./working-order-edit-state.js";
@@ -29,16 +29,7 @@ export async function refuseSplitMoney(tx: Transaction, id: string): Promise<voi
       and(
         eq(billPayments.workingOrderId, id),
         eq(billPayments.state, "received"),
-        or(
-          eq(billPayments.kind, "items"),
-          // Until the card's provider row moves with it (A1515-1 PR 4, Task 4b).
-          exists(
-            tx
-              .select({ id: payments.id })
-              .from(payments)
-              .where(eq(payments.billPaymentId, billPayments.id)),
-          ),
-        ),
+        eq(billPayments.kind, "items"),
       ),
     )
     .limit(1);
@@ -47,16 +38,24 @@ export async function refuseSplitMoney(tx: Transaction, id: string): Promise<voi
 
 /**
  * Moves every received payment of the abandoned printed bill `fromBillId` to `toBillId`, the bill
- * reopened from it, where its money now counts. A failed or declined payment holds no money and
- * stays as the printed bill's history.
+ * reopened from it, where its money now counts, and a card's provider row with it, unlinked from
+ * `fromSaleId`, the credited ticket. A failed or declined payment holds no money and stays as the
+ * printed bill's history.
  */
 export async function carryReceivedPayments(
   tx: Transaction,
   fromBillId: string,
   toBillId: string,
+  fromSaleId: string,
 ): Promise<void> {
-  await tx
+  const moved = await tx
     .update(billPayments)
     .set({ workingOrderId: toBillId })
-    .where(and(eq(billPayments.workingOrderId, fromBillId), eq(billPayments.state, "received")));
+    .where(and(eq(billPayments.workingOrderId, fromBillId), eq(billPayments.state, "received")))
+    .returning({ id: billPayments.id });
+  await carryProviderRows(tx, {
+    billPaymentIds: moved.map((row) => row.id),
+    toWorkingOrderId: toBillId,
+    fromSaleId,
+  });
 }

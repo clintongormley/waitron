@@ -73,6 +73,7 @@ export type {
   RefundAuditRow,
   SettledInitiated,
 } from "./store.js";
+export { carryProviderRows } from "./carry.js";
 export { countProviderCancelledResolutions, recordAttemptResolution } from "./resolutions.js";
 export { listOpenHolds, recordHold, recordHoldOutcome } from "./holds.js";
 export type { HoldOutcome, OpenHold } from "./holds.js";

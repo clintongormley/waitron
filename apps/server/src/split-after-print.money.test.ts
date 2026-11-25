@@ -4,13 +4,14 @@ import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { billPayments, refunds, tenders } from "@waitron/db";
-import { insertCapturedPayment } from "@waitron/payments";
+import { insertCapturedPayment, listReconcilable, payments } from "@waitron/payments";
 import {
   centsToDecimal,
   saleId as brandSaleId,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import { readReceiptPayments } from "./receipt-payments.js";
+import { readTenderBlock } from "./till-sale.js";
 import { billRefundFields, seedPendingCardPayment } from "./testing/bill-payment-fixture.js";
 import {
   cashPayment,
@@ -266,18 +267,118 @@ describe("Reopen to split on a part-paid printed bill", () => {
 
     await refused(party.tabId, "bill.payments_received");
   });
+});
 
-  it("a received card payment refuses until its provider row can move with it", async () => {
-    const party = await printed("Red wine bottle");
-    const keyed = await pay(party.tabId, {
-      kind: "contribution",
-      amount: "10.00",
-      method: "card",
-      entry: "manual",
-      applied: "10.00",
+/** The provider row of a card bill payment: its bill and the sale it is linked to. */
+async function providerRowOf(billPaymentId: string) {
+  const [row] = await inTx(venue, (tx) =>
+    tx
+      .select({ id: payments.id, workingOrderId: payments.workingOrderId, saleId: payments.saleId })
+      .from(payments)
+      .where(eq(payments.billPaymentId, billPaymentId)),
+  );
+  return row!;
+}
+
+async function payByCard(billId: string, amount: string, keyed?: string): Promise<string> {
+  const paid = await pay(billId, {
+    kind: "contribution",
+    amount,
+    method: "card",
+    applied: amount,
+    ...(keyed === undefined ? { entry: "reader" } : { entry: "manual", externalRef: keyed }),
+  });
+  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+  return (paid.json.payment as { id: string }).id;
+}
+
+/** Splits the printed bill, answering the reopened bill's id. */
+async function splitOk(billId: string): Promise<string> {
+  const answer = await split(billId);
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  return answer.json.billId as string;
+}
+
+describe("Reopen to split carries a card's provider row", () => {
+  it("a card paid before printing is linked to the new ticket", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    expect((await fixture.serve(venue, party, party.tabId)).status).toBe(200);
+    const card = await payByCard(party.tabId, "10.00");
+    const ticket = await fixture.printBill(venue, party, party.tabId);
+    expect(ticket.status, JSON.stringify(ticket.json)).toBe(200);
+    const original = await invoiceOf(party.tabId);
+    expect(await providerRowOf(card)).toMatchObject({ saleId: original.id });
+
+    const newBill = await splitOk(party.tabId);
+    const rest = await cashPayment(venue, venue.cookie, newBill, "20.00");
+
+    expect(rest.status, JSON.stringify(rest.json)).toBe(200);
+    expect(await statusOf(venue, newBill)).toBe("settled");
+    expect(await providerRowOf(card)).toMatchObject({
+      workingOrderId: newBill,
+      saleId: (await invoiceOf(newBill)).id,
     });
-    expect(keyed.status, JSON.stringify(keyed.json)).toBe(200);
+  });
 
-    await refused(party.tabId, "bill.payments_received");
+  it("a card paid after printing is not a stray to the reconcile sweep", async () => {
+    const party = await printed("Red wine bottle");
+    const card = await payByCard(party.tabId, "10.00");
+
+    const newBill = await splitOk(party.tabId);
+
+    const row = await providerRowOf(card);
+    const listed = await inTx(venue, (tx) =>
+      listReconcilable(tx, "fake", {
+        from: new Date(Date.now() - 3_600_000),
+        to: new Date(Date.now() + 3_600_000),
+      }),
+    );
+    expect(listed.filter((entry) => entry.paymentId === row.id)).toEqual([
+      expect.objectContaining({
+        workingOrderId: newBill,
+        workingOrderStatus: "open",
+        saleId: null,
+      }),
+    ]);
+  });
+
+  it("a hand-keyed card's operation number prints on the new ticket", async () => {
+    const party = await printed("Red wine bottle");
+    await payByCard(party.tabId, "10.00", "OP-4B");
+
+    const newBill = await splitOk(party.tabId);
+    expect((await cashPayment(venue, venue.cookie, newBill, "20.00")).status).toBe(200);
+
+    const ticket = await invoiceOf(newBill);
+    const tender = await inTx(venue, (tx) => readTenderBlock(tx, brandSaleId(ticket.id), newBill));
+    expect(tender).toMatchObject({ method: "card", charged: "10.00", reference: "OP-4B" });
+  });
+
+  it("a carried payment is refunded on the new bill", async () => {
+    const party = await printed("Red wine bottle");
+    const card = await payByCard(party.tabId, "10.00");
+    const newBill = await splitOk(party.tabId);
+
+    const refunded = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${newBill}/payments/${card}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "5.00",
+        tipAmount: "0.00",
+        reason: "El cliente pagó de más",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+
+    expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
+    expect(refunded.json).toMatchObject({ refund: { state: "completed", appliedAmount: "5.00" } });
+    expect((await balanceOf(newBill)).json).toMatchObject({
+      status: "open",
+      received: "5.00",
+      outstanding: "25.00",
+    });
   });
 });
