@@ -6,14 +6,14 @@ describe("seriesPurposeLabel", () => {
     expect(seriesPurposes.map((purpose) => seriesPurposeLabel(purpose, "en"))).toEqual([
       "Simplified invoices (tickets)",
       "Full invoices",
-      "Corrective of simplified invoices",
-      "Corrective of full invoices",
+      "Corrective receipts",
+      "Corrective invoices",
     ]);
     expect(seriesPurposes.map((purpose) => seriesPurposeLabel(purpose, "es"))).toEqual([
       "Facturas simplificadas (tickets)",
       "Facturas completas",
-      "Rectificativa de simplificadas",
-      "Rectificativa de completas",
+      "Tickets rectificativos",
+      "Facturas rectificativas",
     ]);
   });
 

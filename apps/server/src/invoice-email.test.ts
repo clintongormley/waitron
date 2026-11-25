@@ -253,7 +253,7 @@ describe("invoice SMTP transport", () => {
   );
 
   it.each(["en-GB", "es-ES"])(
-    "captions an emailed corrective invoice as one in %s",
+    "captions an emailed corrective of a receipt as a corrective receipt in %s",
     async (locale) => {
       const rig = await smtpRig("accepted");
       try {
@@ -262,7 +262,7 @@ describe("invoice SMTP transport", () => {
         document.result.invoiceType = "R5";
         document.result.invoiceNumber = "R/7";
         delete document.result.recipient;
-        const caption = `${receiptLabelsFor(locale).correctiveInvoice} R/7`;
+        const caption = `${receiptLabelsFor(locale).correctiveReceipt} R/7`;
         expect(
           await sendInvoiceThrough(rig.config)({ recipient: "guest@example.test", document }),
         ).toEqual({ status: "sent" });

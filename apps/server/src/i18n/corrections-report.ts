@@ -54,7 +54,7 @@ export const CORRECTIONS_REPORT_WORDS = {
     nothing: "Sin correcciones",
     directions: { reduction: "Reducción", addition: "Aumento" },
     kinds: {
-      correction: "Rectificativa",
+      correction: "Rectificativo",
       void: "Anulación",
       date_moved_out: "Fecha trasladada (salida)",
       date_moved_in: "Fecha trasladada (entrada)",

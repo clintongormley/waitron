@@ -378,6 +378,18 @@ describe("receipt labels", () => {
     },
   );
 
+  it.each([
+    ["en-GB", "Corrective receipt", "Corrective invoice"],
+    ["es-ES", "Ticket rectificativo", "Factura rectificativa"],
+    ["ca-ES", "Tiquet rectificatiu", "Factura rectificativa"],
+    ["gl-ES", "Tícket rectificativo", "Factura rectificativa"],
+    ["eu-ES", "Tiket zuzentzailea", "Faktura zuzentzailea"],
+  ])("names a corrective receipt and a corrective invoice in %s", (locale, receipt, invoice) => {
+    const labels = SPAIN.receiptLabels?.[locale];
+    expect(labels?.correctiveReceipt).toBe(receipt);
+    expect(labels?.correctiveInvoice).toBe(invoice);
+  });
+
   it.each([...SPAIN.invoiceLocales, "en-GB"])(
     "keeps the never-translated Veri*Factu legend and QR caption out of %s",
     (locale) => {

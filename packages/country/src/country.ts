@@ -101,6 +101,7 @@ export const RECEIPT_LABEL_KEYS = [
   "simplifiedInvoice",
   "invoiceHeading",
   "correctiveInvoice",
+  "correctiveReceipt",
   "correctsInvoice",
   "replacesInvoiceInFull",
   "rectificationAmount",

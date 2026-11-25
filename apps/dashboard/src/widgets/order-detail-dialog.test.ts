@@ -5,6 +5,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { allergenLabel } from "../i18n/domain.js";
+import { es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { DashboardApi, OrderDetailDto } from "../api/client.js";
 import "./order-detail-dialog.js";
@@ -737,3 +738,28 @@ it.each([
 });
 
 const receivedLocale = currentLocale();
+
+it.each([
+  ["F2", "en-GB", "Corrective receipt"],
+  ["F1", "en-GB", "Corrective invoice"],
+  ["F2", "es-ES", es["orders.detail.corrective_receipt"]],
+  ["F1", "es-ES", es["orders.detail.corrective_invoice"]],
+] as const)("names the corrective of an %s in %s", async (invoiceType, locale, named) => {
+  setLocale(locale);
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api: {
+      getOrder: vi.fn().mockResolvedValue({
+        ...detail,
+        invoices: [{ ...detail.invoices[0]!, invoiceType }, detail.invoices[1]!],
+      }),
+      liveData: new LiveData(),
+    } as unknown as DashboardApi,
+    orderId: "bill-1",
+  });
+  const corrective = () =>
+    [...el.shadowRoot!.querySelectorAll("li")].find((item) => item.textContent!.includes("R/2"));
+  await vi.waitFor(() => expect(corrective()).toBeDefined());
+  expect(corrective()!.textContent!.trim().replace(/\s+/g, " ")).toMatch(
+    new RegExp(`^${named} R/2 `),
+  );
+});

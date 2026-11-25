@@ -59,7 +59,7 @@ periodos anteriores:
 - **Resumen**: base imponible e IVA de cada periodo anterior, tipo de IVA y si es una reducción o
   un aumento.
 - **Correcciones**: una línea por factura, tipo de corrección y tipo de IVA, con la fecha en que se hizo, su tipo
-  (**Rectificativa**, **Anulación**, **Fecha trasladada (salida)**,
+  (**Rectificativo**, **Anulación**, **Fecha trasladada (salida)**,
   **Fecha trasladada (entrada)** o **Emitida después del periodo de su venta**), su número de
   factura, la factura que corrige y el periodo al que corresponde.
 

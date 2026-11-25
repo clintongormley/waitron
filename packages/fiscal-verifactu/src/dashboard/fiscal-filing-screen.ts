@@ -120,8 +120,9 @@ function recordKind(
 ): string {
   if (record.tipoRegistro === "anulacion") return t("fiscal_filing.kind.anulacion");
   const type = record.tipoFactura ?? "";
-  if (type === "F1" || type === "F2" || type === "F3") return t(`fiscal_filing.kind.${type}`);
-  if (/^R[1-5]$/.test(type)) return t("fiscal_filing.kind.corrective");
+  if (type === "F1" || type === "F2" || type === "F3" || type === "R5")
+    return t(`fiscal_filing.kind.${type}`);
+  if (/^R[1-4]$/.test(type)) return t("fiscal_filing.kind.corrective");
   return t("fiscal_filing.kind.other");
 }
 
@@ -978,10 +979,12 @@ export class FiscalFilingScreen extends LitElement {
           ? nothing
           : html`<div class="confirmation" data-test="replacement-confirmation">
               <p>
-                ${t("fiscal_filing.put_right.replace.confirm", {
-                  ...invoice,
-                  today: calendarDay(today),
-                })}
+                ${t(
+                  record.tipoFactura === "F1"
+                    ? "fiscal_filing.put_right.replace.confirm_full"
+                    : "fiscal_filing.put_right.replace.confirm",
+                  { ...invoice, today: calendarDay(today) },
+                )}
               </p>
               <p>${t("fiscal_filing.put_right.replace.order")}</p>
             </div>`

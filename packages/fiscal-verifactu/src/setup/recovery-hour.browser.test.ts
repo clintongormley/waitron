@@ -1806,8 +1806,8 @@ it("a handover start lists each new series with what it is for, and hands over n
     expect(seriesRows(el)).toEqual([
       "A-0CSQW — Simplified invoices (tickets)",
       "FF-0CSQW — Full invoices",
-      "R-0CSQW — Corrective of simplified invoices",
-      "RF-0CSQW — Corrective of full invoices",
+      "R-0CSQW — Corrective receipts",
+      "RF-0CSQW — Corrective invoices",
     ]),
   );
   const next = button(el, "continue") as HTMLElement & { variant: string; disabled: boolean };
@@ -1902,8 +1902,8 @@ it("a Spanish handover start names each new series' use and offers Continuar", a
     expect(seriesRows(el)).toEqual([
       "A-0CSQW — Facturas simplificadas (tickets)",
       "FF-0CSQW — Facturas completas",
-      "R-0CSQW — Rectificativa de simplificadas",
-      "RF-0CSQW — Rectificativa de completas",
+      "R-0CSQW — Tickets rectificativos",
+      "RF-0CSQW — Facturas rectificativas",
     ]),
   );
   expect(button(el, "continue").textContent!.trim()).toBe("Continuar");
@@ -1914,8 +1914,8 @@ it("a restore lists each new series with what it is for, in English and Spanish,
     expect(seriesRows(el)).toEqual([
       "A-0CSQW — Simplified invoices (tickets)",
       "FF-0CSQW — Full invoices",
-      "R-0CSQW — Corrective of simplified invoices",
-      "RF-0CSQW — Corrective of full invoices",
+      "R-0CSQW — Corrective receipts",
+      "RF-0CSQW — Corrective invoices",
     ]),
   );
   expect(el.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
@@ -1925,8 +1925,8 @@ it("a restore lists each new series with what it is for, in English and Spanish,
   expect(seriesRows(el)).toEqual([
     "A-0CSQW — Facturas simplificadas (tickets)",
     "FF-0CSQW — Facturas completas",
-    "R-0CSQW — Rectificativa de simplificadas",
-    "RF-0CSQW — Rectificativa de completas",
+    "R-0CSQW — Tickets rectificativos",
+    "RF-0CSQW — Facturas rectificativas",
   ]);
   expect(el.shadowRoot!.querySelector("[data-test=continue]")).toBeNull();
 });
@@ -2435,14 +2435,14 @@ it.each([
         ? [
             "A-0CSQW — Simplified invoices (tickets)",
             "FF-0CSQW — Full invoices",
-            "R-0CSQW — Corrective of simplified invoices",
-            "RF-0CSQW — Corrective of full invoices",
+            "R-0CSQW — Corrective receipts",
+            "RF-0CSQW — Corrective invoices",
           ]
         : [
             "A-0CSQW — Facturas simplificadas (tickets)",
             "FF-0CSQW — Facturas completas",
-            "R-0CSQW — Rectificativa de simplificadas",
-            "RF-0CSQW — Rectificativa de completas",
+            "R-0CSQW — Tickets rectificativos",
+            "RF-0CSQW — Facturas rectificativas",
           ],
     );
     expect(section.textContent!.replace(/[A-Z]+-0CSQW/g, "")).not.toContain("0CSQW");
@@ -2565,8 +2565,8 @@ it("after Proceed the second screen says which series were created, and the rest
   ).toEqual([
     "A-0CSQW — Simplified invoices (tickets)",
     "FF-0CSQW — Full invoices",
-    "R-0CSQW — Corrective of simplified invoices",
-    "RF-0CSQW — Corrective of full invoices",
+    "R-0CSQW — Corrective receipts",
+    "RF-0CSQW — Corrective invoices",
   ]);
   expect(el.shadowRoot!.querySelector<HTMLElement>("[data-test=check-venue]")?.hidden).toBe(true);
   expect(el.shadowRoot!.querySelector("[data-test=edit-details]")).toBeNull();

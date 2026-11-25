@@ -339,7 +339,7 @@ o lo autorizó.
   modificarse ni borrarse.
 - Destinatarios: _cualquiera con quien los compartas_. **Descargar para tu gestor (XLSX)** en
   **Ventas y recaudación** incluye quién pidió y quién autorizó cada devolución completada
-  del pago de un ticket sin factura rectificativa.
+  del pago de un ticket sin que se emitiera un ticket rectificativo ni una factura rectificativa.
 - Plazo de conservación: _fijar con tu asesor_. Waitron nunca cambia ni borra una venta registrada.
 - Seguridad: como en todas las entradas.
 

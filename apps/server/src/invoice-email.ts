@@ -59,11 +59,13 @@ export async function composeInvoiceEmail({
   const { invoiceType } = document.result;
   const simplified = !printsAsFullInvoice(invoiceType);
   const title =
-    invoiceType === "R4" || invoiceType === "R5"
-      ? labels.correctiveInvoice
-      : simplified
-        ? labels.simplifiedInvoice
-        : labels.invoice;
+    invoiceType === "R5"
+      ? labels.correctiveReceipt
+      : invoiceType === "R4"
+        ? labels.correctiveInvoice
+        : simplified
+          ? labels.simplifiedInvoice
+          : labels.invoice;
   const caption = `${title} ${document.result.invoiceNumber}`;
   const notice = privacyNotice(document, privacy);
   const marked = document.duplicate === true ? `${caption} — ${labels.duplicate}` : caption;

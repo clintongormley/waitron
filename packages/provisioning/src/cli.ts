@@ -246,7 +246,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
       resolveWithoutPrompt(values["full-series-code"]) ?? DEFAULT_SERIES_CODES.fullSeriesCode;
     const correctiveSeriesCode = await resolveOption(
       values["corrective-series-code"],
-      "series code for correctives of simplified invoices: ",
+      "series code for corrective receipts: ",
       deps,
     );
     const fullCorrectiveSeriesCode =

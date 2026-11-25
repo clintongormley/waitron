@@ -1194,3 +1194,8 @@ it("keeps a space still being typed once the app's guarded address takes the sea
     "Ruiz",
   ]);
 });
+
+it("names AEAT's R4 a corrective invoice and its R5 a corrective receipt", () => {
+  expect(en["tax_office.kind.R4"]).toBe("Corrective invoice");
+  expect(en["tax_office.kind.R5"]).toBe("Corrective receipt");
+});

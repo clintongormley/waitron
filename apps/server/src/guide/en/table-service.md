@@ -667,8 +667,8 @@ everyone has finished.
 
 A bill still open when the business day ends gets its receipt then, without printing. Take its
 payment with **Pay**, or record an unpaid departure. A bill with dishes held or not yet sent stays
-open. A bill with an open correction of a payment that has its own ticket stays open until that
-correction is finished or discarded.
+open. A bill with money back under way on a payment that has its own ticket stays open until that
+money back is finished or cancelled.
 
 To find a bill issued when the business day ended, choose the day it opened in **Sales & takings**.
 For tax reporting, use [VAT return (modelo 303)](invoices.md#vat-return). The dates recorded on invoices can place a

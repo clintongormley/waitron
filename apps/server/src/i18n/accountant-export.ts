@@ -26,9 +26,9 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       "Current state",
       "Successful refunds (EUR)",
     ],
-    refundSheet: "Refunds, no corrective invoice",
+    refundSheet: "Refunds with no corrective",
     refundNote:
-      "Note: no corrective invoice was filed for these refunds, so the VAT shown stays declared until the accountant acts",
+      "Note: no corrective receipt or invoice was filed for these refunds, so the VAT shown stays declared until the accountant acts",
     refundColumns: [
       "Refund id",
       "Refunded at (UTC)",
@@ -49,8 +49,11 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     ],
     invoiceSheet: "Issued invoices",
     purchaseSheet: "Recorded purchases",
-    corrective: "Corrective",
-    replacement: "Replacement corrective — do not add (repeats the original)",
+    corrective: { receipt: "Corrective receipt", invoice: "Corrective invoice" },
+    replacement: {
+      receipt: "Replacement corrective receipt — do not add (repeats the original)",
+      invoice: "Replacement corrective invoice — do not add (repeats the original)",
+    },
     regimes: { general: "General regime", equivalence_surcharge: "Equivalence surcharge" },
     vatKinds: { ordinary: "Ordinary goods", capital: "Capital goods" },
     identifierTypes: {
@@ -136,9 +139,9 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       "Estado actual",
       "Reembolsos completados (EUR)",
     ],
-    refundSheet: "Devoluciones sin rectificativa",
+    refundSheet: "Devoluciones sin rectificativo",
     refundNote:
-      "Nota: no se emitió factura rectificativa por estas devoluciones, así que el IVA indicado sigue declarado hasta que actúe el gestor",
+      "Nota: no se emitió ni ticket rectificativo ni factura rectificativa por estas devoluciones, así que el IVA indicado sigue declarado hasta que actúe el gestor",
     refundColumns: [
       "Id. de reembolso",
       "Reembolsado el (UTC)",
@@ -159,8 +162,11 @@ export const ACCOUNTANT_EXPORT_WORDS = {
     ],
     invoiceSheet: "Facturas emitidas",
     purchaseSheet: "Compras registradas",
-    corrective: "Rectificativa",
-    replacement: "Rectificativa por sustitución — no sumar (repite la original)",
+    corrective: { receipt: "Ticket rectificativo", invoice: "Factura rectificativa" },
+    replacement: {
+      receipt: "Ticket rectificativo por sustitución — no sumar (repite el original)",
+      invoice: "Factura rectificativa por sustitución — no sumar (repite la original)",
+    },
     regimes: { general: "Régimen general", equivalence_surcharge: "Recargo de equivalencia" },
     vatKinds: { ordinary: "Bienes corrientes", capital: "Bienes de inversión" },
     identifierTypes: {
@@ -198,7 +204,7 @@ export const ACCOUNTANT_EXPORT_WORDS = {
       voidedAt: "Anulada el (UTC)",
     } satisfies Record<InvoiceLineKey, string>,
     invoiceNotesColumn:
-      "Notas: se omiten las sustituciones F3 y se conservan los tickets originales; las anulaciones se indican, no se restan; las rectificativas por sustitución se indican, no se suman; una factura expedida después del día de la operación figura en ese día",
+      "Notas: se omiten las sustituciones F3 y se conservan los tickets originales; las anulaciones se indican, no se restan; los rectificativos por sustitución se indican, no se suman; una factura expedida después del día de la operación figura en ese día",
     purchaseColumns: [
       "Número de factura",
       "Id. de compra",

@@ -391,8 +391,8 @@ describe("setup-review-screen", () => {
     expect(rows).toEqual([
       ["summary-seriesCode", "Series for simplified invoices (tickets)", "FA"],
       ["summary-fullSeriesCode", "Series for full invoices", "FF"],
-      ["summary-correctiveSeriesCode", "Series for correctives of simplified invoices", "RF"],
-      ["summary-fullCorrectiveSeriesCode", "Series for correctives of full invoices", "FX"],
+      ["summary-correctiveSeriesCode", "Series for corrective receipts", "RF"],
+      ["summary-fullCorrectiveSeriesCode", "Series for corrective invoices", "FX"],
     ]);
   });
 
@@ -509,8 +509,8 @@ describe("setup-review-screen in Spanish", () => {
       expect.arrayContaining([
         "Serie de facturas simplificadas (tickets)",
         "Serie de facturas completas",
-        "Serie rectificativa de simplificadas",
-        "Serie rectificativa de completas",
+        "Serie de tickets rectificativos",
+        "Serie de facturas rectificativas",
       ]),
     );
     expect(text(el, "[data-test=summary-cert]")).toBe("adjunto");

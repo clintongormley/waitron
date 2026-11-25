@@ -303,7 +303,7 @@ export function invoiceLineCells(
       invoiceType:
         invoice.invoiceType === "F1" || invoice.invoiceType === "F2" || invoice.invoiceType === "F3"
           ? invoice.invoiceType
-          : words[invoice.invoiceType],
+          : words[invoice.invoiceType][invoice.customerTaxId === null ? "receipt" : "invoice"],
       issueDate: invoice.issueDate,
       customerName: invoice.customerName,
       customerTaxId: invoice.customerTaxId,
