@@ -899,29 +899,26 @@ describe("your profile", () => {
   it.each([
     ["en-GB", "Remove"],
     ["es-ES", "Eliminar"],
-  ])(
-    "removes the Google login with the Remove passkey window's button in %s when no code is asked",
-    async (locale, text) => {
-      const previous = currentLocale();
-      setLocale(locale);
-      try {
-        const profile = await apiStub().getProfile();
-        const { el, api } = await mount({
-          getProfile: vi.fn().mockResolvedValue({ ...profile, hasTotp: false, hasGoogle: true }),
-        });
-        const button = () =>
-          el.shadowRoot!.querySelector<import("@waitron/ui").WtButton>("[data-test=save]")!;
-        await click(el, "unlink-google");
-        expect(el.shadowRoot!.querySelector("wt-input[name=totp]")).toBeNull();
-        expect(button().textContent?.trim()).toBe(text);
-        expect(button().variant).toBe("primary");
-        await click(el, "save");
-        expect(api.unlinkGoogle).toHaveBeenCalledExactlyOnceWith({});
-      } finally {
-        setLocale(previous);
-      }
-    },
-  );
+  ])("offers Remove for the Google login in %s when no code is asked", async (locale, text) => {
+    const previous = currentLocale();
+    setLocale(locale);
+    try {
+      const profile = await apiStub().getProfile();
+      const { el, api } = await mount({
+        getProfile: vi.fn().mockResolvedValue({ ...profile, hasTotp: false, hasGoogle: true }),
+      });
+      const button = () =>
+        el.shadowRoot!.querySelector<import("@waitron/ui").WtButton>("[data-test=save]")!;
+      await click(el, "unlink-google");
+      expect(el.shadowRoot!.querySelector("wt-input[name=totp]")).toBeNull();
+      expect(button().textContent?.trim()).toBe(text);
+      expect(button().variant).toBe("primary");
+      await click(el, "save");
+      expect(api.unlinkGoogle).toHaveBeenCalledExactlyOnceWith({});
+    } finally {
+      setLocale(previous);
+    }
+  });
 
   it("labels the field 'Display name' and requires it under its own message", async () => {
     const { el } = await mount();
