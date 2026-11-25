@@ -273,3 +273,30 @@ it("leaves a failed read that is already being retried to its retry", async () =
   await settled();
   expect(read).toHaveBeenCalledTimes(2);
 });
+
+it.each([true, false])(
+  "retries a read that fails after the stream is ready (recovers: %s)",
+  async (recovers) => {
+    const error = new Error("refused");
+    let fail!: (error: Error) => void;
+    const read = vi
+      .fn<() => Promise<string>>()
+      .mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)))
+      .mockImplementation(async () => {
+        if (!recovers) throw error;
+        return "fresh courses";
+      });
+    const { observed } = watch("courses", read);
+    connection.start("run:4");
+    await settled();
+    streams[0]!.open();
+    streams[0]!.send("ready", { missed: [] }, "run:5");
+    expect(observed.snapshot.loading).toBe(true);
+    fail(error);
+    await settled();
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(observed.snapshot).toMatchObject(
+      recovers ? { status: "ready", value: "fresh courses" } : { status: "error", error },
+    );
+  },
+);

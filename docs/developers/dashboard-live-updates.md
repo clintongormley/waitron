@@ -53,7 +53,8 @@ A page watches different data from the one before, so every move between pages r
 The replacement does not read everything again (2026-11-25): the server numbers the changes it
 announces (`LiveEvents.position` in `apps/server/src/live-api.ts`), each event carries the number it
 covers as its SSE id, and the next stream sends the last one as `since`. Its `ready` event names the
-watched types that changed after `since`, and only those reads, and reads that failed, are sent again.
+watched types that changed after `since`. The dashboard refreshes those reads and retries failed reads.
+A read still in flight when `ready` arrives gets a retry if it fails.
 The first stream of a sign-in uses the position from `GET /management-api/session/me`, which the
 shell keeps only when it was taken before any read was being watched. A position newer than a read
 would hide a change that read missed. The stream refreshes all watched reads when its position is
