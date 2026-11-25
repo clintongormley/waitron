@@ -436,6 +436,7 @@ async function carveLines(
         soldInEach: workingOrderLines.soldInEach,
         hardwareUnit: workingOrderLines.hardwareUnit,
         latePeriodId: workingOrderLines.latePeriodId,
+        lateStationId: workingOrderLines.lateStationId,
         latePeriodName: workingOrderLines.latePeriodName,
         lateConfirmedBy: workingOrderLines.lateConfirmedBy,
         sentNutrition: workingOrderLines.sentNutrition,

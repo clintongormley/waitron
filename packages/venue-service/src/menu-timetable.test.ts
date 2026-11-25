@@ -2135,6 +2135,25 @@ describe("department service periods", () => {
     });
   };
   type ServiceVenue = Awaited<ReturnType<typeof serviceVenue>>;
+  const endedLunch = ({ menus, lunch }: ServiceVenue) =>
+    [menus.Lunch, menus.Drinks].map((menuId) => ({
+      menuId,
+      periodId: lunch,
+      periodName: "Lunch",
+      sourceMenuIds: [menus.Lunch, menus.Drinks, menus.Coffee],
+    }));
+  const endedAfternoon = ({ menus, afternoon }: ServiceVenue) => ({
+    menuId: menus.Coffee,
+    periodId: afternoon,
+    periodName: "Afternoon",
+    sourceMenuIds: [menus.Coffee],
+  });
+  const endedNight = ({ menus, night }: ServiceVenue) => ({
+    menuId: menus.Dinner,
+    periodId: night,
+    periodName: "Night",
+    sourceMenuIds: [menus.Dinner],
+  });
   const read = (v: ServiceVenue, date: string, time: string) =>
     scoped((tx) => resolveDepartmentService(tx, v.restaurant, madrid(date, time)));
 
@@ -2591,9 +2610,7 @@ describe("department service periods", () => {
       expect(service.endedMenus.map((entry) => entry.menuId)).not.toContain(v.menus.Dinner);
     }
     expect(await read(v, "2026-10-25", "03:00")).toMatchObject({ orderableMenuIds: [] });
-    expect((await read(v, "2026-10-25", "03:00")).endedMenus).toEqual([
-      { menuId: v.menus.Dinner, periodId: v.night, periodName: "Night" },
-    ]);
+    expect((await read(v, "2026-10-25", "03:00")).endedMenus).toEqual([endedNight(v)]);
   });
 
   it("unions a shared staff menu without reviving its ended selling root", async () => {
@@ -2606,9 +2623,8 @@ describe("department service periods", () => {
   it("names each ended menu's period, the one that ended last when two share a menu", async () => {
     const v = await serviceVenue();
     expect((await read(v, FRIDAY, "20:00")).endedMenus).toEqual([
-      { menuId: v.menus.Lunch, periodId: v.lunch, periodName: "Lunch" },
-      { menuId: v.menus.Drinks, periodId: v.lunch, periodName: "Lunch" },
-      { menuId: v.menus.Coffee, periodId: v.afternoon, periodName: "Afternoon" },
+      ...endedLunch(v),
+      endedAfternoon(v),
     ]);
   });
 
@@ -2644,10 +2660,7 @@ describe("department service periods", () => {
       periodOccurrenceKey: expect.any(String),
       customerMenuId: v.menus.Coffee,
       orderableMenuIds: [v.menus.Coffee],
-      endedMenus: [
-        { menuId: v.menus.Lunch, periodId: v.lunch, periodName: "Lunch" },
-        { menuId: v.menus.Drinks, periodId: v.lunch, periodName: "Lunch" },
-      ],
+      endedMenus: [...endedLunch(v)],
     });
   });
 
@@ -2667,11 +2680,7 @@ describe("department service periods", () => {
       periodOccurrenceKey: expect.any(String),
       customerMenuId: v.menus.Dinner,
       orderableMenuIds: [v.menus.Dinner],
-      endedMenus: [
-        { menuId: v.menus.Lunch, periodId: v.lunch, periodName: "Lunch" },
-        { menuId: v.menus.Drinks, periodId: v.lunch, periodName: "Lunch" },
-        { menuId: v.menus.Coffee, periodId: v.afternoon, periodName: "Afternoon" },
-      ],
+      endedMenus: [...endedLunch(v), endedAfternoon(v)],
     });
     expect(await read(v, SATURDAY, "03:00")).toEqual({
       keepOpen: {
@@ -2687,12 +2696,7 @@ describe("department service periods", () => {
       periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
-      endedMenus: [
-        { menuId: v.menus.Lunch, periodId: v.lunch, periodName: "Lunch" },
-        { menuId: v.menus.Drinks, periodId: v.lunch, periodName: "Lunch" },
-        { menuId: v.menus.Coffee, periodId: v.afternoon, periodName: "Afternoon" },
-        { menuId: v.menus.Dinner, periodId: v.night, periodName: "Night" },
-      ],
+      endedMenus: [...endedLunch(v), endedAfternoon(v), endedNight(v)],
     });
     expect(await read(v, SATURDAY, "06:10")).toEqual({
       keepOpen: null,
@@ -2723,11 +2727,7 @@ describe("department service periods", () => {
       periodOccurrenceKey: null,
       customerMenuId: null,
       orderableMenuIds: [],
-      endedMenus: [
-        { menuId: v.menus.Lunch, periodId: v.lunch, periodName: "Lunch" },
-        { menuId: v.menus.Drinks, periodId: v.lunch, periodName: "Lunch" },
-        { menuId: v.menus.Coffee, periodId: v.afternoon, periodName: "Afternoon" },
-      ],
+      endedMenus: [...endedLunch(v), endedAfternoon(v)],
     });
     expect(await read(v, "2026-10-18", "06:10")).toEqual({
       keepOpen: null,

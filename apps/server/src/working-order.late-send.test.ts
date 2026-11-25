@@ -345,6 +345,94 @@ it("asks at Bar's cutoff for a Lunch dish it took over", async () => {
   });
 });
 
+it.each([
+  [false, false],
+  [true, false],
+  [false, true],
+])(
+  "sends an agreed dessert to Bar or its stand-in (closed: %s, agreed at Place: %s)",
+  async (closed, onPlace) => {
+    at(onPlace ? "14:44" : "16:00");
+    const v = await venueWithLastOrders();
+    const { lateSend } = confirming([v.menus.setLunch]);
+    const id = randomUUID();
+    await open(
+      v,
+      [{ menuItemId: v.toast.setLunch, quantity: "1" }],
+      id,
+      onPlace ? undefined : lateSend,
+    );
+    const destination = closed
+      ? await withTransaction(suite.db, async (tx) => {
+          const standIn = await createStation(tx, { name: "Terrace bar" });
+          await setStationToday(
+            tx,
+            v.stations.bar,
+            "closed",
+            new Date(),
+            await seedActivityActor(tx),
+            standIn.id,
+          );
+          return standIn.id;
+        })
+      : v.stations.bar;
+    at("16:15");
+    const reply = await sendAsTill(
+      v,
+      "POST",
+      `/api/working-orders/${id}/place`,
+      onPlace ? { lateSend: { menuIds: [v.menus.setLunch] } } : undefined,
+    );
+    expect(reply).toMatchObject({ status: 200 });
+    const [line] = await linesOf(id);
+    expect(
+      await suite.db
+        .select({
+          stationId: ticketItems.stationId,
+          agreedStationId: workingOrderLines.lateStationId,
+        })
+        .from(ticketItems)
+        .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+        .where(eq(ticketItems.workingOrderLineId, line!.id)),
+    ).toEqual([{ stationId: destination, agreedStationId: v.stations.bar }]);
+  },
+);
+
+it("keeps an extra with its dish when Bar agreed and their Lunch routes match", async () => {
+  at("16:00");
+  const v = await venueWithLastOrders();
+  await withTransaction(suite.db, (tx) =>
+    setRoutingCell(
+      tx,
+      { row: { kind: "all" }, zoneId: v.diningZone },
+      { kind: "station", stationId: v.stations.bar },
+      [{ periodId: v.lunch, target: { kind: "station", stationId: v.stations.kitchen } }],
+    ),
+  );
+  const { lateSend } = confirming([v.menus.setLunch]);
+  const id = await sendAtTable(
+    v,
+    [
+      {
+        menuItemId: v.salad,
+        quantity: "1",
+        extras: [
+          { listId: v.avocado.listId, picks: [{ productId: v.avocado.productId, quantity: 1 }] },
+        ],
+      },
+    ],
+    lateSend,
+  );
+  expect(await linesOf(id)).toHaveLength(2);
+  expect(
+    await suite.db
+      .select({ stationId: ticketItems.stationId })
+      .from(ticketItems)
+      .innerJoin(workingOrderLines, eq(workingOrderLines.id, ticketItems.workingOrderLineId))
+      .where(eq(workingOrderLines.workingOrderId, id)),
+  ).toEqual([{ stationId: v.stations.bar }]);
+});
+
 it("names the period that stopped last when only Lunch has offsets", async () => {
   at("23:10");
   const v = await venueWithLastOrders();

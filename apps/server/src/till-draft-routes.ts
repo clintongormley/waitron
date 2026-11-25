@@ -252,7 +252,7 @@ export function mountTillDraftRoutes(
           tx,
           cfg,
           draft.billId,
-          lines.map((line) => draftPricingLine(line, draft.lines.indexOf(line), false)),
+          lines.map((line) => draftPricingLine(line, draft.lines.indexOf(line))),
           zoneId ?? undefined,
           undefined,
           "ignore",

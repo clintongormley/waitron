@@ -256,7 +256,7 @@ describe("a dish's extras children", () => {
     });
   });
 
-  it("retains the set-menu placement metadata when carving a stored dish row", async () => {
+  it("retains set-menu placement and the agreed station when carving a stored dish row", async () => {
     const { cfg, coffeeId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const setMenu = await createMenu(tx, {
@@ -266,11 +266,13 @@ describe("a dish's extras children", () => {
       });
       const tableId = await makeTable(tx);
       const tabId = await openExtrasTab(tx, cfg, tableId, [{ productId: coffeeId, quantity: "2" }]);
+      const station = await createStation(tx, { name: "Agreed station" });
       const placement = {
         setMenuRole: "dish",
         setMenuId: setMenu.id,
         setMenuPlace: 2,
         countsAsCourseId: randomUUID(),
+        lateStationId: station.id,
       } as const;
       await tx
         .update(workingOrderLines)

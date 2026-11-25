@@ -13,7 +13,6 @@ import type { AllergyPatch } from "@waitron/module";
 import { AppError, partyTablesName } from "@waitron/shared";
 import { and, eq, sql, gt, ne, inArray, notExists, isNull, or } from "drizzle-orm";
 import type { AttendanceRecorder } from "./attendance-capture.js";
-import type { LateSendConfirmation } from "./late-send.js";
 import { readPartyTables } from "./orders-list.js";
 
 export type GroupRelease = "fire" | "hold";
@@ -26,7 +25,6 @@ export interface PartyCommandArgs {
 
 export interface PartyFireArgs extends PartyCommandArgs {
   allergy?: AllergyPatch;
-  lateSend?: LateSendConfirmation;
 }
 /** Who fires a group: a person or a kitchen display. */
 export type Firer = { personId: string } | { deviceId: string };

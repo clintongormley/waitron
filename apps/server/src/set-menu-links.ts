@@ -30,7 +30,7 @@ export interface SetMenuLinks {
    *  resolved no service: a link never reads the clock again. */
   selling: Date | ZoneSelling;
   /** Every dish the round orders a portion of, a raised quantity included. */
-  dishes: readonly ListedDish[];
+  dishes: readonly (ListedDish & { sourceMenuIds?: readonly string[] })[];
 }
 
 type DishRow = Pick<
@@ -96,10 +96,29 @@ export async function linkSetMenusFor(
 ): Promise<void> {
   if (dishes.length === 0 || zoneId === undefined || !(await venueHasSetMenus(tx))) return;
   if (!(await isSetMenuBill(tx, billId))) return;
-  const onSale = copiesOnSale(await VENUE_SERVICE.listZoneSetMenus(tx, zoneId, selling));
-  if (onSale.length === 0) return;
+  const bySource = new Map<readonly string[], ListedDish[]>();
+  for (const dish of dishes) {
+    const { sourceMenuIds } = dish;
+    if (sourceMenuIds === undefined) continue;
+    const batch = bySource.get(sourceMenuIds) ?? [];
+    batch.push(dish);
+    bySource.set(sourceMenuIds, batch);
+  }
   const recorded = new Set((await readBillSetMenuVersions(tx, billId)).map(({ menuId }) => menuId));
-  const linked = listingAny(onSale, dishes).filter(({ setMenuId }) => !recorded.has(setMenuId));
+  const linked: SetMenuCopy[] = [];
+  const collect = async (when: Date | ZoneSelling, batch: readonly ListedDish[]) => {
+    const onSale = copiesOnSale(await VENUE_SERVICE.listZoneSetMenus(tx, zoneId, when));
+    for (const copy of listingAny(onSale, batch)) {
+      if (recorded.has(copy.setMenuId)) continue;
+      recorded.add(copy.setMenuId);
+      linked.push(copy);
+    }
+  };
+  if (!(selling instanceof Date)) {
+    for (const [source, batch] of bySource)
+      await collect({ ...selling, orderableMenuIds: source }, batch);
+  }
+  await collect(selling, dishes);
   if (linked.length === 0) return;
   await tx
     .insert(billSetMenuCopies)

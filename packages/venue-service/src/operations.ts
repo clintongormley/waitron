@@ -40,6 +40,7 @@ import {
   applyLiveFields,
   assertLiveVersions,
   documentOffers,
+  documentSetMenuOffers,
   isEachUnit,
   readLiveDocuments,
   readLiveState,
@@ -1020,6 +1021,7 @@ export async function productsOfferedIn(
   zoneId: string,
   menuIds: readonly string[],
   items: readonly { productId: string; variantId: string | null }[],
+  options?: { includeSetMenus: true },
 ): Promise<ReadonlySet<string>> {
   if (menuIds.length === 0 || items.length === 0) return new Set();
   const zoneMenus = new Set(await zoneMenuIds(tx, zoneId));
@@ -1030,12 +1032,16 @@ export async function productsOfferedIn(
     menuIds.filter((menuId) => zoneMenus.has(menuId)),
   );
   const offered = new Set<string>();
-  for (const { document } of live)
-    for (const offer of documentOffers(document)) {
-      if (offer.ordering === "not_sold_separately") continue;
+  for (const { document } of live) {
+    const offers = [
+      ...documentOffers(document).filter(({ ordering }) => ordering !== "not_sold_separately"),
+      ...(options?.includeSetMenus === true ? documentSetMenuOffers(document) : []),
+    ];
+    for (const offer of offers) {
       offered.add(offeredKey(offer.productId, null));
       for (const variant of offer.variants) offered.add(offeredKey(offer.productId, variant.id));
     }
+  }
   return new Set(
     items
       .map((item) => offeredKey(item.productId, item.variantId))
@@ -1382,6 +1388,7 @@ export async function recordLateSendMarks(
       .update(workingOrderLines)
       .set({
         latePeriodId: mark.periodId,
+        lateStationId: mark.stationId ?? null,
         latePeriodName: mark.periodName,
         lateConfirmedBy: mark.confirmedBy,
       })
@@ -1492,6 +1499,7 @@ export async function lineContextColumns(
           hardwareUnit: line.unit === undefined ? offer.unit.hardwareUnit : line.unit.hardwareUnit,
           offerVatClass: sold.vatClass,
           latePeriodId: line.late?.periodId ?? null,
+          lateStationId: line.late?.stationId ?? null,
           latePeriodName: line.late?.periodName ?? null,
           lateConfirmedBy: line.late?.confirmedBy ?? null,
         },

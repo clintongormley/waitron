@@ -67,7 +67,7 @@ import {
 import type { OrderLineIdentity } from "./stored-order-lines.js";
 import type { TradingContext } from "./trading-context.js";
 import { routingOnce } from "./working-order-kitchen-fire.js";
-import { type EndedMenu, confirmLateDishes } from "./working-order-late-send.js";
+import { type EndedMenu, confirmLateDishes, endedPeriodMakers } from "./working-order-late-send.js";
 import { takesExtras } from "@waitron/menu/src/unit-extras.js";
 
 export type WorkingOrderLineInsert = typeof workingOrderLines.$inferInsert;
@@ -364,6 +364,7 @@ export async function priceOrderLines(
   let service: Awaited<ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>> | null = null;
   // Dishes and extras added to sent dishes can be marked when their menu ended earlier today.
   const ended = new Map<(typeof requestedLines)[number], EndedMenu>();
+  const periodOf = new Map<string, EndedMenu>();
   const cutoffs = new Map<(typeof requestedLines)[number], LastOrdersDecision>();
   let alsoSold: ReadonlySet<string> = new Set();
   const marks = new Map<number, NonNullable<LineContextInput["late"]>>();
@@ -376,13 +377,12 @@ export async function priceOrderLines(
     if (requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true))
       await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at);
     service = await VENUE_SERVICE.resolveDepartmentService(tx, context.departmentId, at);
-    const periodOf = new Map(service.endedMenus.map((menu) => [menu.menuId, menu]));
+    for (const menu of service.endedMenus) periodOf.set(menu.menuId, menu);
     const items: { productId: string; variantId: string | null }[] = [];
     type Candidate = Parameters<typeof lastOrderDishes<(typeof requestedLines)[number]>>[2][number];
     const candidates = new Map<string, Candidate[]>();
     for (const line of requestedLines) {
       const selected = selectedSetMenu(line);
-      if (selected?.fromRecordedCopy === true) continue;
       const offer =
         selected?.offer ??
         (line[SET_MENU_DRAFT_LINE] === undefined ? offerById.get(line.menuItemId) : undefined);
@@ -429,10 +429,19 @@ export async function priceOrderLines(
         context.zoneId,
         service.orderableMenuIds,
         items,
+        { includeSetMenus: true },
       );
     }
   }
-  const late: (EndedMenu & { index: number; menuItemId: string })[] = [];
+  const confirmations: {
+    index: number;
+    menuId: string;
+    menuItemId: string;
+    periodId: string;
+    periodName: string;
+    stationId?: string;
+  }[] = [];
+  const endedDishes: { id: string; productId: string; periodId: string }[] = [];
   const versionOf = new Map(offers.menus.map((menu) => [menu.id, menu.versionId]));
   const lines = requestedLines.map((line, index) => {
     // The wire body is JSON, so a line may still name a product the types no longer carry, or the
@@ -457,27 +466,41 @@ export async function priceOrderLines(
     }
     const period = ended.get(line);
     const cutoff = cutoffs.get(line);
-    if (
-      selected?.fromRecordedCopy === true &&
-      service !== null &&
-      !service.orderableMenuIds.includes(offer.menuId)
-    ) {
-      // A held dish carries the mark so Fire recognises the already permitted send.
-      if (setMenu?.held === true) {
-        const name = service.endedMenus.find(({ menuId }) => menuId === offer.menuId)?.periodName;
-        marks.set(index, { periodId: null, periodName: name ?? offer.menuName, confirmedBy: null });
-      }
-    } else if (cutoff !== undefined) {
+    if (cutoff !== undefined) {
       if (cutoff.stopped && line[STORED_RISE] === true)
         throw new AppError("menu_period.last_orders", { menuItemId: offer.id });
-      if (cutoff.stopped && cutoff.route.kind === "station")
-        late.push({ index, menuItemId: offer.id, menuId: offer.menuId, ...cutoff.run });
+      if (cutoff.stopped) {
+        const { periodId, periodName } = cutoff.run;
+        if (cutoff.route.kind === "no_preparation")
+          marks.set(index, { periodId, periodName, confirmedBy: null });
+        else
+          confirmations.push({
+            index,
+            menuItemId: offer.id,
+            menuId: offer.menuId,
+            periodId,
+            periodName,
+            stationId: cutoff.route.stationId,
+          });
+      }
+    } else if (
+      line[STORED_RISE] === true &&
+      selected?.fromRecordedCopy === true &&
+      (line[STORED_DEPARTMENT] ?? service?.departmentId) === service?.departmentId &&
+      periodOf.has(offer.menuId)
+    ) {
+      throw new AppError("menu_period.last_orders", { menuItemId: offer.id });
     } else if (period !== undefined) {
       if (!alsoSold.has(offeredKey(offer.productId, line.variantId ?? null))) {
-        late.push({ index, menuItemId: offer.id, ...period });
+        endedDishes.push({
+          id: String(index),
+          productId: line.variantId ?? offer.productId,
+          periodId: period.periodId,
+        });
       }
     } else if (
       service !== null &&
+      selected?.fromRecordedCopy !== true &&
       line[ADDED_EXTRAS_ONLY] !== true &&
       !service.orderableMenuIds.includes(offer.menuId)
     ) {
@@ -507,7 +530,10 @@ export async function priceOrderLines(
     if (isSetMenu) assertSetMenuPortion(offer, line.variantId ?? null);
     const setMenuOffer =
       selected === undefined ? undefined : { offer, versionId: selected.copy.versionId };
-    return { ...line, offer, setMenuOffer, holding: selected?.document };
+    let sourceMenuIds = periodOf.get(offer.menuId)?.sourceMenuIds;
+    if (sourceMenuIds !== undefined && cutoff?.run.menuIds.includes(offer.menuId))
+      sourceMenuIds = cutoff.run.menuIds;
+    return { ...line, offer, setMenuOffer, holding: selected?.document, sourceMenuIds };
   });
   const setMenuLinks: SetMenuLinks = {
     zoneId,
@@ -518,7 +544,13 @@ export async function priceOrderLines(
     dishes: lines.flatMap((line) =>
       line[ADDED_EXTRAS_ONLY] === true
         ? []
-        : [{ productId: line.offer.productId, variantId: line.variantId ?? null }],
+        : [
+            {
+              productId: line.offer.productId,
+              variantId: line.variantId ?? null,
+              sourceMenuIds: line.sourceMenuIds,
+            },
+          ],
     ),
   };
   const aLaCarte = await setMenuALaCartePrices(
@@ -530,10 +562,33 @@ export async function priceOrderLines(
     })),
   );
   const countsAs = await countsAsCourses(tx, lines);
-  if (late.length > 0) {
-    const confirmedBy = await confirmLateDishes(tx, service!.departmentId, late, lateSend);
-    for (const { index, periodId, periodName } of late)
-      marks.set(index, { periodId, periodName, confirmedBy });
+  const endedMakers =
+    endedDishes.length === 0 ? undefined : await endedPeriodMakers(zoneId!, endedDishes, routing);
+  for (const { id } of endedDishes) {
+    const index = Number(id);
+    const line = requestedLines[index]!;
+    const choice = endedMakers?.get(id);
+    const sent = line[ON_SENT_DISH];
+    const { periodId, periodName } = ended.get(line)!;
+    if (
+      sent?.stationId === null ||
+      (sent === undefined && choice?.kind === "made" && choice.route.kind === "no_preparation")
+    ) {
+      marks.set(index, { periodId, periodName, confirmedBy: null });
+      continue;
+    }
+    const stationId =
+      sent?.stationId ??
+      (choice?.kind === "made" && choice.route.kind === "station"
+        ? choice.route.stationId
+        : undefined);
+    confirmations.push({ index, menuItemId: line.menuItemId, ...ended.get(line)!, stationId });
+  }
+  if (confirmations.length > 0) {
+    confirmations.sort((a, b) => a.index - b.index);
+    const confirmedBy = await confirmLateDishes(tx, service!.departmentId, confirmations, lateSend);
+    for (const { index, periodId, periodName, stationId } of confirmations)
+      marks.set(index, { periodId, periodName, stationId, confirmedBy });
   }
   const invoiceLocales = await readInvoiceLocales(tx);
   const savedLanguages = await readSavedContentLanguages(tx);

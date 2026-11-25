@@ -305,6 +305,7 @@ export const workingOrderLines = table(
     latePeriodName: label("late_period_name"),
     // A recorded agreement survives deleting its service period.
     latePeriodId: id("late_period_id"),
+    lateStationId: id("late_station_id"),
     lateConfirmedBy: id("late_confirmed_by"),
     sentNutrition: json<{ allergens: AllergenMap | null; dietaryDeclarations: string[] }>(
       "sent_nutrition",
@@ -386,6 +387,11 @@ export const workingOrderLines = table(
       columns: [t.menuVersionId],
       foreignColumns: [menuVersions.id],
       name: "working_order_lines_menu_version_fk",
+    }),
+    foreignKey({
+      columns: [t.lateStationId],
+      foreignColumns: [kitchenStations.id],
+      name: "working_order_lines_late_station_fk",
     }),
     foreignKey({
       columns: [t.lateConfirmedBy],

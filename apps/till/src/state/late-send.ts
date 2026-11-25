@@ -14,11 +14,6 @@ export interface LateSendIndex {
   ended: ReadonlyMap<string, string>;
 }
 
-/**
- * The ended period an unsent line's dish belongs to, when no orderable menu sells it on its own —
- * the server's `productsOfferedIn` rule (`packages/venue-service/src/operations.ts`): an offer not
- * sold separately does not count, and a variant counts only where the offer lists it.
- */
 export function endedPeriodOf(line: OrderLine, index: LateSendIndex): EndedPeriod | undefined {
   if (line.workingOrderLineId !== undefined) return undefined;
   const offer = index.byId.get(line.product.menuItemId ?? "");

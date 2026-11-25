@@ -92,6 +92,7 @@ export function routingOnce(tx: Transaction, at: Date): RoutingOnce {
 }
 
 export const lastOrderLineColumns = {
+  lateStationId: workingOrderLines.lateStationId,
   menuId: workingOrderLines.menuId,
   offerDepartmentId: workingOrderLines.offerDepartmentId,
 };
@@ -103,16 +104,33 @@ export async function makersByLine(
     id: string;
     productId: string | null;
     latePeriodId: string | null;
+    lateStationId: string | null;
     menuId: string | null;
     offerDepartmentId: string | null;
   }[],
 ): Promise<ReadonlyMap<string, MakerOutcome>> {
   const outcomes = new Map<string, MakerOutcome>();
+  if (lines.some(({ lateStationId }) => lateStationId !== null)) {
+    const stations = await resolver.stations();
+    for (const { id, lateStationId } of lines) {
+      if (lateStationId === null) continue;
+      const station = stations.get(lateStationId);
+      if (station === undefined) continue;
+      const stationId = station.open ? lateStationId : station.sendsTo;
+      outcomes.set(
+        id,
+        stationId === null
+          ? { kind: "no_replacement", stationId: lateStationId }
+          : { kind: "made", route: { kind: "station", stationId } },
+      );
+    }
+  }
   if (zoneId !== null) {
     const byDepartment = new Map<string, { key: string; menuId: string; productId: string }[]>();
     for (const { id, productId, latePeriodId, menuId, offerDepartmentId } of lines) {
       if (
         productId === null ||
+        outcomes.has(id) ||
         latePeriodId !== null ||
         menuId === null ||
         offerDepartmentId === null
@@ -154,8 +172,10 @@ export async function makersByLine(
 }
 interface DishKitchenPlace {
   dishLineId: string;
+  productId: string | null;
   stationId: string | null;
   courseId: string | null;
+  chosenStation?: boolean;
   /** Whether the dish's extras leave hold: the dish is initiated, or it is made here, even in a
    *  held group. */
   initiated: boolean;
@@ -207,6 +227,7 @@ export async function insertSplitExtras(
       productId: workingOrderLines.productId,
       quantity: workingOrderLines.quantity,
       latePeriodId: workingOrderLines.latePeriodId,
+      lateStationId: workingOrderLines.lateStationId,
       ticketId: ticketItems.id,
     })
     .from(workingOrderLines)
@@ -228,16 +249,40 @@ export async function insertSplitExtras(
     }))
     .filter((extra) => extra.quantity > 0 && extra.ticketId === null && extra.productId !== null);
   if (fresh.length === 0) return [];
-  const decisions = await (
-    await routing()
-  ).extraMakers(
+  const resolver = await routing();
+  // An extra that shared the dish's route for its period follows the dish to the agreed station.
+  const periodDishRoutes = await makersByLine(
+    resolver,
     zoneId,
-    fresh.map((extra) => ({
-      key: extra.id,
-      productId: extra.productId!,
-      dishStationId: byDish.get(extra.parentLineId!)!.stationId,
-      periodId: extra.latePeriodId,
-    })),
+    fresh.flatMap(({ id, parentLineId, latePeriodId, lateStationId }) =>
+      latePeriodId === null || lateStationId === null || byDish.get(parentLineId!)!.chosenStation
+        ? []
+        : [
+            {
+              id,
+              productId: byDish.get(parentLineId!)!.productId,
+              latePeriodId,
+              lateStationId: null,
+              menuId: null,
+              offerDepartmentId: null,
+            },
+          ],
+    ),
+  );
+  const decisions = await resolver.extraMakers(
+    zoneId,
+    fresh.map((extra) => {
+      const original = periodDishRoutes.get(extra.id);
+      return {
+        key: extra.id,
+        productId: extra.productId!,
+        dishStationId:
+          original?.kind === "made" && original.route.kind === "station"
+            ? original.route.stationId
+            : byDish.get(extra.parentLineId!)!.stationId,
+        periodId: extra.latePeriodId,
+      };
+    }),
   );
   const madeHere = await readMadeHereStations(tx, cfg.sendingDeviceId);
   const waiting = await passWaitingStations(
@@ -250,6 +295,7 @@ export async function insertSplitExtras(
     const decision = decisions.get(extra.id);
     if (decision?.kind !== "made") return [];
     const dish = byDish.get(extra.parentLineId!)!;
+    if (decision.stationId === dish.stationId) return [];
     const here = madeHere.has(decision.stationId);
     const stamps = keptStamps(keepPhase, extra.id, {
       at: routing.at.toISOString(),
@@ -547,6 +593,7 @@ export async function fireLines(
         if (courseFired) sentLineIds.push(line.id);
         dishPlaces.push({
           dishLineId: line.id,
+          productId: line.productId,
           stationId: null,
           courseId,
           initiated: courseFired,
@@ -564,8 +611,10 @@ export async function fireLines(
       if (fired) sentLineIds.push(line.id);
       dishPlaces.push({
         dishLineId: line.id,
+        productId: line.productId,
         stationId,
         courseId,
+        chosenStation: chosenStations.has(line.id),
         initiated: fired,
       });
       return {
