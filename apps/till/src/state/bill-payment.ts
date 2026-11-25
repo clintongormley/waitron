@@ -384,7 +384,8 @@ export function refundOffered(payment: BillPaymentView, status: BillBalance["sta
 }
 
 /** The bill's dishes as an item payment offers them, each with its extras, which are paid with it.
- * A dish is paid a unit at a time only when sold by the unit, in several units, with no extras.
+ * A dish is paid a unit at a time only when its unit has no decimal places, it has several, and it
+ * has no extras.
  * A set-menu dish whose amount, extras included, is 0.00 is left out (owner, 2026-11-21); its set
  * menu is listed as a line of its own. */
 export function payLines(
