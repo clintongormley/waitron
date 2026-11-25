@@ -91,6 +91,7 @@ export const special: ServedSetMenuCopy = {
 
 export const bill: BillSetMenuState = {
   recorded: { daily: "lunch", special: "lunch" },
+  exact: true,
   copies: [setMenuCopyOf(daily, "lunch"), setMenuCopyOf(special, "lunch")],
   setMenus: [
     { lineId: "daily-1", lineNo: 1, copyId: daily.key },

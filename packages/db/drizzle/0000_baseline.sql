@@ -103,6 +103,7 @@ CREATE TABLE `working_order_lines` (
 	`credited_to` text,
 	`list_unit_price_gross` integer,
 	`a_la_carte_unit_price` integer,
+	`counts_as_course_id` text,
 	`menu_item_id` text,
 	`menu_id` text,
 	`menu_name` text,
@@ -154,7 +155,8 @@ CREATE TABLE `working_order_lines` (
 	CONSTRAINT "working_order_lines_a_la_carte_price_ck" CHECK("working_order_lines"."a_la_carte_unit_price" is null or "working_order_lines"."a_la_carte_unit_price" >= 0),
 	CONSTRAINT "working_order_lines_set_menu_role_ck" CHECK("working_order_lines"."set_menu_role" in ('set_menu', 'dish')),
 	CONSTRAINT "working_order_lines_set_menu_ck" CHECK(("working_order_lines"."set_menu_role" is null
-          and "working_order_lines"."set_menu_id" is null and "working_order_lines"."set_menu_version_id" is null
+          and ("working_order_lines"."set_menu_id" is null or ("working_order_lines"."parent_line_id" is null and "working_order_lines"."menu_item_id" is not null))
+          and "working_order_lines"."set_menu_version_id" is null
           and "working_order_lines"."set_menu_line_id" is null and "working_order_lines"."set_menu_place" is null
           and "working_order_lines"."set_menu_counts_as_course_id" is null)
         or ("working_order_lines"."set_menu_role" is 'set_menu'
@@ -164,7 +166,7 @@ CREATE TABLE `working_order_lines` (
           and "working_order_lines"."set_menu_line_id" is null and "working_order_lines"."set_menu_place" is null
           and "working_order_lines"."set_menu_counts_as_course_id" is null)
         or ("working_order_lines"."set_menu_role" is 'dish'
-          and "working_order_lines"."set_menu_id" is not null and "working_order_lines"."menu_item_id" is not null
+          and "working_order_lines"."menu_item_id" is not null
           and "working_order_lines"."set_menu_place" is not null and "working_order_lines"."set_menu_counts_as_course_id" is not null
           and "working_order_lines"."parent_line_id" is null and "working_order_lines"."set_menu_version_id" is null)),
 	CONSTRAINT "working_order_lines_cohort_ck" CHECK(("working_order_lines"."cohort_id" is null and "working_order_lines"."cohort_ordinal" is null and "working_order_lines"."whole_portion" is null)
@@ -228,6 +230,7 @@ CREATE TABLE `working_orders` (
 	`department_id` text,
 	`service_mode` text,
 	`items_paid_from` text,
+	`set_menus_exact` integer DEFAULT true NOT NULL,
 	FOREIGN KEY (`device_id`) REFERENCES `devices`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`delivery_table_id`) REFERENCES `dining_tables`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`editor_id`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE no action,
@@ -3324,6 +3327,7 @@ BEGIN
       AND new.whole_portion IS old.whole_portion
       AND new.list_unit_price_gross IS old.list_unit_price_gross
       AND new.a_la_carte_unit_price IS old.a_la_carte_unit_price
+      AND new.counts_as_course_id IS old.counts_as_course_id
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
       AND new.menu_name IS old.menu_name
@@ -3400,6 +3404,7 @@ BEGIN
       AND new.served_quantity IS old.served_quantity
       AND new.list_unit_price_gross IS old.list_unit_price_gross
       AND new.a_la_carte_unit_price IS old.a_la_carte_unit_price
+      AND new.counts_as_course_id IS old.counts_as_course_id
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
       AND new.menu_name IS old.menu_name
@@ -3494,6 +3499,7 @@ BEGIN
       AND new.whole_portion IS old.whole_portion
       AND new.list_unit_price_gross IS old.list_unit_price_gross
       AND new.a_la_carte_unit_price IS old.a_la_carte_unit_price
+      AND new.counts_as_course_id IS old.counts_as_course_id
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
       AND new.menu_name IS old.menu_name
@@ -3619,6 +3625,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.dining IS old.dining)
     OR (old.status = 'placed' AND new.status = 'placed'
         AND new.id IS old.id
@@ -3634,6 +3641,7 @@ BEGIN
         AND new.collected_at IS old.collected_at
         AND new.dining IS old.dining
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND ((new.invoice_type IS old.invoice_type
           AND new.recipient_tax_id IS old.recipient_tax_id
           AND new.recipient_legal_name IS old.recipient_legal_name
@@ -3671,6 +3679,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.dining IS old.dining
         AND new.zone_id IS old.zone_id
         AND new.department_id IS old.department_id
@@ -3705,6 +3714,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.dining IS old.dining
         AND new.zone_id IS old.zone_id
         AND new.department_id IS old.department_id
@@ -3750,6 +3760,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.dining IS old.dining)
     OR (old.delivery_table_id IS NOT NULL AND new.delivery_table_id IS NULL
         AND old.delivery_table_label IS NULL AND new.delivery_table_label IS NOT NULL
@@ -3776,6 +3787,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.dining IS old.dining
         AND new.zone_id IS old.zone_id
         AND new.department_id IS old.department_id
@@ -3810,6 +3822,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.party_id IS old.party_id
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name
@@ -3844,6 +3857,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.party_id IS old.party_id
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name

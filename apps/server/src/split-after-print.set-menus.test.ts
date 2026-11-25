@@ -1,13 +1,14 @@
 import { eq, inArray } from "drizzle-orm";
 import { expect, it } from "vitest";
-import { adjustmentLines, billSetMenuCopies } from "@waitron/db";
+import { adjustmentLines, billSetMenuCopies, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createPinThrottle } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { suggestMove } from "@waitron/shared";
+import { groupSetMenus, suggestMove, type SetMenuGroupingInput } from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readBillSetMenus } from "./set-menu-bill.js";
+import { readGroupingCopies, saveBillGrouping } from "./set-menu-regroup.js";
 import { splitAfterPrint } from "./split-after-print.js";
 import { readOrderRevision } from "./working-order-context.js";
 import { GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel-line.js";
@@ -240,4 +241,26 @@ it("a comped set menu splits after print with its comp", async () => {
     ({ lineNo }) => lineNo === daily.lineNo,
   )!;
   expect(refiled).toMatchObject({ setMenuRole: "set_menu", lineGross: 0 });
+});
+
+it("a bill whose set menus were not proven cheapest splits after print still not proven", async () => {
+  const tab = await specBill(spec, "fire");
+  const notProven = (input: SetMenuGroupingInput) => ({ ...groupSetMenus(input), exact: false });
+  await inTx(venue, async (tx) =>
+    saveBillGrouping(tx, tab.tabId, await readGroupingCopies(tx, tab.tabId), notProven),
+  );
+  await serveSpecBill(spec, tab.partyId, tab.tabId);
+  await printSpecBill(spec, tab.partyId, tab.tabId);
+  const exactOf = async (id: string) =>
+    (
+      await venue.db
+        .select({ exact: workingOrders.setMenusExact })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, id))
+    )[0]!.exact;
+  expect(await exactOf(tab.tabId)).toBe(false);
+  const { billId } = await split(tab.tabId);
+
+  expect(await exactOf(billId)).toBe(false);
+  expect((await inTx(venue, (tx) => readBillSetMenus(tx, billId))).exact).toBe(false);
 });

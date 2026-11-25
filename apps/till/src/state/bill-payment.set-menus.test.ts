@@ -39,6 +39,7 @@ const placed = (lineId: string, setMenuLineId: string, priceCents: number) => ({
 const state = (...dishes: ReturnType<typeof placed>[]): BillSetMenuState => ({
   copies: [],
   recorded: {},
+  exact: true,
   setMenus: [
     { lineId: "daily-1", copyId: "daily-copy", lineNo: 1 },
     { lineId: "special-1", copyId: "special-copy", lineNo: 2 },

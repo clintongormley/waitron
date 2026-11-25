@@ -98,9 +98,15 @@ export async function isSetMenuBill(tx: Transaction, workingOrderId: string): Pr
     })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
+  return order !== undefined && isSetMenuBillRow(order);
+}
+
+/** {@link isSetMenuBill} for a bill row already read. */
+export function isSetMenuBillRow(
+  order: Pick<typeof workingOrders.$inferSelect, "partyId" | "dining" | "serviceMode">,
+): boolean {
   return (
-    order !== undefined &&
-    (order.dining === "takeaway" || (order.partyId !== null && order.serviceMode === "table_tab"))
+    order.dining === "takeaway" || (order.partyId !== null && order.serviceMode === "table_tab")
   );
 }
 
@@ -224,6 +230,14 @@ export async function readBillsSetMenus(
   ];
   const served = requests.length === 0 ? [] : await serveRecordedSetMenus(tx, requests);
   const servedByVersion = new Map(requests.map((request, i) => [key(request), served[i]!]));
+  const exact = new Map(
+    (
+      await tx
+        .select({ id: workingOrders.id, exact: workingOrders.setMenusExact })
+        .from(workingOrders)
+        .where(inArray(workingOrders.id, billValues))
+    ).map(({ id, exact }) => [id, exact]),
+  );
   const placed = lines.filter((line) => line.role === "dish" && line.setMenuLineId !== null);
   const dishes = placed.length === 0 ? [] : await placedSetMenuDishes(tx, placed);
   return new Map(
@@ -251,6 +265,7 @@ export async function readBillsSetMenus(
               copyId: servedByVersion.get(key({ menuId, versionId }))!.key,
             })),
             dishes: dishes.filter((dish) => dish.billId === billId).map(({ dish }) => dish),
+            exact: exact.get(billId)!,
           },
           setMenuCopies: [...copies.values()].map(({ copy }) => copy),
         },

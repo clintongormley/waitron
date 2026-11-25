@@ -1,5 +1,5 @@
 import "./errors.js";
-import { workingOrderLines, newId, type Transaction, kitchenStations } from "@waitron/db";
+import { workingOrderLines, newId, products, type Transaction, kitchenStations } from "@waitron/db";
 import {
   type ResolvedExtraList,
   readProductModifiers,
@@ -41,7 +41,7 @@ import {
 } from "@waitron/shared";
 import { setMenuALaCartePrices } from "@waitron/orders-sales/a-la-carte-price.js";
 import { offeredKey } from "@waitron/venue-service";
-import { and, inArray, eq } from "drizzle-orm";
+import { and, inArray, eq, sql } from "drizzle-orm";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import {
@@ -489,6 +489,7 @@ export async function priceOrderLines(
       variantId: variantId ?? null,
     })),
   );
+  const countsAs = await countsAsCourses(tx, lines);
   if (late.length > 0) {
     const confirmedBy = await confirmLateDishes(tx, service!.departmentId, late, lateSend);
     for (const { index, periodId, periodName } of late)
@@ -546,6 +547,7 @@ export async function priceOrderLines(
         unit: ExtraChild["unitContext"];
         portionable: boolean;
         aLaCarteCents: number | null;
+        countsAsCourseId: string | null;
         placement?: Omit<SetMenuPlacement, "workingOrderLineId">;
         late?: LineContextInput["late"];
         vatClass: VatClass;
@@ -671,6 +673,7 @@ export async function priceOrderLines(
       makeAt: line.makeAt != null && activeStations.has(line.makeAt) ? line.makeAt : null,
       portionable,
       aLaCarteCents: aLaCarte[index]!,
+      countsAsCourseId: countsAs[index]!,
       ...classes,
       ...(mark === undefined ? {} : { late: mark }),
       unit: {
@@ -763,6 +766,7 @@ export async function priceOrderLines(
       unitPriceGross: decimalToCents(line.grossUnitPrice),
       aLaCarteUnitPrice:
         meta.kind === "parent" ? (meta.aLaCarteCents ?? decimalToCents(line.grossUnitPrice)) : null,
+      countsAsCourseId: meta.kind === "parent" ? meta.countsAsCourseId : null,
       vatClass: meta.vatClass,
       takeawayVatClass: meta.takeawayVatClass,
       // GROSS, unlike the filed `sale_lines.line_total`'s net base: every total the operator and
@@ -803,6 +807,35 @@ export async function priceOrderLines(
   const portionable = lineMeta.map((meta) => meta.kind === "parent" && meta.portionable);
   return { lineRows, portionable, gross, identities, lineContexts, offers, setMenuLinks };
 }
+/**
+ * Each line's product course, a variant's own else its dish's: never the line's `courseId`, which is
+ * the waiter's choice, nor a set-menu copy's course.
+ */
+async function countsAsCourses(
+  tx: Transaction,
+  lines: readonly { offer: { productId: string }; variantId?: string | null }[],
+): Promise<(string | null)[]> {
+  const ids = [
+    ...new Set(
+      lines.flatMap(({ offer, variantId }) =>
+        variantId == null ? [offer.productId] : [offer.productId, variantId],
+      ),
+    ),
+  ];
+  const rows =
+    ids.length === 0
+      ? []
+      : await tx
+          .select({ id: products.id, courseId: products.courseId })
+          .from(products)
+          .where(inArray(products.id, sql`(select value from json_each(${JSON.stringify(ids)}))`));
+  const course = new Map(rows.map(({ id, courseId }) => [id, courseId]));
+  return lines.map(
+    ({ offer, variantId }) =>
+      (variantId == null ? null : course.get(variantId)) ?? course.get(offer.productId) ?? null,
+  );
+}
+
 /**
  * A line's free-text kitchen note, trimmed, or `null` for none. The body is JSON, so a non-string is
  * screened out before it can reach `.trim()` as a TypeError.

@@ -431,6 +431,7 @@ BEGIN
       AND new.whole_portion IS old.whole_portion
       AND new.list_unit_price_gross IS old.list_unit_price_gross
       AND new.a_la_carte_unit_price IS old.a_la_carte_unit_price
+      AND new.counts_as_course_id IS old.counts_as_course_id
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
       AND new.menu_name IS old.menu_name
@@ -507,6 +508,7 @@ BEGIN
       AND new.served_quantity IS old.served_quantity
       AND new.list_unit_price_gross IS old.list_unit_price_gross
       AND new.a_la_carte_unit_price IS old.a_la_carte_unit_price
+      AND new.counts_as_course_id IS old.counts_as_course_id
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
       AND new.menu_name IS old.menu_name
@@ -601,6 +603,7 @@ BEGIN
       AND new.whole_portion IS old.whole_portion
       AND new.list_unit_price_gross IS old.list_unit_price_gross
       AND new.a_la_carte_unit_price IS old.a_la_carte_unit_price
+      AND new.counts_as_course_id IS old.counts_as_course_id
       AND new.menu_item_id IS old.menu_item_id
       AND new.menu_id IS old.menu_id
       AND new.menu_name IS old.menu_name
@@ -726,6 +729,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.dining IS old.dining)
     OR (old.status = 'placed' AND new.status = 'placed'
         AND new.id IS old.id
@@ -741,6 +745,7 @@ BEGIN
         AND new.collected_at IS old.collected_at
         AND new.dining IS old.dining
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND ((new.invoice_type IS old.invoice_type
           AND new.recipient_tax_id IS old.recipient_tax_id
           AND new.recipient_legal_name IS old.recipient_legal_name
@@ -778,6 +783,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.dining IS old.dining
         AND new.zone_id IS old.zone_id
         AND new.department_id IS old.department_id
@@ -812,6 +818,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.dining IS old.dining
         AND new.zone_id IS old.zone_id
         AND new.department_id IS old.department_id
@@ -857,6 +864,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.dining IS old.dining)
     OR (old.delivery_table_id IS NOT NULL AND new.delivery_table_id IS NULL
         AND old.delivery_table_label IS NULL AND new.delivery_table_label IS NOT NULL
@@ -883,6 +891,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.dining IS old.dining
         AND new.zone_id IS old.zone_id
         AND new.department_id IS old.department_id
@@ -917,6 +926,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.party_id IS old.party_id
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name
@@ -951,6 +961,7 @@ BEGIN
         AND new.invoice_delivery IS old.invoice_delivery
         AND new.receipt_locale IS old.receipt_locale
         AND new.items_paid_from IS old.items_paid_from
+        AND new.set_menus_exact IS old.set_menus_exact
         AND new.party_id IS old.party_id
         AND new.bill_number IS old.bill_number
         AND new.bill_name IS old.bill_name

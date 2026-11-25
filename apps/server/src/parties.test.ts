@@ -255,7 +255,7 @@ describe("related bills", () => {
     expect(before).toEqual([
       {
         workingOrderId: tabId,
-        setMenus: { copies: [], recorded: {}, setMenus: [], dishes: [] },
+        setMenus: { copies: [], recorded: {}, setMenus: [], dishes: [], exact: true },
         setMenuCopies: [],
         revision: 2,
         invoiceType: "F2",
@@ -275,7 +275,7 @@ describe("related bills", () => {
       },
       {
         workingOrderId: checkId,
-        setMenus: { copies: [], recorded: {}, setMenus: [], dishes: [] },
+        setMenus: { copies: [], recorded: {}, setMenus: [], dishes: [], exact: true },
         setMenuCopies: [],
         revision: 1,
         invoiceType: "F2",
@@ -1365,7 +1365,7 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
     const listed = before.find((bill) => bill.workingOrderId === billId)!;
     expect(listed).toEqual({
       workingOrderId: billId,
-      setMenus: { copies: [], recorded: {}, setMenus: [], dishes: [] },
+      setMenus: { copies: [], recorded: {}, setMenus: [], dishes: [], exact: true },
       setMenuCopies: [],
       revision: 2,
       invoiceType: "F2",

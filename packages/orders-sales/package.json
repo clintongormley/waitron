@@ -22,6 +22,7 @@
     "./receipt-sale-types.js": "./src/receipt-sale-types.ts",
     "./receipt-table.js": "./src/receipt-table.ts",
     "./receipt-tax-table.js": "./src/receipt-tax-table.ts",
+    "./set-menu-grouping-plan.js": "./src/set-menu-grouping-plan.ts",
     "./testing/full-invoice-fixture.js": "./test/full-invoice-fixture.ts",
     "./testing/receipt-cases.js": "./test/receipt-cases.ts"
   },

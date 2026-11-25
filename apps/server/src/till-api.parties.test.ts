@@ -802,7 +802,7 @@ describe("GET /api/parties/:id/bills", () => {
     expect(await res.json()).toEqual([
       {
         workingOrderId: tabId,
-        setMenus: { copies: [], recorded: {}, setMenus: [], dishes: [] },
+        setMenus: { copies: [], recorded: {}, setMenus: [], dishes: [], exact: true },
         setMenuCopies: [],
         revision: 0,
         invoiceType: "F2",

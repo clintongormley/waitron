@@ -37,7 +37,7 @@ afterEach(cleanupWidgets);
 it("applies a saved count and uses its party revision for the next tap", async () => {
   const zone = menu("lunch");
   zone.setMenus = [{ ...daily, versionIds: ["lunch"], orderable: true, newestOnSale: true }];
-  const empty = { copies: [], setMenus: [], dishes: [], recorded: {} };
+  const empty = { copies: [], setMenus: [], dishes: [], recorded: {}, exact: true };
   let state = empty as typeof bill;
   const setSetMenuCount = vi.fn(async (_billId: string, _menuId: string, count: number) => {
     state = { ...bill, dishes: [], setMenus: bill.setMenus.slice(0, count) };
