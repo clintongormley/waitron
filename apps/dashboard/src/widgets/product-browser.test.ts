@@ -802,15 +802,6 @@ it("shows a refused drop in the Move footer and keeps the destination and select
   const notice = () => el.shadowRoot!.querySelector<HTMLElement>('[data-test="list-action-error"]');
   expect(notice()?.textContent).toContain("Choose a parent outside");
   expect(notice()?.getAttribute("role")).toBeNull();
-  el.tableHidden = true;
-  await el.updateComplete;
-  expect(move.open).toBe(true);
-  expect(move.querySelector("wt-combobox")!.value).toBe("f");
-  expect(move.querySelector('[slot="footer"] [role="alert"]')?.textContent).toContain(
-    "Choose a parent outside",
-  );
-  el.tableHidden = false;
-  await el.updateComplete;
   const scrolled = vi.spyOn(notice()!, "scrollIntoView");
   const closed = dialogClosed(move);
   await userEvent.keyboard("{Escape}");
@@ -3996,6 +3987,14 @@ it("shows a late name refusal above the table and leaves the newer name box alon
     "toolbar-bottom",
   );
   expect(box.error).toBe("");
+  await userEvent.keyboard("Fresh");
+  el.shadowRoot!.querySelector<HTMLElement>('[name="menu-search"]')!.focus();
+  await vi.waitFor(() =>
+    expect(el.api.updateCategory).toHaveBeenCalledExactlyOnceWith("f", { name: "Fresh" }),
+  );
+  expect(
+    el.shadowRoot!.querySelector('[slot="toolbar-bottom"][role="alert"]')?.textContent?.trim(),
+  ).toBe(codeMessage("category.invalid"));
 });
 
 it("Add category clears a typed search, so its name box shows", async () => {

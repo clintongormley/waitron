@@ -55,6 +55,7 @@ import { refusalText } from "../widgets/delete-refusal.js";
 import {
   focusProductsListFeedback,
   productsListLoadFeedback,
+  restartSharedLanguagesRead,
 } from "./products-list-load-feedback.js";
 
 @customElement("dashboard-products-screen")
@@ -107,7 +108,6 @@ export class ProductsScreen extends LitElement {
   @state() private editorValue: ProductEditorValue | null = null;
   @state() private busy = false;
   @state() private errorKey: string | null = null;
-  /** Whether `errorKey` is a read's failure, the only message the reads' recovery may clear. */
   #readErrorShown = false;
   @state() private refusalParams: unknown = null;
   @state() private deletingProduct: { id: string; name: string; isVariant: boolean } | null = null;
@@ -173,9 +173,7 @@ export class ProductsScreen extends LitElement {
   readonly #queries = new DashboardQueries(
     this,
     () => this.api,
-    (error) => {
-      if (this.productsLoaded) this.#showReadError(error);
-    },
+    (error) => this.#showReadError(error),
     () => {
       if (this.#readErrorShown) this.#showError(null);
       this.#resumeInitialLoad();
@@ -320,8 +318,11 @@ export class ProductsScreen extends LitElement {
     if (this.retrying) return;
     this.retrying = true;
     try {
-      if (!this.productsLoaded) await this.#load();
-      else {
+      if (!this.productsLoaded) {
+        if (this.#queries.failing("getContentLanguages"))
+          await restartSharedLanguagesRead(this.api);
+        await this.#load();
+      } else {
         await Promise.allSettled([
           this.#productsQueries.failing("listProducts") && this.#reloadProducts(),
           this.#categoriesQueries.failing("listCategories") && this.#watchCategories(),
@@ -743,22 +744,22 @@ export class ProductsScreen extends LitElement {
 
   override render() {
     const readError = this.#tableReadError();
-    const tableHidden = !this.productsLoaded || readError !== null;
+    const tableHidden = !this.productsLoaded;
     const locales = this.contentLanguages?.languages ?? [];
     const refusals = this.#childRefusalErrors();
-    const errorText = this.errorKey ? refusalText(this.errorKey, this.refusalParams) : "";
+    const error = this.productsLoaded || !this.#readErrorShown ? this.errorKey : null;
+    const errorText = error ? refusalText(error, this.refusalParams) : "";
     return html`
       <div class="header">
         <h1 tabindex="-1">${t("nav.products")}</h1>
       </div>
       ${
-        tableHidden
+        tableHidden || readError !== null
           ? productsListLoadFeedback(readError, this.retrying, () => void this.#retryTable())
           : nothing
       }
       <dashboard-product-browser
         .tableHidden=${tableHidden}
-        @table-focus-lost=${() => focusProductsListFeedback(this.renderRoot)}
         .api=${this.api}
         .categoryId=${this.categoryId}
         @open-category=${(event: CustomEvent<{ categoryId: string | null }>) => {
@@ -791,7 +792,7 @@ export class ProductsScreen extends LitElement {
           this.#openDelete(event.detail.productId);
         }}
       ></dashboard-product-browser>
-      ${this.errorKey ? html`<p class="error" role="alert">${errorText}</p>` : nothing}
+      ${errorText ? html`<p class="error" role="alert">${errorText}</p>` : nothing}
       <dashboard-product-editor
         @wt-close=${() => {
           if (!this.editorOpen && this.placing === null) this.#refocusAdd();

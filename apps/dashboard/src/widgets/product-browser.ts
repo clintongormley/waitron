@@ -272,16 +272,8 @@ export class ProductBrowser extends LitElement {
       this.#folderMadeAt = this.routing ? folderMadeAt(this.routing, this.categories) : new Map();
   }
 
-  override update(changed: PropertyValues): void {
-    const active = this.shadowRoot?.activeElement;
-    const list = this.#list();
-    const losingFocus =
-      changed.has("tableHidden") &&
-      this.tableHidden &&
-      active &&
-      (active === list || list?.contains(active));
-    super.update(changed);
-    if (losingFocus) this.#emit("table-focus-lost", undefined);
+  get #actionNotice(): string {
+    return (this.nameDraft?.kind === "rename" && this.nameError) || this.actionError;
   }
 
   override updated(changed: PropertyValues): void {
@@ -298,16 +290,15 @@ export class ProductBrowser extends LitElement {
       }
     }
     if (
-      this.actionError &&
+      this.#actionNotice &&
       !this.operation &&
       !this.colorTarget &&
-      ["actionError", "operation", "colorTarget", "tableHidden"].some((key) => changed.has(key))
+      ["actionError", "nameError", "operation", "colorTarget"].some((key) => changed.has(key))
     ) {
       this.renderRoot
         .querySelector('[data-test="list-action-error"]')
         ?.scrollIntoView({ block: "nearest" });
     }
-    if (changed.has("tableHidden") && this.nameError) void this.#list()?.revealRefusedName();
   }
 
   #list(): ProductList | null {
@@ -945,7 +936,6 @@ export class ProductBrowser extends LitElement {
     // reaches its own box only while that box is still open.
     const draft = this.nameDraft;
     if (!draft) return;
-    this.actionError = "";
     this.nameError = "";
     const parentId = draft.kind === "create" ? draft.parentId : null;
     const color = this.nameColor;
@@ -960,7 +950,7 @@ export class ProductBrowser extends LitElement {
     } catch (error) {
       const message = Object.values(categoryRefusalErrors(error, parentId))[0]!;
       if (this.nameDraft === draft) this.nameError = message;
-      if (draft.kind === "rename" || this.nameDraft !== draft) this.actionError = message;
+      else this.actionError = message;
     }
   }
   #renamed(draft: CategoryNameDraft | null): CategorySummary | undefined {
@@ -1089,7 +1079,6 @@ export class ProductBrowser extends LitElement {
           event.stopPropagation();
           this.nameDraft = null;
           this.nameError = "";
-          this.actionError = "";
         }}
       >
         <wt-icon-button
@@ -1171,7 +1160,7 @@ export class ProductBrowser extends LitElement {
               </p>`
             : nothing
         }
-        ${productListActionFeedback(this.actionError, !this.operation && !this.colorTarget && !this.tableHidden)}
+        ${productListActionFeedback(this.#actionNotice, !this.operation && !this.colorTarget)}
       </dashboard-product-list>
       ${this.#operationDialog()}<dashboard-category-color-form
         .open=${this.colorTarget !== null}

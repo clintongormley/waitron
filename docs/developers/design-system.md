@@ -2545,8 +2545,8 @@ its controls wrap at phone width. Keep Customise after Search in the toolbar.
 The All products row has a named chevron: closing it closes every category and product branch;
 opening it shows only its own level. Products has no Expand all button. A saved closed root stays
 closed on reload; an explicit category or product reveal opens only its ancestor path.
-While Products is loading, the table and its counts give way to a loading message. If a table
-read fails, choose **Try again** to bring it back.
+Until Products first loads, it shows a loading message or a failure with **Try again**.
+After the first load, a failed table read shows its message and **Try again** above the rows you already have.
 
 Products leaves this mode with **Done**. A valid drop opens the Move dialog with its destination
 selected, including **No category** when you drop on **All products**. Review any changes to

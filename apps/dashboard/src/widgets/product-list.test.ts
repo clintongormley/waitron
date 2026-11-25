@@ -2880,29 +2880,6 @@ describe("the product list as a tree", () => {
     expect(sent).toEqual([{ name: "Juice" }, { name: "Juice" }]);
   });
 
-  it("hides a focused name box without saving its half-typed name", async () => {
-    const { el, root } = await mountTree();
-    const sent: unknown[] = [];
-    el.addEventListener("name-commit", (event) => sent.push((event as CustomEvent).detail));
-    el.nameDraft = { kind: "rename", categoryId: "d" };
-    await vi.waitFor(() => expect(focusedName(el)).toBe("category-name"));
-    await userEvent.keyboard("Drin");
-    const input = root
-      .querySelector('wt-input[name="category-name"]')!
-      .shadowRoot!.querySelector("input")!;
-    el.hidden = true;
-    input.blur();
-    await el.updateComplete;
-    expect(focusedName(el)).toBeUndefined();
-    expect(sent).toEqual([]);
-    el.hidden = false;
-    await el.updateComplete;
-    expect(input.value).toBe("Drin");
-    input.focus();
-    await userEvent.keyboard("{Enter}");
-    expect(sent).toEqual([{ name: "Drin" }]);
-  });
-
   it("turns a category's name into the box, holding its name, for a rename", async () => {
     const { el, root } = await mountTree();
     el.nameDraft = { kind: "rename", categoryId: "d" };

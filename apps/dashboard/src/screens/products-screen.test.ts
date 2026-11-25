@@ -1,5 +1,6 @@
 import { LeaveController, NavigationGuard } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
+import { dashboardQuery } from "../api/live-queries.js";
 import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
@@ -415,7 +416,42 @@ describe("menu-screen", () => {
     },
   );
 
-  it("retries only a failed table read even when a library is also down", async () => {
+  it("retries a failed languages read that the dashboard shell still observes", async () => {
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    vi.mocked(api.getContentLanguages).mockRejectedValueOnce({ code: "connection.failed" });
+    const shell = api.liveData.observe(dashboardQuery(api, "getContentLanguages", []), () => {});
+    onTestFinished(() => shell.unsubscribe());
+    await vi.waitFor(() => expect(shell.snapshot.status).toBe("error"));
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await flush(el);
+    const table = await productTable(el);
+    expect(table.checkVisibility()).toBe(false);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-test="products-retry"]')!.click();
+    await vi.waitFor(() => expect(shell.snapshot.status).toBe("ready"));
+    await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
+    expect(api.getContentLanguages).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a library refresh failure that arrived while products were still pending", async () => {
+    const pending = deferred<Product[]>();
+    const api = Object.assign(stubApi(), { liveData: new LiveData() });
+    vi.mocked(api.listProducts).mockReturnValueOnce(pending.promise);
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    const table = await productTable(el);
+    await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledOnce());
+    vi.mocked(api.listUnits).mockRejectedValue({ code: "connection.failed" });
+    api.liveData.refresh();
+    await vi.waitFor(() => expect(api.listUnits).toHaveBeenCalledTimes(2));
+    await flush(el);
+    pending.resolve(products);
+    await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
+    expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
+      codeMessage("connection.failed"),
+    );
+    expect(el.shadowRoot!.querySelector('[data-test="products-retry"]')).toBeNull();
+  });
+
+  it("keeps loaded rows and retries only a failed table read when a library is also down", async () => {
     const api = Object.assign(stubApi(), { liveData: new LiveData() });
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
@@ -428,15 +464,18 @@ describe("menu-screen", () => {
         '[data-test="products-retry"]',
       );
     await vi.waitFor(() => expect(retry()).not.toBeNull());
-    expect(table.checkVisibility()).toBe(false);
+    expect(table.checkVisibility()).toBe(true);
+    expect(table.shadowRoot!.querySelector('tr[data-row-key="folder:c1"]')?.textContent).toContain(
+      "Appetizers",
+    );
     const pending = deferred<CategorySummary[]>();
     vi.mocked(api.listCategories).mockReturnValueOnce(pending.promise);
     retry()!.click();
     retry()!.click();
     await vi.waitFor(() => expect(api.listCategories).toHaveBeenCalledTimes(3));
     pending.resolve(categories);
-    await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
-    expect(retry()).toBeNull();
+    await vi.waitFor(() => expect(retry()).toBeNull());
+    expect(table.checkVisibility()).toBe(true);
     expect(api.listProducts).toHaveBeenCalledTimes(2);
     expect(api.listUnits).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
@@ -444,7 +483,7 @@ describe("menu-screen", () => {
     );
   });
 
-  it("hands keyboard focus to Try again when a focused toolbar control disappears", async () => {
+  it("keeps table focus on failed refresh and returns focus from a finished retry", async () => {
     const api = Object.assign(stubApi(), { liveData: new LiveData() });
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
@@ -453,9 +492,11 @@ describe("menu-screen", () => {
     expect(list(el).shadowRoot!.activeElement).toBe(select);
     vi.mocked(api.listProducts).mockRejectedValueOnce({ code: "connection.failed" });
     api.liveData.refresh();
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("products-retry"),
-    );
+    const retry = () => el.shadowRoot!.querySelector<HTMLElement>('[data-test="products-retry"]');
+    await vi.waitFor(() => expect(retry()).not.toBeNull());
+    expect(list(el).shadowRoot!.activeElement).toBe(select);
+    retry()!.focus();
+    expect(el.shadowRoot!.activeElement).toBe(retry());
     await userEvent.keyboard("{Enter}");
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement?.localName).toBe("h1"));
   });

@@ -1,4 +1,6 @@
 import { html } from "lit";
+import type { DashboardApi } from "../api/client.js";
+import { dashboardQuery } from "../api/live-queries.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
@@ -21,4 +23,10 @@ export function focusProductsListFeedback(root: HTMLElement | DocumentFragment):
     root.querySelector<HTMLElement>('[data-test="products-retry"]') ??
     root.querySelector<HTMLElement>("h1");
   target?.focus();
+}
+
+export function restartSharedLanguagesRead(api: DashboardApi): Promise<void> {
+  api.liveData?.invalidate(dashboardQuery(api, "getContentLanguages", []).dependencies);
+  // Start the scheduled read before a new watch can reuse the shell's failed snapshot.
+  return Promise.resolve();
 }

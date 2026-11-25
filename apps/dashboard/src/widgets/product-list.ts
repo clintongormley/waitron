@@ -606,34 +606,29 @@ export class ProductList extends LitElement {
 
   protected override updated(changed: PropertyValues<this>): void {
     if (changed.has("nameDraft") && this.nameDraft) void this.#revealNameBox(true);
-    else if (changed.has("nameError") && this.nameError) void this.revealRefusedName();
+    else if (changed.has("nameError") && this.nameError) void this.#revealNameBox(false);
     if (this.loaded && !this.#emptyChecked) {
       this.#emptyChecked = true;
       if (this.products.length === 0 && this.categories.length === 0) void this.#openRootMenu();
     }
   }
 
-  async revealRefusedName(): Promise<void> {
-    await this.updateComplete;
-    if (this.nameError) await this.#revealNameBox(false);
-  }
-
   async #revealNameBox(focus: boolean): Promise<void> {
     const draft = this.nameDraft;
     const table = this.#table();
-    if (!draft || !table || this.hidden) return;
+    if (!draft || !table) return;
     const nameBox = () =>
       table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(
         'wt-input[name="category-name"]',
       );
     await table.updateComplete;
     if (!focus) await nameBox()?.updateComplete;
-    if (this.nameDraft !== draft || this.hidden) return;
+    if (this.nameDraft !== draft) return;
     await table.revealRow(draft.kind === "create" ? DRAFT_KEY : `folder:${draft.categoryId}`);
     const box = nameBox();
     if (!box) return;
     await box.updateComplete;
-    if (this.nameDraft !== draft || this.hidden) return;
+    if (this.nameDraft !== draft) return;
     // Fit before focusing so the input does not scroll the table sideways.
     this.#fitNames();
     if (focus) {
@@ -729,7 +724,7 @@ export class ProductList extends LitElement {
       }}
       @focusout=${() => {
         // A box removed while it holds the cursor also loses it, after the next box's draft is set.
-        if (this.hidden || this.nameDraft !== draft || this.#nameSent || this.choosingColor) return;
+        if (this.nameDraft !== draft || this.#nameSent || this.choosingColor) return;
         if (this.#nameValue.trim() === "") this.#cancelName();
         else this.#commitName();
       }}
