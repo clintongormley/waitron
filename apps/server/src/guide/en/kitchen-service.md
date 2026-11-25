@@ -159,6 +159,9 @@ changed, under **Identical dishes on a station ticket**, **Print held groups in 
 A dish the station has started cannot be changed. A dish that went to no station, with no extra
 that went to a station of its own, can be changed whatever the stations allow.
 
+If you’re a supervisor, [choose a station in the Calendar](opening-hours.md#station-hours) to
+check its **Changes after sending** rule.
+
 ## Sign in on a kitchen display {#kitchen-sign-in}
 
 On a station screen, choose **Log in**, select your name and enter your PIN.

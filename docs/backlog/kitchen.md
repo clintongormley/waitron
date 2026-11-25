@@ -177,8 +177,9 @@ the change (plan PR 8 Decision 1).
 **Owner decisions, 2026-10-15; implemented 2026-10-17.**
 
 - Prep stations follows Departments and zones in the sidebar. It has Stations and Routes tabs.
-  You view planned station times through Calendar's Show picker; its existing
-  `venue.configure` permission stays. A supervisor's read-only view is queued under [SETTLED-SMALL](till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet).
+  **2026-11-25:** Supervisors read planned station times in the Calendar's Show picker under the
+  watcher's reading of A506-12. Choosing one station also shows its Changes after sending rule
+  under the owner's A1079 answer B. The Prep stations page still needs `venue.configure`.
 - Station lists use names, with the default station in its alphabetical place and its Default label
   retained. Stations have no hand-set order, reorder route or stored order column. Courses and
   zones keep their own order.

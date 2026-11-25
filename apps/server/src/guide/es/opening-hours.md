@@ -30,6 +30,8 @@ Pinta todo el tramo de **Cerrado** de la zona, aunque termine después del cierr
 
 En Mes o Semana, elige **Todas las estaciones de preparación** en **Mostrar** para comparar las estaciones por los departamentos que les envían pedidos, o una estación para ver qué departamentos le envían pedidos. Elige **Mostrar todo** para ver los departamentos seguidos de las estaciones. El icono de estación las distingue de las zonas con nombres parecidos. Pulsa cualquier punto de la fila de una estación, incluidos los tramos cerrados, para abrir la ventana del día junto a ese punto.
 
+Si tienes el rol de supervisor, elige una estación en **Mostrar** para consultar su ajuste de **Cambios tras el envío** encima del calendario.
+
 Los horarios de las estaciones siguen los periodos pintados, sus cartas, las rutas y los cierres de las zonas que envían. Para cambiar cuándo recibe pedidos una estación, edita sus periodos y cartas en **Periodos**, sus rutas en **Estaciones de preparación** o los horarios de cierre de las zonas que envían. La estación predeterminada también muestra los periodos que le envían pedidos. Abre una fecha para consultar los departamentos y sus zonas, seguidos de las estaciones seleccionadas, o de todas si no has filtrado por estación.
 
 ## Selecciona varios días {#select-days}

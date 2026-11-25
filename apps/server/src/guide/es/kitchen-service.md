@@ -179,6 +179,9 @@ en **En espera en el pase**: consulta [Haz que una estación espere al pase](kit
 Un plato que la estación ha empezado no se puede cambiar. Un plato que no fue a ninguna estación,
 sin ningún extra que fuera a una estación propia, se puede cambiar sea cual sea el ajuste de las estaciones.
 
+Si tienes el rol de supervisor, [elige una estación en el calendario](opening-hours.md#station-hours)
+para consultar su ajuste de **Cambios tras el envío**.
+
 ## Inicia sesión en una pantalla de cocina {#kitchen-sign-in}
 
 En la pantalla de estación, pulsa **Entrar**, elige tu nombre e introduce tu PIN.

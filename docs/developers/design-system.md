@@ -5446,8 +5446,8 @@ Choose a prep station in the Calendar's Month or Week Show picker to see its pla
 hours (see Calendar below). One chosen station has a row per sending department and says Closed
 once on a date none sends. All prep stations groups sender rows under station headings when several
 departments feed a station, or names the single row after its station. The default station shows
-dated demand too. Month and Week’s Show all list departments before stations. Station choices require `venue.configure`;
-a read-only Calendar keeps its department choices.
+dated demand too. Month and Week’s Show all list departments before stations. In a read-only
+Calendar, choosing a single station also shows its saved Changes after sending rule.
 
 Prep stations itself has only Stations and Routes. Above its tabs, a warning names, zone by zone,
 each station no pass screen can fire there — one set to wait for the pass, or one with a dish
@@ -5802,8 +5802,9 @@ Opening hours' Year.
   a picked date is ringed outside in `--wt-color-text`, twice as wide on today so it shows beside
   today's own inner ring in `--wt-color-primary`. Show starts on All departments, followed by
   indented departments, then pickable All prep stations and its indented stations. Month and Week add
-  Show all first. Station choices require `venue.configure`; a read-only Calendar offers departments
-  and reads no stations. A station option draws its named icon after the label in the list and the closed picker.
+  Show all first. Viewers get the same Show choices. When they choose one station, its saved
+  Changes after sending rule appears as text above the Month or Week. A station option draws its
+  named icon after the label in the list and the closed picker.
   Choosing one writes `/station/<id>`; choosing a group writes `/show/stations` or `/show/all`.
   A station takes precedence over a group, then a group over a department. Year keeps these keys without using them; Month and Week both use Show all to compare
   departments followed by stations.
@@ -5873,12 +5874,12 @@ Opening hours' Year.
   zone hours merge touching periods. Range entries wrap between entries, each “·” kept with the
   preceding range by a non-breaking space. The box uses `--wt-modal-standard-width`, constrained
   to the viewport, and scrolls vertically when needed. Staffing retains its compact content-sized box, flat rows and slots. After the staffing rows or Closed message, show the week’s rota phase to people who can open the rota from the box.
-  Managers then see a bold Prep stations section: the selected station, or all active stations
-  when no station filter is set, in Year, Month and Week. Station names are normal weight; a
+  The bold Prep stations section shows the selected station, or all active stations when no
+  station filter is set, in Year, Month and Week for managers and viewers. Station names are normal weight; a
   station fed by several departments has one line per sender, retaining period names and times.
   These forecasts use the existing passive station batch read, or the selected station's read.
   Department rows remain visible while station times load or fail; failures are announced in the
-  box. Viewers read no station list or times and keep their read-only season navigation.
+  box. Viewers keep their read-only season navigation.
   The box heading is the date, with its special-day name or holiday name. Its season line is a
   link to that season's standard week, on ordinary and special dates. Managers keep Make a
   special day or Edit special day at the bottom, including on station views. Open this week is

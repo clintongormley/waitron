@@ -1,5 +1,13 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
+import type { ChangesAfterSending } from "@waitron/shared";
+
+export const CHANGES_LABELS = {
+  never: "prep.changes_after_sending.never",
+  held: "prep.changes_after_sending.held",
+  "held-or-waiting": "prep.changes_after_sending.held_or_waiting",
+} as const satisfies Record<ChangesAfterSending, string>;
+
 const en = {
   "calendar.selection": "Selected days",
   "calendar.selection_count": "{count} days selected",

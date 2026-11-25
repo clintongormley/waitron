@@ -252,6 +252,23 @@ describe("A725 Calendar station month, migrated from Times", () => {
     },
   );
 
+  it("a viewer can read the station's rule and open a date from Month", async () => {
+    const h = harness();
+    h.state.readOnly = true;
+    const { el } = await mount({ stationId: "grill" }, h);
+    await drawn(el, "2026-12-01", "rest").not.toBeNull();
+    expect(picker(el)!.value).toBe("station:grill");
+    expect(titles(el, "2026-12-01")).toEqual(["Dinner (Restaurant) 19:00–01:00"]);
+    expect(text(el.shadowRoot!.querySelector("[data-test=station-change-policy]"))).toBe(
+      "Changes after sending: While held or waiting",
+    );
+    cell(el, "2026-12-01")!.querySelector<HTMLElement>(".day")!.click();
+    const box = () => el.shadowRoot!.querySelector("calendar-day-box");
+    await expect.poll(() => box()?.shown).toBe(true);
+    await expect.poll(() => box()?.rows.map((row) => row.name)).toContain("Grill");
+    expect(box()!.querySelector("[data-test=special-add], [data-test=special-edit]")).toBeNull();
+  });
+
   it("draws one department's station ranges from passive month and station reads", async () => {
     const { el, calls } = await mount({ stationId: "grill" });
     await drawn(el, "2026-12-01", "rest").not.toBeNull();

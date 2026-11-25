@@ -30,6 +30,8 @@ Paint the zone’s whole **Closed** stretch, even past its department’s curren
 
 In Month or Week, choose **All prep stations** in **Show** to compare stations by sending department, or choose one station to see which departments send it orders. Choose **Show all** to see departments followed by stations. The station icon distinguishes them from zones with similar names. Click anywhere on a station’s row, including its closed stretches, to open the day box beside that point.
 
+If you’re a supervisor, choose one station in **Show** to read its **Changes after sending** rule above the Calendar.
+
 Station hours follow your painted periods, their menus, routing and the closures of sending zones. To change when a station gets orders, edit its periods and menus in **Periods**, its routes in **Prep stations**, or the closing times of the zones that send to it. The default station shows the periods that send it orders too. Open a date to read the departments and their zones, followed by the selected stations, or all stations when you have no station filter.
 
 ## Select days together {#select-days}

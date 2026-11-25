@@ -46,7 +46,7 @@ import type { OpeningHoursApi } from "./opening-hours-client.js";
 import { businessDateToday } from "./business-date.js";
 import { daysBetween, isLocalDate, parseCalendarMonth, parseCalendarYear } from "../hours-rules.js";
 import { browserToday, format, formatDate } from "./hours-view.js";
-import { t } from "./strings.js";
+import { CHANGES_LABELS, t } from "./strings.js";
 import { chosenSeasonId } from "./season-choice.js";
 import type { PrepStation } from "./routing-client.js";
 import {
@@ -667,12 +667,9 @@ export class OpeningHoursScreen extends LitElement {
       );
     });
   }
-  /** A722 plan, Decision 12: a read-only Calendar offers and reads no station. */
   private stationsWanted() {
     return (
-      !this.readOnly &&
-      !this.moduleView &&
-      (this.view === "month" || this.view === "week" || Boolean(this.dayBox))
+      !this.moduleView && (this.view === "month" || this.view === "week" || Boolean(this.dayBox))
     );
   }
   private watchStations() {
@@ -712,11 +709,7 @@ export class OpeningHoursScreen extends LitElement {
     const month = this.boxMonthNeeded() || this.readMonth();
     const target =
       station?.id ||
-      (group
-        ? `show:${group}`
-        : this.dayBox && this.stations?.length && !this.readOnly
-          ? "box:stations"
-          : "");
+      (group ? `show:${group}` : this.dayBox && this.stations?.length ? "box:stations" : "");
     const key = target && month ? `${target} ${monthWeeks(month).join(" ")}` : "";
     this.stationTimesWatch.follow(key, () => {
       this.stationReadError = "";
@@ -1266,7 +1259,7 @@ export class OpeningHoursScreen extends LitElement {
       const departmentId =
         year || this.shownStation() || this.shownGroup() ? "" : this.departmentId;
       const shown = openingHoursDay(day, read.seasons, this.model!.departments, departmentId);
-      if (!this.readOnly && this.stations?.length) {
+      if (this.stations?.length) {
         const times =
           this.stationTimes?.key === this.stationTimesWatch.month
             ? this.stationTimes.value
@@ -1523,6 +1516,13 @@ export class OpeningHoursScreen extends LitElement {
       return html`<p role="alert" data-test="station-read-error">${this.stationReadError}</p>`;
     return nothing;
   }
+  private stationChangePolicy() {
+    const station = this.readOnly ? this.shownStation() : undefined;
+    if (!station) return nothing;
+    return html`<p data-test="station-change-policy">
+      ${t("prep.changes_after_sending")}: ${t(CHANGES_LABELS[station.changesAfterSending])}
+    </p>`;
+  }
   private showStations() {
     return (this.stationsWanted() && this.stations) || NO_STATIONS;
   }
@@ -1554,7 +1554,7 @@ export class OpeningHoursScreen extends LitElement {
     });
   };
   private month() {
-    return html`${this.readErrors()}
+    return html`${this.stationChangePolicy()}${this.readErrors()}
       <opening-hours-month
         .model=${this.monthModel}
         .month=${this.shownMonth()}
@@ -1592,7 +1592,7 @@ export class OpeningHoursScreen extends LitElement {
     if (box) this.shadowRoot?.querySelector("calendar-day-box")?.hide();
   }
   private week() {
-    return html`${this.readErrors()}
+    return html`${this.stationChangePolicy()}${this.readErrors()}
       <opening-hours-week
         .model=${this.monthModel}
         .date=${this.shownWeekDate()}
