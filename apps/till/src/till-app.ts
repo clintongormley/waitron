@@ -338,7 +338,14 @@ import {
   takePayment,
   withItems,
 } from "./state/pay-for-items.js";
-import { creditedNotice, movedToBill, reopenedBill } from "./state/reopened-bill.js";
+import {
+  billNoticeText,
+  creditedNotice,
+  goneNotice,
+  movedToBill,
+  reopenedBill,
+  type BillNotice,
+} from "./state/reopened-bill.js";
 import "./widgets/basket-refresh-dialog.js";
 import "./widgets/late-send-dialog.js";
 import type { LateSendDish, LateSendPurpose } from "./widgets/late-send-dialog.js";
@@ -1685,6 +1692,8 @@ interface BillPaying extends PayingOrder {
   refusal: PayRefusal | null;
   taken: PayTaken | null;
   refunded: RefundNotice | null;
+  /** The printed bill this window paid from was credited and reopened as the bill it is now on. */
+  credited?: BillNotice;
   busy: boolean;
 }
 
@@ -3988,7 +3997,7 @@ export class TillApp extends LitElement {
   /** The table id of that tab. */
   @state() private activeTableId?: string;
   /** What the order screen says once the bill on screen has left the party's bills (D11). */
-  @state() private billGone: string | null = null;
+  @state() private billGone: BillNotice | null = null;
   /** Parties whose + New bill this till has sent and not yet had answered. */
   @state() private newBillsOut: ReadonlySet<string> = new Set();
   /** The open tab's lines at their locked add-time prices; a tab does not re-price. */
@@ -12730,7 +12739,8 @@ export class TillApp extends LitElement {
         .tipsEnabled=${this.tipsEnabled}
         .deferredOffered=${this.#deferredOfferFor(open)}
         .ownReceiptOffered=${this.#ownReceiptOffered(open)}
-        .itemsBarred=${open.surface === "counter" && (this.stage === "collect" || open.balance?.status === "placed")}
+        .itemsBarred=${open.found !== undefined ? "bill_pay.items_barred_found" : open.surface === "counter" && this.stage === "collect" ? "bill_pay.items_barred_counter" : null}
+        .credited=${billNoticeText(open.credited)}
         .cardReader=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
         .readers=${this.#payReaders()}
@@ -15178,7 +15188,13 @@ export class TillApp extends LitElement {
             (this.billRefunding?.payId === paying.id && this.billRefunding.busy))))
     )
       return;
-    const next = billToShow(paidAfterSplit ? undefined : gone, bills);
+    const reopened = this.#reopenedByItems;
+    const next =
+      reopened !== undefined &&
+      reopened.from === gone &&
+      bills.some((bill) => bill.workingOrderId === reopened.to)
+        ? reopened.to
+        : billToShow(paidAfterSplit ? undefined : gone, bills);
     if (afterSplit || gone === undefined) this.#billAfterSplit = undefined;
     if (next === gone || (gone === undefined && !opening && !afterSplit)) return;
     const session = this.#operatorSession;
@@ -15203,18 +15219,13 @@ export class TillApp extends LitElement {
       const was = [...bills, ...before].find(
         (bill) => bill.workingOrderId === gone && bill.billNumber !== null,
       );
-      const numbered = was !== undefined;
       const shown = bills.find((bill) => bill.workingOrderId === next);
-      const reopen = this.#reopenedByItems;
       this.billGone =
-        reopen?.from === gone
-          ? creditedNotice(bills, reopen)
+        reopened?.from === gone
+          ? creditedNotice(bills, reopened)
           : shown === undefined || paidAfterSplit
             ? null
-            : fill(t(numbered ? "table.bill_gone" : "table.bill_gone_unnumbered"), {
-                gone: numbered ? billLabel(was) : "",
-                shown: billLabel(shown),
-              });
+            : goneNotice(was, shown);
       if (sync !== undefined && sync.billId === gone) {
         this.#dropDraft();
         this.#leftBillDrafts.set(
@@ -23796,14 +23807,18 @@ export class TillApp extends LitElement {
     if (!(await this.#switchToBill(reopened.workingOrderId))) return;
     this.billBalance = reopened;
     await this.#rereadPayingOrder(movedToBill(open, reopened), reopened);
-    this.#showCredited(reopened.workingOrderId);
+    this.#showCredited(reopened.workingOrderId, open.id);
   }
 
-  /** On bill `to`, once Pay for items reopened a printed bill as it, says its receipt was credited. */
-  #showCredited(to: string): void {
+  /** On bill `to`, once Pay for items reopened a printed bill as it, says its receipt was credited,
+   * on the screen and in a Pay window `id` still open on it. */
+  #showCredited(to: string, id?: number): void {
     const reopen = this.#reopenedByItems;
-    if (reopen?.to === to && this.activeTabId === to)
-      this.billGone = creditedNotice(this.partyBills, reopen);
+    if (reopen?.to !== to || this.activeTabId !== to) return;
+    this.billGone = creditedNotice(this.partyBills, reopen);
+    const now = id === undefined ? null : this.#billPayingNow(id);
+    if (now?.billId === to && this.billGone !== null)
+      this.billPaying = { ...now, credited: this.billGone };
   }
 
   async #showPaidTicket(
@@ -24818,7 +24833,7 @@ export class TillApp extends LitElement {
       .draftStore=${draft}
       .otherDrafts=${this.#otherDrafts(draft)}
       .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}
-      .billGone=${this.billGone}
+      .billGone=${billNoticeText(this.billGone)}
       .newBillBusy=${this.orderParty !== null && this.newBillsOut.has(this.orderParty.id)}
       .candidateReviewAllowed=${this.#draftSync?.billStatus === "open" && (this.#draftSync.edit?.editorId === null || this.#draftSync?.edit?.editorId === this.operatorPersonId)}
       .candidateReviewBusy=${this.resolvingDraftCandidate === this.#draftSync}
@@ -25033,7 +25048,7 @@ export class TillApp extends LitElement {
           .draftStore=${draft}
           .otherDrafts=${this.#otherDrafts(draft)}
           .retainedDraft=${draft === this.#draftSync?.store ? this.#draftSync.candidate : null}
-          .billGone=${this.billGone}
+          .billGone=${billNoticeText(this.billGone)}
           .newBillBusy=${this.orderParty !== null && this.newBillsOut.has(this.orderParty.id)}
           .candidateReviewAllowed=${this.#draftSync?.billStatus === "open" && (this.#draftSync.edit?.editorId === null || this.#draftSync?.edit?.editorId === this.operatorPersonId)}
           .candidateReviewBusy=${this.resolvingDraftCandidate === this.#draftSync}

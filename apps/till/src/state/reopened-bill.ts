@@ -26,17 +26,42 @@ export function movedToBill<
   return { ...open, billId: balance.workingOrderId, printed: false, balance, expectedEdit: null };
 }
 
-/** The screen's notice on `to`, the bill Pay for items reopened printed bill `from` as, naming the
+type BillRef = Pick<PartyBill, "billNumber" | "billName">;
+
+/** A notice above the table's bill, kept as facts and worded only when drawn, so it follows a
+ * change of language: the bill on screen left the table (`gone`, null when it had no number), or
+ * Pay for items credited a printed bill's receipt (`corrective`, null when the read named none). */
+export type BillNotice =
+  | { kind: "gone"; gone: BillRef | null; shown: BillRef }
+  | { kind: "credited"; corrective: string | null; shown: BillRef };
+
+const refOf = ({ billNumber, billName }: BillRef): BillRef => ({ billNumber, billName });
+
+export function goneNotice(gone: BillRef | undefined, shown: BillRef): BillNotice {
+  return { kind: "gone", gone: gone === undefined ? null : refOf(gone), shown: refOf(shown) };
+}
+
+/** The notice on `to`, the bill Pay for items reopened printed bill `from` as, naming the
  * corrective the bills read lists on `from`; null while `to` is not listed. */
 export function creditedNotice(
   bills: readonly PartyBill[],
   reopen: { from: string; to: string },
-): string | null {
+): BillNotice | null {
   const shown = bills.find((bill) => bill.workingOrderId === reopen.to);
   if (shown === undefined) return null;
-  const number = bills.find((bill) => bill.workingOrderId === reopen.from)?.correctives?.at(-1);
-  return fill(t(number === undefined ? "table.bill_credited_unnumbered" : "table.bill_credited"), {
-    number: number ?? "",
-    shown: billLabel(shown),
-  });
+  const corrective = bills.find((bill) => bill.workingOrderId === reopen.from)?.correctives?.at(-1);
+  return { kind: "credited", corrective: corrective ?? null, shown: refOf(shown) };
+}
+
+/** `notice` worded in the language shown now. */
+export function billNoticeText(notice: BillNotice | null | undefined): string | null {
+  if (notice === null || notice === undefined) return null;
+  const shown = billLabel(notice.shown);
+  if (notice.kind === "gone")
+    return notice.gone === null
+      ? fill(t("table.bill_gone_unnumbered"), { shown })
+      : fill(t("table.bill_gone"), { gone: billLabel(notice.gone), shown });
+  return notice.corrective === null
+    ? fill(t("table.bill_credited_unnumbered"), { shown })
+    : fill(t("table.bill_credited"), { number: notice.corrective, shown });
 }

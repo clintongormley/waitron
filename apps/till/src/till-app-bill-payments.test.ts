@@ -4222,6 +4222,13 @@ describe("till-app: Find bill collects the rest of a printed bill", () => {
       expect(
         dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[name="way"]:checked')!.value,
       ).toBe("contribution");
+      expect(
+        dialog(el)!.shadowRoot!.querySelector<HTMLInputElement>('input[name="way"][value="items"]')!
+          .disabled,
+      ).toBe(true);
+      expect(text(dialog(el)!.shadowRoot!.querySelector("[data-pay-items-reason]"))).toBe(
+        t("bill_pay.items_barred_found"),
+      );
       await type(el, "tendered", "30");
       await press(el, "[data-pay-continue]");
       await press(el, "[data-pay-confirm]");

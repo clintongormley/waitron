@@ -33,6 +33,7 @@ import {
 import { cancelReason, cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { switchToBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { TillApp } from "./till-app.js";
+import { billLabel } from "./state/bill-state.js";
 import { codeMessage } from "./i18n/codes.js";
 import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { fill, setLocale, t } from "./i18n/t.js";
@@ -99,6 +100,12 @@ const creditedWo4 = billOf({
   outstanding: "0.00",
   amountDue: "0.00",
 });
+
+/** The Pay window's own line saying wo-4's receipt was credited, or null when it shows none. */
+const windowCredited = (el: TillApp) => {
+  const line = inDialog(el, "[data-pay-credited]");
+  return line === null ? null : text(line);
+};
 
 /** The screen's notice once Pay for items credited wo-4's receipt, the rest on `shown`. */
 const creditedNotice = (shown: string) =>
@@ -427,6 +434,8 @@ describe("till-app: Pay for items on a bill of their own", () => {
     const getPartyBills = vi.fn(async () =>
       paid
         ? [
+            // Another bill still owing, listed first: the screen still shows the reopened bill.
+            billOf({ workingOrderId: "bill-1", billNumber: 1, outstanding: "20.00" }),
             creditedWo4,
             billOf({
               workingOrderId: "wo-5",
@@ -637,6 +646,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     await flush(el, 6);
 
     expect(formError(el)).toBe(t("bill_pay.card_declined"));
+    expect(windowCredited(el)).toBeNull();
     expect(inDialog(el, "#lines-error")).toBeNull();
     expect(
       [...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="line"]')]
@@ -677,6 +687,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-gone]"))).toBe(
       creditedNotice("Bill 2"),
     );
+    expect(windowCredited(el)).toBe(creditedNotice("Bill 2"));
     expect(tableOrder(el).billBalance).toEqual(reopened);
     expect(dialog(el)!.balance).toEqual(reopened);
     expect(vi.mocked(api.getTabLines).mock.calls).toContainEqual(["wo-5"]);
@@ -730,6 +741,20 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(tableOrder(el).orderId).toBe("wo-5");
     return el;
   }
+
+  it("the credited-receipt notices follow a change of language", async () => {
+    onTestFinished(() => setLocale("en"));
+    const el = await declinedOnPrinted(bill120, [4]);
+    setLocale("es");
+    await flush(el);
+
+    const spanish = fill(t("table.bill_credited_unnumbered"), {
+      shown: billLabel({ billNumber: 1, billName: null }),
+    });
+    expect(spanish).toContain("Cuenta");
+    expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-gone]"))).toBe(spanish);
+    expect(windowCredited(el)).toBe(spanish);
+  });
 
   const ticked = (el: TillApp) =>
     [...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="line"]')]
@@ -805,6 +830,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-gone]"))).toBe(
       creditedNotice("Bill 2"),
     );
+    expect(windowCredited(el)).toBe(creditedNotice("Bill 2"));
     expect(tableOrder(el).billBalance).toEqual(reopened);
     expect(dialog(el)!.balance).toEqual(reopened);
     expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toEqual([]);
@@ -889,6 +915,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-gone]"))).toBe(
       creditedNotice("Bill 2"),
     );
+    expect(windowCredited(el)).toBe(creditedNotice("Bill 2"));
   });
 
   it("no answer resends the same body under the same submission id", async () => {

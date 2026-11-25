@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { setHelpMode } from "@waitron/ui";
@@ -3935,6 +3935,24 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
       expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(t(sentence));
       cleanupWidgets();
     }
+  });
+
+  it("on a printed bill, the confirm step is no wider than the step that chooses the items", async () => {
+    await page.viewport(1280, 800);
+    onTestFinished(() => page.viewport(414, 896));
+    const balance = balanceOf({ status: "placed", outstanding: "120.00" });
+    const width = (el: TillBillPayDialog) =>
+      root(el)
+        .querySelector("wt-dialog")!
+        .shadowRoot!.querySelector("dialog")!
+        .getBoundingClientRect().width;
+    const choosing = width(await mount({ balance }));
+    cleanupWidgets();
+    const confirming = width(
+      await mount({ balance, asked: itemsAsked, preview: ownBill("35.00") }),
+    );
+
+    expect(confirming).toBeLessThanOrEqual(choosing);
   });
 
   it("shows the preview's total for the chosen items", async () => {
