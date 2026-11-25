@@ -7,7 +7,7 @@ describe("the node-local manifest", () => {
     expect(new Set(items).size).toBe(items.length);
   });
 
-  it("checks where handover records belong and how they are classified", () => {
+  it("reports the listed items in their agreed locations and classes", () => {
     const decisions = [
       "box|node.db|destination-owned",
       "node_pair_link|node.db|destination-owned",
