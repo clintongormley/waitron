@@ -56,7 +56,6 @@ import {
   setMenuOnFullMenu,
 } from "./testing/set-menu-bill-fixture.js";
 import { sendSpecDraft, setupSetMenuSpecVenue } from "./testing/set-menu-spec-fixture.js";
-import { setSetMenuCount } from "./set-menu-count.js";
 import { seedTakeawayProducts } from "./testing/takeaway-menu.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -560,7 +559,10 @@ async function lunchVenue(
   return { spec, venue, lunch };
 }
 
-/** A takeaway bill holding `count` Lunch menus and, sent from them, `dishes`; its id. */
+/**
+ * A takeaway bill with `dishes` sent from the Lunch menu, which the send groups into its Lunch
+ * menus, or, with no dishes, holding `count` Lunch menus that hold none; its id.
+ */
 async function lunchBill(
   { spec, venue, lunch }: Awaited<ReturnType<typeof lunchVenue>>,
   dishes: readonly (LunchDish | { dish: LunchDish; variantId: string })[],
@@ -570,10 +572,12 @@ async function lunchBill(
   await partyTx(venue, (tx) =>
     tx.update(workingOrders).set({ dining: "takeaway" }).where(eq(workingOrders.id, bill.tabId)),
   );
-  await partyTx(venue, (tx) =>
-    setSetMenuCount(tx, venue.cfg, bill.tabId, lunch.menuId, count, venue.operator.personId),
-  );
-  if (dishes.length > 0) {
+  if (dishes.length === 0) {
+    await partyTx(venue, async (tx) => {
+      for (let lineNo = 1; lineNo <= count; lineNo++)
+        await seedBillSetMenu(tx, bill.tabId, { ...lunch, name: "Lunch menu" }, lineNo);
+    });
+  } else {
     const draft = await saveSetMenuDraft(
       venue,
       bill,
@@ -842,7 +846,7 @@ describe("the products' takeaway rates are read once per basket", () => {
 
   it("when a takeaway set-menu bill is priced, which reads no menu copy", async () => {
     const lunch = await lunchVenue();
-    const billId = await lunchBill(lunch, ["Soup", "Soup", "Hake", "Lemonade", "Hake"], 2);
+    const billId = await lunchBill(lunch, ["Soup", "Soup", "Hake", "Lemonade", "Hake"]);
 
     rateReads.count = 0;
     copyReads.count = 0;

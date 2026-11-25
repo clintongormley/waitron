@@ -116,7 +116,7 @@ it("opens the same choices for the exact drafted dish Send refuses", async () =>
   expect(screen.draftStore!.lines.map((line) => line.product.name)).toEqual(["Sirloin", "Sirloin"]);
 });
 
-it("shows the counter no set-menu folder or count on a takeaway order", async () => {
+it("shows the counter its set-menu folders on a takeaway order, with no count", async () => {
   resetBillPayDrafts();
   const zone = {
     ...offers,
@@ -145,8 +145,8 @@ it("shows the counter no set-menu folder or count on a takeaway order", async ()
   await flushCounter(el);
   await expect
     .element(page.elementLocator(counter).getByRole("button", { name: /Daily menu/ }))
-    .not.toBeInTheDocument();
-  expect(counter.setMenuCopies).toEqual([]);
+    .toBeInTheDocument();
+  expect(counter.setMenuCopies.map(({ copy }) => copy.menuId)).toEqual([daily.menuId]);
   expect(counter.shadowRoot!.querySelector("till-set-menu-counts")).toBeNull();
 });
 

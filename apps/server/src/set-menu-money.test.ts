@@ -536,7 +536,7 @@ it("still lets staff cancel a dish on a set-menu bill", async () => {
 it("keeps the cancellation when what a takeaway bill keeps, its set menu worked out away, matches cash already received", async () => {
   const id = await bill(false, "takeaway");
   await order(venue, id, "Paella");
-  // The cancel works the bill out again, and a takeaway bill keeps no set menu (D14): the Burger.
+  // The cancel works the bill out again, and the Burger alone fills no set menu.
   const paymentId = await cashContribution(venue, id, "12.00");
   await inTx(venue, (tx) => seedBillSetMenu(tx, id, spec.daily, 3));
 

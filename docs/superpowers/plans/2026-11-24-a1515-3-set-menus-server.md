@@ -479,6 +479,7 @@ cannot be split further for the reasons above. Each of its seven tasks ends gree
   delivery; this takes them away from the counter until piece B. Alternatives: group takeaway and
   accept that such orders cannot be paid (breaks "never block a sale"), or hold 2b until piece B.
   _Owner's answer (watcher 2026-11-24 22:30): "Accept for now"._
+  _Dropped in 2b.8: B1 (#4275) landed first; watcher ruling 2026-11-24 23:40._
 - **D15. What freezes a row (D2), as read:** an `adjustments` row naming it whose action is not
   `cancel`; any `adjustment_lines` row naming it; a `cancel` with `charge_kept` naming it, or a
   `line_service_cancellations` row (today's not-movable set, `set-menu-bill.ts:323-339,352`); any

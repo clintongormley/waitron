@@ -1,4 +1,3 @@
-import "../widgets/set-menu-counts.js";
 import type { ChangeAvailability, ChangeOptionAvailability } from "../widgets/product-info.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
 import type { BillBalance, MenuState } from "../api/client.js";
@@ -288,14 +287,6 @@ export class TillCounterScreen extends LitElement {
     moves: readonly DishMove[],
   ) => Promise<string | undefined>;
 
-  #addSetMenu = (menuId: string): Promise<string | undefined> => {
-    const count =
-      this.setMenuBill === undefined
-        ? 0
-        : menusWithCopies(this.setMenuBill).filter(({ copy }) => copy.setMenuId === menuId).length;
-    return this.saveSetMenuCount?.(menuId, count + 1) ?? Promise.resolve(undefined);
-  };
-
   readonly #browserProducts = memoVisibleProducts();
   readonly #searchProducts = memoVisibleProducts();
   readonly #unfilteredProducts = memoVisibleProducts();
@@ -329,8 +320,6 @@ export class TillCounterScreen extends LitElement {
       .setMenuBill=${copies.length === 0 ? undefined : this.setMenuBill}
       .setMenuCopies=${copies}
       .setMenuCourses=${this.setMenuCourses}
-      .addSetMenu=${this.#addSetMenu}
-      .moveSetMenuDishes=${this.moveSetMenuDishes}
       .setMenuDishNames=${new Map(
         this.store.lines.flatMap((line) =>
           line.setMenuId === undefined || line.workingOrderLineId === undefined
@@ -463,19 +452,6 @@ export class TillCounterScreen extends LitElement {
             this,
             this.stage === "collect" || this.busy || this.orderInFlight,
           )}
-          ${
-            this.stage === "order" &&
-            this.store.dining === "takeaway" &&
-            this.setMenuCopies.length > 0
-              ? html`<till-set-menu-counts
-                  .bill=${this.setMenuBill ?? null}
-                  .draft=${this.store.lines}
-                  .onSale=${this.setMenuCopies.map(({ copy }) => copy)}
-                  .busy=${this.store.editsLocked || this.busy || this.orderInFlight}
-                  .saveCount=${this.saveSetMenuCount}
-                ></till-set-menu-counts>`
-              : nothing
-          }
           <till-basket
             stacked
             .store=${this.store}

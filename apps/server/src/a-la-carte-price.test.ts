@@ -373,7 +373,7 @@ it("writes the a la carte price when a counter order is opened with dishes", asy
   ]);
 });
 
-// D10 and D14: a takeaway bill groups no set menus, so a counter save charges every dish a la carte.
+// D10: these two dishes fill no set menu, so a counter save charges both a la carte.
 it("writes the a la carte price on dishes a counter order saves, a la carte and from a set-menu folder", async () => {
   const { body, revision, setMenus } = await counterWithSetMenu(daily);
   const saved = await request("PUT", `/api/working-orders/${body.id}`, {

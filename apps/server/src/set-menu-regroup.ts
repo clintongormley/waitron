@@ -190,8 +190,7 @@ async function writeBillGrouping(
 
 /**
  * Regroups each open bill among `billIds`, in turn, and answers the bills whose lines or `exact`
- * changed. A takeaway bill is grouped with no set menus (D14), so its set-menu rows go and its
- * dishes are charged a la carte.
+ * changed.
  */
 export async function regroupBills(
   tx: Transaction,
@@ -225,10 +224,7 @@ async function readOpenBill(
     .from(workingOrders)
     .where(eq(workingOrders.id, billId));
   if (bill?.status !== "open") return null;
-  const copies =
-    bill.dining !== "takeaway" && isSetMenuBillRow(bill)
-      ? await readGroupingCopies(tx, billId)
-      : [];
+  const copies = isSetMenuBillRow(bill) ? await readGroupingCopies(tx, billId) : [];
   return { setMenusExact: bill.setMenusExact, copies };
 }
 

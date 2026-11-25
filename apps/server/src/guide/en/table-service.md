@@ -575,8 +575,7 @@ cost. Tap the product to choose one and see its price.
 Add the dishes the guests order, from any folder. The bill groups them into the cheapest set
 menus each time the order changes, and charges a dish that fits none à la carte. A set menu's
 folder shows which dishes it includes and which cost extra: open it from the grid, or type its
-name in **Search** and tap the result. A takeaway bill has no set menus: each dish is charged at
-its own price.
+name in **Search** and tap the result.
 
 Open the set-menu summary on **Order** to see which dishes each set menu holds and which places
 are free. To comp or discount a set menu, choose **Comp…** on it in the summary. A set menu cannot
@@ -585,9 +584,9 @@ be cancelled: cancel or move its dishes instead.
 To move a set menu to another bill, open **Move dishes…** and select the set menu. Its dishes move
 with it.
 
-At the **Counter**, choose **Take away**, set the number, then open the set-menu folder
-and choose the dishes. You can **Park** a takeaway before adding any dishes. To add
-dishes later, find the bill in **Parked orders** and choose **Retrieve**.
+At the **Counter**, choose **Take away**, then add the dishes from any folder: the bill groups
+them into set menus as it does at a table. To add dishes later, find the bill in **Parked
+orders** and choose **Retrieve**.
 
 ## Give a table a short name {#short-names}
 

@@ -159,8 +159,8 @@ async function counterWithSetMenu() {
   return { body, revision: held.revision as number, setMenus: held.setMenus };
 }
 
-// D10 and D14: a takeaway bill groups no set menus, so a dish tapped in a set-menu folder stays at
-// its a la carte price and the empty set menu goes.
+// D10: one dish fills no set menu, so a dish tapped in a set-menu folder stays at its a la carte
+// price and the empty set menu goes.
 it("saves a dish tapped in a set-menu folder at its a la carte price without sending it to the kitchen", async () => {
   const { venue, copy } = fixture;
   const { body, revision, setMenus } = await counterWithSetMenu();

@@ -750,20 +750,65 @@ it("saves a valid grouping a calculation hands it, even when not the cheapest", 
   ]);
 });
 
-it("charges a takeaway bill's dishes a la carte and removes its set menu (D14)", async () => {
+it("groups a takeaway bill's sent dishes into its cheapest set menu, and takes its price", async () => {
+  const bill = await seated();
+  await inTx(venue, (tx) =>
+    tx.update(workingOrders).set({ dining: "takeaway" }).where(eq(workingOrders.id, bill.tabId)),
+  );
+  await send(bill, "Soup", "Hake");
+  const shaped = await shape(bill.tabId);
+  const daily = menuRows(shaped)[0]?.id;
+  expect(
+    shaped.map(({ what, role, price, setMenuLineId }) => ({ what, role, price, setMenuLineId })),
+  ).toEqual([
+    { what: "Soup", role: "dish", price: 0, setMenuLineId: daily },
+    { what: "Hake", role: "dish", price: 0, setMenuLineId: daily },
+    { what: "Daily menu", role: "set_menu", price: 1400, setMenuLineId: null },
+  ]);
+  await takeBillPayment(
+    specDeps(spec),
+    venue.cfg,
+    bill.tabId,
+    {
+      submissionId: randomUUID(),
+      tip: "0.00",
+      kind: "share",
+      shareOf: 1,
+      applied: "14.00",
+      method: "cash",
+      tendered: "14.00",
+    },
+    venue.operator,
+  );
+  const [row] = await venue.db
+    .select({ status: workingOrders.status })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, bill.tabId));
+  expect(row?.status).toBe("settled");
+});
+
+it("groups a counter takeaway bill's dishes into one set menu, leaving no empty one", async () => {
   const id = randomUUID();
   await parkOrder({ db: venue.db }, venue.cfg, {
     id,
     zoneId: takeawayZoneId,
-    lines: [{ menuItemId: ordinary.Hake, quantity: "1" }],
+    lines: [
+      { menuItemId: ordinary.Soup, quantity: "1" },
+      { menuItemId: ordinary.Hake, quantity: "1" },
+    ],
     operatorId: OPERATOR,
     dining: "takeaway",
   });
   await addEmptySpecSetMenus(spec, id, spec.daily);
-  expect(menuRows(await shape(id))).toHaveLength(1);
-  expect(await regroup(id)).toEqual(new Set([id]));
-  expect((await shape(id)).map(({ what, role, price }) => ({ what, role, price }))).toEqual([
-    { what: "Hake", role: null, price: 1600 },
+  await regroup(id);
+  const shaped = await shape(id);
+  const daily = menuRows(shaped)[0]?.id;
+  expect(
+    shaped.map(({ what, role, price, setMenuLineId }) => ({ what, role, price, setMenuLineId })),
+  ).toEqual([
+    { what: "Soup", role: "dish", price: 0, setMenuLineId: daily },
+    { what: "Hake", role: "dish", price: 0, setMenuLineId: daily },
+    { what: "Daily menu", role: "set_menu", price: 1400, setMenuLineId: null },
   ]);
 });
 

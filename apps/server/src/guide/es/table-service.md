@@ -616,8 +616,7 @@ cuestan las variantes. Toca el producto para elegir una y ver su precio.
 Añade los platos que piden los clientes, desde cualquier carpeta. La cuenta los agrupa en los
 menús más baratos cada vez que cambia el pedido, y cobra a la carta un plato que no cabe en
 ninguno. La carpeta de un menú muestra qué platos incluye y cuáles tienen suplemento: ábrela
-desde la cuadrícula o escribe su nombre en **Buscar** y pulsa el resultado. Una cuenta para
-llevar no tiene menús: cada plato se cobra a su propio precio.
+desde la cuadrícula o escribe su nombre en **Buscar** y pulsa el resultado.
 
 Abre el resumen de menús en **Pedido** para ver qué platos lleva cada menú y qué sitios quedan
 libres. Para invitar o hacer un descuento en un menú, pulsa **Descuento…** en él dentro del
@@ -626,10 +625,9 @@ resumen. Un menú no se puede anular: anula o mueve sus platos.
 Para pasar un menú a otra cuenta, abre **Mover platos…** y selecciona el menú. Sus platos se
 mueven con él.
 
-En el **Mostrador**, elige **Para llevar**, indica cuántos menús quieres y abre la
-carpeta para elegir los platos. Puedes **Aparcar** el pedido antes de añadir los
-platos. Para añadirlos después, busca la cuenta en **Pedidos aparcados** y pulsa
-**Recuperar**.
+En el **Mostrador**, elige **Para llevar** y añade los platos desde cualquier carpeta: la
+cuenta los agrupa en menús igual que en una mesa. Para añadir platos después, busca la cuenta
+en **Pedidos aparcados** y pulsa **Recuperar**.
 
 ## Dar a una mesa un nombre corto {#short-names}
 
