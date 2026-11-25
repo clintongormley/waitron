@@ -169,13 +169,6 @@ describe("setup provision email credential", () => {
         masterKey: expect.any(String),
         masterKeyName: expect.any(String),
         recoveryPackPdf: expect.any(String),
-        ...(mode === "prepare"
-          ? {
-              breakGlassSecret: expect.any(String),
-              breakGlassKeyName: expect.any(String),
-              breakGlassKeyInBackups: true,
-            }
-          : {}),
       });
       expect(
         await withTransaction(suite.db, (tx) =>

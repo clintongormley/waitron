@@ -941,7 +941,6 @@
   "src/recovery-backup-preview.test.ts": 10.8,
   "src/recovery-collection.fiscal.test.ts": 1.8,
   "src/recovery-collection.test.ts": 2.4,
-  "src/recovery-document-evidence.test.ts": 2.2,
   "src/recovery-environment.boot.test.ts": 14.1,
   "src/recovery-fiscal-selection.test.ts": 2,
   "src/recovery-key-name.test.ts": 2,

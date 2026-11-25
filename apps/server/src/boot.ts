@@ -494,10 +494,6 @@ import { freeBytes, type Statfs } from "./free-bytes.js";
 import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
-import {
-  readRecoveryDocumentEvidence,
-  type RecoveryDocumentEvidence,
-} from "./recovery-document-evidence.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
@@ -1032,8 +1028,6 @@ async function bootServer(
 ): Promise<StartedServer> {
   const env = await withUnfinishedJoinEnvironment(startEnv, DEFAULT_STATE_ROOT);
   const now = () => new Date();
-  const documentEvidence: RecoveryDocumentEvidence = (module) =>
-    readRecoveryDocumentEvidence({ stateDir: config.stateDir, venueDir: config.venueDir }, module);
   const config = loadConfig(env, DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT);
   refuseUnreleasedBuild(config.environment, seams.builtRelease ?? builtRelease());
   await assertOutsideScratchResolved(config.stateDir, config.venueDir, "WAITRON_VENUE_DIR");
@@ -1766,7 +1760,6 @@ async function bootServer(
           return result;
         },
         seedDemo: (result, req) => seedInstalledDemo(db, result, req.venue),
-        recoveryPackEvidence: documentEvidence,
         adoptJoined: (joined, hooks) => adoptFromPrimary(adoptDeps, joined, hooks),
         establishIdentity: (nodeId) =>
           establishNodeIdentity({ ownerDb: db, node: store.node, ring }, nodeId),
