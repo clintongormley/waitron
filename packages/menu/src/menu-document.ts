@@ -544,7 +544,7 @@ function freezeOffer(
 }
 
 /** JSON with every object's keys sorted, all the way down; arrays keep their order. */
-function canonicalJson(value: unknown): string {
+export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   const object = value as Record<string, unknown>;

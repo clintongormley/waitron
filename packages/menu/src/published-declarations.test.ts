@@ -62,6 +62,19 @@ const patchName = (menuId: string, baseVersionId: string, menuItemId: string, va
       PERSON,
     ),
   );
+const patchDeclarations = (
+  tx: Transaction,
+  menuId: string,
+  baseVersionId: string,
+  menuItemId: string,
+) =>
+  patchLiveMenu(
+    tx,
+    menuId,
+    baseVersionId,
+    [{ target: { kind: "offer", menuItemId }, field: "declarations", value: "product" }],
+    PERSON,
+  );
 const declare = (
   productId: string,
   ...allergens: ("milk" | "fish" | "eggs" | "celery" | "sesame")[]
@@ -135,8 +148,15 @@ it("reads a dish from its menu's live version after a later publish and a patch"
   await declare(f.soup, "eggs");
   expect(await allergensOf(soup)).toEqual({ fish: {} });
 
-  await patchName(f.lunch, v2, soup.menuItemId!, "Broth");
-  expect(await allergensOf(soup)).toEqual({ fish: {} });
+  // Both reads share one handle, and so the documents it keeps.
+  const [before, after] = await app(async (tx) => {
+    const held = async () => (await readPublishedDeclarations(tx, [soup])).get(soup.id)?.allergens;
+    const before = await held();
+    await patchDeclarations(tx, f.lunch, v2, soup.menuItemId!);
+    return [before, await held()];
+  });
+  expect(before).toEqual({ fish: {} });
+  expect(after).toEqual({ eggs: {} });
 });
 
 it("falls back to the line's own version when the live version dropped the dish", async () => {

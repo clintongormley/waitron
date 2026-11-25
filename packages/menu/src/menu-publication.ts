@@ -26,7 +26,8 @@ import {
 } from "./menu-document.js";
 import { reachableProducts } from "./section-graph.js";
 import { readContentLanguages } from "./content-languages.js";
-import { applyMenuPatch, parseMenuPatch } from "./menu-patch.js";
+import { applyMenuPatch, declarationProductIds, parseMenuPatch } from "./menu-patch.js";
+import { queuedCorrections } from "./menu-patch-declarations.js";
 import type { LiveMenu, MenuPatchResult } from "./menu-patch-types.js";
 import { mediaImageExists } from "./sections.js";
 import { menuExists } from "./operations.js";
@@ -40,6 +41,7 @@ import type {
   PublishedMenuVersion,
   QueuedEdition,
 } from "@waitron/shared";
+import { readProductDeclarationValues } from "./product-declarations.js";
 import { refuseSetMenu } from "./set-menus.js";
 import "./errors.js";
 
@@ -793,9 +795,10 @@ export async function readLiveMenu(
 /**
  * Puts `changes` live at once as a new version of the menu's live version `baseVersionId`, inside
  * the caller's one transaction, then queues every still-queued version again after it, with the
- * same content and date. The products, the working menu and every other menu are left as they
- * were. Translated fields merge against the venue's saved content languages, or `fallbackLanguage`
- * alone when none are saved.
+ * same content and date, except that those `queued` names take its declarations changes. With
+ * nothing to change on the live version it stays live, and only those are corrected. The products,
+ * the working menu and every other menu are left as they were. Translated fields merge against the
+ * venue's saved content languages, or `fallbackLanguage` alone when none are saved.
  */
 export async function patchLiveMenu(
   tx: Transaction,
@@ -803,7 +806,7 @@ export async function patchLiveMenu(
   baseVersionId: string,
   changes: unknown,
   personId: string,
-  options: { at?: Date; fallbackLanguage?: string } = {},
+  options: { at?: Date; fallbackLanguage?: string; queued?: readonly string[] } = {},
 ): Promise<MenuPatchResult> {
   await assertMenuWritable(tx, menuId);
   await refuseSetMenu(tx, menuId);
@@ -829,34 +832,46 @@ export async function patchLiveMenu(
         field: "image",
         reason: "image.not_found",
       });
-  const document = applyMenuPatch(
+  const declarations = await readProductDeclarationValues(
+    tx,
+    declarationProductIds(live.document!, parsed),
+  );
+  const languages = await readContentLanguages(tx, options.fallbackLanguage ?? FALLBACK_LOCALE);
+  const document = applyMenuPatch(live.document!, parsed, languages, declarations);
+  const waiting = await waitingEditions(tx, menuId, at);
+  const corrections = queuedCorrections(
+    waiting.filter(({ versionId }) => options.queued?.includes(versionId)),
     live.document!,
     parsed,
-    await readContentLanguages(tx, options.fallbackLanguage ?? FALLBACK_LOCALE),
+    languages,
+    declarations,
   );
   const contentHash = menuDocumentHash(document);
-  if (contentHash === live.contentHash) throw new AppError("menu_patch.unchanged", { menuId });
-  const number = await nextNumber(tx, menuId);
-  const versionId = await insertVersion(tx, {
-    menuId,
+  const unchanged = contentHash === live.contentHash;
+  if (unchanged && corrections.size === 0) throw new AppError("menu_patch.unchanged", { menuId });
+  let { versionId, number } = live;
+  if (!unchanged) {
+    number = await nextNumber(tx, menuId);
+    versionId = await insertVersion(tx, {
+      menuId,
+      number,
+      document,
+      contentHash,
+      createdAt: at,
+      createdBy: personId,
+    });
+    await makeLive(tx, menuId, versionId, at);
+  }
+  return {
+    versionId,
     number,
-    document,
-    contentHash,
-    createdAt: at,
-    createdBy: personId,
-  });
-  await makeLive(tx, menuId, versionId, at);
-  return { versionId, number, requeued: await requeueAfter(tx, menuId, at, personId) };
+    requeued: await requeueAfter(tx, menuId, waiting, at, personId, corrections),
+  };
 }
 
-/** Queues every version of the menu still waiting after `at` again under new numbers, in order. */
-async function requeueAfter(
-  tx: Transaction,
-  menuId: string,
-  at: Date,
-  personId: string,
-): Promise<QueuedEdition[]> {
-  const waiting = await tx
+/** The menu's queued versions not yet due at `at`, by number. */
+export function waitingEditions(tx: Transaction, menuId: string, at: Date) {
+  return tx
     .select({
       versionId: menuReleases.versionId,
       document: menuVersions.document,
@@ -875,6 +890,18 @@ async function requeueAfter(
       ),
     )
     .orderBy(asc(menuVersions.number));
+}
+
+/** Queues the `waiting` versions again under new numbers, in order, those `corrections` names with
+ * its document. */
+async function requeueAfter(
+  tx: Transaction,
+  menuId: string,
+  waiting: Awaited<ReturnType<typeof waitingEditions>>,
+  at: Date,
+  personId: string,
+  corrections: ReadonlyMap<string, MenuDocument>,
+): Promise<QueuedEdition[]> {
   if (waiting.length === 0) return [];
   // Every original is cancelled before any copy is queued: at most one queued row may hold an
   // instant, and each copy takes its original's.
@@ -886,11 +913,12 @@ async function requeueAfter(
   const requeued: QueuedEdition[] = [];
   for (const edition of waiting) {
     const number = await nextNumber(tx, menuId);
+    const corrected = corrections.get(edition.versionId);
     const versionId = await insertVersion(tx, {
       menuId,
       number,
-      document: edition.document,
-      contentHash: edition.contentHash,
+      document: corrected ?? edition.document,
+      contentHash: corrected === undefined ? edition.contentHash : menuDocumentHash(corrected),
       createdAt: edition.createdAt,
       createdBy: edition.createdBy,
     });

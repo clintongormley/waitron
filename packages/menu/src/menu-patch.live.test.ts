@@ -25,6 +25,8 @@ import {
   listMenuPublications,
   queueMenuPublication,
 } from "./menu-schedule.js";
+import { menuDocumentHash } from "./menu-document.js";
+import { readPatchDraft } from "./menu-patch-draft.js";
 import { updateProduct } from "./operations.js";
 import { writeContentLanguages } from "./content-languages.js";
 
@@ -454,5 +456,196 @@ describe("patchLiveMenu", () => {
       expect(["menu_versions", "menu_version_images", "menu_releases", "menu_releases"]).toContain(
         table,
       );
+  });
+});
+
+describe("declarations", () => {
+  const offerTarget = async (productId: string) => ({
+    kind: "offer" as const,
+    menuItemId: await app((tx) => offerOf(tx, f.lunch, productId)),
+  });
+  const declarations = (target: object) => ({ target, field: "declarations", value: "product" });
+  const declareMilk = (productId: string) =>
+    app((tx) =>
+      updateProduct(tx, productId, {
+        allergens: { milk: {} },
+        dietaryDeclarations: ["vegetarian"],
+        dietOverride: { vegan: "no" },
+      }),
+    );
+  const patchQueued = (changes: unknown, queued: readonly string[], base = v1) =>
+    app((tx) => patchLiveMenu(tx, f.lunch, base, changes, ANA, { at: NOW, queued }));
+  const draft = (menuId = f.lunch) => app((tx) => readPatchDraft(tx, menuId, NOW));
+  const imagesOf = async (versionId: string) =>
+    (
+      await fx.db
+        .select({ filename: menuVersionImages.filename })
+        .from(menuVersionImages)
+        .where(eq(menuVersionImages.versionId, versionId))
+        .orderBy(asc(menuVersionImages.filename))
+    ).map(({ filename }) => filename);
+
+  it("patchLiveMenu puts the product's current allergens live", async () => {
+    const soup = await offerTarget(f.soup);
+    const lemonade = await offerTarget(f.lemonade);
+    await declareMilk(f.soup);
+    await declareMilk(f.lemonade);
+    await patch(v1, [
+      declarations(soup),
+      declarations({ ...lemonade, kind: "variant", variantId: f.large }),
+    ]);
+    const live = (await app((tx) => readLiveMenu(tx, f.lunch)))!.document;
+    const milk = {
+      allergens: { milk: {} },
+      dietaryDeclarations: ["vegetarian"],
+      dietOverride: { vegan: "no" },
+    };
+    expect(live.offers[soup.menuItemId]).toMatchObject(milk);
+    expect(live.offers[soup.menuItemId]!.diet).toMatchObject({ vegan: "no" });
+    expect(live.offers[lemonade.menuItemId]!.variants[0]).toMatchObject(milk);
+    expect(live.offers[lemonade.menuItemId]!.allergens).toEqual({});
+  });
+
+  it("a queued version named in the request is queued again at its own time with the corrected allergens, and one not named keeps its document", async () => {
+    const soup = await offerTarget(f.soup);
+    await setSoup("5.50");
+    const first = await queue(day(8));
+    await setSoup("6.00");
+    const second = await queue(day(9));
+    const originals = [await versionRow(first.versionId), await versionRow(second.versionId)];
+    await declareMilk(f.soup);
+
+    const { requeued } = await patchQueued([declarations(soup)], [first.versionId]);
+    expect(requeued).toEqual([
+      { versionId: expect.any(String), number: 5, activatesAt: day(8).toISOString() },
+      { versionId: expect.any(String), number: 6, activatesAt: day(9).toISOString() },
+    ]);
+    const [corrected, kept] = await Promise.all(
+      requeued.map(({ versionId }) => versionRow(versionId)),
+    );
+    const expected = structuredClone(originals[0]!.document);
+    const { allergens, diet, dietOverride, dietaryDeclarations } = (await app((tx) =>
+      readLiveMenu(tx, f.lunch),
+    ))!.document.offers[soup.menuItemId]!;
+    expect(allergens).toEqual({ milk: {} });
+    Object.assign(expected.offers[soup.menuItemId]!, {
+      allergens,
+      diet,
+      dietOverride,
+      dietaryDeclarations,
+    });
+    expect(corrected!.document).toEqual(expected);
+    expect(corrected!.contentHash).toBe(menuDocumentHash(expected));
+    expect(corrected!.contentHash).not.toBe(originals[0]!.contentHash);
+    expect(corrected).toMatchObject({
+      createdAt: originals[0]!.createdAt,
+      createdBy: originals[0]!.createdBy,
+    });
+    const photos = await imagesOf(first.versionId);
+    expect(photos).toHaveLength(2);
+    expect(await imagesOf(corrected!.id)).toEqual(photos);
+    expect(await scheduleRow(corrected!.id)).toMatchObject({
+      state: "queued",
+      activatesAt: day(8),
+    });
+    expect(await scheduleRow(first.versionId)).toMatchObject({ state: "cancelled" });
+    expect(kept!.document).toEqual(originals[1]!.document);
+    expect(kept!.contentHash).toBe(originals[1]!.contentHash);
+  });
+
+  it("a price in the same patch does not reach the named queued version", async () => {
+    const soup = await offerTarget(f.soup);
+    await setSoup("5.50");
+    const queued = await queue(day(8));
+    await declareMilk(f.soup);
+    const { versionId, requeued } = await patchQueued(
+      [{ target: soup, field: "price", value: "9.00" }, declarations(soup)],
+      [queued.versionId],
+    );
+    expect((await versionRow(versionId)).document.offers[soup.menuItemId]).toMatchObject({
+      unitPrice: "9.00",
+      allergens: { milk: {} },
+    });
+    expect(
+      (await versionRow(requeued[0]!.versionId)).document.offers[soup.menuItemId],
+    ).toMatchObject({ unitPrice: "5.50", allergens: { milk: {} } });
+  });
+
+  it("an id that is not queued is ignored", async () => {
+    const soup = await offerTarget(f.soup);
+    await setSoup("5.50");
+    const queued = await queue(day(8));
+    const original = await versionRow(queued.versionId);
+    await declareMilk(f.soup);
+    const { requeued } = await patchQueued(
+      [declarations(soup)],
+      ["00000000-0000-4000-8000-000000000000", v1],
+    );
+    expect(requeued).toHaveLength(1);
+    expect((await versionRow(requeued[0]!.versionId)).document).toEqual(original.document);
+    expect((await versionRow(v1)).document.offers[soup.menuItemId]!.allergens).toEqual({});
+  });
+
+  it("corrects a named queued version when the live one already agrees, keeping the live version", async () => {
+    const soup = await offerTarget(f.soup);
+    await setSoup("5.50");
+    const queued = await queue(day(8));
+    await declareMilk(f.soup);
+    const live = await patchQueued([declarations(soup)], []);
+    const waiting = live.requeued[0]!.versionId;
+    expect((await versionRow(waiting)).document.offers[soup.menuItemId]!.allergens).toEqual({});
+
+    const result = await patchQueued([declarations(soup)], [waiting], live.versionId);
+    expect(result).toEqual({
+      versionId: live.versionId,
+      number: live.number,
+      requeued: [{ versionId: expect.any(String), number: 5, activatesAt: day(8).toISOString() }],
+    });
+    expect(queued.number).toBe(2);
+    expect(await app((tx) => readLiveMenu(tx, f.lunch))).toMatchObject({
+      versionId: live.versionId,
+    });
+    expect(
+      (await versionRow(result.requeued[0]!.versionId)).document.offers[soup.menuItemId]!.allergens,
+    ).toEqual({ milk: {} });
+    expect(await scheduleRow(waiting)).toMatchObject({ state: "cancelled" });
+  });
+
+  it("refuses a patch that changes neither the live version nor a named queued one", async () => {
+    const soup = await offerTarget(f.soup);
+    await setSoup("5.50");
+    const queued = await queue(day(8));
+    await refuses(() => patchQueued([declarations(soup)], [queued.versionId]), {
+      code: "menu_patch.unchanged",
+      params: { menuId: f.lunch },
+    });
+  });
+
+  it("readPatchDraft answers the live version and each queued version that differs", async () => {
+    const soup = await offerTarget(f.soup);
+    expect(await draft(f.dinner)).toBeNull();
+    await setSoup("5.50");
+    await queue(day(8));
+    expect(await draft()).toEqual({
+      ...(await app((tx) => readLiveMenu(tx, f.lunch, NOW))),
+      queued: [],
+    });
+    await declareMilk(f.soup);
+    await setSoup("6.00");
+    const second = await queue(day(9));
+    const first = (await app((tx) => listMenuPublications(tx, f.lunch, NOW))).editions.find(
+      ({ number }) => number === 2,
+    )!;
+    expect((await draft())!.queued).toEqual([
+      {
+        versionId: first.versionId,
+        activatesAt: day(8).toISOString(),
+        targets: [{ target: soup, stillOld: true }],
+      },
+    ]);
+    expect(second.number).toBe(3);
+    const { requeued } = await patchQueued([declarations(soup)], [first.versionId]);
+    expect(requeued).toHaveLength(2);
+    expect((await draft())!.queued).toEqual([]);
   });
 });

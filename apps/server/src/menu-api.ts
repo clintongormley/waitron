@@ -89,7 +89,7 @@ import {
   previewMenu,
   publishMenu,
   patchLiveMenu,
-  readLiveMenu,
+  readPatchDraft,
   cancelMenuPublication,
   listMenuPublications,
   queueMenuPublication,
@@ -1366,7 +1366,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      return c.json(await gated(c, sessionId, (tx) => readLiveMenu(tx, menuId)));
+      return c.json(await gated(c, sessionId, (tx) => readPatchDraft(tx, menuId)));
     }),
   );
 
@@ -1374,7 +1374,11 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const menuId = requireUuidParam(c.req.param("id"), "MenuId");
-      const body = await readJsonBody<{ baseVersionId?: unknown; changes?: unknown }>(c);
+      const body = await readJsonBody<{
+        baseVersionId?: unknown;
+        changes?: unknown;
+        queued?: unknown;
+      }>(c);
       const baseVersionId = requireUuidParam(
         requireString(body.baseVersionId, "baseVersionId"),
         "MenuVersionId",
@@ -1382,10 +1386,13 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       const changes = body.changes;
       if (!Array.isArray(changes))
         throw new AppError("management.request_invalid", { field: "changes" });
+      const queued =
+        body.queued === undefined ? [] : idList(body.queued, "queued", "MenuVersionId");
       return c.json(
         await gated(c, sessionId, (tx, personId) =>
           patchLiveMenu(tx, menuId, baseVersionId, changes, personId, {
             fallbackLanguage: deps.venueLocale ?? FALLBACK_LOCALE,
+            queued,
           }),
         ),
       );

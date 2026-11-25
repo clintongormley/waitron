@@ -18,9 +18,9 @@ export interface MenuPatchChange {
 
 /** The only fields a patch may change, per kind of target; anything else is refused. */
 export const PATCH_FIELDS: { readonly [K in MenuPatchTarget["kind"]]: readonly string[] } = {
-  offer: ["name", "customerName", "kitchenName", "description", "image", "price"],
-  variant: ["name", "customerName", "kitchenName", "image", "price"],
-  extra: ["name", "customerName", "kitchenName", "image", "price"],
+  offer: ["name", "customerName", "kitchenName", "description", "image", "price", "declarations"],
+  variant: ["name", "customerName", "kitchenName", "image", "price", "declarations"],
+  extra: ["name", "customerName", "kitchenName", "image", "price", "declarations"],
   option_label: ["name", "customerName", "kitchenName"],
   list: ["name", "customerName", "kitchenName"],
   section: ["internalName", "names", "image"],
@@ -37,4 +37,17 @@ export interface LiveMenu {
   number: number;
   since: string;
   document: MenuDocument;
+}
+
+/** A queued version holding declarations that are not the products' current ones. */
+export interface QueuedDeclarationDrift {
+  versionId: string;
+  activatesAt: string;
+  /** The live version's targets whose copies here differ; `stillOld` when every differing copy
+   * holds what the live version's same copy holds. */
+  targets: { target: MenuPatchTarget; stillOld: boolean }[];
+}
+
+export interface PatchDraft extends LiveMenu {
+  queued: QueuedDeclarationDrift[];
 }

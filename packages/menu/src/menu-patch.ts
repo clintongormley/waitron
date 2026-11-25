@@ -2,6 +2,7 @@ import { AppError, decimal, isAppError, toScale, type ContentLanguages } from "@
 import "./errors.js";
 import { folderPresentation } from "./include-folder-presentation.js";
 import type { DocumentMember, MenuDocument, IncludeFolderOverrides } from "@waitron/shared";
+import { extraDeclarationValues, type DeclarationValues } from "./declaration-values.js";
 import { PATCH_FIELDS, type MenuPatchChange, type MenuPatchTarget } from "./menu-patch-types.js";
 import { isProductPrice } from "./modifier-limits.js";
 import {
@@ -90,6 +91,9 @@ function checkedValue(change: number, field: string, value: unknown): unknown {
       return value.trim();
     case "price":
       if (typeof value !== "string" || !isProductPrice(value)) throw invalid(change, field);
+      return value;
+    case "declarations":
+      if (value !== "product") throw invalid(change, field);
       return value;
     default:
       // customerName, names and description: the field table admits nothing else.
@@ -236,6 +240,39 @@ function locate(
 
 const fixedNames = (copy: Copy): Record<string, string> => fixedOf(copy).names ?? {};
 
+const DECLARATION_KEYS = ["allergens", "dietOverride", "diet", "dietaryDeclarations"] as const;
+const EXTRA_DECLARATION_KEYS = ["addAllergens", "suitableFor"] as const;
+
+/** The declarations a dish, variant or extra copy holds. */
+export function copyDeclarations(kind: MenuPatchTarget["kind"], copy: object): Copy {
+  const keys = kind === "extra" ? EXTRA_DECLARATION_KEYS : DECLARATION_KEYS;
+  return Object.fromEntries(keys.map((key) => [key, (copy as Copy)[key]]));
+}
+
+/** A product's values as a dish, variant or extra copy of it holds them. */
+export function declarationsFor(kind: MenuPatchTarget["kind"], values: DeclarationValues): Copy {
+  return kind === "extra" ? extraDeclarationValues(values) : { ...values };
+}
+
+const declarationProductId = (kind: MenuPatchTarget["kind"], copy: Copy): string =>
+  (kind === "variant" ? copy.id : copy.productId) as string;
+
+/** The product ids a list's declarations changes copy from: the offer copies' productId, the
+ * variant's id, the extra's productId. */
+export function declarationProductIds(
+  document: MenuDocument,
+  changes: readonly MenuPatchChange[],
+): string[] {
+  const ids = changes.flatMap(({ target, field }) =>
+    field === "declarations"
+      ? (locate(document, target, field)?.copies ?? []).map((copy) =>
+          declarationProductId(target.kind, copy),
+        )
+      : [],
+  );
+  return [...new Set(ids)];
+}
+
 /** The value a field holds now at the first copy a patch would change, preferring a copy that fixes
  * none of it; `undefined` when no copy takes the change, which for a section's names needs the
  * `languages` `applyMenuPatch` is given. Given them, each language of a section's names is read
@@ -253,6 +290,7 @@ export function patchFieldValue(
   const copy =
     located.copies.find((candidate) => !Object.hasOwn(fixedOf(candidate), field)) ??
     located.copies[0]!;
+  if (field === "declarations") return copyDeclarations(target.kind, copy);
   const value = copy[field === "price" ? located.priceKey! : field];
   if (field !== "names" || languages === undefined) return value;
   const names = { ...(value as Record<string, string>) };
@@ -284,11 +322,13 @@ export function fixedLanguages(
   );
 }
 
-/** A patched copy of `document`, which is never changed and may be deep-frozen. */
+/** A patched copy of `document`, which is never changed and may be deep-frozen. A declarations
+ * change copies from `declarations`, by product id. */
 export function applyMenuPatch(
   document: MenuDocument,
   changes: readonly MenuPatchChange[],
   languages: ContentLanguages,
+  declarations?: ReadonlyMap<string, DeclarationValues>,
 ): MenuDocument {
   const patched = structuredClone(document);
   parseMenuPatch(changes).forEach(({ target, field, value }, index) => {
@@ -322,6 +362,10 @@ export function applyMenuPatch(
         copy[located.priceKey!] = price;
         if (located.priceMirror !== undefined && copy[located.priceMirror] !== null)
           copy[located.priceMirror] = price;
+      } else if (field === "declarations") {
+        const values = declarations?.get(declarationProductId(target.kind, copy));
+        if (values === undefined) throw invalid(index, field);
+        Object.assign(copy, declarationsFor(target.kind, values));
       } else {
         copy[field] = value;
       }

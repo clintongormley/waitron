@@ -6,9 +6,9 @@ import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
+import { seedTaxpayer, seedVenue } from "@waitron/db/testing/seed.js";
 import { startManagementSession } from "@waitron/identity";
-import type { LiveMenu, MenuPatchResult, MenuPreview } from "@waitron/menu";
+import type { LiveMenu, MenuPatchResult, MenuPreview, PatchDraft } from "@waitron/menu";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { mountMenuApi } from "./menu-api.js";
@@ -26,7 +26,7 @@ const suite = useVenueDb({
   timeoutMs: 60_000,
   setup: async (db) => {
     await seedTaxpayer(db);
-    await seedVenueSettings(db);
+    await seedVenue(db, {});
     await seedLegacySellingUnits(db);
     await seedPhotoMetadata(db, { filename: PHOTO, names: { es: "Sopa" } });
     const { managerSid, staffSid } = await withTransaction(db, async (tx) => {
@@ -201,6 +201,73 @@ describe("reading and patching a menu's live version", () => {
     const after = await json<LiveMenu>(await live(app, menuId), 200);
     expect(after).toMatchObject({ versionId: result.versionId, number: 2 });
     expect(after.document.offers[itemId]).toMatchObject({ unitPrice: "4.50" });
+  });
+
+  it("lists the queued versions whose allergens differ, and corrects the one a patch names", async () => {
+    const app = mountApp();
+    const { menuId, itemId } = await lunchWithSoup(app);
+    await publish(app, menuId);
+    const target = { kind: "offer", menuItemId: itemId };
+    const declarations = { target, field: "declarations", value: "product" };
+    const rows = await suite.db.all<{ id: string }>(
+      sql`select id from products where name = 'Soup'`,
+    );
+    const queue = async (name: string, day: string) => {
+      await suite.db.execute(
+        sql`update products set kitchen_name = ${name} where id = ${rows[0]!.id}`,
+      );
+      const preview = await json<MenuPreview>(
+        await send(app, "GET", `/management-api/menus/${menuId}/preview`),
+        200,
+      );
+      return (
+        await json<{ versionId: string }>(
+          await send(app, "POST", `/management-api/menus/${menuId}/publications`, {
+            body: { expectedHash: preview.hash, activatesAt: { date: day, time: "09:00" } },
+          }),
+          201,
+        )
+      ).versionId;
+    };
+    const queued = [await queue("SOPA 1", "2099-01-05"), await queue("SOPA 2", "2099-01-06")];
+    await suite.db.execute(
+      sql`update products set allergens = '{"milk":{}}' where id = ${rows[0]!.id}`,
+    );
+    const base = await json<PatchDraft>(await live(app, menuId), 200);
+    expect(base.queued).toEqual(
+      queued.map((versionId) => ({
+        versionId,
+        activatesAt: expect.any(String),
+        targets: [{ target, stillOld: true }],
+      })),
+    );
+    for (const bad of [null, "x", [7], ["not-a-uuid"]])
+      expect(
+        (
+          await patch(app, menuId, {
+            baseVersionId: base.versionId,
+            changes: [declarations],
+            queued: bad,
+          })
+        ).status,
+      ).toBe(400);
+    const result = await json<MenuPatchResult>(
+      await patch(app, menuId, {
+        baseVersionId: base.versionId,
+        changes: [declarations],
+        queued: [queued[1]],
+      }),
+      200,
+    );
+    const after = await json<PatchDraft>(await live(app, menuId), 200);
+    expect(after.document.offers[itemId]!.allergens).toEqual({ milk: {} });
+    expect(after.queued).toEqual([
+      {
+        versionId: result.requeued[0]!.versionId,
+        activatesAt: base.queued[0]!.activatesAt,
+        targets: [{ target, stillOld: false }],
+      },
+    ]);
   });
 
   it("merges translated text against the venue's language when none are saved", async () => {
