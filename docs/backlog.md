@@ -473,10 +473,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Hosted copies can show stale prices, allergens and diet labels until Cloud removes them in
   piece 6. [Design](superpowers/specs/2026-11-24-customer-menu-design.md)
 - **Allergens and diets are published with the menu (owner, 2026-11-24), replacing A1150.** Piece 2 of
-  the same design, section 8; it stands alone. PRs 1, 2 and 3a of 5 landed: the published menu holds
-  them again, Preview lists their changes, tills, kitchen screens, tickets and the allergy check read
-  it, and Patch live menu corrects them. Left: 3b, the kitchen's correction slips and the route behind
-  "Update the live menus now?" after a save; 4, that question and Preview's warning.
+  the same design, section 8; it stands alone. PRs 1, 2, 3a and 3b of 5 landed: the published menu
+  holds them again, Preview lists their changes, tills, kitchen screens, tickets and the allergy
+  check read it, Patch live menu corrects them, and a route puts a saved product's values on every
+  menu still showing the old ones, printing the kitchen's correction slips. Left: 4, the "Update the
+  live menus now?" question that calls that route after a save, and Preview's warning.
   [Plan](superpowers/plans/2026-11-25-allergens-published.md)
 
 - **Smaller things #379 surfaced and did not take.** Separating product and modifier rules.
