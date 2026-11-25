@@ -1545,6 +1545,11 @@ export class PaymentsScreen extends LitElement {
           ? html`<div data-test="held-payments">
               <h3>${t("payments.held.heading")}</h3>
               <p>${t("payments.held.intro")}</p>
+              <p>
+                <a href=${guideHref("modules.resolve-held-payment")} target="_blank" rel="noopener"
+                  >${t("payments.held.guide")}</a
+                >
+              </p>
               <ul class="stuck-list">
                 ${this.heldPayments.map((row) => this.#renderHeldRow(row))}
               </ul>
@@ -1678,11 +1683,6 @@ export class PaymentsScreen extends LitElement {
         ?disabled=${this.billBusy}
         @wt-change=${(event: CustomEvent<{ value: string }>) => change("pin", event.detail.value)}
       ></wt-input>
-      <p>
-        <a href=${guideHref("modules.resolve-held-payment")} target="_blank" rel="noopener"
-          >${t("payments.held.guide")}</a
-        >
-      </p>
       <wt-form-actions slot="footer" .error=${bottom}>
         <wt-button
           slot="cancel"

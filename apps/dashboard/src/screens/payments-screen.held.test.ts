@@ -97,6 +97,10 @@ describe("held card payments on the Payments screen", () => {
   it("lists each held payment's order and time, both amounts and a Record outcome button", async () => {
     const el = await mount();
     const section = q(el, "[data-test=held-payments]")!;
+    expect(section.querySelector("a")?.getAttribute("href")).toBe(
+      "/help/en/modules#resolve-held-payment",
+    );
+    expect(section.querySelector("a")?.target).toBe("_blank");
     expect(section.querySelector("h3")!.textContent!.trim()).toBe(
       "Held: paid out at a different amount",
     );
@@ -150,6 +154,9 @@ describe("held card payments on the Payments screen", () => {
   it("reads the held list in Spanish", async () => {
     setLocale("es");
     const el = await mount();
+    expect(q(el, "[data-test=held-payments] a")?.getAttribute("href")).toBe(
+      "/help/es/modules#resolve-held-payment",
+    );
     expect(q(el, "[data-test=held-payments] h3")!.textContent!.trim()).toBe(
       "Retenidos: liquidados por otro importe",
     );
@@ -345,9 +352,6 @@ describe("the Record what was done dialog", () => {
     expect(text).toContain(
       "Put on a bill. Ring up the dishes again and record the existing charge as taken on another card machine.",
     );
-    expect(box.querySelector("a")?.getAttribute("href")).toBe(
-      "/help/en/modules#resolve-held-payment",
-    );
     expect(field(el, "outcome").label).toBe("Outcome");
     expect(field(el, "outcome").required).toBe(true);
     expect(
@@ -381,9 +385,6 @@ describe("the Record what was done dialog", () => {
     );
     expect(text).toContain(
       "Añadido a una cuenta. Vuelve a registrar los platos y anota el cobro ya hecho como pago en otro datáfono.",
-    );
-    expect(box.querySelector("a")?.getAttribute("href")).toBe(
-      "/help/es/modules#resolve-held-payment",
     );
     expect(field(el, "outcome").label).toBe("Resultado");
     expect(
@@ -464,11 +465,14 @@ describe("the Record what was done dialog", () => {
   });
 
   it("shows any other refusal at the bottom and keeps the dialog open", async () => {
-    const retry = Promise.withResolvers<never>();
+    let refuseRetry!: (reason: unknown) => void;
+    const retry = new Promise<never>((_resolve, reject) => {
+      refuseRetry = reject;
+    });
     const recordHeldOutcome = vi
       .fn()
       .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-      .mockReturnValueOnce(retry.promise);
+      .mockReturnValueOnce(retry);
     const el = await mount(stubApi({ recordHeldOutcome }));
     await open(el);
     await chooseOption(field(el, "outcome"), "put_on_bill");
@@ -480,7 +484,7 @@ describe("the Record what was done dialog", () => {
     expect(field(el, "pin").error).toBe("");
     await submit(el);
     expect(await bottom(el)).toBe("");
-    retry.reject({ code: "authorization.not_permitted" });
+    refuseRetry({ code: "authorization.not_permitted" });
     await vi.waitFor(async () =>
       expect(await bottom(el)).toBe(codeMessage("authorization.not_permitted")),
     );
