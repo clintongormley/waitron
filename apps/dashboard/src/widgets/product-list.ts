@@ -52,6 +52,12 @@ import {
 } from "./product-editor-model.js";
 import { type CategorySummary, type Course, type Product } from "../api/client.js";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
+import {
+  keepAvailabilityFocus,
+  productAvailabilitySwitch,
+  type ProductAvailabilityChange,
+} from "./product-tree-availability.js";
+import { productRowLabels, productRowStyles, unavailableLabel } from "./product-list-row-parts.js";
 
 export const ROOT_KEY = "root";
 
@@ -67,6 +73,7 @@ type RootRow = { kind: "root"; key: typeof ROOT_KEY; parentKey: null };
 type CategoryRow = { kind: "folder"; key: string; parentKey: string; folder: CategorySummary };
 type DraftRow = { kind: "draft"; key: typeof DRAFT_KEY; parentKey: string };
 type ListRow = ProductRow | CategoryRow | RootRow | DraftRow;
+type CategoryCounts = { categories: number; products: number; unavailable: number };
 
 interface ProductRow {
   kind: "product";
@@ -170,9 +177,6 @@ export class ProductList extends LitElement {
       wt-data-table::part(product-cell),
       wt-data-table::part(variant-cell) {
         display: block;
-      }
-      wt-data-table::part(inherited-allergens) {
-        color: var(--wt-color-text-muted);
       }
       wt-data-table[narrow]::part(tree-heading) {
         margin-inline-start: var(--tree-arrow-width);
@@ -284,10 +288,6 @@ export class ProductList extends LitElement {
         font-size: var(--wt-font-size-sm);
         text-align: end;
       }
-      wt-data-table::part(price-unit) {
-        color: var(--wt-color-text-muted);
-        font-size: var(--wt-font-size-sm);
-      }
       wt-data-table::part(vat-note) {
         display: block;
         color: var(--wt-color-text-muted);
@@ -330,6 +330,7 @@ export class ProductList extends LitElement {
       }
     `,
     productMediaStyles,
+    productRowStyles,
   ];
 
   @property({ type: Boolean }) selecting = false;
@@ -338,6 +339,7 @@ export class ProductList extends LitElement {
   @property({ type: Boolean, reflect: true }) reordering = true;
   @property({ attribute: false }) selected: string[] = [];
   @property({ attribute: false }) products: Product[] = [];
+  @property({ attribute: false }) availabilityPending: ReadonlyMap<string, boolean> = new Map();
   @property({ attribute: false }) courses: Course[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) defaultColor: string | null = null;
@@ -369,7 +371,7 @@ export class ProductList extends LitElement {
    * that list; kept otherwise so wt-data-table keeps the search text it prepared for each row. */
   #rowList: ListRow[] = [];
   #rowByKey = new Map<string, ListRow>();
-  #counts = new Map<string | null, { categories: number; products: number }>();
+  #counts = new Map<string | null, CategoryCounts>();
   #branchCounts = new WeakMap<readonly ListRow[], ReadonlyMap<string, number>>();
   #categoryById: ReadonlyMap<string, CategorySummary> = new Map();
   #dragged: string[] = [];
@@ -451,6 +453,7 @@ export class ProductList extends LitElement {
 
   protected override firstUpdated(): void {
     this.#watchTable();
+    keepAvailabilityFocus(this.#table()!);
     this.#table()!.addController({
       hostUpdated: () => {
         this.#scheduleFit();
@@ -476,7 +479,9 @@ export class ProductList extends LitElement {
     if (listed.kind === "product" && listed.variant !== null) return;
     if (
       path.some((item) =>
-        item.matches("input, a, wt-row-actions, wt-input, button:not(.row-activate, .drag-grip)"),
+        item.matches(
+          'input, a, wt-row-actions, wt-input, [data-row-activate="false"], button:not(.row-activate, .drag-grip)',
+        ),
       )
     )
       return;
@@ -837,18 +842,24 @@ export class ProductList extends LitElement {
 
   /** What each category holds directly, and under `null` the whole menu, counted once per change
    * of the lists rather than once per row drawn. */
-  #count(): Map<string | null, { categories: number; products: number }> {
-    const counts = new Map<string | null, { categories: number; products: number }>([
-      [null, { categories: this.categories.length, products: 0 }],
-    ]);
+  #count() {
+    const root = { categories: this.categories.length, products: 0, unavailable: 0 };
+    const counts = new Map<string | null, CategoryCounts>([[null, root]]);
     const entry = (id: string) =>
-      counts.get(id) ?? counts.set(id, { categories: 0, products: 0 }).get(id)!;
+      counts.get(id) ?? counts.set(id, { categories: 0, products: 0, unavailable: 0 }).get(id)!;
     for (const category of this.categories)
       if (category.parentId !== null) entry(category.parentId).categories++;
     for (const product of this.products) {
       if (!product.active) continue;
-      counts.get(null)!.products++;
-      if (product.primaryCategoryId !== null) entry(product.primaryCategoryId).products++;
+      root.products++;
+      if (product.primaryCategoryId === null) continue;
+      const category = entry(product.primaryCategoryId);
+      category.products++;
+      if (
+        !product.available ||
+        product.variants.some(({ active, available }) => active && !available)
+      )
+        category.unavailable++;
     }
     return counts;
   }
@@ -891,23 +902,17 @@ export class ProductList extends LitElement {
         total: String(total),
       });
     }
-    const { categories, products } = this.#counts.get(categoryId) ?? { categories: 0, products: 0 };
+    const { categories = 0, products = 0, unavailable = 0 } = this.#counts.get(categoryId) ?? {};
     const parts = categories > 0 ? [countOf("folders.count", categories)] : [];
     if (products > 0 || categories === 0) parts.push(countOf("folders.product_count", products));
-    return parts.join(", ");
+    const totals = parts.join(", ");
+    return categoryId !== null && unavailable && !this.#table()?.isExpanded(`folder:${categoryId}`)
+      ? `${totals} · ${countOf("product.unavailable_count", unavailable)}`
+      : totals;
   }
 
   #modifierNames(product: Product): string {
     return product.modifiers.map((ref) => modifierListName(ref, this.#listNames)).join(", ");
-  }
-
-  #variantCount(product: Product) {
-    const count = product.variants.filter(({ active }) => active).length;
-    return count === 0
-      ? nothing
-      : html`<span part="variant-count" data-test="variant-count"
-          >${countOf("product.variant_count", count)}</span
-        >`;
   }
 
   /** A product with an Active variant is sold only as one of them, and one with none sells as
@@ -931,7 +936,7 @@ export class ProductList extends LitElement {
   }
 
   #unitWord(product: Product): string {
-    if (product.unitId === EACH_UNIT_ID) return t("product.price_each");
+    if (product.unitId === EACH_UNIT_ID) return "";
     const name = unitPresentation(
       product.unit,
       currentLocale(),
@@ -993,8 +998,11 @@ export class ProductList extends LitElement {
                   color,
                   inheritedFrom,
                   busy: false,
+                  lazy: true,
                   open: () => this.#send("edit-product", { productId: variant.id, field: "image" }),
-                })}<span part="variant-name">${variant.name}</span></span
+                })}<span part="variant-name"
+                  ><span>${variant.name}${unavailableLabel(variant.available)}</span></span
+                ></span
               >`
             : html`<span part=${ancestorOnly ? "product-cell context" : "product-cell"}>
                 ${productMedia({
@@ -1004,27 +1012,34 @@ export class ProductList extends LitElement {
                   color,
                   inheritedFrom,
                   busy: false,
+                  lazy: true,
                   open: () => this.#send("edit-product", { productId: product.id, field: "image" }),
                 })}<span part="name-stack"
                   >${
                     searchRoot
                       ? html`<span part="search-name-line"
-                          ><strong>${product.name}</strong>${this.#searchPath(row)}</span
+                          ><span
+                            ><strong>${product.name}</strong
+                            >${unavailableLabel(product.available)}</span
+                          >${this.#searchPath(row)}</span
                         >`
-                      : html`<strong>${product.name}</strong>`
-                  }${this.#variantCount(product)}</span
+                      : html`<span
+                          ><strong>${product.name}</strong
+                          >${unavailableLabel(product.available)}</span
+                        >`
+                  }${productRowLabels(product)}</span
                 >
               </span>`;
         },
       },
       {
         key: "course",
-        choosable: "shown",
+        choosable: "hidden",
         label: t("product.course"),
         // A variant row names only a course of its own; one that follows its product's is blank.
         cell: ({ product, variant }) => {
           const courseId = variant ? variant.courseId : product.courseId;
-          if (courseId === null) return variant ? nothing : "—";
+          if (courseId === null) return nothing;
           return this.#courseName(courseId);
         },
         sortValue: ({ product }) => this.#courseRank(product.courseId),
@@ -1057,20 +1072,28 @@ export class ProductList extends LitElement {
         // it under its price, since nothing else on the row would show it.
         cell: (row) => {
           const takeaway = this.takeawayVat ? row.variant?.effective.takeawayVatRate : undefined;
-          return html`<span data-test="price">${this.#price(row)}</span>
-            <span part="price-unit" data-test="price-unit">${this.#unitWord(row.product)}</span>${
+          const unit = this.#unitWord(row.product);
+          return html`<span part="price-layout">
+            <span
+              part=${row.variant?.unitPrice === null ? "price-amount inherited-price" : "price-amount"}
+              data-test="price"
+              >${this.#price(row)}</span
+            >
+            ${unit ? html`<span part="price-unit" data-test="price-unit">${unit}</span>` : nothing}
+            ${
               takeaway === undefined || takeaway === row.product.takeawayVatRate
                 ? nothing
                 : html`<span part="vat-note" data-test="takeaway-vat-note"
                     >${t("editor.takeaway_vat")}: ${vatRateText(takeaway)}</span
                   >`
-            }`;
+            }
+          </span>`;
         },
         sortValue: (row) => this.#prices(row).low,
       },
       {
         key: "modifiers",
-        choosable: "shown",
+        choosable: "hidden",
         label: t("editor.modifiers"),
         cell: ({ product, variant }) => (variant ? nothing : this.#modifierNames(product)),
         filter: {
@@ -1085,12 +1108,12 @@ export class ProductList extends LitElement {
       },
       {
         key: "ordering",
-        choosable: "shown",
+        choosable: "hidden",
         label: t("product.ordering"),
         // A variant is a way of buying its product, so the filter reads the PRODUCT's answer on
         // every row and a variant is shown or hidden together with its product.
         cell: ({ product, variant }) => {
-          if (variant) return nothing;
+          if (variant || product.ordering === "public") return nothing;
           return html`<span
             part="badge"
             data-test="ordering-badge"
@@ -1114,21 +1137,20 @@ export class ProductList extends LitElement {
         },
       },
       {
-        key: "availability",
+        key: "available",
         choosable: "shown",
-        label: t("product.availability"),
+        activatesRow: false,
+        label: t("editor.available"),
         help: {
           text: t("help.products.availability"),
-          label: fill("help.badge_label", { part: t("product.availability") }),
+          label: fill("help.badge_label", { part: t("editor.available") }),
         },
-        cell: (row) => {
-          const { product, variant } = row;
-          return (variant ?? product).available
-            ? nothing
-            : html`<span part="badge" data-test="availability-badge" data-state="unavailable"
-                >${t("product.unavailable_badge")}</span
-              >`;
-        },
+        cell: ({ product, variant }) =>
+          productAvailabilitySwitch(
+            variant ?? product,
+            this.availabilityPending,
+            (change: ProductAvailabilityChange) => this.#send("change-availability", change),
+          ),
         sortValue: (row) => ((row.variant ?? row.product).available ? 0 : 1),
       },
       {
@@ -1514,6 +1536,7 @@ export class ProductList extends LitElement {
         viewKey="waitron.products.table"
         rememberExpanded
         flatTreeSearch
+        dense-rows
         .filterCandidates=${this.#filterCandidates}
         customiseColumnsLabel=${t("table.customise_columns")}
         customiseLabel=${t("table.customise")}

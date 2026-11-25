@@ -1,4 +1,4 @@
-import { html, nothing } from "lit";
+import { css, html, nothing } from "lit";
 
 export function productListActionFeedback(message: string, announce: boolean) {
   return message
@@ -11,4 +11,21 @@ export function productListActionFeedback(message: string, announce: boolean) {
         ${message}
       </p>`
     : nothing;
+}
+
+export const productAvailabilityFeedbackStyles = css`
+  .availability-error {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 2;
+    margin: 0;
+    padding: var(--wt-space-2) var(--wt-space-3);
+    background: var(--wt-color-surface);
+    color: var(--wt-color-danger);
+    overflow-wrap: anywhere;
+  }
+`;
+
+export function productAvailabilityFeedback(message: string) {
+  return message ? html`<p class="availability-error" role="alert">${message}</p>` : nothing;
 }

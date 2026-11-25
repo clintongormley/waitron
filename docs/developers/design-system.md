@@ -6180,8 +6180,14 @@ does not reverse Delete.
 
 ### Product availability and deletion
 
-Turn off **Available** to mark a product or variant sold out. Its row stays in Products, with
-**Unavailable** in the Availability column. Available items leave that column blank.
+Use the **Available** switch in a Products row to put that product or variant on or off sale.
+The change applies to every menu using it. Switching a product leaves its variants' own choices
+in place. A refusal names the item above the table and restores the switch.
+
+The Products tree starts with Name, Price, Available and row actions. Open Customise for
+Course, Modifiers, Standalone, Allergens and Dietary info. Off products and variants carry a red
+outlined **Unavailable** label beside their names. A closed category counts each of its direct
+products once when that product or one of its active variants is unavailable.
 
 Delete removes the product or variant from Products and keeps its past sales. Take it out of every
 live or scheduled menu and publish before deleting. The refusal names the menus that still use it,

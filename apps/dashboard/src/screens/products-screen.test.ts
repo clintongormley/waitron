@@ -2,7 +2,7 @@ import { LeaveController, NavigationGuard } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import { dashboardQuery } from "../api/live-queries.js";
 import { LitElement, html } from "lit";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type {
   MenuSettingsAnswer,
@@ -563,6 +563,103 @@ describe("menu-screen", () => {
       );
     });
     expect(table.isExpanded("folder:child")).toBe(true);
+  });
+
+  it("keeps a saved availability through an older reply and a failed refresh", async () => {
+    const original = [
+      { ...products[0]!, primaryCategoryId: null },
+      { ...products[0]!, id: "p2", name: "Toast", primaryCategoryId: null },
+    ];
+    const setProductAvailability = vi.fn().mockResolvedValue(undefined);
+    const api = Object.assign(
+      stubApi({ listProducts: vi.fn().mockResolvedValue(original), setProductAvailability }),
+      { liveData: new LiveData() },
+    );
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await flush(el);
+    const table = await productTable(el);
+    const control = () =>
+      table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+        'tr[data-row-key="p1"] wt-switch',
+      );
+    expect(control()?.checked).toBe(true);
+    table.shadowRoot!.querySelector<HTMLButtonElement>('button[data-sort="available"]')!.click();
+    await table.updateComplete;
+    const old = deferred<Product[]>();
+    vi.mocked(api.listProducts).mockReturnValueOnce(old.promise);
+    api.liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledTimes(2));
+    vi.mocked(api.listProducts).mockRejectedValueOnce({ code: "connection.failed" });
+    control()!.focus();
+    await userEvent.keyboard(" ");
+    await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledTimes(3));
+    expect(setProductAvailability).toHaveBeenCalledExactlyOnceWith("p1", false);
+    old.resolve(original);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector('[data-test="products-retry"]')).not.toBeNull();
+    expect(control()?.checked).toBe(false);
+    expect(table.shadowRoot!.activeElement).toBe(control());
+    api.liveData.invalidate([{ type: "products" }]);
+    await vi.waitFor(() => expect(control()?.checked).toBe(true));
+  });
+
+  it("keeps a named refusal visible when the rows are scrolled", async () => {
+    const viewport = { width: innerWidth, height: innerHeight };
+    await page.viewport(1280, 844);
+    onTestFinished(() => page.viewport(viewport.width, viewport.height));
+    const refusal = deferred<void>();
+    const setProductAvailability = vi.fn().mockImplementation(async () => {
+      await refusal.promise;
+      throw { code: "authorization.not_permitted" };
+    });
+    const many = Array.from({ length: 30 }, (_, index) => ({
+      ...products[0]!,
+      id: `p${index}`,
+      name: `Dish ${index + 10}`,
+      primaryCategoryId: null,
+    }));
+    const api = stubApi({ listProducts: vi.fn().mockResolvedValue(many), setProductAvailability });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    el.style.setProperty("--wt-table-max", "300px");
+    await flush(el);
+    const table = await productTable(el);
+    const root = table.shadowRoot!;
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    const control = root.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      'tr[data-row-key="p29"] wt-switch',
+    );
+    expect(control, "each row has its own switch").not.toBeNull();
+    const cell = control!.closest("td")!;
+    scroll.scrollTop = scroll.scrollHeight;
+    await vi.waitFor(() => {
+      const { left, top } = cell.getBoundingClientRect();
+      expect(root.elementFromPoint(left + 3, top + 6) === cell).toBe(true);
+    });
+    expect(scroll.scrollTop).toBeGreaterThan(0);
+    const blank = page
+      .getByRole("row")
+      .filter({ hasText: "Dish 39" })
+      .getByRole("gridcell")
+      .nth(cell.cellIndex);
+    await userEvent.click(blank, { position: { x: 3, y: 6 }, timeout: 2000 });
+    expect(api.getProductEditor).not.toHaveBeenCalled();
+    expect(setProductAvailability).not.toHaveBeenCalled();
+    control!.focus();
+    await userEvent.keyboard(" ");
+    expect(control!.checked).toBe(false);
+    await userEvent.keyboard(" ");
+    expect(control!.checked).toBe(false);
+    expect(setProductAvailability).toHaveBeenCalledExactlyOnceWith("p29", false);
+    refusal.resolve();
+    const message = () => list(el).shadowRoot!.querySelector<HTMLElement>('[role="alert"]');
+    await vi.waitFor(() => expect(message()?.textContent).toContain("Dish 39"));
+    expect(message()!.textContent).toContain(codeMessage("authorization.not_permitted"));
+    expect(control!.checked).toBe(true);
+    expect(root.activeElement).toBe(control);
+    expect(scroll.scrollTop).toBeGreaterThan(0);
+    expect(message()!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      scroll.getBoundingClientRect().top,
+    );
   });
 
   it("shows a product's new takeaway rate when its rates change", async () => {
@@ -2929,6 +3026,30 @@ describe("menu-screen", () => {
         ],
       },
     ];
+    it("changes a variant's switch while keeping its parent's switch on", async () => {
+      const setProductAvailability = vi.fn().mockResolvedValue(undefined);
+      const listProducts = vi
+        .fn()
+        .mockResolvedValueOnce(withVariant)
+        .mockRejectedValue({ code: "connection.failed" });
+      const api = stubApi({ listProducts, setProductAvailability });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+      await flush(el);
+      const table = await productTable(el);
+      table.setExpanded("folder:c1", true);
+      table.setExpanded("p1", true);
+      await table.updateComplete;
+      const switches =
+        table.shadowRoot!.querySelectorAll<HTMLElementTagNameMap["wt-switch"]>("tbody wt-switch");
+      expect(Array.from(switches, (control) => control.checked)).toEqual([true, true]);
+      switches[1]!.focus();
+      await userEvent.keyboard(" ");
+      await vi.waitFor(() => expect(listProducts).toHaveBeenCalledTimes(2));
+      expect(setProductAvailability).toHaveBeenCalledExactlyOnceWith("v1", false);
+      expect(Array.from(switches, (control) => control.checked)).toEqual([true, false]);
+      expect(list(el).products[0]!.variants[0]!.available).toBe(false);
+    });
+
     const variantValue: ProductEditorValue = {
       ...value,
       id: "v1",

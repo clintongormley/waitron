@@ -38,12 +38,18 @@ export const treeDragStyles = css`
       inset 0 calc(-1 * var(--wt-field-line-width-active)) 0 var(--wt-color-primary),
       inset calc(-1 * var(--wt-field-line-width-active)) 0 0 var(--wt-color-primary);
   }
+  wt-data-table[dense-rows] {
+    --tree-drop-gap: var(--wt-space-2);
+  }
+  wt-data-table[dense-rows][narrow] {
+    --tree-drop-gap: calc(var(--wt-space-1) + var(--wt-space-2));
+  }
   wt-data-table::part(drop-gap-before) {
-    padding-block-start: calc(var(--wt-space-3) + var(--wt-tap-min));
+    padding-block-start: calc(var(--tree-drop-gap, var(--wt-space-3)) + var(--wt-tap-min));
     border-block-start: var(--wt-field-line-width-active) dashed var(--wt-color-primary);
   }
   wt-data-table::part(drop-gap-after) {
-    padding-block-end: calc(var(--wt-space-3) + var(--wt-tap-min));
+    padding-block-end: calc(var(--tree-drop-gap, var(--wt-space-3)) + var(--wt-tap-min));
     border-block-end: var(--wt-field-line-width-active) dashed var(--wt-color-primary);
   }
   /* Placed by a transform from the pointer's own coordinates, which are physical. */

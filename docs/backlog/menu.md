@@ -430,7 +430,7 @@ layout at 768 px. Smaller changes can still leave enough room for the wide layou
   the editor field and the filter are "Standalone ordering by" (Spanish «Pedir por separado»). A
   Course column and a Course filter join the list, and "Default course" is "Course". (2026-11-15: a
   read refused because the person may not see routing shows no line.)
-  (2026-11-24: the approved [Products list design](../superpowers/specs/2026-11-24-products-list-redesign-design.md) changes this when built: which columns start shown, and Availability becomes a switch named Available.)
+  (2026-11-24: the approved [Products list design](../superpowers/specs/2026-11-24-products-list-redesign-design.md) supersedes the initial column choices and replaces Availability with an Available switch.)
 
 - **Optional customer text and unit staff identity (A682, owner, 2026-10-17).** Every customer
   translation is optional, including the default. Units have a required staff name and abbreviation;
@@ -635,7 +635,7 @@ product has no replacement for; the backlog entry marked that matching "assumed,
 choices. The switched-off-station example above records A463's earlier decision; Task 9's
 integrated Made at check follows the surviving rule after deletion. (2026-10-20, A655: the Made at
 column and filter were deleted.)
-(2026-11-24: the approved [Products list design](../superpowers/specs/2026-11-24-products-list-redesign-design.md) changes this when built: Unavailable is a label beside the name, and Available a switch.)
+(2026-11-24: the approved [Products list design](../superpowers/specs/2026-11-24-products-list-redesign-design.md) supersedes the Availability column and the italic style for inherited allergens.)
 
 - **Task 13 (#903, standalone ordering).** A product's `ordering` is Public, Staff only or Not
   sold separately; Staff only behaves exactly as Public until guest ordering exists.

@@ -43,7 +43,12 @@ import { folderMadeAt, isRouted, type FolderMadeAt } from "./folder-made-at.js";
 import { categoryTree } from "./classification-fields.js";
 import "./category-color-form.js";
 import { refusalText } from "./delete-refusal.js";
-import { productListActionFeedback } from "./product-list-action-feedback.js";
+import {
+  productListActionFeedback,
+  productAvailabilityFeedback,
+  productAvailabilityFeedbackStyles,
+} from "./product-list-action-feedback.js";
+import type { ProductAvailabilityChange } from "./product-tree-availability.js";
 import { deleteExtraListWarning } from "./delete-extra-lists.js";
 import { offMenusSentence } from "./off-menus.js";
 import { countOf } from "./count-text.js";
@@ -63,6 +68,7 @@ export class ProductBrowser extends LitElement {
     baseStyles,
     routingPreviewStyles,
     formMessageStyles,
+    productAvailabilityFeedbackStyles,
     css`
       :host {
         display: block;
@@ -163,6 +169,9 @@ export class ProductBrowser extends LitElement {
   #previewRead = 0;
   readonly #operationFeedback = new FormFeedback(this);
 
+  @property({ attribute: false }) availabilitySaved?: (change: ProductAvailabilityChange) => void;
+  @state() private availabilityPending: ReadonlyMap<string, boolean> = new Map();
+  @state() private availabilityError = "";
   @state() private actionError = "";
   readonly #operationOwner = {};
   #operationScope?: DraftScope<OperationDraft>;
@@ -1001,10 +1010,33 @@ export class ProductBrowser extends LitElement {
     await this.updateComplete;
     this.renderRoot.querySelector<HTMLElement>('[data-test="select"]')?.focus();
   }
+  readonly #changeAvailability = async (event: CustomEvent<ProductAvailabilityChange>) => {
+    event.stopPropagation();
+    const change = event.detail;
+    if (this.availabilityPending.has(change.id)) return;
+    this.availabilityPending = new Map(this.availabilityPending).set(change.id, change.available);
+    this.availabilityError = "";
+    try {
+      await this.api.setProductAvailability(change.id, change.available);
+      this.availabilitySaved?.(change);
+    } catch (error) {
+      this.availabilityError = fill("product.availability_refused", {
+        name: change.name,
+        reason: refusalText(codeOf(error), (error as { params?: unknown })?.params),
+      });
+    } finally {
+      const pending = new Map(this.availabilityPending);
+      pending.delete(change.id);
+      this.availabilityPending = pending;
+    }
+  };
+
   override render() {
     const renamed = this.#renamed(this.nameDraft);
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
-    return html`<dashboard-product-list
+    return html`${productAvailabilityFeedback(this.availabilityError)}<dashboard-product-list
+        .availabilityPending=${this.availabilityPending}
+        @change-availability=${this.#changeAvailability}
         .hidden=${this.tableHidden}
         @drop-items=${(event: CustomEvent<{ keys: string[]; folderId: string | null }>) => {
           event.stopPropagation();

@@ -36,8 +36,8 @@ including orders already open; you do not need to publish the menu.
 **Ordering** in **Details**, says who can order it on its own: Anyone, Staff only or Nobody. The
 explanation below the selected choice tells you what it allows. A variant has no Ordering, because
 it is ordered as its product is. The Products list shows
-this setting in its **Standalone** column; the **Standalone ordering by** filter in **Filters** picks
-by it.
+**Staff only** or **Not sold separately** beside the product name when either applies. Use
+**Standalone ordering by** in **Filters** to find products by this setting.
 
 Choose the pencil-marked thumbnail beside Name to change the image or colour. The square previews
 a colour change before you save. Close the panel with Escape to return to the thumbnail.
@@ -534,6 +534,10 @@ notice to acknowledge. Read how [station allergy copies and corrections](kitchen
 stay with the work.
 
 ## Mark a dish sold out during service {#sold-out}
+
+In the dashboard, open **Products** and turn off **Available** on the dish or size. Its row shows
+**Unavailable**. The change takes effect on every menu that sells it. Turn the switch on when it is
+ready again.
 
 When the station runs out, hold the dish on Counter or a table order to open its information.
 You can still send or fire portions already on a bill.
