@@ -1231,11 +1231,16 @@ _2026-11-25: the owner's answers of 24 November replace D1 and D3 (A1515 piece 1
 asks nobody for a PIN; the credit note names the signed-in person, backed by the reopened bill it
 opened ("1 A"). D3: a part-paid printed bill can be split, its money moving to the reopened bill
 ("2 B"). One holding a payment on its own receipt (an advance) can be reopened too (owner,
-2026-11-25, replacing the "ok" of 24 November to refusing it; REOPEN-WITH-ADVANCE,
-[plan](../superpowers/plans/2026-11-25-reopen-with-advance.md)): the advance's payment moves to the
-reopened bill, which counts it and cannot go below it. Giving the advance back on a printed bill not
-yet paid says "Reopen the bill, then give the money back."; on the reopened bill one action corrects
-the advance's receipt, refunds it and the bill stops counting it (owner, 2026-11-25, choice (c))._
+2026-11-25, "I think a bill that has been partially paid by an advance can still be opened, no?",
+replacing the "ok" of 24 November to refusing it; REOPEN-WITH-ADVANCE,
+[plan](../superpowers/plans/2026-11-25-reopen-with-advance.md)). The advance's payment moves to the
+reopened bill, which counts it and cannot go below it: the lane watcher's choice of how to build
+the owner's ask (lane C `questions.md`, 2026-11-25 15:22), not the owner's. Giving the advance back
+on a printed bill not yet paid says "Reopen the bill, then give the money back."; on the reopened
+bill one action corrects the advance's receipt, refunds it and the bill stops counting it. That is
+choice (c), which the owner answered as steps (lane C `questions.md`, 2026-11-25 16:20): "first
+reopen Luis' bill / then remove the advance / then open Ana's bill / refund the 20€ / print luis'
+bill for 72€ again"._
 
 _2026-11-25: **Reopen bill** on a bill where something was served (or its charge kept) and other dishes
 never came offers **Stop these dishes and reopen** (CANCEL-UNSERVED PR 2, [plan](../superpowers/plans/2026-11-25-cancel-unserved.md) §4; the

@@ -937,9 +937,6 @@ declare module "@waitron/shared" {
      * except by Reopen bill, which moves the money to the reopened bill.
      */
     "bill.payments_received": { workingOrderId: string };
-    /** Reopen bill on a printed bill on which an advance was ever taken, even one given back
-     * in full since: an advance's money is on its own ticket, so it cannot follow the dishes. */
-    "bill.has_advance": { workingOrderId: string };
     /** The bill has been presented (placed), so it takes no new order. */
     "bill.presented": { workingOrderId: string };
     /** The bill is closed (paid, or closed as a deferred payment), so it takes no new order. */

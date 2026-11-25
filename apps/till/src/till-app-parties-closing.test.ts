@@ -949,18 +949,6 @@ describe("till-app: reopening a printed bill", () => {
     expect(server.splitAfterPrint).toHaveBeenCalledOnce();
   });
 
-  it("a bill with an advance says to take the rest with An amount or Split equally", async () => {
-    const server = billServer(async () => {
-      throw { code: "bill.has_advance", status: 409, workingOrderId: "wo-check" };
-    });
-    const { el } = await openSplit(server);
-    await confirmSplit(el);
-
-    expect(bottom(el)).toBe(t("split.refused_advance"));
-    expect(bottom(el)).toContain("with An amount or Split equally");
-    expect(doneText(el)).toBeNull();
-  });
-
   it("lists the dishes not marked served, and Mark served serves them and splits again", async () => {
     let refused = false;
     const server = billServer(async () => {

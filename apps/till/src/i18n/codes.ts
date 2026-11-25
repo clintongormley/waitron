@@ -401,10 +401,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This bill has taken payments, so it cannot be merged into another bill.",
     es: "Esta cuenta ya ha recibido pagos, por lo que no se puede añadir a otra cuenta.",
   },
-  "bill.has_advance": {
-    en: "Part of this bill was paid with its own receipt, so its dishes cannot be paid for separately. Take the rest of the payment on this bill with An amount or Split equally.",
-    es: "Parte de esta cuenta se pagó con su propio ticket, así que sus platos no se pueden cobrar por separado. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
-  },
   "bill.merge_invoice_choice_required": {
     en: "The bills' invoice details have changed. Check them and merge again.",
     es: "Los datos de factura de las cuentas han cambiado. Revísalos y vuelve a juntarlas.",

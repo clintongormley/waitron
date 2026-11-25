@@ -984,7 +984,9 @@ till; Task 9 is the guides.
   Print anyway and not yet served, which already offers **Mark served**
   (`apps/server/src/split-after-print.ts:83-109`).
 - A printed bill holding an advance (a part payment that has its own receipt) stays refused (owner,
-  "ok", 2026-11-24 10:4x); PR 1's D4 is the same rule for open bills.
+  "ok", 2026-11-24 10:4x); PR 1's D4 is the same rule for open bills. _2026-11-26: replaced by the
+  owner on 2026-11-25; such a bill can be reopened
+  ([REOPEN-WITH-ADVANCE](2026-11-25-reopen-with-advance.md))._
 - The old items payment (`kind: "items"`) and its server route: PR 3 removes them. After PR 4 the
   till sends it nowhere.
 - No new route. The two Pay for items routes and the Reopen to split route keep their paths and
@@ -1122,7 +1124,9 @@ is raised.
   points by running them, with a control: the reconcile listing (`listReconcilable`,
   `store.ts:747-773`) shows the moved card on an `open` bill, and the same test with the provider
   row left behind shows it on an `abandoned` one.
-- **PR4-D5. What a part-paid printed bill still refuses.** `refusePlacedOrderMoney` keeps its
+- **PR4-D5. What a part-paid printed bill still refuses.** _2026-11-26: the advance refusal below
+  and `bill.has_advance` are gone; [REOPEN-WITH-ADVANCE](2026-11-25-reopen-with-advance.md) lets
+  such a bill be reopened, at the owner's request of 2026-11-25._ `refusePlacedOrderMoney` keeps its
   callers but Reopen to split stops calling it; a new `refuseSplitMoney` (in a new file,
   `apps/server/src/split-after-print-money.ts`) refuses, in this order and after the bill's own
   refusals (as today, `split-after-print.ts:61-63`):

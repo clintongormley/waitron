@@ -531,25 +531,6 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
     },
   );
 
-  it.each(["en", "es"] as const)(
-    "says a bill that has had an advance cannot be reopened in its own words, in %s",
-    async (locale) => {
-      setLocale(locale);
-      try {
-        const el = await mount({ mode: "split", refusal: { code: "bill.has_advance" } });
-
-        expect(actions(el).error).toBe(
-          locale === "en"
-            ? "Part of this bill was paid with its own receipt, so it cannot be reopened. Take the rest of the payment on this bill with An amount or Split equally."
-            : "Parte de esta cuenta se pagó con su propio ticket, así que no se puede reabrir. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
-        );
-        expect(actions(el).error).not.toBe(codeMessage("bill.has_advance"));
-      } finally {
-        setLocale("en");
-      }
-    },
-  );
-
   it("says the dishes are not served even when the refusal lists none", async () => {
     const el = await mount({ mode: "split", refusal: { code: "bill.unserved_dishes" } });
 

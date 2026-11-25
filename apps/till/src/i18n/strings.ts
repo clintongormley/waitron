@@ -2235,8 +2235,6 @@ export const en = {
   "split.refused_left_unpaid": "This bill was recorded as left unpaid, so its guests have gone.",
   "split.refused_not_at_table": "Only a table's bill can be reopened.",
   "split.refused_not_issued": "This bill has no receipt yet.",
-  "split.refused_advance":
-    "Part of this bill was paid with its own receipt, so it cannot be reopened. Take the rest of the payment on this bill with An amount or Split equally.",
   "split.refused_payment_in_flight":
     "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it. If it was not taken, choose Reopen bill again.",
   "split.done":
@@ -4653,8 +4651,6 @@ export const es: Record<StringKey, string> = {
   "split.refused_left_unpaid": "Esta cuenta se registró como no pagada: los clientes se han ido.",
   "split.refused_not_at_table": "Solo se puede reabrir la cuenta de una mesa.",
   "split.refused_not_issued": "Esta cuenta aún no tiene ticket.",
-  "split.refused_advance":
-    "Parte de esta cuenta se pagó con su propio ticket, así que no se puede reabrir. Cobra el resto en esta cuenta con Una cantidad o Dividir a partes iguales.",
   "split.refused_payment_in_flight":
     "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo. Si no se cobró, vuelve a elegir Reabrir cuenta.",
   "split.done":
