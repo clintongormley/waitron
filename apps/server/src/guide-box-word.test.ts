@@ -19,7 +19,6 @@ const OTHER_SERVERS = [
 
 // "Equipo" meaning a staff team or a piece of equipment, each allowed once in its file.
 const OTHER_EQUIPOS: Record<string, string[]> = {
-  "appearance.md": ["la etiqueta del equipo"],
   "staff.md": [
     "roles de acceso del equipo",
     "**Equipo**",

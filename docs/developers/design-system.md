@@ -3373,7 +3373,7 @@ and the staffing grid's block editor in the A761 entry):
   once it can act, keeping its own variant while its own action is being sent. A416 brought these
   under it: the Products browser's toolbar Delete; on the
   Modifiers screen, the Delete confirmation, Add extras list, Add options list and the Used by
-  window's Edit; Print on an equipment label; Print a copy on Reprint the receipt; the profile
+  window's Edit; Print on a QR label; Print a copy on Reprint the receipt; the profile
   window's Edit; and the backup key's Change the key. The owner extended it (2026-10-08, A427) to a
   button disabled because its row's own state rules the action out: it is drawn `secondary` while
   ruled out and its own variant otherwise; which conditions disable it is unchanged. A427 brought
@@ -6052,6 +6052,12 @@ follow normal Tab navigation. Give each action an `icon="menu-…"` for its verb
 registered icon for links, at size `lg`. Action rows start with the icon and use normal-weight
 labels, neutral hover and pressed fills, and the shared focus ring. A checked bill or counter zone
 uses that same icon column for its tick. Keep the bill's label and amount layout inside the row.
+
+A button that opens a list of choices, rather than a row's kebab, is a `wt-row-actions` with words
+and a ▾ in its `trigger` slot: **Print ▾** on a printer's or card reader's QR label
+(`apps/dashboard/src/widgets/equipment-qr-label.ts`) draws its trigger as a primary button through
+`::part(trigger)`. While it waits or works it is a `wt-button` instead, which can be disabled or
+loading; the window puts keyboard focus back on whichever of the two it shows.
 
 Put Delete last with the danger variant. Disconnect and Unpair also use danger. Keep Remove and
 Disable neutral. Use `rowActionTail` to put these actions after ordinary rows and to add the

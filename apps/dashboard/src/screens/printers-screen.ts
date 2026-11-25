@@ -38,7 +38,11 @@ import "../widgets/print-job-preview.js";
 import "../widgets/page-printer-add.js";
 import { PageTestPages, pageFailureReason } from "../widgets/page-test-pages.js";
 import { holdNotice, holdNoticeStyles } from "../widgets/hold-notice.js";
-import "../widgets/equipment-label.js";
+import {
+  equipmentLabelItems,
+  equipmentLabelWindow,
+  type EquipmentLabelWindow,
+} from "../widgets/equipment-label-menu.js";
 import "../widgets/print-job-reprint-dialog.js";
 import { holderText } from "../i18n/equipment.js";
 import { HardwareDeleteDialog } from "../widgets/hardware-delete-dialog.js";
@@ -471,13 +475,6 @@ export class PrintersScreen extends LitElement {
       wt-data-table::part(job-reason) {
         max-width: calc(var(--wt-space-6) * 8);
         overflow-wrap: anywhere;
-      }
-      .status-actions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--wt-space-3);
-        margin-top: var(--wt-space-4);
       }
       wt-data-table::part(job-actions) {
         display: flex;
@@ -1298,9 +1295,10 @@ export class PrintersScreen extends LitElement {
   @state() private testPageSent: string | null = null;
   @state() private refreshErrorKey: string | null = null;
   @state() private addedPrinterName: string | null = null;
-  /** The portable printer whose equipment label is open. */
+  /** The portable printer whose QR label or NFC sticker window is open. */
   @state() private labelPrinterId: string | null = null;
   #labelOpener: HTMLElement | null = null;
+  #labelWindow: EquipmentLabelWindow = "qr";
 
   #deleteIsPage = false;
   #deleteIsBluetooth = false;
@@ -3257,6 +3255,15 @@ export class PrintersScreen extends LitElement {
         >${t("printers.print_test_page")}</wt-button
       >
       ${
+        p.portable
+          ? equipmentLabelItems(p.id, (window, opener) => {
+              this.#labelWindow = window;
+              this.#labelOpener = opener;
+              this.labelPrinterId = p.id;
+            })
+          : nothing
+      }
+      ${
         this.canManageStationPrinters
           ? html`<wt-button
               icon="menu-default"
@@ -3889,18 +3896,6 @@ export class PrintersScreen extends LitElement {
           heading: t("printers.details_paper"),
           dataTest: "printer-section-calibration",
           rows: paper,
-          after: p.portable
-            ? html`<div class="status-actions">
-                <wt-button
-                  data-test="open-equipment-label"
-                  @click=${(event: Event) => {
-                    this.#labelOpener = event.currentTarget as HTMLElement;
-                    this.labelPrinterId = p.id;
-                  }}
-                  >${t("equipment.label")}</wt-button
-                >
-              </div>`
-            : nothing,
         })}
         ${this.#renderUsedBy(
           this.printerProfiles.filter((offer) => offer.printerId === p.id),
@@ -5569,16 +5564,15 @@ export class PrintersScreen extends LitElement {
   #renderEquipmentLabel(): TemplateResult | typeof nothing {
     const printer = this.printers.find((p) => p.id === this.labelPrinterId);
     if (printer === undefined) return nothing;
-    return html`<dashboard-equipment-label
-      .api=${this.api}
-      kind="printer"
-      .itemId=${printer.id}
-      .name=${printer.name}
-      .opener=${this.#labelOpener}
-      @wt-close=${() => {
+    return equipmentLabelWindow(this.#labelWindow, {
+      kind: "printer",
+      item: printer,
+      api: this.api,
+      opener: this.#labelOpener,
+      close: () => {
         this.labelPrinterId = null;
-      }}
-    ></dashboard-equipment-label>`;
+      },
+    });
   }
 
   /** Each of these dialogs shows the failed read itself, so nothing beneath it repeats it. */

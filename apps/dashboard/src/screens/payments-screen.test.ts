@@ -21,6 +21,7 @@ import "./payments-screen.js";
 import { PaymentsScreen } from "./payments-screen.js";
 import { formatEquipmentCode } from "@waitron/shared";
 import { decodeQrImage } from "../testing/decode-qr.js";
+import type { EquipmentQrLabel } from "../widgets/equipment-qr-label.js";
 
 beforeEach(() => setLocale("en"));
 beforeEach(() => {
@@ -1881,7 +1882,7 @@ describe("the readers' status reads", () => {
   });
 });
 
-describe("who carries each card reader, and its equipment label", () => {
+describe("who carries each card reader, its QR label and its NFC sticker", () => {
   const READER_ID = "7d2c9a10-5b3e-4f61-8a2d-1c0e9b8a7f65";
   const carried: ReaderRow = { ...READERS[0]!, id: READER_ID, name: "Terrace" };
 
@@ -1916,21 +1917,73 @@ describe("who carries each card reader, and its equipment label", () => {
     );
   });
 
+  const readerMenu = (el: PaymentsScreen, id: string) =>
+    [
+      ...qCell(el, `[data-test=edit-${id}]`)!
+        .closest("wt-row-actions")!
+        .querySelectorAll<HTMLElement>("wt-button"),
+    ].map((button) => button.dataset["test"]!.replace(`-${id}`, ""));
+
+  it("the menu offers the reader's QR label, and an NFC sticker where the browser can write one", async () => {
+    vi.stubGlobal("NDEFReader", undefined);
+    try {
+      let { el } = await mount(stubApi({ listReaders: vi.fn().mockResolvedValue([carried]) }));
+      expect(readerMenu(el, READER_ID).slice(0, 3)).toEqual(["edit", "qr-label", "details"]);
+      vi.stubGlobal("NDEFReader", class {});
+      ({ el } = await mount(stubApi({ listReaders: vi.fn().mockResolvedValue([carried]) })));
+      expect(readerMenu(el, READER_ID).slice(0, 4)).toEqual([
+        "edit",
+        "qr-label",
+        "nfc-sticker",
+        "details",
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("the label modal shows the exact code text formatEquipmentCode gives for this reader, and its QR image decodes to that text", async () => {
     const { el } = await mount(stubApi({ listReaders: vi.fn().mockResolvedValue([carried]) }));
-    qCell(el, `[data-test=label-${READER_ID}]`)!.click();
+    const item = qCell(el, `[data-test=qr-label-${READER_ID}]`)!;
+    const opener = item.closest("wt-row-actions")!.shadowRoot!.querySelector("button")!;
+    item.click();
     await flush(el);
-    const label = () =>
-      q(el, "dashboard-equipment-label")!.shadowRoot!.querySelector<HTMLElement>(
-        "[data-test=equipment-label-qr]",
-      );
-    await vi.waitFor(() => expect(label()).not.toBeNull());
-    const inLabel = (selector: string) =>
-      q(el, "dashboard-equipment-label")!.shadowRoot!.querySelector(selector)!.textContent!.trim();
+    const widget = q(el, "dashboard-equipment-qr-label")!;
+    const inLabel = (selector: string) => widget.shadowRoot!.querySelector<HTMLElement>(selector);
+    await vi.waitFor(() => expect(inLabel("[data-test=equipment-label-qr]")).not.toBeNull());
+    expect((widget as EquipmentQrLabel).opener).toBe(opener);
+    inLabel("[data-test=show-equipment-code]")!.click();
+    await (widget as EquipmentQrLabel).updateComplete;
     const code = formatEquipmentCode("reader", READER_ID);
-    expect(inLabel("[data-test=equipment-label-code]")).toBe(code);
-    expect(inLabel("[data-test=equipment-label-name]")).toBe("Terrace");
-    expect(await decodeQrImage((label() as HTMLImageElement).src)).toBe(code);
+    expect(inLabel("[data-test=equipment-label-code]")!.textContent!.trim()).toBe(code);
+    expect(inLabel("[data-test=equipment-label-name]")!.textContent!.trim()).toBe("Terrace");
+    const qr = inLabel("[data-test=equipment-label-qr]") as HTMLImageElement;
+    expect(await decodeQrImage(qr.src)).toBe(code);
+  });
+
+  it("NFC sticker writes the reader's code as it opens, and closes back to the list", async () => {
+    const writes: string[] = [];
+    vi.stubGlobal(
+      "NDEFReader",
+      class {
+        scan = () => Promise.resolve();
+        write(message: { records: { data: string }[] }) {
+          writes.push(message.records[0]!.data);
+          return new Promise<void>(() => {});
+        }
+      },
+    );
+    try {
+      const { el } = await mount(stubApi({ listReaders: vi.fn().mockResolvedValue([carried]) }));
+      qCell(el, `[data-test=nfc-sticker-${READER_ID}]`)!.click();
+      await flush(el);
+      expect(writes).toEqual([formatEquipmentCode("reader", READER_ID)]);
+      const widget = q(el, "dashboard-equipment-nfc-sticker")!;
+      widget.shadowRoot!.querySelector<HTMLElement>("[data-test=close-equipment-nfc]")!.click();
+      await vi.waitFor(() => expect(q(el, "dashboard-equipment-nfc-sticker")).toBeNull());
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

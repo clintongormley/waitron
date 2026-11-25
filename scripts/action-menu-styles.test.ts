@@ -11,6 +11,7 @@ import { decodeEscapes, sourceFilesIn } from "./no-till-as-issuer.mjs";
 
 const helpers: Record<string, string[]> = {
   "apps/dashboard/src/screens/printers-screen.ts": ["#pairAgainAction"],
+  "apps/dashboard/src/widgets/equipment-label-menu.ts": ["equipmentLabelItems"],
   "apps/dashboard/src/widgets/product-list.ts": ["#addItems"],
   "apps/dashboard/src/widgets/staff-list.ts": ["#menuItem"],
   "apps/dashboard/src/widgets/variant-table.ts": ["#action"],

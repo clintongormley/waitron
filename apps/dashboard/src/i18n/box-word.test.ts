@@ -19,9 +19,6 @@ const OTHER_EQUIPOS: Record<string, string[]> = {
   "printers.agent_host": ["Equipo"],
   "printers.address": ["Equipo"],
   "printers.host_required": ["nombre de equipo"],
-  "equipment.label": ["Etiqueta del equipo"],
-  "equipment.label_title": ["Etiqueta del equipo"],
-  "equipment.label_hint": ["pégala en el equipo", "el equipo pasa"],
   "code:device.equipment_held": ["ese equipo"],
 };
 

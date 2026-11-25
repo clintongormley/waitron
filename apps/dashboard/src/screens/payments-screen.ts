@@ -58,7 +58,11 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { formatAlertTime, sourceLabel } from "../widgets/alert-format.js";
-import "../widgets/equipment-label.js";
+import {
+  equipmentLabelItems,
+  equipmentLabelWindow,
+  type EquipmentLabelWindow,
+} from "../widgets/equipment-label-menu.js";
 import "../widgets/backup-audit.js";
 import "./payments-settings-panel.js";
 import { holderText } from "../i18n/equipment.js";
@@ -341,9 +345,10 @@ export class PaymentsScreen extends LitElement {
   @state() private providers?: PaymentProviderRow[];
   @state() private readers?: ReaderRow[];
   @state() private holders = new Map<string, ReaderHolderRow>();
-  /** The reader whose equipment label is open. */
+  /** The reader whose QR label or NFC sticker window is open. */
   @state() private labelReader: ReaderRow | null = null;
   #labelOpener: HTMLElement | null = null;
+  #labelWindow: EquipmentLabelWindow = "qr";
   @state() private statuses = new Map<
     string,
     ReaderStatusView | "error" | "connection.timed_out"
@@ -2158,15 +2163,11 @@ export class PaymentsScreen extends LitElement {
               @click=${(event: Event) => this.#openEditor(reader, "edit", event)}
               >${t("action.edit_dialog")}</wt-button
             >
-            <wt-button
-              icon="menu-equipment-label"
-              data-test=${`label-${reader.id}`}
-              @click=${(event: Event) => {
-                this.#labelOpener = event.currentTarget as HTMLElement;
-                this.labelReader = reader;
-              }}
-              >${t("equipment.label")}…</wt-button
-            >
+            ${equipmentLabelItems(reader.id, (window, opener) => {
+              this.#labelWindow = window;
+              this.#labelOpener = opener;
+              this.labelReader = reader;
+            })}
             <wt-button
               icon="menu-details"
               data-test=${`details-${reader.id}`}
@@ -2555,16 +2556,15 @@ export class PaymentsScreen extends LitElement {
       ${
         this.labelReader === null
           ? nothing
-          : html`<dashboard-equipment-label
-              .api=${this.api}
-              kind="reader"
-              .itemId=${this.labelReader.id}
-              .name=${this.labelReader.name}
-              .opener=${this.#labelOpener}
-              @wt-close=${() => {
+          : equipmentLabelWindow(this.#labelWindow, {
+              kind: "reader",
+              item: this.labelReader,
+              api: this.api,
+              opener: this.#labelOpener,
+              close: () => {
                 this.labelReader = null;
-              }}
-            ></dashboard-equipment-label>`
+              },
+            })
       }
     `;
   }

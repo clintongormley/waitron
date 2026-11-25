@@ -80,6 +80,10 @@ aparece un terminal, asigna el cajón en **Dispositivos**. Si el ajuste del caj�
 actívalo en la calibración. **Eliminar de todos modos** conserva el saldo y el recuento pendiente
 si añades una impresora en la misma dirección y Waitron recupera su registro.
 
+Si la impresora la lleva una persona, elige **Etiqueta QR…** en el menú de su fila y pega la
+etiqueta en ella. El personal la escanea para recogerla. En Chrome en un teléfono Android,
+**Pegatina NFC…** escribe una pegatina a la que basta acercar el teléfono.
+
 ## Cola de impresión {#print-queue}
 
 Abre **Cola de impresión** para ver por qué espera un trabajo. Para añadir o eliminar un ordenador que imprime, consulta [Agentes de impresión](printers.md#print-agents). Si ningún agente ve una impresora
@@ -128,6 +132,10 @@ Elige el proveedor si se te pide y añade un lector de su lista o vincula uno nu
 Si no hay ningún proveedor conectado, elige **Configurar proveedores de tarjeta** para configurar uno primero.
 
 Antes de cobrar, abre **Hardware → Dispositivos**, selecciona tu dispositivo y elige **Editar** para asignarle un lector de tarjetas. Si no aparece el porcentaje de batería de un lector, comprueba su carga en el propio lector.
+
+Para que el personal recoja un lector al escanearlo, elige **Etiqueta QR…** en su menú y pega la
+etiqueta en él. En Chrome en un teléfono Android, **Pegatina NFC…** escribe una pegatina a la que
+basta acercar el teléfono.
 
 En **Pagos con tarjeta**, busca el lector en **Lectores de tarjetas** y elige **Eliminar** en su menú. La confirmación indica las asignaciones que se eliminan. Si hay un cobro en curso, deja que termine primero.
 
