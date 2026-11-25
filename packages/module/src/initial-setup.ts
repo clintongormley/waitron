@@ -40,7 +40,7 @@ export interface InitialSetupContribution {
     context: InitialSetupContext,
     imported: InitialSetupImport,
     document: {
-      readonly key: { readonly nodeId: string; readonly name: string; readonly secret: string };
+      readonly key: { readonly nodeId: string; readonly name: string };
       readonly masterKey: { readonly masterKey: string; readonly masterKeyName: string };
       readonly identity: {
         readonly taxpayerName: string;

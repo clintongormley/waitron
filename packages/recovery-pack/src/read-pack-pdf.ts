@@ -32,8 +32,7 @@ function text(value: unknown): string {
 type Entry = { name: string; spec: PDFDict };
 
 /**
- * The same walk as the fiscal reader's (`packages/fiscal-verifactu/src/recovery-reader.ts`), in
- * pdf-lib alone so it also runs on Node: exactly one embedded file, reached through a bounded,
+ * In pdf-lib alone, so it also runs on Node: exactly one embedded file, reached through a bounded,
  * acyclic name tree, and nowhere else in the document, so no two PDF readers can find different
  * files in it.
  */

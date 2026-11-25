@@ -1,13 +1,8 @@
 import { loadRecoveryPackFonts } from "./recovery-pdf.js";
 import { renderSetupRecoveryPack } from "./setup-recovery-pack.js";
-import {
-  parseRecoveryDocument,
-  recoveryDocumentPublic,
-  type RecoveryDocument,
-  type RecoveryDocumentPublic,
-} from "./recovery-document.js";
+import { parseRecoveryDocument, type RecoveryDocument } from "./recovery-document.js";
 export type RecoveryDeliveryBinding = {
-  statement: RecoveryDocumentPublic;
+  statement: RecoveryDocument;
   bindingDigest: string;
   documentDigest: string;
 };
@@ -16,7 +11,7 @@ async function digest(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
     v.toString(16).padStart(2, "0"),
   ).join("");
 }
-function publicBytes(value: RecoveryDocumentPublic): Uint8Array<ArrayBuffer> {
+function publicBytes(value: RecoveryDocument): Uint8Array<ArrayBuffer> {
   function canonical(v: unknown): string {
     if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
     if (typeof v !== "object" || v === null) return JSON.stringify(v);
@@ -43,18 +38,16 @@ export function createRecoveryDelivery<T>(
     if (disposed) throw new Error("Recovery delivery disposed");
   };
   async function prepare(): Promise<RecoveryDeliveryBinding> {
-    const parsed = await parseRecoveryDocument(input);
+    const statement = parseRecoveryDocument(input);
     input = undefined;
-    active();
     const bytes = await renderSetupRecoveryPack(
-      parsed,
+      statement,
       made,
       locale,
       timeZone,
       loadRecoveryPackFonts,
     );
     active();
-    const statement = recoveryDocumentPublic(parsed);
     const binding = {
       statement,
       bindingDigest: await digest(publicBytes(statement)),

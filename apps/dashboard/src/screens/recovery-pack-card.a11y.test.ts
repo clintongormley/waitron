@@ -22,7 +22,6 @@ const BASE: RecoveryPackStatus = {
   backupsUseOlderKey: false,
   masterKey: null,
   keepOldPackUntil: "2026-11-11T12:00:00.000Z",
-  serverKey: "set",
   timeZone: "Europe/Madrid",
 };
 const LATEST: NonNullable<RecoveryPackStatus["latest"]> = {
@@ -33,7 +32,6 @@ const LATEST: NonNullable<RecoveryPackStatus["latest"]> = {
   parts: [
     { part: "bucket", state: "included" },
     { part: "archives", state: "included" },
-    { part: "server-key", state: "included" },
   ],
 };
 
@@ -44,10 +42,7 @@ const STATES: Record<string, RecoveryPackStatus> = {
     ...BASE,
     latest: LATEST,
     reasons: [{ part: "bucket", kind: "key_changed", at: "2026-10-20T10:00:00.000Z" }],
-    keep: [
-      { number: 1, madeAt: "2026-09-02T10:00:00.000Z", until: null, why: "server_key" },
-      { number: 3, madeAt: MADE_AT, until: "2026-11-19T10:00:00.000Z", why: "backup_key" },
-    ],
+    keep: [{ number: 3, madeAt: MADE_AT, until: "2026-11-19T10:00:00.000Z", why: "backup_key" }],
     backupsUseOlderKey: true,
   },
   "emergency unknown": {
@@ -68,7 +63,7 @@ const STATES: Record<string, RecoveryPackStatus> = {
   unreceived: {
     ...BASE,
     latest: { ...LATEST, number: 4, received: false },
-    unreceived: { number: 4, madeAt: MADE_AT, holdsCurrentServerKey: true },
+    unreceived: { number: 4, madeAt: MADE_AT },
   },
 };
 
@@ -109,7 +104,6 @@ describe.each(["light", "dark"] as const)("recovery pack card accessibility (%s)
         detail: {
           pdf: new Blob(["%PDF"], { type: "application/pdf" }),
           number: 4,
-          key: "unchanged",
           madeAt: MADE_AT,
           received: true,
         },

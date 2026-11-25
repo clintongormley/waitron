@@ -1143,9 +1143,9 @@ Real code does write them, legitimately: the setup-mode provision route reaches 
 id from those node tables and `node_take_failures`; the emergency
 switch's take (`apps/server/src/handover-emergency-api.ts`) reaches `node_take_failures`; the main box's join approval
 (`issueMirrorBundle`, `apps/server/src/mirror-bundle-api.ts`) reaches `node_pair_link`; promotion and its repair (`promote.ts`, `promoted-role.ts`) reach
-`box`'s role group; first setup and replacing the recovery key reach its recovery-key group; first setup
-and `waitron-credentials rotate` reach its signing-key group; `mode.ts`, `recovery-key.ts` and
-credentials' `node-signing-key.ts` append role-change, replacement and rotation events through
+`box`'s role group; first setup
+and `waitron-credentials rotate` reach its signing-key group; `mode.ts` and
+credentials' `node-signing-key.ts` append role-change and rotation events through
 `appendHandoverEventTx`; a handover (`apps/server/src/handover-store.ts`, and the server's files that call `appendHandoverEventTx` directly) reaches `node_handover_operations` and `node_handover_events`, and a stepdown (`apps/server/src/handover-stepdown.ts`) reaches `node_handover_restriction`; the dashboard's legal-name change
 (`PUT /management-api/venue-details/legal-name`, owner A494) and its registered-address change
 (`PUT /management-api/venue-details/registered-address`) reach `taxpayer` through
@@ -1751,7 +1751,7 @@ without `applyMigrations` (`runMigrations` called directly) is invisible to it.
 
 `venue.db` holds every table but `node.db`'s, and a primary streams it whole to the owner's bucket once
 one is set up. `node.db`, beside it, holds what a box must remember about itself — its mode and
-singleton role, mirror link, pinned main-box key, recovery-key check and sealed signing key in
+singleton role, mirror link, pinned main-box key and sealed signing key in
 nullable column groups of `box`; its link to the other box of its pair — the spare's store address
 and the store's access key, its secret sealed (`node_pair_link`) — the failed takes of an emergency switch, which must
 outlive the restart each one causes (`node_take_failures`), and its handover records: each handover operation it
@@ -1775,17 +1775,11 @@ queues (`packages/store/src/index.ts`):
   venue first. `packages/db/src/venue-and-node-transaction.test.ts` checks lock order,
   rollback and change delivery for this helper; it does not check other callers' lock order.
 - **Where one change spans both files, `venue.db` is saved first and `node.db` follows**, and a
-  re-run repairs a `node.db` left behind; each such site says so in a one-line comment. The sites:
+  re-run repairs a `node.db` left behind; each such site says so in a one-line comment. One is
   promotion's role (`apps/server/src/promote.ts`; `finishPromotedRole` in `promoted-role.ts`
-  finishes a role left behind at the next press or the next start), the recovery-key replacement
-  and its pack record (`backup-recovery-pack-api.ts`), and first setup's key and first pack
-  (`packages/provisioning/src/first-setup-node-key.ts`). The last two hold the node lock around
-  the venue save; promotion takes the two one after the other. A signing key is the stated exception: it is sealed in `node.db` before its public
+  finishes a role left behind at the next press or the next start), which takes the two locks one
+  after the other. A signing key is the stated exception: it is sealed in `node.db` before its public
   half reaches `venue.db`, because a public key with no private half could never sign as the box.
-  Until A1323 PR 3b, a new master key's `master_keys` row is the other exception: setup
-  (`apps/server/src/setup-api.ts`) and Make a new master key (`backup-recovery-pack-api.ts`) save it
-  as the request's last venue.db write, after node.db's box-key save where there is one, so a
-  failure before it leaves no row.
 - **`withTransaction` never takes the node handle**, and the compiler refuses it: it drains
   `change_log`, which `node.db` does not have (`packages/db/src/tenancy.ts`). A `node.db` write
   uses `withNodeTransaction`. Nothing guards the first two rules.
@@ -4516,7 +4510,7 @@ is an outbox, never inline.
 A definite invoice-identity conflict already retained in the local database is a separate stop on
 new issuance and new money. Its preflight reads local rows; it does not wait for an external filing
 request. The owner-approved [administrator procedure](../operations/hour-recovery.md#switch-a-running-box-after-an-invoice-identity-conflict)
-uses the current recovery key, the same minute/second-clock/history admission as restore, and an
+uses the current master key, the same minute/second-clock/history admission as restore, and an
 explicit switch through the existing activation writer. It starts new series and a chain without
 changing issued records or closing the original rejected case. Automatic switching is excluded.
 The local conflict, pre-capture and captured-payment paths run in the conflict issuance/recovery
@@ -4564,7 +4558,7 @@ preproduction box changes producer on the same chain; the host's cases run again
 
 ## A restore names a fresh minute; the working-time chain continues
 
-Authenticate with the recovery key matching the selected backup and confirm that the former
+Authenticate with the master key that was current when the selected backup was made and confirm that the former
 seller is stopped and no parallel recovery is underway. No installation code is typed
 (`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "has no installation-code
 field"). The module names the new series from the box's clock, five symbols for the UTC minute,
@@ -4644,8 +4638,8 @@ start-failure page").
 restore the setup page keeps the key it sent, in memory only, and its done
 screen drops it once the server answers ready or the screen leaves the page
 (`apps/setup/src/setup-app-recovery-credentials.test.ts`, "after a successful %s restore the done
-screen holds the node recovery key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
-"drops the node recovery key once its poll answers ready" and "drops the node recovery key once it
+screen holds the master key it sent, and nothing else"; `apps/setup/src/screens/done-screen.test.ts`,
+"drops the master key once its poll answers ready" and "drops the master key once it
 leaves the page"). The waiting app's clock routes take the key in the body, and compare it with the staged key file,
 refusing a missing or wrong one with 403 `promotion.break_glass_invalid`
 (`start-clock-waiting.test.ts`, "/restore-clock/%s refuses a missing or wrong key, keeping and
@@ -6705,7 +6699,7 @@ asserting that every raw reader was exercised.
 
 `classifyTimeZone` continues normalizing new input, including the original padded-input case.
 `classifySavedTimeZone` asks the runtime about the stored spelling. Raw context, fiscal clocks,
-provisioning reuse, completed recovery packs and recovery comparison consume the latter; request,
+provisioning reuse and recovery comparison consume the latter; request,
 candidate and country-list inputs retain normalization. Missing blanks, runtime-supported aliases
 and unexpected runtime failures retain their separate outcomes. Repair stores an explicitly chosen
 canonical name; old raw rows are not silently rewritten. The focused shared, boot, repair,

@@ -1,8 +1,8 @@
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { NOMBRE_RAZON_MAX } from "./venue-fields.js";
 import { loadRecoveryPackFonts } from "./recovery-pdf-node.js";
 import type { RecoveryDocument } from "./recovery-document.js";
 import { renderSetupRecoveryPack } from "./setup-recovery-pack.js";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 
 const document: RecoveryDocument = {
   kind: "waitron-recovery-document",
@@ -11,11 +11,7 @@ const document: RecoveryDocument = {
   taxpayerName: "Olivo SL",
   venueName: "Olivo Centro",
   createdAt: "2026-10-18T00:10:00.000Z",
-  nodeKey: {
-    nodeId: "node-1",
-    name: "2026-10-17 · ACRY",
-    secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-  },
+  nodeKey: { nodeId: "node-1", name: "2026-10-17 · ACRY" },
 };
 
 async function pages(bytes: Uint8Array): Promise<string[]> {
@@ -44,23 +40,48 @@ const made = {
 };
 
 it.each(["en", "es"] as const)(
-  "draws in full a legal name at the tax agency's 120-character cap and a venue name at the recovery document's 256, in the widest letter the pack's font draws, in %s",
+  "draws in full a venue name at the recovery document's 256, in the widest letter the pack's font draws, in %s",
   async (locale) => {
-    const taxpayerName = "Ԫ".repeat(NOMBRE_RAZON_MAX);
     const venueName = "Ԫ".repeat(256);
     const texts = await pages(
       await renderSetupRecoveryPack(
-        { ...document, taxpayerName, venueName },
+        { ...document, venueName },
         made,
         locale,
         "Europe/Madrid",
         loadRecoveryPackFonts,
       ),
     );
-    expect(texts).toHaveLength(2);
-    const squash = (text: string) => text.replace(/\s+/g, "");
-    expect(squash(texts[0]!)).toContain(venueName);
-    expect(squash(texts[1]!)).toContain(taxpayerName);
-    expect(squash(texts[1]!)).toContain(venueName);
+    expect(texts).toHaveLength(1);
+    expect(texts[0]!.replace(/\s+/g, "")).toContain(venueName);
+  },
+);
+
+it.each(["en", "es"] as const)(
+  "pack 1 drawn at setup has no box-key page and its file holds no server key, in %s",
+  async (locale) => {
+    const bytes = await renderSetupRecoveryPack(
+      document,
+      made,
+      locale,
+      "Europe/Madrid",
+      loadRecoveryPackFonts,
+    );
+    const texts = await pages(bytes);
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).not.toContain("ACRY");
+    expect(texts[0]).toContain("QZJV");
+    expect(await readRecoveryPackPdf(bytes)).toEqual({
+      kind: "waitron-recovery-pack",
+      version: 2,
+      number: 1,
+      madeAt: document.createdAt,
+      bucketCode: null,
+      archiveCode: null,
+      backupKey: null,
+      masterKey: made.masterKey,
+      masterKeyName: made.masterKeyName,
+      masterKeyHeldBy: null,
+    });
   },
 );

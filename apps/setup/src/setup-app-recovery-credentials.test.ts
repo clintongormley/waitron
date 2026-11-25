@@ -390,7 +390,7 @@ it.each([
   },
 );
 it.each(["archive", "bucket", "cloud"])(
-  "after a successful %s restore the done screen holds the node recovery key it sent, and nothing else",
+  "after a successful %s restore the done screen holds the master key it sent, and nothing else",
   async (kind) => {
     const api = new SetupApi("https://box.example.test", async (input, init) => {
       const request = new Request(input, init);

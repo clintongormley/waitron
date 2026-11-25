@@ -77,7 +77,7 @@ If your box cannot serve its saved connection certificate, open its known HTTP a
 venue network and choose **Set up secure connection**. The public page is also at
 `/setup/connection`; interrupted setup opens it in a separate tab so your password draft stays in
 place. The HTTP page offers managed certificate repair, a read-only **Check again** and **Stop**
-for the current browser attempt. Do not enter a password, recovery key, box key or private certificate there.
+for the current browser attempt. Do not enter a password, recovery key or private certificate there.
 
 Repair keeps the existing certificate authority when its certificate and signing key remain usable.
 If your device already trusts that authority, keep its installed certificate. If the authority is lost
@@ -133,7 +133,7 @@ process on `venue.db`").
 **The node migration set is applied to `node.db`, and every other set to `venue.db`**
 (`packages/migrations/src/apply.ts`). `node.db` holds what this box must remember about itself:
 its mode and singleton role, its link to the main box, the main box's key it pinned when it joined,
-its recovery-key check, its sealed signing key, and its records of the handovers it took part in
+its sealed signing key, and its records of the handovers it took part in
 (`packages/node-db`). So a spare holding a copy of
 the main box's `venue.db` still knows who it is. Only `venue.db` is streamed to a bucket; a backup
 file carries `node.db` whole as `node.dump`. Every other `local` table sits in `venue.db`

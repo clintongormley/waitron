@@ -58,7 +58,7 @@ export const shellEn = {
   "shell.connection.already_set_up": "This box is already set up. Reload to open it.",
   "shell.connection.server_problem": "This box reported a problem. Try again in a moment.",
   "shell.connection.provision_secure":
-    "Setup needs a secure connection to show your box key. Follow the instructions above before continuing.",
+    "Setup needs a secure connection to show your master key. Follow the instructions above before continuing.",
   "shell.connection.unreachable":
     "We could not reach the box. Check its power and your network connection.",
 
@@ -278,7 +278,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.connection.server_problem":
     "Este servidor ha informado de un problema. Inténtalo de nuevo en un momento.",
   "shell.connection.provision_secure":
-    "La configuración necesita una conexión segura para mostrarte la clave del servidor. Sigue las instrucciones de arriba antes de continuar.",
+    "La configuración necesita una conexión segura para mostrarte la clave maestra. Sigue las instrucciones de arriba antes de continuar.",
   "shell.connection.unreachable":
     "No hemos podido contactar con el servidor. Comprueba que está encendido y tu conexión de red.",
 

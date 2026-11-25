@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, it } from "vitest";
 import { openVenueDatabase, runMigrations, withNodeTransaction } from "@waitron/db";
-import { NODE_CLASSIFICATION, NODE_MIGRATIONS, setRecoveryKeyTx } from "@waitron/node-db";
+import { NODE_CLASSIFICATION, NODE_MIGRATIONS, setNodeModeTx } from "@waitron/node-db";
 import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
 import { generateNodeKeyPair } from "@waitron/membership";
 import {
@@ -53,12 +53,10 @@ async function withNode(roots: { venueDir: string }, sql: string) {
   }
 }
 
-async function recoveryKeyRow(roots: { venueDir: string }, nodeId = NODE_ID) {
+async function roleRow(roots: { venueDir: string }) {
   const store = await openVenueDatabase(roots.venueDir);
   try {
-    await withNodeTransaction(store.node, (tx) =>
-      setRecoveryKeyTx(tx, nodeId, "scrypt$verifier", "Olive", null),
-    );
+    await withNodeTransaction(store.node, (tx) => setNodeModeTx(tx, NODE_ID, "primary", "adopt"));
   } finally {
     await store.close();
   }
@@ -124,15 +122,7 @@ async function files(dir: string, prefix = ""): Promise<Record<string, string>> 
 
 it.each<[string, (roots: { venueDir: string }) => Promise<void>]>([
   ["only the node set's tables and its journal, as a setup-mode start leaves it", async () => {}],
-  ["the attempt's recovery-key check", (roots) => recoveryKeyRow(roots)],
   ["the attempt's signing key, sealed", (roots) => sealedSigningKey(roots)],
-  [
-    "the attempt's recovery-key check and signing key, as a first setup's publication leaves it",
-    async (roots) => {
-      await recoveryKeyRow(roots);
-      await sealedSigningKey(roots);
-    },
-  ],
 ])(
   "Start again accepts a node.db holding %s, names it in the marker and deletes it",
   async (_name, seed) => {
@@ -235,14 +225,14 @@ it.each<[string, string, string]>([
     "node.db holds a row: node_take_failures",
   ],
   [
-    "two recovery-key checks",
-    `insert into box (node_id, recovery_key_verifier, recovery_key_name, recovery_key_changed_at) values ('${NODE_ID}', 'v', 'One', '2026-10-31T00:00:00.000Z'),
-       ('${randomUUID()}', 'v', 'Two', '2026-10-31T00:00:00.000Z')`,
+    "two roles",
+    `insert into box (node_id, mode, singleton_role, role_changed_at) values ('${NODE_ID}', 'primary', 'primary', '2026-10-31T00:00:00.000Z'),
+       ('${randomUUID()}', 'mirror', 'secondary', '2026-10-31T00:00:00.000Z')`,
     "node.db holds a row: box",
   ],
   [
-    "another node's recovery-key check",
-    `insert into box (node_id, recovery_key_verifier, recovery_key_name, recovery_key_changed_at) values ('${randomUUID()}', 'v', 'Other', '2026-10-31T00:00:00.000Z')`,
+    "another node's role",
+    `insert into box (node_id, mode, singleton_role, role_changed_at) values ('${randomUUID()}', 'mirror', 'secondary', '2026-10-31T00:00:00.000Z')`,
     "node.db holds another node's row: box",
   ],
   [
@@ -280,9 +270,9 @@ it("Start again names a node.db holding another node's row as unexpected", async
   });
 });
 
-it("Start again told no attempt's node refuses a node.db holding a recovery-key check", async () => {
+it("Start again told no attempt's node refuses a node.db holding a role", async () => {
   const roots = await attemptWithMigratedNode();
-  await recoveryKeyRow(roots);
+  await roleRow(roots);
   await expect(assertStartAgainAllowedOnDisk(roots)).rejects.toMatchObject(
     notReady("node.db holds another node's row: box"),
   );

@@ -2,7 +2,7 @@ import type { NonDbSource } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { projectHourHistory, type HourHistorySource } from "./hour-history.js";
 import { readHourSetupInput } from "./initial-hour-setup.js";
-import { parseRecoveryDocumentPublic } from "./recovery-document.js";
+import { parseRecoveryDocument } from "./recovery-document.js";
 import "./errors.js";
 
 type Recovery = Parameters<
@@ -30,7 +30,7 @@ export function projectRepairHourHistory(recovery: Recovery): readonly HourHisto
   for (const evidence of recovery.publicEvidence) {
     if (record(evidence) && evidence.kind === "waitron-recovery-document") {
       try {
-        parseRecoveryDocumentPublic(evidence);
+        parseRecoveryDocument(evidence);
       } catch {
         invalid();
       }

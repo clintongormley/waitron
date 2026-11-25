@@ -481,7 +481,7 @@ it("a key-only operation service refuses administrator credentials without a cre
   expect(await rows()).toEqual(before);
 });
 
-it("invalidates an earlier comparison when the named recovery key changes", async () => {
+it("invalidates an earlier comparison when the master key changes", async () => {
   const s = await service();
   await admit(s);
   await compare(s);

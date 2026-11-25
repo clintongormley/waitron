@@ -158,7 +158,7 @@ it("has no executable operation when the live bridge is absent", async () => {
   expect((await mount({ absent: true }).request(status())).status).toBe(404);
 });
 it.each(["", "wrong-key"])(
-  "a session cookie cannot replace current recovery key %j",
+  "a session cookie cannot replace current master key %j",
   async (recoveryKey) => {
     const response = await mount().request(status({ recoveryKey }), {
       cookie: "management_session=administrator",

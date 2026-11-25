@@ -278,10 +278,15 @@ it.each(["en", "es"] as const)(
       await click("setup-review-screen [data-test=provision]");
       await page.locator("setup-done-screen").waitFor();
       const original = await readFile(join(receipt, "wizard-original.pdf"));
-      expect((await registeredPromise).postDataJSON()).toMatchObject({
+      const registered = (await registeredPromise).postDataJSON();
+      expect(registered).toMatchObject({
         module: "fiscal-verifactu",
         documentDigest: createHash("sha256").update(original).digest("hex"),
       });
+      const decoded = registered.statement as {
+        nodeKey: { nodeId: string; name: string };
+        scope: { taxpayerNif: string; environment: string };
+      };
       expect(original.subarray(0, 5).toString()).toBe("%PDF-");
       const task = getDocument({
         data: new Uint8Array(original),
@@ -291,10 +296,6 @@ it.each(["en", "es"] as const)(
         useWasm: false,
       });
       let attachment: Uint8Array;
-      let decoded: {
-        nodeKey: { nodeId: string; name: string; secret: string };
-        scope: { taxpayerNif: string; environment: string };
-      };
       let masterKey: string;
       let masterKeyName: string;
       let pagePng: Buffer;
@@ -303,7 +304,7 @@ it.each(["en", "es"] as const)(
         attachment = (await pdf.getAttachmentContent(PACK_ATTACHMENT))!;
         expect(attachment).toBeInstanceOf(Uint8Array);
         const packFile = parseRecoveryPackFile(attachment);
-        decoded = packFile.serverKey as typeof decoded;
+        expect(packFile).not.toHaveProperty("serverKey");
         expect(packFile.masterKey).toMatch(/^[2-9A-HJKMNP-Z]{4}( [2-9A-HJKMNP-Z]{4}){6}$/);
         masterKey = packFile.masterKey!;
         masterKeyName = packFile.masterKeyName!;
@@ -311,22 +312,17 @@ it.each(["en", "es"] as const)(
           taxpayerNif: "50000000R",
           environment: "production",
         });
-        const keyPages: { page: Awaited<ReturnType<typeof pdf.getPage>>; key: string }[] = [];
-        let printedText = "";
+        expect(decoded.nodeKey.name).toBe(masterKeyName);
+        const keyPages: Awaited<ReturnType<typeof pdf.getPage>>[] = [];
         for (let n = 1; n <= pdf.numPages; n++) {
           const candidate = await pdf.getPage(n);
           const text = (await candidate.getTextContent()).items
             .map((item) => ("str" in item ? item.str : ""))
             .join(" ");
-          printedText += ` ${text}`;
-          const key = text.match(
-            /(?:Key|Clave)\s+([0-9A-Z]{4}(?:\s+[0-9A-Z]{4}){9}\s+[0-9A-Z])(?![0-9A-Z])/,
-          )?.[1];
-          if (key) keyPages.push({ page: candidate, key: key.split(/\s+/).join(" ") });
+          if (text.replace(/\s+/g, " ").includes(masterKey)) keyPages.push(candidate);
         }
-        expect(printedText.replace(/\s+/g, " ")).toContain(masterKey);
         expect(keyPages).toHaveLength(1);
-        const sheet = keyPages[0]!.page;
+        const sheet = keyPages[0]!;
         const viewport = sheet.getViewport({ scale: 1.5 });
         const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
         await sheet.render({ canvas: canvas as unknown as HTMLCanvasElement, viewport }).promise;

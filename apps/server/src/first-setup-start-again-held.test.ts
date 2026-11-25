@@ -161,7 +161,7 @@ function nodeHoldings(f: Pick<Held, "roots">) {
   }
 }
 
-it("in the held state, Start again deletes a node.db holding the node set's tables and the attempt's recovery-key check and signing key", async () => {
+it("in the held state, Start again deletes a node.db holding the node set's tables and the attempt's signing key", async () => {
   const f = await heldSetup();
   expect(nodeHoldings(f)).toEqual({
     __drizzle_migrations_node: expectedSchemaVersion(
@@ -180,7 +180,7 @@ it("in the held state, Start again deletes a node.db holding the node set's tabl
   await expectStartAgainDeleted(f.roots);
 });
 
-it("in the held state, a node.db whose recovery-key check names another node refuses Start again setup.not_ready, and nothing changes", async () => {
+it("in the held state, a node.db whose box row names another node refuses Start again setup.not_ready, and nothing changes", async () => {
   const f = await heldSetup();
   const node = new DatabaseSync(join(f.roots.venueDir, "node.db"));
   node.exec(`update box set node_id = '${crypto.randomUUID()}'`);

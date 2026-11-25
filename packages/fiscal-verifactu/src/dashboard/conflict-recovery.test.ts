@@ -189,7 +189,7 @@ it("validates the key before any network work and allows a corrected key", async
   expect(screen.shadowRoot!.innerHTML).not.toContain(printedKey("paper-secret"));
 });
 
-it("clears a refused recovery key and lets the operator authenticate again", async () => {
+it("clears a refused master key and lets the operator authenticate again", async () => {
   const { screen, calls } = await mount(async (body) => {
     if (body.recoveryKey === printedKey("replaced-key"))
       throw { code: "promotion.break_glass_invalid", status: 403 };
@@ -354,9 +354,6 @@ async function packFor(masterKey: string, masterKeyName: string): Promise<Uint8A
       bucketCode: null,
       archiveCode: null,
       backupKey: null,
-      serverKey: null,
-      serverKeyName: null,
-      serverKeyHeldBy: null,
       masterKey,
       masterKeyName,
       masterKeyHeldBy: null,

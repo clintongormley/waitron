@@ -98,7 +98,8 @@ export async function ownedHourSetup(
     reconfirmation: (await send("reconfirm", { password, purpose: "block-use" })).reconfirmation,
   })) as unknown as {
     stage: { stageId: string; nodeId: string; name: string };
-    key: { nodeId: string; name: string; secret: string };
+    masterKey: string;
+    masterKeyName: string;
   };
   const request = venue as VenueRequest;
   const statement = {
@@ -108,7 +109,7 @@ export async function ownedHourSetup(
     taxpayerName: request.legalName,
     venueName: request.name,
     createdAt: new Date().toISOString(),
-    nodeKey: { nodeId: staged.stage.nodeId, name: staged.stage.name },
+    nodeKey: { nodeId: staged.stage.nodeId, name: staged.masterKeyName },
   };
   const ref = {
     module,

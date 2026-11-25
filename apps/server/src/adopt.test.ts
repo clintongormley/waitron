@@ -24,7 +24,6 @@ import {
   readNodeMode,
   readPairLink,
   readPinnedPrimaryKey,
-  readRecoveryKey,
 } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
@@ -68,7 +67,6 @@ import { createTurns } from "./backup-turns.js";
 import { loadRecoveryPackFonts } from "./invoice-font.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
-import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();
@@ -255,7 +253,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
     expect(isEnabled(persistedModules[0]!, ALL_MODULES[0]!.name)).toBe(true);
   });
 
-  it("the recovery pack can replace the master key without a box key", async () => {
+  it("the recovery pack can replace the master key", async () => {
     let ownNodeId = "";
     const answer = await adoptFromPrimary(
       deps({
@@ -267,7 +265,6 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       NO_HOOKS,
     );
     expect(answer).toBeUndefined();
-    expect(await readRecoveryKey(suite.node, ownNodeId)).toBeNull();
 
     // Stands for the master key row the spare's copy of venue.db carries.
     const { name: firstMasterKey } = await mintMasterKey(suite.db);
@@ -281,21 +278,11 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         backups,
         {
           db: suite.db,
-          nodeDb: suite.node,
           ring: RING,
           node: { nodeId: asNodeId(ownNodeId) },
-          modules: [
-            {
-              ...fakeModule("test-regime"),
-              backup: {
-                recoveryPackPage: async () => ({ page: { title: "", rows: [], notes: [] } }),
-              },
-            },
-          ],
           turns: createTurns(),
           readBoxEnv: async () => ({}),
           backups: () => ({ schedule: undefined, retention: undefined, recoveryKey: undefined }),
-          documentEvidence: async () => ({}),
           loadFonts: loadRecoveryPackFonts,
           now: () => new Date("2026-11-24T09:00:00.000Z"),
         },
@@ -309,7 +296,7 @@ describe("adoptFromPrimary (mirror adopt)", () => {
             "content-type": "application/json",
             cookie: `waitron_management_session=${admin.token}`,
           },
-          body: JSON.stringify({ locale: "en", newServerKey: true }),
+          body: JSON.stringify({ locale: "en", newMasterKey: true }),
         },
         { incoming: { socket } },
       );
@@ -326,7 +313,6 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         [1, firstMasterKey],
         [2, shownName],
       ]);
-      expect(await readRecoveryKey(suite.node, ownNodeId)).toBeNull();
     } finally {
       socket.destroy();
     }

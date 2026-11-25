@@ -9,16 +9,6 @@ import {
   type RecoveryPackFile,
 } from "./pack-file.js";
 
-const serverKey = {
-  kind: "waitron-recovery-document",
-  version: 1,
-  scope: { taxpayerNif: "B12345678", softwareId: "01", environment: "preproduction" },
-  taxpayerName: "Bar Example SL",
-  venueName: "Bar Example",
-  createdAt: "2026-10-12T09:30:00.000Z",
-  nodeKey: { nodeId: "node-1", name: "2026-10-12 · key", secret: "A".repeat(32) },
-};
-
 const masterKey = "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5";
 const masterKeyName = "2026-11-23 · QZJV";
 
@@ -30,9 +20,6 @@ const full: RecoveryPackFile = {
   bucketCode: "WAITRON-RECOVERY-KIT-2:" + "b".repeat(600),
   archiveCode: "WAITRON-ARCHIVE-PACK-1:" + "c".repeat(400),
   backupKey: "k".repeat(43),
-  serverKey,
-  serverKeyName: "2026-10-12 · key",
-  serverKeyHeldBy: null,
   masterKey,
   masterKeyName,
   masterKeyHeldBy: null,
@@ -53,11 +40,10 @@ function refusal(bytes: Uint8Array): string {
 }
 
 describe("the recovery pack's attached file", () => {
-  it("builds canonical bytes: keys sorted at every depth, no spaces", () => {
+  it("builds canonical bytes: keys sorted, no spaces", () => {
     const bytes = buildRecoveryPackFile(full);
     const out = text(bytes);
     expect(out.startsWith('{"archiveCode":')).toBe(true);
-    expect(out).toContain('"scope":{"environment":"preproduction","softwareId":"01"');
     expect(out).not.toMatch(/[ \n]"/);
     expect(out).toBe(canonicalJson(full));
   });
@@ -69,13 +55,40 @@ describe("the recovery pack's attached file", () => {
       bucketCode: null,
       archiveCode: null,
       backupKey: null,
-      serverKey: null,
-      serverKeyName: "2026-10-12 · key",
-      serverKeyHeldBy: { number: 2, madeOn: "2026-10-12", received: false },
     };
     expect(parseRecoveryPackFile(buildRecoveryPackFile(bare))).toEqual(bare);
-    const none = { ...bare, serverKeyName: null, serverKeyHeldBy: null };
-    expect(parseRecoveryPackFile(buildRecoveryPackFile(none))).toEqual(none);
+  });
+
+  it("parses a pack file without serverKey fields", () => {
+    expect(Object.keys(parseRecoveryPackFile(bytesOf(full))).sort()).toEqual([
+      "archiveCode",
+      "backupKey",
+      "bucketCode",
+      "kind",
+      "madeAt",
+      "masterKey",
+      "masterKeyHeldBy",
+      "masterKeyName",
+      "number",
+      "version",
+    ]);
+  });
+
+  it.each([
+    ["all three, empty", { serverKey: null, serverKeyName: null, serverKeyHeldBy: null }],
+    [
+      "all three, filled",
+      {
+        serverKey: { kind: "waitron-recovery-document" },
+        serverKeyName: "2026-10-12 · key",
+        serverKeyHeldBy: { number: 2, madeOn: "2026-10-12", received: true },
+      },
+    ],
+    ["serverKey alone", { serverKey: null }],
+    ["serverKeyName alone", { serverKeyName: null }],
+    ["serverKeyHeldBy alone", { serverKeyHeldBy: null }],
+  ])("refuses a pack file with serverKey fields (%s) as shape", (_name, extra) => {
+    expect(refusal(bytesOf({ ...full, ...extra }))).toBe("shape");
   });
 
   it("carries masterKey and masterKeyName, or, on a pack without the key, the pack that holds it", () => {
@@ -92,11 +105,6 @@ describe("the recovery pack's attached file", () => {
     expect(parseRecoveryPackFile(buildRecoveryPackFile(unknown))).toEqual(unknown);
     const none = { ...unknown, masterKeyName: null };
     expect(parseRecoveryPackFile(buildRecoveryPackFile(none))).toEqual(none);
-  });
-
-  it("carries the server key byte for byte", () => {
-    const out = text(buildRecoveryPackFile(full));
-    expect(out).toContain(`"serverKey":${canonicalJson(serverKey)}`);
   });
 
   it("refuses to build a file it would refuse to read", () => {
@@ -116,61 +124,11 @@ describe("the recovery pack's attached file", () => {
     expect(parseRecoveryPackFile(bytes).backupKey).toBe(backupKey);
   });
 
-  it.each([
-    ["an undefined value", { secret: undefined }],
-    ["a function", { secret: () => "A" }],
-    ["NaN", { count: Number.NaN }],
-    ["Infinity", { count: Number.POSITIVE_INFINITY }],
-    ["a big integer", { count: 1n }],
-    ["a date", { createdAt: new Date("2026-10-12T09:30:00.000Z") }],
-    ["a map", { keys: new Map() }],
-    ["an object with no prototype", { scope: Object.create(null) as object }],
-    ["an array with holes", { list: new Array<number>(2) }],
-    ["an array with an extra property", { list: Object.assign([1], { extra: 2 }) }],
-    ["a symbol key", { [Symbol("hidden")]: "A" }],
-    ["an undefined value inside an array", { list: [undefined] }],
-  ])("refuses to build a server key holding %s", (_name, serverKey) => {
-    expect(() =>
-      buildRecoveryPackFile({ ...full, serverKey: serverKey as Record<string, unknown> }),
-    ).toThrow("Recovery pack file refused: shape");
-  });
-
-  it("refuses to build a server key that contains itself", () => {
-    const looped: Record<string, unknown> = { kind: "loop" };
-    looped.self = { inner: looped };
-    expect(() => buildRecoveryPackFile({ ...full, serverKey: looped })).toThrow(
-      "Recovery pack file refused: shape",
-    );
-  });
-
-  it("builds and reads back byte for byte a server key of every JSON value", () => {
-    const nested = {
-      ...serverKey,
-      extras: [null, true, false, 0, -1.5, 1e21, "", "ñ \u2028", [], {}, [{ a: [1, { b: null }] }]],
-    };
-    const bytes = buildRecoveryPackFile({ ...full, serverKey: nested });
-    const read = parseRecoveryPackFile(bytes);
-    expect(read.serverKey).toEqual(nested);
-    expect(buildRecoveryPackFile(read)).toEqual(bytes);
-  });
-
   it("refuses a missing key and an extra key", () => {
     const missing: Partial<RecoveryPackFile> = { ...full };
     delete missing.backupKey;
     expect(refusal(bytesOf(missing))).toBe("shape");
     expect(refusal(bytesOf({ ...full, extra: "secret" }))).toBe("shape");
-    expect(
-      refusal(bytesOf({ ...full, serverKeyHeldBy: { number: 2, madeOn: "2026-10-12" } })),
-    ).toBe("shape");
-    expect(
-      refusal(
-        bytesOf({
-          ...full,
-          serverKey: null,
-          serverKeyHeldBy: { number: 2, madeOn: "2026-10-12", received: true, extra: 1 },
-        }),
-      ),
-    ).toBe("shape");
   });
 
   it.each([
@@ -201,19 +159,6 @@ describe("the recovery pack's attached file", () => {
     ["archiveCode without its prefix", { archiveCode: "WAITRON-RECOVERY-KIT-2:abc" }],
     ["backupKey empty", { backupKey: "" }],
     ["backupKey a number", { backupKey: 7 }],
-    ["serverKey an array", { serverKey: [1] }],
-    ["serverKey text", { serverKey: "key" }],
-    ["serverKeyName empty", { serverKeyName: "" }],
-    ["serverKeyName padded", { serverKeyName: " key" }],
-    [
-      "heldBy number zero",
-      { serverKeyHeldBy: { number: 0, madeOn: "2026-10-12", received: true } },
-    ],
-    ["heldBy bad day", { serverKeyHeldBy: { number: 2, madeOn: "2026-13-01", received: true } }],
-    [
-      "heldBy received as text",
-      { serverKeyHeldBy: { number: 2, madeOn: "2026-10-12", received: "yes" } },
-    ],
   ])("refuses a wrong %s", (_name, change) => {
     expect(refusal(bytesOf({ ...full, ...change }))).toBe("shape");
   });

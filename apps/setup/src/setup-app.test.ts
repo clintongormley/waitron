@@ -1432,13 +1432,12 @@ describe("setup-app", () => {
     expect(done.shadowRoot!.querySelector("[data-test=opening-hours]")).toBeNull();
   });
 
-  it("shows the named Preparation key and PDF returned by provisioning", async () => {
+  it("sends a Preparation setup's mode and ends on its Recovery pack step, with no box key", async () => {
     const provision = vi.fn().mockResolvedValue({
       provisioned: true,
       restarting: true,
-      breakGlassSecret: "key-on-paper",
-      breakGlassKeyName: "2026-10-15 · K7QF",
-      breakGlassKeyInBackups: true,
+      masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+      masterKeyName: "2026-11-23 · QZJV",
       recoveryPackPdf: btoa("%PDF-setup"),
     });
     const el = await mountSetupApp(stubApi({ provision }));
@@ -1450,26 +1449,19 @@ describe("setup-app", () => {
       undefined,
       "en-GB",
     );
-    expect(await screenText(el, "done", "[data-test=download-recovery-pack]")).toBe(
-      "Download recovery pack (PDF)",
-    );
-    expect(await screenText(el, "done", "[data-test=break-glass-key-name]")).toBe(
-      "Box key 15 Oct 2026 · K7QF",
-    );
-    expect(await screenText(el, "done", "[data-test=break-glass-secret]")).toBe("key-on-paper");
-    expect(await screenText(el, "done", "[data-test=break-glass-warning]")).toContain(
-      "The recovery pack contains the box key. Keep it away from this box.",
-    );
+    expect(await screenText(el, "done", "h1")).toBe("Recovery pack");
+    const done = await screenHost(el, "done");
+    expect(done.shadowRoot!.querySelector('[data-test^="break-glass"]')).toBeNull();
+    expect(done.shadowRoot!.textContent).not.toMatch(/box key/i);
   });
 
-  it("points to Backups when a retried Preparation setup returns no key", async () => {
+  it("reaches the finished page when a retried Preparation setup succeeds", async () => {
     const provision = vi
       .fn()
       .mockRejectedValueOnce({ code: "setup.provision_failed", params: {} })
       .mockResolvedValue({
         provisioned: true,
         restarting: true,
-        breakGlassKeyInBackups: true,
       });
     const el = await mountSetupApp(stubApi({ provision }));
     patch(el, { mode: "prepare" });
@@ -1479,11 +1471,9 @@ describe("setup-app", () => {
     pending.shadowRoot!.querySelector<HTMLElement>("[data-test=retry]")!.click();
     await flush(el);
     const done = await screenHost(el, "done");
-    expect(done.shadowRoot!.querySelector("[data-test=break-glass-secret]")).toBeNull();
-    expect(done.shadowRoot!.querySelectorAll('a[href="/backup"]')).toHaveLength(1);
-    const link = done.shadowRoot!.querySelector("[data-test=recovery-pack-replacement] a");
-    expect(link?.textContent).toBe("Open Backups");
-    expect(link?.getAttribute("href")).toBe("/backup");
+    expect(done.shadowRoot!.querySelector("[data-test=links]")).not.toBeNull();
+    expect(done.shadowRoot!.querySelector('[data-test^="break-glass"]')).toBeNull();
+    expect(done.shadowRoot!.querySelector("[data-test=recovery-pack-replacement]")).toBeNull();
   });
 
   it("returns to secure connection setup when the server refuses to send the Preparation key", async () => {
@@ -1495,7 +1485,7 @@ describe("setup-app", () => {
     expect(el.shadowRoot!.querySelector("[data-test=screen-provisioning]")).toBeNull();
     const connection = await screenHost(el, "connection");
     expect(connection.shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
-      "needs a secure connection to show your box key",
+      "needs a secure connection to show your master key",
     );
     expect(connection.shadowRoot!.querySelector("[data-test=trust-help]")).not.toBeNull();
   });

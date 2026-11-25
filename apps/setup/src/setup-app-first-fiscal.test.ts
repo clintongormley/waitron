@@ -557,11 +557,6 @@ it("reads back a completed activation after a lost response and offers no second
       if (path.endsWith("/node-key"))
         return Response.json({
           stage: { stageId: "stage", nodeId: initial.nodeId, name: "Olivo key" },
-          key: {
-            nodeId: initial.nodeId,
-            name: "Olivo key",
-            secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-          },
           masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
           masterKeyName: "2026-11-23 · QZJV",
         });
@@ -648,7 +643,9 @@ it("reads back a completed activation after a lost response and offers no second
   await proof();
   const keyBox = () => hour.shadowRoot!.querySelector<HTMLElement>("wt-master-key-box");
   await expect
-    .poll(() => keyBox()?.shadowRoot!.querySelector("[data-test=download]") ?? null)
+    .poll(() => keyBox()?.shadowRoot!.querySelector("[data-test=download]") ?? null, {
+      timeout: 10_000,
+    })
     .not.toBeNull();
   await click(keyBox()!, "download");
   await click(hour, "kept");
@@ -679,7 +676,7 @@ it("reads back a completed activation after a lost response and offers no second
   await expect.poll(() => owner.textContent).toContain("Setup is complete.");
   expect(owner.textContent).not.toContain("resolve the incident");
   expect(requests.filter((r) => r.path.endsWith("/provision"))).toHaveLength(1);
-});
+}, 60_000);
 
 /** Claims, readies the allocation screen and sends activation, which `refusal` answers. */
 async function activationRefused(refusal: { code: string; params: Record<string, unknown> }) {

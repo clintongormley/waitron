@@ -16,13 +16,12 @@ const STATUS: RecoveryPackStatus = {
   latest: null,
   upToDate: false,
   incomplete: false,
-  unreceived: { number: 3, madeAt: "2026-10-12T12:00:00.000Z", holdsCurrentServerKey: true },
+  unreceived: { number: 3, madeAt: "2026-10-12T12:00:00.000Z", holdsCurrentMasterKey: true },
   reasons: [],
   keep: [],
   backupsUseOlderKey: false,
-  masterKey: null,
+  masterKey: { name: "2026-10-12 · QZJV", pack: 3 },
   keepOldPackUntil: "2026-11-11T12:00:00.000Z",
-  serverKey: "set",
   timeZone: "Europe/Madrid",
 };
 
@@ -32,7 +31,6 @@ type State =
   | "busy"
   | "refused"
   | "lost"
-  | "key failed"
   | "key shown"
   | "key copied"
   | "key downloaded";
@@ -42,19 +40,11 @@ function makeFor(state: State) {
   if (state === "refused")
     return vi.fn().mockRejectedValue({ code: "password.throttled", status: 429 });
   if (state === "lost") return vi.fn().mockRejectedValue({ code: "connection.failed" });
-  if (state.startsWith("key ") && state !== "key failed")
-    return vi.fn().mockResolvedValue({
-      pdf: new Blob(["%PDF"], { type: "application/pdf" }),
-      number: 4,
-      key: "replaced",
-      madeAt: "2026-11-23T09:00:00.000Z",
-      masterKey: { key: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5", name: "2026-11-23 · QZJV" },
-    });
   return vi.fn().mockResolvedValue({
     pdf: new Blob(["%PDF"], { type: "application/pdf" }),
     number: 4,
-    key: "failed",
-    madeAt: "2026-10-30T09:00:00.000Z",
+    madeAt: "2026-11-23T09:00:00.000Z",
+    masterKey: { key: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5", name: "2026-11-23 · QZJV" },
   });
 }
 
@@ -64,7 +54,6 @@ const STATES: State[] = [
   "busy",
   "refused",
   "lost",
-  "key failed",
   "key shown",
   "key copied",
   "key downloaded",
@@ -100,10 +89,8 @@ describe.each(["light", "dark"] as const)("recovery pack dialog accessibility (%
       await expect.poll(() => root.querySelector("wt-form-actions")!.error).not.toBe("");
     if (state === "lost")
       await expect.poll(() => root.querySelector("[data-test=lost]")).toBeTruthy();
-    if (state === "key failed")
-      await expect.poll(() => root.querySelector("[data-test=key-failed]")).toBeTruthy();
     const box = () => root.querySelector("wt-master-key-box")?.shadowRoot ?? null;
-    if (state.startsWith("key ") && state !== "key failed")
+    if (state.startsWith("key "))
       await expect.poll(() => box()?.querySelector("[data-test=master-key]")).toBeTruthy();
     if (state === "key copied") {
       vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);

@@ -1,5 +1,5 @@
 export type PackLocale = "en" | "es";
-export type PartKind = "bucket" | "archives" | "server-key" | "emergency";
+export type PartKind = "bucket" | "archives" | "emergency";
 
 type Words = {
   title: string;
@@ -13,11 +13,6 @@ type Words = {
   page: (n: number, of: number) => string;
   part: Record<PartKind, string>;
   failedTitle: (part: string) => string;
-  thisPackHoldsKey: string;
-  noNewKey: string;
-  keyOnPack: (number: number, day: string) => string;
-  keyOnUnreceivedPack: (number: number, day: string) => string;
-  keyOnSheet: (keyName: string, day: string) => string;
   spaceMark: string;
 };
 
@@ -34,18 +29,9 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     part: {
       bucket: "Bucket copy",
       archives: "Archives",
-      "server-key": "Box key",
       emergency: "Emergency start",
     },
     failedTitle: (part) => `${part}: could not be drawn`,
-    thisPackHoldsKey: "This pack holds the box key.",
-    noNewKey: "This pack did not make a new box key.",
-    keyOnPack: (number, day) =>
-      `The key itself is on recovery pack ${number}, made on ${day}. Keep that pack.`,
-    keyOnUnreceivedPack: (number, day) =>
-      `The key itself is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, choose Make a new master key on Backups.`,
-    keyOnSheet: (keyName, day) =>
-      `The key itself is on the recovery sheet whose key name is ${keyName}, made on ${day}. Keep that sheet.`,
     spaceMark: "Each \u02fd is a space: type one space for it.",
   },
   es: {
@@ -61,17 +47,8 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
       emergency: "Inicio de emergencia",
       bucket: "Copia en el bucket",
       archives: "Archivos",
-      "server-key": "Clave del servidor",
     },
     failedTitle: (part) => `${part}: no se pudo generar`,
-    thisPackHoldsKey: "Este paquete tiene la clave del servidor.",
-    noNewKey: "Este paquete no creó una clave del servidor nueva.",
-    keyOnPack: (number, day) =>
-      `La clave está en el paquete de recuperación ${number}, hecho el ${day}. Guarda ese paquete.`,
-    keyOnUnreceivedPack: (number, day) =>
-      `La clave está en el paquete de recuperación ${number}, hecho el ${day}, pero cuando se hizo este paquete el servidor no había recibido la confirmación de que el paquete ${number} había llegado. Si no tienes el paquete ${number}, elige Crear una clave maestra nueva en Copias de seguridad.`,
-    keyOnSheet: (keyName, day) =>
-      `La clave está en la hoja de recuperación cuyo nombre de clave es ${keyName}, hecha el ${day}. Guarda esa hoja.`,
     spaceMark: "Cada \u02fd es un espacio: escribe un espacio en su lugar.",
   },
 };
@@ -111,17 +88,8 @@ type PartWords = {
   };
   keyRow: string;
   keyChangedOn: (day: string) => string;
-  alsoServerKey: (page: number) => string;
-  keyNotReplaced: string;
-  currentKeyOnPack: (number: number, day: string) => string;
-  currentKeyOnUnreceivedPack: (number: number, day: string) => string;
-  currentKeyOnSheet: (keyName: string, day: string) => string;
   /** Keyed by the refusal's real code. */
   failures: Record<string, PartFailure>;
-  /** `sif.allocation_invalid` with reason `history_invalid`; its other reasons take `general`. */
-  historyInvalid: PartFailure;
-  /** `recovery.pack_invalid` with reason `module_unsupported`: only a wrong module composition gives it. */
-  moduleFault: PartFailure;
   general: PartFailure;
 };
 
@@ -184,14 +152,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     },
     keyRow: "Backup encryption key",
     keyChangedOn: (day) => `changed on ${day}`,
-    alsoServerKey: (page) => `It also needs the box key: page ${page}, or the pack it names.`,
-    keyNotReplaced: "The box key was not replaced.",
-    currentKeyOnPack: (number, day) =>
-      `The current key, on recovery pack ${number} made on ${day}, still works.`,
-    currentKeyOnUnreceivedPack: (number, day) =>
-      `The current box key is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, choose Make a new master key on Backups.`,
-    currentKeyOnSheet: (keyName, day) =>
-      `The current key, on the recovery sheet whose key name is ${keyName}, made on ${day}, still works.`,
     failures: {
       "backup.archive_settings_unreadable": {
         what: "The box could not read its saved archive settings.",
@@ -209,14 +169,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         what: "The box could not find the key that signs its bucket copy.",
         todo: "Check Backups and make a new pack.",
       },
-    },
-    historyInvalid: {
-      what: "The box's record of its invoice series disagrees with what setup recorded.",
-      todo: "Keep the pack or sheet that holds the current box key; the next pack tries this page again.",
-    },
-    moduleFault: {
-      what: "This page could not be made. That is a fault in Waitron.",
-      todo: "A new pack will fail here the same way. The other pages of this pack are still good.",
     },
     general: {
       what: "This part could not be read when this pack was made.",
@@ -280,15 +232,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     },
     keyRow: "Clave de cifrado de copias",
     keyChangedOn: (day) => `cambiada el ${day}`,
-    alsoServerKey: (page) =>
-      `También necesita la clave del servidor: página ${page}, o el paquete que esta indica.`,
-    keyNotReplaced: "La clave del servidor no se ha sustituido.",
-    currentKeyOnPack: (number, day) =>
-      `La clave actual, en el paquete de recuperación ${number} hecho el ${day}, sigue sirviendo.`,
-    currentKeyOnUnreceivedPack: (number, day) =>
-      `La clave del servidor actual está en el paquete de recuperación ${number}, hecho el ${day}, pero cuando se hizo este paquete el servidor no había recibido la confirmación de que el paquete ${number} había llegado. Si no tienes el paquete ${number}, elige Crear una clave maestra nueva en Copias de seguridad.`,
-    currentKeyOnSheet: (keyName, day) =>
-      `La clave actual, en la hoja de recuperación cuyo nombre de clave es ${keyName}, hecha el ${day}, sigue sirviendo.`,
     failures: {
       "backup.archive_settings_unreadable": {
         what: "El servidor no pudo leer los ajustes de archivo guardados.",
@@ -306,14 +249,6 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         what: "El servidor no encontró la clave que firma su copia en el bucket.",
         todo: "Revisa Copias de seguridad y haz un paquete nuevo.",
       },
-    },
-    historyInvalid: {
-      what: "El registro del servidor de sus series de facturas no coincide con lo que registró la instalación.",
-      todo: "Guarda el paquete o la hoja que tiene la clave del servidor actual; el próximo paquete volverá a intentar esta página.",
-    },
-    moduleFault: {
-      what: "Esta página no se pudo hacer. Es un fallo de Waitron.",
-      todo: "Un paquete nuevo fallará aquí de la misma forma. Las demás páginas de este paquete siguen sirviendo.",
     },
     general: {
       what: "Esta parte no se pudo leer cuando se hizo este paquete.",

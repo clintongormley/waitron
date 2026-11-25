@@ -471,8 +471,8 @@ configuración para poner en marcha otro local.
   base de datos en su propio disco y la borra al terminar la copia, o en el siguiente arranque si se
   detuvo durante la copia. La exportación de la configuración va cifrada con una frase de paso de al
   menos 12 caracteres, así que es tan segura como esa frase.
-  Lee las páginas del paquete de recuperación antes de necesitarlo: pueden nombrar un paquete anterior o una hoja que
-  también necesites. Conserva esos papeles y los paquetes de las copias anteriores que puedas
+  Lee las páginas del paquete de recuperación antes de necesitarlo: pueden nombrar un paquete anterior que
+  también necesites. Conserva ese paquete y los paquetes de las copias anteriores que puedas
   necesitar. Guarda cada paquete de recuperación bajo llave, fuera del servidor.
 
 El paquete de recuperación también puede contener la dirección y el código de emergencia para una copia bloqueada en Cloud. Ten disponibles por separado tu contraseña de Waitron y tu autenticador o códigos de recuperación. Consulta [Inicio de emergencia en Cloud](servers.md#cloud-emergency).
@@ -604,7 +604,7 @@ lugar abre **Configuración de la cuenta**, elige **Desactivar** junto a **Aplic
 autenticación** y lo vuelve a configurar.
 
 **Un paquete de recuperación perdido.** El paquete hecho durante la primera configuración contiene
-la clave maestra y la clave del servidor. Una recuperación necesita la clave maestra junto con
+la clave maestra. Una recuperación necesita la clave maestra junto con
 el acceso a una copia; para sustituirla, mira el final de esta sección. Un paquete hecho en **Copias de seguridad** después de
 configurar la copia en el bucket contiene la clave de acceso y el
 secreto de tu bucket y la clave de cifrado de copias, así que quien lo tenga puede leer toda la copia de la base de datos de tu
@@ -625,9 +625,8 @@ proveedor. Mientras las copias programadas están activadas, **Copias de segurid
 **Cambiar la clave de cifrado de copias**; después elige **Hacer paquete de recuperación** en **Copias de
 seguridad** y guarda el paquete nuevo. Las copias programadas hechas antes del cambio y toda la
 copia anterior del bucket siguen necesitando la clave antigua. Conserva el paquete de recuperación
-correspondiente a cualquier copia anterior que puedas necesitar restaurar. Un paquete también
-puede contener la clave del servidor. Para sustituirla, elige **Crear una clave maestra nueva**, que
-también crea una clave del servidor nueva si el servidor tiene una: en un local que emite facturas, para restaurar una copia
+correspondiente a cualquier copia anterior que puedas necesitar restaurar.
+Para sustituir la clave maestra, elige **Crear una clave maestra nueva**: para restaurar una copia
 hecha después hace falta la clave maestra nueva, y para restaurar una anterior sigue haciendo falta la antigua.
 
 **Una exportación de la configuración filtrada.** El archivo contiene a cada persona de tu lista del

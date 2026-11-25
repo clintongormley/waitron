@@ -163,29 +163,26 @@ you did not report.
 
 ## Keep recovery pack 1
 
-Choose **Show the master key** and enter the setup password. The page makes the keys and pack 1,
-then shows the master key, its name above it, with **Download**, **Print** and **Copy**; nothing
+Choose **Show the master key** and enter the setup password. The page makes the master key and pack 1,
+then shows the key, its name above it, with **Download**, **Print** and **Copy**; nothing
 downloads by itself. Download saves `waitron-recovery-pack-1.pdf`, and Print opens the same
 document; Copy copies the key as printed, with its spaces. If Copy does not work, or the browser
-blocks Print, the page says so. **Continue** appears once Download or Print has worked; Copy alone
-is not enough, because the pack also holds the box key
-(`first-hour-recovery-pack.browser.test.ts`, "Copy alone leaves Continue hidden: the pack also
-holds the box key, which Copy leaves out"). Check the business, venue, box ID and key name on
-its box key page, then choose **Continue**.
+blocks Print, the page says so. **Continue** appears once Download, Print or Copy has worked
+(`first-hour-recovery-pack.browser.test.ts`, "Copy is enough to show Continue, and Continue keeps
+the pack"). Check the key name, then choose **Continue**.
 There is no separate signing key, custodian computer, register or downloadable tool.
 
-If the box restarted after it made the keys, it no longer holds them: the page says so and offers
-**Make new keys**, which asks for the password again and shows the new master key
+If the box restarted after it made the master key, it no longer holds it: the page says so and offers
+**Make a new master key**, which asks for the password again and shows the new key
 (`first-hour-recovery-pack.browser.test.ts`, "%s: a key the box lost when it restarted is replaced
-with new keys, which the step then shows once"; `apps/server/src/first-setup-key-reissue.boot.test.ts`).
+with a new one, which the step then shows once"; `apps/server/src/first-setup-key-reissue.boot.test.ts`).
 
-Keep the PDF or paper outside the box and its backups. It contains the master key and the box key.
-Pack 1 has two pages, the master key's and the box key's, and its attached file names no bucket
-copy or archives
+Keep the PDF or paper outside the box and its backups. It contains the master key.
+Pack 1 has one page, the master key's, and its attached file names no bucket copy or archives
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the command path writes recovery pack
-1 holding the master key, then the staged box key, in %s"). Your Cloud login, or the downloaded archive's password,
+1 holding the master key and no box key, in %s"). Your Cloud login, or the downloaded archive's password,
 stays separate. Keep an older pack while you retain backups that need its key.
-The box stores a verifier for the key; it cannot recover the old secret from that verifier.
+The box keeps only the master key's name, check value and sealing public key, never the key itself.
 
 During recovery, select the recovery pack that holds this backup's master key, or type the master
 key. The typing check catches mistakes; opening the selected backup still authenticates the

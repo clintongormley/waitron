@@ -1187,17 +1187,10 @@ export class SetupApp extends LitElement {
   #fiscalTestGeneration = 0;
   @state() private emailError?: Message;
 
-  @state() private breakGlassSecret?: string;
-  @state() private breakGlassKeyName?: string;
-  @state() private breakGlassKeyInBackups = false;
   @state() private cloudStaffEmailUnavailable = false;
   /** This box's own address, for its label. */
   @state() private contactUrl?: string;
 
-  /**
-   * Kept apart from {@link SetupApp.breakGlassSecret} because
-   * that is a value to display and this is a statement about which path ran.
-   */
   @state() private mirrorJoin = false;
 
   @state() private primaryServersUrl?: string;
@@ -2066,9 +2059,6 @@ export class SetupApp extends LitElement {
       this.recoveryPackPdf = result.recoveryPackPdf;
       this.masterKey = result.masterKey;
       this.masterKeyName = result.masterKeyName;
-      this.breakGlassSecret = result.breakGlassSecret;
-      this.breakGlassKeyName = result.breakGlassKeyName;
-      this.breakGlassKeyInBackups = result.breakGlassKeyInBackups === true;
       this.cloudStaffEmailUnavailable = result.cloudStaffEmailUnavailable === true;
       this.contactUrl = result.contactUrl;
       this.screen = "done";
@@ -2708,9 +2698,6 @@ export class SetupApp extends LitElement {
     this.recoveryPackPdf = undefined;
     this.masterKey = undefined;
     this.masterKeyName = undefined;
-    this.breakGlassSecret = undefined;
-    this.breakGlassKeyName = undefined;
-    this.breakGlassKeyInBackups = false;
     this.cloudStaffEmailUnavailable = false;
     this.contactUrl = undefined;
     this.provisionMessage = undefined;
@@ -3241,9 +3228,6 @@ export class SetupApp extends LitElement {
         return html`<setup-done-screen
           data-test="screen-done"
           .api=${this.api}
-          .breakGlassSecret=${this.breakGlassSecret}
-          .breakGlassKeyName=${this.breakGlassKeyName}
-          .breakGlassKeyInBackups=${this.breakGlassKeyInBackups}
           .cloudStaffEmailUnavailable=${this.cloudStaffEmailUnavailable}
           .mirrorJoin=${this.mirrorJoin}
           .serversUrl=${this.primaryServersUrl}

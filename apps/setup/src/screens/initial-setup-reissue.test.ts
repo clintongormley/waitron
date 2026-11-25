@@ -18,8 +18,9 @@ afterEach(async () => {
   sessionStorage.removeItem(FIRST_SETUP_SESSION_KEY);
 });
 const key = {
-  stage: { stageId: "replacement", nodeId: initial.nodeId, name: "New key" },
-  key: { nodeId: initial.nodeId, name: "New key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+  stage: { stageId: "replacement", nodeId: initial.nodeId, name: "2026-11-23 · RKMB" },
+  masterKey: "2SZ5 ZYJ9 UN95 RXKV NF7B N8VU GYU4",
+  masterKeyName: "2026-11-23 · RKMB",
 };
 const reference = {
   stageId: "old-stage",
@@ -81,6 +82,9 @@ it("requires a fresh original password for replacement and clears the previous R
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=next]")!.hasAttribute("disabled")).toBe(true);
   expect(requests.some((request) => request.path.endsWith("/node-key-reissue"))).toBe(false);
+  await expect
+    .poll(() => el.shadowRoot!.querySelector("section p")?.textContent?.trim())
+    .toBe("Confirm before making a new master key.");
   await password();
   await expect(pending).resolves.toEqual(key);
   expect(session.state).toEqual(before);
@@ -91,22 +95,21 @@ it("requires a fresh original password for replacement and clears the previous R
   expect(requests.some((request) => /\/(candidates|input|provision)$/.test(request.path))).toBe(
     false,
   );
-  expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain(key.key.secret);
+  expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain(key.masterKey);
   expect(sessionStorage.getItem(FIRST_SETUP_SESSION_KEY)).not.toContain(venue.admin.password);
   expect(el.shadowRoot!.querySelector("[data-test=owner-password]")).toBeNull();
 });
-it.each([
-  { stage: { ...key.stage, nodeId: "wrong-node" } },
-  { key: { ...key.key, nodeId: "wrong-node" } },
-  { key: { ...key.key, name: "another-name" } },
-])("refuses a replacement bound to a different staged node or key: %j", async (change) => {
-  const { actions, password } = await mount(() => Response.json({ ...key, ...change }));
-  expect(actions.reissueNodeKey).toBeTypeOf("function");
-  const pending = actions.reissueNodeKey!();
-  const refused = expect(pending).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-  await password();
-  await refused;
-});
+it.each([{ stage: { ...key.stage, nodeId: "wrong-node" } }])(
+  "refuses a replacement bound to a different staged node: %j",
+  async (change) => {
+    const { actions, password } = await mount(() => Response.json({ ...key, ...change }));
+    expect(actions.reissueNodeKey).toBeTypeOf("function");
+    const pending = actions.reissueNodeKey!();
+    const refused = expect(pending).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    await password();
+    await refused;
+  },
+);
 it("discards a replacement reply after the owner session is disposed", async () => {
   let release!: (response: Response) => void;
   const { actions, password, session, requests } = await mount(

@@ -2429,12 +2429,9 @@ export type FreshSignInBody = (
   | { method: "passkey"; challengeHandle: string; response: unknown }
 ) & { totp?: string; recoveryCode?: string };
 
-export type RecoveryPackKeyState = "replaced" | "unchanged" | "failed";
-
 export interface MadeRecoveryPack {
   pdf: Blob;
   number: number;
-  key: RecoveryPackKeyState;
   /** The box's own time for the pack, the same instant its status read reports. */
   madeAt: string;
   /** The new master key as printed, and its name; only when the box made and saved one. */
@@ -2455,18 +2452,17 @@ function isInstant(value: string): boolean {
   return !Number.isNaN(at.getTime()) && at.toISOString() === value;
 }
 
-type RecoveryPackPart = "bucket" | "archives" | "server-key" | "emergency";
+type RecoveryPackPart = "bucket" | "archives" | "emergency";
 
 /** Each reason names only the parts the box can give it for. */
 export type RecoveryPackReason =
   | { part: "bucket" | "archives"; kind: "key_changed"; at: string }
   | { part: "bucket" | "archives"; kind: "settings_changed" }
-  | { part: "bucket" | "archives" | "server-key"; kind: "set_up_after" }
-  | { part: "bucket" | "archives" | "server-key" | "emergency"; kind: "removed" }
+  | { part: "bucket" | "archives"; kind: "set_up_after" }
+  | { part: "bucket" | "archives" | "emergency"; kind: "removed" }
   | { part: "emergency"; kind: "code_changed"; at: string }
   | { part: "emergency"; kind: "code_missing" }
-  | { part: "emergency"; kind: "cannot_check" }
-  | { part: "server-key"; kind: "key_replaced" };
+  | { part: "emergency"; kind: "cannot_check" };
 
 /** `GET /api/backup/recovery-pack` — LOCAL copy of `apps/server/src/backup-recovery-pack-status.ts`'s
  * `PackStatus`. */
@@ -2487,19 +2483,18 @@ export interface RecoveryPackStatus {
   unreceived: null | {
     number: number;
     madeAt: string;
-    holdsCurrentServerKey: boolean;
     offeredAtSetup?: true;
+    /** The pack showed the current master key; named even when a later pack was received. */
+    holdsCurrentMasterKey?: true;
   };
   reasons: RecoveryPackReason[];
   keep: {
     number: number;
     madeAt: string;
-    until: string | null;
-    why: "server_key" | "backup_key" | "replaced_server_key";
+    until: string;
+    why: "backup_key";
   }[];
   backupsUseOlderKey: boolean;
-  /** The box's server key now: `none` on a venue that files no invoices, `not_yet` when the box has no server key. */
-  serverKey: "none" | "not_yet" | "set";
   /** The venue's current master key, and this box's pack that showed it, if one did. */
   masterKey: { name: string; pack: number | null } | null;
   /** Until when a pack made before now is kept, were a new master key made now. */
@@ -5561,13 +5556,12 @@ export class DashboardApi {
    */
   async makeRecoveryPack(body: {
     locale: "en" | "es";
-    newServerKey: boolean;
+    newMasterKey: boolean;
   }): Promise<MadeRecoveryPack> {
     const file = await this.#request<DownloadedFile>("/api/backup/recovery-pack", "POST", body, {
       as: "file",
       headers: [
         "X-Waitron-Recovery-Pack",
-        "X-Waitron-Recovery-Pack-Key",
         "X-Waitron-Recovery-Pack-Made-At",
         "X-Waitron-Master-Key",
         "X-Waitron-Master-Key-Name",
@@ -5576,7 +5570,6 @@ export class DashboardApi {
     });
     const pdf = file.blob;
     const number = file.headers?.["X-Waitron-Recovery-Pack"] ?? "";
-    const key = file.headers?.["X-Waitron-Recovery-Pack-Key"];
     const madeAt = file.headers?.["X-Waitron-Recovery-Pack-Made-At"] ?? "";
     const masterKey = file.headers?.["X-Waitron-Master-Key"] ?? undefined;
     const encodedName = file.headers?.["X-Waitron-Master-Key-Name"] ?? undefined;
@@ -5593,7 +5586,6 @@ export class DashboardApi {
       pdf.size === 0 ||
       pdf.size > 8 * 1024 * 1024 ||
       !/^[1-9][0-9]*$/.test(number) ||
-      (key !== "replaced" && key !== "unchanged" && key !== "failed") ||
       !isInstant(madeAt) ||
       (await pdf.slice(0, 5).text()) !== "%PDF-" ||
       !/%%EOF\s*$/.test(await pdf.slice(-16).text())
@@ -5602,7 +5594,6 @@ export class DashboardApi {
     return {
       pdf,
       number: Number(number),
-      key,
       madeAt,
       ...(masterKey === undefined || masterKeyName === undefined
         ? {}

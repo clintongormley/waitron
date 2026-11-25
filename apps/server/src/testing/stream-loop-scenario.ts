@@ -457,7 +457,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
           headers,
           body: JSON.stringify({
             locale: "es",
-            newServerKey: true,
+            newMasterKey: true,
           }),
         });
         expect(made.status).toBe(200);

@@ -33,7 +33,7 @@ function keyInput(screen: ConflictRecovery): HTMLElement {
     .shadowRoot!.querySelector("wt-master-key-input")!
     .shadowRoot!.querySelector("wt-input")!;
 }
-it("protects a typed recovery key on leaving, and Stop releases that draft", async () => {
+it("protects a typed master key on leaving, and Stop releases that draft", async () => {
   const screen = await mount();
   expect(unload()).toBe(false);
   keyInput(screen).dispatchEvent(

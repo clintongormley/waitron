@@ -1,5 +1,5 @@
 import { readSetupFlowRecord, updateSetupFlowSection } from "./setup-flow-record.js";
-import { randomUUID, scrypt } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,16 +7,16 @@ import { afterEach, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import {
   CORE_MIGRATIONS,
+  insertMasterKey,
   insertRecoveryPack,
   masterKeys,
   readCurrentMasterKey,
   readRecoveryPacks,
+  recoveryPacks,
   stampDeployment,
-  withNodeTransaction,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { verifySecretAsync } from "@waitron/identity";
 import {
   makeMasterKey,
   masterKeyCheckValue,
@@ -24,13 +24,7 @@ import {
   sealingPublicKey,
 } from "@waitron/credentials";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
-import {
-  NODE_MIGRATIONS,
-  box,
-  readRecoveryKeyName,
-  readRecoveryKeyVerifier,
-  setRecoveryKeyTx,
-} from "@waitron/node-db";
+import { NODE_MIGRATIONS, box } from "@waitron/node-db";
 import { request, PASSWORD } from "../test/first-setup-request.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import {
@@ -40,17 +34,12 @@ import {
 } from "./first-setup-state.js";
 import { createFirstSetupNodeKeys, readFirstSetupStagedKey } from "./first-setup-node-key.js";
 
-vi.mock("node:crypto", async (original) => {
-  const actual = await original<typeof import("node:crypto")>();
-  return { ...actual, scrypt: vi.fn(actual.scrypt) };
-});
-
 const database = useVenueDb({
   migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
-const handles = () => ({ venue: database.db, node: database.node });
 const storedKeys = () => database.node.select().from(box);
 const storedMasterKeys = () => database.db.select().from(masterKeys);
+const storedPacks = () => database.db.select().from(recoveryPacks);
 const otherPublicKey = () => sealingPublicKey(makeMasterKey()).toString("base64");
 const roots: string[] = [];
 afterEach(async () => {
@@ -111,10 +100,8 @@ async function fixture(stage = true) {
   };
 }
 
-it("retains the same delivered key on a reconfirmed repeat without persisting its secret", async () => {
-  vi.mocked(scrypt).mockClear();
+it("retains the same delivered master key on a reconfirmed repeat without persisting it", async () => {
   const f = await fixture();
-  expect(vi.mocked(scrypt).mock.calls.map(([secret]) => secret)).toContain(f.staged!.key.secret);
   const before = await readFile(f.path);
   const token = await f.grant();
   const repeated = await f.coordinator.run((hold) =>
@@ -122,11 +109,20 @@ it("retains the same delivered key on a reconfirmed repeat without persisting it
   );
   expect(repeated).toEqual(f.staged);
   expect(await readFile(f.path)).toEqual(before);
-  expect(before.toString()).not.toContain(f.staged!.key.secret);
-  expect(await verifySecretAsync(f.staged!.key.secret, repeated.stage.verifier)).toBe(true);
-  expect(await verifySecretAsync("another secret", repeated.stage.verifier)).toBe(false);
-  repeated.key.secret = "changed caller copy";
+  expect(before.toString()).not.toContain(f.staged!.masterKey);
+  repeated.masterKey = "changed caller copy";
   expect(await f.keys.stageInitialNodeKey(f.access, await f.grant())).toEqual(f.staged);
+});
+
+it.each([
+  ["a box-key name", { name: "2026-10-16 · ACRY" }],
+  ["a box-key verifier", { verifier: `scrypt$${"a".repeat(32)}$${"b".repeat(64)}` }],
+] as const)("a staged record with %s is refused", async (_label, extra) => {
+  const f = await fixture();
+  const state = (await f.store.read())!;
+  expect(() => readFirstSetupStagedKey({ ...f.staged!.stage, ...extra }, state)).toThrowError(
+    expect.objectContaining({ code: "setup.attempt_invalid" }),
+  );
 });
 
 it.each([
@@ -139,13 +135,6 @@ it.each([
   ["attempt", { attemptId: "another-attempt" }],
   ["node", { nodeId: "another-node" }],
   ["frozen digest", { frozenDigest: "0".repeat(64) }],
-  ["non-text name", { name: 42 }],
-  ["ambiguous name", { name: "2026-10-16 · OI10" }],
-  ["name length", { name: "2026-10-16 · ABC" }],
-  ["non-text verifier", { verifier: 42 }],
-  ["verifier algorithm", { verifier: "plaintext" }],
-  ["verifier salt", { verifier: `scrypt$${"a".repeat(30)}$${"b".repeat(64)}` }],
-  ["verifier digest", { verifier: `scrypt$${"a".repeat(32)}$${"b".repeat(62)}` }],
   ["non-text master key name", { masterKeyName: 42 }],
   ["master key name outside its alphabet", { masterKeyName: "2026-10-16 · 0OI1" }],
   ["master key name day", { masterKeyName: "2026-13-45 · 2345" }],
@@ -178,8 +167,6 @@ it.each([
   "attemptId",
   "nodeId",
   "frozenDigest",
-  "name",
-  "verifier",
   "masterKeyName",
   "masterKeyCheckValue",
   "masterKeyPublicKey",
@@ -229,7 +216,7 @@ it("a completed activation cannot stage another key", async () => {
 });
 
 it.each(["uncommitted", "missing result", "different node"])(
-  "refuses verifier installation for %s and leaves role storage empty",
+  "refuses installation for %s and writes nothing",
   async (part) => {
     const f = await fixture();
     const state =
@@ -238,45 +225,22 @@ it.each(["uncommitted", "missing result", "different node"])(
         : await f.committed(part === "missing result" ? null : { venue: { nodeId: randomUUID() } });
     await stampDeployment(database.db, "preproduction");
     await expect(
-      f.keys.installStagedNodeKey(handles(), state, f.staged!.stage),
+      f.keys.installStagedNodeKey(database.db, state, f.staged!.stage),
     ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
     expect(await storedKeys()).toEqual([]);
-  },
-);
-
-it.each(["verifier", "name", "both"])(
-  "refuses to replace an existing different %s during publication",
-  async (part) => {
-    const f = await fixture();
-    const state = await f.committed();
-    const stage = f.staged!.stage;
-    await stampDeployment(database.db, "preproduction");
-    await withNodeTransaction(database.node, (tx) =>
-      setRecoveryKeyTx(
-        tx,
-        stage.nodeId,
-        part === "name" ? stage.verifier : "another-verifier",
-        part === "verifier" ? stage.name : "another-name",
-        null,
-      ),
-    );
-    const before = await storedKeys();
-    await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({
-      code: "setup.attempt_uncertain",
-    });
-    expect(await storedKeys()).toEqual(before);
+    expect(await storedPacks()).toEqual([]);
+    expect(await storedMasterKeys()).toEqual([]);
   },
 );
 
 it.each(["stale state", "supplied stage", "stored stage", "changed frozen request"])(
-  "refuses installation from %s without writing a verifier",
+  "refuses installation from %s and writes nothing",
   async (part) => {
     const f = await fixture();
     const state = await f.committed();
     const stage = { ...f.staged!.stage };
     if (part === "stale state") state.revision++;
-    else if (part === "supplied stage")
-      stage.name = stage.name.slice(0, -1) + (stage.name.endsWith("A") ? "C" : "A");
+    else if (part === "supplied stage") stage.masterKeyCheckValue = "0".repeat(64);
     else if (part === "stored stage")
       await updateSetupFlowSection(f.options.stateDir, "nodeKey", () => ({
         ...stage,
@@ -284,31 +248,29 @@ it.each(["stale state", "supplied stage", "stored stage", "changed frozen reques
       }));
     else state.frozen.request.legalName = "Another business";
     const retained = await readFile(f.path);
-    await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({
+    await expect(f.keys.installStagedNodeKey(database.db, state, stage)).rejects.toMatchObject({
       code: "setup.attempt_uncertain",
     });
     expect(await storedKeys()).toEqual([]);
+    expect(await storedPacks()).toEqual([]);
+    expect(await storedMasterKeys()).toEqual([]);
     expect(await readFile(f.path)).toEqual(retained);
   },
 );
 
-it("installs the delivered verifier once and preserves it on exact publication retry", async () => {
+it("installing the staged key writes pack 1 and the master key in one venue transaction and nothing in node.db", async () => {
   const f = await fixture();
   const state = await f.committed();
+  const stage = f.staged!.stage;
   await stampDeployment(database.db, "preproduction");
-  await f.keys.installStagedNodeKey(handles(), state, f.staged!.stage);
   const before = await storedKeys();
-  expect(before).toMatchObject([
-    {
-      nodeId: state.frozen.nodeId,
-      recoveryKeyVerifier: f.staged!.stage.verifier,
-      recoveryKeyName: f.staged!.stage.name,
-    },
-  ]);
-  await f.coordinator.run((hold) =>
-    f.keys.installStagedNodeKey(handles(), state, f.staged!.stage, hold),
-  );
+  await f.keys.installStagedNodeKey(database.db, state, stage);
   expect(await storedKeys()).toEqual(before);
+  const [pack] = await readRecoveryPacks(database.db, stage.nodeId);
+  expect(await readCurrentMasterKey(database.db)).toMatchObject({
+    name: stage.masterKeyName,
+    madeAt: pack!.madeAt,
+  });
 });
 
 it("records recovery pack 1 as received beside the installed key, once across a publication retry", async () => {
@@ -316,7 +278,7 @@ it("records recovery pack 1 as received beside the installed key, once across a 
   const state = await f.committed();
   await stampDeployment(database.db, "preproduction");
   const before = Date.now();
-  await f.keys.installStagedNodeKey(handles(), state, f.staged!.stage);
+  await f.keys.installStagedNodeKey(database.db, state, f.staged!.stage);
   const after = Date.now();
   const packs = await readRecoveryPacks(database.db, state.frozen.nodeId);
   expect(packs).toEqual([
@@ -329,12 +291,6 @@ it("records recovery pack 1 as received beside the installed key, once across a 
       parts: [
         { part: "bucket", state: "not-set-up" },
         { part: "archives", state: "not-set-up" },
-        {
-          part: "server-key",
-          state: "included",
-          keyName: f.staged!.stage.name,
-          carriedKey: true,
-        },
       ],
     },
   ]);
@@ -343,34 +299,9 @@ it("records recovery pack 1 as received beside the installed key, once across a 
   expect(receivedAt).toBeLessThanOrEqual(after);
   expect(packs[0]!.madeAt.getTime()).toBe(receivedAt);
   await f.coordinator.run((hold) =>
-    f.keys.installStagedNodeKey(handles(), state, f.staged!.stage, hold),
+    f.keys.installStagedNodeKey(database.db, state, f.staged!.stage, hold),
   );
   expect(await readRecoveryPacks(database.db, state.frozen.nodeId)).toEqual(packs);
-});
-
-it("a first setup interrupted after pack 1 and before the key installs the key on the next run, and makes no second pack", async () => {
-  const f = await fixture();
-  const state = await f.committed();
-  const stage = f.staged!.stage;
-  await stampDeployment(database.db, "preproduction");
-  database.node.run(
-    sql`create trigger interrupt_key before insert on box begin select raise(abort, 'interrupted'); end`,
-  );
-  try {
-    await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toThrow(
-      /interrupted/,
-    );
-  } finally {
-    database.node.run(sql`drop trigger interrupt_key`);
-  }
-  const packs = await readRecoveryPacks(database.db, stage.nodeId);
-  expect(packs).toMatchObject([{ number: 1, receivedAt: expect.any(Date) }]);
-  expect(await readRecoveryKeyVerifier(database.node, stage.nodeId)).toBeNull();
-  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(handles(), state, stage, hold));
-  expect(await readRecoveryKeyVerifier(database.node, stage.nodeId)).toBe(stage.verifier);
-  expect(await readRecoveryKeyName(database.node, stage.nodeId)).toBe(stage.name);
-  expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual(packs);
-  expect(await storedMasterKeys()).toMatchObject([{ number: 1, name: stage.masterKeyName }]);
 });
 
 it("Live setup installs the master_keys row with pack 1 in one venue transaction, once across a re-run", async () => {
@@ -382,7 +313,7 @@ it("Live setup installs the master_keys row with pack 1 in one venue transaction
     sql`create trigger interrupt_master_key before insert on master_keys begin select raise(abort, 'interrupted'); end`,
   );
   try {
-    await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toThrow(
+    await expect(f.keys.installStagedNodeKey(database.db, state, stage)).rejects.toThrow(
       /interrupted/,
     );
   } finally {
@@ -391,7 +322,7 @@ it("Live setup installs the master_keys row with pack 1 in one venue transaction
   expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual([]);
   expect(await storedMasterKeys()).toEqual([]);
   expect(await storedKeys()).toEqual([]);
-  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(handles(), state, stage, hold));
+  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(database.db, state, stage, hold));
   const [pack] = await readRecoveryPacks(database.db, stage.nodeId);
   expect(await readCurrentMasterKey(database.db)).toEqual({
     number: 1,
@@ -401,7 +332,7 @@ it("Live setup installs the master_keys row with pack 1 in one venue transaction
     madeAt: pack!.madeAt,
     madeBy: null,
   });
-  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(handles(), state, stage, hold));
+  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(database.db, state, stage, hold));
   expect(await storedMasterKeys()).toHaveLength(1);
 });
 
@@ -411,7 +342,7 @@ it("stages a master key's public facts, its name worked out from its public key"
   const publicKey = Buffer.from(stage.masterKeyPublicKey, "base64");
   expect(stage.masterKeyName).toBe(masterKeyName(publicKey, stage.masterKeyName.slice(0, 10)));
   expect(stage.masterKeyCheckValue).toMatch(/^[0-9a-f]{64}$/);
-  expect(Object.keys(f.staged!.key).sort()).toEqual(["name", "nodeId", "secret"]);
+  expect(Object.keys(f.staged!).sort()).toEqual(["masterKey", "masterKeyName", "stage"]);
 });
 
 it("answers the staged master key as printed, with its name, and never writes it to the stage", async () => {
@@ -427,58 +358,59 @@ it("answers the staged master key as printed, with its name, and never writes it
   expect(written).not.toContain(masterKey.replaceAll(" ", ""));
 });
 
-it.each([
-  ["the staged key with no pack 1", "staged", null],
-  ["no key and a pack 1 naming another key", null, "another"],
-  ["the staged key and a pack 1 naming another key", "staged", "another"],
-] as const)("refuses a re-run that finds %s, writing nothing", async (_, key, packName) => {
+it("a re-run finds pack 1 and writes nothing", async () => {
   const f = await fixture();
   const state = await f.committed();
   const stage = f.staged!.stage;
   await stampDeployment(database.db, "preproduction");
-  if (key === "staged")
-    await withNodeTransaction(database.node, (tx) =>
-      setRecoveryKeyTx(tx, stage.nodeId, stage.verifier, stage.name, null),
-    );
-  if (packName !== null)
-    await withTransaction(database.db, (tx) =>
-      insertRecoveryPack(tx, {
-        nodeId: stage.nodeId,
-        number: 1,
-        madeAt: new Date(),
-        madeBy: null,
-        parts: [{ part: "server-key", state: "included", keyName: packName, carriedKey: true }],
-      }),
-    );
-  const keys = await storedKeys();
+  await f.keys.installStagedNodeKey(database.db, state, stage);
   const packs = await readRecoveryPacks(database.db, stage.nodeId);
-  await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({
-    code: "setup.attempt_uncertain",
-  });
-  expect(await storedKeys()).toEqual(keys);
+  const masterKeys = await storedMasterKeys();
+  const keys = await storedKeys();
+  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(database.db, state, stage, hold));
   expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual(packs);
+  expect(await storedMasterKeys()).toEqual(masterKeys);
+  expect(await storedKeys()).toEqual(keys);
 });
 
-it.each(["verifier", "name"])(
-  "records no recovery pack when publication finds a different %s",
-  async (part) => {
+it.each(["no master key", "another master key"] as const)(
+  "refuses a re-run that finds pack 1 and %s, writing nothing",
+  async (current) => {
     const f = await fixture();
     const state = await f.committed();
     const stage = f.staged!.stage;
     await stampDeployment(database.db, "preproduction");
-    await withNodeTransaction(database.node, (tx) =>
-      setRecoveryKeyTx(
-        tx,
-        stage.nodeId,
-        part === "name" ? stage.verifier : "another-verifier",
-        part === "verifier" ? stage.name : "another-name",
-        null,
-      ),
-    );
-    await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({
+    await withTransaction(database.db, async (tx) => {
+      await insertRecoveryPack(tx, {
+        nodeId: stage.nodeId,
+        number: 1,
+        madeAt: new Date(),
+        madeBy: null,
+        parts: [
+          { part: "bucket", state: "not-set-up" },
+          { part: "archives", state: "not-set-up" },
+        ],
+      });
+      if (current === "another master key") {
+        const other = makeMasterKey();
+        const publicKey = sealingPublicKey(other);
+        await insertMasterKey(tx, {
+          name: masterKeyName(publicKey, "2026-10-16"),
+          checkValue: masterKeyCheckValue(other),
+          publicKey,
+          madeAt: new Date(),
+          madeBy: null,
+        });
+      }
+    });
+    const packs = await readRecoveryPacks(database.db, stage.nodeId);
+    const masterKeys = await storedMasterKeys();
+    await expect(f.keys.installStagedNodeKey(database.db, state, stage)).rejects.toMatchObject({
       code: "setup.attempt_uncertain",
     });
-    expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual([]);
+    expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual(packs);
+    expect(await storedMasterKeys()).toEqual(masterKeys);
+    expect(await storedKeys()).toEqual([]);
   },
 );
 
@@ -490,19 +422,15 @@ it("reissues a lost unfinished key only after a separate password confirmation, 
   const proof = await f.owner.reconfirm(f.access, PASSWORD, "node-key-reissue");
   const replacement = await restarted.reissueInitialNodeKey(f.access, proof);
   expect(replacement.stage.stageId).not.toBe(original.stage.stageId);
-  expect(replacement.key.secret).not.toBe(original.key.secret);
-  expect(replacement.stage.name).not.toBe(original.stage.name);
+  expect(replacement.masterKey).not.toBe(original.masterKey);
+  expect(replacement.masterKeyName).not.toBe(original.masterKeyName);
   expect(replacement.stage.nodeId).toBe(original.stage.nodeId);
   expect(replacement.stage.frozenDigest).toBe(original.stage.frozenDigest);
   expect(replacement.stage.masterKeyPublicKey).not.toBe(original.stage.masterKeyPublicKey);
   expect(replacement.stage.masterKeyCheckValue).not.toBe(original.stage.masterKeyCheckValue);
-  expect(await verifySecretAsync(replacement.key.secret, replacement.stage.verifier)).toBe(true);
-  expect(await verifySecretAsync(original.key.secret, replacement.stage.verifier)).toBe(false);
-  expect(await verifySecretAsync(replacement.key.secret, original.stage.verifier)).toBe(false);
-  expect(await verifySecretAsync(original.key.secret, original.stage.verifier)).toBe(true);
   expect(await f.store.read()).toEqual(before);
   expect((await readSetupFlowRecord(f.options.stateDir))?.nodeKey).toEqual(replacement.stage);
-  expect(await readFile(f.path, "utf8")).not.toContain(replacement.key.secret);
+  expect(await readFile(f.path, "utf8")).not.toContain(replacement.masterKey);
   expect(await restarted.stageInitialNodeKey(f.access, await f.grant())).toEqual(replacement);
 });
 
@@ -608,7 +536,7 @@ it.each(["committed", "publication"] as const)(
   },
 );
 
-it("stages its verifier in the setup record", async () => {
+it("stages its public facts in the setup record", async () => {
   const f = await fixture();
   expect((await readSetupFlowRecord(f.options.stateDir))?.nodeKey).toEqual(f.staged!.stage);
 });

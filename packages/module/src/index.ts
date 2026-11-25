@@ -28,7 +28,6 @@ export type {
   WaitronModule,
   NonDbSource,
   ModuleBackupContribution,
-  RecoveryPackPageResult,
   ModuleRoutes,
   ModuleRouteContext,
   ModuleDefaultHolder,

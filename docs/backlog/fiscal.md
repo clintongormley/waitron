@@ -1409,7 +1409,7 @@ not stop this box. Approved with #2570; the note is in the campaign's
 ### W41s-7: administrator conflict switching only (owner, 2026-11-01)
 
 After the conflict reply commits, stop issuance on its clashing identity until an administrator
-uses the current recovery key and the existing activation writer to select a fresh minute identity.
+uses the venue's current master key and the existing activation writer to select a fresh minute identity.
 Keep the rejected original and its case. The owner excludes automatic switching permanently and
 removes Task 7's outside sole-seller grant, fence acknowledgement, outside switch history and
 24-hour automatic limit. Those are not prerequisites for this administrator procedure.

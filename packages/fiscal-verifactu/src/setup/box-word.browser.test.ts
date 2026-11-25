@@ -1,6 +1,5 @@
 import { expect, it } from "vitest";
 import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
-import { serverKeyPageWords } from "../server-key-page.js";
 import { checkVenueStrings } from "./check-venue.js";
 import { clockWaitStrings } from "./clock-wait.js";
 import { firstHourStrings } from "./first-hour.js";
@@ -26,7 +25,6 @@ function collect(value: unknown, path: string, out: [string, string][]): void {
 
 function texts(): [string, string][] {
   const out: [string, string][] = [];
-  collect(serverKeyPageWords, "serverKeyPage", out);
   collect(checkVenueStrings, "checkVenue", out);
   collect(clockWaitStrings, "clockWait", out);
   collect(firstHourStrings, "firstHour", out);
@@ -51,7 +49,6 @@ function namesTheBoxAServer(text: string): boolean {
 it("reads every table", () => {
   const paths = texts().map(([path]) => path);
   for (const expected of [
-    "serverKeyPage.en.title",
     "checkVenue.en.blocked",
     "clockWait.en.theServer",
     "firstHour.en.packLead",

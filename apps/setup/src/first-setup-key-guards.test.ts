@@ -79,7 +79,6 @@ it("refuses staging a key for another node before a PDF can be prepared", async 
     if (path.endsWith("/reconfirm")) return Response.json({ reconfirmation: "proof" });
     return Response.json({
       stage: { stageId: "stage", nodeId: "other", name: "Key" },
-      key: { nodeId: "other", name: "Key", secret: "never delivered" },
     });
   });
   await session.open();

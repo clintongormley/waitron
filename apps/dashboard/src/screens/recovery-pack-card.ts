@@ -9,7 +9,7 @@ import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { RecoveryPackDialog, RecoveryPackMade } from "../widgets/recovery-pack-dialog.js";
 import "../widgets/recovery-pack-dialog.js";
-import { keyHolder, packDate, unreceivedWords } from "../widgets/recovery-pack-words.js";
+import { packDate, withStrong } from "../widgets/recovery-pack-words.js";
 
 type Status = RecoveryPackStatus;
 type Worded = Exclude<RecoveryPackReason, { kind: "key_changed" | "code_changed" }>;
@@ -24,17 +24,14 @@ const REASON_WORDS: {
   set_up_after: {
     bucket: "recovery_pack.reason.bucket_set_up",
     archives: "recovery_pack.reason.archives_set_up",
-    "server-key": "recovery_pack.reason.server_key_set_up",
   },
   removed: {
     bucket: "recovery_pack.reason.bucket_removed",
     archives: "recovery_pack.reason.archives_removed",
-    "server-key": "recovery_pack.reason.server_key_removed",
     emergency: "recovery_pack.reason.emergency_removed",
   },
   code_missing: { emergency: "recovery_pack.reason.emergency_missing" },
   cannot_check: { emergency: "recovery_pack.reason.emergency_unknown" },
-  key_replaced: { "server-key": "recovery_pack.reason.server_key_replaced" },
 };
 
 function reasonWords(reason: Worded): StringKey {
@@ -49,8 +46,6 @@ function reasonWords(reason: Worded): StringKey {
       return REASON_WORDS.code_missing.emergency;
     case "cannot_check":
       return REASON_WORDS.cannot_check.emergency;
-    case "key_replaced":
-      return REASON_WORDS.key_replaced[reason.part];
   }
 }
 
@@ -176,8 +171,6 @@ export class RecoveryPackCard extends LitElement {
   );
   /** How many statuses the dialog has handed over; a read started before the latest is dropped. */
   #taken = 0;
-  /** The newest pack this card was handed that made a new server key. */
-  #keyPack = 0;
 
   constructor() {
     super();
@@ -212,7 +205,6 @@ export class RecoveryPackCard extends LitElement {
 
   #forget(): void {
     this.#release();
-    this.#keyPack = 0;
     this.#dropMade();
     this.status = null;
     this.failed = false;
@@ -264,16 +256,13 @@ export class RecoveryPackCard extends LitElement {
   }
 
   /**
-   * The PDF may hold the server's secret key, so no link to it outlives the card or its permission.
-   * A pack older than the one on offer, whose receipt was confirmed late, replaces it only when it
-   * holds the newest server key this card has been handed; its receipt changes the status either way.
+   * The PDF can hold secrets, so no link to it outlives the card or its permission. A pack older than
+   * the one on offer, whose receipt was confirmed late, never replaces it; its receipt changes the
+   * status either way.
    */
   #madeOne(made: RecoveryPackMade): void {
     if (!this.isConnected || !this.canManage) return;
-    const newestKey = made.key === "replaced" && made.number > this.#keyPack;
-    if (newestKey) this.#keyPack = made.number;
-    const older = this.made !== null && made.number < this.made.number;
-    if (older && !newestKey) {
+    if (this.made !== null && made.number < this.made.number) {
       this.reload();
       return;
     }
@@ -283,7 +272,7 @@ export class RecoveryPackCard extends LitElement {
       number: made.number,
       madeAt: made.madeAt,
     };
-    if (older || !this.dialog?.isOpen) this.reload();
+    if (!this.dialog?.isOpen) this.reload();
   }
 
   #make(): void {
@@ -356,8 +345,7 @@ export class RecoveryPackCard extends LitElement {
   #line(status: Status): TemplateResult {
     const date = (iso: string) => this.#date(iso);
     const latest = status.latest;
-    const keyOn = keyHolder(status);
-    const holder = keyOn !== null && !keyOn.received ? keyOn : null;
+    const holder = status.unreceived?.holdsCurrentMasterKey ? status.unreceived : null;
     const offered = holder?.offeredAtSetup ? holder : null;
     const lines: (string | TemplateResult)[] = [];
     let warn = true;
@@ -398,7 +386,15 @@ export class RecoveryPackCard extends LitElement {
         );
       }
     }
-    if (holder !== null && offered === null) lines.push(unreceivedWords(holder, status.timeZone));
+    if (holder !== null && offered === null)
+      lines.push(
+        withStrong(
+          "recovery_pack.master_key_not_received",
+          { number: String(holder.number), date: date(holder.madeAt) },
+          "option",
+          t("recovery_pack.make_master_key"),
+        ),
+      );
     if (offered !== null && lines.length === 0) warn = false;
     const keep = this.#keep(status, warn);
     if (keep.length > 0) lines.push(keep.join(" "));
@@ -408,7 +404,7 @@ export class RecoveryPackCard extends LitElement {
         offered === null
           ? nothing
           : html`<div class="line" data-test="setup-pack-offered">
-              <p>${unreceivedWords(offered, status.timeZone)}</p>
+              <p>${fill("recovery_pack.offered_at_setup", { date: date(offered.madeAt) })}</p>
             </div>`
       }
       ${
@@ -427,19 +423,13 @@ export class RecoveryPackCard extends LitElement {
     return status.keep
       .filter((pack) => pack.number !== unreceived)
       .filter((pack) => warn || pack.number !== status.latest?.number)
-      .flatMap((pack) => {
-        const values = { number: String(pack.number), date: this.#date(pack.madeAt) };
-        if (pack.why === "server_key") return [fill("recovery_pack.keep_server_key", values)];
-        if (pack.until === null) return [];
-        return [
-          fill(
-            pack.why === "backup_key"
-              ? "recovery_pack.keep_backup_key"
-              : "recovery_pack.keep_old_server_key",
-            { ...values, until: this.#date(pack.until) },
-          ),
-        ];
-      });
+      .map((pack) =>
+        fill("recovery_pack.keep_backup_key", {
+          number: String(pack.number),
+          date: this.#date(pack.madeAt),
+          until: this.#date(pack.until),
+        }),
+      );
   }
 
   #rows(status: Status): TemplateResult {
@@ -465,7 +455,6 @@ export class RecoveryPackCard extends LitElement {
       )}
       ${row("master-key", "recovery_pack.row.master_key", this.#masterKey(status))}
       ${row("backup-key", "recovery_pack.row.backup_key", this.#backupKey(status, pack))}
-      ${row("server-key", "recovery_pack.row.server_key", this.#serverKey(status))}
     </dl>`;
   }
 
@@ -488,24 +477,6 @@ export class RecoveryPackCard extends LitElement {
       (part) => (part.part === "bucket" || part.part === "archives") && part.state === "included",
     );
     return fill(holds ? "recovery_pack.backup_key_same" : "recovery_pack.backup_key_absent", pack);
-  }
-
-  #serverKey(status: Status): string {
-    const holder = keyHolder(status);
-    if (holder !== null)
-      return fill(
-        holder.received || holder.offeredAtSetup
-          ? "recovery_pack.server_key_on"
-          : "recovery_pack.server_key_on_unreceived",
-        { number: String(holder.number), date: this.#date(holder.madeAt) },
-      );
-    return t(
-      status.serverKey === "none"
-        ? "recovery_pack.server_key_none"
-        : status.serverKey === "not_yet"
-          ? "recovery_pack.server_key_not_yet"
-          : "recovery_pack.server_key_elsewhere",
-    );
   }
 
   #made(): TemplateResult | typeof nothing {

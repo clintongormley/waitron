@@ -58,7 +58,7 @@ async function rows(db = suite.db) {
     allocations: await allocationRows(db),
   };
 }
-it("production restore runner refuses a signed paper input with its correct recovery key", async () => {
+it("production restore runner refuses a signed paper input with its correct master key", async () => {
   const action = "restore";
   const fixture = allocationFixture({ node, bases, identity: "P000042", recoveryKey: true });
   const { binding, input } = fixture.request(action);

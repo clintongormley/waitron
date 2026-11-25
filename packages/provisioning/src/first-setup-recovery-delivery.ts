@@ -1,7 +1,7 @@
 import { isDeepStrictEqual as equal } from "node:util";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor, type WaitronModule } from "@waitron/module";
-import type { VenueAndNodeHandles } from "@waitron/node-db";
+import type { Database } from "@waitron/db";
 import {
   readSetupFlowRecord,
   updateSetupFlowSection,
@@ -159,7 +159,7 @@ function readManifest(
     !equal(
       contribution.recoveryDocument!(context, contribution.inspect(context, state.inputs[module]), {
         ...manifest,
-        stage: { nodeId: manifest.stage.nodeId, name: manifest.stage.name },
+        stage: { nodeId: manifest.stage.nodeId, name: manifest.stage.masterKeyName },
         identity: {
           taxpayerName: state.frozen.request.legalName,
           venueName: state.frozen.request.name,
@@ -244,7 +244,7 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
           contribution.inspect(context, state.inputs[supplied.module]),
           {
             ...supplied,
-            stage: { nodeId: stage.nodeId, name: stage.name },
+            stage: { nodeId: stage.nodeId, name: stage.masterKeyName },
             identity: {
               taxpayerName: state.frozen.request.legalName,
               venueName: state.frozen.request.name,
@@ -323,7 +323,7 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
       });
     },
     install(
-      db: VenueAndNodeHandles,
+      db: Database,
       state: FirstSetupState,
       owner: FirstSetupOwnerAttempt,
       module: string,

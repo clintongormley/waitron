@@ -1,11 +1,7 @@
 import { renderRecoveryPack } from "@waitron/recovery-pack";
 import { parseRecoveryDocument, type RecoveryDocument } from "./recovery-document.js";
-import { serverKeyPage } from "./server-key-page.js";
 
-/**
- * Pack 1, drawn during setup: the new master key and the staged server key, before any bucket copy
- * or archive exists.
- */
+/** Pack 1, drawn during setup: the new master key, before any bucket copy or archive exists. */
 export async function renderSetupRecoveryPack(
   input: RecoveryDocument,
   made: { masterKey: string; masterKeyName: string },
@@ -13,7 +9,7 @@ export async function renderSetupRecoveryPack(
   timeZone: string,
   loadFonts: () => Promise<{ regular: Uint8Array; mono: Uint8Array }>,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  const document = await parseRecoveryDocument(input);
+  const document = parseRecoveryDocument(input);
   return renderRecoveryPack({
     locale,
     timeZone,
@@ -22,12 +18,6 @@ export async function renderSetupRecoveryPack(
     parts: [
       { kind: "bucket", state: "not-set-up" },
       { kind: "archives", state: "not-set-up" },
-      {
-        kind: "server-key",
-        state: "included",
-        page: serverKeyPage(document, { locale, timeZone }),
-        serverKeyLocation: { kind: "this-pack" },
-      },
     ],
     file: {
       kind: "waitron-recovery-pack",
@@ -37,9 +27,6 @@ export async function renderSetupRecoveryPack(
       bucketCode: null,
       archiveCode: null,
       backupKey: null,
-      serverKey: document,
-      serverKeyName: document.nodeKey.name,
-      serverKeyHeldBy: null,
       masterKey: made.masterKey,
       masterKeyName: made.masterKeyName,
       masterKeyHeldBy: null,

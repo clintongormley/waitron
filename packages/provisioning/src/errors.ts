@@ -30,8 +30,8 @@ declare module "@waitron/shared" {
     "password.throttled": { retryAfterSeconds: number };
     "setup.owner_required": Record<string, never>;
     "setup.attempt_conflict": Record<string, never>;
-    /** The setup's staged box and master keys survive only in memory, and this process has none:
-     * the box restarted since it made them. Only a reissue makes new ones. */
+    /** The setup's staged master key survives only in memory, and this process has none: the box
+     * restarted since it made it. Only a reissue makes a new one. */
     "setup.node_key_lost": Record<string, never>;
     "setup.attempt_uncertain": Record<string, never>;
     "setup.attempt_invalid": Record<string, never>;

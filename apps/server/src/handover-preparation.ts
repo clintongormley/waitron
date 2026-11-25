@@ -100,7 +100,7 @@ export function assertBindingNamesOperation(
 }
 
 /**
- * Only email, password and authenticator code reach a password sign-in, so no break-glass secret or
+ * Only email, password and authenticator code reach a password sign-in, so no master key or
  * person id can. Given `emergency`, a sign-in without an email is a passkey or this box's switch
  * proof (A947 4d plan D9).
  */

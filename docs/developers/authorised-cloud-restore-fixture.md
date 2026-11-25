@@ -35,8 +35,9 @@ comes from the existing fiscal test seed; it is not Cloud's `Cloud Test Venue` f
 
 **2026-11-22, A1308 fiscal 1.** The current seed exports this taxpayer as `TAXPAYER_A`.
 
-**2026-11-24, A1323 PR 2b:** the current helper seeds with `mintMasterKey` in place of
-`mintBreakGlassKey`, and `archiveCommand` supplies `WAITRON_MASTER_KEY`.
+**2026-11-24 and 2026-11-25, A1323 PRs 2b and 3b:** step 1's call is now `mintMasterKey`,
+`archiveCommand` supplies `WAITRON_MASTER_KEY`, and `mintBreakGlassKey` and
+`apps/server/src/break-glass.ts` are deleted.
 
 ## Keep the authority attached to its own archive
 

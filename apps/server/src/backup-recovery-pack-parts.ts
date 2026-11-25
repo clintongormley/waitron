@@ -1,18 +1,13 @@
 import type { KeyRing } from "@waitron/credentials";
 import { credentialRevision } from "@waitron/credentials";
 import { readNodePublicKeyTx, type RecoveryPackPartRecord, type Transaction } from "@waitron/db";
-import type { ProvisionedNode, RecoveryPackPageResult, WaitronModule } from "@waitron/module";
 import {
   PART_WORDS,
   packDates,
-  packPageNumbers,
   partFailure,
   type PackLocale,
   type PackPart,
-  type PartFailure,
   type RecoveryPackFile,
-  type ServerKeyHolder,
-  type ServerKeyLocation,
 } from "@waitron/recovery-pack";
 import { AppError, isAppError } from "@waitron/shared";
 import { encodeRecoveryKit } from "@waitron/stream";
@@ -41,12 +36,7 @@ export type PartsContext = {
   readonly env: Readonly<Record<string, string | undefined>>;
 };
 
-type FileFields = Partial<
-  Pick<
-    RecoveryPackFile,
-    "bucketCode" | "archiveCode" | "backupKey" | "serverKey" | "serverKeyName" | "serverKeyHeldBy"
-  >
->;
+type FileFields = Partial<Pick<RecoveryPackFile, "bucketCode" | "archiveCode" | "backupKey">>;
 
 export type BuiltPart = {
   readonly part: PackPart;
@@ -137,12 +127,6 @@ export function notSetUp(kind: Kind): BuiltPart {
   };
 }
 
-function refusal(error: unknown): { code: string; params: Readonly<Record<string, unknown>> } {
-  return isAppError(error)
-    ? { code: error.code, params: (error.params ?? {}) as Record<string, unknown> }
-    : { code: "", params: {} };
-}
-
 /** A part whose read refused becomes a failed page keyed by the refusal's real code. */
 async function orFailed(
   kind: Kind,
@@ -152,21 +136,14 @@ async function orFailed(
   try {
     return await build();
   } catch (error) {
-    const { code, params } = refusal(error);
+    const code = isAppError(error) ? error.code : "";
     return {
-      part: { kind, state: "failed", failure: partFailure(context.locale, code, params) },
+      part: { kind, state: "failed", failure: partFailure(context.locale, code) },
       record: { part: kind, state: "failed" },
       file: {},
       failedWith: code === "" ? "unexpected" : code,
     };
   }
-}
-
-/** The day `instant` falls on in the venue's zone, `YYYY-MM-DD`. */
-export function dayIn(timeZone: string, instant: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone, dateStyle: "short" }).format(
-    new Date(instant),
-  );
 }
 
 async function backupKey(env: PartsContext["env"]): Promise<string> {
@@ -312,150 +289,5 @@ export function buildArchivesPart(tx: Transaction, context: PartsContext): Promi
       record,
       file: { backupKey: recoveryKey },
     };
-  });
-}
-
-export type KeyHolder = Exclude<ServerKeyLocation, { kind: "this-pack" }>;
-
-/** The key in force and where it is printed. */
-export type KeyInForce = { readonly name: string; readonly holder: KeyHolder };
-
-function heldBy(holder: KeyHolder): ServerKeyHolder | null {
-  return holder.kind === "pack"
-    ? { number: holder.number, madeOn: holder.madeOn, received: holder.received }
-    : null;
-}
-
-/**
- * The module that draws the server-key page and its evidence, read before the transaction; `null`
- * when no module draws it; a refusal fails that page alone.
- */
-export type ServerKeySeat =
-  | null
-  | { readonly module: WaitronModule; readonly evidence: Readonly<Record<string, unknown>> }
-  | { readonly refused: unknown };
-
-export async function serverKeySeat(
-  modules: readonly WaitronModule[],
-  readEvidence: (module: WaitronModule) => Promise<Readonly<Record<string, unknown>>>,
-): Promise<ServerKeySeat> {
-  const owners = modules.filter((m) => m.backup?.recoveryPackPage !== undefined);
-  if (owners.length === 0) return null;
-  try {
-    if (owners.length > 1) {
-      throw new AppError("recovery.pack_invalid", { reason: "module_unsupported" });
-    }
-    return { module: owners[0]!, evidence: await readEvidence(owners[0]!) };
-  } catch (error) {
-    return { refused: error };
-  }
-}
-
-export type ServerKeyInput = {
-  readonly seat: ServerKeySeat;
-  readonly node: ProvisionedNode;
-  /** `null` when the box has no server key. */
-  readonly keyInForce: KeyInForce | null;
-  readonly newKey?: { readonly name: string; readonly secret: string };
-};
-
-export async function buildServerKeyPart(
-  tx: Transaction,
-  context: Pick<PartsContext, "locale" | "timeZone" | "madeAt" | "nodeId">,
-  input: ServerKeyInput,
-): Promise<BuiltPart> {
-  const { seat } = input;
-  if (seat === null) return absent("server-key");
-  const words = PART_WORDS[context.locale];
-  const { keyInForce, newKey } = input;
-  if (keyInForce === null) return notSetUp("server-key");
-  const failed = (cause: PartFailure, failedWith: string): BuiltPart => {
-    const lines = [cause.todo];
-    if (newKey !== undefined) lines.push(words.keyNotReplaced);
-    const { holder } = keyInForce;
-    const day = packDates(context.locale, context.timeZone).longDay(holder.madeOn);
-    lines.push(
-      holder.kind === "sheet"
-        ? words.currentKeyOnSheet(holder.keyName, day)
-        : (holder.received ? words.currentKeyOnPack : words.currentKeyOnUnreceivedPack)(
-            holder.number,
-            day,
-          ),
-    );
-    return {
-      part: {
-        kind: "server-key",
-        state: "failed",
-        failure: { what: cause.what, todo: lines.join(" ") },
-      },
-      record: {
-        part: "server-key",
-        state: "failed",
-        keyName: keyInForce.name,
-        carriedKey: false,
-      },
-      file: {
-        serverKey: null,
-        serverKeyName: keyInForce.name,
-        serverKeyHeldBy: heldBy(keyInForce.holder),
-      },
-      failedWith,
-    };
-  };
-  const refused = (error: unknown): BuiltPart => {
-    const { code, params } = refusal(error);
-    return failed(partFailure(context.locale, code, params), code === "" ? "unexpected" : code);
-  };
-  if ("refused" in seat) return refused(seat.refused);
-  let drawn: RecoveryPackPageResult;
-  try {
-    drawn = await seat.module.backup!.recoveryPackPage!(tx, input.node, {
-      keyInForce: { nodeId: context.nodeId, name: keyInForce.name },
-      ...(newKey === undefined ? {} : { newKey }),
-      createdAt: context.madeAt,
-      locale: context.locale,
-      evidence: seat.evidence,
-    });
-  } catch (error) {
-    return refused(error);
-  }
-  if (newKey !== undefined && drawn.keyFile === undefined) {
-    throw new Error("the server key seat returned no key file");
-  }
-  const name = newKey?.name ?? keyInForce.name;
-  return {
-    part: {
-      kind: "server-key",
-      state: "included",
-      page: drawn.page,
-      serverKeyLocation: newKey === undefined ? keyInForce.holder : { kind: "this-pack" },
-    },
-    record: {
-      part: "server-key",
-      state: "included",
-      keyName: name,
-      carriedKey: newKey !== undefined,
-    },
-    file: {
-      serverKey: (drawn.keyFile as Record<string, unknown> | undefined) ?? null,
-      serverKeyName: name,
-      serverKeyHeldBy: newKey === undefined ? heldBy(keyInForce.holder) : null,
-    },
-  };
-}
-
-/** Tells the bucket and archive pages which page holds the server key, once every part is built. */
-export function withServerKeyPageNumber(parts: BuiltPart[], locale: PackLocale): BuiltPart[] {
-  const serverKeyPage = [...packPageNumbers(parts.map((p) => p.part))].find(
-    ([part]) => part.kind === "server-key",
-  )?.[1];
-  if (serverKeyPage === undefined) return parts;
-  const sentence = PART_WORDS[locale].alsoServerKey(serverKeyPage);
-  return parts.map((built) => {
-    const page = built.part.page;
-    if ((built.part.kind !== "bucket" && built.part.kind !== "archives") || page === undefined)
-      return built;
-    const intro = page.intro === undefined ? sentence : `${page.intro} ${sentence}`;
-    return { ...built, part: { ...built.part, page: { ...page, intro } } };
   });
 }

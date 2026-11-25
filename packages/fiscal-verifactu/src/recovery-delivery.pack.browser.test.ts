@@ -1,8 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { createRecoveryDelivery } from "./recovery-delivery.js";
-import { readRecoveryPdf } from "./recovery-reader.js";
-import { recoveryDocumentBytes, type RecoveryDocument } from "./recovery-document.js";
+import type { RecoveryDocument } from "./recovery-document.js";
 
 const document: RecoveryDocument = {
   kind: "waitron-recovery-document",
@@ -11,11 +10,7 @@ const document: RecoveryDocument = {
   taxpayerName: "Olivo Restauración SL",
   venueName: "Olivo Centro",
   createdAt: "2026-10-17T12:30:00.000Z",
-  nodeKey: {
-    nodeId: "node-1",
-    name: "2026-10-17 · ACRY",
-    secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-  },
+  nodeKey: { nodeId: "node-1", name: "2026-10-17 · ACRY" },
 };
 
 async function digest(bytes: Uint8Array<ArrayBuffer>) {
@@ -31,7 +26,7 @@ const made = {
 
 describe("setup's delivery is recovery pack 1", () => {
   it.each(["en", "es"] as const)(
-    "carries the new master key and the staged server key, as pack 1, in %s",
+    "carries the new master key and no server key, as pack 1, in %s",
     async (locale) => {
       const session = createRecoveryDelivery(
         document,
@@ -50,13 +45,9 @@ describe("setup's delivery is recovery pack 1", () => {
           bucketCode: null,
           archiveCode: null,
           backupKey: null,
-          serverKey: JSON.parse(new TextDecoder().decode(recoveryDocumentBytes(document))),
-          serverKeyName: "2026-10-17 · ACRY",
-          serverKeyHeldBy: null,
           ...made,
           masterKeyHeldBy: null,
         });
-        expect((await readRecoveryPdf(bytes)).document).toEqual(document);
         expect((await session.ready()).documentDigest).toBe(await digest(bytes));
       } finally {
         session.dispose();

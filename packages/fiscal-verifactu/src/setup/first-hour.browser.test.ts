@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { applyTokens, LeaveController } from "@waitron/ui";
 import type { InitialSetupActions } from "@waitron/module/src/setup-contract.js";
-import { readRecoveryPdf, openRecoveryPdf } from "../recovery-reader.js";
+import { readRecoveryPackPdf } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import { FISCAL_SETUP } from "@waitron/fiscal-verifactu/setup";
 const instant = Date.parse("2026-10-18T12:30:00Z");
 const clock = {
@@ -167,6 +167,8 @@ const keyPart = (el: LitElement, name: string) =>
   el
     .shadowRoot!.querySelector("wt-master-key-box")
     ?.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(`[data-test=${name}]`) ?? null;
+/** The pack is drawn for real, which can take seconds on a loaded machine. */
+const PACK_DRAWN = { timeout: 10_000 };
 /** Records the files the step hands to the browser to save, and the tabs it opens. */
 function captureDownloads() {
   const downloads: { href: string; name: string }[] = [];
@@ -1087,7 +1089,6 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
     kept: unknown[] = [];
   api.stageNodeKey = async () => ({
     stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
-    key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
     masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
     masterKeyName: "2026-11-23 · QZJV",
   });
@@ -1104,7 +1105,7 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   );
   const { downloads, opened } = captureDownloads();
   await userEvent.click(button(el, "prepare-pdf"));
-  await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull());
+  await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull(), PACK_DRAWN);
   expect(downloads).toHaveLength(0);
   await userEvent.click(keyPart(el, "download")!);
   expect(downloads).toHaveLength(1);
@@ -1112,24 +1113,20 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   expect(opened).toHaveBeenCalledWith(downloads[0]!.href, "_blank");
   const bytes = new Uint8Array(await (await fetch(downloads[0]!.href)).arrayBuffer());
   expect(new TextDecoder().decode(bytes.subarray(0, 5))).toBe("%PDF-");
-  const decoded = await readRecoveryPdf(bytes);
-  expect(decoded.document?.nodeKey).toEqual({
-    nodeId: "node",
-    name: "Olivo key",
-    secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-  });
-  expect(decoded.document?.scope).toEqual({
-    taxpayerNif: "B12345674",
-    environment: "production",
-    softwareId: "W1",
-  });
+  const file = await readRecoveryPackPdf(bytes);
+  expect(file).not.toHaveProperty("serverKey");
+  expect(file).not.toHaveProperty("serverKeyName");
+  expect([file.masterKey, file.masterKeyName]).toEqual([
+    "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
+    "2026-11-23 · QZJV",
+  ]);
   expect(JSON.stringify(Object.entries(sessionStorage))).not.toContain(
-    "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
   );
   expect(JSON.stringify(Object.entries(localStorage))).not.toContain(
-    "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
   );
-  expect(JSON.stringify(deliveries)).not.toContain("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+  expect(JSON.stringify(deliveries)).not.toContain("88DP 74BA YPVB RRM5 XFV2 WPQY B5M5");
   expect(deliveries).toEqual([
     {
       stageId: "stage",
@@ -1153,52 +1150,8 @@ it("keeps one real key-only PDF for download and print, then grants Review only 
   await vi.waitFor(() => expect(kept).toHaveLength(1));
   expect(kept[0]).toEqual({ ...(deliveries[0] as object), statement: undefined });
   expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
-  expect(el.shadowRoot!.textContent).not.toContain("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+  expect(el.shadowRoot!.textContent).not.toContain("88DP 74BA YPVB RRM5 XFV2 WPQY B5M5");
 });
-it("the wizard PDF uses the reviewed Canary venue zone", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(instant);
-  try {
-    const request = structuredClone(context);
-    request.venue.timeZone = "Atlantic/Canary";
-    const { el, api } = await mount({ request });
-    api.stageNodeKey = async () => ({
-      stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
-      key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
-      masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
-      masterKeyName: "2026-11-23 · QZJV",
-    });
-    api.registerRecoveryDocument = async () => {};
-    api.confirmRecoveryDocument = async () => {};
-    await ready(el);
-    await proceed(el);
-    await vi.waitFor(() =>
-      expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
-    );
-    const { downloads } = captureDownloads();
-    await userEvent.click(button(el, "prepare-pdf"));
-    await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull());
-    await userEvent.click(keyPart(el, "download")!);
-    const task = openRecoveryPdf(
-      new Uint8Array(await (await fetch(downloads[0]!.href)).arrayBuffer()),
-    );
-    try {
-      const pdf = await task.promise;
-      let text = "";
-      for (let n = 1; n <= pdf.numPages; n++)
-        text += (await (await pdf.getPage(n)).getTextContent()).items
-          .map((item) => ("str" in item ? item.str : ""))
-          .join(" ");
-      expect(text).toContain("18 October 2026, 13:30");
-      expect(text).toContain("WEST");
-    } finally {
-      await task.destroy();
-    }
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
 it.each([
   ["en", "Recovery pack", "Show the master key", "Download", "Recovery pack confirmed."],
   [
@@ -1209,13 +1162,12 @@ it.each([
     "Paquete de recuperación confirmado.",
   ],
 ] as const)(
-  "names the %s step's download a recovery pack and never the server key a recovery key",
+  "names the %s step's download a recovery pack and never calls the master key a recovery key",
   async (locale, next, show, download, complete) => {
     const { downloads } = captureDownloads();
     const { el, api } = await mount({ locale });
     api.stageNodeKey = async () => ({
       stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
-      key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
       masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
       masterKeyName: "2026-11-23 · QZJV",
     });
@@ -1230,7 +1182,7 @@ it.each([
     expect(el.shadowRoot!.textContent).toContain(next);
     expect(button(el, "prepare-pdf").textContent!.trim()).toBe(show);
     await userEvent.click(button(el, "prepare-pdf"));
-    await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull());
+    await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull(), PACK_DRAWN);
     expect(keyPart(el, "download")!.textContent!.trim()).toBe(download);
     await userEvent.click(keyPart(el, "download")!);
     expect(downloads.map((d) => d.name)).toEqual(["waitron-recovery-pack-1.pdf"]);
@@ -1500,7 +1452,6 @@ it.each(["stage", "register", "input digest", "PDF ready"])(
     const registrations: unknown[] = [];
     const staged = {
       stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
-      key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
       masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
       masterKeyName: "2026-11-23 · QZJV",
     };
@@ -1566,7 +1517,6 @@ it("keeps a failed kept confirmation retryable without granting completion", asy
   const { el, api } = await mount();
   api.stageNodeKey = async () => ({
     stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
-    key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
     masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
     masterKeyName: "2026-11-23 · QZJV",
   });
@@ -1582,7 +1532,7 @@ it("keeps a failed kept confirmation retryable without granting completion", asy
   );
   captureDownloads();
   await userEvent.click(button(el, "prepare-pdf"));
-  await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull());
+  await vi.waitFor(() => expect(keyPart(el, "download")).not.toBeNull(), PACK_DRAWN);
   await userEvent.click(keyPart(el, "download")!);
   await userEvent.click(button(el, "kept"));
   await vi.waitFor(() =>
@@ -2369,13 +2319,13 @@ it.each([
   [
     "en",
     "Recovery pack",
-    "Download or print the recovery pack, then keep it somewhere safe, away from this box.",
+    "Download, print or copy the master key, then keep it somewhere safe, away from this box.",
     "This is the only time the master key is shown.",
   ],
   [
     "es",
     "Paquete de recuperación",
-    "Descarga o imprime el paquete de recuperación y guárdalo en un lugar seguro, lejos de este servidor.",
+    "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
     "Esta es la única vez que se muestra la clave maestra.",
   ],
 ] as const)(

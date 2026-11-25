@@ -17,8 +17,6 @@ export type CurrentChecks = {
   bucket: { revision: string } | null;
   /** `null` when the box makes no archives. */
   archives: { revision: string } | "unreadable" | null;
-  /** `undefined` on a venue that files no invoices; `null` when the box has no server key. */
-  serverKeyName: string | null | undefined;
 };
 
 export type PackStatusInput = {
@@ -29,6 +27,8 @@ export type PackStatusInput = {
   retention: { count: number; days: number } | undefined;
   schedule: BackupSchedule | undefined;
   backupsUseOlderKey: boolean;
+  /** The pack in `records` that showed the current master key, when one is known. */
+  masterKeyPack: number | null;
   now: Date;
 };
 
@@ -36,18 +36,17 @@ export type PackStatusInput = {
 type Reason =
   | { part: "bucket" | "archives"; kind: "key_changed"; at: string }
   | { part: "bucket" | "archives"; kind: "settings_changed" }
-  | { part: "bucket" | "archives" | "server-key"; kind: "set_up_after" }
-  | { part: "bucket" | "archives" | "server-key" | "emergency"; kind: "removed" }
+  | { part: "bucket" | "archives"; kind: "set_up_after" }
+  | { part: "bucket" | "archives" | "emergency"; kind: "removed" }
   | { part: "emergency"; kind: "code_changed"; at: string }
   | { part: "emergency"; kind: "code_missing" }
-  | { part: "emergency"; kind: "cannot_check" }
-  | { part: "server-key"; kind: "key_replaced" };
+  | { part: "emergency"; kind: "cannot_check" };
 
 type Keep = {
   number: number;
   madeAt: string;
-  until: string | null;
-  why: "server_key" | "backup_key" | "replaced_server_key";
+  until: string;
+  why: "backup_key";
 };
 
 export type PackStatus = {
@@ -67,26 +66,16 @@ export type PackStatus = {
   unreceived: null | {
     number: number;
     madeAt: string;
-    holdsCurrentServerKey: boolean;
     offeredAtSetup?: true;
+    holdsCurrentMasterKey?: true;
   };
   reasons: Reason[];
   keep: Keep[];
   backupsUseOlderKey: boolean;
-  /** The box's server key now: `none` on a venue that files no invoices, `not_yet` when the box has no server key. */
-  serverKey: "none" | "not_yet" | "set";
 };
 
 const partOf = (record: RecoveryPackRecord, part: RecoveryPackPartRecord["part"]) =>
   record.parts.find((p) => p.part === part);
-
-/** The pack made the server key named `keyName`. */
-export const carriesServerKey = (record: RecoveryPackRecord, keyName: string | null | undefined) =>
-  keyName !== null &&
-  keyName !== undefined &&
-  record.parts.some(
-    (p) => p.part === "server-key" && p.carriedKey === true && p.keyName === keyName,
-  );
 
 const later = (a: string, b: string) => Date.parse(a) > Date.parse(b);
 
@@ -112,17 +101,6 @@ function reasonsFor(record: RecoveryPackRecord, current: CurrentChecks): Reason[
       later(current.keyChangedAt, recorded.keyChangedAt)
     ) {
       reasons.push({ part, kind: "key_changed", at: current.keyChangedAt });
-    }
-  }
-  const serverKey = partOf(record, "server-key");
-  if (serverKey?.state === "included") {
-    if (current.serverKeyName === undefined) reasons.push({ part: "server-key", kind: "removed" });
-    else if (current.serverKeyName !== serverKey.keyName) {
-      reasons.push({ part: "server-key", kind: "key_replaced" });
-    }
-  } else if (serverKey !== undefined && serverKey.state !== "failed") {
-    if (typeof current.serverKeyName === "string") {
-      reasons.push({ part: "server-key", kind: "set_up_after" });
     }
   }
   const recorded = partOf(record, "emergency");
@@ -176,35 +154,11 @@ export function keepOldPackUntil(
   return new Date(keepUntil(input.now.getTime(), input)).toISOString();
 }
 
-/** The day after the key name's own day, which a replacement outside any pack is dated by. */
-function replacedOn(keyName: string, now: Date): number {
-  const day = Date.parse(`${keyName.slice(0, 10)}T00:00:00.000Z`);
-  return Number.isFinite(day) ? day + DAY : now.getTime();
-}
-
 function keepList(input: PackStatusInput): Keep[] {
   const { records, current, now } = input;
-  const kept = new Map<number, Keep>();
-  const add = (record: RecoveryPackRecord, why: Keep["why"], until: number | null) => {
-    if (until !== null && until <= now.getTime()) return;
-    const entry = {
-      number: record.number,
-      madeAt: record.madeAt.toISOString(),
-      until: until === null ? null : new Date(until).toISOString(),
-      why,
-    };
-    const before = kept.get(record.number);
-    if (
-      before === undefined ||
-      entry.until === null ||
-      (before.until !== null && entry.until > before.until)
-    ) {
-      kept.set(record.number, entry);
-    }
-  };
-  const received = records.filter((r) => r.receivedAt !== null);
+  const keep: Keep[] = [];
   const seenKeys = new Set<string>();
-  for (const record of received) {
+  for (const record of records.filter((r) => r.receivedAt !== null)) {
     const facts = [partOf(record, "bucket"), partOf(record, "archives")].find(
       (p) => p?.state === "included" && p.keyChangedAt !== undefined,
     );
@@ -212,44 +166,40 @@ function keepList(input: PackStatusInput): Keep[] {
     // Nothing records a change before the first rotation, so packs made before it count as one key.
     const key = facts?.keyNeverChanged === true ? "never-changed" : recorded;
     if (
-      recorded !== undefined &&
-      key !== undefined &&
-      current.keyChangedAt !== undefined &&
-      later(current.keyChangedAt, recorded) &&
-      !seenKeys.has(key)
+      recorded === undefined ||
+      key === undefined ||
+      current.keyChangedAt === undefined ||
+      !later(current.keyChangedAt, recorded) ||
+      seenKeys.has(key)
     ) {
-      seenKeys.add(key);
-      add(record, "backup_key", keepUntil(Date.parse(current.keyChangedAt), input));
-    }
-    const serverKey = partOf(record, "server-key");
-    if (serverKey?.carriedKey !== true) continue;
-    if (serverKey.keyName === current.serverKeyName) {
-      add(record, "server_key", null);
       continue;
     }
-    const replacement = records
-      .filter((r) => r.number > record.number && partOf(r, "server-key")?.carriedKey === true)
-      .at(-1);
-    const replacedAt =
-      replacement !== undefined
-        ? replacement.madeAt.getTime()
-        : typeof current.serverKeyName === "string"
-          ? replacedOn(current.serverKeyName, now)
-          : now.getTime();
-    add(record, "replaced_server_key", keepUntil(replacedAt, input));
+    seenKeys.add(key);
+    const until = keepUntil(Date.parse(current.keyChangedAt), input);
+    if (until <= now.getTime()) continue;
+    keep.push({
+      number: record.number,
+      madeAt: record.madeAt.toISOString(),
+      until: new Date(until).toISOString(),
+      why: "backup_key",
+    });
   }
-  return [...kept.values()].sort((a, b) => a.number - b.number);
+  return keep.sort((a, b) => a.number - b.number);
 }
 
+/**
+ * The box keeps no copy of the key restore asks for, so a later pack, received or not, never hides
+ * that the pack showing the current master key was not confirmed received.
+ */
 function unreceivedOf(input: PackStatusInput): PackStatus["unreceived"] {
-  const view = (record: RecoveryPackRecord, holdsCurrentServerKey: boolean) => ({
+  const view = (record: RecoveryPackRecord, holdsCurrentMasterKey: boolean) => ({
     number: record.number,
     madeAt: record.madeAt.toISOString(),
-    holdsCurrentServerKey,
     ...(record.madeBy === null ? { offeredAtSetup: true as const } : {}),
+    ...(holdsCurrentMasterKey ? { holdsCurrentMasterKey: true as const } : {}),
   });
   const holder = input.records.find(
-    (r) => r.receivedAt === null && carriesServerKey(r, input.current.serverKeyName),
+    (r) => r.receivedAt === null && r.number === input.masterKeyPack,
   );
   if (holder !== undefined) return view(holder, true);
   const newest = input.records[0];
@@ -282,11 +232,5 @@ export function packStatus(input: PackStatusInput): PackStatus {
     reasons,
     keep: keepList(input),
     backupsUseOlderKey: input.backupsUseOlderKey,
-    serverKey:
-      input.current.serverKeyName === undefined
-        ? "none"
-        : input.current.serverKeyName === null
-          ? "not_yet"
-          : "set",
   };
 }

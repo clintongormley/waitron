@@ -625,7 +625,7 @@ async function recoveryDeliveryFixture() {
     taxpayerName: request.legalName,
     venueName: request.name,
     createdAt: "2026-10-16T11:42:00.001Z",
-    nodeKey: { nodeId: staged.key.nodeId, name: staged.key.name },
+    nodeKey: { nodeId: staged.stage.nodeId, name: staged.masterKeyName },
   };
   const { firstFiscalPublicDigest } = await import("./first-setup-public-digest.js");
   const reference = {
@@ -661,7 +661,7 @@ it("the command runtime retains public delivery bindings but requires a fresh ke
     revision: f.owner.revision,
     ownerGeneration: f.owner.ownerGeneration,
   });
-  expect(JSON.stringify(manifest)).not.toContain(f.staged.key.secret);
+  expect(JSON.stringify(manifest)).not.toContain(f.staged.masterKey);
   expect(JSON.stringify(manifest)).not.toContain(PASSWORD);
   await f.kept();
   await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).resolves.toBeUndefined();
@@ -717,7 +717,7 @@ it("a restarted command runtime reads the staged verifier but has no delivery gr
     ),
   ).rejects.toMatchObject({ code: "setup.node_key_lost" });
   expect(await readFile(join(f.root, "state/flows/setup/record.json"), "utf8")).not.toContain(
-    f.staged.key.secret,
+    f.staged.masterKey,
   );
 });
 
@@ -779,7 +779,8 @@ it("a changed staged key cannot authorize resumption with the original kept docu
   const f = await resumptionFixture();
   const path = join(f.root, "state/flows/setup/record.json");
   const stage = JSON.parse(await readFile(path, "utf8")).nodeKey;
-  stage.name = stage.name.endsWith("AAAA") ? "2026-10-16 · CCCC" : "2026-10-16 · AAAA";
+  stage.masterKeyCheckValue =
+    stage.masterKeyCheckValue === "0".repeat(64) ? "1".repeat(64) : "0".repeat(64);
   await mkdir(dirname(path), { recursive: true });
   await updateSetupFlowSection(join(f.root, "state"), "nodeKey", () => stage);
   await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({

@@ -48,13 +48,6 @@ vi.mock("./backup-recovery-pack-output.js", async (original) => ({
     return "PDF";
   },
 }));
-vi.mock("./break-glass.js", async (original) => ({
-  ...(await original<typeof import("./break-glass.js")>()),
-  mintBreakGlassKey: async () => ({
-    secret: Buffer.alloc(24, 7).toString("base64url"),
-    name: "2026-10-16 · ABCD",
-  }),
-}));
 
 const receiveArchive = useSetupArchiveUpload();
 function mountSetup(...[app, deps, log]: Parameters<typeof mountSetupBase>) {

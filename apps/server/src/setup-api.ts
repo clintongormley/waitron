@@ -85,13 +85,8 @@ import type { FiscalContribution } from "@waitron/fiscal";
 import type { FiscalReadinessResult } from "./fiscal-readiness.js";
 import { mountSetupEmailTest } from "./setup-email-api.js";
 import { parseEmailSettings } from "./email-settings-api.js";
-import { mintBreakGlassKey } from "./break-glass.js";
-import {
-  makeMasterKeyRecoveryPack,
-  makePreparationRecoveryPack,
-} from "./backup-recovery-pack-output.js";
+import { makeMasterKeyRecoveryPack } from "./backup-recovery-pack-output.js";
 import { saveNewMasterKey } from "./master-key-record.js";
-import type { RecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { labelContactUrl } from "./box-name.js";
 import { isSecure } from "./encrypted-connection.js";
 import { sentFromThisOrigin } from "./own-page.js";
@@ -163,7 +158,6 @@ export interface SetupDeps {
   ) => Promise<VenueResult>;
   /** Reconstructs the one venue committed by this persisted request after a process interruption. */
   recoverProvision?: (req: ProvisionRequest) => Promise<VenueResult>;
-  recoveryPackEvidence?: RecoveryDocumentEvidence;
   /** Adds the installed sample restaurant after a Demo venue is minted. Prepare and Live never call
    * it. */
   seedDemo?: (result: VenueResult, req: ProvisionRequest) => Promise<void>;
@@ -1004,13 +998,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
       payload: Awaited<ReturnType<typeof parseProvisionPayload>>,
       rawEmail: unknown,
       rawStaffEmail: unknown,
-      keyOutput:
-        | {
-            node: NodeDatabase;
-            module: (typeof ALL_MODULES)[number];
-            format: (secret: string) => string;
-          }
-        | undefined,
       operation?: ActiveSetupOperation,
     ): Promise<Response> => {
       if (deps.environment === "production" && payload.mode !== "live") {
@@ -1104,7 +1091,6 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         await operation?.advance("secret_sealed");
       }
 
-      let key: { secret: string; name: string } | undefined;
       let recoveryPackPdf: string | undefined;
       let madeMasterKey: MadeMasterKey | undefined;
       let cloudStaffEmailUnavailable = operation?.data.cloudStaffEmailUnavailable === true;
@@ -1119,34 +1105,13 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           ) === "es-ES"
             ? "es"
             : "en";
-        if (keyOutput !== undefined) {
-          const handles = { venue: db, node: keyOutput.node };
-          const {
-            recoveryPackPdf: pdf,
-            ...minted
-          }: Awaited<ReturnType<typeof makePreparationRecoveryPack>> =
-            deps.recoveryPackEvidence === undefined
-              ? await mintBreakGlassKey(handles, result.nodeId)
-              : await makePreparationRecoveryPack(
-                  handles,
-                  result.nodeId,
-                  keyOutput.module,
-                  packLocale,
-                  deps.recoveryPackEvidence,
-                  log,
-                  shown,
-                );
-          key = { ...minted, secret: keyOutput.format(minted.secret) };
-          recoveryPackPdf = pdf;
-        }
-        if (keyOutput === undefined || deps.recoveryPackEvidence === undefined)
-          recoveryPackPdf = await makeMasterKeyRecoveryPack(
-            db,
-            result.nodeId,
-            packLocale,
-            log,
-            shown,
-          );
+        recoveryPackPdf = await makeMasterKeyRecoveryPack(
+          db,
+          result.nodeId,
+          packLocale,
+          log,
+          shown,
+        );
         const trading: TradingConfig = {
           nodeId: result.nodeId,
           environment,
@@ -1165,8 +1130,7 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           cloudStaffEmailUnavailable = staffEmail && enabled !== true;
         }
         await deps.clearConfiguration?.();
-        // Last venue.db write, after node.db's box-key save where there is one (an exception listed
-        // in conventions-data.md): a failure before it leaves no master_keys row.
+        // Last venue.db write: a failure before it leaves no master_keys row.
         madeMasterKey = await saveNewMasterKey(db, masterKey, madeAt, null);
         await operation?.advance("publishing", { ...operation.data, cloudStaffEmailUnavailable });
       }
@@ -1176,15 +1140,13 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
         restarting: true,
         ...labelContactUrl(deps.advertisedOrigin, result.nodeId),
         ...(cloudStaffEmailUnavailable && { cloudStaffEmailUnavailable: true }),
-        ...(keyOutput === undefined ? {} : { breakGlassKeyInBackups: true }),
       };
       await operation?.complete(publicResult);
-      if (key === undefined && madeMasterKey === undefined) return c.json(publicResult);
+      if (madeMasterKey === undefined) return c.json(publicResult);
       c.header("Cache-Control", "no-store");
       return c.json({
         ...publicResult,
         ...madeMasterKey,
-        ...(key === undefined ? {} : { breakGlassSecret: key.secret, breakGlassKeyName: key.name }),
         ...(recoveryPackPdf === undefined ? {} : { recoveryPackPdf }),
       });
     };
@@ -1245,19 +1207,14 @@ export function mountSetup(app: Hono, deps: SetupDeps, log: Logger): void {
           payload.mode === "prepare" && deps.environment !== "production"
             ? ALL_MODULES.find((module) => module.fiscal === payload.contribution)
             : undefined;
-        const formatServerKey = recoveryModule?.backup?.formatServerKey;
-        const node = deps.node;
-        let keyOutput: Parameters<typeof execute>[3];
-        if (recoveryModule !== undefined && formatServerKey !== undefined) {
+        if (recoveryModule !== undefined) {
           if (!isSecure(c)) throw new AppError("setup.connection_insecure", {});
           if (!sentFromThisOrigin(c)) throw new AppError("setup.owner_required", {});
-          if (node === undefined) throw new AppError("setup.not_ready", {});
-          keyOutput = { node, module: recoveryModule, format: formatServerKey };
         }
         const run = async (operation?: ActiveSetupOperation) => {
           if (operation?.phase === "complete")
             return c.json(operation.data as { provisioned: true; restarting: true });
-          const result = await execute(payload, rawEmail, cloudStaffEmail, keyOutput, operation);
+          const result = await execute(payload, rawEmail, cloudStaffEmail, operation);
           await clearHeldAdmin();
           mustRestart();
           return result;

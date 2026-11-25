@@ -10,9 +10,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { authorityKey, makeMasterKey } from "@waitron/credentials";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { encodeRecoveryKey } from "@waitron/fiscal-verifactu/src/recovery-key-code.js";
 import { AppError, decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
-import { masterKeyAuthorising } from "./operation-authentication.js";
+import { withRecoveryKeyAuthority } from "./operation-authentication.js";
 import * as operations from "./recovery-module-operation.js";
 import {
   readStagedMasterKeyName,
@@ -206,11 +205,14 @@ it.each(["archive", "stream"])(
     expect(runner).toHaveBeenCalledOnce();
     const handed = runner.mock.calls[0]![2];
     expect(typeof handed).not.toBe("string");
-    expect(await masterKeyAuthorising(suite.db, handed)).toMatchObject({ number: 1 });
+    const venue = { db: suite.db, node: suite.node, nodeId: operation.binding.targetNodeId };
+    expect(
+      await withRecoveryKeyAuthority(venue, operation.binding, handed, async () => "authorised"),
+    ).toBe("authorised");
   },
 );
 
-it.each(["synthetic node credential", encodeRecoveryKey("AbCdEfGhIjKlMnOpQrStUvWxYz012345")])(
+it.each(["synthetic node credential", "06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C"])(
   "refuses to stage a key that is not a master key (%s)",
   async (nodeRecoverySecret) => {
     const stateDir = await fresh();

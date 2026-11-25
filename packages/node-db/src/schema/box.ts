@@ -6,9 +6,6 @@ export const box = table(
   "box",
   {
     nodeId: id("node_id").primaryKey(),
-    recoveryKeyVerifier: label("recovery_key_verifier"),
-    recoveryKeyName: label("recovery_key_name"),
-    recoveryKeyChangedAt: ts("recovery_key_changed_at"),
     signingKeyCiphertext: binary("signing_key_ciphertext"),
     signingKeyIv: binary("signing_key_iv"),
     signingKeyAuthTag: binary("signing_key_auth_tag"),
@@ -31,10 +28,6 @@ export const box = table(
     primaryPinnedAt: ts("primary_pinned_at"),
   },
   (t) => [
-    check(
-      "box_recovery_key_group_ck",
-      sql`(${t.recoveryKeyVerifier} is null and ${t.recoveryKeyName} is null and ${t.recoveryKeyChangedAt} is null) or (${t.recoveryKeyVerifier} is not null and ${t.recoveryKeyName} is not null and ${t.recoveryKeyChangedAt} is not null)`,
-    ),
     check(
       "box_signing_key_group_ck",
       sql`(${t.signingKeyCiphertext} is null and ${t.signingKeyIv} is null and ${t.signingKeyAuthTag} is null and ${t.signingKeyVersion} is null and ${t.signingKeyChangedAt} is null) or (${t.signingKeyCiphertext} is not null and ${t.signingKeyIv} is not null and ${t.signingKeyAuthTag} is not null and ${t.signingKeyVersion} is not null and ${t.signingKeyChangedAt} is not null)`,

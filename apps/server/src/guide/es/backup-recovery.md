@@ -136,8 +136,7 @@ al propietario de Cloud que apruebe la nueva solicitud en Cloud.
 
 Al terminar la Preparación, el paso **Paquete de recuperación** muestra la clave maestra una sola
 vez. Elige **Descargar**, **Imprimir** o **Copiar**, guarda el paquete o la clave copiada fuera del servidor y elige
-**Continuar**. Si la configuración ofrece **Guardar en un archivo**, guarda ese
-archivo con tus otros documentos de recuperación. Abre **Copias de seguridad** desde el aviso del
+**Continuar**. Abre **Copias de seguridad** desde el aviso del
 panel para configurar tus copias.
 
 Bajo la revisión, en «Recuperar este servidor», elige con **Elegir el PDF del paquete de recuperación** el paquete de
@@ -276,7 +275,7 @@ entrégale el archivo. No vuelvas a registrar esas ventas: la AEAT ya las tiene.
 ## Un conflicto de facturación en un servidor en marcha {#invoice-conflict}
 
 Si el servidor conserva tus pedidos y pagos pero deja de emitir facturas por un conflicto de
-identidad, sigue [Recuperar una identidad de facturación](box-status.md#invoice-conflict) con su clave
-del servidor actual. Ese procedimiento cambia la identidad activa sin restaurar una copia.
+identidad, sigue [Recuperar una identidad de facturación](box-status.md#invoice-conflict) con la
+clave maestra actual del local. Ese procedimiento cambia la identidad activa sin restaurar una copia.
 Conserva el registro rechazado y su incidencia abierta. Desconecta cualquier servidor antiguo o
 copiado antes de continuar.

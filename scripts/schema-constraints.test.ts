@@ -659,7 +659,6 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "box_mirror_group_ck",
   "box_mode_ck",
   "box_primary_key_group_ck",
-  "box_recovery_key_group_ck",
   "box_role_group_ck",
   "box_role_valid_ck",
   "box_signing_key_auth_tag_len_ck",

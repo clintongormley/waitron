@@ -128,11 +128,6 @@ for (const theme of ["light", "dark"] as const)
                 async stageNodeKey() {
                   return {
                     stage: { stageId: "stage", nodeId: "node", name: "Caja principal" },
-                    key: {
-                      nodeId: "node",
-                      name: "Caja principal",
-                      secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-                    },
                     masterKey: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5",
                     masterKeyName: "2026-11-23 · QZJV",
                   };
@@ -199,12 +194,14 @@ for (const theme of ["light", "dark"] as const)
             }
             if (state === "pdf") {
               await click("prepare-pdf");
-              await vi.waitFor(() =>
-                expect(
-                  el
-                    .shadowRoot!.querySelector("wt-master-key-box")
-                    ?.shadowRoot!.querySelector("[data-test=download]") ?? null,
-                ).not.toBeNull(),
+              await vi.waitFor(
+                () =>
+                  expect(
+                    el
+                      .shadowRoot!.querySelector("wt-master-key-box")
+                      ?.shadowRoot!.querySelector("[data-test=download]") ?? null,
+                  ).not.toBeNull(),
+                { timeout: 5_000 },
               );
             }
             expect((await axe.run(host)).violations).toEqual([]);
@@ -220,4 +217,4 @@ for (const theme of ["light", "dark"] as const)
       } finally {
         await page.viewport(previous[0]!, previous[1]!);
       }
-    });
+    }, 120_000);

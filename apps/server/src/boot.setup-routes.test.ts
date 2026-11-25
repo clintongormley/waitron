@@ -1122,11 +1122,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           expect(response.status, await response.clone().text()).toBe(200);
           const provision = (await response.json()) as {
             recoveryPackPdf: string;
-            breakGlassKeyName: string;
+            masterKeyName: string;
           };
           expect(typeof provision.recoveryPackPdf).toBe("string");
           const pack = await readRecoveryPackPdf(Buffer.from(provision.recoveryPackPdf, "base64"));
-          expect(pack.serverKeyName).toBe(provision.breakGlassKeyName);
+          expect(pack.masterKeyName).toBe(provision.masterKeyName);
           await poll(() => (shuttingDown === undefined ? undefined : true));
           await shuttingDown;
           // The setup boot's state folder holds the keys the venue was sealed with; it is removed

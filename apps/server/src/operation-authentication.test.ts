@@ -15,11 +15,8 @@ import { readOperationAuthority, type OperationAuthority } from "@waitron/module
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { generateSync } from "otplib";
 import { authorityKey, makeMasterKey } from "@waitron/credentials";
-import { encodeRecoveryKey } from "@waitron/fiscal-verifactu";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
-import { mintBreakGlassSecret } from "./break-glass.js";
 import {
-  masterKeyAuthorising,
   stagedAuthorityKey,
   withAuthenticatedOperation,
   withRecoveryKeyOperation,
@@ -293,10 +290,10 @@ describe("host-issued authority after fresh operator authentication", () => {
   });
 });
 
-describe("a recovery key's authority", () => {
+describe("a master key's authority", () => {
   const NODE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
   const recovery = { ...binding, action: "restore", targetNodeId: NODE };
-  const handles = () => ({ venue: suite.db, node: suite.node });
+  const PRINTED_BOX_KEY = "06R9 T4FH M4H3 599J EEMM 5D5D ABTV 2RSX 6QDQ WE8M C";
 
   beforeEach(() => stampDeployment(suite.db, "preproduction"));
 
@@ -324,20 +321,6 @@ describe("a recovery key's authority", () => {
     const swapped = secret[at] === "2" ? "3" : "2";
     return secret.slice(0, at) + swapped + secret.slice(at + 1);
   }
-
-  it("a wrong key is refused with `promotion.break_glass_invalid`", async () => {
-    const own = await mintMasterKey(suite.db);
-    const boxKey = await mintBreakGlassSecret(handles(), NODE);
-    const printedBoxKey = encodeRecoveryKey(boxKey);
-    expect(printedBoxKey.replaceAll(" ", "")).toHaveLength(41);
-    for (const secret of [
-      encodeMasterKeyCode(makeMasterKey()),
-      changeOneSymbol(own.secret),
-      boxKey,
-      printedBoxKey,
-    ])
-      expect(await authorised(secret)).toEqual({ code: "promotion.break_glass_invalid" });
-  });
 
   async function refusalParams(secret: unknown): Promise<unknown> {
     try {
@@ -405,6 +388,19 @@ describe("a recovery key's authority", () => {
     const bytes = makeMasterKey();
     for (const secret of [encodeMasterKeyCode(bytes), stagedAuthorityKey(authorityKey(bytes))])
       expect(await authorised(secret)).toEqual({ code: "promotion.break_glass_invalid" });
+  });
+
+  it.each<[string, (current: string) => unknown]>([
+    ["undefined", () => undefined],
+    ["null", () => null],
+    ["an empty string", () => ""],
+    ["a plain object holding the current key", (current) => ({ secret: current })],
+    ["a printed box key", () => PRINTED_BOX_KEY],
+    ["a printed box key in dashed groups", () => PRINTED_BOX_KEY.replaceAll(" ", "-")],
+  ])("%s is refused while the venue holds a master key", async (_label, junk) => {
+    const own = await mintMasterKey(suite.db);
+    expect(await authorised(junk(own.secret))).toEqual({ code: "promotion.break_glass_invalid" });
+    expect(await authorised(own.secret)).toEqual({ result: "committed" });
   });
 
   it("a staged authority key authorises; a plain object or a hex string of the same bytes does not", async () => {
@@ -504,7 +500,7 @@ describe("a recovery key's authority", () => {
     expect(await result).toBe("committed");
     const replaced = await replacement;
     expect(order).toEqual(["venue write committed", "key replaced"]);
-    expect(await masterKeyAuthorising(suite.db, replaced.secret)).not.toBeNull();
+    expect(await authorised(replaced.secret)).toEqual({ result: "committed" });
   });
 });
 

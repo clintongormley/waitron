@@ -82,7 +82,7 @@ async function fixture() {
     taxpayerName: request.legalName,
     venueName: request.name,
     createdAt: "2026-10-16T11:42:00.001Z",
-    nodeKey: { nodeId: staged.key.nodeId, name: staged.key.name },
+    nodeKey: { nodeId: staged.stage.nodeId, name: staged.masterKeyName },
   };
   const reference = {
     module: MODULE,
@@ -150,7 +150,7 @@ it("recovers the exact public delivery from retained bytes without granting acti
   await expect(f.runtime.recoveryDelivery.consume(f.owner, MODULE)).rejects.toMatchObject({
     code: "setup.not_ready",
   });
-  expect(f.bytes.toString()).not.toContain(f.staged.key.secret);
+  expect(f.bytes.toString()).not.toContain(f.staged.masterKey);
   expect(f.bytes.toString()).not.toContain(PASSWORD);
   expect(
     await venue.db.execute("select count(*) as count from verifactu_identities"),
@@ -199,13 +199,7 @@ it("refuses installation when the delivery record is absent", async () => {
   await updateSetupFlowSection(f.options.stateDir, "recoveryManifests", () => ({}));
   await expect(
     f.runtime.coordinator.run((hold) =>
-      f.runtime.recoveryDelivery.install(
-        { venue: venue.db, node: venue.node },
-        f.state,
-        f.owner,
-        MODULE,
-        hold,
-      ),
+      f.runtime.recoveryDelivery.install(venue.db, f.state, f.owner, MODULE, hold),
     ),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
 });

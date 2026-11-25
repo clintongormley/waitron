@@ -34,7 +34,6 @@ import { generateStandbyIdentity } from "./reserved-identity.js";
 import { replaceBackupSettings } from "./backup-env-writer.js";
 import { ensureBoxSecrets, writeCredentialsRing } from "./box-secrets.js";
 import { markJoined } from "./box-tls-install.js";
-import { mintBreakGlassSecret } from "./break-glass.js";
 import { parseEnvFile } from "./env-file.js";
 import { PENDING_ADOPTION_FILE, type PendingAdoption } from "./finish-adoption.js";
 import type { Logger } from "./logger.js";
@@ -153,7 +152,6 @@ async function halfAdoptedBox(joined = false): Promise<{
       boxCaPem: "pem",
       originNodeId: PRIMARY_NODE_ID,
     });
-    await mintBreakGlassSecret({ venue: store.venue, node: store.node }, NODE_ID);
   } finally {
     await store.close();
   }

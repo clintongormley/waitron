@@ -82,7 +82,7 @@ const made = {
 };
 
 it.each(["en", "es"] as const)(
-  "the command document seat renders the frozen identity and staged key in %s",
+  "the command document seat names the frozen identity and staged key, and its pack holds the master key and no box key, in %s",
   async (locale) => {
     const f = configured();
     const saved = fixture();
@@ -90,7 +90,6 @@ it.each(["en", "es"] as const)(
       key: {
         nodeId: "node",
         name: "2026-10-16 · ACRY",
-        secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
       },
       identity: {
         taxpayerName: "Olivo Restauración SL",
@@ -118,51 +117,25 @@ it.each(["en", "es"] as const)(
     });
     try {
       const pdf = await task.promise;
-      const text = (await pageTexts(pdf)).join(" ");
+      const text = (await pageTexts(pdf)).join(" ").replace(/\s+/g, " ");
       expect(text).toContain(PACK_WORDS[locale].title);
-      expect(text).toContain(locale === "en" ? "Box key" : "Clave del servidor");
-      expect(text).toContain("Olivo Restauración SL");
       expect(text).toContain("Olivo Centro");
-      expect(text).toContain("89890001K");
-      expect(text).toContain("2026-10-16 · ACRY");
+      expect(text).toContain(made.masterKey);
+      expect(text).not.toContain(locale === "en" ? "Box key" : "Clave del servidor");
+      expect(text).not.toContain("2026-10-16 · ACRY");
       const attached = JSON.parse(
         Buffer.from((await pdf.getAttachmentContent(PACK_ATTACHMENT))!).toString(),
-      ).serverKey;
-      expect(attached).toEqual({
-        ...(document.statement as object),
-        nodeKey: {
-          nodeId: "node",
-          name: "2026-10-16 · ACRY",
-          secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
-        },
-      });
+      );
+      expect(attached).not.toHaveProperty("serverKey");
+      expect(attached).not.toHaveProperty("serverKeyName");
     } finally {
       await task.destroy();
     }
   },
 );
 
-it("the command recovery pack uses the frozen venue zone", async () => {
-  const f = configured();
-  const saved = fixture();
-  const document = await f.seat.commandRecoveryDocument!(saved, f.seat.inspect(saved, input), {
-    key: { nodeId: "node", name: "2026-10-16 · ACRY", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
-    identity: { taxpayerName: "Olivo", venueName: "Centro", timeZone: "Atlantic/Canary" },
-    masterKey: made,
-    locale: "en",
-  });
-  const task = getDocument({ data: document.bytes.slice(), useSystemFonts: false, useWasm: false });
-  try {
-    const text = (await pageTexts(await task.promise)).join(" ");
-    expect(text).toContain("16 October 2026, 12:40");
-    expect(text).toContain("WEST");
-  } finally {
-    await task.destroy();
-  }
-});
-
 it.each(["en", "es"] as const)(
-  "the command path writes recovery pack 1 holding the master key, then the staged box key, in %s",
+  "the command path writes recovery pack 1 holding the master key and no box key, in %s",
   async (locale) => {
     const f = configured();
     const saved = fixture();
@@ -192,12 +165,10 @@ it.each(["en", "es"] as const)(
       const pdf = await task.promise;
       const pages = await pageTexts(pdf);
       const words = PACK_WORDS[locale];
-      expect(pages).toHaveLength(2);
+      expect(pages).toHaveLength(1);
       expect(pages[0]!.replace(/\s+/g, " ").trim()).toBe(
         `${words.heading("Olivo Centro")} ${words.masterKeyLabel(made.masterKeyName)} ${made.masterKey} ${words.masterKeyQr}`,
       );
-      expect(pages[1]).toContain("Olivo Restauración SL");
-      expect(pages[1]).toContain("2026-10-16 · ACRY");
       expect(
         JSON.parse(Buffer.from((await pdf.getAttachmentContent(PACK_ATTACHMENT))!).toString()),
       ).toEqual({
@@ -208,9 +179,6 @@ it.each(["en", "es"] as const)(
         bucketCode: null,
         archiveCode: null,
         backupKey: null,
-        serverKey: { ...(document.statement as object), nodeKey: key },
-        serverKeyName: "2026-10-16 · ACRY",
-        serverKeyHeldBy: null,
         ...made,
         masterKeyHeldBy: null,
       });
@@ -226,8 +194,7 @@ it("the command document seat refuses a foreign staged node and changed hour inp
   const document = {
     key: {
       nodeId: "foreign",
-      name: "2026-10-16 · ACRY",
-      secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+      name: made.masterKeyName,
     },
     identity: { taxpayerName: "Olivo", venueName: "Centro", timeZone: "Europe/Madrid" },
     masterKey: made,
@@ -250,7 +217,7 @@ it("dates a delayed recovery document when it is created without selecting anoth
   const saved = fixture();
   vi.setSystemTime(new Date("2026-10-17T12:30:00Z"));
   const document = await f.seat.commandRecoveryDocument!(saved, f.seat.inspect(saved, input), {
-    key: { nodeId: "node", name: "2026-10-17 · ACRY", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+    key: { nodeId: "node", name: made.masterKeyName },
     identity: { taxpayerName: "Olivo", venueName: "Centro", timeZone: "Europe/Madrid" },
     masterKey: made,
     locale: "en",

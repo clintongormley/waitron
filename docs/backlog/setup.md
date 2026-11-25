@@ -409,13 +409,13 @@ branch, which changes the same steps.
 - **Older backups' hour records keep being accepted with `timeFloorMs`** (A1385): the field is
   validated as a whole millisecond and never used. The acceptance may be removed once a check of
   shipped backups, and of each box's retained
-  `<state>/module-records/fiscal-verifactu.json` retained `hour-history` section (read by
-  `apps/server/src/recovery-document-evidence.ts`), finds none carrying it.
+  `<state>/module-records/fiscal-verifactu.json` retained `hour-history` section, finds none
+  carrying it.
 - **The setup and restore pages, and the handover start, carry on to the invoice series by themselves once the person
   confirms and presses Proceed** (owner, 2026-11-07, on A1385; 2026-11-09 and 2026-11-10, A1466):
   making a series and throwing it away unused costs nothing, because the first invoice is what
   commits a series, so nobody is asked whether a new one is needed. The person's part is the details
-  tick (setup) or the recovery key, both statements and the "These details are correct." tick (restore), or that tick alone (the handover start), then **Proceed**; everything after
+  tick (setup) or the master key, both statements and the "These details are correct." tick (restore), or that tick alone (the handover start), then **Proceed**; everything after
   that — the countdown, the second-clock checks and a used code's countdown — runs by itself. A
   wait the setup box recorded before a reload carries on with no tick and no press. (Since A1420 PR
   3a, 2026-11-15: when the box cannot check its time over the internet, a page whose clocks agree

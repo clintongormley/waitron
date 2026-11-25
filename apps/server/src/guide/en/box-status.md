@@ -192,7 +192,7 @@ While a backup is running, **Free** leaves the backup's working folder alone, in
 cut-off backup left there, and the page says those files are not counted.
 
 The sizes under **Disk space** show what is filling the disk. On **Backups**, you can choose how
-many archives to keep. Leave without changing the settings to stop. Keep your database, box key, backup
+many archives to keep. Leave without changing the settings to stop. Keep your database, backup
 encryption key and saved backups.
 
 Before each backup, when the disk is short of space, the box can delete its oldest backups on that
@@ -215,7 +215,7 @@ This page cannot remove other files or move your data to a larger disk.
 When the bell says **Backup not made**, open **Box status** and check **Disk space**. Use **Free**
 if it is available, or leave without pressing it to skip cleanup. Freeing space does not start a
 backup. If the cleanup is not enough, **Free** cannot remove other files for you; keep your
-database, box key, backup encryption key and saved backups.
+database, backup encryption key and saved backups.
 
 ## When the box is out of space {#out-of-space}
 

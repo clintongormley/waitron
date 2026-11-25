@@ -25,21 +25,6 @@ afterEach(() => {
 });
 
 describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (theme) => {
-  it("has no violations showing the Preparation PDF download link", async () => {
-    const { host } = await mountWidget<SetupDoneScreen>(
-      "setup-done-screen",
-      {
-        api: apiWith(() => new Promise(() => {})),
-        startDelayMs: 100000,
-        onboardingIntent: "prepare",
-        breakGlassSecret: "key-on-paper",
-        recoveryPackPdf: btoa("%PDF-test"),
-      },
-      theme,
-    );
-    await expectNoA11yViolations(host);
-  });
-
   it("has no violations on the Recovery pack step, before and after Copy, at phone and desktop widths in both languages", async () => {
     vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
     const { host, el } = await mountWidget<SetupDoneScreen>(
@@ -187,7 +172,6 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
         startDelayMs: 0,
         pollIntervalMs: 100000,
         restored: "archive",
-        breakGlassSecret: "bg-9f3a",
       },
       theme,
     );
@@ -322,22 +306,6 @@ describe.each(["light", "dark"] as const)("setup-done-screen a11y (%s theme)", (
         "The box is ready. Open it here:",
       ),
     );
-    await expectNoA11yViolations(host);
-  });
-
-  it("has no violations showing the break-glass code on a trading server", async () => {
-    const { el, host } = await mountWidget<SetupDoneScreen>(
-      "setup-done-screen",
-      {
-        api: apiWith(() => new Promise(() => {})),
-        startDelayMs: 100000,
-        pollIntervalMs: 100000,
-        onboardingIntent: "live",
-        breakGlassSecret: "bg-9f3a",
-      },
-      theme,
-    );
-    expect(q(el, "[data-test=break-glass-secret]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

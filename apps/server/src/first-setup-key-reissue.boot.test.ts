@@ -4,7 +4,6 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Agent } from "undici";
 import { expect, it, vi } from "vitest";
-import { verifySecretAsync } from "@waitron/identity";
 import type { StartedServer } from "./boot.js";
 import { copyMigrationsRoot } from "./testing/boot-harness.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -83,10 +82,14 @@ it("reissues on the real setup HTTPS listener after a restart loses the raw key"
     const reissued = await post("node-key-reissue", { password: PASSWORD });
     expect(reissued.status).toBe(200);
     expect(reissued.headers.get("cache-control")).toBe("no-store");
-    const replacement = (await readSetupFlowRecord(stateDir))?.nodeKey as { verifier: string };
+    const replacement = (await readSetupFlowRecord(stateDir))?.nodeKey as {
+      masterKeyName: string;
+    };
     expect(reissued.body.stage.stageId).not.toBe(initial.body.stage.stageId);
-    expect(await verifySecretAsync(reissued.body.key.secret, replacement.verifier)).toBe(true);
-    expect(await verifySecretAsync(initial.body.key.secret, replacement.verifier)).toBe(false);
+    expect(reissued.body).not.toHaveProperty("key");
+    expect(replacement.masterKeyName).toBe(reissued.body.masterKeyName);
+    expect(reissued.body.masterKey).not.toBe(initial.body.masterKey);
+    expect(replacement.masterKeyName).not.toBe(initial.body.masterKeyName);
     expect((await readSetupFlowRecord(stateDir))?.attempt).toEqual(before);
   } finally {
     await agent?.close();

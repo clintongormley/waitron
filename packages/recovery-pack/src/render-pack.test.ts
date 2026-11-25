@@ -38,9 +38,6 @@ const file: RecoveryPackFile = {
   bucketCode,
   archiveCode,
   backupKey: null,
-  serverKey: null,
-  serverKeyName: "2026-09-02 · K7QF",
-  serverKeyHeldBy: { number: 1, madeOn: "2026-09-02", received: true },
   masterKey,
   masterKeyName,
   masterKeyHeldBy: null,
@@ -67,18 +64,17 @@ const archives: PackPart = {
     notes: ["Run restore --from-archive with this PDF."],
   },
 };
-const serverKey: PackPart = {
-  kind: "server-key",
+const emergencyPart: PackPart = {
+  kind: "emergency",
   state: "included",
   page: {
-    title: "Server key",
+    title: "Emergency start",
     rows: [
       { label: "Legal name", value: "Bar Nora S.L." },
-      { label: "Key name", value: "2026-09-02 · K7QF" },
+      { label: "Venue", value: "Bar Nora" },
     ],
     notes: ["Keep older packs for older backups."],
   },
-  serverKeyLocation: { kind: "pack", number: 1, madeOn: "2026-09-02", received: true },
 };
 
 function input(overrides: Partial<RenderPackInput> = {}): RenderPackInput {
@@ -87,7 +83,7 @@ function input(overrides: Partial<RenderPackInput> = {}): RenderPackInput {
     timeZone: "Europe/Madrid",
     loadFonts,
     pack: { venueName: "Bar Nora", madeAt: file.madeAt, number: 3 },
-    parts: [bucket, archives, serverKey],
+    parts: [bucket, archives, emergencyPart],
     file,
     ...overrides,
   };
@@ -152,9 +148,6 @@ describe("the master key's page", () => {
     const pages = await rendered(await renderRecoveryPack(input({ locale: "es" })));
     expect(pages[0]!.text).toBe(
       "Paquete de recuperación de Waitron · Bar Nora Clave maestra · 2026-11-23 · QZJV 88DP 74BA YPVB RRM5 XFV2 WPQY B5M5 Clave maestra",
-    );
-    expect(pages[3]!.text).toContain(
-      "La clave está en el paquete de recuperación 1, hecho el 2 de septiembre de 2026. Guarda ese paquete.",
     );
   });
 
@@ -223,10 +216,9 @@ describe("the master key's page", () => {
 describe("long names", () => {
   const wide = (length: number) => "Ԫ".repeat(length);
   const keyText = "0123 4567 89AB CDEF GHJK MNPQ RSTV WXYZ 0123 4567 8";
-  const serverKeyPage = (legalName: string, venueName: string): PackPart["page"] => ({
-    title: "Server key",
-    intro:
-      "With this key and its matching backup, the venue's server can be recovered with its own identity.",
+  const namesPage = (legalName: string, venueName: string): PackPart["page"] => ({
+    title: "Names",
+    intro: "A page that names the business and the venue.",
     rows: [
       { label: "Legal name", value: legalName },
       { label: "NIF", value: "B12345674" },
@@ -234,14 +226,13 @@ describe("long names", () => {
       { label: "Environment", value: "Preproduction" },
       { label: "Software ID", value: "WT" },
       { label: "Server ID", value: "4f9c2a1b" },
-      { label: "Key name", value: "2026-10-17 · ACRY" },
       { label: "Created", value: "18 October 2026, 01:30 CEST" },
     ],
     secret: { label: "Key", text: keyText, qr: true },
     notes: [
       "Keep this pack in a safe place. Anyone with this key and its matching backup can recover the server.",
       "A backup in Waitron Cloud needs your Cloud login. This pack is not a backup of your sales.",
-      "Keep older packs for older backups. A new key does not unlock backups made with an older key.",
+      "Keep older packs for older backups.",
     ],
   });
   const setupPack = (locale: "en" | "es", legalName: string, venueName: string) =>
@@ -252,10 +243,9 @@ describe("long names", () => {
         { kind: "bucket", state: "not-set-up" },
         { kind: "archives", state: "not-set-up" },
         {
-          kind: "server-key",
+          kind: "emergency",
           state: "included",
-          page: serverKeyPage(legalName, venueName),
-          serverKeyLocation: { kind: "this-pack" },
+          page: namesPage(legalName, venueName),
         },
       ],
       file: {
@@ -263,8 +253,6 @@ describe("long names", () => {
         number: 1,
         bucketCode: null,
         archiveCode: null,
-        serverKey: { kind: "a-key-file" },
-        serverKeyHeldBy: null,
       },
     });
   const dashboardPack = (locale: "en" | "es", legalName: string, venueName: string) =>
@@ -275,9 +263,8 @@ describe("long names", () => {
         bucket,
         archives,
         {
-          ...serverKey,
-          page: { ...serverKeyPage(legalName, venueName)!, secret: undefined },
-          serverKeyLocation: { kind: "pack", number: 1, madeOn: "2026-09-02", received: false },
+          ...emergencyPart,
+          page: { ...namesPage(legalName, venueName)!, secret: undefined },
         },
       ],
     });
@@ -332,9 +319,9 @@ describe("long names", () => {
           parts: [
             { kind: "bucket", state: "absent" },
             { kind: "archives", state: "absent" },
-            { kind: "server-key", state: "absent" },
+            { kind: "emergency", state: "absent" },
           ],
-          file: { ...file, archiveCode: null, serverKeyName: null, serverKeyHeldBy: null },
+          file: { ...file, archiveCode: null },
         }),
       ),
     );
@@ -366,23 +353,14 @@ describe("long names", () => {
 });
 
 describe("the Spanish pack's other wording", () => {
-  it("covers a failed page and each place the key can be", async () => {
+  it("covers a failed page", async () => {
     const es = (parts: PackPart[]) => renderRecoveryPack(input({ locale: "es", parts }));
     const failed = await rendered(
       await es([
-        { kind: "server-key", state: "failed", failure: { what: "Falló.", todo: "Reintenta." } },
+        { kind: "emergency", state: "failed", failure: { what: "Falló.", todo: "Reintenta." } },
       ]),
     );
-    expect(failed[1]!.text).toContain("Clave del servidor: no se pudo generar");
-    const at = async (serverKeyLocation: PackPart["serverKeyLocation"]) =>
-      (await rendered(await es([{ ...serverKey, serverKeyLocation }])))[1]!.text;
-    expect(await at({ kind: "this-pack" })).toContain("Este paquete tiene la clave del servidor.");
-    expect(await at({ kind: "pack", number: 1, madeOn: "2026-09-02", received: false })).toContain(
-      `${PACK_WORDS.es.noNewKey} ${PACK_WORDS.es.keyOnUnreceivedPack(1, "2 de septiembre de 2026")}`,
-    );
-    expect(
-      await at({ kind: "sheet", keyName: "2026-09-02 · K7QF", madeOn: "2026-09-02" }),
-    ).toContain(PACK_WORDS.es.keyOnSheet("2026-09-02 · K7QF", "2 de septiembre de 2026"));
+    expect(failed[1]!.text).toContain("Inicio de emergencia: no se pudo generar");
   });
 });
 
@@ -454,7 +432,7 @@ describe("a part the pack does not hold", () => {
           parts: [
             { kind: "bucket", state: "not-set-up" },
             archives,
-            { kind: "server-key", state: "absent" },
+            { kind: "emergency", state: "absent" },
           ],
         }),
       ),
@@ -478,7 +456,7 @@ describe("a part the pack does not hold", () => {
                 todo: "Make a new pack.",
               },
             },
-            serverKey,
+            emergencyPart,
           ],
         }),
       ),
@@ -491,81 +469,7 @@ describe("a part the pack does not hold", () => {
   });
 });
 
-describe("the server-key page says where the key is", () => {
-  const withLocation = (location: PackPart["serverKeyLocation"]) =>
-    input({ parts: [bucket, archives, { ...serverKey, serverKeyLocation: location }] });
-
-  it("on this pack", async () => {
-    const pages = await rendered(await renderRecoveryPack(withLocation({ kind: "this-pack" })));
-    expect(pages[3]!.text).toContain("This pack holds the box key.");
-  });
-
-  it("on an earlier pack a browser confirmed receiving: keep that pack", async () => {
-    const pages = await rendered(await renderRecoveryPack(input()));
-    expect(pages[3]!.text).toContain(
-      "This pack did not make a new box key. The key itself is on recovery pack 1, made on 2 September 2026. Keep that pack.",
-    );
-  });
-
-  it("on an earlier pack no browser confirmed receiving: never 'keep that pack'", async () => {
-    const pages = await rendered(
-      await renderRecoveryPack(
-        withLocation({ kind: "pack", number: 1, madeOn: "2026-09-02", received: false }),
-      ),
-    );
-    expect(pages[3]!.text).toContain(
-      "The key itself is on recovery pack 1, made on 2 September 2026, but when this pack was made the box had not been told that pack 1 arrived. If you do not have pack 1, choose Make a new master key on Backups.",
-    );
-    expect(pages[3]!.text).not.toContain("Keep that pack");
-  });
-
-  it("on a recovery sheet from before the pack", async () => {
-    const pages = await rendered(
-      await renderRecoveryPack(
-        withLocation({ kind: "sheet", keyName: "2026-09-02 · K7QF", madeOn: "2026-09-02" }),
-      ),
-    );
-    expect(pages[3]!.text).toContain(
-      "The key itself is on the recovery sheet whose key name is 2026-09-02 · K7QF, made on 2 September 2026. Keep that sheet.",
-    );
-  });
-
-  it("also on a server-key page that failed", async () => {
-    const pages = await rendered(
-      await renderRecoveryPack(
-        input({
-          parts: [
-            bucket,
-            archives,
-            {
-              kind: "server-key",
-              state: "failed",
-              failure: { what: "The server key page could not be drawn.", todo: "Try again." },
-              serverKeyLocation: { kind: "pack", number: 1, madeOn: "2026-09-02", received: true },
-            },
-          ],
-        }),
-      ),
-    );
-    expect(pages[3]!.text).toContain("The server key page could not be drawn.");
-    expect(pages[3]!.text).toContain(
-      "The key itself is on recovery pack 1, made on 2 September 2026.",
-    );
-  });
-
-  it("keeps the text inside its boxes clear of the box's edge", async () => {
-    const bytes = await renderRecoveryPack(input());
-    const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
-    try {
-      const pdf = await loading.promise;
-      const items = (await (await pdf.getPage(4)).getTextContent()).items;
-      const item = items.find((i) => "str" in i && i.str.startsWith("This pack did not make"));
-      expect((item as { transform: number[] }).transform[4]).toBeGreaterThanOrEqual(48 + 10);
-    } finally {
-      await loading.destroy();
-    }
-  });
-
+describe("pack numbers", () => {
   it("prints every pack number with its date", async () => {
     const pages = await rendered(await renderRecoveryPack(input()));
     for (const { text } of pages) {
@@ -574,6 +478,34 @@ describe("the server-key page says where the key is", () => {
       }
     }
   });
+});
+
+describe("no page names where a box key is", () => {
+  it.each(["en", "es"] as const)(
+    "draws nothing for a stale location on an included or failed page (%s)",
+    async (locale) => {
+      const stale = { serverKeyLocation: { kind: "this-pack" } } as unknown as Partial<PackPart>;
+      const failed: PackPart = {
+        kind: "archives",
+        state: "failed",
+        failure: { what: "The archive settings could not be read.", todo: "Make a new pack." },
+      };
+      const pages = await rendered(
+        await renderRecoveryPack(
+          input({
+            locale,
+            parts: [
+              { ...bucket, ...stale },
+              { ...failed, ...stale },
+            ],
+          }),
+        ),
+      );
+      const all = pages.map((page) => page.text).join(" ");
+      expect(pages).toHaveLength(3);
+      expect(all).not.toMatch(/box key|clave del servidor|key itself|la clave está/i);
+    },
+  );
 });
 
 describe("the secrets on the pages", () => {
@@ -636,12 +568,12 @@ describe("the secrets on the pages", () => {
   it("draws a grouped key's spaces as plain spaces when its spaces carry no meaning", async () => {
     const grouped = "ABCD EFGH IJKL";
     const page: PackPart = {
-      kind: "server-key",
+      kind: "emergency",
       state: "included",
       page: {
-        title: "Server key",
+        title: "Emergency start",
         rows: [],
-        secret: { label: "Server key", text: grouped, qr: true },
+        secret: { label: "Emergency code", text: grouped, qr: true },
         notes: [],
       },
     };
@@ -725,7 +657,7 @@ it.each(["en", "es"] as const)(
       },
     };
     const bytes = await renderRecoveryPack(
-      input({ locale, parts: [emergency, bucket, archives, serverKey] }),
+      input({ locale, parts: [emergency, bucket, archives, emergencyPart] }),
     );
     const pages = await rendered(bytes);
     expect(pages).toHaveLength(5);

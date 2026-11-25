@@ -750,8 +750,8 @@ also qualifies the historical operation-description references in this section.
 
   There is one state-folder layout, and a box keeps its venue under that state folder.
   A first setup has no venue claim or separate setup lock; its record and attachments live
-  in `flows/setup/`. The attempt, initial node-key verifier, public evidence and recovery-document
-  metadata share one record. A completed setup folder ends after the trading start stays up for
+  in `flows/setup/`. The attempt, the staged master key's public facts, public evidence and
+  recovery-document metadata share one record. A completed setup folder ends after the trading start stays up for
   two minutes; unknown top-level files and nested attachment folders are kept, and a refused cleanup
   is logged without stopping the start. Start again removes its listed files and then the empty folders,
   and sets unknown files aside under the state folder. The box certificate and key
@@ -767,8 +767,8 @@ also qualifies the historical operation-description references in this section.
   The menu table, identifiers, routes and wording now use menu names; the Products screen uses
   products names. Menu root names now come from menus.name; include-folder names, photo and colour have their own columns. Live and scheduled menu versions now share menu_releases; rescheduling leaves an activity entry. Menu version creators and release cancellers now name existing people through database keys. Periods hold their ordered staff-menu ids. Photo metadata lives on each photo; original and replacement bytes share one immutable blob store, and deleting or replacing a photo prunes bytes no photo names.
   Membership reads its term from the signed document, and an alert's handler references a person.
-  The box's role, recovery key, signing key, mirror link and pinned main-box key share one local
-  row; role changes, recovery-key replacements and signing-key rotations leave events in node.db.
+  The box's role, signing key, mirror link and pinned main-box key share one local row; role changes
+  and signing-key rotations leave events in node.db.
   A card reader holds its device id on its own row; its enabled status comes from `disabled_at`.
   A device keeps its chosen reader on its row, and a profile keeps its ordered readers and default
   in one list. Reader deletion clears both; configuration exports leave those assignments behind.

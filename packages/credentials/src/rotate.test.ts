@@ -10,8 +10,8 @@ import {
 } from "@waitron/db";
 import {
   NODE_MIGRATIONS,
-  readRecoveryKey,
-  setRecoveryKeyTx,
+  readNodeModeRow,
+  setNodeModeTx,
   nodeHandoverEvents,
 } from "@waitron/node-db";
 import { hasCode, type AppError } from "@waitron/shared";
@@ -226,19 +226,22 @@ describe("rotateCredentials", () => {
     expect(result).toEqual({ rotated: 0, alreadyCurrent: 0 });
   });
 
-  it("rotation skips recovery-only boxes and still re-seals a populated signing group", async () => {
+  it("rotation skips role-only boxes and still re-seals a populated signing group", async () => {
     await withNodeTransaction(suite.node, async (tx) => {
-      await setRecoveryKeyTx(tx, OTHER_NODE, "verifier", "Recovery only", null);
+      await setNodeModeTx(tx, OTHER_NODE, "primary", "adopt");
       await sealNodeSigningKeyTx(tx, RING_V1, NODE, SIGNING_KEY);
     });
     expect(await rotateCredentials(suite.db, RING_BOTH, suite.node)).toEqual({
       rotated: 1,
       alreadyCurrent: 0,
     });
-    expect(await readRecoveryKey(suite.node, OTHER_NODE)).toEqual({
-      verifier: "verifier",
-      keyName: "Recovery only",
+    expect(await readNodeModeRow(suite.node, OTHER_NODE)).toEqual({
+      mode: "primary",
+      singletonRole: "primary",
     });
+    expect(
+      suite.node.all(sql`select signing_key_version from box where node_id = ${OTHER_NODE}`),
+    ).toEqual([{ signing_key_version: null }]);
     expect(await readNodeSigningKey(suite.node, RING_V2_ONLY, NODE)).toBe(SIGNING_KEY);
     expect(
       await suite.node

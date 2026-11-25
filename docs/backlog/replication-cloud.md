@@ -829,6 +829,8 @@ against this box's own key and that pinned key (`assertHeldDocumentTrusted`,
   Demo venue never has and no restore path names a Demo invoice series. The Backups screen shows a
   line saying so in place of the bucket-copy settings when the venue's setup choice is Demo; an
   unknown choice still shows them.
+  _2026-11-25, A1323 PR 3b: there is no server key; restore needs the master key, which a Demo
+  venue now has._
 - **A placed Cloud emergency copy seals its new signing key with a fresh key ring of its own; the
   venue's ring, and with it the AEAT certificate and card credentials, reaches the copy only at
   A1188 part 4's activation** (watcher, 2026-11-17 02:31, A1425-3 decision 5, answer (a); not the
@@ -948,8 +950,8 @@ restructuring wider than a review fix:
   callers (`writeStagedNodeCopy`, `openStagedCopy` and `assertStagedNodeCopy`). Let
   `validateDatabaseEntries` write the copy, and give the store an option that refuses a missing `node.db`.
 - Matching lock nests use `withVenueAndNodeTransaction`; the remaining sites do work before or
-  between venue transactions. Keep their separate commit/check stages when consolidating them:
-  credential rotation, spare join, recovery-pack replacement, first setup and return records.
+  between venue transactions. Keep their separate commit/check stages when consolidating them,
+  such as credential rotation, spare join and return records.
 
 ## A1282: browser trust after a connection repair replaces the certificate authority
 

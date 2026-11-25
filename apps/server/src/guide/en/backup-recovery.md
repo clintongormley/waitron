@@ -125,8 +125,7 @@ approve the new request in Cloud.
 
 At the end of Preparation, the **Recovery pack** step shows the master key once. Choose
 **Download**, **Print** or **Copy**, keep the pack or the copied key somewhere other than the box, then choose
-**Continue**. If setup offers **Save as a file**, keep that file with your
-other recovery documents. Open **Backups** from the dashboard alert to set up your copies.
+**Continue**. Open **Backups** from the dashboard alert to set up your copies.
 
 Below the review, under "Recover this box", choose the recovery pack that holds this backup's
 master key with **Choose the recovery pack PDF**; or type the master key printed on it in **Master key**. A pack with
@@ -254,6 +253,6 @@ AEAT already has them.
 ## An invoice conflict on a running box {#invoice-conflict}
 
 If the box still has your orders and payments but stops issuing invoices after an identity
-conflict, use [Recover an invoice identity](box-status.md#invoice-conflict) with its current box
-key. That procedure switches the live identity without restoring a backup. It keeps the rejected
-record and its open case. Take any old or copied box offline before continuing.
+conflict, use [Recover an invoice identity](box-status.md#invoice-conflict) with the venue's
+current master key. That procedure switches the live identity without restoring a backup. It keeps
+the rejected record and its open case. Take any old or copied box offline before continuing.

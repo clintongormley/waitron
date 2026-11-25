@@ -37,7 +37,6 @@ import type {
   workingOrderLines,
 } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
-import type { RecoveryPackPage } from "@waitron/recovery-pack";
 import type { MigrationSet, MigrationSetSource } from "@waitron/migrations";
 import { appendOnlyTablesIn, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { FiscalContribution, TrustedClock } from "@waitron/fiscal";
@@ -1465,31 +1464,6 @@ export interface ModuleBackupContribution {
   readonly verification?: BackupVerificationContribution;
   readonly nonDbState?: readonly NonDbSource[];
   readonly restore?: RestoreHook;
-  /** Describe the recovery pack's server-key page; the host draws it and commits `newKey` only after. */
-  readonly recoveryPackPage?: (
-    tx: Transaction,
-    node: import("./provisioning.js").ProvisionedNode,
-    context: {
-      /** The key the box holds now. */
-      readonly keyInForce: { readonly nodeId: string; readonly name: string };
-      /** The key this pack would make, named by the host. */
-      readonly newKey?: { readonly name: string; readonly secret: string };
-      readonly createdAt: string;
-      readonly locale: "en" | "es";
-      readonly evidence: Readonly<Record<string, unknown>>;
-    },
-  ) => Promise<RecoveryPackPageResult>;
-  /** The secret a server key typed as printed on this module's recovery pack stands for, or
-   * undefined when the text is not one. */
-  readonly serverKeyAsTyped?: (typed: string) => string | undefined;
-  /** Prints a new key in the format this module accepts on Restore. */
-  readonly formatServerKey?: (secret: string) => string;
-}
-
-/** What `recoveryPackPage` answers: the page, and the key file when it was asked for a new key. */
-export interface RecoveryPackPageResult {
-  readonly page: RecoveryPackPage;
-  readonly keyFile?: Readonly<Record<string, unknown>>;
 }
 
 /** Each path step is an object key, or "*" for every object key or array element. */

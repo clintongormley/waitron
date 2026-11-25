@@ -4,7 +4,7 @@ import { recoveryPacks } from "./schema/recovery-packs.js";
 
 /** What one part of a pack held, and the checks that tell when it is out of date. */
 export type RecoveryPackPartRecord = {
-  part: "bucket" | "archives" | "server-key" | "emergency";
+  part: "bucket" | "archives" | "emergency";
   codeIssuedAt?: string;
   state: "included" | "absent" | "failed" | "not-set-up";
   keyChangedAt?: string;
@@ -12,8 +12,6 @@ export type RecoveryPackPartRecord = {
   keyNeverChanged?: boolean;
   settingsRevision?: string;
   destination?: "bucket" | "folder";
-  keyName?: string;
-  carriedKey?: boolean;
 };
 
 export type RecoveryPackRecord = {
@@ -25,9 +23,9 @@ export type RecoveryPackRecord = {
   parts: RecoveryPackPartRecord[];
 };
 
-const PARTS = new Set(["bucket", "archives", "server-key", "emergency"]);
+const PARTS = new Set(["bucket", "archives", "emergency"]);
 const STATES = new Set(["included", "absent", "failed", "not-set-up"]);
-const TEXT_FIELDS = new Set(["keyChangedAt", "settingsRevision", "keyName", "codeIssuedAt"]);
+const TEXT_FIELDS = new Set(["keyChangedAt", "settingsRevision", "codeIssuedAt"]);
 
 // An allow-list, so nothing secret can reach a backup through this table: the row travels in
 // every copy of venue.db.
@@ -44,7 +42,7 @@ function checkedPart(entry: unknown): RecoveryPackPartRecord {
       if (!STATES.has(value as string)) refuse();
     } else if (key === "destination") {
       if (value !== "bucket" && value !== "folder") refuse();
-    } else if (key === "carriedKey" || key === "keyNeverChanged") {
+    } else if (key === "keyNeverChanged") {
       if (typeof value !== "boolean") refuse();
     } else if (!TEXT_FIELDS.has(key) || typeof value !== "string") refuse();
   }

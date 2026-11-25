@@ -568,7 +568,7 @@ it("rejects over-limit streaming bodies before any claim or import side effect",
   expect((await f.host.store.read())?.revision).toBe(1);
 });
 
-it("answers the staged master key as printed and its name beside the box key, on a repeat too", async () => {
+it("the node-key reply names the master key and carries no box key, on a repeat too", async () => {
   const f = await fixture();
   expect(f.claimed.status).toBe(200);
   const { comparisonId, reconfirmation } = await f.settle();
@@ -589,7 +589,12 @@ it("answers the staged master key as printed and its name beside the box key, on
   const response = await stageKey();
   expect(response.status).toBe(200);
   const staged = await response.json();
-  expect(Object.keys(staged).sort()).toEqual(["key", "masterKey", "masterKeyName", "stage"]);
+  expect(Object.keys(staged).sort()).toEqual(["masterKey", "masterKeyName", "stage"]);
+  expect(staged.stage).toEqual({
+    stageId: expect.any(String),
+    nodeId: state.nodeId,
+    name: staged.masterKeyName,
+  });
   expect(staged.masterKey).toBe(encodeMasterKeyCode(decodeMasterKeyCode(staged.masterKey)));
   expect(staged.masterKeyName).toMatch(/^\d{4}-\d\d-\d\d · [2-9A-HJKMNP-Z]{4}$/);
   expect(await (await stageKey()).json()).toEqual(staged);

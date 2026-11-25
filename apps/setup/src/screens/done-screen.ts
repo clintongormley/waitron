@@ -6,16 +6,12 @@ import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-choice-row.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-master-key-box.js";
-import { errorStyles, helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
+import { helpLinkStyles, introStyles, statusStyles } from "../form-styles.js";
 import { modePill, modePillStyles } from "../mode-pill.js";
 import type { JoinCopyStage, SetupApi } from "../api/client.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { currentLocale, format, t } from "../i18n/t.js";
 import "../widgets/box-label.js";
-
-const KEY_NAME = /^(\d{4}-\d{2}-\d{2}) · ([34679ACDEFHJKMNPQRTUVWXY]{4})$/;
-
-export const BACKUP_SETUP_URL = "/backup";
 
 const HEADINGS = {
   none: "done.heading",
@@ -70,7 +66,6 @@ export class SetupDoneScreen extends LitElement {
     baseStyles,
     pageTitleStyles,
     statusStyles,
-    errorStyles,
     introStyles,
     modePillStyles,
     css`
@@ -84,8 +79,7 @@ export class SetupDoneScreen extends LitElement {
         margin: 0 0 var(--wt-space-4);
       }
       .choices,
-      wt-card,
-      .break-glass {
+      wt-card {
         margin: var(--wt-space-4) 0;
       }
       wt-card p {
@@ -153,34 +147,6 @@ export class SetupDoneScreen extends LitElement {
         flex-wrap: wrap;
         gap: var(--wt-space-2);
       }
-      .break-glass {
-        padding: var(--wt-space-4);
-        border: 1px solid var(--wt-color-warning);
-        border-inline-start: var(--wt-space-1) solid var(--wt-color-warning);
-        border-radius: var(--wt-radius-lg);
-        background: var(--wt-color-surface);
-      }
-      .break-glass h2 {
-        margin: 0 0 var(--wt-space-2);
-        font-size: var(--wt-font-size-lg);
-      }
-      .break-glass-warning {
-        margin: 0;
-        font-weight: var(--wt-font-weight-bold);
-      }
-      .break-glass-secret {
-        display: block;
-        margin: var(--wt-space-2) 0 0;
-        padding: var(--wt-space-2) var(--wt-space-3);
-        font-family: var(--wt-font-family-mono);
-        font-size: var(--wt-font-size-lg);
-        word-break: break-all;
-        user-select: all;
-        background: var(--wt-color-surface-raised);
-        color: var(--wt-color-text);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-      }
       .pack-warning {
         margin: var(--wt-space-3) 0;
         padding: var(--wt-space-3) var(--wt-space-4);
@@ -188,28 +154,12 @@ export class SetupDoneScreen extends LitElement {
         border-radius: var(--wt-radius-sm);
         background: var(--wt-color-surface);
       }
-      a.break-glass-save {
-        display: inline-block;
-      }
-      .break-glass-save {
-        margin: var(--wt-space-2) 0 0;
-      }
     `,
   ];
 
   @property({ attribute: false }) api!: SetupApi;
 
-  /** The server keeps only a verifier of this secret (`mintBreakGlassSecret`), so this screen is the
-   * operator's only chance to record it. */
-  @property({ attribute: false }) breakGlassSecret?: string;
-  @property({ attribute: false }) breakGlassKeyName?: string;
-  @property({ type: Boolean }) breakGlassKeyInBackups = false;
-
-  /**
-   * True after a successful adopt, where the box restarts as a joining spare, not a trading
-   * server. A separate flag rather than a `breakGlassSecret` test: the secret is a value to
-   * display, not a statement of which path ran.
-   */
+  /** True after a successful adopt, where the box restarts as a joining spare, not a trading server. */
   @property({ type: Boolean }) mirrorJoin = false;
 
   @property({ attribute: false }) recoveryPackPdf?: string;
@@ -256,8 +206,6 @@ export class SetupDoneScreen extends LitElement {
   @property({ attribute: false }) nodeRecoveryKey?: string;
 
   @state() private ready = false;
-
-  @state() private breakGlassSaveFailed = false;
 
   @state() private labelPrinted = false;
 
@@ -323,7 +271,7 @@ export class SetupDoneScreen extends LitElement {
       );
       this.#recoveryPackUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
     } catch {
-      // The server key can still be saved as text.
+      // The master key box then offers Copy alone.
     }
   }
 
@@ -610,112 +558,6 @@ export class SetupDoneScreen extends LitElement {
     return this.mirrorJoin ? this.#renderJoining() : this.#renderTrading();
   }
 
-  #keyName(name: string): string {
-    const parts = KEY_NAME.exec(name);
-    if (parts === null) return name;
-    const date = new Date(`${parts[1]}T00:00:00Z`);
-    if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== parts[1])
-      return name;
-    return format("done.break_glass.key_name", {
-      date: new Intl.DateTimeFormat(currentLocale(), {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-        timeZone: "UTC",
-      }).format(date),
-      code: parts[2]!,
-    });
-  }
-
-  #breakGlassFileName(): string {
-    const parts = KEY_NAME.exec(this.breakGlassKeyName ?? "");
-    return parts === null
-      ? "waitron-server-key.txt"
-      : `waitron-server-key-${parts[1]}-${parts[2]}.txt`;
-  }
-
-  /** Whether the file was handed to the browser to save. */
-  #saveBreakGlass(secret: string): boolean {
-    const lines = [
-      t("done.break_glass.file_title"),
-      ...(this.breakGlassKeyName === undefined ? [] : [this.#keyName(this.breakGlassKeyName)]),
-      "",
-      secret,
-      "",
-      t("done.break_glass.file_keep"),
-    ];
-    const anchor = document.createElement("a");
-    let url: string | undefined;
-    try {
-      url = URL.createObjectURL(
-        new Blob([`${lines.join("\n")}\n`], { type: "text/plain;charset=utf-8" }),
-      );
-      anchor.href = url;
-      anchor.download = this.#breakGlassFileName();
-      document.body.append(anchor);
-      anchor.click();
-      this.breakGlassSaveFailed = false;
-    } catch {
-      this.breakGlassSaveFailed = true;
-    } finally {
-      anchor.remove();
-      if (url) URL.revokeObjectURL(url);
-    }
-    return !this.breakGlassSaveFailed;
-  }
-
-  #preparation(): boolean {
-    return this.onboardingIntent === "prepare" && !this.mirrorJoin;
-  }
-
-  #breakGlass(): TemplateResult | null {
-    const secret = this.breakGlassSecret;
-    if (secret === undefined) return null;
-    const preparation = this.#preparation();
-    return html`<div class="break-glass" data-test="break-glass">
-      <h2>${t("done.break_glass.heading")}</h2>
-      <p class="break-glass-warning" data-test="break-glass-warning">
-        ${
-          preparation
-            ? t(
-                this.#recoveryPackUrl === undefined
-                  ? "done.break_glass.restore"
-                  : "done.break_glass.pack_keep",
-              )
-            : t("done.break_glass.warning")
-        }
-      </p>
-      ${this.breakGlassKeyName === undefined ? nothing : html`<p data-test="break-glass-key-name">${this.#keyName(this.breakGlassKeyName)}</p>`}
-      <code class="break-glass-secret" data-test="break-glass-secret">${secret}</code>
-      ${
-        this.#recoveryPackUrl === undefined
-          ? html`<wt-button
-              class="break-glass-save"
-              data-test="break-glass-save"
-              variant="secondary"
-              @click=${() => this.#saveBreakGlass(secret)}
-              >${t("done.break_glass.save")}</wt-button
-            >`
-          : html`<a
-              class="break-glass-save"
-              data-test="download-recovery-pack"
-              href=${this.#recoveryPackUrl}
-              download="waitron-recovery-pack.pdf"
-              >${t("done.break_glass.download_pack")}</a
-            >`
-      }
-      ${this.#saveFailed()}
-    </div>`;
-  }
-
-  #saveFailed(): TemplateResult | typeof nothing {
-    return this.breakGlassSaveFailed
-      ? html`<p class="error" role="alert" data-test="break-glass-save-error">
-          ${t("done.break_glass.save_failed")}
-        </p>`
-      : nothing;
-  }
-
   #boxLabel(): TemplateResult {
     return html`<setup-box-label
       .address=${this.contactUrl!}
@@ -779,7 +621,6 @@ export class SetupDoneScreen extends LitElement {
   #renderTrading(): TemplateResult {
     if (this.masterKey !== undefined && !this.packContinued)
       return this.#recoveryPackStep(this.masterKey);
-    const needsReplacement = this.breakGlassKeyInBackups && this.breakGlassSecret === undefined;
     return html`
       <h1>${t(HEADINGS[this.restored ?? "none"])}</h1>
       ${
@@ -807,15 +648,6 @@ export class SetupDoneScreen extends LitElement {
       </div>
       ${this.startFailed ? nothing : this.#mainLabel()}
       ${this.restored === undefined || this.startFailed ? nothing : this.#deviceSteps()}
-      ${this.#breakGlass()}
-      ${
-        !needsReplacement || this.startFailed
-          ? nothing
-          : html`<wt-card data-test="recovery-pack-replacement">
-              <p>${t("done.break_glass.replacement")}</p>
-              <a href=${BACKUP_SETUP_URL}>${t("done.break_glass.open_backups")}</a>
-            </wt-card>`
-      }
     `;
   }
 

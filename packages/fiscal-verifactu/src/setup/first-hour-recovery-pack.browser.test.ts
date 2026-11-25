@@ -74,7 +74,6 @@ function captureHandovers() {
 
 const staged = (masterKey = KEY): InitialSetupNodeKey => ({
   stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
-  key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
   masterKey,
   masterKeyName: "2026-11-23 · QZJV",
 });
@@ -148,9 +147,11 @@ async function mount(
   return { el, host, kept, reissues };
 }
 
+/** The pack is drawn for real, which can take seconds on a loaded machine. */
+const PACK_DRAWN = { timeout: 10_000 };
 async function showKey(el: LitElement) {
   await userEvent.click(control(el, "prepare-pdf")!);
-  await expect.poll(() => control(el, "master-key")).not.toBeNull();
+  await expect.poll(() => control(el, "master-key"), PACK_DRAWN).not.toBeNull();
 }
 
 it("a Live setup ends with the Recovery pack step: after the password, the key box with Download, Print and Copy, and nothing downloaded by itself", async () => {
@@ -158,7 +159,7 @@ it("a Live setup ends with the Recovery pack step: after the password, the key b
   const { el } = await mount();
   expect(text(el, "pack-heading")).toBe("Recovery pack");
   expect(text(el, "pack-lead")).toBe(
-    "Download or print the recovery pack, then keep it somewhere safe, away from this box.",
+    "Download, print or copy the master key, then keep it somewhere safe, away from this box.",
   );
   expect(text(el, "pack-warning")).toBe("This is the only time the master key is shown.");
   expect(text(el, "prepare-pdf")).toBe("Show the master key");
@@ -184,7 +185,7 @@ it("a Live setup ends with the Recovery pack step: after the password, the key b
 });
 
 it.each(["download", "print"])(
-  "Continue is not shown until Download or Print has been used, and keeps the pack once pressed: %s",
+  "Continue stays hidden until the master key has been used, and keeps the pack once pressed: %s",
   async (used) => {
     captureHandovers();
     const { el, kept } = await mount();
@@ -201,14 +202,17 @@ it.each(["download", "print"])(
   },
 );
 
-it("Copy alone leaves Continue hidden: the pack also holds the box key, which Copy leaves out", async () => {
+it("Copy is enough to show Continue, and Continue keeps the pack", async () => {
   captureHandovers();
   const { el, kept } = await mount();
   await showKey(el);
+  expect(control(el, "kept")).toBeNull();
   await userEvent.click(control(el, "copy")!);
   await expect.poll(() => text(el, "copied")).toBe("Copied.");
-  expect(control(el, "kept")).toBeNull();
+  await expect.poll(() => control(el, "kept")).not.toBeNull();
   expect(kept).toEqual([]);
+  await userEvent.click(control(el, "kept")!);
+  await expect.poll(() => kept).toHaveLength(1);
 });
 
 it("a Print the browser blocks does not count: it says so where a refused Copy does, and Continue stays hidden", async () => {
@@ -267,7 +271,7 @@ it("a Copy the browser refuses says so under the key box, never Copied., and lea
   await expect.poll(() => control(el, "kept")).not.toBeNull();
 });
 
-it("offers no new keys while the box holds the key it made", async () => {
+it("offers no new master key while the box holds the key it made", async () => {
   captureHandovers();
   const { el, reissues } = await mount();
   expect(control(el, "replace-key")).toBeNull();
@@ -280,7 +284,7 @@ it("offers no new keys while the box holds the key it made", async () => {
 });
 
 it.each(["password.invalid", "setup.attempt_conflict"])(
-  "offers no new keys when showing the key is refused with %s, which is not the box saying it lost the key",
+  "offers no new master key when showing the key is refused with %s, which is not the box saying it lost the key",
   async (code) => {
     const { el } = await mount("en", async () => {
       throw { code };
@@ -298,16 +302,16 @@ it.each(["password.invalid", "setup.attempt_conflict"])(
 it.each([
   [
     "en",
-    "The box no longer holds the master key it made. Make new keys to carry on.",
-    "Make new keys",
+    "The box no longer holds the master key it made. Make a new one to carry on.",
+    "Make a new master key",
   ],
   [
     "es",
-    "El servidor ya no guarda la clave maestra que creó. Crea claves nuevas para seguir.",
-    "Crear claves nuevas",
+    "El servidor ya no guarda la clave maestra que creó. Crea una nueva para seguir.",
+    "Crear una clave maestra nueva",
   ],
 ] as const)(
-  "%s: a key the box lost when it restarted is replaced with new keys, which the step then shows once",
+  "%s: a key the box lost when it restarted is replaced with a new one, which the step then shows once",
   async (locale, lost, replace) => {
     captureHandovers();
     const { el, host, reissues } = await mount(locale, async () => {
@@ -324,7 +328,7 @@ it.each([
     expect(control(el, "prepare-pdf")).toBeNull();
     expect((await axe.run(host)).violations).toEqual([]);
     await userEvent.click(control(el, "replace-key")!);
-    await expect.poll(() => text(el, "master-key")).toBe(NEW_KEY);
+    await expect.poll(() => text(el, "master-key"), PACK_DRAWN).toBe(NEW_KEY);
     expect(reissues).toHaveLength(1);
     expect(control(el, "replace-key")).toBeNull();
     expect(control(el, "key-lost")).toBeNull();
@@ -337,7 +341,7 @@ it("shows the Recovery pack step in Spanish", async () => {
   const { el } = await mount("es");
   expect(text(el, "pack-heading")).toBe("Paquete de recuperación");
   expect(text(el, "pack-lead")).toBe(
-    "Descarga o imprime el paquete de recuperación y guárdalo en un lugar seguro, lejos de este servidor.",
+    "Descarga, imprime o copia la clave maestra y guárdala en un lugar seguro, lejos de este servidor.",
   );
   expect(text(el, "pack-warning")).toBe("Esta es la única vez que se muestra la clave maestra.");
   expect(text(el, "prepare-pdf")).toBe("Mostrar la clave maestra");
