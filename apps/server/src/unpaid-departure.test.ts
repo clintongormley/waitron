@@ -69,6 +69,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { seedGivenAwayLine } from "./testing/cancel-line.js";
+import { zeroBillHoldingMoney } from "./testing/zero-bill-holding-money.js";
 import {
   BASIC_ACTIONS,
   revokedDeviceSessionCookie,
@@ -1086,6 +1087,29 @@ describe("a bill that owes nothing", () => {
     ).toEqual([{ collected: expect.any(String) }]);
     expect((await partyState(party.partyId)).state).toBe("closed");
     expect(await tableHeldBy(party.tableId)).toBeNull();
+  });
+});
+
+describe("a bill holding more than it comes to", () => {
+  it("refuses an open bill whose total is zero but which holds money, and writes nothing", async () => {
+    const { partyId, billId } = await zeroBillHoldingMoney(venue);
+
+    const answer = await depart(partyId, {
+      billId,
+      expectedPartyRevision: revisionOf(partyId),
+      reason: REASON,
+    });
+
+    expect(answer).toEqual({
+      status: 409,
+      json: { code: "bill.overpaid", params: { workingOrderId: billId } },
+    });
+    expect(await salesOf(billId)).toEqual([]);
+    expect(await departuresOf(billId)).toEqual([]);
+    expect(await statusOf(venue, billId)).toBe("open");
+    expect(
+      (await send(venue.app, venue.cookie, "GET", `/api/working-orders/${billId}/payments`)).json,
+    ).toMatchObject({ total: "0.00", received: "15.00", overpaid: "15.00" });
   });
 });
 
@@ -2430,6 +2454,28 @@ describe("left unpaid with part paid", () => {
     );
     expect((await payInCash(party.tabId, "20.00")).status).toBe(200);
     await credit(venue, party.tabId, "11.00", "-12.10");
+
+    const answer = await departNow(party.partyId);
+
+    expect(answer).toMatchObject({
+      status: 409,
+      json: { code: "bill.overpaid", params: { workingOrderId: party.tabId } },
+    });
+    expect(await departuresOf(party.tabId)).toEqual([]);
+    expect(await statusOf(venue, party.tabId)).toBe("placed");
+    expect((await partyState(party.partyId)).state).toBe("open");
+  });
+
+  it("refuses a printed bill whose corrective leaves exactly what was paid, and writes nothing", async () => {
+    const party = await seatedWith(venue, "Red wine bottle");
+    await printOrderForTest(
+      { ...venue, admission: testTradingAdmission() },
+      venue.cfg,
+      party.tabId,
+      venue.operatorId,
+    );
+    expect((await payInCash(party.tabId, "20.00")).status).toBe(200);
+    await credit(venue, party.tabId, "9.09", "-10.00");
 
     const answer = await departNow(party.partyId);
 

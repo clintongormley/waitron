@@ -609,6 +609,18 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "This bill has nothing paid over what it comes to.",
     es: "Esta cuenta no tiene nada pagado de más.",
   },
+  "bill.overpaid_changed": {
+    en: "What this bill was paid over its total has changed. Check the new amount and choose again.",
+    es: "Lo pagado de más en esta cuenta ha cambiado. Revisa el nuevo importe y vuelve a elegir.",
+  },
+  "bill.overpaid": {
+    en: "This bill has been paid more than it comes to. First give back the extra on the bill, or keep it as a tip where the bill offers that.",
+    es: "Esta cuenta se ha pagado de más. Primero devuelve en la cuenta lo que sobra, o guárdalo como propina si la cuenta lo ofrece.",
+  },
+  "bill.tip_needs_a_sale": {
+    en: "This bill comes to nothing, so there is no sale to tip on. Give the money back instead.",
+    es: "Esta cuenta no suma nada, así que no hay venta en la que dejar propina. Devuelve el dinero.",
+  },
   "bill.tip_not_allowed_on_excess": {
     en: "This venue does not take tips. Give the money back instead.",
     es: "Este local no acepta propinas. Devuelve el dinero.",

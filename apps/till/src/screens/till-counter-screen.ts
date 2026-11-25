@@ -1,7 +1,9 @@
 import "../widgets/set-menu-counts.js";
 import type { ChangeAvailability, ChangeOptionAvailability } from "../widgets/product-info.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
-import type { MenuState } from "../api/client.js";
+import type { BillBalance, MenuState } from "../api/client.js";
+import { billMoneyNoticeStyles, overpaidNotice } from "./bill-money-notice.js";
+import { amountToPay, overpaidOf } from "../state/bill-state.js";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, floorChipStyles } from "@waitron/ui";
@@ -73,6 +75,7 @@ export class TillCounterScreen extends LitElement {
     baseStyles,
     servicePeriodStyles,
     floorChipStyles,
+    billMoneyNoticeStyles,
     css`
       :host {
         display: block;
@@ -240,6 +243,13 @@ export class TillCounterScreen extends LitElement {
   @property({ type: Boolean }) payHeld = false;
   /** Outstanding amount offered through the bill-payment flow. */
   @property() payRest: string | null = null;
+  /** The order's bill balance while it may be paid over its total: undefined until it is read,
+   * with Pay held back meanwhile. */
+  @property({ attribute: false }) overpaidBalance:
+    Pick<BillBalance, "overpaid" | "total"> | null | undefined = null;
+  @property({ type: Boolean }) overpaidBusy = false;
+  /** Keep as tip needs `payment.take` and tips on. */
+  @property({ type: Boolean }) keepsTips = false;
   @property() cardProvider: CardProvider = "none";
   /** See the tender card's `takesCash`. */
   @property({ type: Boolean }) takesCash = true;
@@ -413,16 +423,22 @@ export class TillCounterScreen extends LitElement {
           ></till-counter-waiting>`;
   }
 
+  #emit(name: string, detail: object): void {
+    this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }));
+  }
+
   #takeRest(outstanding: string): TemplateResult {
     return html`<section class="pay-rest" data-counter-bill-payments>
       <p>
-        ${t("table.bill_to_pay").replace("{amount}", () => formatMoney(outstanding, currentLocale()))}
+        ${t("table.bill_to_pay").replace("{amount}", () => formatMoney(amountToPay(outstanding), currentLocale()))}
       </p>
     </section>`;
   }
 
   #gridBody(): TemplateResult {
     const { placedPrice, total } = this.#setMenuPrices();
+    const balance = this.overpaidBalance;
+    const overpaid = balance != null && overpaidOf(balance) !== null ? balance : null;
     return html`<div class="body grid-body">
       ${servicePeriod(this.service, this.departmentName, this.api, this.selectedServiceZoneId, this.zoneName, this.receiptEquipment)}
       <div class="sale-grid">
@@ -480,7 +496,20 @@ export class TillCounterScreen extends LitElement {
           <till-total .store=${this.store} .previewTotal=${total}></till-total>
         </div>
         <div class="payment-cell">
-          ${this.payRest === null ? nothing : this.#takeRest(this.payRest)}<till-tender-pay
+          ${
+            overpaid !== null
+              ? overpaidNotice({
+                  balance: overpaid,
+                  tipsEnabled: this.keepsTips,
+                  busy: this.overpaidBusy,
+                  onGiveBack: (excess) => this.#emit("counter-give-back", { excess }),
+                  onKeepAsTip: (overpaid) => this.#emit("counter-keep-as-tip", { overpaid }),
+                })
+              : this.payRest === null || balance === undefined
+                ? nothing
+                : this.#takeRest(this.payRest)
+          }<till-tender-pay
+            .payOffered=${overpaid === null && balance !== undefined}
             .filters=${this.selectedFilters}
             .paymentWindow=${this.stage === "order" || this.paymentWindow}
             .store=${this.store}

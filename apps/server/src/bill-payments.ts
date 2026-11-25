@@ -120,6 +120,7 @@ import { readBillTenderLines } from "./receipt-payments.js";
 import {
   completedRefundsOf,
   netOfRefunds,
+  overpaidBy,
   owedOf,
   type RefundMoney,
 } from "./bill-payment-money.js";
@@ -581,17 +582,18 @@ function refuseExcess(workingOrderId: string, excess: Decimal, allowed: Decimal 
 }
 
 /** By how much the bill, holding these of its payments, has received and reserved more than its
- * total now; undefined when it is not overpaid. */
+ * total now (undefined when it is not overpaid), and that total (undefined when it holds no
+ * payment, as the total is then not read). */
 async function excessOf(
   tx: Transaction,
   workingOrderId: string,
   held: readonly PaymentMoney[],
   advances: BillAdvances,
-): Promise<Decimal | undefined> {
-  if (held.length === 0) return undefined;
+): Promise<{ excess: Decimal | undefined; total: Decimal | undefined }> {
+  if (held.length === 0) return { excess: undefined, total: undefined };
   const funds = fundsOf(workingOrderId, await billPaymentTotal(tx, workingOrderId, advances), held);
   const excess = subtractDecimal(addDecimal(funds.received, funds.reserved), funds.total);
-  return compareDecimal(excess, ZERO) > 0 ? excess : undefined;
+  return { excess: compareDecimal(excess, ZERO) > 0 ? excess : undefined, total: funds.total };
 }
 
 /** By how much each of these bills holding a payment has received and reserved more than its
@@ -604,17 +606,18 @@ async function billExcesses(
   const excesses = new Map<string, Decimal>();
   for (const workingOrderId of workingOrderIds) {
     const held = payments.filter(({ row }) => row.workingOrderId === workingOrderId);
-    const excess = await excessOf(tx, workingOrderId, held, advances);
+    const { excess } = await excessOf(tx, workingOrderId, held, advances);
     if (excess !== undefined) excesses.set(workingOrderId, excess);
   }
   return excesses;
 }
 
-/** One bill's {@link HeldMoney} and by how much it is paid over its total (undefined when it is
- * not). */
+/** One bill's {@link HeldMoney}, by how much it is paid over its total (undefined when it is
+ * not), and its total (undefined when it holds no payment). */
 export interface BillExcess extends HeldMoney {
   workingOrderId: string;
   excess: Decimal | undefined;
+  total: Decimal | undefined;
 }
 
 /** The bill's {@link BillExcess}, read now. */
@@ -624,7 +627,7 @@ export async function readBillExcess(tx: Transaction, workingOrderId: string): P
     workingOrderId,
     held,
     advances,
-    excess: await excessOf(tx, workingOrderId, held, advances),
+    ...(await excessOf(tx, workingOrderId, held, advances)),
   };
 }
 
@@ -635,7 +638,7 @@ export async function readBillExcess(tx: Transaction, workingOrderId: string): P
  */
 export async function assertLinesKeptExcess(tx: Transaction, before: BillExcess): Promise<void> {
   const { workingOrderId, held, advances } = before;
-  const excess = await excessOf(tx, workingOrderId, held, advances);
+  const { excess } = await excessOf(tx, workingOrderId, held, advances);
   if (excess !== undefined) refuseExcess(workingOrderId, excess, before.excess);
 }
 
@@ -1027,9 +1030,8 @@ export async function readBillBalance(
     reserved: money(funds.reserved),
     outstanding: order.status === "open" || order.status === "placed" ? money(outstanding) : ZERO,
     overpaid:
-      (order.status === "open" || order.status === "placed") &&
-      compareDecimal(outstanding, ZERO) < 0
-        ? money(subtractDecimal(ZERO, outstanding))
+      order.status === "open" || order.status === "placed"
+        ? (overpaidBy(outstanding) ?? ZERO)
         : ZERO,
     tips: money(
       sumDecimals(held.filter(({ row }) => row.state === "received").map(({ netTip }) => netTip)),

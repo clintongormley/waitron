@@ -1,4 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
+import { formatMoney } from "@waitron/shared";
 import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { CounterWaitingOrder, TillProduct } from "../api/client.js";
@@ -100,6 +101,24 @@ it("shows the remaining amount and blocks Pay while its request is busy", async 
   await (button as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(button!.shadowRoot!.querySelector<HTMLButtonElement>("button")!.disabled).toBe(true);
 });
+
+it.each([
+  ["its bill balance could not be read", null],
+  ["its bill balance says it is not", { total: "90.00", overpaid: "0.00" }],
+] as const)(
+  "an order the held list says is overpaid offers Pay and nothing negative to pay when %s",
+  async (_case, overpaidBalance) => {
+    const { el } = await mount({ payRest: "-5.00", overpaidBalance });
+    const tender = el.shadowRoot!.querySelector("till-tender-pay")!;
+    await tender.updateComplete;
+
+    expect(el.shadowRoot!.querySelector("[data-overpaid]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-counter-bill-payments]")!.textContent!.trim()).toBe(
+      `${formatMoney("0.00", currentLocale())} por pagar`,
+    );
+    expect(tender.shadowRoot!.querySelector("[data-counter-pay]")).not.toBeNull();
+  },
+);
 
 it("opens one Counter Pay window and keeps Park beside it", async () => {
   const { el } = await mount();

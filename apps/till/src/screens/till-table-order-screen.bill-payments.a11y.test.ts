@@ -201,3 +201,34 @@ describe.each(["light", "dark"] as const)(
     });
   },
 );
+
+describe.each(["light", "dark"] as const)(
+  "till-table-order-screen overpaid bill a11y (%s theme)",
+  (theme) => {
+    it("has no violations for the overpaid notice and its choices", async () => {
+      const { el, host } = await mountWidget<TillTableOrderScreen>(
+        "till-table-order-screen",
+        {
+          products: [],
+          lines,
+          orderId: "wo-4",
+          party,
+          bills: [{ ...bill, total: "10.00", outstanding: "0.00", overpaid: "5.00" }],
+          billBalance: {
+            ...balance,
+            total: "10.00",
+            received: "15.00",
+            outstanding: "-5.00",
+            overpaid: "5.00",
+            paidLines: [],
+          },
+          tipsEnabled: true,
+        },
+        theme,
+      );
+      if (el.shadowRoot!.querySelector("[data-keep-as-tip]") === null)
+        throw new Error("the scan must include the overpaid notice's choices");
+      await expectNoA11yViolations(host);
+    });
+  },
+);

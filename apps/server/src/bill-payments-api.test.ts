@@ -578,7 +578,7 @@ interface PaymentBody {
   tendered?: string;
   addedTip?: string;
   choice?: "full_with_tip" | "use_pool";
-  externalRef?: string;
+  externalRef?: unknown;
   externalProvider?: unknown;
   externalMachine?: unknown;
   applied: string;
@@ -1125,6 +1125,39 @@ describe("a contribution (design §8 test 2)", () => {
         amount: "40.00",
         method: "card",
         entry,
+        applied: "40.00",
+        tip: "0.00",
+        ...extra,
+      });
+      expect(result.status).toBe(400);
+      expect(result.json).toMatchObject({ code: "management.request_invalid", params: { field } });
+    },
+  );
+
+  it.each([
+    { method: "card", entry: "reader", extra: { externalRef: "OP-1" }, field: "externalRef" },
+    { method: "card", entry: "manual", extra: { externalRef: 17 }, field: "externalRef" },
+    { method: "cash", extra: { readerId: "reader-1", tendered: "40.00" }, field: "readerId" },
+    {
+      method: "card",
+      entry: "manual",
+      extra: { simulationOutcome: "captured" },
+      field: "simulationOutcome",
+    },
+    {
+      method: "card",
+      entry: "reader",
+      extra: { simulationOutcome: "lost" },
+      field: "simulationOutcome",
+    },
+  ] as const)(
+    "refuses $extra on a $method payment the field does not belong to",
+    async ({ method, extra, field, ...rest }) => {
+      const result = await pay(await bill120(), {
+        kind: "contribution",
+        amount: "40.00",
+        method,
+        ...rest,
         applied: "40.00",
         tip: "0.00",
         ...extra,
@@ -6391,6 +6424,70 @@ describe("A1515 pay for items over HTTP", () => {
     expect(refused).toEqual({
       status: 400,
       json: { code: "management.request_invalid", params: { field: "picks" } },
+    });
+    expect(await lineTotals(billId)).toEqual(["36.00", "35.00"]);
+  });
+
+  it("item payments keep a hand-keyed card's operation number and machine", async () => {
+    const { billId, partyId } = await threeSaladsAndPaella();
+    const [salad] = await lineIdsOf(billId, [1]);
+
+    const paid = await request("POST", `/api/working-orders/${billId}/item-payments`, {
+      submissionId: randomUUID(),
+      picks: [{ lineId: salad, quantity: "1" }],
+      partyId,
+      expectedPartyRevision: await partyRevisionOf(billId),
+      expectedEdits: [await inTx((tx) => readBillEditState(tx, billId))],
+      method: "card",
+      externalRef: "4471",
+      externalProvider: "other",
+      externalMachine: "  Patio  ",
+      applied: "12.00",
+      tip: "0.00",
+    });
+
+    expect(paid.status).toBe(200);
+    expect(paid.json.payment).toMatchObject({
+      outcome: "received",
+      payment: {
+        method: "card",
+        entry: "manual",
+        externalRef: "4471",
+        externalProvider: "other",
+        externalMachine: "Patio",
+      },
+    });
+  });
+
+  it.each([
+    [
+      "item payments refuse which-machine details for cash",
+      { method: "cash", tendered: "20.00", externalProvider: "other" },
+      "externalProvider",
+    ],
+    [
+      "item payments refuse an operation number for a reader card",
+      { method: "card", entry: "reader", externalRef: "4471" },
+      "externalRef",
+    ],
+  ] as const)("%s", async (_, pay, field) => {
+    const { billId, partyId } = await threeSaladsAndPaella();
+    const [salad] = await lineIdsOf(billId, [1]);
+
+    const refused = await request("POST", `/api/working-orders/${billId}/item-payments`, {
+      submissionId: randomUUID(),
+      picks: [{ lineId: salad, quantity: "1" }],
+      partyId,
+      expectedPartyRevision: await partyRevisionOf(billId),
+      expectedEdits: [await inTx((tx) => readBillEditState(tx, billId))],
+      applied: "12.00",
+      tip: "0.00",
+      ...pay,
+    });
+
+    expect(refused).toEqual({
+      status: 400,
+      json: { code: "management.request_invalid", params: { field } },
     });
     expect(await lineTotals(billId)).toEqual(["36.00", "35.00"]);
   });

@@ -126,6 +126,17 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Deferred payment", "New bill"]);
   });
 
+  it("the switcher shows an overpaid bill's excess, not an amount owed", async () => {
+    const bills = [
+      partyBill("wo-1", 1, "0.00", { total: "10.00", overpaid: "5.00", hasPayments: true }),
+      partyBill("wo-2", 2, "30.00"),
+    ];
+    const el = await mountScreen(bills, "wo-1");
+
+    expect(closedLabel(el)).toBe("Bill 1 · 2 bills · €5.00 over");
+    expect(items(el)).toEqual(["Bill 1 €5.00 over", "Bill 2 €30.00", "New bill"]);
+  });
+
   it("says Paid for a paid bill on screen", async () => {
     const el = await mountScreen(three, "wo-3");
 

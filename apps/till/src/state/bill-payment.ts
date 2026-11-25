@@ -30,13 +30,14 @@ import type { StringKey } from "../i18n/strings.js";
 import { moreThanOneWholeUnit, tabLineGross } from "./adjust-target.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import type { PayLine, PayRefusal } from "../widgets/bill-pay-dialog.js";
+import type { ItemsPart } from "./pay-for-items.js";
 import { tabLinePortionKey } from "./portion-groups.js";
 
 /** What the operator chose to pay. A pick with no `units` is the whole line. An equal share names
  * only how many people are still to pay: the server works out the share and the preview shows it. */
 export type PayChoice =
   | { kind: "whole" }
-  | { kind: "items"; picks: { lineNo: number; units?: number }[] }
+  | { kind: "items"; picks: { lineNo: number; lineId: string; units?: number }[] }
   | { kind: "contribution"; amount: string }
   | { kind: "share"; shareOf: number };
 
@@ -122,8 +123,8 @@ export type CardEntry =
       simulationOutcome?: "captured" | "declined" | "attempting";
     };
 
-/** A payment as confirmed, before it has a submission id. */
-export type Confirmation = Omit<BillPaymentRequest, "submissionId">;
+/** A payment as confirmed, before it has a submission id; `items` when it goes to Pay for items. */
+export type Confirmation = Omit<BillPaymentRequest, "submissionId"> & { items?: ItemsPart };
 
 /**
  * The payment the operator confirmed: the ask with the allocation they were shown, which the server
@@ -178,7 +179,12 @@ export function submissionFor(
   const payment: Partial<Confirmation> = { ...confirmation };
   delete payment.expectedEdit;
   delete payment.guestCount;
-  const key = JSON.stringify([billId, payment]);
+  delete payment.items;
+  const key = JSON.stringify(
+    confirmation.items === undefined
+      ? [billId, payment]
+      : [billId, payment, confirmation.items.picks],
+  );
   if (unanswered?.billId === billId && unanswered.unconfirmed === true) return unanswered;
   if (unanswered?.billId !== billId || unanswered.key !== key)
     return { key, billId, request: structuredClone({ ...confirmation, submissionId: mint() }) };
@@ -205,7 +211,8 @@ export function paymentNotRecorded(error: unknown): boolean {
     code === "draft.out_of_date" ||
     code === "draft.taken_over" ||
     code === "bill.unsent_dishes" ||
-    code === "bill.allocation_changed"
+    code === "bill.allocation_changed" ||
+    code === "party.out_of_date"
   );
 }
 
@@ -296,6 +303,8 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
     finalNotFullyPaid?: unknown;
     moneyLeft?: unknown;
     advanceInvoiceNumbers?: unknown;
+    advances?: unknown;
+    dishName?: unknown;
   };
   const unsent = billUnsentOf(error);
   return {
@@ -322,6 +331,8 @@ export function refusalOf(error: unknown, changes = true): PayRefusal {
           ),
         }
       : {}),
+    ...(typeof refused.advances === "string" ? { advances: refused.advances } : {}),
+    ...(typeof refused.dishName === "string" ? { dishName: refused.dishName } : {}),
   };
 }
 
@@ -424,6 +435,7 @@ export function payLines(
       const portionKey = tabLinePortionKey(line, lines);
       return {
         lineNo: line.lineNo,
+        lineId: line.id,
         name: name(line),
         quantity: trimQuantity(line.quantity),
         total,

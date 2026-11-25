@@ -14,6 +14,7 @@ import { AppError, decimalToCents, thousandthsToDecimal } from "@waitron/shared"
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import { parseBillEditExpecteds, requireBillEditors } from "./bill-editing.js";
 import { stillOwedOnIssuedBill } from "./bill-payments.js";
+import { issuedBillStanding } from "./bill-payment-money.js";
 import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { assertProfileAction, type DeviceBinding } from "./device-session.js";
 import { pinnedAt } from "./issue-moment.js";
@@ -122,7 +123,10 @@ export async function endMeal(
       );
       const total = invoice.priced.total;
       const owed = await stillOwedOnIssuedBill(tx, req.billId, total);
-      if (decimalToCents(total) !== 0 && decimalToCents(owed) <= 0)
+      const standing = issuedBillStanding(total, owed);
+      if (standing === "overpaid")
+        throw new AppError("bill.overpaid", { workingOrderId: req.billId });
+      if (standing === "nothing_owed")
         throw new AppError("bill.nothing_outstanding", { workingOrderId: req.billId });
       const { saleId } = await issueUnpaidInvoice(
         tx,

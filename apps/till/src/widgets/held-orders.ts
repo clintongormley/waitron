@@ -7,7 +7,7 @@ import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { trackDialog } from "./track-dialog.js";
 import { seatedRead, tableTarget, tableTargetStyles, type SeatedRead } from "./table-targets.js";
-import { billName, paidInPart } from "../state/bill-state.js";
+import { amountToPay, billName, paidInPart } from "../state/bill-state.js";
 import { seatsGuests, shownName } from "../state/floor-today.js";
 import { signalChipStyles, signalChips } from "./signal-chips.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
@@ -230,7 +230,7 @@ export class TillHeldOrders extends LitElement {
     if (paidInPart(order))
       parts.push(
         t("table.bill_to_pay").replace("{amount}", () =>
-          formatMoney(order.outstanding, currentLocale()),
+          formatMoney(amountToPay(order.outstanding), currentLocale()),
         ),
       );
     return parts.join(" · ");

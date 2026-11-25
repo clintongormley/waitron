@@ -1846,6 +1846,16 @@ export const en = {
   "table.bill_receipt": "Receipt copy",
   "table.take_payment": "Take payment",
   "table.still_to_pay": "Still to pay at this table",
+  "table.being_paid_on": "Being paid on {bill}",
+  "table.overpaid": "Paid {amount} more than this bill comes to",
+  "table.give_back": "Give back {amount}",
+  "table.keep_as_tip": "Keep {amount} as tip",
+  "table.finish_overpaid":
+    "{bill} was paid {amount} more than it comes to. Give back the extra, or keep it as a tip, on that bill before finishing the table",
+  "table.finish_overpaid_give_back":
+    "{bill} was paid {amount} more than it comes to. Give back the extra on that bill before finishing the table",
+  "table.go_to_bill": "Go to {bill}",
+  "table.bill_overpaid": "{amount} over",
   "table.finish": "Finish table",
   "table.finish_bill_holds_money":
     "A bill on this table owes nothing but still holds money. Refund it before finishing the table",
@@ -1918,6 +1928,7 @@ export const en = {
   "bill_pay.reading": "Reading the bill's payments…",
   "bill_pay.total": "Total",
   "bill_pay.received": "Paid so far",
+  "bill_pay.overpaid": "Paid over the total",
   "bill_pay.reserved": "Card payment in progress",
   "bill_pay.outstanding": "Still to pay",
   "bill_pay.way": "How is this paid?",
@@ -2015,6 +2026,10 @@ export const en = {
   "bill_pay.choice_pool": "Pay {amount}, using {pool} contributed earlier",
   "bill_pay.tip_amount_between": "Enter a tip above {min} and no more than {amount}",
   "bill_pay.chargeable": "This venue does not take tips, so charge at most {amount} to this card",
+  "bill_pay.items_set_menu_dish":
+    "{dishName} is part of a set menu. Choose its set menu too, or leave it on this bill.",
+  "bill_pay.items_own_bill":
+    "These items move to a bill of their own, paid now. The rest stays on this bill.",
   "bill_pay.reader": "Card reader",
   "bill_pay.card_declined":
     "The card was declined and nothing was taken. Try the card again, or go back and choose another way to pay.",
@@ -2022,6 +2037,8 @@ export const en = {
     "The card reader could not reach the card network, so nothing was taken. Try again, or go back and take cash.",
   "bill_pay.card_pending":
     "The card payment is still in progress, so {amount} is held on this bill until it finishes. If it does not finish, it can be cleared in the dashboard, under Check card payments.",
+  "bill_pay.card_pending_items":
+    "The card payment is still in progress, so {amount} is held, with the items it pays for, on a bill of their own until it finishes. If it does not finish, it can be cleared in the dashboard, under Check card payments.",
   "bill_pay.uncertain_title": "We don't know yet whether it was charged",
   "bill_pay.uncertain":
     "The reader has not answered. Do not take this guest's money another way yet: {amount} stays held on the bill and this screen updates itself.",
@@ -2063,6 +2080,10 @@ export const en = {
     "Next, refund it on the separate card terminal it was keyed on. A supervisor or manager then approves it with their PIN.",
   "bill_refund.terminal":
     "This card was keyed on a separate card terminal, so Waitron cannot refund it itself. Refund {amount} on that terminal first, then confirm it here. A supervisor or manager approves it with their PIN.",
+  "bill_refund.terminal_next_no_pin":
+    "Next, refund it on the separate card terminal it was keyed on.",
+  "bill_refund.terminal_no_pin":
+    "This card was keyed on a separate card terminal, so Waitron cannot refund it itself. Refund {amount} on that terminal first, then confirm it here.",
   "bill_refund.terminal_done": "Refunded on the terminal",
   "bill_refund.approvers_failed": "Could not read who can approve this. Try again.",
   "bill_refund.unconfirmed":
@@ -4162,6 +4183,16 @@ export const es: Record<StringKey, string> = {
   "table.bill_receipt": "Copia del ticket",
   "table.take_payment": "Cobrar esta cuenta",
   "table.still_to_pay": "Pendiente de pago en la mesa",
+  "table.being_paid_on": "Se está cobrando en la {bill}",
+  "table.overpaid": "Se ha pagado {amount} más de lo que suma esta cuenta",
+  "table.give_back": "Devolver {amount}",
+  "table.keep_as_tip": "Dejar {amount} de propina",
+  "table.finish_overpaid":
+    "En la {bill} se han pagado {amount} más de lo que suma. Devuelve lo que sobra, o déjalo de propina, en esa cuenta antes de cerrar la mesa",
+  "table.finish_overpaid_give_back":
+    "En la {bill} se han pagado {amount} más de lo que suma. Devuelve lo que sobra en esa cuenta antes de cerrar la mesa",
+  "table.go_to_bill": "Ir a la {bill}",
+  "table.bill_overpaid": "{amount} de más",
   "table.finish": "Cerrar mesa",
   "table.finish_bill_holds_money":
     "Una cuenta de esta mesa no debe nada pero aún tiene dinero. Devuélvelo antes de cerrar la mesa",
@@ -4233,6 +4264,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.reading": "Leyendo los pagos de la cuenta…",
   "bill_pay.total": "Total",
   "bill_pay.received": "Pagado hasta ahora",
+  "bill_pay.overpaid": "Pagado de más",
   "bill_pay.reserved": "Pago con tarjeta en curso",
   "bill_pay.outstanding": "Queda por pagar",
   "bill_pay.way": "¿Cómo se paga?",
@@ -4332,6 +4364,10 @@ export const es: Record<StringKey, string> = {
   "bill_pay.tip_amount_between": "Introduce una propina mayor que {min} y de {amount} como mucho",
   "bill_pay.chargeable":
     "Este local no acepta propinas, así que cobra como mucho {amount} en esta tarjeta",
+  "bill_pay.items_set_menu_dish":
+    "{dishName} forma parte de un menú. Elige también su menú o deja el plato en esta cuenta.",
+  "bill_pay.items_own_bill":
+    "Estos artículos pasan a una cuenta propia, que se paga ahora. El resto sigue en esta cuenta.",
   "bill_pay.reader": "Lector de tarjetas",
   "bill_pay.card_declined":
     "La tarjeta se ha rechazado y no se ha cobrado nada. Vuelve a intentarlo con la tarjeta, o vuelve atrás y elige otra forma de pago.",
@@ -4339,6 +4375,8 @@ export const es: Record<StringKey, string> = {
     "El lector no ha podido conectar con la red de pagos, así que no se ha cobrado nada. Vuelve a intentarlo, o vuelve atrás y cobra en efectivo.",
   "bill_pay.card_pending":
     "El pago con tarjeta sigue en curso, así que se reservan {amount} en esta cuenta hasta que termine. Si no termina, se puede anular en el panel, en Comprobar pagos con tarjeta.",
+  "bill_pay.card_pending_items":
+    "El pago con tarjeta sigue en curso, así que se reservan {amount}, con los platos que paga, en una cuenta aparte hasta que termine. Si no termina, se puede anular en el panel, en Comprobar pagos con tarjeta.",
   "bill_pay.uncertain_title": "Aún no sabemos si se ha cobrado",
   "bill_pay.uncertain":
     "El lector no ha contestado. No cobres a este cliente de otra forma todavía: {amount} quedan reservados en la cuenta y esta pantalla se actualiza sola.",
@@ -4381,6 +4419,10 @@ export const es: Record<StringKey, string> = {
     "A continuación, devuélvelo en el datáfono aparte en el que se cobró. Después lo aprueba un responsable o encargado con su PIN.",
   "bill_refund.terminal":
     "Esta tarjeta se cobró en un datáfono aparte, así que Waitron no puede devolverla por sí mismo. Devuelve primero {amount} en ese datáfono y luego confírmalo aquí. Lo aprueba un responsable o encargado con su PIN.",
+  "bill_refund.terminal_next_no_pin":
+    "A continuación, devuélvelo en el datáfono aparte en el que se cobró.",
+  "bill_refund.terminal_no_pin":
+    "Esta tarjeta se cobró en un datáfono aparte, así que Waitron no puede devolverla por sí mismo. Devuelve primero {amount} en ese datáfono y luego confírmalo aquí.",
   "bill_refund.terminal_done": "Devuelto en el datáfono",
   "bill_refund.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
   "bill_refund.unconfirmed":

@@ -278,7 +278,9 @@ it("clean confirmation Back preserves entered cash without an extra question", a
 });
 it("item units are protected and reverting the selection clears the warning", async () => {
   const { app, form } = await mount();
-  form.lines = [{ lineNo: 2, name: "Beer", quantity: "3", total: "9.00", unitTotal: "3.00" }];
+  form.lines = [
+    { lineNo: 2, lineId: "line-2", name: "Beer", quantity: "3", total: "9.00", unitTotal: "3.00" },
+  ];
   click(form, "input[name=way][value=items]");
   await form.updateComplete;
   click(form, 'input[name=line][value="2"]');
@@ -293,7 +295,7 @@ it("item units are protected and reverting the selection clears the warning", as
   await expect.poll(() => app.requests.length).toBe(1);
   expect(app.requests).toEqual([
     {
-      choice: { kind: "items", picks: [{ lineNo: 2, units: 2 }] },
+      choice: { kind: "items", picks: [{ lineNo: 2, lineId: "line-2", units: 2 }] },
       pay: { method: "cash", tendered: "10.00" },
     },
   ]);

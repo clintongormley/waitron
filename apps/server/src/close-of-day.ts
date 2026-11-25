@@ -21,6 +21,7 @@ import {
   type BusinessDayClock,
 } from "@waitron/shared";
 import { clockUnconfirmedRefusal, stillOwedOnIssuedBill } from "./bill-payments.js";
+import { issuedBillStanding } from "./bill-payment-money.js";
 import { queueDailyReportMail } from "./daily-report-mail.js";
 import { DAILY_REPORT_MAIL_SETTINGS } from "./daily-report-mail-settings.js";
 import { pinnedAt } from "./issue-moment.js";
@@ -112,7 +113,7 @@ export async function issueBillAtClose(
   }
   const total = invoice.priced.total;
   const owed = await stillOwedOnIssuedBill(tx, billId, total);
-  if (decimalToCents(total) !== 0 && decimalToCents(owed) <= 0)
+  if (issuedBillStanding(total, owed) !== "owes")
     return { kind: "left_open", reason: "owes_nothing" };
   // Unlike Print the bill, a staged delivery that fails or cannot be reserved does not stop the
   // close: nobody is there to hand it to.

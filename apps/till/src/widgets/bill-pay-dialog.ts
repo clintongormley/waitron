@@ -80,6 +80,8 @@ import {
 import type { CardEntry, PayChoice, PayMethod } from "../state/bill-payment.js";
 import type { DeferredOffer } from "../state/deferred-close.js";
 import { portionGroups } from "../state/portion-groups.js";
+import { overpaidOf } from "../state/bill-state.js";
+import { itemsChoiceOf, paysOnNewBill } from "../state/pay-for-items.js";
 import {
   heldForEquipment,
   payRowWantsOpen,
@@ -98,6 +100,7 @@ type Method = "cash" | "card" | "manual";
 /** A dish of the bill as the dialog offers it. */
 export interface PayLine {
   lineNo: number;
+  lineId: string;
   name: string;
   /** Its quantity as shown. */
   quantity: string;
@@ -130,6 +133,8 @@ export type BillPayConfirmDetail = ReceiptGuestsDetail & {
 export interface PayTaken {
   change: string | null;
   slipPaymentId?: string;
+  /** The bill holding `slipPaymentId` when it is not the dialog's: Pay for items' new bill. */
+  slipBillId?: string;
   pending?: string;
   settled?: true;
   reader?: string;
@@ -585,6 +590,8 @@ export class TillBillPayDialog extends LitElement {
   #runPending = new Set<PayTaken>();
   /** Take the next was pressed since the payment last taken. */
   #leftTaken = false;
+  /** The payment last taken paid for items, which wait for its card on a bill of their own. */
+  #takenForItems = false;
 
   #leave?: LeaveCoordinator;
   #entry?: DraftScope<PaymentDraft>;
@@ -772,9 +779,20 @@ export class TillBillPayDialog extends LitElement {
     if (changed.has("amount")) this.typedAmountValue = this.amount;
     if (changed.has("asked") && this.asked === null) this.ownReceipt = null;
     if (!this.busy && this.asked === null && !this.confirmationLocked) {
+      // A line moved back from a failed Pay for items keeps its id but takes a new line number.
+      const before = (changed.get("lines") as PayLine[] | undefined) ?? this.lines;
+      const known = new Set(before.map((line) => line.lineNo));
+      const unitsById = new Map(
+        before.flatMap((line) => {
+          const units = this.picks.get(line.lineNo);
+          return units === undefined ? [] : [[line.lineId, units] as const];
+        }),
+      );
       const picks = new Map<number, number>();
       for (const line of this.#offered()) {
-        const units = this.picks.get(line.lineNo);
+        const units = known.has(line.lineNo)
+          ? this.picks.get(line.lineNo)
+          : unitsById.get(line.lineId);
         if (units !== undefined) picks.set(line.lineNo, Math.min(units, this.#remaining(line)));
       }
       this.picks = picks;
@@ -790,7 +808,11 @@ export class TillBillPayDialog extends LitElement {
     }
     if (changed.has("taken") && this.taken?.settled === true)
       this.#runPending.delete(changed.get("taken") as PayTaken);
-    if (changed.has("taken") && this.taken !== null) this.#accept(this.taken);
+    if (changed.has("taken") && this.taken !== null) {
+      const asked = (changed.has("asked") ? changed.get("asked") : this.asked) as PayRequest | null;
+      this.#takenForItems = asked?.choice.kind === "items";
+      this.#accept(this.taken);
+    }
     if (changed.has("refunded") && this.refunded !== null) this.#endRun();
     if (changed.has("balance") && !this.#owing()) this.nextOffered = false;
     const wanted = this.#rowWantsOpen();
@@ -960,16 +982,7 @@ export class TillBillPayDialog extends LitElement {
       case "whole":
         return { kind: "whole" };
       case "items":
-        return {
-          kind: "items",
-          picks: this.#offered().flatMap((line) => {
-            const units = this.picks.get(line.lineNo);
-            if (units === undefined) return [];
-            // Once any of a line is paid, fewer units than its quantity are left to pick.
-            const whole = line.unitTotal === null || units === Number(line.quantity);
-            return [whole ? { lineNo: line.lineNo } : { lineNo: line.lineNo, units }];
-          }),
-        };
+        return itemsChoiceOf(this.lines, this.picks, this.#offered());
       case "contribution":
         return { kind: "contribution", amount: typedAmount(this.typedAmountValue)! };
       case "share":
@@ -1349,6 +1362,8 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #takenText(taken: PayTaken): string {
+    if (taken.pending !== undefined && this.#takenForItems && this.balance?.beingPaidOn)
+      return fill(t("bill_pay.card_pending_items"), { amount: this.#money(taken.pending) });
     if (taken.pending !== undefined)
       return t("bill_pay.card_pending").replace("{amount}", () => this.#money(taken.pending!));
     return taken.change === null || compareDecimal(decimal(taken.change), decimal("0")) === 0
@@ -1519,6 +1534,7 @@ export class TillBillPayDialog extends LitElement {
     if (balance === null)
       return html`<p class="muted" data-pay-balance>${t("bill_pay.reading")}</p>`;
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
+    const over = overpaidOf(balance);
     return html`<dl class="balance" data-pay-balance aria-label=${t("bill_pay.balance")}>
       <div data-pay-total>
         <dt>${t("bill_pay.total")}</dt>
@@ -1532,10 +1548,17 @@ export class TillBillPayDialog extends LitElement {
         <dt>${t("bill_pay.reserved")}</dt>
         ${amount(balance.reserved)}
       </div>
-      <div data-pay-outstanding>
-        <dt>${t("bill_pay.outstanding")}</dt>
-        ${amount(balance.outstanding)}
-      </div>
+      ${
+        over === null
+          ? html`<div data-pay-outstanding>
+              <dt>${t("bill_pay.outstanding")}</dt>
+              ${amount(balance.outstanding)}
+            </div>`
+          : html`<div data-pay-overpaid>
+              <dt>${t("bill_pay.overpaid")}</dt>
+              ${amount(over)}
+            </div>`
+      }
     </dl>`;
   }
 
@@ -1551,6 +1574,10 @@ export class TillBillPayDialog extends LitElement {
       ),
       MONEY_SCALE,
     );
+  }
+
+  #ownBill(): this is { preview: Allocated & { total: string } } {
+    return paysOnNewBill(this.preview);
   }
 
   /** What the way covers, as far as the dialog knows before the server allocates it. */
@@ -1583,9 +1610,10 @@ export class TillBillPayDialog extends LitElement {
             return shown === "1" ? line.name : `${line.name} ×${shown}`;
           })
           .join(", ");
+        const total = this.#ownBill() ? this.preview.total : undefined;
         return fill(t("bill_pay.scope_items"), {
           items: names,
-          amount: this.#money(this.#pickedAmount()),
+          amount: this.#money(total ?? this.#pickedAmount()),
         });
       }
       case "contribution": {
@@ -2132,6 +2160,7 @@ export class TillBillPayDialog extends LitElement {
   #guestsShown(preview: Allocated): boolean {
     return (
       this.asksGuests &&
+      !paysOnNewBill(preview) &&
       this.balance !== null &&
       (this.asked?.choice.kind === "whole" ||
         compareDecimal(decimal(preview.applied), decimal(this.balance.outstanding)) === 0)
@@ -2142,6 +2171,7 @@ export class TillBillPayDialog extends LitElement {
   #ownReceiptAsked(preview: Allocated): boolean {
     return (
       this.ownReceiptOffered &&
+      !paysOnNewBill(preview) &&
       !this.confirmationLocked &&
       this.balance !== null &&
       this.asked !== null &&
@@ -2222,6 +2252,7 @@ export class TillBillPayDialog extends LitElement {
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
     const body = html`${outsideCardSummary(asked.card?.entry === "manual" ? asked.card : {})}
       <p class="scope" data-pay-scope>${this.#scope()}</p>
+      ${this.#ownBill() ? html`<p data-pay-own-bill>${t("bill_pay.items_own_bill")}</p>` : nothing}
       <dl class="allocation">
         <div class=${cash === null ? "headline" : ""} data-pay-applied>
           <dt>${t("bill_pay.applied")}</dt>

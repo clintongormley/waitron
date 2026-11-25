@@ -21,6 +21,7 @@ import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { AdjustmentReason, BillPaymentView } from "../api/client.js";
 import { reasonPicker, voidReasons } from "./reason-picker.js";
+import { givesBackOverpaid } from "../state/bill-state.js";
 import {
   REASON_MAX,
   moneyPlus,
@@ -97,6 +98,8 @@ export class TillBillRefundDialog extends LitElement {
   /** An amount offered as the part to give back, when this payment can give that part: the
    * dialog opens on it. */
   @property() suggested: string | null = null;
+  /** Up to this much, what the bill was paid over its total, goes back with no approver's PIN. */
+  @property() pinFreeUpTo: string | null = null;
   @property({ attribute: false }) reasons: AdjustmentReason[] | null = null;
   @property({ type: Boolean }) reasonsLoading = false;
 
@@ -268,6 +271,23 @@ export class TillBillRefundDialog extends LitElement {
       : { appliedAmount: left.applied, tipAmount: left.tip, reason };
   }
 
+  /** Whether the amount asked is within {@link pinFreeUpTo}. */
+  #pinFree(): boolean {
+    if (this.pinFreeUpTo === null || (this.#part() && this.#partAmount() === null)) return false;
+    return givesBackOverpaid({ overpaid: this.pinFreeUpTo }, this.#ask());
+  }
+
+  #nextStep(): TemplateResult | typeof nothing {
+    const keyed = this.payment.entry === "manual";
+    if (this.#pinFree() && !keyed) return nothing;
+    const key = !keyed
+      ? "bill_refund.approval_next"
+      : this.#pinFree()
+        ? "bill_refund.terminal_next_no_pin"
+        : "bill_refund.terminal_next";
+    return html`<p class="muted" data-refund-next>${t(key)}</p>`;
+  }
+
   #ownErrors(): Map<Field, string> {
     const errors = new Map<Field, string>();
     if (this.#part() && this.#partAmount() === null)
@@ -427,9 +447,7 @@ export class TillBillRefundDialog extends LitElement {
           if (this.isConnected && this.active && !this.busy) this.#emit("bill-refund-reasons");
         },
       })}
-      <p class="muted" data-refund-next>
-        ${t(this.payment.entry === "manual" ? "bill_refund.terminal_next" : "bill_refund.approval_next")}
-      </p>
+      ${this.#nextStep()}
       <wt-form-actions .error=${this.#bottomMessage(errors)}
         >${recoveryLink(this.shownRefusal)} ${this.#cancelButton()}
         <wt-button
@@ -514,7 +532,10 @@ export class TillBillRefundDialog extends LitElement {
     const ask = this.#ask();
     const amount = moneyPlus(ask.appliedAmount, ask.tipAmount);
     return html`<p class="instruction" data-refund-terminal>
-        ${t("bill_refund.terminal").replace("{amount}", () => this.#money(amount))}
+        ${t(this.#pinFree() ? "bill_refund.terminal_no_pin" : "bill_refund.terminal").replace(
+          "{amount}",
+          () => this.#money(amount),
+        )}
       </p>
       <wt-form-actions .error=${this.#bottomMessage(new Map())}
         >${recoveryLink(this.shownRefusal)} ${this.#cancelButton()}

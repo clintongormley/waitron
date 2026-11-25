@@ -1,7 +1,6 @@
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { TillApi as RealTillApi } from "./api/client.js";
 import { ServerRouter, withServerTarget } from "./api/server-router.js";
-import { openSentDish } from "./screens/till-table-order-screen.sent.test-helpers.js";
 import { openTableMenu } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import type { TillFindBillDialog } from "./widgets/find-bill-dialog.js";
@@ -75,17 +74,16 @@ import type {
   BillRefundRequest,
   BillRefundResult,
   BillRefundView,
-  CurrentOrders,
   Draft,
   HeldOrderSummary,
   InvoiceDeliveryOptions,
-  OrderGroup,
   PartyBill,
   TableState,
   TillApi,
   TillProduct,
   TillSaleResult,
 } from "./api/client.js";
+import type { ItemPaymentRequest } from "./api/item-payment-types.js";
 
 // A table's bill paid in parts through the bill payment dialog (service, ordering and billing plan
 // Task 15; bill payments design §12): the dialog asks the server for each allocation, shows it,
@@ -104,6 +102,17 @@ async function mountApp(overrides: Record<string, unknown> = {}, theme?: "light"
 
 const sent = (): BillPaymentRequest[] =>
   vi.mocked(api.takeBillPayment).mock.calls.map(([, request]) => request);
+
+/** Pay for items' preview of `applied` in cash, with `change`. */
+const itemsPreview = (applied: string, change: string) => ({
+  total: applied,
+  applied,
+  tip: "0.00",
+  change,
+});
+
+const itemsSent = (): ItemPaymentRequest[] =>
+  vi.mocked(api.payForItems).mock.calls.map(([, request]) => request);
 
 /** What a person's pointer would land on there, through every shadow root. */
 function deepestAt(x: number, y: number): Element | null {
@@ -1142,13 +1151,23 @@ describe("till-app: the three ways to pay part of a bill", () => {
     let accepted = false;
     const dirtyAtRead: boolean[] = [];
     const { el } = await mountApp({
-      previewBillPayment: vi.fn().mockResolvedValue(cash("40.00", "10.00")),
-      takeBillPayment: vi.fn(async () => {
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview("40.00", "10.00")),
+      payForItems: vi.fn(async () => {
         accepted = true;
-        return takenOf(
-          { applied: "40.00", change: "10.00" },
-          { received: "40.00", outstanding: "80.00" },
-        );
+        return {
+          billId: "wo-9",
+          payment: takenOf(
+            { applied: "40.00", change: "10.00" },
+            {
+              workingOrderId: "wo-9",
+              status: "settled",
+              total: "40.00",
+              received: "40.00",
+              outstanding: "0.00",
+            },
+            invoiceOf("40.00"),
+          ),
+        };
       }),
       getTablesState: vi.fn(async () => {
         if (accepted) {
@@ -1165,13 +1184,15 @@ describe("till-app: the three ways to pay part of a bill", () => {
     await type(el, "tendered", "50");
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
+    emit(el.shadowRoot!.querySelector("till-settlement-document-dialog")!, "settlement-close");
     await expect.poll(() => dirtyAtRead.length).toBeGreaterThan(0);
     expect(dirtyAtRead).toEqual([false]);
-    expect(sent()).toEqual([
+    expect(itemsSent()).toEqual([
       {
-        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
-        kind: "items",
-        lines: [{ lineNo: 1 }],
+        expectedEdits: [{ billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null }],
+        expectedPartyRevision: 3,
+        partyId: "v1",
+        picks: [{ lineId: "line-1" }],
         method: "cash",
         tendered: "50",
         applied: "40.00",
@@ -1182,23 +1203,35 @@ describe("till-app: the three ways to pay part of a bill", () => {
   });
 
   it("pays for chosen items, then a contribution, then an equal share, showing the balance after each", async () => {
-    const paidPaella = [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }];
     const answers = [
       takenOf(
-        { kind: "items", applied: "40.00", tendered: "50.00", change: "10.00" },
-        { received: "40.00", outstanding: "80.00", paidLines: paidPaella },
-      ),
-      takenOf(
         { applied: "20.00", tendered: "20.00" },
-        { received: "60.00", outstanding: "60.00", paidLines: paidPaella },
+        { total: "80.00", received: "20.00", outstanding: "60.00" },
       ),
       takenOf(
         { kind: "share", shareOf: 3, applied: "20.00", tendered: "20.00" },
-        { received: "80.00", outstanding: "40.00", paidLines: paidPaella },
+        { total: "80.00", received: "40.00", outstanding: "40.00" },
       ),
     ];
     // The server's side: each payment taken is what the bill and its balance read afterwards.
     let latest = balanceOf();
+    const payForItems = vi.fn(async () => {
+      latest = balanceOf({ total: "80.00", outstanding: "80.00" });
+      return {
+        billId: "wo-9",
+        payment: takenOf(
+          { applied: "40.00", tendered: "50.00", change: "10.00" },
+          {
+            workingOrderId: "wo-9",
+            status: "settled",
+            total: "40.00",
+            received: "40.00",
+            outstanding: "0.00",
+          },
+          invoiceOf("40.00"),
+        ),
+      };
+    });
     const takeBillPayment = vi.fn(async () => {
       const answer = answers.shift()!;
       latest = answer.balance;
@@ -1206,7 +1239,6 @@ describe("till-app: the three ways to pay part of a bill", () => {
     });
     const previewBillPayment = vi
       .fn()
-      .mockResolvedValueOnce(cash("40.00", "10.00"))
       .mockResolvedValueOnce(cash("20.00", "0.00"))
       .mockResolvedValueOnce(cash("20.00", "0.00"));
     const getBillBalance = vi.fn(async () => latest);
@@ -1214,6 +1246,8 @@ describe("till-app: the three ways to pay part of a bill", () => {
       billOf({ outstanding: latest.outstanding, hasPayments: latest.received !== "0.00" }),
     ]);
     const { el } = await mountApp({
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview("40.00", "10.00")),
+      payForItems,
       takeBillPayment,
       previewBillPayment,
       getBillBalance,
@@ -1228,37 +1262,43 @@ describe("till-app: the three ways to pay part of a bill", () => {
     await type(el, "tendered", "50");
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
-    expect(shownBalance(el)).toEqual(balanceShows("120.00", "40.00", "80.00"));
-    expect(text(inDialog(el, "[data-pay-taken]"))).toBe(
-      t("bill_pay.taken_change").replace("{amount}", money("10.00")),
-    );
-    expect(dialog(el)!.shadowRoot!.querySelector('input[name="line"][value="1"]')).toBeNull();
+    // The items are paid on a bill of their own, whose receipt shows; the table's bill is read again.
+    expect(dialog(el)).toBeNull();
+    emit(el.shadowRoot!.querySelector("till-settlement-document-dialog")!, "settlement-close");
+    await flush(el, 6);
 
-    await press(el, 'input[name="way"][value="contribution"]');
+    await openDialog(el, "contribution");
+    expect(shownBalance(el)).toEqual(balanceShows("80.00", "0.00", "80.00"));
     await type(el, "amount", "20");
     await type(el, "tendered", "20");
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
-    expect(shownBalance(el)).toEqual(balanceShows("120.00", "60.00", "60.00"));
+    expect(shownBalance(el)).toEqual(balanceShows("80.00", "20.00", "60.00"));
 
     await press(el, 'input[name="way"][value="share"]');
     await type(el, "people", "3");
     await type(el, "tendered", "20");
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
-    expect(shownBalance(el)).toEqual(balanceShows("120.00", "80.00", "40.00"));
+    expect(shownBalance(el)).toEqual(balanceShows("80.00", "40.00", "40.00"));
 
+    expect(vi.mocked(api.previewItemPayment).mock.calls).toEqual([
+      ["wo-4", { picks: [{ lineId: "line-1" }], method: "cash", tendered: "50" }],
+    ]);
+    expect(itemsSent()).toEqual([
+      {
+        expectedEdits: [{ billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null }],
+        expectedPartyRevision: 3,
+        partyId: "v1",
+        picks: [{ lineId: "line-1" }],
+        method: "cash",
+        tendered: "50",
+        applied: "40.00",
+        tip: "0.00",
+        submissionId: expect.any(String),
+      },
+    ]);
     expect(previewBillPayment.mock.calls.map(([billId, ask]) => [billId, ask])).toEqual([
-      [
-        "wo-4",
-        {
-          expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
-          kind: "items",
-          lines: [{ lineNo: 1 }],
-          method: "cash",
-          tendered: "50",
-        },
-      ],
       [
         "wo-4",
         {
@@ -1283,16 +1323,6 @@ describe("till-app: the three ways to pay part of a bill", () => {
     expect(sent()).toEqual([
       {
         expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
-        kind: "items",
-        lines: [{ lineNo: 1 }],
-        method: "cash",
-        tendered: "50",
-        applied: "40.00",
-        tip: "0.00",
-        submissionId: expect.any(String),
-      },
-      {
-        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
         kind: "contribution",
         amount: "20",
         method: "cash",
@@ -1312,10 +1342,10 @@ describe("till-app: the three ways to pay part of a bill", () => {
         submissionId: expect.any(String),
       },
     ]);
-    expect(new Set(sent().map((request) => request.submissionId)).size).toBe(3);
+    expect(new Set([...itemsSent(), ...sent()].map((request) => request.submissionId)).size).toBe(
+      3,
+    );
     expect(api.recordSale).not.toHaveBeenCalled();
-    const paid = tableOrder(el).shadowRoot!.querySelector("[data-line-paid]");
-    expect(text(paid)).toBe(t("table.pick_payment_stays"));
   });
 
   it("prints the confirmed part payer's slip before the next payment", async () => {
@@ -2495,7 +2525,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
 
   it("shows a refusal above the action and reads the balance again", async () => {
     let paidElsewhere = false;
-    const takeBillPayment = vi.fn(async () => {
+    const payForItems = vi.fn(async () => {
       paidElsewhere = true;
       throw { code: "bill.line_paid", lineNo: 1 };
     });
@@ -2510,7 +2540,11 @@ describe("till-app: a bill payment's refusals and retries", () => {
           : {},
       ),
     );
-    const { el } = await mountApp({ takeBillPayment, getBillBalance });
+    const { el } = await mountApp({
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview("40.00", "10.00")),
+      payForItems,
+      getBillBalance,
+    });
     await openTable(el);
     await openDialog(el, "items");
     await press(el, 'input[name="line"][value="1"]');
@@ -5919,280 +5953,6 @@ describe("till-app: the owner's split after a contribution", () => {
     );
     await openDialog(el, "rest");
     expect(shownBalance(el)).toEqual(balanceShows("90.00", "50.00", "40.00"));
-  });
-});
-
-describe("till-app: a guest leaving early pays for a held dish", () => {
-  it("pays for one held Tiramisu on the table's own bill, which stays held in Sent, marked with a payment in its window, and is not offered again", async () => {
-    const tiramisu = line({
-      lineNo: 6,
-      name: "Tiramisu",
-      unitPriceGross: "6.00",
-      groupId: "g-2",
-      sentAt: null,
-      firedAt: null,
-      state: null,
-    });
-    const held: OrderGroup = {
-      courseIds: [],
-      id: "g-2",
-      position: 2,
-      displayNumber: 2,
-      numberPartyId: "v1",
-      state: "held",
-      firedAt: null,
-      remindAt: null,
-      lineIds: [tiramisu.id],
-      summary: "1 × Tiramisu",
-    };
-    const currentOrders: CurrentOrders = {
-      hasGroups: true,
-      nextDisplayNumber: 3,
-      retainedCourses: [],
-      revision: 3,
-      reminder: null,
-      groups: [
-        {
-          id: "g-2",
-          position: 2,
-          displayNumber: 2,
-          numberPartyId: "v1",
-          state: "held",
-          firedAt: null,
-          remindAt: null,
-          sentAt: "2026-09-30T19:00:00.000Z",
-          sentBy: "Ana",
-          rows: [
-            {
-              billStatus: "open",
-              netAmount: tiramisu.unitPriceGross,
-              readyAt: null,
-              requestedAt: null,
-              firedAt: null,
-              lineId: tiramisu.id,
-              workingOrderId: "wo-4",
-              lineNo: 6,
-              courseId: null,
-              name: "Tiramisu",
-              quantity: "1.000",
-              unitPrecision: 0,
-              servedQuantity: "0.000",
-              servedAt: null,
-              released: false,
-              kitchen: null,
-              note: null,
-              extras: [],
-            },
-          ],
-        },
-      ],
-      ungrouped: [],
-    };
-    let paid = false;
-    const paidTiramisu = [{ lineId: tiramisu.id, lineNo: 6, paidQuantity: "1.000" }];
-    const { el } = await mountApp({
-      getTabLines: vi.fn().mockResolvedValue({
-        lines: [...bill120, tiramisu],
-        revision: 0,
-      }),
-      listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [held], printProblems: [] }),
-      readCurrentOrders: vi.fn().mockResolvedValue(currentOrders),
-      getPartyBills: vi.fn(async () => [
-        billOf({ total: "126.00", outstanding: paid ? "120.00" : "126.00", hasPayments: paid }),
-      ]),
-      getBillBalance: vi.fn(async () =>
-        balanceOf({
-          total: "126.00",
-          received: paid ? "6.00" : "0.00",
-          outstanding: paid ? "120.00" : "126.00",
-          paidLines: paid ? paidTiramisu : [],
-        }),
-      ),
-      previewBillPayment: vi.fn().mockResolvedValue(cash("6.00", "4.00")),
-      takeBillPayment: vi.fn(async () => {
-        paid = true;
-        return takenOf(
-          { kind: "items", applied: "6.00", tendered: "10.00", change: "4.00" },
-          { total: "126.00", received: "6.00", outstanding: "120.00", paidLines: paidTiramisu },
-        );
-      }),
-    });
-    await openTable(el);
-
-    await openDialog(el, "items");
-    await press(el, 'input[name="line"][value="6"]');
-    await type(el, "tendered", "10");
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
-
-    expect(sent()[0]!.kind).toBe("items");
-    expect(sent()[0]!.lines).toEqual([{ lineNo: 6 }]);
-    expect(dialog(el)!.shadowRoot!.querySelector('input[name="line"][value="6"]')).toBeNull();
-    await press(el, "[data-pay-close]");
-    await expect.poll(() => dialog(el)).toBeNull();
-    const order = tableOrder(el);
-    const dish = await openSentDish(order, tiramisu.id, "held");
-    expect(text(dish.querySelector("[data-sent-line-status]"))).toBe(t("table.group_held"));
-    expect(text(dish.querySelector("[data-line-paid]"))).toBe(t("table.pick_payment_stays"));
-    const closed = new Promise<void>((resolve) =>
-      dish.addEventListener("wt-close", () => resolve(), { once: true }),
-    );
-    await userEvent.click(dish.querySelector<HTMLElement>("[data-sent-line-close]")!);
-    await closed;
-    await flush(el);
-    await openDialog(el, "items");
-    expect(dialog(el)!.shadowRoot!.querySelector('input[name="line"][value="6"]')).toBeNull();
-    expect(api.recordSale).not.toHaveBeenCalled();
-  });
-});
-
-// Design §3.3: €105.00 contributed on a €120.00 bill, and a guest's €25.00 steak with €15.00 left.
-describe("till-app: the steak's two choices", () => {
-  const steak = line({ lineNo: 6, name: "Chuletón", unitPriceGross: "25.00" });
-  const choices = (tip = "0.00"): AllocationPreview => ({
-    kind: "choose",
-    options: [
-      { choice: "full_with_tip", applied: "15.00", tip: `${10 + Number(tip)}.00` },
-      { choice: "use_pool", applied: "15.00", tip },
-    ],
-  });
-  const contributed = balanceOf({ received: "105.00", outstanding: "15.00" });
-
-  async function toChoices(overrides: Record<string, unknown>) {
-    const { el } = await mountApp({
-      getPartyBills: vi
-        .fn()
-        .mockResolvedValue([billOf({ outstanding: "15.00", hasPayments: true })]),
-      getBillBalance: vi.fn().mockResolvedValue(contributed),
-      getTabLines: vi.fn().mockResolvedValue({ lines: [...bill120, steak], revision: 0 }),
-      ...overrides,
-    });
-    await openTable(el);
-    await openDialog(el, "items");
-    await press(el, 'input[name="line"][value="6"]');
-    return el;
-  }
-
-  it("charges a card €25.00, €10.00 of it a tip, when the full price with a tip is chosen", async () => {
-    const previewBillPayment = vi.fn().mockResolvedValueOnce(choices()).mockResolvedValueOnce({
-      kind: "allocated",
-      choice: "full_with_tip",
-      applied: "15.00",
-      tip: "10.00",
-      change: null,
-      charged: "25.00",
-    });
-    const takeBillPayment = vi.fn().mockResolvedValue(
-      takenOf(
-        {
-          kind: "items",
-          method: "card",
-          applied: "15.00",
-          tip: "10.00",
-          tendered: null,
-          change: null,
-        },
-        { received: "120.00", outstanding: "0.00", status: "settled" },
-        invoiceOf("120.00"),
-      ),
-    );
-    const el = await toChoices({ previewBillPayment, takeBillPayment });
-    await press(el, 'input[name="method"][value="card"]');
-    await press(el, "[data-pay-continue]");
-
-    expect(text(inDialog(el, '[data-pay-choice="full_with_tip"]'))).toBe(
-      t("bill_pay.choice_tip").replace("{amount}", money("25.00")).replace("{tip}", money("10.00")),
-    );
-    await press(el, '[data-pay-choice="full_with_tip"]');
-    expect(text(inDialog(el, "[data-pay-charged] dd"))).toBe(money("25.00"));
-    await press(el, "[data-pay-confirm]");
-
-    expect(previewBillPayment.mock.calls.map(([, ask]) => ask)).toEqual([
-      {
-        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
-        kind: "items",
-        lines: [{ lineNo: 6 }],
-        method: "card",
-      },
-      {
-        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
-        kind: "items",
-        lines: [{ lineNo: 6 }],
-        method: "card",
-        choice: "full_with_tip",
-      },
-    ]);
-    expect(sent()).toEqual([
-      {
-        expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
-        kind: "items",
-        lines: [{ lineNo: 6 }],
-        method: "card",
-        choice: "full_with_tip",
-        applied: "15.00",
-        tip: "10.00",
-        entry: "manual",
-        externalProvider: "other",
-        guestCount: 4,
-        submissionId: expect.any(String),
-      },
-    ]);
-  });
-
-  it("takes €15.00 in cash, using €10.00 of the earlier contribution, when that is chosen", async () => {
-    const previewBillPayment = vi
-      .fn()
-      .mockResolvedValueOnce(choices())
-      .mockResolvedValueOnce({ ...cash("15.00", "0.00"), choice: "use_pool" });
-    const takeBillPayment = vi
-      .fn()
-      .mockResolvedValue(
-        takenOf(
-          { kind: "items", applied: "15.00", tendered: "15.00", change: "0.00" },
-          { received: "120.00", outstanding: "0.00", status: "settled" },
-          invoiceOf("120.00"),
-        ),
-      );
-    const el = await toChoices({ previewBillPayment, takeBillPayment });
-    await type(el, "tendered", "15");
-    await press(el, "[data-pay-continue]");
-
-    expect(text(inDialog(el, '[data-pay-choice="use_pool"]'))).toBe(
-      t("bill_pay.choice_pool")
-        .replace("{amount}", money("15.00"))
-        .replace("{pool}", money("10.00")),
-    );
-    await press(el, '[data-pay-choice="use_pool"]');
-    await press(el, "[data-pay-confirm]");
-
-    expect(previewBillPayment.mock.calls[1]![1]).toEqual({
-      expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
-      kind: "items",
-      lines: [{ lineNo: 6 }],
-      method: "cash",
-      tendered: "15",
-      choice: "use_pool",
-    });
-    expect(sent()[0]).toMatchObject({ choice: "use_pool", applied: "15.00", tip: "0.00" });
-    expect(dialog(el)).toBeNull();
-  });
-
-  it("offers only the earlier contribution in a venue that takes no tips", async () => {
-    const el = await toChoices({
-      getTill: vi.fn().mockResolvedValue({ ...till, tipsEnabled: false }),
-      previewBillPayment: vi.fn().mockResolvedValue({
-        kind: "choose",
-        options: [{ choice: "use_pool", applied: "15.00", tip: "0.00" }],
-      }),
-    });
-    await type(el, "tendered", "15");
-    await press(el, "[data-pay-continue]");
-
-    expect(
-      [...dialog(el)!.shadowRoot!.querySelectorAll<HTMLElement>("[data-pay-choice]")].map(
-        (choice) => choice.dataset.payChoice,
-      ),
-    ).toEqual(["use_pool"]);
   });
 });
 

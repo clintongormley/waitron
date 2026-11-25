@@ -1,7 +1,16 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { refunds as refundRows, type billPayments, type Transaction } from "@waitron/db";
-import { MONEY_SCALE, subtractDecimal, sumDecimals, toScale } from "@waitron/shared";
+import {
+  MONEY_SCALE,
+  compareDecimal,
+  decimalToCents,
+  negateDecimal,
+  subtractDecimal,
+  sumDecimals,
+  toScale,
+} from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
+import { ZERO } from "./bill-allocation.js";
 
 type PaymentRow = typeof billPayments.$inferSelect;
 type RefundRow = typeof refundRows.$inferSelect;
@@ -57,8 +66,27 @@ export function outstandingOf(total: Decimal, received: Decimal | undefined): De
   return received === undefined ? total : toScale(subtractDecimal(total, received), MONEY_SCALE);
 }
 
+/** What a bill whose `outstanding` is below zero was paid over its total, at the money scale;
+ * undefined when nothing is over. */
+export function overpaidBy(outstanding: Decimal): Decimal | undefined {
+  return compareDecimal(outstanding, ZERO) < 0
+    ? toScale(negateDecimal(outstanding), MONEY_SCALE)
+    : undefined;
+}
+
 /** What an issued bill still owes: its amount due less what each received payment has kept of its
  * applied money. */
 export function owedOf(amountDue: Decimal, keptApplied: readonly Decimal[]): Decimal {
   return outstandingOf(amountDue, sumDecimals(keptApplied));
+}
+
+/** Where an issued bill with `owed` left of `amountDue` stands: paid over it, owing nothing on an
+ * amount due other than zero, or owing; a bill due nothing and owing nothing counts as owing. */
+export function issuedBillStanding(
+  amountDue: Decimal,
+  owed: Decimal,
+): "overpaid" | "nothing_owed" | "owes" {
+  if (decimalToCents(owed) < 0) return "overpaid";
+  if (decimalToCents(amountDue) !== 0 && decimalToCents(owed) === 0) return "nothing_owed";
+  return "owes";
 }

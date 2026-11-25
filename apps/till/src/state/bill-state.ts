@@ -1,10 +1,60 @@
-import { MONEY_SCALE, compareDecimal, decimal, subtractDecimal, toScale } from "@waitron/shared";
-import type { PartyBill } from "../api/client.js";
+import {
+  MONEY_SCALE,
+  compareDecimal,
+  decimal,
+  isZeroDecimal,
+  subtractDecimal,
+  toScale,
+} from "@waitron/shared";
+import type { BillBalance, PartyBill } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
+import { moneyPlus, type RefundAsk } from "./bill-payment.js";
+
+/** What an open or placed bill was paid over its total, or null when nothing is over. */
+export function overpaidOf(balance: Pick<BillBalance, "overpaid"> | null): string | null {
+  const over = balance?.overpaid;
+  return over === undefined || compareDecimal(decimal(over), decimal("0")) <= 0 ? null : over;
+}
+
+/** Whether `asked` gives back no more than `balance` was paid over its total: money just taken on
+ * this bill, which the server gives back with no approver's PIN unless tips it gave back earlier
+ * used up the excess (`refundPermission`, apps/server/src/bill-overpaid.ts). */
+export function givesBackOverpaid(
+  balance: Pick<BillBalance, "overpaid"> | null,
+  asked: Pick<RefundAsk, "appliedAmount" | "tipAmount">,
+): boolean {
+  const over = overpaidOf(balance);
+  return (
+    over !== null &&
+    compareDecimal(moneyPlus(asked.appliedAmount, asked.tipAmount), decimal(over)) <= 0
+  );
+}
 
 /** Open or placed; unlike `stillToPay`, counts an open bill with nothing outstanding. */
 export function owing(bill: Pick<PartyBill, "status">): boolean {
   return bill.status === "open" || bill.status === "placed";
+}
+
+/** The bill Finish table's refusal names: one owing money first, then one paid over its total,
+ * then an open bill with nothing to pay on it, which may hold no dish, and Finish does not wait for
+ * a bill with no dish (`billOwes`, apps/server/src/parties.ts); within each, a bill other than
+ * `shownId` first, as the bill on screen is charged below. */
+export function finishBlocker(
+  bills: readonly PartyBill[],
+  shownId: string | undefined,
+): PartyBill | undefined {
+  const unpaid = bills.filter((bill) => !bill.leftUnpaid && owing(bill));
+  const nothingToPay = (bill: PartyBill) =>
+    bill.status === "open" && !bill.hasPayments && isZeroDecimal(decimal(bill.total));
+  for (const tier of [
+    unpaid.filter((bill) => overpaidOf(bill) === null && !nothingToPay(bill)),
+    unpaid.filter((bill) => overpaidOf(bill) !== null),
+    unpaid.filter(nothingToPay),
+  ]) {
+    const found = tier.find((bill) => bill.workingOrderId !== shownId) ?? tier[0];
+    if (found !== undefined) return found;
+  }
+  return undefined;
 }
 
 /** As the server's `needsPaper`: only a full invoice going to A4 or by email prints no receipt. */
@@ -42,17 +92,20 @@ export function printBillOffered(
 }
 
 /**
- * A bill the table cannot finish without paying, as near the server's `billOwes` as the wire allows:
- * the bills read sends no line count, so an open bill whose lines total zero reads as not owing, and
- * the server's refusal of Finish table handles it.
+ * A bill the table cannot finish without paying, or giving back or keeping what it was paid over
+ * its total, as near the server's `billOwes` as the wire allows: the bills read sends no line count,
+ * so an open bill whose lines total zero reads as not owing, and the server's refusal of Finish
+ * table handles it.
  */
 export function stillToPay(
-  bill: Pick<PartyBill, "status" | "outstanding" | "leftUnpaid">,
+  bill: Pick<PartyBill, "status" | "outstanding" | "leftUnpaid" | "overpaid">,
 ): boolean {
   return (
     !bill.leftUnpaid &&
     (bill.status === "placed" ||
-      (bill.status === "open" && compareDecimal(decimal(bill.outstanding), decimal("0")) !== 0))
+      (bill.status === "open" &&
+        (compareDecimal(decimal(bill.outstanding), decimal("0")) !== 0 ||
+          overpaidOf(bill) !== null)))
   );
 }
 
@@ -64,6 +117,14 @@ export function stillOwed(bill: Pick<PartyBill, "total" | "outstanding" | "amoun
   if (bill.amountDue === undefined) return bill.outstanding;
   const received = subtractDecimal(decimal(bill.total), decimal(bill.outstanding));
   return toScale(subtractDecimal(decimal(bill.amountDue), received), MONEY_SCALE);
+}
+
+/** What a held-list row's `outstanding` leaves to pay: the list gives an order paid over its total a
+ * negative outstanding, where the party bills read gives zero. */
+export function amountToPay(outstanding: string): string {
+  return compareDecimal(decimal(outstanding), decimal("0")) < 0
+    ? toScale(decimal("0"), MONEY_SCALE)
+    : outstanding;
 }
 
 /**

@@ -133,9 +133,9 @@ const press = async (el: TillTableOrderScreen, selector: string) => {
 };
 
 const offeredLines = [
-  { lineNo: 1, name: "Paella", quantity: "1", total: "30.00", unitTotal: null },
-  { lineNo: 2, name: "Beer", quantity: "3", total: "9.00", unitTotal: "3.00" },
-  { lineNo: 3, name: "Tiramisu", quantity: "1", total: "6.00", unitTotal: null },
+  { lineNo: 1, lineId: "line-1", name: "Paella", quantity: "1", total: "30.00", unitTotal: null },
+  { lineNo: 2, lineId: "line-2", name: "Beer", quantity: "3", total: "9.00", unitTotal: "3.00" },
+  { lineNo: 3, lineId: "line-3", name: "Tiramisu", quantity: "1", total: "6.00", unitTotal: null },
 ];
 
 beforeEach(() => setLocale("en"));
@@ -645,5 +645,150 @@ describe("till-table-order-screen: a bill's receipt language", () => {
     });
 
     expect(languageButton(el)).toBeNull();
+  });
+});
+
+describe("till-table-order-screen: a bill paid elsewhere or paid too much", () => {
+  const overpaidBill: PartyBill = {
+    ...untouched,
+    total: "10.00",
+    outstanding: "0.00",
+    overpaid: "5.00",
+    hasPayments: true,
+  };
+  const overpaidBalance = balance({
+    total: "10.00",
+    received: "15.00",
+    outstanding: "-5.00",
+    overpaid: "5.00",
+  });
+
+  it("an open bill being paid elsewhere says which bill", async () => {
+    const el = await mountScreen({
+      bills: [partlyPaid],
+      billBalance: balance({ beingPaidOn: { billId: "wo-9", billNumber: 3 } }),
+    });
+
+    expect(text(el.shadowRoot!.querySelector("[data-being-paid-on]"))).toBe("Being paid on Bill 3");
+    expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).not.toBeNull();
+  });
+
+  it("says nothing of another bill's balance", async () => {
+    const el = await mountScreen({
+      bills: [overpaidBill],
+      billBalance: {
+        ...overpaidBalance,
+        workingOrderId: "wo-5",
+        beingPaidOn: { billId: "wo-9", billNumber: 3 },
+      },
+    });
+
+    expect(el.shadowRoot!.querySelector("[data-being-paid-on]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-overpaid]")).toBeNull();
+  });
+
+  it.each([
+    ["at till width", {}],
+    ["on a handheld", { handheld: true }],
+  ] as const)("an overpaid bill says by how much and offers no Pay, %s", async (_case, over) => {
+    const el = await mountScreen({
+      ...over,
+      bills: [overpaidBill],
+      billBalance: overpaidBalance,
+      tipsEnabled: true,
+      fullInvoices: true,
+    });
+
+    expect(text(el.shadowRoot!.querySelector("[data-overpaid] p"))).toBe(
+      `Paid ${money("5.00")} more than this bill comes to`,
+    );
+    expect(text(el.shadowRoot!.querySelector("[data-give-back]"))).toBe(
+      `Give back ${money("5.00")}`,
+    );
+    expect(text(el.shadowRoot!.querySelector("[data-keep-as-tip]"))).toBe(
+      `Keep ${money("5.00")} as tip`,
+    );
+    expect(el.shadowRoot!.querySelector("[data-pay-sheet]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-pay-rest]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-tender-pay")).toBeNull();
+    expect(
+      el.shadowRoot!.querySelector("[data-choose-bill-invoice]:not([data-table-menu] *)"),
+    ).toBeNull();
+  });
+
+  it("with tips off only Give back is offered", async () => {
+    const el = await mountScreen({ bills: [overpaidBill], billBalance: overpaidBalance });
+
+    expect(el.shadowRoot!.querySelector("[data-give-back]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-keep-as-tip]")).toBeNull();
+  });
+
+  it("a bill that comes to nothing is offered Give back but not Keep as tip", async () => {
+    const el = await mountScreen({
+      bills: [{ ...overpaidBill, total: "0.00", overpaid: "15.00" }],
+      billBalance: balance({
+        total: "0.00",
+        received: "15.00",
+        outstanding: "-15.00",
+        overpaid: "15.00",
+      }),
+      tipsEnabled: true,
+    });
+
+    expect(text(el.shadowRoot!.querySelector("[data-give-back]"))).toBe(
+      `Give back ${money("15.00")}`,
+    );
+    expect(el.shadowRoot!.querySelector("[data-keep-as-tip]")).toBeNull();
+  });
+
+  it("someone who may not take payments is offered Give back but not Keep as tip", async () => {
+    const el = await mountScreen({
+      bills: [overpaidBill],
+      billBalance: overpaidBalance,
+      tipsEnabled: true,
+      takesPayment: false,
+    });
+
+    expect(el.shadowRoot!.querySelector("[data-give-back]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-keep-as-tip]")).toBeNull();
+  });
+
+  it("Give back asks for the excess to be refunded", async () => {
+    const el = await mountScreen({ bills: [overpaidBill], billBalance: overpaidBalance });
+    const seen: CustomEvent[] = [];
+    el.addEventListener("refund-excess", (event) => seen.push(event as CustomEvent));
+
+    await press(el, "[data-give-back]");
+
+    expect(seen.map((event) => event.detail)).toEqual([{ excess: "5.00" }]);
+    expect(seen[0]!.bubbles).toBe(true);
+    expect(seen[0]!.composed).toBe(true);
+  });
+
+  it("Keep as tip asks for the excess it shows to be kept", async () => {
+    const el = await mountScreen({
+      bills: [overpaidBill],
+      billBalance: overpaidBalance,
+      tipsEnabled: true,
+    });
+    const asked = capture<unknown>(el, "keep-as-tip");
+
+    await press(el, "[data-keep-as-tip]");
+
+    expect(asked).toEqual([{ overpaid: "5.00" }]);
+  });
+
+  it("Keep as tip is quiet while it is out", async () => {
+    const el = await mountScreen({
+      bills: [overpaidBill],
+      billBalance: overpaidBalance,
+      tipsEnabled: true,
+      overpaidBusy: true,
+    });
+    const disabled = (selector: string) =>
+      el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(selector)!.disabled;
+
+    expect(disabled("[data-give-back]")).toBe(true);
+    expect(disabled("[data-keep-as-tip]")).toBe(true);
   });
 });

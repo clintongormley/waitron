@@ -29,6 +29,7 @@ import { assertBillHasNoUnsent } from "./bill-unsent.js";
 import { readPartyFinishReadiness } from "./finish-party-service.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { stillOwedOnIssuedBill } from "./bill-payments.js";
+import { issuedBillStanding } from "./bill-payment-money.js";
 import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";
 import { pinnedAt } from "./issue-moment.js";
@@ -131,7 +132,9 @@ export async function recordUnpaidDeparture(
       await markOrderPlaced(tx, deps.clock, cfg, req.billId, operator.personId, deps.attendance);
   }
   const owed = await stillOwedOnIssuedBill(tx, req.billId, due!);
-  if (decimalToCents(due!) !== 0 && decimalToCents(owed) <= 0)
+  const standing = issuedBillStanding(due!, owed);
+  if (standing === "overpaid") throw new AppError("bill.overpaid", { workingOrderId: req.billId });
+  if (standing === "nothing_owed")
     throw new AppError("unpaid_departure.nothing_outstanding", { partyId });
   const departures =
     decimalToCents(due!) === 0

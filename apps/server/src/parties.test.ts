@@ -57,6 +57,7 @@ import {
 } from "./testing/party-close-fixture.js";
 import {
   cashPayment,
+  partyRevisionOf,
   paymentRows,
   placedCounterBillMovedTo,
   provisionBillVenue,
@@ -72,6 +73,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { splitBill, mergeBills } from "./testing/bill-action-fixture.js";
 import { joinTables, moveGuests, partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { readBillEditState } from "./bill-editing.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -335,6 +337,72 @@ describe("related bills", () => {
     expect(await inTx(suite, (tx) => readPartyBills(tx, partyId))).toEqual([
       expect.objectContaining({ status: "abandoned", total: "0.00", outstanding: "0.00" }),
     ]);
+  });
+  it("an overpaid bill owes nothing and the party still owes its other bill", async () => {
+    const venue = await provisionBillVenue(suite.db);
+    const { partyId, tabId, tableId } = await seatedWith(
+      venue,
+      "Croquettes",
+      "Croquettes",
+      "Red wine bottle",
+    );
+    const revision = await partyRevisionOf(venue, tabId);
+    const { billId: wineBill } = await inTx(suite, (tx) =>
+      splitBill(tx, venue.cfg, tabId, [{ lineNo: 3 }], {
+        partyId,
+        expectedPartyRevision: revision,
+        operatorId: venue.operatorId,
+      }),
+    );
+    const contribution = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${tabId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: "15.00",
+        method: "cash",
+        tendered: "15.00",
+        applied: "15.00",
+        tip: "0.00",
+      },
+    );
+    expect(contribution.status, JSON.stringify(contribution.json)).toBe(200);
+    const [croquettes] = venue.db.all<{ id: string }>(
+      sql`select id from working_order_lines where working_order_id = ${tabId} and line_no = 1`,
+    );
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${tabId}/item-payments`,
+      {
+        submissionId: randomUUID(),
+        picks: [{ lineId: croquettes!.id, quantity: "1" }],
+        partyId,
+        expectedPartyRevision: await partyRevisionOf(venue, tabId),
+        expectedEdits: [await inTx(suite, (tx) => readBillEditState(tx, tabId))],
+        method: "cash",
+        tendered: "10.00",
+        applied: "10.00",
+        tip: "0.00",
+      },
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+
+    const bills = await inTx(suite, (tx) => readPartyBills(tx, partyId));
+    expect(bills.find((bill) => bill.workingOrderId === tabId)).toMatchObject({
+      status: "open",
+      total: "10.00",
+      outstanding: "0.00",
+      overpaid: "5.00",
+    });
+    const wine = bills.find((bill) => bill.workingOrderId === wineBill)!;
+    expect(wine).toMatchObject({ outstanding: "30.00" });
+    expect(wine).not.toHaveProperty("overpaid");
+    expect((await floorRow(venue, tableId)).party).toMatchObject({ outstanding: "30.00" });
   });
 });
 

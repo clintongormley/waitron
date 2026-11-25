@@ -497,6 +497,7 @@ describe("POST /api/working-orders/:id/overpaid/keep-as-tip needs payment.take",
       `/api/working-orders/${billId}/overpaid/keep-as-tip`,
       {
         submissionId: randomUUID(),
+        overpaid: "5.00",
       },
     );
   }

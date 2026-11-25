@@ -1,4 +1,4 @@
-import { readOutsideCardDetails } from "./outside-card.js";
+import { readOutsideCardDetails, type OutsideCardDetails } from "./outside-card.js";
 import { parseBillEditExpected, parseBillEditExpecteds } from "./bill-editing.js";
 import type { Hono } from "hono";
 import { withTransaction } from "@waitron/db";
@@ -152,7 +152,6 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
   }
   const guestCount = readGuestCountChoice(body.guestCount);
   if (guestCount !== undefined) request.guestCount = guestCount;
-  const readerOnly = ["readerId", "simulationOutcome"] as const;
   if (body.printCardSlip !== undefined) {
     if (typeof body.printCardSlip !== "boolean") throw invalid("printCardSlip");
     request.printCardSlip = body.printCardSlip;
@@ -162,28 +161,39 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
   } else if (body.entry !== undefined) {
     throw invalid("entry");
   }
-  Object.assign(request, readOutsideCardDetails(body, request.entry === "manual"));
-  if (request.entry === "manual") {
-    if (body.externalRef !== undefined) {
-      if (typeof body.externalRef !== "string") throw invalid("externalRef");
-      request.externalRef = body.externalRef;
-    }
-  } else if (body.externalRef !== undefined) {
-    throw invalid("externalRef");
+  Object.assign(
+    request,
+    readCardEntry(body, request.entry === "manual", request.entry === "reader"),
+  );
+  return request;
+}
+
+/** A card's entry details: an outside card's details and reference only when it is hand-keyed,
+ * and a reader's fields only on a reader. */
+function readCardEntry(
+  body: Record<string, unknown>,
+  handKeyed: boolean,
+  reader: boolean,
+): OutsideCardDetails & Pick<BillPaymentRequest, "externalRef" | "simulationOutcome"> {
+  const entry: ReturnType<typeof readCardEntry> = readOutsideCardDetails(body, handKeyed);
+  if (body.externalRef !== undefined) {
+    if (!handKeyed || typeof body.externalRef !== "string") throw invalid("externalRef");
+    entry.externalRef = body.externalRef;
   }
-  if (request.entry === "reader") {
-    if (body.simulationOutcome !== undefined) {
-      request.simulationOutcome = oneOf(
+  if (reader) {
+    if (body.simulationOutcome !== undefined)
+      entry.simulationOutcome = oneOf(
         body.simulationOutcome,
         ["captured", "declined", "attempting"] as const,
         "simulationOutcome",
       );
-    }
   } else {
-    const stray = readerOnly.find((field) => body[field] !== undefined);
+    const stray = (["readerId", "simulationOutcome"] as const).find(
+      (field) => body[field] !== undefined,
+    );
     if (stray !== undefined) throw invalid(stray);
   }
-  return request;
+  return entry;
 }
 
 function parsePicks(value: unknown): ItemPick[] {
@@ -236,19 +246,8 @@ function parseItemsPayment(body: Record<string, unknown>): PayForItemsRequest {
     if (request.method !== "card") throw invalid("entry");
     request.entry = oneOf(body.entry, ["reader"] as const, "entry");
   }
-  if (request.entry === "reader") {
-    if (body.simulationOutcome !== undefined)
-      request.simulationOutcome = oneOf(
-        body.simulationOutcome,
-        ["captured", "declined", "attempting"] as const,
-        "simulationOutcome",
-      );
-  } else {
-    const stray = (["readerId", "simulationOutcome"] as const).find(
-      (field) => body[field] !== undefined,
-    );
-    if (stray !== undefined) throw invalid(stray);
-  }
+  const handKeyed = request.method === "card" && request.entry === undefined;
+  Object.assign(request, readCardEntry(body, handKeyed, request.entry === "reader"));
   return request;
 }
 
@@ -553,13 +552,15 @@ export function mountBillPaymentsApi(
       await assertRequestDevice(deps, c, session);
       const id = requireBillParam(c.req.param("id"));
       await gateZones(deps, session, [{ orderId: id }]);
-      const submissionId = submissionIdOf(asObject(await readRawJsonBody<unknown>(c)));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const submissionId = submissionIdOf(body);
+      const overpaid = decimal(moneyField(body.overpaid, "overpaid"));
       const saleCfg = sendingCfg(requestCfg(deps.cfg, session), c, session.device);
       return c.json(
         await withIssuanceTransaction(
           deps.db,
           (tx) =>
-            keepOverpaidAsTip(tx, fiscal, saleCfg, id, submissionId, {
+            keepOverpaidAsTip(tx, fiscal, saleCfg, id, submissionId, overpaid, {
               personId: session.personId,
               sessionId: session.sessionId,
             }),

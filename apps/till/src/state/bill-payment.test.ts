@@ -7,12 +7,14 @@ import {
   paidQuantities,
   payLines,
   paymentAsk,
+  paymentNotRecorded,
   refundOffered,
   refundSubmissionFor,
   refundableOf,
   refusalOf,
   submissionFor,
   unansweredAfter,
+  type Confirmation,
   type Submission,
 } from "./bill-payment.js";
 
@@ -45,7 +47,10 @@ describe("paymentAsk", () => {
       paymentAsk(
         {
           kind: "items",
-          picks: [{ lineNo: 1 }, { lineNo: 3, units: 2 }],
+          picks: [
+            { lineNo: 1, lineId: "l-1" },
+            { lineNo: 3, lineId: "l-3", units: 2 },
+          ],
         },
         { method: "card" },
       ),
@@ -93,7 +98,10 @@ describe("paymentAsk", () => {
       addedTip: "10.00",
     });
     expect(
-      paymentAsk({ kind: "items", picks: [{ lineNo: 2 }] }, { method: "card", addedTip: "10.00" }),
+      paymentAsk(
+        { kind: "items", picks: [{ lineNo: 2, lineId: "l-2" }] },
+        { method: "card", addedTip: "10.00" },
+      ),
     ).toEqual({
       expectedEdit: null,
       kind: "items",
@@ -105,7 +113,10 @@ describe("paymentAsk", () => {
 });
 
 describe("confirmationOf", () => {
-  const ask = paymentAsk({ kind: "items", picks: [{ lineNo: 1 }] }, { method: "card" });
+  const ask = paymentAsk(
+    { kind: "items", picks: [{ lineNo: 1, lineId: "l-1" }] },
+    { method: "card" },
+  );
 
   it("sends the applied amount and tip the operator was shown", () => {
     expect(
@@ -705,10 +716,38 @@ describe("payLines", () => {
     ];
 
     expect(payLines(lines, (line) => line.name!, undefined)).toEqual([
-      { lineNo: 1, name: "Beer", quantity: "3", total: "9.00", unitTotal: "3.00" },
-      { lineNo: 2, name: "Burger", quantity: "2", total: "23.00", unitTotal: null },
-      { lineNo: 4, name: "Ham", quantity: "0.25", total: "10.00", unitTotal: null },
-      { lineNo: 5, name: "Tiramisu", quantity: "1", total: "6.00", unitTotal: null },
+      {
+        lineNo: 1,
+        lineId: "line-1",
+        name: "Beer",
+        quantity: "3",
+        total: "9.00",
+        unitTotal: "3.00",
+      },
+      {
+        lineNo: 2,
+        lineId: "line-2",
+        name: "Burger",
+        quantity: "2",
+        total: "23.00",
+        unitTotal: null,
+      },
+      {
+        lineNo: 4,
+        lineId: "line-4",
+        name: "Ham",
+        quantity: "0.25",
+        total: "10.00",
+        unitTotal: null,
+      },
+      {
+        lineNo: 5,
+        lineId: "line-5",
+        name: "Tiramisu",
+        quantity: "1",
+        total: "6.00",
+        unitTotal: null,
+      },
     ]);
   });
 });
@@ -848,5 +887,102 @@ describe("a payment's refunds", () => {
 
     expect(unansweredAfter(refund, steppingDown)).toEqual(refund);
     expect(unansweredAfter(refund, steppingDown, true)).toEqual({ ...refund, unconfirmed: true });
+  });
+});
+
+describe("Pay for items in the bill payment state", () => {
+  const row = (lineNo: number, name: string): TabLine => ({
+    changesAfterSending: null,
+    stationId: null,
+    movable: false,
+    id: `id-${name}`,
+    lineNo,
+    name,
+    productId: "p",
+    quantity: "1.000",
+    unitPrecision: 0,
+    unitPriceGross: "4.00",
+    servedAt: null,
+    courseId: null,
+    sentAt: null,
+    firedAt: null,
+    state: null,
+    groupId: null,
+    note: null,
+    listId: null,
+    menuItemId: null,
+    parentProductId: null,
+  });
+
+  it("payLines names each line's id", () => {
+    expect(
+      payLines([row(1, "Flan"), row(2, "Coffee")], (line) => line.name!, undefined).map((line) => [
+        line.lineNo,
+        line.lineId,
+      ]),
+    ).toEqual([
+      [1, "id-Flan"],
+      [2, "id-Coffee"],
+    ]);
+  });
+
+  it("the same items payment confirmed again after a reread keeps its submission id", () => {
+    const edit = (editorVersion: number) => ({
+      billId: "wo-1",
+      editorVersion,
+      draftId: null,
+      draftRevision: null,
+    });
+    const confirmed = (editorVersion: number, partyRevision: number): Confirmation => ({
+      ...confirmationOf(
+        paymentAsk(
+          { kind: "items", picks: [{ lineNo: 1, lineId: "id-Flan" }] },
+          { method: "card" },
+          undefined,
+          edit(editorVersion),
+        ),
+        {
+          kind: "allocated",
+          choice: null,
+          applied: "4.00",
+          tip: "0.00",
+          change: null,
+          charged: "4.00",
+        },
+      ),
+      items: {
+        picks: [{ lineId: "id-Flan" }],
+        expectedEdits: [edit(editorVersion)],
+        expectedPartyRevision: partyRevision,
+        partyId: "v1",
+      },
+    });
+    const first = submissionFor("wo-1", confirmed(2, 3), null, () => "sub-1");
+    const unanswered = unansweredAfter(first, { code: "bill.tip_not_allowed", status: 409 });
+    expect(unanswered?.unconfirmed).toBeUndefined();
+
+    const again = submissionFor("wo-1", confirmed(5, 4), unanswered, () => "sub-2");
+    expect(again.request.submissionId).toBe("sub-1");
+    expect(again.request.items?.expectedPartyRevision).toBe(3);
+    const otherDish: Confirmation = {
+      ...confirmed(2, 3),
+      items: { ...confirmed(2, 3).items!, picks: [{ lineId: "id-Coffee" }] },
+    };
+    expect(submissionFor("wo-1", otherDish, first, () => "sub-3").request.submissionId).toBe(
+      "sub-3",
+    );
+  });
+
+  it("a stale party revision is not recorded", () => {
+    expect(paymentNotRecorded({ code: "party.out_of_date" })).toBe(true);
+  });
+
+  it("refusalOf keeps advances and dishName", () => {
+    expect(refusalOf({ code: "bill.below_advances", advances: "15.00", dishName: "Flan" })).toEqual(
+      { code: "bill.below_advances", advances: "15.00", dishName: "Flan" },
+    );
+    expect(refusalOf({ code: "bill.below_advances", advances: 15, dishName: 3 })).toEqual({
+      code: "bill.below_advances",
+    });
   });
 });

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { withIssuanceTransaction } from "@waitron/core";
 import {
   billPayments,
@@ -46,6 +46,7 @@ import {
   type ReaderBillPaymentDeps,
   type ReaderPaymentHold,
 } from "./bill-payments.js";
+import { outsideCardDetails } from "./outside-card.js";
 import { withSettledSlip } from "./payment-slip-print.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { fingerprint } from "./parties.js";
@@ -255,9 +256,13 @@ export async function moveItemsToNewBill(
     sourceMayBeOverpaid: true,
     tellKitchen: false,
   });
+  const sourceLocale = tx
+    .select({ receiptLocale: workingOrders.receiptLocale })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, fromBillId));
   await tx
     .update(workingOrders)
-    .set({ itemsPaidFrom: fromBillId })
+    .set({ itemsPaidFrom: fromBillId, receiptLocale: sql`(${sourceLocale})` })
     .where(eq(workingOrders.id, billId));
   await refuseBelowAdvances(tx, fromBillId);
   if (options.holdSourceInvoice === true) {
@@ -285,6 +290,10 @@ export interface PayForItemsRequest {
   entry?: "reader";
   /** A reader card only, passed to the provider's `collect`. */
   simulationOutcome?: "captured" | "declined" | "attempting";
+  /** A hand-keyed card only: its terminal operation number and which machine took it. */
+  externalRef?: string;
+  externalProvider?: "connected_account" | "other";
+  externalMachine?: string;
 }
 
 /** The request as its retry fingerprint reads it: amounts at the money scale, an absent added tip
@@ -357,6 +366,8 @@ export async function payForItems(
       : { entry: req.entry === "reader" ? ("reader" as const) : ("manual" as const) }),
     ...(req.addedTip === undefined ? {} : { addedTip: req.addedTip }),
     ...(req.simulationOutcome === undefined ? {} : { simulationOutcome: req.simulationOutcome }),
+    ...(req.externalRef === undefined ? {} : { externalRef: req.externalRef }),
+    ...outsideCardDetails(req),
   });
   /** The bill an earlier request paid on, else the new bill the items move to, and its edit state. */
   const billFor = async (tx: Transaction, holdSourceInvoice: boolean) => {

@@ -45,6 +45,12 @@ import type {
 } from "./invoice-correction-types.js";
 import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
 import type {
+  ItemPaymentAsk,
+  ItemPaymentPreview,
+  ItemPaymentRequest,
+  ItemPaymentResult,
+} from "./item-payment-types.js";
+import type {
   ProductAllergens,
   BumpMode,
   ChangesAfterSending,
@@ -1202,6 +1208,8 @@ export type AllocationPreview =
       change: string | null;
       /** Card only: what the card is charged. */
       charged: string | null;
+      /** Pay for items only: the chosen items' price. */
+      total?: string;
     }
   | { kind: "choose"; options: { choice: AllocationChoice; applied: string; tip: string }[] };
 
@@ -1272,11 +1280,16 @@ export interface BillBalance {
   reserved: string;
   /** The total less received and reserved; zero once the bill is settled or abandoned. */
   outstanding: string;
+  /** On an open or placed bill, what received and reserved come to above the total; else zero.
+   * Optional only so the many test balances need not name it; absent reads as zero. */
+  overpaid?: string;
   /** The net tips of the received payments. */
   tips: string;
   payments: BillPaymentView[];
   /** `paidQuantity` at three places, such as "1.000". */
   paidLines: { lineId: string; lineNo: number; paidQuantity: string }[];
+  /** On an open bill: the bill its chosen items moved to while a card payment of theirs is pending. */
+  beingPaidOn?: { billId: string; billNumber: number | null };
 }
 
 export type BillReaderStopOutcome = "requested" | "unavailable" | "refused" | "unknown";
@@ -2378,6 +2391,7 @@ export interface PartyBill {
   leftUnpaid?: boolean;
   total: string;
   outstanding: string;
+  overpaid?: string;
   /** A payment is pending or received on the bill, which the single payment refuses. */
   hasPayments: boolean;
   /** The bill holds money: a pending payment, or received money not all given back. A close as a
@@ -5202,6 +5216,43 @@ export class TillApi {
     options: ReadOptions = {},
   ): Promise<BillPaymentResult> {
     return this.#request(`/api/working-orders/${billId}/payments`, "POST", request, options.signal);
+  }
+
+  /** What paying for the chosen items would take, writing nothing →
+   * `POST /api/working-orders/:id/item-payments/preview`. Refuses as the payment would. */
+  previewItemPayment(billId: string, ask: ItemPaymentAsk): Promise<ItemPaymentPreview> {
+    return this.#request(`/api/working-orders/${billId}/item-payments/preview`, "POST", ask);
+  }
+
+  /** Moves the chosen items to a new bill and takes the payment there →
+   * `POST /api/working-orders/:id/item-payments`. A reader card's Stop is keyed by this bill's id. */
+  payForItems(
+    billId: string,
+    request: ItemPaymentRequest,
+    options: ReadOptions = {},
+  ): Promise<ItemPaymentResult> {
+    return this.#request(
+      `/api/working-orders/${billId}/item-payments`,
+      "POST",
+      request,
+      options.signal,
+    );
+  }
+
+  /** Keeps what an overpaid bill took above its total, `overpaid` as staff saw it, as a tip →
+   * `POST /api/working-orders/:id/overpaid/keep-as-tip`. */
+  keepOverpaidAsTip(
+    billId: string,
+    submissionId: string,
+    overpaid: string,
+    options: ReadOptions = {},
+  ): Promise<BillBalance> {
+    return this.#request(
+      `/api/working-orders/${billId}/overpaid/keep-as-tip`,
+      "POST",
+      { submissionId, overpaid },
+      options.signal,
+    );
   }
 
   cancelBillReaderPayment(

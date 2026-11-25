@@ -4,7 +4,7 @@ import { formatMoney } from "@waitron/shared";
 import { setHelpMode } from "@waitron/ui";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { es } from "../i18n/strings.js";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
 import { pendingCard } from "../../test/bill-pay-fixtures.js";
@@ -36,14 +36,23 @@ function balanceOf(over: Partial<BillBalance> = {}): BillBalance {
 
 const mainDish: PayLine = {
   lineNo: 1,
+  lineId: "line-1",
   name: "Paella",
   quantity: "1",
   total: "35.00",
   unitTotal: null,
 };
-const beers: PayLine = { lineNo: 2, name: "Beer", quantity: "3", total: "9.00", unitTotal: "3.00" };
+const beers: PayLine = {
+  lineNo: 2,
+  lineId: "line-2",
+  name: "Beer",
+  quantity: "3",
+  total: "9.00",
+  unitTotal: "3.00",
+};
 const tiramisu: PayLine = {
   lineNo: 3,
+  lineId: "line-3",
   name: "Tiramisu",
   quantity: "1",
   total: "6.00",
@@ -209,13 +218,19 @@ it("groups twelve portions and keeps only selected members that remain on the bi
   await type(el, "tendered", "20");
   const asked = capture<PayRequest>(el, "bill-pay-preview");
   await click(el, "[data-pay-continue]");
-  expect(asked[0]!.choice).toEqual({ kind: "items", picks: [{ lineNo: 1 }, { lineNo: 2 }] });
+  expect(asked[0]!.choice).toEqual({
+    kind: "items",
+    picks: [
+      { lineNo: 1, lineId: "line-3" },
+      { lineNo: 2, lineId: "line-3" },
+    ],
+  });
   el.lines = portions.slice(1);
   await el.updateComplete;
   expect(offered(el)).toHaveLength(1);
   expect(text(root(el).querySelector("[data-units='2']"))).toBe("1");
   await click(el, "[data-pay-continue]");
-  expect(asked[1]!.choice).toEqual({ kind: "items", picks: [{ lineNo: 2 }] });
+  expect(asked[1]!.choice).toEqual({ kind: "items", picks: [{ lineNo: 2, lineId: "line-3" }] });
   expect(field(el, "tendered")!.value).toBe("20");
 });
 
@@ -229,7 +244,10 @@ it("caps a selected quantity and drops paid or departed picks on a successful re
   await el.updateComplete;
   const asked = capture<PayRequest>(el, "bill-pay-preview");
   await click(el, "[data-pay-continue]");
-  expect(asked[0]!.choice).toEqual({ kind: "items", picks: [{ lineNo: 2, units: 1 }] });
+  expect(asked[0]!.choice).toEqual({
+    kind: "items",
+    picks: [{ lineNo: 2, lineId: "line-2", units: 1 }],
+  });
   el.balance = balanceOf({ paidLines: [{ lineId: "line-2", lineNo: 2, paidQuantity: "3.000" }] });
   await el.updateComplete;
   expect(button(el, "[data-pay-continue]").disabled).toBe(true);
@@ -290,6 +308,23 @@ describe("till-bill-pay-dialog: the bill's balance", () => {
     expect(text(root(el).querySelector("[data-pay-outstanding]"))).toContain(money("50.00"));
   });
 
+  it("the Pay window shows what was paid over the total", async () => {
+    const el = await mount({
+      balance: balanceOf({
+        total: "10.00",
+        received: "15.00",
+        outstanding: "-5.00",
+        overpaid: "5.00",
+      }),
+    });
+
+    expect(root(el).querySelector("[data-pay-outstanding]")).toBeNull();
+    const over = root(el).querySelector("[data-pay-overpaid]");
+    expect(text(over)).toContain(t("bill_pay.overpaid"));
+    expect(text(over)).toContain(money("5.00"));
+    expect(text(over)).not.toContain("-");
+  });
+
   it("shows the balance again when it is read again", async () => {
     const el = await mount();
     el.balance = balanceOf({ received: "30.00", outstanding: "90.00" });
@@ -326,6 +361,7 @@ describe("till-bill-pay-dialog: paying for items", () => {
     setLocale(locale);
     const ham: PayLine = {
       lineNo: 4,
+      lineId: "line-4",
       name: "Ham",
       quantity: "0.35",
       total: "7.00",
@@ -359,7 +395,13 @@ describe("till-bill-pay-dialog: paying for items", () => {
     expect(scope(el)).toContain(money("41.00"));
     expect(asked).toEqual([
       {
-        choice: { kind: "items", picks: [{ lineNo: 1 }, { lineNo: 2, units: 2 }] },
+        choice: {
+          kind: "items",
+          picks: [
+            { lineNo: 1, lineId: "line-1" },
+            { lineNo: 2, lineId: "line-2", units: 2 },
+          ],
+        },
         pay: { method: "cash", tendered: "50" },
       },
     ]);
@@ -374,7 +416,10 @@ describe("till-bill-pay-dialog: paying for items", () => {
     await type(el, "tendered", "6");
     await click(el, "[data-pay-continue]");
 
-    expect(asked[0]!.choice).toEqual({ kind: "items", picks: [{ lineNo: 2, units: 2 }] });
+    expect(asked[0]!.choice).toEqual({
+      kind: "items",
+      picks: [{ lineNo: 2, lineId: "line-2", units: 2 }],
+    });
   });
 
   it("does not step units beyond one or beyond what is still to pay", async () => {
@@ -900,6 +945,7 @@ describe("till-bill-pay-dialog: refusals and answers", () => {
 describe("till-bill-pay-dialog: the steak's two choices", () => {
   const steak: PayLine = {
     lineNo: 4,
+    lineId: "line-4",
     name: "Steak",
     quantity: "1",
     total: "25.00",
@@ -1240,6 +1286,19 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     expect(actions(el).error).toBe(t("bill_pay.card_declined"));
   });
 
+  it("keeps a declined item chosen when it comes back to the bill under a new line number", async () => {
+    const el = await mount();
+    await pick(el, "line", "3");
+
+    el.lines = [mainDish, beers, { ...tiramisu, lineNo: 4 }];
+    el.refusal = { code: "declined" };
+    await el.updateComplete;
+
+    const box = root(el).querySelector<HTMLInputElement>('input[name="line"][value="4"]')!;
+    expect(box.checked).toBe(true);
+    expect(actions(el).error).toBe(t("bill_pay.card_declined"));
+  });
+
   it("says a reader that could not reach the card network took nothing", async () => {
     const el = await mount({ refusal: { code: "card_network" } });
     expect(actions(el).error).toBe(t("bill_pay.card_unreachable"));
@@ -1249,6 +1308,48 @@ describe("till-bill-pay-dialog: a card on the reader", () => {
     const el = await mount({ taken: { change: null, pending: "40.00" } });
     expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(
       t("bill_pay.card_pending").replace("{amount}", money("40.00")),
+    );
+  });
+
+  /** Continue and Take payment, answered with a card still in progress, as the app answers it. */
+  async function pendingAfter(el: TillBillPayDialog, pending: string): Promise<PayRequest> {
+    await pick(el, "method", "card");
+    const asked = await previewed(el, {
+      kind: "allocated",
+      choice: null,
+      applied: pending,
+      tip: "0.00",
+      change: null,
+      charged: pending,
+    });
+    el.asked = null;
+    el.preview = null;
+    el.balance = balanceOf({ beingPaidOn: { billId: "bill-3", billNumber: 3 } });
+    el.taken = { change: null, pending };
+    await el.updateComplete;
+    return asked;
+  }
+
+  it.each(["en", "es"] as const)(
+    "in %s, says a card still in progress for chosen items holds its amount on a bill of their own",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mount();
+      await pick(el, "line", "3");
+      expect((await pendingAfter(el, "6.00")).choice.kind).toBe("items");
+      expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(
+        fill(t("bill_pay.card_pending_items"), { amount: money("6.00") }).replace(/\s+/g, " "),
+      );
+      expect(t("bill_pay.card_pending_items")).not.toBe(t("bill_pay.card_pending"));
+    },
+  );
+
+  it("says a card in progress for every item is held on this bill, as the whole bill it pays", async () => {
+    const el = await mount({ lines: [tiramisu] });
+    await pick(el, "line", "3");
+    expect((await pendingAfter(el, "6.00")).choice).toEqual({ kind: "whole" });
+    expect(text(root(el).querySelector("[data-pay-taken]"))).toBe(
+      t("bill_pay.card_pending").replace("{amount}", money("6.00")),
     );
   });
 });
@@ -3265,6 +3366,7 @@ describe("till-bill-pay-dialog: the buttons stay in view at the sheet's foot", (
     await page.viewport(390, 900);
     const steak: PayLine = {
       lineNo: 4,
+      lineId: "line-4",
       name: "Steak",
       quantity: "1",
       total: "25.00",
@@ -3479,7 +3581,7 @@ describe("till-bill-pay-dialog: the payer's own receipt", () => {
   const PART_WAYS: { way: PayRequest["choice"]["kind"]; choice: PayRequest["choice"] }[] = [
     { way: "contribution", choice: { kind: "contribution", amount: "30.00" } },
     { way: "share", choice: { kind: "share", shareOf: 4 } },
-    { way: "items", choice: { kind: "items", picks: [{ lineNo: 1 }] } },
+    { way: "items", choice: { kind: "items", picks: [{ lineNo: 1, lineId: "line-1" }] } },
   ];
 
   async function confirming(
@@ -3778,6 +3880,55 @@ describe("till-bill-pay-dialog: a payment that has its own ticket", () => {
       t("bill_pay.refund_label")
         .replace("{n}", "1")
         .replace("{amount}", () => money("20.00")),
+    );
+  });
+});
+
+describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
+  const ownBill = (applied: string, total = applied): AllocationPreview => ({
+    kind: "allocated",
+    choice: null,
+    applied,
+    tip: "0.00",
+    change: "0.00",
+    charged: null,
+    total,
+  });
+  const itemsAsked: PayRequest = {
+    choice: { kind: "items", picks: [{ lineNo: 1, lineId: "line-1" }] },
+    pay: { method: "cash", tendered: "35.00" },
+  };
+
+  it("asks no receipt guests and no own receipt for items", async () => {
+    // Today's part payment of what is left asks the guests, and of less than that its own receipt.
+    for (const outstanding of ["35.00", "120.00"]) {
+      const el = await mount({
+        balance: balanceOf({ outstanding }),
+        asksGuests: true,
+        receiptGuests: 4,
+        ownReceiptOffered: true,
+        asked: itemsAsked,
+        preview: ownBill("35.00"),
+      });
+      expect(root(el).querySelector('[name="guests"]')).toBeNull();
+      expect(root(el).querySelector("[data-pay-own-receipt]")).toBeNull();
+      expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(
+        t("bill_pay.items_own_bill"),
+      );
+      const confirmed = capture(el, "bill-pay-confirm");
+      await click(el, "[data-pay-confirm]");
+      expect(confirmed).toEqual([{}]);
+      cleanupWidgets();
+    }
+  });
+
+  it("shows the preview's total for the chosen items", async () => {
+    const el = await mount();
+    await pick(el, "line", "1");
+    await type(el, "tendered", "40");
+    await previewed(el, ownBill("36.00"));
+    expect(scope(el)).toBe(
+      fill(t("bill_pay.scope_items"), { items: "Paella", amount: money("36.00") }),
     );
   });
 });

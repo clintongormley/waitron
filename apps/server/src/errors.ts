@@ -924,6 +924,15 @@ declare module "@waitron/shared" {
     "bill.all_items_chosen": { workingOrderId: string };
     /** Keep as tip on a bill that holds nothing paid over its total. */
     "bill.not_overpaid": { workingOrderId: string };
+    /** Keep as tip naming another amount than what the bill is paid over its total now,
+     * `overpaid`: another payment or a change of its dishes moved it after the till showed it. */
+    "bill.overpaid_changed": { workingOrderId: string; overpaid: string };
+    /** Print the bill or an unpaid departure on a bill holding more than it comes to: its excess
+     * is given back or kept as a tip first. */
+    "bill.overpaid": { workingOrderId: string };
+    /** Keep as tip on a bill that comes to nothing: there is no sale to tip on, so its excess can
+     * only be given back. */
+    "bill.tip_needs_a_sale": { workingOrderId: string };
     /** Keep as tip while the venue takes no tips: what the bill is paid over its total can only be
      * given back. */
     "bill.tip_not_allowed_on_excess": { workingOrderId: string };

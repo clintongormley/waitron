@@ -35,6 +35,33 @@ it("words Keep as tip refused while the venue takes no tips, saying to give the 
   );
 });
 
+it("words Keep as tip refused for an amount that has changed, asking staff to check it and choose again", () => {
+  expect(codeMessage("bill.overpaid_changed", "en")).toBe(
+    "What this bill was paid over its total has changed. Check the new amount and choose again.",
+  );
+  expect(codeMessage("bill.overpaid_changed", "es")).toBe(
+    "Lo pagado de más en esta cuenta ha cambiado. Revisa el nuevo importe y vuelve a elegir.",
+  );
+});
+
+it("words Keep as tip refused on a bill that comes to nothing, saying why and to give the money back", () => {
+  expect(codeMessage("bill.tip_needs_a_sale", "en")).toBe(
+    "This bill comes to nothing, so there is no sale to tip on. Give the money back instead.",
+  );
+  expect(codeMessage("bill.tip_needs_a_sale", "es")).toBe(
+    "Esta cuenta no suma nada, así que no hay venta en la que dejar propina. Devuelve el dinero.",
+  );
+});
+
+it("words a bill paid more than it comes to without promising Keep as tip where the bill does not offer it", () => {
+  expect(codeMessage("bill.overpaid", "en")).toBe(
+    "This bill has been paid more than it comes to. First give back the extra on the bill, or keep it as a tip where the bill offers that.",
+  );
+  expect(codeMessage("bill.overpaid", "es")).toBe(
+    "Esta cuenta se ha pagado de más. Primero devuelve en la cuenta lo que sobra, o guárdalo como propina si la cuenta lo ofrece.",
+  );
+});
+
 it("words a refund Correct invoice must make, saying what each choice does, in both languages", () => {
   expect(codeMessage("tender.refund_needs_correction", "en")).toBe(
     "Correct invoice can give this money back, so Refund a payment cannot: it files nothing. Close this window and choose Correct invoice: it gives the money back and files a corrective invoice for it. Refund a payment still gives back a tip, or what is still owed for cancelled dishes.",

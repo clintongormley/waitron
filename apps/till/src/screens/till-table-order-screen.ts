@@ -135,6 +135,8 @@ import {
   billLabel,
   billName,
   billNumberLabel,
+  finishBlocker,
+  overpaidOf,
   owing,
   paidInPart,
   printBillOffered,
@@ -239,6 +241,12 @@ import {
   type SplitGuestsDetail,
 } from "../widgets/guest-count.js";
 import { billControlStyles, billSwitcher, tableMenu } from "./table-bill-controls.js";
+import {
+  beingPaidNotice,
+  billMoneyNoticeStyles,
+  finishOverpaidRefusal,
+  overpaidNotice,
+} from "./bill-money-notice.js";
 
 /** The screen's own width, in CSS pixels, from which browsing and the order show side by side.
  * Narrower, a Menu / Order switch shows one at a time. */
@@ -678,6 +686,7 @@ export class TillTableOrderScreen extends LitElement {
   static override styles = [
     priceWasStyles,
     billControlStyles,
+    billMoneyNoticeStyles,
     guestsStepperStyles,
     formMessageStyles,
     floorChipStyles,
@@ -1492,6 +1501,9 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) fullInvoices = false;
   /** The payments of the bill on screen, when it holds any; a balance of another bill is ignored. */
   @property({ attribute: false }) billBalance: BillBalance | null = null;
+  @property({ type: Boolean }) tipsEnabled = false;
+  /** A Keep as tip of the bill on screen is unanswered. */
+  @property({ type: Boolean }) overpaidBusy = false;
   /** Finish table was refused because a bill is unpaid. */
   @property({ type: Boolean }) finishRefused = false;
   @property({ attribute: false }) mealEnd: MealEndShown | null = null;
@@ -3309,17 +3321,17 @@ export class TillTableOrderScreen extends LitElement {
    * Pay are fixed at the order pane's foot. The whole tender, fixed there, would cover the order. */
   #footFixed(): boolean {
     if (!this.handheld || this.wide) return false;
-    return !(this.canSettle && this.#chargeable()) || this.#paysOnSheet(this.#shownBill);
+    return !this.#payOffered() || this.#paysOnSheet(this.#shownBill);
   }
 
   #orderSummary(draft: WorkingOrderStore | null): TemplateResult {
+    const notices = this.#billMoneyNotices();
     if (!this.#footFixed())
-      return html`${this.#finishRefusal()} ${this.#mealEndOutcome()} ${this.#totals(draft)}
-        <div data-bill-actions>
-          ${this.canSettle && this.#chargeable() ? this.#paySection() : nothing}
-        </div>`;
-    const pays = this.canSettle && this.#chargeable();
-    return html`${this.#finishRefusal()} ${this.#mealEndOutcome()}
+      return html`${this.#finishRefusal()} ${this.#mealEndOutcome()} ${notices}
+        ${this.#totals(draft)}
+        <div data-bill-actions>${this.#payOffered() ? this.#paySection() : nothing}</div>`;
+    const pays = this.#payOffered();
+    return html`${this.#finishRefusal()} ${this.#mealEndOutcome()} ${notices}
       <div data-bill-actions>${pays ? this.#payHeadSection(this.#shownBill) : nothing}</div>`;
   }
 
@@ -3327,7 +3339,7 @@ export class TillTableOrderScreen extends LitElement {
    * pay and Pay, held together at the window's foot while Order shows. */
   #orderDock(draft: WorkingOrderStore | null): TemplateResult | typeof nothing {
     if (!this.#footFixed()) return nothing;
-    const pays = this.canSettle && this.#chargeable();
+    const pays = this.#payOffered();
     return html`<div
       class="order-dock"
       data-order-dock
@@ -5196,6 +5208,24 @@ export class TillTableOrderScreen extends LitElement {
     return this.paymentConfirmation !== undefined || shown === undefined || owing(shown);
   }
 
+  /** An overpaid bill offers its excess back, or as a tip, rather than Pay. */
+  #payOffered(): boolean {
+    return this.canSettle && this.#chargeable() && overpaidOf(this.#balanceShown()) === null;
+  }
+
+  #billMoneyNotices(): TemplateResult {
+    const balance = this.#balanceShown();
+    return html`${beingPaidNotice(balance)}
+    ${overpaidNotice({
+      balance,
+      // The server's keep-as-tip route needs `payment.take` (bill-payments-api.ts).
+      tipsEnabled: this.tipsEnabled && this.takesPayment,
+      busy: this.overpaidBusy,
+      onGiveBack: (excess) => this.#dispatch("refund-excess", { excess }),
+      onKeepAsTip: (overpaid) => this.#dispatch("keep-as-tip", { overpaid }),
+    })}`;
+  }
+
   #billHasUnsent(): boolean {
     return billHasUnsent(this.#draftStore, this.otherDrafts);
   }
@@ -5447,12 +5477,20 @@ export class TillTableOrderScreen extends LitElement {
     return formatMoney(decimal(amount), currentLocale());
   }
 
-  /** Finish table's refusal while a bill is unpaid, with Take payment for another unpaid bill
-   * first, since the bill on screen is charged in the foot below. */
+  /** Finish table's refusal while a bill is unpaid, naming the bill {@link finishBlocker} picks. */
   #finishRefusal(): TemplateResult | typeof nothing {
     if (this.party === null || !this.finishRefused) return nothing;
-    const unpaid = this.#shownBills().filter((bill) => !bill.leftUnpaid && owing(bill));
-    const firstUnpaid = unpaid.find((bill) => bill.workingOrderId !== this.orderId) ?? unpaid[0];
+    const firstUnpaid = finishBlocker(this.#shownBills(), this.orderId);
+    if (firstUnpaid !== undefined && overpaidOf(firstUnpaid) !== null) {
+      const id = firstUnpaid.workingOrderId;
+      return finishOverpaidRefusal(
+        firstUnpaid,
+        this.tipsEnabled && this.takesPayment,
+        id === this.orderId
+          ? undefined
+          : () => this.#dispatch("take-payment", { workingOrderId: id }),
+      );
+    }
     return html`<div class="finish-refusal" role="alert" data-finish-refusal>
       <span>${codeMessage("party.bill_outstanding")}</span>
       <div class="finish-refusal-actions">

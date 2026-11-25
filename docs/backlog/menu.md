@@ -769,7 +769,7 @@ _2026-11-24: The owner reworked set menus in [set menus worked out by the bill](
 
 _2026-11-24: Piece 3, the server, is planned as four pull requests ([plan](../superpowers/plans/2026-11-24-a1515-3-set-menus-server.md)). The first stores each dish's à la carte price on its bill line, also when it is tapped in a set-menu folder, and records on the bill every set menu on sale that lists a dish when the dish is ordered; a dish moved to another bill brings those records with it, so that set menu stays usable after its period. Left: the server forms set menus on every change (PR 2), comps and discounts (PR 3), and moves with discounts (PR 4)._
 
-_Piece 1 ([plan](../superpowers/plans/2026-11-24-a1515-1-pay-for-items-new-bill.md)): the server can pay for chosen items on a bill of their own, put them back when the card fails, and give back or keep as a tip what that leaves the table's bill paid over its total; the till still pays for items the old way until piece 1's pull request 2; pull requests 3 (removing the old items payment) and 4 (printed bills) follow._
+_Piece 1 ([plan](../superpowers/plans/2026-11-24-a1515-1-pay-for-items-new-bill.md)): the server and, since pull request 2 of 4, the till pay for chosen items on a bill of their own, put them back when the card fails, and give back or keep as a tip what that leaves the table's bill paid over its total; a printed bill's items are still paid the old way until pull request 4 (printed bills), and pull request 3 (removing the old items payment) follows it._
 
 The old set-lunch build has been removed. The owner replaced it on 17 November 2026 with
 [set menus](../superpowers/specs/2026-11-17-set-menus-design.md): ordinary dishes are ordered,
