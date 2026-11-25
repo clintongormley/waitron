@@ -1,7 +1,10 @@
 # Reopen a printed bill that had an advance (REOPEN-WITH-ADVANCE)
 
 **Goal.** A table's printed bill, part of which was paid on the payer's own receipt (an *advance*), can be reopened
-like any other, with **Reopen bill** or **Pay > Items**. On #4317's head `c7d7bf953f`; lands after it.
+like any other, with **Reopen bill** or **Pay > Items**. Measured on #4317's head `c7d7bf953f` (landed as `dd8843a4ed`).
+Built after PR 3 (`feat/a1515-1-items-kind-removal`), which removes the items payment, its refusal in `refuseSplitMoney`
+and the triggers' `kind <> 'items'` clauses: re-read every reference here on PR 3's head before Task 1.
+Read once by a fresh reviewer (2026-11-25), who built the moving design on `dd8843a4ed` and ran it; findings folded in.
 
 **The ask** (`~/waitron-campaign-c/queue.md`): the owner, 25 Nov 13:0x: "I think a bill that has been partially paid
 by an advance can still be opened, no? We just can't refund more than the advance no?", then "y" to "lifting the
@@ -50,7 +53,13 @@ against real Veri\*Factu records. "Run" means there; everything else is read.
   Run: 30.00 refunded on X, then reopened: Y shows Paid 30.00, owes 90.00, and Correct invoice on the advance answers
   `invoice_correction.money_short`. Recommend no code: Y owes what X owed, the advance is filed and must be deducted,
   and the export already lists such a refund (owner, 2026-11-21 16:36). Alternative: refuse reopening (~10 lines and
-  words).
+  words). **The fresh read ran it and disagrees:** this is the till's ordinary path (Give money back on an unpaid
+  printed bill previews a plain refund), and afterwards the advance's give-back on Y has every choice unavailable with
+  no reason: staff cannot put it right. Third choice, the reviewer's and now this plan's recommendation: while the
+  receipt that took the advance off is unpaid and its bill could be reopened, refuse the plain refund with "Reopen the
+  bill, then give the money back.", on Y it files a corrective (run). The plain route stays where a bill cannot be
+  reopened. `advance.taken_off_final_invoice`'s words (`codes.ts:720`, `:1184`, `:1190`), which tell staff to wait until
+  the receipt is paid, say the same. About 25 product lines, estimated.
 - **RA-D5. The floor** (follows). Pay > Items: `bill.below_advances`, rolling the reopen back (run: X still placed, no
   corrective). Moving a dish off Y: today's `bill.received_exceeds_total`. The Items preview still does not say it
   before the payment, as on an open bill.
@@ -60,7 +69,9 @@ against real Veri\*Factu records. "Run" means there; everything else is read.
   other actions are an open bill's: merge away refused, left unpaid files 90.00 (run), deferred and day close issue
   it. **Cancel and credit** on a printed bill holding an advance stays `bill.payments_received` (run on X and Y), not
   in the ask. A pending *card* refund of an advance on X does not refuse: it names the advance's sale and tender, and
-  completes there as RA-D4.
+  completes there as RA-D4 — **corrected by the fresh read:** lifting `bill.has_advance` would let a bill reopen while
+  that refund is in progress, so `refuseSplitMoney` answers `bill.refund_in_progress` when a pending refund's tender
+  names a payment on the bill; one test.
 - **RA-D7. `bill.has_advance`, `split.refused_advance` and their words are deleted** (from the queue; pre-live, so an
   error code may go).
 - **RA-D8. Accountant export: an advance names the last receipt not reopened; X's receipt lists no "takes off"**
@@ -82,7 +93,7 @@ against real Veri\*Factu records. "Run" means there; everything else is read.
 | `bill-payments.ts` (`readPaymentRows`, `holdsPayment`, `givenBackAfterSettling`, `findSubmission`, settle), `bill-refunds.ts`, `bill-overpaid.ts`, `receipt-payments.ts`, `working-order-invoice.ts`, `payment-slip-print.ts`, `order-dining.ts`, `orders-list.ts`, `find-bill-bills.ts`, `set-menu-bill.ts` | none | read by the payment's bill, now Y; a reading design changes the ones that count money or find the payment |
 | `pay-for-items.ts` `refuseBelowAdvances` | none | through `readBillAdvances` |
 | `owed-receipts.ts`, `tender-refund-reservation.ts`, `transaction-receipt.ts`, `receipt-adjustments.ts`, `accountant-export.ts` | none | by the advance's sale, never by bill |
-| `find-bill-transactions.ts` | none | it lists a bill's own documents, and the advance was taken on X; its zone scope is as today |
+| `find-bill-transactions.ts` (and `find-bill-transactions.ts:29`'s scope) | join `bill_payments` and read `bp.working_order_id` | otherwise an advance's scope stays X, abandoned: once Y moves zone, a till limited to Y's zone is refused its own advance (the scope run by the fresh read; the refusal read). Tested |
 | `cash-up.ts`, close of day, VAT, category and top sellers | none | by payment or by sale. VAT, category and top sellers run (30.05 dish, 20.00 advance): printed +30.05, reopened +20.00 all payments on account, paid again +30.05, dish once |
 | triggers `bill_payments_guard_update` / `payments_guard_update` | first only | RA-D9 / RA-D2 |
 
@@ -109,12 +120,14 @@ Pinned today: 81.82+8.18, 100.00 and the mixed receipt (`advance-final.test.ts`)
 ## Tasks (each: failing test first; commit `-s`)
 
 1. **The trigger.** `packages/db/triggers/core.sql`: `bill_payments_guard_update`'s move branch drops `NOT exists
-   bill_advances` and allows a tender only when a `bill_advances` row names that payment and that tender's sale.
+   bill_advances` and allows a tender only when a `bill_advances` row names that payment and that tender's sale, and that sale has no `working_order_id`
+   (no trigger stops a `bill_advances` row naming a bill's own receipt). Drop `bill_advances_working_order_idx` in the same
+   rebuild: no product read is left for it.
    Rebuild: `pnpm --filter @waitron/server migration-baseline rebuild --set core`. Comments:
    `schema/bill-payments.ts`, `schema/bill-advances.ts` (its `working_order_id` is where it was taken).
    `bill-payments.test.ts`: "…not one that paid an advance" becomes "one that paid an advance moves, its advance's
    tender naming it, its `bill_advances` row unchanged"; add "…not one an advance names when its tender is another
-   sale's"; keep "…not one a tender names". Run it, then the guards: `pnpm exec vitest run
+   sale's" and "…or is on a bill's own receipt"; keep "…not one a tender names". Run it, then the guards: `pnpm exec vitest run
    scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts scripts/behavioural-triggers.test.ts
    scripts/starting-migrations.test.ts scripts/migration-upgrade.test.ts` and `pnpm --filter @waitron/fiscal-verifactu
    exec vitest run src/inmutabilidad.test.ts`.
@@ -125,11 +138,16 @@ Pinned today: 81.82+8.18, 100.00 and the mixed receipt (`advance-final.test.ts`)
    sum of records; a second advance on Y; a keyed card advance (provider row unchanged); tip on an advance; a resend
    to X answers Y and issues one advance; X shows no money and its receipt reprints −50.00. Replace the two refusals
    in `split-after-print.test.ts:393`, `:446` with the reopen.
-3. **Giving back.** Same file: before printing in full; on Y in part and in full; mixed 20 of 50; Correct invoice
+3. **Giving back** (3a: before printing, in full, in part; 3b: correction open, export and reports; each its own
+   dispatch). Same file: before printing in full; on Y in part and in full; mixed 20 of 50; Correct invoice
    refused on X, allowed on Y, refused once Y is printed, naming Y's receipt; plain refund on Y
    `tender.refund_of_advance`; on X then reopened (RA-D4); bill refund on Y `bill.refund_of_advance`; correction open
    on Y: pay and print refused, then Close with a card taken meanwhile issues Y; export and reports as above. Delete
-   each changed clause in turn and see a case fail.
+   each changed clause in turn and see a case fail. Add: a card-reader advance refunded on Y reaches the provider with the
+   original reference; reopening with a pending card refund of the advance is `bill.refund_in_progress`; a till limited
+   to Y's zone may give the advance back. Comments made false by this: `bill-payments.ts` ("of its own bill"),
+   `advance-taken-off.ts` ("A whole credit … leaves the refusal in place"), the headers of `refuseSplitMoney` and
+   `carryReceivedPayments`; `docs/backlog/fiscal.md`'s note with RA-D4's answer.
 4. **What follows.** `pay-for-items.printed.test.ts`: with an advance pays for a dish (source 30.00 of 120.00);
    `bill.below_advances` leaves X printed, nothing credited; a printed part payment leaves Y overpaid and Keep as tip
    takes none from the advance (run: 130.00 of 120.00, settled); the preview case at `:600` loses its advance half.
