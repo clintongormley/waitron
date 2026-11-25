@@ -1,5 +1,6 @@
 import type {
   AllocationPreview,
+  BillBalance,
   BillEditExpected,
   BillPaymentResult,
   BillRevisions,
@@ -190,15 +191,16 @@ export async function previewPayment(
 }
 
 /** Takes the payment: with an items part through Pay for items, answering the new bill as
- * `paidOn`; otherwise through today's bill payment. */
+ * `paidOn` and the bill the items came from as `sourceBalance`; otherwise through today's bill
+ * payment. */
 export async function takePayment(
   api: TillApi,
   billId: string,
   request: Confirmation & { submissionId: string },
   options: ReadOptions,
-): Promise<BillPaymentResult & { paidOn?: string }> {
+): Promise<BillPaymentResult & { paidOn?: string; sourceBalance?: BillBalance }> {
   const { items } = request;
   if (items === undefined) return api.takeBillPayment(billId, request, options);
   const paid = await api.payForItems(billId, itemsRequestOf({ ...request, items }), options);
-  return { ...paid.payment, paidOn: paid.billId };
+  return { ...paid.payment, paidOn: paid.billId, sourceBalance: paid.sourceBalance };
 }

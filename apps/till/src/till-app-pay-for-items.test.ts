@@ -59,8 +59,12 @@ const itemsPreview = (over: Partial<ItemPaymentPreview> = {}): ItemPaymentPrevie
   ...over,
 });
 
-/** The server's answer: the new bill `wo-9`, settled by the payment, with its receipt. */
-const paidOnWo9 = (over: Parameters<typeof takenOf>[0] = {}): ItemPaymentResult => ({
+/** The server's answer: the new bill `wo-9`, settled by the payment, with its receipt, and the
+ * table's bill `source`. */
+const paidOnWo9 = (
+  over: Parameters<typeof takenOf>[0] = {},
+  source: Partial<BillBalance> = {},
+): ItemPaymentResult => ({
   billId: "wo-9",
   payment: takenOf(
     { applied: "30.00", tendered: "50.00", change: "20.00", ...over },
@@ -73,6 +77,7 @@ const paidOnWo9 = (over: Parameters<typeof takenOf>[0] = {}): ItemPaymentResult 
     },
     invoiceOf("30.00"),
   ),
+  sourceBalance: balanceOf(source),
 });
 
 const formError = (el: TillApp) => inDialog(el, "wt-form-actions")!.error;
@@ -419,6 +424,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       ),
       outcome,
     },
+    sourceBalance: balanceOf(),
   });
   const itemsSent = () =>
     vi.mocked(api.payForItems).mock.calls.map(([, request]) => request as ItemPaymentRequest);
@@ -458,6 +464,33 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
     expect(tableOrder(el).billBalance?.workingOrderId).toBe("wo-4");
     expect(dialog(el)!.balance?.workingOrderId).toBe("wo-4");
+  });
+
+  it("a declined reader card for items shows the table's bill from the answer, reading no balance", async () => {
+    const table = balanceOf({ total: "90.00", outstanding: "90.00" });
+    const { el } = await mountApp({
+      ...withReader(),
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
+      payForItems: vi
+        .fn()
+        .mockResolvedValue({ ...onWo9("declined", "failed"), sourceBalance: table }),
+    });
+    await chooseItems(el, [4, 5]);
+    const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
+    const balanceReads = vi.mocked(api.getBillBalance).mock.calls.length;
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await flush(el);
+
+    expect(formError(el)).toBe(t("bill_pay.card_declined"));
+    expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+    expect(vi.mocked(api.getTabLines).mock.calls.slice(lineReads)).toContainEqual(["wo-4"]);
+    expect(dialog(el)!.balance).toEqual(table);
+    expect(tableOrder(el).billBalance).toEqual(table);
+    expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toEqual([]);
   });
 
   it("Cancel payment stops the reader under the table's bill", async () => {
@@ -548,13 +581,15 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(second!.submissionId).not.toBe(first!.submissionId);
   });
 
-  it("a card still pending on a till shows the payment in progress and reads the table's bill", async () => {
+  it("a card still pending on a till shows the payment in progress and the table's bill from the answer, reading no balance", async () => {
+    const table = balanceOf({ total: "90.00", outstanding: "90.00" });
     const { el } = await mountApp({
       ...withReader(),
       previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
-      payForItems: vi
-        .fn()
-        .mockResolvedValue(onWo9("timeout", "pending", { reserved: "30.00", outstanding: "0.00" })),
+      payForItems: vi.fn().mockResolvedValue({
+        ...onWo9("timeout", "pending", { reserved: "30.00", outstanding: "0.00" }),
+        sourceBalance: table,
+      }),
     });
     await chooseItems(el, [4, 5]);
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
@@ -562,17 +597,15 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     await press(el, 'input[name="method"][value="card"]');
     await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
     await press(el, "[data-pay-continue]");
-    // A failed read keeps what the window showed, so it must not show the new bill's.
-    vi.mocked(api.getBillBalance).mockRejectedValue(new TypeError("Failed to fetch"));
     await press(el, "[data-pay-confirm]");
     await flush(el);
 
     expect(text(inDialog(el, "[data-pay-taken]"))).toBe(
       t("bill_pay.card_pending").replace("{amount}", money("30.00")),
     );
-    expect(dialog(el)!.balance?.workingOrderId).toBe("wo-4");
-    expect(tableOrder(el).billBalance?.workingOrderId).toBe("wo-4");
-    expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toContainEqual(["wo-4"]);
+    expect(dialog(el)!.balance).toEqual(table);
+    expect(tableOrder(el).billBalance).toEqual(table);
+    expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toEqual([]);
     expect(vi.mocked(api.getTabLines).mock.calls.length).toBeGreaterThan(lineReads);
   });
 
@@ -734,6 +767,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
   });
 
   describe("at the Counter", () => {
+    const onWo1 = { workingOrderId: "wo-1" };
     const counterEdit = { billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null };
     const counter = (el: TillApp) =>
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["till-counter-screen"]>(
@@ -845,11 +879,12 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       return first.lineId;
     }
 
-    it("at the Counter the window stays, says the payment was taken, and reads the order again", async () => {
+    it("at the Counter the window stays, says the payment was taken, and reads the order again without a balance read", async () => {
       let paid = false;
+      const table = balanceOf({ workingOrderId: "wo-1", total: "90.00", outstanding: "90.00" });
       const payForItems = vi.fn(async () => {
         paid = true;
-        return paidOnWo9();
+        return { ...paidOnWo9({}, onWo1), sourceBalance: table };
       });
       const el = await retrieved({
         getTabLines: vi.fn(async () => ({
@@ -891,8 +926,8 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       expect(text(inDialog(el, "[data-pay-taken]"))).toBe(
         t("bill_pay.taken_change").replace("{amount}", money("20.00")),
       );
-      expect(dialog(el)!.balance?.workingOrderId).toBe("wo-1");
-      expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toContainEqual(["wo-1"]);
+      expect(dialog(el)!.balance).toEqual(table);
+      expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toEqual([]);
       expect(vi.mocked(api.retrieveWorkingOrder).mock.calls.length).toBeGreaterThan(orderReads);
       expect(dialog(el)!.lines.map((row) => row.lineId)).toEqual(
         bill120.slice(1).map((dish) => dish.id),
@@ -908,7 +943,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
         const el = await retrieved({
           getTill: vi.fn().mockResolvedValue({ ...till, capabilities: [...capabilities] }),
           previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
-          payForItems: vi.fn().mockResolvedValue(paidOnWo9()),
+          payForItems: vi.fn().mockResolvedValue(paidOnWo9({}, onWo1)),
         });
         await chooseFirst(el);
         await press(el, "[data-pay-continue]");
@@ -950,7 +985,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
           previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
           payForItems: vi.fn(async () => {
             paid = true;
-            return paidOnWo9();
+            return paidOnWo9({}, onWo1);
           }),
           ...overrides,
         },
@@ -1062,7 +1097,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
           keepOverpaidAsTip,
           payForItems: vi.fn(async () => {
             paid = true;
-            return paidOnWo9();
+            return paidOnWo9({}, onWo1);
           }),
         },
         ["payment.take"],
@@ -1125,7 +1160,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
         getBillBalance,
         payForItems: vi.fn(async () => {
           paid = true;
-          return paidOnWo9();
+          return paidOnWo9({}, onWo1);
         }),
       });
       const payButton = () =>
@@ -1219,7 +1254,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
           roles: [roleOf("payment_slip", BAR_PRINTER, [BAR_PRINTER])],
         }),
         previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
-        payForItems: vi.fn().mockResolvedValue(paidOnWo9({ id: "new-payment" })),
+        payForItems: vi.fn().mockResolvedValue(paidOnWo9({ id: "new-payment" }, onWo1)),
         printPaymentSlip,
       });
       await chooseFirst(el);
@@ -1233,7 +1268,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     });
 
     it("at the Counter a card charged for a different amount still warns", async () => {
-      const answer = paidOnWo9();
+      const answer = paidOnWo9({}, onWo1);
       answer.payment.balance.captureWarning = { requestedAmount: "30.00", reportedAmount: "25.00" };
       const el = await retrieved({
         previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),

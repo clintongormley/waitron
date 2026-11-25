@@ -23673,7 +23673,7 @@ export class TillApp extends LitElement {
    */
   async #onBillPaid(
     open: BillPaying,
-    result: BillPaymentResult & { paidOn?: string },
+    result: BillPaymentResult & { paidOn?: string; sourceBalance?: BillBalance },
     readerName: string | undefined,
     readerMakesSlip: boolean,
     cancelled: boolean,
@@ -23694,7 +23694,7 @@ export class TillApp extends LitElement {
         taken: null,
         busy: false,
       };
-      await this.#rereadAfterPaid(open, own);
+      await this.#rereadAfterPaid(open, own, result.sourceBalance);
       return;
     }
     if (NOT_CHARGED_OUTCOMES.has(result.outcome)) {
@@ -23714,7 +23714,7 @@ export class TillApp extends LitElement {
             },
         busy: false,
       };
-      if (own === undefined) await this.#rereadAfterPaid(open);
+      if (own === undefined) await this.#rereadAfterPaid(open, undefined, result.sourceBalance);
       return;
     }
     this.shadowRoot!.querySelector<TillBillPayDialog>("till-bill-pay-dialog")?.paymentAccepted();
@@ -23759,15 +23759,22 @@ export class TillApp extends LitElement {
     };
     if (result.payment.state === "pending")
       this.#startPendingReread(open.id, result.payment.id, taken, result.paidOn);
-    await this.#rereadAfterPaid(open, own);
+    await this.#rereadAfterPaid(open, own, result.sourceBalance);
   }
 
-  /** The order read again after an answer, on `balance` when it is the bill's own; otherwise the
-   * dialog's bill is read first. */
-  async #rereadAfterPaid(open: BillPaying, balance?: BillBalance): Promise<void> {
+  /** The order read again after an answer, on `balance` when it is the bill's own; else on
+   * `answered`, the dialog's bill as Pay for items answered it, shown as a read of it would be;
+   * otherwise the dialog's bill is read first. */
+  async #rereadAfterPaid(
+    open: BillPaying,
+    balance?: BillBalance,
+    answered?: BillBalance,
+  ): Promise<void> {
+    if (balance === undefined && answered !== undefined)
+      await this.#showBillPayingBalance(open.id, open.billId, answered, ++this.#payTicks);
     await this.#rereadPayingOrder(
       open,
-      balance ?? (await this.#rereadBillPaying(open.id, open.billId)),
+      balance ?? answered ?? (await this.#rereadBillPaying(open.id, open.billId)),
     );
   }
 

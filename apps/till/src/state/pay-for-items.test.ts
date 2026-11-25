@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AllocationPreview,
+  BillBalance,
   BillEditExpected,
   BillPaymentResult,
   TillApi,
@@ -400,6 +401,20 @@ describe("previewPayment and takePayment", () => {
     expect(api.payForItems).toHaveBeenCalledWith("wo-4", itemsRequestOf(request), { signal });
     expect(api.previewBillPayment).not.toHaveBeenCalled();
     expect(api.takeBillPayment).not.toHaveBeenCalled();
+  });
+
+  it("takePayment passes on the table's bill an items answer carries", async () => {
+    const api = apiStub();
+    const sourceBalance = { workingOrderId: "wo-4", total: "21.00" } as unknown as BillBalance;
+    api.payForItems.mockResolvedValue({ billId: "wo-9", payment: paid, sourceBalance });
+    const request = {
+      ...withItems(itemsConfirmation(itemsAsked), itemsAsked, edit, revisions, false),
+      submissionId: "s",
+    } as Confirmation & { submissionId: string; items: ItemsPart };
+
+    await expect(
+      takePayment(api as unknown as TillApi, "wo-4", request, { signal }),
+    ).resolves.toEqual({ ...paid, paidOn: "wo-9", sourceBalance });
   });
 
   it("previewPayment and takePayment send a printed bill's items choice down today's route with kind items", async () => {

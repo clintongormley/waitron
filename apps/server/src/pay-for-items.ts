@@ -37,9 +37,12 @@ import {
   beginReaderBillPayment,
   collectBegunReaderPayment,
   diskFullBeforePayment,
+  getBillBalance,
   issueIfFullyPaid,
+  readBillBalance,
   refuseCoveredWhileAdvanceCorrectionOpen,
   takeBillPaymentIn,
+  type BillBalance,
   type BillPaymentDeps,
   type BillPaymentRequest,
   type BillPaymentResult,
@@ -415,7 +418,7 @@ export async function payForItems(
   req: PayForItemsRequest,
   operator: { personId: string; sessionId: string },
   device: DeviceBinding | null,
-): Promise<{ billId: string; payment: BillPaymentResult }> {
+): Promise<{ billId: string; payment: BillPaymentResult; sourceBalance: BillBalance }> {
   if (req.entry === "reader" && !("provider" in deps)) throw invalid("entry");
   if (req.method === "cash" ? req.tendered === undefined : req.tendered !== undefined)
     throw invalid("tendered");
@@ -436,10 +439,18 @@ export async function payForItems(
     ...(req.externalRef === undefined ? {} : { externalRef: req.externalRef }),
     ...outsideCardDetails(req),
   });
-  /** The bill an earlier request paid on, else the new bill the items move to, and its edit state. */
+  /** The bill an earlier request paid on, else the new bill the items move to, and its edit state;
+   * and the bill the items came from, which on a replay is the earlier bill's, not `fromBillId`:
+   * on a printed bill that names the abandoned bill, not the reopened one (PR4-D10). */
   const billFor = async (tx: Transaction, holdSourceInvoice: boolean) => {
     const earlier = await earlierItemsBill(tx, fromBillId, req.submissionId);
-    if (earlier !== undefined) return { billId: earlier, request: payment(null) };
+    if (earlier !== undefined) {
+      const [row] = await tx
+        .select({ itemsPaidFrom: workingOrders.itemsPaidFrom })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, earlier));
+      return { billId: earlier, sourceId: row!.itemsPaidFrom!, request: payment(null) };
+    }
     const source = await reopenIfPrinted(
       tx,
       deps,
@@ -472,13 +483,18 @@ export async function payForItems(
       { deps, cfg },
       { holdSourceInvoice },
     );
-    return { billId, request: payment(await readBillEditState(tx, billId)) };
+    return {
+      billId,
+      sourceId: source.fromBillId,
+      request: payment(await readBillEditState(tx, billId)),
+    };
   };
   const pending = diskFullBeforePayment(deps);
   const preRead = pending !== false && (await pending);
   if ("provider" in deps && req.entry === "reader") {
     const hold: ReaderPaymentHold = { release: () => {}, capturedReplay: false };
     let billId = fromBillId;
+    let sourceId = fromBillId;
     try {
       const begun = await withSettledSlip((slip) =>
         withIssuanceTransaction(
@@ -486,6 +502,7 @@ export async function payForItems(
           async (tx) => {
             const bill = await billFor(tx, true);
             billId = bill.billId;
+            sourceId = bill.sourceId;
             const started = await beginReaderBillPayment(
               tx,
               deps,
@@ -505,8 +522,9 @@ export async function payForItems(
           deps.log,
         ),
       );
-      if (begun.kind === "replay") return { billId, payment: begun.result };
-      return { billId, payment: await collectBegunReaderPayment(deps, cfg, begun) };
+      const paid =
+        begun.kind === "replay" ? begun.result : await collectBegunReaderPayment(deps, cfg, begun);
+      return { billId, payment: paid, sourceBalance: await getBillBalance(deps, sourceId) };
     } catch (error) {
       if (!hold.capturedReplay) throw error;
       return afterCardCharged(deps, billId, () => Promise.reject(error));
@@ -517,14 +535,12 @@ export async function payForItems(
   return withIssuanceTransaction(
     deps.db,
     async (tx) => {
-      const { billId, request } = await billFor(tx, false);
-      return {
-        billId,
-        payment: await takeBillPaymentIn(tx, deps, cfg, billId, request, operator, {
-          preRead,
-          print,
-        }),
-      };
+      const { billId, sourceId, request } = await billFor(tx, false);
+      const paid = await takeBillPaymentIn(tx, deps, cfg, billId, request, operator, {
+        preRead,
+        print,
+      });
+      return { billId, payment: paid, sourceBalance: await readBillBalance(tx, sourceId) };
     },
     deps.log,
   );

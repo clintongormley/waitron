@@ -327,6 +327,27 @@ describe("Pay for items on a printed bill", () => {
     expect(await itemsBillsOf(reopened)).toEqual([first.json.billId]);
   });
 
+  it("a replay on a printed bill carries the reopened bill", async () => {
+    const party = await printed(await seated("soup", "hake"));
+    const body = await itemsBody(
+      party,
+      [{ lineId: await lineOf(party.tabId, "hake") }],
+      cashFor("15.00", "20.00"),
+    );
+
+    await payItems(party.tabId, body);
+    const again = await payItems(party.tabId, body);
+
+    expect(again.status, JSON.stringify(again.json)).toBe(200);
+    const [reopened] = await reopenedFrom(party.tabId);
+    expect(again.json.sourceBalance).toMatchObject({
+      workingOrderId: reopened,
+      status: "open",
+      total: "6.00",
+      outstanding: "6.00",
+    });
+  });
+
   it("a declined card leaves every dish on the reopened bill", async () => {
     const party = await printed(await seated("soup", "hake"));
     const original = await fixture.invoiceOf(venue, party.tabId);

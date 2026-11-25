@@ -188,6 +188,27 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
     expect(await paymentsOf(billId)).toEqual([]);
   });
 
+  it("the answer carries the table's bill as the payment left it", async () => {
+    const { partyId, billId } = await seatedBill({ product: "soup" }, { product: "hake" });
+    const req = await request(partyId, billId, [{ lineId: await lineOf(billId, "hake") }], {
+      method: "cash",
+      applied: "15.00",
+      tip: "0.00",
+      tendered: "20.00",
+    });
+
+    const paid = await payForItems(deps(), v.cfg, billId, req, v.operator, null);
+
+    expect(paid.sourceBalance).toMatchObject({
+      workingOrderId: billId,
+      status: "open",
+      total: "6.00",
+      received: "0.00",
+      outstanding: "6.00",
+      payments: [],
+    });
+  });
+
   it("a hand-keyed card does the same", async () => {
     const { partyId, billId } = await seatedBill({ product: "soup" }, { product: "hake" });
     const req = await request(partyId, billId, [{ lineId: await lineOf(billId, "hake") }], {
