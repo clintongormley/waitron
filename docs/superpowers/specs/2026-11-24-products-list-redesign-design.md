@@ -115,8 +115,9 @@ Show archived and the Archived state are gone before the list here is built).
 
 - Move to…, **Mark available**, **Mark unavailable**, Delete, Done. The availability actions stay
   visible in Select and act on the ticked products and the contents of ticked categories in one
-  request, all or none. They include products hidden by search or filters. After a category batch
-  succeeds, the bottom notice says how many products it applied to (A1589, owner, 2026-11-25).
+  request, all or none. They include products hidden by search or filters. A successful category
+  batch reports how many products it applied to (A1589, owner choice recorded 2026-11-25).
+  Use the bottom notice for eight seconds (watcher clearance, 22:01).
 - Select all in Tree affects rows that match the search and filters. You can tick a category shown
   because a product matches by hand (A1589, watcher, 2026-11-25).
 - Dragging and its handles are in the Tree only. Switching views clears the ticks (**my call**).

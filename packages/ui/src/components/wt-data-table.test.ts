@@ -9275,6 +9275,10 @@ test("A461 flat search preserves query boundaries, filters and visible select al
   el.setExpanded("coffee", true);
   await el.updateComplete;
   expect(treeKeys(el)).toEqual(["coffee", "espresso", "ginger", "iced", "cake", "iced"]);
+  el.rowSelectAll = (row, filtered) => !filtered || row.id !== "coffee";
+  await el.updateComplete;
+  el.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-all"]')!.click();
+  expect(selection.mock.calls[1]![0].detail.selected).toEqual(["iced", "cake"]);
 });
 
 test("A461 roots tied on closeness use the chosen column sort", async () => {

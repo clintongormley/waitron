@@ -26,13 +26,14 @@ says how many products the box applied the choice to.
   pending and focus checks and in one all-or-none request. On success, clear the tick keys
   captured at press time in the same selection session.
 - [ ] **Show the result.** In `widgets/product-availability-actions.ts`, give `changeSelected`
-  a flag from the captured category ticks and record `batchResult` only on their success.
+  a flag from the captured category ticks and put the count in `batchNotice` only on their success.
   Keep row refusals independent. Clear the batch notice on Close, a selection reset or a new
   write. Reuse the bottom `wt-toast` in `widgets/product-list-action-feedback.ts`. Rename its
   hook to `batch-availability-notice` and apply the same visibility check to both outcomes.
   Use the toast's eight-second timeout for success and keep refusals until dismissed. Hold the
   success toast while the popover opens, then release it two frames later so the empty
-  `role="status"` is visible first. Keep the existing focus return.
+  `role="status"` is visible first. The watcher cleared the bottom notice and eight-second
+  timeout at 22:01. Keep the existing focus return.
   Use the existing count helper in `widgets/count-text.ts` and strings in `i18n/strings.ts`.
   Use “Marked 1 product available.” / “Marked {count} products available.” and
   “1 producto marcado como disponible.” / “{count} productos marcados como disponibles.”

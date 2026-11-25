@@ -2243,7 +2243,8 @@ it("marks products inside hidden category ticks once and announces the count aft
   api.setProductsAvailability.mockReturnValue(saved.promise);
   const el = await mountBrowser({
     api: api as unknown as DashboardApi,
-    products: [...PRODUCTS, product("stout", "Stout", "b")],
+    categories: [...CATEGORIES, folder("dark", "Dark beer", "b")],
+    products: [...PRODUCTS, product("stout", "Stout", "dark")],
   });
   await toggleCategory(el, "d");
   await selectKeys(el, ["folder:d", "folder:b", "cola", "bread"]);
@@ -2276,7 +2277,7 @@ it("marks products inside hidden category ticks once and announces the count aft
   expect(el.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("cancel-selection");
 });
 
-it.each(["all", "folder:d"])("honours a %s tick in filtered Tree", async (selection) => {
+it.each(["all", "folder:d"])("marks products from %s in filtered Tree", async (selection) => {
   const api = bulkApi();
   const el = await mountBrowser({
     api: api as unknown as DashboardApi,
@@ -2464,8 +2465,12 @@ it.each(["bread", "cola"])("keeps only unrelated switch refusals for %s", async 
   await selectKeys(el, ["folder:d"]);
   await userEvent.click(bulkButton(el, "available")!);
   await vi.waitFor(() => expect(batchRefusal(el)?.message).toBe("Marked 1 product available."));
-  if (id === "bread") expect(refusal()?.textContent).toContain(name);
-  else expect(refusal()).toBeNull();
+  if (id === "bread") {
+    expect(refusal()?.textContent).toContain(name);
+    await press(el, "cancel-selection");
+    await userEvent.click(await availabilitySwitch(el, "cola"));
+  }
+  expect(refusal()).toBeNull();
 });
 
 it.each(["cola", "folder:d"])("refreshes a deleted product from %s", async (selected) => {
@@ -2487,6 +2492,7 @@ it.each(["cola", "folder:d"])("refreshes a deleted product from %s", async (sele
       "Nothing was changed. Cola was deleted and can no longer be changed.",
     ),
   );
+  expect(el.shadowRoot!.activeElement).toBe(bulkButton(el, "available"));
   expect(api.liveData.invalidate).toHaveBeenCalledExactlyOnceWith([{ type: "products" }]);
   expect(count(el)).toBe("1 selected");
   el.products = PRODUCTS.filter(({ id }) => id !== "cola");

@@ -909,6 +909,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
   /** Adds row and header checkboxes. The caller updates `selected` on `wt-selection-change`. */
   @property({ type: Boolean }) selectable = false;
   @property({ attribute: false }) rowSelectable: (row: Row) => boolean = () => true;
+  /** Limits the tree header to matching rows that pass this check, independently of row boxes. */
   @property({ attribute: false }) rowSelectAll?: (row: Row, filtered: boolean) => boolean;
   /** Domain eligibility for retained ticks; rowSelectable still controls visible checkboxes. */
   @property({ attribute: false }) rowSelectionAllowed?: (row: Row) => boolean;
