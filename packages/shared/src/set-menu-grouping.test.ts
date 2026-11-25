@@ -77,7 +77,7 @@ function expectWithinHalfSecond(start: number) {
 }
 
 function checkOrdinaryTiming(check: () => void) {
-  // Coverage and machine load affect timing measurements.
+  // Coverage instrumentation adds work inside the timed interval.
   const coverage = Reflect.get(globalThis, "__vitest_worker__")?.config?.coverage?.enabled;
   if (coverage !== true) check();
 }

@@ -4,7 +4,7 @@ The Shared suite should check that a forty-diner bill with two percentage discou
 
 The old assertion measures process CPU time. Ubuntu's nightly measured 680 ms against a 500 ms ceiling. On Node 26.13.1 on macOS, three whole-file runs with V8 coverage measured 546–646 ms before #4267 (`b925d5f767`) and 578–679 ms on the starting main (`1c2057aadf`). All six ordinary runs came in at 152–180 ms. Every run returned the same price. The covered failure predates #4267 in this reproduction. [Nightly failure](https://github.com/clintongormley/waitron/actions/runs/45532039292/job/138929805703)
 
-Claude proposed counting placement solves, using the existing spy pattern in `packages/shared/src/set-menu-search.test.ts`. In a disposable checkout the forty-diner bill needed 15 solves in both modes. Raising `REFINEMENT_WORK_LIMIT` from 16,000 to 1,600,000 kept the price while raising the count to 62. A limit of 20 rejected it in both modes. CPU time varied with machine load. The watcher also measured covered runs at 288–317 ms. Repeating the solver's path scan eight times kept 15 calls and the same price while breaking the ordinary timing check.
+Claude proposed counting placement solves, using the existing spy pattern in `packages/shared/src/set-menu-search.test.ts`. In a disposable checkout the forty-diner bill needed 15 solves in both modes. Raising `REFINEMENT_WORK_LIMIT` from 16,000 to 1,600,000 kept the price while raising the count to 62. A limit of 20 rejected it in both modes. CPU time varied between runs. The watcher also measured covered runs at 288–317 ms. Repeating the solver's path scan eight times kept 15 calls and the same price while breaking the ordinary timing check.
 
 ## Change and verify
 
