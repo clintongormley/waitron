@@ -687,6 +687,39 @@ describe("NFC throughout the till", () => {
     (await reader()).read(`waitron-equipment:reader:${READER_ID}`);
     await vi.waitFor(() => expect(notice(el)?.message).toBe("Picked up Portable reader"));
   });
+  it.each(["stored", "refused"])("a tap in the Equipment window that is %s", async (outcome) => {
+    let answer!: () => void;
+    const setDeviceEquipment = vi.fn(
+      () =>
+        new Promise((resolve, reject) => {
+          answer = () =>
+            outcome === "stored"
+              ? resolve(NFC_EQUIPMENT)
+              : reject({ code: "device.binding_invalid", status: 400, field: "cardReaderId" });
+        }),
+    );
+    const { el } = await mountEquipmentApp({ setDeviceEquipment });
+    await signIn(el);
+    await openEquipment(el);
+    const dialog = el.shadowRoot!.querySelector<TillEquipmentDialog>("till-equipment-dialog")!;
+    const said = () =>
+      dialog.shadowRoot!.querySelector("[data-equipment-nfc-message]")!.textContent!.trim();
+    await vi.waitFor(() =>
+      expect(dialog.shadowRoot!.querySelector("[data-equipment-nfc]")).not.toBeNull(),
+    );
+    (await reader()).read(`waitron-equipment:reader:${READER_ID}`);
+    await vi.waitFor(() => expect(setDeviceEquipment).toHaveBeenCalledTimes(1));
+    expect(said()).toBe(t("equipment.nfc_hint"));
+    answer();
+    if (outcome === "stored")
+      await vi.waitFor(() => expect(said()).toBe("Picked up Portable reader"));
+    else {
+      await vi.waitFor(() => expect(dialog.error?.code).toBe("device.binding_invalid"));
+      await dialog.updateComplete;
+      expect(said()).toBe(t("equipment.nfc_hint"));
+    }
+    expect(notice(el)?.open).toBe(false);
+  });
   it("the dialog owns NFC while open and QR pauses both readers", async () => {
     const { el, requests } = await mountEquipmentApp();
     await signIn(el);

@@ -1168,6 +1168,8 @@ export const en = {
   "equipment.nfc_allow": "Allow NFC",
   "equipment.nfc_hint": "Tap the equipment’s NFC sticker with your phone.",
   "equipment.nfc_read_error": "That sticker could not be read. Hold it still and try again.",
+  "equipment.nfc_blocked":
+    "NFC is blocked for Waitron. Allow it in this app’s or browser’s permissions. Meanwhile, scan the QR code or choose from the list.",
   "equipment.nfc_unavailable": "NFC is not available. Scan the QR code or choose from the list.",
   "equipment.scan_back": "Back to the list",
   "equipment.scan_hint": "Point the camera at the equipment's label.",
@@ -3638,6 +3640,8 @@ export const es: Record<StringKey, string> = {
   "equipment.nfc_hint": "Acerca el teléfono a la pegatina NFC del equipo.",
   "equipment.nfc_read_error":
     "No se ha podido leer la pegatina. Mantenla quieta e inténtalo de nuevo.",
+  "equipment.nfc_blocked":
+    "NFC está bloqueado para Waitron. Permítelo en los permisos de esta aplicación o del navegador. Mientras tanto, escanea el código QR o elige de la lista.",
   "equipment.nfc_unavailable": "NFC no está disponible. Escanea el código QR o elige de la lista.",
   "equipment.scan_back": "Volver a la lista",
   "equipment.scan_hint": "Apunta la cámara a la etiqueta del equipo.",

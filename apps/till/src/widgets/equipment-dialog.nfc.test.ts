@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
 import { TillApi, type EquipmentChange } from "../api/client.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import {
   FakeNdefReader,
@@ -648,4 +648,202 @@ describe("equipment dialog NFC", () => {
     nfc.read(code("reader", READER_ID));
     expect(seen).toEqual([]);
   });
+
+  const blocked = (el: TillEquipmentDialog) =>
+    el.shadowRoot!.querySelector("[data-equipment-nfc-blocked]");
+  it.each(["en", "es"] as const)(
+    "says why NFC is blocked and how to allow it (%s)",
+    async (locale) => {
+      const permission = installNfc("denied");
+      setLocale(locale);
+      const words = t("equipment.nfc_blocked");
+      expect(words.startsWith("NFC is blocked for Waitron.")).toBe(locale === "en");
+      const el = await mount();
+      await vi.waitFor(() => expect(blocked(el)?.textContent?.trim()).toBe(words));
+      expect(blocked(el)!.getAttribute("role")).toBe("status");
+      Object.assign(permission, { state: "granted" });
+      permission.dispatchEvent(new Event("change"));
+      await el.updateComplete;
+      expect(blocked(el)).toBeNull();
+    },
+  );
+  it("a refused permission prompt says NFC is blocked", async () => {
+    installNfc("prompt");
+    FakeNdefReader.scanResult = () =>
+      Promise.reject(new DOMException("refused", "NotAllowedError"));
+    const el = await mount();
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-equipment-nfc-allow]")).not.toBeNull(),
+    );
+    expect(blocked(el)).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-equipment-nfc-allow]")!.click();
+    await vi.waitFor(() => expect(blocked(el)).not.toBeNull());
+  });
+  it("a blocked phone hides the explanation while the QR camera is open", async () => {
+    installNfc("denied");
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockRejectedValue(
+      new DOMException("refused", "NotAllowedError"),
+    );
+    const el = await mount();
+    await vi.waitFor(() => expect(blocked(el)).not.toBeNull());
+    scanRow(el, "receipt");
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("till-equipment-scanner")).not.toBeNull();
+    expect(blocked(el)).toBeNull();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-equipment-scan-back]")!.click();
+    await el.updateComplete;
+    expect(blocked(el)).not.toBeNull();
+  });
+  it("a device with no NFC says nothing about NFC", async () => {
+    vi.stubGlobal("NDEFReader", undefined);
+    const el = await mount();
+    await el.updateComplete;
+    expect(blocked(el)).toBeNull();
+  });
+
+  const line = (el: TillEquipmentDialog) =>
+    el.shadowRoot!.querySelector("[data-equipment-nfc-message]")!.textContent!.trim();
+  const HINT = "Tap the equipment’s NFC sticker with your phone.";
+  it("says picked up only once the app answers that the tap was stored", async () => {
+    installNfc();
+    const el = await mount();
+    const seen = changes(el);
+    (await reader()).read(code("reader", READER_ID));
+    await el.updateComplete;
+    expect(line(el)).toBe(HINT);
+    el.answered(seen[0]!, NFC_EQUIPMENT);
+    await el.updateComplete;
+    expect(line(el)).toBe("Picked up Portable reader");
+  });
+  it.each(["en", "es"] as const)("names an armed row's printer (%s)", async (locale) => {
+    installNfc();
+    setLocale(locale);
+    const words = t("equipment.picked_up").replace("{item}", "Portable printer");
+    expect(words === "Picked up Portable printer").toBe(locale === "en");
+    const el = await mount();
+    const seen = changes(el);
+    const nfc = await reader();
+    scanRow(el, "payment_slip");
+    await el.updateComplete;
+    nfc.read(code("printer", PRINTER_ID));
+    el.answered(seen[0]!, NFC_EQUIPMENT);
+    await el.updateComplete;
+    expect(line(el)).toBe(words);
+  });
+  it("an unarmed printer tap says which role took it, as the till does", async () => {
+    installNfc();
+    const el = await mount();
+    const seen = changes(el);
+    const nfc = await reader();
+    nfc.read(code("printer", PRINTER_ID));
+    el.answered(seen[0]!, NFC_EQUIPMENT);
+    await el.updateComplete;
+    expect(line(el)).toBe("No printer role selected. Choose a role in Equipment.");
+    nfc.read(code("printer", PRINTER_ID));
+    el.answered(seen[1]!, {
+      roles: NFC_EQUIPMENT.roles.map((role) =>
+        role.role === "payment_slip" ? { ...role, chosenId: PRINTER_ID } : role,
+      ),
+    });
+    await el.updateComplete;
+    expect(line(el)).toBe("Picked up Portable printer for payment slips");
+  });
+  it.each(["refused", "unanswered"])("a %s tap never says picked up", async (outcome) => {
+    installNfc();
+    const el = await mount();
+    const seen = changes(el);
+    (await reader()).read(code("reader", READER_ID));
+    el.answered(seen[0]!, outcome === "refused" ? { error: "Busy" } : undefined);
+    el.answered(seen[0]!, NFC_EQUIPMENT);
+    await el.updateComplete;
+    expect(line(el)).toBe(HINT);
+  });
+  it("a refused tap clears the one before's confirmation", async () => {
+    installNfc();
+    const el = await mount();
+    const seen = changes(el);
+    const nfc = await reader();
+    nfc.read(code("reader", READER_ID));
+    el.answered(seen[0]!, NFC_EQUIPMENT);
+    nfc.read(code("printer", PRINTER_ID));
+    el.answered(seen[1]!, { error: "Busy" });
+    await el.updateComplete;
+    expect(line(el)).toBe(HINT);
+  });
+  it("a list choice clears a confirmation and is not itself confirmed", async () => {
+    installNfc();
+    const el = await mount();
+    const seen = changes(el);
+    (await reader()).read(code("reader", READER_ID));
+    el.answered(seen[0]!, NFC_EQUIPMENT);
+    await el.updateComplete;
+    expect(line(el)).toBe("Picked up Portable reader");
+    await chooseOption(
+      el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="receiptPrinterId"]')!,
+      PRINTER_ID,
+    );
+    expect(seen).toHaveLength(2);
+    await el.updateComplete;
+    expect(line(el)).toBe(HINT);
+    el.answered(seen[1]!, NFC_EQUIPMENT);
+    await el.updateComplete;
+    expect(line(el)).toBe(HINT);
+  });
+  it("a list choice leaves an NFC failure said", async () => {
+    installNfc();
+    FakeNdefReader.scanResult = () =>
+      Promise.reject(new DOMException("no NFC", "NotSupportedError"));
+    const el = await mount();
+    await vi.waitFor(() => expect(line(el)).toContain("NFC is not available"));
+    await chooseOption(
+      el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="receiptPrinterId"]')!,
+      PRINTER_ID,
+    );
+    await el.updateComplete;
+    expect(line(el)).toContain("NFC is not available");
+  });
+  it("an earlier tap's answer does not confirm the tap after it", async () => {
+    installNfc();
+    const el = await mount();
+    const seen = changes(el);
+    const nfc = await reader();
+    nfc.read(code("reader", READER_ID));
+    nfc.read(code("printer", PRINTER_ID));
+    el.answered(seen[0]!, NFC_EQUIPMENT);
+    await el.updateComplete;
+    expect(line(el)).toBe(HINT);
+    el.answered(seen[1]!, NFC_EQUIPMENT);
+    await el.updateComplete;
+    expect(line(el)).toBe("No printer role selected. Choose a role in Equipment.");
+  });
+  it.each(["a later tap", "a later choice", "reopening"])(
+    "an answer that comes back after %s confirms nothing",
+    async (later) => {
+      installNfc();
+      const el = await mount();
+      const seen = changes(el);
+      (await reader()).read(code("reader", READER_ID));
+      let shown = HINT;
+      if (later === "a later tap") {
+        (await reader()).read("garbage");
+        shown = "That is not a Waitron equipment label";
+      } else if (later === "a later choice")
+        await chooseOption(
+          el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="receiptPrinterId"]')!,
+          PRINTER_ID,
+        );
+      else {
+        el.open = false;
+        await el.updateComplete;
+        el.open = true;
+        await el.updateComplete;
+        await vi.waitFor(() =>
+          expect(el.shadowRoot!.querySelector("[data-equipment-nfc]")).not.toBeNull(),
+        );
+      }
+      el.answered(seen[0]!, NFC_EQUIPMENT);
+      await el.updateComplete;
+      expect(line(el)).toBe(shown);
+    },
+  );
 });
