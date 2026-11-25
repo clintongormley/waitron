@@ -4,6 +4,8 @@ import type { PackLocale } from "./pack-words.js";
 type MasterKeyFieldWords = {
   label: string;
   button: string;
+  /** The show/hide button's names, and what is said once it is pressed. */
+  visibility: { show: string; hide: string; shown: string; hidden: string };
   /** Said to screen readers once a chosen PDF filled the field; never the key itself. */
   loaded: string;
   notPack: string;
@@ -17,6 +19,12 @@ export const MASTER_KEY_FIELD_WORDS: Record<PackLocale, MasterKeyFieldWords> = {
   en: {
     label: "Master key",
     button: "Choose the recovery pack PDF",
+    visibility: {
+      show: "Show key",
+      hide: "Hide key",
+      shown: "Key shown",
+      hidden: "Key hidden",
+    },
     loaded: "Key loaded",
     notPack: "This PDF is not a recovery pack.",
     damaged: "This recovery pack PDF is damaged. Type the key.",
@@ -30,6 +38,12 @@ export const MASTER_KEY_FIELD_WORDS: Record<PackLocale, MasterKeyFieldWords> = {
   es: {
     label: "Clave maestra",
     button: "Elegir el PDF del paquete de recuperación",
+    visibility: {
+      show: "Mostrar clave",
+      hide: "Ocultar clave",
+      shown: "Clave visible",
+      hidden: "Clave oculta",
+    },
     loaded: "Clave cargada",
     notPack: "Este PDF no es un paquete de recuperación.",
     damaged: "Este PDF del paquete de recuperación está dañado. Escribe la clave.",

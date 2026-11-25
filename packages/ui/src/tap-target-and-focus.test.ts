@@ -107,6 +107,7 @@ async function mountNarrow(
     field.copy = {
       label: "Master key",
       button: "Choose the recovery pack PDF",
+      visibility: { show: "Show key", hide: "Hide key", shown: "", hidden: "" },
       loaded: "",
       notPack: "",
       damaged: "",

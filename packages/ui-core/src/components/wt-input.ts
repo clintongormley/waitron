@@ -145,10 +145,12 @@ export class WtInput extends LitElement {
     const input = event.target as HTMLInputElement;
     const locale = this.inputLocale;
     this.value = locale ? readDecimalInput(input, locale) : input.value;
-    this.#typedValue = this.value;
     if (!this.value) this.maskPassword();
     if (locale) this.requestUpdate();
     dispatchWtChange(this, event, { value: this.value });
+    // A host may put back its own form of what was typed, such as a key in groups of four.
+    this.#typedValue = this.value;
+    if (!this.value) this.maskPassword();
   }
 
   private onEndSlotChange(event: Event): void {

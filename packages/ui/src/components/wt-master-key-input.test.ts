@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { state } from "lit/decorators.js";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
@@ -22,6 +22,12 @@ const LIMIT = 16;
 const EN: MasterKeyInputCopy = {
   label: "Master key",
   button: "Choose the recovery pack PDF",
+  visibility: {
+    show: "Show key",
+    hide: "Hide key",
+    shown: "Key shown",
+    hidden: "Key hidden",
+  },
   loaded: "Key loaded",
   notPack: "This PDF is not a recovery pack.",
   damaged: "This recovery pack PDF is damaged. Type the key.",
@@ -813,4 +819,170 @@ test("the host's line shows while the field has none of its own", async () => {
   expect(message(el)).toBe("Host line");
   await type(el, `${KEY}2`);
   expect(message(el)).toBe(EN.notWhole);
+});
+
+const visibilityButton = (name: string) => page.getByRole("button", { name, exact: true });
+
+/** A field holding `text`, typed and then shown, with the caret after its last symbol. */
+async function shownField(text: string, extra: Partial<WtMasterKeyInput> = {}) {
+  const mounted = await field(extra);
+  native(mounted.el).focus();
+  await userEvent.keyboard(text);
+  await visibilityButton(EN.visibility.show).click();
+  const input = native(mounted.el);
+  expect(input.type).toBe("text");
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  return { ...mounted, input };
+}
+
+async function drawn(el: WtMasterKeyInput): Promise<void> {
+  await el.updateComplete;
+  await inner(el).updateComplete;
+}
+
+test.each([
+  ["EN", EN, "Show key", "Hide key"],
+  ["ES", ES, "Mostrar clave", "Ocultar clave"],
+])("the button shows and hides the key, in its own words (%s)", async (_l, copy, show, hide) => {
+  const { el, seen } = await field({ copy });
+  await type(el, KEY);
+  seen.length = 0;
+  const input = native(el);
+  expect(input.type).toBe("password");
+  await visibilityButton(show).click();
+  expect(input.type).toBe("text");
+  expect(input.value).toBe(KEY);
+  const statuses = () =>
+    page
+      .getByRole("status")
+      .elements()
+      .map((status) => status.textContent!.trim());
+  expect(statuses()).toContain(copy.visibility.shown);
+  await visibilityButton(hide).click();
+  expect(input.type).toBe("password");
+  expect(input.value).toBe(KEY);
+  expect(statuses()).toContain(copy.visibility.hidden);
+  expect(statuses().join()).not.toContain(KEY.slice(0, 4));
+  expect(seen).toStrictEqual([]);
+});
+
+test.each([
+  ["EN", EN],
+  ["ES", MASTER_KEY_FIELD_WORDS.es],
+])("a shown key stays shown while typing regroups it (%s)", async (_locale, copy) => {
+  const { el } = await field({ copy });
+  const input = native(el);
+  await visibilityButton(copy.visibility.show).click();
+  input.focus();
+  for (const [symbol, held] of [
+    ["8", "8"],
+    ["8", "88"],
+    ["d", "88D"],
+    ["p", "88DP"],
+    ["7", "88DP 7"],
+    ["4", "88DP 74"],
+  ]) {
+    await userEvent.keyboard(symbol!);
+    await drawn(el);
+    expect(input.value).toBe(held);
+    expect(input.type).toBe("text");
+    expect(input.selectionStart).toBe(held!.length);
+  }
+});
+
+test("a shown key stays shown, and keeps the caret, while an edit in its middle regroups it", async () => {
+  const { el, input } = await shownField("88DP74BA");
+  input.setSelectionRange(2, 2);
+  await userEvent.keyboard("x");
+  await drawn(el);
+  expect(input.value).toBe("88XD P74B A");
+  expect(input.type).toBe("text");
+  expect(input.selectionStart).toBe(3);
+});
+
+test("a dash the field drops leaves a shown key shown and the inner field without it", async () => {
+  const { el, input } = await shownField("88DP");
+  await userEvent.keyboard("-");
+  await drawn(el);
+  expect(input.value).toBe("88DP");
+  expect(inner(el).value).toBe("88DP");
+  expect(input.type).toBe("text");
+});
+
+test("a symbol typed over a selection in a shown key stays shown", async () => {
+  const { el, input } = await shownField("88DP74BA");
+  input.setSelectionRange(0, 6);
+  await userEvent.keyboard("q");
+  await drawn(el);
+  expect(input.value).toBe("Q4BA");
+  expect(input.type).toBe("text");
+  expect(input.selectionStart).toBe(1);
+});
+
+test.each([
+  ["another key", KEY.replace("88DP", "QQQQ")],
+  ["the same key", KEY],
+])("a key loaded from a PDF over a shown key is hidden: %s", async (_case, typed) => {
+  const { el, input } = await shownField(typed.replaceAll(" ", ""));
+  await choose(el);
+  await el.pdfRead;
+  expect(input.value).toBe(KEY);
+  expect(input.type).toBe("password");
+});
+
+test("a key loaded from a PDF into an empty shown field is hidden", async () => {
+  const { el } = await field();
+  await visibilityButton(EN.visibility.show).click();
+  expect(native(el).type).toBe("text");
+  await choose(el);
+  await el.pdfRead;
+  expect(native(el).value).toBe(KEY);
+  expect(native(el).type).toBe("password");
+});
+
+test.each<[string, (el: WtMasterKeyInput) => void]>([
+  ["clear()", (el) => el.clear()],
+  ["a new key name", (el) => (el.keyName = "2026-01-02 · AAAA")],
+])("%s empties and hides a shown key", async (_case, change) => {
+  const { el, input } = await shownField("88DP7");
+  change(el);
+  await drawn(el);
+  expect(input.value).toBe("");
+  expect(input.type).toBe("password");
+});
+
+test("emptying a shown key by hand hides the next one typed", async () => {
+  const { el, input } = await shownField("88DP7");
+  input.select();
+  await userEvent.keyboard("{Backspace}");
+  await drawn(el);
+  expect(input.type).toBe("password");
+  await userEvent.keyboard("8");
+  await drawn(el);
+  expect(input.type).toBe("password");
+});
+
+test("text the field drops whole hides the field, which is then empty", async () => {
+  const { el, input } = await shownField("88DP7");
+  input.select();
+  await userEvent.keyboard("-");
+  await drawn(el);
+  expect(input.value).toBe("");
+  expect(input.type).toBe("password");
+});
+
+test("disabling the field hides a shown key and its button", async () => {
+  const { el, input } = await shownField("88DP7");
+  el.disabled = true;
+  await drawn(el);
+  expect(input.type).toBe("password");
+  await expect.element(visibilityButton(EN.visibility.show)).toBeDisabled();
+});
+
+test("a shown key is left out of the browser's spelling check, correction and form memory", async () => {
+  const { input } = await shownField("88DP7");
+  expect(input.getAttribute("spellcheck")).toBe("false");
+  expect(input.getAttribute("autocorrect")).toBe("off");
+  expect(input.autocomplete).toBe("off");
 });

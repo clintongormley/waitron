@@ -5,6 +5,7 @@ import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import type { DraftScope } from "@waitron/ui-core/unsaved-changes";
 import { draftScopeFor } from "../leave-controller.js";
+import type { WtInput } from "./wt-input.js";
 import "./wt-input.js";
 import "./wt-button.js";
 
@@ -12,6 +13,8 @@ import "./wt-button.js";
 export type MasterKeyInputCopy = {
   label: string;
   button: string;
+  /** The show/hide button's names, and what is said once it is pressed. */
+  visibility: { show: string; hide: string; shown: string; hidden: string };
   /** Said to screen readers once a chosen PDF filled the field; never the key itself. */
   loaded: string;
   notPack: string;
@@ -191,7 +194,8 @@ export class WtMasterKeyInput extends LitElement {
     return (this.#reading = {});
   }
 
-  async #edit(typed: string, input: HTMLInputElement): Promise<void> {
+  async #edit(typed: string, field: WtInput): Promise<void> {
+    const input = field.shadowRoot!.querySelector("input")!;
     this.#start();
     const symbols = (offset: number | null) => {
       const length = normalise(typed.slice(0, offset ?? 0)).length;
@@ -200,6 +204,8 @@ export class WtMasterKeyInput extends LitElement {
     const caret = [symbols(input.selectionStart), symbols(input.selectionEnd)] as const;
     const symbolsTyped = normalise(typed);
     this.value = symbolsTyped.match(/.{1,4}/g)?.join(" ") ?? "";
+    // Set while `wt-change` is handled, so a shown key stays shown.
+    field.value = this.value;
     input.value = this.value;
     this.#file = undefined;
     this.#scope!.changed();
@@ -260,6 +266,9 @@ export class WtMasterKeyInput extends LitElement {
         name=${this.name}
         type="password"
         autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+        .passwordVisibility=${copy.visibility}
         label=${copy.label}
         ?required=${this.required}
         ?disabled=${this.disabled}
@@ -267,8 +276,7 @@ export class WtMasterKeyInput extends LitElement {
         .error=${line}
         @wt-change=${(event: CustomEvent<{ value: string }>) => {
           event.stopPropagation();
-          const input = (event.currentTarget as LitElement).shadowRoot!.querySelector("input")!;
-          void this.#edit(event.detail.value, input);
+          void this.#edit(event.detail.value, event.currentTarget as WtInput);
         }}
         ><slot name="help" slot="help"></slot
       ></wt-input>

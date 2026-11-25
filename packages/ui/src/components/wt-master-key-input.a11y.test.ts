@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
+import { page } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import type { RecoveryPackReading, WtMasterKeyInput } from "./wt-master-key-input.js";
@@ -16,6 +17,12 @@ const KEY_NAME = "2026-11-23 · QZJV";
 const COPY = {
   label: "Master key",
   button: "Choose the recovery pack PDF",
+  visibility: {
+    show: "Show key",
+    hide: "Hide key",
+    shown: "Key shown",
+    hidden: "Key hidden",
+  },
   loaded: "Key loaded",
   notPack: "This PDF is not a recovery pack.",
   damaged: "This recovery pack PDF is damaged. Type the key.",
@@ -58,6 +65,10 @@ async function type(el: WtMasterKeyInput, text: string): Promise<void> {
   await inner(el).updateComplete;
 }
 
+async function toggle(name: string): Promise<void> {
+  await page.getByRole("button", { name, exact: true }).click();
+}
+
 async function choose(el: WtMasterKeyInput, line: string): Promise<void> {
   const control = el.shadowRoot!.querySelector<HTMLInputElement>('input[type="file"]')!;
   const transfer = new DataTransfer();
@@ -82,6 +93,23 @@ describe.each(["light", "dark"] as const)("wt-master-key-input a11y (%s theme)",
   test("filled", async () => {
     const el = await field(theme);
     await type(el, KEY);
+    await expectNoA11yViolations(host);
+  });
+
+  test("shown", async () => {
+    const el = await field(theme);
+    await type(el, KEY);
+    await toggle(COPY.visibility.show);
+    expect(inner(el).shadowRoot!.querySelector("input")!.type).toBe("text");
+    await expectNoA11yViolations(host);
+  });
+
+  test("hidden again after it was shown", async () => {
+    const el = await field(theme);
+    await type(el, KEY);
+    await toggle(COPY.visibility.show);
+    await toggle(COPY.visibility.hide);
+    expect(inner(el).shadowRoot!.querySelector("input")!.type).toBe("password");
     await expectNoA11yViolations(host);
   });
 

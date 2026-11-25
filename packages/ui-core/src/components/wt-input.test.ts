@@ -434,6 +434,59 @@ test("keeps edits visible until the person empties the field", async () => {
   expect(page.getByRole("status").element().textContent).toBe("Password hidden");
 });
 
+test("keeps a password shown when its form puts back its own form of what was typed", async () => {
+  const { field, input } = await mountPassword();
+  field.addEventListener("wt-change", () => (field.value = field.value.toUpperCase()));
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  input.focus();
+  await userEvent.keyboard("x");
+  await field.updateComplete;
+  expect(input.value).toContain("X");
+  expect(input.value).toBe(field.value);
+  expect(input.type).toBe("text");
+});
+
+test("masks a password its form replaces once it has handled what was typed", async () => {
+  const { field, input } = await mountPassword();
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  input.focus();
+  await userEvent.keyboard("x");
+  await field.updateComplete;
+  expect(input.type).toBe("text");
+  field.value = field.value.toUpperCase();
+  await field.updateComplete;
+  expect(input.type).toBe("password");
+});
+
+test("masks a password its form replaces with one the person typed before", async () => {
+  const { field, input } = await mountPassword();
+  input.focus();
+  await userEvent.keyboard("x");
+  const typed = field.value;
+  for (const value of ["", typed]) {
+    await page.getByRole("button", { name: "Show password", exact: true }).click();
+    field.value = value;
+    await field.updateComplete;
+    expect(input.value).toBe(value);
+    expect(input.type).toBe("password");
+  }
+});
+
+test.each([
+  ["empties what was typed", "x", ""],
+  ["fills the field the person emptied", "{Backspace}", "a saved secret"],
+])("masks a password when its form %s", async (_case, keys, replacement) => {
+  const { field, input } = await mountPassword();
+  field.addEventListener("wt-change", () => (field.value = replacement));
+  await page.getByRole("button", { name: "Show password", exact: true }).click();
+  input.focus();
+  input.select();
+  await userEvent.keyboard(keys);
+  await field.updateComplete;
+  expect(input.value).toBe(replacement);
+  expect(input.type).toBe("password");
+});
+
 test("masks a password while its form disables the field", async () => {
   const { field, input } = await mountPassword();
   await page.getByRole("button", { name: "Show password", exact: true }).click();

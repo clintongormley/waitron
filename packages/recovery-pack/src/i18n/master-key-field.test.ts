@@ -12,6 +12,12 @@ describe("the master-key field's words", () => {
     expect(words.wrongKey("2026-11-23 · QZJV")).toBe(
       "Wrong master key. Use the one dated 2026-11-23 · QZJV.",
     );
+    expect(words.visibility).toEqual({
+      show: "Show key",
+      hide: "Hide key",
+      shown: "Key shown",
+      hidden: "Key hidden",
+    });
   });
 
   it("names the key, the pack button and each refusal in Spanish", () => {
@@ -28,6 +34,12 @@ describe("the master-key field's words", () => {
     expect(words.wrongKey("2026-11-23 · QZJV")).toBe(
       "Clave maestra incorrecta. Usa la del 2026-11-23 · QZJV.",
     );
+    expect(words.visibility).toEqual({
+      show: "Mostrar clave",
+      hide: "Ocultar clave",
+      shown: "Clave visible",
+      hidden: "Clave oculta",
+    });
   });
 
   it("says which pack holds the master key, when it is known", () => {
