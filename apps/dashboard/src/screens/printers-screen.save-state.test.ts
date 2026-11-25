@@ -435,7 +435,7 @@ function pending() {
 }
 
 describe("the Edit printer settings form", () => {
-  it("opens with saved settings and sends only edits, preserving an untouched live change", async () => {
+  it.each([true, false])("keeps live changes when roles edited=%s", async (editRoles) => {
     const liveData = new LiveData();
     let current = printer;
     const { el, api } = await openDetail(
@@ -457,9 +457,15 @@ describe("the Edit printer settings form", () => {
     await choose(el, "printer-paper-width", "58mm");
     await choose(el, "printer-resolution", "203dpi");
     await toggle(el, "printer-portable", true);
-    await chooseOptions(q(el, "[name=printer-pickup-roles]")!, ["receipt"]);
+    if (editRoles) await chooseOptions(q(el, "[name=printer-pickup-roles]")!, ["receipt"]);
 
-    current = { ...printer, name: "Remote name", hasCashDrawer: true, resolution: "203dpi" };
+    current = {
+      ...printer,
+      name: "Remote name",
+      hasCashDrawer: true,
+      resolution: "203dpi",
+      pickupRoles: ["receipt"],
+    };
     liveData.invalidate([{ type: "printers", id: "p1" }]);
     await expect
       .poll(() => q(el, "[data-test=printer-row-p1]")?.textContent?.trim())
@@ -468,7 +474,18 @@ describe("the Edit printer settings form", () => {
     expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", {
       paperWidth: "58mm",
       portable: true,
-      pickupRoles: ["receipt"],
+    });
+  });
+
+  it("saves a roles-only edit on a portable printer", async () => {
+    const { el, api } = await openDetail(
+      stubApi({ listPrinters: vi.fn().mockResolvedValue([{ ...printer, portable: true }]) }),
+    );
+    await chooseOptions(q(el, "[name=printer-pickup-roles]")!, ["payment_slip"]);
+    expect(await state(el, detailsEditTest("save"))).toEqual(ready);
+    await press(el, detailsEditTest("save"));
+    expect(api.updatePrinter).toHaveBeenCalledExactlyOnceWith("p1", {
+      pickupRoles: ["payment_slip"],
     });
   });
 

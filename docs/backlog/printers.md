@@ -169,7 +169,8 @@ both when the connection was closed at once and five seconds later. The connecti
 long as the printer stays switched on: 0.2–1.4 s, sometimes about 2 s, after some switch-ons and 2.7–4.3 s after others, with no
 known cause, and a Bluetooth scan just before did not cure it. The helper's 20-second connect and
 send timeouts and the agent's five-second grace have not been tried at their limits.
-[A1578 plan](../superpowers/plans/2026-11-25-a1578-bluetooth-printing.md).
+The Bluetooth print channels decision records the timed runs that led to part 2.
+[A1578 plan](../superpowers/plans/2026-11-25-a1578-bluetooth-printing.md), [decision and timings](#decisions-and-deliberate-limits).
 
 ## The virtual PDF printer
 
