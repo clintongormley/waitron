@@ -833,11 +833,8 @@ describe("Split a table's panel reopened by a refusal", () => {
         bill.billId === "main"
           ? {
               ...bill,
-              balance: {
-                ...bill.balance,
-                received: "10.00",
-                paidLines: [{ lineId: "soup", lineNo: 1, paidQuantity: "1.000" }],
-              },
+              lines: bill.lines.filter((line) => line.id !== "soup"),
+              balance: balance("main", "10.00"),
             }
           : bill,
       ),

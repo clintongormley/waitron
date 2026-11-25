@@ -3,7 +3,6 @@ import { page } from "vitest/browser";
 import { decimal, formatMoney } from "@waitron/shared";
 import type { BillBalance, TabLine } from "../api/client.js";
 import { currentLocale } from "../i18n/t.js";
-import { paidQuantities } from "../state/bill-payment.js";
 import { tabLinePortionKey } from "../state/portion-groups.js";
 import { pickGroups, pickRows, type PickRow, type Picks } from "../state/portion-selection.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
@@ -40,7 +39,7 @@ function line(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine 
   };
 }
 
-function balance(total: string, received: string, paidLines: BillBalance["paidLines"] = []) {
+function balance(total: string, received: string) {
   return {
     workingOrderId: "bill-1",
     status: "open",
@@ -50,7 +49,7 @@ function balance(total: string, received: string, paidLines: BillBalance["paidLi
     outstanding: "0.00",
     tips: "0.00",
     payments: [],
-    paidLines,
+    paidLines: [],
   } satisfies BillBalance;
 }
 
@@ -97,22 +96,11 @@ const STATES: [string, readonly TabLine[], BillBalance | null, Picks][] = [
   ["a grouped row, unticked", BEERS, null, new Set()],
   ["a grouped row ticked at 2 of 4", BEERS, null, new Set(["c1", "c2"])],
   ["a weighed row", [WEIGHED], null, new Set(["w1"])],
-  [
-    "a paid row",
-    [line("k1", 1), line("k2", 2)],
-    balance("10.00", "5.00", [{ lineId: "k1", lineNo: 1, paidQuantity: "1.000" }]),
-    new Set(),
-  ],
   ["a floor-blocked row", [...BEERS, STEAK], balance("52.00", "40.00"), new Set(["c1", "c2"])],
 ];
 
 function rowsOf(lines: readonly TabLine[], paid: BillBalance | null, picks: Picks): PickRow[] {
-  const keyOf = (row: TabLine) =>
-    tabLinePortionKey(
-      row,
-      lines,
-      paid === null ? null : (paidQuantities(paid).get(row.lineNo) ?? null),
-    );
+  const keyOf = (row: TabLine) => tabLinePortionKey(row, lines);
   return pickRows(pickGroups(lines, keyOf, paid), picks);
 }
 
@@ -231,22 +219,25 @@ describe.each(["light", "dark"] as const)("A803 picker a11y (%s theme)", (theme)
     expect(Math.max(...painted.map((pixel) => contrast(pixel, page_)))).toBeGreaterThanOrEqual(3);
   });
 
-  const PAID_LINES = [line("c1", 1), STEAK];
-  const PAID_ROWS = balance("37.00", "32.00", [{ lineId: "s1", lineNo: 5, paidQuantity: "1.000" }]);
+  const PRESENTED = rowsOf([line("c1", 1), STEAK], null, new Set()).map((row) => ({
+    ...row,
+    limit: 0,
+    blocked: { reason: "presented" as const },
+  }));
 
-  it("a whole bill with a paid row has no violations", async () => {
+  it("a whole bill with presented rows has no violations", async () => {
     const { host } = await mountWidget<TillPortionPicker>(
       "till-portion-picker",
-      { rows: rowsOf(PAID_LINES, PAID_ROWS, new Set()), whole: true, nameOf, money },
+      { rows: PRESENTED, whole: true, nameOf, money },
       theme,
     );
     await expectNoA11yViolations(host);
   });
 
-  it("a paid row's ticked, disabled box stands out from the page at 3:1", async () => {
+  it("a presented row's ticked, disabled box stands out from the page at 3:1", async () => {
     const { el, host } = await mountWidget<TillPortionPicker>(
       "till-portion-picker",
-      { rows: rowsOf(PAID_LINES, PAID_ROWS, new Set()), whole: true, nameOf, money },
+      { rows: PRESENTED, whole: true, nameOf, money },
       theme,
     );
     const box = el.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="s1"]')!;
@@ -257,10 +248,10 @@ describe.each(["light", "dark"] as const)("A803 picker a11y (%s theme)", (theme)
     expect(Math.max(...painted.map((pixel) => contrast(pixel, page_)))).toBeGreaterThanOrEqual(3);
   });
 
-  it("a paid row's ticked, disabled box paints a check mark on its fill", async () => {
+  it("a presented row's ticked, disabled box paints a check mark on its fill", async () => {
     const { el, host } = await mountWidget<TillPortionPicker>(
       "till-portion-picker",
-      { rows: rowsOf(PAID_LINES, PAID_ROWS, new Set()), whole: true, nameOf, money },
+      { rows: PRESENTED, whole: true, nameOf, money },
       theme,
     );
     const box = el.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="s1"]')!;

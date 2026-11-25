@@ -3,7 +3,6 @@ import { page, userEvent } from "vitest/browser";
 import { decimal, formatMoney } from "@waitron/shared";
 import type { BillBalance, TabLine } from "../api/client.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
-import { paidQuantities } from "../state/bill-payment.js";
 import { tabLinePortionKey } from "../state/portion-groups.js";
 import { pickGroups, pickRows, type PickRow, type Picks } from "../state/portion-selection.js";
 import type { WtButton } from "@waitron/ui";
@@ -43,12 +42,7 @@ function dish(id: string, lineNo: number, name: string, price: string): TabLine 
   return line(id, lineNo, { name, productId: name, menuItemId: name, unitPriceGross: price });
 }
 
-function balance(
-  total: string,
-  received: string,
-  paidLines: BillBalance["paidLines"] = [],
-  reserved = "0.00",
-): BillBalance {
+function balance(total: string, received: string, reserved = "0.00"): BillBalance {
   return {
     workingOrderId: "bill-1",
     status: "open",
@@ -58,17 +52,12 @@ function balance(
     outstanding: "0.00",
     tips: "0.00",
     payments: [],
-    paidLines,
+    paidLines: [],
   };
 }
 
 function rowsOf(lines: readonly TabLine[], paid: BillBalance | null, picks: Picks): PickRow[] {
-  const keyOf = (row: TabLine) =>
-    tabLinePortionKey(
-      row,
-      lines,
-      paid === null ? null : (paidQuantities(paid).get(row.lineNo) ?? null),
-    );
+  const keyOf = (row: TabLine) => tabLinePortionKey(row, lines);
   return pickRows(pickGroups(lines, keyOf, paid), picks);
 }
 
@@ -246,68 +235,28 @@ describe("till-portion-picker", () => {
     expect(q(el, '[data-pick-count="w1"]')).toBeNull();
   });
 
-  it("A803 picker: a paid row's tick is disabled and its payment reason is tied to the tick", async () => {
-    const lines = [
-      dish("k1", 1, "Croqueta", "3.00"),
-      dish("k2", 2, "Croqueta", "3.00"),
-      dish("k3", 3, "Croqueta", "3.00"),
-    ];
-    const paid = balance("9.00", "3.00", [{ lineId: "k1", lineNo: 1, paidQuantity: "1.000" }]);
-    const { el, emitted } = await picker(lines, paid);
-    const paidTick = tick(el, "k1");
-    expect(paidTick.disabled).toBe(true);
-    const reasonId = paidTick.getAttribute("aria-describedby");
-    expect(reasonId).toBeTruthy();
-    const reason = el.shadowRoot!.getElementById(reasonId!)!;
-    expect(reason.textContent!.trim()).toBe(t("table.pick_payment_stays"));
-    expect(reason.checkVisibility()).toBe(true);
-    await userEvent.click(paidTick, { force: true });
-    expect(emitted).toHaveLength(0);
-    expect(tick(el, "k2").disabled).toBe(false);
-    expect(tick(el, "k2").hasAttribute("aria-describedby")).toBe(false);
-  });
-
   it.each([
-    ["en", "Has a payment"],
-    ["es", "Tiene un pago"],
-  ])("a reserved item stays blocked with a neutral reason in %s", async (locale, expected) => {
-    const previous = currentLocale();
-    try {
-      setLocale(locale);
-      const { el, emitted } = await picker(
-        BEERS,
-        balance("20.00", "0.00", [{ lineId: "c1", lineNo: 1, paidQuantity: "1.000" }], "5.00"),
-      );
-      const held = tick(el, "c1");
-      expect(held.disabled).toBe(true);
-      const reason = el.shadowRoot!.getElementById(held.getAttribute("aria-describedby")!)!;
-      expect(reason.textContent!.trim()).toBe(expected);
-      expect(reason.checkVisibility()).toBe(true);
-      await userEvent.click(held, { force: true });
-      expect(emitted).toHaveLength(0);
-    } finally {
-      setLocale(previous);
-    }
-  });
-
-  it("A803 picker: a paid row still holding picks is drawn unticked, with no count control", async () => {
-    const lines = [
-      dish("k1", 1, "Croqueta", "3.00"),
-      dish("k2", 2, "Croqueta", "3.00"),
-      dish("k3", 3, "Croqueta", "3.00"),
-    ];
-    const paid = balance("9.00", "6.00", [
-      { lineId: "k1", lineNo: 1, paidQuantity: "1.000" },
-      { lineId: "k2", lineNo: 2, paidQuantity: "1.000" },
-    ]);
-    const { el } = await picker(lines, paid, new Set(["k1", "k2"]));
-    expect(q(el, '[data-pick-row="k1"]')!.querySelectorAll("input")).toHaveLength(1);
-    expect(q(el, "#pick-reason-k1")!.textContent!.trim()).toBe(t("table.pick_payment_stays"));
-    expect(tick(el, "k1").checked).toBe(false);
-    expect(tick(el, "k1").disabled).toBe(true);
-    expect(dec(el, "k1")).toBeNull();
-    expect(q(el, '[data-pick-qty="k1"]')!.textContent!.trim()).toBe("2");
-  });
+    ["en", (kept: string) => `Payments keep ${kept} on this bill: move fewer dishes`],
+    ["es", (kept: string) => `Los pagos retienen ${kept} en esta cuenta: mueve menos platos`],
+  ])(
+    "a dish held back by a reserved payment stays blocked, its reason in %s",
+    async (locale, expected) => {
+      const previous = currentLocale();
+      try {
+        setLocale(locale);
+        const { el, emitted } = await picker(BEERS, balance("20.00", "0.00", "20.00"));
+        const held = tick(el, "c1");
+        expect(held.disabled).toBe(true);
+        const reason = el.shadowRoot!.getElementById(held.getAttribute("aria-describedby")!)!;
+        expect(reason.textContent!.trim()).toBe(expected(formatMoney(decimal("20.00"), locale)));
+        expect(reason.checkVisibility()).toBe(true);
+        await userEvent.click(held, { force: true });
+        expect(emitted).toHaveLength(0);
+      } finally {
+        setLocale(previous);
+      }
+    },
+  );
 
   it.each([
     ["40.00", "0.00"],
@@ -317,7 +266,7 @@ describe("till-portion-picker", () => {
     "a floor-blocked row explains received %s plus reserved %s in EN/ES",
     async (received, reserved) => {
       const lines = [...BEERS, dish("s1", 5, "Steak", "32.00")];
-      const paid = balance("52.00", received, [], reserved);
+      const paid = balance("52.00", received, reserved);
       const previous = currentLocale();
       try {
         setLocale("en-GB");
@@ -599,12 +548,10 @@ describe("till-portion-picker's mark", () => {
 
 describe("till-portion-picker whole", () => {
   const WHOLE_LINES = [...BEERS, dish("h1", 5, "Ham", "9.00")];
-  const PAID = balance("14.00", "9.00", [{ lineId: "h1", lineNo: 5, paidQuantity: "1.000" }]);
-  const LINES_PAID = [line("c1", 1), dish("h1", 5, "Ham", "9.00")];
 
-  async function whole(lines: readonly TabLine[], paid: BillBalance | null = null) {
+  async function whole(lines: readonly TabLine[]) {
     const { el } = await mountWidget<TillPortionPicker>("till-portion-picker", {
-      rows: rowsOf(lines, paid, new Set()),
+      rows: rowsOf(lines, null, new Set()),
       picks: new Set(),
       whole: true,
       nameOf,
@@ -645,18 +592,6 @@ describe("till-portion-picker whole", () => {
     const again = await whole(WHOLE_LINES);
     await userEvent.click(tick(again.el, "h1"));
     expect(again.emitted).toEqual([["c1", "c2", "c3", "c4"]]);
-  });
-
-  it("a paid row is ticked and disabled with its reason, and is never among the picks emitted", async () => {
-    const { el, emitted } = await whole(LINES_PAID, PAID);
-    const paid = tick(el, "h1");
-    expect(paid.checked).toBe(true);
-    expect(paid.disabled).toBe(true);
-    const reason = el.shadowRoot!.getElementById(paid.getAttribute("aria-describedby")!);
-    expect(reason!.textContent).toBe(t("table.pick_payment_stays"));
-    expect(getComputedStyle(q(el, '[data-pick-row="h1"] .name')!).opacity).toBe("0.5");
-    await userEvent.click(tick(el, "c1"));
-    expect(emitted).toEqual([[]]);
   });
 
   it("a tick the screen does not answer goes back to ticked", async () => {

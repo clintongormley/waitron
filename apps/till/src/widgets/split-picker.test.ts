@@ -3,7 +3,6 @@ import { page, userEvent } from "vitest/browser";
 import { decimal, formatMoney } from "@waitron/shared";
 import type { BillBalance, Draft, PartyBill, TabLine } from "../api/client.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
-import { paidQuantities } from "../state/bill-payment.js";
 import { tabLinePortionKey } from "../state/portion-groups.js";
 import { pickGroups } from "../state/portion-selection.js";
 import {
@@ -55,7 +54,6 @@ const DISHES = [...BEERS, ham("h1", 4)];
 interface SourceOptions {
   received?: string;
   reserved?: string;
-  paid?: string[];
   status?: PartyBill["status"];
   billName?: string;
   held?: SplitSource["held"];
@@ -76,16 +74,11 @@ function balanceOf(
     outstanding: "0.00",
     tips: "0.00",
     payments: [],
-    paidLines: (options.paid ?? []).map((lineId) => ({
-      lineId,
-      lineNo: lines.find((row) => row.id === lineId)!.lineNo,
-      paidQuantity: "1.000",
-    })),
+    paidLines: [],
   };
 }
 
-const keyFor = (lines: readonly TabLine[], balance: BillBalance) => (row: TabLine) =>
-  tabLinePortionKey(row, lines, paidQuantities(balance).get(row.lineNo) ?? null);
+const keyFor = (lines: readonly TabLine[]) => (row: TabLine) => tabLinePortionKey(row, lines);
 
 function source(
   id: string,
@@ -112,7 +105,7 @@ function source(
       hasPayments: (options.received ?? "0.00") !== "0.00",
       receiptAvailable: false,
     },
-    groups: pickGroups(lines, keyFor(lines, balance), balance),
+    groups: pickGroups(lines, keyFor(lines), balance),
     held: options.held ?? null,
     ownUnsent: options.ownUnsent ?? false,
     refundPending: false,
@@ -220,20 +213,6 @@ describe("till-split-picker", () => {
     const expected = pickOnBill(sources[0]!, wholeOf("b1"), new Set(["c1", "c2", "c3"]));
     expect([...emitted[0]!.whole]).toEqual([...expected.whole]);
     expect([...emitted[0]!.picks.get("b1")!]).toEqual(["c1", "c2", "c3"]);
-  });
-
-  it("A803 selection: a paid row in a whole bill is ticked and disabled, its reason tied to the tick", async () => {
-    const { el } = await picker(
-      [source("b1", 1, [ham("p1", 1), line("c1", 2)], { received: "9.00", paid: ["p1"] })],
-      wholeOf("b1"),
-    );
-    const tick = rowTick(el, "b1", "p1");
-    expect(tick.checked).toBe(true);
-    expect(tick.disabled).toBe(true);
-    const reason = inner(el, "b1")!.shadowRoot!.getElementById(
-      tick.getAttribute("aria-describedby")!,
-    );
-    expect(reason!.textContent).toBe(t("table.pick_payment_stays"));
   });
 
   it("a part-paid bill says what is paid in its header; another bill says nothing", async () => {

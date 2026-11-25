@@ -1326,32 +1326,27 @@ describe("A803 split: the steps before the panel follow the party", () => {
 });
 
 describe("A803 split: a re-read", () => {
-  it("a re-read: a picked dish paid elsewhere drops, and its row names the payment", async () => {
+  it("a re-read: a picked dish that left the bill drops, and its row goes", async () => {
     const el = await mountScreen();
     await toPanel(el);
     await pickDish(el, "b1", "salad");
     await pickDish(el, "b1", "soup");
     const rows = board08.splitRead.bills[0]!.lines;
     el.splitRead = read(
-      { b1: rows, b2: [dish("wine", 5, "40.00")], b3: [dish("fish", 6, "39.00")] },
-      { b1: "97.00", b2: "40.00", b3: "39.00" },
       {
-        b1: {
-          received: "10.00",
-          paidLines: [{ lineId: "salad", lineNo: 2, paidQuantity: "1.000" }],
-        },
+        b1: rows.filter((line) => line.id !== "salad"),
+        b2: [dish("wine", 5, "40.00")],
+        b3: [dish("fish", 6, "39.00")],
       },
+      { b1: "87.00", b2: "40.00", b3: "39.00" },
     );
     await settled(el);
 
     expect([...ticked(el).picks.get("b1")!]).toEqual(["soup"]);
-    const salad = splitPicker(el)!
-      .shadowRoot!.querySelector('[data-split-bill="b1"] till-portion-picker')!
-      .shadowRoot!.querySelector('[data-pick-row="salad"]')!;
-    expect(salad.textContent).toContain(t("table.pick_payment_stays"));
+    expect(rowIds(el, "b1")).toEqual(["soup", "bread", "steak"]);
   });
 
-  it("a re-read: two of four picked, one paid elsewhere, two are still picked", async () => {
+  it("a re-read: two of four picked, one of them gone from the bill, two are still picked", async () => {
     const beer = (id: string, lineNo: number) =>
       dish(id, lineNo, "5.00", { name: "Beer", productId: "beer", menuItemId: "offer-beer" });
     const rows = [
@@ -1377,11 +1372,7 @@ describe("A803 split: a re-read", () => {
     await settled(el);
     expect([...ticked(el).picks.get("b1")!].sort()).toEqual(["c1", "c2"]);
 
-    el.splitRead = read(
-      { b1: rows },
-      { b1: "25.00" },
-      { b1: { received: "5.00", paidLines: [{ lineId: "c1", lineNo: 1, paidQuantity: "1.000" }] } },
-    );
+    el.splitRead = read({ b1: rows.filter((line) => line.id !== "c1") }, { b1: "20.00" });
     await settled(el);
 
     expect([...ticked(el).picks.get("b1")!].sort()).toEqual(["c2", "c3"]);
@@ -2193,16 +2184,14 @@ describe("A803 split: a read and a selected bill", () => {
     return opened;
   }
 
-  const paidSalad = () =>
+  const withoutSalad = () =>
     read(
-      { b1: lines("b1"), b2: lines("b2"), b3: lines("b3") },
-      { b1: "97.00", b2: "40.00", b3: "39.00" },
       {
-        b1: {
-          received: "10.00",
-          paidLines: [{ lineId: "salad", lineNo: 2, paidQuantity: "1.000" }],
-        },
+        b1: lines("b1").filter((line) => line.id !== "salad"),
+        b2: lines("b2"),
+        b3: lines("b3"),
       },
+      { b1: "87.00", b2: "40.00", b3: "39.00" },
     );
 
   it("a read and a selected bill: a whole bill and a bill with picks stay ticked when each gains someone else's draft", async () => {
@@ -2457,7 +2446,7 @@ describe("A803 split: a read and a selected bill", () => {
   it("a read and a selected bill: a bill that changed and then went takes one press, as gone", async () => {
     const { el, sent } = await selected();
     await pickDish(el, "b1", "soup");
-    el.splitRead = paidSalad();
+    el.splitRead = withoutSalad();
     await settled(el);
     el.splitRead = withoutBills("b1");
     await settled(el);
@@ -2469,11 +2458,11 @@ describe("A803 split: a read and a selected bill", () => {
     expect(sent).toHaveLength(1);
   });
 
-  it("a read and a selected bill: a picked dish paid stops one press, and the next sends", async () => {
+  it("a read and a selected bill: a picked dish that left the bill stops one press, and the next sends", async () => {
     const { el, sent } = await selected();
     await pickDish(el, "b1", "soup");
 
-    el.splitRead = paidSalad();
+    el.splitRead = withoutSalad();
     await settled(el);
 
     await press(el);
@@ -2491,7 +2480,7 @@ describe("A803 split: a read and a selected bill", () => {
   it("a read and a selected bill: the changed sentence's Spanish words", async () => {
     setLocale("es-ES");
     const { el } = await selected();
-    el.splitRead = paidSalad();
+    el.splitRead = withoutSalad();
     await settled(el);
     await press(el);
     expect(sentence(el)).toBe(
@@ -2499,13 +2488,13 @@ describe("A803 split: a read and a selected bill", () => {
     );
   });
 
-  it("a read and a selected bill: a bill's last pick paid, leaving nothing ticked, still says so before an empty send", async () => {
+  it("a read and a selected bill: a bill's last pick gone from it, leaving nothing ticked, still says so before an empty send", async () => {
     const el = await mountScreen();
     const sent = heard<SplitTableDetail>(el, "split-table");
     await toPanel(el);
     await pickDish(el, "b1", "salad");
 
-    el.splitRead = paidSalad();
+    el.splitRead = withoutSalad();
     await settled(el);
     expect(ticked(el).picks.size).toBe(0);
 
@@ -2915,14 +2904,8 @@ describe("A803 split: a read and a selected bill", () => {
       const { el, sent } = await selected();
       await pickDish(el, "b1", "soup");
       el.splitRead = read(
-        { b1: lines("b1"), b2: lines("b2") },
-        { b1: "97.00", b2: "40.00" },
-        {
-          b1: {
-            received: "10.00",
-            paidLines: [{ lineId: "salad", lineNo: 2, paidQuantity: "1.000" }],
-          },
-        },
+        { b1: lines("b1").filter((line) => line.id !== "salad"), b2: lines("b2") },
+        { b1: "87.00", b2: "40.00" },
       );
       await settled(el);
 
@@ -2938,7 +2921,7 @@ describe("A803 split: a read and a selected bill", () => {
     it("a read and a selected bill: a changed stop still takes one press after its bill's picks are unticked, and its sentence stays true", async () => {
       const { el, sent } = await selected();
       await pickDish(el, "b1", "soup");
-      el.splitRead = paidSalad();
+      el.splitRead = withoutSalad();
       await settled(el);
       await pickDish(el, "b1", "soup");
       expect(ticked(el).picks.has("b1")).toBe(false);

@@ -674,7 +674,7 @@ describe("A803 move dishes app:", () => {
     expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
   });
 
-  it("opening Move dishes waits for its balance and disables a dish paid on another till", async () => {
+  it("opening Move dishes waits for its balance and disables a dish the money taken on another till keeps on the bill", async () => {
     const { el, order } = await open({
       getPartyBills: vi.fn().mockResolvedValue(twoBills()),
       getBillBalance: vi.fn().mockResolvedValue(balance()),
@@ -696,7 +696,6 @@ describe("A803 move dishes app:", () => {
       balance({
         received: "3.00",
         outstanding: "0.00",
-        paidLines: [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }],
       }),
     );
     await flush(el, 6);
@@ -705,7 +704,7 @@ describe("A803 move dishes app:", () => {
     expect(
       picker.shadowRoot!.querySelector<HTMLInputElement>('[data-pick="line-1"]')!.disabled,
     ).toBe(true);
-    expect(picker.rows[0]!.blocked).toEqual({ reason: "paid" });
+    expect(picker.rows[0]!.blocked).toEqual({ reason: "floor", kept: "3.00" });
     expect(api.moveDishes).not.toHaveBeenCalled();
   });
 
@@ -746,7 +745,6 @@ describe("A803 move dishes app:", () => {
       balance({
         received: "3.00",
         outstanding: "0.00",
-        paidLines: [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }],
       }),
     );
     window.dispatchEvent(new Event("focus"));
@@ -1075,7 +1073,6 @@ describe("A803 move dishes app:", () => {
         balance({
           received: "3.00",
           outstanding: "0.00",
-          paidLines: [{ lineId: "line-1", lineNo: 1, paidQuantity: "1.000" }],
         }),
       );
     const { el, order } = await open({
@@ -1107,7 +1104,7 @@ describe("A803 move dishes app:", () => {
     await order.updateComplete;
     await picker()!.updateComplete;
     expect(picker()!.picks).toEqual(new Set());
-    expect(picker()!.rows[0]!.blocked).toEqual({ reason: "paid" });
+    expect(picker()!.rows[0]!.blocked).toEqual({ reason: "floor", kept: "3.00" });
   });
 
   it("a reply after the waiter switched bills does not change the screen", async () => {

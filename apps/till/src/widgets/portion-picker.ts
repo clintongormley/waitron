@@ -186,7 +186,6 @@ export class TillPortionPicker extends LitElement {
 
   #reason(row: PickRow): string {
     if (row.blocked === null || row.blocked.reason === "presented") return "";
-    if (row.blocked.reason === "paid") return t("table.pick_payment_stays");
     return fill(t("table.move_dishes_floor"), { amount: this.money(row.blocked.kept) });
   }
 
@@ -201,11 +200,7 @@ export class TillPortionPicker extends LitElement {
 
   #row(row: PickRow): TemplateResult {
     const id = row.members[0]!.id;
-    const count = this.whole
-      ? row.members.length
-      : row.blocked?.reason === "paid"
-        ? 0
-        : pickedCount(row, this.picks);
+    const count = this.whole ? row.members.length : pickedCount(row, this.picks);
     const stepped = row.counted && count > 0 && !this.whole;
     const off = row.blocked !== null && (count === 0 || this.whole);
     const look =
