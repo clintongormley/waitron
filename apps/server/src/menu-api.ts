@@ -368,9 +368,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "menu_section.member_cycle": 409,
   "menu_section.member_duplicate": 409,
 
-  // 400 under `runBodySection` and `runBodyRole`, whose routes can name a list, section or member
-  // of the wrong kind only in the body. 409 elsewhere: there the address can name one, and so can
-  // the body (a member's `ref`, a move-in's `listId`); one status for both, as A394-11 chose.
+  // Routes that can name a wrong role only in the body answer 400 through runBodyIds.
   "menu_section.wrong_role": 409,
   // The working menu no longer matches the preview the publish was asked from.
   "menu.changed_since_preview": 409,

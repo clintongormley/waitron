@@ -120,6 +120,7 @@ it("saves a complete draft through the HTTP request", async () => {
     };
   });
   const id = crypto.randomUUID();
+  const memberId = (last: number) => "abcdef00-0000-4000-8000-00000000000" + last;
   const included = { kind: "section", sectionId: includedRoot };
   const setRef = { kind: "set_menu", menuId: set.id };
   const folder = {
@@ -134,9 +135,9 @@ it("saves a complete draft through the HTTP request", async () => {
   };
   const response = await f.send("PUT", f.lunch.id, {
     rootMembers: [
-      { id: crypto.randomUUID(), ref: { kind: "section", sectionId: id } },
-      { id: crypto.randomUUID(), ref: included, folder },
-      { id: crypto.randomUUID(), ref: setRef },
+      { id: memberId(3).toUpperCase(), ref: { kind: "section", sectionId: id } },
+      { id: memberId(2), ref: included, folder },
+      { id: memberId(1), ref: setRef },
     ],
     sections: [{ id, ...presentation, members: [{ id: f.member.id, ref: f.member.ref }] }],
     prices: [{ productId: f.soup.id, variantId: variant.id, price: "2.50" }],
@@ -145,7 +146,11 @@ it("saves a complete draft through the HTTP request", async () => {
   const after = await f.send("GET", f.lunch.id);
   expect(await after.json()).toMatchObject({
     nodes: [
-      { ...presentation, children: [{ memberId: f.member.id, ref: f.member.ref }] },
+      {
+        ...presentation,
+        memberId: memberId(3),
+        children: [{ memberId: f.member.id, ref: f.member.ref }],
+      },
       { ref: included, folder },
       { ref: setRef },
     ],

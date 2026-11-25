@@ -52,7 +52,7 @@ async function atField<T>(prefix: string, fallback: string, check: () => Promise
     const field = "field" in cause.params ? cause.params.field : undefined;
     throw new AppError(
       cause.code,
-      { ...cause.params, field: prefix + "." + (field ?? fallback) },
+      { field: prefix + "." + (field ?? fallback) },
       { reason: cause.reason },
     );
   }

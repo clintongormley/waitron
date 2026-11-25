@@ -181,11 +181,11 @@ declare module "@waitron/shared" {
     "menu_section.translation_required": { field: string; language: string };
     /** Holding the child would let a section reach itself. */
     "menu_section.member_cycle": { sectionId: string; childSectionId: string; field?: string };
-    /** The list already holds that product or that section. */
+    /** The list repeats a reference, or a draft names an owned section twice. */
     "menu_section.member_duplicate": { sectionId: string; field?: string };
     /** `sectionId` is a list a menu owns, which the write refused. */
     "menu_section.wrong_role": { sectionId: string; role: string; field?: string };
-    /** A member reference or selection names nothing the write can use. */
+    /** A member reference, selection or draft placement cannot be used. */
     "menu_section.membership_invalid": { field?: string };
     /**
      * An options list's authoring body, or an ORDER-time selection list, is refused. `field` is the

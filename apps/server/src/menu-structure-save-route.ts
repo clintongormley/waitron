@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { saveMenuStructure } from "@waitron/menu";
 import {
   AppError,
+  normaliseUuid,
   type IncludeFolder,
   type MemberRef,
   type MenuStructureMemberInput,
@@ -13,7 +14,6 @@ import {
   requireManagementSession,
   requireNullableString,
   requireString,
-  requireUuidParam,
   type createErrorBoundary,
 } from "@waitron/server-kit";
 import type { GatedWork } from "./content-translations-api.js";
@@ -34,15 +34,19 @@ function rows<T>(value: unknown, field: string, read: (row: unknown, path: strin
   return value.map((row, index) => read(row, field + "." + index));
 }
 
+function bodyId(value: unknown, field: string): string {
+  return normaliseUuid(requireBodyUuid(value, field), field);
+}
+
 function refOf(value: unknown, path: string): MemberRef {
   const ref = object(value, path);
   switch (ref.kind) {
     case "product":
-      return { kind: ref.kind, productId: requireBodyUuid(ref.productId, path + ".productId") };
+      return { kind: ref.kind, productId: bodyId(ref.productId, path + ".productId") };
     case "section":
-      return { kind: ref.kind, sectionId: requireBodyUuid(ref.sectionId, path + ".sectionId") };
+      return { kind: ref.kind, sectionId: bodyId(ref.sectionId, path + ".sectionId") };
     case "set_menu":
-      return { kind: ref.kind, menuId: requireBodyUuid(ref.menuId, path + ".menuId") };
+      return { kind: ref.kind, menuId: bodyId(ref.menuId, path + ".menuId") };
     default:
       return invalid(path + ".kind");
   }
@@ -58,7 +62,7 @@ function folderOf(value: unknown, path: string): IncludeFolder {
 function memberOf(value: unknown, path: string): MenuStructureMemberInput {
   const { id, ref, folder } = object(value, path);
   return {
-    id: requireBodyUuid(id, path + ".id"),
+    id: bodyId(id, path + ".id"),
     ref: refOf(ref, path + ".ref"),
     ...(folder === undefined ? {} : { folder: folderOf(folder, path + ".folder") }),
   };
@@ -71,7 +75,7 @@ function bodyOf(value: unknown): MenuStructureSaveInput {
     sections: rows(sections, "sections", (value, path) => {
       const { id, internalName, names, image, color, members } = object(value, path);
       return {
-        id: requireBodyUuid(id, path + ".id"),
+        id: bodyId(id, path + ".id"),
         internalName: requireString(internalName, path + ".internalName"),
         names: Object.fromEntries(
           Object.entries(object(names, path + ".names")).map(([language, text]) => [
@@ -87,10 +91,8 @@ function bodyOf(value: unknown): MenuStructureSaveInput {
     prices: rows(prices, "prices", (value, path) => {
       const { productId, variantId, price } = object(value, path);
       return {
-        productId: requireBodyUuid(productId, path + ".productId"),
-        ...(variantId === undefined
-          ? {}
-          : { variantId: requireBodyUuid(variantId, path + ".variantId") }),
+        productId: bodyId(productId, path + ".productId"),
+        ...(variantId === undefined ? {} : { variantId: bodyId(variantId, path + ".variantId") }),
         price: requireString(price, path + ".price"),
       };
     }),
@@ -107,7 +109,7 @@ export function mountMenuStructureSaveRoute(
   app.put("/management-api/menus/:id/structure", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
-      const menuId = requireUuidParam(c.req.param("id"), "MenuId");
+      const menuId = normaliseUuid(c.req.param("id"), "MenuId");
       const body = bodyOf(await readJsonBody<unknown>(c));
       return c.json(
         await gated(c, sessionId, (tx) => saveMenuStructure(tx, menuId, body, venueLocale)),
