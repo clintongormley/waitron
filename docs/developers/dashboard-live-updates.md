@@ -204,6 +204,9 @@ neither.
 2026-10-17, A725: Prep stations' Times tab is retired. Its month, station-change, read-recovery
 and reconnect checks now exercise the Calendar in `calendar-station-month.test.ts`; the Calendar
 continues to use the watches described in A722-3 above.
+2026-11-25, A1079 and A506-12 give read-only Calendar viewers the same passive station watches.
+Month and Week watch the station list, then the selected station or group. A Year day box starts
+the station watches when opened.
 2026-11-15, A1545: Periods has its own list and individual Add/Edit pages. Its opening-hours,
 Painted-in and floor-plan watches remain on the list host while an editor is open; the Calendar
 painters retain their period dialogs. See the [current page contract](design-system.md#periods-page).

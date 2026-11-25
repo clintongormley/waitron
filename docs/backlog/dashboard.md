@@ -463,9 +463,9 @@ registered as `venue-service:week`, and the others register theirs when they exi
 - **Venue settings' Tables and Kitchen tabs (A261 step 1, #1166; owner amendment, 2026-10-04).**
   Supervisors can read Tables and Kitchen, while writes remain manager-only. (2026-10-19: the Tables
   tab was retired by A757 slice 2; 2026-10-24: the Kitchen tab went with A756 PR 8. Its last
-  setting, Changes after sending, moved to the station editor, which needs `venue.configure`,
-  so a supervisor no longer sees it; the owner's answer of 2026-10-25 gives a read-only view, queued under
-  [SETTLED-SMALL](till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet).)
+  setting, Changes after sending, moved to the station editor, which needs `venue.configure`.
+  2026-11-25: a supervisor can read the setting in Calendar by choosing one station in Show,
+  following the owner's A1079 answer B of 2026-10-25.)
 
 - **One fixed "nothing matches" sentence; a specific "nothing yet" sentence per screen (A177,
   #1037).** Kept as they were, because they answer a question rather than say nothing was made: the

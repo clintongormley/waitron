@@ -1,5 +1,13 @@
 import { makeT, registerCatalogue } from "@waitron/dashboard-kit";
 
+import type { ChangesAfterSending } from "@waitron/shared";
+
+export const CHANGES_LABELS = {
+  never: "prep.changes_after_sending.never",
+  held: "prep.changes_after_sending.held",
+  "held-or-waiting": "prep.changes_after_sending.held_or_waiting",
+} as const satisfies Record<ChangesAfterSending, string>;
+
 const en = {
   "calendar.selection": "Selected days",
   "calendar.selection_count": "{count} days selected",
@@ -146,7 +154,6 @@ const en = {
   "month.rows": "Rows:",
   "month.department_closed": "{name} closed",
   "month.no_orders": "Closed",
-  "month.period_department": "{period} ({department})",
   "month.range": "{name} {start}–{end}",
   "day.standard": "{season} standard hours",
   "day.replaces": "Special day — replaces {season}'s standard hours",
@@ -171,8 +178,9 @@ const en = {
     "Prep-station times could not be loaded. They will be tried again.",
   "opening.all_stations": "All prep stations",
   "opening.prep_station": "Prep station",
-  "opening.station_hours":
-    "A prep station is open while a period sends it orders. Change its hours through the periods, their menus, routing or zone closing times. The default station follows the periods that send it orders.",
+  "opening.station_hours": "A prep station is open while a period sends it orders.",
+  "opening.station_hours_edit":
+    "Change its hours through the periods, their menus, routing or zone closing times.",
   "opening.zone_placeholder": "{name}: closed times",
   "opening.closed_invalid": "These closed times overlap or are not in 15-minute steps.",
   "opening.check_day": "Check this day's time ranges and periods.",
@@ -1083,7 +1091,6 @@ const es: Record<keyof typeof en, string> = {
   "month.rows": "Filas:",
   "month.department_closed": "{name}: cerrado",
   "month.no_orders": "Cerrada",
-  "month.period_department": "{period} ({department})",
   "month.range": "{name} {start}–{end}",
   "day.standard": "Horario habitual de {season}",
   "day.replaces": "Día especial: sustituye el horario habitual de {season}",
@@ -1109,7 +1116,9 @@ const es: Record<keyof typeof en, string> = {
   "opening.all_stations": "Todas las estaciones de preparación",
   "opening.prep_station": "Estación de preparación",
   "opening.station_hours":
-    "Una estación de preparación está abierta mientras un periodo le envía pedidos. Cambia sus horarios mediante los periodos, sus cartas, las rutas o los cierres de las zonas. La estación predeterminada sigue los periodos que le envían pedidos.",
+    "Una estación de preparación está abierta mientras un periodo le envía pedidos.",
+  "opening.station_hours_edit":
+    "Cambia sus horarios mediante los periodos, sus cartas, las rutas o los cierres de las zonas.",
   "opening.zone_placeholder": "{name}: horarios de cierre",
   "opening.closed_invalid": "Estas horas de cierre se solapan o no van de 15 en 15 minutos.",
   "opening.check_day": "Revisa las franjas horarias y los periodos de este día.",

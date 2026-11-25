@@ -601,8 +601,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Small till and floor wording fixes** (bundle of 1, size S). [Detail](backlog/till.md#bundle-small-till-and-floor-wording-fixes)
 
-- **SETTLED-SMALL. Small answers the owner gave, and rules read across from them, not built yet** — queued (lane I): a supervisor's
-  read-only station views (A1079, A506-12), "started" wins (A1080), the station's name in refusals (A1081),
+- **SETTLED-SMALL. Small answers the owner gave, and rules read across from them, not built yet** — queued (lane F):
+  "started" wins (A1080), the station's name in refusals (A1081),
   "Take the rest", extras keep "made here" (A692), variants in the extras form, one word per meaning
   (A957, A1011). [Detail](backlog/till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet)
 

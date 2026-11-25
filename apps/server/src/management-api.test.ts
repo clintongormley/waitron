@@ -1056,7 +1056,13 @@ describe("/management-api/stations (KDS-1 config)", () => {
     );
     expect(response.status).toBe(200);
     expect(await response.json()).toContainEqual(
-      expect.objectContaining({ id, name, active: true, isDefault: false }),
+      expect.objectContaining({
+        id,
+        name,
+        active: true,
+        isDefault: false,
+        changesAfterSending: "held-or-waiting",
+      }),
     );
     const write = await req(
       `/stations/${id}`,
@@ -1065,7 +1071,19 @@ describe("/management-api/stations (KDS-1 config)", () => {
     );
     expect(write.status).toBe(403);
     expect(await write.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
-    expect((await listStations()).find((station) => station.id === id)?.name).toBe(name);
+    const policyWrite = await req(
+      `/stations/${id}`,
+      { method: "PATCH", body: JSON.stringify({ changesAfterSending: "never" }) },
+      supervisorCookie,
+    );
+    expect(policyWrite.status).toBe(403);
+    expect(await policyWrite.json()).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
+    expect((await listStations()).find((station) => station.id === id)).toMatchObject({
+      name,
+      changesAfterSending: "held-or-waiting",
+    });
     expect((await req("/stations", { method: "GET" })).status).toBe(401);
   });
   it("ignores obsolete includeDisabled and hides deleted station metadata", async () => {

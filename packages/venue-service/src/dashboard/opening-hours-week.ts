@@ -9,7 +9,12 @@ import type { LocalDate } from "../hours-types.js";
 import { addDays } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
 import { stationIcon } from "./station-icon.js";
-import { showPicker, stationExplanation, type CalendarShow } from "./calendar-show.js";
+import {
+  calendarShowStyles,
+  showPicker,
+  stationExplanation,
+  type CalendarShow,
+} from "./calendar-show.js";
 import { formatDayHeading, formatDayTitleParts, formatWeekTitleParts } from "./hours-view.js";
 import {
   chosenDepartment,
@@ -122,6 +127,7 @@ function dayTitleCandidates(): TemplateResult[] {
 @customElement("opening-hours-week")
 export class OpeningHoursWeekView extends LitElement {
   static override styles = [
+    calendarShowStyles,
     baseStyles,
     periodColourStyles,
     dayNameWordStyles,
@@ -141,9 +147,6 @@ export class OpeningHoursWeekView extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
         margin-block-end: var(--wt-space-2);
-      }
-      .head wt-combobox {
-        min-width: 0;
       }
       .no-orders {
         margin: 0;
@@ -169,17 +172,6 @@ export class OpeningHoursWeekView extends LitElement {
       }
       .hint {
         ${visuallyHiddenStyles}
-      }
-      .station-heading {
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-        display: flex;
-        align-items: center;
-        gap: var(--wt-space-1);
-        margin-block: var(--wt-space-2) var(--wt-space-1);
-      }
-      .row[data-station-child] .row-name {
-        font-weight: var(--wt-font-weight-normal);
       }
       .ruler,
       .row {
@@ -361,6 +353,7 @@ export class OpeningHoursWeekView extends LitElement {
   /** The station Show shows, drawn in place of `model`'s departments; its rows read as orders. */
   @property({ attribute: false }) station?: StationShow;
   @property() show: CalendarShow = "";
+  @property({ type: Boolean }) readOnly = false;
 
   /** Whether the Week's own width is below `PHONE_WIDTH`. */
   @state() narrow = false;
@@ -487,7 +480,7 @@ export class OpeningHoursWeekView extends LitElement {
       </div>
       <span id="month-hint" class="hint">${t("week.month_view_hint")}</span>
       <span id="year-hint" class="hint">${t("month.year_view_hint")}</span>
-      ${this.stations.length ? stationExplanation() : nothing}
+      ${this.stations.length ? stationExplanation(this.readOnly) : nothing}
       ${drawn ? this.#body(drawn, (body) => this.#week(body)) : nothing}`;
   }
 
@@ -524,7 +517,7 @@ export class OpeningHoursWeekView extends LitElement {
         )}
         ${this.#step(1, "next-day", "week.next_day", "›")} ${drawn ? this.#show(drawn) : nothing}
       </div>
-      ${this.stations.length ? stationExplanation() : nothing}
+      ${this.stations.length ? stationExplanation(this.readOnly) : nothing}
       ${drawn ? this.#body(drawn, (body) => this.#day(body)) : nothing}
       <span id="month-hint" class="hint">${t("week.month_view_hint")}</span>`;
   }
@@ -660,37 +653,33 @@ export class OpeningHoursWeekView extends LitElement {
   }
 
   #phoneRow(row: WeekRow, day: Day, names: MonthNames, orders: boolean) {
-    const stationRow = Boolean(
-      this.station && (orders || row.station || row.stationGroup !== undefined),
-    );
+    const stationRow = Boolean(this.station && (orders || row.station));
     const span = day.endMinute;
-    return html`${row.stationHeading ? html`<h3 class="station-heading">${stationIcon()}${row.stationHeading}</h3>` : nothing}
-      <div
-        class="row"
-        data-row=${row.key}
-        ?data-station-child=${row.stationGroup !== undefined}
-        @click=${stationRow ? (event: MouseEvent) => this.#openBarDay(day.date, event, stationRow) : nothing}
+    return html`<div
+      class="row"
+      data-row=${row.key}
+      @click=${stationRow ? (event: MouseEvent) => this.#openBarDay(day.date, event, stationRow) : nothing}
+    >
+      <span class="row-name ${row.strong ? "strong" : ""}"
+        >${row.station ? stationIcon() : nothing}${row.name}</span
       >
-        <span class="row-name ${row.strong ? "strong" : ""}"
-          >${row.station && row.stationGroup === undefined ? stationIcon() : nothing}${row.name}</span
-        >
-        <span class="words" ?data-no-orders=${orders && !row.blocks.length}>${row.words}</span>
-        <div class="track" aria-hidden="true">
-          ${row.blocks.map(
-            (block) =>
-              html`<span
-                class="block"
-                @click=${stationRow ? nothing : (event: MouseEvent) => this.#openBarDay(day.date, event, stationRow)}
-                data-colour=${names.period(block.periodId).colour || nothing}
-                ?data-faded=${block.faded}
-                style=${styleMap({
-                  left: `${(block.start / span) * 100}%`,
-                  width: `${((block.end - block.start) / span) * 100}%`,
-                })}
-              ></span>`,
-          )}
-        </div>
-      </div>`;
+      <span class="words" ?data-no-orders=${orders && !row.blocks.length}>${row.words}</span>
+      <div class="track" aria-hidden="true">
+        ${row.blocks.map(
+          (block) =>
+            html`<span
+              class="block"
+              @click=${stationRow ? nothing : (event: MouseEvent) => this.#openBarDay(day.date, event, stationRow)}
+              data-colour=${names.period(block.periodId).colour || nothing}
+              ?data-faded=${block.faded}
+              style=${styleMap({
+                left: `${(block.start / span) * 100}%`,
+                width: `${((block.end - block.start) / span) * 100}%`,
+              })}
+            ></span>`,
+        )}
+      </div>
+    </div>`;
   }
 
   #show({ model, chosen, names }: Drawn) {
@@ -756,50 +745,46 @@ export class OpeningHoursWeekView extends LitElement {
   }
 
   #row(row: WeekRow, day: Day, names: MonthNames, longest: number, orders: boolean) {
-    const stationRow = Boolean(
-      this.station && (orders || row.station || row.stationGroup !== undefined),
-    );
+    const stationRow = Boolean(this.station && (orders || row.station));
     const span = day.endMinute;
-    return html`${row.stationHeading ? html`<h4 class="station-heading">${stationIcon()}${row.stationHeading}</h4>` : nothing}
-      <div
-        class="row"
-        data-row=${row.key}
-        ?data-station-child=${row.stationGroup !== undefined}
-        @click=${stationRow ? (event: MouseEvent) => this.#openBarDay(day.date, event, stationRow) : nothing}
+    return html`<div
+      class="row"
+      data-row=${row.key}
+      @click=${stationRow ? (event: MouseEvent) => this.#openBarDay(day.date, event, stationRow) : nothing}
+    >
+      <span class="row-name ${row.zone ? "" : "strong"}" aria-hidden="true"
+        >${row.station ? stationIcon() : nothing}${row.name}</span
       >
-        <span class="row-name ${row.zone ? "" : "strong"}" aria-hidden="true"
-          >${row.station && row.stationGroup === undefined ? stationIcon() : nothing}${row.name}</span
+      <span class="spoken"
+        >${`${row.station ? t("opening.prep_station") + " " : ""}${row.name}: ${row.words}`}</span
+      >
+      <div class="lane">
+        <div
+          class="track"
+          aria-hidden="true"
+          style=${styleMap({ width: `${(span / longest) * 100}%` })}
         >
-        <span class="spoken"
-          >${`${row.station && row.stationGroup === undefined ? t("opening.prep_station") + " " : ""}${row.name}: ${row.words}`}</span
-        >
-        <div class="lane">
-          <div
-            class="track"
-            aria-hidden="true"
-            style=${styleMap({ width: `${(span / longest) * 100}%` })}
-          >
-            ${
-              row.blocks.length
-                ? row.blocks.map(
-                    (block) =>
-                      html`<span
-                        class="block"
-                        @click=${stationRow ? nothing : (event: MouseEvent) => this.#openBarDay(day.date, event, stationRow)}
-                        data-colour=${names.period(block.periodId).colour || nothing}
-                        ?data-faded=${block.faded}
-                        style=${styleMap({
-                          left: `${(block.start / span) * 100}%`,
-                          width: `${((block.end - block.start) / span) * 100}%`,
-                        })}
-                        ><span class="text">${block.text}</span></span
-                      >`,
-                  )
-                : row.empty
-            }
-          </div>
+          ${
+            row.blocks.length
+              ? row.blocks.map(
+                  (block) =>
+                    html`<span
+                      class="block"
+                      @click=${stationRow ? nothing : (event: MouseEvent) => this.#openBarDay(day.date, event, stationRow)}
+                      data-colour=${names.period(block.periodId).colour || nothing}
+                      ?data-faded=${block.faded}
+                      style=${styleMap({
+                        left: `${(block.start / span) * 100}%`,
+                        width: `${((block.end - block.start) / span) * 100}%`,
+                      })}
+                      ><span class="text">${block.text}</span></span
+                    >`,
+                )
+              : row.empty
+          }
         </div>
-      </div>`;
+      </div>
+    </div>`;
   }
 }
 

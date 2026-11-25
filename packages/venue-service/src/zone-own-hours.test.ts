@@ -225,9 +225,10 @@ describe("closuresInHours", () => {
   });
 });
 
-it("joins touching placed ranges through midnight without carrying a period identity", () => {
+it("joins overlapping and touching placed ranges through midnight, preserving the gap", () => {
   const pieces = [
     { ...range("late", "23:15", "00:00"), start: 1035, end: 1080 },
+    { ...range("overlap", "21:00", "23:30"), start: 900, end: 1050 },
     { ...range("early", "09:00", "23:15"), start: 180, end: 1035 },
     { ...range("overnight", "01:00", "02:00"), start: 1140, end: 1200 },
   ];
@@ -236,5 +237,5 @@ it("joins touching placed ranges through midnight without carrying a period iden
     { startsAt: "01:00", endsAt: "02:00", start: 1140, end: 1200 },
   ]);
   expect(pieces[0]!.periodId).toBe("late");
-  expect(pieces[1]!.endsAt).toBe("23:15");
+  expect(pieces[2]!.endsAt).toBe("23:15");
 });

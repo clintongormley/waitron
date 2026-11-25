@@ -64,7 +64,7 @@ publication dates, imports), so it needs a decision.
   sale or for a table elsewhere. A per-zone choice of menus (A1548) was withdrawn for this. Set menus are the exception: they go only on
   a seated table's bill ([set-menu design](../superpowers/specs/2026-11-17-set-menus-design.md)).
 
-- **A1546, watcher 2026-11-15 17:05:** special-day bands and month runs use dashed purple; season lines remain solid and purple remains selectable. Day boxes show selected stations, or all without a station filter, to managers in every view. Viewers keep their station-read exclusion. The season-hours link remains on special dates too.
+- **A1546, watcher 2026-11-15 17:05:** special-day bands and month runs use dashed purple; season lines remain solid and purple remains selectable. Day boxes show selected stations, or all without a station filter, to managers in every view. The season-hours link remains on special dates too. The 2026-11-25 decision below extends the station rows to viewers. Year keeps the station filter in the address and [shows all stations in its day box](../developers/design-system.md#calendar).
 
 - **Pop-up in painters (A1545, owner, 2026-11-15).** Keep the small period pop-up inside
   the Calendar painters; elsewhere use the Periods pages. The owner chose “Pop-up in painters”
@@ -269,12 +269,14 @@ the season painter continues saving through the season-week route._
   dates. If the station list cannot be read, Show offers departments only, with no alert.
   **2026-10-17:** A725 retires the Times tab; Calendar's station view above remains the current
   surface. The earlier sentence about the lone Times row records the pre-retirement behavior.
+  **2026-11-25:** The owner chose [one row per station](../developers/design-system.md#worked-out-prep-station-times)
+  with joined hours in Calendar.
 
 - **A read-only Calendar offers no prep stations in Show ([A722 Part 3](https://github.com/clintongormley/waitron/blob/ebd0cc11d3bb50e77f2ace2b2ed8cb764b65375f/docs/superpowers/plans/2026-10-17-a722-calendar-week-view.md), Decision 12; plan default, sent to the owner as an FYI, 2026-10-17).**
   Stations go only to those who could already open the Times tab, which needs
   `venue.configure`. A read-only Calendar reads no station list and no station times, and
-  ignores a `station` in its address. A supervisor's read-only station view is queued under
-  [SETTLED-SMALL](till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet).
+  ignores a `station` in its address. **2026-11-25:** The [read-only station view](../developers/design-system.md#worked-out-prep-station-times)
+  replaces this restriction under A1079 and the watcher's reading of A506-12.
 
 - **A viewer gets the day box too (A720, 2026-10-15).** A viewer's box makes no special day; it
   offers "Show {season}'s standard week", which opens the read-only painter. In Staffing a viewer's

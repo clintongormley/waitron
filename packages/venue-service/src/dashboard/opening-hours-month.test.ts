@@ -12,7 +12,7 @@ import type {
   OpeningHoursMonthView,
 } from "./opening-hours-month.js";
 import "./opening-hours-month.js";
-import type { ShowStation, StationShow } from "./station-show.js";
+import { stationShowModel, type ShowStation, type StationShow } from "./station-show.js";
 import { VENUE_SERVICE_STRINGS } from "./strings.js";
 
 const hosts: HTMLElement[] = [];
@@ -253,16 +253,11 @@ describe("Opening hours month", () => {
   });
 
   it("keeps a station range in a calendar colour beyond the first six", async () => {
-    const departments = DEPARTMENTS.map((department) => ({
-      ...department,
-      periods: department.periods.map((period) =>
-        period.id === "breakfast" ? { ...period, colour: "brown" as const } : period,
-      ),
-    }));
     const model = monthModel();
+    const station = { id: "grill", name: "Grill", colour: "brown" } as const;
+    const days = model.days.map(({ date, departments }) => ({ date, departments }));
     const el = await mount(model, {
-      departments,
-      station: { id: "grill", state: "ready", model, departments },
+      station: { id: station.id, state: "ready", ...stationShowModel(model, { days }, station)! },
     });
     applyTokens(el);
     const breakfast = cell(el, "2026-12-07").querySelector<HTMLElement>(".segment")!;
@@ -1099,34 +1094,16 @@ describe("Opening hours month", () => {
 });
 
 const STATIONS: ShowStation[] = [
-  { id: "grill", name: "Grill" },
-  { id: "cold", name: "Cold kitchen" },
+  { id: "grill", name: "Grill", colour: "red" },
+  { id: "cold", name: "Cold kitchen", colour: "green" },
 ];
-const SENDERS = DEPARTMENTS.map(({ id, name, periods }) => ({
-  id,
-  name,
-  zones: [],
-  periods: periods.map(({ id, name, colour }) => ({ id, name, colour })),
-}));
-/** The Grill's month: the Restaurant and the Bar both send it orders, neither on 15 December. */
-function grill(): StationShow {
+function grill(): Extract<StationShow, { state: "ready" }> {
   const model = monthModel();
-  return {
-    id: "grill",
-    state: "ready",
-    model: {
-      ...model,
-      days: model.days.map((day) => ({
-        ...day,
-        departments: day.departments.map((d) => ({
-          departmentId: d.departmentId,
-          ranges: day.date === "2026-12-15" ? [] : d.ranges,
-          zones: [],
-        })),
-      })),
-    },
-    departments: SENDERS,
-  };
+  const days = model.days.map((day) => ({
+    date: day.date,
+    departments: day.date === "2026-12-15" ? [] : day.departments,
+  }));
+  return { id: "grill", state: "ready", ...stationShowModel(model, { days }, STATIONS[0]!)! };
 }
 const show = (el: OpeningHoursMonthView) =>
   root(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>("wt-combobox[name=departmentId]")!;
@@ -1194,30 +1171,18 @@ describe("Opening hours month, a station shown", () => {
     expect(show(el).value).toBe("station:grill");
   });
 
-  it("a station draws a row per sending department, its dates still buttons that open the box", async () => {
+  it("a station draws its own row, and its dates still open the box", async () => {
     const el = await mount(monthModel(), { stations: STATIONS, station: grill() });
     expect(testId(el, "rows")).toBeNull();
-    expect(root(el).querySelector('.named-track wt-icon[name="prep-station"]')).toBeNull();
+    expect(root(el).querySelector('.named-track wt-icon[name="prep-station"]')).not.toBeNull();
     const monday = cell(el, "2026-12-07");
-    const tracks = [...monday.querySelectorAll<HTMLElement>(".track")];
-    expect(tracks.map((track) => track.dataset.row)).toEqual(["rest", "bar"]);
     expect(
-      tracks.map((track) =>
-        [...track.querySelectorAll<HTMLElement>(".segment")].map((s) => s.title),
-      ),
-    ).toEqual([
-      [
-        "Breakfast (Restaurant) 08:00–11:00",
-        "Lunch (Restaurant) 13:00–16:00",
-        "Dinner (Restaurant) 20:00–23:00",
-      ],
-      ["All day (Bar) 10:00–02:00"],
-    ]);
+      [...monday.querySelectorAll<HTMLElement>(".track")].map((row) => row.dataset.row),
+    ).toEqual(["grill"]);
     const sunday = cell(el, "2026-12-06");
-    expect(sunday.querySelectorAll('.track[data-row="rest"] .segment')).toHaveLength(0);
     expect(sunday.querySelector('[data-test="no-orders"]')).toBeNull();
     await named(dayButton(el, "2026-12-06")).toHaveAccessibleName(
-      containing("Restaurant: Closed, Bar: All day 10:00–02:00"),
+      containing("Prep station Grill: 10:00–02:00"),
     );
     expect(root(el).querySelectorAll("td[data-date] button.day")).toHaveLength(
       monthModel().days.length,
@@ -1236,27 +1201,6 @@ describe("Opening hours month, a station shown", () => {
     await userEvent.dblClick(dayButton(el, "2026-12-22"));
     await el.updateComplete;
     expect(runs).toEqual([]);
-  });
-
-  it("names a lone sending department beside each period", async () => {
-    const station = grill() as Extract<StationShow, { state: "ready" }>;
-    const el = await mount(monthModel(), {
-      stations: STATIONS,
-      station: {
-        ...station,
-        model: {
-          ...station.model,
-          days: station.model.days.map((day) => ({
-            ...day,
-            departments: day.departments.slice(1),
-          })),
-        },
-        departments: SENDERS.slice(1),
-      },
-    });
-    expect(
-      [...cell(el, "2026-12-07").querySelectorAll<HTMLElement>(".segment")].map((s) => s.title),
-    ).toEqual(["All day (Bar) 10:00–02:00"]);
   });
 
   it("a date no department sends on reads Closed once", async () => {

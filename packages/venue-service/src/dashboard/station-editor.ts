@@ -38,7 +38,7 @@ import {
 } from "@waitron/shared";
 import { stationColourChoices, type StationColourUser } from "./station-colour-choices.js";
 import { format } from "./hours-view.js";
-import { t } from "./strings.js";
+import { CHANGES_LABELS, t } from "./strings.js";
 
 export type StationEditorStation = {
   id: string;
@@ -264,12 +264,6 @@ function groupingOptions() {
 function bumpOptions() {
   return BUMP_MODES.map((value) => ({ value, label: t(`prep.bump_mode.${value}`) }));
 }
-
-const CHANGES_LABELS = {
-  never: "prep.changes_after_sending.never",
-  held: "prep.changes_after_sending.held",
-  "held-or-waiting": "prep.changes_after_sending.held_or_waiting",
-} as const satisfies Record<ChangesAfterSending, string>;
 
 function changesOptions() {
   return CHANGES_AFTER_SENDING.map((value) => ({ value, label: t(CHANGES_LABELS[value]) }));

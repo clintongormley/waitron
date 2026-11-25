@@ -82,8 +82,24 @@ afterEach(async () => {
 });
 
 const STATIONS = [
-  { id: "s2", name: "Default", active: true, isDefault: true, displayOrder: 0 },
-  { id: "s1", name: "Grill", active: true, isDefault: false, displayOrder: 1 },
+  {
+    id: "s2",
+    name: "Default",
+    colour: "purple",
+    active: true,
+    isDefault: true,
+    displayOrder: 0,
+    changesAfterSending: "never",
+  },
+  {
+    id: "s1",
+    name: "Grill",
+    colour: "green",
+    active: true,
+    isDefault: false,
+    displayOrder: 1,
+    changesAfterSending: "held",
+  },
 ];
 /** The Grill's days from `from` to `to`: the Restaurant sends it lunch, the Bar all day. The
  *  default station uses the same dated demand fixture. */
@@ -102,7 +118,12 @@ function stationTimes(_stationId: string, from: string, to: string) {
               },
               {
                 departmentId: "bar",
-                ranges: [{ periodId: "allday", startsAt: "10:00", endsAt: "02:00" }],
+                ranges: [
+                  { periodId: "allday", startsAt: "10:00", endsAt: "02:00" },
+                  ...(date === "2026-12-09"
+                    ? [{ periodId: "allday", startsAt: "04:00", endsAt: "05:00" }]
+                    : []),
+                ],
               },
             ],
     });
@@ -555,17 +576,7 @@ describe("from the Week to the Month, the Year and the day box", () => {
     const box = dayBox(el)!;
     await expect
       .poll(() => box.rows.map((row) => row.name))
-      .toEqual([
-        "Restaurant",
-        "Terrace",
-        "Prep stations",
-        "Default",
-        "Restaurant",
-        "Bar",
-        "Grill",
-        "Restaurant",
-        "Bar",
-      ]);
+      .toEqual(["Restaurant", "Terrace", "Prep stations", "Default", "Grill"]);
     await box.updateComplete;
     const popup = () => box.shadowRoot!.querySelector("[popover]")!.getBoundingClientRect();
     const anchor = button.getBoundingClientRect();
@@ -864,14 +875,24 @@ describe("a prep station in the Calendar", () => {
     expect(monthView(el)!.shadowRoot!.querySelector("wt-combobox")!.value).toBe("station:s1");
   });
 
-  it("choosing a station in the Week's Show writes it and draws its rows", async () => {
+  it("choosing a station in Week draws the overnight union and a separate stretch in its colour", async () => {
     const { el } = await mount("/opening-hours/view/week/week/2026-12-09");
     await expect.poll(() => showValues(el)).toContain("station:s1");
     chooseShown(el, "station:s1");
     await expect.poll(() => location.pathname).toBe(grillWeek);
     await expect.poll(() => week(el)!.station?.state).toBe("ready");
     await week(el)!.updateComplete;
-    expect(rowKeys(el, "2026-12-09")).toEqual(["rest", "bar"]);
+    expect(rowKeys(el, "2026-12-09")).toEqual(["s1"]);
+    const blocks = [
+      ...week(el)!.shadowRoot!.querySelectorAll<HTMLElement>(
+        '[data-date="2026-12-09"] [data-row="s1"] .block',
+      ),
+    ];
+    expect(blocks.map((block) => block.textContent?.trim())).toEqual([
+      "10:00–02:00",
+      "04:00–05:00",
+    ]);
+    expect(blocks.map((block) => block.dataset.colour)).toEqual(["green", "green"]);
     expect(week(el)!.shadowRoot!.querySelector("wt-combobox")!.value).toBe("station:s1");
   });
 
@@ -915,21 +936,21 @@ describe("a prep station in the Calendar", () => {
       "a station named beside a department",
       "/opening-hours/view/week/department/rest/show/stations/station/s1/week/2026-12-09",
     ],
-  ])(
-    "the day box over %s lists its sending departments and identifies the station",
-    async (_, address) => {
-      const { el } = await mount(address);
-      await expect.poll(() => week(el)!.station?.state).toBe("ready");
-      await week(el)!.updateComplete;
-      await userEvent.click(dayName(el, "2026-12-09"));
-      await expect.poll(() => boxOpen(el)).toBe(true);
-      await expect
-        .poll(() => dayBox(el)!.rows.map((row) => row.name))
-        .toEqual(["Restaurant", "Terrace", "Bar", "Prep stations", "Grill", "Restaurant", "Bar"]);
-      expect(dayBox(el)!.stationName).toBe("Grill");
-      expect(dayBox(el)!.querySelector("a[data-test=edit-week]")).not.toBeNull();
-    },
-  );
+  ])("the day box over %s shows only the chosen station", async (_, address) => {
+    const { el } = await mount(address);
+    await expect.poll(() => week(el)!.station?.state).toBe("ready");
+    await week(el)!.updateComplete;
+    await userEvent.click(dayName(el, "2026-12-09"));
+    await expect.poll(() => boxOpen(el)).toBe(true);
+    await expect
+      .poll(() => dayBox(el)!.rows.map((row) => row.name))
+      .toEqual(["Prep stations", "Grill"]);
+    expect(dayBox(el)!.rows.find((row) => row.name === "Grill")?.text).toBe(
+      "10:00–02:00 · 04:00–05:00",
+    );
+    expect(dayBox(el)!.stationName).toBe("Grill");
+    expect(dayBox(el)!.querySelector("a[data-test=edit-week]")).not.toBeNull();
+  });
 
   it("a station waits for the station list before drawing anything", async () => {
     const { el, paths } = await mount(grillWeek, undefined, false, { holdStations: true });
@@ -940,12 +961,17 @@ describe("a prep station in the Calendar", () => {
     expect(timesReads(paths)).toEqual([]);
   });
 
-  it("the default station draws its dated department demand", async () => {
+  it("the default station draws its dated hours", async () => {
     const { el } = await mount("/opening-hours/view/week/station/s2/week/2026-12-09");
     await expect.poll(() => week(el)!.station?.state).toBe("ready");
     await week(el)!.updateComplete;
-    expect(week(el)!.shadowRoot!.querySelector('[data-row="rest"] .block')).not.toBeNull();
+    expect(week(el)!.shadowRoot!.querySelector('[data-row="s2"] .block')).not.toBeNull();
     expect(week(el)!.shadowRoot!.querySelector("[data-test=always-open]")).toBeNull();
+    const hint = () =>
+      week(el)!.shadowRoot!.querySelector("[data-test=station-explanation]")?.textContent;
+    expect(hint()).toContain("Change its hours through the periods");
+    await toPhone(el);
+    expect(hint()).toContain("Change its hours through the periods");
   });
 
   it.each([
@@ -995,18 +1021,47 @@ describe("a prep station in the Calendar", () => {
     },
   );
 
-  it("a read-only Calendar offers no stations and reads none", async () => {
-    const { el, paths } = await mount(grillWeek, undefined, false, { readOnly: true });
-    await week(el)!.updateComplete;
-    // Gives a station list a chance to have been asked for, had the screen wanted one.
-    await new Promise((settled) => setTimeout(settled, 50));
-    await week(el)!.updateComplete;
-    expect(showValues(el)).toEqual(["all", "rest", "bar"]);
-    expect(week(el)!.stations).toEqual([]);
-    expect(week(el)!.station).toBeUndefined();
-    expect(week(el)!.shadowRoot!.querySelector("wt-combobox")!.value).toBe("all");
-    expect(paths.some((path) => path.startsWith("/management-api/stations"))).toBe(false);
-    expect(paths.some((path) => path.includes("/service-times"))).toBe(false);
+  it("a viewer reads a station's hours and the selected station's saved rule", async () => {
+    const { el } = await mount(grillWeek, undefined, false, { readOnly: true });
+    const policy = () => el.shadowRoot!.querySelector("[data-test=station-change-policy]");
+    await expect.poll(() => showValues(el)).toContain("station:s1");
+    expect(showValues(el)).toContain("show:all");
+    expect(week(el)!.shadowRoot!.querySelector("wt-combobox")!.value).toBe("station:s1");
+    await expect.poll(() => rowKeys(el, "2026-12-09")).toEqual(["s1"]);
+    expect(
+      week(el)!.shadowRoot!.querySelector('[data-date="2026-12-09"] [data-row="s1"] .block')
+        ?.textContent,
+    ).toContain("10:00–02:00");
+    expect(policy()?.textContent?.trim()).toBe("Changes after sending: While held");
+    expect(policy()!.tagName).toBe("P");
+    expect(policy()!.children).toHaveLength(0);
+    const hint = () =>
+      week(el)!.shadowRoot!.querySelector("[data-test=station-explanation]")?.textContent;
+    expect(hint()?.trim()).toBe("A prep station is open while a period sends it orders.");
+    for (const date of ["2026-12-09", "2026-12-14"]) {
+      if (date === "2026-12-14") {
+        week(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=next-week]")!.click();
+        await expect.poll(() => dayName(el, date)).not.toBeNull();
+      }
+      await userEvent.click(dayName(el, date));
+      await expect.poll(() => boxOpen(el)).toBe(true);
+      await expect.poll(() => dayBox(el)?.rows.map((row) => row.name)).toContain("Grill");
+      expect(
+        dayBox(el)!.querySelector("[data-test=special-add], [data-test=special-edit]"),
+      ).toBeNull();
+      dayBox(el)!.hide();
+      await expect.poll(() => dayBox(el)).toBeNull();
+    }
+
+    chooseShown(el, "station:s2");
+    await expect
+      .poll(() => policy()?.textContent?.trim())
+      .toBe("Changes after sending: Not allowed");
+    chooseShown(el, "bar");
+    await expect.poll(policy).toBeNull();
+
+    await toPhone(el);
+    expect(hint()?.trim()).toBe("A prep station is open while a period sends it orders.");
   });
 
   it.each(["pointer", "keyboard"] as const)(
@@ -1088,7 +1143,18 @@ describe("a prep station in the Calendar", () => {
     expect(week(el)!.station).toBe(shown);
     deliver(STATIONS.map((station) => ({ ...station, name: `${station.name} renamed` })));
     await el.updateComplete;
-    expect(week(el)!.station).not.toBe(shown);
+    const renamed = week(el)!.station;
+    expect(renamed).not.toBe(shown);
+    deliver(
+      STATIONS.map((station) => ({ ...station, name: station.name + " renamed", colour: "red" })),
+    );
+    await expect
+      .poll(
+        () =>
+          week(el)!.shadowRoot!.querySelector<HTMLElement>('[data-row="s1"] .block')?.dataset
+            .colour,
+      )
+      .toBe("red");
   });
 
   it("a week across two months draws the station on every one of its days", async () => {
@@ -1105,7 +1171,7 @@ describe("a prep station in the Calendar", () => {
       "2027-01-02",
       "2027-01-03",
     ]);
-    for (const date of dates) expect(rowKeys(el, date), date).toEqual(["rest", "bar"]);
+    for (const date of dates) expect(rowKeys(el, date), date).toEqual(["s1"]);
     const station = week(el)!.station as Extract<StationShow, { state: "ready" }>;
     const read = monthModel();
     for (const date of dates) {
@@ -1126,27 +1192,18 @@ describe("a prep station in the Calendar", () => {
 
 it("Show all draws departments before stations, preserves department actions and remembers its address through Month", async () => {
   const { el, paths } = await mount("/opening-hours/view/week/show/all/week/2026-12-09");
-  await expect
-    .poll(() => week(el)!.shadowRoot!.querySelector('[data-row="s1:rest"]'))
-    .not.toBeNull();
+  await expect.poll(() => week(el)!.shadowRoot!.querySelector('[data-row="s1"]')).not.toBeNull();
   const rows = () => [
     ...week(el)!
       .shadowRoot!.querySelector('[data-date="2026-12-09"]')!
       .querySelectorAll<HTMLElement>(".row"),
   ];
-  expect(rows().map((row) => row.dataset.row)).toEqual([
-    "rest",
-    "bar",
-    "s2:rest",
-    "s2:bar",
-    "s1:rest",
-    "s1:bar",
-  ]);
+  expect(rows().map((row) => row.dataset.row)).toEqual(["rest", "bar", "s2", "s1"]);
   expect(paths.filter((path) => path.includes("service-times?"))).toEqual([
     "/management-api/venue-service/stations/service-times?from=2026-11-30&to=2027-01-03",
   ]);
   expect(
-    week(el)!.shadowRoot!.querySelector('.station-heading wt-icon[name="prep-station"]'),
+    week(el)!.shadowRoot!.querySelector('[data-row="s1"] wt-icon[name="prep-station"]'),
   ).not.toBeNull();
   dayName(el, "2026-12-09").click();
   await expect.poll(() => boxOpen(el)).toBe(true);
@@ -1169,21 +1226,23 @@ it("Show all draws departments before stations, preserves department actions and
   expect(optionValues).toContain("show:all");
   history.back();
   await expect
-    .poll(() => week(el)?.shadowRoot!.querySelector('[data-row="s1:rest"]') ?? null)
+    .poll(() => week(el)?.shadowRoot!.querySelector('[data-row="s1"]') ?? null)
     .not.toBeNull();
   expect(week(el)!.shadowRoot!.querySelector("wt-combobox")!.value).toBe("show:all");
 });
 
-it("a viewer ignores combined station keys without station reads", async () => {
-  const { el, paths } = await mount(
+it("a viewer can compare all prep stations", async () => {
+  const { el } = await mount(
     "/opening-hours/view/week/show/stations/week/2026-12-09",
     undefined,
     false,
     { readOnly: true },
   );
-  await expect.poll(() => week(el)!.shadowRoot!.querySelector('[data-row="rest"]')).not.toBeNull();
-  expect(paths.filter((path) => path.includes("/stations"))).toEqual([]);
-  expect(week(el)!.station).toBeUndefined();
+  const rows = () => week(el)!.shadowRoot!;
+  await expect.poll(() => rows().querySelector('[data-row="s1"]')).not.toBeNull();
+  expect(rows().querySelector('[data-row="s2"]')).not.toBeNull();
+  expect(rows().querySelector("wt-combobox")!.value).toBe("show:stations");
+  expect(el.shadowRoot!.querySelector("[data-test=station-change-policy]")).toBeNull();
 });
 
 it("choosing a group, station or department keeps only that choice in the address", async () => {
@@ -1205,7 +1264,7 @@ it("choosing a group, station or department keeps only that choice in the addres
         .shadowRoot!.querySelector('section[data-date="2026-12-09"]')!
         .querySelectorAll<HTMLElement>(".row"),
     ].map((row) => row.dataset.row),
-  ).toEqual(["s2:rest", "s2:bar", "s1:rest", "s1:bar"]);
+  ).toEqual(["s2", "s1"]);
   chooseShown(el, "station:s1");
   await expect
     .poll(() => location.pathname)
@@ -1250,11 +1309,11 @@ it("keeps loaded departments visible when Show all's station times fail, then ad
   await expect.poll(() => boxOpen(el)).toBe(false);
   answers.timesFail = undefined;
   el.api.rereadWatches();
-  await expect.poll(rows).toEqual(["rest", "bar", "s2:rest", "s2:bar", "s1:rest", "s1:bar"]);
+  await expect.poll(rows).toEqual(["rest", "bar", "s2", "s1"]);
   expect(el.shadowRoot!.querySelector('[data-test="station-read-error"]')).toBeNull();
 });
 
-it("keeps departments distinct from station orders on a closed phone day, and keeps every grouped station row", async () => {
+it("keeps departments distinct from station orders on a closed phone day, and keeps every station row", async () => {
   const { el } = await mount("/opening-hours/view/week/show/all/week/2026-12-25");
   await expect.poll(() => week(el)!.station?.state).toBe("ready");
   await toPhone(el);
@@ -1268,17 +1327,28 @@ it("keeps departments distinct from station orders on a closed phone day, and ke
   chooseShown(el, "show:stations");
   await expect
     .poll(() => [...card().querySelectorAll<HTMLElement>(".row")].map((item) => item.dataset.row))
-    .toEqual(["s2:rest", "s2:bar", "s1:rest", "s1:bar"]);
-  for (const id of ["s2:rest", "s2:bar", "s1:rest", "s1:bar"])
-    expect(words(id).textContent).toBe("Closed");
+    .toEqual(["s2", "s1"]);
+  for (const id of ["s2", "s1"]) expect(words(id).textContent).toBe("Closed");
 });
 
-it.each(["year", "month", "week"])(
-  "a manager's %s day box includes department sections and all planned stations",
-  async (view) => {
+it.each([
+  ["manager", "year", false, ""],
+  ["manager", "month", false, ""],
+  ["manager", "week", false, ""],
+  ["viewer", "year", true, ""],
+  ["viewer with a station in the address", "year", true, "station/s1/"],
+  ["viewer with a station group in the address", "year", true, "show/stations/"],
+] as const)(
+  "a %s sees department sections and all planned stations in the %s day box",
+  async (_, view, readOnly, filter) => {
     const suffix =
       view === "year" ? "year/2026" : view === "month" ? "month/2026-12" : "week/2026-12-09";
-    const { el, paths } = await mount(`/opening-hours/view/${view}/${suffix}`);
+    const { el, paths } = await mount(
+      `/opening-hours/view/${view}/${filter}${suffix}`,
+      undefined,
+      false,
+      { readOnly },
+    );
     if (view === "year") expect(paths.filter((path) => path.includes("/stations"))).toEqual([]);
     await expect.poll(() => el.shadowRoot!.querySelector(`opening-hours-${view}`)).not.toBeNull();
     const calendar = el.shadowRoot!.querySelector(`opening-hours-${view}`)!;
@@ -1293,25 +1363,17 @@ it.each(["year", "month", "week"])(
     );
     await expect
       .poll(() => dayBox(el)?.rows.map((row) => row.name))
-      .toEqual([
-        "Restaurant",
-        "Terrace",
-        "Bar",
-        "Prep stations",
-        "Default",
-        "Restaurant",
-        "Bar",
-        "Grill",
-        "Restaurant",
-        "Bar",
-      ]);
+      .toEqual(["Restaurant", "Terrace", "Bar", "Prep stations", "Default", "Grill"]);
     expect(dayBox(el)!.sectioned).toBe(true);
     expect(
       dayBox(el)!
         .rows.filter((row) => row.strong)
         .map((row) => row.name),
     ).toEqual(["Restaurant", "Bar", "Prep stations"]);
-    expect(paths.some((path) => path.includes("/stations/service-times?"))).toBe(true);
+    expect(paths.filter((path) => path.includes("/service-times?"))).toEqual([
+      "/management-api/venue-service/stations/service-times?from=2026-11-30&to=2027-01-03",
+    ]);
+    expect(dayBox(el)!.stationName).toBe("");
     expect(dayBox(el)!.querySelector("[data-test=station-explanation]")).toBeNull();
     const season = dayBox(el)!.querySelector<HTMLAnchorElement>("a[data-test=edit-week]")!;
     expect(season.textContent!.trim()).toBe("Winter standard hours");
@@ -1320,21 +1382,32 @@ it.each(["year", "month", "week"])(
   },
 );
 
+it("names a failed Year station batch in the day box", async () => {
+  const { el } = await mount("/opening-hours/view/year/show/stations/year/2026", undefined, false, {
+    readOnly: true,
+    timesFail: REFUSED,
+  });
+  const anchor = document.createElement("button");
+  el.append(anchor);
+  yearView(el)!.dispatchEvent(
+    new CustomEvent("calendar-day-open", {
+      bubbles: true,
+      composed: true,
+      detail: { date: "2026-12-09", returnTo: () => anchor },
+    }),
+  );
+  await expect
+    .poll(() => dayBox(el)?.shadowRoot?.querySelector('[role="alert"]')?.textContent)
+    .toBe("Prep-station times could not be loaded. They will be tried again.");
+});
+
 it("a special station day retains its season link and special-day action without repeating the explanation", async () => {
   const { el } = await mount("/opening-hours/view/week/station/s1/week/2026-12-14");
   await expect.poll(() => week(el)!.station?.state).toBe("ready");
   await week(el)!.updateComplete;
   await userEvent.click(dayName(el, "2026-12-14"));
   await expect.poll(() => boxOpen(el)).toBe(true);
-  expect(dayBox(el)!.rows.map((row) => row.name)).toEqual([
-    "Restaurant",
-    "Terrace",
-    "Bar",
-    "Prep stations",
-    "Grill",
-    "Restaurant",
-    "Bar",
-  ]);
+  expect(dayBox(el)!.rows.map((row) => row.name)).toEqual(["Prep stations", "Grill"]);
   expect(dayBox(el)!.querySelector("[data-test=special-edit]")).not.toBeNull();
   expect(dayBox(el)!.querySelector("a[data-test=edit-week]")!.textContent).toContain("Winter");
   expect(dayBox(el)!.querySelector("[data-test=open-week]")).toBeNull();

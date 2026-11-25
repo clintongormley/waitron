@@ -679,9 +679,9 @@ painter instead passes the selected season's weekdays directly to the shared rea
 staffing painter passes the edited special day's own plan, including when another repeating day
 would stand on one of its dates. All requested stations share the schedule and routing reads. Planning
 ignores today's station closures and kept-open extensions. Every active station, including the default, answers dated department ranges through the same
-planner; `StationServiceTimes` carries only `days`. Managers' Calendar day boxes reuse the same
-passive batch (or the selected station's read), including over Year; viewers read neither. A deleted station's id is refused
-(`station.not_found`). The default station's staffing guides also show scheduled demand from
+planner. `StationServiceTimes` carries only `days`. Calendar day boxes reuse the same passive
+batch or selected station read for managers and viewers. Year always uses the batch. A deleted station's
+id is refused (`station.not_found`). The default station's staffing guides also show scheduled demand from
 period menus and untimed routes.
 
 2026-11-15, A1539: All prep stations uses `stationsServiceTimes` to read every active station in

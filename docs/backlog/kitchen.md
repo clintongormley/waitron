@@ -178,8 +178,9 @@ the change (plan PR 8 Decision 1).
 **Owner decisions, 2026-10-15; implemented 2026-10-17.**
 
 - Prep stations follows Departments and zones in the sidebar. It has Stations and Routes tabs.
-  You view planned station times through Calendar's Show picker; its existing
-  `venue.configure` permission stays. A supervisor's read-only view is queued under [SETTLED-SMALL](till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet).
+  **2026-11-25:** Supervisors read planned station times in the Calendar's Show picker under the
+  watcher's reading of A506-12. Choosing one station also shows its Changes after sending rule
+  under the owner's A1079 answer B. The Prep stations page still needs `venue.configure`.
 - Station lists use names, with the default station in its alphabetical place and its Default label
   retained. Stations have no hand-set order, reorder route or stored order column. Courses and
   zones keep their own order.
@@ -259,6 +260,8 @@ the change (plan PR 8 Decision 1).
   _2026-11-15, A1546 slice 1: Calendar uses Closed in place of No orders; station comparisons
   group sender rows under station headings. See the current Calendar contract in
   [design-system.md](../developers/design-system.md#calendar)._
+  **2026-11-25:** The owner chose one row with joined hours per station in Calendar. See the
+  [current station view](../developers/design-system.md#worked-out-prep-station-times).
 
 - After approval the owner ruled that a dish made at the till is never held and the till lists
   what to make ("Make now").

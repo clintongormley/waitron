@@ -14,27 +14,15 @@ afterEach(() => {
   setLocale("en");
 });
 
-/** The Grill's month: both departments send it orders, neither on 3 December. */
+const STATIONS = [{ id: "grill", name: "Grill", colour: "red" }] as const;
 function grill(): StationShow {
   const model = monthModel();
-  return {
-    id: "grill",
-    state: "ready",
-    model: {
-      ...model,
-      days: model.days.map((day) => ({
-        ...day,
-        departments: day.departments.map((d) => ({
-          departmentId: d.departmentId,
-          zones: [],
-          ranges: day.date === "2026-12-03" ? [] : d.ranges,
-        })),
-      })),
-    },
-    departments: DEPARTMENTS.map(({ id, name, periods }) => ({ id, name, zones: [], periods })),
-  };
+  const days = model.days.map((day) => ({
+    date: day.date,
+    departments: day.date === "2026-12-03" ? [] : day.departments,
+  }));
+  return { id: "grill", state: "ready", ...stationShowModel(model, { days }, STATIONS[0])! };
 }
-const STATIONS = [{ id: "grill", name: "Grill" }];
 
 function contrastRatio(a: string, b: string): number {
   const luminance = (rgb: string) => {
@@ -85,20 +73,14 @@ const states: Record<
   Spanish: { props: { date: "2026-12-08", departmentId: "rest" }, shown: [".name.holiday"] },
   "a station's Week": {
     props: { date: "2026-12-02", stations: STATIONS, station: grill() },
-    shown: ['[data-test="no-orders"]', ".block", ".track:not(:has(.block))", "wt-combobox"],
+    shown: ['[data-test="no-orders"]', ".block", "wt-combobox"],
   },
   "all prep stations": {
     props: {
       date: "2026-12-09",
       stations: STATIONS,
       show: "stations",
-      station: {
-        ...grill(),
-        id: "",
-        state: "ready",
-        model: monthModel(),
-        departments: DEPARTMENTS.map((row) => ({ ...row, station: true })),
-      },
+      station: { ...grill(), id: "" },
     },
     shown: ['wt-icon[name="prep-station"]', ".block", "wt-combobox"],
   },
@@ -126,36 +108,19 @@ describe.each(["light", "dark"] as const)("Opening hours week accessibility (%s)
     ).toBeGreaterThanOrEqual(1.4);
   });
 
-  test.each([390, 1280])("grouped station senders at %s pixels", async (width) => {
+  test.each([390, 1280])("one row per station at %s pixels", async (width) => {
     await page.viewport(width, 800);
-    const model = monthModel();
-    const grouped = stationShowModel(
-      model,
-      { days: model.days.map((day) => ({ date: day.date, departments: day.departments })) },
-      STATIONS[0]!,
-      DEPARTMENTS.flatMap((department) =>
-        department.periods.map((period) => ({
-          ...period,
-          departmentId: department.id,
-          departmentName: department.name,
-        })),
-      ),
-      "station",
-    )!;
     const el = await mountWeek(theme, {
       date: "2026-12-02",
       stations: STATIONS,
       show: "stations",
-      station: {
-        id: "",
-        state: "ready",
-        ...grouped,
-        departments: grouped.departments.map((row) => ({ ...row, station: true })),
-      },
+      station: { ...grill(), id: "" },
     });
-    expect(el.shadowRoot!.querySelector(".station-heading")?.textContent).toContain("Grill");
-    expect(el.shadowRoot!.querySelectorAll("[data-station-child]")).toHaveLength(
-      width === 390 ? 2 : 14,
+    expect(el.shadowRoot!.querySelector('[data-row="grill"] .row-name')?.textContent).toContain(
+      "Grill",
+    );
+    expect(el.shadowRoot!.querySelectorAll('[data-row="grill"]')).toHaveLength(
+      width === 390 ? 1 : 7,
     );
     await expectNoA11yViolations(host);
   });

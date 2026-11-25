@@ -13,6 +13,7 @@ import { FIRST_MONTH, LAST_MONTH, mondayOf } from "./calendar-grid.js";
 import { format } from "./hours-view.js";
 import { chosenDepartment, type MonthNames } from "./opening-hours-day.js";
 import { t } from "./strings.js";
+import { placedStationRanges } from "./station-show.js";
 
 type Day = OpeningHoursMonth["days"][number];
 
@@ -60,8 +61,6 @@ export interface WeekBlock {
 
 export interface WeekRow {
   station?: boolean;
-  stationHeading?: string;
-  stationGroup?: string;
   key: string;
   name: string;
   zone: boolean;
@@ -145,26 +144,21 @@ export function weekRows(day: Day, chosen: string, names: MonthNames): WeekRow[]
     });
 }
 
-/** A prep station's rows retain sending-department identity and period detail. */
 export function weekStationRows(day: Day, names: MonthNames): WeekRow[] {
-  const place = placeOnDay(day);
-  return day.departments.map((read) => {
-    const name = names.name(read.departmentId);
-    const blocks = departmentBlocks(read, place, names);
+  return day.departments.map(({ departmentId, ranges }) => {
+    const blocks = placedStationRanges(day, ranges, departmentId).map((range) => ({
+      ...range,
+      text: format("day.open_range", { start: range.startsAt, end: range.endsAt }),
+      faded: false,
+    }));
     return {
-      key: read.departmentId,
-      name,
-      ...(names.station(read.departmentId) ? { station: true } : {}),
-      ...(names.stationHeading(read.departmentId)
-        ? { stationHeading: names.stationHeading(read.departmentId) }
-        : {}),
-      ...(names.stationGroup(read.departmentId) !== undefined
-        ? { stationGroup: names.stationGroup(read.departmentId) }
-        : {}),
+      key: departmentId,
+      name: names.name(departmentId),
+      station: true,
       zone: false,
       strong: true,
       blocks,
-      empty: names.station(read.departmentId) ? t("month.no_orders") : "",
+      empty: t("month.no_orders"),
       words: blocks.length ? blocks.map((block) => block.text).join(" · ") : t("month.no_orders"),
     };
   });

@@ -719,17 +719,9 @@ the owner's redesign.
 
 ## SETTLED-SMALL. Small answers the owner gave that are not built yet
 
-Queued as SETTLED-SMALL (lane I), in two or three pull requests by screen. Some are the owner's own
+Queued as SETTLED-SMALL (lane F), in two or three pull requests by screen. Some are the owner's own
 answers; where an entry says a rule is read across, the owner was not asked that point.
 
-- **A1079. A supervisor may read a station's "Changes after sending", and not change it** (owner's
-  picker answer B, 2026-10-25). Since #2044 the setting lives only in the station editor, which needs
-  `venue.configure`; only `venue_service.manage` changes it.
-- **A supervisor may read a station's service times (ASK A1 of A506-12).** The same answer, read
-  across by the watcher. A read-only Calendar offers no stations today, and A455 (the owner's answer
-  35, October) took the Prep stations page away from supervisors, so the times go in the read-only
-  Calendar's Show. The stations service-times route already lets `venue.view` read them
-  (`packages/venue-service/src/routes.ts`).
 - **A1080. In a save holding several problem dishes, "already started" always wins** (owner's picker
   answer B, 2026-10-25): `ticket.already_fired` answers only when no dish in the save has started.
   `apps/server/src/working-order-line-edits.ts` still checks dish by dish
@@ -1700,7 +1692,7 @@ payment belongs to the table, so no payment is lost.
 - **Task 15 (#956, several payments on the till).** Open:
   - The table's button is labelled with the whole sentence "Part of
     this bill is already paid: take the rest as a bill payment", while the counter's says "Take
-    the rest". Queued under SETTLED-SMALL (lane I): "Take the rest" on both.
+    the rest". Queued under SETTLED-SMALL (lane F): "Take the rest" on both.
   - Giving money back after the invoice stays out of scope for `BillPaymentView` (bill payments
     design §6).
 

@@ -1,18 +1,16 @@
 import { compareStationNames } from "@waitron/shared";
-import type { LocalDate } from "../hours-types.js";
+import type { CalendarColour, LocalDate } from "../hours-types.js";
 import { addDays, weekdayOf } from "../hours-rules.js";
 import type { OpeningHoursMonth } from "../opening-hours-calendar.js";
-import type { RoutingPeriod } from "../routing-types.js";
+import type { ServiceRange } from "../service-day.js";
+import { joinPlacedRanges, placeOnDay } from "../zone-own-hours.js";
 import type { StationServiceTimes } from "../station-service-times.js";
 import type { MonthDepartment } from "./opening-hours-month.js";
 
-export type TimesPeriod = Pick<
-  RoutingPeriod,
-  "id" | "departmentId" | "departmentName" | "name" | "colour"
->;
 export interface ShowStation {
   id: string;
   name: string;
+  colour: CalendarColour;
 }
 export type StationShow =
   | { id: string; state: "loading" }
@@ -32,8 +30,6 @@ export function activeStationsInOrder<Station extends { active: boolean; name: s
     .sort((a, b) => compareStationNames(a.name, b.name));
 }
 
-const minutes = (time: string) => Number(time.slice(0, 2)) * 60 + Number(time.slice(3, 5));
-
 /** The whole Monday-to-Sunday weeks covering `month`, worked out as `readOpeningHoursMonth` does, so
  *  the station read starts beside the month read; `stationShowModel` still checks the dates agree. */
 export function monthWeeks(month: string): [LocalDate, LocalDate] {
@@ -42,61 +38,42 @@ export function monthWeeks(month: string): [LocalDate, LocalDate] {
   return [addDays(first, -((weekdayOf(first) + 6) % 7)), addDays(last, (7 - weekdayOf(last)) % 7)];
 }
 
-/** Both reads must cover the same dates; sending departments keep the month read's order. */
+/** The dates must match before the sending ranges are paired with their business-day bounds. */
 export function stationShowModel(
   meta: OpeningHoursMonth,
   times: StationServiceTimes,
-  station: ShowStation,
-  periods: readonly TimesPeriod[],
-  rowsBy: "station" | "department",
+  { id, name, colour }: ShowStation,
 ): { model: OpeningHoursMonth; departments: MonthDepartment[] } | undefined {
   if (
     times.days.length !== meta.days.length ||
     times.days.some((day, index) => day.date !== meta.days[index]!.date)
   )
     return undefined;
-  const order = meta.days[0]!.departments.map((row) => row.departmentId);
-  const rank = (id: string) => (order.includes(id) ? order.indexOf(id) : order.length);
-  const fed = [
-    ...new Set(times.days.flatMap((day) => day.departments.map((row) => row.departmentId))),
-  ].sort((a, b) => rank(a) - rank(b));
-  const grouped = rowsBy === "station" && fed.length > 1;
-  const perDepartment = rowsBy === "department" || grouped;
-  const key = (id: string) => (grouped ? `${station.id}:${id}` : id);
-  const rows = perDepartment ? fed : [station.id];
-  const model: OpeningHoursMonth = {
-    ...meta,
-    days: meta.days.map((day, index) => {
-      const cutover = minutes(day.dayCutover);
-      const offset = (time: string) => (minutes(time) - cutover + 1440) % 1440;
-      const sent = times.days[index]!.departments;
-      return {
+  return {
+    model: {
+      ...meta,
+      days: meta.days.map((day, index) => ({
         ...day,
-        departments: rows.map((id) => ({
-          departmentId: key(id),
-          zones: [],
-          ranges: sent
-            .filter((row) => !perDepartment || row.departmentId === id)
-            .flatMap((row) => row.ranges)
-            .sort((a, b) => offset(a.startsAt) - offset(b.startsAt)),
-        })),
-      };
-    }),
+        departments: [
+          {
+            departmentId: id,
+            zones: [],
+            ranges: times.days[index]!.departments.flatMap((sender) => sender.ranges),
+          },
+        ],
+      })),
+    },
+    departments: [{ id, name, station: true, zones: [], periods: [{ id, name: "", colour }] }],
   };
-  const plain = ({ id, name, colour }: TimesPeriod) => ({ id, name, colour });
-  const departments: MonthDepartment[] = perDepartment
-    ? fed.map((id) => ({
-        id: key(id),
-        ...(grouped
-          ? {
-              stationGroup: station.name,
-              ...(id === fed[0] ? { stationHeading: station.name } : {}),
-            }
-          : {}),
-        name: periods.find((period) => period.departmentId === id)?.departmentName ?? "",
-        zones: [],
-        periods: periods.filter((period) => period.departmentId === id).map(plain),
-      }))
-    : [{ id: station.id, name: station.name, zones: [], periods: periods.map(plain) }];
-  return { model, departments };
+}
+
+export function placedStationRanges(
+  day: OpeningHoursMonth["days"][number],
+  ranges: readonly ServiceRange[],
+  stationId: string,
+) {
+  return joinPlacedRanges(ranges.map(placeOnDay(day))).map((range) => ({
+    ...range,
+    periodId: stationId,
+  }));
 }
