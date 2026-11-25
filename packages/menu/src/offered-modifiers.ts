@@ -1,4 +1,4 @@
-import { extraDeclarationValues } from "./product-declarations.js";
+import { extraDeclarationValues } from "./declaration-values.js";
 import {
   customerPresentationText,
   joinCustomerPresentationText,

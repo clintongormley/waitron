@@ -11,6 +11,7 @@ import {
   section,
   type MenusFixture,
 } from "../test/menus-fixture.js";
+import { productDeclarationValues, type DeclarationValues } from "./declaration-values.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { writeProductModifiers } from "./product-modifiers.js";
 import { addMember, createSectionIn } from "./sections.js";
@@ -22,13 +23,18 @@ import { readMenuStructure } from "./menu-structure.js";
 import {
   applyMenuPatch,
   declarationProductIds,
+  declarationsFor,
   fixedLanguages,
   parseMenuPatch,
   patchFieldValue,
 } from "./menu-patch.js";
-import { queuedCorrections, queuedDeclarationDrift } from "./menu-patch-declarations.js";
+import {
+  liveDeclarations,
+  queuedChanges,
+  queuedCorrections,
+  queuedDeclarationDrift,
+} from "./menu-patch-declarations.js";
 import { PATCH_FIELDS, type MenuPatchChange, type MenuPatchTarget } from "./menu-patch-types.js";
-import { productDeclarationValues, type DeclarationValues } from "./product-declarations.js";
 import { addSetMenuDishes } from "./set-menus.js";
 import type { DocumentMember, FrozenOfferedModifier, MenuDocument } from "@waitron/shared";
 
@@ -153,7 +159,7 @@ describe("applyMenuPatch", () => {
     });
   });
 
-  it("patching a dish leaves every variant as it was", async () => {
+  it("patching a dish leaves every variant as it was, but for its declarations", async () => {
     const { f, document } = await liveLunch();
     const lemonade = await menuItem(f, f.lemonade);
     const target = { kind: "offer", menuItemId: lemonade };
@@ -175,9 +181,14 @@ describe("applyMenuPatch", () => {
         })),
       ),
       languages,
-      new Map([[f.lemonade, MILK]]),
+      new Map([
+        [f.lemonade, MILK],
+        [f.large, NUTS],
+      ]),
     );
-    expect(patched.offers[lemonade]!.variants).toEqual(document.offers[lemonade]!.variants);
+    expect(patched.offers[lemonade]!.variants).toEqual(
+      document.offers[lemonade]!.variants.map((variant) => ({ ...variant, ...NUTS })),
+    );
     expect(patched.offers[lemonade]).toMatchObject({
       name: "Lemon soda",
       customerName: { en: "Fizzy lemon" },
@@ -1034,6 +1045,26 @@ describe("declarations", () => {
     expect(patched.offers[soup]).toEqual(document.offers[soup]);
   });
 
+  it("a dish's declarations take every copy's variants, each with its own values", async () => {
+    const { f, document, targets } = await lunchWithSetMenu();
+    const patched = applyMenuPatch(
+      document,
+      declarations(targets.dish),
+      languages,
+      new Map([
+        [f.lemonade, MILK],
+        [f.large, NUTS],
+      ]),
+    );
+    const dishes = offers(patched).filter(({ productId }) => productId === f.lemonade);
+    expect(dishes).toHaveLength(2);
+    for (const dish of dishes) {
+      expect(dish).toMatchObject(MILK);
+      expect(dish.variants).toHaveLength(1);
+      expect(dish.variants[0]).toMatchObject({ id: f.large, ...NUTS });
+    }
+  });
+
   it("copies an unreviewed product's allergens as null", async () => {
     const { f, document, targets } = await lunchWithSetMenu();
     const unreviewed = productDeclarationValues();
@@ -1043,6 +1074,7 @@ describe("declarations", () => {
       languages,
       new Map([
         [f.lemonade, unreviewed],
+        [f.large, unreviewed],
         [f.extraLemon, unreviewed],
       ]),
     );
@@ -1091,7 +1123,7 @@ describe("declarations", () => {
   it("names the products a declarations change copies from, and no other change's", async () => {
     const { f, document, targets } = await lunchWithSetMenu();
     const ids = (...changes: MenuPatchChange[]) => declarationProductIds(document, changes);
-    expect(ids(...declarations(targets.dish))).toEqual([f.lemonade]);
+    expect(ids(...declarations(targets.dish))).toEqual([f.lemonade, f.large]);
     expect(ids(...declarations(targets.variant))).toEqual([f.large]);
     expect(ids(...declarations(targets.extra))).toEqual([f.extraLemon]);
     expect(ids({ target: targets.dish, field: "price", value: "2.00" })).toEqual([]);
@@ -1104,7 +1136,12 @@ describe("declarations", () => {
       document: MenuDocument,
       live: MenuDocument,
       current: ReadonlyMap<string, DeclarationValues>,
-    ) => queuedDeclarationDrift([{ versionId: "v2", activatesAt: AT, document }], live, current);
+    ) =>
+      queuedDeclarationDrift(
+        [{ versionId: "v2", activatesAt: AT, document }],
+        current,
+        liveDeclarations(live),
+      );
     const listed = (...targets: { target: MenuPatchTarget; stillOld: boolean }[]) => [
       { versionId: "v2", activatesAt: AT.toISOString(), targets },
     ];
@@ -1135,14 +1172,17 @@ describe("declarations", () => {
         listed({ target: targets.dish, stillOld: true }),
       );
       expect(drift(document, document, allOf(f, { variant: NUTS }))).toEqual(
-        listed({ target: targets.variant, stillOld: true }),
+        listed(
+          { target: targets.dish, stillOld: true },
+          { target: targets.variant, stillOld: true },
+        ),
       );
       expect(drift(document, document, allOf(f, { extra: EGGS }))).toEqual(
         listed({ target: targets.extra, stillOld: true }),
       );
     });
 
-    it("stillOld is true only when every differing copy holds the live version's value", async () => {
+    it("stillOld is true only when every differing copy holds the live version's value of its product", async () => {
       const { f, document, targets } = await lunchWithSetMenu();
       const current = allOf(f, { dish: MILK });
       const stillOld = (queued: MenuDocument, live = document) =>
@@ -1164,9 +1204,71 @@ describe("declarations", () => {
 
       const lacking = structuredClone(document);
       delete lacking.setMenus;
-      expect(stillOld(document, lacking)).toBe(false);
       expect(drift(document, lacking, current)).toEqual(
+        listed({ target: targets.dish, stillOld: true }),
+      );
+      expect(drift(document, lacking, allOf(f, { extra: EGGS }))).toEqual(
+        listed({ target: targets.extra, stillOld: true }),
+      );
+    });
+
+    it("stillOld is false when the live version's own copies disagree", async () => {
+      const { f, document, targets } = await lunchWithSetMenu();
+      for (const copyOf of [
+        (live: MenuDocument) => live.offers[targets.dish.menuItemId]!,
+        (live: MenuDocument) => setMenuOffers(live)[0]!,
+      ]) {
+        const live = structuredClone(document);
+        Object.assign(copyOf(live), NUTS);
+        expect(drift(document, live, allOf(f, { dish: MILK }))).toEqual(
+          listed({ target: targets.dish, stillOld: false }),
+        );
+      }
+    });
+
+    it("a variant's third value unticks its dish too", async () => {
+      const { f, document, targets } = await lunchWithSetMenu();
+      const queued = structuredClone(document);
+      Object.assign(setMenuOffers(queued)[0]!.variants[0]!, NUTS);
+      expect(drift(queued, document, allOf(f, { dish: MILK, variant: MILK }))).toEqual(
+        listed(
+          { target: targets.dish, stillOld: false },
+          { target: targets.variant, stillOld: false },
+        ),
+      );
+    });
+
+    it("lists a variant the live version lacks under its dish alone, unticked", async () => {
+      const { f, document, targets } = await lunchWithSetMenu();
+      const live = structuredClone(document);
+      for (const offer of offers(live)) offer.variants = [];
+      expect(drift(document, live, allOf(f, { variant: NUTS }))).toEqual(
         listed({ target: targets.dish, stillOld: false }),
+      );
+    });
+
+    it("takes its targets and old values from the lookup alone, for a menu with no live version", async () => {
+      const { f, document, targets } = await lunchWithSetMenu();
+      const before = allOf(f, {});
+      const bySave = (document: MenuDocument) =>
+        queuedDeclarationDrift(
+          [{ versionId: "v2", activatesAt: AT, document }],
+          allOf(f, { dish: MILK, extra: EGGS }),
+          ({ target, productId }) => ({
+            target,
+            values: declarationsFor(target.kind, before.get(productId)!),
+          }),
+        );
+      expect(bySave(document)).toEqual(
+        listed({ target: targets.dish, stillOld: true }, { target: targets.extra, stillOld: true }),
+      );
+      const thirdValue = structuredClone(document);
+      Object.assign(thirdValue.offers[targets.dish.menuItemId]!, NUTS);
+      expect(bySave(thirdValue)).toEqual(
+        listed(
+          { target: targets.dish, stillOld: false },
+          { target: targets.extra, stillOld: true },
+        ),
       );
     });
 
@@ -1192,23 +1294,65 @@ describe("declarations", () => {
       expect(drift(both, document, new Map([...allOf(f, {}), [f.soup, current]]))).toEqual([]);
     });
 
+    const corrections = (
+      document: MenuDocument,
+      live: MenuDocument,
+      changes: readonly MenuPatchChange[],
+      current: ReadonlyMap<string, DeclarationValues>,
+    ) =>
+      queuedCorrections(
+        [
+          {
+            versionId: "v2",
+            contentHash: menuDocumentHash(document),
+            document,
+            changes: queuedChanges(document, live, changes),
+          },
+        ],
+        languages,
+        current,
+      );
+
+    it("corrects a variant and an extra alone, not the same extra in another list", async () => {
+      const { f, document: live, targets } = await lunchWithSetMenu();
+      const queued = structuredClone(live);
+      const lists = queued.offers[targets.dish.menuItemId]!.offeredModifiers;
+      const extras = lists.find(({ kind }) => kind === "extras")!;
+      lists.unshift({ ...structuredClone(extras), id: "other-list" });
+      const corrected = corrections(
+        queued,
+        live,
+        declarations(targets.variant, targets.extra),
+        allOf(f, { dish: MILK, variant: NUTS, extra: EGGS }),
+      ).get("v2")!;
+      const expected = structuredClone(queued);
+      for (const offer of offers(expected))
+        if (offer.productId === f.lemonade) {
+          Object.assign(offer.variants[0]!, NUTS);
+          for (const list of offer.offeredModifiers)
+            if (list.kind === "extras" && list.id === f.extrasList)
+              Object.assign(
+                list.items.find(({ productId }) => productId === f.extraLemon)!,
+                declarationsFor("extra", EGGS),
+              );
+        }
+      expect(corrected).toEqual(expected);
+      expect(extraItems(corrected, f.extraLemon)).toHaveLength(3);
+    });
+
     it("corrects the copies a queued version holds, wherever it holds the product", async () => {
       const { f, document: live, targets } = await lunchWithSetMenu();
       const queued = structuredClone(live);
       delete queued.offers[targets.dish.menuItemId];
+      const changes = [
+        ...declarations(targets.dish, targets.soup),
+        { target: targets.soup, field: "price", value: "9.00" },
+      ];
       const correct = (document: MenuDocument) =>
-        queuedCorrections(
-          [{ versionId: "v2", contentHash: menuDocumentHash(document), document }],
-          live,
-          [
-            ...declarations(targets.dish, targets.soup),
-            { target: targets.soup, field: "price", value: "9.00" },
-          ],
-          languages,
-          allOf(f, { dish: MILK }),
-        );
+        corrections(document, live, changes, allOf(f, { dish: MILK, variant: NUTS }));
       const corrected = correct(queued).get("v2")!;
       expect(setMenuOffers(corrected)[0]).toMatchObject({ productId: f.lemonade, ...MILK });
+      expect(setMenuOffers(corrected)[0]!.variants[0]).toMatchObject(NUTS);
       expect(corrected.offers).toEqual(queued.offers);
       const without = structuredClone(queued);
       delete without.setMenus;

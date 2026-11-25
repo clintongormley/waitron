@@ -4,12 +4,6 @@ import { batches } from "./batches.js";
 import { productDeclarationValues, type DeclarationValues } from "./declaration-values.js";
 import { effectiveProductColumns, parentJoin, parentProducts } from "./variant-fallback.js";
 
-export {
-  extraDeclarationValues,
-  productDeclarationValues,
-  type DeclarationValues,
-} from "./declaration-values.js";
-
 /** The products' values now, a variant's blank ones taken from its parent. */
 export async function readProductDeclarationValues(
   tx: Transaction,

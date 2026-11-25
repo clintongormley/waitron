@@ -6,7 +6,7 @@ import type {
   SetMenuFrozenOffer,
 } from "@waitron/shared";
 import { onceLiveVersionsAfter, readRecordedDocuments } from "./menu-publication.js";
-import { productDeclarationValues, type DeclarationValues } from "./product-declarations.js";
+import { productDeclarationValues, type DeclarationValues } from "./declaration-values.js";
 
 export interface PublishedLine {
   id: string;

@@ -1,4 +1,4 @@
-import { productDeclarationValues } from "./product-declarations.js";
+import { productDeclarationValues } from "./declaration-values.js";
 import { nameOf } from "./section-members.js";
 import { combineOffer } from "./menu-combine.js";
 import { includedMenus, placesOf } from "./menu-inclusion.js";

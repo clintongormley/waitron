@@ -27,7 +27,7 @@ import {
 import { reachableProducts } from "./section-graph.js";
 import { readContentLanguages } from "./content-languages.js";
 import { applyMenuPatch, declarationProductIds, parseMenuPatch } from "./menu-patch.js";
-import { queuedCorrections } from "./menu-patch-declarations.js";
+import { queuedChanges, queuedCorrections } from "./menu-patch-declarations.js";
 import type { LiveMenu, MenuPatchResult } from "./menu-patch-types.js";
 import { mediaImageExists } from "./sections.js";
 import { menuExists } from "./operations.js";
@@ -832,20 +832,20 @@ export async function patchLiveMenu(
         field: "image",
         reason: "image.not_found",
       });
-  const declarations = await readProductDeclarationValues(
-    tx,
-    declarationProductIds(live.document!, parsed),
-  );
+  const waiting = await waitingEditions(tx, menuId, at);
+  const named = waiting
+    .filter(({ versionId }) => options.queued?.includes(versionId))
+    .map((edition) => ({
+      ...edition,
+      changes: queuedChanges(edition.document, live.document!, parsed),
+    }));
+  const declarations = await readProductDeclarationValues(tx, [
+    ...declarationProductIds(live.document!, parsed),
+    ...named.flatMap(({ document, changes }) => declarationProductIds(document, changes)),
+  ]);
   const languages = await readContentLanguages(tx, options.fallbackLanguage ?? FALLBACK_LOCALE);
   const document = applyMenuPatch(live.document!, parsed, languages, declarations);
-  const waiting = await waitingEditions(tx, menuId, at);
-  const corrections = queuedCorrections(
-    waiting.filter(({ versionId }) => options.queued?.includes(versionId)),
-    live.document!,
-    parsed,
-    languages,
-    declarations,
-  );
+  const corrections = queuedCorrections(named, languages, declarations);
   const contentHash = menuDocumentHash(document);
   const unchanged = contentHash === live.contentHash;
   if (unchanged && corrections.size === 0) throw new AppError("menu_patch.unchanged", { menuId });

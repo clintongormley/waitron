@@ -28,6 +28,7 @@ import {
 import { menuDocumentHash } from "./menu-document.js";
 import { readPatchDraft } from "./menu-patch-draft.js";
 import { updateProduct } from "./operations.js";
+import { listProductVariants, setProductVariants } from "./variants.js";
 import { writeContentLanguages } from "./content-languages.js";
 
 const fx = useMenuDb();
@@ -619,6 +620,55 @@ describe("declarations", () => {
       code: "menu_patch.unchanged",
       params: { menuId: f.lunch },
     });
+  });
+
+  it("a dish's change corrects its variants, live and in a named queued version holding one more", async () => {
+    const lemonade = await offerTarget(f.lemonade);
+    await app(async (tx) => {
+      const variants = await listProductVariants(tx, f.lemonade);
+      const medium = {
+        name: "Medium",
+        customerName: null,
+        kitchenName: null,
+        image: null,
+        unitPrice: "3.25",
+        available: true,
+      };
+      await setProductVariants(tx, f.lemonade, [...variants, medium], "en");
+    });
+    await queue(day(8));
+    await declareMilk(f.lemonade);
+    const [listed] = (await draft())!.queued;
+    expect(listed!.targets).toEqual([
+      { target: lemonade, stillOld: false },
+      { target: { ...lemonade, kind: "variant", variantId: f.large }, stillOld: true },
+    ]);
+    const { versionId, requeued } = await patchQueued(
+      [declarations(lemonade)],
+      [listed!.versionId],
+    );
+    const variantAllergens = async (id: string) =>
+      (await versionRow(id)).document.offers[lemonade.menuItemId]!.variants.map(
+        ({ name, allergens }) => ({ name, allergens }),
+      );
+    const milk = { milk: {} };
+    expect(await variantAllergens(versionId)).toEqual([{ name: "Large", allergens: milk }]);
+    expect(await variantAllergens(requeued[0]!.versionId)).toEqual([
+      { name: "Large", allergens: milk },
+      { name: "Medium", allergens: milk },
+    ]);
+    expect((await draft())!.queued).toEqual([]);
+  });
+
+  it("readPatchDraft lists no queued version that is due but not yet settled", async () => {
+    await setSoup("5.50");
+    await queue(day(8));
+    await setSoup("6.00");
+    const later = await queue(day(9));
+    await declareMilk(f.soup);
+    const due = (await app((tx) => readPatchDraft(tx, f.lunch, day(8))))!;
+    expect(due.number).toBe(2);
+    expect(due.queued.map(({ versionId }) => versionId)).toEqual([later.versionId]);
   });
 
   it("readPatchDraft answers the live version and each queued version that differs", async () => {

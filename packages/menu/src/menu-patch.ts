@@ -180,8 +180,12 @@ function locate(
   let located: Located;
   switch (target.kind) {
     case "offer": {
+      const offers = offersOf(target.menuItemId);
       located = {
-        copies: offersOf(target.menuItemId),
+        copies:
+          field === "declarations"
+            ? offers.flatMap((offer): Copy[] => [offer, ...offer.variants])
+            : offers,
         priceKey: "unitPrice",
         priceMirror: "grossPrice",
       };
@@ -254,20 +258,18 @@ export function declarationsFor(kind: MenuPatchTarget["kind"], values: Declarati
   return kind === "extra" ? extraDeclarationValues(values) : { ...values };
 }
 
-const declarationProductId = (kind: MenuPatchTarget["kind"], copy: Copy): string =>
-  (kind === "variant" ? copy.id : copy.productId) as string;
+/** A variant copy's product is its own id. */
+const declarationProductId = (copy: Copy): string => (copy.productId ?? copy.id) as string;
 
-/** The product ids a list's declarations changes copy from: the offer copies' productId, the
- * variant's id, the extra's productId. */
+/** The product ids a list's declarations changes copy from: the offer copies' productId and their
+ * variants' ids, the variant's id, the extra's productId. */
 export function declarationProductIds(
   document: MenuDocument,
   changes: readonly MenuPatchChange[],
 ): string[] {
   const ids = changes.flatMap(({ target, field }) =>
     field === "declarations"
-      ? (locate(document, target, field)?.copies ?? []).map((copy) =>
-          declarationProductId(target.kind, copy),
-        )
+      ? (locate(document, target, field)?.copies ?? []).map(declarationProductId)
       : [],
   );
   return [...new Set(ids)];
@@ -363,7 +365,7 @@ export function applyMenuPatch(
         if (located.priceMirror !== undefined && copy[located.priceMirror] !== null)
           copy[located.priceMirror] = price;
       } else if (field === "declarations") {
-        const values = declarations?.get(declarationProductId(target.kind, copy));
+        const values = declarations?.get(declarationProductId(copy));
         if (values === undefined) throw invalid(index, field);
         Object.assign(copy, declarationsFor(target.kind, values));
       } else {

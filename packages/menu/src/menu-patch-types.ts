@@ -43,8 +43,8 @@ export interface LiveMenu {
 export interface QueuedDeclarationDrift {
   versionId: string;
   activatesAt: string;
-  /** The live version's targets whose copies here differ; `stillOld` when every differing copy
-   * holds what the live version's same copy holds. */
+  /** The targets whose copies here differ, a dish's including its variants; `stillOld` when every
+   * differing copy holds the value being corrected. */
   targets: { target: MenuPatchTarget; stillOld: boolean }[];
 }
 

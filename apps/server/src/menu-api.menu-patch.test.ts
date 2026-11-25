@@ -241,16 +241,27 @@ describe("reading and patching a menu's live version", () => {
         targets: [{ target, stillOld: true }],
       })),
     );
-    for (const bad of [null, "x", [7], ["not-a-uuid"]])
+    const invalid = { code: "management.request_invalid", params: { field: "queued" } };
+    const badId = {
+      code: "shared.invalid_id",
+      params: { kind: "MenuVersionId", value: "not-a-uuid" },
+    };
+    for (const [bad, error] of [
+      [null, invalid],
+      ["x", invalid],
+      [[7], invalid],
+      [["not-a-uuid"], badId],
+    ])
       expect(
-        (
+        await json(
           await patch(app, menuId, {
             baseVersionId: base.versionId,
             changes: [declarations],
             queued: bad,
-          })
-        ).status,
-      ).toBe(400);
+          }),
+          400,
+        ),
+      ).toMatchObject({ error });
     const result = await json<MenuPatchResult>(
       await patch(app, menuId, {
         baseVersionId: base.versionId,

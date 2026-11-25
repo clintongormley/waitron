@@ -78,10 +78,14 @@ Lane's own calls, for the watcher to confirm:
   - A queued version is listed when one of its copies of the product (dish, variant, extra, set-menu
     copy) differs from the product's current declarations.
   - "Still has the old value" compares each differing copy with the value being corrected: after a
-    save, the product's declarations before that save; in Patch live menu, that copy's declarations
-    on the live version the patch is built on. Ticked when every differing copy equals it; a copy
-    holding anything else (someone already changed that version on purpose), or one the live version
-    lacks, leaves the menu unticked.
+    save, the product's declarations before that save; in Patch live menu, that product's (an
+    extra's: that product's in that list) declarations on the live version the patch is built on.
+    Ticked when every differing copy equals it; a copy holding anything else (someone already
+    changed that version on purpose), or of a product the live version lacks, leaves the menu
+    unticked. (Changed 2026-11-25 by lane A, put to the watcher: it read "that copy's declarations
+    on the live version", and any copy in a place the live version lacked left the menu unticked
+    although it still held the old value. Where the live version's own copies of one product
+    disagree, there is no one old value, so the menu is unticked.)
   - A ticked queued version is cancelled and queued again under a new number with the corrected
     document, at its own time, by `requeueAfter`, which already does that with the document
     unchanged. An unticked one is requeued as today. A menu with only a scheduled version goes
@@ -515,8 +519,8 @@ tests about +300.
     languages: ContentLanguages,
     declarations?: ReadonlyMap<string, DeclarationValues>, // by product id; required for a declarations change
   ): MenuDocument;
-  /** The product ids a list's declarations changes copy from: the offer copies' productId, the
-   * variant's id, the extra's productId. */
+  /** The product ids a list's declarations changes copy from: the offer copies' productId and
+   * their variants' ids, the variant's id, the extra's productId. */
   export function declarationProductIds(
     document: MenuDocument,
     changes: readonly MenuPatchChange[],
@@ -525,7 +529,11 @@ tests about +300.
 - `applyMenuPatch` for `declarations`: each dish copy takes the four fields of
   `declarations.get(copy.productId)`, each variant copy of `declarations.get(copy.id)`, each extra
   copy `extraDeclarationValues`'s two fields; a missing entry throws `menu_patch.invalid` with
-  `field: "declarations"`.
+  `field: "declarations"`. A dish's change also takes the variants of each copy it changes, each
+  from its own effective values, live and in a named queued version, and a variant's drift is
+  listed under its dish as well as under itself. (Changed 2026-11-25 by lane A, put to the watcher:
+  it changed the dish copies alone, so correcting a dish sold by its variants changed nothing a
+  guest can order.)
 - `patchLiveMenu` reads `readProductDeclarationValues(tx, declarationProductIds(...))` before
   applying.
 - `patchLiveMenu`'s options gain `queued?: readonly string[]` (version ids), and `requeueAfter`
@@ -536,7 +544,9 @@ tests about +300.
   version (A1151).
 - `GET` of the patch draft answers, for a `declarations` target, the queued versions that differ:
   `{ versionId, activatesAt, stillOld }[]` (the route the dialog already loads from; a pure
-  `queuedDeclarationDrift(queued, live, current)` in `menu-patch.ts`, also used by PR 3b).
+  `queuedDeclarationDrift(queued, current, correctedFrom)` in `menu-patch-declarations.ts`, also
+  used by PR 3b: `correctedFrom` gives each copy's target and old value, Patch passing
+  `liveDeclarations(live)`).
 
 - [ ] **Step 1: Failing tests.** `menu-patch.test.ts`: `declarations copies the product's values to
   the dish, its set-menu copies, a variant and an extra`; `refuses a declarations value other than
@@ -545,8 +555,8 @@ tests about +300.
   request is queued again at its own time with the corrected allergens, and one not named keeps its
   document`; `a price in the same patch does not reach the named queued version` (A1151); `an id
   that is not queued is ignored`. `menu-patch.test.ts`: `stillOld is true only when every differing
-  copy holds the live version's value` (a third value, and a copy the live version lacks, give
-  false).
+  copy holds the live version's value of its product` (a third value, a variant the live version
+  lacks, and live copies that disagree, give false; a copy in a place the live version lacks, true).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/menu exec vitest run src/menu-patch.test.ts src/menu-patch.live.test.ts`; FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run**; PASS. Commit `-s`.
