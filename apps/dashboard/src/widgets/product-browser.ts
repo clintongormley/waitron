@@ -1081,8 +1081,11 @@ export class ProductBrowser extends LitElement {
               </p>`
             : nothing
         }
-        ${clearProductSearch(this.#clearProductSearch, "no-matches-action")}
-        ${this.hiddenSave === null ? nothing : hiddenProductSave(this.hiddenSave, this.#clearProductSearch)}
+        ${
+          this.hiddenSave === null
+            ? clearProductSearch(this.#clearProductSearch, "no-matches-action")
+            : hiddenProductSave(this.hiddenSave, this.#clearProductSearch)
+        }
         ${productListActionFeedback(this.#actionNotice, !this.operation && !this.colorTarget)}
       </dashboard-product-list>
       ${this.#operationDialog()}<dashboard-category-color-form

@@ -1418,6 +1418,9 @@ describe("menu-screen", () => {
     await vi.waitFor(() => expect(notice()?.textContent).toContain("Toast"));
     expect(editor(el).open).toBe(false);
     expect(table.shadowRoot!.querySelector('tr[data-row-key="p1"]')).toBeNull();
+    expect(
+      page.getByRole("button", { name: t("product.clear_search_filters") }).elements(),
+    ).toHaveLength(1);
     notice()!.querySelector<HTMLElement>("wt-button")!.click();
     await vi.waitFor(() => expect(notice()).toBeNull());
     expect(search.value).toBe("");
