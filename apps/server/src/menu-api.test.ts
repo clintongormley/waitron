@@ -2564,7 +2564,7 @@ describe("mountMenuApi — products", () => {
       body: { ...value, unitPrice: null, courseId: null },
     });
     expect(cleared.status).toBe(200);
-    expect(await cleared.json()).toEqual({ ...read, unitPrice: null });
+    expect(await cleared.json()).toEqual({ ...read, unitPrice: null, declarationMenus: [] });
     expect(await stored()).toEqual(blank);
   });
 

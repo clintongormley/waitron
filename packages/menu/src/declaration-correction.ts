@@ -84,8 +84,18 @@ export async function findDeclarationDrift(
   before: ReadonlyMap<string, DeclarationValues>,
   at: Date = now(),
 ): Promise<DeclarationDrift[]> {
-  const ids = new Set(productIds);
   const current = await readProductDeclarationValues(tx, productIds);
+  return driftFrom(tx, productIds, before, current, at);
+}
+
+async function driftFrom(
+  tx: Transaction,
+  productIds: readonly string[],
+  before: ReadonlyMap<string, DeclarationValues>,
+  current: ReadonlyMap<string, DeclarationValues>,
+  at: Date,
+): Promise<DeclarationDrift[]> {
+  const ids = new Set(productIds);
   const live = await liveVersions(tx, undefined, "document", at);
   const queuedRows = await tx
     .select({
@@ -139,7 +149,7 @@ export async function waitingDeclarationMenus(
     (id) => canonicalJson(after.get(id) ?? null) === canonicalJson(before.get(id) ?? null),
   );
   if (unchanged) return [];
-  return (await findDeclarationDrift(tx, productIds, before)).map(
+  return (await driftFrom(tx, productIds, before, after, now())).map(
     ({ menuId, name, live, queued }) => ({
       menuId,
       name,
