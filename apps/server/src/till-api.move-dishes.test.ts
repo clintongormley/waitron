@@ -448,7 +448,7 @@ describe("A803 move dishes route:", () => {
     ["a hand-keyed card", { method: "card", entry: "manual" }],
     ["a reader card", { method: "card", entry: "reader" }],
   ])(
-    "a dish moved onto a bill whose Seafood rice is paid by item in %s leaves that payment as it was, and paying the rest files one invoice holding the moved dish and both payments",
+    "a dish moved onto a bill holding a part payment of its Seafood rice's price in %s leaves that payment as it was, and paying the rest files one invoice holding the moved dish and both payments",
     async (_, tender) => {
       const { partyId, tabId } = await seated("Seafood rice", "Small beer", "Steak", "Tarta");
       const { billId: destination } = await inTx(venue, (tx) =>
@@ -458,8 +458,8 @@ describe("A803 move dishes route:", () => {
         }),
       );
       const paid = await pay(destination, {
-        kind: "items",
-        lines: [{ lineNo: 1 }],
+        kind: "contribution",
+        amount: "35.00",
         applied: "35.00",
         ...tender,
       });
@@ -474,7 +474,6 @@ describe("A803 move dishes route:", () => {
       const after = await paymentsRead(destination);
       expect(after.json).toMatchObject({ total: "56.00", received: "35.00", outstanding: "21.00" });
       expect(after.json.payments).toEqual(before.json.payments);
-      expect(after.json.paidLines).toEqual(before.json.paidLines);
       expect(lineIdsOf(destination)).toContain(cakeLineId);
       expect(fiscalRecordCount(venue, destination)).toBe(0);
 

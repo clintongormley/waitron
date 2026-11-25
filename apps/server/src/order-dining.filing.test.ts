@@ -153,17 +153,17 @@ describe("a parked order paid whole", () => {
   });
 });
 
-describe("a takeaway bill paid in two item payments", () => {
-  const ask = (lineNo: number, amount: string) => ({
-    kind: "items",
-    lines: [{ lineNo }],
+describe("a takeaway bill paid in two amounts", () => {
+  const ask = (amount: string) => ({
+    kind: "contribution",
+    amount,
     method: "cash",
     tendered: amount,
     applied: amount,
     tip: "0.00",
   });
 
-  it("previews each payment at the line's gross and files the final invoice at the takeaway rates", async () => {
+  it("previews each payment at its amount and files the final invoice at the takeaway rates", async () => {
     const billId = await tab("takeaway", [menu.cola, menu.cheeseBoard]);
     const path = `/api/working-orders/${billId}/payments`;
 
@@ -172,12 +172,12 @@ describe("a takeaway bill paid in two item payments", () => {
       venue.cookie,
       "POST",
       `${path}/preview`,
-      ask(1, "1.80"),
+      ask("1.80"),
     );
     expect([firstPreview.status, firstPreview.json.applied]).toEqual([200, "1.80"]);
     const first = await send(venue.app, venue.cookie, "POST", path, {
       submissionId: randomUUID(),
-      ...ask(1, "1.80"),
+      ...ask("1.80"),
     });
     expect([first.status, first.json.invoice]).toEqual([200, undefined]);
 
@@ -186,12 +186,12 @@ describe("a takeaway bill paid in two item payments", () => {
       venue.cookie,
       "POST",
       `${path}/preview`,
-      ask(2, "4.00"),
+      ask("4.00"),
     );
     expect([secondPreview.status, secondPreview.json.applied]).toEqual([200, "4.00"]);
     const second = await send(venue.app, venue.cookie, "POST", path, {
       submissionId: randomUUID(),
-      ...ask(2, "4.00"),
+      ...ask("4.00"),
     });
     expect(second.status).toBe(200);
 

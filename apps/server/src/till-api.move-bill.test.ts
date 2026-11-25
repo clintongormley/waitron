@@ -12,7 +12,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { billPaymentLines, refunds as refundRows, saleLines, sales } from "@waitron/db";
+import { refunds as refundRows, saleLines, sales } from "@waitron/db";
 import { parkOrder } from "./working-order-open.js";
 import { createTable } from "./testing/live-table.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -54,8 +54,7 @@ useVenueDb({
 
 interface Body {
   submissionId?: string;
-  kind: "items" | "contribution" | "share";
-  lines?: { lineNo: number; quantity?: string }[];
+  kind: "contribution" | "share";
   amount?: string;
   method: "cash" | "card";
   entry?: "manual" | "reader";
@@ -471,35 +470,17 @@ describe("money on a moved bill", () => {
     expect(refunds).toEqual([{ state: "completed" }]);
   });
 
-  it("keeps an item paid for before the move applied to its line, and settles the rest in one invoice of both dishes", async () => {
+  it("keeps a part payment taken before the move, and settles the rest in one invoice of both dishes", async () => {
     const { secondParty, billId } = await splitAtTwoParties(
       ["Tarta", "Octopus", "Croquettes"],
       [2, 3],
     );
-    const paid = await pay(billId, {
-      kind: "items",
-      lines: [{ lineNo: 1 }],
-      method: "cash",
-      tendered: "20.00",
-      applied: "20.00",
-      tip: "0.00",
-    });
+    const paid = await cashContribution(billId, "20.00");
     expect(paid.status).toBe(200);
-    const paymentId = (paid.json.payment as { id: string }).id;
-    const [octopusLine] = venue.db.all<{ id: string }>(
-      sql`select id from working_order_lines where working_order_id = ${billId} and line_no = 1`,
-    );
 
     expect((await moveTo(billId, secondParty.tableId)).status).toBe(200);
-    const applied = await inTx(venue, (tx) =>
-      tx
-        .select({ lineId: billPaymentLines.lineId, amount: billPaymentLines.amount })
-        .from(billPaymentLines)
-        .where(eq(billPaymentLines.billPaymentId, paymentId)),
-    );
     const rest = await cashContribution(billId, "10.00");
 
-    expect(applied).toEqual([{ lineId: octopusLine!.id, amount: 2000 }]);
     expect(rest.json).toMatchObject({ outcome: "received", invoice: { total: "30.00" } });
     expect(await statusOf(venue, billId)).toBe("settled");
     const invoiced = await inTx(venue, (tx) =>
