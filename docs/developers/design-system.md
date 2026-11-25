@@ -3965,8 +3965,9 @@ trigger shows the arrow unless `inTable` is set and adds `inheritedSuffix` to th
 description if supplied.
 
 In Devices, equipment cells show choices fixed on each device. Where equipment applies, a blank
-cell follows that device's profile. Equipment columns sort by the resolved name. Screen readers
-hear the inherited label with “from the profile”. Edit puts the profile choice in the Inherit row.
+cell follows that device's profile. Equipment columns sort by the resolved name. Where equipment
+applies, screen readers hear the inherited label with “from the profile”. Edit puts the profile
+choice in the Inherit row.
 When another device holds the profile choice, the row says “Inherit: None”.
 
 #### Hints

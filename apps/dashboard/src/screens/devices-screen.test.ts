@@ -1864,13 +1864,16 @@ describe("the Edit dialog", () => {
     "after a deleted reader is refused, the device shows its stored reader %s again",
     async (stored) => {
       const api = editApi({
-        getDeviceReader: vi.fn().mockResolvedValue({ readerId: stored }),
+        getDeviceReader: vi
+          .fn()
+          .mockResolvedValueOnce({ readerId: "r2" })
+          .mockResolvedValue({ readerId: stored }),
         setDeviceReader: vi
           .fn()
           .mockRejectedValue({ code: "reader.not_found", params: { id: "r1" } }),
       });
       const el = await openEdit(api);
-      expect(field(el, "edit-reader").value).toBe(stored);
+      expect(field(el, "edit-reader").value).toBe("r2");
       vi.mocked(api.listReaders).mockResolvedValue(readers.filter((r) => r.id !== "r1"));
       await chooseOption(q(el, "[data-test=edit-reader]")!, "r1");
       await flush(el);
@@ -3369,12 +3372,10 @@ describe("the Edit dialog", () => {
     it("does not offer an inactive reader after the profile saves and its new reader is refused", async () => {
       const api = equipmentApi({
         getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r3" }),
-        getProfileReaders: vi
-          .fn()
-          .mockImplementation(async (id: string) => ({
-            readerIds: id === "pa" ? ["r2", "r3"] : ["r2"],
-            defaultReaderId: null,
-          })),
+        getProfileReaders: vi.fn().mockImplementation(async (id: string) => ({
+          readerIds: id === "pa" ? ["r2", "r3"] : ["r2"],
+          defaultReaderId: null,
+        })),
         setDeviceReader: vi.fn().mockRejectedValue({ code: "reader.payment_in_progress" }),
       });
       const el = await openEdit(api);
@@ -3393,10 +3394,16 @@ describe("the Edit dialog", () => {
     it("waits for the selected profile before naming its inherited printer", async () => {
       const profiles = deferred<DeviceProfile[]>();
       const el = await openEdit(
-        equipmentApi({ listDeviceProfiles: vi.fn().mockReturnValue(profiles.promise) }),
+        equipmentApi({
+          listDevices: vi.fn().mockResolvedValue([{ ...onDefault, paymentSlipPrinterId: "pr2" }]),
+          listDeviceProfiles: vi.fn().mockReturnValue(profiles.promise),
+        }),
       );
       const receipt = field(el, "edit-receipt-printer");
       expect(receipt.options).toEqual([]);
+      const slip = field(el, "edit-slip-printer");
+      expect(slip.value).toBe("pr2");
+      expect(slip.options).toEqual([expect.objectContaining({ value: "pr2", fixed: true })]);
       profiles.resolve([withDefaults]);
       await vi.waitFor(() => expect(receipt.options[0]).toEqual(inheritOption("Kitchen")));
     });
