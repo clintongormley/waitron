@@ -18,13 +18,6 @@ export function productsListLoadFeedback(
   `;
 }
 
-export function focusProductsListFeedback(root: HTMLElement | DocumentFragment): void {
-  const target =
-    root.querySelector<HTMLElement>('[data-test="products-retry"]') ??
-    root.querySelector<HTMLElement>("h1");
-  target?.focus();
-}
-
 export function restartSharedLanguagesRead(api: DashboardApi): Promise<void> {
   api.liveData?.invalidate(dashboardQuery(api, "getContentLanguages", []).dependencies);
   // Start the scheduled read before a new watch can reuse the shell's failed snapshot.

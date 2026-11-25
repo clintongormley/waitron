@@ -402,14 +402,16 @@ describe("menu-screen", () => {
       vi.mocked(api[read]).mockRejectedValueOnce({ code: "connection.failed" });
       const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
       const table = await productTable(el);
+      const retry = () => el.shadowRoot!.querySelector<HTMLElement>('[data-test="products-retry"]');
       await vi.waitFor(() => {
-        expect(el.shadowRoot!.querySelector("[role=alert]")?.textContent).toContain(
-          codeMessage("connection.failed"),
-        );
+        expect(retry()).not.toBeNull();
+        const alerts = el.shadowRoot!.querySelectorAll("[role=alert]");
+        expect(alerts).toHaveLength(1);
+        expect(alerts[0]!.textContent).toContain(codeMessage("connection.failed"));
         expect(table.checkVisibility()).toBe(false);
       });
       expect(el.shadowRoot!.querySelector("[role=status]")).toBeNull();
-      el.shadowRoot!.querySelector<HTMLElement>('[data-test="products-retry"]')!.click();
+      retry()!.click();
       await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
       expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
       expect(api[read]).toHaveBeenCalledTimes(2);
@@ -418,9 +420,11 @@ describe("menu-screen", () => {
 
   it("retries a failed languages read that the dashboard shell still observes", async () => {
     const api = Object.assign(stubApi(), { liveData: new LiveData() });
-    vi.mocked(api.getContentLanguages).mockRejectedValueOnce({ code: "connection.failed" });
     const shell = api.liveData.observe(dashboardQuery(api, "getContentLanguages", []), () => {});
     onTestFinished(() => shell.unsubscribe());
+    await vi.waitFor(() => expect(shell.snapshot.status).toBe("ready"));
+    vi.mocked(api.getContentLanguages).mockRejectedValueOnce({ code: "connection.failed" });
+    api.liveData.refresh();
     await vi.waitFor(() => expect(shell.snapshot.status).toBe("error"));
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     await flush(el);
@@ -429,7 +433,7 @@ describe("menu-screen", () => {
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="products-retry"]')!.click();
     await vi.waitFor(() => expect(shell.snapshot.status).toBe("ready"));
     await vi.waitFor(() => expect(table.checkVisibility()).toBe(true));
-    expect(api.getContentLanguages).toHaveBeenCalledTimes(2);
+    expect(api.getContentLanguages).toHaveBeenCalledTimes(3);
   });
 
   it("shows a library refresh failure that arrived while products were still pending", async () => {
@@ -545,15 +549,16 @@ describe("menu-screen", () => {
     const table = await productTable(el);
     await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledOnce());
     expect(table.checkVisibility()).toBe(false);
+    await new Promise(requestAnimationFrame);
     pending.resolve(products);
     await vi.waitFor(() => {
       const root = table.shadowRoot!;
-      const row = root.querySelector('tr[data-row-key="folder:child"]');
-      expect(row?.checkVisibility()).toBe(true);
-      expect(row!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+      const name = root.querySelector('tr[data-row-key="folder:child"] strong');
+      expect(name?.checkVisibility()).toBe(true);
+      expect(name!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
         root.querySelector("thead th")!.getBoundingClientRect().bottom,
       );
-      expect(row!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      expect(name!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
         root.querySelector(".scroll")!.getBoundingClientRect().bottom + 1,
       );
     });

@@ -3963,41 +3963,48 @@ it("saves a second name, and its box answers Enter, Esc and leaving it, while an
   expect(el.shadowRoot!.querySelector('[role="alert"]')).toBeNull();
 });
 
-it("shows a late name refusal above the table and leaves the newer name box alone", async () => {
-  const el = await mountBrowser();
-  let refuse!: (reason: unknown) => void;
-  vi.mocked(el.api.createCategory).mockImplementationOnce(
-    () =>
-      new Promise((_, reject) => {
-        refuse = reject;
-      }),
-  );
-  await menuAction(el, "add-category-d");
-  await nameBox(el);
-  await userEvent.keyboard("Juice{Enter}");
-  await menuAction(el, "rename-f");
-  const box = await nameBox(el);
-  refuse({ code: "category.invalid" });
-  await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent?.trim()).toBe(
-      codeMessage("category.invalid"),
-    ),
-  );
-  expect(el.shadowRoot!.querySelector('[role="alert"]')?.getAttribute("slot")).toBe(
-    "toolbar-bottom",
-  );
-  expect(box.error).toBe("");
-  await userEvent.keyboard("Fresh");
-  el.shadowRoot!.querySelector<HTMLElement>('[name="menu-search"]')!.focus();
-  await vi.waitFor(() =>
-    expect(el.api.updateCategory).toHaveBeenCalledExactlyOnceWith("f", { name: "Fresh" }),
-  );
-  expect(
-    el.shadowRoot!.querySelector('[slot="toolbar-bottom"][role="alert"]')?.textContent?.trim(),
-  ).toBe(codeMessage("category.invalid"));
-  await menuAction(el, "add-category-d");
-  expect(el.shadowRoot!.querySelector('[slot="toolbar-bottom"][role="alert"]')).toBeNull();
-});
+it.each(["typed blur", "blank blur", "Escape"])(
+  "keeps a late name refusal above the table when the newer name box ends by %s",
+  async (exit) => {
+    const el = await mountBrowser();
+    let refuse!: (reason: unknown) => void;
+    vi.mocked(el.api.createCategory).mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          refuse = reject;
+        }),
+    );
+    await menuAction(el, "add-category-d");
+    await nameBox(el);
+    await userEvent.keyboard("Juice{Enter}");
+    await menuAction(el, exit === "typed blur" ? "rename-f" : "add-category-root");
+    const box = await nameBox(el);
+    refuse({ code: "category.invalid" });
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent?.trim()).toBe(
+        codeMessage("category.invalid"),
+      ),
+    );
+    expect(el.shadowRoot!.querySelector('[role="alert"]')?.getAttribute("slot")).toBe(
+      "toolbar-bottom",
+    );
+    expect(box.error).toBe("");
+    if (exit === "Escape") await userEvent.keyboard("{Escape}");
+    else {
+      if (exit === "typed blur") await userEvent.keyboard("Fresh");
+      el.shadowRoot!.querySelector<HTMLElement>('[name="menu-search"]')!.focus();
+    }
+    await vi.waitFor(() => expect(box.isConnected).toBe(false));
+    if (exit === "typed blur")
+      expect(el.api.updateCategory).toHaveBeenCalledExactlyOnceWith("f", { name: "Fresh" });
+    else expect(el.api.createCategory).toHaveBeenCalledOnce();
+    expect(
+      el.shadowRoot!.querySelector('[slot="toolbar-bottom"][role="alert"]')?.textContent?.trim(),
+    ).toBe(codeMessage("category.invalid"));
+    await menuAction(el, "add-category-d");
+    expect(el.shadowRoot!.querySelector('[slot="toolbar-bottom"][role="alert"]')).toBeNull();
+  },
+);
 
 it("Add category clears a typed search, so its name box shows", async () => {
   const el = await mountBrowser();

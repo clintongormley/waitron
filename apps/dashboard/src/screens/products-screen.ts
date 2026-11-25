@@ -53,7 +53,6 @@ import { unitRefusalErrors, type UnitFormErrors } from "../widgets/unit-form.js"
 import { deleteExtraListWarning } from "../widgets/delete-extra-lists.js";
 import { refusalText } from "../widgets/delete-refusal.js";
 import {
-  focusProductsListFeedback,
   productsListLoadFeedback,
   restartSharedLanguagesRead,
 } from "./products-list-load-feedback.js";
@@ -108,6 +107,7 @@ export class ProductsScreen extends LitElement {
   @state() private editorValue: ProductEditorValue | null = null;
   @state() private busy = false;
   @state() private errorKey: string | null = null;
+  /** A read's recovery clears only a read's error. */
   #readErrorShown = false;
   @state() private refusalParams: unknown = null;
   @state() private deletingProduct: { id: string; name: string; isVariant: boolean } | null = null;
@@ -739,7 +739,7 @@ export class ProductsScreen extends LitElement {
       this.shadowRoot?.activeElement?.matches('[data-test="products-retry"]') &&
       this.#tableReadError() === null;
     super.update(changed);
-    if (leavingRetry) focusProductsListFeedback(this.renderRoot);
+    if (leavingRetry) this.renderRoot.querySelector("h1")?.focus();
   }
 
   override render() {
