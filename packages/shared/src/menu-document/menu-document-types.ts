@@ -16,11 +16,8 @@ import type { IncludeFolderOverrides } from "./section-types.js";
  * type definitions only. The guard is `scripts/dashboard-browser-purity.test.ts`.
  */
 
-/** Frozen, and replaced from current products when the document is served. */
-export type DeclarationField = "allergens" | "diet" | "dietOverride" | "dietaryDeclarations";
-export type OverlayOfferField = "available" | "courseId" | "category" | DeclarationField;
 /** Read from current rows when served, never frozen. */
-type UnfrozenOfferField = "available" | "courseId" | "category";
+export type OverlayOfferField = "available" | "courseId" | "category";
 
 /** `image` is the product's effective photo, which `OfferedExtraItem` does not carry. */
 export type FrozenExtraItem = OfferedExtraItem & { image: string | null };
@@ -32,13 +29,13 @@ export type FrozenOfferedModifier =
   | (Omit<OfferedExtrasList, "items"> & { items: FrozenExtraItem[] })
   | (Omit<OfferedOptionsList, "labels"> & { labels: FrozenOptionLabel[] });
 
-export type FrozenOfferVariant = Omit<MenuOfferVariant, UnfrozenOfferField>;
+export type FrozenOfferVariant = Omit<MenuOfferVariant, OverlayOfferField>;
 
 type PublishedOrdering = { ordering?: MenuOffer["ordering"] };
 
 export type FrozenOffer = Omit<
   MenuOffer,
-  UnfrozenOfferField | "placements" | "offeredModifiers" | "variants" | "ordering" | "combined"
+  OverlayOfferField | "placements" | "offeredModifiers" | "variants" | "ordering" | "combined"
 > &
   PublishedOrdering & {
     /** The dish's own photo and description, which `MenuOffer` does not carry. */
@@ -126,23 +123,8 @@ export interface MenuDocument {
   home: DeviceHome;
 }
 
-export type DeclarationOffer = Omit<FrozenOffer, "variants" | "offeredModifiers"> &
-  Pick<MenuOffer, DeclarationField> & {
-    variants: (FrozenOfferVariant & Pick<MenuOfferVariant, DeclarationField>)[];
-    offeredModifiers: (
-      | Extract<FrozenOfferedModifier, { kind: "options" }>
-      | (Omit<Extract<FrozenOfferedModifier, { kind: "extras" }>, "items"> & {
-          items: (FrozenExtraItem & Pick<OfferedExtraItem, "addAllergens" | "suitableFor">)[];
-        })
-    )[];
-  };
-export type DeclarationDocument = Omit<MenuDocument, "offers"> & {
-  offers: Record<string, DeclarationOffer>;
-};
-
 /** An extras item as a served offer carries it: the frozen item with its current availability. */
-export type LiveExtraItem = FrozenExtraItem &
-  Pick<OfferedExtraItem, "addAllergens" | "suitableFor"> & { available: boolean };
+export type LiveExtraItem = FrozenExtraItem & { available: boolean };
 
 /**
  * An options list as a served offer carries it. Unlike `OfferedOptionsList`, whose labels are the

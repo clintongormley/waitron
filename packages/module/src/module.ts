@@ -383,7 +383,7 @@ export interface ZoneOffers {
   readonly menus: readonly ZoneMenu[];
   readonly offers: readonly ZoneMenuOffer[];
   readonly setMenus: readonly ServedSetMenu[];
-  /** Digest of current declarations, course, reporting category, deleted modifier lists and
+  /** Digest of current course, reporting category, deleted modifier lists and
    *  published set-menu dish availability and course overrides.
    *  A read limited by `menuItemIds`
    *  digests only those offers' rows and is not comparable with `ZoneMenuState.liveFields`. */
@@ -442,7 +442,7 @@ export interface ZoneMenuState {
     readonly endedPeriodName: string | null;
   }[];
   readonly unavailable: ZoneUnavailable;
-  /** Digest of current declarations, course, reporting category, deleted modifier lists and
+  /** Digest of current course, reporting category, deleted modifier lists and
    *  published set-menu dish availability and course overrides. */
   readonly liveFields: string;
 }

@@ -12,7 +12,7 @@ import { observedPaymentBody } from "./testing/bill-payment-fixture.js";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, eq, sql, type SQL } from "drizzle-orm";
+import { and, eq, inArray, sql, type SQL } from "drizzle-orm";
 import { beforeEach, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   products,
@@ -1002,18 +1002,24 @@ describe("who may order a product on its own (spec §9, D12)", () => {
 });
 
 describe("each fact reaches the till at its own moment (Review Focus 1, server half)", () => {
-  it("serves current allergens of a dish and its extra without republishing", async () => {
+  it("serves a dish's and its extra's allergens as published, and a product edit only once republished", async () => {
     const v = await setupLunch();
-    await publish(v.menuId);
+    const milk = { milk: {} };
     const sulphites = { sulphites: {} };
-    await suite.db
-      .update(products)
-      .set({ allergens: sulphites })
-      .where(eq(products.id, v.lemonade.productId));
-    await suite.db
-      .update(products)
-      .set({ allergens: sulphites })
-      .where(eq(products.id, v.extraLemon.productId));
+    const save = (allergens: typeof milk | typeof sulphites) =>
+      suite.db
+        .update(products)
+        .set({ allergens })
+        .where(inArray(products.id, [v.lemonade.productId, v.extraLemon.productId]));
+    const polled = async () => {
+      const response = await send(v, "GET", `/api/menu-state?zoneId=${v.zoneId}`);
+      expect(response.status).toBe(200);
+      return response.json();
+    };
+    await save(milk);
+    await publish(v.menuId);
+    const atPublish = await polled();
+    await save(sulphites);
 
     const served = async () => {
       const body = (await (
@@ -1029,8 +1035,10 @@ describe("each fact reaches the till at its own moment (Review Focus 1, server h
       const extra = lemonade.offeredModifiers.find((entry) => entry.kind === "extras")!.items![0]!;
       return { dish: lemonade.allergens, extra: extra.addAllergens };
     };
-    expect(await served()).toEqual({ dish: sulphites, extra: sulphites });
-    await publish(v.menuId);
+    expect(await served()).toEqual({ dish: milk, extra: milk });
+    expect(await polled()).toEqual(atPublish);
+    const versionId = await publish(v.menuId);
+    expect(await polled()).toMatchObject({ menus: [{ menuId: v.menuId, versionId }] });
     expect(await served()).toEqual({ dish: sulphites, extra: sulphites });
   });
 });

@@ -3,7 +3,7 @@ import { matchLanguage } from "../language-match.js";
 import { ALLERGEN_CODES, type ProductAllergens } from "./allergens.js";
 import { DIETARY_LABELS, type DietaryLabel } from "./dietary-declarations.js";
 import { menuPriceRange, resolveMenuText } from "./customer-menu-presentation.js";
-import type { DocumentMember, DeclarationDocument } from "./menu-document-types.js";
+import type { DocumentMember, MenuDocument } from "./menu-document-types.js";
 
 export interface GuestDeclarations {
   allergens: ProductAllergens | null;
@@ -36,7 +36,7 @@ export interface PublicGuestMenu {
 }
 
 export function publicGuestMenu(
-  document: DeclarationDocument,
+  document: MenuDocument,
   config: ContentLanguages,
   requested: string | readonly string[],
 ): PublicGuestMenu {
