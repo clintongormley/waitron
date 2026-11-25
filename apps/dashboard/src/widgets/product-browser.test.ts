@@ -2150,7 +2150,7 @@ const bulkButton = (el: ProductBrowser, action: "available" | "unavailable") =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test="mark-${action}"]`);
 const batchRefusal = (el: ProductBrowser) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-toast"]>(
-    '[data-test="batch-availability-refusal"]',
+    '[data-test="batch-availability-notice"]',
   );
 const bulkApi = () =>
   ({
@@ -2197,10 +2197,11 @@ it.each(["List", "Tree"] as const)(
     await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
     expect(bulkButton(el, "unavailable")?.disabled).toBe(true);
     expect(el.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("cancel-selection");
+    expect(batchRefusal(el)?.open).toBe(false);
   },
 );
 
-it("disables availability actions for empty or mixed ticks on a Spanish phone", async () => {
+it("enables mixed availability ticks on a Spanish phone and skips an inactive-only category", async () => {
   const viewport = [innerWidth, innerHeight] as const;
   onTestFinished(async () => {
     setLocale("en-GB");
@@ -2211,9 +2212,14 @@ it("disables availability actions for empty or mixed ticks on a Spanish phone", 
   const el = await mountBrowser();
   await selectKeys(el, []);
   expect(bulkButton(el, "available")?.disabled).toBe(true);
+  await toggleCategory(el, "d");
   const table = await tableOf(el);
   const tick = (id: string) =>
     table.shadowRoot!.querySelector<HTMLInputElement>(`[data-test="select-${id}"]`)!.click();
+  tick("folder:b");
+  await el.updateComplete;
+  expect(bulkButton(el, "available")?.disabled).toBe(true);
+  expect(bulkButton(el, "unavailable")?.disabled).toBe(true);
   tick("bread");
   await el.updateComplete;
   for (const [action, label] of [
@@ -2227,8 +2233,47 @@ it("disables availability actions for empty or mixed ticks on a Spanish phone", 
   }
   tick("folder:d");
   await typeSearch(el, "Bread");
-  expect(bulkButton(el, "available")?.disabled).toBe(true);
-  expect(bulkButton(el, "unavailable")?.disabled).toBe(true);
+  expect(bulkButton(el, "available")?.disabled).toBe(false);
+  expect(bulkButton(el, "unavailable")?.disabled).toBe(false);
+});
+
+it("marks products inside hidden category ticks once and announces the count after the write", async () => {
+  const api = bulkApi();
+  const saved = pendingAvailability();
+  api.setProductsAvailability.mockReturnValue(saved.promise);
+  const el = await mountBrowser({
+    api: api as unknown as DashboardApi,
+    products: [...PRODUCTS, product("stout", "Stout", "b")],
+  });
+  await toggleCategory(el, "d");
+  await selectKeys(el, ["folder:d", "folder:b", "cola", "bread"]);
+  await typeSearch(el, "Bread");
+  expect(await rowKeys(el)).toEqual(["bread"]);
+  const toast = batchRefusal(el)!;
+  const status = () => toast.shadowRoot!.querySelector("[role=status]")?.textContent?.trim();
+  const firstFrame = new Promise((resolve) => {
+    toast.addEventListener("beforetoggle", () => requestAnimationFrame(() => resolve(status())), {
+      once: true,
+    });
+  });
+  await userEvent.click(bulkButton(el, "unavailable")!);
+  expect(api.setProductsAvailability).toHaveBeenCalledTimes(1);
+  expect(api.setProductsAvailability.mock.calls[0]![0].toSorted()).toEqual([
+    "bread",
+    "cola",
+    "stout",
+  ]);
+  expect(api.setProductsAvailability.mock.calls[0]![1]).toBe(false);
+  expect(toast.open).toBe(false);
+  saved.resolve();
+  await vi.waitFor(() => expect(status()).toBe("Marked 3 products unavailable."));
+  expect(await firstFrame).toBe("");
+  expect(toast.duration).toBe(8000);
+  expect(count(el)).toBe("0 selected");
+  toast.shadowRoot!.querySelector<HTMLButtonElement>("button.close")!.focus();
+  await userEvent.keyboard(" ");
+  expect(toast.open).toBe(false);
+  expect(el.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("cancel-selection");
 });
 
 it.each([
@@ -2289,7 +2334,11 @@ it.each([
   },
 );
 
-it("keeps a new tick and prevents overlapping writes to the same product", async () => {
+const availabilityTicks = ["bread", "folder:d"] as const;
+it.each(availabilityTicks)("keeps a new tick during a batch for %s", async (selected) => {
+  const category = selected === "folder:d";
+  const member = category ? "cola" : "bread";
+  const newTick = category ? "stout" : "cola";
   const viewport = [innerWidth, innerHeight] as const;
   onTestFinished(() => page.viewport(...viewport));
   await page.viewport(1180, 844);
@@ -2299,11 +2348,15 @@ it("keeps a new tick and prevents overlapping writes to the same product", async
   const other = pendingAvailability();
   api.setProductAvailability.mockReturnValueOnce(single.promise).mockReturnValue(other.promise);
   api.setProductsAvailability.mockReturnValueOnce(batch.promise);
-  const el = await mountBrowser({ api: api as unknown as DashboardApi });
-  await chooseView(el, "List");
-  await selectKeys(el, ["bread"]);
-  const bread = await availabilitySwitch(el, "bread");
-  await userEvent.click(bread);
+  const el = await mountBrowser({
+    api: api as unknown as DashboardApi,
+    products: [...PRODUCTS, product("stout", "Stout", "d")],
+  });
+  await toggleCategory(el, "d");
+  await toggleCategory(el, "f");
+  await selectKeys(el, [selected]);
+  const memberSwitch = await availabilitySwitch(el, member);
+  await userEvent.click(memberSwitch);
   expect(bulkButton(el, "available")?.disabled).toBe(true);
   expect(bulkButton(el, "unavailable")?.disabled).toBe(true);
   single.resolve();
@@ -2312,21 +2365,26 @@ it("keeps a new tick and prevents overlapping writes to the same product", async
   await userEvent.click(bulkButton(el, "unavailable")!);
   const burger = await availabilitySwitch(el, "burger");
   await userEvent.click(burger);
-  await userEvent.click(bread);
-  (await tableOf(el))
-    .shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cola"]')!
-    .click();
+  await userEvent.click(memberSwitch);
+  const checkbox = (await tableOf(el)).shadowRoot!.querySelector<HTMLInputElement>(
+    `[data-test="select-${newTick}"]`,
+  )!;
+  checkbox.click();
   await vi.waitFor(() => expect(count(el)).toBe("2 selected"));
   batch.resolve();
   await vi.waitFor(() => expect(count(el)).toBe("1 selected"));
-  expect(
-    (await tableOf(el)).shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-cola"]')!
-      .checked,
-  ).toBe(true);
+  await tableOf(el);
+  expect(checkbox.checked).toBe(true);
   await userEvent.click(burger);
-  other.resolve();
+  other.reject({ code: "authorization.not_permitted" });
+  const rowRefusal = () => el.shadowRoot!.querySelector(".availability-error")?.textContent;
+  await vi.waitFor(() => expect(rowRefusal()).toContain("Burger"));
+  expect(batchRefusal(el)?.message).toBe(category ? "Marked 2 products unavailable." : "");
+  await press(el, "cancel-selection");
+  expect(batchRefusal(el)?.open).toBe(false);
+  expect(rowRefusal()).toContain("Burger");
   expect(api.setProductAvailability.mock.calls).toEqual([
-    ["bread", false],
+    [member, false],
     ["burger", false],
   ]);
 });
@@ -2338,7 +2396,7 @@ it.each(["Done", "view switch"])(
     const saved = pendingAvailability();
     api.setProductsAvailability.mockReturnValue(saved.promise);
     const el = await mountBrowser({ api: api as unknown as DashboardApi });
-    await selectKeys(el, ["bread"]);
+    await selectKeys(el, ["folder:d", "bread"]);
     await userEvent.click(bulkButton(el, "unavailable")!);
     if (exit === "Done") {
       await press(el, "cancel-selection");
@@ -2359,10 +2417,24 @@ it.each(["Done", "view switch"])(
     await vi.waitFor(() => expect(bulkButton(el, "unavailable")?.disabled).toBe(false));
     expect(count(el)).toBe("1 selected");
     expect(el.shadowRoot!.activeElement).toBe(search);
+    expect(batchRefusal(el)?.open).toBe(false);
   },
 );
 
-it("refreshes a deleted tick and reports a retry refused without a product name", async () => {
+it("keeps an unrelated switch refusal when marking a category available", async () => {
+  const api = bulkApi();
+  api.setProductAvailability.mockRejectedValueOnce({ code: "authorization.not_permitted" });
+  const el = await mountBrowser({ api: api as unknown as DashboardApi });
+  await userEvent.click(await availabilitySwitch(el, "bread"));
+  const refusal = () => el.shadowRoot!.querySelector(".availability-error")?.textContent;
+  await vi.waitFor(() => expect(refusal()).toContain("Bread"));
+  await selectKeys(el, ["folder:d"]);
+  await userEvent.click(bulkButton(el, "available")!);
+  await vi.waitFor(() => expect(batchRefusal(el)?.message).toBe("Marked 1 product available."));
+  expect(refusal()).toContain("Bread");
+});
+
+it.each(["cola", "folder:d"])("refreshes a deleted product from %s", async (selected) => {
   const viewport = [innerWidth, innerHeight] as const;
   onTestFinished(() => page.viewport(...viewport));
   await page.viewport(1180, 844);
@@ -2371,8 +2443,8 @@ it("refreshes a deleted tick and reports a retry refused without a product name"
     .mockRejectedValueOnce({ code: "product.deleted", params: { productId: "cola" } })
     .mockRejectedValueOnce({ code: "authorization.not_permitted" });
   const el = await mountBrowser({ api: api as unknown as DashboardApi });
-  await chooseView(el, "List");
-  await selectKeys(el, ["cola"]);
+  if (selected === "cola") await chooseView(el, "List");
+  await selectKeys(el, [selected]);
   bulkButton(el, "available")!.focus();
   await userEvent.keyboard(" ");
   const notice = () => batchRefusal(el)?.shadowRoot?.querySelector("[role=alert] .message");
@@ -2384,7 +2456,8 @@ it("refreshes a deleted tick and reports a retry refused without a product name"
   expect(api.liveData.invalidate).toHaveBeenCalledExactlyOnceWith([{ type: "products" }]);
   expect(count(el)).toBe("1 selected");
   el.products = PRODUCTS.filter(({ id }) => id !== "cola");
-  await vi.waitFor(() => expect(count(el)).toBe("0 selected"));
+  await vi.waitFor(() => expect(bulkButton(el, "available")?.disabled).toBe(true));
+  expect(count(el)).toBe(selected === "cola" ? "0 selected" : "1 selected");
   expect(el.shadowRoot!.activeElement?.getAttribute("data-test")).toBe("cancel-selection");
   (await tableOf(el))
     .shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-bread"]')!

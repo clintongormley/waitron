@@ -113,9 +113,10 @@ Show archived and the Archived state are gone before the list here is built).
 
 ### 5. Select mode
 
-- Move to…, **Mark available**, **Mark unavailable**, Delete, Done. The two new ones act on the ticked
-  products in one request, all or none, and show only while just products are ticked (**my call**).
-  Like Move and Delete they act on ticked rows a search hides; each button says how many.
+- Move to…, **Mark available**, **Mark unavailable**, Delete, Done. The availability actions stay
+  visible in Select and act on the ticked products and the contents of ticked categories in one
+  request, all or none. They include products hidden by search or filters. After a category batch
+  succeeds, the bottom notice says how many products it applied to (A1589, owner, 2026-11-25).
 - Dragging and its handles are in the Tree only. Switching views clears the ticks (**my call**).
 - The move window's last button says Move, not "Move to…" (**my call**).
 

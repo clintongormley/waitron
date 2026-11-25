@@ -1,4 +1,5 @@
 import type { CategorySummary } from "../api/catalog-api.js";
+import type { Product } from "../api/client.js";
 import { compareLabels } from "@waitron/shared";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -50,6 +51,23 @@ export function categoryWithDescendants(
       }
   }
   return ids;
+}
+
+export function activeProductIdsInCategories(
+  categoryIds: readonly string[],
+  products: readonly Product[],
+  categories: readonly CategorySummary[],
+): string[] {
+  if (!categoryIds.length) return [];
+  const subtree = new Set(
+    categoryIds.flatMap((id) => [...categoryWithDescendants(id, categories)]),
+  );
+  return products
+    .filter(
+      ({ active, primaryCategoryId }) =>
+        active && primaryCategoryId !== null && subtree.has(primaryCategoryId),
+    )
+    .map(({ id }) => id);
 }
 
 const FIELD_BY_CODE = new Map([

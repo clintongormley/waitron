@@ -422,8 +422,9 @@ a touch screen.
 Searching or changing a filter keeps your ticks, so you can gather rows from several searches.
 The selected count says how many ticks search or filters hide. Move and the two availability
 actions include those ticks.
-When your selection contains only products, choose **Mark available** or **Mark unavailable** to
-change them together. A drag carries only visible ticks
+Choose **Mark available** or **Mark unavailable** to change products together. Tick a category to
+include its products and those in its subcategories, even if search or filters hide them. The
+result shows how many products the action applied to. A drag carries only visible ticks
 and keeps the hidden ones selected. Select all adds or removes only rendered eligible rows.
 Opening or closing a category keeps it, so a selection can span categories; a selected row inside a
 closed category is still selected. **Done** clears it, hides the grips and restores the ordinary

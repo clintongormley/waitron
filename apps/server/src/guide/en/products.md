@@ -21,8 +21,9 @@ the product name for its category. The switch beside the price controls availabi
 exit **Select** to see the price and switch again.
 
 To change several products together, turn on **Select**, tick the products and choose
-**Mark available** or **Mark unavailable**. The selected count also says how many ticks search
-or filters hide. Clear any category ticks to enable the availability buttons.
+**Mark available** or **Mark unavailable**. In **Tree**, tick a category to include all its
+products and those in its subcategories, even when search or filters hide them. The result
+shows how many products the action applied to.
 
 Switch to **Tree** to browse or organise categories. Categories stay in alphabetical order when
 you sort products, and matching categories open while you filter. To add directly in a category,
