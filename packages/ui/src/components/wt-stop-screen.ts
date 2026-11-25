@@ -1,6 +1,6 @@
 import { css } from "lit";
 import { customElement } from "lit/decorators.js";
-import { onModalChange, underModal } from "../modal-layer.js";
+import { onModalChange, topModal } from "../modal-layer.js";
 import { WtDialog } from "./wt-dialog.js";
 
 @customElement("wt-stop-screen")
@@ -15,7 +15,7 @@ export class WtStopScreen extends WtDialog {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#stopWatchingModals = onModalChange(() => {
-      if (this.open && underModal(this)) this.raiseModal();
+      if (this.open && topModal() !== this) this.raiseModal();
     });
   }
 
