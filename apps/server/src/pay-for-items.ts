@@ -26,14 +26,7 @@ import {
   type BillCommand,
 } from "./bill-actions.js";
 import { refuseBelowAdvances } from "./bill-advances.js";
-import {
-  invalid,
-  money,
-  previewAllocation,
-  ZERO,
-  type AllocationPreview,
-  type BillFunds,
-} from "./bill-allocation.js";
+import { invalid, money, previewAllocation, ZERO, type BillFunds } from "./bill-allocation.js";
 import { readBillEditState, requireBillEditors } from "./bill-editing.js";
 import {
   afterCardCharged,
@@ -594,11 +587,9 @@ export async function previewPayForItems(
       total,
       received: ZERO,
       reserved: ZERO,
-      hasPending: false,
     };
     const addedTip = decimal(ask.addedTip ?? "0.00");
     const { doc } = await readPaymentsSettings(tx);
-    // Only an items payment is offered a choice, so a share is always allocated.
     const preview = previewAllocation(
       funds,
       {
@@ -610,7 +601,7 @@ export async function previewPayForItems(
             : { method: "card", addedTip },
       },
       { tipsEnabled: doc.tipsEnabled },
-    ) as Extract<AllocationPreview, { kind: "allocated" }>;
+    );
     return {
       total: money(total),
       applied: money(preview.applied),

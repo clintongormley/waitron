@@ -46,15 +46,13 @@ useVenueDb({
 
 interface Body {
   submissionId?: string;
-  kind: "items" | "contribution" | "share";
-  lines?: { lineNo: number; quantity?: string }[];
+  kind: "contribution" | "share";
   amount?: string;
   shareOf?: number;
   method: "cash" | "card";
   entry?: "manual" | "reader";
   tendered?: string;
   addedTip?: string;
-  choice?: "full_with_tip" | "use_pool";
   readerId?: string;
   applied: string;
   tip: string;
@@ -447,6 +445,7 @@ describe("a malformed payment body", () => {
   it.each([
     ["a list for a body", [], "body"],
     ["an unknown kind", { ...card, kind: "gift" }, "kind"],
+    ["the old items kind", { ...card, kind: "items", lines: [{ lineNo: 1 }] }, "kind"],
     ["an unknown method", { ...card, method: "cheque" }, "method"],
     ["an amount on a share", { ...card, kind: "share", shareOf: 2 }, "amount"],
     ["a share of none", { ...card, kind: "share", amount: undefined, shareOf: 0 }, "shareOf"],

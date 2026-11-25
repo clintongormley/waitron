@@ -12,18 +12,12 @@ import {
 const d = (value: string): Decimal => decimal(value);
 const BILL = "11111111-1111-4111-8111-111111111111";
 
-function funds(
-  total: string,
-  received = "0.00",
-  reserved = "0.00",
-  hasPending = reserved !== "0.00",
-): BillFunds {
+function funds(total: string, received = "0.00", reserved = "0.00"): BillFunds {
   return {
     workingOrderId: BILL,
     total: d(total),
     received: d(received),
     reserved: d(reserved),
-    hasPending,
   };
 }
 
@@ -87,22 +81,21 @@ describe("equalShare: the available amount divided by the people still to pay, r
 });
 
 describe("previewAllocation: the design's §3.2 table", () => {
-  const items40 = (payment: AllocationRequest["payment"]): AllocationRequest => ({
-    kind: "items",
-    due: d("40.00"),
+  const pay40 = (payment: AllocationRequest["payment"]): AllocationRequest => ({
+    kind: "contribution",
+    amount: d("40.00"),
     payment,
   });
 
-  it("items €40.00, cash €50.00: applied €40.00, change €10.00, no tip", () => {
+  it("contribution €40.00, cash €50.00: applied €40.00, change €10.00, no tip", () => {
     expect(
       previewAllocation(
         funds("40.00"),
-        items40({ method: "cash", tendered: d("50.00"), addedTip: d("0.00") }),
+        pay40({ method: "cash", tendered: d("50.00"), addedTip: d("0.00") }),
         TIPS_ON,
       ),
     ).toEqual({
       kind: "allocated",
-      choice: null,
       applied: "40.00",
       tip: "0.00",
       change: "10.00",
@@ -114,18 +107,17 @@ describe("previewAllocation: the design's §3.2 table", () => {
     expect(
       previewAllocation(
         funds("40.00"),
-        items40({ method: "cash", tendered: d("50.00"), addedTip: d("10.00") }),
+        pay40({ method: "cash", tendered: d("50.00"), addedTip: d("10.00") }),
         TIPS_ON,
       ),
     ).toMatchObject({ applied: "40.00", tip: "10.00", change: "0.00", charged: null });
   });
 
-  it("items €40.00, card €50.00: applied €40.00, tip €10.00, charged €50.00", () => {
+  it("contribution €40.00, card €50.00: applied €40.00, tip €10.00, charged €50.00", () => {
     expect(
-      previewAllocation(funds("40.00"), items40({ method: "card", addedTip: d("10.00") }), TIPS_ON),
+      previewAllocation(funds("40.00"), pay40({ method: "card", addedTip: d("10.00") }), TIPS_ON),
     ).toEqual({
       kind: "allocated",
-      choice: null,
       applied: "40.00",
       tip: "10.00",
       change: null,
@@ -224,8 +216,8 @@ describe("previewAllocation: what is refused", () => {
       previewAllocation(
         funds("40.00"),
         {
-          kind: "items",
-          due: d("40.00"),
+          kind: "contribution",
+          amount: d("40.00"),
           payment: { method: "cash", tendered: d("50.00"), addedTip: d("1.00") },
         },
         TIPS_OFF,
@@ -270,8 +262,8 @@ describe("previewAllocation: what is refused", () => {
       previewAllocation(
         funds("40.00"),
         {
-          kind: "items",
-          due: d("40.00"),
+          kind: "contribution",
+          amount: d("40.00"),
           payment: { method: "cash", tendered: d("39.00"), addedTip: d("1.00") },
         },
         TIPS_ON,
@@ -291,8 +283,8 @@ describe("previewAllocation: what is refused", () => {
         previewAllocation(
           funds(due),
           {
-            kind: "items",
-            due: d(due),
+            kind: "contribution",
+            amount: d(due),
             payment: { method: "cash", tendered: d(tendered), addedTip: d(addedTip) },
           },
           TIPS_ON,
@@ -308,8 +300,8 @@ describe("previewAllocation: what is refused", () => {
       previewAllocation(
         funds("40.00"),
         {
-          kind: "items",
-          due: d("40.00"),
+          kind: "contribution",
+          amount: d("40.00"),
           payment: { method: "cash", tendered: d("45.00"), addedTip: d("5.00") },
         },
         TIPS_ON,
@@ -337,7 +329,11 @@ describe("previewAllocation: what is refused", () => {
     const error = thrown(() =>
       previewAllocation(
         funds("40.00"),
-        { kind: "items", due: d("40.00"), payment: { method: "card", addedTip: d("-1.00") } },
+        {
+          kind: "contribution",
+          amount: d("40.00"),
+          payment: { method: "card", addedTip: d("-1.00") },
+        },
         TIPS_ON,
       ),
     );
@@ -360,7 +356,6 @@ describe("confirmAllocation: the applied amount and tip the operator saw must st
         tip: d("20.00"),
       }),
     ).toEqual({
-      choice: null,
       applied: "30.00",
       tip: "20.00",
       change: null,
@@ -389,7 +384,6 @@ describe("confirmAllocation: the applied amount and tip the operator saw must st
       workingOrderId: BILL,
       preview: {
         kind: "allocated",
-        choice: null,
         applied: "20.00",
         tip: "30.00",
         change: null,

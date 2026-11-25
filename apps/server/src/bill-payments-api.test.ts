@@ -568,15 +568,13 @@ async function lineIdsOf(billId: string, lineNos: number[]): Promise<string[]> {
 
 interface PaymentBody {
   submissionId?: string;
-  kind: "items" | "contribution" | "share";
-  lines?: { lineNo: number; quantity?: string }[];
+  kind: "contribution" | "share";
   amount?: string;
   shareOf?: number;
   method: "cash" | "card";
   entry?: "manual" | "reader";
   tendered?: string;
   addedTip?: string;
-  choice?: "full_with_tip" | "use_pool";
   externalRef?: unknown;
   externalProvider?: unknown;
   externalMachine?: unknown;

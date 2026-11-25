@@ -70,29 +70,9 @@ export function asObject(raw: unknown): Record<string, unknown> {
   return raw as Record<string, unknown>;
 }
 
-function parseLines(value: unknown): { lineNo: number; quantity?: string }[] {
-  if (!Array.isArray(value)) throw invalid("lines");
-  return value.map((entry: unknown) => {
-    const line =
-      typeof entry === "object" && entry !== null ? (entry as Record<string, unknown>) : null;
-    if (
-      line === null ||
-      typeof line.lineNo !== "number" ||
-      !Number.isInteger(line.lineNo) ||
-      line.lineNo < 1 ||
-      (line.quantity !== undefined && typeof line.quantity !== "string")
-    ) {
-      throw invalid("lines");
-    }
-    return line.quantity === undefined
-      ? { lineNo: line.lineNo }
-      : { lineNo: line.lineNo, quantity: line.quantity as string };
-  });
-}
-
 /** The ask a preview and a payment share, refused field by field as `management.request_invalid`. */
 function parseAsk(body: Record<string, unknown>): BillPaymentAsk {
-  const kind = oneOf(body.kind, ["items", "contribution", "share"] as const, "kind");
+  const kind = oneOf(body.kind, ["contribution", "share"] as const, "kind");
   const method = oneOf(body.method, ["cash", "card"] as const, "method");
   const ask: BillPaymentAsk = {
     kind,
@@ -100,8 +80,6 @@ function parseAsk(body: Record<string, unknown>): BillPaymentAsk {
     expectedEdit: body.expectedEdit == null ? null : parseBillEditExpected(body.expectedEdit),
   };
   if (body.dining !== undefined) ask.dining = requireDining(body.dining);
-  if (kind === "items") ask.lines = parseLines(body.lines);
-  else if (body.lines !== undefined) throw invalid("lines");
   if (kind === "contribution") ask.amount = moneyField(body.amount, "amount");
   else if (body.amount !== undefined) throw invalid("amount");
   if (kind === "share") {
@@ -114,9 +92,6 @@ function parseAsk(body: Record<string, unknown>): BillPaymentAsk {
   else if (body.tendered !== undefined) throw invalid("tendered");
   const addedTip = optionalMoney(body.addedTip, "addedTip");
   if (addedTip !== undefined) ask.addedTip = addedTip;
-  if (body.choice !== undefined) {
-    ask.choice = oneOf(body.choice, ["full_with_tip", "use_pool"] as const, "choice");
-  }
   return ask;
 }
 
@@ -139,11 +114,7 @@ function parseRequest(body: Record<string, unknown>): BillPaymentRequest {
     applied: counter ? ZERO : moneyField(body.applied, "applied"),
     tip: counter ? ZERO : moneyField(body.tip, "tip"),
   };
-  if (
-    counter &&
-    (request.kind !== "share" || request.shareOf !== 1 || request.choice !== undefined)
-  )
-    throw invalid("kind");
+  if (counter && (request.kind !== "share" || request.shareOf !== 1)) throw invalid("kind");
   if (body.receiptLanguage !== undefined)
     request.receiptLanguage = requireString(body.receiptLanguage, "receiptLanguage");
   if (body.ownReceipt !== undefined) {
