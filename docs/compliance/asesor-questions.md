@@ -737,6 +737,10 @@ el tratamiento de datos personales como actividades auxiliares», and recital 91
 health professional or lawyer is not «a gran escala» (said of impact assessments). (a) and (b) are open; (c) and (d) ask you
 to confirm our reading.
 
+**2026-11-25:** do not send (c) as written. Parliament passed a new article 30(5) on 24 November that,
+once the Council adopts it and it takes effect, drops the triggers (c) relies on. P11 of the
+[curated list](2026-11-06-adviser-questions.md#for-the-privacy-specialist) asks about the new rule.
+
 > Un restaurante anota, cuando el cliente lo comunica, las alergias de los comensales de una mesa
 > (por ejemplo «ventana, asiento 2: cacahuete»), normalmente sin nombre, para preparar la comida
 > con seguridad; la mesa puede estar vinculada a una reserva con nombre y teléfono. También lleva

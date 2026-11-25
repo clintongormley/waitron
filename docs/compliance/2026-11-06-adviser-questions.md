@@ -27,7 +27,8 @@ This is research, not legal advice. The limits are at the end.
 | Consumer law | 1 | None: removed | 0 |
 
 On 13 November T17 was added for the tax adviser, a second point of judgement. The figures above
-were counted and estimated before it.
+were counted and estimated before it. On 25 November P11 was added for the privacy specialist, also
+after those figures.
 
 So about 4 to 7 hours rather than about 25. At the tax adviser's €300 an hour that is €1,200 to
 €2,100 rather than about €7,500. The hours are our estimate, and the other two advisers' rates are
@@ -409,6 +410,20 @@ tell customers which allergens a dish contains.
 - **P10. Collecting a customer's details for an invoice.** Staff show or say a short notice before taking
   the details, and the full notice is a sign or a link they can reach at once (LOPDGDD article 11). The
   email comes too late to be the first notice. Is this wording right?
+- **P11. The new exemption from the record of processing** (added 2026-11-25). Parliament passed a new
+  GDPR article 30(5) on 24 November; the Council has still to adopt it. Under it an organisation with
+  fewer than 1,000 people records only a use of data likely to be high risk within article 35, or a core
+  activity that requires a data protection officer under article 37(1)(b) or (c)
+  ([text and sources](research/2026-11-06-adviser-privacy.md#record-exemption-2026-11-25)).
+  - **The restaurant.** Once it is in force we think a single restaurant needs no record for staff,
+    invoices and bookings, and that your answer to P5 also settles its allergy notes: no DPIA needed
+    means no record needed. Is that right?
+  - **Waitron Cloud.** A restaurant that runs its own box without Cloud's hosting or backups keeps its
+    allergy notes itself, and Waitron holds none. If Cloud hosts many restaurants, or keeps backups it
+    can unlock, does that make it a processor whose core activity is large-scale processing of health
+    data, needing a data protection officer and a record of that processing? We think the notes are
+    incidental to hosting a till, but the working party's guidance on data protection officers (WP243,
+    page 9) adds up a processor's customers. Needed before Cloud's first customer.
 
   > **Protección de datos.** *[Razón social]* usa tu nombre, NIF y domicilio para emitir tu factura.
   > Derechos y más información: *[dirección de la página]*.
@@ -484,7 +499,7 @@ midnight needs a remedy.
 | How long labour papers are kept | Time record 4, contribution papers 4, payslips 5. Six years covers them | Research |
 | Hospitality contribution rates | None in the 2026 order | Orden PJC/297/2026 |
 | A ticket with no customer data | No privacy line needed. One on an invoice is optional | GDPR art. 13 |
-| Must a restaurant have a record of processing? | Yes. A DPO for one restaurant? No. Facilita for allergy notes? No | GDPR arts. 30, 37; AEPD |
+| Must a restaurant have a record of processing? | Yes, until the new article 30(5) takes effect (P11, 2026-11-25). A DPO for one restaurant? No. Facilita for allergy notes? No | GDPR arts. 30, 37; AEPD |
 | Biometric clock-in | Not justified on the AEPD's 2023 reading, and no law requires it | AEPD guide |
 
 ## Removed

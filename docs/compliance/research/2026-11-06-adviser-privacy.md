@@ -429,6 +429,9 @@ occasional. The AEPD says directly of every employer: «El registro de jornada d
 el Registro de las Actividades del Tratamiento (art. 30 RGPD)» [S6]. The guide could stop saying "ask
 your adviser" here. A pending EU change is noted under [Law in motion](#law-in-motion).
 
+**2026-11-25: Parliament has passed that change; it is not law yet.** See the
+[update](#record-exemption-2026-11-25). Until it takes effect, the answer above stands.
+
 ### Q54-5. DPO: ANSWERED
 
 **No, for a single restaurant.** Art. 37(1)(c) needs core activities consisting of large-scale special
@@ -883,17 +886,61 @@ None of this is law today, and the GDPR applies unchanged.
 | Item | Status | Touches | Evidence |
 | --- | --- | --- | --- |
 | Digital Omnibus (GDPR changes) | Council agreed a negotiating position on 21 October 2026; Parliament has not; talks not begun. Secondary sources report a 96-hour breach deadline and a high-risk threshold for notifying the authority, and that the Council kept the current definition of personal data | Q62-3, Q57-2 | Council press release page found by search; it refused direct download (403). Treat the detail as unverified |
-| Record of processing exemption (May 2025 proposal, under 750 staff) | Proposal; status not established | Q54-4 | Secondary only. As reported it keeps an exception for high-risk processing, which allergy notes may be |
+| Record of processing exemption (May 2025 proposal, under 750 staff) | Proposal; status not established. 2026-11-25: now under 1,000 staff and passed by Parliament, see the [update](#record-exemption-2026-11-25) | Q54-4 | Secondary only. As reported it keeps an exception for high-risk processing, which allergy notes may be |
 | EDPB anonymisation guidelines 02/2026 | Adopted for consultation 7 July 2026 | Q57-2 | Downloaded [S33] |
 | EDPB pseudonymisation guidelines 01/2025 | Consultation version; final not found | Q57-2 | Downloaded [S32] |
 | Mandatory digital working-time record | Not in the BOE per secondary sources | L3 | Secondary only |
+
+### Update, 2026-11-25: the record of processing exemption {#record-exemption-2026-11-25}
+
+**Status.** Parliament adopted the regulation on 24 November 2026, 572 to 44 with 42 abstentions
+([Agence Europe](https://agenceurope.eu/en/bulletin/article/13989/20/european-parliament-approves-new-rules-creating-another-category-of-mid-sized-companies)).
+We found no Council adoption and no publication. It enters into force «on the twentieth day following
+that of its publication» in the Official Journal. Until then today's article 30(5) applies.
+
+**The new article 30(5)**, from the compromise text in
+[Council document 10978/26](https://data.consilium.europa.eu/doc/document/ST-10978-2026-INIT/en/pdf):
+
+> The obligations referred to in paragraphs 1 and 2 shall not apply to an enterprise or an organisation
+> employing fewer than 1000 persons unless and to the extent that a specific processing activity they
+> carry out is likely to result in a high risk to the rights and freedoms of data subjects, within the
+> meaning of Article 35, in particular with regard to the cases referred to in paragraph 3 of that
+> Article and, in any event, where the processing activity constitutes a core activity requiring the
+> appointment of a data protection officer pursuant to Article 37(1), point (b) or (c). The obligations
+> referred to in paragraphs 1 and 2 of this Article shall only apply to the specific processing activity
+> that meets the conditions established in this paragraph.
+
+Parliament's site refused a download (403), so its adopted text was not read. The wording
+[PPC Land](https://ppc.land/firms-under-1-000-staff-win-gdpr-records-exemption-in-eu-deal/) quotes
+from Amendment 44 differs slightly and sets the same conditions. Spain's LOPDGDD art. 31.1 requires the
+record «salvo que sea de aplicación la excepción prevista en su apartado 5» (unless the exception in
+article 30(5) applies), so it should follow the new text without a Spanish change. Our reading.
+
+**A restaurant (our reading).** "Not occasional" and "special categories" stop removing the exemption on
+their own. Staff, invoices and bookings would probably need no record. Allergy notes would need one
+only if likely to be high risk, the test article 35 uses for a DPIA, so Q54-3's answer should settle
+both. Q54-5's answer, no DPO for a single restaurant, means the second limit should not apply. Nothing
+else the restaurant must do changes: not the privacy notice, people's rights, breach reporting, security
+or retention, nor the daily working-time record, which is labour law. Nor does the written reason for
+having no DPIA.
+
+**Waitron (our reading).** The exemption covers processors too: paragraph 2 is their record. For a
+restaurant that runs its own box without Cloud's hosting or backups, Waitron holds no allergy notes and
+nothing new falls on it. If Cloud hosts venues or keeps backups it can unlock, it would be a processor of
+the copies. WP243 (p. 9) gives an example where a small business's processing is not large scale
+but its website analytics processor's is, «having many customers like this small enterprise, taken
+together», so the processor must have a DPO under art. 37(1)(b). That example is about monitoring
+people, not hosting, and allergy notes may be ancillary to hosting a till. Whether Cloud meets
+art. 37(1)(c) is open:
+[P11](../2026-11-06-adviser-questions.md#for-the-privacy-specialist).
 
 ## What the owner can do without any adviser
 
 1. Correct the Spanish batch ([list above](#what-to-send)).
 2. Decide whether A1324 stands, with the four facts above in view.
 3. Add a blocking step to S9, S11 and A664's removal, or hold them for the Q55-1 answer.
-4. Guide changes: state that the record of processing is required; add a walk-in allergy notice; add
+4. Guide changes: state that the record of processing is required (2026-11-25: do not, see the
+   [update](#record-exemption-2026-11-25)); add a walk-in allergy notice; add
    order changes and the clock-in device to the staff notice; add a bucket-login and two-step note to
    the backups advice; add Waitron as a recipient once A1047 is built.
 5. Tell lane D about Q57-4 and Q57-5, since Cloud's register and D101 question 4 rely on Q57.

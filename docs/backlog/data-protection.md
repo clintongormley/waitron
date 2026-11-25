@@ -95,6 +95,15 @@ by the answers):
     table is not one column: a party's bill reaches its tables through its party, a counter order
     names the table it is delivered to in `delivery_table_id`, and the bill's `label` is operator
     text that filing overwrites with the frozen table grouping (S2d decision 9).
+- **The guide's record-of-processing paragraph, once the new GDPR article 30(5) takes effect**
+  (2026-11-25). Parliament passed it on 24 November; the Council has still to adopt it, and it takes
+  effect twenty days after publication in the Official Journal. Until then the guide is right: do not
+  change it early. On the day, rewrite the first paragraph of "Your record of processing" in English
+  and Spanish (`apps/server/src/guide/en/data-protection.md` and its Spanish twin) for the new limits,
+  keeping the template for venues that still want or need one.
+  [Text and our reading](../compliance/research/2026-11-06-adviser-privacy.md#record-exemption-2026-11-25);
+  the questions for the specialist are P11 of the
+  [curated list](../compliance/2026-11-06-adviser-questions.md#for-the-privacy-specialist).
 - **A swap in the download carries no shift** (S2b decision 8), kept by the watcher 2026-11-24, not asked: approving a
   swap moves no shift, so the shift stays its giver's and the taker's copy shows the swap with no time.
 - **Measure the working-time, actions and adjustments parts, and the invoice customer's download,

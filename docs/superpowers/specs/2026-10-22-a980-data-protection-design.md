@@ -617,6 +617,9 @@ exemption looks lost on that ground alone, and allergy notes are health data (R5
 asks the specialist to confirm. Waitron ships an English and Spanish template in the help guide
 (O10 (b), S6), which the venue's adviser fills in.
 
+_2026-11-25: Parliament has passed a new article 30(5), not yet law; see the
+[update](../../compliance/research/2026-11-06-adviser-privacy.md#record-exemption-2026-11-25)._
+
 ### 4.7 Data protection officer
 
 Required where the controller's "actividades principales" are "el tratamiento a gran escala de

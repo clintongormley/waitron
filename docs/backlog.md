@@ -1856,7 +1856,9 @@ carries the privacy contact, and a production box can be set up from an export a
 staff emails, the sign-in page, Account settings and both downloads read the saved privacy page, and
 the environment setting is gone) and S1b2 (the invoice email carries the invoice customers' privacy
 notice) are built.
-The privacy-specialist questions from Q54 on are open. The Cloud half is lane D's D101.
+The privacy-specialist questions from Q54 on are open. When the new GDPR article 30(5) takes effect,
+the guide's record-of-processing paragraph changes
+([entry](backlog/data-protection.md#a980--data-protection-waitrons-side)). The Cloud half is lane D's D101.
 
 ---
 
