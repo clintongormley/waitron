@@ -3377,8 +3377,6 @@ export class TillTableOrderScreen extends LitElement {
       }`;
   }
 
-  /** A bill that is not open takes its total from the bills read: the server refuses a paid bill's
-   * lines (`tab.not_open`). */
   #savedTotal(): string {
     const shown = this.#shownBill;
     return shown === undefined || shown.status === "open" ? this.#payStore!.total : shown.total;

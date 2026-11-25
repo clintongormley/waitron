@@ -844,6 +844,53 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(dialog(el)!.balance?.workingOrderId).toBe("wo-4");
   });
 
+  it("Cancel payment on a printed bill moves to the reopened bill and says its receipt was credited", async () => {
+    let settle!: (result: ItemPaymentResult) => void;
+    let paid = false;
+    const cancelBillReaderPayment = vi.fn().mockResolvedValue({ outcome: "requested" });
+    const { el } = await mountApp({
+      ...withReader("sumup_cloud"),
+      cancelBillReaderPayment,
+      getPartyBills: vi.fn(async () =>
+        paid
+          ? [creditedWo4, billOf({ workingOrderId: "wo-5", billNumber: 2 })]
+          : [billOf({ status: "placed" })],
+      ),
+      getBillBalance: vi.fn().mockResolvedValue(balanceOf({ status: "placed" })),
+      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
+      payForItems: vi.fn(
+        () =>
+          new Promise<ItemPaymentResult>((resolve) => {
+            settle = resolve;
+          }),
+      ),
+    });
+    await choosePrintedItems(el, [4, 5]);
+    await press(el, 'input[name="method"][value="card"]');
+    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await press(el, "[data-pay-cancel-reader]");
+    paid = true;
+    settle({
+      ...onWo9("declined", "failed"),
+      sourceBalance: balanceOf({ workingOrderId: "wo-5" }),
+    });
+    await flush(el, 6);
+
+    expect(cancelBillReaderPayment).toHaveBeenCalledWith(
+      "wo-4",
+      expect.any(String),
+      expect.anything(),
+    );
+    expect(formError(el)).toBe(t("bill_pay.no_payment_taken"));
+    expect(dialog(el)!.balance?.workingOrderId).toBe("wo-5");
+    expect(tableOrder(el).orderId).toBe("wo-5");
+    expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-gone]"))).toBe(
+      creditedNotice("Bill 2"),
+    );
+  });
+
   it("no answer resends the same body under the same submission id", async () => {
     let party = 3;
     const payForItems = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));

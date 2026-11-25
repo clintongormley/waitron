@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { sales, workingOrderLines, workingOrders } from "@waitron/db";
 import { createProduct } from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -381,6 +381,60 @@ describe("Pay for items on a printed bill", () => {
     expect(await statusOf(venue, itemsBill)).toBe("abandoned");
     expect(await ticketsOf(itemsBill)).toEqual([]);
     expect(await paymentRows(venue, itemsBill)).toMatchObject([{ state: "failed" }]);
+  });
+
+  it("Cancel payment at the reader leaves every dish on the reopened bill, as a declined card does", async () => {
+    const party = await printed(await seated("soup", "hake"));
+    const original = await fixture.invoiceOf(venue, party.tabId);
+    let offered!: () => void;
+    let stopped!: () => void;
+    const atReader = new Promise<void>((resolve) => (offered = resolve));
+    const cancelled = new Promise<void>((resolve) => (stopped = resolve));
+    const stop = vi.fn(async () => {
+      stopped();
+      return "requested" as const;
+    });
+    const collect = venue.card.collect.bind(venue.card);
+    vi.spyOn(venue.card, "collect").mockImplementationOnce(async (params) => {
+      params.onReaderCheckout?.(stop);
+      offered();
+      await cancelled;
+      // The reader charges nothing once its checkout is stopped.
+      venue.card.failNextCollect();
+      return collect(params);
+    });
+    const body = await itemsBody(party, [{ lineId: await lineOf(party.tabId, "hake") }], {
+      method: "card",
+      entry: "reader",
+      applied: "15.00",
+    });
+
+    const paying = payItems(party.tabId, body);
+    await atReader;
+    const cancel = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments/${body.submissionId}/cancel`,
+    );
+    const paid = await paying;
+
+    expect(cancel.json).toEqual({ outcome: "requested" });
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(paid.json.payment).toMatchObject({ outcome: "declined" });
+    expect((await fixture.creditsOf(venue, original.id)).map((credit) => credit.total)).toEqual([
+      -2100,
+    ]);
+    const [reopened] = await reopenedFrom(party.tabId);
+    expect(await statusOf(venue, reopened!)).toBe("open");
+    expect(await dishes(reopened!)).toEqual([
+      ["Soup", "1.000", "6.00"],
+      ["Hake", "1.000", "15.00"],
+    ]);
+    expect(paid.json.sourceBalance).toMatchObject({
+      workingOrderId: reopened,
+      outstanding: "21.00",
+    });
   });
 
   it("a refusal reopens nothing", async () => {
