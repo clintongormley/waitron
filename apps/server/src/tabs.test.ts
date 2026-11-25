@@ -2928,23 +2928,27 @@ describe("editing a line the kitchen has and has not started", () => {
       expect(await ticketRow(tabId, 2)).toMatchObject({ note: "no onions" });
     });
 
-    it("refuses a change to a row whose second dish is started, changing nothing", async () => {
-      const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
-      await asApp((tx) => advanceTicketItem(tx, tickets[1]!.id, "preparing"));
-      const before = await linesOf(tabId);
+    it.each(["held-or-waiting", "never"] as const)(
+      "refuses a change to a row whose second dish is started at a %s station, changing nothing",
+      async (policy) => {
+        const { cfg, tabId, tickets } = await tabWithTwoSentCoffees();
+        await asApp((tx) => setChangesAfterSending(tx, policy, [tickets[0]!.stationId]));
+        await asApp((tx) => advanceTicketItem(tx, tickets[1]!.id, "preparing"));
+        const before = await linesOf(tabId);
 
-      await expect(
-        editRow(cfg, tabId, { note: "no onions", portionLineNos: [2] }),
-      ).rejects.toMatchObject({
-        code: "ticket.already_started",
-        params: { ticketItemId: tickets[1]!.id },
-      });
+        await expect(
+          editRow(cfg, tabId, { note: "no onions", portionLineNos: [2] }),
+        ).rejects.toMatchObject({
+          code: "ticket.already_started",
+          params: { ticketItemId: tickets[1]!.id },
+        });
 
-      expect(await linesOf(tabId)).toEqual(before);
-      expect(await ticketRow(tabId, 1)).toMatchObject({ id: tickets[0]!.id, note: null });
-      expect(await ticketRow(tabId, 2)).toMatchObject({ id: tickets[1]!.id, state: "preparing" });
-      expect(await noticesAt(tickets[0]!.stationId)).toEqual([]);
-    });
+        expect(await linesOf(tabId)).toEqual(before);
+        expect(await ticketRow(tabId, 1)).toMatchObject({ id: tickets[0]!.id, note: null });
+        expect(await ticketRow(tabId, 2)).toMatchObject({ id: tickets[1]!.id, state: "preparing" });
+        expect(await noticesAt(tickets[0]!.stationId)).toEqual([]);
+      },
+    );
 
     it("refuses a lower or fractional total, and any dish that is not another of this row's, changing nothing", async () => {
       const { cfg, tableId, coffeeId, waterId, coffeeOffer, waterOffer } = await setupVenue();
