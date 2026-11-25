@@ -114,11 +114,7 @@ export class EquipmentNfcSticker extends LitElement {
     failed: (error: unknown) => Step,
   ): Promise<void> {
     this.confirmLock = false;
-    const Writer = nfcWriter();
-    if (Writer === undefined) {
-      this.step = failed(undefined);
-      return;
-    }
+    const Writer = nfcWriter()!;
     this.step = waiting;
     const controller = new AbortController();
     this.#operation = controller;
@@ -146,7 +142,7 @@ export class EquipmentNfcSticker extends LitElement {
           { signal },
         ),
       "written",
-      (error) => ((error as Error | undefined)?.name === "NotAllowedError" ? "blocked" : "failed"),
+      (error) => ((error as Error).name === "NotAllowedError" ? "blocked" : "failed"),
     );
   }
 
@@ -164,8 +160,7 @@ export class EquipmentNfcSticker extends LitElement {
   async #writeAgain(): Promise<void> {
     const written = this.#write();
     await this.updateComplete;
-    if (this.step === "writing")
-      this.renderRoot.querySelector<HTMLElement>("[data-test=close-equipment-nfc]")?.focus();
+    this.renderRoot.querySelector<HTMLElement>("[data-test=close-equipment-nfc]")?.focus();
     await written;
   }
 

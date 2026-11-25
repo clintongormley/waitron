@@ -265,20 +265,34 @@ it("Print is quiet while the printers are read", async () => {
   complete(active);
   await listed(el);
 });
-it("ignores a late list after the label changes", async () => {
-  let complete!: (printers: typeof active) => void;
-  const { el, api } = await mount(
-    "printer",
-    () => new Promise<typeof active>((resolve) => (complete = resolve)),
-  );
-  api.listPrinters.mockResolvedValue(active);
-  el.itemId = OTHER;
-  await vi.waitFor(() => expect(items(el)[0]?.textContent!.trim()).toBe("Counter"));
-  complete([]);
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  await el.updateComplete;
-  expect(items(el)).toHaveLength(3);
-});
+it.each(["list", "refusal", "list after the new one"] as const)(
+  "ignores a late %s after the label changes",
+  async (answer) => {
+    const reads: { resolve: (printers: typeof active) => void; reject: (e: Error) => void }[] = [];
+    const { el } = await mount(
+      "printer",
+      () => new Promise<typeof active>((resolve, reject) => reads.push({ resolve, reject })),
+    );
+    el.itemId = OTHER;
+    await vi.waitFor(() => expect(q(el, "equipment-label-qr")).not.toBeNull());
+    if (answer === "list") reads[0]!.resolve([]);
+    else if (answer === "refusal") reads[0]!.reject(new Error("old refusal"));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await el.updateComplete;
+    expect(q<WtButton>(el, "print-equipment-label").loading).toBe(true);
+    expect(error(el)).toBe("");
+    reads[1]!.resolve(active);
+    await listed(el);
+    if (answer === "list after the new one") reads[0]!.resolve([]);
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    await el.updateComplete;
+    expect(items(el).map((each) => each.textContent!.trim())).toEqual([
+      "Counter",
+      "Portable",
+      "This computer’s printer",
+    ]);
+  },
+);
 it("sends once while pending and ignores its late result after switching equipment", async () => {
   const { el, api } = await mountListed();
   let complete!: (result: { jobId: string }) => void;
@@ -298,11 +312,13 @@ it("sends once while pending and ignores its late result after switching equipme
   expect(waiting.variant).toBe("primary");
   el.itemId = OTHER;
   await vi.waitFor(() => expect(items(el)).toHaveLength(3));
+  api.printEquipmentLabel.mockImplementationOnce(() => new Promise(() => {}));
+  choose(el, ID);
   complete({ jobId: "old-job" });
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await el.updateComplete;
   expect(q(el, "equipment-label-printer-status")).toBeNull();
-  expect(items(el)).toHaveLength(3);
+  expect(q<WtButton>(el, "print-equipment-label").loading).toBe(true);
 });
 
 it("keeps a late refusal from appearing on the replacement label", async () => {

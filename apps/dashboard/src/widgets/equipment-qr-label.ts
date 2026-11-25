@@ -150,7 +150,7 @@ export class EquipmentQrLabel extends LitElement {
   }
 
   async #loadPrinters(): Promise<void> {
-    if (!this.api || this.loading) return;
+    if (!this.api) return;
     const generation = this.#generation;
     this.loading = true;
     this.readError = null;
