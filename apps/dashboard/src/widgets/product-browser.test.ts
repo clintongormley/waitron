@@ -2290,20 +2290,20 @@ it.each(["all", "folder:d"])("marks products from %s in filtered Tree", async (s
   await chooseFilter(el, "modifiers", "has");
   expect(await rowKeys(el)).toEqual(["folder:d", "cola"]);
   await selectKeys(el, []);
-  const tick = async (key: string) => {
-    const { shadowRoot } = await tableOf(el);
-    await userEvent.click(shadowRoot!.querySelector(`[data-test="select-${key}"]`)!);
-  };
-  await tick(selection);
+  const table = await tableOf(el);
+  const checkbox = (key: string) =>
+    table.shadowRoot!.querySelector<HTMLInputElement>(`[data-test="select-${key}"]`)!;
+  await userEvent.click(checkbox(selection));
   await userEvent.click(bulkButton(el, "unavailable")!);
   expect(api.setProductsAvailability).toHaveBeenCalledExactlyOnceWith(
     selection === "all" ? ["cola"] : ["cola", "water", "stout"],
     false,
   );
   if (selection !== "all") return;
-  await chooseFilter(el, "modifiers", "");
   await typeSearch(el, "Drinks");
-  await tick("all");
+  expect(checkbox("all").disabled).toBe(true);
+  await chooseFilter(el, "modifiers", "");
+  await userEvent.click(checkbox("all"));
   await userEvent.click(bulkButton(el, "available")!);
   expect(api.setProductsAvailability).toHaveBeenLastCalledWith(["cola", "water", "stout"], true);
 });
@@ -2639,7 +2639,7 @@ it("selects folders and products but never variants", async () => {
             available: true,
             allergensInherited: true,
             effective: {
-              allergens: null,
+              allergens: {},
               unitPrice: "2.00",
               vatClass: "reduced",
               takeawayVatRate: "10.00",
@@ -2662,6 +2662,10 @@ it("selects folders and products but never variants", async () => {
     table.shadowRoot!.querySelector('tr[data-row-key="cola:v"] input[type="checkbox"]'),
   ).toBeNull();
   expect(count(el)).toBe("2 selected");
+  await chooseView(el, "List");
+  await chooseFilter(el, "allergens", "none");
+  table.shadowRoot!.querySelector<HTMLInputElement>('[data-test="select-all"]')!.click();
+  await vi.waitFor(() => expect(count(el)).toBe("1 selected"));
 });
 it("leaves selection mode on Done and restores the ordinary toolbar with no selected keys", async () => {
   const el = await mountBrowser();

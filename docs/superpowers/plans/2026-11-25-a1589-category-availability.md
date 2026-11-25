@@ -52,6 +52,7 @@ comes from the browser’s snapshot when staff press the button. Send the watche
 at 390 and 1180 px.
 
 **Watcher clearance, 22:30.** Select all in Products Tree ticks only rendered matches. Categories
-shown for a matching product keep their individual boxes. A category matching by name is included.
+shown for a matching product keep their individual boxes. A category matching by name is included
+when search is the only narrowing. A product column filter still requires matches in those products.
 Opt in through `wt-data-table` so availability, Move and Delete share the same ticks. Test a
 column filter, a deliberate category tick under that filter and a category-name search.

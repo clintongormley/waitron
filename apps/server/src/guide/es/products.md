@@ -26,9 +26,9 @@ Para cambiar varios productos a la vez, activa **Seleccionar**, marca los produc
 **Marcar como disponible** o **Marcar como no disponible**. El recuento de la selección indica
 cuántos elementos marcados ocultan la búsqueda o los filtros. En **Árbol**, marca una categoría
 para incluir todos sus productos y los de sus subcategorías, incluso si la búsqueda o los filtros
-los ocultan. Después de cambiar una categoría, un aviso indica a cuántos productos se aplicó la acción.
-**Seleccionar todo** marca las filas visibles que coinciden. Si una categoría aparece porque coincide
-uno de sus productos, marca la categoría para incluirla.
+los ocultan. Después de marcar una categoría como disponible o no disponible, un aviso indica a
+cuántos productos se aplicó la acción. En Árbol, la casilla de la cabecera marca las filas visibles que
+coinciden. Si una categoría aparece porque coincide uno de sus productos, marca la categoría para incluirla.
 
 Cambia a **Árbol** para recorrer u organizar las categorías. Las categorías siguen en orden
 alfabético cuando ordenas los productos y se abren si tienen coincidencias al filtrar. Para añadir

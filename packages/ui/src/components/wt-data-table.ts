@@ -2705,6 +2705,7 @@ export class WtDataTable<Row = unknown> extends LitElement {
                             type="checkbox"
                             data-test="select-all"
                             aria-label=${this.selectAllLabel}
+                            ?disabled=${this.rowSelectAll !== undefined && visibleKeys.length === 0}
                             .checked=${allSelected}
                             .indeterminate=${someSelected && !allSelected}
                             @change=${(event: Event) => {

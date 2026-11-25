@@ -23,8 +23,8 @@ exit **Select** to see the price and switch again.
 To change several products together, turn on **Select**, tick the products and choose
 **Mark available** or **Mark unavailable**. The selected count says how many ticks search
 or filters hide. In **Tree**, tick a category to include all its products and those in its
-subcategories, even when search or filters hide them. After changing a category, a notice
-shows how many products the action applied to. **Select all** ticks the visible matching rows.
+subcategories, even when search or filters hide them. After marking a category, a notice
+shows how many products the action applied to. In Tree, the heading checkbox ticks the visible matching rows.
 To include a category shown because one of its products matches, tick the category itself.
 
 Switch to **Tree** to browse or organise categories. Categories stay in alphabetical order when

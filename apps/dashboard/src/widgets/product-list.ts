@@ -1507,7 +1507,7 @@ export class ProductList extends LitElement {
         .rowControls=${this.view === "tree" && this.reordering ? (row: ListRow) => this.#rowControls(row) : undefined}
         rowControlsLabel=${t("folders.drag")}
         .selectable=${this.selecting}
-        .rowSelectAll=${(row: ListRow, filtered: boolean) => !filtered || row.kind !== "folder"}
+        .rowSelectAll=${this.view === "tree" ? (row: ListRow, filtered: boolean) => !filtered || row.kind !== "folder" : undefined}
         .selected=${this.selected}
         .rowSelectable=${(row: ListRow) =>
           row.kind === "folder" || (row.kind === "product" && row.variant === null)}

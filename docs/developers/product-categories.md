@@ -424,9 +424,10 @@ The selected count says how many ticks search or filters hide. Move and the two 
 actions include those ticks.
 Choose **Mark available** or **Mark unavailable** to change products together. Tick a category to
 include its products and those in its subcategories, even if search or filters hide them. After
-changing a category, a notice shows how many products the action applied to. A drag carries only
-visible ticks and keeps the hidden ones selected. In Tree, Select all ticks only rendered rows
-that match search and filters. You can still tick a category shown because one of its products matches.
+marking a category, a notice shows how many products the action applied to. A drag carries only
+visible ticks and keeps the hidden ones selected. In Tree, the heading checkbox adds or removes
+ticks only on visible rows that match. Categories shown for matching products keep their own
+checkboxes and any ticks you added by hand.
 Opening or closing a category keeps it, so a selection can span categories; a selected row inside a
 closed category is still selected. **Done** clears it, hides the grips and restores the ordinary
 toolbar and returns focus to **Select**, and so does pressing **Select** again. A valid drop opens
