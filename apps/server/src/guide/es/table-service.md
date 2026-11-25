@@ -524,10 +524,10 @@ para enviar todos sus platos con sus extras.
 
 Los alérgenos y las etiquetas dietéticas vienen de la carta publicada. Los detalles de un plato
 enviado conservan, en la caja, los que tenía al enviarlo; las pantallas de cocina y la comprobación
-de alergias de la mesa muestran cualquier corrección publicada desde entonces. **Actualizar las
-cartas publicadas** y **Corregir la carta publicada** también imprimen un aviso de corrección cuando
-la corrección añade o quita un alérgeno en un plato enviado marcado para un comensal con esa alergia;
-publicar la carta no imprime ninguno.
+de alergias de la mesa muestran cualquier corrección publicada desde entonces. **Actualizar ahora**,
+que se ofrece al guardar un producto, y **Corregir la carta publicada** también imprimen un aviso de
+corrección cuando la corrección añade o quita un alérgeno en un plato enviado y aún no servido,
+marcado para un comensal con esa alergia; una publicación normal no imprime ninguno.
 
 Para consultar los alérgenos y las etiquetas dietéticas de un plato enviado, abre sus detalles y
 lee **Registrado al enviar**. Un plato en espera muestra lo que está publicado ahora hasta que lo

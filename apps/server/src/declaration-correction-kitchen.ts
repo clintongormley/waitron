@@ -1,7 +1,6 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNotNull, or, sql } from "drizzle-orm";
 import {
-  parties,
-  partyFamilies,
+  partyTables,
   ticketItems,
   workingOrderLines,
   workingOrders,
@@ -12,36 +11,43 @@ import { inIds } from "./in-ids.js";
 import { refreshKitchenAllergyClashes } from "./kitchen-allergy.js";
 import type { TradingContext } from "./trading-context.js";
 
-/** Refreshes allergy clashes for every sent line (one with a ticket item) whose product (dish,
- * variant or picked extra) is one of `productIds`, on an order whose party is open: one
- * `refreshKitchenAllergyClashes` per order, with extra lines mapped to their dish line. */
+const dishId = sql<string>`coalesce(${workingOrderLines.parentLineId}, ${workingOrderLines.id})`;
+
+/** Refreshes allergy clashes for every sent dish on an open party's order whose own product, or
+ * whose picked extra's, is one of `productIds` (a variant line holds the variant's id), and which
+ * holds a kitchen allergy record on its own ticket or an extra's: one
+ * `refreshKitchenAllergyClashes` per order. Only such a dish can get a correction slip. */
 export async function refreshCorrectedKitchenLines(
   tx: Transaction,
   cfg: TradingContext,
   productIds: readonly string[],
 ): Promise<void> {
-  const open = await tx.select({ id: parties.id }).from(parties).where(eq(parties.state, "open"));
-  if (open.length === 0) return;
-  // A party joined into an open one is closed, and its bills count as the open party's.
-  const families = await partyFamilies(
-    tx,
-    open.map(({ id }) => id),
-  );
-  const dishId = sql<string>`coalesce(${workingOrderLines.parentLineId}, ${workingOrderLines.id})`;
-  const rows = await tx
-    .selectDistinct({ orderId: workingOrderLines.workingOrderId, lineId: dishId })
+  // A party holds `party_tables` rows from its seating until it closes (`closePartyTables`), so
+  // these are the open parties, read through the table's own small index.
+  const openParties = tx.selectDistinct({ id: partyTables.partyId }).from(partyTables);
+  const recorded = await tx
+    .selectDistinct({ orderId: workingOrderLines.workingOrderId, dishId })
+    .from(workingOrders)
+    .innerJoin(workingOrderLines, eq(workingOrderLines.workingOrderId, workingOrders.id))
+    .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
+    .where(
+      and(sql`${workingOrders.partyId} in ${openParties}`, isNotNull(ticketItems.allergyCurrent)),
+    );
+  if (recorded.length === 0) return;
+  const dishes = recorded.map((row) => row.dishId);
+  const corrected = await tx
+    .selectDistinct({ dishId })
     .from(workingOrderLines)
-    .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .innerJoin(ticketItems, eq(ticketItems.workingOrderLineId, dishId))
     .where(
       and(
-        inIds(workingOrders.partyId, [...families.values()].flat()),
+        or(inIds(workingOrderLines.id, dishes), inIds(workingOrderLines.parentLineId, dishes)),
         inIds(workingOrderLines.productId, productIds),
       ),
     );
+  const hit = new Set(corrected.map((row) => row.dishId));
   const byOrder = new Map<string, string[]>();
-  for (const { orderId, lineId } of rows)
-    byOrder.set(orderId, [...(byOrder.get(orderId) ?? []), lineId]);
+  for (const { orderId, dishId: id } of recorded)
+    if (hit.has(id)) byOrder.set(orderId, [...(byOrder.get(orderId) ?? []), id]);
   for (const [orderId, lineIds] of byOrder)
     await refreshKitchenAllergyClashes(tx, cfg, orderId, lineIds);
 }
