@@ -55,13 +55,14 @@ announces (`LiveEvents.position` in `apps/server/src/live-api.ts`), each event c
 covers as its SSE id, and the next stream sends the last one as `since`. Its `ready` event names the
 watched types that changed after `since`, and only those reads, and reads that failed, are sent again.
 The first stream of a sign-in uses the position from `GET /management-api/session/me`, which the
-shell keeps only when it was taken before any read was being watched; a position newer than a read
-would hide a change that read missed. A stream reads everything when it opens, as before, whenever the position is in
-doubt: the server restarted or is another box, the stream failed or went silent, the page was left
-and shown again, or another session started. Measured on a fresh load of Products before and after:
-42 reads of 17 addresses on two streams, then 16 reads of 15 on one. Moving to Products from Menus
-went from 33 reads to 8. A read that is not answered from stored rows still needs its timer: a
-position says nothing about it.
+shell keeps only when it was taken before any read was being watched. A position newer than a read
+would hide a change that read missed. The stream refreshes all watched reads when its position is
+uncertain, such as after a server restart, on a different box, after a failed or silent stream, or
+when the page returns to view. Queries whose answers change with time still need their timers.
+
+In a signed-in Chromium session on the same demo venue, a fresh Products load went from 43 GETs to
+17, and a move from Menus to Products went from 35 to 9. These counts include the event streams.
+Each action opened two streams before the change and one after.
 
 Start a page's reads together. A read started after others answer changes what the page watches, so
 it also costs another stream.
@@ -235,7 +236,7 @@ Reusing an already cached query issues no request and therefore does not extend 
 to the active client. Its reads go through `readVenueTheme` (`packages/ui/src/venue-theme.ts`). An
 answer the read hands in is dropped if a theme was applied after that read was sent.
 2026-11-25: sign-in no longer takes the start-up fetch's answer, which is older than the sign-in
-check and so not covered by its change position (below).
+check and so falls outside its change position (above).
 
 Test an external identity event with the view already mounted. Check the displayed value and an
 unsaved draft, then disconnect the view and confirm later events stop issuing reads. Query and
