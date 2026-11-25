@@ -670,13 +670,15 @@ export class MenusScreen extends LitElement {
     settings: () => this.menuSettings,
     languages: () => this.contentLanguages,
     showError: (message) => {
+      if (message === null) this.memberError = null;
       this.structureWriteError = message;
     },
     reportRefusal: (name, error) => this.#reportRefused(name, error),
     // The query reports a failed refresh through the screen's load state.
     refreshProducts: () => this.#watchLibraryProducts().catch(() => undefined),
     returnFocusTo: (path, photo) => this.#returnFocusTo(path, false, photo),
-    windowClosed: () => this.#windowClosed(),
+    windowClosed: () =>
+      this.#windowClosed(this.#productEditor.saving ? this.#focusedElement() : undefined),
   });
 
   get #canOpenProduct(): boolean {
@@ -763,7 +765,7 @@ export class MenusScreen extends LitElement {
   #pickerHeld: string[] = [];
   #addable: Product[] = [];
   #focusReturn:
-    | { menuId: string; key: string; swatch: boolean }
+    | { menuId: string; key: string; swatch: boolean; focusWhenClosed?: Element | null }
     | { menuId: string; shortcuts: string[]; add: "product" | "section" }
     | null = null;
   #windowShut = false;
@@ -805,7 +807,7 @@ export class MenusScreen extends LitElement {
     this.#followUsage();
     if (this.busy || changed.has("structureSelecting")) this.#productEditor.cancelRead();
     if (
-      !this.#canOpenProduct ||
+      !this.canEditProducts ||
       this.view !== "structure" ||
       this.creatingSection ||
       this.editingSection ||
@@ -1708,8 +1710,16 @@ export class MenusScreen extends LitElement {
     this.#windowShut = shut;
   }
 
+  #focusedElement(): Element | null {
+    let focused = this.ownerDocument.activeElement;
+    while (focused?.shadowRoot?.activeElement) focused = focused.shadowRoot.activeElement;
+    return focused;
+  }
+
   /** A window's close is reported after the dialog has put focus back. */
-  #windowClosed(): void {
+  #windowClosed(focusWhenClosed?: Element | null): void {
+    if (focusWhenClosed !== undefined && this.#focusReturn && "key" in this.#focusReturn)
+      this.#focusReturn.focusWhenClosed = focusWhenClosed;
     this.#windowShut = true;
     this.requestUpdate();
   }
@@ -1722,6 +1732,10 @@ export class MenusScreen extends LitElement {
     this.#focusReturn = null;
     if (target.menuId !== this.menuId) return;
     if ("key" in target) {
+      if (target.focusWhenClosed !== undefined) {
+        const focused = this.#focusedElement();
+        if (focused !== target.focusWhenClosed && focused !== this.ownerDocument.body) return;
+      }
       const table = this.renderRoot.querySelector("dashboard-menu-structure-table");
       if (target.swatch) void table?.focusRowSwatch(target.key);
       else table?.focusRowMenu(target.key);
@@ -2704,7 +2718,7 @@ export class MenusScreen extends LitElement {
       }
       <dashboard-menu-structure-table
         .nodes=${structure.nodes}
-        .editProductsInPlace=${this.#canOpenProduct}
+        .editProductsInPlace=${this.canEditProducts}
         .menus=${this.menus}
         .placeableSetMenus=${structure.placeableSetMenus ?? []}
         .products=${this.products}
@@ -2742,9 +2756,10 @@ export class MenusScreen extends LitElement {
           this.#openAdd(event.detail.action, event.detail.path);
         }}
         @wt-edit-product=${(event: CustomEvent<StructureProductEdit>) => {
-          if (!this.#canOpenProduct || this.view !== "structure") return;
+          if (!this.canEditProducts) return;
           event.stopPropagation();
-          this.#productEditor.open(event.detail);
+          if (this.#canOpenProduct && this.view === "structure" && !this.busy)
+            this.#productEditor.open(event.detail);
         }}
         @wt-member-remove=${(event: CustomEvent<{ path: string[]; memberId: string }>) => {
           event.stopPropagation();
@@ -3929,7 +3944,7 @@ export class MenusScreen extends LitElement {
       </wt-tabs>
       ${this.#renderNewSection()} ${this.#renderIncludeEdit()} ${this.#renderAddProducts()}
       ${this.#renderShortcutPicker()}
-      ${this.#productEditor.render(this.canEditProducts && this.view === "structure" && this.contentLanguages !== null && this.menuSettings !== null)}`;
+      ${this.#productEditor.render(this.#canOpenProduct && this.view === "structure")}`;
   }
 
   override render() {

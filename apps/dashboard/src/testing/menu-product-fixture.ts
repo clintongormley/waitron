@@ -56,7 +56,6 @@ export function menuProductApi(product: Product = menuProduct): MenuProductApi {
       { id: "menu-one", name: "Lunch", active: true, kind: "menu", setPrice: null },
     ],
     listLibraryProducts: async () => [product],
-    listProducts: async () => [product],
     listCategories: async () => [],
     listUnits: async () => [menuProductUnit],
     listCourses: async () => [],

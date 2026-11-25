@@ -1363,7 +1363,12 @@ export class MenuStructureTable extends LitElement {
             data-test=${`edit-product-${key}`}
             href=${`/products/product/${encodeURIComponent(productId)}`}
             ?data-own-click=${this.editProductsInPlace}
+            aria-disabled=${this.busy ? "true" : nothing}
             @click=${(event: MouseEvent) => {
+              if (this.busy) {
+                event.preventDefault();
+                return;
+              }
               if (leftToBrowser(event)) return;
               event.preventDefault();
               this.#send(

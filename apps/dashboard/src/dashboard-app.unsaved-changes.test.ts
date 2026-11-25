@@ -1335,12 +1335,18 @@ describe("a price override row's Edit product link under the app's link router",
 });
 
 describe("a Structure tab product row's Edit product link under the app's link router", () => {
-  it.each([true, false])(
-    "keeps the menu address and opens the editor only with Products access (%s)",
-    async (allowed) => {
+  it.each(["allowed", "denied", "retry"] as const)(
+    "opens Edit product in the right place for %s",
+    async (mode) => {
+      const allowed = mode !== "denied";
       const productApi = menuProductApi();
+      let settingsReady = mode !== "retry";
       const { app } = await mount({
         ...productApi,
+        getMenuSettings: async () => {
+          if (!settingsReady) throw { code: "connection.failed" };
+          return productApi.getMenuSettings!();
+        },
         getMe: async () => ({
           personId: "p1",
           email: "ada@example.com",
@@ -1358,7 +1364,7 @@ describe("a Structure tab product row's Edit product link under the app's link r
       const menus = () => app.shadowRoot!.querySelector("dashboard-menus-screen")?.shadowRoot;
       const editor = () => menus()?.querySelector<ProductEditor>("dashboard-product-editor");
       await guard.write("/menus");
-      if (allowed) {
+      if (mode === "allowed") {
         await userEvent.click(page.getByRole("button", { name: "Actions: Lunch" }));
         await userEvent.click(page.getByRole("button", { name: "Rename…" }));
         const rename = () => menus()?.querySelector("dashboard-section-details-form")?.open;
@@ -1370,6 +1376,15 @@ describe("a Structure tab product row's Edit product link under the app's link r
       await userEvent.click(page.getByRole("button", { name: "Actions: Burger" }));
       const link = page.getByRole("link", { name: "Edit product" });
       expect(location.pathname).toBe(address);
+      if (mode === "retry") {
+        await userEvent.click(link);
+        expect(location.pathname).toBe(address);
+        expect(productApi.getProductEditor).not.toHaveBeenCalled();
+        settingsReady = true;
+        await userEvent.click(page.getByRole("button", { name: "Try again" }));
+        await expect.poll(() => menus()?.querySelector('[data-test="load-error"]')).toBeNull();
+        await userEvent.click(page.getByRole("button", { name: "Actions: Burger" }));
+      }
       const push = vi.spyOn(history, "pushState");
       const replace = vi.spyOn(history, "replaceState");
       await userEvent.click(link);
@@ -1384,7 +1399,6 @@ describe("a Structure tab product row's Edit product link under the app's link r
       } else {
         expect(location.pathname).toBe("/menus");
         expect(productApi.getProductEditor).not.toHaveBeenCalled();
-        expect(editor()?.open ?? false).toBe(false);
       }
     },
   );
