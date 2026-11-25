@@ -1,5 +1,6 @@
 import { LiveConnection, type LiveData } from "@waitron/dashboard-kit";
 import axe from "axe-core";
+import { nothing, render } from "lit";
 import { commands, page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
@@ -7,6 +8,10 @@ import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi, DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/shared";
+
+import type { MenuPreviewPanel } from "./menu-preview.js";
+import type { MenuPublicationsPanel } from "./menu-publications.js";
+import { publishAction, scheduleAction } from "./menu-publication-actions.js";
 
 declare module "vitest/browser" {
   interface BrowserCommands {
@@ -63,12 +68,12 @@ export async function mountWidget<T extends HTMLElement>(
   return { el, host };
 }
 
-export function mountMenuPreview<T extends HTMLElement>(
+export async function mountMenuPreview<T extends MenuPreviewPanel>(
   tag: string,
   props: Partial<T>,
   theme?: Theme,
 ) {
-  return mountWidget<T>(
+  const mounted = await mountWidget<T>(
     tag,
     {
       menuId: "menu-fixture",
@@ -79,6 +84,60 @@ export function mountMenuPreview<T extends HTMLElement>(
     },
     theme,
   );
+  attachPublishAction(mounted.el);
+  mounted.el.requestUpdate();
+  await mounted.el.updateComplete;
+  return mounted;
+}
+
+export async function mountMenuPublications<T extends MenuPublicationsPanel>(
+  tag: string,
+  props: Partial<T>,
+  theme?: Theme,
+) {
+  const mounted = await mountWidget<T>(tag, props, theme);
+  attachScheduleAction(mounted.el);
+  await mounted.el.updateComplete;
+  return mounted;
+}
+
+// Standalone fixtures connect the screen-owned controls to the widget's actions.
+function attachPublishAction(panel: MenuPreviewPanel): void {
+  const outlet = document.createElement("div");
+  panel.addController({
+    hostUpdated() {
+      if (!outlet.parentNode) panel.renderRoot.prepend(outlet);
+      const preview = panel.preview;
+      render(
+        preview && !panel.failed
+          ? publishAction(preview, panel.publishing, panel.menuName, (event) =>
+              panel.requestPublish(event, preview),
+            )
+          : nothing,
+        outlet,
+      );
+    },
+  });
+}
+
+export function attachScheduleAction(panel: MenuPublicationsPanel): void {
+  panel.tabIndex = -1;
+  const outlet = document.createElement("div");
+  panel.heading = {
+    scheduleChanged: (available) => {
+      if (!outlet.parentNode) panel.renderRoot.prepend(outlet);
+      const preview = panel.preview;
+      render(
+        available && preview
+          ? scheduleAction((event) =>
+              panel.openSchedule(event.currentTarget as HTMLElement, preview),
+            )
+          : nothing,
+        outlet,
+      );
+    },
+    focusFallback: () => panel,
+  };
 }
 
 /**

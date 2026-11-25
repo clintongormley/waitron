@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { page } from "vitest/browser";
-import type { DashboardApi, MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
+import type { MenuChange, MenuPreview, MenuStatus } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { MenuPreviewPanel, type PublishResult } from "./menu-preview.js";
@@ -73,79 +73,9 @@ async function mount(props: Partial<MenuPreviewPanel>) {
   return (await mountIn(props)).el;
 }
 
-it.each([
-  [1280, "en"],
-  [1280, "es-ES"],
-  [390, "en"],
-  [390, "es-ES"],
-] as const)(
-  "A547 keeps Publish later before Publish now on one line at %i px in %s",
-  async (width, language) => {
-    const viewport = { width: innerWidth, height: innerHeight };
-    onTestFinished(() => page.viewport(viewport.width, viewport.height));
-    await page.viewport(width, 900);
-    setLocale(language);
-    const el = await mount({
-      menuId: "menu-lunch",
-      api: {
-        getMenuPublications: async () => ({ timeZone: "Europe/Madrid", live: null, editions: [] }),
-      } as unknown as DashboardApi,
-    });
-    const publications = el.shadowRoot!.querySelector("dashboard-menu-publications")!;
-    expect(publications).not.toBeNull();
-    await expect
-      .poll(() => publications.shadowRoot?.querySelector('[data-test="schedule-open"]') ?? null)
-      .not.toBeNull();
-    const later = publications
-      .shadowRoot!.querySelector<HTMLElement>('[data-test="schedule-open"]')!
-      .getBoundingClientRect();
-    const now = q(el, '[data-test="publish"]')!.getBoundingClientRect();
-    expect(later.width).toBeGreaterThan(0);
-    expect(now.width).toBeGreaterThan(0);
-    expect(later.right).toBeLessThanOrEqual(now.left);
-    expect(later.top).toBeLessThan(now.bottom);
-    expect(now.top).toBeLessThan(later.bottom);
-    expect(
-      q(el, '[data-test="changes-pane"]')!.getBoundingClientRect().top - now.bottom,
-    ).toBeCloseTo(parseFloat(getComputedStyle(el).getPropertyValue("--wt-space-3")), 0);
-    expect(publications.closest('[data-test="changes-pane"]')).toBeNull();
-    expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
-  },
-);
-
 function q<T extends HTMLElement = HTMLElement>(el: MenuPreviewPanel, selector: string): T | null {
   return el.shadowRoot!.querySelector<T>(selector);
 }
-
-it.each(["now", "later"] as const)("A547 shows Publish %s on its own", async (action) => {
-  const el = await mount({
-    preview: { ...preview([]), hash: action === "now" ? NEW_HASH : LIVE_HASH },
-    api: {
-      getMenuPublications: async () => ({
-        timeZone: "Europe/Madrid",
-        live: null,
-        editions: [
-          {
-            versionId: "queued",
-            number: 3,
-            state: "queued",
-            contentHash: NEW_HASH,
-            activatesAt: "2030-01-01T12:00:00Z",
-            queuedAt: PUBLISHED_AT,
-            cancelledAt: null,
-            local: { date: "2030-01-01", time: "13:00", offset: "+01:00", repeated: false },
-          },
-        ],
-      }),
-    } as unknown as DashboardApi,
-  });
-  const publications = q(el, "dashboard-menu-publications")!;
-  await expect.poll(() => publications.shadowRoot!.querySelector("wt-data-table")).not.toBeNull();
-  const now = q(el, '[data-test="publish"]');
-  expect((now?.getBoundingClientRect().width ?? 0) > 0).toBe(action === "now");
-  const later = publications.shadowRoot!.querySelector('[data-test="schedule-open"]');
-  expect((later?.getBoundingClientRect().width ?? 0) > 0).toBe(action === "later");
-});
 
 function text(node: Element | null): string {
   return (node?.textContent ?? "").replace(/\s+/g, " ").trim();
@@ -865,7 +795,8 @@ it("holds the publish button while a publish is out, saying what it is doing", a
   });
   const button = q<HTMLElementTagNameMap["wt-button"]>(el, '[data-test="publish"]')!;
   expect(button.loading).toBe(true);
-  expect(text(button)).toBe("Publishing Lunch Menu…");
+  expect(text(button)).toBe("Publish now");
+  expect(button.ariaDescription).toBe("Publishing Lunch Menu…");
   const asked: unknown[] = [];
   el.addEventListener("wt-menu-publish", (event) => asked.push(event));
   button.click();
@@ -1227,10 +1158,6 @@ it.each([
       }
       expect(documentPane!.contains(q(el, '[data-test="document"]'))).toBe(true);
       expect(changesPane!.contains(q(el, '[data-test="changes"]'))).toBe(true);
-      const publish = q(el, '[data-test="publish"]')!;
-      expect(documentPane!.contains(publish)).toBe(false);
-      expect(changesPane!.contains(publish)).toBe(false);
-      expect(publish.getBoundingClientRect().bottom).toBeLessThanOrEqual(left.top);
       expect(el.scrollWidth).toBeLessThanOrEqual(el.clientWidth);
       expect(getComputedStyle(documentPane!).overflowY).toBe("auto");
       expect(getComputedStyle(changesPane!).overflowY).toBe("auto");
@@ -1240,7 +1167,7 @@ it.each([
   },
 );
 
-it("makes overflowing pane regions keyboard reachable without scrolling the publication action", async () => {
+it("makes overflowing pane regions keyboard reachable", async () => {
   await page.viewport(1280, 850);
   try {
     const document = menuDocument(
@@ -1256,8 +1183,6 @@ it("makes overflowing pane regions keyboard reachable without scrolling the publ
       source: "this_menu",
     }));
     const el = await mount({ preview: { ...preview(changes), document } });
-    const publish = q(el, '[data-test="publish"]')!;
-    const actionTop = publish.getBoundingClientRect().top;
     for (const name of ["document", "changes"]) {
       const pane = q(el, `[data-test="${name}-pane"]`)!;
       expect(pane.scrollHeight).toBeGreaterThan(pane.clientHeight);
@@ -1268,7 +1193,6 @@ it("makes overflowing pane regions keyboard reachable without scrolling the publ
       expect(el.shadowRoot!.activeElement).toBe(pane);
       pane.scrollTop = pane.scrollHeight;
       expect(pane.scrollTop).toBeGreaterThan(0);
-      expect(publish.getBoundingClientRect().top).toBe(actionTop);
     }
   } finally {
     await page.viewport(414, 850);

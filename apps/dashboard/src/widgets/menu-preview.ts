@@ -35,6 +35,7 @@ import { PATH_SEPARATOR } from "./category-form.js";
 import { placeName } from "./price-source.js";
 import { setMenuAddress, leftToBrowser } from "../navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
+import { previewLiveVersion, type MenuPublicationHeading } from "./menu-publication-actions.js";
 import "./menu-publications.js";
 import type { StringKey } from "../i18n/strings.js";
 
@@ -284,6 +285,7 @@ export class MenuPreviewPanel extends LitElement {
   @property() menuName = "";
   @property({ attribute: false }) api!: DashboardApi;
   @property() menuId = "";
+  @property({ attribute: false }) heading?: MenuPublicationHeading;
   @property({ attribute: false }) lateRefusalFor?: (name: string) => () => void;
   @property({ attribute: false }) includedBy: { id: string; name: string }[] = [];
   /** Null while the live version is being read. */
@@ -584,11 +586,8 @@ export class MenuPreviewPanel extends LitElement {
       : source;
   }
 
-  /** The live version's number when the working menu is exactly that version, else null. Read
-   * from the state that came with the preview, so both describe the same moment. */
-  #upToDate(preview: MenuPreview): number | null {
-    const { status } = preview;
-    return status.state !== "unpublished" && status.hash === preview.hash ? status.version : null;
+  requestPublish(event: Event, preview: MenuPreview): void {
+    if (this.preview === preview) this.#publish(event);
   }
 
   #publish(event: Event, confirmed = false): void {
@@ -653,9 +652,9 @@ export class MenuPreviewPanel extends LitElement {
       body = html`<p class="note" role="status" data-test="preview-loading">
         ${t("menu_preview.loading")}
       </p>`;
-    else if (this.#upToDate(preview) !== null)
+    else if (previewLiveVersion(preview) !== null)
       body = html`<p data-test="nothing">
-        ${fill("menu_preview.nothing", { number: String(this.#upToDate(preview)) })}
+        ${fill("menu_preview.nothing", { number: String(previewLiveVersion(preview)) })}
       </p>`;
     else if (preview.changes.length === 0)
       body = html`<p class="note" data-test="no-changes">${t("menu_preview.no_changes")}</p>`;
@@ -788,7 +787,7 @@ export class MenuPreviewPanel extends LitElement {
     const preview = this.preview;
     if (this.failed || preview === null) return nothing;
     const heading = t(
-      this.#upToDate(preview) === null
+      previewLiveVersion(preview) === null
         ? "menu_preview.document_heading"
         : "menu_preview.document_heading_live",
     );
@@ -829,22 +828,10 @@ export class MenuPreviewPanel extends LitElement {
     </section>`;
   }
 
-  #renderPublish() {
-    if (this.failed || this.preview === null || this.#upToDate(this.preview) !== null)
+  #renderPublishNote() {
+    if (this.failed || this.preview === null || previewLiveVersion(this.preview) !== null)
       return nothing;
-    const menu = { menu: this.menuName };
-    return html`<wt-button
-        variant=${this.publishing || this.preview.clashes.length === 0 ? "primary" : "secondary"}
-        data-test="publish"
-        .loading=${this.publishing}
-        .disabled=${this.preview.clashes.length > 0}
-        @click=${(event: Event) => this.#publish(event)}
-        >${fill(
-          this.publishing ? "menu_preview.publishing" : "menu_preview.publish",
-          menu,
-        )}</wt-button
-      >
-      ${this.includedBy.length === 0 ? nothing : html`<p slot="publish-note" class="help" data-test="only-this-menu">${this.#includerLinks()} ${t(this.includedBy.length === 1 ? "menu_preview.includer_note" : "menu_preview.includers_note")}</p>`} `;
+    return html`${this.includedBy.length === 0 ? nothing : html`<p slot="publish-note" class="help" data-test="only-this-menu">${this.#includerLinks()} ${t(this.includedBy.length === 1 ? "menu_preview.includer_note" : "menu_preview.includers_note")}</p>`} `;
   }
 
   #includerLinks() {
@@ -951,7 +938,8 @@ export class MenuPreviewPanel extends LitElement {
             .menuName=${this.menuName}
             .lateRefusalFor=${this.lateRefusalFor}
             .preview=${this.failed ? null : this.preview}
-            >${this.#renderPublish()}</dashboard-menu-publications
+            .heading=${this.heading}
+            >${this.#renderPublishNote()}</dashboard-menu-publications
           >
           <div
             class="pane"

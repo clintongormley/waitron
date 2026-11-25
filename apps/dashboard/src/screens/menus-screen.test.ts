@@ -1,6 +1,6 @@
 import { useLocale } from "../testing/locale-setup.js";
 import { LitElement, html } from "lit";
-import { LeaveController, NavigationGuard, setHelpMode } from "@waitron/ui";
+import { LeaveController, NavigationGuard } from "@waitron/ui";
 import { combinedFixture } from "../widgets/test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
@@ -2765,12 +2765,13 @@ describe("copying a menu from the list", () => {
       "edit-menu-lunch",
       "rename-menu-lunch",
       "duplicate-menu-lunch",
+      "patch-menu-lunch",
       "delete-menu-lunch",
     ]);
     expect(items.map((item) => text(item))).toEqual(
       currentLocale().split("-")[0] === "en"
-        ? ["Open", "Rename…", "Copy…", "Delete…"]
-        : ["Abrir", "Cambiar nombre…", "Copiar…", "Eliminar…"],
+        ? ["Open", "Rename…", "Copy…", "Patch live menu…", "Delete…"]
+        : ["Abrir", "Cambiar nombre…", "Copiar…", "Corregir la carta publicada…", "Eliminar…"],
     );
     expect(text(items[2]!)).toBe(t("menus.copy"));
     expect(items[2]!.variant).toBe("secondary");
@@ -8826,11 +8827,14 @@ it.each(["another menu", "another tab"])(
     const client = api({ updateMenuItem: vi.fn(() => pending.promise) });
     const el = await mountPrices(client);
     const oldTable = prices(el);
+    type(priceField(el, "mi-burger"), "11.00");
+    await oldTable.updateComplete;
+    await el.updateComplete;
     const refresh = vi.fn(oldTable.refreshPrices);
     const save = vi.fn(oldTable.savePrices!);
     oldTable.refreshPrices = refresh;
     oldTable.savePrices = save;
-    await commitPrice(el, "mi-burger", "11.00");
+    priceSave(el).click();
     if (destination === "another menu") {
       history.pushState(null, "", "/menus/menu/menu-dinner/view/prices");
       window.dispatchEvent(new PopStateEvent("popstate"));
@@ -9177,7 +9181,10 @@ describe("publishing", () => {
   }
 
   function inPanel(el: MenusScreen, testId: string): HTMLElement | null {
-    return panel(el).shadowRoot!.querySelector<HTMLElement>(`[data-test="${testId}"]`);
+    const selector = `[data-test="${testId}"]`;
+    return testId === "publish" || testId === "schedule-open"
+      ? q(el, selector)
+      : panel(el).shadowRoot!.querySelector<HTMLElement>(selector);
   }
 
   async function mountPreview(client: Api = api()) {
@@ -9215,8 +9222,8 @@ describe("publishing", () => {
       HTMLElementTagNameMap["dashboard-menu-publications"]
     >("dashboard-menu-publications")!;
     const sq = (selector: string) => schedule.shadowRoot!.querySelector<HTMLElement>(selector)!;
-    await expect.poll(() => sq('[data-test="schedule-open"]')).not.toBeNull();
-    await userEvent.click(sq('[data-test="schedule-open"]'));
+    await expect.poll(() => inPanel(el, "schedule-open")).not.toBeNull();
+    await userEvent.click(inPanel(el, "schedule-open")!);
     await schedule.updateComplete;
     for (const [name, value] of [
       ["date", "2030-01-01"],
@@ -9290,8 +9297,8 @@ describe("publishing", () => {
         const schedule = panel(el).shadowRoot!.querySelector("dashboard-menu-publications")!;
         const sq = (selector: string) => schedule.shadowRoot!.querySelector<HTMLElement>(selector);
         if (action === "Schedule") {
-          await expect.poll(() => sq('[data-test="schedule-open"]')).toBeTruthy();
-          sq('[data-test="schedule-open"]')!.click();
+          await expect.poll(() => inPanel(el, "schedule-open")).toBeTruthy();
+          inPanel(el, "schedule-open")!.click();
         } else {
           const move = () =>
             sq("wt-data-table")?.shadowRoot?.querySelector<HTMLElement>(
@@ -9367,11 +9374,12 @@ describe("publishing", () => {
         .shadowRoot!.querySelector("dashboard-menus-screen")
         ?.shadowRoot?.querySelector("dashboard-menu-preview")
         ?.shadowRoot?.querySelector("dashboard-menu-publications");
+    const menusScreen = () => app.shadowRoot!.querySelector("dashboard-menus-screen");
     await expect
-      .poll(() => publication()?.shadowRoot?.querySelector('[data-test="schedule-open"]'))
+      .poll(() => menusScreen()?.shadowRoot?.querySelector('[data-test="schedule-open"]'))
       .toBeTruthy();
+    const menus = menusScreen()!;
     const schedule = publication()!;
-    const menus = app.shadowRoot!.querySelector("dashboard-menus-screen")!;
     await menus.updateComplete;
     await schedule.updateComplete;
     const menuRenders = vi.spyOn(menus, "render");
@@ -9385,7 +9393,7 @@ describe("publishing", () => {
     expect(menuRenders).not.toHaveBeenCalled();
     expect(scheduleRenders).not.toHaveBeenCalled();
     const sq = (selector: string) => schedule.shadowRoot!.querySelector<HTMLElement>(selector)!;
-    sq('[data-test="schedule-open"]').click();
+    inPanel(menus, "schedule-open")!.click();
     await schedule.updateComplete;
     type(sq('wt-input[name="date"]'), "2030-01-02");
     type(sq('wt-input[name="time"]'), "13:00");
@@ -9423,8 +9431,8 @@ describe("publishing", () => {
     const el = await mountPreview(client);
     const schedule = panel(el).shadowRoot!.querySelector("dashboard-menu-publications")!;
     const sq = (selector: string) => schedule.shadowRoot!.querySelector<HTMLElement>(selector)!;
-    await expect.poll(() => sq('[data-test="schedule-open"]')).toBeTruthy();
-    sq('[data-test="schedule-open"]').click();
+    await expect.poll(() => inPanel(el, "schedule-open")).toBeTruthy();
+    inPanel(el, "schedule-open")!.click();
     await schedule.updateComplete;
     type(sq('wt-input[name="date"]'), "2030-01-02");
     type(sq('wt-input[name="time"]'), "13:00");
@@ -9444,6 +9452,59 @@ describe("publishing", () => {
     expect(sq('[data-test="late-refusal"]')).toBeNull();
   });
 
+  it.each([false, true])(
+    "returns focus after cancelling the last queued version with unpublished changes: %s",
+    async (changed) => {
+      const edition = {
+        versionId: "v-next",
+        number: 3,
+        state: "queued" as const,
+        activatesAt: "2030-01-01T11:00:00.000Z",
+        queuedAt: PUBLISHED_AT,
+        cancelledAt: null,
+        contentHash: "e".repeat(64),
+        local: { date: "2030-01-01", time: "12:00", offset: "+01:00", repeated: false },
+      };
+      const queue = { timeZone: "Europe/Madrid", live: null, editions: [edition] };
+      const preview = { ...lunchPreview(), warnings: [] };
+      const client = api({
+        getMenuPreview: vi.fn().mockResolvedValue({
+          ...preview,
+          status: {
+            ...statuses()["menu-lunch"],
+            state: changed ? "changed" : "current",
+            hash: changed ? LUNCH_LIVE_HASH : preview.hash,
+          },
+        }),
+        getMenuPublications: vi.fn().mockResolvedValue(queue),
+        cancelMenuPublication: vi.fn(async () => {
+          client.getMenuPublications.mockResolvedValue({ ...queue, editions: [] });
+        }),
+      });
+      const el = await mount(client, PREVIEW_PATH);
+      if (!changed) {
+        await vi.waitFor(() => expect(inPanel(el, "schedule-open")).not.toBeNull());
+        expect(inPanel(el, "publish")).toBeNull();
+      }
+      const schedule = panel(el).shadowRoot!.querySelector("dashboard-menu-publications")!;
+      const cancel = () =>
+        schedule
+          .shadowRoot!.querySelector("wt-data-table")
+          ?.shadowRoot!.querySelector<HTMLElement>('[data-test="cancel-v-next"]');
+      await vi.waitFor(() => expect(cancel()).toBeTruthy());
+      cancel()!.closest("wt-row-actions")!.show();
+      await userEvent.click(cancel()!);
+      const confirm = schedule.shadowRoot!.querySelector<HTMLElement>(
+        '[data-test="cancel-confirm"]',
+      )!;
+      await userEvent.click(confirm);
+      await vi.waitFor(() => expect(cancel()).toBeUndefined());
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "h1")));
+      await userEvent.keyboard("{Enter}");
+      expect(client.publishMenu).not.toHaveBeenCalled();
+    },
+  );
+
   it("renders the publications widget for the open menu with the preview it read", async () => {
     const client = api();
     const el = await mountPreview(client);
@@ -9456,9 +9517,6 @@ describe("publishing", () => {
     expect(schedule.api).toBe(client);
     expect(schedule.preview).toBe(panel(el).preview);
     expect(schedule.preview?.hash).toBe(LUNCH_HASH);
-    const slot = schedule.shadowRoot!.querySelector("slot:not([name])");
-    expect(slot).not.toBeNull();
-    expect(inPanel(el, "publish")!.assignedSlot).toBe(slot);
     await vi.waitFor(() => expect(client.getMenuPublications).toHaveBeenCalledWith("menu-lunch"));
   });
 
@@ -9965,7 +10023,7 @@ describe("publishing", () => {
       LUNCH_PATH,
     );
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).toBe("(Could not be checked)"),
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe("Could not be checked"),
     );
     cleanupWidgets();
 
@@ -9974,7 +10032,7 @@ describe("publishing", () => {
       PREVIEW_PATH,
     );
     await vi.waitFor(() =>
-      expect(text(q(onPreview, '[data-test="menu-status"]'))).toBe("(Could not be checked)"),
+      expect(text(q(onPreview, '[data-test="menu-status"]'))).toBe("Could not be checked"),
     );
     await vi.waitFor(() => expect(inPanel(onPreview, "live")).toBeNull());
   });
@@ -9982,7 +10040,7 @@ describe("publishing", () => {
   it("keeps the state it read on another tab when the preview cannot be read", async () => {
     const client = api({ getMenuPreview: vi.fn().mockRejectedValue(new Error("offline")) });
     const el = await mountLunch(client);
-    const shown = `(Live: version 2 · 1 hour ago)`;
+    const shown = `Live: version 2 · 1 hour ago`;
     await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(shown));
     await chooseTab(el, "preview");
     await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
@@ -10024,7 +10082,7 @@ describe("publishing", () => {
     });
     const el = await mount(client, PREVIEW_PATH);
     expect(q(el, '[data-test="load-error"]')).not.toBeNull();
-    const shown = `(Live: version 2 · 1 hour ago)`;
+    const shown = `Live: version 2 · 1 hour ago`;
     await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(shown));
     const previews = client.getMenuPreview.mock.calls.length;
     await click(el, "retry");
@@ -10225,7 +10283,7 @@ describe("publishing", () => {
     await vi.waitFor(() => expect(client.getMenuStatuses).toHaveBeenCalledTimes(1));
     await inTable(el, "open-menu-lunch");
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).toBe(`(Live: version 2 · 1 hour ago)`),
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe(`Live: version 2 · 1 hour ago`),
     );
     expect(client.getMenuStatus).toHaveBeenCalledWith("menu-lunch");
     const one = client.getMenuStatus.mock.calls.length;
@@ -10300,7 +10358,7 @@ describe("publishing", () => {
     live.invalidate([{ type: "menu_releases" }]);
     await vi.waitFor(() => expect(client.getMenuPreview.mock.calls.length).toBe(previews + 1));
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).toBe(`(Live: version 3 · 1 hour ago)`),
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe(`Live: version 3 · 1 hour ago`),
     );
     expect(inPanel(el, "live")).toBeNull();
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -10310,10 +10368,10 @@ describe("publishing", () => {
     await chooseTab(el, "structure");
     await vi.waitFor(() => expect(client.getMenuStatus.mock.calls.length).toBe(statusReads + 1));
     await el.updateComplete;
-    expect(text(q(el, '[data-test="menu-status"]'))).toBe(`(Live: version 3 · 1 hour ago)`);
+    expect(text(q(el, '[data-test="menu-status"]'))).toBe(`Live: version 3 · 1 hour ago`);
     held.resolve(statuses()["menu-lunch"]!);
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).toBe(`(Live: version 2 · 1 hour ago)`),
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe(`Live: version 2 · 1 hour ago`),
     );
     live.invalidate([{ type: "menu_releases" }]);
     await vi.waitFor(() => expect(client.getMenuStatus.mock.calls.length).toBe(statusReads + 2));
@@ -10323,7 +10381,7 @@ describe("publishing", () => {
     const opened = api({ liveData: new LiveData() });
     const direct = await mountPreview(opened);
     await vi.waitFor(() =>
-      expect(text(q(direct, '[data-test="menu-status"]'))).toBe(`(Live: version 2 · 1 hour ago)`),
+      expect(text(q(direct, '[data-test="menu-status"]'))).toBe(`Live: version 2 · 1 hour ago`),
     );
     expect(opened.getMenuStatus).not.toHaveBeenCalled();
   });
@@ -10358,7 +10416,7 @@ describe("publishing", () => {
     expect(client.getMenuPreview.mock.calls.length).toBeGreaterThan(previews);
     expect(client.getMenuStatus).not.toHaveBeenCalled();
     expect(inPanel(el, "publish")).toBeNull();
-    expect(text(q(el, '[data-test="menu-status"]'))).toBe(`(Live: version 3 · 30 minutes ago)`);
+    expect(text(q(el, '[data-test="menu-status"]'))).toBe(`Live: version 3 · 30 minutes ago`);
   });
 
   it("shows the box's publish time in the header when the preview cannot be read again", async () => {
@@ -10377,7 +10435,7 @@ describe("publishing", () => {
       ),
     );
     await vi.waitFor(() => expect(inPanel(el, "preview-error")).not.toBeNull());
-    expect(text(q(el, '[data-test="menu-status"]'))).toBe(`(Live: version 3 · 55 minutes ago)`);
+    expect(text(q(el, '[data-test="menu-status"]'))).toBe(`Live: version 3 · 55 minutes ago`);
     expect(inPanel(el, "live")).toBeNull();
     cleanupWidgets();
 
@@ -10392,7 +10450,7 @@ describe("publishing", () => {
     again.getMenuPreview.mockRejectedValue(new Error("offline"));
     await publish(kept);
     await vi.waitFor(() => expect(inPanel(kept, "preview-error")).not.toBeNull());
-    expect(text(q(kept, '[data-test="menu-status"]'))).toBe(`(Live: version 2 · 1 hour ago)`);
+    expect(text(q(kept, '[data-test="menu-status"]'))).toBe(`Live: version 2 · 1 hour ago`);
   });
 
   it("sends one publish while one is out", async () => {
@@ -10687,16 +10745,17 @@ describe("publishing", () => {
     expect(button()!.loading).toBe(true);
     history.pushState(null, "", "/menus/menu/menu-dinner/view/preview");
     window.dispatchEvent(new PopStateEvent("popstate"));
-    await vi.waitFor(() => expect(text(inPanel(el, "publish"))).toBe("Publish now"));
-    expect(button()!.loading).toBe(false);
+    await vi.waitFor(() => expect(button()?.loading).toBe(false));
+    expect(text(button())).toBe("Publish now");
     await publish(el);
     expect(client.publishMenu).toHaveBeenLastCalledWith("menu-dinner", "c".repeat(64));
     await vi.waitFor(() =>
       expect(text(inPanel(el, "result"))).toBe("Dinner Menu version 6 is now live."),
     );
     history.back();
-    await vi.waitFor(() => expect(text(inPanel(el, "publish"))).toBe("Publishing Lunch Menu…"));
-    expect(button()!.loading).toBe(true);
+    await vi.waitFor(() => expect(button()?.loading).toBe(true));
+    expect(text(button())).toBe("Publish now");
+    expect(button()?.ariaDescription).toBe("Publishing Lunch Menu…");
     lunchOut.resolve({ versionId: "v-lunch-3", number: 3, publishedAt: NEXT_PUBLISHED_AT });
     await vi.waitFor(() =>
       expect(text(inPanel(el, "result"))).toBe(
@@ -10827,209 +10886,139 @@ describe("patching the live menu", () => {
     hash: "c".repeat(64),
   };
 
-  function patchButton(el: MenusScreen): HTMLElement | null {
-    return q(el, '[data-test="patch-live-menu"]');
-  }
-
-  function dialog(el: MenusScreen): HTMLElementTagNameMap["dashboard-menu-patch-dialog"] {
-    return q<HTMLElementTagNameMap["dashboard-menu-patch-dialog"]>(
-      el,
-      "dashboard-menu-patch-dialog",
+  const row = (el: MenusScreen, id = "menu-lunch") =>
+    table(el).shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
+      `wt-row-actions:has([data-test="edit-${id}"])`,
     )!;
-  }
+  const patch = (el: MenusScreen, id = "menu-lunch") =>
+    row(el, id).querySelector<HTMLElement>(`[data-test="patch-${id}"]`);
+  const dialog = (el: MenusScreen) =>
+    q<HTMLElementTagNameMap["dashboard-menu-patch-dialog"]>(el, "dashboard-menu-patch-dialog")!;
 
-  function previewMarked(el: MenusScreen): string | undefined {
-    const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
-    return tabs.items.find((item) => item.key === "preview")?.marked;
+  async function openPatch(el: MenusScreen, id = "menu-lunch") {
+    await vi.waitFor(() => expect(patch(el, id)).not.toBeNull());
+    row(el, id).show();
+    await userEvent.click(patch(el, id)!);
+    await vi.waitFor(() => expect(dialog(el).open).toBe(true));
   }
 
   function announcePatch(el: MenusScreen): void {
-    dialog(el).dispatchEvent(
-      new CustomEvent("wt-menu-patched", {
-        detail: { versionId: "v-lunch-3", number: 3, requeued: [] },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    dialog(el).dispatchEvent(new CustomEvent("wt-menu-patched", { bubbles: true, composed: true }));
   }
 
-  /** Lunch with version 2 live and nothing changed since it was published. */
-  function currentLunch(overrides: Partial<Api> = {}) {
-    return api({
-      getMenuStatus: vi.fn().mockResolvedValue({ ...statuses()["menu-lunch"]!, state: "current" }),
-      ...overrides,
+  it("offers Patch for live rows only and opens the chosen menu", async () => {
+    const first = deferred<Record<string, MenuStatus>>();
+    const client = api({
+      getMenuStatuses: vi.fn().mockReturnValue(first.promise),
     });
-  }
-
-  it("offers the patch beside the live words of a menu with a live version", async () => {
-    const el = await mountLunch(currentLunch());
-    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
-    expect(text(patchButton(el))).toBe("Patch live menu…");
-    expect(patchButton(el)!.getAttribute("variant")).toBe("secondary");
-    expect(patchButton(el)!.closest(".title")).not.toBeNull();
-    cleanupWidgets();
-
-    const changed = await mountLunch(api());
-    await vi.waitFor(() =>
-      expect(text(q(changed, '[data-test="menu-status"]'))).toContain("version 2"),
-    );
-    expect(patchButton(changed)).not.toBeNull();
+    const el = await mount(client);
+    expect(patch(el, "menu-dinner")).toBeNull();
+    first.resolve({
+      ...statuses(),
+      "menu-lunch": { state: "unpublished", clashes: 0 },
+    });
+    await openPatch(el, "menu-dinner");
+    expect(patch(el)).toBeNull();
+    expect(dialog(el).menuId).toBe("menu-dinner");
+    expect(dialog(el).menuName).toBe("Dinner Menu");
+    expect(dialog(el).api).toBe(client);
+    expect("takeawayVat" in dialog(el)).toBe(false);
   });
 
-  it("offers no patch for a menu never published, nor while its state cannot be read", async () => {
-    const el = await mountLunch(
-      api({ getMenuStatus: vi.fn().mockResolvedValue({ state: "unpublished", clashes: 0 }) }),
+  it("offers no Patch when the list status read fails", async () => {
+    const el = await mount(
+      api({ getMenuStatuses: vi.fn().mockRejectedValue(new Error("offline")) }),
     );
-    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe("(Unpublished)"));
-    expect(patchButton(el)).toBeNull();
-    cleanupWidgets();
-
-    const failed = await mountLunch(
-      api({ getMenuStatus: vi.fn().mockRejectedValue(new Error("offline")) }),
-    );
-    await vi.waitFor(() =>
-      expect(text(q(failed, '[data-test="menu-status"]'))).toBe("(Could not be checked)"),
-    );
-    expect(patchButton(failed)).toBeNull();
+    await vi.waitFor(() => expect(patch(el)).toBeNull());
+    expect(patch(el, "menu-dinner")).toBeNull();
   });
-
-  function patchHelp(el: MenusScreen): HTMLElement | null {
-    return q(el, '[data-test="patch-live-menu-help"]');
-  }
 
   it.each([
     ["en", "/help/en/products#patch-live-menu"],
-    ["es", "/help/es/products#patch-live-menu"],
-  ])(
-    "explains the patch in a help-mode tooltip beside its button, linking to the guide in %s",
-    async (locale, href) => {
-      setLocale(locale);
-      const el = await mountLunch(currentLunch());
-      await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
-      const tooltip = patchHelp(el)!;
-      expect(tooltip.tagName).toBe("WT-HELP-TOOLTIP");
-      expect(tooltip.previousElementSibling).toBe(patchButton(el));
-      expect(tooltip.getAttribute("mode")).toBe("help-mode");
-      expect(tooltip.getAttribute("aria-label")).toBe(t("menus.patch_live_help_label"));
-      expect(text(tooltip)).toBe(t("menus.patch_live_help"));
-      expect(tooltip.getAttribute("guide-href")).toBe(href);
-      expect(tooltip.getAttribute("guide-label")).toBe(t("menus.patch_live_help_guide"));
-    },
-  );
-
-  it("hangs the patch's help badge over its button's top trailing corner while help is on", async () => {
-    setHelpMode(true);
-    onTestFinished(() => setHelpMode(false));
-    const el = await mountLunch(currentLunch());
-    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
-    const button = patchButton(el)!.getBoundingClientRect();
-    const badge = patchHelp(el)!.getBoundingClientRect();
-    expect(badge.width).toBeGreaterThan(0);
-    const [x, y] = [badge.left + badge.width / 2, badge.top + badge.height / 2];
-    expect(Math.abs(x - button.right)).toBeLessThanOrEqual(1);
-    expect(Math.abs(y - button.top)).toBeLessThanOrEqual(1);
+    ["es-ES", "/help/es/products#patch-live-menu"],
+  ])("links to the %s guide from the Patch row", async (locale, href) => {
+    setLocale(locale);
+    const el = await mount(api());
+    await vi.waitFor(() => expect(patch(el)).not.toBeNull());
+    const tooltip = patch(el)!
+      .closest("wt-menu-row")!
+      .shadowRoot!.querySelector("wt-help-tooltip")!;
+    expect(tooltip.getAttribute("guide-href")).toBe(href);
+    expect(tooltip.getAttribute("aria-label")).toBe(t("menus.patch_live_help_label"));
   });
 
-  it("keeps the patch's help badge off the live words and the title when the heading wraps on a phone", async () => {
-    const [width, height] = [window.innerWidth, window.innerHeight];
-    await page.viewport(390, 844);
-    onTestFinished(() => page.viewport(width, height));
-    setHelpMode(true);
-    onTestFinished(() => setHelpMode(false));
-    const el = await mountLunch(currentLunch());
-    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
-    const words = q(el, '[data-test="menu-status"]')!.getBoundingClientRect();
-    const title = q(el, ".title h1")!.getBoundingClientRect();
-    const button = patchButton(el)!.getBoundingClientRect();
-    const badge = patchHelp(el)!.getBoundingClientRect();
-    expect(button.top).toBeGreaterThanOrEqual(words.bottom);
-    expect(badge.width).toBeGreaterThan(0);
-    for (const box of [words, title])
-      expect(
-        badge.left < box.right &&
-          box.left < badge.right &&
-          badge.top < box.bottom &&
-          box.top < badge.bottom,
-      ).toBe(false);
-  });
-
-  it("shows no patch tooltip where there is no patch button", async () => {
-    const el = await mountLunch(
-      api({ getMenuStatus: vi.fn().mockResolvedValue({ state: "unpublished", clashes: 0 }) }),
-    );
-    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe("(Unpublished)"));
-    expect(patchHelp(el)).toBeNull();
-  });
-
-  it("opens the patch dialog for the open menu, and again after it closes", async () => {
-    const client = currentLunch();
-    const el = await mountLunch(client);
-    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
-    expect(dialog(el).open).toBe(false);
-    await userEvent.click(patchButton(el)!);
+  it("keeps the filtered row and returns focus to its menu after patching", async () => {
+    const initial = statuses();
+    const current = { ...initial, "menu-lunch": { ...initial["menu-lunch"]!, state: "current" } };
+    const client = api({ getMenuStatuses: vi.fn().mockResolvedValue(current) });
+    const el = await mount(client);
+    const filter = table(el).querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+      'wt-combobox[name="menu-status"]',
+    )!;
+    emit(filter, "wt-change", { value: "published" });
+    await openPatch(el);
+    const read = deferred<Record<string, MenuStatus>>();
+    client.getMenuStatuses.mockReturnValue(read.promise);
+    announcePatch(el);
     await el.updateComplete;
-    expect(dialog(el).open).toBe(true);
-    expect(dialog(el).menuId).toBe("menu-lunch");
-    expect(dialog(el).menuName).toBe("Lunch Menu");
-    expect(dialog(el).api).toBe(client);
+    expect(row(el)).not.toBeNull();
     const closed = new Promise<void>((resolve) =>
       dialog(el).addEventListener("wt-close", () => resolve(), { once: true }),
     );
     void dialog(el).shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     await closed;
     await el.updateComplete;
-    expect(dialog(el).open).toBe(false);
-    await userEvent.click(patchButton(el)!);
-    await el.updateComplete;
-    expect(dialog(el).open).toBe(true);
-  });
-
-  it("hands the patch dialog no takeaway VAT switch, since a live menu's patch offers no takeaway VAT", async () => {
-    const el = await mountLunch(
-      currentLunch({
-        getMenuSettings: vi.fn().mockResolvedValue({
-          defaultProductVatClass: "general",
-          defaultTakeawayVatRate: "10.00",
-          defaultColor: null,
-          takeawayVat: true,
-          vatRates: ["0.00", "4.00", "10.00", "21.00"],
-        }),
-      }),
+    read.resolve({ ...initial, "menu-lunch": patched });
+    await vi.waitFor(() =>
+      expect(text(table(el).shadowRoot!.querySelector('[data-test="status-menu-lunch"]'))).toBe(
+        "Published · 30 minutes ago",
+      ),
     );
-    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
-    expect("takeawayVat" in dialog(el)).toBe(false);
+    expect(row(el).shadowRoot!.activeElement).toBe(row(el).shadowRoot!.querySelector("button"));
+    expect(client.publishMenu).not.toHaveBeenCalled();
+    expect(dialog(el).open).toBe(false);
+    await openPatch(el);
   });
 
-  it("does not reopen the patch dialog on coming back to a menu left while it was open", async () => {
-    const el = await mountLunch(currentLunch());
-    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
-    await userEvent.click(patchButton(el)!);
+  it("reports a failed list read after a patch as a load failure", async () => {
+    const client = api();
+    const el = await mount(client);
+    await openPatch(el);
+    client.getMenuStatuses.mockRejectedValue(new Error("offline"));
+    announcePatch(el);
+    await vi.waitFor(() => expect(q(el, '[data-test="statuses-error"]')).not.toBeNull());
+    expect(patch(el)).toBeNull();
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
+  });
+
+  it("leaves the list's Patch dialog closed when returning from an editor", async () => {
+    const client = api();
+    const el = await mount(client);
+    await openPatch(el);
+    const oldDialog = dialog(el);
+    history.pushState(null, "", LUNCH_PATH);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await vi.waitFor(() => expect(text(q(el, "h1"))).toBe("Lunch Menu"));
+    const listReads = client.getMenuStatuses.mock.calls.length;
+    oldDialog.dispatchEvent(new CustomEvent("wt-menu-patched", { bubbles: true, composed: true }));
     await el.updateComplete;
-    expect(dialog(el).open).toBe(true);
+    expect(client.getMenuStatuses).toHaveBeenCalledTimes(listReads);
     await click(el, "back");
-    await vi.waitFor(() => expect(table(el)).not.toBeNull());
-    await inTable(el, "open-menu-lunch");
-    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
+    await vi.waitFor(() => expect(patch(el)).not.toBeNull());
     expect(dialog(el).open).toBe(false);
   });
 
   it("keeps the patch dialog open when a dialog inside it closes", async () => {
-    const el = await mountLunch(currentLunch());
-    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
-    await userEvent.click(patchButton(el)!);
-    await el.updateComplete;
-    // The picture picker's own modal closes with a composed `wt-close`, which reaches the screen
-    // from the patch dialog while that dialog stays open.
+    const el = await mount(api());
+    await openPatch(el);
     dialog(el).dispatchEvent(new CustomEvent("wt-close", { bubbles: true, composed: true }));
     await el.updateComplete;
     expect(dialog(el).open).toBe(true);
   });
 
   it("keeps the patch dialog's close inside the screen", async () => {
-    const el = await mountLunch(currentLunch());
-    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
-    await userEvent.click(patchButton(el)!);
-    await el.updateComplete;
+    const el = await mount(api());
+    await openPatch(el);
     const outside = vi.fn();
     el.parentElement!.addEventListener("wt-close", outside);
     onTestFinished(() => el.parentElement?.removeEventListener("wt-close", outside));
@@ -11039,38 +11028,7 @@ describe("patching the live menu", () => {
     void dialog(el).shadowRoot!.querySelector("wt-modal")!.requestClose("cancel");
     await closed;
     await el.updateComplete;
-    expect(dialog(el).open).toBe(false);
     expect(outside).not.toHaveBeenCalled();
-  });
-
-  it("reads the menu's state again after a patch, showing the new version as changed", async () => {
-    const client = currentLunch();
-    const el = await mountLunch(client);
-    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
-    expect(previewMarked(el)).toBeUndefined();
-    const reads = client.getMenuStatus.mock.calls.length;
-    client.getMenuStatus.mockResolvedValue(patched);
-    await userEvent.click(patchButton(el)!);
-    announcePatch(el);
-    await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).toBe(`(Live: version 3 · 30 minutes ago)`),
-    );
-    expect(client.getMenuStatus.mock.calls.length).toBeGreaterThan(reads);
-    expect(client.getMenuStatus).toHaveBeenLastCalledWith("menu-lunch");
-    expect(previewMarked(el)).toBe(t("menus.tab_preview_unpublished"));
-    expect(client.publishMenu).not.toHaveBeenCalled();
-  });
-
-  it("says the state could not be checked when the read after a patch fails, as a load failure", async () => {
-    const client = currentLunch();
-    const el = await mountLunch(client);
-    await vi.waitFor(() => expect(patchButton(el)).not.toBeNull());
-    client.getMenuStatus.mockRejectedValue(new Error("offline"));
-    announcePatch(el);
-    await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).toBe("(Could not be checked)"),
-    );
-    expect(q(el, '[data-test="member-error"]')).toBeNull();
   });
 
   it("shows the renumbered scheduled version on the Preview tab after a patch", async () => {
@@ -11108,7 +11066,7 @@ describe("patching the live menu", () => {
       live: null,
       editions: [edition("v-lunch-5", 5)],
     });
-    announcePatch(el);
+    live.invalidate([{ type: "menu_versions" }]);
     await vi.waitFor(() => expect(version("v-lunch-5")).not.toBeNull());
     expect(version("v-lunch-3")).toBeNull();
   });
@@ -12437,7 +12395,7 @@ describe("after the server comes back", () => {
     const el = await mount(client, LUNCH_PATH);
     await vi.waitFor(() => expect(q(el, '[data-test="structure-error"]')).not.toBeNull());
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).toBe(`(${t("menus.status_error")})`),
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe(t("menus.status_error")),
     );
 
     answer();
@@ -12446,7 +12404,7 @@ describe("after the server comes back", () => {
     await vi.waitFor(() => expect(structure(el)).not.toBeNull());
     expect(q(el, '[data-test="structure-error"]')).toBeNull();
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).not.toBe(`(${t("menus.status_error")})`),
+      expect(text(q(el, '[data-test="menu-status"]'))).not.toBe(t("menus.status_error")),
     );
   });
 
@@ -12470,14 +12428,14 @@ describe("after the server comes back", () => {
     const answer = failing(client, "getMenuPreview");
     const el = await mount(client, PREVIEW_PATH);
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).toBe(`(${t("menus.status_error")})`),
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe(t("menus.status_error")),
     );
 
     answer();
     live.refresh();
 
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).not.toBe(`(${t("menus.status_error")})`),
+      expect(text(q(el, '[data-test="menu-status"]'))).not.toBe(t("menus.status_error")),
     );
     const preview = q<HTMLElementTagNameMap["dashboard-menu-preview"]>(
       el,
@@ -12593,9 +12551,7 @@ it.each(["en", "es-ES"])(
         ),
       ).toContain(codeMessage("menu.reset_required")),
     );
-    expect(
-      q(el, "dashboard-menu-preview")!.shadowRoot!.querySelector('[data-test="publish"]'),
-    ).toBeNull();
+    expect(q(el, '.heading [data-test="publish"]')).toBeNull();
   },
 );
 
@@ -12647,9 +12603,7 @@ it.each(["en", "es-ES"])(
       }),
       LUNCH_PATH,
     );
-    await vi.waitFor(() =>
-      expect(text(q(selected, '[data-test="menu-status"]'))).toBe(`(${expected})`),
-    );
+    await vi.waitFor(() => expect(text(q(selected, '[data-test="menu-status"]'))).toBe(expected));
   },
 );
 

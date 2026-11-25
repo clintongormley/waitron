@@ -35,10 +35,18 @@ export class WtMenuRow extends LitElement {
   /** The badge's accessible name, whole. */
   @property({ attribute: "help-label" }) helpLabel = "";
 
+  @property({ attribute: "guide-href" }) guideHref = "";
+  @property({ attribute: "guide-label" }) guideLabel = "";
+
   override render() {
     return html`<slot></slot>${
         this.help
-          ? html`<wt-help-tooltip mode="help-mode" data-keep-open aria-label=${this.helpLabel}
+          ? html`<wt-help-tooltip
+              mode="help-mode"
+              data-keep-open
+              aria-label=${this.helpLabel}
+              guide-href=${this.guideHref}
+              guide-label=${this.guideLabel}
               >${this.help}</wt-help-tooltip
             >`
           : nothing

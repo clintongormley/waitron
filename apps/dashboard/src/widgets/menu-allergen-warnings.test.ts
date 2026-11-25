@@ -6,7 +6,7 @@ import {
   cleanupWidgets,
   expectNoA11yViolations,
   menuDocument,
-  mountWidget,
+  mountMenuPreview as mountWidget,
   type Theme,
 } from "./test-helpers.js";
 import { MenuPreviewPanel } from "./menu-preview.js";

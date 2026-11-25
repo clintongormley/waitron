@@ -360,7 +360,8 @@ own sections leaves the source as it was; included menus still point to the same
 
 ## Review unpublished menu changes {#preview-undo}
 
-Open **Preview** to review your changes before publishing. Choose **View** beside a change to
+Choose **Review and publish** in the menu heading. In **Preview**, use **Publish now** or
+**Publish later** in the heading when you are ready. Choose **View** beside a change to
 see where it appears. Follow the **Edit** link to open the product or included menu. For a price
 change, **Edit product** opens the product, and the included menu's **Edit** link opens its
 **Price overrides** tab. After you publish, check the version and the box's publication time in
@@ -373,9 +374,8 @@ products already hold work for the next menu that you do not want on the till ye
 put that work live as well. A patch changes only the values you correct, in the live version of one
 menu.
 
-Open the menu in **Products and menus → Menus** and choose **Patch live menu…** beside its live
-version in the heading. The button appears only while the menu has a live version, and anyone who
-can publish the menu can patch it. The window lists the items in the live menu, with a search box,
+Find the live menu in **Products and menus → Menus**. Open its row menu and choose
+**Patch live menu…**. The window lists the items in the live menu, with a search box,
 and its extras and options lists under **Extras and options**. Pick an item to see what you can
 change:
 

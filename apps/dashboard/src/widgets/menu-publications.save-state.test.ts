@@ -6,7 +6,11 @@ import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
 import "./menu-publications.js";
 import type { MenuPublicationsPanel } from "./menu-publications.js";
-import { cleanupWidgets, closeReportsDelivered, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  closeReportsDelivered,
+  mountMenuPublications as mountWidget,
+} from "./test-helpers.js";
 
 type Edition = MenuPublicationsAnswer["editions"][number];
 

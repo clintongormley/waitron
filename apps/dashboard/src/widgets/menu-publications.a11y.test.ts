@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  expectNoA11yViolations,
+  mountMenuPublications as mountWidget,
+} from "./test-helpers.js";
 import "./menu-publications.js";
 import type { MenuPublicationsPanel } from "./menu-publications.js";
 import type { DashboardApi, MenuPreview, MenuPublicationsAnswer } from "../api/client.js";

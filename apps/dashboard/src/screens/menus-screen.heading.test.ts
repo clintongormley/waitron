@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
-import { page } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import {
   cleanupWidgets,
   expectNoA11yViolations,
@@ -34,7 +34,7 @@ const PRICES_PATH = "/menus/menu/menu-lunch/view/prices";
 const PUBLISHED_AT = "2026-09-26T10:15:00.000Z";
 /** The screen's clock, 1 hour 15 minutes after PUBLISHED_AT. */
 const NOW = "2026-09-26T11:30:00.000Z";
-const LIVE_WORDS = "(Live: version 2 · 1 hour ago)";
+const LIVE_WORDS = "Live: version 2 · 1 hour ago";
 
 const burger = {
   id: "p-burger",
@@ -211,7 +211,7 @@ function modifiedClick(target: Element, modifier: (typeof MODIFIERS)[number]): v
 }
 
 describe("the menu editor's heading", () => {
-  it("puts a path landmark holding one link, Menus ›, above the menu's name, left-aligned, at normal text size in the link colour", async () => {
+  it("puts a path landmark holding one link, Menus ›, beside the menu's name at normal text size in the link colour", async () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     onTestFinished(() => page.viewport(width, height));
@@ -245,18 +245,25 @@ describe("the menu editor's heading", () => {
     expect(nav.contains(h1)).toBe(false);
     const a = nav.getBoundingClientRect();
     const b = h1.getBoundingClientRect();
-    expect(a.bottom, "the path sits above the name").toBeLessThanOrEqual(b.top + 1);
-    expect(Math.abs(link.getBoundingClientRect().left - b.left)).toBeLessThanOrEqual(1);
+    expect(a.top).toBeLessThan(b.bottom);
+    expect(a.bottom).toBeGreaterThan(b.top);
+    expect(a.right).toBeLessThanOrEqual(b.left);
   });
 
   it("draws the menu's name at the size of the Menus list's heading", async () => {
+    const [width, height] = [window.innerWidth, window.innerHeight];
+    onTestFinished(() => page.viewport(width, height));
+    await page.viewport(1280, 900);
     const list = await mount(api(), LIST_PATH);
     await vi.waitFor(() => expect(q(list, '[data-test="menus"]')).not.toBeNull());
-    const listSize = getComputedStyle(q(list, "h1")!).fontSize;
+    const listHeading = q(list, "h1")!;
+    const listSize = getComputedStyle(listHeading).fontSize;
+    const listHeight = listHeading.parentElement!.getBoundingClientRect().height;
     cleanupWidgets();
     const el = await mount();
     expect(text(q(el, "h1"))).toBe("Lunch Menu");
     expect(getComputedStyle(q(el, "h1")!).fontSize).toBe(listSize);
+    expect(q(el, ".heading")!.getBoundingClientRect().height).toBeCloseTo(listHeight, 0);
   });
 
   it("names the path and its link in Spanish", async () => {
@@ -314,34 +321,27 @@ describe("the menu editor's heading", () => {
     )!;
   }
 
-  it("marks the Preview tab with a star while the menu has unpublished changes, and draws no link for them", async () => {
-    const el = await mount();
-    await vi.waitFor(() => expect(previewTab(el).querySelector(".mark")).not.toBeNull());
-    expect(text(previewTab(el))).toBe("Preview*");
-    expect(previewTab(el).getAttribute("aria-label")).toBe("Preview, unpublished changes");
-    expect(deepAll(el.shadowRoot!, '[data-test="status-changes"]')).toEqual([]);
-    expect(text(q(el, '[data-test="menu-status"]'))).not.toContain("Unpublished changes");
-    expect(q(el, '[data-test="menu-status"] a')).toBeNull();
-  });
-
-  it("names the starred Preview tab in Spanish", async () => {
-    setLocale("es-ES");
-    const el = await mount();
-    await vi.waitFor(() => expect(previewTab(el).querySelector(".mark")).not.toBeNull());
-    expect(text(previewTab(el))).toBe("Vista previa*");
-    expect(previewTab(el).getAttribute("aria-label")).toBe("Vista previa, cambios sin publicar");
-  });
-
   it.each([
-    ["Structure", LUNCH_PATH],
-    ["Preview", PREVIEW_PATH],
-  ])("draws the starred Preview tab in the primary colour on the %s tab", async (_tab, path) => {
-    const el = await mount(api(), path);
-    await vi.waitFor(() => expect(previewTab(el).querySelector(".mark")).not.toBeNull());
-    expect(getComputedStyle(previewTab(el)).color).toBe(resolved(el, "--wt-color-primary-text"));
-  });
+    ["en", "Unpublished changes", "Review and publish", "Preview"],
+    ["es-ES", "Cambios sin publicar", "Revisar y publicar", "Vista previa"],
+  ])(
+    "shows unpublished changes and opens Preview from the heading in %s",
+    async (locale, cue, action, tab) => {
+      setLocale(locale);
+      const el = await mount();
+      await vi.waitFor(() => expect(text(q(el, '[data-test="unpublished-changes"]'))).toBe(cue));
+      expect(text(previewTab(el))).toBe(tab);
+      const review = q(el, '.heading [data-test="review-publish"]')!;
+      expect(text(review)).toBe(action);
+      expect(review.getAttribute("variant")).toBe("primary");
+      review.focus();
+      await userEvent.keyboard("{Enter}");
+      await vi.waitFor(() => expect(location.pathname).toBe(PREVIEW_PATH));
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(q(el, "h1")));
+    },
+  );
 
-  it("sits the live version in brackets beside the name, on the heading's line, in normal text", async () => {
+  it("sits the live version beside the name, on the heading's line, in normal text", async () => {
     const width = window.innerWidth,
       height = window.innerHeight;
     onTestFinished(() => page.viewport(width, height));
@@ -368,7 +368,7 @@ describe("the menu editor's heading", () => {
     setLocale("es-ES");
     const el = await mount();
     await vi.waitFor(() =>
-      expect(text(q(el, '[data-test="menu-status"]'))).toBe("(Publicada: versión 2 · hace 1 hora)"),
+      expect(text(q(el, '[data-test="menu-status"]'))).toBe("Publicada: versión 2 · hace 1 hora"),
     );
   });
 
@@ -379,43 +379,151 @@ describe("the menu editor's heading", () => {
       async (): Promise<MenuStatus> => ({ ...CHANGED, state: "current" }),
       LIVE_WORDS,
     ],
-    ["still being checked", never, "(Checking…)"],
+    ["still being checked", never, "Checking…"],
     [
       "not checkable",
       async (): Promise<MenuStatus> => Promise.reject(new Error("offline")),
-      "(Could not be checked)",
+      "Could not be checked",
     ],
-  ])("leaves the Preview tab unstarred while the menu is %s", async (_state, status, words) => {
-    const el = await mount(api(status));
-    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(words));
-    expect(q(el, '[data-test="menu-status"] a')).toBeNull();
-    expect(previewTab(el).querySelector(".mark")).toBeNull();
-    expect(previewTab(el).hasAttribute("aria-label")).toBe(false);
-    expect(text(previewTab(el))).toBe("Preview");
-  });
+  ])(
+    "offers no review or unpublished-change cue while the menu is %s",
+    async (_state, status, words) => {
+      const el = await mount(api(status));
+      await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(words));
+      expect(q(el, '[data-test="menu-status"] a')).toBeNull();
+      expect(q(el, '[data-test="review-publish"]')).toBeNull();
+      expect(q(el, '[data-test="unpublished-changes"]')).toBeNull();
+    },
+  );
 
   it.each([
     ["holding products and sections", nodes],
     ["holding nothing at all", []],
-  ])("marks the Preview tab with a star on a menu never published, %s", async (_, held) => {
+  ])("offers review without a change cue on a menu never published, %s", async (_, held) => {
     const client = api(async () => ({ state: "unpublished", clashes: 0 }));
     vi.mocked(client.getMenuStructure).mockResolvedValue({
       ...(await client.getMenuStructure("menu-lunch")),
       nodes: held,
     });
     const el = await mount(client);
-    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe("(Unpublished)"));
-    await vi.waitFor(() => expect(previewTab(el).querySelector(".mark")).not.toBeNull());
-    expect(text(previewTab(el))).toBe("Preview*");
-    expect(previewTab(el).getAttribute("aria-label")).toBe("Preview, unpublished changes");
+    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe("Unpublished"));
+    expect(q(el, '[data-test="review-publish"]')).not.toBeNull();
+    expect(q(el, '[data-test="unpublished-changes"]')).toBeNull();
   });
 
-  it("keeps the star on the Preview tab while it is the tab shown", async () => {
-    const el = await mount(api(), PREVIEW_PATH);
-    await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(LIVE_WORDS));
-    expect(q(el, '[data-test="menu-status"] a')).toBeNull();
-    expect(previewTab(el).getAttribute("aria-selected")).toBe("true");
-    expect(text(previewTab(el))).toBe("Preview*");
+  it.each([
+    [390, "en"],
+    [390, "es-ES"],
+    [1280, "en"],
+    [1280, "es-ES"],
+  ] as const)(
+    "puts Publish later before Publish now in the heading at %i px in %s",
+    async (width, locale) => {
+      const [beforeWidth, beforeHeight] = [window.innerWidth, window.innerHeight];
+      onTestFinished(() => page.viewport(beforeWidth, beforeHeight));
+      await page.viewport(width, 900);
+      setLocale(locale);
+      const el = await mount(api(), PREVIEW_PATH);
+      const later = () => q(el, '.heading [data-test="schedule-open"]');
+      await vi.waitFor(() => expect(text(later())).toBe(t("menu_publications.schedule")));
+      const now = q(el, '.heading [data-test="publish"]')!;
+      expect(text(now)).toBe(t("menu_preview.publish"));
+      const a = later()!.getBoundingClientRect();
+      const b = now.getBoundingClientRect();
+      expect(a.right).toBeLessThanOrEqual(b.left);
+      expect(a.top).toBeLessThan(b.bottom);
+      expect(b.top).toBeLessThan(a.bottom);
+      expect(q(el, '[data-test="review-publish"]')).toBeNull();
+      const schedule = q(el, "dashboard-menu-preview")!.shadowRoot!.querySelector(
+        "dashboard-menu-publications",
+      )!;
+      await page.elementLocator(later()!).click();
+      const dialog = schedule.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+        '[data-test="schedule-dialog"]',
+      );
+      await vi.waitFor(() => expect(dialog?.open).toBe(true));
+      const closed = new Promise<void>((resolve) =>
+        dialog!.addEventListener("wt-close", () => resolve(), { once: true }),
+      );
+      void dialog!.requestClose("cancel");
+      await closed;
+      await vi.waitFor(() => expect(el.shadowRoot!.activeElement).toBe(later()));
+    },
+  );
+
+  it.each([false, true])(
+    "restores focus after a live refresh and Escape (read failed: %s)",
+    async (failedFirst) => {
+      const live = new LiveData();
+      const client = api();
+      const publishMenu = vi.fn();
+      let failed = false;
+      const getMenuRead = vi.fn(async (id: string) => {
+        if (failed) throw { code: "server.internal" };
+        return {
+          structure: { status: 200, body: await client.getMenuStructure(id) },
+          preview: { status: 200, body: await client.getMenuPreview(id) },
+        };
+      });
+      Object.assign(client, { liveData: live, getMenuRead, publishMenu });
+      const el = await mount(client, PREVIEW_PATH);
+      const later = () => q(el, '[data-test="schedule-open"]');
+      await vi.waitFor(() => expect(later()).not.toBeNull());
+      const opener = later()!;
+      opener.focus();
+      await userEvent.keyboard("{Enter}");
+      const preview = q<HTMLElementTagNameMap["dashboard-menu-preview"]>(
+        el,
+        "dashboard-menu-preview",
+      )!;
+      const publications = preview.shadowRoot!.querySelector("dashboard-menu-publications")!;
+      const dialog = () =>
+        publications.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-dialog"]>(
+          '[data-test="schedule-dialog"]',
+        );
+      await vi.waitFor(() => expect(dialog()?.open).toBe(true));
+      if (failedFirst) {
+        failed = true;
+        live.invalidate([{ type: "menu_items" }]);
+        await vi.waitFor(() => expect(later()).toBeNull());
+        failed = false;
+      }
+      const old = preview.preview;
+      live.invalidate([{ type: "menu_items" }]);
+      await vi.waitFor(() => {
+        expect(preview.preview).not.toBe(old);
+        expect(later()).not.toBeNull();
+      });
+      await publications.updateComplete;
+      const closed = new Promise<void>((resolve) =>
+        dialog()!.addEventListener("wt-close", () => resolve(), { once: true }),
+      );
+      await userEvent.keyboard("{Escape}");
+      await closed;
+      await vi.waitFor(() =>
+        expect(el.shadowRoot!.activeElement).toBe(failedFirst ? q(el, "h1") : later()),
+      );
+      await userEvent.keyboard("{Enter}");
+      if (!failedFirst) {
+        expect(later()).toBe(opener);
+        await vi.waitFor(() => expect(dialog()?.open).toBe(true));
+      }
+      expect(publishMenu).not.toHaveBeenCalled();
+    },
+  );
+
+  it("leaves Publish now disabled and offers no scheduling while prices clash", async () => {
+    const client = api(async () => ({ ...CHANGED, clashes: 1 }));
+    const read = client.getMenuPreview;
+    client.getMenuPreview = async (id) => ({
+      ...(await read(id)),
+      clashes: [{ productId: "p-burger", variantId: null, field: "price", candidates: [] }],
+    });
+    const el = await mount(client, PREVIEW_PATH);
+    const publish = () =>
+      q<HTMLElementTagNameMap["wt-button"]>(el, '.heading [data-test="publish"]');
+    await vi.waitFor(() => expect(publish()?.disabled).toBe(true));
+    expect(q(el, '.heading [data-test="schedule-open"]')).toBeNull();
   });
 
   const clashWords = (el: MenusScreen) =>
@@ -574,23 +682,27 @@ describe("the menu editor's heading", () => {
     );
   }
 
-  it("keeps the path above a long menu name inside a phone's width without scrolling sideways", async () => {
-    const name = "The weekend brunch and late lunch menu served on the terrace until four";
-    const el = await onPhone(name);
-    const heading = q(el, "h1")!;
-    expect(text(heading)).toBe(name);
-    // The tree turns narrow a frame after it is drawn, and the page is measured as the person sees it.
-    const tree = q(el, "dashboard-menu-structure-table")!.shadowRoot!.querySelector(
-      "wt-data-table",
-    )!;
-    await vi.waitFor(() => expect(tree.hasAttribute("narrow")).toBe(true));
-    expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-    const h1 = heading.getBoundingClientRect();
-    const path = trail(el).getBoundingClientRect();
-    expect(h1.right).toBeLessThanOrEqual(window.innerWidth);
-    expect(path.right).toBeLessThanOrEqual(window.innerWidth);
-    expect(h1.top, "the name sits under the path").toBeGreaterThanOrEqual(path.bottom - 1);
-  });
+  it.each(["Lunch", "The weekend brunch and late lunch menu served on the terrace until four"])(
+    "puts the status under %s inside a phone's width",
+    async (name) => {
+      const el = await onPhone(name);
+      const heading = q(el, "h1")!;
+      expect(text(heading)).toBe(name);
+      // The tree turns narrow a frame after it is drawn, and the page is measured as the person sees it.
+      const tree = q(el, "dashboard-menu-structure-table")!.shadowRoot!.querySelector(
+        "wt-data-table",
+      )!;
+      await vi.waitFor(() => expect(tree.hasAttribute("narrow")).toBe(true));
+      expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+      const h1 = heading.getBoundingClientRect();
+      const path = trail(el).getBoundingClientRect();
+      expect(h1.right).toBeLessThanOrEqual(window.innerWidth);
+      expect(path.right).toBeLessThanOrEqual(window.innerWidth);
+      const live = q(el, '[data-test="menu-status"]')!.getBoundingClientRect();
+      expect(live.top).toBeGreaterThanOrEqual(h1.bottom - 1);
+      expect(live.right).toBeLessThanOrEqual(window.innerWidth);
+    },
+  );
 
   it("breaks a menu name in one word longer than the phone is wide inside the heading", async () => {
     const el = await onPhone(`Terrace${"brunch".repeat(12)}`);

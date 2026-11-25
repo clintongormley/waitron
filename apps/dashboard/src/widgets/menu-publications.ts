@@ -34,6 +34,7 @@ import { conjunctionList } from "../i18n/list.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
+import type { MenuPublicationHeading } from "./menu-publication-actions.js";
 import { publishWarningStyles, renderPublishWarningConfirmation } from "./menu-publish-warnings.js";
 
 type Edition = MenuPublicationsAnswer["editions"][number];
@@ -223,11 +224,6 @@ export class MenuPublicationsPanel extends LitElement {
         margin: 0;
         color: var(--wt-color-text);
       }
-      .schedule {
-        display: flex;
-        align-items: start;
-        gap: var(--wt-space-2);
-      }
       .intro {
         margin: 0 0 var(--wt-space-4);
         color: var(--wt-color-text);
@@ -248,6 +244,7 @@ export class MenuPublicationsPanel extends LitElement {
   @property() menuName = "";
   @property({ attribute: false }) lateRefusalFor?: (name: string) => () => void;
   @property({ attribute: false }) preview: MenuPreview | null = null;
+  @property({ attribute: false }) heading?: MenuPublicationHeading;
 
   @state() private answer: MenuPublicationsAnswer | null = null;
   @state() private readError: string | null = null;
@@ -274,7 +271,6 @@ export class MenuPublicationsPanel extends LitElement {
   /** A write that failed once its window had gone: nothing else would say so. */
   @state() private lateRefusal = false;
 
-  /** The menu whose editions are followed. */
   #watching: string | null = null;
   /** The menu last followed: unlike the watch, it survives a removal from the page. */
   #followed: string | null = null;
@@ -284,6 +280,7 @@ export class MenuPublicationsPanel extends LitElement {
   #shownRead = 0;
   /** A row menu's popover closes on the click, so the dialog hands focus back to its trigger. */
   #focusTarget: HTMLElement | null = null;
+  #scheduleOpener: HTMLElement | null = null;
   /** Replaced at each opening of the schedule form, so a late answer cannot reach a later one. */
   #opening = {};
   #scope?: DraftScope<ScheduleDraft>;
@@ -311,7 +308,6 @@ export class MenuPublicationsPanel extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.tabIndex = -1;
     this.#follow();
   }
 
@@ -330,6 +326,16 @@ export class MenuPublicationsPanel extends LitElement {
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("menuId")) this.#follow();
     if (changed.has("preview")) this.confirming = null;
+  }
+
+  override updated(): void {
+    this.heading?.scheduleChanged(this.#canSchedule());
+  }
+
+  openSchedule(opener: HTMLElement, preview: MenuPreview): void {
+    if (this.preview !== preview || !this.#canSchedule() || this.scheduling) return;
+    this.#scheduleOpener = opener;
+    this.#openSchedule(null);
   }
 
   #follow(): void {
@@ -435,12 +441,10 @@ export class MenuPublicationsPanel extends LitElement {
   }
 
   #returnFocus(opener: HTMLElement | null = null): void {
-    const publish = this.renderRoot.querySelector("slot")?.assignedElements()[0] as
-      HTMLElement | undefined;
     (opener?.isConnected
       ? opener
-      : (this.renderRoot.querySelector<HTMLElement>("h2") ?? publish ?? this)
-    ).focus();
+      : (this.renderRoot.querySelector<HTMLElement>("h2") ?? this.heading?.focusFallback())
+    )?.focus();
   }
 
   async #refreshAfterWrite(): Promise<void> {
@@ -519,15 +523,9 @@ export class MenuPublicationsPanel extends LitElement {
     this.scheduleBusy = false;
     this.#disposeDraft();
     this.scheduling = false;
-    const moved = this.moving !== null;
-    requestAnimationFrame(() => {
-      const opener = moved
-        ? this.#focusTarget?.isConnected
-          ? this.#focusTarget
-          : null
-        : this.renderRoot.querySelector<HTMLElement>('[data-test="schedule-open"]');
-      this.#returnFocus(opener);
-    });
+    const opener = this.moving === null ? this.#scheduleOpener : this.#focusTarget;
+    this.#scheduleOpener = null;
+    requestAnimationFrame(() => this.#returnFocus(opener));
   }
 
   #scheduleDialog(): HTMLElementTagNameMap["wt-dialog"] {
@@ -914,19 +912,6 @@ export class MenuPublicationsPanel extends LitElement {
   override render(): TemplateResult {
     const queued = this.answer?.editions.filter((edition) => edition.state === "queued") ?? [];
     return html`<div class="content">
-        <div class="schedule">
-          ${
-            this.#canSchedule()
-              ? html`<wt-button
-                  variant="secondary"
-                  data-test="schedule-open"
-                  @click=${() => this.#openSchedule(null)}
-                  >${t("menu_publications.schedule")}</wt-button
-                >`
-              : nothing
-          }
-          <slot></slot>
-        </div>
         <slot name="publish-note"></slot>
         ${
           this.lateRefusal

@@ -734,7 +734,8 @@ From A335 (#1457, the menu editor's heading):
 
 - **When the venue needs a reset, the menu editor shows the "reset the venue" sentence inside the
   brackets beside the menu's name**, where the live version normally sits, in muted text. A review
-  suggested a line of its own; kept in the brackets by decision. (A335, #1457.)
+  suggested a line of its own; kept in the brackets by decision. (A335, #1457.) The 2026-11-24
+  menu editor redesign moved those words into the new heading without brackets.
 
 From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
 
@@ -763,7 +764,7 @@ From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
 
 _2026-11-24: Menus, set menus, products and variants use permanent Delete. [Owner’s design](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
 
-_2026-11-24: The menu editor is to become one table of structure and prices with one Save, with publishing in its heading, approved by the owner: [spec](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md). The remaining [Device home page work](../superpowers/specs/2026-11-24-device-home-page-design.md#delivery) is one display without column settings or a stored tile mode, then one tab that saves the settings and shortcuts together. The guest menu preview becomes the [customer menu](../superpowers/specs/2026-11-24-customer-menu-design.md), approved the same day._
+_2026-11-25: The [menu editor redesign](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md) has its new heading and the live menu’s Patch action in the list. Preview and the single draft, table and Save are still to come. The remaining [Device home page work](../superpowers/specs/2026-11-24-device-home-page-design.md#delivery) is one display without column settings or a stored tile mode, then one tab that saves the settings and shortcuts together. The guest menu preview becomes the [customer menu](../superpowers/specs/2026-11-24-customer-menu-design.md), approved the same day._
 
 _2026-11-24: The owner reworked set menus in [set menus worked out by the bill](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md). The waiter only adds dishes. The bill groups them at the cheapest price it finds on every change, and each dish keeps its own course. Paying for items moves them to a bill of their own. The remaining work connects the shared calculation to the server and till, updates the dashboard and checks the whole flow._
 

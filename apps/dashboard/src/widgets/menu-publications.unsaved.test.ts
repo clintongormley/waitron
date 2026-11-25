@@ -11,6 +11,7 @@ import {
   closeReportsDelivered,
   dialogClosed,
   mountWidget,
+  attachScheduleAction,
   putBack,
 } from "./test-helpers.js";
 import "./menu-publications.js";
@@ -87,6 +88,7 @@ async function mount() {
     {},
   );
   const panel = app.shadowRoot!.querySelector("dashboard-menu-publications")!;
+  attachScheduleAction(panel);
   await vi.waitFor(() =>
     expect(panel.shadowRoot!.querySelector('[data-test="schedule-open"]')).not.toBeNull(),
   );
@@ -212,6 +214,7 @@ async function mountMove() {
     {},
   );
   const panel = app.shadowRoot!.querySelector("dashboard-menu-publications")!;
+  attachScheduleAction(panel);
   const table = () => panel.shadowRoot!.querySelector("wt-data-table")!;
   await vi.waitFor(() =>
     expect(table().shadowRoot!.querySelector('[data-test="move-v-lunch-1"]')).not.toBeNull(),
