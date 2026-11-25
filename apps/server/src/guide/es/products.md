@@ -288,7 +288,8 @@ o _muy hecho_ no lleva alérgenos ni aptitud dietética propios, porque es una f
 plato, no algo más que comer. La caja y la estación muestran la lista propia de cada elemento.
 
 Los alérgenos y las etiquetas dietéticas forman parte de la carta publicada: publica la carta para que
-un cambio entre en vigor.
+un cambio entre en vigor. [Corregir la carta publicada](products.md#patch-live-menu) también puede
+poner en vigor los alérgenos y dietas actuales de un producto sin publicar la carta.
 
 En la lista de Productos, **Sin revisar**, **Ninguno** y **Declarado** distinguen un plato que no has
 comprobado de uno que sí. Una variante muestra el estado de los alérgenos que usa.
@@ -423,7 +424,8 @@ Busca la carta publicada en **Productos y cartas → Cartas**. Abre el menú de 
 de la carta publicada, con un buscador, y sus listas de extras y de opciones bajo **Extras y
 opciones**. Elige un elemento para ver lo que puedes cambiar:
 
-- Un plato: su nombre, nombre para el cliente, nombre de estación de preparación, descripción, imagen y precio.
+- Un plato: su nombre, nombre para el cliente, nombre de estación de preparación, descripción,
+  imagen, precio, y alérgenos y dietas.
 - Una variante o un extra: lo mismo, sin descripción.
 - Una opción de una lista de opciones, y el nombre de una lista de extras o de opciones: sus tres
   nombres.
@@ -432,18 +434,20 @@ opciones**. Elige un elemento para ver lo que puedes cambiar:
 Los nombres para el cliente y las descripciones muestran un campo por cada idioma del contenido.
 Elige o quita una imagen igual que en el editor de productos. Un plato con variantes se cobra al
 precio de cada variante, así que corrige el precio en sus variantes, que su formulario muestra con su precio; corregir el
-plato nunca las cambia. Un cambio en un extra, en una opción o en el nombre de una lista se hace en
+plato nunca las cambia, salvo sus alérgenos y dietas. Un cambio en un extra, en una opción o en el nombre de una lista se hace en
 todos los sitios de esta carta donde aparece esa lista. Un producto que se vende como plato y como
 extra se corrige en cada sitio por separado. Una sección que aparece dentro de la carpeta
 de una carta incluida conserva el nombre o la imagen que le fija esa carpeta, y el nombre en un
 idioma que las carpetas fijan en todos los sitios donde aparece la sección se muestra desactivado,
 con **La carpeta incluida fija este nombre.** debajo, y no se puede cambiar aquí.
 
-Una corrección no puede cambiar nada más. Los alérgenos y las etiquetas dietéticas se declaran en
-el propio producto y entran en vigor al publicar la carta; consulta
-[Declara los alérgenos y la aptitud dietética directamente](products.md#allergens). Tampoco puede
-cambiar la unidad, la disponibilidad, el orden de plato ni la categoría, el orden de los
-elementos, los colores ni qué elementos y secciones tiene la carta.
+Para corregir alérgenos o etiquetas dietéticas, [cámbialos primero en el
+producto](products.md#allergens) y luego marca **Usar los alérgenos y dietas actuales del producto**
+en su elemento de la corrección. Debajo aparecen
+las versiones programadas que difieren del producto: deja marcadas las que quieras corregir.
+
+Una corrección no puede cambiar nada más: ni la unidad, la disponibilidad, el orden de plato ni
+la categoría, el orden de los elementos, los colores ni qué elementos y secciones tiene la carta.
 
 Cada elemento que cambias se marca con un punto. Un valor que la corrección no admite se señala al
 elegir **Revisar**: su campo dice qué corregir, su elemento se marca con **!** y **Revisar** no
@@ -465,7 +469,7 @@ como el valor anterior → el nuevo. Elige **Seguir editando** para volver, o **
 - No cambia nada más: ni los productos, ni los elementos y secciones de la propia carta, ni tus
   otras cartas. Un producto que está en dos cartas se corrige en cada una.
 - Una versión programada para más tarde conserva su fecha y su contenido, y entra en vigor entonces
-  sin la corrección. Recibe un número nuevo, posterior al de la corrección, en **Versiones
+  sin la corrección, salvo los alérgenos y dietas de las versiones que dejes marcadas. Recibe un número nuevo, posterior al de la corrección, en **Versiones
   programadas**, en la pestaña **Vista previa**.
 - La próxima publicación normal vuelve a crear la carta a partir de los productos, así que vuelve a
   poner los valores anteriores, salvo que corrijas también los productos.

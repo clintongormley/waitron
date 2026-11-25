@@ -5943,13 +5943,19 @@ A section's customer-facing name in a language that every included folder showin
 disabled, with "The included folder sets this name." under it in `--wt-color-text-muted` at
 `--wt-font-size-sm`. That line is hidden from a screen reader, which reads the same words as the
 field's description.
+A dish, variant or extra ends with a native checkbox, "Use the product's current allergens and
+diets". While it is ticked, a `fieldset` under it, "Correct these scheduled versions too", lists by
+date each scheduled version that differs for that item, ticked while it still holds the old value for
+every ticked item. A version's tick is one choice shared by every item it is listed under. A dish's
+checkbox covers its variants and, when it has some, says "variants included"; while it is ticked, a
+variant's own is drawn ticked and disabled, with "Set on the dish." under it.
 The footer holds Close and "Review N changes", N counting each edited field, including one whose
 value fails its check. Following Forms, a field's own error, the tree's "!" and the bottom sentence
 appear only once Review has been pressed. That press stays on the item shown if one of its fields
 fails its check, otherwise opens the first item, in the order edited, with a field that fails, and
 focuses the first field marked on the item's form. A refusal placed under a field keeps its change staged and Review enabled, and
 its sentence goes when that field changes, its language is removed or fixed by an included folder, or the patch is sent again. The review step lists each change as "<item>:
-<field> <old> → <new>" under "Check the changes before putting them live", then its notes, with
+<field> <old> → <new>", a ticked checkbox as "<item>: Allergens and diets: from the product", under "Check the changes before putting them live", then its notes, with
 "Keep editing" and "Put live now" in the footer. A "went live" or "no longer fits" refusal, or a newer live
 version arriving while changes are staged or a field needs correcting, adds a secondary "Reload" to
 either step's footer, with the refusal's sentence above the buttons.

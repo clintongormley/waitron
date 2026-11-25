@@ -1,5 +1,6 @@
 import { LitElement, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { live } from "lit/directives/live.js";
 import {
   ContentLanguageController,
   currentContentLanguages,
@@ -29,11 +30,11 @@ import "@waitron/ui/src/components/wt-modal.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
   DashboardApi,
-  LiveMenu,
-  LocalTime,
   MenuPatchChange,
   MenuPatchResult,
   MenuPatchTarget,
+  MenuPublicationsAnswer,
+  PatchDraft,
 } from "../api/client.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
@@ -47,7 +48,13 @@ import {
 } from "./form-fields.js";
 import "./image-upload.js";
 import type { ImageUploader } from "./image-upload.js";
-import { MenuPatchDraft, patchTree, targetKey } from "./menu-patch-draft.js";
+import {
+  MenuPatchDraft,
+  patchTree,
+  scheduledCorrections,
+  targetKey,
+  type ScheduledCorrection,
+} from "./menu-patch-draft.js";
 import {
   changeLines,
   itemNames,
@@ -147,7 +154,7 @@ export class MenuPatchDialog extends LitElement {
     });
   });
 
-  @state() private live: LiveMenu | null = null;
+  @state() private live: PatchDraft | null = null;
   @state() private notPublished = false;
   @state() private readError: string | null = null;
   @state() private search = "";
@@ -165,10 +172,12 @@ export class MenuPatchDialog extends LitElement {
   /** The `changeKey`s of the edited fields, staged or failing their own check, whose text typed in
    * a name language gave way to the text a newer version's folders fix it to. */
   @state() private refixed = new Set<string>();
-  @state() private queued: LocalTime[] = [];
+  @state() private queued: MenuPublicationsAnswer["editions"] = [];
+  /** The ticks the person set on scheduled versions, by activation time (`scheduledCorrections`). */
+  @state() private choices: ReadonlyMap<string, boolean> = new Map();
   /** The newest live version delivered while the draft held work; the draft stays on `live` until
    * Reload, or until a later delivery finds nothing staged and no field failing its check. */
-  @state() private newer: LiveMenu | null = null;
+  @state() private newer: PatchDraft | null = null;
 
   #draft: MenuPatchDraft | null = null;
   /** Whether Review has been pressed since the dialog opened: until then no field shows its own
@@ -183,7 +192,7 @@ export class MenuPatchDialog extends LitElement {
   #watching: string | null = null;
   /** A live version or language change that arrived while a patch was being sent. Applying it then
    * could drop a change the answer's refusal still has to place, so it waits for the answer. */
-  #held: { answer?: LiveMenu | null; languages: boolean; reload?: boolean } | null = null;
+  #held: { answer?: PatchDraft | null; languages: boolean; reload?: boolean } | null = null;
   /** The `changeKey` of the change a bottom "no longer fits" refusal names. */
   #refusedKey: string | null = null;
   #scope: DraftScope<Edit[]> | undefined;
@@ -279,6 +288,7 @@ export class MenuPatchDialog extends LitElement {
     this.trimmed = new Set();
     this.refixed = new Set();
     this.queued = [];
+    this.choices = new Map();
     this.newer = null;
     this.#held = null;
     this.#refusedKey = null;
@@ -309,6 +319,7 @@ export class MenuPatchDialog extends LitElement {
     this.#draft = new MenuPatchDraft(this.live!.document, currentContentLanguages());
     this.#feedback.reset();
     this.#typed = new Map();
+    this.choices = new Map();
     this.step = "edit";
     this.requestUpdate();
   }
@@ -322,9 +333,7 @@ export class MenuPatchDialog extends LitElement {
         .catch(() => undefined),
       this.#queries
         .watch("getMenuPublications", [menuId], (answer) => {
-          this.queued = answer.editions
-            .filter((edition) => edition.state === "queued")
-            .map((edition) => edition.local);
+          this.queued = answer.editions.filter((edition) => edition.state === "queued");
         })
         .catch(() => undefined),
     ]);
@@ -333,8 +342,9 @@ export class MenuPatchDialog extends LitElement {
   /** Takes a live read from the subscription or, with `reload`, from Reload, which moves the draft
    * even when it holds work. A later live version has a higher number (`nextNumber`,
    * `refuseOvertaken` and `requeueAfter`, `packages/menu/src/menu-publication.ts`), so an
-   * answer numbered below the newest one known is a late read and is ignored. */
-  #applyLive(answer: LiveMenu | null, reload = false): void {
+   * answer numbered below the newest one known is a late read and is ignored. One of the version
+   * shown may hold other scheduled versions. */
+  #applyLive(answer: PatchDraft | null, reload = false): void {
     if (this.busy) {
       const held = this.#held;
       const late = answer !== null && held?.answer != null && answer.number < held.answer.number;
@@ -376,7 +386,10 @@ export class MenuPatchDialog extends LitElement {
       }
       this.newer = null;
       this.live = newest;
-    } else if (!reload) return;
+    } else {
+      if (answer.number === this.live!.number) this.live = answer;
+      if (!reload) return;
+    }
     // Reload checks the draft again even on the version shown: the venue's languages may differ.
     this.#revalidate(reload);
   }
@@ -570,13 +583,20 @@ export class MenuPatchDialog extends LitElement {
     const session = this.#session;
     const sent = this.changes;
     const submitted = this.#current();
+    const queued = this.#scheduled().flatMap(({ versionId, ticked }) =>
+      ticked ? [versionId] : [],
+    );
     this.busy = true;
     this.refusal = null;
     this.reloadFailure = null;
     for (const typed of this.#typed.values())
       if (typed.refused) Object.assign(typed, { error: "", language: null, refused: false });
     const outcome = await this.api
-      .patchLiveMenu(this.menuId, { baseVersionId: this.live!.versionId, changes: sent })
+      .patchLiveMenu(this.menuId, {
+        baseVersionId: this.live!.versionId,
+        changes: sent,
+        ...(queued.length === 0 ? {} : { queued }),
+      })
       .then(
         (result) => ({ result }),
         (error: unknown) => ({ error }),
@@ -675,7 +695,7 @@ export class MenuPatchDialog extends LitElement {
   /** The Reload button is usually gone afterwards, so with `focus` focus moves to Review, or to
    * Close while Review is unavailable. Without it, focus stays on the refused field unless the
    * version moved onto removed that field. */
-  async #reloaded(answer: LiveMenu | null, focus = true): Promise<void> {
+  async #reloaded(answer: PatchDraft | null, focus = true): Promise<void> {
     this.reloadFailure = null;
     this.#applyLive(answer, true);
     if (!focus) {
@@ -722,6 +742,10 @@ export class MenuPatchDialog extends LitElement {
 
   #change(target: MenuPatchTarget, field: string, raw: unknown): void {
     this.#check(target, field, raw);
+    this.#changed();
+  }
+
+  #changed(): void {
     this.#retireRefusal();
     this.#scope!.changed();
     this.requestUpdate();
@@ -922,8 +946,24 @@ export class MenuPatchDialog extends LitElement {
     ];
   }
 
+  /** The scheduled versions the form lists, each with its date; only these are ever sent. */
+  #scheduled(): (ScheduledCorrection & { date: string })[] {
+    return scheduledCorrections(this.live!, this.changes, this.choices).flatMap((row) => {
+      const edition = this.queued.find(({ activatesAt }) => activatesAt === row.activatesAt);
+      return edition === undefined ? [] : [{ ...row, date: localTimeWords(edition.local) }];
+    });
+  }
+
   #renderReview(): TemplateResult {
     const languages = currentContentLanguages();
+    const scheduled = this.#scheduled();
+    const fromProducts = this.changes.every(({ field }) => field === "declarations");
+    // A version not among `scheduled` needs none of the staged declarations: it agrees with the
+    // products already, or holds none of the items.
+    const without = this.queued.filter(({ activatesAt }) => {
+      const row = scheduled.find((listed) => listed.activatesAt === activatesAt);
+      return row === undefined ? !fromProducts : !row.ticked;
+    });
     return html`<div class="review" data-test="review-step">
       <h3 tabindex="-1">${t("menu_patch.review_heading")}</h3>
       <ul class="changes">
@@ -931,9 +971,11 @@ export class MenuPatchDialog extends LitElement {
           (line) => html`<li data-test="review-line">${line}</li>`,
         )}
       </ul>
-      ${reviewNotes(this.queued.map(localTimeWords)).map(
-        (note) => html`<p class="note" data-test="review-note">${note}</p>`,
-      )}
+      ${reviewNotes(
+        without.map(({ local }) => localTimeWords(local)),
+        scheduled.flatMap(({ ticked, date }) => (ticked ? [date] : [])),
+        fromProducts,
+      ).map((note) => html`<p class="note" data-test="review-note">${note}</p>`)}
     </div>`;
   }
 
@@ -1023,6 +1065,82 @@ export class MenuPatchDialog extends LitElement {
     </div>`;
   }
 
+  #declared(target: MenuPatchTarget): boolean {
+    const key = `${targetKey(target)}/declarations`;
+    return this.changes.some((change) => changeKey(change) === key);
+  }
+
+  /** A dish's change corrects its variants too, so ticking it takes back theirs. */
+  #declare(target: MenuPatchTarget, variants: readonly MenuPatchTarget[], ticked: boolean): void {
+    for (const cleared of ticked ? variants : [target]) {
+      this.#draft!.clear(cleared, "declarations");
+      this.#typed.delete(`${targetKey(cleared)}/declarations`);
+    }
+    if (ticked) this.#check(target, "declarations", "product");
+    this.#changed();
+  }
+
+  #renderDeclarations(target: MenuPatchTarget, error: string): TemplateResult {
+    const variants =
+      target.kind === "offer"
+        ? this.live!.document.offers[target.menuItemId]!.variants.map(
+            ({ id }): MenuPatchTarget => ({ ...target, kind: "variant", variantId: id }),
+          )
+        : [];
+    const byDish =
+      target.kind === "variant" && this.#declared({ kind: "offer", menuItemId: target.menuItemId });
+    const ticked = byDish || this.#declared(target);
+    const note = byDish
+      ? html`<p class="locked-note" id="declarations-note">
+          ${t("menu_patch.declarations_by_dish")}
+        </p>`
+      : error === ""
+        ? nothing
+        : html`<p class="field-error" id="declarations-note">${error}</p>`;
+    const rows = ticked ? this.#scheduled().filter((row) => row.differsFor(target)) : [];
+    return html`<div data-test="declarations">
+      <label class="tick">
+        <input
+          type="checkbox"
+          name="declarations"
+          .checked=${live(ticked)}
+          ?disabled=${byDish}
+          aria-invalid=${error === "" ? "false" : "true"}
+          aria-describedby=${note === nothing ? nothing : "declarations-note"}
+          @change=${(event: Event) =>
+            this.#declare(target, variants, (event.target as HTMLInputElement).checked)}
+        />
+        <span
+          >${t(variants.length === 0 ? "menu_patch.declarations" : "menu_patch.declarations_variants")}</span
+        >
+      </label>
+      ${note}
+      ${
+        rows.length === 0
+          ? nothing
+          : html`<fieldset>
+              <legend>${t("menu_patch.scheduled")}</legend>
+              ${rows.map(
+                ({ activatesAt, date, ticked }) =>
+                  html`<label class="tick">
+                    <input
+                      type="checkbox"
+                      name="scheduled"
+                      value=${activatesAt}
+                      .checked=${live(ticked)}
+                      @change=${(event: Event) => {
+                        const { checked } = event.target as HTMLInputElement;
+                        this.choices = new Map(this.choices).set(activatesAt, checked);
+                      }}
+                    />
+                    <span>${date}</span>
+                  </label>`,
+              )}
+            </fieldset>`
+      }
+    </div>`;
+  }
+
   #renderField(target: MenuPatchTarget, field: string): TemplateResult {
     const value = this.#shown(target, field);
     const typed = this.#typed.get(`${targetKey(target)}/${field}`);
@@ -1082,6 +1200,8 @@ export class MenuPatchDialog extends LitElement {
         );
       case "price":
         return priceField(context, "price", t("editor.price"), value as string, change, true);
+      case "declarations":
+        return this.#renderDeclarations(target, error);
       default:
         return html`<dashboard-image-upload
           label=${t("image.label")}

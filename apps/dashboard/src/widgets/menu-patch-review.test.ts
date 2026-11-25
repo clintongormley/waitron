@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import type { FrozenExtraItem, FrozenOfferVariant, MenuDocument } from "@waitron/shared";
+import type { MenuPatchTarget } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
 import { changeLines, placeRefusal, refusalWords, reviewNotes } from "./menu-patch-review.js";
@@ -79,6 +80,27 @@ it("words each change as its item, field, old value and new value", () => {
     "Soup: Price €3.00 → €3.50",
     "Soup: Prep station name SOUP KITCHEN → (empty)",
     "Starters: Internal name Starters → First",
+  ]);
+});
+
+it("words a declarations change as from the product, in the screen language", () => {
+  const changes = [
+    soup,
+    { kind: "variant", menuItemId: "mi-lemonade", variantId: "v-large" },
+    { kind: "extra", listId: "l-toppings", productId: "p-bread" },
+  ].map((target) => ({
+    target: target as MenuPatchTarget,
+    field: "declarations",
+    value: "product",
+  }));
+  expect(changeLines(lunch(), changes, languages)).toEqual([
+    "Soup: Allergens and diets: from the product",
+    "Lemonade › Large: Allergens and diets: from the product",
+    "Toppings › Bread: Allergens and diets: from the product",
+  ]);
+  setLocale("es");
+  expect(changeLines(lunch(), changes.slice(0, 1), languages)).toEqual([
+    "Soup: Alérgenos y dietas: del producto",
   ]);
 });
 
@@ -222,6 +244,28 @@ const kitchen = { target: soup, field: "kitchenName", value: "SOUP" };
 function refused(code: string, params: Record<string, unknown>): Error {
   return Object.assign(new Error(code), { code, params });
 }
+
+it("says which scheduled versions get the allergens and diets, apart from those that get nothing", () => {
+  expect(reviewNotes(["10 Nov 2026, 08:00"], ["3 Nov 2026, 08:00"]).slice(1, 3)).toEqual([
+    "The version going live on 3 Nov 2026, 08:00 also gets these allergens and diets, but no other change.",
+    "The version going live on 10 Nov 2026, 08:00 does not include these changes.",
+  ]);
+  const both = ["3 Nov 2026, 08:00", "10 Nov 2026, 08:00"];
+  expect(reviewNotes([], both).slice(1, -1)).toEqual([
+    "The versions going live on 3 Nov 2026, 08:00 and 10 Nov 2026, 08:00 also get these allergens and diets, but no other change.",
+  ]);
+  setLocale("es");
+  expect(reviewNotes([], both.slice(0, 1)).slice(1, -1)).toEqual([
+    "La versión que se publica el 3 Nov 2026, 08:00 también recibe estos alérgenos y dietas, pero ninguna otra corrección.",
+  ]);
+  expect(reviewNotes([], both).slice(1, -1)).toEqual([
+    "Las versiones que se publican en estas fechas también reciben estos alérgenos y dietas, pero ninguna otra corrección: 3 Nov 2026, 08:00 y 10 Nov 2026, 08:00.",
+  ]);
+});
+
+it("does not say a publish puts old values back when every value is the products' own", () => {
+  expect(reviewNotes([], [], true)).toEqual(["Lines already on open orders keep their old price."]);
+});
 
 it("places a refused value under the field of the change it names", () => {
   expect(

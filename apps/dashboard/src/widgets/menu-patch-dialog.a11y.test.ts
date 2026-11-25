@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import type { DashboardApi, LiveMenu } from "../api/client.js";
+import type { DashboardApi, PatchDraft } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,
@@ -14,10 +14,11 @@ import {
 import "./menu-patch-dialog.js";
 import type { MenuPatchDialog } from "./menu-patch-dialog.js";
 
-const LIVE: LiveMenu = {
+const LIVE: PatchDraft = {
   versionId: "v-3",
   number: 3,
   since: "2026-10-27T09:00:00.000Z",
+  queued: [],
   document: menuDocument(
     [
       documentSection("sec-starters", "Starters", [
@@ -140,6 +141,91 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
     expect(el.shadowRoot!.querySelector(".locked-note")!.textContent!.trim()).toBe(
       "The included folder sets this name.",
     );
+    await expectNoA11yViolations(host);
+  });
+
+  it.each(["en", "es"])("renders the scheduled versions accessibly, in %s", async (locale) => {
+    setLocale(locale);
+    const queued = ["2026-11-03", "2026-11-10"].map((date, index) => ({
+      versionId: `v-q${index}`,
+      activatesAt: `${date}T07:00:00.000Z`,
+      targets: [{ target: { kind: "offer", menuItemId: "mi-soup" }, stillOld: index === 0 }],
+    }));
+    const api = {
+      getLiveMenu: vi.fn(async () => ({ ...LIVE, queued })),
+      getMenuPublications: vi.fn(async () => ({
+        timeZone: "Europe/Madrid",
+        live: null,
+        editions: queued.map(({ versionId, activatesAt }) => ({
+          versionId,
+          activatesAt,
+          state: "queued",
+          local: { date: activatesAt.slice(0, 10), time: "08:00", repeated: false },
+        })),
+      })),
+      patchLiveMenu: vi.fn().mockRejectedValue({
+        code: "menu_patch.invalid",
+        params: { change: 0, field: "declarations" },
+      }),
+      imageLibraryRequest: vi.fn(),
+    } as unknown as DashboardApi;
+    const { el, host } = await mountWidget<MenuPatchDialog>(
+      "dashboard-menu-patch-dialog",
+      { api, menuId: "menu-lunch", menuName: "Lunch Menu", open: true },
+      theme,
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="tree"] button')).not.toBeNull(),
+    );
+    await pick(el, "Soup");
+    const boxes = () => [
+      ...el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    ];
+    expect(boxes()).toHaveLength(1);
+    await expectNoA11yViolations(host);
+    boxes()[0]!.click();
+    await settle(el);
+    expect(boxes().map(({ checked }) => checked)).toEqual([true, true, false]);
+    await expectNoA11yViolations(host);
+    await press(el, "review");
+    expect(el.shadowRoot!.querySelectorAll('[data-test="review-note"]')).toHaveLength(3);
+    await expectNoA11yViolations(host);
+    await press(el, "put-live");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('input[aria-invalid="true"]')).not.toBeNull(),
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a variant whose dish is ticked accessibly", async () => {
+    const document = structuredClone(LIVE.document);
+    (document.offers["mi-soup"] as { variants: unknown }).variants = [
+      { id: "v-cup", name: "Cup", customerName: null, kitchenName: null, unitPrice: "2.00" },
+    ];
+    const api = {
+      getLiveMenu: vi.fn(async () => ({ ...LIVE, document })),
+      getMenuPublications: vi.fn(async () => ({
+        timeZone: "Europe/Madrid",
+        live: null,
+        editions: [],
+      })),
+      imageLibraryRequest: vi.fn(),
+    } as unknown as DashboardApi;
+    const { el, host } = await mountWidget<MenuPatchDialog>(
+      "dashboard-menu-patch-dialog",
+      { api, menuId: "menu-lunch", menuName: "Lunch Menu", open: true },
+      theme,
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="tree"] button')).not.toBeNull(),
+    );
+    const box = () => el.shadowRoot!.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    await pick(el, "Soup");
+    box().click();
+    await settle(el);
+    await expectNoA11yViolations(host);
+    await pick(el, "Cup");
+    expect(box().disabled).toBe(true);
     await expectNoA11yViolations(host);
   });
 

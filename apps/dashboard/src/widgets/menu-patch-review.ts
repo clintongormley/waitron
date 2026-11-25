@@ -17,6 +17,7 @@ const FIELD_LABELS: Record<string, StringKey> = {
   description: "editor.description",
   image: "image.label",
   price: "editor.price",
+  declarations: "menu_patch.declarations_label",
 };
 
 const CHILD_KINDS = new Set(["variant", "extra", "option_label"]);
@@ -95,6 +96,8 @@ export function changeLines(
   return changes.flatMap(({ target, field, value }) => {
     const item = names.get(targetKey(target))!;
     const label = t(FIELD_LABELS[field]!);
+    if (field === "declarations")
+      return [fill("menu_patch.declarations_line", { item, field: label })];
     const old = patchFieldValue(document, target, field, languages);
     if (field === "customerName" || field === "names" || field === "description") {
       const before = (old as Record<string, string> | null) ?? {};
@@ -125,11 +128,23 @@ export function changeLines(
   });
 }
 
-/** The notes under the review list. `queuedDates` names each version waiting to go live: the
- * patch renumbers them, so a date is the name that still holds after it. */
-export function reviewNotes(queuedDates: readonly string[]): string[] {
+/** The notes under the review list. `queuedDates` names each version waiting to go live that gets
+ * nothing, `correctedDates` each that gets the declarations: the patch renumbers them, so a date is
+ * the name that still holds after it. `fromProducts` is whether every value is the products' own. */
+export function reviewNotes(
+  queuedDates: readonly string[],
+  correctedDates: readonly string[] = [],
+  fromProducts = false,
+): string[] {
   return [
     t("menu_patch.open_orders_note"),
+    ...(correctedDates.length === 0
+      ? []
+      : [
+          correctedDates.length === 1
+            ? fill("menu_patch.corrected_note", { date: correctedDates[0]! })
+            : fill("menu_patch.corrected_note_many", { dates: conjunctionList(correctedDates) }),
+        ]),
     ...(queuedDates.length === 0
       ? []
       : [
@@ -137,6 +152,6 @@ export function reviewNotes(queuedDates: readonly string[]): string[] {
             ? fill("menu_patch.queued_note", { date: queuedDates[0]! })
             : fill("menu_patch.queued_note_many", { dates: conjunctionList(queuedDates) }),
         ]),
-    t("menu_patch.products_note"),
+    ...(fromProducts ? [] : [t("menu_patch.products_note")]),
   ];
 }

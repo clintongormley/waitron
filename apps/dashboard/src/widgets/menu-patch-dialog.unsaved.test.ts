@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import type { DashboardApi, LiveMenu, MenuPatchResult } from "../api/client.js";
+import type { DashboardApi, MenuPatchResult, PatchDraft } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
   cleanupWidgets,
@@ -15,10 +15,11 @@ import {
 import "./menu-patch-dialog.js";
 import type { MenuPatchDialog } from "./menu-patch-dialog.js";
 
-const LIVE: LiveMenu = {
+const LIVE: PatchDraft = {
   versionId: "v-3",
   number: 3,
   since: "2026-10-27T09:00:00.000Z",
+  queued: [],
   document: menuDocument(
     [documentSection("sec-starters", "Starters", [documentProduct("mi-soup", "p-soup")])],
     { "p-soup": "Soup" },
@@ -179,6 +180,26 @@ it("asks before Escape throws away the changes on the review step, and after Kee
   await closing;
   expect(dialog.open).toBe(false);
   expect(app.api.patchLiveMenu).not.toHaveBeenCalled();
+});
+
+it("keeps a ticked allergens checkbox protected until it is unticked", async () => {
+  const { app, dialog } = await mount();
+  [...dialog.shadowRoot!.querySelectorAll<HTMLElement>('[data-test="tree"] button')]
+    .find((button) => button.textContent!.trim() === "Soup")!
+    .click();
+  await dialog.updateComplete;
+  const box = () =>
+    dialog.shadowRoot!.querySelector<HTMLInputElement>('input[name="declarations"]')!;
+  await userEvent.click(page.elementLocator(box()));
+  expect(unload()).toBe(true);
+  await press(dialog, "close");
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>('[data-choice="keep"]')!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(box().checked).toBe(true);
+  await userEvent.click(page.elementLocator(box()));
+  expect(unload()).toBe(false);
 });
 
 it("asks before leaving the screen with a staged change", async () => {

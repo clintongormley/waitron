@@ -5,13 +5,19 @@ import type {
   FrozenOfferedModifier,
   MenuDocument,
 } from "@waitron/shared";
+import { productDeclarationValues } from "@waitron/menu/src/declaration-values.js";
 import {
   applyMenuPatch,
+  declarationProductIds,
   fixedLanguages,
   parseMenuPatch,
   patchFieldValue,
 } from "@waitron/menu/src/menu-patch.js";
-import type { MenuPatchChange, MenuPatchTarget } from "@waitron/menu/src/menu-patch-types.js";
+import type {
+  MenuPatchChange,
+  MenuPatchTarget,
+  PatchDraft,
+} from "@waitron/menu/src/menu-patch-types.js";
 import { mergeOptionalTranslations } from "@waitron/menu/src/optional-translations.js";
 
 /** `target` is null only for the group holding the extras and options lists. */
@@ -129,6 +135,66 @@ export function targetKey(target: MenuPatchTarget): string {
     case "section":
       return `section:${target.sectionId}`;
   }
+}
+
+/** What a declarations change corrects: a dish or variant by its product, whichever of its places
+ * on the menu is named, and an extra in its list. A dish only a set menu holds is never picked. */
+function declarationSubject(document: MenuDocument, target: MenuPatchTarget): string | undefined {
+  if (target.kind === "variant") return `variant:${target.variantId}`;
+  if (target.kind !== "offer") return targetKey(target);
+  const offer = document.offers[target.menuItemId];
+  return offer && `offer:${offer.productId}`;
+}
+
+/** Every subject a declarations change corrects: a dish's takes its variants too. */
+function correctedSubjects(document: MenuDocument, target: MenuPatchTarget) {
+  const variants = target.kind === "offer" ? document.offers[target.menuItemId]?.variants : [];
+  return [
+    declarationSubject(document, target),
+    ...(variants ?? []).map(({ id }) => `variant:${id}`),
+  ];
+}
+
+export interface ScheduledCorrection {
+  versionId: string;
+  activatesAt: string;
+  /** Whether the patch corrects this version too. */
+  ticked: boolean;
+  /** Whether this version differs for something a change to `target` corrects. */
+  differsFor(target: MenuPatchTarget): boolean;
+}
+
+/** The scheduled versions that differ from the products' current declarations for an item whose
+ * declarations are staged. `choices` holds the ticks the person set, by activation time: a patch
+ * renumbers a scheduled version, and no two wait for the same time. */
+export function scheduledCorrections(
+  { document, queued }: PatchDraft,
+  changes: readonly MenuPatchChange[],
+  choices: ReadonlyMap<string, boolean>,
+): ScheduledCorrection[] {
+  const staged = new Set(
+    changes.flatMap(({ target, field }) =>
+      field === "declarations" ? correctedSubjects(document, target) : [],
+    ),
+  );
+  if (staged.size === 0) return [];
+  return queued.flatMap(({ versionId, activatesAt, targets }) => {
+    const held = new Map<string | undefined, boolean>();
+    for (const { target, stillOld } of targets) {
+      const subject = declarationSubject(document, target);
+      if (staged.has(subject)) held.set(subject, stillOld);
+    }
+    if (held.size === 0) return [];
+    return [
+      {
+        versionId,
+        activatesAt,
+        ticked: choices.get(activatesAt) ?? [...held.values()].every(Boolean),
+        differsFor: (target) =>
+          correctedSubjects(document, target).some((subject) => held.has(subject)),
+      },
+    ];
+  });
 }
 
 const TRANSLATED = new Set(["customerName", "names", "description"]);
@@ -393,6 +459,9 @@ export class MenuPatchDraft {
         this.staged.set(key, change);
       }
     }
+    const declared = declarationProductIds(document, this.changes());
+    // Only whether each change still fits is asked here, so any values do.
+    const declarations = new Map(declared.map((id) => [id, productDeclarationValues()]));
     for (;;) {
       const entries = [...this.staged];
       try {
@@ -400,6 +469,7 @@ export class MenuPatchDraft {
           document,
           entries.map(([, change]) => change),
           this.languages,
+          declarations,
         );
         return { dropped: dropped.size, trimmed: [...trimmed], fixed: [...fixed] };
       } catch (error) {

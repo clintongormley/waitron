@@ -301,7 +301,8 @@ export const QUERY_DEPENDENCIES = {
   getMenuStatuses: MENU_PUBLICATION_READS,
   getMenuStatus: MENU_PUBLICATION_READS,
   getMenuPreview: MENU_PUBLICATION_READS,
-  getLiveMenu: ["menu_releases", "menu_versions"],
+  // The route compares each scheduled version with the products' current allergens and diets.
+  getLiveMenu: ["menu_releases", "menu_versions", "products"],
   // The route converts each time with the venue's zone.
   getMenuPublications: [
     "menu_releases",

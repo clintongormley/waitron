@@ -111,6 +111,34 @@ export const menuPatchDialogStyles = [
       color: var(--wt-color-primary-text);
       text-decoration: underline;
     }
+    .tick {
+      display: flex;
+      align-items: center;
+      gap: var(--wt-space-2);
+      min-height: var(--wt-tap-min);
+      cursor: pointer;
+    }
+    .tick input {
+      flex: none;
+      margin: 0;
+      accent-color: var(--wt-color-primary);
+    }
+    .field-error {
+      margin: 0;
+      color: var(--wt-color-danger);
+      font-size: var(--wt-font-size-sm);
+    }
+    fieldset {
+      min-width: 0;
+      margin: 0;
+      padding: 0;
+      padding-inline-start: var(--wt-space-5);
+      border: 0;
+    }
+    legend {
+      padding: 0;
+      color: var(--wt-color-text-muted);
+    }
     .variant {
       display: flex;
       flex-wrap: wrap;

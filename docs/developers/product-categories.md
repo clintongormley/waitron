@@ -289,14 +289,18 @@ every waiting edition again after itself.
 A manager can correct the live version itself, leaving the products and the working menu as they
 were.
 
-- `GET /management-api/menus/:id/live` gives `{ versionId, number, since, document }` for the
-  version live now, with `since` as `publishedAt` above, or `null` when the menu has none. An
-  unknown menu answers `menu.not_found` (404).
-- `POST /management-api/menus/:id/patch`, with `{ baseVersionId, changes }`, puts the changes
+- `GET /management-api/menus/:id/live` gives `{ versionId, number, since, document, queued }` for the
+  version live now, with `since` as `publishedAt` above, or `null` when the menu has none. `queued`
+  lists each scheduled version whose allergens or diets differ from the products' current ones, as
+  `{ versionId, activatesAt, targets }`; each target is `{ target, stillOld }`, `stillOld` when every
+  differing copy holds what the live version's same copy holds. An unknown menu answers `menu.not_found` (404).
+- `POST /management-api/menus/:id/patch`, with `{ baseVersionId, changes, queued? }`, puts the changes
   live at once as a new version under the next number and gives `{ versionId, number, requeued }`
   (200). `requeued` lists each queued edition's copy as `{ versionId, number, activatesAt }`, lowest
   number first. Each change is `{ target, field, value }`; the fields each kind of target takes are
-  `PATCH_FIELDS` in `packages/menu/src/menu-patch-types.ts`. A missing or non-string
+  `PATCH_FIELDS` in `packages/menu/src/menu-patch-types.ts`. A `declarations` change takes only
+  `"product"` and copies the product's current allergens and diets; the scheduled versions `queued`
+  names take those changes and no others. A missing or non-string
   `baseVersionId`, or a `changes` that is not a list, answers `management.request_invalid` (400,
   `field` naming it); a malformed menu id or `baseVersionId` answers `shared.invalid_id` (400). An
   unknown menu answers `menu.not_found` (404), a menu with no live version
@@ -305,7 +309,7 @@ were.
   answers `menu_patch.invalid` (400, `change` as its index, `field` naming `target`, `field` or the
   refused field, and `reason` with the code behind a refused translation, or `image.not_found`
   for a picture the image library does not hold). A patch that leaves the
-  live version as it was answers `menu_patch.unchanged` (409, `menuId`).
+  live version and every scheduled version it names as they were answers `menu_patch.unchanged` (409, `menuId`).
 
 Tills sell from live versions of active menus. Reading a live version outside document format 6 refuses
 with `menu.reset_required`. Status reads check their requested menus; preview checks its own menu

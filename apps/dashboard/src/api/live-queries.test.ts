@@ -1329,8 +1329,12 @@ it("refreshes the box's health every fifteen seconds, from no table, passively a
   expect(active).toHaveBeenCalledOnce();
 });
 
-it("refreshes the live menu read only when a publication or version changes", async () => {
-  expect([...QUERY_DEPENDENCIES.getLiveMenu].sort()).toEqual(["menu_releases", "menu_versions"]);
+it("refreshes the live menu read only when a publication, version or product changes", async () => {
+  expect([...QUERY_DEPENDENCIES.getLiveMenu].sort()).toEqual([
+    "menu_releases",
+    "menu_versions",
+    "products",
+  ]);
   const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
     async () => new Response("null"),
   );

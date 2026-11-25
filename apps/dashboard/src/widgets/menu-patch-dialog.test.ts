@@ -11,7 +11,9 @@ import type {
   DashboardApi,
   LiveMenu,
   MenuPatchResult,
+  MenuPatchTarget,
   MenuPublicationsAnswer,
+  PatchDraft,
 } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -106,8 +108,8 @@ function lunch(soupName = "Soup"): MenuDocument {
   return document;
 }
 
-function live(number = 3, document = lunch()): LiveMenu {
-  return { versionId: `v-${number}`, number, since: "2026-10-27T09:00:00.000Z", document };
+function live(number = 3, document = lunch(), queued: PatchDraft["queued"] = []): PatchDraft {
+  return { versionId: `v-${number}`, number, since: "2026-10-27T09:00:00.000Z", document, queued };
 }
 
 function publications(
@@ -189,7 +191,9 @@ const form = (el: MenuPatchDialog) => el.shadowRoot!.querySelector('[data-test="
 /** Each field in the form, by its input name; the picture by its element. */
 const fieldNames = (el: MenuPatchDialog) =>
   [
-    ...form(el).querySelectorAll("wt-input, wt-price-input, wt-combobox, dashboard-image-upload"),
+    ...form(el).querySelectorAll(
+      'wt-input, wt-price-input, wt-combobox, dashboard-image-upload, input[type="checkbox"]',
+    ),
   ].map((field) => field.getAttribute("name") ?? field.localName);
 
 function field<K extends "wt-input" | "wt-price-input">(el: MenuPatchDialog, tag: K, name: string) {
@@ -421,6 +425,7 @@ it("shows a dish's patchable fields and nothing else, in every content language"
     "description-es",
     "dashboard-image-upload",
     "price",
+    "declarations",
   ]);
   expect(field(el, "wt-input", "name").value).toBe("Soup");
   expect(field(el, "wt-input", "name").required).toBe(true);
@@ -609,6 +614,7 @@ it("lists a dish's variants as links that pick them, and says it sells through t
     "kitchen-name",
     "dashboard-image-upload",
     "price",
+    "declarations",
   ]);
   expect(form(el).querySelector('[data-test="variants-note"]')).toBeNull();
 });
@@ -3329,4 +3335,421 @@ it("retires a server refusal when a newer folder locks its language, keeping the
   expect(refusalsIn(el)).toBe("");
   expect(el.changes).toHaveLength(1);
   expect(footerButton(el, "review")!.disabled).toBe(false);
+});
+
+const declarations = (el: MenuPatchDialog) =>
+  form(el).querySelector<HTMLInputElement>('input[name="declarations"]')!;
+
+const scheduled = (el: MenuPatchDialog) => [
+  ...form(el).querySelectorAll<HTMLInputElement>('input[name="scheduled"]'),
+];
+
+/** Each scheduled row as its words and whether it is ticked. */
+const scheduledRows = (el: MenuPatchDialog) =>
+  scheduled(el).map((box) => [box.closest("label")!.textContent!.trim(), box.checked]);
+
+async function tick(el: MenuPatchDialog, box: HTMLInputElement): Promise<void> {
+  await userEvent.click(page.elementLocator(box));
+  await el.updateComplete;
+}
+
+const salad = { kind: "offer", menuItemId: "mi-salad" } as const;
+const small = { kind: "variant", menuItemId: "mi-lemonade", variantId: "v-small" } as const;
+const bread = { kind: "extra", listId: "l-toppings", productId: "p-bread" } as const;
+const fromProduct = (target: MenuPatchTarget) => ({
+  target,
+  field: "declarations",
+  value: "product",
+});
+
+/** A queued version that differs from the products, at the time `publications` gives `date`. */
+const differing = (
+  versionId: string,
+  date: string,
+  ...targets: [MenuPatchTarget, boolean][]
+): PatchDraft["queued"][number] => ({
+  versionId,
+  activatesAt: `${date}T07:00:00.000Z`,
+  targets: targets.map(([target, stillOld]) => ({ target, stillOld })),
+});
+
+const twoDates = () =>
+  publications({ date: "2026-11-03", time: "08:00" }, { date: "2026-11-10", time: "09:30" });
+
+const scheduledApi = (
+  queued: PatchDraft["queued"],
+  overrides: Parameters<typeof stubApi>[0] = {},
+) =>
+  stubApi({
+    getLiveMenu: vi.fn(async () => live(3, lunch(), queued)),
+    getMenuPublications: vi.fn(async () => twoDates()),
+    ...overrides,
+  });
+
+it.each([
+  ["Soup", soup],
+  ["Small", small],
+  ["Bread", bread],
+] as const)(
+  "offers %s the product's current allergens and diets with one checkbox, staging and unstaging it",
+  async (label, target) => {
+    const el = await mount();
+    await pick(el, label);
+    const boxes = form(el).querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+    expect(boxes).toHaveLength(1);
+    const box = declarations(el);
+    expect(box.labels![0]!.textContent!.trim()).toBe(
+      "Use the product's current allergens and diets",
+    );
+    expect(box.checked).toBe(false);
+    await tick(el, box);
+    expect(el.changes).toEqual([fromProduct(target)]);
+    expect(changedDot(el, label)).not.toBeNull();
+    expect(footerButton(el, "review")!.disabled).toBe(false);
+    await pick(el, "Salad");
+    expect(declarations(el).checked).toBe(false);
+    await pick(el, label);
+    expect(declarations(el).checked).toBe(true);
+    await tick(el, declarations(el));
+    expect(el.changes).toEqual([]);
+    expect(changedDot(el, label)).toBeNull();
+    expect(footerButton(el, "review")!.disabled).toBe(true);
+  },
+);
+
+it("corrects a dish's variants through the dish's checkbox alone", async () => {
+  const el = await mount(scheduledApi([differing("v-q0", "2026-11-03", [small, true])]));
+  const lemonade = { kind: "offer", menuItemId: "mi-lemonade" } as const;
+  await pick(el, "Small");
+  await tick(el, declarations(el));
+  expect(el.changes).toEqual([fromProduct(small)]);
+  await pick(el, "Lemonade");
+  expect(declarations(el).labels![0]!.textContent!.trim()).toBe(
+    "Use the product's current allergens and diets, variants included",
+  );
+  await tick(el, declarations(el));
+  expect(el.changes).toEqual([fromProduct(lemonade)]);
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", true]]);
+  await pick(el, "Small");
+  expect(changedDot(el, "Small")).toBeNull();
+  expect(declarations(el).checked).toBe(true);
+  expect(declarations(el).disabled).toBe(true);
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", true]]);
+  const why = el.shadowRoot!.getElementById(declarations(el).getAttribute("aria-describedby")!)!;
+  expect(why.textContent!.trim()).toBe("Set on the dish.");
+  setLocale("es");
+  await el.updateComplete;
+  expect(why.textContent!.trim()).toBe("Se marca en el plato.");
+  await pick(el, "Lemonade");
+  expect(declarations(el).labels![0]!.textContent!.trim()).toBe(
+    "Usar los alérgenos y dietas actuales del producto, también en sus variantes",
+  );
+  await tick(el, declarations(el));
+  expect(el.changes).toEqual([]);
+  await pick(el, "Small");
+  expect(declarations(el).checked).toBe(false);
+  expect(declarations(el).disabled).toBe(false);
+});
+
+it("offers no allergens checkbox for a section or a list", async () => {
+  const el = await mount();
+  for (const label of ["Drinks", "Toppings"]) {
+    await pick(el, label);
+    expect(form(el).querySelector('input[type="checkbox"]')).toBeNull();
+  }
+});
+
+it("words the checkbox in Spanish", async () => {
+  setLocale("es");
+  const el = await mount();
+  await pick(el, "Soup");
+  expect(declarations(el).labels![0]!.textContent!.trim()).toBe(
+    "Usar los alérgenos y dietas actuales del producto",
+  );
+});
+
+it("lists the scheduled versions that differ only while the checkbox is ticked, with their dates", async () => {
+  const el = await mount(
+    scheduledApi([
+      differing("v-q0", "2026-11-03", [soup, true]),
+      differing("v-q1", "2026-11-10", [soup, false], [bread, true]),
+    ]),
+  );
+  await pick(el, "Soup");
+  expect(form(el).querySelector("fieldset")).toBeNull();
+  await tick(el, declarations(el));
+  expect(form(el).querySelector("fieldset legend")!.textContent!.trim()).toBe(
+    "Correct these scheduled versions too",
+  );
+  expect(scheduledRows(el)).toEqual([
+    ["3 Nov 2026, 08:00", true],
+    ["10 Nov 2026, 09:30", false],
+  ]);
+  setLocale("es");
+  await el.updateComplete;
+  expect(form(el).querySelector("fieldset legend")!.textContent!.trim()).toBe(
+    "Corregir también estas versiones programadas",
+  );
+  expect(scheduledRows(el).map(([words]) => words)).toEqual([
+    "3 nov 2026, 08:00",
+    "10 nov 2026, 09:30",
+  ]);
+  await tick(el, declarations(el));
+  expect(form(el).querySelector("fieldset")).toBeNull();
+});
+
+it("lists nothing for a ticked item no scheduled version differs for", async () => {
+  const el = await mount(scheduledApi([differing("v-q0", "2026-11-03", [bread, true])]));
+  await pick(el, "Soup");
+  await tick(el, declarations(el));
+  expect(form(el).querySelector("fieldset")).toBeNull();
+  await pick(el, "Bread");
+  expect(form(el).querySelector("fieldset")).toBeNull();
+  await tick(el, declarations(el));
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", true]]);
+});
+
+it("lists in each ticked item's form only the versions that differ for it, and none in an unticked one's", async () => {
+  const el = await mount(
+    scheduledApi([
+      differing("v-q0", "2026-11-03", [soup, true]),
+      differing("v-q1", "2026-11-10", [salad, true], [bread, true]),
+    ]),
+  );
+  for (const label of ["Soup", "Salad"]) {
+    await pick(el, label);
+    await tick(el, declarations(el));
+  }
+  expect(scheduledRows(el)).toEqual([["10 Nov 2026, 09:30", true]]);
+  await pick(el, "Soup");
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", true]]);
+  await tick(el, declarations(el));
+  expect(scheduledRows(el)).toEqual([]);
+  await pick(el, "Salad");
+  await tick(el, declarations(el));
+  await pick(el, "Bread");
+  await tick(el, declarations(el));
+  await pick(el, "Salad");
+  expect(scheduledRows(el)).toEqual([]);
+});
+
+it("keeps the person's choice on a scheduled version when another item is ticked", async () => {
+  const el = await mount(
+    scheduledApi([
+      differing("v-q0", "2026-11-03", [soup, true], [salad, true]),
+      differing("v-q1", "2026-11-10", [soup, true], [salad, false]),
+    ]),
+  );
+  await pick(el, "Soup");
+  await tick(el, declarations(el));
+  await tick(el, scheduled(el)[0]!);
+  expect(scheduledRows(el).map(([, ticked]) => ticked)).toEqual([false, true]);
+  await pick(el, "Salad");
+  await tick(el, declarations(el));
+  // The second, left alone, is no longer ticked: it does not hold the salad's old value.
+  expect(scheduledRows(el).map(([, ticked]) => ticked)).toEqual([false, false]);
+  await tick(el, scheduled(el)[1]!);
+  await pick(el, "Soup");
+  expect(scheduledRows(el).map(([, ticked]) => ticked)).toEqual([false, true]);
+});
+
+it("reviews and sends only the scheduled versions left ticked", async () => {
+  const api = scheduledApi([
+    differing("v-q0", "2026-11-03", [soup, true]),
+    differing("v-q1", "2026-11-10", [soup, true]),
+  ]);
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await tick(el, declarations(el));
+  await tick(el, scheduled(el)[1]!);
+  await press(el, "review");
+  expect(reviewLines(el)).toEqual(["Soup: Allergens and diets: from the product"]);
+  expect(reviewNotes(el)).toEqual([
+    "Lines already on open orders keep their old price.",
+    "The version going live on 3 Nov 2026, 08:00 also gets these allergens and diets, but no other change.",
+    "The version going live on 10 Nov 2026, 09:30 does not include these changes.",
+  ]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledWith("menu-lunch", {
+    baseVersionId: "v-3",
+    changes: [fromProduct(soup)],
+    queued: ["v-q0"],
+  });
+});
+
+it("says nothing in the review of a scheduled version that already has the product's values, unless something else changes", async () => {
+  const el = await mount(scheduledApi([differing("v-q0", "2026-11-03", [soup, true])]));
+  await pick(el, "Soup");
+  await tick(el, declarations(el));
+  await press(el, "review");
+  const corrected =
+    "The version going live on 3 Nov 2026, 08:00 also gets these allergens and diets, but no other change.";
+  const openOrders = "Lines already on open orders keep their old price.";
+  expect(reviewNotes(el)).toEqual([openOrders, corrected]);
+  await press(el, "keep-editing");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  expect(reviewNotes(el)).toEqual([
+    openOrders,
+    corrected,
+    "The version going live on 10 Nov 2026, 09:30 does not include these changes.",
+    "The next normal publish from the products puts the old values back unless you fix the products too.",
+  ]);
+});
+
+it("sends no scheduled version once the checkbox is unticked or every row is", async () => {
+  const api = scheduledApi([differing("v-q0", "2026-11-03", [soup, true])], {
+    patchLiveMenu: vi.fn(async () => {
+      throw refusal("menu_patch.unchanged", { menuId: "menu-lunch" });
+    }),
+  });
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await tick(el, declarations(el));
+  await tick(el, declarations(el));
+  await press(el, "review");
+  await press(el, "put-live");
+  const price = { target: soup, field: "price", value: "4.00" };
+  expect(api.patchLiveMenu).toHaveBeenLastCalledWith("menu-lunch", {
+    baseVersionId: "v-3",
+    changes: [price],
+  });
+  await press(el, "keep-editing");
+  await tick(el, declarations(el));
+  await tick(el, scheduled(el)[0]!);
+  await press(el, "review");
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenLastCalledWith("menu-lunch", {
+    baseVersionId: "v-3",
+    changes: [price, fromProduct(soup)],
+  });
+  expect(bottomMessage(el)).toBe("These values are already live. Nothing was saved.");
+});
+
+it("lists a scheduled version that starts to differ while the same live version is shown", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live())
+    .mockResolvedValue(live(3, lunch(), [differing("v-q0", "2026-11-03", [soup, true])]));
+  const el = await mount(scheduledApi([], { liveData: data, getLiveMenu }));
+  await pick(el, "Soup");
+  await tick(el, declarations(el));
+  expect(scheduledRows(el)).toEqual([]);
+  data.invalidate([{ type: "products", id: "p-soup" }]);
+  await vi.waitFor(() => expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", true]]));
+});
+
+it("keeps the change and the choice when reloaded onto a newer version that renumbered the scheduled one", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3, lunch(), [differing("v-q0", "2026-11-03", [soup, true])]))
+    .mockResolvedValue(live(4, lunch(), [differing("v-q9", "2026-11-03", [soup, true])]));
+  const api = scheduledApi([], { liveData: data, getLiveMenu });
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await tick(el, declarations(el));
+  await tick(el, scheduled(el)[0]!);
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  expect(el.changes).toEqual([fromProduct(soup)]);
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", false]]);
+  await tick(el, scheduled(el)[0]!);
+  await press(el, "review");
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledWith("menu-lunch", {
+    baseVersionId: "v-4",
+    changes: [fromProduct(soup)],
+    queued: ["v-q9"],
+  });
+});
+
+it("forgets the scheduled choices when the dialog opens again", async () => {
+  const el = await mount(scheduledApi([differing("v-q0", "2026-11-03", [soup, true])]));
+  await pick(el, "Soup");
+  await tick(el, declarations(el));
+  await tick(el, scheduled(el)[0]!);
+  el.open = false;
+  await flush(el);
+  el.open = true;
+  await flush(el);
+  await pick(el, "Soup");
+  expect(declarations(el).checked).toBe(false);
+  await tick(el, declarations(el));
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", true]]);
+});
+
+it("forgets the scheduled choices when its changes are discarded", async () => {
+  const coordinator = createLeaveCoordinator(async () => "discard", window);
+  const answer = (event: Event) =>
+    (event as CustomEvent<{ accept(value: typeof coordinator): void }>).detail.accept(coordinator);
+  document.body.addEventListener("wt-leave-coordinator", answer);
+  try {
+    const el = await mount(scheduledApi([differing("v-q0", "2026-11-03", [soup, true])]));
+    await pick(el, "Soup");
+    await tick(el, declarations(el));
+    await tick(el, scheduled(el)[0]!);
+    await coordinator.request({ scopes: "all", reason: "cancel", proceed() {} });
+    await el.updateComplete;
+    expect(declarations(el).checked).toBe(false);
+    await tick(el, declarations(el));
+    expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", true]]);
+  } finally {
+    document.body.removeEventListener("wt-leave-coordinator", answer);
+    coordinator.dispose();
+  }
+});
+
+it("puts a refused allergens change back under its checkbox, until it is unticked", async () => {
+  const el = await mount(
+    stubApi({
+      patchLiveMenu: vi.fn(async () => {
+        throw refusal("menu_patch.invalid", { change: 0, field: "declarations" });
+      }),
+    }),
+  );
+  await pick(el, "Soup");
+  await tick(el, declarations(el));
+  await press(el, "review");
+  await press(el, "put-live");
+  const box = declarations(el);
+  expect(box.checked).toBe(true);
+  expect(box.getAttribute("aria-invalid")).toBe("true");
+  const message = el.shadowRoot!.getElementById(box.getAttribute("aria-describedby")!)!;
+  expect(message.textContent!.trim()).toBe("Check this value.");
+  expect(el.shadowRoot!.activeElement).toBe(box);
+  expect(bottomMessage(el)).toBe("Correct the fields marked on Soup to continue.");
+  await tick(el, box);
+  expect(declarations(el).getAttribute("aria-invalid")).toBe("false");
+  expect(form(el).querySelector(".field-error")).toBeNull();
+  expect(bottomMessage(el)).toBe("");
+});
+
+it("shows the scheduled rows inside the form at 390 px in Spanish", async () => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(390, 844);
+  try {
+    setLocale("es");
+    const el = await mount(
+      scheduledApi([
+        differing("v-q0", "2026-11-03", [soup, true]),
+        differing("v-q1", "2026-11-10", [soup, false]),
+      ]),
+    );
+    await pick(el, "Soup");
+    await tick(el, declarations(el));
+    const right = form(el).getBoundingClientRect().right + 0.5;
+    const labels = [declarations(el), ...scheduled(el)].map((box) => box.closest("label")!);
+    expect(labels).toHaveLength(3);
+    for (const label of labels) {
+      const box = label.getBoundingClientRect();
+      expect(box.right).toBeLessThanOrEqual(right);
+      expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
+      expect(box.height).toBeGreaterThanOrEqual(44);
+    }
+  } finally {
+    await page.viewport(before.width, before.height);
+  }
 });

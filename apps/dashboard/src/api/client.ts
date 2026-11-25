@@ -325,8 +325,9 @@ import type {
   MenuPatchChange,
   MenuPatchResult,
   MenuPatchTarget,
+  PatchDraft,
 } from "@waitron/menu/src/menu-patch-types.js";
-export type { LiveMenu, MenuPatchChange, MenuPatchResult, MenuPatchTarget };
+export type { LiveMenu, MenuPatchChange, MenuPatchResult, MenuPatchTarget, PatchDraft };
 import type {
   DocumentMember,
   FrozenOffer,
@@ -3768,14 +3769,15 @@ export class DashboardApi {
   }
 
   /** `null` when the menu has never been published. */
-  getLiveMenu(menuId: string): Promise<LiveMenu | null> {
-    return this.#request<LiveMenu | null>(`/management-api/menus/${menuId}/live`, "GET");
+  getLiveMenu(menuId: string): Promise<PatchDraft | null> {
+    return this.#request<PatchDraft | null>(`/management-api/menus/${menuId}/live`, "GET");
   }
 
-  /** A live version other than `baseVersionId` is refused `menu_patch.base_changed`. */
+  /** A live version other than `baseVersionId` is refused `menu_patch.base_changed`. `queued` names
+   * the scheduled versions that take the declarations changes too. */
   patchLiveMenu(
     menuId: string,
-    body: { baseVersionId: string; changes: MenuPatchChange[] },
+    body: { baseVersionId: string; changes: MenuPatchChange[]; queued?: string[] },
   ): Promise<MenuPatchResult> {
     return this.#request<MenuPatchResult>(`/management-api/menus/${menuId}/patch`, "POST", body);
   }

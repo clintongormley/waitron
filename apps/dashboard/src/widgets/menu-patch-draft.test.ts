@@ -6,7 +6,13 @@ import type {
   MenuDocument,
   ContentLanguages,
 } from "@waitron/shared";
-import { MenuPatchDraft, patchTree, type PatchTreeNode } from "./menu-patch-draft.js";
+import type { MenuPatchTarget, PatchDraft } from "../api/client.js";
+import {
+  MenuPatchDraft,
+  patchTree,
+  scheduledCorrections,
+  type PatchTreeNode,
+} from "./menu-patch-draft.js";
 import { documentProduct, documentSection, menuDocument } from "./test-helpers.js";
 
 const languages: ContentLanguages = { defaultLanguage: "en", languages: ["en", "es"] };
@@ -334,6 +340,23 @@ describe("MenuPatchDraft", () => {
     expect(draft.rebase(next)).toEqual({ dropped: 1, trimmed: [], fixed: [] });
     expect(draft.changes()).toEqual([{ target: salad, field: "price", value: "5.00" }]);
     expect(draft.changed(bowl)).toBe(false);
+  });
+
+  it.each([
+    ["a dish", { kind: "offer", menuItemId: "mi-soup" }],
+    ["a variant", { kind: "variant", menuItemId: "mi-soup", variantId: "v-bowl" }],
+    ["an extra", { kind: "extra", listId: "l-toppings", productId: "p-bread" }],
+  ] as const)("keeps %s's declarations change on rebase while its item is there", (_, target) => {
+    const draft = new MenuPatchDraft(lunch(), languages);
+    const change = { target, field: "declarations", value: "product" };
+    draft.set(change);
+    expect(draft.rebase(lunch())).toEqual({ dropped: 0, trimmed: [], fixed: [] });
+    expect(draft.changes()).toEqual([change]);
+    const empty = lunch();
+    empty.root.members = [];
+    empty.offers = {};
+    expect(draft.rebase(empty)).toEqual({ dropped: 1, trimmed: [], fixed: [] });
+    expect(draft.changes()).toEqual([]);
   });
 
   it("on rebase drops without counting a change the new live version already holds", () => {
@@ -857,5 +880,134 @@ describe("MenuPatchDraft", () => {
     expect(draft.changes()).toEqual([
       { target, field: "names", value: { en: "Beverages", es: "Copas" } },
     ]);
+  });
+});
+
+describe("scheduledCorrections", () => {
+  const declared = (target: MenuPatchTarget) => ({
+    target,
+    field: "declarations",
+    value: "product",
+  });
+  const extraCheese = { kind: "extra", listId: "l-toppings", productId: "p-cheese" } as const;
+
+  function live(...queued: PatchDraft["queued"]): PatchDraft {
+    return {
+      versionId: "v-3",
+      number: 3,
+      since: "2026-10-27T09:00:00.000Z",
+      document: lunch(),
+      queued,
+    };
+  }
+  const differing = (
+    versionId: string,
+    ...targets: [MenuPatchTarget, boolean][]
+  ): PatchDraft["queued"][number] => ({
+    versionId,
+    activatesAt: `${versionId}-time`,
+    targets: targets.map(([target, stillOld]) => ({ target, stillOld })),
+  });
+  const ticks = (...given: Parameters<typeof scheduledCorrections>) =>
+    scheduledCorrections(...given).map(({ versionId, ticked }) => [versionId, ticked]);
+
+  it("lists only the versions that differ for a ticked dish, variant or extra", () => {
+    const draft = live(
+      differing("q-soup", [soup, true]),
+      differing("q-bowl", [bowl, true]),
+      differing("q-cheese", [extraCheese, true]),
+    );
+    const none = new Map<string, boolean>();
+    expect(ticks(draft, [], none)).toEqual([]);
+    expect(ticks(draft, [{ target: soup, field: "price", value: "4.00" }], none)).toEqual([]);
+    expect(ticks(draft, [declared(bowl)], none)).toEqual([["q-bowl", true]]);
+    expect(ticks(draft, [declared(extraCheese)], none)).toEqual([["q-cheese", true]]);
+    expect(ticks(draft, [declared(salad)], none)).toEqual([]);
+  });
+
+  it("lists for a dish the versions that differ for one of its variants, and ticks them by both", () => {
+    const draft = live(
+      differing("q-bowl", [bowl, true]),
+      differing("q-mixed", [soup, true], [bowl, false]),
+    );
+    const rows = scheduledCorrections(draft, [declared(soup)], new Map());
+    expect(rows.map(({ versionId, ticked }) => [versionId, ticked])).toEqual([
+      ["q-bowl", true],
+      ["q-mixed", false],
+    ]);
+    expect(rows.map((row) => row.differsFor(soup))).toEqual([true, true]);
+    expect(rows.map((row) => row.differsFor(salad))).toEqual([false, false]);
+  });
+
+  it("lists nothing for the same extra on another list", () => {
+    const draft = live(differing("q-cheese", [extraCheese, true]));
+    const other = { kind: "extra", listId: "l-other", productId: "p-cheese" } as const;
+    expect(ticks(draft, [declared(other)], new Map())).toEqual([]);
+  });
+
+  it("ticks a version only when it still holds the old value for every ticked item it holds", () => {
+    const draft = live(
+      differing("q-mixed", [soup, true], [salad, false]),
+      differing("q-old", [soup, true], [salad, true]),
+    );
+    const none = new Map<string, boolean>();
+    expect(ticks(draft, [declared(soup)], none)).toEqual([
+      ["q-mixed", true],
+      ["q-old", true],
+    ]);
+    expect(ticks(draft, [declared(salad)], none)).toEqual([
+      ["q-mixed", false],
+      ["q-old", true],
+    ]);
+    expect(ticks(draft, [declared(soup), declared(salad)], none)).toEqual([
+      ["q-mixed", false],
+      ["q-old", true],
+    ]);
+  });
+
+  it("keeps the person's choice for a scheduled time over what the version still holds", () => {
+    const draft = live(
+      differing("q-1", [soup, true]),
+      differing("q-2", [soup, false], [salad, false]),
+    );
+    const choices = new Map([
+      ["q-1-time", false],
+      ["q-2-time", true],
+    ]);
+    const chosen = [
+      ["q-1", false],
+      ["q-2", true],
+    ];
+    expect(ticks(draft, [declared(soup)], choices)).toEqual(chosen);
+    expect(ticks(draft, [declared(soup), declared(salad)], choices)).toEqual(chosen);
+  });
+
+  it("lists a version for a dish the menu holds twice whichever of its places is ticked", () => {
+    const draft = live(differing("q-soup", [soup, true]));
+    draft.document.offers["mi-soup-2"] = {
+      ...draft.document.offers["mi-soup"]!,
+      id: "mi-soup-2",
+    };
+    const second = { kind: "offer", menuItemId: "mi-soup-2" } as const;
+    const rows = scheduledCorrections(draft, [declared(second)], new Map());
+    expect(rows.map(({ versionId }) => versionId)).toEqual(["q-soup"]);
+    expect(rows[0]!.differsFor(second)).toBe(true);
+    expect(rows[0]!.differsFor(soup)).toBe(true);
+    expect(rows[0]!.differsFor(salad)).toBe(false);
+  });
+
+  it("matches a variant by its product, whichever place of its dish is ticked", () => {
+    const draft = live(differing("q-bowl", [bowl, true]));
+    const second = { kind: "variant", menuItemId: "mi-soup-2", variantId: "v-bowl" } as const;
+    expect(ticks(draft, [declared(second)], new Map())).toEqual([["q-bowl", true]]);
+  });
+
+  it("passes over a target only a set menu holds", () => {
+    const draft = live(
+      differing("q-set", [{ kind: "offer", menuItemId: "mi-in-set-menu" }, true], [soup, true]),
+    );
+    const [row] = scheduledCorrections(draft, [declared(soup)], new Map());
+    expect(row!.differsFor(soup)).toBe(true);
+    expect(row!.differsFor(salad)).toBe(false);
   });
 });
