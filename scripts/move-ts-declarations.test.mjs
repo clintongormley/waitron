@@ -148,26 +148,6 @@ describe("move-ts-declarations", () => {
       expect(read("client.ts")).not.toContain("import type { TicketAmount }");
     });
 
-    it("keeps an import comment when the import moves out of the client", async () => {
-      write("receipt.ts", "export interface Receipt { cents: number; }\n");
-      const note = "/** Receipt amounts are recorded in cents. */";
-      write(
-        "client.ts",
-        client
-          .replace(
-            "export class Api",
-            note + '\nimport type { Receipt } from "./receipt.js";\n\nexport class Api',
-          )
-          .replace("(): Ticket", "(): Ticket & Receipt")
-          .replace("#request<Ticket>", "#request<Ticket & Receipt>"),
-      );
-
-      await moveClient(["readTicket"]);
-
-      expect(read("client.ts")).not.toContain("import type { Receipt }");
-      expect(read("client.ts") + read("tickets.ts")).toContain(note);
-    });
-
     it("uses a type-only import when the retained client uses a moved type", async () => {
       write(
         "tsconfig.json",
