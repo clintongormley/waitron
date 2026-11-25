@@ -1440,23 +1440,27 @@ placed placement in job 3 and search in job 4, with 486.6 weight seconds each, c
 
 Later on 25 November, the [fourth shard on runner 1000401397](https://github.com/clintongormley/waitron/actions/runs/45624546172/job/139241719163)
 completed 2,101 of its 2,102 mutations before the deadline. Its initial 1,152 tests took 38 seconds.
-Earlier runs started with the same tests and took 21 and 24 seconds.
+Earlier jobs instrumented the same 2,102 mutations and ran the same initial tests in 21 and 24
+seconds. Test execution on runner 1000401397 was slower on the same-sized workload.
 [First run](https://github.com/clintongormley/waitron/actions/runs/45605912501),
 [second run](https://github.com/clintongormley/waitron/actions/runs/45618464015).
 
 Runner 1000401482 ran those initial tests in 22 seconds and completed the same shard.
 [Retry log](https://github.com/clintongormley/waitron/actions/runs/45624546172/job/139252242561).
 
-The refreshed table uses the per-file medians
-from the three sets of completed whole-file reports, using the retry's shard 4 report after the
-cancellation. Those weights placed 490 and 844 seconds in the previous two whole-file shards and
-358, 325, 325 and 325 in the new four, rounded to whole seconds. These sums describe the packing.
+The refreshed table uses the per-file medians from the three sets of completed whole-file reports,
+including the retry's shard 4 report. Recorded durations leave out time Stryker spends handling
+each mutation. The review compared elapsed time with reported durations and used about 0.075 seconds
+per mutation in elapsed time, or 0.3 weight seconds at four workers. Using this estimate, the first
+packing based on time alone weighed 393, 786, 844 and 757 seconds. Packing with the added overhead
+gave each job about 695 weight seconds. Use the job logs to check elapsed time on GitHub-hosted runners.
 
 To refresh `packages/shared/mutation-costs.json`, download `mutation-report-shared-shard-*` from
 completed runs. Use the whole-file jobs, currently 4 through 7, and prefer jobs with the `ubuntu-latest`
 runner label. The reports expire after one day. List files from `config.mutate`, leaving the separately
 sharded grouping file out. In each run, sum `duration ?? 0` for `Killed`, `Survived` and `Timeout`
-per file. Use the median across runs, round to tenths of a second and use a minimum weight of 0.1,
+per file, then add 300 milliseconds for each mutation in that file's report, regardless of status.
+Use the median across runs, round to tenths of a second and use a minimum weight of 0.1,
 including for a file absent from the reports. Remove or rename a key when its listed source file goes
 away or moves. `scripts/mutation-shard.test.mjs` checks the table's file names against the mutation
 selection. Use this recorded-duration recipe for Shared because the reports from Stryker 10.1.1
