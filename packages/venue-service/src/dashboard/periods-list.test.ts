@@ -660,7 +660,7 @@ function plannedModel(): OpeningHoursModel {
   };
 }
 
-it("a Floor plan column after Staff-only menus shows the set, or the default's name with (default) muted, and nothing without tables", async () => {
+it("Floor plan follows Staff-only menus, shows a fixed set and leaves inheritance blank", async () => {
   const el = await mount(answering(plannedModel, paintedIn, withTables));
   const grid = await loaded(el);
   await expect.poll(() => grid.columns.map((c) => c.key)).toContain("floorPlan");
@@ -675,17 +675,7 @@ it("a Floor plan column after Staff-only menus shows the set, or the default's n
   ]);
   expect(grid.columns.find((c) => c.key === "floorPlan")!.label).toBe("Floor plan");
   expect(cell(grid, "period:p1", "floorPlan")!.textContent!.trim()).toBe("Dinner");
-  expect(cell(grid, "period:p1", "floorPlan")!.querySelector("[part~=default-mark]")).toBeNull();
-  const fallback = cell(grid, "period:p2", "floorPlan")!;
-  expect(fallback.textContent!.replace(/\s+/g, " ").trim()).toBe("House");
-  const mark = fallback.querySelector<HTMLElement>("[part~=default-mark]")!;
-  expect(mark.textContent!.trim()).toBe("House");
-  const probe = document.createElement("span");
-  probe.style.color = "var(--wt-color-text-muted)";
-  el.shadowRoot!.append(probe);
-  expect(getComputedStyle(mark).color).toBe(getComputedStyle(probe).color);
-
-  probe.remove();
+  expect(cell(grid, "period:p2", "floorPlan")!.textContent!.trim()).toBe("");
   expect(cell(grid, "period:p3", "floorPlan")!.textContent!.trim()).toBe("—");
   expect(cell(grid, "department:restaurant", "floorPlan")!.textContent!.trim()).toBe("");
   setLocale("es");
@@ -695,9 +685,7 @@ it("a Floor plan column after Staff-only menus shows the set, or the default's n
   expect(grid.columns.find((c) => c.key === "floorPlan")!.label).toBe(
     VENUE_SERVICE_STRINGS.es["period.floor_plan"],
   );
-  expect(cell(grid, "period:p2", "floorPlan")!.textContent!.replace(/\s+/g, " ").trim()).toBe(
-    "House",
-  );
+  expect(cell(grid, "period:p2", "floorPlan")!.textContent!.trim()).toBe("");
 });
 
 it("no Floor plan column while no department has a zone with tables", async () => {
@@ -734,7 +722,7 @@ it("the period dialog opened from a row offers the department's sets and sends t
       "[name=floorPlanSetId]",
     )!;
   expect(plan.value).toBe("dinner");
-  expect(plan.options.map((o) => o.label)).toEqual(["House (default)", "Dinner"]);
+  expect(plan.options.map((o) => o.label)).toEqual(["Inherit: House", "House", "Dinner"]);
   plan.dispatchEvent(
     new CustomEvent("wt-change", { detail: { value: "" }, bubbles: true, composed: true }),
   );
@@ -753,7 +741,7 @@ it("says when the floor plan sets cannot be read", async () => {
     .toBe("Floor plans could not be loaded. It will be tried again.");
 });
 
-it("a period naming the department's default set reads as the default, (default) muted", async () => {
+it("shows a fixed default by name and a missing plan ID as a dash", async () => {
   const read = () => {
     const base = plannedModel();
     return {
@@ -761,7 +749,11 @@ it("a period naming the department's default set reads as the default, (default)
       departments: base.departments.map((department) => ({
         ...department,
         periods: department.periods.map((entry) =>
-          entry.id === "p1" ? { ...entry, floorPlanSetId: "house" } : entry,
+          entry.id === "p1"
+            ? { ...entry, floorPlanSetId: "house" }
+            : entry.id === "p2"
+              ? { ...entry, floorPlanSetId: "missing" }
+              : entry,
         ),
       })),
     };
@@ -771,7 +763,8 @@ it("a period naming the department's default set reads as the default, (default)
   await grid.updateComplete;
   const shown = cell(grid, "period:p1", "floorPlan")!;
   expect(shown.textContent!.replace(/\s+/g, " ").trim()).toBe("House");
-  expect(shown.querySelector("[part~=default-mark]")!.textContent!.trim()).toBe("House");
+  expect(shown.querySelector("[part~=default-mark]")).toBeNull();
+  expect(cell(grid, "period:p2", "floorPlan")!.textContent!.trim()).toBe("—");
 });
 
 beforeEach(() => history.replaceState({}, "", "/periods"));

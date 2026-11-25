@@ -1074,9 +1074,6 @@ async function mountPlanned(floorPlanSetId: string | null = null, departmentId =
     el.floorPlans = floorPlans;
   });
 }
-const shownText = (control: HTMLElement) =>
-  control.shadowRoot!.querySelector<HTMLElement>(".value")!;
-
 it("draws Floor plan after Staff-only menus and before Painted in, not required, for a department with tables", async () => {
   const el = await mountEdit((dialog) => {
     dialog.period = { ...structuredClone(period), floorPlanSetId: null };
@@ -1103,26 +1100,28 @@ it("draws Floor plan after Staff-only menus and before Painted in, not required,
   expect(field(el, "floorPlanSetId").label).toBe(VENUE_SERVICE_STRINGS.es["period.floor_plan"]);
 });
 
-it("offers the default first by its own name, muted, then the other sets in the read's order", async () => {
+it("offers inheritance first and each set under its own ID", async () => {
   const el = await mountPlanned();
   const control = field(el, "floorPlanSetId");
   expect(control.options).toEqual([
-    { value: "", label: "House (default)", muted: true },
+    { value: "", label: "Inherit: House", valueLabel: "House", inherited: true },
+    { value: "house", label: "House" },
     { value: "banquet", label: "Banquet" },
     { value: "dinner", label: "Dinner" },
   ]);
   expect(control.value).toBe("");
-  expect(control.hasAttribute("show-empty-option")).toBe(true);
-  await (control as unknown as HTMLElementTagNameMap["wt-combobox"]).updateComplete;
-  expect(shownText(control).textContent!.trim()).toBe("House (default)");
-  expect(shownText(control).classList.contains("muted")).toBe(true);
+  expect(control.hasAttribute("show-empty-option")).toBe(false);
+  expect((control as unknown as HTMLElementTagNameMap["wt-combobox"]).inheritedSuffix).toBe(
+    "inherited",
+  );
   setLocale("es");
   el.requestUpdate();
   await el.updateComplete;
   expect(field(el, "floorPlanSetId").options[0]).toEqual({
     value: "",
-    label: "House (predeterminado)",
-    muted: true,
+    label: VENUE_SERVICE_STRINGS.es["inherit.value"].replace("{value}", "House"),
+    valueLabel: "House",
+    inherited: true,
   });
 });
 
@@ -1131,12 +1130,15 @@ it("names a default called Standard in English and Spanish", async () => {
   el.floorPlans = [{ id: "bar", sets: barSets }];
   await el.updateComplete;
   expect(field(el, "floorPlanSetId").options).toEqual([
-    { value: "", label: "Standard (default)", muted: true },
+    { value: "", label: "Inherit: Standard", valueLabel: "Standard", inherited: true },
+    { value: "bar-standard", label: "Standard" },
   ]);
   setLocale("es");
   el.requestUpdate();
   await el.updateComplete;
-  expect(field(el, "floorPlanSetId").options[0]!.label).toBe("Standard (predeterminado)");
+  expect(field(el, "floorPlanSetId").options[0]!.label).toBe(
+    VENUE_SERVICE_STRINGS.es["inherit.value"].replace("{value}", "Standard"),
+  );
 });
 
 it("no Floor plan field for a department with no zone holding tables, nor with no read of the sets", async () => {
@@ -1156,7 +1158,7 @@ it("no Floor plan field for a department with no zone holding tables, nor with n
   expect(writes[0]!.input).not.toHaveProperty("floorPlanSetId");
 });
 
-it("shows the stored set, sends a chosen one, and sends null when the default is chosen", async () => {
+it("saves an alternative, inheritance, and the fixed default distinctly", async () => {
   const el = await mountPlanned("dinner");
   expect(field(el, "floorPlanSetId").value).toBe("dinner");
   expect(save(el).disabled).toBe(true);
@@ -1173,6 +1175,12 @@ it("shows the stored set, sends a chosen one, and sends null when the default is
   await el.updateComplete;
   expect(writes).toHaveLength(2);
   expect(writes[1]!.input.floorPlanSetId).toBeNull();
+  expect(el.commitSubmitted(writes[1]!.input as never)).toBe(true);
+  await change(el, "floorPlanSetId", { value: "house" });
+  expect(save(el).disabled).toBe(false);
+  save(el).click();
+  await el.updateComplete;
+  expect(writes[2]!.input.floorPlanSetId).toBe("house");
 });
 
 it("a floorPlanSetId refusal shows under Floor plan, and choosing again clears it", async () => {
@@ -1204,13 +1212,14 @@ it("adding, the field follows the chosen department and empties on a change of d
   expect(writes[0]!.input.floorPlanSetId).toBeNull();
 });
 
-it("a stored set that is now the default shows the empty choice, and an unchanged field sends nothing", async () => {
+it("a stored set that is now the default stays fixed when another field changes", async () => {
   const el = await mountPlanned("house");
   const control = field(el, "floorPlanSetId");
-  expect(control.value).toBe("");
-  await (control as unknown as HTMLElementTagNameMap["wt-combobox"]).updateComplete;
-  expect(shownText(control).textContent!.trim()).toBe("House (default)");
-  expect(shownText(control).classList.contains("muted")).toBe(true);
+  expect(control.value).toBe("house");
+  expect(control.options.find(({ value }) => value === "house")).toEqual({
+    value: "house",
+    label: "House",
+  });
   expect(save(el).disabled).toBe(true);
   const writes: { input: Record<string, unknown> }[] = [];
   el.addEventListener("period-save", (e) => writes.push((e as CustomEvent).detail));
@@ -1218,5 +1227,5 @@ it("a stored set that is now the default shows the empty choice, and an unchange
   save(el).click();
   await el.updateComplete;
   expect(writes).toHaveLength(1);
-  expect(writes[0]!.input).not.toHaveProperty("floorPlanSetId");
+  expect(writes[0]!.input).toHaveProperty("floorPlanSetId", "house");
 });

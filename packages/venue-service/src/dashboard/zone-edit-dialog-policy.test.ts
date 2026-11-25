@@ -54,7 +54,7 @@ async function change(value: Partial<import("./service-settings-fields.js").Serv
   );
   await el.updateComplete;
 }
-it("shows only inherited placeholders, clears to null and saves the service settings once", async () => {
+it("shows the inherited row values, clears to null and saves the service settings once", async () => {
   await mount("z3");
   const writes: unknown[] = [];
   el.api = settingsApi((async (path, method, body) => {
@@ -75,15 +75,15 @@ it("shows only inherited placeholders, clears to null and saves the service sett
   await fields().updateComplete;
   const combos = [...fields().shadowRoot!.querySelectorAll("wt-combobox")];
   expect(combos.map((c) => c.value)).toEqual(["", "", ""]);
-  expect(combos.map((c) => c.placeholder)).toEqual([
+  expect(combos.map((c) => c.options[0]!.valueLabel)).toEqual([
     "Table service",
     "Paid before preparation",
     "Don't print",
   ]);
   expect(combos.map((c) => c.options[0]!.label)).toEqual([
-    "Same as department (Table service)",
-    "Same as department (Paid before preparation)",
-    "Same as department (Don't print)",
+    "Inherit: Table service",
+    "Inherit: Paid before preparation",
+    "Inherit: Don't print",
   ]);
   expect(button("save-editor").disabled).toBe(false);
   expect(button("save-editor").variant).toBe("primary");
@@ -114,8 +114,8 @@ it("renders inherited Print from a refreshed department", async () => {
   expect(
     fields().shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
       "[name=collectionNumber]",
-    )!.placeholder,
-  ).toBe("Print");
+    )!.options[0],
+  ).toMatchObject({ inherited: true, valueLabel: "Print" });
   expect(fields().shadowRoot!.querySelector("[name=receiptPrintMode]")).toBeNull();
 });
 it("a deleted zone is absent and has no Enable action", async () => {
@@ -438,7 +438,8 @@ it.each([
     button("save-editor").click();
     await el.updateComplete;
     expect(box.value).toBe("");
-    expect(box.placeholder).not.toBe("");
+    expect(box.options[0]).toMatchObject({ value: "", inherited: true });
+    expect(box.options[0]!.valueLabel).toBeTruthy();
     expect(writes).toHaveLength(1);
     expect(button("save-editor").disabled).toBe(true);
     expect(button("save-editor").variant).toBe("secondary");

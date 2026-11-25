@@ -1067,10 +1067,10 @@ describe("the device table", () => {
     const api = stubApi({ listDevices: vi.fn().mockResolvedValue([equipped]) });
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", { api });
     await flush(el);
-    expect(deepText(el, "[data-test=device-receipt-d1]")).toBe("Kitchen");
+    expect(deepText(el, "[data-test=device-receipt-d1]")).toBe("");
     expect(deepText(el, "[data-test=device-slip-d1]")).toBe("Terrace");
-    expect(deepText(el, "[data-test=device-drawer-d1]")).toBe(t("equipment.none"));
-    expect(deepText(el, "[data-test=device-reader-d1]")).toBe("Front counter");
+    expect(deepText(el, "[data-test=device-drawer-d1]")).toBe("");
+    expect(deepText(el, "[data-test=device-reader-d1]")).toBe("");
   });
 
   it("draws no card reader column for a session that cannot manage readers", async () => {
@@ -1130,6 +1130,7 @@ describe("the Edit dialog", () => {
     placeholder: string;
     disabled: boolean;
     options: { value: string; label: string }[];
+    inheritedSuffix: string;
   };
   type Button = HTMLElement & { disabled: boolean };
 
@@ -1192,6 +1193,12 @@ describe("the Edit dialog", () => {
   const field = (el: DevicesScreen, id: string) => q(el, `[data-test=${id}]`) as Field;
   /** Use default on a profile with no default for the role. */
   const useDefaultNone = () => t("equipment.none");
+  const inheritOption = (name = useDefaultNone()) => ({
+    value: "",
+    label: t("inherit.value").split("{value}").join(name),
+    valueLabel: name,
+    inherited: true,
+  });
 
   async function openEdit(api: DashboardApi, id = "t1"): Promise<DevicesScreen> {
     const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
@@ -1402,7 +1409,7 @@ describe("the Edit dialog", () => {
     ]);
     // The device keeps the switched-off printer it holds; it cannot newly choose one.
     expect(receipt.options).toEqual([
-      { value: "", muted: true, label: useDefaultNone() },
+      inheritOption(useDefaultNone()),
       { value: "pr3", label: "Back bar (Deshabilitada)" },
       { value: "pr1", label: "Kitchen" },
       { value: "pr2", label: "Terrace" },
@@ -1414,7 +1421,7 @@ describe("the Edit dialog", () => {
       "pr2",
     ]);
     expect(slip.options).toEqual([
-      { value: "", muted: true, label: useDefaultNone() },
+      inheritOption(useDefaultNone()),
       { value: "pr2", label: "Terrace" },
     ]);
 
@@ -1440,7 +1447,7 @@ describe("the Edit dialog", () => {
     ]);
     // Only active readers, by name and a friendly provider label, after a leading none option.
     expect(reader.options).toEqual([
-      { value: "", muted: true, label: useDefaultNone() },
+      inheritOption(useDefaultNone()),
       { value: "r1", label: "Front counter (Acme Pay)" },
       { value: "r2", label: "Bar (Zeta Pay)" },
     ]);
@@ -1514,7 +1521,8 @@ describe("the Edit dialog", () => {
     for (const id of ["edit-receipt-printer", "edit-slip-printer"]) {
       expect(field(el, id).value).toBe("");
       expect(shown(id).textContent!.trim()).toBe(useDefaultNone());
-      expect(shown(id).classList.contains("placeholder")).toBe(true);
+      expect(field(el, id).options[0]).toEqual(inheritOption());
+      expect(field(el, id).placeholder).toBe("");
     }
   });
 
@@ -1526,7 +1534,8 @@ describe("the Edit dialog", () => {
     )!;
     expect(field(el, "edit-reader").value).toBe("");
     expect(shown.textContent!.trim()).toBe(useDefaultNone());
-    expect(shown.classList.contains("placeholder")).toBe(true);
+    expect(field(el, "edit-reader").options[0]).toEqual(inheritOption());
+    expect(field(el, "edit-reader").placeholder).toBe("");
   });
 
   it("changing the profile puts both printers on Use default", async () => {
@@ -1569,11 +1578,7 @@ describe("the Edit dialog", () => {
           const receipt = field(el, "edit-receipt-printer");
           expect(receipt.value).toBe("pr4");
           expect(receipt.options).toEqual([
-            {
-              value: "",
-              muted: true,
-              label: useDefaultNone(),
-            },
+            inheritOption(),
             { value: "pr1", label: "Kitchen" },
             { value: "pr2", label: "Terrace" },
             { value: "pr4", label: receiptLabel, fixed: true },
@@ -1581,11 +1586,7 @@ describe("the Edit dialog", () => {
           const slip = field(el, "edit-slip-printer");
           expect(slip.value).toBe("pr3");
           expect(slip.options).toEqual([
-            {
-              value: "",
-              muted: true,
-              label: useDefaultNone(),
-            },
+            inheritOption(),
             { value: "pr2", label: "Terrace" },
             { value: "pr3", label: slipLabel, fixed: true },
           ]);
@@ -2928,111 +2929,38 @@ describe("the Edit dialog", () => {
       });
     }
 
-    it.each(["light", "dark"] as const)(
-      "paints inherited equipment in muted ink and explicit choices normally in %s",
-      async (theme) => {
-        const device: DeviceRow = {
-          ...onDefault,
-          equipment: [
-            {
-              role: "receipt",
-              selection: "default",
-              chosenId: null,
-              resolved: { id: "pr1", name: "Kitchen", available: true },
-            },
-            {
-              role: "payment_slip",
-              selection: "item",
-              chosenId: "pr2",
-              resolved: { id: "pr2", name: "Terrace", available: true },
-            },
-            { role: "cash_drawer", selection: "default", chosenId: null, resolved: null },
-            {
-              role: "card_terminal",
-              selection: "default",
-              chosenId: null,
-              resolved: { id: "r1", name: "Front counter", available: true },
-            },
-          ],
-        };
-        const { el } = await mountWidget<DevicesScreen>(
-          "dashboard-devices-screen",
-          {
-            api: equipmentApi({
-              listDevices: vi.fn().mockResolvedValue([device]),
-              getDeviceReader: vi.fn().mockResolvedValue({ readerId: null }),
-            }),
-            panels: PANELS,
-          },
-          theme,
-        );
-        await flush(el);
-        const probe = document.createElement("span");
-        probe.style.color = "var(--wt-color-text-muted)";
-        el.shadowRoot!.appendChild(probe);
-        const muted = getComputedStyle(probe).color;
-        probe.remove();
-        for (const [role, name, inherited] of [
-          ["receipt", "Kitchen", true],
-          ["slip", "Terrace", false],
-          ["drawer", t("equipment.none"), true],
-          ["reader", "Front counter", true],
-        ] as const) {
-          const cell = dq(el.shadowRoot!, `[data-test=device-${role}-t1]`)!;
-          expect(cell.textContent!.trim()).toBe(name);
-          const spoken = cell.closest("td")!.textContent!;
-          if (inherited) {
-            expect(spoken).toContain(t("devices.from_profile"));
-            const cue = cell.nextElementSibling!;
-            const style = getComputedStyle(cue);
-            expect(style.position).toBe("absolute");
-            expect(style.clip).toBe("rect(0px, 0px, 0px, 0px)");
-          } else expect(spoken).not.toContain(t("devices.from_profile"));
-          if (inherited) expect(getComputedStyle(cell).color).toBe(muted);
-          else expect(getComputedStyle(cell).color).not.toBe(muted);
-        }
-        dq(el.shadowRoot!, "[data-test=edit-device-t1]")!.click();
-        await vi.waitFor(() => expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull());
-        await flush(el);
-        for (const [id, name] of [
-          ["edit-receipt-printer", "Kitchen"],
-          ["edit-slip-printer", t("equipment.none")],
-          ["edit-cash-drawer", t("equipment.none")],
-          ["edit-invoice-printer", t("equipment.none")],
-          ["edit-reader", t("equipment.none")],
-        ]) {
-          const control = field(el, id!);
-          const value = control.shadowRoot!.querySelector<HTMLElement>("button.trigger .value")!;
-          expect(control.value).toBe("");
-          expect(value.textContent!.trim()).toBe(name);
-          expect(getComputedStyle(value).color).toBe(muted);
-        }
-        for (const id of ["edit-receipt-printer", "edit-reader"]) {
-          const control = field(el, id);
-          control.shadowRoot!.querySelector<HTMLButtonElement>("button.trigger")!.click();
-          await flush(el);
-          const rows = [...control.shadowRoot!.querySelectorAll<HTMLElement>("[role=option]")];
-          expect(rows.length).toBeGreaterThan(1);
-          expect(rows[0]!.textContent!.trim()).toBe(
-            id === "edit-receipt-printer" ? "Kitchen" : t("equipment.none"),
-          );
-          expect(getComputedStyle(rows[0]!).color).toBe(muted);
-          expect(getComputedStyle(rows[1]!).color).not.toBe(muted);
-          await userEvent.keyboard("{Escape}");
-        }
-        const receipt = field(el, "edit-receipt-printer");
-        await chooseOption(receipt, "pr1");
-        await flush(el);
-        const explicit = receipt.shadowRoot!.querySelector<HTMLElement>("button.trigger .value")!;
-        expect(explicit.textContent!.trim()).toBe("Kitchen");
-        expect(getComputedStyle(explicit).fontStyle).toBe("normal");
-        expect(getComputedStyle(explicit).color).not.toBe(muted);
-        await chooseOption(receipt, "");
-        await flush(el);
-        expect(getComputedStyle(explicit).color).toBe(muted);
-        expect(q(el, "[data-test=edit-save]")!.hasAttribute("disabled")).toBe(true);
-      },
-    );
+    it("leaves inherited equipment blank while the same explicit printer is shown", async () => {
+      const inherited: RoleEquipment = {
+        role: "receipt",
+        selection: "default",
+        chosenId: null,
+        resolved: { id: "pr1", name: "Kitchen", available: true },
+      };
+      const device = { ...onDefault, equipment: [inherited] };
+      const explicit = {
+        ...device,
+        id: "t2",
+        receiptPrinterId: "pr1",
+        equipment: [{ ...inherited, selection: "item" as const, chosenId: "pr1" }],
+      };
+      const el = await openEdit(
+        equipmentApi({ listDevices: vi.fn().mockResolvedValue([device, explicit, kitchen]) }),
+      );
+      const cell = dq(el.shadowRoot!, "[data-test=device-receipt-t1]")!;
+      const cue = cell.nextElementSibling!;
+      expect(cell.textContent!.trim()).toBe("");
+      expect(cue.textContent!.trim()).toBe(`Kitchen ${t("devices.from_profile")}`);
+      expect(getComputedStyle(cue).clip).toBe("rect(0px, 0px, 0px, 0px)");
+      expect(deepText(el, "[data-test=device-receipt-t2]")).toBe("Kitchen");
+      expect(
+        dq(el.shadowRoot!, `[data-test=device-receipt-${kitchen.id}]`)!
+          .closest("td")!
+          .textContent!.trim(),
+      ).toBe("");
+      const receipt = devicesTable(el).columns.find((column) => column.key === "receipt")!;
+      expect(receipt.sortValue!(device)).toBe("Kitchen");
+      expect(receipt.sortValue!(explicit)).toBe("Kitchen");
+    });
 
     it("groups the existing device fields under headings without tabs", async () => {
       const el = await openEdit(
@@ -3072,31 +3000,17 @@ describe("the Edit dialog", () => {
       const el = await openEdit(equipmentApi());
       const receipt = field(el, "edit-receipt-printer");
       expect(receipt.value).toBe("");
-      expect(receipt.options[0]).toEqual({
-        value: "",
-        muted: true,
-        label: "Kitchen",
-      });
+      expect(receipt.options[0]).toEqual(inheritOption("Kitchen"));
+      expect(receipt.inheritedSuffix).toBe(t("inherit.suffix"));
       // The slip default is carried by another device, so Use default prints no slip here.
-      expect(field(el, "edit-slip-printer").options[0]).toEqual({
-        value: "",
-        muted: true,
-        label: t("equipment.none"),
-      });
+      expect(field(el, "edit-slip-printer").options[0]).toEqual(inheritOption());
       const drawer = field(el, "edit-cash-drawer");
       expect([drawer.name, drawer.label, drawer.value]).toEqual([
         "cashDrawerPrinterId",
         t("devices.cash_drawer_now"),
         "",
       ]);
-      expect(drawer.options).toEqual([
-        {
-          value: "",
-          muted: true,
-          label: t("equipment.none"),
-        },
-        { value: "pr1", label: "Kitchen" },
-      ]);
+      expect(drawer.options).toEqual([inheritOption(), { value: "pr1", label: "Kitchen" }]);
     });
 
     describe("the invoice printer", () => {
@@ -3155,15 +3069,10 @@ describe("the Edit dialog", () => {
               };
         const device = { ...onDefault, equipment: [equipment] };
         const el = await openEdit(invoiceApi(device));
-        const name = test.name ?? t("equipment.none");
-        expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(
-          `${name}${test.a4 ? " · A4" : ""}`,
-        );
-        el.style.setProperty("--wt-color-text-muted", "rgb(7, 8, 9)");
-        const invoiceName = dq(el.shadowRoot!, "[data-test=device-invoice-t1]")!;
-        expect(getComputedStyle(invoiceName).color === "rgb(7, 8, 9)").toBe(test.defaulted);
+        const name = `${test.name ?? t("equipment.none")}${test.a4 ? " · A4" : ""}`;
+        expect(deepText(el, "[data-test=device-invoice-t1]")).toBe(test.defaulted ? "" : name);
         const invoice = devicesTable(el).columns.find((column) => column.key === "invoice")!;
-        expect(invoice.sortValue!(device)).toBe(deepText(el, "[data-test=device-invoice-t1]"));
+        expect(invoice.sortValue!(device)).toBe(name);
       });
 
       it("adds the A4 marker when the printer list arrives after the devices", async () => {
@@ -3173,7 +3082,10 @@ describe("the Edit dialog", () => {
         });
         const { el } = await mountWidget<DevicesScreen>("dashboard-devices-screen", {
           api: invoiceApi(
-            { ...onDefault, equipment: [invoiceOn(null)] },
+            {
+              ...onDefault,
+              equipment: [{ ...invoiceOn(null), selection: "item", chosenId: "pg1" }],
+            },
             {
               listPagePrinters: vi.fn(() => pages),
             },
@@ -3198,7 +3110,7 @@ describe("the Edit dialog", () => {
         ]);
         // Terrace is portable and another device carries it; an invoice printer ignores that.
         expect(invoice.options).toEqual([
-          { value: "", muted: true, label: "Office · A4" },
+          inheritOption("Office · A4"),
           { value: "pg1", label: "Office · A4" },
           { value: "pr2", label: "Terrace" },
         ]);
@@ -3370,11 +3282,7 @@ describe("the Edit dialog", () => {
         }),
       );
       const receipt = field(el, "edit-receipt-printer");
-      expect(receipt.options[0]).toEqual({
-        value: "",
-        muted: true,
-        label: "Kitchen $&",
-      });
+      expect(receipt.options[0]).toEqual(inheritOption("Kitchen $&"));
       expect(receipt.options.find((option) => option.value === "pr2")).toEqual({
         value: "pr2",
         label: `Terrace (${t("equipment.carried_by").split("{device}").join("Mobile $&")})`,
@@ -3396,7 +3304,7 @@ describe("the Edit dialog", () => {
         }),
       );
       expect(field(el, "edit-slip-printer").options).toEqual([
-        { value: "", muted: true, label: "Terrace" },
+        inheritOption("Terrace"),
         { value: "pr2", label: "Terrace" },
       ]);
     });
@@ -3418,17 +3326,33 @@ describe("the Edit dialog", () => {
         }),
       );
       expect(field(el, "edit-reader").options).toEqual([
-        {
-          value: "",
-          muted: true,
-          label: t("equipment.none"),
-        },
+        inheritOption(),
         {
           value: "r2",
           label: `Bar (Zeta Pay) (${t("equipment.carried_by").replace("{device}", "Mobile 2")})`,
         },
         { value: "r1", label: `Front counter (Acme Pay) (${t("equipment.busy")})` },
       ]);
+    });
+
+    it("keeps the stored inactive reader on its original profile only", async () => {
+      const el = await openEdit(
+        equipmentApi({
+          getDeviceReader: vi.fn().mockResolvedValue({ readerId: "r3" }),
+          getProfileReaders: vi
+            .fn()
+            .mockResolvedValue({ readerIds: ["r2", "r3"], defaultReaderId: null }),
+        }),
+      );
+      const reader = field(el, "edit-reader");
+      expect(reader.value).toBe("r3");
+      expect(reader.options).toEqual([
+        inheritOption(),
+        { value: "r2", label: "Bar (Zeta Pay)" },
+        { value: "r3", label: "Old terminal (Acme Pay)", fixed: true },
+      ]);
+      await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
+      await vi.waitFor(() => expect(reader.options.map(({ value }) => value)).toEqual(["", "r2"]));
     });
 
     it("a reader refusal shows under the reader in its own words", async () => {
@@ -3488,7 +3412,7 @@ describe("the Edit dialog", () => {
       expect(q(el, "[data-test=edit-device-modal]")).not.toBeNull();
     });
 
-    it("a till with no profile offers only Use default, then the readers of the profile chosen for it", async () => {
+    it("a till with no profile offers no reader choices until the chosen profile is read", async () => {
       const unprofiled: DeviceRow = { ...onDefault, deviceProfileId: null };
       const api = equipmentApi({
         listDevices: vi.fn().mockResolvedValue([unprofiled]),
@@ -3496,29 +3420,15 @@ describe("the Edit dialog", () => {
         getProfileReaders: vi.fn().mockResolvedValue({ readerIds: ["r2"], defaultReaderId: "r2" }),
       });
       const el = await openEdit(api);
-      for (const id of [
-        "edit-receipt-printer",
-        "edit-slip-printer",
-        "edit-cash-drawer",
-        "edit-reader",
-      ])
-        expect(field(el, id).options).toEqual([
-          {
-            value: "",
-            muted: true,
-            label: t("equipment.none"),
-          },
-        ]);
+      for (const id of ["edit-receipt-printer", "edit-slip-printer", "edit-cash-drawer"])
+        expect(field(el, id).options).toEqual([inheritOption()]);
+      expect(field(el, "edit-reader").options).toEqual([]);
       expect(api.getProfileReaders).not.toHaveBeenCalled();
 
       await chooseOption(q(el, "[data-test=edit-profile]")!, "pa");
       await vi.waitFor(() =>
         expect(field(el, "edit-reader").options).toEqual([
-          {
-            value: "",
-            muted: true,
-            label: "Bar (Zeta Pay)",
-          },
+          inheritOption("Bar (Zeta Pay)"),
           { value: "r2", label: "Bar (Zeta Pay)" },
         ]),
       );
@@ -3549,6 +3459,8 @@ describe("the Edit dialog", () => {
       });
       const el = await openEdit(api);
       expect(field(el, "edit-reader").disabled).toBe(true);
+      expect(field(el, "edit-reader").options).toEqual([]);
+      expect(field(el, "edit-reader").placeholder).toBe("");
       await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
       await flush(el);
       await chooseOption(q(el, "[data-test=edit-profile]")!, "pa");
@@ -3579,13 +3491,8 @@ describe("the Edit dialog", () => {
       expect(await bottom(el)).toBe("");
       await chooseOption(q(el, "[data-test=edit-profile]")!, "pb");
       await vi.waitFor(async () => expect(await bottom(el)).toBe(codeMessage("connection.failed")));
-      expect(field(el, "edit-reader").options).toEqual([
-        {
-          value: "",
-          muted: true,
-          label: t("equipment.none"),
-        },
-      ]);
+      expect(field(el, "edit-reader").options).toEqual([]);
+      expect(field(el, "edit-reader").placeholder).toBe("");
     });
 
     describe("a chosen profile's readers answering after Edit was saved and opened again", () => {

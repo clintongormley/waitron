@@ -61,9 +61,10 @@ it("asks to delete the set, lists its periods, says the tables stay and offers t
   const field = picker(el)!;
   expect(field.label).toBe("Replace with");
   expect(field.value).toBe("");
-  expect(field.showEmptyOption).toBe(true);
+  expect(field.showEmptyOption).toBe(false);
+  expect(field.inheritedSuffix).toBe("inherited");
   expect(field.options).toEqual([
-    { value: "", label: "House (default)", muted: true },
+    { value: "", label: "Inherit: House", valueLabel: "House", inherited: true },
     { value: "private", label: "Private party" },
   ]);
   expect(confirm(el).textContent!.trim()).toBe("Delete Dinner");
@@ -196,8 +197,9 @@ it("speaks Spanish", async () => {
   expect(picker(el)!.label).toBe(VENUE_SERVICE_STRINGS.es["period.replace_with"]);
   expect(picker(el)!.options[0]).toEqual({
     value: "",
-    label: "House (predeterminado)",
-    muted: true,
+    label: VENUE_SERVICE_STRINGS.es["inherit.value"].replace("{value}", "House"),
+    valueLabel: "House",
+    inherited: true,
   });
   expect(confirm(el).textContent!.trim()).toBe("Eliminar Dinner");
   el.refusal = { code: "floor_plan_set.invalid", params: { field: "replaceWith" } };

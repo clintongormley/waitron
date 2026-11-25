@@ -177,9 +177,7 @@ async function mount(state: string, theme: "light" | "dark", inWindow = false) {
     const table = screen.shadowRoot!.querySelector("wt-data-table")!;
     await expect.poll(() => table.shadowRoot!.querySelector("[part~=chip]")).not.toBeNull();
     if (state === "floor-plan")
-      await expect
-        .poll(() => table.shadowRoot!.querySelector("[part~=default-mark]"))
-        .not.toBeNull();
+      await expect.poll(() => table.columns.map(({ key }) => key)).toContain("floorPlan");
   }
   await screen.updateComplete;
   if (state.startsWith("delete")) {

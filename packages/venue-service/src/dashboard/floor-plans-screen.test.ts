@@ -449,7 +449,7 @@ it("Delete… reads the impact, offers the default, and deletes with the choice"
   const field =
     dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=replaceWith]")!;
   expect(field.options).toEqual([
-    { value: "", label: "Standard (default)", muted: true },
+    { value: "", label: "Inherit: Standard", valueLabel: "Standard", inherited: true },
     { value: "private", label: "Private party" },
   ]);
   const button = dialog.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm-delete]")!;
@@ -537,7 +537,7 @@ it("follows the live read while Delete… is open, and closes once the set is go
   const field =
     dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>("[name=replaceWith]")!;
   expect(field.options).toEqual([
-    { value: "", label: "House (default)", muted: true },
+    { value: "", label: "Inherit: House", valueLabel: "House", inherited: true },
     { value: "standard", label: "Standard" },
   ]);
   model = casaMarina();

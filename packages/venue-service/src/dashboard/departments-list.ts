@@ -209,26 +209,20 @@ export class DepartmentsList extends LitElement {
       row.kind === "department" ? { departmentId: row.id } : { zoneId: row.id },
     );
   }
+  #zoneOverride(zoneId: string, field: PolicyField) {
+    return this.model!.salePolicies.zones.find((policy) => policy.zoneId === zoneId)?.[field];
+  }
   #value(row: DepartmentZoneRow, field: PolicyField): string {
     const departmentId = row.kind === "department" ? row.id : row.departmentId;
     const department = this.model!.salePolicies.departments.find(
       (policy) => policy.departmentId === departmentId,
     );
-    const own =
-      row.kind === "zone"
-        ? this.model!.salePolicies.zones.find((policy) => policy.zoneId === row.id)?.[field]
-        : undefined;
+    const own = row.kind === "zone" ? this.#zoneOverride(row.id, field) : undefined;
     const defaults = { orderStart: "counter", paidWhen: "prepay" };
     return own ?? department?.[field] ?? defaults[field];
   }
   #policy(row: DepartmentZoneRow, field: PolicyField, rows: readonly DepartmentZoneRow[]) {
-    const value = this.#value(row, field);
-    if (row.kind === "zone") {
-      const department = rows.find(
-        (other) => other.kind === "department" && other.id === row.departmentId,
-      );
-      if (department !== undefined && this.#value(department, field) === value) return nothing;
-    }
+    if (row.kind === "zone" && this.#zoneOverride(row.id, field) == null) return nothing;
     if (field === "paidWhen" && this.#value(row, "orderStart") === "table") {
       const counterZone =
         row.kind === "department" &&
@@ -246,6 +240,7 @@ export class DepartmentsList extends LitElement {
       prepay: "venue.paid_before_preparation",
       ticket_then_pay: "venue.paid_at_collection",
     } as const;
+    const value = this.#value(row, field);
     return html`<span part="policy">${t(labels[value as keyof typeof labels])}</span>`;
   }
   #actions(row: DepartmentZoneRow) {

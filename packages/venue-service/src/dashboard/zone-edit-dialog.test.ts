@@ -60,9 +60,14 @@ it("opens the selected zone with name and three service overrides, offering each
   expect(choices.map((f) => f.name)).toEqual(["orderStart", "paidWhen", "collectionNumber"]);
   expect(choices.map((f) => f.value)).toEqual(["counter", "", ""]);
   expect(choices.map((f) => f.options[0])).toEqual([
-    { value: "", label: "Same as department (Table service)" },
-    { value: "", label: "Same as department (Paid before preparation)" },
-    { value: "", label: "Same as department (Don't print)" },
+    { value: "", label: "Inherit: Table service", valueLabel: "Table service", inherited: true },
+    {
+      value: "",
+      label: "Inherit: Paid before preparation",
+      valueLabel: "Paid before preparation",
+      inherited: true,
+    },
+    { value: "", label: "Inherit: Don't print", valueLabel: "Don't print", inherited: true },
   ]);
   expect(zoneSave(el).disabled).toBe(true);
   expect(zoneSave(el).variant).toBe("secondary");

@@ -56,9 +56,9 @@ Where an inherit row replaces an empty option, remove `show-empty-option`, `mute
 placeholder. Screen tests own the option fields and suffix, table cells and saved values. The
 shared combobox suites own the arrow, ink, search and spoken suffix. Change only failing
 expectations in the two zone edit suites, venue department policy, Floor plans and both painters.
-In the PR, list the changed test checks and show that a held device default now leaves a blank
-instead of “None”, a blank period's plan is named nowhere in that table, and a period already
-storing the default ID stays fixed after “Make default”.
+In the PR, list the changed test checks and show the blank cell for a held device default. It previously showed “None”. Show the blank
+period cell whose plan follows the department and the fixed default ID that stays fixed after
+“Make default”.
 
 Run each changed browser suite red for the new expectation, then green with the smallest change.
 Run the Calendar, Routes and guide guards. Check the changed controls and tables with keyboard and

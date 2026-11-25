@@ -63,13 +63,13 @@ function policyCells(table: Element) {
     ]),
   );
 }
-it("leaves a zone's value blank where it matches its department's, and counter-service timing blank on a table-service row", async () => {
+it("shows explicit equal zone choices and leaves inheritance and inapplicable timing blank", async () => {
   const { table } = await setup();
   expect(policyCells(table)).toEqual({
     "department:d1": ["Table service", "Paid before preparation"],
     "zone:z1": ["Counter service", ""],
     "zone:z2": ["", ""],
-    "zone:z3": ["", ""],
+    "zone:z3": ["Table service", ""],
     "department:d2": ["Counter service", "Paid before preparation"],
     "zone:z4": ["", ""],
   });
@@ -103,8 +103,8 @@ it("shows a counter-service zone's own timing, and leaves a table-service depart
         zone.zoneId === "z1"
           ? {
               ...zone,
-              paidWhen: "ticket_then_pay",
-              effective: { ...zone.effective, paidWhen: "ticket_then_pay" },
+              paidWhen: "prepay",
+              effective: { ...zone.effective, paidWhen: "prepay" },
             }
           : zone,
       ),
@@ -113,7 +113,7 @@ it("shows a counter-service zone's own timing, and leaves a table-service depart
   await el.updateComplete;
   await table.updateComplete;
   expect(policyCells(table)["department:d1"]).toEqual(["Table service", "Paid before preparation"]);
-  expect(policyCells(table)["zone:z1"]).toEqual(["Counter service", "Paid at collection"]);
+  expect(policyCells(table)["zone:z1"]).toEqual(["Counter service", "Paid before preparation"]);
 });
 it("each row opens its own editor and department menus offer Edit, Add a zone and Delete", async () => {
   const { el, table } = await setup();

@@ -869,7 +869,7 @@ describe("periods from the painter", () => {
       editor.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
         "[name=floorPlanSetId]",
       )!;
-    expect(plan.options.map((option) => option.label)).toEqual(["House (default)", "Late"]);
+    expect(plan.options.map((option) => option.label)).toEqual(["Inherit: House", "House", "Late"]);
   });
 
   it("✎ on a period chip opens the period dialog with that period", async () => {
