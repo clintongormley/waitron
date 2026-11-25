@@ -1,4 +1,4 @@
-import { foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { foreignKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { id, label, newId, nowIso, table, tsString } from "./columns.js";
 import { billPayments } from "./bill-payments.js";
 import { workingOrders } from "./orders.js";
@@ -6,7 +6,8 @@ import { sales } from "./sales.js";
 
 /**
  * An advance invoice issued against a bill before its own invoice, which the bill's invoice later
- * takes off.
+ * takes off. Its bill is the payment's (`bill_payment_id`), which follows the bill through a reopen;
+ * `working_order_id` is the bill it was taken on.
  */
 export const billAdvances = table(
   "bill_advances",
@@ -36,7 +37,6 @@ export const billAdvances = table(
       foreignColumns: [billPayments.id],
       name: "bill_advances_bill_payment_fk",
     }).onDelete("restrict"),
-    index("bill_advances_working_order_idx").on(t.workingOrderId),
     unique("bill_advances_advance_sale_key").on(t.advanceSaleId),
     uniqueIndex("bill_advances_bill_payment_key").on(t.billPaymentId),
   ],

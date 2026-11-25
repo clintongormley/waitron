@@ -56,8 +56,15 @@ BEGIN
         AND exists (SELECT 1 FROM working_orders
           WHERE id = new.working_order_id AND status = 'open'
             AND reopened_from = old.working_order_id)
-        AND NOT exists (SELECT 1 FROM tenders WHERE bill_payment_id = old.id)
-        AND NOT exists (SELECT 1 FROM bill_advances WHERE bill_payment_id = old.id)
+        -- The one tender allowed is the advance's own: no trigger stops a bill_advances row
+        -- naming a bill's own receipt, so the sale must be on no bill.
+        AND NOT exists (SELECT 1 FROM tenders
+          WHERE tenders.bill_payment_id = old.id
+            AND NOT exists (SELECT 1 FROM bill_advances
+              INNER JOIN sales ON sales.id = bill_advances.advance_sale_id
+              WHERE bill_advances.bill_payment_id = old.id
+                AND bill_advances.advance_sale_id = tenders.sale_id
+                AND sales.working_order_id IS NULL))
         AND NOT exists (SELECT 1 FROM refunds
           WHERE bill_payment_id = old.id AND state = 'pending')))
     AND new.submission_id IS old.submission_id

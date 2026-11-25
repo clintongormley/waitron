@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "2a5b7a4c-7e73-4f71-af53-f14163275dfd",
+  "id": "a0aee183-d0ce-4a61-937a-252e4081a152",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -8998,13 +8998,6 @@
         }
       },
       "indexes": {
-        "bill_advances_working_order_idx": {
-          "name": "bill_advances_working_order_idx",
-          "columns": [
-            "working_order_id"
-          ],
-          "isUnique": false
-        },
         "bill_advances_bill_payment_key": {
           "name": "bill_advances_bill_payment_key",
           "columns": [

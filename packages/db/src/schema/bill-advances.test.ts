@@ -226,14 +226,14 @@ describe("bill_advances and a sale line's advance columns", () => {
     expect(await db.select().from(saleLines).where(eq(saleLines.saleId, rest))).toEqual([]);
   });
 
-  it.each([
-    ["bill_advances", "working_order_id", "bill_advances_working_order_idx"],
-    ["sale_lines", "deducts_sale_id", "sale_lines_deducts_sale_idx"],
-  ])("indexes %s by %s", (table, column, name) => {
-    const rows = db.all<{ name: string; column: string }>(
-      sql.raw(`select il.name as name, ii.name as "column"
+  it.each([["sale_lines", "deducts_sale_id", "sale_lines_deducts_sale_idx"]])(
+    "indexes %s by %s",
+    (table, column, name) => {
+      const rows = db.all<{ name: string; column: string }>(
+        sql.raw(`select il.name as name, ii.name as "column"
         from pragma_index_list('${table}') il, pragma_index_info(il.name) ii`),
-    );
-    expect(rows).toContainEqual({ name, column });
-  });
+      );
+      expect(rows).toContainEqual({ name, column });
+    },
+  );
 });
