@@ -13,26 +13,19 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-master-key-box.js";
-import type { DashboardApi, RecoveryPackKeyState, RecoveryPackStatus } from "../api/client.js";
+import type { DashboardApi, RecoveryPackStatus } from "../api/client.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import {
-  keepDate,
-  keyHolder,
-  packDate,
-  unreceivedWords,
-  withStrong,
-} from "./recovery-pack-words.js";
+import { keepDate, packDate } from "./recovery-pack-words.js";
 
-/** A plain pack, or a new master key (with a new box key when the box has one) and its pack. */
+/** A plain pack, or a new master key and its pack. */
 export type RecoveryPackDialogKind = "pack" | "master-key";
 
 /** The detail of `recovery-pack-made`: the pack's PDF, and whether the box has it marked received. */
 export interface RecoveryPackMade {
   pdf: Blob;
   number: number;
-  key: RecoveryPackKeyState;
   madeAt: string;
   received: boolean;
 }
@@ -46,7 +39,7 @@ function answeredByBox(error: unknown): boolean {
   );
 }
 
-type Step = "form" | "lost" | "key-failed" | "shown";
+type Step = "form" | "lost" | "shown";
 /** A shown master key whose pack was not yet downloaded or printed is lost when the dialog closes. */
 type Draft = { unkept: boolean };
 
@@ -204,7 +197,7 @@ export class RecoveryPackDialog extends LitElement {
   async #make(): Promise<void> {
     if (!this.opened || this.busy) return;
     const generation = this.#generation;
-    const newServerKey = this.kind === "master-key";
+    const newMasterKey = this.kind === "master-key";
     const api = this.api;
     this.refusal = "";
     this.busy = true;
@@ -213,7 +206,7 @@ export class RecoveryPackDialog extends LitElement {
     try {
       made = await api.makeRecoveryPack({
         locale: currentLocale().startsWith("es") ? "es" : "en",
-        newServerKey,
+        newMasterKey,
       });
     } catch (error) {
       if (generation !== this.#generation) return;
@@ -224,7 +217,7 @@ export class RecoveryPackDialog extends LitElement {
       }
       this.reread = await this.#readStatus(api, generation);
       if (generation !== this.#generation) return;
-      this.lostMasterKey = newServerKey;
+      this.lostMasterKey = newMasterKey;
       this.step = "lost";
       this.busy = false;
       return;
@@ -240,7 +233,6 @@ export class RecoveryPackDialog extends LitElement {
         detail: {
           pdf: made.pdf,
           number: made.number,
-          key: made.key,
           madeAt: made.madeAt,
           received,
         },
@@ -249,14 +241,7 @@ export class RecoveryPackDialog extends LitElement {
       }),
     );
     if (generation !== this.#generation) return;
-    if (made.key === "failed" && newServerKey) {
-      this.reread = await this.#readStatus(api, generation);
-      if (generation !== this.#generation) return;
-      this.step = "key-failed";
-      this.busy = false;
-      return;
-    }
-    if (newServerKey && made.masterKey) {
+    if (newMasterKey && made.masterKey) {
       this.shown = {
         key: made.masterKey.key,
         name: made.masterKey.name,
@@ -356,7 +341,6 @@ export class RecoveryPackDialog extends LitElement {
         }
       </div>
       ${this.step === "lost" ? this.#lost() : nothing}
-      ${this.step === "key-failed" ? this.#keyFailed() : nothing}
       ${this.step === "shown" && this.shown ? this.#shown(this.shown) : nothing}`;
   }
 
@@ -393,7 +377,7 @@ export class RecoveryPackDialog extends LitElement {
       <p>
         ${t("recovery_pack_dialog.lost_new_key")}
         ${
-          unreceived?.holdsCurrentServerKey
+          unreceived && this.reread?.masterKey?.pack === unreceived.number
             ? fill("recovery_pack_dialog.lost_new_key_named", {
                 number: String(unreceived.number),
                 date: packDate(unreceived.madeAt, this.#zone),
@@ -403,23 +387,6 @@ export class RecoveryPackDialog extends LitElement {
       </p>
       <p>${t("recovery_pack_dialog.lost_new_key_choices")}</p>
     </div>`;
-  }
-
-  #keyFailed(): TemplateResult {
-    const holder = keyHolder(this.reread);
-    const where =
-      holder === null
-        ? nothing
-        : holder.received || holder.offeredAtSetup
-          ? fill("recovery_pack_dialog.key_still_works", {
-              number: String(holder.number),
-              date: packDate(holder.madeAt, this.#zone),
-            })
-          : unreceivedWords(holder, this.#zone);
-    return html`<p data-test="key-failed" role="alert">
-      ${withStrong("recovery_pack_dialog.key_failed", {}, "not", t("recovery_pack_dialog.not"))}
-      ${where}
-    </p>`;
   }
 
   #footer(): TemplateResult {
@@ -440,12 +407,6 @@ export class RecoveryPackDialog extends LitElement {
             >
           </wt-form-actions>`
         : html``;
-    if (this.step === "key-failed")
-      return html`<wt-form-actions slot="footer">
-        <wt-button data-test="close-pack" variant="primary" @click=${leave}
-          >${t("action.close")}</wt-button
-        >
-      </wt-form-actions>`;
     if (this.step === "lost")
       return html`<wt-form-actions slot="footer">
         <wt-button slot="cancel" data-test="stop-pack" variant="secondary" @click=${leave}

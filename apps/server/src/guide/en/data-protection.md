@@ -554,7 +554,7 @@ secrets is on the box too, so choose **Reset login** for each person who uses tw
 Waitron refuses **Reset login** for the venue's only active admin who can sign in to the dashboard, who instead opens **Account
 settings**, chooses **Disable** beside **Authenticator app**, and sets it up again.
 
-**A lost recovery pack.** The pack made during first setup holds the master key and the box key.
+**A lost recovery pack.** The pack made during first setup holds the master key.
 A recovery needs the master key alongside access to a copy; to replace it, see the end of this section. A pack made
 on **Backups** after you set up the bucket copy holds your bucket's access
 key and secret and the backup encryption key, so whoever has it can read the whole database copy in your bucket and unlock the passwords and keys
@@ -569,8 +569,8 @@ and **Secret access key**, and choose **Save changes**. A new backup encryption 
 so change those at each provider too. While scheduled backups are on, **Backups** also offers
 **Change the backup encryption key**; afterwards choose **Make recovery pack** on **Backups** and keep the new
 pack. Scheduled backups made before the change and the whole older bucket copy still need the
-old key. Keep the matching recovery pack for any older copy you may need to restore. A pack can also
-hold the box key. To replace it, choose **Make a new master key**, which also makes a new box key when the box has one: for a venue that files invoices, restoring a backup made after that needs the new master key, and restoring an older backup still needs the old one.
+old key. Keep the matching recovery pack for any older copy you may need to restore.
+To replace the master key, choose **Make a new master key**: for a venue that files invoices, restoring a backup made after that needs the new master key, and restoring an older backup still needs the old one.
 
 **A leaked configuration export.** The file holds every person on your staff list, former staff
 included, with their name, email, telephone, role and status, and their employment records with

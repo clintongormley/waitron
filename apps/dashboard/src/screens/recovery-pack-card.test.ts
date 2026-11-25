@@ -28,22 +28,28 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
     backupsUseOlderKey: false,
     masterKey: null,
     keepOldPackUntil: "2026-11-11T12:00:00.000Z",
-    serverKey: "set",
     timeZone: "Europe/Madrid",
     ...overrides,
   };
 }
 
 it.each([
-  ["en-GB", "Backup key", "Box key"],
-  ["es-ES", "Clave de las copias", "Clave del servidor"],
-] as const)("names the two keys separately on the pack in %s", async (locale, backup, server) => {
-  setLocale(locale);
-  const el = await mount(stubApi(STATES["up to date"]));
-  const root = el.shadowRoot!;
-  expect(root.querySelector("[data-test=row-backup-key] dt")?.textContent).toBe(backup);
-  expect(root.querySelector("[data-test=row-server-key] dt")?.textContent).toBe(server);
-});
+  ["en-GB", ["Last pack", "Master key", "Backup key"], "Box key"],
+  ["es-ES", ["Último paquete", "Clave maestra", "Clave de las copias"], "Clave del servidor"],
+] as const)(
+  "the card's rows are Last pack, Master key and Backup key in %s",
+  async (locale, rows, boxKey) => {
+    setLocale(locale);
+    const el = await mount(stubApi(STATES["up to date"]));
+    const root = el.shadowRoot!;
+    const labels = [...root.querySelectorAll("dl > div[data-test^=row-] > dt")].map(
+      (dt) => dt.textContent,
+    );
+    expect(labels).toEqual(rows);
+    expect(root.querySelector("[data-test=row-server-key]")).toBeNull();
+    expect(root.textContent).not.toContain(boxKey);
+  },
+);
 
 it.each([
   ["en-GB", "Master key", "2026-11-23 · QZJV, in pack 1", "None yet"],
@@ -96,7 +102,6 @@ it.each([
 const PARTS: NonNullable<RecoveryPackStatus["latest"]>["parts"] = [
   { part: "bucket", state: "included" },
   { part: "archives", state: "included" },
-  { part: "server-key", state: "included" },
 ];
 
 function latest(
@@ -117,7 +122,6 @@ const STATES = {
   "up to date": status({
     latest: latest(),
     upToDate: true,
-    keep: [{ number: 1, madeAt: FIRST_AT, until: null, why: "server_key" }],
   }),
   "out of date": status({
     latest: latest(),
@@ -125,25 +129,20 @@ const STATES = {
       { part: "bucket", kind: "key_changed", at: "2026-10-20T10:00:00.000Z" },
       { part: "archives", kind: "key_changed", at: "2026-10-20T10:00:00.000Z" },
     ],
-    keep: [
-      { number: 1, madeAt: FIRST_AT, until: null, why: "server_key" },
-      { number: 3, madeAt: MADE_AT, until: "2026-11-19T10:00:00.000Z", why: "backup_key" },
-    ],
+    keep: [{ number: 3, madeAt: MADE_AT, until: "2026-11-19T10:00:00.000Z", why: "backup_key" }],
   }),
   incomplete: status({
     latest: latest({
       parts: [
         { part: "bucket", state: "included" },
         { part: "archives", state: "failed" },
-        { part: "server-key", state: "included" },
       ],
     }),
     incomplete: true,
-    keep: [{ number: 3, madeAt: MADE_AT, until: null, why: "server_key" }],
   }),
   unreceived: status({
     latest: latest({ number: 4, received: false }),
-    unreceived: { number: 4, madeAt: MADE_AT, holdsCurrentServerKey: true },
+    unreceived: { number: 4, madeAt: MADE_AT },
   }),
 } satisfies Record<string, RecoveryPackStatus>;
 
@@ -181,7 +180,7 @@ function stubApi(at: RecoveryPackStatus = status()) {
     freshSignInPasskeyOptions: vi.fn(),
     makeRecoveryPack: vi
       .fn<(body: unknown) => Promise<MadeRecoveryPack>>()
-      .mockResolvedValue({ pdf: pdf(), number: 4, key: "unchanged", madeAt: MADE_AT }),
+      .mockResolvedValue({ pdf: pdf(), number: 4, madeAt: MADE_AT }),
     markRecoveryPackReceived: vi.fn<(n: number) => Promise<void>>().mockResolvedValue(undefined),
     liveData: new LiveData(),
   };
@@ -242,8 +241,6 @@ const DAYS = {
   },
 } as const;
 
-const option = () => t("recovery_pack.make_master_key");
-
 describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => {
   const day = DAYS[locale];
 
@@ -254,23 +251,17 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     expect(row(el, "last")).toBe(t("recovery_pack.last_none"));
   });
 
-  it("says the last pack is up to date, naming who made it and when, and the pack holding the box key", async () => {
+  it("says the last pack is up to date, naming who made it and when", async () => {
     setLocale(locale);
     const el = await mount(stubApi(STATES["up to date"]));
     expect(line(el)).toBe(
-      `${fill("recovery_pack.up_to_date", { number: "3", date: day.made, name: "Marta Puig" })} ${fill(
-        "recovery_pack.keep_server_key",
-        { number: "1", date: day.first },
-      )}`,
+      fill("recovery_pack.up_to_date", { number: "3", date: day.made, name: "Marta Puig" }),
     );
     expect(row(el, "last")).toBe(
       fill("recovery_pack.last_value", { number: "3", date: day.made, name: "Marta Puig" }),
     );
     expect(row(el, "backup-key")).toBe(
       fill("recovery_pack.backup_key_same", { number: "3", date: day.made }),
-    );
-    expect(row(el, "server-key")).toBe(
-      fill("recovery_pack.server_key_on", { number: "1", date: day.first }),
     );
   });
 
@@ -292,7 +283,6 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
         fill("recovery_pack.out_of_date", { number: "3", date: day.made }),
         fill("recovery_pack.reason.key_changed", { date: day.changed }),
         t("recovery_pack.make_new"),
-        fill("recovery_pack.keep_server_key", { number: "1", date: day.first }),
         fill("recovery_pack.keep_backup_key", { number: "3", date: day.made, until: day.until }),
       ].join(" "),
     );
@@ -308,84 +298,14 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
   it("says the last pack is incomplete", async () => {
     setLocale(locale);
     const el = await mount(stubApi(STATES.incomplete));
-    expect(line(el)).toBe(
-      `${fill("recovery_pack.incomplete", { number: "3", date: day.made })} ${fill(
-        "recovery_pack.keep_server_key",
-        { number: "3", date: day.made },
-      )}`,
-    );
+    expect(line(el)).toBe(fill("recovery_pack.incomplete", { number: "3", date: day.made }));
   });
-
-  const noKeyParts: NonNullable<RecoveryPackStatus["latest"]>["parts"] = [
-    { part: "bucket", state: "included" },
-    { part: "archives", state: "included" },
-    { part: "server-key", state: "not-set-up" },
-  ];
-
-  it("says the box has no key yet, not that the pack is incomplete", async () => {
-    setLocale(locale);
-    const el = await mount(
-      stubApi(
-        status({ latest: latest({ parts: noKeyParts }), upToDate: true, serverKey: "not_yet" }),
-      ),
-    );
-    expect(row(el, "server-key")).toBe(t("recovery_pack.server_key_not_yet"));
-    expect(line(el)).toBe(
-      fill("recovery_pack.up_to_date", { number: "3", date: day.made, name: "Marta Puig" }),
-    );
-    expect(line(el)).not.toContain(
-      fill("recovery_pack.incomplete", { number: "3", date: day.made }),
-    );
-  });
-
-  it("says the box key is on no pack once one was made after a pack that had none", async () => {
-    setLocale(locale);
-    const el = await mount(
-      stubApi(
-        status({
-          latest: latest({ parts: noKeyParts }),
-          reasons: [{ part: "server-key", kind: "set_up_after" }],
-        }),
-      ),
-    );
-    expect(row(el, "server-key")).toBe(t("recovery_pack.server_key_elsewhere"));
-    expect(line(el)).not.toContain(
-      fill("recovery_pack.incomplete", { number: "3", date: day.made }),
-    );
-  });
-
-  it.each([
-    ["none", "absent", "recovery_pack.server_key_none"],
-    ["not_yet", "not-set-up", "recovery_pack.server_key_not_yet"],
-    ["set", "included", "recovery_pack.server_key_elsewhere"],
-    ["set", "absent", "recovery_pack.server_key_elsewhere"],
-  ] as const)(
-    "words the box key row from the box's key now (%s), whatever the last pack's part was (%s), when no pack holds it",
-    async (serverKey, state, words) => {
-      setLocale(locale);
-      const parts = [...noKeyParts.slice(0, 2), { part: "server-key", state } as const];
-      const el = await mount(
-        stubApi(
-          status({
-            latest: latest({ parts }),
-            serverKey,
-            reasons:
-              state === "absent" && serverKey === "set"
-                ? [{ part: "server-key", kind: "set_up_after" }]
-                : [],
-          }),
-        ),
-      );
-      expect(row(el, "server-key")).toBe(t(words));
-    },
-  );
 
   it("calmly points back to the pack offered at the end of setup", async () => {
     setLocale(locale);
     const unreceived = {
       number: 1,
       madeAt: MADE_AT,
-      holdsCurrentServerKey: true,
       offeredAtSetup: true as const,
     };
     const el = await mount(
@@ -403,7 +323,6 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
         ? "Offered as a PDF at the end of setup on 12 October. If you did not keep it, make a new master key."
         : "Se ofreció como PDF al terminar la configuración el 12 de octubre. Si no lo guardaste, crea una clave maestra nueva.",
     );
-    expect(row(el, "server-key")).toContain("1");
     expect(line(el)).toBe("");
   });
 
@@ -416,7 +335,6 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
           unreceived: {
             number: 1,
             madeAt: MADE_AT,
-            holdsCurrentServerKey: true,
             offeredAtSetup: true,
           },
           reasons: [{ part: "bucket", kind: "set_up_after" }],
@@ -429,32 +347,23 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     expect(offered?.classList.contains("warn")).toBe(false);
   });
 
-  it("names a pack holding the box key no browser confirmed receiving, in decision 10's words", async () => {
-    setLocale(locale);
-    const el = await mount(stubApi(STATES.unreceived));
-    expect(line(el)).toBe(
-      fill("recovery_pack_dialog.unreceived", { number: "4", date: day.made, option: option() }),
-    );
-    expect(row(el, "server-key")).toBe(
-      fill("recovery_pack.server_key_on_unreceived", { number: "4", date: day.made }),
-    );
-  });
-
-  it("names a newest pack no browser confirmed receiving and holds no box key", async () => {
+  it("names a newest pack no browser confirmed receiving", async () => {
     setLocale(locale);
     const el = await mount(
       stubApi(
         status({
           latest: latest({ number: 4, received: false }),
-          unreceived: { number: 4, madeAt: MADE_AT, holdsCurrentServerKey: false },
-          keep: [{ number: 1, madeAt: FIRST_AT, until: null, why: "server_key" }],
+          unreceived: { number: 4, madeAt: MADE_AT },
+          keep: [
+            { number: 1, madeAt: FIRST_AT, until: "2026-11-19T10:00:00.000Z", why: "backup_key" },
+          ],
         }),
       ),
     );
     expect(line(el)).toBe(
       `${fill("recovery_pack.not_received", { number: "4", date: day.made })} ${fill(
-        "recovery_pack.keep_server_key",
-        { number: "1", date: day.first },
+        "recovery_pack.keep_backup_key",
+        { number: "1", date: day.first, until: day.until },
       )}`,
     );
   });
@@ -471,76 +380,22 @@ describe("an unreceived pack", () => {
     [
       fill("recovery_pack.up_to_date", { number, date: "12 October", name: "Marta Puig" }),
       fill("recovery_pack.up_to_date_unnamed", { number, date: "12 October" }),
-      fill("recovery_pack.keep_server_key", { number, date: "12 October" }),
-    ]
-      .filter((words) => line(el).includes(words))
-      .concat(
-        row(el, "server-key") ===
-          fill("recovery_pack.server_key_on", { number, date: "12 October" })
-          ? [row(el, "server-key")]
-          : [],
-      );
+    ].filter((words) => line(el).includes(words));
 
-  it("is never called up to date nor a safe holder of the key, even if the status says so", async () => {
+  it("is never called up to date, even if the status says so", async () => {
     const el = await mount(
       stubApi(
         status({
           latest: latest({ number: 4, received: false }),
           upToDate: true,
-          unreceived: { number: 4, madeAt: MADE_AT, holdsCurrentServerKey: true },
-          keep: [{ number: 4, madeAt: MADE_AT, until: null, why: "server_key" }],
+          unreceived: { number: 4, madeAt: MADE_AT },
         }),
       ),
     );
     expect(unsafe(el, "4")).toEqual([]);
     expect(line(el)).toContain(
-      fill("recovery_pack_dialog.unreceived", {
-        number: "4",
-        date: "12 October",
-        option: option(),
-      }),
+      fill("recovery_pack.not_received", { number: "4", date: "12 October" }),
     );
-  });
-
-  it("holding the key makes a newer received pack's line no claim of up to date", async () => {
-    const el = await mount(
-      stubApi(
-        status({
-          latest: latest({ number: 4 }),
-          upToDate: true,
-          unreceived: { number: 3, madeAt: MADE_AT, holdsCurrentServerKey: true },
-        }),
-      ),
-    );
-    expect(unsafe(el, "4")).toEqual([]);
-    expect(line(el)).toBe(
-      fill("recovery_pack_dialog.unreceived", {
-        number: "3",
-        date: "12 October",
-        option: option(),
-      }),
-    );
-  });
-});
-
-describe("which pack holds the box key", () => {
-  it("is the same pack in the card's row and line when the status names a kept and an unreceived holder", async () => {
-    setLocale("en-GB");
-    const both = status({
-      latest: latest({ number: 4, received: false }),
-      unreceived: { number: 4, madeAt: MADE_AT, holdsCurrentServerKey: true },
-      keep: [{ number: 1, madeAt: FIRST_AT, until: null, why: "server_key" }],
-    });
-    const el = await mount(stubApi(both));
-    const unreceived = fill("recovery_pack_dialog.unreceived", {
-      number: "4",
-      date: "12 October",
-      option: option(),
-    });
-    expect(row(el, "server-key")).toBe(
-      fill("recovery_pack.server_key_on_unreceived", { number: "4", date: "12 October" }),
-    );
-    expect(line(el)).toContain(unreceived);
   });
 });
 
@@ -663,11 +518,7 @@ describe("reading the status", () => {
     const api = stubApi(STATES.unreceived);
     const el = await mount(api);
     expect(line(el)).toContain(
-      fill("recovery_pack_dialog.unreceived", {
-        number: "4",
-        date: "12 October",
-        option: option(),
-      }),
+      fill("recovery_pack.not_received", { number: "4", date: "12 October" }),
     );
     api.getRecoveryPackStatus.mockResolvedValue(
       status({ latest: latest({ number: 4 }), upToDate: true }),
@@ -710,11 +561,7 @@ describe("reading the status", () => {
       await settle(el);
       expect(el.shadowRoot!.querySelector("[data-test=pack-load-failed]")).toBeNull();
       expect(line(el)).toBe(
-        fill("recovery_pack_dialog.unreceived", {
-          number: "4",
-          date: "12 October",
-          option: option(),
-        }),
+        fill("recovery_pack.not_received", { number: "4", date: "12 October" }),
       );
       // A read started after the dialog's status is shown.
       api.getRecoveryPackStatus.mockResolvedValue(STATES["up to date"]);
@@ -738,13 +585,7 @@ describe("reading the status", () => {
     );
     await settle(el);
     expect(api.getRecoveryPackStatus).toHaveBeenCalledOnce();
-    expect(line(el)).toBe(
-      fill("recovery_pack_dialog.unreceived", {
-        number: "4",
-        date: "12 October",
-        option: option(),
-      }),
-    );
+    expect(line(el)).toBe(fill("recovery_pack.not_received", { number: "4", date: "12 October" }));
   });
 });
 
@@ -777,16 +618,11 @@ describe("making a pack", () => {
     expect(show).toHaveBeenCalledWith(STATES["up to date"], "master-key");
   });
 
-  it.each(["none", "not_yet", "set"] as const)(
-    "offers Make a new master key whether or not the box has a box key to replace with it (%s)",
-    async (serverKey) => {
-      const el = await mount(stubApi(status({ serverKey })));
-      expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).not.toBeNull();
-      expect(
-        el.shadowRoot!.querySelector("wt-button[data-test=make-recovery-pack]"),
-      ).not.toBeNull();
-    },
-  );
+  it("offers Make a new master key beside Make pack", async () => {
+    const el = await mount(stubApi(status()));
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-recovery-pack]")).not.toBeNull();
+  });
 
   it("offers no Make a new master key while the status is still being read", async () => {
     const api = stubApi(STATES["up to date"]);
@@ -840,11 +676,7 @@ describe("making a pack", () => {
     await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBeGreaterThan(1);
     await settle(el);
     expect(line(el)).toContain(
-      fill("recovery_pack_dialog.unreceived", {
-        number: "4",
-        date: "12 October",
-        option: option(),
-      }),
+      fill("recovery_pack.not_received", { number: "4", date: "12 October" }),
     );
   });
 
@@ -861,7 +693,7 @@ describe("making a pack", () => {
     const made = (number: number) =>
       dialogOf(el).dispatchEvent(
         new CustomEvent("recovery-pack-made", {
-          detail: { pdf: pdf(), number, key: "unchanged", received: true, madeAt: MADE_AT },
+          detail: { pdf: pdf(), number, received: true, madeAt: MADE_AT },
           bubbles: true,
           composed: true,
         }),
@@ -898,7 +730,7 @@ describe("making a pack", () => {
     const el = await mount(stubApi());
     dialogOf(el).dispatchEvent(
       new CustomEvent("recovery-pack-made", {
-        detail: { pdf: pdf(), number: 4, key: "unchanged", received: true, madeAt: MADE_AT },
+        detail: { pdf: pdf(), number: 4, received: true, madeAt: MADE_AT },
         bubbles: true,
         composed: true,
       }),
@@ -927,15 +759,11 @@ describe("making a pack", () => {
     cancel();
     await closed;
     await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBeGreaterThan(reads);
-    answer.resolve({ pdf: pdf(), number: 4, key: "replaced", madeAt: MADE_AT });
+    answer.resolve({ pdf: pdf(), number: 4, madeAt: MADE_AT });
     await settle(el);
     expect(el.shadowRoot!.querySelector("[data-test=download-pack]")).toBeNull();
     expect(line(el)).toContain(
-      fill("recovery_pack_dialog.unreceived", {
-        number: "4",
-        date: "12 October",
-        option: option(),
-      }),
+      fill("recovery_pack.not_received", { number: "4", date: "12 October" }),
     );
   });
 
@@ -994,7 +822,7 @@ describe("making a pack", () => {
     "dates the ready line from the box's own time for the pack, in the venue's zone (%s)",
     async (timeZone, madeAt, day) => {
       const api = stubApi(status({ timeZone }));
-      api.makeRecoveryPack.mockResolvedValue({ pdf: pdf(), number: 4, key: "unchanged", madeAt });
+      api.makeRecoveryPack.mockResolvedValue({ pdf: pdf(), number: 4, madeAt });
       const el = await mount(api);
       api.getRecoveryPackStatus.mockResolvedValue(
         status({
@@ -1027,7 +855,6 @@ describe("making a pack", () => {
     api.makeRecoveryPack.mockResolvedValue({
       pdf: pdf(),
       number: 4,
-      key: "unchanged",
       madeAt: "2024-02-28T09:00:00.000Z",
     });
     const el = await mount(api);
@@ -1062,7 +889,7 @@ describe("making a pack", () => {
       const next = stubApi(STATES.none);
       el.api = next as unknown as DashboardApi;
       await settle(el);
-      answer.resolve({ pdf: pdf(), number: 4, key: "unchanged", madeAt: MADE_AT });
+      answer.resolve({ pdf: pdf(), number: 4, madeAt: MADE_AT });
       marked.resolve();
       await settle(el);
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -1101,10 +928,7 @@ describe("making a pack", () => {
       else oldRead.resolve(STATES.unreceived);
       await settle(el);
       expect(line(el)).toBe(
-        `${fill("recovery_pack.up_to_date", { number: "3", date: "12 October", name: "Marta Puig" })} ${fill(
-          "recovery_pack.keep_server_key",
-          { number: "1", date: "2 September" },
-        )}`,
+        fill("recovery_pack.up_to_date", { number: "3", date: "12 October", name: "Marta Puig" }),
       );
     },
   );
@@ -1133,10 +957,7 @@ describe("making a pack", () => {
       else oldRead.resolve(STATES.unreceived);
       await settle(el);
       expect(line(el)).toBe(
-        `${fill("recovery_pack.up_to_date", { number: "3", date: "12 October", name: "Marta Puig" })} ${fill(
-          "recovery_pack.keep_server_key",
-          { number: "1", date: "2 September" },
-        )}`,
+        fill("recovery_pack.up_to_date", { number: "3", date: "12 October", name: "Marta Puig" }),
       );
     },
   );
@@ -1188,8 +1009,8 @@ describe("making a pack", () => {
     it("never swaps a newer pack's link for an older one's, but still re-reads the status the older one's receipt changed", async () => {
       const api = stubApi(STATES.none);
       api.makeRecoveryPack
-        .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: "replaced", madeAt: MADE_AT })
-        .mockResolvedValueOnce({ pdf: pdf(), number: 2, key: "replaced", madeAt: MADE_AT });
+        .mockResolvedValueOnce({ pdf: pdf(), number: 1, madeAt: MADE_AT })
+        .mockResolvedValueOnce({ pdf: pdf(), number: 2, madeAt: MADE_AT });
       const first = deferred<void>();
       const second = deferred<void>();
       api.markRecoveryPackReceived
@@ -1218,14 +1039,11 @@ describe("making a pack", () => {
     });
 
     /** Pack 1 is made, its receipt held; the dialog is dismissed; pack 2 is made and received. */
-    const twoMakes = async (
-      firstKey: "replaced" | "unchanged",
-      secondKey: "replaced" | "unchanged",
-    ) => {
+    const twoMakes = async () => {
       const api = stubApi(STATES.none);
       api.makeRecoveryPack
-        .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: firstKey, madeAt: MADE_AT })
-        .mockResolvedValueOnce({ pdf: pdf(), number: 2, key: secondKey, madeAt: MADE_AT });
+        .mockResolvedValueOnce({ pdf: pdf(), number: 1, madeAt: MADE_AT })
+        .mockResolvedValueOnce({ pdf: pdf(), number: 2, madeAt: MADE_AT });
       const first = deferred<void>();
       api.markRecoveryPackReceived
         .mockReturnValueOnce(first.promise)
@@ -1245,46 +1063,8 @@ describe("making a pack", () => {
       return { api, el, first, download };
     };
 
-    it("offers an older pack's link when only that pack holds the new box key, and re-reads the status", async () => {
-      const { api, el, first, download } = await twoMakes("replaced", "unchanged");
-      await openDialog(el);
-      const reads = api.getRecoveryPackStatus.mock.calls.length;
-      first.resolve();
-      await expect.poll(download).toBe("waitron-recovery-pack-1.pdf");
-      await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBeGreaterThan(reads);
-    });
-
-    it("never offers an older pack whose new box key a later pack has replaced", async () => {
-      const api = stubApi(STATES.none);
-      api.makeRecoveryPack
-        .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: "replaced", madeAt: MADE_AT })
-        .mockResolvedValueOnce({ pdf: pdf(), number: 2, key: "replaced", madeAt: MADE_AT })
-        .mockResolvedValueOnce({ pdf: pdf(), number: 3, key: "unchanged", madeAt: MADE_AT });
-      const first = deferred<void>();
-      api.markRecoveryPackReceived.mockReturnValueOnce(first.promise).mockResolvedValue(undefined);
-      const el = await mount(api);
-      const download = () =>
-        el
-          .shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=download-pack]")
-          ?.getAttribute("download") ?? null;
-      (await openDialog(el)).make();
-      await expect.poll(() => api.markRecoveryPackReceived.mock.calls.length).toBe(1);
-      dialogOf(el).dismiss();
-      await settle(el);
-      (await openDialog(el)).make();
-      await expect.poll(download).toBe("waitron-recovery-pack-2.pdf");
-      await settle(el);
-      (await openDialog(el)).make();
-      await expect.poll(download).toBe("waitron-recovery-pack-3.pdf");
-      await settle(el);
-      const reads = api.getRecoveryPackStatus.mock.calls.length;
-      first.resolve();
-      await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBeGreaterThan(reads);
-      expect(download()).toBe("waitron-recovery-pack-3.pdf");
-    });
-
     it("re-reads the status an older pack's late receipt changed, even with an unused dialog open", async () => {
-      const { api, el, first, download } = await twoMakes("unchanged", "unchanged");
+      const { api, el, first, download } = await twoMakes();
       await openDialog(el);
       const reads = api.getRecoveryPackStatus.mock.calls.length;
       first.resolve();
@@ -1307,7 +1087,7 @@ describe("making a pack", () => {
     api.getRecoveryPackStatus.mockRejectedValue({ code: "connection.failed" });
     dialogOf(el).dispatchEvent(
       new CustomEvent("recovery-pack-made", {
-        detail: { pdf: pdf(), number: 4, key: "unchanged", received: true, madeAt: MADE_AT },
+        detail: { pdf: pdf(), number: 4, received: true, madeAt: MADE_AT },
         bubbles: true,
         composed: true,
       }),
@@ -1363,46 +1143,39 @@ it.each(["en-GB", "es-ES"] as const)(
   },
 );
 
-it.each([true, false])(
-  "waits for linked maker's server-key facts (present=%s)",
-  async (present) => {
-    const value = status({
-      latest: latest({ parts: present ? PARTS : [{ part: "server-key", state: "absent" }] }),
-      serverKey: present ? "set" : "none",
-      keep: [{ number: 1, madeAt: FIRST_AT, until: null, why: "server_key" }],
-    });
-    const api = stubApi(value);
-    let release!: (value: RecoveryPackStatus) => void;
-    api.getRecoveryPackStatus.mockReturnValue(
-      new Promise((resolve) => {
-        release = resolve;
-      }),
-    );
-    const { el } = await mountWidget<RecoveryPackCard>("dashboard-recovery-pack-card", {
-      api: api as unknown as DashboardApi,
-      canManage: true,
-      openRequested: true,
-    });
-    const dialog = dialogOf(el);
-    try {
-      expect(dialog.isOpen).toBe(false);
-      expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).toBeNull();
-    } finally {
-      release(value);
-    }
-    await expect.poll(() => dialog.isOpen).toBe(true);
-    await el.updateComplete;
-    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).not.toBeNull();
-    expect(dialog.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
-      t("recovery_pack_dialog.heading"),
-    );
-    dialog.dismiss();
-    api.getRecoveryPackStatus.mockResolvedValue({ ...value });
-    el.reload();
-    await settle(el);
+it("waits for the status before opening the linked maker", async () => {
+  const value = status({ latest: latest() });
+  const api = stubApi(value);
+  let release!: (value: RecoveryPackStatus) => void;
+  api.getRecoveryPackStatus.mockReturnValue(
+    new Promise((resolve) => {
+      release = resolve;
+    }),
+  );
+  const { el } = await mountWidget<RecoveryPackCard>("dashboard-recovery-pack-card", {
+    api: api as unknown as DashboardApi,
+    canManage: true,
+    openRequested: true,
+  });
+  const dialog = dialogOf(el);
+  try {
     expect(dialog.isOpen).toBe(false);
-  },
-);
+    expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).toBeNull();
+  } finally {
+    release(value);
+  }
+  await expect.poll(() => dialog.isOpen).toBe(true);
+  await el.updateComplete;
+  expect(el.shadowRoot!.querySelector("wt-button[data-test=make-master-key]")).not.toBeNull();
+  expect(dialog.shadowRoot!.querySelector("wt-dialog")!.heading).toBe(
+    t("recovery_pack_dialog.heading"),
+  );
+  dialog.dismiss();
+  api.getRecoveryPackStatus.mockResolvedValue({ ...value });
+  el.reload();
+  await settle(el);
+  expect(dialog.isOpen).toBe(false);
+});
 
 it("opens the linked maker after the initial status read fails", async () => {
   const api = stubApi(STATES.none);

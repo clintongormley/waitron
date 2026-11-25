@@ -209,7 +209,6 @@ const NO_PACK: RecoveryPackStatus = {
   backupsUseOlderKey: false,
   masterKey: null,
   keepOldPackUntil: "2026-11-11T12:00:00.000Z",
-  serverKey: "set",
   timeZone: "Europe/Madrid",
 };
 const PACK_UP_TO_DATE: RecoveryPackStatus = {

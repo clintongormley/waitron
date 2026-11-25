@@ -1672,14 +1672,7 @@ export const en = {
   "fresh_sign_in.retry": "Try again",
   "recovery_pack_dialog.heading": "Make recovery pack",
   "recovery_pack_dialog.intro": "The pack is made once, for this download; the box keeps no copy.",
-  "recovery_pack_dialog.unreceived":
-    "The current box key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, choose {option}.",
   "recovery_pack_dialog.make": "Make pack",
-  "recovery_pack_dialog.key_failed":
-    "The pack was made, but the master key was {not} replaced. The pack says why.",
-  "recovery_pack_dialog.not": "not",
-  "recovery_pack_dialog.key_still_works":
-    "The current key, on recovery pack {number} made on {date}, still works.",
   "recovery_pack_dialog.lost_new_key":
     "The box may have made a new master key that did not reach this browser. If it did, the only copy of your current master key is on a pack you do not have.",
   "recovery_pack_dialog.lost_new_key_named": "That pack is recovery pack {number}, made on {date}.",
@@ -1717,22 +1710,15 @@ export const en = {
   "recovery_pack.reason.archives_settings": "The archive settings changed.",
   "recovery_pack.reason.bucket_set_up": "The bucket copy was set up after this pack.",
   "recovery_pack.reason.archives_set_up": "Archives were set up after this pack.",
-  "recovery_pack.reason.server_key_set_up": "The box key was made after this pack.",
   "recovery_pack.reason.bucket_removed": "The bucket copy was turned off.",
   "recovery_pack.reason.archives_removed": "Archives were turned off.",
-  "recovery_pack.reason.server_key_removed": "The box no longer keeps a box key.",
-  "recovery_pack.reason.server_key_replaced": "The box key was replaced.",
   "recovery_pack.make_new": "Make a new pack.",
-  "recovery_pack.keep_server_key": "Keep pack {number}, made on {date}: it holds the box key.",
   "recovery_pack.keep_backup_key":
     "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its backup key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
-  "recovery_pack.keep_old_server_key":
-    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its box key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
   "recovery_pack.older_key":
     "The box's backups still use the backup key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too until Backups shows the settings loaded.",
   "recovery_pack.row.last": "Last pack",
   "recovery_pack.row.backup_key": "Backup key",
-  "recovery_pack.row.server_key": "Box key",
   "recovery_pack.last_none": "None yet",
   "recovery_pack.last_value": "Pack {number}, made on {date} by {name}",
   "recovery_pack.last_value_unnamed": "Pack {number}, made on {date}",
@@ -1740,12 +1726,6 @@ export const en = {
     "Changed on {date}; pack {number}, made on {packDate}, has the older key",
   "recovery_pack.backup_key_same": "Unchanged since pack {number}, made on {date}",
   "recovery_pack.backup_key_absent": "Not in pack {number}, made on {date}",
-  "recovery_pack.server_key_on": "On pack {number}, made on {date}",
-  "recovery_pack.server_key_on_unreceived":
-    "On pack {number}, made on {date} (the box was never told it arrived)",
-  "recovery_pack.server_key_none": "This venue keeps no box key",
-  "recovery_pack.server_key_not_yet": "This box has no box key yet",
-  "recovery_pack.server_key_elsewhere": "Not on a recovery pack",
   "recovery_pack.make": "Make recovery pack",
   "recovery_pack.ready":
     "Recovery pack {number}, made on {date}, is ready. Print it or save it, and keep it locked away, off the box.",
@@ -6498,14 +6478,7 @@ export const es: Record<StringKey, string> = {
   "recovery_pack_dialog.heading": "Hacer paquete de recuperación",
   "recovery_pack_dialog.intro":
     "El paquete se hace una sola vez, para esta descarga; el servidor no guarda ninguna copia.",
-  "recovery_pack_dialog.unreceived":
-    "La clave actual del servidor está en el paquete de recuperación {number}, hecho el {date}, pero el servidor nunca recibió la confirmación de que el paquete {number} llegó. Si no tienes el paquete {number}, elige {option}.",
   "recovery_pack_dialog.make": "Hacer paquete",
-  "recovery_pack_dialog.key_failed":
-    "El paquete se ha hecho, pero la clave maestra {not} se ha sustituido. El paquete explica por qué.",
-  "recovery_pack_dialog.not": "no",
-  "recovery_pack_dialog.key_still_works":
-    "La clave actual, en el paquete de recuperación {number} hecho el {date}, sigue funcionando.",
   "recovery_pack_dialog.lost_new_key":
     "Puede que el servidor haya creado una clave maestra nueva que no llegó a este navegador. Si fue así, la única copia de tu clave maestra actual está en un paquete que no tienes.",
   "recovery_pack_dialog.lost_new_key_named":
@@ -6549,24 +6522,15 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.reason.bucket_set_up":
     "La copia en el bucket se configuró después de este paquete.",
   "recovery_pack.reason.archives_set_up": "Los archivos se configuraron después de este paquete.",
-  "recovery_pack.reason.server_key_set_up":
-    "La clave del servidor se creó después de este paquete.",
   "recovery_pack.reason.bucket_removed": "La copia en el bucket se desactivó.",
   "recovery_pack.reason.archives_removed": "Los archivos se desactivaron.",
-  "recovery_pack.reason.server_key_removed": "El servidor ya no guarda una clave del servidor.",
-  "recovery_pack.reason.server_key_replaced": "La clave del servidor se sustituyó.",
   "recovery_pack.make_new": "Haz un paquete nuevo.",
-  "recovery_pack.keep_server_key":
-    "Guarda el paquete {number}, hecho el {date}: contiene la clave del servidor.",
   "recovery_pack.keep_backup_key":
     "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave de las copias si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
-  "recovery_pack.keep_old_server_key":
-    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave del servidor si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
   "recovery_pack.older_key":
     "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior hasta que Copias de seguridad muestre los ajustes cargados.",
   "recovery_pack.row.last": "Último paquete",
   "recovery_pack.row.backup_key": "Clave de las copias",
-  "recovery_pack.row.server_key": "Clave del servidor",
   "recovery_pack.last_none": "Ninguno todavía",
   "recovery_pack.last_value": "Paquete {number}, hecho el {date} por {name}",
   "recovery_pack.last_value_unnamed": "Paquete {number}, hecho el {date}",
@@ -6574,12 +6538,6 @@ export const es: Record<StringKey, string> = {
     "Cambió el {date}; el paquete {number}, hecho el {packDate}, tiene la clave anterior",
   "recovery_pack.backup_key_same": "Sin cambios desde el paquete {number}, hecho el {date}",
   "recovery_pack.backup_key_absent": "No está en el paquete {number}, hecho el {date}",
-  "recovery_pack.server_key_on": "En el paquete {number}, hecho el {date}",
-  "recovery_pack.server_key_on_unreceived":
-    "En el paquete {number}, hecho el {date} (el servidor nunca recibió la confirmación de que llegó)",
-  "recovery_pack.server_key_none": "Este local no guarda clave del servidor",
-  "recovery_pack.server_key_not_yet": "Este servidor aún no tiene clave del servidor",
-  "recovery_pack.server_key_elsewhere": "No está en ningún paquete de recuperación",
   "recovery_pack.make": "Hacer paquete de recuperación",
   "recovery_pack.ready":
     "El paquete de recuperación {number}, hecho el {date}, está listo. Imprímelo o guárdalo, y guárdalo bajo llave, lejos del servidor.",

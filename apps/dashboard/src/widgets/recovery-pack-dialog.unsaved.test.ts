@@ -34,7 +34,6 @@ const STATUS: RecoveryPackStatus = {
   backupsUseOlderKey: false,
   masterKey: null,
   keepOldPackUntil: "2026-11-11T12:00:00.000Z",
-  serverKey: "set",
   timeZone: "Europe/Madrid",
 };
 
@@ -43,7 +42,6 @@ async function fixture(kind: "pack" | "master-key" = "master-key") {
   const makeRecoveryPack = vi.fn().mockResolvedValue({
     pdf: new Blob(["%PDF-1.7 pack"], { type: "application/pdf" }),
     number: 4,
-    key: "replaced",
     madeAt: "2026-11-23T09:00:00.000Z",
     masterKey: { key: "88DP 74BA YPVB RRM5 XFV2 WPQY B5M5", name: "2026-11-23 · QZJV" },
   });
