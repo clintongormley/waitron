@@ -22,6 +22,7 @@ import { unservedDishes } from "./meal-end.js";
 import { carryLineReductions } from "./order-portions.js";
 import { bumpPartyRevision } from "./parties.js";
 import { carryBillSetMenuCopies } from "./set-menu-bill.js";
+import { carryOrderedPeriods } from "./ordered-periods.js";
 import { carryReceivedPayments, refuseSplitMoney } from "./split-after-print-money.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
@@ -225,6 +226,7 @@ export async function copyBillDishes(
   const pairs = rows.map((row) => ({ from: row.id, to: copyOf.get(row.id)! }));
   await carryLineReductions(tx, pairs);
   await carryBillSetMenuCopies(tx, fromBillId, toBillId);
+  await carryOrderedPeriods(tx, fromBillId, toBillId);
   const [from] = await tx
     .select({ setMenusExact: workingOrders.setMenusExact })
     .from(workingOrders)

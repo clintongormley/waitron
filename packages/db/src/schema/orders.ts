@@ -1,6 +1,6 @@
 import type { AllergenMap, OptionSnapshot, SaleLineClassification } from "@waitron/shared";
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, index, primaryKey, unique, uniqueIndex } from "drizzle-orm/sqlite-core";
 import {
   count,
   enumCheck,
@@ -204,6 +204,22 @@ export const workingOrders = table(
       "working_orders_settled_at_ck",
       sql`(${t.status} = 'settled') = (${t.settledAt} is not null)`,
     ),
+  ],
+);
+
+export const billOrderedPeriods = table(
+  "bill_ordered_periods",
+  {
+    billId: id("bill_id").notNull(),
+    occurrenceKey: label("occurrence_key").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.billId, t.occurrenceKey], name: "bill_ordered_periods_pk" }),
+    foreignKey({
+      columns: [t.billId],
+      foreignColumns: [workingOrders.id],
+      name: "bill_ordered_periods_bill_fk",
+    }).onDelete("cascade"),
   ],
 );
 

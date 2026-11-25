@@ -14,12 +14,20 @@ import * as orderGroupTransfer from "./order-group-transfer.js";
 import { fireGroup } from "./order-group-release.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { AppError } from "@waitron/shared";
-import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "@waitron/venue-service";
+import {
+  readBusinessDayScheduleRevision,
+  readPartyAllergy,
+  replaceMenuWeek,
+  saveMenuPeriod,
+  savePartyAllergy,
+  setAllergyLineTicks,
+} from "@waitron/venue-service";
 import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  billOrderedPeriods,
   kitchenCourses,
   orderEvents,
   orderDraftLines,
@@ -70,13 +78,19 @@ import { listTablesWithState } from "./working-order-table-state.js";
 
 import { submitGroups } from "./testing/group-submit-fixture.js";
 import type { GroupRelease } from "./order-group-records.js";
-import { readDrafts, submitDraft } from "./order-drafts.js";
+import { readDrafts, splitDraft, submitDraft } from "./order-drafts.js";
 import type { Draft, FreshDraftLine } from "./order-drafts.js";
 import "./errors.js";
 import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { joinTables, splitTable } from "./testing/table-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { writeGroupedLines } from "./testing/grouped-counter-order.js";
+import { cancelItemForTest } from "./testing/cancel-line.js";
+import { saveHeldOrderIn, updateOrderLine } from "./working-order-held-write.js";
+import { copyBillDishes } from "./split-after-print.js";
+import { readOrderRevision } from "./working-order-context.js";
+import { testTradingAdmission } from "./testing/trading-admission.js";
+import { insertPartyBill } from "./parties.js";
 
 const LOCALE = "es-ES";
 const ALEX = "cccccccc-0000-4000-8000-00000000000a";
@@ -2650,6 +2664,202 @@ async function submit(
 }
 
 const lineIds = (draft: Draft) => draft.lines.map((line) => line.id);
+
+describe("when a bill ordered during a period", () => {
+  const at = (time: string) => vi.setSystemTime(new Date(`2026-10-05T${time}:00+02:00`));
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function timetable() {
+    at("10:00");
+    const v = await setupVenue();
+    const { departmentId } = await inTx((tx) => VENUE_SERVICE.resolveZoneContext(tx, v.zoneId));
+    const [lunch, dinner] = await inTx(async (tx) => {
+      const period = (name: string) =>
+        saveMenuPeriod(tx, departmentId, { name, menuId: v.menuId, staffMenuIds: [] });
+      const lunch = await period("Lunch");
+      const dinner = await period("Dinner");
+      await replaceMenuWeek(
+        tx,
+        departmentId,
+        Array.from({ length: 7 }, (_, weekday) => ({
+          weekday,
+          slots: [
+            { periodId: lunch.id, startsAt: "12:00", endsAt: "15:00" },
+            { periodId: dinner.id, startsAt: "15:00", endsAt: "23:00" },
+          ],
+        })),
+        new Date(),
+        await readBusinessDayScheduleRevision(tx),
+      );
+      return [lunch.id, dinner.id];
+    });
+    return {
+      v,
+      lunch: JSON.stringify([departmentId, "2026-10-05", lunch, "12:00"]),
+      dinner: JSON.stringify([departmentId, "2026-10-05", dinner, "15:00"]),
+    };
+  }
+
+  async function orderedDuring(billId: string) {
+    const rows = await db
+      .select({ key: billOrderedPeriods.occurrenceKey })
+      .from(billOrderedPeriods)
+      .where(eq(billOrderedPeriods.billId, billId))
+      .orderBy(billOrderedPeriods.occurrenceKey);
+    return rows.map(({ key }) => key);
+  }
+
+  it("keeps the first add when identical draft lines merge before a held dish is placed", async () => {
+    const { v, lunch } = await timetable();
+    at("14:58");
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
+    at("15:05");
+    const later = await saveOnSeparateBill(v, partyId, ALEX, null, 0, [item(v, "beer")]);
+    const revision = await partyRevision(partyId);
+    await inTx((tx) =>
+      mergeBills(tx, v.cfg, later.billId, draft.billId, {
+        operatorId: ALEX,
+        expectedPartyRevision: revision,
+      }),
+    );
+    const [combined] = await draftsOf(partyId);
+    const edited = await save(v, partyId, ALEX, combined!.id, combined!.revision, combined!.lines);
+    const { destination, billId } = await inTx(async (tx) =>
+      splitDraft(tx, v.cfg, partyId, edited.id, {
+        expectedEdit: await expectedDraftEditForTest(tx, edited),
+        expectedPartyRevision: await partyRevision(partyId),
+        operatorId: ALEX,
+        submissionId: randomUUID(),
+        lineIds: lineIds(edited),
+      }),
+    );
+    const split = destination.draft!;
+    await submit(v, partyId, split, ALEX, [{ lineIds: lineIds(split), release: "hold" }]);
+    expect(await orderedDuring(billId)).toEqual([lunch]);
+  });
+
+  it("uses the direct order's time even though the party was seated during Lunch", async () => {
+    const { v, dinner } = await timetable();
+    at("14:55");
+    const { partyId, tabId } = await seated(v);
+    expect(await orderedDuring(tabId)).toEqual([]);
+    at("15:02");
+    await inTx((tx) =>
+      submitGroups(tx, v.cfg, partyId, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: 0,
+        operatorId: ALEX,
+        groups: [{ release: "fire", lines: [{ menuItemId: v.offer("beer"), quantity: "1" }] }],
+      }),
+    );
+    expect(await orderedDuring(tabId)).toEqual([dinner]);
+  });
+
+  it("uses Place time when the draft was saved before any period was running", async () => {
+    const { v, lunch } = await timetable();
+    at("11:58");
+    const { partyId, tabId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
+    at("12:10");
+    await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]);
+    expect(await orderedDuring(tabId)).toEqual([lunch]);
+  });
+
+  it("carries Lunch through reopen, split and merge even after the dish is cancelled", async () => {
+    const { v, lunch } = await timetable();
+    at("14:59");
+    const { partyId, tabId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
+    await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]);
+    const [beer] = await tabLines(partyId);
+    at("15:05");
+    const { tabId: reopened } = await seated(v, "Another table");
+    await inTx((tx) => copyBillDishes(tx, tabId, reopened));
+    expect(await orderedDuring(reopened)).toEqual([lunch]);
+    const command = { expectedPartyRevision: await partyRevision(partyId), operatorId: ALEX };
+    const { billId } = await inTx((tx) =>
+      splitBill(tx, v.cfg, tabId, [{ lineNo: beer!.lineNo }], command),
+    );
+    const [moved] = (await tabLines(partyId)).filter((line) => line.workingOrderId === billId);
+    await inTx((tx) => cancelItemForTest(tx, v.cfg, billId, moved!.lineNo, "1", ALEX));
+    expect(await tabLines(partyId)).toEqual([]);
+    expect(await orderedDuring(billId)).toEqual([lunch]);
+
+    const receiving = await inTx((tx) => insertPartyBill(tx, v.cfg, partyId));
+    const revision = await partyRevision(partyId);
+    await inTx((tx) =>
+      mergeBills(tx, v.cfg, receiving, billId, {
+        operatorId: ALEX,
+        expectedPartyRevision: revision,
+      }),
+    );
+    expect(await orderedDuring(receiving)).toEqual([lunch]);
+  });
+
+  it("records a direct counter order and a new dish added to it in the next period", async () => {
+    const { v, lunch, dinner } = await timetable();
+    const id = randomUUID();
+    const beer = { menuItemId: v.offer("beer"), quantity: "1" };
+    at("14:50");
+    await inTx((tx) =>
+      workingOrderOpen.createOpenOrder(tx, v.cfg, id, [beer], null, { zoneId: v.zoneId }),
+    );
+    expect(await orderedDuring(id)).toEqual([lunch]);
+    at("15:05");
+    await inTx(async (tx) => {
+      const [line] = await tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, id));
+      await saveHeldOrderIn(tx, v.cfg, id, {
+        revision: 0,
+        expectedEdit: null,
+        lines: [
+          { ...beer, workingOrderLineId: line!.id },
+          { menuItemId: v.offer("fish"), quantity: "1" },
+        ],
+      });
+    });
+    expect(await orderedDuring(id)).toEqual([lunch, dinner].sort());
+  });
+
+  it("counts more portions of an existing dish at the time they are ordered", async () => {
+    const { v, lunch, dinner } = await timetable();
+    at("14:58");
+    const { partyId, tabId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [item(v, "beer")]);
+    await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]);
+    const [beer] = await tabLines(partyId);
+    at("15:05");
+    const edit = (patch: Pick<Parameters<typeof updateOrderLine>[4], "quantity" | "note">) =>
+      inTx(async (tx) => {
+        const revision = await readOrderRevision(tx, tabId);
+        await updateOrderLine(
+          tx,
+          v.cfg,
+          tabId,
+          beer!.lineNo,
+          { ...patch, portionLineNos: [] },
+          revision,
+          {
+            expectedEdit: await readBillEditState(tx, tabId),
+            operatorId: ALEX,
+            admission: testTradingAdmission(),
+          },
+        );
+      });
+    await edit({ note: "In a small glass" });
+    expect(await orderedDuring(tabId)).toEqual([lunch]);
+    await edit({ quantity: "3" });
+    expect(await orderedDuring(tabId)).toEqual([lunch, dinner].sort());
+  });
+});
 
 /** A Burger as the till sends it: its doneness list must be answered for pricing to accept it. */
 const burger = (v: Venue) => item(v, "burger", { options: [v.rare] });

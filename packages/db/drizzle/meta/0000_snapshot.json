@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "307ee189-285f-4f71-803e-8a11a2eb4d1a",
+  "id": "23733653-a5e0-4610-8ef5-21a90f6163d5",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -438,6 +438,52 @@
           "value": "\"invoice_series\".\"code\" <> ''"
         }
       }
+    },
+    "bill_ordered_periods": {
+      "name": "bill_ordered_periods",
+      "columns": {
+        "bill_id": {
+          "name": "bill_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurrence_key": {
+          "name": "occurrence_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "bill_ordered_periods_bill_fk": {
+          "name": "bill_ordered_periods_bill_fk",
+          "tableFrom": "bill_ordered_periods",
+          "tableTo": "working_orders",
+          "columnsFrom": [
+            "bill_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "bill_ordered_periods_pk": {
+          "columns": [
+            "bill_id",
+            "occurrence_key"
+          ],
+          "name": "bill_ordered_periods_pk"
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraints": {}
     },
     "working_order_lines": {
       "name": "working_order_lines",
@@ -3976,6 +4022,13 @@
         },
         "draft_id": {
           "name": "draft_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "added_at": {
+          "name": "added_at",
           "type": "text",
           "primaryKey": false,
           "notNull": true,

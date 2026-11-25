@@ -67,6 +67,7 @@ export const orderDraftLines = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     draftId: id("draft_id").notNull(),
+    addedAt: tsString("added_at").notNull().$defaultFn(nowIso),
     position: count("position").notNull(),
     menuItemId: id("menu_item_id").notNull(),
     variantId: id("variant_id"),

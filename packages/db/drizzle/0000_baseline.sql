@@ -68,6 +68,13 @@ CREATE TABLE `invoice_series` (
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `invoice_series_node_code_key` ON `invoice_series` (`node_id`,`code`);--> statement-breakpoint
+CREATE TABLE `bill_ordered_periods` (
+	`bill_id` text NOT NULL,
+	`occurrence_key` text NOT NULL,
+	PRIMARY KEY(`bill_id`, `occurrence_key`),
+	FOREIGN KEY (`bill_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
 CREATE TABLE `working_order_lines` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text NOT NULL,
@@ -600,6 +607,7 @@ CREATE TABLE `order_group_hold_stations` (
 CREATE TABLE `order_draft_lines` (
 	`id` text PRIMARY KEY NOT NULL,
 	`draft_id` text NOT NULL,
+	`added_at` text NOT NULL,
 	`position` integer NOT NULL,
 	`menu_item_id` text NOT NULL,
 	`variant_id` text,

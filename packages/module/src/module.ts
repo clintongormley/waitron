@@ -908,6 +908,7 @@ export interface VenueServiceContribution {
     at: Date,
   ): Promise<{
     departmentId: string;
+    periodOccurrenceKey: string | null;
     orderableMenuIds: readonly string[];
     endedMenus: readonly {
       menuId: string;

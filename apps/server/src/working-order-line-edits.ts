@@ -45,6 +45,7 @@ import {
   editLineExtras,
 } from "./modifier-selection.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { recordOrderedPeriods } from "./ordered-periods.js";
 import {
   correctHoldTickets,
   holdPaperFor,
@@ -990,6 +991,12 @@ export async function applyLineEdits(
     await carryLineReductions(tx, copiedContexts);
     await copyAllergyWorkingTicks(tx, copiedDishes);
   }
+  const ordersDishes =
+    plan.fresh.length > 0 ||
+    plan.edits.some(
+      ({ parent, intent }) => compareDecimal(decimal(intent.quantity), parent.quantity) > 0,
+    );
+  if (ordersDishes) await recordOrderedPeriods(tx, orderId, routing);
   await linkSetMenusFor(tx, orderId, priced.setMenuLinks);
   const addedToExisting = changes.filter(
     (change) =>

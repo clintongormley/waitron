@@ -81,13 +81,27 @@ export type FireableLine = {
 export type RoutingOnce = (() => Promise<MakerResolver>) & {
   readonly at: Date;
   readonly opened: () => Promise<MakerResolver> | undefined;
+  readonly departmentService: (
+    departmentId: string,
+    when?: Date,
+  ) => ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>;
 };
 
 export function routingOnce(tx: Transaction, at: Date): RoutingOnce {
   let opened: Promise<MakerResolver> | undefined;
+  const services = new Map<string, ReturnType<typeof VENUE_SERVICE.resolveDepartmentService>>();
   return Object.assign(() => (opened ??= VENUE_SERVICE.routingAt(tx, at)), {
     at,
     opened: () => opened,
+    departmentService(departmentId: string, when = at) {
+      const key = `${departmentId}/${Math.floor(when.getTime() / 60_000)}`;
+      let service = services.get(key);
+      if (service === undefined) {
+        service = VENUE_SERVICE.resolveDepartmentService(tx, departmentId, when);
+        services.set(key, service);
+      }
+      return service;
+    },
   });
 }
 
