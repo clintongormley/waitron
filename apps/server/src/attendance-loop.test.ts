@@ -478,8 +478,9 @@ describe("attendance job lifecycle", () => {
     await done;
     expect((await snapshot()).entries).toEqual([]);
   });
-  it("awaits its active queued pass before resolving an abort", async () => {
+  it("awaits its queued pass on abort and leaves due attendance untouched", async () => {
     await seed();
+    const before = await snapshot();
     const entered = gate(),
       held = gate(),
       queued = gate();
@@ -523,7 +524,7 @@ describe("attendance job lifecycle", () => {
     await done;
     expect(finished).toBe(true);
     expect(sleeps).toBe(0);
-    expect((await snapshot()).entries.map((e) => e.entryKind)).toEqual(["in", "out"]);
+    expect(await snapshot()).toEqual(before);
   });
 });
 

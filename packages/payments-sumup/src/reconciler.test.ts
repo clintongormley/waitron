@@ -892,6 +892,54 @@ it.each([
   expect(suite.db.all(sql`select state from payments`)).toEqual([{ state: "captured" }]);
 });
 
+it.each(["before", "after"] as const)(
+  "handles stepdown %s claiming an abandoned payment for refund",
+  async (phase) => {
+    const seeded = await failedPayment("stepdown");
+    await suite.db.execute(
+      sql`update working_orders set status = 'abandoned' where id = ${seeded.workingOrderId}`,
+    );
+    const controller = new AbortController();
+    const mark = () =>
+      suite.db.all<{ at: string | null }>(
+        sql`select reconcile_remediated_at as at from payments`,
+      )[0]!.at;
+    const client = new FakeSumUp();
+    vi.spyOn(client, "findTransaction").mockImplementation(async () => {
+      if ((mark() === null) === (phase === "before")) controller.abort();
+      return {
+        id: "stepdown-charge",
+        foreignTransactionId: "stepdown",
+        status: "SUCCESSFUL",
+        amount: decimal("10.00"),
+        currency: "EUR",
+        timestamp: "2026-07-01T12:00:00Z",
+        refundEvents: [],
+      };
+    });
+    const audit = new SumUpReconciler({
+      db: suite.db,
+      resolveClient: async () => client,
+      incidents: captureAlerts.raise,
+      heldAlerts,
+    });
+    const stopped = await audit.reconcile(period, now, controller.signal);
+    expect(controller.signal.aborted).toBe(true);
+    const refund = { transactionId: "stepdown-charge", amount: "10.00" };
+    if (phase === "before") {
+      expect(stopped.resweepAfter).toEqual(new Date("2026-07-26T00:00:00Z"));
+      expect(mark()).toBeNull();
+      expect(client.sendRefundCalls).toEqual([]);
+    } else {
+      expect(mark()).toBe(now.toISOString());
+      expect(client.sendRefundCalls).toEqual([refund]);
+    }
+
+    await audit.reconcile(period, new Date("2026-07-26T00:00:00Z"));
+    expect(client.sendRefundCalls).toEqual([refund]);
+  },
+);
+
 it("two sweeps claim a captured orphan once", async () => {
   const seeded = await seedWorkingOrder(suite.db, freshNif());
   await withTransaction(suite.db, (tx) =>

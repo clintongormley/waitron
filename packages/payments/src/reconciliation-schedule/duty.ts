@@ -42,5 +42,5 @@ export interface PeriodDuty {
    * later than `retryParkedAfterMs`, reads as written before the clock stepped back and runs at
    * once (`longestWait` in `run.ts`), so `runOne` enqueues a later one at that limit. */
   readonly longestResweepMs?: number;
-  run(period: RunPeriod, now: Date): Promise<DutyOutcome>;
+  run(period: RunPeriod, now: Date, signal?: AbortSignal): Promise<DutyOutcome>;
 }

@@ -157,7 +157,11 @@ export interface PaymentReconcileResult {
 /** One implementer per settlement identity (per `provider` id), never one per capture mechanism. */
 export interface PaymentReconciler {
   readonly provider: string;
-  reconcile(period: ReconcilePeriod, now: Date): Promise<PaymentReconcileResult>;
+  reconcile(
+    period: ReconcilePeriod,
+    now: Date,
+    signal?: AbortSignal,
+  ): Promise<PaymentReconcileResult>;
 }
 
 /** The four classes a LOCAL row can fall into. `missingLocal` is not here: it has no local row. */

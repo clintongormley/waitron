@@ -42,7 +42,7 @@ export class SumUpReconciler implements PaymentReconciler {
       reconcileMoney?: ReconcileMoneyGates;
     },
   ) {}
-  async reconcile(period: ReconcilePeriod, now: Date) {
+  async reconcile(period: ReconcilePeriod, now: Date, signal?: AbortSignal) {
     const client = await this.deps.resolveClient();
     const evidence = async (paymentRef: string, ref: string, amount: string) => {
       try {
@@ -280,7 +280,8 @@ export class SumUpReconciler implements PaymentReconciler {
         report,
         prepareOrphans: async (tx) => {
           if (prepared.size === 0) return [];
-          if (!(await admit(tx))) {
+          // A marked refund cannot be resent, so stepdown can only stop work before claiming it.
+          if (!(await admit(tx)) || signal?.aborted) {
             retryOrphans = true;
             return [];
           }

@@ -21,10 +21,12 @@ export function menuActivationJob(deps: {
     minSleepMs: 0,
     maxSleepMs: deps.maxWaitMs,
     backoff: { firstMs: 5_000, maxMs: 300_000 },
-    async pass({ now }) {
+    async pass({ now, signal }) {
       try {
         const { activated, nextDueAt } = await withTransaction(deps.db, (tx) =>
-          activateDueMenuPublications(tx, now),
+          signal.aborted
+            ? { activated: [], nextDueAt: null }
+            : activateDueMenuPublications(tx, now),
         );
         for (const edition of activated) deps.log("info", "menu_publication.activated", edition);
         deps.log("debug", "menu_publication.activation_armed", {

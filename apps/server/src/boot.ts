@@ -4725,7 +4725,7 @@ async function bootServer(
         onHeldRefreshFailure: (error) =>
           log("warn", "payment.held_alert_refresh_failed", { errorCode: codeOf(error) }),
         credentialProvisioned: (purpose) => credentialProvisioned(db, purpose),
-        runDue: (at, duties) =>
+        runDue: (at, duties, signal) =>
           runDue(
             {
               db,
@@ -4738,6 +4738,7 @@ async function bootServer(
               skipRetryMs: timings.skipRetryMs,
             },
             at,
+            signal,
           ),
       }),
     }),
