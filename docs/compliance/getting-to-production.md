@@ -458,6 +458,11 @@ it, which makes this an uncomfortable arrangement. Under a hosted Model A the cl
 a **sello de entidad** — owned by the company, designed for machine custody. The seal stops being
 an optional nicety and becomes the correct instrument.
 
+> **Pointer, 2026-11-25 (owner).** Venues may run in Waitron Cloud again, each filing for itself under
+> its own certificate. There a seal is **preferred, not required**. The reading that a named person must
+> keep sole control of a representante certificate's key carries no quoted source here; Q11(a) and
+> (d) in [asesor-questions.md](asesor-questions.md) ask it, and have not been sent.
+
 > **Premise superseded, 2026-07-31.** "When we host" no longer describes any supported deployment.
 > [`2026-07-31-cloud-storage-model-design.md`](https://github.com/clintongormley/waitron/blob/6ff3d446d64a366f3cd5c780e4f40a29d04e5e63/docs/superpowers/specs/2026-07-31-cloud-storage-model-design.md) makes the cloud a sync root that
 > never holds the key ring: the certificate stays on the client's own local server, sealed under a key

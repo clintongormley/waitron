@@ -315,6 +315,16 @@ own server and the client submits — so this does not bite now. It is the recei
 *Waitron-operated* submitter remitting on a venue's behalf would require (Convenio 17 + the authorization
 documents).
 
+> **Addendum, 2026-11-25.** AEAT's
+> [FAQ page on colaboración social](https://sede.agenciatributaria.gob.es/Sede/iva/sistemas-informaticos-facturacion-verifactu/preguntas-frecuentes/colaboracion-social.html)
+> (page dated 21 October 2026) asks for each client's own signature on the Resolución of 18 December 2024's
+> forms, by hand with a copy of the ID, or electronically: *"una firma electrónica reconocida [...] o una firma
+> electrónica avanzada que cumpla con los requisitos previstos en el artículo 26 del Reglamento eIDAS"*. It adds:
+> *"no se admitirán modalidades de aceptación de condiciones del servicio u otras alternativas que no permitan
+> acreditar el otorgamiento"*. So a ticked box when the relationship starts is not enough by itself. What a
+> software company sends to sign the Tipo 017 agreement is question 2 of §16 of the developer FAQ (4 December
+> 2025, p.31).
+
 ## 19. F3 canje vs rectificativa — and the **modelo 303** rule (R1–R5 count, F3 does **not**)
 
 The §27 worked examples settle how corrections and *canje* are treated for the VAT return. The load-bearing rule:

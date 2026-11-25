@@ -76,8 +76,7 @@ Written **2026-07-26**. Plain action list; the reasoning and sources are in
 > Two residuals to keep in view. This proves a *read* (`consultar`), not that a *submission*
 > (`RegistroAlta`) is accepted — XSD validation, chaining and registration coherence are still
 > unexercised. And the working key is a **representante** certificate tied to a named natural
-> person; the **sello de entidad** in Step 2 remains the right instrument for unattended
-> production. The renewal deadline **2027-10-03** is now the live operational fact — diarise it with
+> person, which is enough for a box on the venue's own premises (Step 2). The renewal deadline **2027-10-03** is now the live operational fact — diarise it with
 > the same discipline as Step 4.
 
 To re-check any certificate you are handed (a renewal, or the sello from Step 2):
@@ -101,15 +100,19 @@ and could not be renewed — an expired FNMT certificate always needs a fresh ap
 certificate (valid from 2025-10-03, per the status box above) is now in hand, so testing against
 AEAT is no longer blocked.
 
-## Step 2 — Order the deli's sello de entidad
+## Step 2 — ~~Order the deli's sello de entidad~~ Not needed (owner, 2026-11-25)
+
+> **The deli does not need a seal.** It files under its own representante certificate, on its own box;
+> each owner has their own certificate. For a venue in Waitron Cloud, which also files for itself under
+> its own certificate, a seal is **preferred but not required**: its key sits on machines Waitron runs,
+> and a seal holds the company's key rather than a named person's. Whether a provider may hold either
+> key is Q11(a) and (d) in [asesor-questions.md](asesor-questions.md), written but not sent. The rest of this step is kept for a company
+> that wants one.
 
 **Cost: 260 € + IVA for 1 year, 330 € + IVA for 2 years** (314,60 € / 399,30 €).
 
-Why bother, when the certificate from step 1 already works? Because Waitron will host the
-deli's system. A representante certificate belongs to a named person who must keep sole
-control of the key; a sello belongs to the company and is *designed* for a machine to hold.
-Once Waitron is a separate business, running the deli's filings off a director's personal key
-is the wrong shape.
+A representante certificate belongs to a named person, whom these notes take to be obliged to keep
+sole control of its key; a sello belongs to the company and is *designed* for a machine to hold.
 
 1. Get a **certificación registral** from the Registro Mercantil (constitución y personalidad
    jurídica), CSV-verifiable, **issued within the last 15 business days**. Notas simples are no
@@ -253,8 +256,8 @@ deadline passed on 29 July 2025.
 
 | Item | Cost |
 | --- | --- |
-| Sello de entidad, 1 year | 260 € + IVA (**314,60 €**) |
-| Sello de entidad, 2 years | 330 € + IVA (**399,30 €**) |
+| Sello de entidad, 1 year (optional) | 260 € + IVA (**314,60 €**) |
+| Sello de entidad, 2 years (optional) | 330 € + IVA (**399,30 €**) |
 | Representante de persona jurídica (if you want one) | 14 € + IVA (16,94 €) |
 | Certificación registral | Registry fee, per request |
 | Notary, if a board resolution is needed | Per notary |
@@ -266,7 +269,7 @@ deadline passed on 29 July 2025.
 ## Order of play
 
 ```text
-Step 1 ✓ (cert in hand)  ──▶  Step 2 (sello)  ──▶  AEAT preproduction (read proven)
+Step 1 ✓ (cert in hand)  ──▶  AEAT preproduction and production (read proven)
 Step 3 (junta)           ──▶  Waitron works for the deli
 Step 4, 5 (certs)        ──▶  independent, deadline July 2027
 Step 6 (incorporate)     ──▶  before client #2
@@ -274,6 +277,6 @@ Step 7 (mdiago FAQ)      ──▶  whenever; we owe it
 Step 8 (DR)              ──▶  before anyone else uses it
 ```
 
-Step 1 is done — a working certificate is in hand (see Step 1), which unblocks Step 2 and AEAT
-preproduction access. The residual critical-path item is Step 2, the **sello de entidad**, for the
-unattended production shape; everything else is administrative and can proceed in parallel.
+Step 1 is done — a working certificate is in hand (see Step 1), and AEAT's production service
+accepted it in a read-only query on 2026-11-25 ([first-aeat-contact.md](first-aeat-contact.md)).
+Step 2 is not needed; everything else is administrative and can proceed in parallel.
