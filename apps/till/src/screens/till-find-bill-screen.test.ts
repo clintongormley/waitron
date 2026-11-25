@@ -789,10 +789,10 @@ it("filters actual completed refund rows without changing their identity, sign o
 });
 
 it.each([
-  ["en-GB", "Money back receipt", "Replacement receipt"],
+  ["en-GB", "Corrective receipt", "Replacement receipt"],
   ["es-ES", t("find_page.correction", "es-ES"), t("find_page.replacement", "es-ES")],
 ] as const)(
-  "in %s, names a money back receipt %s and a replacement %s",
+  "in %s, names a corrective receipt %s and a replacement %s",
   async (language, correction, replacement) => {
     const { el } = await mount(
       findBillApi(async (url) =>

@@ -428,7 +428,7 @@ rellenada.
 Cuando una devolución a tarjeta espera a la compañía de la tarjeta, elige **Comprobar de nuevo**
 para ver su respuesta, y **Devolver el resto** cuando la ventana lo ofrezca. Si la ventana dice que
 el servidor no respondió, elige **Enviar de nuevo**: el mismo dinero nunca se devuelve dos veces. Un
-ticket de devolución que no se imprime solo se puede imprimir desde **Buscar cuenta**, en la
+ticket rectificativo que no se imprime solo se puede imprimir desde **Buscar cuenta**, en la
 pestaña **Transacciones**.
 
 Si cierras la ventana antes de que vuelva todo el dinero, busca el recibo en **Buscar cuenta**, en

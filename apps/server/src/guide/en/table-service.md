@@ -405,7 +405,7 @@ to use it: one opened later from the receipt is not filled in.
 
 When a card refund waits for the card company, choose **Check again** to see its answer, and
 **Give back the rest** when the window offers it. If the window says the box did not answer, choose
-**Send again**: the same money never goes back twice. A money back receipt that does not print by
+**Send again**: the same money never goes back twice. A corrective receipt that does not print by
 itself can be printed from **Find a bill**, on the **Transactions** tab.
 
 If you close the window before all the money is back, look for the receipt in **Find a bill** under
