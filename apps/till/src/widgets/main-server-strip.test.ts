@@ -74,6 +74,19 @@ it("shows WiFi guidance, with no switch, when no server answers", async () => {
   expect(button(el)).toBeNull();
 });
 
+it.each([
+  ["another box replies but the spare is silent", false],
+  ["the spare replies before the round finishes", true],
+] as const)("names the silent main box when %s", async (_case, spareAnswering) => {
+  const { el } = await mountWidget<TillMainServerStrip>("till-main-server-strip", {
+    noBoxAnswering: spareAnswering,
+    spareAnswering,
+    showSwitch: true,
+  });
+  expect(el.shadowRoot!.textContent).toContain(t("server.main_silent"));
+  expect(button(el) !== null).toBe(spareAnswering);
+});
+
 it("paints with the danger colour", async () => {
   const { el } = await mountWidget<TillMainServerStrip>("till-main-server-strip", {
     spareAnswering: true,

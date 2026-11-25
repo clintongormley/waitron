@@ -178,7 +178,7 @@ export class TillMainServerStrip extends LitElement {
               ? "cloud_emergency.main_answering"
               : switchable && this.refused
                 ? "server.main_still_answering"
-                : this.noBoxAnswering
+                : this.noBoxAnswering && !switchable
                   ? "server.none_answering"
                   : "server.main_silent",
           )}

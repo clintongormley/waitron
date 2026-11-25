@@ -25,6 +25,25 @@ afterEach(() => {
 });
 
 describe("till clocking integration", () => {
+  it("keeps the clock-in page open under the WiFi notice", async () => {
+    const router = new ServerRouter({
+      origin: "https://box.example.test",
+      fetchImpl: async () => {
+        throw new TypeError("Failed to fetch");
+      },
+    });
+    const { el } = await clockApp({ props: { router } });
+    await signIn(el);
+    await vi.waitFor(() => expect(clockPage(el)).not.toBeNull());
+    const opened = clockPage(el);
+    await router.probeNow();
+    await el.updateComplete;
+    expect(clockPage(el)).toBe(opened);
+    expect(el.shadowRoot!.querySelector(".banner[role='status']")?.textContent).toContain(
+      t("server.none_answering"),
+    );
+  });
+
   it("shows every notice on the clock-in page, words only, with no Open drawer", async () => {
     const openDrawer = vi.fn().mockResolvedValue(undefined);
     const f = await clockApp({

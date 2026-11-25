@@ -107,6 +107,9 @@ describe("till attendance sign-in flow", () => {
 
     online = true;
     await router.probeNow();
+    await open.updateComplete;
+    expect(open.shadowRoot!.textContent).toContain("Your hours could not be read. Retry read.");
+    expect(retry()).not.toBeNull();
     f.api.getAttendanceInbox.mockResolvedValue(inbox());
     await questionButton(f.el, "[data-retry]");
     await vi.waitFor(() => expect(open.inbox?.prompts).toHaveLength(1));

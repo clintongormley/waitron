@@ -6935,8 +6935,8 @@ primitive.
 - **Before a recovery panel applies.** A compact line tells staff to check the venue's WiFi when
   no known box answers. On the roster and PIN steps the line appears above the sign-in content,
   with **Check again** inside it. Enrolment, device choice, clock-in and attendance use only the compact
-  line. If Retry in Check your times was refused during that silence, the message appears beside
-  Retry instead.
+  line. If a read in Check your times is refused during that silence, the message appears beside
+  **Retry read** instead.
 
 Cases: `apps/till/src/widgets/main-server-strip.test.ts`, its `main-server-strip.a11y.test.ts`,
 "main-server strip" in `apps/till/src/till-app.test.ts`, `apps/till/src/screens/till-lock-screen.test.ts`

@@ -18092,6 +18092,35 @@ describe("till-app follows a server move", () => {
     expect(el.shadowRoot!.querySelector(".banner[role='status']")?.textContent).toContain(words);
   });
 
+  it.each(["enrol", "chooser"])(
+    "keeps the %s screen open under the WiFi notice",
+    async (screen) => {
+      const router = new ServerRouter({
+        origin: BOX,
+        fetchImpl: probeFetch(),
+        storage: memoryStorage(),
+      });
+      const api = stubApi({
+        getDeviceIdentity: vi.fn().mockRejectedValue({ code: "device.unauthorized" }),
+        getDevDevices:
+          screen === "chooser"
+            ? vi.fn().mockResolvedValue({ devices: [] })
+            : vi.fn().mockRejectedValue({ status: 404 }),
+      });
+      const { el } = await mountWidget<TillApp>("till-app", { api, router });
+      await flush(el);
+      const surface = () => (screen === "chooser" ? chooser(el) : enrolScreen(el));
+      const opened = surface();
+      expect(opened).not.toBeNull();
+      await router.probeNow();
+      await flush(el);
+      expect(surface()).toBe(opened);
+      expect(el.shadowRoot!.querySelector(".banner[role='status']")?.textContent).toContain(
+        t("server.none_answering"),
+      );
+    },
+  );
+
   /** A fetch where each listed server answers its `/api/node` with the given body; the rest fail. */
   function answeringFetch(answers: Record<string, object>): typeof fetch {
     return vi.fn(async (input: RequestInfo | URL) => {
@@ -18582,16 +18611,21 @@ describe("the main-server strip", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
-  it("a till that reaches no server shows no switch", async () => {
-    answering.spare = false;
-    const { el, router } = await mount();
-    await silentFor(el, router, 20_000);
-    expect(lockStrip(el)).not.toBeNull();
-    expect(lockStrip(el)!.spareAnswering).toBe(false);
-    await lockStrip(el)!.updateComplete;
-    expect(lockStrip(el)!.shadowRoot!.textContent).toContain(t("server.none_answering"));
-    expect(lockStrip(el)!.shadowRoot!.querySelector("[data-switch-to-spare]")).toBeNull();
-  });
+  it.each(["lock", "shell"])(
+    "a till that reaches no server shows no switch on the %s",
+    async (screen) => {
+      answering.spare = false;
+      const { el, router } = await mount();
+      if (screen === "shell") await signIn(el, ["node.manage"]);
+      await silentFor(el, router, 20_000);
+      const strip = screen === "lock" ? lockStrip(el) : shellStrip(el);
+      expect(strip).not.toBeNull();
+      expect(strip!.spareAnswering).toBe(false);
+      await strip!.updateComplete;
+      expect(strip!.shadowRoot!.textContent).toContain(t("server.none_answering"));
+      expect(strip!.shadowRoot!.querySelector("[data-switch-to-spare]")).toBeNull();
+    },
+  );
 
   it("a venue with no spare shows the WiFi line and no strip", async () => {
     const { el, router } = await mount([bothServers[0]!]);

@@ -47,6 +47,7 @@ import "./widgets/device-zones-dialog.js";
 import "./widgets/notice-strip.js";
 import "./widgets/main-server-strip.js";
 import {
+  attendanceConnectionRefusal,
   serverConnectionNotice,
   serverConnectionNoticeStyles,
 } from "./widgets/server-connection-notice.js";
@@ -5845,7 +5846,7 @@ export class TillApp extends LitElement {
       this.#editAttendancePrompt(prompt.id, true);
   }
 
-  #attendanceMessage(noBoxAnswering = false): string {
+  #attendanceMessage(inQuestions = false): string {
     const snapshot = this.attendanceSnapshot;
     if (snapshot?.uncertainCommandId) return t("attendance.uncertain");
     if (snapshot?.retryCommand) return t("attendance.retry_response_message");
@@ -5854,8 +5855,8 @@ export class TillApp extends LitElement {
       snapshot?.readError ??
       snapshot?.dayError ??
       snapshot?.approversError;
-    if (noBoxAnswering && (error ?? this.clockSnapshot.refusal)?.code === NO_BOX_ANSWERING)
-      return t("server.none_answering");
+    if (inQuestions && (error ?? this.clockSnapshot.refusal)?.code === NO_BOX_ANSWERING)
+      return attendanceConnectionRefusal(this.router, snapshot?.actionError != null);
     return error ? codeMessage(error.code) : this.#clockMessage();
   }
   async #retryAttendance(): Promise<void> {
@@ -24814,9 +24815,8 @@ export class TillApp extends LitElement {
   override render() {
     const shellFormFactor = this.#inShell() ? this.formFactor : undefined;
     const noBoxAnswering = this.router?.noBoxAnswering ?? false;
-    const attendanceMessage = this.attendancePage ? this.#attendanceMessage(noBoxAnswering) : "";
-    const lateSendWindow = this.lateSendWindow;
-    const lateSendApproval = this.lateSendApproval;
+    const attendanceMessage = this.attendancePage ? this.#attendanceMessage(true) : "";
+    const { lateSendWindow, lateSendApproval } = this;
     const served = this.#currentServedCommand();
     const errorLine = (error: CounterError) => {
       const said = errorText(

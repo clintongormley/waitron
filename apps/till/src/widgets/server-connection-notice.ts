@@ -1,4 +1,6 @@
 import { css, html, nothing, type TemplateResult } from "lit";
+import type { ServerRouter } from "../api/server-router.js";
+import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
 export const serverConnectionNoticeStyles = css`
@@ -30,4 +32,10 @@ export function serverConnectionNotice(noBoxAnswering: boolean, action?: Templat
     <span>${t(noBoxAnswering ? "server.none_answering" : "server.waiting_sales")}</span>
     ${action}
   </div>`;
+}
+
+export function attendanceConnectionRefusal(router: ServerRouter | undefined, write: boolean) {
+  if (router?.noBoxAnswering) return t("server.none_answering");
+  if (router?.waiting !== false) return t("server.waiting_sales");
+  return codeMessage(write ? "attendance.write_failed" : "attendance.read_failed");
 }
