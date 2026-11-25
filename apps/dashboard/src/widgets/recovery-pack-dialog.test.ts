@@ -603,6 +603,26 @@ describe("a lost answer", () => {
     );
   });
 
+  it("names an older unreceived pack that shows the current master key, though a later pack was received", async () => {
+    const { el } = await lose({
+      masterKey: true,
+      after: status({
+        latest: {
+          number: 4,
+          madeAt: MADE_AT,
+          madeByName: null,
+          received: true,
+          parts: [],
+        },
+        unreceived: { number: 3, madeAt: MADE_AT, holdsCurrentMasterKey: true },
+        masterKey: { name: "2026-10-12 · QZJV", pack: 3 },
+      }),
+    });
+    expect(words(el.shadowRoot!.querySelector("[data-test=lost]"))).toContain(
+      fill("recovery_pack_dialog.lost_new_key_named", { number: "3", date: "12 October" }),
+    );
+  });
+
   it("names no pack when the status names none unreceived", async () => {
     const { el } = await lose({ masterKey: true, after: HELD });
     const lost = words(el.shadowRoot!.querySelector("[data-test=lost]"));

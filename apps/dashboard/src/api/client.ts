@@ -2484,6 +2484,8 @@ export interface RecoveryPackStatus {
     number: number;
     madeAt: string;
     offeredAtSetup?: true;
+    /** The pack showed the current master key; named even when a later pack was received. */
+    holdsCurrentMasterKey?: true;
   };
   reasons: RecoveryPackReason[];
   keep: {

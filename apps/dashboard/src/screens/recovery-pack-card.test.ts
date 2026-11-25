@@ -307,6 +307,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
       number: 1,
       madeAt: MADE_AT,
       offeredAtSetup: true as const,
+      holdsCurrentMasterKey: true as const,
     };
     const el = await mount(
       stubApi(
@@ -336,6 +337,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
             number: 1,
             madeAt: MADE_AT,
             offeredAtSetup: true,
+            holdsCurrentMasterKey: true,
           },
           reasons: [{ part: "bucket", kind: "set_up_after" }],
         }),
@@ -368,6 +370,48 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     );
   });
 
+  it("names an unconfirmed pack that shows the current master key in the master key's words, though a later pack was received", async () => {
+    setLocale(locale);
+    const el = await mount(
+      stubApi(
+        status({
+          latest: latest({ number: 4 }),
+          upToDate: true,
+          unreceived: { number: 3, madeAt: FIRST_AT, holdsCurrentMasterKey: true },
+          masterKey: { name: "2026-09-02 · QZJV", pack: 3 },
+        }),
+      ),
+    );
+    expect(line(el)).toBe(
+      locale === "en-GB"
+        ? "The current master key is on recovery pack 3, made on 2 September, but the box was never told that pack 3 arrived. If you do not have pack 3, choose Make a new master key."
+        : "La clave maestra actual está en el paquete de recuperación 3, hecho el 2 de septiembre, pero el servidor nunca recibió la confirmación de que el paquete 3 llegó. Si no tienes el paquete 3, elige Crear una clave maestra nueva.",
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=pack-status] strong")?.textContent).toBe(
+      t("recovery_pack.make_master_key"),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=pack-status]")?.classList).toContain("warn");
+  });
+
+  it("names a received pack that shows the current master key in the Master key row, with no keep line", async () => {
+    setLocale(locale);
+    const el = await mount(
+      stubApi(
+        status({
+          latest: latest({ number: 4 }),
+          upToDate: true,
+          masterKey: { name: "2026-09-02 · QZJV", pack: 3 },
+        }),
+      ),
+    );
+    expect(row(el, "master-key")).toBe(
+      fill("recovery_pack.master_key_in", { name: "2026-09-02 · QZJV", number: "3" }),
+    );
+    expect(line(el)).toBe(
+      fill("recovery_pack.up_to_date", { number: "4", date: day.made, name: "Marta Puig" }),
+    );
+  });
+
   it("says the box's backups still use the older key after a failed reload", async () => {
     setLocale(locale);
     const el = await mount(stubApi(status({ ...STATES["up to date"], backupsUseOlderKey: true })));
@@ -396,6 +440,60 @@ describe("an unreceived pack", () => {
     expect(line(el)).toContain(
       fill("recovery_pack.not_received", { number: "4", date: "12 October" }),
     );
+  });
+
+  it("holding the master key makes a newer received pack's line no claim of up to date", async () => {
+    const el = await mount(
+      stubApi(
+        status({
+          latest: latest({ number: 4 }),
+          upToDate: true,
+          unreceived: { number: 3, madeAt: MADE_AT, holdsCurrentMasterKey: true },
+        }),
+      ),
+    );
+    expect(unsafe(el, "4")).toEqual([]);
+    expect(line(el)).toBe(
+      fill("recovery_pack.master_key_not_received", {
+        number: "3",
+        date: "12 October",
+        option: t("recovery_pack.make_master_key"),
+      }),
+    );
+  });
+});
+
+describe("an unreceived pack that shows the current master key", () => {
+  const holder = fill("recovery_pack.master_key_not_received", {
+    number: "4",
+    date: "12 October",
+    option: t("recovery_pack.make_master_key"),
+  });
+
+  it("is named in the master key's words, never as up to date, when it is the newest", async () => {
+    const el = await mount(
+      stubApi(
+        status({
+          latest: latest({ number: 4, received: false }),
+          upToDate: true,
+          unreceived: { number: 4, madeAt: MADE_AT, holdsCurrentMasterKey: true },
+        }),
+      ),
+    );
+    expect(line(el)).toBe(holder);
+  });
+
+  it("offered at the end of setup but no longer showing the current master key is named as any unreceived pack", async () => {
+    const el = await mount(
+      stubApi(
+        status({
+          latest: latest({ number: 1, madeByName: null, received: false }),
+          unreceived: { number: 1, madeAt: MADE_AT, offeredAtSetup: true },
+        }),
+      ),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=setup-pack-offered]")).toBeNull();
+    expect(line(el)).toBe(fill("recovery_pack.not_received", { number: "1", date: "12 October" }));
   });
 });
 

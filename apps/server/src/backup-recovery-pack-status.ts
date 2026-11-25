@@ -27,6 +27,8 @@ export type PackStatusInput = {
   retention: { count: number; days: number } | undefined;
   schedule: BackupSchedule | undefined;
   backupsUseOlderKey: boolean;
+  /** The pack in `records` that showed the current master key, when one is known. */
+  masterKeyPack: number | null;
   now: Date;
 };
 
@@ -65,6 +67,7 @@ export type PackStatus = {
     number: number;
     madeAt: string;
     offeredAtSetup?: true;
+    holdsCurrentMasterKey?: true;
   };
   reasons: Reason[];
   keep: Keep[];
@@ -184,14 +187,23 @@ function keepList(input: PackStatusInput): Keep[] {
   return keep.sort((a, b) => a.number - b.number);
 }
 
+/**
+ * The pack showing the current master key is the only copy of the key restore asks for, so a later
+ * pack, received or not, never hides that it was not confirmed received.
+ */
 function unreceivedOf(input: PackStatusInput): PackStatus["unreceived"] {
+  const view = (record: RecoveryPackRecord, holdsCurrentMasterKey: boolean) => ({
+    number: record.number,
+    madeAt: record.madeAt.toISOString(),
+    ...(record.madeBy === null ? { offeredAtSetup: true as const } : {}),
+    ...(holdsCurrentMasterKey ? { holdsCurrentMasterKey: true as const } : {}),
+  });
+  const holder = input.records.find(
+    (r) => r.receivedAt === null && r.number === input.masterKeyPack,
+  );
+  if (holder !== undefined) return view(holder, true);
   const newest = input.records[0];
-  if (newest === undefined || newest.receivedAt !== null) return null;
-  return {
-    number: newest.number,
-    madeAt: newest.madeAt.toISOString(),
-    ...(newest.madeBy === null ? { offeredAtSetup: true as const } : {}),
-  };
+  return newest !== undefined && newest.receivedAt === null ? view(newest, false) : null;
 }
 
 export function packStatus(input: PackStatusInput): PackStatus {

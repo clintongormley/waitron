@@ -9,7 +9,7 @@ import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { RecoveryPackDialog, RecoveryPackMade } from "../widgets/recovery-pack-dialog.js";
 import "../widgets/recovery-pack-dialog.js";
-import { packDate } from "../widgets/recovery-pack-words.js";
+import { packDate, withStrong } from "../widgets/recovery-pack-words.js";
 
 type Status = RecoveryPackStatus;
 type Worded = Exclude<RecoveryPackReason, { kind: "key_changed" | "code_changed" }>;
@@ -256,9 +256,9 @@ export class RecoveryPackCard extends LitElement {
   }
 
   /**
-   * A pack made with a new master key shows that key, so no link to the PDF outlives the card or its
-   * permission. A pack older than the one on offer, whose receipt was confirmed late, never replaces
-   * it; its receipt changes the status either way.
+   * The PDF holds secrets, so no link to it outlives the card or its permission. A pack older than
+   * the one on offer, whose receipt was confirmed late, never replaces it; its receipt changes the
+   * status either way.
    */
   #madeOne(made: RecoveryPackMade): void {
     if (!this.isConnected || !this.canManage) return;
@@ -345,12 +345,13 @@ export class RecoveryPackCard extends LitElement {
   #line(status: Status): TemplateResult {
     const date = (iso: string) => this.#date(iso);
     const latest = status.latest;
-    const offered = status.unreceived?.offeredAtSetup ? status.unreceived : null;
+    const holder = status.unreceived?.holdsCurrentMasterKey ? status.unreceived : null;
+    const offered = holder?.offeredAtSetup ? holder : null;
     const lines: (string | TemplateResult)[] = [];
     let warn = true;
     if (latest === null) {
       lines.push(t("recovery_pack.none"));
-    } else if (offered === null && !latest.received) {
+    } else if (holder === null && !latest.received) {
       lines.push(
         fill("recovery_pack.not_received", {
           number: String(latest.number),
@@ -376,7 +377,7 @@ export class RecoveryPackCard extends LitElement {
               t("recovery_pack.make_new"),
             ].join(" ")}`,
         );
-      } else if (offered === null) {
+      } else if (holder === null) {
         warn = false;
         lines.push(
           latest.madeByName === null
@@ -385,6 +386,15 @@ export class RecoveryPackCard extends LitElement {
         );
       }
     }
+    if (holder !== null && offered === null)
+      lines.push(
+        withStrong(
+          "recovery_pack.master_key_not_received",
+          { number: String(holder.number), date: date(holder.madeAt) },
+          "option",
+          t("recovery_pack.make_master_key"),
+        ),
+      );
     if (offered !== null && lines.length === 0) warn = false;
     const keep = this.#keep(status, warn);
     if (keep.length > 0) lines.push(keep.join(" "));

@@ -22,6 +22,7 @@ import {
   installChangeFeed,
   insertMasterKey,
   masterKeys,
+  readCurrentMasterKey,
   readRecoveryPacks,
   removeChangeFeed,
   setNodePublicKey,
@@ -505,6 +506,36 @@ describe("a made pack", () => {
     expect(refused.headers.has("x-waitron-master-key")).toBe(false);
     expect(await packs()).toEqual([]);
     expect(await storedMasterKeys()).toMatchObject([{ number: 1, name: oldMasterKey.name }]);
+    const retried = await fixture().make(true);
+    expect(retried.status).toBe(200);
+    expect(await storedMasterKeys()).toMatchObject([
+      { number: 1, name: oldMasterKey.name },
+      { number: 2, name: shownMasterKey(retried).masterKeyName, madeBy: admin.personId },
+    ]);
+    expect(await packs()).toMatchObject([{ number: 1 }]);
+  });
+
+  it("a refused pack save writes no master key and keeps the old master key current", async () => {
+    await withTransaction(suite.db, (tx) => insertMasterKey(tx, oldMasterKey));
+    suite.db.run(
+      sql`create trigger refuse_pack before insert on recovery_packs begin select raise(abort, 'refused'); end`,
+    );
+    let refused: Response;
+    try {
+      refused = await fixture().make(true);
+    } finally {
+      suite.db.run(sql`drop trigger refuse_pack`);
+    }
+    expect(refused.status).toBe(500);
+    expect(await refused.json()).toEqual({ error: { code: "server.internal" } });
+    expect(refused.headers.has("x-waitron-master-key")).toBe(false);
+    expect(await packs()).toEqual([]);
+    expect(await storedMasterKeys()).toEqual([
+      expect.objectContaining({ number: 1, name: oldMasterKey.name }),
+    ]);
+    expect(await withTransaction(suite.db, (tx) => readCurrentMasterKey(tx))).toMatchObject({
+      name: oldMasterKey.name,
+    });
   });
 
   it("Make a new master key writes its pack and its master_keys row, and nothing in node.db", async () => {
@@ -680,8 +711,35 @@ describe("a made pack", () => {
         ],
       },
     ]);
-    const seen = JSON.stringify([logs, [...response.headers], [...failing.headers]]);
-    for (const value of [KEY, BUCKET.secretAccessKey, file.bucketCode!, file.archiveCode!])
+    const cloudFailing = await fixture({
+      cloud: cloudPack(async () => {
+        throw new Error("could not read /home/jane-doe/cloud.json");
+      }),
+    }).make();
+    expect(cloudFailing.status).toBe(200);
+    expect(logs).toContainEqual([
+      "info",
+      "recovery.pack_made",
+      expect.objectContaining({
+        number: 3,
+        parts: expect.arrayContaining([
+          { part: "emergency", state: "failed", failedWith: "unexpected" },
+        ]),
+      }),
+    ]);
+    const seen = JSON.stringify([
+      logs,
+      [...response.headers],
+      [...failing.headers],
+      [...cloudFailing.headers],
+    ]);
+    for (const value of [
+      KEY,
+      BUCKET.secretAccessKey,
+      file.bucketCode!,
+      file.archiveCode!,
+      "jane-doe",
+    ])
       expect(seen).not.toContain(value);
   });
 
@@ -991,6 +1049,29 @@ describe("the status route", () => {
     expect(await read(f)).toMatchObject({ masterKey: { name, pack: 1 } });
     await (await f.make(false)).arrayBuffer();
     expect(await read(f)).toMatchObject({ masterKey: { name, pack: 1 } });
+  });
+
+  it("still names the unconfirmed pack that showed the master key after a later plain pack is received", async () => {
+    let at = Date.parse("2026-10-30T09:00:00.000Z");
+    const f = fixture({ now: () => new Date((at += 60_000)) });
+    await (await f.make(true)).arrayBuffer();
+    await (await f.make(false)).arrayBuffer();
+    expect((await f.received(2)).status).toBe(204);
+    expect(await read(f)).toMatchObject({
+      latest: { number: 2, received: true },
+      unreceived: { number: 1, holdsCurrentMasterKey: true },
+      masterKey: { pack: 1 },
+    });
+  });
+
+  it("names the received pack that showed the master key once a later plain pack is made, and adds no keep entry for it", async () => {
+    let at = Date.parse("2026-10-30T09:00:00.000Z");
+    const f = fixture({ now: () => new Date((at += 60_000)) });
+    await (await f.make(true)).arrayBuffer();
+    expect((await f.received(1)).status).toBe(204);
+    await (await f.make(false)).arrayBuffer();
+    expect((await f.received(2)).status).toBe(204);
+    expect(await read(f)).toMatchObject({ unreceived: null, keep: [], masterKey: { pack: 1 } });
   });
 
   it("names no pack for a master key when a plain pack was made at the same instant as the pack that showed it", async () => {

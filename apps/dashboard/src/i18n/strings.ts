@@ -1705,6 +1705,8 @@ export const en = {
     "Offered as a PDF at the end of setup on {date}. If you did not keep it, make a new master key.",
   "recovery_pack.not_received":
     "Recovery pack {number}, made on {date}: the box was never told it arrived. If you do not have it, make a new pack.",
+  "recovery_pack.master_key_not_received":
+    "The current master key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, choose {option}.",
   "recovery_pack.reason.key_changed": "The backup key changed on {date}.",
   "recovery_pack.reason.bucket_settings": "The bucket copy's settings changed.",
   "recovery_pack.reason.archives_settings": "The archive settings changed.",
@@ -4759,7 +4761,7 @@ export const en = {
   "box_status.restart_help": "Use it when an alert says to. Tills stop selling until it is back.",
   "box_status.restart_help_guide": "More about restarting the box",
   "box_status.fillers":
-    "Choose how many archives to keep on Backups. Older archives are removed only after a new backup succeeds, or before a backup that is short of room; this cannot free a full disk now. Leave without changes to stop. Keep your database, box key, backup encryption key and saved backups.",
+    "Choose how many archives to keep on Backups. Older archives are removed only after a new backup succeeds, or before a backup that is short of room; this cannot free a full disk now. Leave without changes to stop. Keep your database, backup encryption key and saved backups.",
   "box_status.checks_unavailable":
     "Some checks could not be made, so this page may not show every problem.",
   "box_status.other_alerts": "{count} other alerts",
@@ -6516,6 +6518,8 @@ export const es: Record<StringKey, string> = {
     "Se ofreció como PDF al terminar la configuración el {date}. Si no lo guardaste, crea una clave maestra nueva.",
   "recovery_pack.not_received":
     "El paquete de recuperación {number}, hecho el {date}: el servidor nunca recibió la confirmación de que llegó. Si no lo tienes, haz un paquete nuevo.",
+  "recovery_pack.master_key_not_received":
+    "La clave maestra actual está en el paquete de recuperación {number}, hecho el {date}, pero el servidor nunca recibió la confirmación de que el paquete {number} llegó. Si no tienes el paquete {number}, elige {option}.",
   "recovery_pack.reason.key_changed": "La clave de las copias cambió el {date}.",
   "recovery_pack.reason.bucket_settings": "Los ajustes de la copia en el bucket cambiaron.",
   "recovery_pack.reason.archives_settings": "Los ajustes de los archivos cambiaron.",
@@ -9630,7 +9634,7 @@ export const es: Record<StringKey, string> = {
     "Úsalo cuando una alerta lo indique. Las cajas no pueden vender hasta que vuelva.",
   "box_status.restart_help_guide": "Más sobre reiniciar el servidor",
   "box_status.fillers":
-    "Elige cuántas copias conservar en Copias de seguridad. Las antiguas solo se borran después de guardar una nueva, o antes de una copia si falta sitio; esto no libera espacio de inmediato en un disco lleno. Sal sin hacer cambios para parar. Conserva la base de datos, la clave del servidor, la clave de cifrado de copias y las copias guardadas.",
+    "Elige cuántas copias conservar en Copias de seguridad. Las antiguas solo se borran después de guardar una nueva, o antes de una copia si falta sitio; esto no libera espacio de inmediato en un disco lleno. Sal sin hacer cambios para parar. Conserva la base de datos, la clave de cifrado de copias y las copias guardadas.",
   "box_status.checks_unavailable":
     "Algunas comprobaciones no se han podido hacer, así que esta página puede no mostrar todos los problemas.",
   "box_status.other_alerts": "{count} avisos más",

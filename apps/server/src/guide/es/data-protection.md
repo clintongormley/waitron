@@ -626,7 +626,7 @@ proveedor. Mientras las copias programadas están activadas, **Copias de segurid
 seguridad** y guarda el paquete nuevo. Las copias programadas hechas antes del cambio y toda la
 copia anterior del bucket siguen necesitando la clave antigua. Conserva el paquete de recuperación
 correspondiente a cualquier copia anterior que puedas necesitar restaurar.
-Para sustituir la clave maestra, elige **Crear una clave maestra nueva**: en un local que emite facturas, para restaurar una copia
+Para sustituir la clave maestra, elige **Crear una clave maestra nueva**: para restaurar una copia
 hecha después hace falta la clave maestra nueva, y para restaurar una anterior sigue haciendo falta la antigua.
 
 **Una exportación de la configuración filtrada.** El archivo contiene a cada persona de tu lista del

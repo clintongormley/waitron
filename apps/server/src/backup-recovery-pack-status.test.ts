@@ -55,6 +55,7 @@ const base: PackStatusInput = {
   retention: { count: 7, days: 30 },
   schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
   backupsUseOlderKey: false,
+  masterKeyPack: null,
   now: new Date("2026-10-30T09:00:00.000Z"),
 };
 
@@ -234,6 +235,56 @@ describe("a pack no browser confirmed receiving", () => {
         pack(1, "2026-10-12T10:00:00.000Z", { received: false }),
       ]).unreceived,
     ).toBeNull();
+  });
+
+  it("is still named when it shows the current master key, though a received pack was made after it", () => {
+    const answer = status(
+      [
+        pack(3, "2026-10-22T10:00:00.000Z"),
+        pack(2, "2026-10-12T10:00:00.000Z", { received: false }),
+        pack(1, "2026-10-01T10:00:00.000Z"),
+      ],
+      { masterKeyPack: 2 },
+    );
+    expect(answer.unreceived).toEqual({
+      number: 2,
+      madeAt: "2026-10-12T10:00:00.000Z",
+      holdsCurrentMasterKey: true,
+    });
+  });
+
+  it("names the master key's pack before a newer unreceived pack", () => {
+    expect(
+      status(
+        [
+          pack(3, "2026-10-22T10:00:00.000Z", { received: false }),
+          pack(2, "2026-10-12T10:00:00.000Z", { received: false }),
+        ],
+        { masterKeyPack: 2 },
+      ).unreceived,
+    ).toEqual({ number: 2, madeAt: "2026-10-12T10:00:00.000Z", holdsCurrentMasterKey: true });
+  });
+
+  it("says the newest unreceived pack holds the current master key only when it does", () => {
+    const records = [pack(2, "2026-10-22T10:00:00.000Z", { received: false })];
+    expect(status(records, { masterKeyPack: 2 }).unreceived).toEqual({
+      number: 2,
+      madeAt: "2026-10-22T10:00:00.000Z",
+      holdsCurrentMasterKey: true,
+    });
+    expect(status(records, { masterKeyPack: 1 }).unreceived).toEqual({
+      number: 2,
+      madeAt: "2026-10-22T10:00:00.000Z",
+    });
+  });
+
+  it("says nothing of a received pack that shows the current master key", () => {
+    const answer = status(
+      [pack(2, "2026-10-22T10:00:00.000Z"), pack(1, "2026-10-01T10:00:00.000Z")],
+      { masterKeyPack: 1 },
+    );
+    expect(answer.unreceived).toBeNull();
+    expect(answer.keep).toEqual([]);
   });
 });
 

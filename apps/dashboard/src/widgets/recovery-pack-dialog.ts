@@ -293,7 +293,7 @@ export class RecoveryPackDialog extends LitElement {
     this.refusal = "";
   }
 
-  /** Copy does not count: the pack can hold more than the key, such as a new box key. */
+  /** Copy does not count: the pack can hold more than the key. */
   #keyUsed(event: CustomEvent<MasterKeyUsedDetail>): void {
     if (event.detail.action === "copy") return;
     this.used = true;

@@ -385,6 +385,7 @@ export function mountBackupRecoveryPackMakeApi(
         );
         const loaded = deps.backups();
         const now = deps.now();
+        const master = await currentMasterKeyElsewhere(tx, records);
         const status = packStatus({
           records: records.map((r) => ({
             ...r,
@@ -400,9 +401,9 @@ export function mountBackupRecoveryPackMakeApi(
             loaded.recoveryKey !== undefined &&
             fileKey !== undefined &&
             loaded.recoveryKey !== fileKey,
+          masterKeyPack: master.masterKeyHeldBy,
           now,
         });
-        const master = await currentMasterKeyElsewhere(tx, records);
         return {
           ...status,
           masterKey:
