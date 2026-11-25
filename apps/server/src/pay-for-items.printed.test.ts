@@ -335,17 +335,15 @@ describe("Pay for items on a printed bill", () => {
       cashFor("15.00", "20.00"),
     );
 
-    await payItems(party.tabId, body);
+    const first = await payItems(party.tabId, body);
     const again = await payItems(party.tabId, body);
 
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
     expect(again.status, JSON.stringify(again.json)).toBe(200);
     const [reopened] = await reopenedFrom(party.tabId);
-    expect(again.json.sourceBalance).toMatchObject({
-      workingOrderId: reopened,
-      status: "open",
-      total: "6.00",
-      outstanding: "6.00",
-    });
+    const left = { workingOrderId: reopened, status: "open", total: "6.00", outstanding: "6.00" };
+    expect(first.json.sourceBalance).toMatchObject(left);
+    expect(again.json.sourceBalance).toMatchObject(left);
   });
 
   it("a declined card leaves every dish on the reopened bill", async () => {

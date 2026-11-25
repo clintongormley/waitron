@@ -325,19 +325,20 @@ function retryPrintOf(req: PayForItemsRequest): string {
 
 /**
  * The bill an earlier request with this submission id paid for items of `fromBillId` on (D6), or,
- * when `fromBillId` was a printed bill, of the bill reopened from it (PR4-D7).
+ * when `fromBillId` was a printed bill, of the bill reopened from it (PR4-D7); and the bill those
+ * items came from.
  */
 async function earlierItemsBill(
   tx: Transaction,
   fromBillId: string,
   submissionId: string,
-): Promise<string | undefined> {
+): Promise<{ billId: string; sourceId: string } | undefined> {
   const reopened = tx
     .select({ id: workingOrders.id })
     .from(workingOrders)
     .where(eq(workingOrders.reopenedFrom, fromBillId));
   const [row] = await tx
-    .select({ billId: billPayments.workingOrderId })
+    .select({ billId: billPayments.workingOrderId, sourceId: workingOrders.itemsPaidFrom })
     .from(billPayments)
     .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
     .where(
@@ -349,7 +350,7 @@ async function earlierItemsBill(
         eq(billPayments.submissionId, submissionId),
       ),
     );
-  return row?.billId;
+  return row === undefined ? undefined : { billId: row.billId, sourceId: row.sourceId! };
 }
 
 /** The bill the items move from, and the move's party read and picks, as the till sent them. */
@@ -444,13 +445,7 @@ export async function payForItems(
    * on a printed bill that names the abandoned bill, not the reopened one (PR4-D10). */
   const billFor = async (tx: Transaction, holdSourceInvoice: boolean) => {
     const earlier = await earlierItemsBill(tx, fromBillId, req.submissionId);
-    if (earlier !== undefined) {
-      const [row] = await tx
-        .select({ itemsPaidFrom: workingOrders.itemsPaidFrom })
-        .from(workingOrders)
-        .where(eq(workingOrders.id, earlier));
-      return { billId: earlier, sourceId: row!.itemsPaidFrom!, request: payment(null) };
-    }
+    if (earlier !== undefined) return { ...earlier, request: payment(null) };
     const source = await reopenIfPrinted(
       tx,
       deps,

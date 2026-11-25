@@ -441,15 +441,19 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     vi.useRealTimers();
   });
 
-  it("a declined reader card leaves the table's bill as it was", async () => {
+  it("a declined reader card leaves the table's bill as it was, shown from the answer, reading no balance", async () => {
+    const table = balanceOf({ total: "90.00", outstanding: "90.00" });
     const { el } = await mountApp({
       ...withReader(),
       previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
-      payForItems: vi.fn().mockResolvedValue(onWo9("declined", "failed")),
+      payForItems: vi
+        .fn()
+        .mockResolvedValue({ ...onWo9("declined", "failed"), sourceBalance: table }),
     });
     await chooseItems(el, [4, 5]);
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
     const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
+    const balanceReads = vi.mocked(api.getBillBalance).mock.calls.length;
     await press(el, 'input[name="method"][value="card"]');
     await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
     await press(el, "[data-pay-continue]");
@@ -462,34 +466,8 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
     expect(vi.mocked(api.getTabLines).mock.calls.slice(lineReads)).toContainEqual(["wo-4"]);
     expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
-    expect(tableOrder(el).billBalance?.workingOrderId).toBe("wo-4");
-    expect(dialog(el)!.balance?.workingOrderId).toBe("wo-4");
-  });
-
-  it("a declined reader card for items shows the table's bill from the answer, reading no balance", async () => {
-    const table = balanceOf({ total: "90.00", outstanding: "90.00" });
-    const { el } = await mountApp({
-      ...withReader(),
-      previewItemPayment: vi.fn().mockResolvedValue(itemsPreview({ change: null })),
-      payForItems: vi
-        .fn()
-        .mockResolvedValue({ ...onWo9("declined", "failed"), sourceBalance: table }),
-    });
-    await chooseItems(el, [4, 5]);
-    const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
-    const balanceReads = vi.mocked(api.getBillBalance).mock.calls.length;
-    await press(el, 'input[name="method"][value="card"]');
-    await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
-    await press(el, "[data-pay-continue]");
-    await press(el, "[data-pay-confirm]");
-    await flush(el);
-
-    expect(formError(el)).toBe(t("bill_pay.card_declined"));
-    expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
-    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
-    expect(vi.mocked(api.getTabLines).mock.calls.slice(lineReads)).toContainEqual(["wo-4"]);
-    expect(dialog(el)!.balance).toEqual(table);
     expect(tableOrder(el).billBalance).toEqual(table);
+    expect(dialog(el)!.balance).toEqual(table);
     expect(vi.mocked(api.getBillBalance).mock.calls.slice(balanceReads)).toEqual([]);
   });
 
