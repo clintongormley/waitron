@@ -487,7 +487,8 @@ export function mountBillPaymentsApi(
       const id = requireBillParam(c.req.param("id"));
       await gateZones(deps, session, [{ orderId: id }]);
       const ask = parseItemsAsk(asObject(await readRawJsonBody<unknown>(c)));
-      return c.json(await previewPayForItems(deps.db, id, ask));
+      const saleCfg = sendingCfg(requestCfg(deps.cfg, session), c, session.device);
+      return c.json(await previewPayForItems(fiscal, saleCfg, id, ask, session.device));
     }),
   );
 
@@ -512,7 +513,14 @@ export function mountBillPaymentsApi(
       const operator = { personId, sessionId };
       if (request.entry !== "reader")
         return c.json(
-          await payForItems({ ...fiscal, disk: deps.disk }, saleCfg, id, request, operator),
+          await payForItems(
+            { ...fiscal, disk: deps.disk },
+            saleCfg,
+            id,
+            request,
+            operator,
+            session.device,
+          ),
         );
       if (request.simulationOutcome !== undefined && deps.cardProvider?.provider !== "simulator") {
         throw invalid("simulationOutcome");
@@ -523,9 +531,14 @@ export function mountBillPaymentsApi(
         `${id}/${request.submissionId}`,
         parseReaderId(body),
       );
-      const paid = await payForItems(reading.deps, saleCfg, id, request, operator).finally(
-        reading.done,
-      );
+      const paid = await payForItems(
+        reading.deps,
+        saleCfg,
+        id,
+        request,
+        operator,
+        session.device,
+      ).finally(reading.done);
       logCollectionFailed(c.get("requestId"), id, paid.payment.outcome);
       return c.json(paid);
     }),

@@ -12,6 +12,7 @@ export async function carryProviderRows(
   tx: Transaction,
   params: { billPaymentIds: readonly string[]; toWorkingOrderId: string; fromSaleId: string },
 ): Promise<void> {
+  if (params.billPaymentIds.length === 0) return;
   await tx
     .update(payments)
     .set({

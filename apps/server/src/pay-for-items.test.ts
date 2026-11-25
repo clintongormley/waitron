@@ -317,7 +317,13 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
     ];
 
     expect(
-      await previewPayForItems(v.db, billId, { picks, method: "cash", tendered: "20.00" }),
+      await previewPayForItems(
+        deps(),
+        v.cfg,
+        billId,
+        { picks, method: "cash", tendered: "20.00" },
+        null,
+      ),
     ).toEqual({ total: "17.50", applied: "17.50", tip: "0.00", change: "2.50" });
     expect(await billsNaming(billId)).toEqual([]);
     expect(await lineTotals(billId)).toEqual(["7.50", "15.00", "6.00"]);
@@ -344,9 +350,13 @@ describe("A1515 pay for items: cash and hand-keyed card", () => {
         await request(partyId, billId, picks, { method: "card", applied: "1.25", tip: "0.00" }),
         v.operator,
       ).catch((error: unknown) => error);
-      const previewing = await previewPayForItems(v.db, billId, { picks, method: "card" }).catch(
-        (error: unknown) => error,
-      );
+      const previewing = await previewPayForItems(
+        deps(),
+        v.cfg,
+        billId,
+        { picks, method: "card" },
+        null,
+      ).catch((error: unknown) => error);
 
       expect(paying).toMatchObject({
         code: "tab.transfer_quantity_invalid",

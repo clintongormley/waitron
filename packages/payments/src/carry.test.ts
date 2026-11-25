@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import { CORE_MIGRATIONS, billPayments, invoiceSeries, sales, withTransaction } from "@waitron/db";
 import { seedPerson, seedWorkingOrder as seedOrder } from "@waitron/db/testing/seed.js";
@@ -13,6 +13,18 @@ const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS] })
 const AT = "2026-07-22T10:00:00.000Z";
 
 describe("carryProviderRows", () => {
+  it("sends no update when no bill payment is named", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const update = vi.spyOn(tx, "update");
+      await carryProviderRows(tx, {
+        billPaymentIds: [],
+        toWorkingOrderId: "00000000-0000-4000-8000-000000000001",
+        fromSaleId: "00000000-0000-4000-8000-000000000002",
+      });
+      expect(update).not.toHaveBeenCalled();
+    });
+  });
+
   it("moves the named rows to the bill and clears only the old sale", async () => {
     const seeded = await seedWorkingOrder(suite.db);
     const printed = seeded.workingOrderId;

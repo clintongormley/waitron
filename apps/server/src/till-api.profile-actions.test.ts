@@ -4,9 +4,17 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { devices, kitchenStations, withTransaction, floorZones, personRoles } from "@waitron/db";
+import {
+  devices,
+  kitchenStations,
+  withTransaction,
+  floorZones,
+  personRoles,
+  workingOrderLines,
+  workingOrders,
+} from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ADJUSTMENT_ACTIONS } from "@waitron/adjustments";
@@ -1143,6 +1151,79 @@ describe("the person's permission and the profile's action are both needed", () 
       },
     );
     expect(paid).toMatchObject({ status: 200, body: { balance: { status: "settled" } } });
+  });
+
+  /** Pay for the bill's first dish in cash, at 3.00, on a till without take-orders. */
+  async function payFirstDishWithoutTakeOrders(billId: string, path = "item-payments") {
+    const [line] = await suite.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, billId))
+      .orderBy(workingOrderLines.lineNo)
+      .limit(1);
+    const picks = [{ lineId: line!.id }];
+    const expectedEdits = [await withTransaction(suite.db, (tx) => readBillEditState(tx, billId))];
+    return send(
+      sessions.get("take-orders")!,
+      "POST",
+      `/api/working-orders/${billId}/${path}`,
+      path === "item-payments"
+        ? {
+            submissionId: randomUUID(),
+            picks,
+            expectedEdits,
+            method: "cash",
+            tendered: "3.00",
+            applied: "3.00",
+            tip: "0.00",
+          }
+        : { picks, method: "cash", tendered: "3.00" },
+    );
+  }
+
+  /** The bills and invoices on file, which a reopen would add to. */
+  const filed = () =>
+    suite.db.all(sql`select (select count(*) from working_orders) as bills,
+      (select count(*) from sales) as sales`)[0];
+
+  async function statusOfBill(billId: string) {
+    const [bill] = await suite.db
+      .select({ status: workingOrders.status })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId));
+    return bill!.status;
+  }
+
+  it("refuses Pay for items on a printed bill on a till without take-orders, reopening nothing", async () => {
+    const billId = await counterOrder(v, "Caña", "Flan");
+    await placeByHand(v, billId);
+    const before = filed();
+
+    const paid = await payFirstDishWithoutTakeOrders(billId);
+
+    expect({ status: paid.status, error: paid.body.error }).toEqual(forbidden("take-orders"));
+    expect(await statusOfBill(billId)).toBe("placed");
+    expect(filed()).toEqual(before);
+  });
+
+  it("refuses its preview the same way", async () => {
+    const billId = await counterOrder(v, "Caña", "Flan");
+    await placeByHand(v, billId);
+
+    const previewed = await payFirstDishWithoutTakeOrders(billId, "item-payments/preview");
+
+    expect({ status: previewed.status, error: previewed.body.error }).toEqual(
+      forbidden("take-orders"),
+    );
+  });
+
+  it("pays for items on an open bill on a till without take-orders", async () => {
+    const billId = await counterOrder(v, "Caña", "Flan");
+
+    const paid = await payFirstDishWithoutTakeOrders(billId);
+
+    expect(paid.status, JSON.stringify(paid.body)).toBe(200);
+    expect(await statusOfBill(billId)).toBe("open");
   });
 
   it("refuses the drawer when the person lacks its grant, even on a profile that opens it", async () => {
