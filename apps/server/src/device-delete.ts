@@ -1,11 +1,6 @@
 import "./errors.js";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import {
-  AppError,
-  type DeleteImpact,
-  type DeleteImpactItem,
-  type DeleteTarget,
-} from "@waitron/shared";
+import { AppError, type DeleteImpact, type DeleteImpactItem } from "@waitron/shared";
 import {
   refunds,
   billPayments,
@@ -13,24 +8,17 @@ import {
   devices,
   isReceiptPrinter,
   printers,
+  readOrderPlaces,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { endDeviceSessions, tillSessions } from "@waitron/identity";
 import { IN_PROGRESS_PAYMENT_STATES, cardReaders, payments } from "@waitron/payments";
 import { named } from "./delete-impact.js";
+import { refusalOrderName } from "./current-order-label.js";
 import { releaseDevice } from "./device-equipment.js";
 import { endReturningRequest, hasReturningRequest } from "./join-requests.js";
 import type { TradingContext } from "./trading-context.js";
-
-const orderName = (row: {
-  id: string;
-  label: string | null;
-  orderNumber: number;
-}): DeleteTarget => ({
-  id: row.id,
-  name: row.label ?? `#${row.orderNumber}`,
-});
 
 const counted = (key: string, count: number): DeleteImpactItem => ({ key, count, targets: [] });
 
@@ -50,7 +38,6 @@ async function deviceDeleteRules(
 
   const orderColumns = {
     id: workingOrders.id,
-    label: workingOrders.label,
     orderNumber: workingOrders.orderNumber,
   };
   const cardOrders = await tx
@@ -69,9 +56,17 @@ async function deviceDeleteRules(
     .innerJoin(billPayments, eq(billPayments.id, refunds.billPaymentId))
     .innerJoin(workingOrders, eq(workingOrders.id, billPayments.workingOrderId))
     .where(and(eq(refunds.deviceId, id), eq(refunds.state, "pending")));
+  const orders = [...cardOrders, ...billOrders, ...refundOrders];
+  const places = await readOrderPlaces(
+    tx,
+    orders.map((row) => row.id),
+  );
   const unfinished = named(
     "device.payment_in_progress",
-    [...cardOrders, ...billOrders, ...refundOrders].map(orderName),
+    orders.map(({ id, orderNumber }) => ({
+      id,
+      name: refusalOrderName(orderNumber, places.get(id)),
+    })),
   );
 
   const openSessions = await tx

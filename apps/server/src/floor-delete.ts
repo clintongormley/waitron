@@ -9,6 +9,7 @@ import {
   LEFT_MERGE,
   parties,
   partyTables,
+  readOrderPlaces,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
@@ -22,6 +23,8 @@ import {
   type ErrorParams,
 } from "@waitron/shared";
 import { foodOnItsWay } from "./delivery-release.js";
+import { refusalOrderName } from "./current-order-label.js";
+import { distinctTargets } from "./delete-impact.js";
 import { deletePlans, removeSets } from "./floor-plan-sets.js";
 import { removeLiveTables, tableDeleteRefusals } from "./table-removal.js";
 import "./errors.js";
@@ -100,7 +103,6 @@ async function refusalsFor(
     .select({
       tableId: workingOrders.deliveryTableId,
       id: workingOrders.id,
-      label: workingOrders.label,
       number: workingOrders.orderNumber,
     })
     .from(workingOrders)
@@ -110,6 +112,10 @@ async function refusalsFor(
         or(inArray(workingOrders.status, ["open", "placed"]), foodOnItsWay()),
       ),
     );
+  const places = await readOrderPlaces(
+    tx,
+    delivered.map((row) => row.id),
+  );
   const refusals: DeleteImpactRefusal[] = [];
   for (const table of tables) {
     for (const target of sorted(
@@ -123,10 +129,10 @@ async function refusalsFor(
         targets: [target],
       });
     }
-    for (const target of sorted(
+    for (const target of distinctTargets(
       delivered
         .filter((row) => row.tableId === table.id)
-        .map((row) => ({ id: row.id, name: row.label ?? String(row.number) })),
+        .map((row) => ({ id: row.id, name: refusalOrderName(row.number, places.get(row.id)) })),
     )) {
       refusals.push({
         code: "table.delivery_in_progress",

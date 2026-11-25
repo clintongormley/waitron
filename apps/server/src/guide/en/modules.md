@@ -76,6 +76,7 @@ Check this list even if an earlier payment warning is still open in Alerts.
 ## Resolve a held card payment {#resolve-held-payment}
 
 In Reporting, open **Check card payments** and find the payment under **Held: paid out at a different amount**.
+Use the order number and bill name to find the payment. For a paid delivery that was handed over or whose table was removed, look for its recorded place.
 Check how much the customer was charged and how much you still hold in your card provider's dashboard.
 
 - **Refunded.** Refund the held amount in the provider's dashboard and confirm the refund there.

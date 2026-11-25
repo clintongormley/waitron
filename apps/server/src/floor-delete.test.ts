@@ -1,5 +1,5 @@
 import { settings } from "@waitron/db";
-import { seedPerson } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
 import { mergeOf as mergeColumns } from "@waitron/db";
 import { addFloorPlanSet } from "@waitron/venue-service";
 import { seedZone } from "@waitron/db/testing/seed.js";
@@ -271,11 +271,12 @@ describe("floor hierarchy deletion", () => {
         ),
     );
     const before = await inTx(v, snapshot);
+    const blockers = await Promise.all([open, placed, food].map((id) => billRow(v, id)));
     expect((await impact([z])).refusals).toEqual(
-      [open, placed, food].map((id, i) => ({
+      blockers.map(({ id, orderNumber }) => ({
         code: "table.delivery_in_progress",
         params: { tableId: table, workingOrderId: id },
-        targets: [{ id, name: ["A open", "B placed", "Delivery table"][i] }],
+        targets: [{ id, name: `#${orderNumber} · Delivery table` }],
       })),
     );
     expect(await inTx(v, snapshot)).toEqual(before);
@@ -322,6 +323,7 @@ describe("floor hierarchy deletion", () => {
         .values({ partyId: party, tableId: table, leftAt: NOW.toISOString() });
     });
     const order = await delivery(table, "Order");
+    const { orderNumber } = await billRow(v, order);
     const booking = randomUUID();
     await inTx(v, async (tx) =>
       tx.insert(bookings).values({
@@ -344,7 +346,7 @@ describe("floor hierarchy deletion", () => {
       {
         code: "table.delivery_in_progress",
         params: { tableId: table, workingOrderId: order },
-        targets: [{ id: order, name: "Order" }],
+        targets: [{ id: order, name: `#${orderNumber} · Combined table` }],
       },
       {
         code: "table.booked",
@@ -710,6 +712,20 @@ describe("floor hierarchy deletion", () => {
     expect(
       await inTx(v, (tx) => tx.select().from(diningTables).where(eq(diningTables.zoneId, zoneId))),
     ).toEqual([]);
+  });
+
+  it("keeps orders at the same delivery table in number order across digit lengths", async () => {
+    const zoneId = await zone("Same delivery table");
+    const table = await v.table("Terrace", zoneId);
+    const [later, earlier] = await inTx(v, async (tx) => [
+      await seedWorkingOrder(tx, { orderNumber: 1000, deliveryTableId: table, label: "A former" }),
+      await seedWorkingOrder(tx, { orderNumber: 999, deliveryTableId: table, label: "B former" }),
+    ]);
+    const { refusals } = await impact([zoneId]);
+    expect(refusals.flatMap((refusal) => refusal.targets)).toEqual([
+      { id: earlier.id, name: "#999 · Terrace" },
+      { id: later.id, name: "#1000 · Terrace" },
+    ]);
   });
 
   it("empty and unknown zone selections do not change or create floor state", async () => {

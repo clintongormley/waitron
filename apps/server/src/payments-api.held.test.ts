@@ -5,9 +5,9 @@ import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { withTransaction, workingOrders } from "@waitron/db";
+import { diningTables, withTransaction, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { seedWorkingOrder as seedOrderRow } from "@waitron/db/testing/seed.js";
+import { seedWorkingOrder as seedOrderRow, seedZone } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createPinThrottle,
@@ -26,6 +26,7 @@ import {
 } from "@waitron/payments";
 import { seedWorkingOrder } from "@waitron/payments/test/seed.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { releaseDeliveries } from "./delivery-release.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { systemClock } from "./till-backend.js";
 import { watchDerivationsAndLock, watchedOrder } from "./testing/watched-scrypt.js";
@@ -241,7 +242,7 @@ describe("GET /management-api/payments/held", () => {
     ]);
   });
 
-  it("names the order's label beside its number", async () => {
+  it("names a counter order by its typed name beside its number", async () => {
     const v = await setup();
     const held = await aHeldPayment(v, {
       amount: "12.10",
@@ -251,7 +252,7 @@ describe("GET /management-api/payments/held", () => {
     });
     await suite.db
       .update(workingOrders)
-      .set({ label: "Terrace 4" })
+      .set({ label: "Former table", billName: "Riley" })
       .where(eq(workingOrders.orderNumber, held.orderNumber));
 
     const res = await list(v);
@@ -261,9 +262,61 @@ describe("GET /management-api/payments/held", () => {
       expect.objectContaining({
         paymentId: held.paymentId,
         orderNumber: held.orderNumber,
-        label: "Terrace 4",
+        label: "Riley",
       }),
     ]);
+  });
+
+  it.each([true, false])("keeps the paid place (handed over: %s)", async (handedOver) => {
+    const v = await setup();
+    const held = await aHeldPayment(v, {
+      amount: "12.10",
+      providerAmount: "1.21",
+      settledAt: "2026-10-15T21:00:00.000Z",
+      foundAt: "2026-10-17T03:00:00.000Z",
+    });
+    const order = eq(workingOrders.orderNumber, held.orderNumber);
+    const collectedAt = handedOver ? "2026-10-15T20:45:00.000Z" : null;
+    const tableId = await withTransaction(suite.db, async (tx) => {
+      const { id: zoneId, departmentId } = await seedZone(tx, { name: "Terrace" });
+      const [table] = await tx
+        .insert(diningTables)
+        .values({ zoneId, label: "Terrace 8" })
+        .returning({ id: diningTables.id });
+      await tx
+        .update(workingOrders)
+        .set({
+          deliveryTableId: table!.id,
+          status: "placed",
+          collectedAt,
+          zoneId,
+          departmentId,
+          serviceMode: "ticket_then_pay",
+        })
+        .where(order);
+      return table!.id;
+    });
+    const checkLabel = async (label: string) => {
+      const res = await list(v);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual([
+        expect.objectContaining({ paymentId: held.paymentId, label }),
+      ]);
+    };
+
+    await checkLabel("Terrace 8");
+    await suite.db
+      .update(workingOrders)
+      .set({ status: "settled", settledAt: "2026-10-15T21:00:00.000Z", label: "Terrace 8" })
+      .where(order);
+    await suite.db
+      .update(diningTables)
+      .set({ label: "Birthday" })
+      .where(eq(diningTables.id, tableId));
+    await checkLabel(handedOver ? "Terrace 8" : "Birthday");
+
+    await withTransaction(suite.db, (tx) => releaseDeliveries(tx, tableId, "Birthday"));
+    await checkLabel("Terrace 8");
   });
 
   it("refuses a session without hardware.manage", async () => {

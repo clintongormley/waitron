@@ -16,6 +16,7 @@ import {
   tenders,
   billPayments,
   devices,
+  diningTables,
   withTransaction,
   saveSettings,
   workingOrders,
@@ -831,6 +832,16 @@ describe("GET /management-api/payments/bill-payments", () => {
       intent: { status: "requires_payment_method" },
     });
     const settled = await strandBillPayment(v, await openOrder(v), { kind: "none" });
+    await withTransaction(suite.db, async (tx) => {
+      const [table] = await tx
+        .insert(diningTables)
+        .values({ zoneId: v.zoneId, label: "Terrace 4" })
+        .returning({ id: diningTables.id });
+      await tx
+        .update(workingOrders)
+        .set({ deliveryTableId: table!.id, label: "Former table" })
+        .where(eq(workingOrders.id, orderId));
+    });
     await suite.db
       .update(billPayments)
       .set({ state: "failed", failedAt: "2026-09-27T10:00:00.000Z" })
@@ -844,6 +855,7 @@ describe("GET /management-api/payments/bill-payments", () => {
       expect.objectContaining({
         billPaymentId: pending,
         workingOrderId: orderId,
+        label: "Terrace 4",
         source: "device",
         deviceId: v.cfg.origin.deviceId,
         deviceName: expect.any(String),
