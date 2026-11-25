@@ -2095,7 +2095,9 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
         await openReceipt(el, "sale-wo-4");
         await giveBack(el, "5.51");
         await expect.poll(() => prompt(el)).not.toBeNull();
-        expect(api.listApprovers).toHaveBeenCalledWith(["sale.refund"]);
+        expect(api.listApprovers).toHaveBeenCalledWith(["sale.refund"], {
+          signal: expect.any(AbortSignal),
+        });
         emit(prompt(el)!, "override-confirm", { personId: "m1", pin: "1234" });
         await flush(el, 8);
         await expect.poll(() => sent()).toHaveLength(1);

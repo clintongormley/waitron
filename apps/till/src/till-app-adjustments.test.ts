@@ -4489,7 +4489,9 @@ describe("till-app: service cancellation consent", () => {
         await giveBackNow(el);
         await approveIn(el, "1234");
         await expect.poll(() => gaveBack()).toHaveLength(1);
-        expect(vi.mocked(api.listApprovers)).toHaveBeenCalledWith(["sale.refund"]);
+        expect(vi.mocked(api.listApprovers)).toHaveBeenCalledWith(["sale.refund"], {
+          signal: expect.any(AbortSignal),
+        });
         expect(gaveBack()[0]).toMatchObject({
           request: { amount: "3.35", fromCancel: [cancelId] },
           override: { personId: "m-1", pin: "1234" },
@@ -4756,7 +4758,9 @@ describe("till-app: service cancellation consent", () => {
       const prompt = () =>
         inForm<TillSupervisorOverrideDialog>(el, "till-supervisor-override-dialog");
       await expect.poll(() => prompt()).not.toBeNull();
-      expect(vi.mocked(api.listApprovers)).toHaveBeenCalledWith(["sale.refund"]);
+      expect(vi.mocked(api.listApprovers)).toHaveBeenCalledWith(["sale.refund"], {
+        signal: expect.any(AbortSignal),
+      });
       emit(prompt()!, "override-confirm", { personId: "m-1", pin: "1234" });
       await flush(el);
       await expect.poll(() => gaveBack()).toHaveLength(1);
