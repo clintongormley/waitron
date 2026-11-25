@@ -106,6 +106,12 @@ On a host with apt and systemd where the `bluez` package (the Linux Bluetooth se
 it is carrying on without Bluetooth and that Bluetooth printers will not be found until BlueZ is
 installed.
 
+On Debian, `install` also installs `firmware-realtek` if it is missing. That package provides
+firmware for USB Bluetooth adapters such as the TP-Link UB500. If the installer warns that it
+could not install the package, check your network connection and enable `non-free-firmware` in
+your Debian APT sources, then run the current installer again. If the adapter was already plugged
+in, unplug it and plug it back in so it can load the firmware.
+
 On a box whose Bluetooth service runs under systemd (`bluetooth.service`), `install` also writes
 `/etc/systemd/system/bluetooth.service.d/waitron-noautopair.conf`. It runs the unit's own Bluetooth
 daemon command with `--noplugin=autopair` added. On the owner's box (BlueZ 5.82, 2026-09-29),
@@ -232,9 +238,10 @@ it is rather than fetching the ref's `waitron.sh`:
 sudo deploy/waitron.sh install
 ```
 
-An existing box keeps the installer you ran throughout its checked upgrade. Candidate
-preparation uses a retained script from the fixed driver revision. Download the
-current installer before upgrading a box that still has an older copy.
+An existing box uses the installer you ran for host package steps throughout its checked upgrade.
+Candidate preparation uses a retained script from the fixed driver revision. Download the current
+installer before upgrading. If you already upgraded using an older copy that skipped the firmware
+step, run the current installer or the updated retained copy at `/opt/waitron-host/waitron.sh`.
 
 Set `WAITRON_DIR` to install somewhere other than `/opt/waitron` (that is how the script is
 exercised on a developer machine without touching `/opt`).
@@ -295,8 +302,8 @@ and installing in one run", does not take the upgrade path on such a box: once i
 and confirmation pass, it wipes the box as `reset` does and installs. On a host with apt, an upgrade
 installs the `libatomic1` package when it is missing, because the host runtime needs it, and, on a
 host that also has systemd, the `bluez` package when it is missing, so the print agent can find
-Bluetooth printers. On a host
-without apt, install the library that provides `libatomic.so.1` before upgrading, and BlueZ if the
+Bluetooth printers. The current installer also installs missing Realtek firmware on Debian, as
+described above. On a host without apt, install the library that provides `libatomic.so.1` before upgrading, and BlueZ if the
 box uses Bluetooth printers.
 
 An already-stopped app skips the online trial, so you can repair a broken version through
