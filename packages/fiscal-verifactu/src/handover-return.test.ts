@@ -9,7 +9,9 @@ import { expect, it } from "vitest";
 import {
   insertInChunks,
   billPayments,
+  parties,
   departments,
+  diningTables,
   type Database,
   sales,
   saleSettlements,
@@ -20,7 +22,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { saleId } from "@waitron/shared";
-import { seedPerson, seedWorkingOrder } from "@waitron/db/testing/seed.js";
+import { seedPerson, seedWorkingOrder, seedZone } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { archiveTo, openBackupQuery } from "@waitron/store";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -1742,6 +1744,192 @@ it("batches pending refund recovery anchors and preserves receiver progress on r
     { state: "refunded" },
   ]);
 });
+
+const cleared = (...columns: string[]) =>
+  Object.fromEntries(columns.map((column) => [column, null]));
+
+it.each(
+  [
+    { kind: "table", holds: [], changed: cleared("party_id", "bill_number") },
+    { kind: "table", holds: ["party_id"], changed: {} },
+    {
+      kind: "table",
+      holds: ["party_id"],
+      taken: "bill_number",
+      changed: cleared("party_id", "bill_number"),
+    },
+    {
+      kind: "reopened",
+      holds: [],
+      changed: cleared("party_id", "bill_number", "reopened_from"),
+    },
+    { kind: "reopened", holds: ["party_id", "reopened_from"], changed: cleared("reopened_from") },
+    { kind: "pay-for-items", holds: [], changed: cleared("items_paid_from") },
+    { kind: "pay-for-items", holds: ["items_paid_from"], changed: {} },
+    { kind: "delivery", holds: [], changed: cleared("delivery_table_id") },
+    { kind: "delivery", holds: ["delivery_table_id"], changed: {} },
+    { kind: "edited", holds: [], changed: cleared("editor_id") },
+    { kind: "edited", holds: ["editor_id"], changed: {} },
+    {
+      kind: "service",
+      holds: ["department_id"],
+      changed: cleared("zone_id", "department_id", "service_mode"),
+    },
+    {
+      kind: "service",
+      holds: ["zone_id"],
+      changed: cleared("zone_id", "department_id", "service_mode"),
+    },
+    { kind: "service", holds: ["department_id", "zone_id"], changed: {} },
+    { kind: "counter", holds: [], taken: "order_number", changed: { order_number: 51 } },
+  ].map((anchor) => ({ taken: "none", ...anchor })),
+)(
+  "returns a pending card refund of a $kind bill, the receiver holding $holds, number taken: $taken",
+  async ({ kind, holds, taken, changed }) => {
+    const source = await original("Source", 1, copyBase);
+    await seedRefundActors(suite.db);
+    const settledAt = "2026-07-20T17:21:00.000Z";
+    const settled = {
+      nodeId: source.nodeId,
+      status: "settled" as const,
+      settledAt,
+      orderNumber: 7,
+    };
+    const party = async () =>
+      (await suite.db.insert(parties).values({ openedBy: "manager" }).returning())[0]!.id;
+    let order: { id: string };
+    if (kind === "counter") order = await seedWorkingOrder(suite.db, settled);
+    else if (kind === "table")
+      order = await seedWorkingOrder(suite.db, {
+        ...settled,
+        partyId: await party(),
+        billNumber: 1,
+      });
+    else if (kind === "delivery") {
+      const zone = await seedZone(suite.db, { name: "Terrace" });
+      const [table] = await suite.db
+        .insert(diningTables)
+        .values({ label: "Table 4", zoneId: zone.id })
+        .returning();
+      order = await seedWorkingOrder(suite.db, {
+        ...settled,
+        deliveryTableId: table!.id,
+      });
+    } else if (kind === "edited") {
+      await seedPerson(suite.db, { id: "editor", displayName: "Bill editor" });
+      order = await seedWorkingOrder(suite.db, { ...settled, editorId: "editor" });
+    } else if (kind === "service") {
+      const zone = await seedZone(suite.db, { name: "Terrace" });
+      order = await seedWorkingOrder(suite.db, {
+        ...settled,
+        zoneId: zone.id,
+        departmentId: zone.departmentId,
+        serviceMode: "table_tab",
+      });
+    } else if (kind === "pay-for-items") {
+      const earlier = await seedWorkingOrder(suite.db, { nodeId: source.nodeId, status: "placed" });
+      order = await seedWorkingOrder(suite.db, { ...settled, itemsPaidFrom: earlier.id });
+    } else {
+      const partyId = await party();
+      const earlier = await seedWorkingOrder(suite.db, {
+        nodeId: source.nodeId,
+        status: "placed",
+        partyId,
+        billNumber: 1,
+      });
+      order = await seedWorkingOrder(suite.db, {
+        nodeId: source.nodeId,
+        orderNumber: 7,
+        partyId,
+        billNumber: 2,
+      });
+      await suite.db.execute(
+        sql`update working_orders set reopened_from = ${earlier.id} where id = ${order.id}`,
+      );
+      await suite.db.execute(sql`update working_orders set status = 'settled',
+        settled_at = ${settledAt} where id = ${order.id}`);
+    }
+    await suite.db.insert(tenders).values({
+      id: "pending-tender",
+      saleId: source.saleId,
+      method: "card",
+      amount: 100,
+      settledAt,
+    });
+    await suite.db.execute(sql`insert into payments
+    (id, working_order_id, source, device_id, node_id, sale_id, provider, payment_ref,
+      amount, state, settled_at, created_at, updated_at)
+    values ('capture', ${order.id}, 'device', ${source.deviceId}, ${source.nodeId}, ${source.saleId},
+      'recorded-provider', 'recorded-charge', 100, 'captured', ${settledAt}, ${settledAt}, ${settledAt})`);
+    await suite.db.insert(refunds).values({
+      id: "pending-refund",
+      saleId: source.saleId,
+      tenderId: "pending-tender",
+      submissionId: "pending-submission",
+      fingerprint: "pending-fingerprint",
+      appliedAmount: 100,
+      reason: "Goodwill",
+      authorizedBy: "manager",
+      requestedBy: "operator",
+      source: "device",
+      deviceId: source.deviceId,
+      nodeId: source.nodeId,
+      method: "card",
+      provider: "recorded-provider",
+      providerPaymentRef: "recorded-charge",
+      state: "pending",
+      createdAt: "2026-07-20T17:21:01.000Z",
+    });
+    const returned = await withTransaction(suite.db, (tx) =>
+      readReturnedOriginals(tx, source.nodeId),
+    );
+    const [stored] = suite.db.all<ReturnRow>(
+      sql`select * from working_orders where id = ${order.id}`,
+    );
+    for (const column of [...holds, ...Object.keys(changed)])
+      expect(stored![column]).not.toBeNull();
+    const hold: Record<string, (id: string) => Promise<unknown>> = {
+      party_id: (id) => receiver.db.insert(parties).values({ id, openedBy: "manager" }),
+      reopened_from: (id) =>
+        seedWorkingOrder(receiver.db, { id, nodeId: source.nodeId, status: "placed" }),
+      items_paid_from: (id) =>
+        seedWorkingOrder(receiver.db, { id, nodeId: source.nodeId, status: "placed" }),
+      editor_id: (id) => seedPerson(receiver.db, { id, displayName: "Bill editor" }),
+      department_id: (id) =>
+        receiver.db.insert(departments).values({ id, name: "Terrace", tradingName: "Terrace" }),
+      zone_id: (id) => seedZone(receiver.db, { id, name: "Terrace" }),
+      delivery_table_id: async (id) => {
+        const zone = await seedZone(receiver.db, { name: "Hall" });
+        await receiver.db.insert(diningTables).values({ id, label: "Table 4", zoneId: zone.id });
+      },
+    };
+    if (holds.length > 0 || taken !== "none") await seedRefundActors(receiver.db);
+    for (const column of holds) await hold[column]!(String(stored![column]));
+    if (taken === "order_number")
+      for (const orderNumber of [7, 50])
+        await seedWorkingOrder(receiver.db, { nodeId: source.nodeId, orderNumber });
+    if (taken === "bill_number")
+      await seedWorkingOrder(receiver.db, {
+        nodeId: source.nodeId,
+        partyId: String(stored!.party_id),
+        billNumber: Number(stored!.bill_number),
+      });
+    expect(
+      await withTransaction(receiver.db, (tx) =>
+        receiveReturnedOriginals(tx, source.nodeId, returned, new Date("2026-07-20T17:22:00.000Z")),
+      ),
+    ).toEqual({ complete: true });
+    expect(receiver.db.all<ReturnRow>(sql`select * from payments`)).toEqual(
+      suite.db.all<ReturnRow>(sql`select * from payments`),
+    );
+    expect(receiver.db.all<ReturnRow>(sql`select * from refunds`)).toEqual(
+      suite.db.all<ReturnRow>(sql`select * from refunds`),
+    );
+    expect(
+      receiver.db.all<ReturnRow>(sql`select * from working_orders where id = ${order.id}`),
+    ).toEqual([{ ...stored, ...changed }]);
+  },
+);
 
 const returnedAt = new Date("2026-07-20T17:22:00.000Z");
 
