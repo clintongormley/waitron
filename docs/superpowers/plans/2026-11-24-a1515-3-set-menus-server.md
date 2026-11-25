@@ -991,7 +991,7 @@ No dining-switch path: `orderDiningLocked` refuses any order holding a sent line
 lines is a counter order, either eaten in (not a set-menu bill) or taken away (no set menus, D14), so a
 switch never changes a grouping.
 
-_2026-11-25: D14 was dropped in Task 2b.8 (VAT-RATES B1 landed first): takeaway bills are grouped and the Counter shows set-menu folders. A switch to takeaway, or a Counter order seated at a table, now links and regroups the bill; a switch or move that would leave set menus on an eat-in Counter bill is refused `set_menu.bill_holds_set_menus`. The codes `set_menu.no_place_on_target` and `set_menu.remove_from_summary` named in this plan were renamed `set_menu.moves_with_set_menu` and `set_menu.worked_out_by_bill` in 2b's review._
+_2026-11-25: D14 was dropped in Task 2b.8 (VAT-RATES B1 landed first): takeaway bills are grouped and the Counter shows set-menu folders. A switch to takeaway, or a Counter order seated at a table, now links and regroups the bill only when it could not hold set menus before (an eat-in Counter order); a switch or move that would leave set menus on an eat-in Counter bill is refused `set_menu.bill_holds_set_menus`. The codes `set_menu.no_place_on_target` and `set_menu.remove_from_summary` named in this plan were renamed `set_menu.moves_with_set_menu` and `set_menu.worked_out_by_bill` in 2b's review._
 
 #### Task 2b.4: Moves, merges, table splits and Pay for items regroup both bills
 
