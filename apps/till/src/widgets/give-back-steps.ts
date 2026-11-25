@@ -37,6 +37,13 @@ export async function readApprovers(
     limit.done();
   }
 }
+/** Tells the till the server ended this person's sign-in, so it locks as any ended sign-in does;
+ * true when `code` says so. */
+export function signInEnded(host: HTMLElement, code: string): boolean {
+  if (code !== "session.required" && code !== "session.not_open") return false;
+  host.dispatchEvent(new CustomEvent("give-back-signed-out", { bubbles: true, composed: true }));
+  return true;
+}
 export const APPROVER_PIN_REFUSALS = new Set(["pin.invalid", "pin.throttled"]);
 export const NEEDS_APPROVER = new Set([
   "authorization.not_permitted",

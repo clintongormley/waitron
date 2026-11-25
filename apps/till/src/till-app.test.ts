@@ -27948,6 +27948,19 @@ describe("A737 post-invoice refund integration", () => {
         remove.mockRestore();
       }
     });
+
+    it.each(["session.required", "session.not_open"])(
+      "locks the till when a press is refused with %s, closing the window and clearing this person's saved press",
+      async (code) => {
+        const api = giving({ giveBack: vi.fn().mockRejectedValue({ code, status: 401 }) });
+        const { el } = await open(api);
+        await pressGoodwill(el);
+        await vi.waitFor(() => expect(lock(el)).not.toBeNull());
+        expect(api.giveBack).toHaveBeenCalledOnce();
+        expect(giveBack(el)).toBeNull();
+        expect(refundKeys()).toEqual([]);
+      },
+    );
   });
   it("a definitive first amount refusal leaves the native amount editable and a corrected request can complete", async () => {
     const refundTransaction = vi

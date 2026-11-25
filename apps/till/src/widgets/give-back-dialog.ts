@@ -61,6 +61,7 @@ import {
   recoveryLinkOf,
   recoveryText,
   restOutcome,
+  signInEnded,
   stillStarting,
   summaryOf,
   terminalStep,
@@ -538,6 +539,7 @@ export class TillGiveBackDialog extends LitElement {
       error instanceof TenderRefundAttemptError
         ? { code: error.kind === "storage" ? "storage" : "network" }
         : refusalOf(error);
+    if (signInEnded(this, refusal.code)) return;
     if (refusal.code === "network") {
       this.approvers = null;
       this.#approval = undefined;
@@ -596,7 +598,9 @@ export class TillGiveBackDialog extends LitElement {
     try {
       check = await this.session.checkRest(this.saleId);
     } catch (error) {
-      this.step = { ...step, notice: this.#sendRefusalText(refusalOf(error), true) };
+      const refusal = refusalOf(error);
+      if (!signInEnded(this, refusal.code))
+        this.step = { ...step, notice: this.#sendRefusalText(refusal, true) };
       return;
     } finally {
       this.sending = false;

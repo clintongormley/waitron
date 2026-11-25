@@ -9865,6 +9865,10 @@ export class TillApp extends LitElement {
         this.givingBack = null;
         void this.#readRefundableTenders(true);
       }}
+      @give-back-signed-out=${(event: Event) => {
+        event.stopPropagation();
+        if (this.givingBack === open) void this.#onLogout();
+      }}
     ></till-give-back-dialog>`;
   }
 

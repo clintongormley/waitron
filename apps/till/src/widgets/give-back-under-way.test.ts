@@ -555,6 +555,19 @@ describe("cash", () => {
     expect(shown(el, "finish")).toBe(true);
   });
 
+  it("tells the till the sign-in ended when the server says so, for the till to lock", async () => {
+    const api = fakeApi();
+    api.giveInvoiceCorrectionCash.mockRejectedValueOnce({ code: "session.required", status: 401 });
+    const { el } = await mount(OPEN, api);
+    const signedOut = vi.fn();
+    el.addEventListener("give-back-signed-out", signedOut);
+
+    press(el, "cash");
+    await vi.waitFor(() => expect(signedOut).toHaveBeenCalledOnce());
+    expect(signedOut.mock.calls[0]![0]).toMatchObject({ bubbles: true, composed: true });
+    expect(api.giveInvoiceCorrectionCash).toHaveBeenCalledOnce();
+  });
+
   it("after a cash answer is lost, gives that same amount again even when less is left", async () => {
     const api = fakeApi();
     api.giveInvoiceCorrectionCash.mockRejectedValueOnce(lost());

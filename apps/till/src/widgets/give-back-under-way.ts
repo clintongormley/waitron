@@ -15,6 +15,7 @@ import {
   readApprovers,
   recoveryLinkOf,
   recoveryText,
+  signInEnded,
   terminalStep,
 } from "./give-back-steps.js";
 import { currentLocale, t } from "../i18n/t.js";
@@ -224,6 +225,7 @@ export class TillGiveBackUnderWay extends LitElement {
       return;
     }
     const refusal = refusalOf(error);
+    if (signInEnded(this, refusal.code)) return;
     if (this.approvers !== null && approverId !== undefined && PIN_REFUSALS.has(refusal.code)) {
       this.pinError = approverRefusal(error, approverId);
       return;

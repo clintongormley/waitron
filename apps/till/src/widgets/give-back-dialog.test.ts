@@ -1515,6 +1515,19 @@ describe("sending", () => {
     await vi.waitFor(() => expect(outcomeText(el)).toContain(t("give_back.preview_failed")));
   });
 
+  it("tells the till the sign-in ended when Check again is refused for it, for the till to lock", async () => {
+    const api = fakeGiveBackApi();
+    withRest(api);
+    api.getTenderRefund.mockRejectedValueOnce({ code: "session.required", status: 401 });
+    const el = await press(api, "card-1");
+    const signedOut = vi.fn();
+    el.addEventListener("give-back-signed-out", signedOut);
+    await vi.waitFor(() => expect(root(el).querySelector("[data-check-again]")).not.toBeNull());
+    root(el).querySelector<HTMLElement>("[data-check-again]")!.click();
+    await vi.waitFor(() => expect(signedOut).toHaveBeenCalledOnce());
+    expect(signedOut.mock.calls[0]![0]).toMatchObject({ bubbles: true, composed: true });
+  });
+
   it("says what went back and why the rest did not when a later part is refused", async () => {
     const api = fakeGiveBackApi();
     api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
