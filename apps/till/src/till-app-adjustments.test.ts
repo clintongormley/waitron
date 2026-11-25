@@ -27,7 +27,6 @@ import {
   openTableMenu,
 } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { formatMoney } from "@waitron/shared";
-import { transactionRow } from "../test/find-bill-fixtures.js";
 import {
   UNDER_WAY,
   VIEW,
@@ -3289,7 +3288,6 @@ describe("till-app: service cancellation consent", () => {
       createdAt: "2026-10-17T11:01:00.000Z",
       completedAt: "2026-10-17T11:01:01.000Z",
     };
-    const refundForm = (el: TillApp) => el.shadowRoot!.querySelector("till-tender-refund-dialog");
     const giving = (el: TillApp) => el.shadowRoot!.querySelector("till-give-back-dialog");
     const cashWay: GiveBackWay = {
       way: "cash",
@@ -3955,7 +3953,6 @@ describe("till-app: service cancellation consent", () => {
       const { el } = await mountApp(methods);
       await openTable4(el);
       await cancelAndRefundOne(el);
-      expect(refundForm(el)).toBeNull();
       expect(vi.mocked(api.readGiveBack)).toHaveBeenCalledWith("own-sale", {});
       expect(inForm(el, "[data-purpose]")!.textContent!.trim()).toBe(t("give_back.dishes"));
       expect(
@@ -4683,7 +4680,6 @@ describe("till-app: service cancellation consent", () => {
       expect(cancelDialog(el)?.refusal).toBe(codeMessage("working_order.out_of_date"));
       expect(api.getTransactionReceipt).not.toHaveBeenCalled();
       expect(api.refundTransaction).not.toHaveBeenCalled();
-      expect(refundForm(el)).toBeNull();
       expect(giving(el)).toBeNull();
     });
 
@@ -4786,14 +4782,13 @@ describe("till-app: service cancellation consent", () => {
       await chooseRefund(el);
       await expect.poll(() => ticket(el)).not.toBeNull();
       await flush(el);
-      expect(refundForm(el)).toBeNull();
       expect(giving(el)).toBeNull();
       expect(ticket(el)!.shadowRoot!.querySelector("[data-give-back]")).toBeNull();
       expect(api.refundTransaction).not.toHaveBeenCalled();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
     });
 
-    it("offers Give money back on the paid receipt in place of Correct invoice and Refund a payment, closing it on leaving", async () => {
+    it("offers Give money back on the paid receipt, closing it on leaving", async () => {
       const readGiveBack = vi.fn(() => new Promise(() => {}));
       const methods = paidMethods({ readGiveBack });
       const { el } = await mountApp(methods);
@@ -4803,7 +4798,6 @@ describe("till-app: service cancellation consent", () => {
       emit(giving(el)!, "give-back-close");
       await flush(el);
       expect(giving(el)).toBeNull();
-      expect(ticket(el)!.shadowRoot!.querySelector("[data-invoice-correction]")).toBeNull();
       const button = ticket(el)!.shadowRoot!.querySelector<HTMLElement>("[data-give-back]")!;
       expect(button.textContent!.trim()).toBe(t("give_back.title"));
       await userEvent.click(page.elementLocator(button));
@@ -4813,73 +4807,6 @@ describe("till-app: service cancellation consent", () => {
       emit(ticket(el)!, "back-to-find-bill");
       await flush(el);
       expect(giving(el)).toBeNull();
-    });
-
-    it("gives a correction's card leg through Refund a payment, then has the correction read again", async () => {
-      const card = {
-        ...cash,
-        tenderId: "44444444-4444-4444-8444-444444444444",
-        method: "card",
-        last4: "0042",
-        tipRemaining: "0.00",
-      };
-      const refundTransaction = vi
-        .fn()
-        .mockResolvedValue({ ...refunded, tenderId: card.tenderId, appliedAmount: "6.05" });
-      const methods = paidMethods({
-        getTill: vi.fn().mockResolvedValue({
-          ...till,
-          capabilities: [...till.capabilities, "take-cash", "integrated-card-payment"],
-        }),
-        readInvoiceCorrectionLines: vi.fn(() => new Promise(() => {})),
-        getRefundableTenders: vi.fn().mockResolvedValue([cash, card]),
-        refundTransaction,
-      });
-      const { el } = await mountApp(methods);
-      await openTable4(el);
-      await chooseRefund(el);
-      await expect.poll(() => giving(el)).not.toBeNull();
-      emit(giving(el)!, "give-back-close");
-      await flush(el);
-      emit(ticket(el)!, "invoice-correction-open");
-      await flush(el);
-      const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog")!;
-      expect(correcting().legsRevision).toBe(0);
-
-      emit(correcting(), "invoice-correction-card", {
-        correctionId: "correction-1",
-        tenderId: card.tenderId,
-        target: "6.05",
-        startReasonId: "r-mistake",
-      });
-      await expect.poll(() => refundForm(el)).not.toBeNull();
-      expect([refundForm(el)!.target, refundForm(el)!.startReasonId]).toEqual([
-        "6.05",
-        "r-mistake",
-      ]);
-      expect(refundForm(el)!.tenders).toEqual([card]);
-      expect(correcting().capabilities).toEqual(
-        expect.arrayContaining(["take-cash", "integrated-card-payment"]),
-      );
-      emit(refundForm(el)!, "tender-refund-submit", {
-        tenderId: card.tenderId,
-        appliedAmount: "6.05",
-        tipAmount: "0.00",
-        reason: "Mistake",
-        manualConfirmed: false,
-      });
-      await expect.poll(() => refundForm(el)).toBeNull();
-      expect(refundTransaction).toHaveBeenCalledWith("own-sale", {
-        tenderId: card.tenderId,
-        appliedAmount: "6.05",
-        tipAmount: "0.00",
-        reason: "Mistake",
-        manualConfirmed: false,
-        invoiceCorrectionId: "correction-1",
-        submissionId: expect.any(String),
-      });
-      expect(correcting().legsRevision).toBe(1);
-      expect(correcting().session).toBeDefined();
     });
 
     it("opens a money back under way chosen in Find bill on its receipt, even with nothing left to refund", async () => {
@@ -4909,198 +4836,6 @@ describe("till-app: service cancellation consent", () => {
       await expect
         .poll(() => giving()!.shadowRoot!.querySelector("till-give-back-under-way")?.correction.id)
         .toBe("correction-1");
-      expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
-    });
-
-    const resumedCard = {
-      ...cash,
-      tenderId: "44444444-4444-4444-8444-444444444444",
-      method: "card",
-      last4: "0042",
-      tipRemaining: "0.00",
-      appliedRemaining: "10.00",
-    };
-    const resumedCorrection = {
-      id: "correction-1",
-      saleId: "own-sale",
-      state: "open",
-      gross: "10.00",
-      moneyBack: "6.00",
-      pending: "0.00",
-      left: "4.00",
-      reason: "Mistake",
-      openedAt: "2026-11-13T10:00:00.000Z",
-      correctiveSaleId: null,
-      legs: [],
-      fileNow: null,
-    };
-    async function openCorrection(methods: ReturnType<typeof paidMethods>) {
-      const { el } = await mountApp(methods);
-      await flush(el);
-      emit(lock(el)!, "logged-in", { personId: "p1", displayName: "Ana", permissions: [] });
-      await flush(el);
-      emit(shell(el), "find-bill");
-      const findBill = () => el.shadowRoot!.querySelector("till-find-bill-screen");
-      await expect.poll(findBill).not.toBeNull();
-      emit(findBill()!, "find-transaction-open", { row: transactionRow({ saleId: "own-sale" }) });
-      await expect.poll(() => ticket(el)).not.toBeNull();
-      await flush(el);
-      // Correct invoice has no button now; its window stays until the till's old windows go.
-      emit(ticket(el)!, "invoice-correction-open", { correctionId: "correction-1" });
-      const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog");
-      return { el, correcting };
-    }
-    async function resumeCorrection(methods: ReturnType<typeof paidMethods>) {
-      const { el, correcting } = await openCorrection(methods);
-      await expect
-        .poll(() => correcting()?.shadowRoot!.querySelector("[data-choice=card]"))
-        .not.toBeNull();
-      correcting()!.shadowRoot!.querySelector<HTMLElement>("[data-choice=card]")!.click();
-      return el;
-    }
-
-    it("hands a correction's card to Refund a payment with the payment as it is now", async () => {
-      const methods = paidMethods({
-        getTill: vi.fn().mockResolvedValue({
-          ...till,
-          capabilities: [...till.capabilities, "take-cash", "integrated-card-payment"],
-        }),
-        getRefundableTenders: vi
-          .fn()
-          .mockResolvedValueOnce([{ ...resumedCard, pendingRefundId: "old-refund" }])
-          .mockResolvedValue([{ ...resumedCard, appliedRemaining: "4.00" }]),
-        getInvoiceCorrection: vi.fn().mockResolvedValue(resumedCorrection),
-      });
-      const el = await resumeCorrection(methods);
-
-      await expect.poll(() => refundForm(el)).not.toBeNull();
-      await refundForm(el)!.updateComplete;
-      expect(refundForm(el)!.tenders).toMatchObject([
-        { pendingRefundId: null, appliedRemaining: "4.00" },
-      ]);
-      expect(refundForm(el)!.shadowRoot!.querySelector('[name="appliedAmount"]')).not.toBeNull();
-      expect(refundForm(el)!.correcting).toBe(true);
-    });
-
-    it.each([
-      [
-        "cannot be read again",
-        () => Promise.reject(new TypeError("Failed to fetch")),
-        "invoice_correction.card_unread",
-      ],
-      [
-        "has changed since the window showed it",
-        () => Promise.resolve([{ ...resumedCard, appliedRemaining: "0.00" }]),
-        "invoice_correction.card_changed",
-      ],
-    ] as const)(
-      "says so in Correct invoice, and reads the correction again, when the card's payment %s",
-      async (_case, reread, key) => {
-        const fresh = [{ ...resumedCard, appliedRemaining: "4.00" }];
-        const getInvoiceCorrection = vi.fn().mockResolvedValue(resumedCorrection);
-        const methods = paidMethods({
-          getTill: vi.fn().mockResolvedValue({
-            ...till,
-            capabilities: [...till.capabilities, "take-cash", "integrated-card-payment"],
-          }),
-          getRefundableTenders: vi
-            .fn()
-            .mockResolvedValueOnce(fresh)
-            .mockResolvedValueOnce(fresh)
-            .mockImplementationOnce(reread)
-            .mockResolvedValue(fresh),
-          getInvoiceCorrection,
-        });
-        const el = await resumeCorrection(methods);
-        const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog")!;
-
-        await expect
-          .poll(() => correcting().shadowRoot!.querySelector("wt-form-actions")!.error)
-          .toBe(t(key));
-        await expect.poll(() => getInvoiceCorrection).toHaveBeenCalledTimes(2);
-        expect(refundForm(el)).toBeNull();
-      },
-    );
-
-    it("opens no Refund a payment when the waiter leaves the bill while the card's payment is read again", async () => {
-      const fresh = [{ ...resumedCard, appliedRemaining: "4.00" }];
-      let answer!: (rows: typeof fresh) => void;
-      const methods = paidMethods({
-        getTill: vi.fn().mockResolvedValue({
-          ...till,
-          capabilities: [...till.capabilities, "take-cash", "integrated-card-payment"],
-        }),
-        getRefundableTenders: vi
-          .fn()
-          .mockResolvedValueOnce(fresh)
-          .mockResolvedValueOnce(fresh)
-          .mockImplementation(
-            () =>
-              new Promise((resolve) => {
-                answer = resolve;
-              }),
-          ),
-        getInvoiceCorrection: vi.fn().mockResolvedValue(resumedCorrection),
-      });
-      const el = await resumeCorrection(methods);
-
-      await expect.poll(() => api.getRefundableTenders).toHaveBeenCalledTimes(3);
-      emit(shell(el), "screen-select", { screen: "floor" });
-      await flush(el);
-      answer(fresh);
-      await flush(el);
-      expect(refundForm(el)).toBeNull();
-    });
-
-    it("says in Correct invoice that Refund a payment did not open when its saved refund cannot be read", async () => {
-      const fresh = [{ ...resumedCard, appliedRemaining: "4.00" }];
-      const methods = paidMethods({
-        getTill: vi.fn().mockResolvedValue({
-          ...till,
-          capabilities: [...till.capabilities, "take-cash", "integrated-card-payment"],
-        }),
-        getRefundableTenders: vi.fn().mockResolvedValue(fresh),
-        getInvoiceCorrection: vi.fn().mockResolvedValue(resumedCorrection),
-      });
-      const getItem = Storage.prototype.getItem;
-      const unreadable = vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (
-        this: Storage,
-        key: string,
-      ) {
-        return key.startsWith("waitron.tender-refund:") && key.endsWith('"own-sale"')
-          ? "{not json"
-          : getItem.call(this, key);
-      });
-      try {
-        const el = await resumeCorrection(methods);
-        const correcting = () => el.shadowRoot!.querySelector("till-invoice-correction-dialog")!;
-
-        await expect
-          .poll(() => correcting().shadowRoot!.querySelector("wt-form-actions")!.error)
-          .toBe(t("invoice_correction.card_not_opened"));
-        expect(refundForm(el)).toBeNull();
-      } finally {
-        unreadable.mockRestore();
-      }
-    });
-
-    it("closes Correct invoice from Close once the correction has ended, reading the payments again", async () => {
-      const getRefundableTenders = vi.fn().mockResolvedValue([resumedCard]);
-      const methods = paidMethods({
-        getRefundableTenders,
-        getInvoiceCorrection: vi
-          .fn()
-          .mockResolvedValue({ ...resumedCorrection, state: "filed", left: "0.00" }),
-      });
-      const { el, correcting } = await openCorrection(methods);
-      const done = () => correcting()?.shadowRoot!.querySelector<HTMLElement>("[data-done]");
-      await expect.poll(done).not.toBeNull();
-      const reads = getRefundableTenders.mock.calls.length;
-
-      done()!.click();
-      await expect.poll(correcting).toBeNull();
-      await expect.poll(() => getRefundableTenders.mock.calls.length).toBe(reads + 1);
-      expect(ticket(el)).not.toBeNull();
     });
 
     it("reports a transaction load failure after the kitchen write without reopening a cancellation", async () => {
@@ -5114,7 +4849,6 @@ describe("till-app: service cancellation consent", () => {
         .poll(() => el.shadowRoot!.textContent)
         .toContain(t("find_bill.invoice_load_failed"));
       expect(cancelDialog(el)).toBeNull();
-      expect(refundForm(el)).toBeNull();
       expect(giving(el)).toBeNull();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
       expect(api.getRefundableTenders).toHaveBeenCalledExactlyOnceWith(
@@ -5143,7 +4877,6 @@ describe("till-app: service cancellation consent", () => {
       answer(paidReceipt);
       await flush(el);
       expect(ticket(el)).toBeNull();
-      expect(refundForm(el)).toBeNull();
       expect(giving(el)).toBeNull();
       expect(api.getRefundableTenders).toHaveBeenCalledExactlyOnceWith(
         "own-sale",
@@ -5173,7 +4906,6 @@ describe("till-app: service cancellation consent", () => {
       await flush(el);
       answer([cash]);
       await flush(el);
-      expect(refundForm(el)).toBeNull();
       expect(giving(el)).toBeNull();
       expect(methods.cancelItem).toHaveBeenCalledOnce();
       expect(el.api.refundTransaction).not.toHaveBeenCalled();

@@ -75,7 +75,6 @@ import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import type {
-  AdjustmentReason,
   CounterWaitingOrder,
   DeadEndAnswer,
   DevDeviceList,
@@ -102,16 +101,8 @@ import type {
 } from "./api/client.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
-import type {
-  RefundableTender,
-  TenderRefundRequest,
-  TenderRefundView,
-} from "./api/tender-refund-types.js";
-import type { TillTenderRefundDialog } from "./widgets/tender-refund-dialog.js";
-import type {
-  ApproverRefusal,
-  TillSupervisorOverrideDialog,
-} from "./widgets/supervisor-override-dialog.js";
+import type { RefundableTender } from "./api/tender-refund-types.js";
+import type { ApproverRefusal } from "./widgets/supervisor-override-dialog.js";
 
 // The venue's default menu — every product fixture below is tagged with its id, so the
 // counter grid (which shows only the selected menu's products) renders them under the default selection.
@@ -26461,10 +26452,7 @@ describe("A737 Find a bill page", () => {
     expect(getRefundableTenders).not.toHaveBeenCalled();
     expect(ticket(el)).toBeNull();
     expect(refundView(el)!.shadowRoot!.querySelector("[data-give-back]")).toBeNull();
-    emit(refundView(el)!, "tender-refund-open");
-    await flush(el);
     expect(el.shadowRoot!.querySelector("till-give-back-dialog")).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
     emit(refundView(el)!, "back-to-find-bill");
     await flush(el);
     expect(pageOf(el)).toBe(view);
@@ -27454,39 +27442,6 @@ describe("A737 post-invoice refund integration", () => {
     pendingRefundId: null,
     manual: false,
   };
-  const returned: TenderRefundView = {
-    id: "22222222-2222-4222-8222-222222222222",
-    saleId: "sale-1",
-    tenderId: cash.tenderId,
-    state: "completed",
-    appliedAmount: "3.00",
-    tipAmount: "0.00",
-    createdAt: "2026-10-16T12:00:00Z",
-    completedAt: "2026-10-16T12:00:01Z",
-  };
-  const ask = {
-    tenderId: cash.tenderId,
-    appliedAmount: "3.00",
-    tipAmount: "0.00",
-    reason: "Customer request",
-  };
-  const voidReason = (id: string, name: string): AdjustmentReason => ({
-    id,
-    name,
-    kind: "void",
-    actions: ["cancel"],
-    noteRequired: false,
-    maxPercentBp: null,
-    maxAmount: null,
-  });
-  const refundReasons = [
-    voidReason("r-request", "Customer request"),
-    voidReason("r-return", "Return"),
-  ];
-  const dialog = (el: TillApp) =>
-    el.shadowRoot!.querySelector<TillTenderRefundDialog>("till-tender-refund-dialog");
-  const approval = (el: TillApp) =>
-    el.shadowRoot!.querySelector<TillSupervisorOverrideDialog>("[data-tender-refund-approval]");
   const refundKeys = () =>
     Object.keys(localStorage).filter((key) => key.startsWith("waitron.tender-refund:"));
   const giveBackButton = (el: TillApp) =>
@@ -27503,21 +27458,10 @@ describe("A737 post-invoice refund integration", () => {
     activity?: ReturnType<typeof fakeSessionActivity>,
   ) {
     const getRefundableTenders = vi.fn().mockResolvedValue([cash]);
-    const refundTransaction = vi
-      .fn<(sale: string, body: TenderRefundRequest) => Promise<TenderRefundView>>()
-      .mockResolvedValue(returned);
     const mounted = await mountApp({
       getTransactionReceipt: vi.fn().mockResolvedValue({ ...saleResult, invoiceType }),
       getRefundableTenders,
-      refundTransaction,
-      getTenderRefund: vi
-        .fn()
-        .mockResolvedValue({ ...returned, state: "pending", completedAt: null }),
-      retryTenderRefund: vi.fn().mockResolvedValue(returned),
-      listRefundAuthorizers: vi
-        .fn()
-        .mockResolvedValue([{ personId: "manager", displayName: "Marta" }]),
-      listAdjustmentReasons: vi.fn().mockResolvedValue(refundReasons),
+      listAdjustmentReasons: vi.fn().mockResolvedValue(REASONS),
       ...overrides,
     });
     const el = mounted.el;
@@ -27529,24 +27473,7 @@ describe("A737 post-invoice refund integration", () => {
     emit(view, "find-transaction-open", { row: transactionRow() });
     await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
     await ticket(el)!.updateComplete;
-    return { el, basket, view, getRefundableTenders, refundTransaction };
-  }
-  async function openRefund(el: TillApp) {
-    expect(giveBackButton(el), "the paid receipt offers Give money back").not.toBeNull();
-    emit(ticket(el)!, "tender-refund-open");
-    await vi.waitFor(() => expect(dialog(el)?.reasons ?? null).not.toBeNull());
-    await dialog(el)!.updateComplete;
-    return dialog(el)!;
-  }
-  async function submit(el: TillApp) {
-    const form = dialog(el)!;
-    const reason = form.shadowRoot!.querySelector('[name="reason"]')!;
-    emit(reason, "wt-change", { value: "r-request" });
-    await form.updateComplete;
-    await userEvent.click(
-      page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),
-    );
-    await flush(el);
+    return { el, basket, view, getRefundableTenders };
   }
   const giveBack = (el: TillApp) =>
     el.shadowRoot!.querySelector<TillGiveBackDialog>("till-give-back-dialog");
@@ -27559,33 +27486,21 @@ describe("A737 post-invoice refund integration", () => {
   }
   const appCapabilities = (el: TillApp) =>
     (el as unknown as { capabilities: readonly string[] }).capabilities;
-  /** What the till Refund a payment uses: its window, opened on the same receipt. */
-  const refundSession = (el: TillApp) =>
-    (el as unknown as { tenderRefunding: { session: TenderRefundSession } | null }).tenderRefunding
-      ?.session;
   describe("Give money back", () => {
-    it("opens one window on the receipt in place of Refund a payment and Correct invoice, with the sessions Refund a payment uses", async () => {
+    it("opens one window on the receipt, with its sessions", async () => {
       const readGiveBack = vi.fn().mockResolvedValue(VIEW);
       const { el } = await open({ readGiveBack });
-      expect(ticket(el)!.shadowRoot!.querySelector("[data-tender-refund]")).toBeNull();
-      expect(ticket(el)!.shadowRoot!.querySelector("[data-invoice-correction]")).toBeNull();
       const window = await openGiveBack(el);
       expect([window.saleId, window.invoiceNumber]).toEqual(["sale-1", "F-0001"]);
       expect(readGiveBack).toHaveBeenCalledWith("sale-1", {});
       expect(window.session).toBeInstanceOf(GiveBackSession);
       expect(window.corrections).toBeInstanceOf(InvoiceCorrectionSession);
       expect(window.capabilities).toEqual(appCapabilities(el));
-      expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
-      expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
-      const refunds = window.refunds;
-      expect(refunds).toBeInstanceOf(TenderRefundSession);
+      expect(window.refunds).toBeInstanceOf(TenderRefundSession);
 
       emit(window, "give-back-close");
       await flush(el);
       expect(giveBack(el)).toBeNull();
-      emit(ticket(el)!, "tender-refund-open");
-      await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
-      expect(refundSession(el)).toBe(refunds);
     });
 
     it("leaves the receipt with the window closed", async () => {
@@ -27720,7 +27635,6 @@ describe("A737 post-invoice refund integration", () => {
       await vi.waitFor(() =>
         expect(giveBack(el)!.shadowRoot!.querySelector("till-give-back-under-way")).not.toBeNull(),
       );
-      expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
     });
 
     /** The reads and writes Give money back sends, each answering at once. */
@@ -27789,8 +27703,8 @@ describe("A737 post-invoice refund integration", () => {
 
     it("clears this person's saved press when the device locks, keeping another device's, and shows nothing of an answer arriving after", async () => {
       let resolve!: (value: unknown) => void;
-      const giveBackCall = vi.fn(
-        (_saleId: string, _body: GiveBackWrite) =>
+      const giveBackCall = vi.fn<(saleId: string, body: GiveBackWrite) => Promise<unknown>>(
+        () =>
           new Promise((done) => {
             resolve = done;
           }),
@@ -27839,8 +27753,8 @@ describe("A737 post-invoice refund integration", () => {
 
     it("closes the window when the server connection is replaced, and shows nothing of the old connection's late answer", async () => {
       let resolve!: (value: unknown) => void;
-      const giveBackCall = vi.fn(
-        (_saleId: string, _body: GiveBackWrite) =>
+      const giveBackCall = vi.fn<(saleId: string, body: GiveBackWrite) => Promise<unknown>>(
+        () =>
           new Promise((done) => {
             resolve = done;
           }),
@@ -27887,7 +27801,7 @@ describe("A737 post-invoice refund integration", () => {
         tenderId: "reader-tender",
         method: "card",
         appliedRemaining: "0.00",
-        pendingRefundId: returned.id,
+        pendingRefundId: "22222222-2222-4222-8222-222222222222",
       };
       const readGiveBack = vi.fn().mockResolvedValue({
         ...VIEW,
@@ -27951,8 +27865,8 @@ describe("A737 post-invoice refund integration", () => {
 
     it("shows the outcome of a press answered after its receipt was left and opened again on Send again, sending nothing more", async () => {
       let resolve!: (value: unknown) => void;
-      const giveBackCall = vi.fn(
-        (_saleId: string, _body: GiveBackWrite) =>
+      const giveBackCall = vi.fn<(saleId: string, body: GiveBackWrite) => Promise<unknown>>(
+        () =>
           new Promise((done) => {
             resolve = done;
           }),
@@ -27992,102 +27906,80 @@ describe("A737 post-invoice refund integration", () => {
         expect(refundKeys()).toEqual([]);
       },
     );
-  });
-  it("a definitive first amount refusal leaves the native amount editable and a corrected request can complete", async () => {
-    const refundTransaction = vi
-      .fn()
-      .mockRejectedValueOnce({
-        code: "tender.refund_exceeds_payment",
-        params: { applied: "2.00", tip: "0.00" },
-      })
-      .mockResolvedValueOnce({ ...returned, appliedAmount: "1.00" });
-    const { el } = await open({ refundTransaction });
-    await openRefund(el);
-    await submit(el);
-    expect(refundTransaction).toHaveBeenCalledOnce();
-    const form = dialog(el)!;
-    const field = form.shadowRoot!.querySelector<WtInput>('[name="appliedAmount"]')!;
-    await field.updateComplete;
-    expect(field.shadowRoot!.querySelector<HTMLInputElement>("input")!.disabled).toBe(false);
-    expect(refundKeys()).toEqual([]);
-    emit(field, "wt-change", { value: "1.00" });
-    await form.updateComplete;
-    await userEvent.click(
-      page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),
-    );
-    await vi.waitFor(() => expect(dialog(el)).toBeNull());
-    expect(refundTransaction).toHaveBeenCalledTimes(2);
-    expect(refundTransaction.mock.calls[1]![1]).toMatchObject({
-      appliedAmount: "1.00",
-      reason: "Customer request",
-    });
-    expect(refundTransaction.mock.calls[1]![1].submissionId).not.toBe(
-      refundTransaction.mock.calls[0]![1].submissionId,
-    );
-  });
-  it.each(["F1", "F2"] as const)(
-    "a paid %s opens its original tender and closes before refreshing completed money",
-    async (invoiceType) => {
-      const { el, basket, view, getRefundableTenders, refundTransaction } = await open(
-        {},
-        invoiceType,
-      );
-      basket.store.addProduct(coffee, "2");
-      await flush(el);
-      await openRefund(el);
-      expect(getRefundableTenders).toHaveBeenCalledWith("sale-1", expect.anything());
-      expect(dialog(el)!.tenders).toEqual([cash]);
-      getRefundableTenders.mockImplementation(async () => {
-        expect(dialog(el), "successful refund is closed before the refresh starts").toBeNull();
-        throw new Error("read unavailable");
+
+    it("money given back keeps the Transactions query, filters, sorting and page while leaving the basket intact", async () => {
+      let searchRequested!: () => void;
+      const searchRequest = new Promise<void>((resolve) => (searchRequested = resolve));
+      const listTransactions = vi.fn(async (query: { page: number; q: string }) => {
+        if (query.q === "0091 ") searchRequested();
+        return { ...listPage([transactionRow()], 101, query.page), dates: resolvedDates };
       });
-      await submit(el);
-      expect(refundTransaction).toHaveBeenCalledTimes(1);
-      expect(refundTransaction.mock.calls[0]![0]).toBe("sale-1");
-      expect(refundTransaction.mock.calls[0]![1]).toMatchObject(ask);
-      expect(refundTransaction.mock.calls[0]![1].override).toBeUndefined();
-      expect(dialog(el)).toBeNull();
-      expect(refundKeys()).toEqual([]);
-      expect(ticket(el)!.result).toMatchObject({
-        invoiceNumber: "F-0001",
-        total: "3.00",
-        qr: saleResult.qr,
-      });
-      expect(el.shadowRoot!.textContent).toContain(t("tender_refund.refresh_failed"));
+      const { el, view, basket } = await open({ ...giving(), listTransactions });
       emit(ticket(el)!, "back-to-find-bill");
       await flush(el);
-      expect(el.shadowRoot!.querySelector("till-find-bill-screen")).toBe(view);
+      const tabs = view.shadowRoot!.querySelector("wt-tabs")!;
+      await userEvent.click(
+        page.elementLocator(
+          tabs.shadowRoot!.querySelector<HTMLElement>('[data-key="transactions"]')!,
+        ),
+      );
+      await flush(el);
+      const grid = view.shadowRoot!.querySelector<WtDataTable<unknown>>(
+        'wt-data-table[data-tab="transactions"]',
+      )!;
+      await vi.waitFor(() => expect(grid.loading).toBe(false));
+      await userEvent.click(
+        page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>('[data-sort="amount"]')!),
+      );
+      await vi.waitFor(() => expect(grid.loading).toBe(false));
+      await userEvent.click(
+        page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!),
+      );
+      await chooseOption(grid.shadowRoot!.querySelector('[data-filter="method"]')!, "card");
+      await chooseOption(grid.shadowRoot!.querySelector('[data-filter="type"]')!, "full-invoice");
+      await userEvent.click(
+        page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>(".filters-close")!),
+      );
+      await vi.waitFor(() => expect(grid.loading).toBe(false));
+      const search = grid.shadowRoot!.querySelector<HTMLInputElement>('input[type="search"]')!;
+      await userEvent.fill(page.elementLocator(search), "0091 ");
+      await searchRequest;
+      expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ q: "0091 " });
+      await vi.waitFor(() => expect(grid.loading).toBe(false));
+      await userEvent.click(
+        page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>("[data-next-page]")!),
+      );
+      await vi.waitFor(() => expect(grid.serverPaging?.page).toBe(1));
+      await vi.waitFor(() => expect(grid.loading).toBe(false));
+      basket.store.addProduct(coffee, "2");
+      await flush(el);
+      const before = listTransactions.mock.calls.at(-1)![0];
+      expect(before).toMatchObject({
+        q: "0091 ",
+        page: 1,
+        method: "card",
+        type: "full-invoice",
+        sort: { key: "amount", direction: "ascending" },
+      });
+      await userEvent.click(
+        page.elementLocator(
+          grid.shadowRoot!.querySelector<HTMLElement>('[data-row-key="sale-1"] td')!,
+        ),
+      );
+      await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
+      await pressGoodwill(el);
+      await vi.waitFor(() => expect(inWindow(el, "[data-outcome]")).not.toBeNull());
+      emit(giveBack(el)!, "give-back-close");
+      await flush(el);
+      expect(giveBack(el)).toBeNull();
+      emit(ticket(el)!, "back-to-find-bill");
+      await flush(el);
+      expect(view.shadowRoot!.querySelector('wt-data-table[data-tab="transactions"]')).toBe(grid);
+      await vi.waitFor(() => expect(listTransactions.mock.calls.at(-1)![0]).toEqual(before));
+      expect(grid.serverPaging?.page).toBe(1);
+      expect(search.value).toBe("0091 ");
       expect(basket.store.lines[0]!.quantity).toBe("2");
-    },
-  );
-  it("can inspect a pending card refund on a device that cannot start a card refund", async () => {
-    const pending = {
-      ...cash,
-      tenderId: "reader-tender",
-      method: "card",
-      pendingRefundId: returned.id,
-    };
-    const getTenderRefund = vi.fn().mockResolvedValue({
-      ...returned,
-      tenderId: pending.tenderId,
-      state: "pending",
-      completedAt: null,
     });
-    const { el, refundTransaction } = await open({
-      getTill: vi.fn().mockResolvedValue({ ...till, capabilities: [] }),
-      getRefundableTenders: vi.fn().mockResolvedValue([pending]),
-      getTenderRefund,
-    });
-    const form = await openRefund(el);
-    expect(form.tenders).toEqual([pending]);
-    expect(form.shadowRoot!.querySelectorAll('input[name="tender"]')).toHaveLength(0);
-    await userEvent.click(
-      page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-inspect]")!),
-    );
-    await flush(el);
-    expect(getTenderRefund).toHaveBeenCalledExactlyOnceWith(returned.id, {});
-    expect(dialog(el)!.result?.state).toBe("pending");
-    expect(refundTransaction).not.toHaveBeenCalled();
   });
 
   it("does not offer a refund for an unsupported-only invoice", async () => {
@@ -28097,269 +27989,7 @@ describe("A737 post-invoice refund integration", () => {
     await flush(el);
     expect(giveBackButton(el)).toBeNull();
   });
-  it("uses the same saved request after a lost answer and a receipt reopen", async () => {
-    const refundTransaction = vi
-      .fn()
-      .mockRejectedValueOnce(new TypeError("offline"))
-      .mockResolvedValue(returned);
-    const { el, view } = await open({ refundTransaction });
-    await openRefund(el);
-    await submit(el);
-    expect(dialog(el)!.attempt?.request.submissionId).toBeTruthy();
-    const first = refundTransaction.mock.calls[0]![1];
-    expect(refundKeys()).toHaveLength(1);
-    emit(dialog(el)!, "tender-refund-close");
-    await flush(el);
-    emit(ticket(el)!, "back-to-find-bill");
-    await flush(el);
-    emit(view, "find-transaction-open", { row: transactionRow() });
-    await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
-    await openRefund(el);
-    expect(dialog(el)!.attempt?.request.submissionId).toBe(first.submissionId);
-    emit(dialog(el)!, "tender-refund-status");
-    await flush(el);
-    expect(refundTransaction).toHaveBeenCalledTimes(2);
-    expect(refundTransaction.mock.calls[1]![1]).toEqual(first);
-    expect(dialog(el)).toBeNull();
-  });
-  it("asks for an approver only after the operator's refund permission refusal, keeping the same identity and no PIN in storage", async () => {
-    const refundTransaction = vi
-      .fn()
-      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-      .mockResolvedValue(returned);
-    const { el } = await open({ refundTransaction });
-    await openRefund(el);
-    await submit(el);
-    expect(refundTransaction).toHaveBeenCalledTimes(1);
-    expect(approval(el)).not.toBeNull();
-    const id = refundTransaction.mock.calls[0]![1].submissionId;
-    emit(approval(el)!, "override-confirm", { personId: "manager", pin: "6394" });
-    await flush(el);
-    expect(refundTransaction).toHaveBeenCalledTimes(2);
-    expect(refundTransaction.mock.calls[1]![1]).toMatchObject({
-      submissionId: id,
-      override: { personId: "manager", pin: "6394" },
-    });
-    expect(dialog(el)).toBeNull();
-    expect(refundKeys()).toEqual([]);
-  });
-  it("ignores a refund outcome after logout and clears only this person's durable requests", async () => {
-    let resolve!: (value: TenderRefundView) => void;
-    const refundTransaction = vi.fn(
-      () =>
-        new Promise<TenderRefundView>((done) => {
-          resolve = done;
-        }),
-    );
-    const activity = fakeSessionActivity();
-    const { el, basket } = await open({ refundTransaction }, "F2", activity);
-    basket.store.addProduct(coffee, "2");
-    await flush(el);
-    await openRefund(el);
-    await submit(el);
-    expect(refundKeys()).toHaveLength(1);
-    const foreign = 'waitron.tender-refund:["other-device","p1"]:"sale-1"';
-    localStorage.setItem(foreign, "foreign");
-    (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
-    await flush(el);
-    expect(lock(el)).not.toBeNull();
-    expect(refundKeys()).toEqual([foreign]);
-    resolve(returned);
-    await flush(el);
-    await new Promise<void>((done) => requestAnimationFrame(() => done()));
-    expect(dialog(el)).toBeNull();
-    expect(ticket(el)).toBeNull();
-    expect(lock(el)).not.toBeNull();
-    expect(localStorage.getItem(foreign)).toBe("foreign");
-    expect(basket.store.lines[0]!.quantity).toBe("2");
-  });
-  it("a manual-terminal return requires a PIN before the first money request and never stores it", async () => {
-    const manual = { ...cash, method: "card", manual: true, last4: "4401" };
-    const refundTransaction = vi.fn(async (_sale: string, body: TenderRefundRequest) => {
-      expect(body.override).toEqual({ personId: "manager", pin: "6394" });
-      expect(refundKeys()).toHaveLength(1);
-      const stored = localStorage.getItem(refundKeys()[0]!)!;
-      expect(stored).not.toContain("6394");
-      expect(stored).not.toContain("override");
-      return returned;
-    });
-    const { el } = await open({
-      getTill: vi.fn().mockResolvedValue({
-        ...till,
-        capabilities: [...till.capabilities, "hand-keyed-card-payment"],
-      }),
-      getRefundableTenders: vi.fn().mockResolvedValue([manual]),
-      refundTransaction,
-    });
-    await openRefund(el);
-    const form = dialog(el)!;
-    emit(form.shadowRoot!.querySelector('[name="reason"]')!, "wt-change", {
-      value: "r-request",
-    });
-    emit(form.shadowRoot!.querySelector('[name="manualConfirmed"]')!, "wt-change", {
-      checked: true,
-    });
-    await form.updateComplete;
-    await userEvent.click(
-      page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),
-    );
-    await flush(el);
-    expect(refundTransaction).not.toHaveBeenCalled();
-    expect(approval(el)).not.toBeNull();
-    emit(approval(el)!, "override-confirm", { personId: "manager", pin: "6394" });
-    await flush(el);
-    expect(refundTransaction).toHaveBeenCalledTimes(1);
-    expect(dialog(el)).toBeNull();
-  });
-  it("discovers a pending server attempt after local logout cleanup and retries its id without a new request", async () => {
-    const pending: TenderRefundView = { ...returned, state: "pending", completedAt: null };
-    const getTenderRefund = vi.fn().mockResolvedValue(pending);
-    const retryTenderRefund = vi.fn().mockResolvedValue(returned);
-    const { el, refundTransaction } = await open({
-      getRefundableTenders: vi
-        .fn()
-        .mockResolvedValue([{ ...cash, pendingRefundId: returned.id, appliedRemaining: "0.00" }]),
-      getTenderRefund,
-      retryTenderRefund,
-    });
-    const form = await openRefund(el);
-    const inspect = form.shadowRoot!.querySelector<HTMLElement>("[data-inspect]");
-    expect(inspect).not.toBeNull();
-    await userEvent.click(page.elementLocator(inspect!));
-    await flush(el);
-    expect(dialog(el)!.result).toEqual(pending);
-    expect(getTenderRefund).toHaveBeenCalledWith(returned.id, expect.anything());
-    expect(refundKeys()).toEqual([]);
-    emit(dialog(el)!, "tender-refund-retry");
-    await flush(el);
-    expect(retryTenderRefund).toHaveBeenCalledWith(returned.id, undefined);
-    expect(refundTransaction).not.toHaveBeenCalled();
-    expect(dialog(el)).toBeNull();
-  });
-  it("a PIN refusal during a discovered retry remains on the PIN prompt and approval retries that existing id", async () => {
-    const retryTenderRefund = vi
-      .fn()
-      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-      .mockRejectedValueOnce({ code: "pin.invalid" })
-      .mockResolvedValue(returned);
-    const { el } = await open({
-      getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, pendingRefundId: returned.id }]),
-      retryTenderRefund,
-    });
-    await openRefund(el);
-    emit(dialog(el)!, "tender-refund-inspect", { refundId: returned.id });
-    await flush(el);
-    emit(dialog(el)!, "tender-refund-retry");
-    await flush(el);
-    expect(approval(el)).not.toBeNull();
-    emit(approval(el)!, "override-confirm", { personId: "manager", pin: "9999" });
-    await flush(el);
-    expect(approval(el)).not.toBeNull();
-    expect(approval(el)!.error).toEqual({ code: "pin.invalid", personId: "manager" });
-    expect(dialog(el)!.busy).toBe(false);
-    emit(approval(el)!, "override-confirm", { personId: "manager", pin: "6394" });
-    await flush(el);
-    expect(retryTenderRefund.mock.calls.map((call) => call[0])).toEqual([
-      returned.id,
-      returned.id,
-      returned.id,
-    ]);
-    expect(dialog(el)).toBeNull();
-  });
-  it("ignores a late approver list after leaving the receipt page", async () => {
-    let answer!: (staff: { personId: string; displayName: string }[]) => void;
-    const { el } = await open({
-      refundTransaction: vi.fn().mockRejectedValue({ code: "authorization.not_permitted" }),
-      listRefundAuthorizers: vi.fn(
-        () =>
-          new Promise((resolve) => {
-            answer = resolve;
-          }),
-      ),
-    });
-    await openRefund(el);
-    await submit(el);
-    expect(dialog(el)!.busy).toBe(true);
-    emit(ticket(el)!, "back-to-find-bill");
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("till-find-bill-screen")).not.toBeNull();
-    answer([{ personId: "manager", displayName: "Late manager" }]);
-    await flush(el);
-    await new Promise<void>((done) => requestAnimationFrame(() => done()));
-    expect(approval(el)).toBeNull();
-    expect(dialog(el)).toBeNull();
-  });
-  it("an ordinary component detach preserves the saved request but closes its departed refund window", async () => {
-    const { el } = await open({
-      refundTransaction: vi.fn().mockRejectedValue(new TypeError("offline")),
-    });
-    await openRefund(el);
-    await submit(el);
-    const saved = localStorage.getItem(refundKeys()[0]!)!;
-    el.remove();
-    await flush(el);
-    expect(dialog(el)).toBeNull();
-    const reloaded = await open({
-      refundTransaction: vi.fn().mockRejectedValue(new TypeError("offline")),
-    });
-    expect(dialog(reloaded.el)).toBeNull();
-    expect(localStorage.getItem(refundKeys()[0]!)).toBe(saved);
-    await openRefund(reloaded.el);
-    expect(dialog(reloaded.el)!.attempt?.request.reason).toBe("Customer request");
-  });
 
-  it("a lost-response request restored after reload can obtain a PIN when its status replay needs approval", async () => {
-    const first = await open({
-      refundTransaction: vi.fn().mockRejectedValue(new TypeError("offline")),
-    });
-    await openRefund(first.el);
-    await submit(first.el);
-    const id = dialog(first.el)!.attempt!.request.submissionId;
-    first.el.remove();
-    const refundTransaction = vi
-      .fn()
-      .mockRejectedValueOnce({ code: "authorization.not_permitted" })
-      .mockResolvedValue(returned);
-    const { el } = await open({ refundTransaction });
-    await openRefund(el);
-    emit(dialog(el)!, "tender-refund-status");
-    await flush(el);
-    expect(approval(el)).not.toBeNull();
-    emit(approval(el)!, "override-confirm", { personId: "manager", pin: "6394" });
-    await flush(el);
-    expect(refundTransaction).toHaveBeenCalledTimes(2);
-    expect(refundTransaction.mock.calls[1]![1]).toMatchObject({
-      submissionId: id,
-      ...ask,
-      override: { personId: "manager", pin: "6394" },
-    });
-    expect(dialog(el)).toBeNull();
-  });
-  it("a receipt departed by a tab switch cannot retain its refund dialog or accept its late result", async () => {
-    let resolve!: (value: TenderRefundView) => void;
-    const refundTransaction = vi.fn(
-      () =>
-        new Promise<TenderRefundView>((done) => {
-          resolve = done;
-        }),
-    );
-    const { el } = await open({ refundTransaction });
-    await openRefund(el);
-    await submit(el);
-    selectTab(el, "floor");
-    await flush(el);
-    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
-    expect(question.open).toBe(true);
-    emit(question, "wt-unsaved-choice", { decision: "discard" });
-    await flush(el);
-    expect(ticket(el)).toBeNull();
-    expect(dialog(el)).toBeNull();
-    resolve(returned);
-    await flush(el);
-    await new Promise<void>((done) => requestAnimationFrame(() => done()));
-    expect(ticket(el)).toBeNull();
-    expect(dialog(el)).toBeNull();
-  });
   it("an old refundable-balance read cannot expose Refund on a newer unsupported invoice", async () => {
     let resolve!: (value: RefundableTender[]) => void;
     const getRefundableTenders = vi
@@ -28380,434 +28010,6 @@ describe("A737 post-invoice refund integration", () => {
     await flush(el);
     await new Promise<void>((done) => requestAnimationFrame(() => done()));
     expect(giveBackButton(el)).toBeNull();
-  });
-  it("a pending response keeps one known attempt and repeated retry clicks cannot create another payout", async () => {
-    const pending: TenderRefundView = { ...returned, state: "pending", completedAt: null };
-    let resolve!: (value: TenderRefundView) => void;
-    const retryTenderRefund = vi.fn(
-      () =>
-        new Promise<TenderRefundView>((done) => {
-          resolve = done;
-        }),
-    );
-    const refundTransaction = vi.fn().mockResolvedValue(pending);
-    const { el } = await open({ refundTransaction, retryTenderRefund });
-    await openRefund(el);
-    await submit(el);
-    expect(dialog(el)!.result).toEqual(pending);
-    expect(dialog(el)!.attempt!.refundId).toBe(returned.id);
-    emit(dialog(el)!, "tender-refund-retry");
-    emit(dialog(el)!, "tender-refund-retry");
-    await flush(el);
-    expect(retryTenderRefund).toHaveBeenCalledTimes(1);
-    expect(refundTransaction).toHaveBeenCalledTimes(1);
-    expect(dialog(el)!.busy).toBe(true);
-    resolve(returned);
-    await flush(el);
-    expect(dialog(el)).toBeNull();
-    expect(refundKeys()).toEqual([]);
-  });
-  it("a lost-response journal is cleared on logout even when its receipt has not been reopened after reload", async () => {
-    const original = await open({
-      refundTransaction: vi.fn().mockRejectedValue(new TypeError("offline")),
-    });
-    await openRefund(original.el);
-    await submit(original.el);
-    original.el.remove();
-    const activity = fakeSessionActivity();
-    const { el } = await mountWidget<TillApp>("till-app", {
-      api: stubApi(),
-      sessionActivity: activity as never,
-    });
-    await toCounter(el);
-    expect(refundKeys()).toHaveLength(1);
-    (activity.configure.mock.calls.at(-1)![0] as { onIdle: () => void }).onIdle();
-    await flush(el);
-    expect(refundKeys()).toEqual([]);
-    expect(lock(el)).not.toBeNull();
-  });
-
-  it("a saved request can resolve after reload even when the refundable-balance refresh is unavailable", async () => {
-    const first = await open({
-      refundTransaction: vi.fn().mockRejectedValue(new TypeError("offline")),
-    });
-    await openRefund(first.el);
-    await submit(first.el);
-    first.el.remove();
-    const { el, refundTransaction } = await open({
-      getRefundableTenders: vi.fn().mockRejectedValue(new TypeError("unavailable")),
-    });
-    await openRefund(el);
-    emit(dialog(el)!, "tender-refund-status");
-    await flush(el);
-    expect(refundTransaction).toHaveBeenCalledTimes(1);
-    expect(dialog(el)).toBeNull();
-    expect(refundKeys()).toEqual([]);
-    expect(el.shadowRoot!.textContent).toContain(t("tender_refund.refresh_failed"));
-  });
-  it("a departed PIN prompt cannot submit after its cancellation", async () => {
-    const refundTransaction = vi.fn().mockRejectedValue({ code: "authorization.not_permitted" });
-    const { el } = await open({ refundTransaction });
-    await openRefund(el);
-    await submit(el);
-    const old = approval(el)!;
-    expect(old).not.toBeNull();
-    emit(old, "override-cancel");
-    await flush(el);
-    expect(approval(el)).toBeNull();
-    emit(old, "override-confirm", { personId: "manager", pin: "6394" });
-    await flush(el);
-    expect(refundTransaction).toHaveBeenCalledTimes(1);
-    expect(dialog(el)).not.toBeNull();
-  });
-  it("replacing the API closes an old refund window and ignores its late completion", async () => {
-    let resolve!: (value: TenderRefundView) => void;
-    const { el } = await open({
-      refundTransaction: vi.fn(
-        () =>
-          new Promise<TenderRefundView>((done) => {
-            resolve = done;
-          }),
-      ),
-    });
-    await openRefund(el);
-    await submit(el);
-    el.api = stubApi();
-    await flush(el);
-    expect(dialog(el)).toBeNull();
-    resolve(returned);
-    await flush(el);
-    await new Promise<void>((done) => requestAnimationFrame(() => done()));
-    expect(dialog(el)).toBeNull();
-  });
-
-  it("a saved manual-terminal request gets a fresh PIN when its unknown replay requires one", async () => {
-    const manual = { ...cash, method: "card", manual: true };
-    const refundTransaction = vi
-      .fn()
-      .mockRejectedValueOnce(new TypeError("lost manual answer"))
-      .mockRejectedValueOnce({ code: "tender.manual_refund_pin_required" })
-      .mockResolvedValue(returned);
-    const overrides = {
-      getTill: vi.fn().mockResolvedValue({
-        ...till,
-        capabilities: [...till.capabilities, "hand-keyed-card-payment"],
-      }),
-      getRefundableTenders: vi.fn().mockResolvedValue([manual]),
-      refundTransaction,
-    };
-    const first = await open(overrides);
-    await openRefund(first.el);
-    const form = dialog(first.el)!;
-    emit(form.shadowRoot!.querySelector('[name="reason"]')!, "wt-change", {
-      value: "r-request",
-    });
-    emit(form.shadowRoot!.querySelector('[name="manualConfirmed"]')!, "wt-change", {
-      checked: true,
-    });
-    await form.updateComplete;
-    await userEvent.click(
-      page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),
-    );
-    await flush(first.el);
-    emit(approval(first.el)!, "override-confirm", { personId: "manager", pin: "6394" });
-    await flush(first.el);
-    const id = dialog(first.el)!.attempt!.request.submissionId;
-    first.el.remove();
-    const { el } = await open(overrides);
-    await openRefund(el);
-    emit(dialog(el)!, "tender-refund-status");
-    await flush(el);
-    expect(approval(el)).not.toBeNull();
-    emit(approval(el)!, "override-confirm", { personId: "manager", pin: "6394" });
-    await flush(el);
-    expect(refundTransaction).toHaveBeenCalledTimes(3);
-    expect(refundTransaction.mock.calls[2]![1]).toMatchObject({
-      submissionId: id,
-      manualConfirmed: true,
-      override: { personId: "manager", pin: "6394" },
-    });
-    expect(dialog(el)).toBeNull();
-    expect(refundKeys()).toEqual([]);
-  });
-  it("a completed refund keeps the Transactions query, filters, sorting and page while leaving the basket intact", async () => {
-    let searchRequested!: () => void;
-    const searchRequest = new Promise<void>((resolve) => (searchRequested = resolve));
-    const listTransactions = vi.fn(async (query: { page: number; q: string }) => {
-      if (query.q === "0091 ") searchRequested();
-      return { ...listPage([transactionRow()], 101, query.page), dates: resolvedDates };
-    });
-    const { el, view, basket } = await open({ listTransactions });
-    emit(ticket(el)!, "back-to-find-bill");
-    await flush(el);
-    const tabs = view.shadowRoot!.querySelector("wt-tabs")!;
-    await userEvent.click(
-      page.elementLocator(
-        tabs.shadowRoot!.querySelector<HTMLElement>('[data-key="transactions"]')!,
-      ),
-    );
-    await flush(el);
-    const grid = view.shadowRoot!.querySelector<WtDataTable<unknown>>(
-      'wt-data-table[data-tab="transactions"]',
-    )!;
-    await vi.waitFor(() => expect(grid.loading).toBe(false));
-    await userEvent.click(
-      page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>('[data-sort="amount"]')!),
-    );
-    await vi.waitFor(() => expect(grid.loading).toBe(false));
-    await userEvent.click(
-      page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>(".filters-trigger")!),
-    );
-    await chooseOption(grid.shadowRoot!.querySelector('[data-filter="method"]')!, "card");
-    await chooseOption(grid.shadowRoot!.querySelector('[data-filter="type"]')!, "full-invoice");
-    await userEvent.click(
-      page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>(".filters-close")!),
-    );
-    await vi.waitFor(() => expect(grid.loading).toBe(false));
-    const search = grid.shadowRoot!.querySelector<HTMLInputElement>('input[type="search"]')!;
-    await userEvent.fill(page.elementLocator(search), "0091 ");
-    await searchRequest;
-    expect(listTransactions.mock.calls.at(-1)?.[0]).toMatchObject({ q: "0091 " });
-    await vi.waitFor(() => expect(grid.loading).toBe(false));
-    await userEvent.click(
-      page.elementLocator(grid.shadowRoot!.querySelector<HTMLElement>("[data-next-page]")!),
-    );
-    await vi.waitFor(() => expect(grid.serverPaging?.page).toBe(1));
-    await vi.waitFor(() => expect(grid.loading).toBe(false));
-    basket.store.addProduct(coffee, "2");
-    await flush(el);
-    const before = listTransactions.mock.calls.at(-1)![0];
-    expect(before).toMatchObject({
-      q: "0091 ",
-      page: 1,
-      method: "card",
-      type: "full-invoice",
-      sort: { key: "amount", direction: "ascending" },
-    });
-    await userEvent.click(
-      page.elementLocator(
-        grid.shadowRoot!.querySelector<HTMLElement>('[data-row-key="sale-1"] td')!,
-      ),
-    );
-    await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
-    await openRefund(el);
-    await submit(el);
-    expect(dialog(el)).toBeNull();
-    emit(ticket(el)!, "back-to-find-bill");
-    await flush(el);
-    expect(view.shadowRoot!.querySelector('wt-data-table[data-tab="transactions"]')).toBe(grid);
-    await vi.waitFor(() => expect(listTransactions.mock.calls.at(-1)![0]).toEqual(before));
-    expect(grid.serverPaging?.page).toBe(1);
-    expect(search.value).toBe("0091 ");
-    expect(basket.store.lines[0]!.quantity).toBe("2");
-  });
-
-  it("a reopened window can check the same attempt after the departed window's late completion cleared its journal", async () => {
-    let resolve!: (value: TenderRefundView) => void;
-    const refundTransaction = vi.fn(
-      () =>
-        new Promise<TenderRefundView>((done) => {
-          resolve = done;
-        }),
-    );
-    const { el, view } = await open({ refundTransaction });
-    await openRefund(el);
-    await submit(el);
-    emit(ticket(el)!, "back-to-find-bill");
-    await flush(el);
-    const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
-    expect(question.open).toBe(true);
-    emit(question, "wt-unsaved-choice", { decision: "discard" });
-    await flush(el);
-    emit(view, "find-transaction-open", { row: transactionRow() });
-    await vi.waitFor(() => expect(ticket(el)).not.toBeNull());
-    await openRefund(el);
-    expect(dialog(el)!.attempt).not.toBeNull();
-    resolve(returned);
-    await refundTransaction.mock.results[0]!.value;
-    await flush(el);
-    await new Promise<void>((done) => requestAnimationFrame(() => done()));
-    expect(refundKeys()).toEqual([]);
-    expect(dialog(el)).not.toBeNull();
-    emit(dialog(el)!, "tender-refund-status");
-    await flush(el);
-    expect(dialog(el)).toBeNull();
-    expect(refundTransaction).toHaveBeenCalledTimes(1);
-  });
-  it("keeps an approver-list failure on the refund without sending a manual return", async () => {
-    const refundTransaction = vi.fn();
-    const { el } = await open({
-      getTill: vi.fn().mockResolvedValue({
-        ...till,
-        capabilities: [...till.capabilities, "hand-keyed-card-payment"],
-      }),
-      getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, manual: true, method: "card" }]),
-      listRefundAuthorizers: vi.fn().mockRejectedValue(new TypeError("offline")),
-      refundTransaction,
-    });
-    const form = await openRefund(el);
-    emit(form.shadowRoot!.querySelector('[name="reason"]')!, "wt-change", { value: "r-return" });
-    emit(form.shadowRoot!.querySelector('[name="manualConfirmed"]')!, "wt-change", {
-      checked: true,
-    });
-    await form.updateComplete;
-    await userEvent.click(
-      page.elementLocator(form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!),
-    );
-    await flush(el);
-    expect(dialog(el)!.busy).toBe(false);
-    expect(dialog(el)!.refusal).toEqual({ code: "approvers" });
-    expect(approval(el)).toBeNull();
-    expect(refundTransaction).not.toHaveBeenCalled();
-    expect(refundKeys()).toEqual([]);
-  });
-  it("gives up reading who can approve a manual return at the time limit, and says it could not be read", async () => {
-    const refundTransaction = vi.fn();
-    const { el } = await open({
-      getTill: vi.fn().mockResolvedValue({
-        ...till,
-        capabilities: [...till.capabilities, "hand-keyed-card-payment"],
-      }),
-      getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, manual: true, method: "card" }]),
-      listRefundAuthorizers: vi.fn(
-        (options?: { signal?: AbortSignal }) =>
-          new Promise((_resolve, reject) =>
-            options?.signal?.addEventListener("abort", () =>
-              reject(new DOMException("aborted", "AbortError")),
-            ),
-          ),
-      ),
-      refundTransaction,
-    });
-    const form = await openRefund(el);
-    emit(form.shadowRoot!.querySelector('[name="reason"]')!, "wt-change", { value: "r-return" });
-    emit(form.shadowRoot!.querySelector('[name="manualConfirmed"]')!, "wt-change", {
-      checked: true,
-    });
-    await form.updateComplete;
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    try {
-      form.shadowRoot!.querySelector<HTMLElement>("[data-submit]")!.click();
-      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1);
-      await el.updateComplete;
-      expect(dialog(el)!.busy).toBe(true);
-
-      await vi.advanceTimersByTimeAsync(1);
-      await el.updateComplete;
-
-      expect(dialog(el)!.busy).toBe(false);
-      expect(dialog(el)!.refusal).toEqual({ code: "approvers" });
-      expect(approval(el)).toBeNull();
-      expect(refundTransaction).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-  it("rejects a discovered refund belonging to another sale without exposing its result", async () => {
-    const { el, refundTransaction } = await open({
-      getRefundableTenders: vi.fn().mockResolvedValue([{ ...cash, pendingRefundId: returned.id }]),
-      getTenderRefund: vi.fn().mockResolvedValue({ ...returned, saleId: "another-sale" }),
-    });
-    await openRefund(el);
-    emit(dialog(el)!, "tender-refund-inspect", { refundId: returned.id });
-    await flush(el);
-    expect(dialog(el)).not.toBeNull();
-    expect(dialog(el)!.result).toBeNull();
-    expect(dialog(el)!.refusal).toEqual({ code: "network" });
-    expect(refundTransaction).not.toHaveBeenCalled();
-    expect(ticket(el)!.result.invoiceNumber).toBe("F-0001");
-  });
-  it("shows a storage refusal before opening a refund and still clears the session on logout", async () => {
-    const { el, refundTransaction } = await open();
-    const originalGet = Storage.prototype.getItem;
-    const originalRemove = Storage.prototype.removeItem;
-    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (
-      this: Storage,
-      key,
-    ) {
-      if (key.startsWith("waitron.tender-refund:")) throw new Error("Storage blocked");
-      return originalGet.call(this, key);
-    });
-    const remove = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(function (
-      this: Storage,
-      key,
-    ) {
-      if (key.startsWith("waitron.tender-refund:")) throw new Error("Storage blocked");
-      return originalRemove.call(this, key);
-    });
-    try {
-      el.requestUpdate();
-      await flush(el);
-      expect(giveBackButton(el), "the paid receipt offers Give money back").not.toBeNull();
-      emit(ticket(el)!, "tender-refund-open");
-      await flush(el);
-      expect(dialog(el)).toBeNull();
-      expect(el.shadowRoot!.textContent).toContain(t("tender_refund.storage"));
-      expect(refundTransaction).not.toHaveBeenCalled();
-      emit(shell(el)!, "logout");
-      await flush(el);
-      expect(lock(el)).not.toBeNull();
-    } finally {
-      get.mockRestore();
-      remove.mockRestore();
-    }
-  });
-  it("ignores a late rejected refund after its receipt has been left", async () => {
-    let reject!: (error: unknown) => void;
-    const { el } = await open({
-      refundTransaction: vi.fn(
-        () =>
-          new Promise((_resolve, fail) => {
-            reject = fail;
-          }),
-      ),
-    });
-    await openRefund(el);
-    await submit(el);
-    emit(ticket(el)!, "back-to-find-bill");
-    await flush(el);
-    emit(el.shadowRoot!.querySelector("wt-unsaved-changes")!, "wt-unsaved-choice", {
-      decision: "discard",
-    });
-    await flush(el);
-    reject({ code: "pin.invalid" });
-    await flush(el);
-    await new Promise<void>((done) => requestAnimationFrame(() => done()));
-    expect(dialog(el)).toBeNull();
-    expect(approval(el)).toBeNull();
-    expect(el.shadowRoot!.textContent).not.toContain(codeMessage("pin.invalid"));
-    expect(el.shadowRoot!.querySelector("till-find-bill-screen")).not.toBeNull();
-  });
-  it("a repeated Refund activation cannot replace the window awaiting its money result", async () => {
-    let resolve!: (value: TenderRefundView) => void;
-    const refundTransaction = vi.fn(
-      () =>
-        new Promise<TenderRefundView>((done) => {
-          resolve = done;
-        }),
-    );
-    const { el } = await open({ refundTransaction });
-    await openRefund(el);
-    await submit(el);
-    expect(dialog(el)!.busy).toBe(true);
-    emit(ticket(el)!, "tender-refund-open");
-    await flush(el);
-    expect(dialog(el)!.busy).toBe(true);
-    expect(refundTransaction).toHaveBeenCalledOnce();
-    resolve(returned);
-    await flush(el);
-    await vi.waitFor(() => expect(dialog(el)).toBeNull());
-    expect(refundKeys()).toEqual([]);
-  });
-  it("an expired session during a refund locks locally and clears this person's saved request", async () => {
-    const { el } = await open({
-      refundTransaction: vi.fn().mockRejectedValue({ code: "session.required" }),
-    });
-    await openRefund(el);
-    await submit(el);
-    expect(lock(el)).not.toBeNull();
-    expect(dialog(el)).toBeNull();
-    expect(refundKeys()).toEqual([]);
   });
 });
 

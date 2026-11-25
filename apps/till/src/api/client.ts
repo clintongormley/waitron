@@ -38,11 +38,6 @@ import type {
   InvoiceCorrectionCashGiven,
   InvoiceCorrectionCashRequest,
   InvoiceCorrectionFileRequest,
-  InvoiceCorrectionLines,
-  InvoiceCorrectionOpened,
-  InvoiceCorrectionPreview,
-  InvoiceCorrectionPreviewRequest,
-  InvoiceCorrectionRequest,
   InvoiceCorrectionView,
   OpenInvoiceCorrection,
 } from "./invoice-correction-types.js";
@@ -4399,29 +4394,6 @@ export class TillApi {
     );
   }
 
-  readInvoiceCorrectionLines(
-    saleId: string,
-    options: ReadOptions = {},
-  ): Promise<InvoiceCorrectionLines> {
-    return this.#request(
-      `/api/transactions/${encodeURIComponent(saleId)}/corrections/lines`,
-      "GET",
-      undefined,
-      options.signal,
-    );
-  }
-
-  previewInvoiceCorrection(
-    saleId: string,
-    request: InvoiceCorrectionPreviewRequest,
-  ): Promise<InvoiceCorrectionPreview> {
-    return this.#request(
-      `/api/transactions/${encodeURIComponent(saleId)}/corrections/preview`,
-      "POST",
-      request,
-    );
-  }
-
   readGiveBack(saleId: string, options: ReadOptions = {}): Promise<GiveBackView> {
     return this.#request(
       `/api/transactions/${encodeURIComponent(saleId)}/give-back`,
@@ -4441,19 +4413,6 @@ export class TillApi {
 
   giveBack(saleId: string, body: GiveBackWrite): Promise<GiveBackOutcome> {
     return this.#request(`/api/transactions/${encodeURIComponent(saleId)}/give-back`, "POST", body);
-  }
-
-  /** `POST /api/transactions/:saleId/corrections`; refused `invoice_correction.already_open`
-   * with the open correction's `correctionId`. */
-  openInvoiceCorrection(
-    saleId: string,
-    request: InvoiceCorrectionRequest,
-  ): Promise<InvoiceCorrectionOpened> {
-    return this.#request(
-      `/api/transactions/${encodeURIComponent(saleId)}/corrections`,
-      "POST",
-      request,
-    );
   }
 
   giveInvoiceCorrectionCash(

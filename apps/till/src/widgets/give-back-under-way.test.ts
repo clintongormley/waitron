@@ -90,7 +90,6 @@ function fakeApi() {
     listApprovers: vi.fn<TillApi["listApprovers"]>(async () => [
       { personId: "manager", displayName: "Marta" },
     ]),
-    openInvoiceCorrection: vi.fn(),
     giveInvoiceCorrectionCash: vi.fn(async (_id: string, request: { amount: string }) => ({
       correction: { ...OPEN, state: "filed" as const, moneyBack: request.amount, left: "0.00" },
       refunds: [],
@@ -1124,7 +1123,7 @@ describe("only a card's part with no answer counts as lost", () => {
     expect(api.refundTransaction.mock.calls[1]![1]).toEqual(first);
   });
 
-  it("keeps a refused card refund Refund a payment saved when this window closes", async () => {
+  it("keeps a refused card refund saved outside a correction when this window closes", async () => {
     const api = fakeApi();
     const refunds = new TenderRefundSession(SCOPE, api);
     api.refundTransaction.mockRejectedValueOnce(
@@ -1203,7 +1202,6 @@ describe("what still works when a read fails", () => {
 
   it("offers the cash still left when the saved cash request cannot be read", async () => {
     const other = new InvoiceCorrectionSession(SCOPE, {
-      openInvoiceCorrection: () => Promise.reject(lost()),
       giveInvoiceCorrectionCash: () => Promise.reject(lost()),
     });
     await other.giveCash("correction-1", { amount: "2.00" }).catch(() => {});

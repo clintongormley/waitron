@@ -193,7 +193,6 @@ export function underWayStubs(correction: InvoiceCorrectionView = UNDER_WAY) {
       ...correction,
       state: "discarded",
     })),
-    openInvoiceCorrection: vi.fn<TillApi["openInvoiceCorrection"]>(),
     giveInvoiceCorrectionCash: vi.fn<TillApi["giveInvoiceCorrectionCash"]>(),
     refundTransaction: vi.fn<TillApi["refundTransaction"]>(),
     retryTenderRefund: vi.fn<TillApi["retryTenderRefund"]>(),

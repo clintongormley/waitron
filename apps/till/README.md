@@ -57,7 +57,7 @@ remove or reduce sent dishes and their extras.
 
 On a paid bill, **Cancel item…** offers **Refund** only when this device can return an original
 cash or card payment that still has money available toward the bill. The device profile must allow
-that payment method. If you need a different device, the dialog directs you to **Refund a payment**
+that payment method. If you need a different device, the dialog directs you to **Give money back**
 on the receipt at a till. Cancelling the dish stops its kitchen work; returning money remains a
 separate step.
 

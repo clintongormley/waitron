@@ -82,7 +82,6 @@ import {
   applyThemePick,
   THEME_SELECTED_EVENT,
   followVenueTheme,
-  formatDecimalInput,
   setHelpMode,
 } from "@waitron/ui";
 import {
@@ -261,27 +260,15 @@ import type {
 } from "./widgets/bill-pay-dialog.js";
 import type { ReaderStopControl } from "./widgets/card-waiting.js";
 import "./widgets/bill-refund-dialog.js";
-import "./widgets/tender-refund-dialog.js";
-import "./widgets/invoice-correction-dialog.js";
-import type { InvoiceCorrectionCardLeg } from "./widgets/invoice-correction-dialog.js";
 import { InvoiceCorrectionSession } from "./state/invoice-correction.js";
 import "./widgets/give-back-dialog.js";
 import type { GiveBackFill } from "./widgets/give-back-dialog.js";
 import { GiveBackSession } from "./state/give-back.js";
-import type { TillTenderRefundDialog } from "./widgets/tender-refund-dialog.js";
-import type {
-  RefundableTender,
-  TenderRefundView,
-  TenderRefundAcknowledgment,
-  TenderRefundRequest,
-} from "./api/tender-refund-types.js";
+import type { RefundableTender, TenderRefundAcknowledgment } from "./api/tender-refund-types.js";
 import {
   refundMethodAllowed,
   TenderRefundAttempts,
   TenderRefundSession,
-  TenderRefundAttemptError,
-  type SavedTenderRefund,
-  type TenderRefundAsk,
   type TenderRefundScope,
 } from "./state/tender-refund.js";
 import "./widgets/unpaid-departure-dialog.js";
@@ -1555,19 +1542,6 @@ function sameFinishContext(
       ),
   ];
   return JSON.stringify(values(a)) === JSON.stringify(values(b));
-}
-
-/** What a cancel handed to a refund fills in on the refund screen. */
-interface RefundFill {
-  target: string;
-  startReasonId: string;
-  dishes: string;
-  cancellationIds: string[];
-  /** The cancel's Void reasons, so the refund does not read them again. */
-  reasons?: AdjustmentReason[];
-  /** The open correction this refund is a card leg of, and its card. */
-  invoiceCorrectionId?: string;
-  tenderId?: string;
 }
 
 interface FinishingTable {
@@ -3068,8 +3042,6 @@ export class TillApp extends LitElement {
     this.servedCommand = null;
     this.#closeDeviceZones();
     this.deviceSettingsOpen = false;
-    this.#closeTenderRefund();
-    this.invoiceCorrecting = null;
     this.givingBack = null;
     this.#tenderRefundRead++;
     this.#stopClocking();
@@ -3901,18 +3873,11 @@ export class TillApp extends LitElement {
   readonly #tenderRefundAttempts = new TenderRefundAttempts();
   #tenderRefundScope?: TenderRefundScope;
   #tenderRefundSession?: TenderRefundSession;
-  /** One per sign-in and server, as Refund a payment's: a window opened again before a press's
-   * answer came shares the session that sent it, which remembers the answer. */
+  /** One per sign-in and server: a window opened again before a press's answer came shares the
+   * session that sent it, which remembers the answer. */
   #giveBackSession?: GiveBackSession;
   #tenderRefundRead = 0;
   @state() private refundableTenders: RefundableTender[] = [];
-  @state() private invoiceCorrecting: {
-    saleId: string;
-    correctionId: string;
-    session: InvoiceCorrectionSession;
-    legsRevision: number;
-    cardNotice: { key: StringKey } | null;
-  } | null = null;
   /** Whether the receipt offers Give money back: read when its payments or windows change. */
   @state() private giveBackOffered = false;
   @state() private givingBack: {
@@ -3921,22 +3886,6 @@ export class TillApp extends LitElement {
     corrections: InvoiceCorrectionSession;
     refunds: TenderRefundSession;
     fill: GiveBackFill | null;
-  } | null = null;
-  @state() private tenderRefunding: {
-    visit: object;
-    saleId: string;
-    session: TenderRefundSession;
-    attempt: SavedTenderRefund | null;
-    result: TenderRefundView | null;
-    ask?: TenderRefundAsk;
-    retry?: boolean;
-    busy: boolean;
-    refusal: DialogRefusal | null;
-    approvers?: StaffMember[];
-    pinError: ApproverRefusal | null;
-    reasons: AdjustmentReason[] | null;
-    reasonsLoading: boolean;
-    fill?: RefundFill;
   } | null = null;
   @state() private findBillError?:
     | StringKey
@@ -4319,7 +4268,7 @@ export class TillApp extends LitElement {
     session: number;
     visit: number;
     tab: BuiltInScreen | undefined;
-    receipts: (FinishingTable["receipts"][number] & { fill: RefundFill })[];
+    receipts: (FinishingTable["receipts"][number] & { fill: GiveBackFill })[];
     busy: boolean;
     refusal: string;
   } | null = null;
@@ -5296,8 +5245,6 @@ export class TillApp extends LitElement {
       this.#refundPrint = undefined;
       this.refundPrintBusy = false;
       if (this.historicalReceipt?.kind === "refund") this.#backToFindBill();
-      this.#closeTenderRefund();
-      this.invoiceCorrecting = null;
       this.givingBack = null;
       if (this.#tenderRefundScope !== undefined) {
         this.#tenderRefundSession = new TenderRefundSession(
@@ -5311,8 +5258,6 @@ export class TillApp extends LitElement {
     if (changed.has("api")) this.#stopHours();
     if (changed.has("drill")) {
       if (this.drill?.kind !== "ticket") {
-        this.#closeTenderRefund();
-        this.invoiceCorrecting = null;
         this.givingBack = null;
       }
       if (this.drill?.kind !== "find-bill") this.#cancelFindBillRead();
@@ -5371,8 +5316,8 @@ export class TillApp extends LitElement {
     const open = this.adjusting;
     if (open !== null && this.#hasLeftAdjusted(open)) this.#closeAdjust();
     if (
-      ["refundableTenders", "historicalReceipt", "givingBack", "tenderRefunding", "api"].some(
-        (key) => changed.has(key),
+      ["refundableTenders", "historicalReceipt", "givingBack", "api"].some((key) =>
+        changed.has(key),
       )
     )
       this.giveBackOffered = this.#offersGiveBack();
@@ -9419,7 +9364,7 @@ export class TillApp extends LitElement {
       refundId: string | null;
     },
     cancellation?: CancellingItem | (() => boolean),
-    fill?: RefundFill,
+    fill?: GiveBackFill,
   ): Promise<void> {
     const originCurrent =
       cancellation === undefined
@@ -9543,10 +9488,9 @@ export class TillApp extends LitElement {
     );
   }
 
-  /** True when the payments read now are the ones shown. */
-  async #readRefundableTenders(afterRefund = false): Promise<boolean> {
+  async #readRefundableTenders(afterRefund = false): Promise<void> {
     const receipt = this.historicalReceipt;
-    if (receipt?.kind !== "invoice") return false;
+    if (receipt?.kind !== "invoice") return;
     const session = this.#operatorSession;
     const api = this.api;
     const read = ++this.#tenderRefundRead;
@@ -9558,23 +9502,11 @@ export class TillApp extends LitElement {
       read === this.#tenderRefundRead;
     try {
       const tenders = await api.getRefundableTenders(receipt.saleId, {});
-      if (!current()) return false;
-      this.refundableTenders = tenders;
-      return true;
+      if (current()) this.refundableTenders = tenders;
     } catch {
       if (current())
         this.errorKey = afterRefund ? "tender_refund.refresh_failed" : "tender_refund.read_failed";
-      return false;
     }
-  }
-
-  #closeTenderRefund(): void {
-    if (this.tenderRefunding?.fill?.invoiceCorrectionId !== undefined && this.invoiceCorrecting)
-      this.invoiceCorrecting = {
-        ...this.invoiceCorrecting,
-        legsRevision: this.invoiceCorrecting.legsRevision + 1,
-      };
-    this.tenderRefunding = null;
   }
 
   #clearTenderRefundSession(): void {
@@ -9590,217 +9522,7 @@ export class TillApp extends LitElement {
     this.#giveBackSession = undefined;
     this.#tenderRefundRead++;
     this.refundableTenders = [];
-    this.#closeTenderRefund();
     this.givingBack = null;
-  }
-
-  #openTenderRefund(fill?: RefundFill): void {
-    const receipt = this.historicalReceipt;
-    const session = this.#tenderRefundSession;
-    if (
-      !this.isConnected ||
-      this.drill?.kind !== "ticket" ||
-      receipt?.kind !== "invoice" ||
-      !session ||
-      this.tenderRefunding ||
-      !this.#hasRefundableTenders()
-    )
-      return;
-    try {
-      this.tenderRefunding = {
-        visit: {},
-        saleId: receipt.saleId,
-        session,
-        attempt: session.read(receipt.saleId),
-        result: null,
-        refusal: null,
-        pinError: null,
-        busy: false,
-        reasons: fill?.reasons ?? null,
-        reasonsLoading: false,
-        ...(fill === undefined ? {} : { fill }),
-      };
-    } catch {
-      this.errorKey = "tender_refund.storage";
-      return;
-    }
-    if (fill?.reasons === undefined) void this.#loadTenderRefundReasons();
-  }
-
-  async #loadTenderRefundReasons(): Promise<void> {
-    const open = this.tenderRefunding;
-    if (!open || open.reasonsLoading) return;
-    const api = this.api;
-    const current = () =>
-      this.isConnected && this.tenderRefunding?.visit === open.visit && this.api === api;
-    this.tenderRefunding = { ...open, reasonsLoading: true };
-    let reasons: AdjustmentReason[] | null = null;
-    try {
-      reasons = await api.listAdjustmentReasons();
-    } catch {
-      // The dialog offers Retry while the reasons are unread.
-    }
-    if (current())
-      this.tenderRefunding = { ...this.tenderRefunding!, reasons, reasonsLoading: false };
-  }
-
-  #linkedAsk(ask: TenderRefundAsk, fill: RefundFill | undefined): TenderRefundAsk {
-    const rest: TenderRefundAsk = { ...ask };
-    delete rest.cancellationIds;
-    if (fill?.invoiceCorrectionId !== undefined)
-      return { ...rest, invoiceCorrectionId: fill.invoiceCorrectionId };
-    if (fill === undefined || fill.cancellationIds.length === 0) return rest;
-    return { ...rest, cancellationIds: [...fill.cancellationIds] };
-  }
-
-  #refundAtTill(fill: RefundFill | undefined): boolean {
-    if (fill === undefined || fill.invoiceCorrectionId !== undefined) return false;
-    const available = this.refundableTenders.filter((row) =>
-      this.#cancellationPaymentAvailable(row),
-    );
-    const here = available.filter((row) => this.#refundMethodAllowed(row));
-    return here.length <= 1 && here.length < available.length;
-  }
-
-  async #askTenderRefundApprover(): Promise<void> {
-    const open = this.tenderRefunding;
-    if (!open) return;
-    const api = this.api;
-    const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    try {
-      const approvers = await api.listRefundAuthorizers({ signal: limit.signal });
-      if (this.tenderRefunding?.visit === open.visit && this.isConnected && this.api === api)
-        this.tenderRefunding = { ...this.tenderRefunding, busy: false, approvers, pinError: null };
-    } catch {
-      if (this.tenderRefunding?.visit === open.visit && this.isConnected && this.api === api)
-        this.tenderRefunding = {
-          ...this.tenderRefunding,
-          busy: false,
-          refusal: { code: "approvers" },
-        };
-    } finally {
-      limit.done();
-    }
-  }
-
-  async #submitTenderRefund(ask: TenderRefundAsk): Promise<void> {
-    const open = this.tenderRefunding;
-    if (!open || open.busy || open.attempt || open.result) return;
-    const tender = this.refundableTenders.find((row) => row.tenderId === ask.tenderId);
-    if (!tender || tender.pendingRefundId !== null || !this.#refundMethodAllowed(tender)) return;
-    this.tenderRefunding = {
-      ...open,
-      ask: this.#linkedAsk(ask, open.fill),
-      busy: true,
-      refusal: null,
-    };
-    if (tender.manual) await this.#askTenderRefundApprover();
-    else await this.#runTenderRefund("submit");
-  }
-
-  async #runTenderRefund(
-    action: "submit" | "status" | "retry" | "inspect",
-    override?: TenderRefundRequest["override"],
-    refundId?: string,
-  ): Promise<void> {
-    const open = this.tenderRefunding;
-    if (!open || !this.isConnected || this.drill?.kind !== "ticket") return;
-    const receipt = this.historicalReceipt;
-    const api = this.api;
-    const session = this.#operatorSession;
-    const current = () =>
-      this.isConnected &&
-      this.tenderRefunding?.visit === open.visit &&
-      this.historicalReceipt === receipt &&
-      this.#operatorSession === session &&
-      this.api === api;
-    this.tenderRefunding = {
-      ...open,
-      busy: true,
-      refusal: null,
-      pinError: null,
-      retry: action === "retry" || (action === "status" && open.attempt !== null),
-    };
-    await this.#holdingReload(async () => {
-      try {
-        let result: TenderRefundView;
-        if (action === "submit") {
-          result = await open.session.submit(open.saleId, open.ask!, override);
-        } else if (action === "inspect") result = await api.getTenderRefund(refundId!, {});
-        else if (open.attempt !== null || open.session.read(open.saleId) !== null)
-          result =
-            action === "retry"
-              ? await open.session.retry(open.saleId, override)
-              : await open.session.resume(open.saleId);
-        else if (open.result !== null)
-          result =
-            action === "retry"
-              ? await api.retryTenderRefund(open.result.id, override)
-              : await api.getTenderRefund(open.result.id, {});
-        else return;
-        if (!current()) return;
-        const target =
-          open.ask?.tenderId ??
-          open.attempt?.request.tenderId ??
-          open.result?.tenderId ??
-          this.refundableTenders.find((row) => row.pendingRefundId === refundId)?.tenderId;
-        if (result.saleId !== open.saleId || result.tenderId !== target)
-          throw new TenderRefundAttemptError("mismatch");
-        if (result.state === "completed") {
-          this.shadowRoot!.querySelector<TillTenderRefundDialog>(
-            "till-tender-refund-dialog",
-          )!.closeSaved();
-          this.#closeTenderRefund();
-          this.refundableTenders = [];
-          await this.updateComplete;
-          if (
-            this.isConnected &&
-            this.historicalReceipt === receipt &&
-            this.#operatorSession === session &&
-            this.api === api
-          )
-            await this.#readRefundableTenders(true);
-        } else
-          this.tenderRefunding = {
-            ...this.tenderRefunding!,
-            busy: false,
-            approvers: undefined,
-            result,
-            attempt: open.session.read(open.saleId),
-          };
-      } catch (error) {
-        if (!current()) return;
-        const refusal =
-          error instanceof TenderRefundAttemptError
-            ? { code: error.kind === "storage" ? "storage" : "network" }
-            : refusalOf(error);
-        if (refusal.code === "session.required" || refusal.code === "session.not_open") {
-          void this.#onLogout();
-          return;
-        }
-        let attempt: SavedTenderRefund | null = null;
-        try {
-          attempt = open.session.read(open.saleId);
-        } catch {
-          /* The storage refusal is shown without another send. */
-        }
-        this.tenderRefunding = { ...this.tenderRefunding!, busy: false, attempt, refusal };
-        if (
-          override === undefined &&
-          (refusal.code === "authorization.not_permitted" ||
-            refusal.code === "tender.manual_refund_pin_required" ||
-            refusal.code === "tender.refund_exceeds_cancelled")
-        ) {
-          this.tenderRefunding = { ...this.tenderRefunding, busy: true };
-          await this.#askTenderRefundApprover();
-        } else if (override !== undefined && APPROVER_REFUSALS.has(refusal.code))
-          this.tenderRefunding = {
-            ...this.tenderRefunding,
-            pinError: approverRefusal(error, override.personId),
-          };
-        else this.tenderRefunding = { ...this.tenderRefunding, approvers: undefined };
-      }
-    });
   }
 
   async #onFindCorrectionOpen(
@@ -9827,7 +9549,7 @@ export class TillApp extends LitElement {
 
   /** With `underWay`, opens on a receipt whose give-back is under way, which may have nothing left
    * to start: the window reads it and opens on what is left to do. */
-  #openGiveBack(underWay = false, fill?: RefundFill): void {
+  #openGiveBack(underWay = false, fill?: GiveBackFill): void {
     const receipt = this.historicalReceipt;
     const scope = this.#tenderRefundScope;
     const refunds = this.#tenderRefundSession;
@@ -9848,10 +9570,7 @@ export class TillApp extends LitElement {
       session,
       corrections: new InvoiceCorrectionSession(scope, this.api),
       refunds,
-      fill:
-        fill === undefined
-          ? null
-          : { cancellationIds: fill.cancellationIds, reasonId: fill.startReasonId },
+      fill: fill ?? null,
     };
   }
 
@@ -9881,197 +9600,12 @@ export class TillApp extends LitElement {
     ></till-give-back-dialog>`;
   }
 
-  /** With `correctionId`, carries on with that open correction, which may have nothing left to
-   * refund. Only the old window's tests send one now; it goes with that window in PR 3. */
-  #openInvoiceCorrection(correctionId = ""): void {
-    const receipt = this.historicalReceipt;
-    if (
-      !this.isConnected ||
-      this.drill?.kind !== "ticket" ||
-      receipt?.kind !== "invoice" ||
-      this.invoiceCorrecting ||
-      this.#tenderRefundScope === undefined ||
-      (correctionId === "" && !this.#hasRefundableTenders())
-    )
-      return;
-    this.invoiceCorrecting = {
-      saleId: receipt.saleId,
-      correctionId,
-      session: new InvoiceCorrectionSession(this.#tenderRefundScope, this.api),
-      legsRevision: 0,
-      cardNotice: null,
-    };
-  }
-
-  /** Opens Refund a payment on a correction's card once the payments are read again: the correction
-   * window read them after this app did, and a refund may have ended between the two reads. */
-  async #openCorrectionCard(
-    correcting: InvoiceCorrectionSession,
-    leg: InvoiceCorrectionCardLeg,
-  ): Promise<void> {
-    const receipt = this.historicalReceipt;
-    const session = this.#operatorSession;
-    const api = this.api;
-    if (this.invoiceCorrecting?.session !== correcting || this.tenderRefunding) return;
-    this.invoiceCorrecting = { ...this.invoiceCorrecting, cardNotice: null };
-    const read = await this.#readRefundableTenders();
-    const same = () =>
-      this.isConnected &&
-      this.historicalReceipt === receipt &&
-      this.#operatorSession === session &&
-      this.api === api &&
-      this.invoiceCorrecting?.session === correcting;
-    // The window's own message, and a fresh read of the correction, since the main screen's error
-    // sits behind the window and the step pressed may be gone.
-    const refused = (key: StringKey) => {
-      if (this.invoiceCorrecting?.session === correcting)
-        this.invoiceCorrecting = {
-          ...this.invoiceCorrecting,
-          legsRevision: this.invoiceCorrecting.legsRevision + 1,
-          cardNotice: { key },
-        };
-    };
-    if (!read) {
-      refused("invoice_correction.card_unread");
-      return;
-    }
-    if (!same() || this.tenderRefunding) return;
-    const card = this.refundableTenders.find((row) => row.tenderId === leg.tenderId);
-    if (
-      card === undefined ||
-      card.pendingRefundId !== null ||
-      compareDecimal(decimal(card.appliedRemaining), decimal("0")) <= 0 ||
-      !this.#refundMethodAllowed(card)
-    ) {
-      refused("invoice_correction.card_changed");
-      return;
-    }
-    this.#openTenderRefund({
-      target: leg.target,
-      startReasonId: leg.startReasonId,
-      dishes: "",
-      cancellationIds: [],
-      invoiceCorrectionId: leg.correctionId,
-      tenderId: leg.tenderId,
-    });
-    if (!this.tenderRefunding) refused("invoice_correction.card_not_opened");
-  }
-
-  #renderInvoiceCorrection(): TemplateResult | typeof nothing {
-    const open = this.invoiceCorrecting;
-    if (!open) return nothing;
-    return html`<till-invoice-correction-dialog
-      .api=${this.api}
-      .saleId=${open.saleId}
-      .correctionId=${open.correctionId}
-      .invoiceNumber=${this.result?.invoiceNumber ?? ""}
-      .namesLocale=${this.result?.namesLocale ?? this.result?.locale ?? ""}
-      .session=${open.session}
-      .capabilities=${this.capabilities}
-      .legsRevision=${open.legsRevision}
-      .cardNotice=${open.cardNotice}
-      @invoice-correction-card=${(event: CustomEvent<InvoiceCorrectionCardLeg>) => {
-        event.stopPropagation();
-        void this.#openCorrectionCard(open.session, event.detail);
-      }}
-      @invoice-correction-close=${(event: Event) => {
-        event.stopPropagation();
-        if (this.invoiceCorrecting?.session !== open.session) return;
-        this.invoiceCorrecting = null;
-        void this.#readRefundableTenders(true);
-      }}
-    ></till-invoice-correction-dialog>`;
-  }
-
-  #renderTenderRefund(): TemplateResult | typeof nothing {
-    const open = this.tenderRefunding;
-    if (!open) return nothing;
-    return html`<till-tender-refund-dialog
-        .tenders=${this.refundableTenders.filter((row) => (open.fill?.tenderId === undefined || row.tenderId === open.fill.tenderId) && (row.pendingRefundId !== null || this.#refundMethodAllowed(row)))}
-        .invoiceNumber=${this.result?.invoiceNumber ?? ""}
-        .attempt=${open.attempt}
-        .result=${open.result}
-        .busy=${open.busy}
-        .refusal=${open.refusal}
-        .reasons=${open.reasons}
-        .reasonsLoading=${open.reasonsLoading}
-        .startReasonId=${open.fill?.startReasonId ?? ""}
-        .dishes=${open.fill?.dishes ?? ""}
-        .target=${open.fill?.target ?? ""}
-        .refundAtTill=${this.#refundAtTill(open.fill)}
-        .correcting=${open.fill?.invoiceCorrectionId !== undefined}
-        @tender-refund-reasons=${(event: Event) => {
-          event.stopPropagation();
-          if (this.tenderRefunding?.visit === open.visit) void this.#loadTenderRefundReasons();
-        }}
-        @tender-refund-submit=${(event: CustomEvent<TenderRefundAsk>) => {
-          event.stopPropagation();
-          if (this.tenderRefunding?.visit === open.visit)
-            void this.#submitTenderRefund(event.detail);
-        }}
-        @tender-refund-close=${(event: Event) => {
-          event.stopPropagation();
-          if (this.tenderRefunding?.visit === open.visit && !this.tenderRefunding.busy)
-            this.#closeTenderRefund();
-        }}
-        @tender-refund-status=${(event: Event) => {
-          event.stopPropagation();
-          if (this.tenderRefunding?.visit === open.visit && !this.tenderRefunding.busy)
-            void this.#runTenderRefund("status");
-        }}
-        @tender-refund-retry=${(event: Event) => {
-          event.stopPropagation();
-          if (this.tenderRefunding?.visit === open.visit && !this.tenderRefunding.busy)
-            void this.#runTenderRefund("retry");
-        }}
-        @tender-refund-inspect=${(event: CustomEvent<{ refundId: string }>) => {
-          event.stopPropagation();
-          if (
-            this.tenderRefunding?.visit === open.visit &&
-            !this.tenderRefunding.busy &&
-            this.refundableTenders.some((row) => row.pendingRefundId === event.detail.refundId)
-          )
-            void this.#runTenderRefund("inspect", undefined, event.detail.refundId);
-        }}
-      ></till-tender-refund-dialog
-      >${
-        open.approvers === undefined
-          ? nothing
-          : html`<till-supervisor-override-dialog
-              data-tender-refund-approval
-              .authorizers=${open.approvers}
-              .error=${open.pinError}
-              @override-confirm=${(event: CustomEvent<{ personId: string; pin: string }>) => {
-                event.stopPropagation();
-                if (
-                  (event.currentTarget as Element).isConnected &&
-                  this.tenderRefunding?.visit === open.visit &&
-                  !this.tenderRefunding.busy &&
-                  this.tenderRefunding.approvers?.some(
-                    (person) => person.personId === event.detail.personId,
-                  )
-                )
-                  void this.#runTenderRefund(open.retry ? "retry" : "submit", {
-                    personId: event.detail.personId,
-                    pin: event.detail.pin,
-                  });
-              }}
-              @override-cancel=${(event: Event) => {
-                event.stopPropagation();
-                if (this.tenderRefunding?.visit === open.visit && !this.tenderRefunding.busy)
-                  this.tenderRefunding = { ...this.tenderRefunding, approvers: undefined };
-              }}
-            ></till-supervisor-override-dialog>`
-      }`;
-  }
-
   #backToFindBill(): void {
     if (this.historicalReceipt === null) return;
     this.#cancelFindBillRead();
     this.historicalReceipt = null;
     this.#refundPrint = undefined;
     this.refundPrintBusy = false;
-    this.#closeTenderRefund();
     this.refundableTenders = [];
     this.reprintAsking = null;
     this.errorKey = undefined;
@@ -17288,7 +16822,7 @@ export class TillApp extends LitElement {
     open: CancellingItem,
     choice: CancelItemChoice,
     links: RefundLink[],
-  ): RefundFill | undefined {
+  ): GiveBackFill | undefined {
     const ids = open.lineIds ?? [open.lineId];
     const dishes = choice.consent.context.components.filter((row) => ids.includes(row.lineId));
     if (dishes.length === 0) return undefined;
@@ -17299,21 +16833,9 @@ export class TillApp extends LitElement {
       choice.quantity,
     );
     if (own === undefined) return undefined;
-    const free = (choice.consent.withFree ?? []).filter((item) =>
-      choice.withFree?.includes(item.lineId),
-    );
     return {
-      target: toScale(
-        sumDecimals([own, ...free.map((item) => decimal(item.refundAmount))]),
-        MONEY_SCALE,
-      ),
-      startReasonId: choice.reasonId ?? "",
-      dishes: [
-        this.#refundDishWords(choice.quantity, open.name),
-        ...free.map((item) => this.#refundDishWords(item.quantity, item.name)),
-      ].join(", "),
       cancellationIds: links.map((link) => link.adjustmentId),
-      ...(open.reasons === undefined ? {} : { reasons: open.reasons }),
+      reasonId: choice.reasonId ?? "",
     };
   }
 
@@ -20707,7 +20229,6 @@ export class TillApp extends LitElement {
         .map((row) => ({
           ...row,
           fill: this.#finishRefundFill(
-            open,
             ticked.filter((other) => other.saleId === row.saleId),
             handedOff,
             answer.refundLinks ?? [],
@@ -20818,32 +20339,16 @@ export class TillApp extends LitElement {
   }
 
   #finishRefundFill(
-    open: FinishingTable,
     lines: FinishingTable["receipts"],
     cancellations: FinishTableResolution["cancellations"],
     links: RefundLink[],
-  ): RefundFill {
+  ): GiveBackFill {
     return {
-      target: toScale(
-        sumDecimals(lines.map((row) => decimal(open.refunds[row.lineId]!))),
-        MONEY_SCALE,
-      ),
-      startReasonId: cancellations.find((row) => row.lineId === lines[0]!.lineId)?.reasonId ?? "",
-      dishes: lines
-        .map((row) => {
-          const dish = open.dishes.find((candidate) => candidate.lineId === row.lineId)!;
-          return this.#refundDishWords(dish.quantity, dish.name);
-        })
-        .join(", "),
       cancellationIds: lines.flatMap((row) =>
         links.filter((link) => link.lineId === row.lineId).map((link) => link.adjustmentId),
       ),
-      ...(open.reasons === null ? {} : { reasons: open.reasons }),
+      reasonId: cancellations.find((row) => row.lineId === lines[0]!.lineId)?.reasonId ?? "",
     };
-  }
-
-  #refundDishWords(quantity: string, name: string): string {
-    return `${formatDecimalInput(trimQuantity(quantity), currentLocale())} × ${name}`;
   }
 
   #closeFinishRefunds(): void {
@@ -25045,9 +24550,6 @@ export class TillApp extends LitElement {
         return html`<till-ticket-view
           .refundable=${this.giveBackOffered}
           @give-back-open=${() => this.#openGiveBack()}
-          @tender-refund-open=${() => this.#openTenderRefund()}
-          @invoice-correction-open=${(event: CustomEvent<{ correctionId?: string } | null>) =>
-            this.#openInvoiceCorrection(event.detail?.correctionId)}
           .historical=${this.historicalReceipt !== null}
           .receiptCopiesOnly=${this.#ticketDeliveryTarget()?.transaction === true}
           .historicalDelivery=${this.historicalReceipt?.kind === "invoice" && this.#ticketDeliveryTarget() !== undefined}
@@ -25777,8 +25279,7 @@ export class TillApp extends LitElement {
         }
         ${this.#renderCancelItem()} ${this.#renderFinishTable()} ${this.#renderAdjusting()}
         ${this.#renderBillPaying()} ${this.#renderDeferredClosing()}
-        ${this.#renderPresentedPaying()} ${this.#renderDeparting()} ${this.#renderTenderRefund()}
-        ${this.#renderInvoiceCorrection()} ${this.#renderGiveBack()}
+        ${this.#renderPresentedPaying()} ${this.#renderDeparting()} ${this.#renderGiveBack()}
         ${this.#renderCancelCrediting()}
         ${
           this.settlementDocument === null

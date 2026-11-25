@@ -370,33 +370,6 @@ describe("clock-stopped payment guidance", () => {
   });
 });
 
-it("says plainly what Send again does to a correction whose answer was lost, in both languages", () => {
-  expect([en["invoice_correction.saved_cash"], en["invoice_correction.saved"]]).toEqual([
-    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again corrects the invoice now and gives {amount} back in cash, opening the cash drawer. If it did, Send again shows what happened. Nothing happens twice.",
-    "An earlier request to correct and refund {amount} got no answer. If it did not go through, Send again opens the correction, so you can then choose how to give back {amount}; nothing is refunded or filed yet. If it did, Send again shows it. Nothing happens twice.",
-  ]);
-  expect([es["invoice_correction.saved_cash"], es["invoice_correction.saved"]]).toEqual([
-    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo rectifica la factura ahora y devuelve {amount} en efectivo, abriendo el cajón. Si llegó, al pulsar Enviar de nuevo verás lo que pasó. Nada ocurre dos veces.",
-    "Una petición anterior para rectificar y devolver {amount} no recibió respuesta. Si no llegó, Enviar de nuevo abre la rectificación, para que luego elijas cómo devolver {amount}; aún no se devuelve ni se presenta nada. Si llegó, al pulsar Enviar de nuevo verás la rectificación. Nada ocurre dos veces.",
-  ]);
-});
-
-it("says Send again got no answer either, in both languages", () => {
-  expect([en["invoice_correction.still_lost"], es["invoice_correction.still_lost"]]).toEqual([
-    "Still no answer. Check this till's connection to the box, then send again.",
-    "Sigue sin respuesta. Comprueba la conexión de esta caja con el servidor y vuelve a enviar.",
-  ]);
-});
-
-it("says why a till that cannot give cash back stops after opening a correction, in both languages", () => {
-  expect(en["invoice_correction.no_cash_here"]).toBe(
-    "This till cannot give cash back. Give the cash back from a till that can; while nothing has been given back, Discard ends the correction.",
-  );
-  expect(es["invoice_correction.no_cash_here"]).toBe(
-    "Esta caja no puede devolver efectivo. Devuelve el efectivo desde una caja que pueda; mientras no se haya devuelto nada, Descartar termina la rectificación.",
-  );
-});
-
 it("says a receipt has no printer on this device, and what to do, in both languages", () => {
   expect([en["document.no_receipt_printer"], es["document.no_receipt_printer"]]).toEqual([
     "This device has no receipt printer switched on. Choose one in Equipment, then try again.",
@@ -422,7 +395,6 @@ describe("till texts say where a problem is put right", () => {
   const sendsElsewhere = /manager|whoever|encargado|responsable/i;
   it.each([
     ["venue.time_zone_confirm", "dashboard", "panel"],
-    ["tender_refund.storage", "Refund a payment", "Devolver un pago"],
     ["station.printer_down", "the dashboard, under Printers.", "el panel, en Impresoras."],
     [
       "device.join_refused_hint",

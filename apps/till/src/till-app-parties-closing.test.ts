@@ -1386,7 +1386,6 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       "sale-wo-4",
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
-    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
     expect(giving(el)).not.toBeNull();
     expect(giving(el)!.saleId).toBe("sale-wo-4");
     expect(giving(el)!.fill).toEqual({ cancellationIds: [], reasonId: "r-cancel" });
@@ -1869,7 +1868,6 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       await untick(el, 2);
       await choose(el, true);
       await opened(el);
-      expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
       expect(ticked(el)).toEqual(["croquetas", "flan"]);
       expect(amountOf(el)).toBe("16.50");
       expect(
@@ -2243,7 +2241,6 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     receipt.answer.settle(saleResult);
     await flush(el, 10);
     expect(tableOrder(el)?.party?.id).toBe("v7");
-    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
     expect(giving(el)).toBeNull();
   });
 
@@ -2452,7 +2449,6 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
     await openFinish(el);
     await choose(el, true);
     expect(tableOrder(el)).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
     expect(giving(el)).toBeNull();
     const choice = el.shadowRoot!.querySelector<HTMLElement>('[data-finish-refund="sale-wo-4"]')!;
     expect(choice).not.toBeNull();
@@ -2820,7 +2816,6 @@ describe("till-app: Finish table confirms paid unserved dishes", () => {
       expect(api.listRefundAuthorizers).not.toHaveBeenCalled();
       expect(approval(el)).toBeNull();
       expect(api.getTransactionReceipt).not.toHaveBeenCalled();
-      expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
       expect(giving(el)).toBeNull();
     });
   });

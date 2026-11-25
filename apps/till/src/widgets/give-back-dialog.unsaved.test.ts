@@ -127,6 +127,28 @@ it("a ticked dish asks first", async () => {
   expect(app.closes).toBe(0);
 });
 
+it("a dish ticked and unticked again, with nothing typed, closes without asking", async () => {
+  const { app, form } = await mount();
+  await choose(form, "dishes");
+  const toggle = async () => {
+    form
+      .shadowRoot!.querySelector('wt-switch[data-line="croquetas"]')!
+      .shadowRoot!.querySelector("input")!
+      .click();
+    await form.updateComplete;
+  };
+  await toggle();
+  expect(unload()).toBe(true);
+  await toggle();
+  expect(unload()).toBe(false);
+  const closed = new Promise<void>((resolve) =>
+    form.addEventListener("give-back-close", () => resolve(), { once: true }),
+  );
+  await userEvent.keyboard("{Escape}");
+  await closed;
+  expect((await question(app)).open).toBe(false);
+});
+
 it("the choice's Cancel closes at once", async () => {
   const { app, form } = await mount();
   const closed = new Promise<void>((resolve) =>

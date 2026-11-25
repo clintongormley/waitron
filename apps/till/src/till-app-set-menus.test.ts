@@ -405,8 +405,6 @@ it.each([[undefined], ["F1/7"]])(
     expect(api.getTransactionReceipt).toHaveBeenCalledWith("advance-sale", expect.anything());
     expect(api.readGiveBack).toHaveBeenCalledWith("advance-sale", {});
     expect(el.shadowRoot!.querySelector("till-give-back-dialog")!.saleId).toBe("advance-sale");
-    expect(el.shadowRoot!.querySelector("till-invoice-correction-dialog")).toBeNull();
-    expect(el.shadowRoot!.querySelector("till-tender-refund-dialog")).toBeNull();
     expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
     expect(dialog(el)).toBeNull();
   },

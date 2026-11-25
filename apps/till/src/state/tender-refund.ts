@@ -12,7 +12,7 @@ export interface TenderRefundScope {
   deviceId: string;
   personId: string;
 }
-export type TenderRefundAsk = Omit<TenderRefundRequest, "submissionId" | "override">;
+type TenderRefundAsk = Omit<TenderRefundRequest, "submissionId" | "override">;
 export interface SavedTenderRefund {
   saleId: string;
   request: Omit<TenderRefundRequest, "override">;
@@ -86,12 +86,6 @@ function normalized(ask: TenderRefundAsk): TenderRefundAsk {
   const correctionId = ask.invoiceCorrectionId;
   if (correctionId !== undefined && (typeof correctionId !== "string" || correctionId === ""))
     return fail("invalid");
-  const ids = ask.cancellationIds;
-  if (
-    ids !== undefined &&
-    (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || id === ""))
-  )
-    return fail("invalid");
   const appliedAmount = tenderRefundAmount(ask.appliedAmount) ?? fail("invalid");
   const tipAmount = tenderRefundAmount(ask.tipAmount) ?? fail("invalid");
   const total = moneyPlus(appliedAmount, tipAmount);
@@ -106,14 +100,12 @@ function normalized(ask: TenderRefundAsk): TenderRefundAsk {
     tipAmount,
     reason: ask.reason.trim(),
     manualConfirmed: ask.manualConfirmed === true,
-    ...(ids === undefined || ids.length === 0 ? {} : { cancellationIds: [...ids] }),
     ...(correctionId === undefined ? {} : { invoiceCorrectionId: correctionId.toLowerCase() }),
   };
 }
 
 function fingerprint(ask: TenderRefundAsk): string {
-  const body = normalized(ask);
-  return JSON.stringify({ ...body, cancellationIds: [...(body.cancellationIds ?? [])].sort() });
+  return JSON.stringify(normalized(ask));
 }
 
 /** Unknown outcomes keep the original request; a PIN exists only on the outgoing call. */

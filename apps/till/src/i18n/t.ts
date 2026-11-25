@@ -138,7 +138,7 @@ export function pickLocale(entry: { en: string; es: string }, l: string = locale
     : entry.en;
 }
 
-/** One VAT rate's base and tax, worded as Correct invoice and the Pay window both show them. */
+/** One VAT rate's base and tax, worded as the Pay window shows them. */
 export function vatSplitText(split: VatBreakdownEntry): string {
   const locale = currentLocale();
   return t("invoice_correction.split")

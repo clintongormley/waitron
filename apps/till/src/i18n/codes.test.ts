@@ -1029,23 +1029,16 @@ it("says a dish list that no longer matches the invoice is out of date, in Engli
 it.each([
   [
     "en",
-    en,
     "A card refund of this bill is still waiting for the card company's answer. Try again once it has answered.",
   ],
   [
     "es",
-    es,
     "Una devolución a tarjeta de esta cuenta aún espera la respuesta de la compañía de la tarjeta. Vuelve a intentarlo cuando haya respondido.",
   ],
-] as const)(
-  "in %s, tells staff a card refund still waits for its answer, naming no old window",
-  (locale, words, sentence) => {
-    const message = codeMessage("invoice_correction.refund_pending", locale);
-    expect(message).toBe(sentence);
-    expect(message).not.toContain(words["tender_refund.title"]);
-    expect(message).not.toContain(words["tender_refund.pending_payment"]);
-  },
-);
+] as const)("in %s, tells staff a card refund still waits for its answer", (locale, sentence) => {
+  const message = codeMessage("invoice_correction.refund_pending", locale);
+  expect(message).toBe(sentence);
+});
 
 it.each([
   "invoice_correction.not_settled",
