@@ -404,7 +404,7 @@ En un recibo anterior, elige **Devolver dinero**. **¿Por qué se devuelve?** of
 Con **Un plato** o **Cortesía o queja**, si el pago elegido también tiene algo pagado de más, activa
 **Devolver también lo pagado de más** para devolverlo a la vez.
 
-Elige un **Motivo**. Un motivo que necesita una nota te pide que la escribas.
+Elige un **Motivo**. Un motivo que necesita una nota, como **Otro motivo**, te pide que la escribas.
 
 En **Cómo se devuelve**, elige efectivo o una tarjeta; cada uno muestra cuánto admite. La ventana
 dice entonces qué pasa: en efectivo se abre el cajón y entregas el dinero al cliente, y a una
@@ -432,7 +432,9 @@ ticket de devolución que no se imprime solo se puede imprimir desde **Buscar cu
 pestaña **Transacciones**.
 
 Si cierras la ventana antes de que vuelva todo el dinero, **Buscar cuenta** muestra el recibo en
-**Devoluciones en curso**. Elígelo para continuar:
+**Devoluciones en curso**. El dinero que aún espera a la compañía de la tarjeta queda en cambio en
+este TPV: vuelve a abrir **Devolver dinero** en el recibo en este TPV para continuar. Si no, elige
+el recibo en **Buscar cuenta** para continuar:
 
 - **Devolver … en efectivo** o **Devolver … a la tarjeta** devuelve lo que queda de esa forma.
 - **Terminar** registra lo devuelto.
@@ -447,7 +449,7 @@ antes de devolver el dinero en el datáfono: Waitron no puede registrar la devol
 
 Para un pago con tarjeta registrado desde un datáfono aparte, devuélvelo en ese datáfono solo
 cuando la ventana te lo pida, y completa allí la devolución antes de confirmarlo en la ventana.
-Después, un supervisor o encargado aprueba su registro en Waitron con su PIN, salvo que devuelva
+Después, un responsable o encargado aprueba su registro en Waitron con su PIN, salvo que devuelva
 como mucho lo que la cuenta se pagó de más.
 
 Si una devolución no recibe respuesta, revisa los pagos de la cuenta antes de intentarla otra vez.
