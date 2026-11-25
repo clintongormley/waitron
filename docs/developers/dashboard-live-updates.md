@@ -63,7 +63,8 @@ when the page returns to view. Queries whose answers change with time still need
 
 In a signed-in Chromium session on the same demo venue, a fresh Products load went from 43 GETs to
 17, and a move from Menus to Products went from 35 to 9. These counts include the event streams.
-Each action opened two streams before the change and one after.
+Each action opened two streams before the change and one after. The comparison used `5db080de1d`
+and `e42c11afb1`, before the Products Tree change landed.
 
 Start a page's reads together. A read started after others answer changes what the page watches, so
 it also costs another stream.

@@ -52,8 +52,15 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("reads nothing again when nothing changed since the position it started from", async () => {
-  const printers = watch("printers");
+it("leaves an in-flight success alone when nothing changed", async () => {
+  let finish!: (value: string) => void;
+  const printers = watch(
+    "printers",
+    vi
+      .fn<() => Promise<string>>()
+      .mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+      .mockResolvedValue("printers"),
+  );
   connection.start("run:4");
   await settled();
   expect(since(0)).toBe("run:4");
@@ -61,9 +68,12 @@ it("reads nothing again when nothing changed since the position it started from"
   await settled();
   expect(data.connected).toBe(false);
   streams[0]!.send("ready", { missed: [] }, "run:9");
+  expect(printers.observed.snapshot.loading).toBe(true);
+  finish("printers");
   await settled();
   expect(data.connected).toBe(true);
   expect(printers.read).toHaveBeenCalledOnce();
+  expect(printers.observed.snapshot).toMatchObject({ status: "ready", value: "printers" });
 });
 
 it("reads again only what the server says changed", async () => {
@@ -255,24 +265,39 @@ it("reads a failed read again though nothing changed", async () => {
   expect(printers.read).toHaveBeenCalledOnce();
 });
 
-it("leaves a failed read that is already being retried to its retry", async () => {
-  let finish = (): void => {};
-  const read = vi
-    .fn<() => Promise<string>>()
-    .mockRejectedValueOnce(new Error("refused"))
-    .mockImplementation(() => new Promise((resolve) => (finish = () => resolve("ok"))));
-  watch("courses", read as never);
-  connection.start("run:4");
-  await settled();
-  data.invalidate([{ type: "courses" }]);
-  await settled();
-  expect(read).toHaveBeenCalledTimes(2);
-  streams[0]!.open();
-  streams[0]!.send("ready", { missed: [] }, "run:5");
-  finish();
-  await settled();
-  expect(read).toHaveBeenCalledTimes(2);
-});
+it.each(["answers", "fails"] as const)(
+  "finishes recovery when an in-flight retry %s after ready",
+  async (outcome) => {
+    const error = new Error("refused");
+    let finish!: () => void;
+    const read = vi
+      .fn<() => Promise<string>>()
+      .mockRejectedValueOnce(error)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve, reject) => {
+            finish = () => {
+              if (outcome === "answers") resolve("courses");
+              else reject(error);
+            };
+          }),
+      )
+      .mockResolvedValue("courses");
+    const { observed } = watch("courses", read);
+    connection.start("run:4");
+    await settled();
+    data.invalidate([{ type: "courses" }]);
+    await settled();
+    expect(read).toHaveBeenCalledTimes(2);
+    streams[0]!.open();
+    expect(observed.snapshot).toMatchObject({ status: "error", loading: true });
+    streams[0]!.send("ready", { missed: [] }, "run:5");
+    finish();
+    await settled();
+    expect(read).toHaveBeenCalledTimes(outcome === "answers" ? 2 : 3);
+    expect(observed.snapshot).toMatchObject({ status: "ready", value: "courses" });
+  },
+);
 
 it.each([true, false])(
   "retries a read that fails after the stream is ready (recovers: %s)",

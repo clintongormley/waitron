@@ -176,7 +176,7 @@ export class LiveData {
     this.invalidate(missed);
     for (const entry of this.#entries.values()) {
       if (entry.snapshot.loading) {
-        entry.retryOnFailure = entry.snapshot.status !== "error";
+        entry.retryOnFailure = true;
         continue;
       }
       if (entry.snapshot.status !== "error") continue;

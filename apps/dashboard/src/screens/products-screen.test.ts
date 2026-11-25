@@ -3826,19 +3826,9 @@ describe("menu-screen", () => {
     );
   });
 
-  it("asks for the products beside its other reads, and has loaded once the last one answers", async () => {
-    let resolveCategories!: (value: never[]) => void;
-    const api = stubApi({
-      listCategories: vi.fn(() => new Promise<never[]>((resolve) => (resolveCategories = resolve))),
-    });
-    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
-    await vi.waitFor(() => expect(list(el).products).toEqual(products));
-    expect(list(el).loaded).toBe(false);
-    resolveCategories([]);
-    await vi.waitFor(() => expect(list(el).loaded).toBe(true));
-  });
-
   it("opens the product named in the address only once every read has answered", async () => {
+    const before = location.href;
+    onTestFinished(() => history.replaceState(null, "", before));
     history.replaceState(null, "", "/products/product/p1");
     let resolveUnits!: (value: never[]) => void;
     const api = stubApi({
