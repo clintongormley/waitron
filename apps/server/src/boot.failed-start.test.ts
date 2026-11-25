@@ -1755,20 +1755,26 @@ describe("settled-tender recovery boot lifetime", () => {
     });
     const failure = new Error("landing interfaces unavailable");
     failLandingAfterMdns(failure);
-    let release = () => {};
-    vi.mocked(stopTenderRefundResolvers).mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          release = () => resolve([]);
-        }),
-    );
+    let markShutdownStarted!: () => void;
+    const shutdownStarted = new Promise<void>((resolve) => {
+      markShutdownStarted = resolve;
+    });
+    let release!: () => void;
+    const shutdownFinished = new Promise<string[]>((resolve) => {
+      release = () => resolve([]);
+    });
+    vi.mocked(stopTenderRefundResolvers).mockImplementationOnce(() => {
+      markShutdownStarted();
+      return shutdownFinished;
+    });
     const result = startServer(env).then(
       (server) => server,
       (error: unknown) => error,
     );
     const deadline = new AbortController();
     try {
-      await vi.waitFor(() => expect(stopTenderRefundResolvers).toHaveBeenCalledOnce());
+      await Promise.race([shutdownStarted, result]);
+      expect(stopTenderRefundResolvers).toHaveBeenCalledOnce();
       expect(recoverTenderRefunds).not.toHaveBeenCalled();
       expect(await Promise.race([result, delay(50, "waiting", { signal: deadline.signal })])).toBe(
         "waiting",
