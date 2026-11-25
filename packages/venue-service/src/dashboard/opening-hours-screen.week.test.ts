@@ -960,6 +960,11 @@ describe("a prep station in the Calendar", () => {
     await week(el)!.updateComplete;
     expect(week(el)!.shadowRoot!.querySelector('[data-row="rest"] .block')).not.toBeNull();
     expect(week(el)!.shadowRoot!.querySelector("[data-test=always-open]")).toBeNull();
+    const hint = () =>
+      week(el)!.shadowRoot!.querySelector("[data-test=station-explanation]")?.textContent;
+    expect(hint()).toContain("Change its hours through the periods");
+    await toPhone(el);
+    expect(hint()).toContain("Change its hours through the periods");
   });
 
   it.each([
@@ -1023,11 +1028,10 @@ describe("a prep station in the Calendar", () => {
     expect(policy()?.textContent?.trim()).toBe("Changes after sending: While held");
     expect(policy()!.tagName).toBe("P");
     expect(policy()!.children).toHaveLength(0);
-    const hint = week(el)!.shadowRoot!.querySelector(
-      "[data-test=station-explanation]",
-    )?.textContent;
-    expect(hint).toContain("A prep station is open while a period sends it orders.");
-    expect(hint).not.toContain("Change its hours");
+    const hint = () =>
+      week(el)!.shadowRoot!.querySelector("[data-test=station-explanation]")?.textContent;
+    expect(hint()).toContain("A prep station is open while a period sends it orders.");
+    expect(hint()).not.toContain("Change its hours");
     for (const date of ["2026-12-09", "2026-12-14"]) {
       if (date === "2026-12-14") {
         week(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=next-week]")!.click();
@@ -1049,6 +1053,10 @@ describe("a prep station in the Calendar", () => {
       .toBe("Changes after sending: Not allowed");
     chooseShown(el, "bar");
     await expect.poll(policy).toBeNull();
+
+    await toPhone(el);
+    expect(hint()).toContain("The default station follows the periods that send it orders.");
+    expect(hint()).not.toContain("Change its hours");
   });
 
   it.each(["pointer", "keyboard"] as const)(
