@@ -114,6 +114,7 @@ export function reversedLines(rows: (typeof saleLines.$inferSelect)[]): RecordSa
         advanceRole: row.advanceRole,
         deductsSaleId: row.deductsSaleId,
         setMenuRole: row.setMenuRole,
+        setMenuPart: row.setMenuPart === null ? null : centsToDecimal(-row.setMenuPart),
       }) satisfies Required<RecordSaleLine>,
   );
 }

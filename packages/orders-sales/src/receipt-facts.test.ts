@@ -9,6 +9,7 @@ import {
   type ReceiptDocumentInput,
   type ReceiptFigures,
 } from "./receipt-facts.js";
+import type { TillSaleLine } from "./receipt-lines.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "../test/full-invoice-fixture.js";
 import {
   advanceTakenOff,
@@ -586,4 +587,425 @@ it("carries the original issue and deferred account alongside the current issuer
   expect(facts.band).not.toHaveProperty("issuedOffsetMinutes");
   expect(facts.qr).toEqual({ text: input.result.qr });
   expect(facts.payment).toEqual({ tender: { method: "deferred" }, deferred: { account } });
+});
+
+// VAT rates piece B, S9: a takeaway set menu whose price was divided between dishes at two rates.
+describe("a simplified ticket of a divided set menu", () => {
+  const dish = (
+    name: string,
+    gross: string,
+    setMenuPart: string,
+    vatRate: string,
+    extra: Partial<TillSaleLine> = {},
+  ): TillSaleLine => ({
+    descriptions: { en: name },
+    quantity: "1",
+    gross,
+    setMenuPart,
+    vatRate,
+    setMenuRole: "dish",
+    parentLineNo: null,
+    ...extra,
+  });
+  const menu = (extra: Partial<TillSaleLine> = {}): TillSaleLine => ({
+    descriptions: { en: "Daily menu" },
+    quantity: "1",
+    gross: "0.00",
+    setMenuPart: "-14.00",
+    vatRate: "10.00",
+    setMenuRole: "set_menu",
+    parentLineNo: null,
+    ...extra,
+  });
+  // The plan's worked example: 3.58, 8.14 and 2.28 of 14.00.
+  const workedExample = (): TillSaleLine[] => [
+    menu(),
+    dish("Soup", "3.58", "3.58", "10.00"),
+    dish("Hake", "8.14", "8.14", "10.00"),
+    dish("Lemonade", "2.28", "2.28", "21.00"),
+  ];
+  function ticket(
+    lines: TillSaleLine[],
+    total: string,
+    vatBreakdown: { rate: string; base: string; tax: string }[],
+  ): ReceiptDocumentInput {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.invoiceLocale = "en-GB";
+    input.result.invoiceType = "F2";
+    input.result.total = total;
+    input.result.vatBreakdown = vatBreakdown;
+    input.result.lines = lines;
+    delete input.result.billAdjustments;
+    return input;
+  }
+  const printed = (input: ReceiptDocumentInput) =>
+    receiptFigures(input).sections.map((section) => {
+      if (section.kind !== "withVat") return section;
+      const { item, amount, surcharge, rateLetter, adjustments } = section.group;
+      return { item, amount, surcharge, rateLetter, adjustments };
+    });
+  const named = (item: string, rateLetter: string) => ({
+    item,
+    amount: undefined,
+    surcharge: undefined,
+    rateLetter,
+    adjustments: [],
+  });
+  const VAT = [
+    { rate: "10.00", base: "10.65", tax: "1.07" },
+    { rate: "21.00", base: "1.88", tax: "0.40" },
+  ];
+
+  it("prints the set menu at 14.00 with no letter, then each dish by name with its letter and no amount", () => {
+    const input = ticket(workedExample(), "14.00", VAT);
+    const figures = receiptFigures(input);
+    expect(printed(input)).toEqual([
+      { ...named("Daily menu", ""), amount: "14.00" },
+      named("Soup", "A"),
+      named("Hake", "A"),
+      named("Lemonade", "B"),
+    ]);
+    expect(figures.vat).toEqual([
+      { rate: "10.00", base: "10.65", tax: "1.07", letter: "A" },
+      { rate: "21.00", base: "1.88", tax: "0.40", letter: "B" },
+    ]);
+    expect(figures.total).toBe("14.00");
+  });
+
+  it("prints a 2.00 supplement on hake with a plus and hake's letter", () => {
+    const lines = workedExample();
+    lines[2] = dish("Hake", "10.14", "8.14", "10.00");
+    const vat = [
+      { rate: "10.00", base: "12.47", tax: "1.25" },
+      { rate: "21.00", base: "1.88", tax: "0.40" },
+    ];
+    expect(printed(ticket(lines, "16.00", vat))).toEqual([
+      { ...named("Daily menu", ""), amount: "14.00" },
+      named("Soup", "A"),
+      { ...named("Hake", "A"), amount: "2.00", surcharge: true },
+      named("Lemonade", "B"),
+    ]);
+  });
+
+  it("prints a 10% discount on the set menu as 14.00 and −1.40, with no letter", () => {
+    const lines = [
+      menu({
+        setMenuPart: "-12.60",
+        listGross: "14.00",
+        listUnitPriceGross: "14.00",
+        adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.40" }],
+      }),
+      dish("Soup", "3.22", "3.22", "10.00"),
+      dish("Hake", "7.33", "7.33", "10.00"),
+      dish("Lemonade", "2.05", "2.05", "21.00"),
+    ];
+    const vat = [
+      { rate: "10.00", base: "9.59", tax: "0.96" },
+      { rate: "21.00", base: "1.69", tax: "0.36" },
+    ];
+    expect(printed(ticket(lines, "12.60", vat))).toEqual([
+      {
+        ...named("Daily menu", ""),
+        amount: "14.00",
+        adjustments: [{ item: "Discount 10%", amount: "-1.40", rateLetter: "" }],
+      },
+      named("Soup", "A"),
+      named("Hake", "A"),
+      named("Lemonade", "B"),
+    ]);
+  });
+
+  it("prints its credit note the same, negated", () => {
+    const negate = (amount: string) => (amount.startsWith("-") ? amount.slice(1) : `-${amount}`);
+    const lines = workedExample().map((line) => ({
+      ...line,
+      quantity: "-1",
+      gross: negate(line.gross),
+      setMenuPart: negate(line.setMenuPart!),
+    }));
+    const input = ticket(
+      lines,
+      "-14.00",
+      VAT.map(({ rate, base, tax }) => ({ rate, base: negate(base), tax: negate(tax) })),
+    );
+    input.result.invoiceType = "R5";
+    input.result.corrects = { invoiceNumber: "T/37", issuedAt: "2026-08-16T20:00:00.000Z" };
+    expect(printed(input)).toEqual([
+      { ...named("Daily menu", ""), amount: "-14.00" },
+      named("Soup", "A"),
+      named("Hake", "A"),
+      named("Lemonade", "B"),
+    ]);
+  });
+
+  it("adds up two divided set menus merged on a ticket with one VAT row", () => {
+    // Lemonade's part of each 14.00 rounded to 0.00, so its row files at the lead rate (S4).
+    const lines = [
+      menu(),
+      menu(),
+      dish("Soup", "14.00", "14.00", "10.00"),
+      dish("Soup", "14.00", "14.00", "10.00"),
+      dish("Lemonade", "0.00", "0.00", "10.00"),
+      dish("Lemonade", "0.00", "0.00", "10.00"),
+    ];
+    const input = ticket(lines, "28.00", [{ rate: "10.00", base: "25.45", tax: "2.55" }]);
+    expect(printed(input)).toEqual([
+      { ...named("Daily menu", ""), amount: "28.00" },
+      named("Soup", ""),
+      named("Lemonade", ""),
+    ]);
+    expect(
+      receiptFigures(input).sections.map((section) =>
+        section.kind === "withVat" ? section.group.quantity : section.kind,
+      ),
+    ).toEqual(["2", "2", "2"]);
+  });
+
+  it("prints a set menu whose dishes share one rate as today (control)", () => {
+    const lines: TillSaleLine[] = [
+      { ...menu(), gross: "14.00" },
+      dish("Soup", "0.00", "0", "10.00"),
+      dish("Hake", "0.00", "0", "10.00"),
+    ];
+    for (const line of lines) delete line.setMenuPart;
+    expect(
+      printed(ticket(lines, "14.00", [{ rate: "10.00", base: "12.73", tax: "1.27" }])),
+    ).toEqual([{ ...named("Daily menu", ""), amount: "14.00" }]);
+  });
+});
+
+// VAT rates piece B, S9: the full invoice of the same set menu states the filed figures.
+describe("a full invoice of a divided set menu", () => {
+  const row = (
+    name: string,
+    role: "set_menu" | "dish",
+    filed: { gross: string; base: string; rate: string; setMenuPart?: string },
+    extra: Partial<TillSaleLine> = {},
+  ): TillSaleLine => ({
+    descriptions: { en: name },
+    quantity: "1",
+    gross: filed.gross,
+    vatRate: filed.rate,
+    setMenuRole: role,
+    parentLineNo: null,
+    ...(filed.setMenuPart === undefined ? {} : { setMenuPart: filed.setMenuPart }),
+    net: {
+      unitPrice: filed.base,
+      priceQuantity: "1.000",
+      base: filed.base,
+      rate: filed.rate,
+      tax: (Number(filed.gross) - Number(filed.base)).toFixed(2),
+    },
+    ...extra,
+  });
+  function invoice(
+    lines: TillSaleLine[],
+    total: string,
+    vatBreakdown: { rate: string; base: string; tax: string }[],
+  ): ReceiptDocumentInput {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.invoiceLocale = "en-GB";
+    input.result.total = total;
+    input.result.vatBreakdown = vatBreakdown;
+    input.result.lines = lines;
+    delete input.result.billAdjustments;
+    return input;
+  }
+  const table = (input: ReceiptDocumentInput): object[] =>
+    receiptFigures(input).sections.flatMap((section): object[] =>
+      section.kind === "filed"
+        ? section.rows.map(({ kind, item, unitPrice, amountExVat, rate, chargedWithVat }) => ({
+            kind,
+            item,
+            unitPrice,
+            amountExVat,
+            rate,
+            chargedWithVat,
+          }))
+        : [{ kind: section.kind }],
+    );
+  const heading = (item: string) => ({
+    kind: "line",
+    item,
+    unitPrice: undefined,
+    amountExVat: undefined,
+    rate: undefined,
+    chargedWithVat: undefined,
+  });
+  const part = (item: string, base: string, rate: string, gross: string) => ({
+    kind: "line",
+    item,
+    unitPrice: base,
+    amountExVat: base,
+    rate,
+    chargedWithVat: gross,
+  });
+  const VAT = [
+    { rate: "10.00", base: "10.65", tax: "1.07" },
+    { rate: "21.00", base: "1.88", tax: "0.40" },
+  ];
+
+  it("prints the set menu as a heading and each dish's part, base and rate", () => {
+    const input = invoice(
+      [
+        row("Daily menu", "set_menu", {
+          gross: "0.00",
+          base: "0.00",
+          rate: "10.00",
+          setMenuPart: "-14.00",
+        }),
+        row("Soup", "dish", { gross: "3.58", base: "3.25", rate: "10.00", setMenuPart: "3.58" }),
+        row("Hake", "dish", { gross: "8.14", base: "7.40", rate: "10.00", setMenuPart: "8.14" }),
+        row("Lemonade", "dish", {
+          gross: "2.28",
+          base: "1.88",
+          rate: "21.00",
+          setMenuPart: "2.28",
+        }),
+      ],
+      "14.00",
+      VAT,
+    );
+    expect(table(input)).toEqual([
+      heading("Daily menu"),
+      part("Soup", "3.25", "10.00", "3.58"),
+      part("Hake", "7.40", "10.00", "8.14"),
+      part("Lemonade", "1.88", "21.00", "2.28"),
+    ]);
+    expect(receiptFigures(input).vat).toEqual(VAT);
+    expect(receiptFigures(input).total).toBe("14.00");
+  });
+
+  it("prints no discount row for 10% off the set menu, and the parts of what was charged", () => {
+    const input = invoice(
+      [
+        row(
+          "Daily menu",
+          "set_menu",
+          { gross: "0.00", base: "0.00", rate: "10.00", setMenuPart: "-12.60" },
+          {
+            listGross: "14.00",
+            listUnitPriceGross: "14.00",
+            adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.40" }],
+          },
+        ),
+        row("Soup", "dish", { gross: "3.22", base: "2.93", rate: "10.00", setMenuPart: "3.22" }),
+        row("Hake", "dish", { gross: "7.33", base: "6.66", rate: "10.00", setMenuPart: "7.33" }),
+        row("Lemonade", "dish", {
+          gross: "2.05",
+          base: "1.69",
+          rate: "21.00",
+          setMenuPart: "2.05",
+        }),
+      ],
+      "12.60",
+      [
+        { rate: "10.00", base: "9.59", tax: "0.96" },
+        { rate: "21.00", base: "1.69", tax: "0.36" },
+      ],
+    );
+    expect(table(input)).toEqual([
+      heading("Daily menu"),
+      part("Soup", "2.93", "10.00", "3.22"),
+      part("Hake", "6.66", "10.00", "7.33"),
+      part("Lemonade", "1.69", "21.00", "2.05"),
+    ]);
+  });
+
+  it("adds up to the filed bases with 10% off the whole bill beside the set menu", () => {
+    const input = invoice(
+      [
+        row(
+          "Daily menu",
+          "set_menu",
+          { gross: "0.00", base: "0.00", rate: "10.00", setMenuPart: "-12.60" },
+          { listGross: "14.00", listUnitPriceGross: "14.00" },
+        ),
+        row("Soup", "dish", { gross: "3.22", base: "2.93", rate: "10.00", setMenuPart: "3.22" }),
+        row("Hake", "dish", { gross: "7.33", base: "6.66", rate: "10.00", setMenuPart: "7.33" }),
+        row("Lemonade", "dish", {
+          gross: "2.05",
+          base: "1.69",
+          rate: "21.00",
+          setMenuPart: "2.05",
+        }),
+        {
+          ...row("Water", "dish", { gross: "1.80", base: "1.64", rate: "10.00" }),
+          listGross: "2.00",
+          listUnitPriceGross: "2.00",
+        },
+      ],
+      "14.40",
+      [
+        { rate: "10.00", base: "11.23", tax: "1.12" },
+        { rate: "21.00", base: "1.69", tax: "0.36" },
+      ],
+    );
+    delete input.result.lines[4]!.setMenuRole;
+    input.result.billAdjustments = [{ kind: "discount", percentBp: 1000, amount: "1.60" }];
+    expect(table(input)).toEqual([
+      heading("Daily menu"),
+      part("Soup", "2.93", "10.00", "3.22"),
+      part("Hake", "6.66", "10.00", "7.33"),
+      part("Lemonade", "1.69", "21.00", "2.05"),
+      part("Water", "1.82", "10.00", "2.00"),
+      {
+        kind: "discount",
+        item: "Discount 10%",
+        unitPrice: undefined,
+        amountExVat: "-0.18",
+        rate: "10.00",
+        chargedWithVat: "-0.20",
+      },
+    ]);
+    const rows = receiptFigures(input).sections.flatMap((section) =>
+      section.kind === "filed" ? section.rows : [],
+    );
+    const at = (rate: string, figure: "amountExVat" | "chargedWithVat") =>
+      rows
+        .filter((one) => one.rate === rate)
+        .reduce((sum, one) => sum + Number(one[figure] ?? 0), 0)
+        .toFixed(2);
+    expect([at("10.00", "amountExVat"), at("21.00", "amountExVat")]).toEqual(["11.23", "1.69"]);
+    expect([at("10.00", "chargedWithVat"), at("21.00", "chargedWithVat")]).toEqual([
+      "12.35",
+      "2.05",
+    ]);
+  });
+
+  it("leaves out a dish whose part filed nothing", () => {
+    const input = invoice(
+      [
+        row("Daily menu", "set_menu", {
+          gross: "0.00",
+          base: "0.00",
+          rate: "10.00",
+          setMenuPart: "-14.00",
+        }),
+        row("Soup", "dish", { gross: "14.00", base: "12.73", rate: "10.00", setMenuPart: "14.00" }),
+        row("Lemonade", "dish", {
+          gross: "0.00",
+          base: "0.00",
+          rate: "10.00",
+          setMenuPart: "0.00",
+        }),
+      ],
+      "14.00",
+      [{ rate: "10.00", base: "12.73", tax: "1.27" }],
+    );
+    expect(table(input)).toEqual([heading("Daily menu"), part("Soup", "12.73", "10.00", "14.00")]);
+  });
+
+  it("prints a set menu whose dishes share one rate as today (control)", () => {
+    const input = invoice(
+      [
+        row("Daily menu", "set_menu", { gross: "14.00", base: "12.73", rate: "10.00" }),
+        row("Soup", "dish", { gross: "0.00", base: "0.00", rate: "10.00" }),
+        row("Hake", "dish", { gross: "0.00", base: "0.00", rate: "10.00" }),
+      ],
+      "14.00",
+      [{ rate: "10.00", base: "12.73", tax: "1.27" }],
+    );
+    expect(table(input)).toEqual([part("Daily menu", "12.73", "10.00", "14.00")]);
+  });
 });

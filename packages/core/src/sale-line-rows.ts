@@ -1,4 +1,10 @@
-import { newRowId, stringToBasisPoints, stringToCents, stringToThousandths } from "@waitron/shared";
+import {
+  decimalToCents,
+  newRowId,
+  stringToBasisPoints,
+  stringToCents,
+  stringToThousandths,
+} from "@waitron/shared";
 import type { RecordSaleLine } from "./record-sale.js";
 
 /**
@@ -52,5 +58,6 @@ export function saleLineRows(
     ...(line.advanceRole == null ? {} : { advanceRole: line.advanceRole }),
     ...(line.deductsSaleId == null ? {} : { deductsSaleId: line.deductsSaleId }),
     ...(line.setMenuRole == null ? {} : { setMenuRole: line.setMenuRole }),
+    ...(line.setMenuPart == null ? {} : { setMenuPart: decimalToCents(line.setMenuPart) }),
   }));
 }

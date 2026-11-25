@@ -51,8 +51,10 @@ export interface TopSeller {
   /** Dishes sold less dishes returned over the range, as `computeTopSellers` counts them, at three
    * decimal places; it can fall below zero. */
   quantity: Decimal;
-  /** Σ line_total over the range, as an amount; every correction except a replacement, and the
-   * reversed lines of a sale whose void falls in the range, net in. */
+  /** Σ line_total over the range, as an amount; the net that goes with each dish row's part of a
+   * divided set menu's price counts under that set menu, shared by price when its sale has
+   * several. Every correction except a replacement, and the reversed lines of a sale whose void
+   * falls in the range, net in. */
   total: Decimal;
   /** One row per variant sold under this name, by quantity then name; `[]` when none was. */
   variants: TopSellerVariant[];

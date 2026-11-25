@@ -1709,6 +1709,14 @@ for (const locale of ["en", "es"] as const) {
         saleLines.columns.push({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 });
         for (const row of Object.values(saleLines.rows)) row[name] = null;
       }
+      saleLines.columns.push({
+        name: "set_menu_part",
+        type: "INTEGER",
+        notnull: 0,
+        dflt_value: null,
+        pk: 0,
+      });
+      for (const row of Object.values(saleLines.rows)) row.set_menu_part = null;
       saleLines.foreignKeys = [
         {
           id: 0,

@@ -145,6 +145,8 @@ export interface GrossLine extends Omit<
    * working-order draft stores the gross the operator saw.
    */
   lineGross: Decimal;
+  /** On a covered dish's row of a takeaway bill, one entry per working line it stands for. */
+  setMenuParts?: readonly { setMenuLineNo: number; weight: Decimal }[];
 }
 
 export interface GrossLines {
@@ -217,16 +219,19 @@ function grossRows(rows: readonly PricingRow[]): GrossLines {
 }
 
 /**
- * Each line at the rate its own list gives on `on`, a local calendar date `YYYY-MM-DD`: its net
- * base and net unit, and the VAT breakdown. Every other field a gross line carries passes through,
- * except `vatRates` and `grossUnitPrice`, which are dropped. A line with an empty list is refused
+ * Each line at the rate its own list gives on `on`, a local calendar date `YYYY-MM-DD` (a 0.00 line
+ * as `lineRates` says): its net base and net unit, and the VAT breakdown. Every other field a gross
+ * line carries passes through, except `vatRates`, `grossUnitPrice` and `setMenuParts`, which are
+ * dropped. A line with an empty list is refused
  * `vat_rate.unavailable`.
  */
 export function rateLines(gross: GrossLines, on: string): PricedLines {
+  const rates = lineRates(gross, on);
   const groups = new Map<Decimal, { base: Decimal; gross: Decimal; indexes: number[] }>();
-  const lines = gross.lines.map(({ vatRates, grossUnitPrice, ...line }, index) => {
-    if (vatRates.length === 0) throw new AppError("vat_rate.unavailable", { lineNo: line.lineNo });
-    const rate = rateOn(vatRates, on);
+  const lines = gross.lines.map(({ vatRates, grossUnitPrice, setMenuParts, ...line }, index) => {
+    void vatRates;
+    void setMenuParts;
+    const rate = rates[index]!;
     const base = baseFromGross(line.lineGross, rate);
     const g = groups.get(rate);
     if (g === undefined) {
@@ -266,6 +271,150 @@ export function rateLines(gross: GrossLines, on: string): PricedLines {
 }
 
 /**
+ * Each line's rate on `on`, except that a 0.00 line whose rate no line with money carries takes its
+ * parent's if it is an extra, else its set menu's, so the ticket gains no empty VAT row (S4); when
+ * that line is not on the ticket, as for a covered dish whose set menu is on another bill, it takes
+ * the first rate that carries money. A set menu priced 0.00 that was not divided follows
+ * `freeMenuRate`. A line with no rates is refused; a set menu's own row, whose rates are its
+ * dishes', only after every other line.
+ */
+function lineRates(gross: GrossLines, on: string): Decimal[] {
+  const unrated = (line: GrossLine) => line.vatRates.length === 0;
+  const missing =
+    gross.lines.find((line) => unrated(line) && line.setMenuRole !== "set_menu") ??
+    gross.lines.find(unrated);
+  if (missing !== undefined) throw new AppError("vat_rate.unavailable", { lineNo: missing.lineNo });
+  const own = gross.lines.map((line) => rateOn(line.vatRates, on));
+  const funded = new Set(own.filter((_, index) => !isZeroDecimal(gross.lines[index]!.lineGross)));
+  const firstFunded = funded.size > 0 ? [...funded][0] : undefined;
+  const indexByLineNo = new Map(gross.lines.map((line, index) => [line.lineNo, index]));
+  const dishes = weightedDishes(gross);
+  const heaviest = (weighted: readonly { index: number; weight: Decimal }[]) =>
+    weighted.reduce<{ index: number; weight: Decimal } | undefined>(
+      (best, dish) =>
+        best === undefined || compareDecimal(dish.weight, best.weight) > 0 ? dish : best,
+      undefined,
+    );
+  // A set menu priced 0.00 and not divided: a paid rate among its weighted dishes', the heaviest
+  // first; else the first paid rate; else, with nothing paid, its heaviest dish's or its own.
+  const freeMenuRate = (index: number): Decimal => {
+    const weighted = dishes.get(gross.lines[index]!.lineNo)!;
+    const paid = heaviest(weighted.filter((dish) => funded.has(own[dish.index]!)));
+    if (paid !== undefined) return own[paid.index]!;
+    if (firstFunded !== undefined) return firstFunded;
+    const any = heaviest(weighted);
+    return any === undefined ? own[index]! : own[any.index]!;
+  };
+  const rates: Decimal[] = [];
+  const rateAt = (index: number): Decimal => {
+    if (rates[index] !== undefined) return rates[index];
+    const line = gross.lines[index]!;
+    rates[index] = own[index]!;
+    if (
+      line.setMenuRole === "set_menu" &&
+      isZeroDecimal(line.lineGross) &&
+      line.setMenuPart == null
+    ) {
+      rates[index] = freeMenuRate(index);
+    } else if (isZeroDecimal(line.lineGross) && !funded.has(own[index]!)) {
+      const holder = line.parentLineNo ?? line.setMenuParts?.[0]?.setMenuLineNo;
+      const at = holder == null ? undefined : indexByLineNo.get(holder);
+      if (at !== undefined) rates[index] = rateAt(at);
+      else if ((holder != null || line.setMenuRole === "dish") && firstFunded !== undefined)
+        rates[index] = firstFunded;
+    }
+    return rates[index];
+  };
+  return gross.lines.map((_, index) => rateAt(index));
+}
+
+/** Each set menu's covered dishes with a weight above 0, by the set menu's `lineNo`, in line order. */
+function weightedDishes(gross: GrossLines): Map<number, { index: number; weight: Decimal }[]> {
+  const menus = new Map<number, { index: number; weight: Decimal }[]>();
+  for (const line of gross.lines) if (line.setMenuRole === "set_menu") menus.set(line.lineNo, []);
+  gross.lines.forEach((line, index) => {
+    for (const part of line.setMenuParts ?? []) {
+      if (compareDecimal(part.weight, ZERO) > 0)
+        menus.get(part.setMenuLineNo)?.push({ index, weight: part.weight });
+    }
+  });
+  return menus;
+}
+
+/**
+ * Each set menu's charged price divided between its covered dishes by weight when their rates on `on`
+ * differ (S3–S7); any other ticket comes back as it is. A divided set menu's row keeps 0.00 at the
+ * rate of its largest part (charged nothing, of its largest weight), the earlier on a tie; a set
+ * menu whose weighted dishes share one rate takes that rate whole.
+ */
+export function shareSetMenus(gross: GrossLines, on: string): GrossLines {
+  if (gross.lines.some((line) => line.vatRates.length === 0)) return gross;
+  const indexByLineNo = new Map(gross.lines.map((line, index) => [line.lineNo, index]));
+  const parts = new Map<number, Decimal>();
+  const divided = new Set<number>();
+  const menus = new Map<number, GrossLine>();
+  for (const [menuLineNo, dishes] of weightedDishes(gross)) {
+    const menuIndex = indexByLineNo.get(menuLineNo)!;
+    const menu = gross.lines[menuIndex]!;
+    if (dishes.length === 0) continue;
+    const ratesOf = (at: number) => gross.lines[dishes[at]!.index]!.vatRates;
+    const largest = (amounts: readonly Decimal[]) =>
+      amounts.reduce(
+        (lead, amount, at) => (compareDecimal(amount, amounts[lead]!) > 0 ? at : lead),
+        0,
+      );
+    if (new Set(dishes.map((_, at) => rateOn(ratesOf(at), on))).size < 2) {
+      menus.set(menuIndex, { ...menu, vatRates: ratesOf(0) });
+      continue;
+    }
+    if (isZeroDecimal(menu.lineGross)) {
+      menus.set(menuIndex, {
+        ...menu,
+        vatRates: ratesOf(largest(dishes.map((dish) => dish.weight))),
+      });
+      continue;
+    }
+    const shares = shareByWeight(
+      menu.lineGross,
+      dishes.map((dish) => dish.weight),
+    );
+    const lead = largest(shares);
+    divided.add(menuLineNo);
+    shares.forEach((share, at) => {
+      const index = dishes[at]!.index;
+      parts.set(index, addDecimal(parts.get(index) ?? ZERO, share));
+    });
+    const none = toScale(ZERO, MONEY_SCALE);
+    menus.set(menuIndex, {
+      ...menu,
+      vatRates: ratesOf(lead),
+      grossUnitPrice: none,
+      lineGross: none,
+      setMenuPart: negateDecimal(menu.lineGross),
+    });
+  }
+  if (menus.size === 0) return gross;
+  const lines = gross.lines.map((line, index) => {
+    const menu = menus.get(index);
+    if (menu !== undefined) return menu;
+    const part = parts.get(index);
+    // A dish with no weight files a part of 0.00, so its row still says it was in a divided set menu.
+    if (part === undefined)
+      return line.setMenuParts?.some((held) => divided.has(held.setMenuLineNo))
+        ? { ...line, setMenuPart: toScale(ZERO, MONEY_SCALE) }
+        : line;
+    const lineGross = addDecimal(line.lineGross, part);
+    return {
+      ...line,
+      grossUnitPrice: divideDecimal(lineGross, decimal(line.quantity), MONEY_SCALE),
+      lineGross,
+      setMenuPart: part,
+    };
+  });
+  return { lines, total: gross.total };
+}
+
+/**
  * The price paid shared over every line by menu price (its list gross, else its gross) when a free
  * line (gross 0, list price above 0) is on a ticket whose lines with a menu price or gross above 0
  * carry two or more rates on `on`; any other ticket comes back as it is.
@@ -276,10 +425,15 @@ export function shareFreeItems(gross: GrossLines, on: string): GrossLines {
   const listed = (line: GrossLine) => line.listGross !== undefined && line.listGross !== null;
   const menuPrice = (line: GrossLine) => (listed(line) ? decimal(line.listGross!) : line.lineGross);
   const above = (amount: Decimal) => compareDecimal(amount, ZERO) > 0;
+  const dishes = weightedDishes(gross);
+  const ratesOf = (line: GrossLine) => {
+    const weighted = dishes.get(line.lineNo) ?? [];
+    return weighted.length === 0
+      ? [rateOn(line.vatRates, on)]
+      : weighted.map((dish) => rateOn(gross.lines[dish.index]!.vatRates, on));
+  };
   const rates = new Set(
-    gross.lines
-      .filter((line) => above(menuPrice(line)) || above(line.lineGross))
-      .map((line) => rateOn(line.vatRates, on)),
+    gross.lines.filter((line) => above(menuPrice(line)) || above(line.lineGross)).flatMap(ratesOf),
   );
   const free = gross.lines.some((line) => isZeroDecimal(line.lineGross) && above(menuPrice(line)));
   if (rates.size < 2 || !free) return gross;

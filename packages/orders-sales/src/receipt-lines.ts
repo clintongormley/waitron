@@ -9,6 +9,7 @@ import {
   joinCustomerPresentationText,
   multiplyDecimal,
   MONEY_SCALE,
+  subtractDecimal,
   type Decimal,
   type OptionSnapshot,
 } from "@waitron/shared";
@@ -74,6 +75,12 @@ export interface TillSaleLine {
   advance?: { invoiceNumber: string; issuedOn: string };
   /** The filed line's set-menu role; absent on a line with none. */
   setMenuRole?: "set_menu" | "dish";
+  /**
+   * The filed row's `set_menu_part`, on the rows of a set menu whose price was divided between its
+   * dishes: how much of `gross` is the set menu's price, 0.00 on a dish with no weight. A
+   * simplified ticket prints the sold amount, `gross` less this.
+   */
+  setMenuPart?: string;
   /** Presentation only. On a correction's set-menu dish filed with a list price, which a
    * whole-invoice credit copies from the line it corrects, though the receipt shows none: the set
    * menu did not cover it. */
@@ -170,13 +177,18 @@ function soldAt(
   };
 }
 
-export function withReceiptListPrices<T extends ReceiptSource>(
+/** A row of a divided set menu is compared with the amount it was sold at, not the part it files. */
+export function withReceiptListPrices<T extends ReceiptSource & { setMenuPart?: Decimal | null }>(
   lines: readonly T[],
   identities: readonly { listUnitGross: Decimal | null }[],
 ): (T & { listGross?: string; listUnitPriceGross?: string })[] {
   return lines.map((line, i) => {
     const listUnit = identities[i]!.listUnitGross;
-    const list = listGrossOf(line, listUnit);
+    const sold =
+      line.setMenuPart == null
+        ? line
+        : { ...line, lineGross: subtractDecimal(line.lineGross, line.setMenuPart) };
+    const list = listGrossOf(sold, listUnit);
     return list.listGross === undefined
       ? { ...line }
       : { ...line, ...list, listUnitPriceGross: listUnit! };
@@ -223,9 +235,37 @@ export function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
   return groups;
 }
 
+/** What the line was sold at: its gross less any part of a divided set menu's price it files. */
+export function soldGross(line: Pick<TillSaleLine, "gross" | "setMenuPart">): Decimal {
+  return line.setMenuPart === undefined
+    ? decimal(line.gross)
+    : subtractDecimal(decimal(line.gross), decimal(line.setMenuPart));
+}
+
+/** A row of a set menu whose price was divided between its dishes at different rates. */
+export function isDividedSetMenu(line: TillSaleLine): boolean {
+  return line.setMenuPart !== undefined;
+}
+
 /** A set menu's dish at no extra cost: a dish comped to 0.00 keeps a list price, so is not one. */
 export function isCoveredDish(line: TillSaleLine): boolean {
   return line.setMenuRole === "dish" && !isPriced(line);
+}
+
+/**
+ * A set menu's dish at no extra cost on a full invoice, which states the filed figures: a dish of a
+ * divided set menu is covered only when it files nothing.
+ */
+export function isCoveredOnFullInvoice(line: TillSaleLine): boolean {
+  if (line.net === undefined || !isDividedSetMenu(line)) return isCoveredDish(line);
+  const filed = { ...line, gross: line.net.base };
+  delete filed.setMenuPart;
+  return isCoveredDish(filed);
+}
+
+/** The heading row of a divided set menu: its price is stated on its dishes' rows. */
+export function isDividedSetMenuHeading(line: TillSaleLine): boolean {
+  return line.setMenuRole === "set_menu" && isDividedSetMenu(line);
 }
 
 /** A dish placed in a set menu that costs more than the set menu covers; the simplified ticket prints its amount with a plus. */
@@ -235,16 +275,25 @@ export function isSurcharge(line: TillSaleLine, amount: Decimal): boolean {
 
 function isPriced(line: TillSaleLine): boolean {
   return (
-    !isZeroDecimal(decimal(line.gross)) ||
+    !isZeroDecimal(soldGross(line)) ||
     line.listGross !== undefined ||
     line.correctsPricedDish === true ||
     (line.adjustments ?? []).length > 0
   );
 }
 
-/** A ticket or full invoice leaves out a covered dish whose extras all came free, with its answers. */
+/**
+ * A ticket or full invoice leaves out a covered dish whose extras all came free, with its answers,
+ * unless its set menu's price was divided: the dishes then name the goods at each rate.
+ */
 export function printsOnTicket({ dish, options }: LineGroup): boolean {
-  return !isCoveredDish(dish) || options.some(isPriced);
+  return !isCoveredDish(dish) || isDividedSetMenu(dish) || options.some(isPriced);
+}
+
+/** {@link printsOnTicket} for a full invoice's filed group, which reads its filed figures. */
+export function printsOnFullInvoice(group: LineGroup): boolean {
+  if (group.dish.net === undefined) return printsOnTicket(group);
+  return !isCoveredOnFullInvoice(group.dish) || group.options.some(isPriced);
 }
 
 /**
@@ -275,6 +324,9 @@ function summed(left: TillSaleLine, right: TillSaleLine): TillSaleLine {
     ...left,
     quantity: String(Number(left.quantity) + Number(right.quantity)),
     gross: addDecimal(decimal(left.gross), decimal(right.gross)),
+    ...(left.setMenuPart === undefined
+      ? {}
+      : { setMenuPart: addDecimal(decimal(left.setMenuPart), decimal(right.setMenuPart!)) }),
   };
   if (!samePrice(left, right)) {
     delete merged.unitPriceGross;
@@ -295,6 +347,7 @@ function samePrinting(a: LineGroup, b: LineGroup, oneRate: boolean): boolean {
   const lines = (group: LineGroup) => [group.dish, ...group.options];
   if (a.options.length !== b.options.length) return false;
   if (a.dish.setMenuRole !== b.dish.setMenuRole) return false;
+  if (isDividedSetMenu(a.dish) !== isDividedSetMenu(b.dish)) return false;
   if (![...lines(a), ...lines(b)].every(groupable)) return false;
   if (answersKey(a.dish) !== answersKey(b.dish)) return false;
   const [aDishes, bDishes] = [decimal(a.dish.quantity), decimal(b.dish.quantity)];
@@ -306,10 +359,13 @@ function samePrinting(a: LineGroup, b: LineGroup, oneRate: boolean): boolean {
       sameRate(left, right, oneRate) &&
       // The same count per dish, and the same price each: compared crosswise, so nothing divides.
       compareDecimal(multiplyDecimal(aCount, bDishes), multiplyDecimal(bCount, aDishes)) === 0 &&
-      compareDecimal(
-        multiplyDecimal(decimal(left.gross), bCount),
-        multiplyDecimal(decimal(right.gross), aCount),
-      ) === 0
+      [(line: TillSaleLine) => decimal(line.gross), soldGross].every(
+        (amount) =>
+          compareDecimal(
+            multiplyDecimal(amount(left), bCount),
+            multiplyDecimal(amount(right), aCount),
+          ) === 0,
+      )
     );
   });
 }

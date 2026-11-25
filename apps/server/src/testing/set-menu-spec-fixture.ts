@@ -7,6 +7,7 @@ import {
   saleLines,
   sales,
   workingOrderLines,
+  workingOrders,
   type Database,
 } from "@waitron/db";
 import {
@@ -18,6 +19,7 @@ import {
   createProduct,
   menuItems,
   requireMenuRoot,
+  setTakeawayVatRate,
   writeProductModifiers,
 } from "@waitron/menu";
 import { thousandthsToDecimal } from "@waitron/shared";
@@ -175,6 +177,110 @@ export async function setupSetMenuSpecVenue(db: Database): Promise<SpecVenue> {
     daily.versionId = special.versionId = await publishWorkingMenu(tx, fullMenuId);
     return { venue, daily, special, productIds, bread };
   });
+}
+
+export type LunchDish = "Soup" | "Hake" | "Lemonade";
+
+export interface SpecLunch {
+  menuId: string;
+  versionId: string;
+  items: Record<LunchDish, string>;
+  lemonadeId: string;
+}
+
+/**
+ * The plan's worked example on the spec venue: a Lunch menu at 14.00 listing Soup, Hake and a new
+ * Lemonade (3.50, a Drink), one line each. Soup and Hake are taken away at 10% and Lemonade at 21%;
+ * the caller sets Soup and Hake to 5.50 and 12.50. Publishes the full menu again, so every set
+ * menu of `spec` carries the new version.
+ */
+export async function addSpecLunch(spec: SpecVenue): Promise<SpecLunch> {
+  const { venue } = spec;
+  return inTx(venue, async (tx) => {
+    const [{ id: drinkCourse }] = await tx
+      .insert(kitchenCourses)
+      .values({ name: "Drink", displayOrder: 30 })
+      .returning({ id: kitchenCourses.id });
+    const lemonade = await createProduct(tx, {
+      categoryId: null,
+      name: "Lemonade",
+      pricingUnit: "each",
+      unitPrice: "3.50",
+      vatClass: "reduced",
+      takeawayVatRate: "21.00",
+    });
+    await tx.update(products).set({ courseId: drinkCourse }).where(eq(products.id, lemonade.id));
+    const ids: Record<LunchDish, string> = {
+      Soup: spec.productIds.Soup,
+      Hake: spec.productIds.Hake,
+      Lemonade: lemonade.id,
+    };
+    await setTakeawayVatRate(tx, ids.Soup, "10.00");
+    await setTakeawayVatRate(tx, ids.Hake, "10.00");
+    const { id: menuId } = await createMenu(tx, {
+      kind: "set_menu",
+      name: "Lunch menu",
+      setPrice: "14.00",
+      setVatClass: "reduced",
+      setTakeawayVatClass: "general",
+    });
+    await addSetMenuDishes(
+      tx,
+      menuId,
+      Object.values(ids).map((productId) => ({ productId, excludedVariantIds: [] })),
+    );
+    const fullMenuId = venue.tables.menuId;
+    await addMember(tx, await requireMenuRoot(tx, fullMenuId), { kind: "set_menu", menuId });
+    const listed = await tx
+      .select({ id: menuItems.id, productId: menuItems.productId })
+      .from(menuItems)
+      .where(eq(menuItems.menuId, menuId));
+    const items = Object.fromEntries(
+      (Object.keys(ids) as LunchDish[]).map((dish) => [
+        dish,
+        listed.find(({ productId }) => productId === ids[dish])!.id,
+      ]),
+    ) as Record<LunchDish, string>;
+    const versionId = await publishWorkingMenu(tx, fullMenuId);
+    spec.daily.versionId = spec.special.versionId = versionId;
+    return { menuId, versionId, items, lemonadeId: lemonade.id };
+  });
+}
+
+/**
+ * A takeaway bill holding a Lunch menu with Soup, Hake and Lemonade sent from it from the copy
+ * `versionId`, then each of `moreItems` (menu item ids of the Lunch menu), fired: 14.00.
+ */
+export async function lunchBill(
+  spec: SpecVenue,
+  lunch: SpecLunch,
+  versionId = lunch.versionId,
+  moreItems: readonly string[] = [],
+) {
+  const { venue } = spec;
+  const bill = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
+  await inTx(venue, async (tx) => {
+    await tx
+      .update(workingOrders)
+      .set({ dining: "takeaway" })
+      .where(eq(workingOrders.id, bill.tabId));
+    await setSetMenuCount(tx, venue.cfg, bill.tabId, lunch.menuId, 1, venue.operator.personId);
+  });
+  const draft = await saveSetMenuDraft(
+    venue,
+    bill,
+    ...[
+      ...(["Soup", "Hake", "Lemonade"] as const).map((dish) => lunch.items[dish]),
+      ...moreItems,
+    ].map((menuItemId) => ({
+      menuItemId,
+      menuVersionId: versionId,
+      setMenuId: lunch.menuId,
+      quantity: "1",
+    })),
+  );
+  await sendSpecDraft(spec, bill.partyId, draft.id, "fire");
+  return bill;
 }
 
 export function setSpecCount(spec: SpecVenue, billId: string, setMenu: SpecSetMenu, count: number) {

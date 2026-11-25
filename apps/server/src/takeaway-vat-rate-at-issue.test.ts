@@ -1,17 +1,29 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
+  kitchenCourses,
+  menuItemVariantOverrides,
   products,
   productTakeawayVatRates,
   readVenueClock,
   withTransaction,
+  workingOrderLines,
   workingOrders,
   type Database,
   type Transaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { createProduct, setProductVariants, setTakeawayVatRate } from "@waitron/menu";
+import {
+  addMember,
+  addSetMenuDishes,
+  createMenu,
+  createProduct,
+  menuItems,
+  requireMenuRoot,
+  setProductVariants,
+  setTakeawayVatRate,
+} from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { payments } from "@waitron/payments";
 import type { Dining } from "@waitron/shared";
@@ -34,27 +46,49 @@ import {
   seatWithNoAllergies,
   setupPartyVenue,
   inTx as partyTx,
+  type PartyVenue,
 } from "./testing/party-venue.js";
+import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   capturedCardPayment,
+  saveSetMenuDraft,
   seedBillSetMenu,
   setMenuOnFullMenu,
 } from "./testing/set-menu-bill-fixture.js";
+import { sendSpecDraft, setupSetMenuSpecVenue } from "./testing/set-menu-spec-fixture.js";
+import { setSetMenuCount } from "./set-menu-count.js";
 import { seedTakeawayProducts } from "./testing/takeaway-menu.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import { priceForIssuance } from "./working-order-invoice.js";
 import { parkOrder } from "./working-order-open.js";
+import { priceStoredOrderForIssuance } from "./stored-order-lines.js";
 import "./errors.js";
 
-// Passes every call through, counting the reads of the products' takeaway rates.
+// Passes every call through, counting the reads of the products' takeaway rates and of recorded
+// menu copies. A copy read can be made to fail, or to answer copies holding no set menu.
 const rateReads = vi.hoisted(() => ({ count: 0 }));
+const copyReads = vi.hoisted(() => ({
+  count: 0,
+  mode: "pass" as "pass" | "throw" | "no_set_menus",
+}));
 vi.mock("@waitron/menu", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/menu")>();
+  const { AppError } = await import("@waitron/shared");
   return {
     ...actual,
     readTakeawayVatSchedules: (...args: Parameters<typeof actual.readTakeawayVatSchedules>) => {
       rateReads.count++;
       return actual.readTakeawayVatSchedules(...args);
+    },
+    readRecordedDocuments: async (...args: Parameters<typeof actual.readRecordedDocuments>) => {
+      copyReads.count++;
+      if (copyReads.mode === "throw") throw new AppError("menu.reset_required", { menuId: "old" });
+      const documents = await actual.readRecordedDocuments(...args);
+      if (copyReads.mode === "pass") return documents;
+      return new Map(
+        [...documents].map(([versionId, document]) => [versionId, { ...document, setMenus: {} }]),
+      );
     },
   };
 });
@@ -377,11 +411,12 @@ describe("a takeaway product with no rate", () => {
 });
 
 describe("a takeaway set-menu bill paid by a captured card", () => {
-  it("files its set-menu line at its set menu's takeaway label", async () => {
+  it("files a set menu at the rate its dishes share", async () => {
     const venue = await setupPartyVenue(suite.db);
-    const copy = await partyTx(venue, (tx) =>
-      setMenuOnFullMenu(tx, venue.tables.menuId, venue.productId("Flan")),
-    );
+    const copy = await partyTx(venue, async (tx) => {
+      await setTakeawayVatRate(tx, venue.productId("Flan"), "4.00");
+      return setMenuOnFullMenu(tx, venue.tables.menuId, venue.productId("Flan"));
+    });
     const { tabId } = await seatWithNoAllergies(venue, await venue.table(randomUUID()));
     await partyTx(venue, (tx) =>
       tx.update(workingOrders).set({ dining: "takeaway" }).where(eq(workingOrders.id, tabId)),
@@ -404,13 +439,357 @@ describe("a takeaway set-menu bill paid by a captured card", () => {
           join sales s on s.id = sl.sale_id
           where s.working_order_id = ${tabId} and sl.product_id is null`,
     );
-    expect(setMenuRates).toEqual([{ vat_rate: 2100 }]);
+    expect(setMenuRates).toEqual([{ vat_rate: 400 }]);
     expect(
       await venue.db
         .select({ state: payments.state })
         .from(payments)
         .where(eq(payments.workingOrderId, tabId)),
     ).toEqual([{ state: "captured" }]);
+  });
+});
+
+type LunchDish = "Soup" | "Hake" | "Lemonade";
+
+/**
+ * The plan's worked example: a takeaway Lunch menu at 14.00 listing Soup (5.50, 10%), Hake (12.50,
+ * 10%) and Lemonade (3.50, 21%), none of them offered on their own unless `soupOnMenuAt` puts Soup
+ * on the full menu at that menu price, in cents.
+ */
+async function lunchVenue(
+  options: {
+    soupOnMenuAt?: number;
+    lemonadeRate?: string;
+    /** A Large Hake at 15.50, offered on the full menu at 16.50. */
+    largeHake?: boolean;
+  } = {},
+) {
+  const spec = await setupSetMenuSpecVenue(suite.db);
+  const { venue } = spec;
+  const lunch = await partyTx(venue, async (tx) => {
+    const [{ id: drinkCourse }] = await tx
+      .insert(kitchenCourses)
+      .values({ name: "Drink", displayOrder: 30 })
+      .returning({ id: kitchenCourses.id });
+    const lemonade = await createProduct(tx, {
+      categoryId: null,
+      name: "Lemonade",
+      pricingUnit: "each",
+      unitPrice: "3.50",
+      vatClass: "reduced",
+      takeawayVatRate: options.lemonadeRate ?? "21.00",
+    });
+    await tx.update(products).set({ courseId: drinkCourse }).where(eq(products.id, lemonade.id));
+    const ids: Record<LunchDish, string> = {
+      Soup: spec.productIds.Soup,
+      Hake: spec.productIds.Hake,
+      Lemonade: lemonade.id,
+    };
+    await tx.update(products).set({ unitPrice: 550 }).where(eq(products.id, ids.Soup));
+    await tx.update(products).set({ unitPrice: 1250 }).where(eq(products.id, ids.Hake));
+    await setTakeawayVatRate(tx, ids.Soup, "10.00");
+    await setTakeawayVatRate(tx, ids.Hake, "10.00");
+    const [large] = options.largeHake
+      ? await setProductVariants(
+          tx,
+          ids.Hake,
+          [
+            {
+              name: "Large",
+              customerName: null,
+              kitchenName: null,
+              image: null,
+              unitPrice: "15.50",
+              available: true,
+            },
+          ],
+          "es-ES",
+        )
+      : [];
+    const { id: menuId } = await createMenu(tx, {
+      kind: "set_menu",
+      name: "Lunch menu",
+      setPrice: "14.00",
+      setVatClass: "reduced",
+      setTakeawayVatClass: "general",
+    });
+    await addSetMenuDishes(
+      tx,
+      menuId,
+      Object.values(ids).map((productId) => ({ productId, excludedVariantIds: [] })),
+    );
+    const fullMenuId = venue.tables.menuId;
+    const root = await requireMenuRoot(tx, fullMenuId);
+    await addMember(tx, root, { kind: "set_menu", menuId });
+    if (options.soupOnMenuAt !== undefined) {
+      await addMember(tx, root, { kind: "product", productId: ids.Soup });
+      await tx
+        .update(menuItems)
+        .set({ grossPrice: options.soupOnMenuAt })
+        .where(and(eq(menuItems.menuId, fullMenuId), eq(menuItems.productId, ids.Soup)));
+    }
+    if (large !== undefined) {
+      await addMember(tx, root, { kind: "product", productId: ids.Hake });
+      const [hakeItem] = await tx
+        .select({ id: menuItems.id })
+        .from(menuItems)
+        .where(and(eq(menuItems.menuId, fullMenuId), eq(menuItems.productId, ids.Hake)));
+      await tx.insert(menuItemVariantOverrides).values({
+        menuItemId: hakeItem!.id,
+        productId: ids.Hake,
+        variantId: large.id,
+        price: 1650,
+      });
+    }
+    const listed = await tx
+      .select({ id: menuItems.id, productId: menuItems.productId })
+      .from(menuItems)
+      .where(eq(menuItems.menuId, menuId));
+    const items = Object.fromEntries(
+      (Object.keys(ids) as LunchDish[]).map((dish) => [
+        dish,
+        listed.find(({ productId }) => productId === ids[dish])!.id,
+      ]),
+    ) as Record<LunchDish, string>;
+    return {
+      menuId,
+      versionId: await publishWorkingMenu(tx, fullMenuId),
+      items,
+      ids,
+      largeHake: large?.id,
+    };
+  });
+  return { spec, venue, lunch };
+}
+
+/** A takeaway bill holding `count` Lunch menus and, sent from them, `dishes`; its id. */
+async function lunchBill(
+  { spec, venue, lunch }: Awaited<ReturnType<typeof lunchVenue>>,
+  dishes: readonly (LunchDish | { dish: LunchDish; variantId: string })[],
+  count = 1,
+): Promise<string> {
+  const bill = await seatWithNoAllergies(venue, await venue.table(randomUUID()));
+  await partyTx(venue, (tx) =>
+    tx.update(workingOrders).set({ dining: "takeaway" }).where(eq(workingOrders.id, bill.tabId)),
+  );
+  await partyTx(venue, (tx) =>
+    setSetMenuCount(tx, venue.cfg, bill.tabId, lunch.menuId, count, venue.operator.personId),
+  );
+  if (dishes.length > 0) {
+    const draft = await saveSetMenuDraft(
+      venue,
+      bill,
+      ...dishes.map((line) => {
+        const { dish, variantId } = typeof line === "string" ? { dish: line } : line;
+        return {
+          menuItemId: lunch.items[dish],
+          ...(variantId === undefined ? {} : { variantId }),
+          menuVersionId: lunch.versionId,
+          setMenuId: lunch.menuId,
+          quantity: "1",
+        };
+      }),
+    );
+    await sendSpecDraft(spec, bill.partyId, draft.id);
+  }
+  return bill.tabId;
+}
+
+/** The bill priced for its invoice. */
+function priced(venue: PartyVenue, billId: string) {
+  return partyTx(venue, (tx) =>
+    priceForIssuance(tx, venue.clock, venue.backend, venue.cfg, billId),
+  );
+}
+
+/** Each priced line's name, total, rate and set-menu part. */
+async function pricedRows(venue: PartyVenue, billId: string) {
+  const { priced: lines } = await priced(venue, billId);
+  return {
+    rows: lines.lines.map((line) => [
+      line.name,
+      line.lineGross,
+      line.vatRate,
+      line.setMenuPart ?? null,
+    ]),
+    vat: lines.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
+  };
+}
+
+describe("a takeaway set menu priced for its invoice", () => {
+  it("divides a set menu whose dishes' rates differ", async () => {
+    const lunch = await lunchVenue();
+    const billId = await lunchBill(lunch, ["Soup", "Hake", "Lemonade"]);
+
+    expect(await pricedRows(lunch.venue, billId)).toEqual({
+      rows: [
+        ["Lunch menu", "0.00", "10.00", "-14.00"],
+        ["Soup", "3.58", "10.00", "3.58"],
+        ["Hake", "8.14", "10.00", "8.14"],
+        ["Lemonade", "2.28", "21.00", "2.28"],
+      ],
+      vat: [
+        { rate: "10.00", base: "10.65", tax: "1.07" },
+        { rate: "21.00", base: "1.88", tax: "0.40" },
+      ],
+    });
+  });
+
+  it("files a set menu whose dishes share one rate whole at that rate", async () => {
+    const lunch = await lunchVenue({ lemonadeRate: "10.00" });
+    const billId = await lunchBill(lunch, ["Soup", "Hake", "Lemonade"]);
+
+    expect(await pricedRows(lunch.venue, billId)).toEqual({
+      rows: [
+        ["Lunch menu", "14.00", "10.00", null],
+        ["Soup", "0.00", "10.00", null],
+        ["Hake", "0.00", "10.00", null],
+        ["Lemonade", "0.00", "10.00", null],
+      ],
+      vat: [{ rate: "10.00", base: "12.73", tax: "1.27" }],
+    });
+  });
+
+  it("weighs a dish by the price its menu charges for it", async () => {
+    // Soup weighs 6.00, not its product's 5.50: 14.00 over 6.00, 12.50 and 3.50.
+    const lunch = await lunchVenue({ soupOnMenuAt: 600 });
+    const billId = await lunchBill(lunch, ["Soup", "Hake", "Lemonade"]);
+
+    const { rows } = await pricedRows(lunch.venue, billId);
+    expect(rows.map((row) => row[3])).toEqual(["-14.00", "3.82", "7.95", "2.23"]);
+  });
+
+  it("weighs a dish with no ordinary offer by its product's price when added", async () => {
+    const lunch = await lunchVenue();
+    await partyTx(lunch.venue, (tx) =>
+      tx.update(products).set({ unitPrice: 700 }).where(eq(products.id, lunch.lunch.ids.Soup)),
+    );
+    const billId = await lunchBill(lunch, ["Soup", "Hake", "Lemonade"]);
+
+    // 14.00 over 7.00, 12.50 and 3.50.
+    const { rows } = await pricedRows(lunch.venue, billId);
+    expect(rows.map((row) => row[3])).toEqual(["-14.00", "4.26", "7.61", "2.13"]);
+  });
+
+  it("weighs a dish by the price stored when it was added, not its product's price at issue", async () => {
+    const lunch = await lunchVenue();
+    const billId = await lunchBill(lunch, ["Soup", "Hake", "Lemonade"]);
+    const soupPrice = (unitPrice: number) =>
+      partyTx(lunch.venue, (tx) =>
+        tx.update(products).set({ unitPrice }).where(eq(products.id, lunch.lunch.ids.Soup)),
+      );
+    await soupPrice(700);
+    try {
+      const { rows } = await pricedRows(lunch.venue, billId);
+      expect(rows.map((row) => row[3])).toEqual(["-14.00", "3.58", "8.14", "2.28"]);
+    } finally {
+      await soupPrice(550);
+    }
+  });
+
+  it("weighs a dish by its line's stored a la carte price, not its menu copy's offer", async () => {
+    // The copy offers Soup at 6.00; its line says 7.00: 14.00 over 7.00, 12.50 and 3.50.
+    const lunch = await lunchVenue({ soupOnMenuAt: 600 });
+    const billId = await lunchBill(lunch, ["Soup", "Hake", "Lemonade"]);
+    await partyTx(lunch.venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ aLaCarteUnitPrice: 700 })
+        .where(
+          and(
+            eq(workingOrderLines.workingOrderId, billId),
+            eq(workingOrderLines.productId, lunch.lunch.ids.Soup),
+          ),
+        ),
+    );
+
+    const { rows } = await pricedRows(lunch.venue, billId);
+    expect(rows.map((row) => row[3])).toEqual(["-14.00", "4.26", "7.61", "2.13"]);
+  });
+
+  it("weighs a dish sold as a variant by the variant's price in the menu copy", async () => {
+    // Large Hake weighs its 16.50 on the full menu, not its own 15.50: 14.00 over 5.50, 16.50, 3.50.
+    const lunch = await lunchVenue({ largeHake: true });
+    const billId = await lunchBill(lunch, [
+      "Soup",
+      { dish: "Hake", variantId: lunch.lunch.largeHake! },
+      "Lemonade",
+    ]);
+
+    const { rows } = await pricedRows(lunch.venue, billId);
+    expect(rows.map((row) => row[3])).toEqual(["-14.00", "3.02", "9.06", "1.92"]);
+  });
+
+  it("refuses a weighted dish with no rate on its own line, not its set menu's", async () => {
+    const lunch = await lunchVenue();
+    await partyTx(lunch.venue, (tx) =>
+      tx
+        .delete(productTakeawayVatRates)
+        .where(eq(productTakeawayVatRates.productId, lunch.lunch.ids.Soup)),
+    );
+    const billId = await lunchBill(lunch, ["Soup", "Hake", "Lemonade"]);
+
+    await expect(priced(lunch.venue, billId)).rejects.toMatchObject({
+      code: "vat_rate.unavailable",
+      params: { lineNo: 2 },
+    });
+  });
+
+  it("a set menu with no priced dish takes the highest rate its copy can hold", async () => {
+    // Its own takeaway label says 21%; the dishes its copy holds are at 10% and 4%.
+    const lunch = await lunchVenue({ lemonadeRate: "4.00" });
+    const billId = await lunchBill(lunch, []);
+
+    expect(await pricedRows(lunch.venue, billId)).toEqual({
+      rows: [["Lunch menu", "14.00", "10.00", null]],
+      vat: [{ rate: "10.00", base: "12.73", tax: "1.27" }],
+    });
+  });
+
+  it("refuses a set menu with no priced dish whose copy cannot be read", async () => {
+    const lunch = await lunchVenue();
+    const billId = await lunchBill(lunch, []);
+
+    copyReads.mode = "throw";
+    try {
+      await expect(priced(lunch.venue, billId)).rejects.toMatchObject({
+        code: "menu.reset_required",
+      });
+    } finally {
+      copyReads.mode = "pass";
+    }
+  });
+
+  it("refuses a set menu with no priced dish whose copy no longer holds it", async () => {
+    const lunch = await lunchVenue();
+    const billId = await lunchBill(lunch, []);
+
+    copyReads.mode = "no_set_menus";
+    try {
+      await expect(priced(lunch.venue, billId)).rejects.toMatchObject({
+        code: "menu.reset_required",
+        params: { menuId: lunch.lunch.menuId },
+      });
+    } finally {
+      copyReads.mode = "pass";
+    }
+  });
+
+  it("reads no set-menu copy when a dish has a price", async () => {
+    const lunch = await lunchVenue();
+    const billId = await lunchBill(lunch, ["Soup", "Hake", "Lemonade"]);
+
+    // Copies answered without their set menus: reading the set menu's copy would refuse.
+    copyReads.mode = "no_set_menus";
+    copyReads.count = 0;
+    try {
+      const { rows } = await pricedRows(lunch.venue, billId);
+      expect(rows.map((row) => row[3])).toEqual(["-14.00", "3.58", "8.14", "2.28"]);
+    } finally {
+      copyReads.mode = "pass";
+    }
+    // The dishes' weights are stored on their lines.
+    expect(copyReads.count).toBe(0);
   });
 });
 
@@ -449,6 +828,30 @@ describe("the products' takeaway rates are read once per basket", () => {
     expect(filedRates(venue.db, id)).toEqual(
       Array.from({ length: 20 }, (_, i) => (i % 2 === 0 ? 2100 : 400)),
     );
+  });
+
+  it("by an a la carte takeaway bill, which reads no menu copy", async () => {
+    const { venue, tea, counter } = await counterVenue();
+    const id = await park(venue, counter, "takeaway", [
+      { menuItemId: counter.offerFor(tea), quantity: "1" },
+    ]);
+
+    copyReads.count = 0;
+    await inTx(venue, (tx) => priceStoredOrderForIssuance(tx, id));
+
+    expect(copyReads.count).toBe(0);
+  });
+
+  it("when a takeaway set-menu bill is priced, which reads no menu copy", async () => {
+    const lunch = await lunchVenue();
+    const billId = await lunchBill(lunch, ["Soup", "Soup", "Hake", "Lemonade", "Hake"], 2);
+
+    rateReads.count = 0;
+    copyReads.count = 0;
+    await priced(lunch.venue, billId);
+
+    expect(rateReads.count).toBe(1);
+    expect(copyReads.count).toBe(0);
   });
 
   it("when a parked order is paid, and not when it is parked", async () => {

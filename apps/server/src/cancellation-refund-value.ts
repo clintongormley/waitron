@@ -285,6 +285,12 @@ export function pairFiling(filing: BillFiling): FilingPairs {
   return { familyOf, atPosition, portionsOf, rowsOfPortion };
 }
 
+/** What a filed row sold for: a divided set menu's dish keeps its part filed (S10), so it refunds
+ * only its supplement. */
+function soldAmount(row: Filed): number | null {
+  return row.lineGross === null ? null : row.lineGross - (row.setMenuPart ?? 0);
+}
+
 /** Each stored line's filed row at its position, when every line pairs with the row at its
  * position (same count, quantities and parents); otherwise none. */
 function pairByPosition(stored: readonly Stored[], filed: readonly Filed[]): Map<string, Filed> {
@@ -304,24 +310,24 @@ function pairByPosition(stored: readonly Stored[], filed: readonly Filed[]): Map
   return pairs;
 }
 
-/** The filed rows the dish line `lineId` and its extras are valued from, the dish's first, each
- * with this line's share of it in cents; none where {@link refundValueIn} values none. */
+/** The filed rows the dish line `lineId` and its extras are valued from, the dish's first; none
+ * where {@link refundValueIn} values none. */
 export function filedFamilyOf(
   filing: BillFiling,
   pairs: FilingPairs,
   lineId: string,
-): { rowId: string; dish: boolean; share: number }[] | undefined {
+): { rowId: string; dish: boolean }[] | undefined {
   const family = pairs.familyOf.get(lineId);
   if (family === undefined) return undefined;
   if (filing.bindings.has(lineId)) {
     if (byPortion(pairs, lineId, family) === undefined) return undefined;
     return portionShares(pairs, lineId)
-      .map(({ row, share }) => ({ rowId: row.id, dish: row.parentLineId === null, share }))
+      .map(({ row }) => ({ rowId: row.id, dish: row.parentLineId === null }))
       .sort((a, b) => Number(b.dish) - Number(a.dish));
   }
   const rows = family.map((row) => pairs.atPosition.get(row.id));
   if (rows.some((row) => row?.lineGross == null)) return undefined;
-  return rows.map((row, i) => ({ rowId: row!.id, dish: i === 0, share: row!.lineGross! }));
+  return rows.map((row, i) => ({ rowId: row!.id, dish: i === 0 }));
 }
 
 /** An unbound line's family, each paired by position with a filed row no portion is linked to. */
@@ -331,21 +337,24 @@ function byPosition(
 ): { quantity: string; gross: string } | undefined {
   let gross = decimal("0.00");
   for (const row of family) {
-    const amount = pairs.atPosition.get(row.id)?.lineGross;
-    if (amount == null) return undefined;
+    const frozen = pairs.atPosition.get(row.id);
+    const amount = frozen === undefined ? null : soldAmount(frozen);
+    if (amount === null) return undefined;
     gross = addDecimal(gross, centsToDecimal(amount));
   }
   return { quantity: thousandthsToDecimal(family[0]!.quantity), gross };
 }
 
-/** Each filed row linked to `dishLineId` with that portion's share of its quantity and cents: a
- * row's cents go to its portions evenly, the cents left over one each to the earliest. */
+/** Each filed row linked to `dishLineId` with that portion's share of its quantity and of what it
+ * sold for in cents: those cents go to its portions evenly, the cents left over one each to the
+ * earliest. */
 function portionShares(pairs: FilingPairs, dishLineId: string) {
   return (pairs.rowsOfPortion.get(dishLineId) ?? []).map((row) => {
     const portions = pairs.portionsOf.get(row.id)!;
-    if (row.lineGross === null) return { row, quantity: 0, share: null };
-    const base = Math.floor(row.lineGross / portions.length);
-    const left = row.lineGross - base * portions.length;
+    const sold = soldAmount(row);
+    if (sold === null) return { row, quantity: 0, share: null };
+    const base = Math.floor(sold / portions.length);
+    const left = sold - base * portions.length;
     return {
       row,
       quantity: row.quantity / portions.length,
@@ -355,8 +364,8 @@ function portionShares(pairs: FilingPairs, dishLineId: string) {
 }
 
 /**
- * One portion's share of each filed row linked to it: its dish row and its extras' rows, which must
- * match its stored dish line and extras. A row's portions sum to what it filed.
+ * One portion's share of what each filed row linked to it sold for: its dish row and its extras'
+ * rows, which must match its stored dish line and extras. A row's portions sum to what it sold for.
  */
 function byPortion(
   pairs: FilingPairs,

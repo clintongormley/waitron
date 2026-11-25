@@ -310,6 +310,8 @@ be cancelled or edited by hand.
 - **Tables, takeaway and delivery.** Today a takeaway bill holding a set menu cannot yet be paid,
   comped or discounted (`set_menu.payment_not_ready`, `apps/server/src/set-menu-bill.ts:64-90`)
   until lane L's VAT piece B lands; this design does not change that order.
+  _2026-11-24: VAT rates piece B's first pull request removes that refusal: a takeaway bill holding
+  a set menu is paid like any other._
 - **Eat-in orders at the counter** can now form set menus too. The 17 November refusal was the
   owner's ("these set menus are only for tables/bars with seating"); with the bill doing the
   grouping nothing technical needs it, and the owner did not keep it when asked on 24 November
@@ -321,6 +323,9 @@ Unchanged from what piece 4 built, except that the counts are worked out:
 
 - The bill, ticket and full invoice list the set menus, the supplements and the à la carte dishes,
   not the covered dishes. Paid extras on a covered dish print.
+  _2026-11-24: a takeaway set menu whose price was divided between its dishes names them on the
+  ticket, with their VAT letter and no amount, and lists them with their parts on the full invoice
+  (VAT rates piece B)._
 - The kitchen gets every dish as an ordinary line; set-menu lines are never sent.
 - Sales reports show each set menu as an item and covered dishes at 0. They read the lines as saved
   when the sale was issued.

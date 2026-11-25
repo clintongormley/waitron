@@ -1547,6 +1547,8 @@ export interface HeldOrder {
   recipient?: NonNullable<PartyBill["recipient"]>;
   /** How the invoice is to be delivered; absent while no delivery has been chosen. */
   invoiceDelivery?: InvoiceDeliveryChoice;
+  /** Only on a placed order whose invoice is issued. */
+  invoiced?: true;
   /** The order's own way, whatever its department now says. */
   dining: Dining;
   diningChoice: DiningChoice;

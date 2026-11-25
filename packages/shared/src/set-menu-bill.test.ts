@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import type { MenuOfferVariant, ServedSetMenuCopy, ServedSetMenuOffer } from "./index.js";
+import type {
+  FrozenExtraItem,
+  FrozenOfferedModifier,
+  MenuOfferVariant,
+  PublishedSetMenu,
+  ServedSetMenuCopy,
+  ServedSetMenuOffer,
+  SetMenuFrozenOffer,
+  SetMenuOfferVariant,
+} from "./index.js";
 import * as shared from "./index.js";
 
 const portion: ServedSetMenuOffer["unit"] = {
@@ -164,4 +173,155 @@ describe("set-menu copies", () => {
 it("does not offer a plain dish when none of its published variants can be served", () => {
   const wine = { ...offer("wine", "starters"), variantCountsAs: { glass: "drinks" } };
   expect(shared.setMenuOfferOf(daily([wine])).dishes).toEqual([]);
+});
+
+describe("the products a published set menu can hold", () => {
+  function dish(
+    productId: string,
+    countsAsCourseId: string | null,
+    rest: Partial<SetMenuFrozenOffer> = {},
+  ): SetMenuFrozenOffer {
+    return {
+      ...offer(productId, countsAsCourseId),
+      courseOverrideId: null,
+      variants: [],
+      offeredModifiers: [],
+      ...rest,
+    };
+  }
+
+  function variant(id: string, countsAsCourseId: string): SetMenuOfferVariant {
+    return { ...glass, id, name: id, countsAsCourseId };
+  }
+
+  function extra(productId: string): FrozenExtraItem {
+    return {
+      productId,
+      presentation: {
+        name: productId,
+        customerName: null,
+        kitchenName: null,
+        variantName: null,
+        variantCustomerName: null,
+        variantKitchenName: null,
+      },
+      portion: "1.000",
+      unit: portion,
+      name: productId,
+      customerName: null,
+      kitchenName: null,
+      price: "1.00",
+      vatClass: "general",
+      takeawayVatClass: "general",
+      maxQuantity: null,
+      preselected: false,
+      image: null,
+    };
+  }
+
+  function extras(...productIds: string[]): FrozenOfferedModifier {
+    return {
+      kind: "extras",
+      id: "extras",
+      name: "Extras",
+      customerName: null,
+      kitchenName: null,
+      minPicks: 0,
+      maxPicks: null,
+      items: productIds.map(extra),
+    };
+  }
+
+  const cooking: FrozenOfferedModifier = {
+    kind: "options",
+    id: "cooking",
+    name: "Cooking",
+    customerName: null,
+    kitchenName: null,
+    defaultLabelId: "rare",
+    labels: [{ id: "rare", name: "Rare", customerName: null, kitchenName: null }],
+  };
+
+  function published(...offers: SetMenuFrozenOffer[]): PublishedSetMenu {
+    const { name, terms, changedAt } = daily([]);
+    return {
+      name,
+      terms,
+      changedAt,
+      root: { members: [] },
+      offers: Object.fromEntries(offers.map((each, index) => [`item-${index}`, each])),
+    };
+  }
+
+  const held = (...offers: SetMenuFrozenOffer[]) => shared.setMenuProductIds(published(...offers));
+
+  it("holds each dish a line accepts and the extras it offers", () => {
+    expect(
+      held(
+        dish("soup", "starters"),
+        dish("hake", "mains", { offeredModifiers: [extras("sauce", "lemon"), extras("bread")] }),
+      ),
+    ).toEqual(["soup", "hake", "sauce", "lemon", "bread"]);
+  });
+
+  it("leaves out a dish whose course no line accepts, and its extras", () => {
+    expect(
+      held(
+        dish("soup", "starters"),
+        dish("flan", "desserts", { offeredModifiers: [extras("cream")] }),
+      ),
+    ).toEqual(["soup"]);
+  });
+
+  it("leaves out a dish with no course", () => {
+    expect(held(dish("soup", null))).toEqual([]);
+  });
+
+  it("holds the accepted variants of a dish, not the dish, with the extras it offers", () => {
+    expect(
+      held(
+        dish("wine", "drinks", {
+          variants: [variant("glass", "drinks"), variant("bottle", "bar")],
+          offeredModifiers: [extras("ice")],
+        }),
+      ),
+    ).toEqual(["glass", "ice"]);
+  });
+
+  it("leaves out a dish none of whose variants a line accepts, and its extras", () => {
+    expect(
+      held(
+        dish("wine", "drinks", {
+          variants: [variant("bottle", "bar")],
+          offeredModifiers: [extras("ice")],
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it("takes nothing from an options list", () => {
+    expect(held(dish("sirloin", "mains", { offeredModifiers: [cooking] }))).toEqual(["sirloin"]);
+  });
+
+  it("leaves out a dish sold by measure, with its variants and extras", () => {
+    const unit: SetMenuFrozenOffer["unit"] = { ...portion, id: "kg", measure: true };
+    expect(
+      held(
+        dish("soup", "starters"),
+        dish("fish", "mains", { unit, offeredModifiers: [extras("sauce")] }),
+        dish("ham", "starters", { unit, variants: [variant("cured", "starters")] }),
+      ),
+    ).toEqual(["soup"]);
+  });
+
+  it("names a product once however many times it can be had", () => {
+    const bread = extras("bread");
+    expect(
+      held(
+        dish("soup", "starters", { offeredModifiers: [bread] }),
+        dish("soup", "mains", { offeredModifiers: [bread] }),
+        dish("bread", "starters"),
+      ),
+    ).toEqual(["soup", "bread"]);
+  });
 });

@@ -410,7 +410,7 @@ describe("till-tender-pay", () => {
       expect(query(el, "[data-full-invoice]")).toBeNull();
     });
 
-    it("can choose a receipt language while a placed set-menu order cannot be paid", async () => {
+    it("can choose a receipt language and pay a placed set-menu order", async () => {
       const store = new WorkingOrderStore();
       store.addProduct(coffee, "1");
       const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
@@ -421,8 +421,12 @@ describe("till-tender-pay", () => {
         receiptLanguages: ["es-ES", "ca-ES"],
         receiptLanguage: "es-ES",
       });
-      expect(query(el, ".pay")!.hasAttribute("disabled")).toBe(true);
+      const paid = vi.fn();
+      el.addEventListener("counter-bill-pay", paid);
+      expect(query(el, ".pay")).toBeNull();
       expect(languageButton(el)!.hasAttribute("disabled")).toBe(false);
+      await userEvent.click(query(el, "[data-counter-pay]") as HTMLElement);
+      expect(paid).toHaveBeenCalledOnce();
     });
 
     it("disables the language button with Full invoice while the basket is empty", async () => {
@@ -438,6 +442,47 @@ describe("till-tender-pay", () => {
       expect(query(el, "[data-full-invoice]")!.hasAttribute("disabled")).toBe(true);
     });
   });
+
+  it.each([true, false])(
+    "a set-menu order pays in the payment window even when its basket totals nothing (paymentWindow %s)",
+    async (paymentWindow) => {
+      const store = new WorkingOrderStore();
+      store.addProduct({ ...coffee, unitPrice: "0.00" }, "1");
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store,
+        paymentWindow,
+        hasSetMenus: true,
+        fullInvoices: true,
+      });
+      const paid = vi.fn();
+      el.addEventListener("counter-bill-pay", paid);
+
+      const pay = query(el, "[data-counter-pay]") as HTMLElementTagNameMap["wt-button"];
+      expect(pay.disabled).toBe(false);
+      expect(pay.variant).toBe("primary");
+      expect(query(el, ".pay, .pay-card")).toBeNull();
+      expect(query(el, "[data-full-invoice]")!.hasAttribute("disabled")).toBe(false);
+      await userEvent.click(pay);
+      expect(paid).toHaveBeenCalledOnce();
+    },
+  );
+
+  it.each(["order", "collect"] as const)(
+    "offers no payment for a set menu with no dish at the %s stage",
+    async (stage) => {
+      const { el } = await mountWidget<TillTenderPay>("till-tender-pay", {
+        store: new WorkingOrderStore(),
+        mode: "ticket_then_pay",
+        stage,
+        paymentWindow: true,
+        hasSetMenus: true,
+        fullInvoices: true,
+      });
+
+      expect(query(el, "[data-counter-pay]")!.hasAttribute("disabled")).toBe(true);
+      expect(query(el, "[data-counter-pay]")!.getAttribute("variant")).toBe("secondary");
+    },
+  );
 
   it("opens the cash screen showing the total when Cash is tapped", async () => {
     const store = new WorkingOrderStore();

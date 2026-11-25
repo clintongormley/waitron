@@ -510,6 +510,7 @@ export type {
   SetMenuTerms,
 } from "./menu-document/set-menu-types.js";
 export {
+  highestRates,
   rateOn,
   vatRateOn,
   vatRatesOn,
@@ -634,6 +635,7 @@ export {
   placeInOrder,
   setMenuCopyOf,
   setMenuOfferOf,
+  setMenuProductIds,
   suggestMove,
   withPlacements,
   type BillSetMenu,

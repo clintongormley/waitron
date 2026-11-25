@@ -15,12 +15,23 @@ import { t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { setMenuCopyOf } from "@waitron/shared";
 import {
+  balanceOf,
+  cash,
+  dialog,
   emit,
   flush as flushCounter,
+  inDialog,
+  invoiceOf,
+  line,
   lock,
   offers,
+  paymentOf,
+  press,
   resetBillPayDrafts,
   stubApi as counterApi,
+  takenOf,
+  till,
+  type,
 } from "../test/bill-pay-app.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import type { TillApp } from "./till-app.js";
@@ -361,9 +372,13 @@ it("parks a set-menu-only takeaway and orders from its original folder after rep
   expect(folder.copy?.terms.price).toBe("14.00");
   await userEvent.click(page.elementLocator(folder).getByRole("button", { name: /Sirloin/ }));
   expect(total.shadowRoot!.textContent).toContain("€19.00");
-  await expect
-    .element(page.elementLocator(tender).getByRole("button", { name: "Pay", exact: true }))
-    .toBeDisabled();
+  const payButton = page.elementLocator(tender).getByRole("button", { name: "Pay", exact: true });
+  await expect.element(payButton).toBeEnabled();
+  // Stopped before the app, whose save of the order is the refusal the Park below checks.
+  const payPressed = vi.fn((event: Event) => event.stopPropagation());
+  tender.addEventListener("counter-bill-pay", payPressed, { once: true });
+  await userEvent.click(payButton);
+  expect(payPressed).toHaveBeenCalledOnce();
   await park();
 
   await vi.waitFor(() => {
@@ -440,6 +455,293 @@ it("renders a reopened set-menu dish from the recorded offer and saved price", a
     "€19.00",
   );
 });
+
+async function takeawaySetMenuOnCounter(
+  id: string,
+  invoiceNumber?: string,
+  overrides: Record<string, unknown> = {},
+) {
+  resetBillPayDrafts();
+  const soup = daily.offers.find((offer) => offer.id === "soup")!;
+  const order = {
+    id,
+    orderNumber: 10,
+    revision: 6,
+    zoneId: offers.context.zoneId,
+    label: null,
+    expectedEdit: null,
+    invoiceType: "F2",
+    dining: "takeaway",
+    diningChoice: "locked",
+    kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+    setMenus: {
+      copies: [setMenuCopyOf(daily, "v1")],
+      recorded: { [daily.menuId]: "v1" },
+      setMenus: [bill.setMenus[0]!],
+      dishes: [
+        {
+          ...bill.dishes[0]!,
+          lineId: "soup-line",
+          productId: soup.productId,
+          place: 0,
+          priceCents: 0,
+          countsAsCourseId: "starter",
+        },
+      ],
+    },
+    setMenuCopies: [daily],
+    lines: [
+      {
+        workingOrderLineId: "soup-line",
+        menuItemId: soup.id,
+        menuVersionId: "v1",
+        setMenuId: daily.menuId,
+        quantity: "1.000",
+        product: {
+          ...setMenuProduct({ offer: soup, setMenuId: daily.menuId, versionId: "v1" }),
+          unit: { id: "each", name: { en: "each" }, precision: 0, hardwareUnit: null },
+        },
+      },
+    ],
+  };
+  const placed = { ...order, ...(invoiceNumber === undefined ? {} : { invoiced: true }) };
+  const api = counterApi({
+    getTabLines: vi.fn(async () => ({
+      lines: [line({ id: "soup-line", lineNo: 2, name: "Soup", unitPriceGross: "0.00" })],
+      revision: 6,
+    })),
+    retrieveWorkingOrder: vi.fn(async () => order),
+    retrievePlacedOrder: vi.fn(async () => placed),
+    listCounterWaiting: vi.fn(async () => [
+      {
+        id: "placed-takeaway",
+        items: [],
+        orderNumber: 10,
+        label: null,
+        status: "placed",
+        total: "14.00",
+        openedAt: "2026-11-10T10:00:00Z",
+        settledAt: null,
+        collectedAt: null,
+        serviceMode: "ticket_then_pay",
+        counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 },
+        canHandOver: false,
+        movableDishes: [],
+        invoiceNumber,
+      },
+    ]),
+    getBillBalance: vi.fn(async () =>
+      balanceOf({ workingOrderId: id, total: "14.00", outstanding: "14.00" }),
+    ),
+    previewBillPayment: vi.fn().mockResolvedValue(cash("4.00", "0.00")),
+    ...overrides,
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flushCounter(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+  await flushCounter(el);
+  const counter = () => el.shadowRoot!.querySelector("till-counter-screen")!;
+  async function pay({ outstanding = "14.00" } = {}) {
+    await vi.waitFor(() => expect(counter().store.id).toBe(id));
+    await flushCounter(el);
+    expect(counter().store.total.toString()).toBe("0.00");
+    const tender = counter().shadowRoot!.querySelector("till-tender-pay")!;
+    await userEvent.click(tender.shadowRoot!.querySelector("[data-counter-pay]")!);
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await flushCounter(el);
+    expect(api.getBillBalance).toHaveBeenCalledWith(id);
+    expect(dialog(el)!.balance).toMatchObject({ total: "14.00", outstanding });
+    expect(dialog(el)!.shadowRoot!.textContent).toContain("€14.00");
+  }
+  async function toTakePart() {
+    inDialog(el, '[name="way"][value="contribution"]')!.click();
+    await flushCounter(el);
+    await type(el, "amount", "4");
+    await type(el, "tendered", "4");
+    await press(el, "[data-pay-continue]");
+    expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
+  }
+  return { api, el, counter, pay, toTakePart };
+}
+
+it("pays a Counter takeaway set menu at the server's balance", async () => {
+  const { counter, pay } = await takeawaySetMenuOnCounter("counter-takeaway");
+  emit(counter(), "retrieve-order", { id: "counter-takeaway" });
+  await pay();
+});
+
+it.each([undefined, "F1/7"])(
+  "pays a placed Counter takeaway set menu at the server's balance (invoice %s)",
+  async (invoiceNumber) => {
+    const { el, counter, pay, toTakePart } = await takeawaySetMenuOnCounter(
+      "placed-takeaway",
+      invoiceNumber,
+    );
+    emit(counter(), "pay-waiting-order", { id: "placed-takeaway" });
+    await pay();
+    await toTakePart();
+    const question = inDialog(el, "[data-pay-own-receipt]");
+    if (invoiceNumber === undefined)
+      expect(question?.textContent).toContain(t("bill_pay.own_receipt"));
+    else expect(question).toBeNull();
+  },
+);
+
+it.each([
+  ["has not answered", () => new Promise<never>(() => {})],
+  ["failed", () => Promise.reject({ code: "server.internal" })],
+  ["no longer lists it", () => Promise.resolve([])],
+])(
+  "asks for no own receipt on an invoiced Counter order when the waiting list %s",
+  async (_, list) => {
+    const { el, counter, pay, toTakePart } = await takeawaySetMenuOnCounter(
+      "placed-takeaway",
+      "F1/7",
+      { listCounterWaiting: vi.fn().mockResolvedValueOnce([]).mockImplementation(list) },
+    );
+    emit(counter(), "pay-waiting-order", { id: "placed-takeaway" });
+    await pay();
+    await toTakePart();
+    expect(inDialog(el, "[data-pay-own-receipt]")).toBeNull();
+  },
+);
+
+it.each([
+  [undefined, "till-invoice-correction-dialog", "till-tender-refund-dialog"],
+  ["F1/7", "till-tender-refund-dialog", "till-invoice-correction-dialog"],
+] as const)(
+  "refunds a payment with its own receipt on a placed Counter set menu (invoice %s) through %s",
+  async (invoiceNumber, opened, other) => {
+    const id = "placed-takeaway";
+    const { api, el, counter, pay } = await takeawaySetMenuOnCounter(id, invoiceNumber, {
+      getBillBalance: vi.fn().mockResolvedValue(
+        balanceOf({
+          workingOrderId: id,
+          status: "placed",
+          total: "14.00",
+          received: "4.00",
+          outstanding: "10.00",
+          payments: [
+            paymentOf({
+              applied: "4.00",
+              hasTicket: true,
+              saleId: "advance-sale",
+              left: "4.00",
+              tipLeft: "0.00",
+              givenBack: "0.00",
+              ...(invoiceNumber === undefined
+                ? {}
+                : { takenOffBy: { saleId: "bill-sale", invoiceNumber } }),
+            }),
+          ],
+        }),
+      ),
+      getTransactionReceipt: vi.fn().mockResolvedValue(invoiceOf("4.00")),
+      getRefundableTenders: vi.fn().mockResolvedValue([
+        {
+          tenderId: "11111111-1111-4111-8111-111111111111",
+          method: "cash",
+          last4: null,
+          appliedRemaining: "4.00",
+          tipRemaining: "0.00",
+          pendingRefundId: null,
+          manual: false,
+        },
+      ]),
+      readInvoiceCorrectionLines: vi.fn(() => new Promise(() => {})),
+    });
+    emit(counter(), "pay-waiting-order", { id });
+    await pay({ outstanding: "10.00" });
+    await press(el, '[data-payment-refund="pay-1"]');
+    await vi.waitFor(() => expect(el.shadowRoot!.querySelector(opened)).not.toBeNull());
+    expect(api.getTransactionReceipt).toHaveBeenCalledWith("advance-sale", expect.anything());
+    expect(el.shadowRoot!.querySelector(other)).toBeNull();
+    expect(el.shadowRoot!.querySelector("till-bill-refund-dialog")).toBeNull();
+    expect(dialog(el)).toBeNull();
+  },
+);
+
+it.each([
+  [undefined, true],
+  ["F1/7", false],
+])(
+  "a paid placed Counter set menu (invoice %s) has its original receipt to print: %s",
+  async (invoiceNumber, original) => {
+    const id = "placed-takeaway";
+    const { el, counter, pay } = await takeawaySetMenuOnCounter(id, invoiceNumber, {
+      previewBillPayment: vi.fn().mockResolvedValue(cash("14.00", "0.00")),
+      takeBillPayment: vi.fn(async () =>
+        takenOf(
+          { applied: "14.00", tendered: "14.00" },
+          {
+            workingOrderId: id,
+            status: "settled",
+            total: "14.00",
+            received: "14.00",
+            outstanding: "0.00",
+          },
+          invoiceOf("14.00"),
+        ),
+      ),
+    });
+    emit(counter(), "pay-waiting-order", { id });
+    await pay();
+    await type(el, "tendered", "14");
+    await press(el, "[data-pay-continue]");
+    await press(el, "[data-pay-confirm]");
+    await vi.waitFor(() => expect(dialog(el)).toBeNull());
+    const ticket = () => el.shadowRoot!.querySelector("till-settlement-document-dialog");
+    await vi.waitFor(() => expect(ticket()).not.toBeNull());
+    expect(ticket()!.originalReceiptAvailable).toBe(original);
+  },
+);
+
+it.each([undefined, "F1/7"])(
+  "asks for an own receipt as before when Pay is opened again from deferred payment (invoice %s)",
+  async (invoiceNumber) => {
+    const id = "placed-takeaway";
+    const { el, counter, pay, toTakePart } = await takeawaySetMenuOnCounter(id, invoiceNumber, {
+      getTill: vi
+        .fn()
+        .mockResolvedValue({ ...till, capabilities: [...till.capabilities, "close-deferred"] }),
+    });
+    emit(counter(), "pay-waiting-order", { id });
+    await pay();
+    await press(el, "[data-pay-deferred]");
+    expect(dialog(el)).toBeNull();
+    emit(el.shadowRoot!.querySelector("till-deferred-close-dialog")!, "deferred-close-cancel");
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await flushCounter(el);
+    await toTakePart();
+    expect(inDialog(el, "[data-pay-own-receipt]") !== null).toBe(invoiceNumber === undefined);
+  },
+);
+
+it.each([undefined, "F1/7"])(
+  "asks for an own receipt only before the invoice in the window a short card capture opens (invoice %s)",
+  async (invoiceNumber) => {
+    const id = "placed-takeaway";
+    const balance = balanceOf({
+      workingOrderId: id,
+      status: "placed",
+      total: "14.00",
+      received: "5.00",
+      outstanding: "9.00",
+    });
+    const { el, counter, toTakePart } = await takeawaySetMenuOnCounter(id, invoiceNumber, {
+      pay: vi.fn().mockResolvedValue({ outcome: "partial", balance }),
+      getBillBalance: vi.fn().mockResolvedValue(balance),
+    });
+    emit(counter(), "pay-waiting-order", { id });
+    await vi.waitFor(() => expect(counter().store.id).toBe(id));
+    await flushCounter(el);
+    emit(counter(), "collect-card", {});
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await flushCounter(el);
+    await toTakePart();
+    expect(inDialog(el, "[data-pay-own-receipt]") !== null).toBe(invoiceNumber === undefined);
+  },
+);
 
 async function tableWithSetMenus(overrides: Record<string, unknown> = {}) {
   const zone = menu("lunch");

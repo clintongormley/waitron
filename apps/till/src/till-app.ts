@@ -591,9 +591,12 @@ interface ReleasedBill {
 
 function storedInvoiceOf(
   orderId: string,
-  { invoiceType, recipient, invoiceDelivery }: HeldOrder,
-): { orderId: string } & Pick<HeldOrder, "invoiceType" | "recipient" | "invoiceDelivery"> {
-  return { orderId, invoiceType, recipient, invoiceDelivery };
+  { invoiceType, recipient, invoiceDelivery, invoiced }: HeldOrder,
+): { orderId: string } & Pick<
+  HeldOrder,
+  "invoiceType" | "recipient" | "invoiceDelivery" | "invoiced"
+> {
+  return { orderId, invoiceType, recipient, invoiceDelivery, invoiced };
 }
 
 /** A bill this device holds or released, for the bar (D4, D10): its store's lines, and whether
@@ -23039,9 +23042,11 @@ export class TillApp extends LitElement {
       ...order,
       printed:
         order.printed ??
-        (order.surface === "table" &&
-          this.partyBills.find((bill) => bill.workingOrderId === billId)?.invoiceNumber !==
-            undefined),
+        (order.surface === "table"
+          ? this.partyBills.find((bill) => bill.workingOrderId === billId)?.invoiceNumber !==
+            undefined
+          : this.#counterStoredInvoice?.orderId === billId &&
+            this.#counterStoredInvoice.invoiced === true),
       way,
       amount: amount ?? "",
       lines,

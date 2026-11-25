@@ -409,6 +409,7 @@ it("builds lines in allocation order from the invoice line's frozen facts, negat
     advanceRole: null,
     deductsSaleId: null,
     setMenuRole: null,
+    setMenuPart: null,
   });
   expect(correctionLinesFor(rows, [sauce])[0]!.parentLineNo).toBeNull();
 });
@@ -440,6 +441,44 @@ it("keeps an invoice line's set-menu role", async () => {
   );
 
   expect(lines.map(({ setMenuRole }) => setMenuRole)).toEqual(["set_menu", "dish"]);
+});
+
+// VAT rates piece B, S10: an amount taken off a divided set menu's dish comes off its part first,
+// then off its sold amount (a supplement).
+it("takes an amount off a dish's set-menu part before its supplement", async () => {
+  const { rows, ids } = await sell();
+  const hake = { ...rows[0]!, setMenuRole: "dish" as const, lineGross: 1014, setMenuPart: 814 };
+  const off = (gross: string) =>
+    correctionLinesFor([hake], [allocation(ids[0]!, "10.00", gross, "0.00")])[0]!.setMenuPart;
+  expect(off("2.00")).toBe("-2.00");
+  expect(off("8.14")).toBe("-8.14");
+  expect(off("9.00")).toBe("-8.14");
+});
+
+it("takes an amount off what earlier corrections left of a dish's part", async () => {
+  const { rows, ids } = await sell();
+  const hake = { ...rows[0]!, setMenuRole: "dish" as const, lineGross: 1014, setMenuPart: 814 };
+  const off = (gross: string, taken: number) =>
+    correctionLinesFor(
+      [hake],
+      [allocation(ids[0]!, "10.00", gross, "0.00")],
+      new Map([[ids[0]!, taken]]),
+    )[0]!.setMenuPart;
+  expect(off("5.00", 500)).toBe("-3.14");
+  expect(off("1.00", 814)).toBeNull();
+  expect(off("1.00", 0)).toBe("-1.00");
+});
+
+it("leaves the part out on a row whose part is not a share of the price", async () => {
+  const { rows, ids } = await sell();
+  const lines = correctionLinesFor(
+    [
+      { ...rows[0]!, setMenuRole: "set_menu", lineGross: 50, setMenuPart: -1400 },
+      { ...rows[1]!, setMenuPart: 0 },
+    ],
+    [allocation(ids[0]!, "10.00", "0.50", "0.45"), allocation(ids[1]!, "21.00", "1.21", "1.00")],
+  );
+  expect(lines.map(({ setMenuPart }) => setMenuPart)).toEqual([null, null]);
 });
 
 function preview(saleId: SaleId, of = backend as FiscalBackend) {

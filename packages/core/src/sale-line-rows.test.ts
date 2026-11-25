@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { decimal } from "@waitron/shared";
 import type { OptionSnapshot } from "@waitron/shared";
 import { saleLineRows } from "./sale-line-rows.js";
 import type { RecordSaleLine } from "./record-sale.js";
@@ -323,5 +324,23 @@ describe("saleLineRows", () => {
     expect(setMenu).toMatchObject({ setMenuRole: "set_menu" });
     expect(dish).toMatchObject({ setMenuRole: "dish" });
     expect(extra).not.toHaveProperty("setMenuRole");
+  });
+
+  it("writes a line's set-menu part in cents, and none on a line without one", () => {
+    const base = {
+      descriptions: { "es-ES": "Menú" },
+      quantity: "1",
+      unitPrice: "3.25",
+      vatRate: "10.00",
+      lineTotal: "3.25",
+    };
+    const [setMenu, dish, plain] = saleLineRows("sale-1", [
+      { ...base, lineNo: 1, name: "Daily menu", setMenuPart: decimal("-14.00") },
+      { ...base, lineNo: 2, name: "Soup", setMenuPart: decimal("3.58") },
+      { ...base, lineNo: 3, name: "Bread" },
+    ]);
+    expect(setMenu).toMatchObject({ setMenuPart: -1400 });
+    expect(dish).toMatchObject({ setMenuPart: 358 });
+    expect(plain).not.toHaveProperty("setMenuPart");
   });
 });

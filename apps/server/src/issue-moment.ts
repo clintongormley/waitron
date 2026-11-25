@@ -1,4 +1,4 @@
-import { localCalendarDate, rateLines, shareFreeItems } from "@waitron/menu";
+import { localCalendarDate, rateLines, shareFreeItems, shareSetMenus } from "@waitron/menu";
 import type { GrossLines, PricedLines } from "@waitron/menu";
 import type { FiscalBackend, TrustedClock, TrustedReading } from "@waitron/fiscal";
 import { deductAdvances, type AdvanceCredit, type DeductionLine } from "./advance-deduction.js";
@@ -27,7 +27,8 @@ export interface IssueAdvances {
 }
 
 /**
- * Take ONE clock reading and rate `gross`, each free item given its share (`shareFreeItems`), at its
+ * Take ONE clock reading and rate `gross`, each free item given its share (`shareFreeItems`) and each
+ * takeaway set menu divided between its dishes (`shareSetMenus`), at its
  * local calendar date, or at `mealDay` when the meal ended on an earlier venue day: the rate in
  * force when the sale happened applies, and that day is returned as the operation date to file.
  * Every till path that issues an invoice from an order's lines rates them here and hands
@@ -45,7 +46,7 @@ export function issueMoment(
   const issueDay = localCalendarDate(reading.instant, reading.offsetMinutes);
   const earlier = mealDay !== undefined && mealDay < issueDay ? mealDay : undefined;
   const on = earlier ?? issueDay;
-  const meal = rateLines(shareFreeItems(gross, on), on);
+  const meal = rateLines(shareSetMenus(shareFreeItems(gross, on), on), on);
   const { priced, deductionLines } = deductAdvances(meal, advances?.credits ?? [], {
     languages: advances?.languages ?? [],
   });

@@ -887,7 +887,7 @@ job count as a physical exactly-once printing guarantee.
 
 ## VAT rates per product, eaten in or taken away (was: VAT at line add, M7v, A68)
 
-**Design approved by the owner 2026-11-21:** [2026-11-21-vat-rates-design.md](../superpowers/specs/2026-11-21-vat-rates-design.md). The owner changed the model that day: one dine-in rate for everything eaten or drunk on the premises, supplied by Waitron with dates; a dated takeaway rate per product; no labels; set menus with no VAT of their own, and none taken away when its products' takeaway rates differ. The history below is kept for the earlier decisions it records.
+**Design approved by the owner 2026-11-21:** [2026-11-21-vat-rates-design.md](../superpowers/specs/2026-11-21-vat-rates-design.md). The owner changed the model that day: one dine-in rate for everything eaten or drunk on the premises, supplied by Waitron with dates; a dated takeaway rate per product; no labels; set menus with no VAT of their own, and none taken away when its products' takeaway rates differ. On 24 November the owner replaced that refusal: taken away, a set menu's price is divided between its dishes in proportion to their à la carte prices, each part at its dish's takeaway rate. The history below is kept for the earlier decisions it records.
 
 The owner's brainstorm of 16 November 2026, paused for the adviser: VAT classes go; each product
 keeps a dated history of two rates, one for eating in and one for taking away, chosen from the
@@ -902,23 +902,25 @@ the [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the advis
   it out, and staff may ring it up that way when the customer says nothing: "yes".
 - A set menu carries its own eat-in and takeaway rates and can include dishes at any rate.
   Surcharges and paid extras sold as part of it use the menu's rate
-  ([A1515](menu.md#a1515-set-menus), watcher, 18 November at 20:28).
+  ([A1515](menu.md#a1515-set-menus), watcher, 18 November at 20:28). _Replaced 2026-11-21 and
+  2026-11-24: set menus have no VAT of their own, and taken away their price is divided (above)._
 - **Waiting:** drinks served in the restaurant without food may take 21%, certainly once the
   kitchen has stopped serving; unsettled, and the adviser will come back on it.
 
 A rate found wrong later goes on the [report for the accountant](#a-report-for-the-accountant-wrong-vat-rates).
 Each product has its own dated takeaway rate, picked as a percentage, everything eaten here files
 at the one dine-in rate, and no product screen offers an eat-in VAT class (piece A,
-[plan](../superpowers/plans/2026-11-22-vat-rates-a.md)). Left, with no plan yet:
+[plan](../superpowers/plans/2026-11-22-vat-rates-a.md)). Taken away, a set menu's price is
+divided between its dishes, when their rates differ, in proportion to the à la carte prices stored on their lines, each part
+at its dish's takeaway rate, and a takeaway set menu is no longer refused because its dishes' rates differ (owner,
+24 November; piece B's first pull request, [plan](../superpowers/plans/2026-11-24-vat-rates-b.md)).
+The adviser is asked to confirm it ([question 4](../compliance/2026-11-19-adviser-meeting.md)). Left:
 
-- **Piece B:** set menus have no VAT of their own. For takeaway, divide a set menu's price in
-  proportion to its dishes' à la carte prices and apply each dish's rate (owner, 24 November,
-  [set-menu design §4](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md#4-the-calculation)).
-  Until then a takeaway bill holding a set menu refuses new
-  payments, comps, discounts and Print the bill (`set_menu.payment_not_ready`, A1515); piece B lifts that refusal and puts the takeaway set-menu steps back in the table-service guide (English and Spanish). Its last pull request (the plan's "PR L") removes the old VAT class labels: the
+- **Piece B, the rest** ([plan](../superpowers/plans/2026-11-24-vat-rates-b.md), PRs B2–B5): set
+  menus lose their own eat-in and takeaway VAT fields, then the old VAT class labels go: the
   `vat_class` and `takeaway_vat_class` columns on products and order lines, their checks, the
   hidden `defaultProductVatClass` setting and the shared class table's last readers.
-- **Piece C:** scheduled and bulk rate changes. Today an edit to a product's takeaway rate
+- **Piece C** (no plan yet): scheduled and bulk rate changes. Today an edit to a product's takeaway rate
   replaces its one row from the beginning of time. Piece C must date an edit from the moment it is
   made, so a meal that ended before it keeps the old rate, and must never let a stale editor draft
   erase a dated rate.

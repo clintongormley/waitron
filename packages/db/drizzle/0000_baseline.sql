@@ -1437,6 +1437,7 @@ CREATE TABLE `sale_lines` (
 	`advance_role` text,
 	`deducts_sale_id` text,
 	`set_menu_role` text,
+	`set_menu_part` integer,
 	FOREIGN KEY (`sale_id`) REFERENCES `sales`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`parent_line_id`) REFERENCES `sale_lines`(`id`) ON UPDATE no action ON DELETE no action,
 	FOREIGN KEY (`corrects_line_id`) REFERENCES `sale_lines`(`id`) ON UPDATE no action ON DELETE no action,

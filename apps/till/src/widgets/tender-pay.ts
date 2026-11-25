@@ -982,10 +982,7 @@ export class TillTenderPay extends LitElement {
 
   #tenderVariant(action: "cash" | "card" | "pay"): "primary" | "secondary" {
     if (this.busy && this.sendingTender !== action) return "secondary";
-    return this.payQuiet ||
-      this.held ||
-      this.hasSetMenus ||
-      (!this.busy && this.store.lineCount === 0)
+    return this.payQuiet || this.held || (!this.busy && this.store.lineCount === 0)
       ? "secondary"
       : "primary";
   }
@@ -1031,7 +1028,9 @@ export class TillTenderPay extends LitElement {
   }
 
   #opensPaymentWindow(): boolean {
-    return this.paymentWindow && compareDecimal(this.store.total, decimal("0")) > 0;
+    return (
+      this.hasSetMenus || (this.paymentWindow && compareDecimal(this.store.total, decimal("0")) > 0)
+    );
   }
 
   #renderTenderButtons(disabled: boolean) {
@@ -1135,8 +1134,7 @@ export class TillTenderPay extends LitElement {
       ${this.#opensPaymentWindow() ? nothing : html`${this.#renderCardExtras()} ${this.#renderGuests()}`}
       ${this.#renderFormMessage()}
       <div class="actions">
-        ${this.#renderTenderButtons(disabled || this.hasSetMenus)}
-        ${this.#renderReceiptLanguageButton(disabled)}
+        ${this.#renderTenderButtons(disabled)} ${this.#renderReceiptLanguageButton(disabled)}
       </div>
     `;
   }
@@ -1147,7 +1145,7 @@ export class TillTenderPay extends LitElement {
       ${this.#opensPaymentWindow() ? nothing : html`${this.#renderCardExtras()} ${this.#renderGuests()}`}
       ${this.#renderFormMessage()}
       <div class="actions idle-actions">
-        ${this.#renderTenderButtons(disabled || this.hasSetMenus)}
+        ${this.#renderTenderButtons(disabled)}
         ${
           withPlace
             ? html`<wt-button
@@ -1161,7 +1159,7 @@ export class TillTenderPay extends LitElement {
               </wt-button>`
             : nothing
         }
-        ${this.#renderInvoiceButton(disabled || this.hasSetMenus)}
+        ${this.#renderInvoiceButton(disabled)}
         ${
           this.parks
             ? html`<span class="help-anchor"

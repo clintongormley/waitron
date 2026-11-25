@@ -146,7 +146,6 @@ import {
 } from "./stored-order-lines.js";
 import { captureOrderEdit } from "./working-order-context.js";
 import type { UpdateHeldOrderRequest } from "./working-order-edit-state.js";
-import type { GrossOrder } from "./stored-order-lines.js";
 import type { TillSaleDeps } from "./working-order-context.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import { clearBillRequestIfPaid } from "./bill-request.js";
@@ -162,7 +161,6 @@ import {
 } from "./bill-advances.js";
 import { advancesTakenOff, type TakenOffBy } from "./advance-taken-off.js";
 import { assertStillSignedIn } from "./till-session.js";
-import { refuseTakeawaySetMenuMoney } from "./set-menu-bill.js";
 import "./errors.js";
 import {
   enqueueRequestedPaymentSlip,
@@ -1276,18 +1274,9 @@ async function issueOrSettleWhenFullyPaid(
 
   // A card already captured cannot be undone by refusing its invoice, so a line whose product has
   // since gone off sale is filed as it stands, as a whole-order card recovery files it.
-  let stored: GrossOrder;
-  try {
-    stored = await priceStoredOrderForIssuance(tx, workingOrderId, {
-      refuseUnsentUnavailable: options.moneyMoved !== true,
-    });
-  } catch (error) {
-    // Automatic issuance must leave an edit intact while a takeaway set menu cannot be paid.
-    if (isAppError(error) && error.code === "set_menu.payment_not_ready") {
-      return unpaid;
-    }
-    throw error;
-  }
+  const stored = await priceStoredOrderForIssuance(tx, workingOrderId, {
+    refuseUnsentUnavailable: options.moneyMoved !== true,
+  });
   const invoice = await priceOrderInvoice(
     tx,
     deps.clock,
@@ -1758,7 +1747,6 @@ async function requireReadyForPayment(
     expectedEdit: req.expectedEdit,
   });
   await assertBillHasNoUnsent(tx, workingOrderId);
-  await refuseTakeawaySetMenuMoney(tx, workingOrderId);
   await refuseRefundInProgress(tx, [workingOrderId]);
 }
 

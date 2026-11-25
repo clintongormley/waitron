@@ -169,6 +169,8 @@ export async function seedSale(
       deductsSaleId?: SaleId;
       /** A set menu's own line, or a dish taken as part of one; absent means neither. */
       setMenuRole?: "set_menu" | "dish";
+      /** The stored part of a divided takeaway set menu's price; absent means none. */
+      setMenuPart?: string;
     }>;
     correctsSaleId?: SaleId;
     /** A corrective by replacement: it carries the full amounts and takes `correctsSaleId`'s place. */
@@ -244,6 +246,7 @@ export async function seedSale(
       advanceRole: line.advanceRole ?? null,
       deductsSaleId: line.deductsSaleId ?? null,
       setMenuRole: line.setMenuRole ?? null,
+      setMenuPart: line.setMenuPart === undefined ? null : stringToCents(line.setMenuPart),
     })),
   );
   return saleId;

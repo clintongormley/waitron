@@ -4,6 +4,7 @@ import {
   workingOrderLines,
   orderTableLabels,
   billSetMenuCopies,
+  sales,
   products,
 } from "@waitron/db";
 import { productDeclarationValues, extraDeclarationValues } from "@waitron/menu";
@@ -97,6 +98,8 @@ export interface HeldOrder {
   recipient?: NonNullable<PartyBill["recipient"]>;
   /** How the invoice is to be delivered; absent while no delivery has been chosen. */
   invoiceDelivery?: BillInvoiceDelivery;
+  /** Only on a placed order whose invoice is issued. */
+  invoiced?: true;
   /** The order's own way of selling, whatever its department now says. */
   dining: Dining;
   diningChoice: DiningChoice;
@@ -270,6 +273,9 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
             .select({ id: billSetMenuCopies.workingOrderId })
             .from(billSetMenuCopies)
             .where(eq(billSetMenuCopies.workingOrderId, id)),
+        ).mapWith(Boolean),
+        invoiced: exists(
+          tx.select({ id: sales.id }).from(sales).where(eq(sales.workingOrderId, id)),
         ).mapWith(Boolean),
       })
       .from(workingOrders)
@@ -451,6 +457,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       ...(order.invoiceDelivery === null
         ? {}
         : { invoiceDelivery: billInvoiceDelivery(order.invoiceDelivery) }),
+      ...(order.invoiced ? { invoiced: true as const } : {}),
       ...(await readOrderDinings(tx, [order.id])).get(order.id)!,
       ...(order.hasSetMenus ? (await readBillsSetMenus(tx, [id])).get(id)! : {}),
       lines,

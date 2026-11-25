@@ -7359,7 +7359,7 @@ guard and pointer.
 
 > the proposal the owner agreed named an administrator sign-in
 
-## A free item's share changes filed line totals
+## A free item's share or a divided set menu changes filed line totals
 
 Since A445 (plan `docs/superpowers/plans/2026-11-19-adviser-goodwill-corrective.md`), a takeaway
 ticket at two or more VAT rates holding a free item files every line's share of the price paid by
@@ -7372,6 +7372,18 @@ now takes its own whole cents, `byPortion` and `rowRefundsIn` in
 `apps/server/src/cancellation-refund-value.ts`). The review's runs of whole-bill and line discounts on
 one-rate tickets (2026-11-23) produced no uneven grouped row: the portions split into separate rows
 instead. On 2026-11-24 `soldAt` moved to `packages/orders-sales/src/receipt-lines.ts`.
+
+Since VAT rates piece B (plan `docs/superpowers/plans/2026-11-24-vat-rates-b.md`, PR B1), a takeaway
+set menu whose dishes have different rates files its price as parts on its dishes' rows
+(`shareSetMenus`, `packages/menu/src/pricing.ts`) and 0.00 on its own row, so those rows' filed
+totals differ from their stored lines' too, and a grouped row standing for dishes of several set
+menus files the sum of their parts. Each row of a divided set menu stores its part in `sale_lines.set_menu_part`
+(0.00 on a dish with no weight; on the set menu's own row, minus what that row was charged after its comps, discounts and any free
+item's share; null on every other row), and a row's sold amount
+is `line_gross − set_menu_part`: read the sold amount from that column (`soldGross`,
+`packages/orders-sales/src/receipt-lines.ts`; `soldAmount`,
+`apps/server/src/cancellation-refund-value.ts`), never by pairing with the stored lines, which a
+split or a move may have changed since.
 
 ## A box reaches another box only over https or on this machine
 

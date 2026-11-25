@@ -36,6 +36,8 @@ export interface LineSpec {
   advanceRole?: "payment_on_account" | "deduction";
   deductsSaleId?: SaleId;
   setMenuRole?: "set_menu" | "dish";
+  setMenuPart?: string;
+  vatRate?: string;
 }
 
 let invoiceNumber = 0;
@@ -59,7 +61,7 @@ export function sellLines(
     correctsSaleId,
     replacesOriginal,
     lines: lines.map((l) => ({
-      vatRate: "10.00",
+      vatRate: l.vatRate ?? "10.00",
       lineTotal: l.net,
       name: "House negroni",
       descriptions: { es: "Negroni de la casa" },
@@ -74,6 +76,7 @@ export function sellLines(
       advanceRole: l.advanceRole,
       deductsSaleId: l.deductsSaleId,
       setMenuRole: l.setMenuRole,
+      setMenuPart: l.setMenuPart,
     })),
   });
 }

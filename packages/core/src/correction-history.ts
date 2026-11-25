@@ -49,7 +49,7 @@ export async function previewCorrectionAmounts(
   issuingNodeId: NodeId,
   selection: { gross: Decimal; lineIds?: readonly string[] },
 ): Promise<CorrectionPreview> {
-  const { admission, history, invoiceLines } = await admittedHistory(
+  const { admission, history, invoiceLines, partsTaken } = await admittedHistory(
     tx,
     backend,
     saleId,
@@ -60,7 +60,7 @@ export async function previewCorrectionAmounts(
     ...preview,
     filing: admission.filing,
     original: admission.original,
-    lines: correctionLinesFor(invoiceLines, preview.allocations),
+    lines: correctionLinesFor(invoiceLines, preview.allocations, partsTaken),
   };
 }
 
@@ -201,7 +201,11 @@ async function readHistory(
   tx: Transaction,
   saleId: SaleId,
   stored?: Awaited<ReturnType<typeof readStored>>,
-): Promise<{ history: CorrectionAmountHistory; invoiceLines: InvoiceLine[] }> {
+): Promise<{
+  history: CorrectionAmountHistory;
+  invoiceLines: InvoiceLine[];
+  partsTaken: Map<string, number>;
+}> {
   const { sale, corrections } = stored ?? (await readStored(tx, saleId));
 
   const lines = await tx
@@ -216,6 +220,7 @@ async function readHistory(
       vatRate: saleLines.vatRate,
       lineTotal: saleLines.lineTotal,
       lineGross: saleLines.lineGross,
+      setMenuPart: saleLines.setMenuPart,
     })
     .from(saleLines)
     .innerJoin(sales, eq(sales.id, saleLines.saleId))
@@ -280,7 +285,13 @@ async function readHistory(
       })),
     ],
   };
-  return { history, invoiceLines: lines };
+  const partsTaken = new Map<string, number>();
+  for (const line of earlierLines) {
+    if (line.setMenuPart === null) continue;
+    const id = line.correctsLineId!;
+    partsTaken.set(id, (partsTaken.get(id) ?? 0) - line.setMenuPart);
+  }
+  return { history, invoiceLines: lines, partsTaken };
 }
 
 /**
@@ -345,11 +356,13 @@ function mealView(
  * `invoiceLines`, in allocation order. The quantity is the invoice line's, negated: an amount
  * correction's quantity is the scope shown, never units returned. The list gross is a line amount,
  * not a frozen fact, so it is left out; an extra points at its dish only when the dish is corrected
- * too.
+ * too. An amount taken off a divided set menu's dish comes off what earlier corrections left of
+ * its part (`partsTaken`, cents by invoice line) first, then off its sold amount.
  */
 export function correctionLinesFor(
   invoiceLines: readonly InvoiceLine[],
   allocations: readonly CorrectionAmountAllocation[],
+  partsTaken: ReadonlyMap<string, number> = new Map(),
 ): RecordSaleLine[] {
   const byId = new Map(invoiceLines.map((line) => [line.id, line]));
   const lineNoOf = new Map(
@@ -357,6 +370,11 @@ export function correctionLinesFor(
   );
   return allocations.map((allocation, index) => {
     const line = byId.get(allocation.saleLineId)!;
+    const taken = decimalToCents(allocation.gross);
+    const partLeft =
+      line.setMenuPart !== null && line.setMenuPart > 0
+        ? line.setMenuPart - (partsTaken.get(line.id) ?? 0)
+        : 0;
     return {
       lineNo: index + 1,
       name: line.name,
@@ -368,7 +386,7 @@ export function correctionLinesFor(
       unitPrice: centsToDecimal(line.unitPrice),
       vatRate: basisPointsToDecimal(line.vatRate),
       lineTotal: centsToDecimal(-decimalToCents(allocation.base)),
-      lineGross: centsToDecimal(-decimalToCents(allocation.gross)),
+      lineGross: centsToDecimal(-taken),
       optionSnapshots: line.optionSnapshots,
       variantName: line.variantName,
       variantDescriptions: line.variantDescriptions,
@@ -388,6 +406,7 @@ export function correctionLinesFor(
       advanceRole: line.advanceRole,
       deductsSaleId: line.deductsSaleId,
       setMenuRole: line.setMenuRole,
+      setMenuPart: partLeft > 0 ? centsToDecimal(-Math.min(taken, partLeft)) : null,
     } satisfies Required<RecordSaleLine>;
   });
 }

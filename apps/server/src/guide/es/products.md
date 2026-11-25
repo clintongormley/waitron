@@ -323,10 +323,8 @@ del árbol verás la lista afectada y el motivo.
 ## Menús {#set-menus}
 
 Para ofrecer varios platos por un precio único, abre **Menús** en **Productos y cartas**
-y elige **Añadir menú**. Ponle un nombre y un precio, y elige su **IVA para comer aquí** y, si es distinto, su **IVA para
-llevar**. Si se consume en el local, se cobra con el único tipo de
-[Cómo se cobra el IVA](products.md#vat); su IVA para comer aquí solo se usa como IVA para llevar si
-no eliges ninguno. Añade los nombres para clientes en
+y elige **Añadir menú**. Ponle un nombre y un precio. Si se consume en el local, se cobra con el único tipo de
+[Cómo se cobra el IVA](products.md#vat). Añade los nombres para clientes en
 los idiomas que uses y guarda.
 
 En **Platos**, añade los platos que quieras ofrecer. Deja los platos que se venden al peso en la
