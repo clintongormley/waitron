@@ -3,6 +3,7 @@ import { userEvent } from "vitest/browser";
 import { NavigationGuard, type WtDataTable } from "@waitron/ui";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
+import { es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import type { DashboardApi } from "../api/client.js";
 import type {
@@ -777,15 +778,22 @@ describe("dashboard Orders", () => {
 
   it.each([
     ["en-GB", "menu", "Invoice A/12 queued for Office printer."],
-    ["es-ES", "details", "Copia de la factura A/12 puesta en cola para Office printer."],
+    [
+      "es-ES",
+      "details",
+      es["orders.print_invoice.copy_queued"]
+        .replace("{invoice}", "A/12")
+        .replace("{printer}", "Office printer"),
+    ],
   ] as const)(
     "confirms a full invoice queued from Orders (%s, %s)",
     async (locale, via, message) => {
       setLocale(locale);
       const full = { ...ROW, invoiceType: "F1" as const };
+      const next = { ...full, id: "next-bill", invoiceNumber: "B/13" };
       const detail = fullDetail(full);
       const api = stubApi({
-        listOrdersPage: vi.fn().mockResolvedValue({ ...PAGE, rows: [full] }),
+        listOrdersPage: vi.fn().mockResolvedValue({ ...PAGE, rows: [full, next] }),
         getOrder: vi.fn().mockResolvedValue(detail),
         requestOrderPrintDelivery: vi.fn().mockResolvedValue({
           id: "delivery-1",
@@ -801,9 +809,9 @@ describe("dashboard Orders", () => {
           lateSuccess: false,
         } satisfies OrderDeliveryAttempt),
       });
-      const { el } = await loaded(api);
+      const { el } = await mountWidget<OrdersScreen>("dashboard-orders-screen", { api });
       const table = el.shadowRoot!.querySelector("wt-data-table")!;
-      await table.updateComplete;
+      await expect.poll(() => table.rows).toHaveLength(2);
       const details = el.shadowRoot!.querySelector("dashboard-order-detail-dialog")!;
       if (via === "details") {
         table.shadowRoot!.querySelector<HTMLElement>("tbody .row-activate")!.click();
@@ -837,6 +845,14 @@ describe("dashboard Orders", () => {
         .poll(() => notice.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim())
         .toBe(message);
       expect(details.orderId).toBe(via === "details" ? full.id : null);
+      if (via === "details") {
+        await userEvent.click(notice.shadowRoot!.querySelector<HTMLButtonElement>("button.close")!);
+        expect(details.orderId).toBe(full.id);
+      } else {
+        table.shadowRoot!.querySelectorAll<HTMLElement>("tbody .row-activate")[1]!.click();
+        await expect.poll(() => details.orderId).toBe(next.id);
+        expect(details.querySelector("wt-toast")!.open).toBe(false);
+      }
     },
   );
 

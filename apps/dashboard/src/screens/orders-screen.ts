@@ -276,6 +276,11 @@ export class OrdersScreen extends LitElement {
     this.reprintRow = row;
   }
 
+  #openDetails(id: string): void {
+    this.printNotice = null;
+    this.openId = id;
+  }
+
   #printConfirmation() {
     return html`<wt-toast
       .open=${this.printNotice !== null}
@@ -362,7 +367,7 @@ export class OrdersScreen extends LitElement {
               icon="menu-open"
               @click=${(event: Event) => {
                 event.stopPropagation();
-                this.openId = row.id;
+                this.#openDetails(row.id);
               }}
               >${t("orders.view")}</wt-button
             >${
@@ -501,7 +506,7 @@ export class OrdersScreen extends LitElement {
         .columns=${this.#columns()}
         .rowKey=${(row: OrderRowDto) => row.id}
         .rowClick=${(row: OrderRowDto) => {
-          this.openId = row.id;
+          this.#openDetails(row.id);
         }}
         .rowClickLabel=${() => t("orders.view")}
         .loading=${this.loading}
@@ -522,7 +527,6 @@ export class OrdersScreen extends LitElement {
         }}
         @wt-close=${() => {
           this.openId = null;
-          this.printNotice = null;
           if (this.linkedOrder !== null) this.#url.write({ order: null }, true);
         }}
         >${this.openId === null ? nothing : this.#printConfirmation()}</dashboard-order-detail-dialog
