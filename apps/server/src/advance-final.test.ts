@@ -390,10 +390,11 @@ describe("the rest's invoice takes the advances off", () => {
     expect(ticket).not.toHaveProperty("payments");
   });
 
-  it("example 1 by Print the bill, then €20 of the advance back by Refund a payment: the bill still owes €90, the advance still counts €30 and shows €20 given back", async () => {
+  it("example 1 by Print the bill, then €20 of the advance back by Refund a payment: refused, telling staff to reopen the bill; the bill still owes €90 and the advance still counts €30 with nothing given back", async () => {
     const bill = await seated("Tasting menu");
     const advanceId = await advance(bill.billId, "30.00");
     await printTheBill(bill);
+    const rest = await restOf(bill.billId);
     const payments = async () => {
       const read = await send(
         venue.app,
@@ -424,13 +425,26 @@ describe("the rest's invoice takes the advances off", () => {
       },
     );
 
-    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(given.status, JSON.stringify(given.json)).toBe(409);
+    expect(given.json).toEqual({
+      code: "advance.taken_off_final_invoice",
+      params: {
+        saleId: advanceId,
+        finalSaleId: rest!.id,
+        invoiceNumber: await inTx(venue, (tx) => readInvoiceNumber(tx, brandSaleId(rest!.id))),
+        finalMoneyLeft: "0.00",
+        reopenBill: true,
+      },
+    });
     const after = await payments();
     expect(after).toMatchObject({ received: "30.00", outstanding: "90.00" });
-    expect(after.payments[0]).toMatchObject({ left: "30.00", givenBack: "20.00" });
+    expect(after.payments[0]).toMatchObject({ left: "30.00", givenBack: "0.00" });
+    expect(
+      await inTx(venue, (tx) => tx.select().from(refunds).where(eq(refunds.saleId, advanceId))),
+    ).toEqual([]);
   });
 
-  it("example 1 by Print the bill, then €20 of the advance back by Refund a payment: Find bills' paid figure does not move", async () => {
+  it("example 1 by Print the bill, then €20 of the advance back by Refund a payment: refused, and Find bills' paid figure does not move", async () => {
     const bill = await seated("Tasting menu");
     const advanceId = await advance(bill.billId, "30.00");
     await printTheBill(bill);
@@ -455,12 +469,16 @@ describe("the rest's invoice takes the advances off", () => {
       },
     );
 
-    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(given.status, JSON.stringify(given.json)).toBe(409);
+    expect(given.json).toMatchObject({
+      code: "advance.taken_off_final_invoice",
+      params: { reopenBill: true },
+    });
     expect(before).toMatchObject({ paid: "30.00" });
     expect(await found()).toMatchObject({ paid: before.paid, stillOwed: before.stillOwed });
   });
 
-  it("example 1 by Print the bill, €50 paid on it: Refund a payment of the advance is refused, saying the receipt is not fully paid, and once it is, refused as on any paid receipt", async () => {
+  it("example 1 by Print the bill, €50 paid on it: Refund a payment of the advance is refused, telling staff to reopen the bill, and once it is fully paid, refused as on any paid receipt", async () => {
     const bill = await seated("Tasting menu");
     const advanceId = await advance(bill.billId, "30.00");
     await printTheBill(bill);
@@ -490,7 +508,7 @@ describe("the rest's invoice takes the advances off", () => {
     expect(unpaid.status, JSON.stringify(unpaid.json)).toBe(409);
     expect(unpaid.json).toEqual({
       code: "advance.taken_off_final_invoice",
-      params: { ...params, finalMoneyLeft: "50.00", finalNotFullyPaid: true },
+      params: { ...params, finalMoneyLeft: "50.00", reopenBill: true },
     });
     expect(correction.json).toEqual({
       code: "invoice_correction.not_settled",

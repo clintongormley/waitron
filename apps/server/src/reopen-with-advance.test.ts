@@ -6,18 +6,26 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billAdvances,
   billPayments,
+  floorZones,
   refunds,
   saleLines,
   sales,
   tenders,
+  withTransaction,
   workingOrders,
 } from "@waitron/db";
+import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
+import { loginWithPin } from "@waitron/identity";
+import { setProfileServiceAccess } from "@waitron/venue-service";
 import { listAdjustmentReasons } from "@waitron/adjustments";
 import { payments } from "@waitron/payments";
 import { addDecimal, decimal } from "@waitron/shared";
 import { filedInvoicesOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
 import { advancesTakenOff } from "./advance-taken-off.js";
 import { readBillAdvances } from "./bill-advances.js";
+import { DEVICE_COOKIE } from "./device-session.js";
+import { resolveTransactionScope } from "./find-bill-transactions.js";
+import type { GiveBackPlan, GiveBackRequest } from "./give-back-plan.js";
 import {
   advanceBills,
   printed,
@@ -26,6 +34,9 @@ import {
 } from "./testing/advance-bills.js";
 import { billRefundFields } from "./testing/bill-payment-fixture.js";
 import { inTx, paymentRows, send, statusOf } from "./testing/bill-venue.js";
+import { enrolDeviceForTest } from "./testing/enrol.js";
+import { BASIC_ACTIONS } from "./testing/session-device.js";
+import { SESSION_COOKIE } from "./till-session.js";
 import * as fixture from "./testing/split-after-print-fixture.js";
 import "./errors.js";
 
@@ -33,6 +44,8 @@ import "./errors.js";
 // payer's own receipt): the advance's payment moves to the reopened bill and counts there, against
 // a venue that files real Veri*Factu records. Each case's bill is at a table of its own.
 let advanceVenue: AdvanceVenue;
+/** A till of its own, signed in by the waiter, whose profile serves only the venue's zone. */
+let zonedTill: string;
 
 useVenueDb({
   resetPerTest: false,
@@ -43,12 +56,41 @@ useVenueDb({
     // Print the bill prints on the till's receipt printer, which the venue's till profile allows.
     db.run(sql`update device_profiles set capabilities = json_insert(capabilities, '$[#]', 'print-receipt')
       where name = 'Counter till'`);
+    const profileId = await withTransaction(db, async (tx) => {
+      const [profile] = await seedDeviceProfiles(tx, {
+        name: "Zoned till",
+        formFactor: "till",
+        capabilities: [...BASIC_ACTIONS, "open-cash-drawer", "take-cash"],
+      });
+      const [zone] = await tx
+        .select({ departmentId: floorZones.departmentId })
+        .from(floorZones)
+        .where(eq(floorZones.id, advanceVenue.venue.zoneId));
+      await setProfileServiceAccess(tx, profile!.id, {
+        departmentId: zone!.departmentId,
+        allowedZoneIds: [advanceVenue.venue.zoneId],
+        startingZoneId: advanceVenue.venue.zoneId,
+      });
+      return profile!.id;
+    });
+    const device = await enrolDeviceForTest(db, advanceVenue.venue.cfg, {
+      name: "Zoned till",
+      profileId,
+    });
+    const session = await withTransaction(db, (tx) =>
+      loginWithPin(tx, {
+        deviceId: device.deviceId,
+        personId: advanceVenue.venue.operatorId,
+        pin: "5555",
+      }),
+    );
+    zonedTill = `${SESSION_COOKIE}=${session.token}; ${DEVICE_COOKIE}=${device.deviceId}.${device.token}`;
   },
 });
 
 const venue = () => advanceVenue.venue;
 const supervisor = () => ({ personId: venue().adminId, pin: "1234" });
-const { seated, seatedTakeaway, cash, advance, caption, readTicket } = advanceBills(
+const { seated, seatedTakeaway, cash, advance, advanceFacts, caption, readTicket } = advanceBills(
   () => advanceVenue,
 );
 
@@ -180,6 +222,97 @@ async function payRestOf(billId: string, amount: string): Promise<string> {
   return (await fixture.invoiceOf(venue(), billId)).id;
 }
 
+const giveBackPreview = (saleId: string, request: GiveBackRequest, cookie = venue().cookie) =>
+  send(venue().app, cookie, "POST", `/api/transactions/${saleId}/give-back/preview`, request);
+
+/** Gives `amount` of `saleId` back as goodwill through Give money back, in cash or on the card
+ * tender `way`, as its preview answers; the write's answer. */
+async function giveBack(saleId: string, amount: string, cookie = venue().cookie, way = "cash") {
+  const request: GiveBackRequest = { purpose: "goodwill", amount, extra: "0.00", way };
+  const shown = await giveBackPreview(saleId, request, cookie);
+  expect(shown.status, JSON.stringify(shown.json)).toBe(200);
+  const [reason] = await inTx(venue(), (tx) => listAdjustmentReasons(tx));
+  return send(venue().app, cookie, "POST", `/api/transactions/${saleId}/give-back`, {
+    ...request,
+    reasonId: reason!.id,
+    note: "Money given back",
+    expected: (shown.json as unknown as GiveBackPlan).parts,
+    submissionIds: {
+      refund: randomUUID(),
+      extra: randomUUID(),
+      correction: randomUUID(),
+      leg: randomUUID(),
+    },
+    override: supervisor(),
+  });
+}
+
+/** Gives `amount` of `saleId` back and answers the corrective it filed. */
+async function givenBack(saleId: string, amount: string, cookie = venue().cookie) {
+  const given = await giveBack(saleId, amount, cookie);
+  expect(given.status, JSON.stringify(given.json)).toBe(200);
+  return (await correctivesOf(saleId)).at(-1)!;
+}
+
+async function correctivesOf(saleId: string): Promise<string[]> {
+  const rows = await inTx(venue(), (tx) =>
+    tx
+      .select({ id: sales.id })
+      .from(sales)
+      .where(eq(sales.correctsSaleId, saleId))
+      .orderBy(sql`${sales}.rowid`),
+  );
+  return rows.map((row) => row.id);
+}
+
+function refundsOf(saleId: string) {
+  return inTx(venue(), (tx) =>
+    tx
+      .select({ state: refunds.state, appliedAmount: refunds.appliedAmount })
+      .from(refunds)
+      .where(eq(refunds.saleId, saleId)),
+  );
+}
+
+async function tenderIdOf(saleId: string): Promise<string> {
+  const [tender] = await inTx(venue(), (tx) =>
+    tx.select({ id: tenders.id }).from(tenders).where(eq(tenders.saleId, saleId)),
+  );
+  return tender!.id;
+}
+
+/** Refund a payment on the advance's own ticket, for `amount` of its tender. */
+async function plainRefund(advanceId: string, amount: string) {
+  return send(venue().app, venue().cookie, "POST", `/api/transactions/${advanceId}/refunds`, {
+    submissionId: randomUUID(),
+    tenderId: await tenderIdOf(advanceId),
+    appliedAmount: amount,
+    tipAmount: "0.00",
+    reason: "Paid too much",
+    override: supervisor(),
+  });
+}
+
+const correctionPreview = (saleId: string, gross: string) =>
+  send(venue().app, venue().cookie, "POST", `/api/transactions/${saleId}/corrections/preview`, {
+    gross,
+  });
+
+/** `advance.taken_off_final_invoice` naming the receipt `finalSaleId`, still unsettled, whose bill
+ * is reopened before the advance's money goes back. */
+async function reopenFirst(advanceId: string, finalSaleId: string, finalMoneyLeft = "0.00") {
+  return {
+    code: "advance.taken_off_final_invoice",
+    params: {
+      saleId: advanceId,
+      finalSaleId,
+      invoiceNumber: (await advanceFacts(finalSaleId)).invoiceNumber,
+      finalMoneyLeft,
+      reopenBill: true,
+    },
+  };
+}
+
 const MIXED_RECEIPT = {
   total: "50.00",
   breakdown: [
@@ -215,6 +348,9 @@ describe("Reopen bill on a printed bill with an advance", () => {
       outstanding: "52.00",
     });
     expect(await takenOffBy(advanceId)).toEqual([undefined]);
+    expect(await inTx(venue(), (tx) => resolveTransactionScope(tx, advanceId))).toEqual({
+      workingOrderIds: [y.billId],
+    });
     const final = await payRestOf(y.billId, "52.00");
     expect(recordOf(final)).toEqual({ total: "52.00", breakdown: [["10.00", "47.27", "4.73"]] });
     expect(sumOfRecords([advanceId, xReceipt, y.correctiveId, final])).toEqual([
@@ -502,5 +638,379 @@ describe("Reopen bill on a printed bill with an advance", () => {
           .where(inArray(billPayments.id, [paymentId])),
       ),
     ).toEqual([{ bill: x }]);
+  });
+});
+
+describe("Giving back an advance on a bill printed, or reopened, after it was taken", () => {
+  it("before printing, the whole 20.00 given back: the bill counts nothing and its receipt files 72.00", async () => {
+    const x = await seated("Grill for two");
+    const advanceId = await advance(x, "20.00");
+
+    const corrective = await givenBack(advanceId, "20.00");
+
+    expect(recordOf(corrective)).toEqual({
+      total: "-20.00",
+      breakdown: [["10.00", "-18.18", "-1.82"]],
+    });
+    expect(await balanceOf(x)).toMatchObject({ received: "0.00", outstanding: "72.00" });
+    const xReceipt = await print(x);
+    expect(recordOf(xReceipt)).toEqual({ total: "72.00", breakdown: [["10.00", "65.45", "6.55"]] });
+  });
+
+  it("before printing, 10.00 of a 30.00 advance given back: the bill counts 20.00 and its receipt files 100.00", async () => {
+    const x = await seated("Tasting menu");
+    const advanceId = await advance(x, "30.00");
+
+    const corrective = await givenBack(advanceId, "10.00");
+
+    expect(recordOf(corrective)).toEqual({
+      total: "-10.00",
+      breakdown: [["10.00", "-9.09", "-0.91"]],
+    });
+    expect(await balanceOf(x)).toMatchObject({ received: "20.00", outstanding: "100.00" });
+    const xReceipt = await print(x);
+    expect(recordOf(xReceipt)).toEqual({
+      total: "100.00",
+      breakdown: [["10.00", "90.91", "9.09"]],
+    });
+  });
+
+  it("on the reopened bill, 10.00 of a 30.00 advance given back: it counts 20.00, its receipt files 100.00 and the records add up to the meal", async () => {
+    const x = await seated("Tasting menu");
+    const advanceId = await advance(x, "30.00");
+    const xReceipt = await print(x);
+    const y = await reopen(x);
+
+    const corrective = await givenBack(advanceId, "10.00");
+
+    expect(recordOf(corrective)).toEqual({
+      total: "-10.00",
+      breakdown: [["10.00", "-9.09", "-0.91"]],
+    });
+    expect(await refundsOf(advanceId)).toEqual([{ state: "completed", appliedAmount: 1000 }]);
+    expect(await balanceOf(y.billId)).toMatchObject({ received: "20.00", outstanding: "100.00" });
+    const final = await payRestOf(y.billId, "100.00");
+    expect(recordOf(final)).toEqual({ total: "100.00", breakdown: [["10.00", "90.91", "9.09"]] });
+    expect(sumOfRecords([advanceId, corrective, xReceipt, y.correctiveId, final])).toEqual([
+      ["10.00", "109.09", "10.91"],
+    ]);
+  });
+
+  it("on the reopened bill, the whole 30.00 given back: it counts nothing and its receipt files 120.00", async () => {
+    const x = await seated("Tasting menu");
+    const advanceId = await advance(x, "30.00");
+    await print(x);
+    const y = await reopen(x);
+
+    const corrective = await givenBack(advanceId, "30.00");
+
+    expect(recordOf(corrective)).toEqual({
+      total: "-30.00",
+      breakdown: [["10.00", "-27.27", "-2.73"]],
+    });
+    expect(await balanceOf(y.billId)).toMatchObject({ received: "0.00", outstanding: "120.00" });
+    const final = await payRestOf(y.billId, "120.00");
+    expect(recordOf(final)).toEqual({
+      total: "120.00",
+      breakdown: [["10.00", "109.09", "10.91"]],
+    });
+  });
+
+  it("mixed rates taken away, 20.00 of the 50.00 advance given back on the reopened bill, then reopened again: it counts 30.00 and each receipt files 70.00", async () => {
+    const x = await seatedTakeaway("Salad bowl", "Wine case");
+    const advanceId = await advance(x, "50.00");
+    const xReceipt = await print(x);
+    const y = await reopen(x);
+
+    const corrective = await givenBack(advanceId, "20.00");
+
+    expect(recordOf(corrective)).toEqual({
+      total: "-20.00",
+      breakdown: [["10.00", "-18.18", "-1.82"]],
+    });
+    expect(await balanceOf(y.billId)).toMatchObject({ received: "30.00", outstanding: "70.00" });
+    const seventy = {
+      total: "70.00",
+      breakdown: [
+        ["10.00", "-9.09", "-0.91"],
+        ["21.00", "66.12", "13.88"],
+      ],
+    };
+    const yReceipt = await print(y.billId);
+    expect(recordOf(yReceipt)).toEqual(seventy);
+    const z = await reopen(y.billId);
+    expect(await balanceOf(z.billId)).toMatchObject({ received: "30.00", outstanding: "70.00" });
+    const zReceipt = await print(z.billId);
+    expect(recordOf(zReceipt)).toEqual(seventy);
+    expect(
+      sumOfRecords([
+        advanceId,
+        corrective,
+        xReceipt,
+        y.correctiveId,
+        yReceipt,
+        z.correctiveId,
+        zReceipt,
+      ]),
+    ).toEqual([
+      ["10.00", "18.18", "1.82"],
+      ["21.00", "66.12", "13.88"],
+    ]);
+  });
+
+  it("Correct invoice on the advance is refused on the printed bill, allowed once it is reopened, and refused once the reopened bill is printed, naming its receipt", async () => {
+    const x = await seated("Grill for two");
+    const advanceId = await advance(x, "20.00");
+    const xReceipt = await print(x);
+
+    const onX = await correctionPreview(advanceId, "20.00");
+
+    expect(onX.status, JSON.stringify(onX.json)).toBe(409);
+    expect(onX.json).toEqual(await reopenFirst(advanceId, xReceipt));
+    const y = await reopen(x);
+    const onY = await correctionPreview(advanceId, "20.00");
+    expect(onY.status, JSON.stringify(onY.json)).toBe(200);
+    const yReceipt = await print(y.billId);
+    const printedY = await correctionPreview(advanceId, "20.00");
+    expect(printedY.status, JSON.stringify(printedY.json)).toBe(409);
+    expect(printedY.json).toEqual(await reopenFirst(advanceId, yReceipt));
+    expect(await correctivesOf(advanceId)).toEqual([]);
+  });
+
+  it("on the reopened bill, Refund a payment on the advance answers tender.refund_of_advance and a bill refund of its payment bill.refund_of_advance, giving nothing back", async () => {
+    const x = await seated("Grill for two");
+    const advanceId = await advance(x, "20.00");
+    await print(x);
+    const y = await reopen(x);
+    const paymentId = await paymentOf(advanceId);
+    const invoiceNumber = (await advanceFacts(advanceId)).invoiceNumber;
+
+    const plain = await plainRefund(advanceId, "20.00");
+    const bill = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/working-orders/${y.billId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "20.00",
+        tipAmount: "0.00",
+        reason: "Paid too much",
+        override: supervisor(),
+      },
+    );
+
+    expect({ status: plain.status, json: plain.json }).toEqual({
+      status: 409,
+      json: {
+        code: "tender.refund_of_advance",
+        params: { tenderId: await tenderIdOf(advanceId), saleId: advanceId, invoiceNumber },
+      },
+    });
+    expect({ status: bill.status, json: bill.json }).toEqual({
+      status: 409,
+      json: {
+        code: "bill.refund_of_advance",
+        params: { paymentId, saleId: advanceId, invoiceNumber },
+      },
+    });
+    expect(await refundsOf(advanceId)).toEqual([]);
+    expect(await balanceOf(y.billId)).toMatchObject({ received: "20.00", outstanding: "52.00" });
+  });
+
+  it("RA-D4: on the printed unpaid bill the advance is not given back, so staff reopen the bill, give it back there and the receipt files the whole 72.00", async () => {
+    const x = await seated("Grill for two");
+    const advanceId = await advance(x, "20.00");
+    const xReceipt = await print(x);
+    const refusal = await reopenFirst(advanceId, xReceipt);
+    const request: GiveBackRequest = {
+      purpose: "goodwill",
+      amount: "20.00",
+      extra: "0.00",
+      way: "cash",
+    };
+
+    const plain = await plainRefund(advanceId, "20.00");
+    const previewed = await giveBackPreview(advanceId, request);
+    const view = await send(
+      venue().app,
+      venue().cookie,
+      "GET",
+      `/api/transactions/${advanceId}/give-back`,
+    );
+
+    for (const refused of [plain, previewed]) {
+      expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+      expect(refused.json).toEqual(refusal);
+    }
+    expect(view.json).toMatchObject({
+      choices: { goodwill: { available: false, reason: refusal } },
+    });
+    expect(await refundsOf(advanceId)).toEqual([]);
+    expect(await balanceOf(x)).toMatchObject({ received: "20.00", outstanding: "52.00" });
+
+    const y = await reopen(x);
+    const corrective = await givenBack(advanceId, "20.00");
+
+    expect(recordOf(corrective)).toEqual({
+      total: "-20.00",
+      breakdown: [["10.00", "-18.18", "-1.82"]],
+    });
+    expect(await refundsOf(advanceId)).toEqual([{ state: "completed", appliedAmount: 2000 }]);
+    expect(await balanceOf(y.billId)).toMatchObject({ received: "0.00", outstanding: "72.00" });
+    const yReceipt = await print(y.billId);
+    expect(recordOf(yReceipt)).toEqual({ total: "72.00", breakdown: [["10.00", "65.45", "6.55"]] });
+  });
+
+  it("RA-D4 on a part-paid printed bill: Refund a payment on the advance says to reopen the bill, naming what was paid on it", async () => {
+    const x = await seated("Grill for two");
+    const advanceId = await advance(x, "20.00");
+    const xReceipt = await print(x);
+    expect((await cash(x, "10.00")).status).toBe(200);
+
+    const refused = await plainRefund(advanceId, "20.00");
+
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(refused.json).toEqual(await reopenFirst(advanceId, xReceipt, "10.00"));
+    expect(await refundsOf(advanceId)).toEqual([]);
+  });
+
+  /** Records that the party of the printed bill `billId` left without paying. */
+  async function leftUnpaid(billId: string): Promise<void> {
+    const { partyId } = await partyOf(billId);
+    const [party] = venue().db.all<{ revision: number }>(
+      sql`select revision from parties where id = ${partyId}`,
+    );
+    const left = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/parties/${partyId}/unpaid-departure`,
+      {
+        billId,
+        expectedPartyRevision: party!.revision,
+        reason: "Left without paying",
+        override: supervisor(),
+      },
+    );
+    expect(left.status, JSON.stringify(left.json)).toBe(200);
+  }
+
+  it("a printed bill its party left unpaid cannot be reopened, so Refund a payment still gives the advance back plainly", async () => {
+    const x = await seated("Grill for two");
+    const advanceId = await advance(x, "20.00");
+    await print(x);
+    await leftUnpaid(x);
+
+    const given = await plainRefund(advanceId, "20.00");
+
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(await refundsOf(advanceId)).toEqual([{ state: "completed", appliedAmount: 2000 }]);
+  });
+
+  it("a part-paid printed bill its party left unpaid: Refund a payment on the advance waits until the receipt is fully paid, as before", async () => {
+    const x = await seated("Grill for two");
+    const advanceId = await advance(x, "20.00");
+    const xReceipt = await print(x);
+    expect((await cash(x, "10.00")).status).toBe(200);
+    await leftUnpaid(x);
+
+    const refused = await plainRefund(advanceId, "20.00");
+
+    expect(refused.status, JSON.stringify(refused.json)).toBe(409);
+    expect(refused.json).toEqual({
+      code: "advance.taken_off_final_invoice",
+      params: {
+        saleId: advanceId,
+        finalSaleId: xReceipt,
+        invoiceNumber: (await advanceFacts(xReceipt)).invoiceNumber,
+        finalMoneyLeft: "10.00",
+        finalNotFullyPaid: true,
+      },
+    });
+    expect(await refundsOf(advanceId)).toEqual([]);
+  });
+
+  it("a printed bill away from a table cannot be reopened, so Refund a payment still gives the advance back plainly", async () => {
+    const x = await seated("Grill for two");
+    const advanceId = await advance(x, "20.00");
+    await print(x);
+    // A bill with no party, as a counter order is; this venue sells at its tables only.
+    venue().db.run(
+      sql`update working_orders set party_id = null, bill_number = null where id = ${x}`,
+    );
+
+    const given = await plainRefund(advanceId, "20.00");
+
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(await refundsOf(advanceId)).toEqual([{ state: "completed", appliedAmount: 2000 }]);
+  });
+
+  it("on the reopened bill the advance is given back from the bill's payments and from its own ticket found in Find a bill, by a till that serves only the bill's zone", async () => {
+    const x = await seated("Tasting menu");
+    const advanceId = await advance(x, "30.00");
+    await print(x);
+    const y = await reopen(x);
+
+    const payments = await send(
+      venue().app,
+      venue().cookie,
+      "GET",
+      `/api/working-orders/${y.billId}/payments`,
+    );
+    expect(payments.status, JSON.stringify(payments.json)).toBe(200);
+    const fromBill = (payments.json as { payments: { saleId?: string }[] }).payments[0]!.saleId!;
+    expect(fromBill).toBe(advanceId);
+    await givenBack(fromBill, "10.00");
+    expect(await balanceOf(y.billId)).toMatchObject({ received: "20.00", outstanding: "100.00" });
+
+    const { invoiceNumber } = await advanceFacts(advanceId);
+    const found = await send(
+      venue().app,
+      zonedTill,
+      "GET",
+      `/api/transactions?q=${encodeURIComponent(invoiceNumber)}`,
+    );
+    expect(found.status, JSON.stringify(found.json)).toBe(200);
+    const row = (found.json as { rows: { saleId: string; scopeOrderIds: string[] }[] }).rows.find(
+      (r) => r.saleId === advanceId,
+    );
+    expect(row).toMatchObject({ scopeOrderIds: [y.billId] });
+    await givenBack(row!.saleId, "20.00", zonedTill);
+
+    expect(await balanceOf(y.billId)).toMatchObject({ received: "0.00", outstanding: "120.00" });
+    expect(await correctivesOf(advanceId)).toHaveLength(2);
+  });
+
+  it("a card-reader advance given back on the reopened bill reaches the provider with the card payment's own reference", async () => {
+    const x = await seated("Grill for two");
+    const paid = await cash(x, "20.00", {
+      method: "card",
+      entry: "reader",
+      tendered: undefined,
+      ownReceipt: true,
+    });
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    const paymentId = (paid.json.payment as { id: string }).id;
+    const advanceId = await paymentAdvance(paymentId);
+    const [card] = await inTx(venue(), (tx) =>
+      tx
+        .select({ ref: sql<string>`coalesce(${payments.externalRef}, ${payments.paymentRef})` })
+        .from(payments)
+        .where(eq(payments.billPaymentId, paymentId)),
+    );
+    await print(x);
+    const y = await reopen(x);
+    const calls = venue().card.refundCalls.length;
+
+    const given = await giveBack(advanceId, "20.00", venue().cookie, await tenderIdOf(advanceId));
+
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(
+      venue()
+        .card.refundCalls.slice(calls)
+        .map((call) => ({ processorRef: call.processorRef, amount: String(call.amount) })),
+    ).toEqual([{ processorRef: card!.ref, amount: "20.00" }]);
+    expect(await balanceOf(y.billId)).toMatchObject({ received: "0.00", outstanding: "72.00" });
   });
 });

@@ -887,13 +887,16 @@ declare module "@waitron/shared" {
      * `invoiceNumber`, took it off: money comes back through Correct invoice on that invoice, which
      * can still give back `finalMoneyLeft`, and past that by Refund a payment on the advance.
      * `finalNotFullyPaid` marks an invoice whose bill is still being paid: `finalMoneyLeft` is what
-     * has been paid on it so far, and Correct invoice can give it back only once it is fully paid. */
+     * has been paid on it so far, and Correct invoice can give it back only once it is fully paid.
+     * `reopenBill` marks one whose table's bill is still being paid instead: `finalMoneyLeft` is
+     * what has been paid on it so far, and the advance goes back once that bill is reopened. */
     "advance.taken_off_final_invoice": {
       saleId: string;
       finalSaleId: string;
       invoiceNumber: string;
       finalMoneyLeft: string;
       finalNotFullyPaid?: true;
+      reopenBill?: true;
     };
     /** The bill `workingOrderId`'s invoice was asked for while a correction of its advance
      * `saleId`, numbered `invoiceNumber`, is still open: that correction is filed or closed first. */

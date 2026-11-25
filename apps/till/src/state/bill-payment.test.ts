@@ -564,6 +564,20 @@ describe("refusalOf", () => {
       finalMoneyLeft: "50.00",
       finalNotFullyPaid: true,
     });
+    expect(
+      refusalOf({
+        code: "advance.taken_off_final_invoice",
+        finalMoneyLeft: "0.00",
+        reopenBill: true,
+      }),
+    ).toEqual({
+      code: "advance.taken_off_final_invoice",
+      finalMoneyLeft: "0.00",
+      reopenBill: true,
+    });
+    expect(refusalOf({ code: "advance.taken_off_final_invoice", reopenBill: "yes" })).toEqual({
+      code: "advance.taken_off_final_invoice",
+    });
     expect(refusalOf({ code: "invoice_correction.money_short", moneyLeft: "0.00" })).toEqual({
       code: "invoice_correction.money_short",
       moneyLeft: "0.00",

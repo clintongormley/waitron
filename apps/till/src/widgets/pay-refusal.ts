@@ -29,6 +29,9 @@ export interface PayRefusal {
   /** An `advance.taken_off_final_invoice`'s: the table's receipt is still being paid, so
    * `finalMoneyLeft` is what was paid on it so far. */
   finalNotFullyPaid?: true;
+  /** An `advance.taken_off_final_invoice`'s: the table's receipt is still being paid and its bill
+   * is reopened before the money goes back. */
+  reopenBill?: true;
   /** An `invoice_correction.money_short`'s: what the receipt's payments can still give back. */
   moneyLeft?: string;
   /** An `invoice_correction.money_short`'s: the payments on account the receipt took off. */

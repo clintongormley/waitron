@@ -1188,6 +1188,13 @@ const TAKEN_OFF_NOT_FULLY_PAID = {
   es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}, que aún no está pagado del todo, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Cuando {receipt} esté pagado del todo, devuelve primero dinero con Devolver dinero en {it}: devuelve dinero pagado en {it}. Cuando no quede nada pagado en {it}, Devolver dinero en este ticket devuelve el resto.",
 };
 
+/** `advance.taken_off_final_invoice` while the table's receipt is still being paid and its bill can
+ * be reopened. */
+const TAKEN_OFF_REOPEN_BILL = {
+  en: "Reopen the bill, then give the money back.",
+  es: "Reabre la cuenta y luego devuelve el dinero.",
+};
+
 /** `invoice_correction.money_short` when nothing paid on the receipt is left and it took payments
  * on account off. */
 const MONEY_SHORT_NOTHING_LEFT = {
@@ -1255,6 +1262,7 @@ export const CODE_TABLES: Readonly<Record<string, unknown>> = {
   FREE_ITEM_AT_FINISH,
   TAKEN_OFF_NOTHING_LEFT,
   TAKEN_OFF_NOT_FULLY_PAID,
+  TAKEN_OFF_REOPEN_BILL,
   MONEY_SHORT_NOTHING_LEFT,
   MONEY_SHORT_ADVANCES,
   DINING_FIXED,
@@ -1281,6 +1289,7 @@ export function codeMessage(
     invoiceNumber?: unknown;
     finalMoneyLeft?: unknown;
     finalNotFullyPaid?: unknown;
+    reopenBill?: unknown;
     moneyLeft?: unknown;
     advanceInvoiceNumbers?: unknown;
     advances?: unknown;
@@ -1371,8 +1380,15 @@ export function codeMessage(
 function takenOffMessage(
   locale: string,
   params:
-    { invoiceNumber?: unknown; finalMoneyLeft?: unknown; finalNotFullyPaid?: unknown } | undefined,
+    | {
+        invoiceNumber?: unknown;
+        finalMoneyLeft?: unknown;
+        finalNotFullyPaid?: unknown;
+        reopenBill?: unknown;
+      }
+    | undefined,
 ): string {
+  if (params?.reopenBill === true) return pickLocale(TAKEN_OFF_REOPEN_BILL, locale);
   const number = typeof params?.invoiceNumber === "string" ? params.invoiceNumber : undefined;
   const message = pickLocale(
     isZeroMoney(params?.finalMoneyLeft)

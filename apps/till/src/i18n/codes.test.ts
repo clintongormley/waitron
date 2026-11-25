@@ -1252,6 +1252,23 @@ it.each([
 );
 
 it.each([
+  ["en", "Reopen the bill, then give the money back."],
+  ["es", "Reabre la cuenta y luego devuelve el dinero."],
+])(
+  "sends staff to reopen the table's bill before giving the money back, paid in part or not at all, in %s",
+  (locale, words) => {
+    for (const finalMoneyLeft of ["0.00", "10.00"])
+      expect(
+        codeMessage("advance.taken_off_final_invoice", locale, {
+          invoiceNumber: "A/45",
+          finalMoneyLeft,
+          reopenBill: true,
+        }),
+      ).toBe(words);
+  },
+);
+
+it.each([
   [
     "en",
     "Nothing paid on this bill is left to give back. To give money back, choose Give money back on the ticket of the payment on account A/12: it gives money back from that payment.",
