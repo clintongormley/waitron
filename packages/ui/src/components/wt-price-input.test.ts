@@ -1182,6 +1182,22 @@ test("while the label rests, a fixed unit is hidden under it and still describes
   expect(visibility(el, ".unit")).toBe("visible");
 });
 
+test("an end-aligned amount sits next to its fixed unit at the end of the field", async () => {
+  const el = await mount(
+    '<wt-price-input label="Juice" unit="ml" fixed-unit align-amount-end value="250" style="width: 400px"></wt-price-input>',
+  );
+  const { field: box, input } = field(el);
+  const unit = el.shadowRoot!.querySelector<HTMLElement>('[part="unit"]')!;
+  const amountStyle = getComputedStyle(input);
+  const amountEnd = input.getBoundingClientRect().right - parseFloat(amountStyle.paddingRight);
+  const unitBox = unit.getBoundingClientRect();
+  const unitStart = unitBox.left + parseFloat(getComputedStyle(unit).paddingLeft);
+  expect(amountStyle.textAlign).toBe("end");
+  expect(unitStart - amountEnd).toBeGreaterThanOrEqual(0);
+  expect(unitStart - amountEnd).toBeLessThan(12);
+  expect(box.getBoundingClientRect().right - unitBox.right).toBeLessThan(4);
+});
+
 for (const locale of ["en", "es"]) {
   for (const separator of [".", ","]) {
     test(`decimal input accepts ${separator} in ${locale} without changing cents`, async () => {

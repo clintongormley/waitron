@@ -220,9 +220,6 @@ export class TillTenderPay extends LitElement {
       wt-price-input {
         margin-block-end: var(--wt-space-3);
       }
-      wt-price-input::part(unit) {
-        margin-inline-start: auto;
-      }
 
       .change .amount {
         font-size: var(--wt-font-size-lg);
@@ -1671,6 +1668,7 @@ export class TillTenderPay extends LitElement {
         label=${lineProductName(product)}
         unit=${unitName(product)}
         fixed-unit
+        align-amount-end
         placeholder=" "
         required
         decimal-locale=${currentLocale()}

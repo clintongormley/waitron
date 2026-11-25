@@ -169,6 +169,7 @@ describe("till-table-order-screen: the last-added bar", () => {
     );
     await userEvent.keyboard("{Backspace}{Backspace}");
     expect(add().disabled).toBe(false);
+    expect(getComputedStyle(input).textAlign).toBe("end");
     add().click();
     await el.updateComplete;
     expect(store(el).lines.map((line) => line.quantity)).toEqual(["250"]);
@@ -193,6 +194,7 @@ describe("till-table-order-screen: the last-added bar", () => {
     expect(amount.shadowRoot!.querySelector('[part="unit"]')?.textContent).toBe("ml");
     const field = amount.shadowRoot!.querySelector("input")!;
     expect(field.value).toBe("250");
+    expect(getComputedStyle(field).textAlign).toBe("end");
     await userEvent.fill(field, "1,000");
     await userEvent.click(picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!);
     expect(store(el).lines.map((line) => line.quantity)).toEqual(["250"]);

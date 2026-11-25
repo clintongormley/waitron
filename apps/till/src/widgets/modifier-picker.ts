@@ -136,9 +136,6 @@ export class TillModifierPicker extends LitElement {
         display: block;
         margin-block-end: var(--wt-space-3);
       }
-      wt-price-input::part(unit) {
-        margin-inline-start: auto;
-      }
       .min-quantity-action {
         margin-block: calc(-1 * var(--wt-space-2)) var(--wt-space-3);
       }
@@ -935,6 +932,7 @@ export class TillModifierPicker extends LitElement {
                         label=${measured ? lineProductName(this.product) : t("table.split_quantity")}
                         unit=${measured ? unitName(this.product) : nothing}
                         ?fixed-unit=${measured}
+                        ?align-amount-end=${measured}
                         required
                         decimal-locale=${currentLocale()}
                         .value=${this.editedQuantity}

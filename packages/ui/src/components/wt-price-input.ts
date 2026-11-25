@@ -173,6 +173,23 @@ export class WtPriceInput extends WtInput {
         }
       }
 
+      :host([align-amount-end]) .fixed .amount-box {
+        --amount-end-inset: 0px;
+        flex: 1;
+        min-width: 0;
+      }
+
+      :host([align-amount-end]) .fixed .field-control {
+        flex: 1;
+        min-width: 0;
+        max-width: none;
+        text-align: end;
+      }
+
+      :host([align-amount-end]) .fixed span.unit {
+        padding-inline-start: var(--wt-space-1);
+      }
+
       /* A unit too long for the field gives up width before the amount does; its text is cut with
          an ellipsis, never the chevron, and the whole unit stays the button's accessible name. */
       button.unit {
@@ -247,6 +264,7 @@ export class WtPriceInput extends WtInput {
   /** Marks a field holding its own value rather than the fallback its placeholder shows. */
   @property({ type: Boolean, reflect: true }) overriding = false;
   @property({ type: Boolean, attribute: "fixed-unit" }) fixedUnit = false;
+  @property({ type: Boolean, attribute: "align-amount-end", reflect: true }) alignAmountEnd = false;
   /** The unit button's `aria-haspopup`, for a host whose unit click opens a dialog or menu. */
   @property({ attribute: "unit-haspopup" }) unitHasPopup = "";
   /** Draws the euro sign in the amount box as this locale writes it; empty draws none. */

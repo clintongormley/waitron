@@ -313,6 +313,7 @@ it("adds a chosen variant at the entered litre amount while payment is held", as
     expect(amount().error).toBe("");
     await userEvent.keyboard("125");
     expect(input().value).toBe("0,125");
+    expect(getComputedStyle(input()).textAlign).toBe("end");
     input().dispatchEvent(
       new KeyboardEvent("keydown", {
         key: "Enter",
