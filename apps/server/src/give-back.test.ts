@@ -12,6 +12,7 @@ import {
   devices,
   floorZones,
   incidents,
+  invoiceCorrectionRefunds,
   invoiceCorrections,
   parties,
   refunds,
@@ -732,7 +733,10 @@ describe("readGiveBack: what can be used now (O1)", () => {
 
   it("while another payment's refund is pending: goodwill waits, and that way says why", async () => {
     const b = await tab(["Paella", "Cheesecake"]);
-    const saleId = await pay(b, [{ reader: "12.50" }, { cash: "12.50" }], "1.00");
+    const saleId = await pay(b, [
+      { reader: "12.50", tip: "1.00" },
+      { cash: "12.50", tip: "2.00" },
+    ]);
     const card = await tenderOf(saleId, "card");
     venue.card.scriptNextRefund({ made: false, answer: { kind: "uncertain", reason: "network" } });
     expect(await plainRefund(saleId, card, { tip: "1.00" })).toMatchObject({
@@ -755,6 +759,15 @@ describe("readGiveBack: what can be used now (O1)", () => {
       pending: false,
       reason: null,
     });
+    const before = effects();
+    expect(await routePreview(saleId, ask("extra", "0.50", { way: card }))).toEqual({
+      status: 409,
+      json: { code: "tender.refund_in_progress", params: { tenderId: card } },
+    });
+    expect((await routePreview(saleId, ask("extra", "0.50"))).json).toMatchObject({
+      parts: [{ kind: "extra", amount: "0.50", way: "cash" }],
+    });
+    expect(effects()).toEqual(before);
   });
 
   it("while the box's time is unconfirmed, every choice waits", async () => {
@@ -1206,6 +1219,7 @@ describe("planGiveBack: more than one payment (D10)", () => {
         leftUnderWay: "15.00",
       }),
     );
+    expect(await preview(saleId, ask("goodwill", "47.01"))).toEqual(invalidField("amount"));
     await cancel(b, "Paella", "1", true);
     const card = await tenderOf(saleId, "card");
     const paella = [lineOf(await read(saleId), "Paella").id];
@@ -1370,6 +1384,36 @@ function expectRefusedUnwritten(
   expect(effects()).toEqual(before);
 }
 
+it("refuses to price a dish's extra on its own for an items payment", async () => {
+  const { billId } = await tab(["Paella", "Cheesecake"], { withAioli: true });
+  const [extra] = await venue.db
+    .select()
+    .from(workingOrderLines)
+    .where(
+      and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.productId, aioliId)),
+    );
+  const before = effects();
+
+  expect(
+    (
+      await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/working-orders/${billId}/item-payments/preview`,
+        {
+          method: "card",
+          picks: [{ lineId: extra!.id }],
+        },
+      )
+    ).json,
+  ).toEqual({
+    code: "tab.transfer_modifier_line",
+    params: { tabId: billId, lineNo: extra!.lineNo },
+  });
+  expect(effects()).toEqual(before);
+});
+
 describe("POST …/give-back in cash", () => {
   it("refunds the paella's cancel, then corrects and files the cheesecake, opening the drawer once", async () => {
     const b = await tab(FIVE);
@@ -1522,6 +1566,32 @@ describe("POST …/give-back in cash", () => {
     // the route's tag.
     expect(answer).toEqual({ status: 500, json: { code: "server.internal" } });
     expect(logged).toContainEqual(["error", "give_back.failed", expect.anything()]);
+    expect(effects()).toEqual(before);
+  });
+
+  it("names the malformed write field without giving money back", async () => {
+    const saleId = await pay(await tab(FIVE), [{ cash: "34.00" }]);
+    const body = await giveBody(saleId, ask("goodwill", "10.00"));
+    const before = effects();
+    const [part] = body.expected;
+    for (const [change, field] of [
+      [{ note: 1 }, "note"],
+      [{ submissionIds: null }, "submissionIds"],
+      [
+        { submissionIds: { ...body.submissionIds, extra: body.submissionIds.refund } },
+        "submissionIds",
+      ],
+      [{ manualConfirmed: "true" }, "manualConfirmed"],
+      [{ expected: [] }, "expected"],
+      [{ expected: [null] }, "expected"],
+      [{ expected: [{ ...part, kind: 1 }] }, "expected"],
+      [{ expected: [{ ...part, lineIds: ["not an id"] }] }, "expected"],
+    ] as const) {
+      expect(await give(saleId, { ...body, ...change })).toEqual({
+        status: 400,
+        json: { code: "management.request_invalid", params: { field } },
+      });
+    }
     expect(effects()).toEqual(before);
   });
 
@@ -2055,6 +2125,39 @@ describe("POST …/give-back: a cancel's approval covers its money only from the
     });
   });
 
+  it("records a refund holder's own approval and takes only the first of two cash payments", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ cash: "20.00" }, { cash: "14.00" }]);
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const firstCash = await tenderOf(saleId, "cash");
+    const paella = lineOf(await read(saleId), "Paella").id;
+    const body = await giveBody(
+      saleId,
+      ask("dishes", "18.50", { lineIds: [paella], fromCancel: [cancelId] }),
+    );
+    const holder = await signedInHolding(["sale.refund"], "8643");
+
+    const answer = await give(saleId, body, holder.cookie);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({ parts: [{ kind: "refund", state: "completed" }] });
+    expect(await refundRowsOf(saleId)).toMatchObject([
+      {
+        tenderId: firstCash,
+        appliedAmount: 1850,
+        state: "completed",
+        authorizedBy: holder.personId,
+      },
+    ]);
+    const after = effects();
+
+    expect(await give(saleId, body, venue.cookie)).toEqual({
+      status: 403,
+      json: { code: "authorization.not_permitted", params: { permission: "sale.refund" } },
+    });
+    expect(await give(saleId, body, holder.cookie)).toEqual(answer);
+    expect(effects()).toEqual(after);
+  });
+
   it("asks refund rights for the same cancelled paella without fromCancel, writing nothing", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ cash: "34.00" }]);
@@ -2248,6 +2351,135 @@ describe("POST …/give-back on a card reader", () => {
     expect((await give(saleId, body, allowed.cookie)).status).toBe(200);
   });
 
+  it("refuses a missing required note before giving any of the reader's money back", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
+    const reader = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { extra: "3.00", way: reader }));
+    const name = `Reason with note ${randomUUID().slice(0, 8)}`;
+    const reason = await inTx(venue, (tx) =>
+      createAdjustmentReason(tx, {
+        ...REASONS.house,
+        name,
+        names: { en: name },
+        noteRequired: true,
+      }),
+    );
+    const before = effects();
+    const calls = cardCallsNow();
+
+    const answer = await give(saleId, { ...body, reasonId: reason.id, note: " " });
+
+    expectRefusedUnwritten(answer, "adjustment.note_required", before);
+    expect(cardCallsSince(calls)).toEqual({ refunds: [], lookups: 0 });
+  });
+
+  it("refuses the first reader part if the clock becomes unconfirmed after the plan is read", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
+    const reader = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("extra", "3.00", { way: reader }));
+    const before = effects();
+    const calls = cardCallsNow();
+    let confirmed = true;
+    const backend = gateSeatOnStartClock(venue.backend, () => !confirmed);
+    const refuseNewRefund = venue.backend.refuseNewRefund.bind(venue.backend);
+    const afterPlanning = vi
+      .spyOn(venue.backend, "refuseNewRefund")
+      .mockImplementationOnce(async (tx, nodeId) => {
+        await refuseNewRefund(tx, nodeId);
+        confirmed = false;
+      });
+
+    const answer = await give(saleId, body, adminCookie, venue.appWith({ backend })).finally(() =>
+      afterPlanning.mockRestore(),
+    );
+
+    expectRefusedUnwritten(answer, "clock.unconfirmed", before);
+    expect(answer).toEqual({ status: 409, json: { code: "clock.unconfirmed", params: {} } });
+    expect(cardCallsSince(calls)).toEqual({ refunds: [], lookups: 0 });
+  });
+
+  it("keeps the reader refund and leaves the correction open when that card is empty", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "18.50" }, { cash: "15.50" }]);
+    const reader = await tenderOf(saleId, "card");
+    const cancelId = await cancel(b, "Paella", "1", true);
+    const view = await read(saleId);
+    const lineIds = [lineOf(view, "Paella").id, lineOf(view, "Cheesecake").id];
+    const body = await giveBody(
+      saleId,
+      ask("dishes", "25.00", { way: reader, lineIds, fromCancel: [cancelId] }),
+    );
+    const calls = cardCallsNow();
+
+    const answer = await give(saleId, body);
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [
+        { kind: "refund", amount: "18.50", state: "completed" },
+        { kind: "correction", amount: "6.50", state: "pending" },
+      ],
+      underWay: { state: "open", moneyBack: "0.00", left: "6.50" },
+      refusal: null,
+      rest: null,
+    });
+    expect(cardCallsSince(calls).refunds).toEqual(["18.50"]);
+    expect(await refundRowsOf(saleId)).toMatchObject([
+      { tenderId: reader, appliedAmount: 1850, state: "completed" },
+    ]);
+    const [correction] = await correctionsOn(saleId);
+    expect(correction).toMatchObject({ gross: 650, state: "open", correctiveSaleId: null });
+    expect(
+      await venue.db
+        .select()
+        .from(invoiceCorrectionRefunds)
+        .where(eq(invoiceCorrectionRefunds.invoiceCorrectionId, correction!.id)),
+    ).toEqual([]);
+  });
+
+  it("reports a completed reader refund and an open correction when automatic filing fails", async () => {
+    const b = await tab(FIVE);
+    const saleId = await pay(b, [{ reader: "34.00" }]);
+    const reader = await tenderOf(saleId, "card");
+    const body = await giveBody(saleId, ask("goodwill", "10.00", { way: reader }));
+    const logged: unknown[][] = [];
+    automaticFiling.refuse = true;
+    onTestFinished(() => {
+      automaticFiling.refuse = false;
+    });
+
+    const answer = await give(
+      saleId,
+      body,
+      adminCookie,
+      venue.appWith({ log: (...line) => void logged.push(line) }),
+    );
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [{ kind: "correction", amount: "10.00", state: "pending" }],
+      underWay: { state: "open", moneyBack: "10.00", left: "0.00" },
+      refusal: null,
+    });
+    const [correction] = await correctionsOn(saleId);
+    const [refund] = await refundRowsOf(saleId);
+    expect(refund).toMatchObject({ state: "completed", appliedAmount: 1000, tenderId: reader });
+    expect(
+      await venue.db
+        .select()
+        .from(invoiceCorrectionRefunds)
+        .where(eq(invoiceCorrectionRefunds.invoiceCorrectionId, correction!.id)),
+    ).toMatchObject([{ tenderRefundId: refund!.id }]);
+    expect(correction).toMatchObject({ state: "open", correctiveSaleId: null });
+    expect(logged).toContainEqual([
+      "error",
+      "invoice_correction.automatic_filing_failed",
+      expect.objectContaining({ correctionId: correction!.id, refundId: refund!.id }),
+    ]);
+  });
+
   it("sends the extra, then the goodwill's leg, each completing before the next, and files the corrective", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
@@ -2329,6 +2561,53 @@ describe("POST …/give-back on a card reader", () => {
       expect.objectContaining({ state: "filed", gross: 1000 }),
     ]);
   });
+
+  it.each(["pending", "failed"] as const)(
+    "leaves only the extra to give back when the cancelled dish's refund is %s",
+    async (state) => {
+      const b = await tab(FIVE);
+      const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
+      const reader = await tenderOf(saleId, "card");
+      await cancel(b, "Paella", "1", true);
+      const paella = lineOf(await read(saleId), "Paella").id;
+      const body = await giveBody(
+        saleId,
+        ask("dishes", "18.50", {
+          way: reader,
+          lineIds: [paella],
+          extra: "3.00",
+        }),
+      );
+      venue.card.scriptNextRefund(
+        state === "pending"
+          ? { made: false, answer: { kind: "uncertain", reason: "network" } }
+          : { made: "failed", answer: "made" },
+      );
+      const calls = cardCallsNow();
+
+      const answer = await give(saleId, body);
+
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      const [refund] = await refundRowsOf(saleId);
+      expect(refund).toMatchObject({ appliedAmount: 1850, tipAmount: 0, state });
+      expect(answer.json).toMatchObject({
+        parts: [
+          { kind: "refund", state },
+          { kind: "extra", state: "not_started" },
+        ],
+        refusal:
+          state === "pending"
+            ? null
+            : {
+                code: "give_back.refund_failed",
+                params: { refundId: refund!.id, tenderId: reader },
+              },
+        rest: { purpose: "extra", amount: "3.00", extra: "0.00", way: reader },
+        underWay: null,
+      });
+      expect(cardCallsSince(calls).refunds).toEqual(["18.50"]);
+    },
+  );
 
   it("discards the correction when the card company declines its leg, leaving nothing open, and says why", async () => {
     const b = await tab(FIVE);
@@ -2672,6 +2951,34 @@ describe("POST …/give-back: resends checked against the press's own fields", (
       "submission.id_reused",
       after,
     );
+  });
+
+  it("refuses a resend that changes both the correction amount and its expected part", async () => {
+    const saleId = await pay(await tab(FIVE), [{ cash: "34.00" }]);
+    const body = await giveBody(saleId, ask("goodwill", "10.00"));
+    expect((await give(saleId, body)).status).toBe(200);
+    const after = effects();
+
+    const answer = await give(saleId, {
+      ...body,
+      amount: "9.00",
+      expected: [{ ...body.expected[0], amount: "9.00" }],
+    });
+
+    expect(answer).toEqual({
+      status: 409,
+      json: {
+        code: "submission.id_reused",
+        params: { submissionId: body.submissionIds.correction },
+      },
+    });
+    const insertedPart = await give(saleId, {
+      ...body,
+      extra: "1.00",
+      expected: [{ kind: "extra", amount: "1.00", way: "cash" }, ...body.expected],
+    });
+    expect(insertedPart).toMatchObject({ status: 409, json: { code: "submission.id_reused" } });
+    expect(effects()).toEqual(after);
   });
 
   it("answers an extra-only resend on a separate terminal as its first send, writing nothing", async () => {

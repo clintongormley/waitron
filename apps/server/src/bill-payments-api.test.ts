@@ -6428,6 +6428,103 @@ describe("A1515 pay for items over HTTP", () => {
     expect(await lineTotals(billId)).toEqual(["36.00", "35.00"]);
   });
 
+  it("refuses invalid item picks and a disabled tip without changing the bill", async () => {
+    const { billId } = await threeSaladsAndPaella();
+    const other = await threeSaladsAndPaella();
+    const [salad] = await lineIdsOf(billId, [1]);
+    const [otherSalad] = await lineIdsOf(other.billId, [1]);
+    const picked = { lineId: salad, quantity: "1" };
+    const path = `/api/working-orders/${billId}/item-payments/preview`;
+    for (const [picks, error] of [
+      [null, { code: "management.request_invalid", params: { field: "picks" } }],
+      [[], { code: "sale.empty_basket", params: {} }],
+      [
+        [picked, picked],
+        { code: "tab.transfer_duplicate_line", params: { tabId: billId, lineNo: 1 } },
+      ],
+      [
+        [{ lineId: otherSalad }],
+        { code: "tab.line_not_found", params: { tabId: billId, lineId: otherSalad } },
+      ],
+      [
+        [{ lineId: salad, quantity: "one" }],
+        {
+          code: "tab.transfer_quantity_invalid",
+          params: { tabId: billId, lineNo: 1, quantity: "one" },
+        },
+      ],
+    ] as const) {
+      expect(
+        (await request("POST", path, { picks, method: "cash", tendered: "20.00" })).json,
+      ).toEqual(error);
+    }
+    const unknown = randomUUID();
+    expect(
+      (
+        await request("POST", `/api/working-orders/${unknown}/item-payments/preview`, {
+          picks: [picked],
+          method: "card",
+        })
+      ).json,
+    ).toEqual({ code: "tab.not_open", params: { tabId: unknown } });
+    expect(
+      await request("POST", path, {
+        picks: [picked],
+        method: "card",
+        addedTip: "2.00",
+      }),
+    ).toEqual({
+      status: 422,
+      json: {
+        code: "bill.tip_not_allowed",
+        params: { workingOrderId: billId, chargeable: "12.00" },
+      },
+    });
+    expect(await lineTotals(billId)).toEqual(["36.00", "35.00"]);
+    expect(await lineTotals(other.billId)).toEqual(["36.00", "35.00"]);
+    expect(await paymentRows(billId)).toEqual([]);
+  });
+
+  it("refuses an empty or unpriceable item payment before moving a dish", async () => {
+    const { billId, partyId } = await threeSaladsAndPaella();
+    const [salad] = await lineIdsOf(billId, [1]);
+    const path = `/api/working-orders/${billId}/item-payments`;
+    const body = {
+      submissionId: randomUUID(),
+      picks: [{ lineId: salad, quantity: "1" }],
+      partyId,
+      expectedPartyRevision: await partyRevisionOf(billId),
+      expectedEdits: [await inTx((tx) => readBillEditState(tx, billId))],
+      method: "cash",
+      tendered: "20.00",
+      applied: "12.00",
+      tip: "0.00",
+    };
+    for (const [patch, error] of [
+      [{ picks: [] }, { code: "sale.empty_basket", params: {} }],
+      [
+        { picks: [{ lineId: salad, quantity: "one" }] },
+        {
+          code: "tab.transfer_quantity_invalid",
+          params: { tabId: billId, lineNo: 1, quantity: "one" },
+        },
+      ],
+      [
+        { partyId: "not an id" },
+        { code: "management.request_invalid", params: { field: "partyId" } },
+      ],
+      [{ method: "card" }, { code: "management.request_invalid", params: { field: "tendered" } }],
+      [
+        { simulationOutcome: "captured" },
+        { code: "management.request_invalid", params: { field: "simulationOutcome" } },
+      ],
+    ] as const) {
+      expect((await request("POST", path, { ...body, ...patch })).json).toEqual(error);
+    }
+    expect(await lineTotals(billId)).toEqual(["36.00", "35.00"]);
+    expect(await paymentRows(billId)).toEqual([]);
+  });
+
   it("item payments keep a hand-keyed card's operation number and machine", async () => {
     const { billId, partyId } = await threeSaladsAndPaella();
     const [salad] = await lineIdsOf(billId, [1]);

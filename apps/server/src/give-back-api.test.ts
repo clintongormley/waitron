@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { floorZones, invoiceCorrections, refunds, sales, withTransaction } from "@waitron/db";
@@ -5,6 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedDeviceProfiles } from "@waitron/db/testing/seed.js";
 import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { loginWithPin } from "@waitron/identity";
+import { listAdjustmentReasons } from "@waitron/adjustments";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
   createDepartment,
@@ -143,10 +145,17 @@ describe("GET /api/transactions/:saleId/give-back and its preview", () => {
     const billId = await seated("Salad bowl");
     await payRest(billId, "20.00");
     const saleId = await restId(billId);
+    const receipt = (await read(saleId)).json as unknown as GiveBackView;
+    const lineId = receipt.lines[0]!.id;
+    const before = await rowCount();
     for (const [body, field] of [
       [{ purpose: "tip", amount: "5.00" }, "purpose"],
       [{ purpose: "goodwill", amount: "0.00" }, "amount"],
       [{ purpose: "goodwill", amount: "5.00", way: "card" }, "way"],
+      [{ purpose: "goodwill", amount: "5.00", way: "" }, "way"],
+      [{ purpose: "goodwill", amount: "5.00", way: undefined }, "way"],
+      [{ purpose: "goodwill", amount: "5.00", fromCancel: ["not an id"] }, "fromCancel"],
+      [{ purpose: "dishes", amount: "5.00", lineIds: [lineId, lineId] }, "lineIds"],
       [{ purpose: "dishes", amount: "5.00" }, "lineIds"],
       [{ purpose: "extra", amount: "1.00", extra: "1.00" }, "extra"],
     ] as const)
@@ -154,6 +163,7 @@ describe("GET /api/transactions/:saleId/give-back and its preview", () => {
         status: 400,
         json: { code: "management.request_invalid", params: { field } },
       });
+    expect(await rowCount()).toBe(before);
   });
 });
 
@@ -197,6 +207,48 @@ describe("POST …/give-back/preview on a part payment's ticket", () => {
       status: 409,
       json: reason,
     });
+  });
+  it("offers a plain refund of the advance once the final invoice has no money left", async () => {
+    const billId = await seated("Tasting menu");
+    const advanceId = await advance(billId, "30.00");
+    await payRest(billId, "90.00");
+    const finalId = await restId(billId);
+    const request = { purpose: "goodwill", amount: "90.00", extra: "0.00", way: "cash" };
+    const shown = await preview(finalId, request);
+    expect(shown.status, JSON.stringify(shown.json)).toBe(200);
+    const [reason] = await inTx(venue(), (tx) => listAdjustmentReasons(tx));
+    const given = await send(
+      venue().app,
+      venue().cookie,
+      "POST",
+      `/api/transactions/${finalId}/give-back`,
+      {
+        ...request,
+        reasonId: reason!.id,
+        note: "Money given back",
+        expected: shown.json.parts,
+        submissionIds: {
+          refund: randomUUID(),
+          extra: randomUUID(),
+          correction: randomUUID(),
+          leg: randomUUID(),
+        },
+        override: { personId: venue().adminId, pin: "1234" },
+      },
+    );
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+    expect(given.json).toMatchObject({
+      parts: [{ kind: "correction", amount: "90.00", state: "completed" }],
+    });
+    const before = await rowCount();
+
+    const answer = await preview(advanceId, { purpose: "goodwill", amount: "10.00" });
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(answer.json).toMatchObject({
+      parts: [{ kind: "refund", amount: "10.00", way: "cash" }],
+    });
+    expect(await rowCount()).toBe(before);
   });
 });
 
