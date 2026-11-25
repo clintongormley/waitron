@@ -171,7 +171,7 @@ export class ProductBrowser extends LitElement {
 
   @property({ attribute: false }) availabilitySaved?: (change: ProductAvailabilityChange) => void;
   @state() private availabilityPending: ReadonlyMap<string, boolean> = new Map();
-  @state() private availabilityError = "";
+  @state() private availabilityError: { name: string; error: unknown } | null = null;
   @state() private actionError = "";
   readonly #operationOwner = {};
   #operationScope?: DraftScope<OperationDraft>;
@@ -1015,15 +1015,12 @@ export class ProductBrowser extends LitElement {
     const change = event.detail;
     if (this.availabilityPending.has(change.id)) return;
     this.availabilityPending = new Map(this.availabilityPending).set(change.id, change.available);
-    this.availabilityError = "";
+    this.availabilityError = null;
     try {
       await this.api.setProductAvailability(change.id, change.available);
       if (this.isConnected) this.availabilitySaved?.(change);
     } catch (error) {
-      this.availabilityError = fill("product.availability_refused", {
-        name: change.name,
-        reason: refusalText(codeOf(error), (error as { params?: unknown })?.params),
-      });
+      this.availabilityError = { name: change.name, error };
     } finally {
       const pending = new Map(this.availabilityPending);
       pending.delete(change.id);
@@ -1034,7 +1031,18 @@ export class ProductBrowser extends LitElement {
   override render() {
     const renamed = this.#renamed(this.nameDraft);
     const boxColor = this.nameColor !== undefined ? this.nameColor : (renamed?.color ?? null);
-    return html`${productAvailabilityFeedback(this.availabilityError)}<dashboard-product-list
+    const refusal = this.availabilityError;
+    return html`${productAvailabilityFeedback(
+        refusal
+          ? fill("product.availability_refused", {
+              name: refusal.name,
+              reason: refusalText(
+                codeOf(refusal.error),
+                (refusal.error as { params?: unknown })?.params,
+              ),
+            })
+          : "",
+      )}<dashboard-product-list
         .availabilityPending=${this.availabilityPending}
         @change-availability=${this.#changeAvailability}
         .hidden=${this.tableHidden}

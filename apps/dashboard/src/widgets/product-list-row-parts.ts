@@ -20,6 +20,11 @@ export const productRowStyles = css`
   wt-data-table[narrow]::part(variant-cell) {
     padding-inline-start: var(--wt-space-2);
   }
+  wt-data-table:not([narrow])::part(name-stack) {
+    flex-flow: row wrap;
+    align-items: baseline;
+    column-gap: var(--wt-space-2);
+  }
   wt-data-table::part(row-labels) {
     display: flex;
     flex-wrap: wrap;
@@ -41,10 +46,13 @@ export const productRowStyles = css`
   }
   wt-data-table::part(price-layout) {
     display: inline-grid;
-    grid-template-columns: auto var(--wt-tap-min);
+    grid-template-columns: auto calc(var(--wt-tap-min) * 2);
     column-gap: var(--wt-space-1);
     align-items: baseline;
     vertical-align: baseline;
+  }
+  wt-data-table[narrow]::part(price-layout) {
+    grid-template-columns: auto var(--wt-tap-min);
   }
   wt-data-table::part(price-amount) {
     white-space: nowrap;

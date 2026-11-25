@@ -111,6 +111,6 @@ export function productMediaFrame(
     data-test=${image ? "thumb" : "thumb-placeholder"}
     style=${painted ? `--product-media-color:${color}` : nothing}
     aria-hidden="true"
-    >${image ? html`<img part="thumbnail" src=${liveMediaImage(image, "square")} alt="" loading=${lazy ? "lazy" : nothing} draggable="false" />` : nothing}</span
+    >${image ? html`<img part="thumbnail" loading=${lazy ? "lazy" : nothing} src=${liveMediaImage(image, "square")} alt="" draggable="false" />` : nothing}</span
   >`;
 }

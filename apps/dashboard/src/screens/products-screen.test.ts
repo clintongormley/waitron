@@ -623,8 +623,48 @@ describe("menu-screen", () => {
     expect(api.listProducts).toHaveBeenCalledOnce();
   });
 
+  it("keeps the scroll position after a pointer changes the availability sort", async () => {
+    const many = Array.from({ length: 40 }, (_, index) => ({
+      ...products[0]!,
+      id: `p${index}`,
+      name: `Dish ${index + 10}`,
+      primaryCategoryId: null,
+    }));
+    const saved = deferred<void>();
+    const setProductAvailability = vi.fn().mockReturnValue(saved.promise);
+    const api = stubApi({
+      listProducts: vi
+        .fn()
+        .mockResolvedValueOnce(many)
+        .mockRejectedValue({ code: "connection.failed" }),
+      setProductAvailability,
+    });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    el.style.setProperty("--wt-table-max", "300px");
+    await flush(el);
+    const table = await productTable(el);
+    const root = table.shadowRoot!;
+    const scroll = root.querySelector<HTMLElement>(".scroll")!;
+    root.querySelector<HTMLButtonElement>('button[data-sort="available"]')!.click();
+    await table.updateComplete;
+    expect(scroll.scrollHeight).toBeGreaterThan(scroll.clientHeight);
+    await userEvent.click(page.getByRole("switch", { name: `${t("editor.available")}: Dish 10` }), {
+      position: { x: 40, y: 22 },
+      timeout: 2000,
+    });
+    expect(setProductAvailability).toHaveBeenCalledExactlyOnceWith("p0", false);
+    const scrollBeforeSave = scroll.scrollTop;
+    saved.resolve();
+    await vi.waitFor(() =>
+      expect(root.querySelector("tbody tr:last-child")?.getAttribute("data-row-key")).toBe("p0"),
+    );
+    expect(scroll.scrollTop).toBe(scrollBeforeSave);
+  });
+
   it("keeps a named refusal visible when the rows are scrolled", async () => {
     const viewport = { width: innerWidth, height: innerHeight };
+    const locale = currentLocale();
+    onTestFinished(() => setLocale(locale));
     await page.viewport(1280, 844);
     onTestFinished(() => page.viewport(viewport.width, viewport.height));
     const refusal = deferred<void>();
@@ -639,7 +679,7 @@ describe("menu-screen", () => {
       primaryCategoryId: null,
     }));
     const api = stubApi({ listProducts: vi.fn().mockResolvedValue(many), setProductAvailability });
-    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    const { el, host } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
     el.style.setProperty("--wt-table-max", "300px");
     await flush(el);
     const table = await productTable(el);
@@ -674,12 +714,30 @@ describe("menu-screen", () => {
     const message = () => list(el).shadowRoot!.querySelector<HTMLElement>('[role="alert"]');
     await vi.waitFor(() => expect(message()?.textContent).toContain("Dish 39"));
     expect(message()!.textContent).toContain(codeMessage("authorization.not_permitted"));
+    setLocale("es");
+    await vi.waitFor(() =>
+      expect(message()?.textContent).toContain(codeMessage("authorization.not_permitted")),
+    );
     expect(control!.checked).toBe(true);
     expect(root.activeElement).toBe(control);
     expect(scroll.scrollTop).toBeGreaterThan(0);
     expect(message()!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
       scroll.getBoundingClientRect().top,
     );
+
+    await page.viewport(844, 334);
+    host.style.cssText += "height: 334px; overflow: auto;";
+    el.style.setProperty("--wt-table-max", "none");
+    await productTable(el);
+    const browserRoot = list(el).shadowRoot!;
+    for (const top of [120, 300, 550]) {
+      host.scrollTop = top;
+      await new Promise(requestAnimationFrame);
+      const box = message()!.getBoundingClientRect();
+      expect(
+        browserRoot.elementFromPoint(box.right - 12, box.top + box.height / 2)?.localName,
+      ).toBe("p");
+    }
   });
 
   it("shows a product's new takeaway rate when its rates change", async () => {
@@ -3067,6 +3125,14 @@ describe("menu-screen", () => {
       await vi.waitFor(() => expect(listProducts).toHaveBeenCalledTimes(2));
       expect(setProductAvailability).toHaveBeenCalledExactlyOnceWith("v1", false);
       expect(Array.from(switches, (control) => control.checked)).toEqual([true, false]);
+      expect(switches[1]!.accessibleName).toContain("Croquettes, Half portion");
+      setProductAvailability.mockRejectedValueOnce({ code: "authorization.not_permitted" });
+      await userEvent.keyboard(" ");
+      await vi.waitFor(() =>
+        expect(list(el).shadowRoot!.querySelector('[role="alert"]')?.textContent).toContain(
+          "Croquettes, Half portion",
+        ),
+      );
       expect(list(el).products[0]!.variants[0]!.available).toBe(false);
     });
 

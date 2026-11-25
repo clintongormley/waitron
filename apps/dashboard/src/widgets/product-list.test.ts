@@ -1018,6 +1018,20 @@ describe("product-list", () => {
     expect(rows.map((row) => row.textContent).join(" ")).not.toContain("SM");
   });
 
+  it("opens and closes a category from the blank Available cell", async () => {
+    const { table, root } = await mountTree();
+    const cell = cellUnder(root, "folder:d", t("editor.available"));
+    const blank = page
+      .getByRole("row")
+      .filter({ hasText: "Drinks" })
+      .getByRole("gridcell")
+      .nth(Array.from(cell.parentElement!.children).indexOf(cell));
+    for (const expanded of [true, false]) {
+      await userEvent.click(blank, { position: { x: 3, y: 6 }, timeout: 2000 });
+      expect(table.isExpanded("folder:d")).toBe(expanded);
+    }
+  });
+
   it("summarizes each unavailable direct product once in its closed category", async () => {
     setLocale("en");
     const soldOut = { ...bunVariant, available: false };
@@ -1026,10 +1040,15 @@ describe("product-list", () => {
         product({ id: "a", primaryCategoryId: drinks.id, available: false, variants: [soldOut] }),
         product({ id: "b", primaryCategoryId: drinks.id }),
         product({ id: "c", primaryCategoryId: beer.id, available: false }),
+        product({
+          id: "d",
+          primaryCategoryId: drinks.id,
+          variants: [{ ...soldOut, active: false }],
+        }),
       ],
     });
     const count = () => root.querySelector('[data-test="count-d"]')!.textContent;
-    expect(count()).toContain("2 products · 1 unavailable");
+    expect(count()).toContain("3 products · 1 unavailable");
     expect(root.querySelector('[data-test="count-root"]')!.textContent).not.toContain(
       "unavailable",
     );
@@ -1055,6 +1074,7 @@ describe("product-list", () => {
     );
     expect(badges.length).toBe(1);
     expect(getComputedStyle(badges[0]!).borderTopColor).toBe("rgb(16, 17, 18)");
+    expect(getComputedStyle(badges[0]!).color).toBe("rgb(16, 17, 18)");
     expect(badges[0]!.getAttribute("data-state")).toBe("unavailable");
     expect(badges[0]!.textContent!.trim().length).toBeGreaterThan(0);
   });
@@ -1497,6 +1517,11 @@ describe("product-list", () => {
           unit: { ...product().unit, id: EACH_UNIT_ID },
         }),
         product({ id: "ham", name: "Sliced ham", unitId: "kg", unit: kilo, unitPrice: "48.00" }),
+        product({
+          id: "bottle",
+          unitId: "bottle",
+          unit: { ...kilo, id: "bottle", staffAbbreviation: "botella", abbreviation: {} },
+        }),
       ],
     });
     const root = await tableRoot(el);
@@ -1509,6 +1534,12 @@ describe("product-list", () => {
         .querySelector('[data-test="price"]')!
         .getBoundingClientRect().right;
     expect(amountRight("plate")).toBeCloseTo(amountRight("ham"), 0);
+    expect(amountRight("bottle")).toBeCloseTo(amountRight("ham"), 0);
+    const unitHeight = (key: string) =>
+      cellUnder(root, key, t("product.price"))
+        .querySelector('[data-test="price-unit"]')!
+        .getBoundingClientRect().height;
+    expect(unitHeight("bottle")).toBe(unitHeight("ham"));
   });
 
   it("names a stored unit with no translated abbreviation by its staff abbreviation, and a variant by its product's unit", async () => {
@@ -1961,8 +1992,11 @@ describe("the product list at phone width", () => {
         for (let frame = 0; frame < 2; frame++) await new Promise(requestAnimationFrame);
         const scroll = root.querySelector<HTMLElement>(".scroll")!;
         const scrollSideways = () => {
-          scroll.scrollLeft = 172;
-          expect(scroll.scrollLeft).toBe(172);
+          scroll.scrollLeft = scroll.scrollWidth - scroll.clientWidth;
+          const clipped = root.querySelector('tr[data-row-key="folder:f"] :is(wt-input, strong)')!;
+          expect(clipped.getBoundingClientRect().left).toBeLessThan(
+            scroll.getBoundingClientRect().left,
+          );
         };
         if (scrolled === "before") scrollSideways();
         el.nameDraft = { kind: "rename", categoryId: "f" };
@@ -3520,7 +3554,7 @@ describe("a product's variants in the list", () => {
     ["en", "2 variants", "1 variant"],
     ["es", "2 variantes", "1 variante"],
   ])(
-    "says how many variants a product has under its name, leaving removed ones out (%s)",
+    "says how many variants a product has beside its name, leaving removed ones out (%s)",
     async (locale, two, one) => {
       setLocale(locale);
       const { root } = await mountDeli();
@@ -3531,8 +3565,8 @@ describe("a product's variants in the list", () => {
       expect(count("chorizo")).toBeNull();
       const name = nameCell(root, "cecina").querySelector("strong")!.getBoundingClientRect();
       const box = count("cecina")!.getBoundingClientRect();
-      expect(box.top).toBeGreaterThanOrEqual(name.bottom - 1);
-      expect(Math.abs(box.left - name.left)).toBeLessThanOrEqual(0.5);
+      expect(box.top).toBeLessThan(name.bottom);
+      expect(box.left).toBeGreaterThan(name.right);
       expect(getComputedStyle(count("cecina")!).color).not.toBe(
         getComputedStyle(nameCell(root, "cecina").querySelector("strong")!).color,
       );
@@ -4295,6 +4329,21 @@ describe("a refresh during a drag", () => {
       '[part~="drop-target"], [part~="drop-gap-before"], [part~="drop-gap-after"]',
     );
 
+  it("allows a category drag from the Available cell and keeps product availability out of drag", async () => {
+    const { el, root } = await mountTree();
+    const { offered } = watch(el);
+    const cell = (key: string) => cellUnder(root, key, t("editor.available"));
+    const destination = nameOf(root, "folder:d");
+    press(cell("bread"), "pointerdown");
+    press(destination, "pointermove");
+    press(destination, "pointercancel");
+    expect(offered).toEqual([]);
+    press(cell("folder:f"), "pointerdown");
+    press(destination, "pointermove");
+    expect(offered).toEqual([["folder:f"]]);
+    press(destination, "pointercancel");
+  });
+
   it("starts no drag, and throws nothing, when a refresh removes the pressed product before it moves", async () => {
     const { el, root } = await mountTree();
     const { offered, drops } = watch(el);
@@ -4455,7 +4504,8 @@ describe("a refresh during a drag", () => {
     expect(drops).toEqual([]);
   });
 
-  it("moves the gap to the row the dragged product would now land before when a refresh adds one to the target category", async () => {
+  it.each([1280, 390])("moves a row-height gap on refresh at %i px", async (width) => {
+    await page.viewport(width, 844);
     const { el } = await mountTree();
     await openRow(el, "folder:d");
     const root = await tableRoot(el);
@@ -4466,12 +4516,12 @@ describe("a refresh during a drag", () => {
     const row = root.querySelector<HTMLElement>('tr[data-row-key="cola"]')!;
     const height = row.getBoundingClientRect().height;
     expect(height).toBeGreaterThanOrEqual(48);
-    expect(height).toBeLessThan(52);
+    expect(height).toBeLessThan(width === 390 ? 58 : 52);
     press(nameOf(root, "bread"), "pointerdown");
     press(nameOf(root, "folder:f"), "pointermove");
     press(nameOf(root, "folder:d"), "pointermove");
     expect(gapBefore(root)).toEqual(["cola"]);
-    expect(row.getBoundingClientRect().height - height).toBeCloseTo(height, 0);
+    expect(Math.abs(row.getBoundingClientRect().height - height * 2)).toBeLessThanOrEqual(3);
     const after = await refreshed(el, {
       products: [
         ...treeProducts(),
@@ -6091,8 +6141,8 @@ describe("product-list filters (A463)", () => {
     expect(heading).toBe(locale === "en" ? "Available" : "Disponible");
     for (const [key, name, available] of [
       ["a-ok", "A ok", true],
-      ["a-ok:small", bunVariant.name, true],
-      ["a-ok:medium", soldOut.name, false],
+      ["a-ok:small", `A ok, ${bunVariant.name}`, true],
+      ["a-ok:medium", `A ok, ${soldOut.name}`, false],
       ["b-sold-out", "B sold out", false],
     ] as const) {
       const control = cellUnder(root, key, heading).querySelector("wt-switch")!;
@@ -6486,7 +6536,7 @@ describe("A668 effective allergen cells", () => {
             name: "Dish",
             allergens,
             variants: [
-              bunVariant,
+              { ...bunVariant, unitPrice: null },
               {
                 ...bunVariant,
                 id: "own",
@@ -6525,6 +6575,14 @@ describe("A668 effective allergen cells", () => {
       expect(getComputedStyle(badge("dish:small")!).fontStyle).toBe("normal");
       expect(badge("dish:own")!.textContent!.trim()).toBe("None");
       expect(getComputedStyle(badge("dish:own")!).color).not.toBe("rgb(7, 8, 9)");
+      expect(getComputedStyle(badge("dish:own")!).fontStyle).toBe("normal");
+      const inheritedPrice = cellUnder(root, "dish:small", t("product.price")).querySelector(
+        '[data-test="price"]',
+      )!;
+      expect(getComputedStyle(inheritedPrice).color).toBe(
+        getComputedStyle(badge("dish:small")!).color,
+      );
+      expect(getComputedStyle(inheritedPrice).fontStyle).toBe("normal");
       expect(badge("dish")!.textContent!.trim()).toBe(
         allergens === null ? "Not reviewed" : Object.keys(allergens).length ? "Declared" : "None",
       );

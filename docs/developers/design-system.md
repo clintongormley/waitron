@@ -2302,19 +2302,18 @@ All products' square open their colour picker directly. On a category being adde
 a category keeps one. Then come `--wt-space-3` and the name. So on those rows names step in by the
 table's indent per level whether the row is a category or a product, and the Name heading, which
 moves with the mode, sits over the All products name. Each row's colour square sits at its own row's
-indent, one step in per level, rather than every square sharing one column (owner, 2026-10-08, A415). A colour square and a product's photo or
-placeholder each occupy a `--wt-tap-min` square, including their border. This keeps the square's
-colour action at the minimum tap size and gives photos the same visual size. At phone width, when
+indent, one step in per level, rather than every square sharing one column (owner, 2026-10-08, A415).
+In Products a colour square, photo or placeholder draws at 36 px inside its `--wt-tap-min` target.
+The Structure tree uses `--wt-tap-min` for its squares. At phone width, when
 the table carries `narrow` (its box is 440px wide or less), both trees hide the category, All products or section
 slot — except a category's while it is being named (below) — and the product photo or placeholder, so names at the same level start together. The Products
 tree visually hides each category's count, including All products', with the shared visually hidden
 pattern. The text remains in the row's accessible name, so screen readers retain the contents count
 while the visible name gets more room. A category's cell is laid out as a product's is, so when its
 name wraps, keep its grip and wider-layout colour square beside the name's first line. A
-variant's row draws no grip. Its photo square sits in its product's column and shows the variant's
-own photo, else its product's, in the same frame its product's square uses; it opens the variant's own
-editor at its photo. At phone width the square is hidden, as a product's is, and the name starts
-under its product's name. Each name, with what follows it on its row (a category's count and the asterisk that marks a
+variant's row draws no grip. Its photo and name sit one step further in than the product's.
+The square shows the variant's photo or the product's photo, and opens the variant's editor
+at its photo. At phone width the square is hidden and the name keeps its extra indent. Each name, with what follows it on its row (a category's count and the asterisk that marks a
 category with no active station; a product's variant count), takes
 only the room between its own start and the row's pinned Actions cell, measured as if the table
 were unscrolled, and wraps inside it, a single long word included; a name that fits stays on one

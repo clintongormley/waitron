@@ -17,7 +17,7 @@ export const productAvailabilityFeedbackStyles = css`
   .availability-error {
     position: sticky;
     inset-block-start: 0;
-    z-index: 2;
+    z-index: 4;
     margin: 0;
     padding: var(--wt-space-2) var(--wt-space-3);
     background: var(--wt-color-surface);

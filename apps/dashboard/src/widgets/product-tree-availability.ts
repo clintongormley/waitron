@@ -52,6 +52,7 @@ export function productsWithAvailability(
 
 export function keepAvailabilityFocus(table: ReactiveControllerHost & HTMLElement): void {
   let control: HTMLElement | undefined;
+  let fromKeyboard = false;
   table.addController({
     hostUpdate() {
       const focused = table.shadowRoot?.activeElement;
@@ -59,10 +60,12 @@ export function keepAvailabilityFocus(table: ReactiveControllerHost & HTMLElemen
         focused instanceof HTMLElement && focused.matches('wt-switch[part="availability-switch"]')
           ? focused
           : undefined;
+      fromKeyboard = control?.shadowRoot?.activeElement?.matches(":focus-visible") ?? false;
     },
     hostUpdated() {
       // Moving a keyed row can blur its still-connected switch.
-      if (control?.isConnected && !table.shadowRoot?.activeElement) control.focus();
+      if (control?.isConnected && !table.shadowRoot?.activeElement)
+        control.focus({ preventScroll: !fromKeyboard });
     },
   });
 }

@@ -477,17 +477,25 @@ export class ProductList extends LitElement {
     const listed = row ? this.#rowByKey.get(row.dataset.rowKey!) : undefined;
     if (!row || !listed || listed.kind === "root" || listed.kind === "draft") return;
     if (listed.kind === "product" && listed.variant !== null) return;
+    if (listed.kind === "product" && path.some((item) => item.dataset.rowActivate === "false"))
+      return;
     if (
       path.some((item) =>
-        item.matches(
-          'input, a, wt-row-actions, wt-input, [data-row-activate="false"], button:not(.row-activate, .drag-grip)',
-        ),
+        item.matches("input, a, wt-row-actions, wt-input, button:not(.row-activate, .drag-grip)"),
       )
     )
       return;
     const grip = path.some((item) => item.classList.contains("drag-grip"));
     if (!grip && path.some((item) => item.hasAttribute("data-selection-cell"))) return;
     this.#startDrag(event, listed.key, grip);
+  };
+
+  readonly #clickAvailableCell = (event: MouseEvent): void => {
+    const cell = event.composedPath()[0];
+    if (!(cell instanceof HTMLTableCellElement) || cell.dataset.rowActivate !== "false") return;
+    const row = cell.closest("tr");
+    if (row?.dataset.rowKey?.startsWith("folder:"))
+      row.querySelector<HTMLButtonElement>("button.row-activate")?.click();
   };
 
   #startDrag(event: PointerEvent, key: string, grip: boolean): void {
@@ -1147,7 +1155,7 @@ export class ProductList extends LitElement {
         },
         cell: ({ product, variant }) =>
           productAvailabilitySwitch(
-            variant ?? product,
+            variant ? { ...variant, name: `${product.name}, ${variant.name}` } : product,
             this.availabilityPending,
             (change: ProductAvailabilityChange) => this.#send("change-availability", change),
           ),
@@ -1599,6 +1607,7 @@ export class ProductList extends LitElement {
         .rowKey=${(row: ListRow) => row.key}
         .rowParent=${(row: ListRow) => row.parentKey}
         @pointerdown=${this.#pointerDown}
+        @click=${this.#clickAvailableCell}
         @wt-expand-change=${this.#expandChange}
         ><slot name="toolbar-start" slot="toolbar-start"></slot
         ><slot name="toolbar-search" slot="toolbar-search"></slot
