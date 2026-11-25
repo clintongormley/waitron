@@ -3,12 +3,6 @@ import { invoiceDeliveries, isA4Printer, printers, printJobs, type Transaction }
 import { renderInvoiceRaster } from "./invoice-raster.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 
-export const linkedPrintDelivery = () =>
-  and(
-    eq(invoiceDeliveries.printJobId, printJobs.id),
-    eq(invoiceDeliveries.saleId, printJobs.saleId),
-  );
-
 export async function readA4QueueInvoice(tx: Transaction, id: string) {
   const [invoice] = await tx
     .select({
@@ -20,7 +14,7 @@ export async function readA4QueueInvoice(tx: Transaction, id: string) {
       printerActive: printers.active,
     })
     .from(printJobs)
-    .innerJoin(invoiceDeliveries, linkedPrintDelivery())
+    .innerJoin(invoiceDeliveries, eq(invoiceDeliveries.printJobId, printJobs.id))
     .innerJoin(printers, and(isA4Printer(), eq(printers.id, printJobs.printerId)))
     .where(
       and(

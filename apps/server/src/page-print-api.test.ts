@@ -798,6 +798,7 @@ describe("the print agent's own client", () => {
 it("redraws the queued A4 preview with the linked sale and its recorded copy mark", async () => {
   const v = await venue();
   const office = await printer(v.agentOne);
+  await fullInvoice(v, "Tomato soup");
   const saleId = await fullInvoice(v, "Orange juice");
   const original = await queueA4(saleId, office);
   const job = (await claim(v))!;

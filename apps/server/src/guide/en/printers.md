@@ -100,7 +100,7 @@ reported, check whether the drawer opened before opening it again.
 
 If you moved cash by hand, [record it on the till](table-service.md#drawer-cash-entry).
 
-Use a receipt printer to reprint a job sent to a receipt printer. If the original already
+Choose **Reprint** to send a receipt-printer job to a receipt printer. If the original already
 printed, you get a marked copy. For an A4 copy of an invoice sent to a receipt printer, use **Orders**. You can also reprint a
 station ticket or refund receipt on a printer at least as wide. A printout waiting on a
 printer that is disabled, or on a USB or Bluetooth printer no print agent sees, can be moved the

@@ -88,12 +88,7 @@ import type { TradingContext } from "./trading-context.js";
 import { requireBodyUuid, requireEnum, requireString, requireUuidParam } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { previewPrintJob } from "./print-job-preview.js";
-import {
-  activeA4QueuePrinters,
-  linkedPrintDelivery,
-  previewA4Invoice,
-  readA4QueueInvoice,
-} from "./print-job-a4.js";
+import { activeA4QueuePrinters, previewA4Invoice, readA4QueueInvoice } from "./print-job-a4.js";
 import { formatTestPage } from "./test-page.js";
 import { formatSampleReceipt } from "./sample-receipt.js";
 import { layOutPrinterTestPage } from "./printer-test-page.js";
@@ -1821,7 +1816,7 @@ export function mountPrintApi(app: Hono, deps: PrintApiDeps, log: Logger): void 
               ),
             ),
           )
-          .leftJoin(invoiceDeliveries, linkedPrintDelivery())
+          .leftJoin(invoiceDeliveries, eq(invoiceDeliveries.printJobId, printJobs.id))
           .where(
             or(
               and(ne(printJobs.status, "done"), ne(printJobs.status, "failed")),
