@@ -21,7 +21,8 @@ import {
 } from "@waitron/ui/src/test-helpers.js";
 import { EACH_CHOICE, ProductEditor, productEditorField } from "./product-editor.js";
 import type { EditorVariant, ProductEditorDraft, UnitChoice } from "./product-editor-model.js";
-import type { CategorySummary, ExtraList, OptionList } from "../api/client.js";
+import type { ExtraList, OptionList } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 import type { InheritedValues } from "@waitron/shared";
 import { formatMoney } from "@waitron/shared";
 import { es } from "../i18n/strings.js";

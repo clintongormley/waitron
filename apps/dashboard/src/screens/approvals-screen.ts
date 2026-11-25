@@ -6,7 +6,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { absenceKindName } from "../i18n/domain.js";
-import type { DashboardApi, PendingAbsence, PendingSwap } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PendingAbsence, PendingSwap } from "../api/staff-api.js";
 import { personNameMap, resolvePersonName } from "../person-utils.js";
 
 @customElement("dashboard-approvals-screen")

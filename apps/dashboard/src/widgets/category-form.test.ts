@@ -8,7 +8,7 @@ import {
 } from "./category-form.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import type { CategorySummary } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 
 const food: CategorySummary = {
   id: "food",

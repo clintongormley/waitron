@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtDialog } from "@waitron/ui";
-import type { DashboardApi, RecoveryPackStatus } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { RecoveryPackStatus } from "../api/backup-api.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import type { RecoveryPackDialog } from "./recovery-pack-dialog.js";

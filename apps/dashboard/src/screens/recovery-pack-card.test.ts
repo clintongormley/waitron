@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { WtDialog } from "@waitron/ui";
 import { DashboardApi } from "../api/client.js";
-import type { MadeRecoveryPack, OwnProfile, RecoveryPackStatus } from "../api/client.js";
+import type { OwnProfile } from "../api/account-api.js";
+import type { MadeRecoveryPack, RecoveryPackStatus } from "../api/backup-api.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";

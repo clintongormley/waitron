@@ -36,6 +36,7 @@ import { alertMessage } from "../i18n/alerts.js";
 import "./stream-settings-panel.js";
 import "./recovery-pack-card.js";
 import "../widgets/backup-settings-evidence.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
   BackupApplyBody,
   BackupDestinationStatus,
@@ -43,8 +44,7 @@ import type {
   BackupSchedule,
   BackupStatusView,
   BackupWriteAnswer,
-  DashboardApi,
-} from "../api/client.js";
+} from "../api/backup-api.js";
 import {
   EMPTY_CUSTOM,
   destinationsBody,

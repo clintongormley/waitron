@@ -8,7 +8,8 @@ import {
   type DraftScope,
   type LeaveReason,
 } from "@waitron/ui";
-import type { DashboardApi, MenuSummary, Product } from "../api/client.js";
+import type { DashboardApi, Product } from "../api/client.js";
+import type { MenuSummary } from "../api/menu-api.js";
 import { codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { dishRefusal } from "./set-menu-dish-choices.js";

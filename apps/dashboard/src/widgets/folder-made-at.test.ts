@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RoutingModel } from "@waitron/venue-service/routing";
-import type { CategorySummary } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 import { folderMadeAt, isRouted, type FolderMaker } from "./folder-made-at.js";
 
 type Target = { kind: "station"; stationId: string } | { kind: "no_preparation" };

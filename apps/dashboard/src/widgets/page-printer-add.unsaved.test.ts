@@ -3,7 +3,7 @@ import { LitElement, html } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import { t } from "../i18n/t.js";
-import type { PagePrinterEntry } from "../api/client.js";
+import type { PagePrinterEntry } from "../api/printing-api.js";
 import {
   cleanupWidgets,
   closeReportsDelivered,

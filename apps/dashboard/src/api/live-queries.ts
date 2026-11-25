@@ -1,5 +1,6 @@
 import type { ResourceQuery } from "@waitron/dashboard-kit";
-import type { DashboardApi, MenuReadPart } from "./client.js";
+import type { DashboardApi } from "./client.js";
+import type { MenuReadPart } from "./menu-api.js";
 
 const MENU_PUBLICATION_READS = [
   "settings.menu",

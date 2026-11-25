@@ -37,11 +37,11 @@ import {
   type DashboardRequest,
   t as tRaw,
 } from "@waitron/dashboard-kit";
+import type { DashboardApi } from "../api/client.js";
 import type {
   AbandonedRefundOutcome,
   AvailableReader,
   BillRecoveryOutcome,
-  DashboardApi,
   PaymentProviderRow,
   ReaderHolderRow,
   ReaderRow,
@@ -50,7 +50,7 @@ import type {
   StuckBillRefundRow,
   HeldOutcome,
   HeldPaymentRow,
-} from "../api/client.js";
+} from "../api/payments-api.js";
 import { guideHref } from "../help-guide.js";
 import { dashboardPath } from "../navigation.js";
 import { CARD_PROVIDERS_FROM_READERS_PATH } from "./modules-screen.js";

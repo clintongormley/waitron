@@ -1,11 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { LitElement } from "lit";
 import type { WtDialog } from "@waitron/ui";
-import type {
-  DashboardApi,
-  BusinessDayClockModel,
-  BusinessDayStartPreview,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { BusinessDayClockModel, BusinessDayStartPreview } from "../api/venue-api.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { setLocale } from "../i18n/t.js";

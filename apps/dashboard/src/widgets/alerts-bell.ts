@@ -8,7 +8,7 @@ import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { codeMessage } from "../i18n/codes.js";
 import { alertMessage, hasAlertMessage } from "../i18n/alerts.js";
-import type { AlertView } from "../api/client.js";
+import type { AlertView } from "../api/servers-api.js";
 import {
   areaLabel,
   formatAlertTime,

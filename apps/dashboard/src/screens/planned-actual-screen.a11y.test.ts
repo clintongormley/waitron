@@ -2,7 +2,8 @@ import { afterEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./planned-actual-screen.js";
 import type { PlannedActualScreen } from "./planned-actual-screen.js";
-import type { DashboardApi, PersonSummary, PlannedVsActualRow } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PersonSummary, PlannedVsActualRow } from "../api/staff-api.js";
 
 const staff: PersonSummary[] = [
   {

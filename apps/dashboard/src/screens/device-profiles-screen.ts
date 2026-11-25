@@ -65,26 +65,25 @@ import {
   type FormFactor,
 } from "../device-profile-types.js";
 import { toggleMembership } from "../array-utils.js";
+import type { DashboardApi } from "../api/client.js";
+import type { JobRole } from "../api/staff-api.js";
+import type { ReaderRow } from "../api/payments-api.js";
+import type { PagePrinterRow, Printer } from "../api/printing-api.js";
 import type {
   DeviceProfile,
-  DashboardApi,
   KitchenScreenKind,
   KitchenScreenScope,
-  PagePrinterRow,
-  JobRole,
-  Printer,
   ProfileEquipmentDefaults,
   ProfileKitchenScreen,
   ProfileKitchenScreens,
   ProfilePrinterLists,
   ProfileReaderList,
   ProfileSaveExtras,
-  ReaderRow,
   ProfileScopeChoices,
   ProfileServiceScope,
-  Station,
-} from "../api/client.js";
-import { KITCHEN_SCREEN_KINDS } from "../api/client.js";
+} from "../api/devices-api.js";
+import type { Station } from "../api/kitchen-api.js";
+import { KITCHEN_SCREEN_KINDS } from "../api/devices-api.js";
 
 /** Every printer list and default a profile holds; the save sends the drawer, invoice list and
  * defaults apart. */

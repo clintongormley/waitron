@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import { DashboardApi, type BoxUpgradeSettings } from "../api/client.js";
+import { DashboardApi } from "../api/client.js";
+import { type BoxUpgradeSettings } from "../api/servers-api.js";
 import { setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,

@@ -1,12 +1,12 @@
 import { LitElement, html } from "lit";
 import { afterEach, expect, it } from "vitest";
 import { LeaveController, type WtButton, type WtInput } from "@waitron/ui";
+import type { DashboardApi } from "../api/client.js";
 import type {
-  DashboardApi,
   BusinessDayClockModel,
   BusinessDayStartPreview,
   VenueDetailsModel,
-} from "../api/client.js";
+} from "../api/venue-api.js";
 import {
   cleanupWidgets,
   mountWidget,

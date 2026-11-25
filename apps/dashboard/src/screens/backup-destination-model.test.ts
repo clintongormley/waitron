@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { BackupDestinationView, BackupStatusView } from "../api/client.js";
+import type { BackupDestinationView, BackupStatusView } from "../api/backup-api.js";
 import {
   EMPTY_CUSTOM,
   destinationsBody,

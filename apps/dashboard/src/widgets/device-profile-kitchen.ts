@@ -1,6 +1,6 @@
 import { type TemplateResult, html, nothing } from "lit";
-import type { KitchenScreenKind, ProfileKitchenScreen } from "../api/client.js";
-import { KITCHEN_SCREEN_KINDS } from "../api/client.js";
+import type { KitchenScreenKind, ProfileKitchenScreen } from "../api/devices-api.js";
+import { KITCHEN_SCREEN_KINDS } from "../api/devices-api.js";
 import { t } from "../i18n/t.js";
 import { renderSwitchGroup } from "./device-profile-switch-group.js";
 

@@ -8,14 +8,8 @@ import {
   mountWidget,
 } from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
-import type {
-  MenuSummary,
-  DashboardApi,
-  MenuPreview,
-  MenuStatus,
-  MenuStructureNode,
-  Product,
-} from "../api/client.js";
+import type { DashboardApi, MenuPreview, MenuStatus, Product } from "../api/client.js";
+import type { MenuSummary, MenuStructureNode } from "../api/menu-api.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);

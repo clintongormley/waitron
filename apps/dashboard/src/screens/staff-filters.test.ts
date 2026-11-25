@@ -1,7 +1,8 @@
 import { withStaffPages } from "../testing/staff-page-fixture.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { accessRoleChoices } from "../testing/access-role-fixture.js";
-import type { DashboardApi, PersonSummary } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PersonSummary } from "../api/staff-api.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { StaffList } from "../widgets/staff-list.js";
 import { StaffScreen } from "./staff-screen.js";

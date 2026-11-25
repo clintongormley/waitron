@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { setContentLanguages } from "@waitron/ui";
-import type { Unit } from "../api/client.js";
+import type { Unit } from "../api/catalog-api.js";
 import { unitRefusalErrors, type UnitForm } from "./unit-form.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";

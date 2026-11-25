@@ -1,4 +1,5 @@
-import type { MenuSettingsAnswer, ProductSaveBody } from "../api/client.js";
+import type { ProductSaveBody } from "../api/catalog-api.js";
+import type { MenuSettingsAnswer } from "../api/menu-api.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
@@ -17,7 +18,6 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
-  CategorySummary,
   DashboardApi,
   ExtraList,
   ExtraListInput,
@@ -27,10 +27,9 @@ import type {
   Product,
   ProductEditorInput,
   ProductEditorValue,
-  Course,
-  Unit,
-  UnitInput,
 } from "../api/client.js";
+import type { Course } from "../api/kitchen-api.js";
+import type { CategorySummary, Unit, UnitInput } from "../api/catalog-api.js";
 import { withoutVatClass, type ProductEditorDraft } from "../widgets/product-editor-model.js";
 import { codeMessage, codeOf, allergenRefusalText } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";

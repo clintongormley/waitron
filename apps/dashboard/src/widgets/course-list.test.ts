@@ -7,7 +7,8 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
-import type { Course, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { Course } from "../api/kitchen-api.js";
 import { CourseList } from "./course-list.js";
 
 afterEach(cleanupWidgets);

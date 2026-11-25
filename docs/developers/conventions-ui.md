@@ -849,6 +849,17 @@ Restoring row replacement failed the identity checks; omitting the in-place refr
 retaining rows across a newer revision failed the replacement check. These cases cover this draft
 sync path, not every screen's snapshot updates.
 
+## Where to put a Dashboard API call
+
+Put a call and its local types in the matching area under `apps/dashboard/src/api/`. Import
+local types from their area files. `main.ts` creates the `DashboardApi` that screens receive as
+`api`. The area classes extend one another and use the same request function. Keep calls that use the
+background client, unprompted requests, the base URL or the locale cache beside that state in `client.ts`.
+
+Most area response types mirror the server's JSON in a separate declaration. TypeScript cannot
+compare those declarations with the server's answers. Product and modifier-list types come from
+the shared declarations. See [the Dashboard browser import guard](../../scripts/dashboard-browser-purity.test.ts).
+
 ## A background API client does not make POST requests passive
 
 The request primitive marks only GETs as passive. Automatic renewal of a pairing hold uses an

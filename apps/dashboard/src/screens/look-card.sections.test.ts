@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { WAITRON_CHOICES, fixAll, type ThemeChoices } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
-import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ThemeList, ThemeView } from "../api/email-theme-api.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { ADVANCED_SECTIONS, type AdvancedSectionId } from "../widgets/advanced-sections.js";
 import {

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import type { DashboardApi, EmailSettingsView } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { EmailSettingsView } from "../api/email-theme-api.js";
 import "./email-settings-panel.js";
 const stored: EmailSettingsView = {
   mode: "smtp",

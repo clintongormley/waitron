@@ -4,7 +4,8 @@ import type { WtButton, WtDialog, WtFormActions, WtInput } from "@waitron/ui";
 import { cleanupWidgets, dialogClosed, mountWidget } from "../widgets/test-helpers.js";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { DashboardApi, VenueDetailsModel } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { VenueDetailsModel } from "../api/venue-api.js";
 import "./venue-details-panel.js";
 
 type Panel = HTMLElementTagNameMap["dashboard-venue-details-panel"];

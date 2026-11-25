@@ -4,13 +4,13 @@ import { baseStyles, type WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
   BackupEvidenceDestination,
   BackupLoadFailure,
   BackupLoadFailureDetail,
   BackupSettingsEvidence,
-  DashboardApi,
-} from "../api/client.js";
+} from "../api/backup-api.js";
 import { codeOf } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRequest, LiveData, type FetchLike } from "@waitron/dashboard-kit";
 import { leaveCoordinatorFor } from "@waitron/ui";
-import { DashboardApi, type ServerListing } from "./api/client.js";
+import { DashboardApi } from "./api/client.js";
+import { type ServerListing } from "./api/servers-api.js";
 import type { DashboardApp } from "./dashboard-app.js";
 import "./dashboard-app.js";
 import { codeMessage } from "./i18n/codes.js";

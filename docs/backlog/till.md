@@ -971,7 +971,7 @@ installed till app):
 - **Editing a device still has to send its name, its profile and, unless the profile is a kitchen
   display, its receipt and payment-slip printer choices (lane B, 2026-11-18; kept by the watcher 2026-11-24, not asked).** The edit request (`PATCH /management-api/devices/:id`) does not treat every
   field as optional, as #1235's review suggested: its one caller, the Devices screen's Edit
-  (`updateDevice` in `apps/dashboard/src/api/client.ts`), always sends them, so that would add a
+  (`updateDevice` in `apps/dashboard/src/api/devices-api.ts`), always sends them, so that would add a
   path nothing uses.
 
 - **A copy of a deleted device's cookie can still ask to come back first, and so make the real

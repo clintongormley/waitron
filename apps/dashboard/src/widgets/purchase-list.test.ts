@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { regimeName } from "../i18n/domain.js";
-import type { PurchaseInvoice } from "../api/client.js";
+import type { PurchaseInvoice } from "../api/reporting-api.js";
 import { PurchaseList } from "./purchase-list.js";
 
 useLocale("es-ES");

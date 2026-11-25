@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { DashboardApi, RecoveryPackStatus } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { RecoveryPackStatus } from "../api/backup-api.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { RecoveryPackCard } from "./recovery-pack-card.js";

@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import type { DashboardApi, PurchaseInvoice } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PurchaseInvoice } from "../api/reporting-api.js";
 import { PurchaseForm } from "./purchase-form.js";
 import { PurchasesScreen } from "../screens/purchases-screen.js";
 

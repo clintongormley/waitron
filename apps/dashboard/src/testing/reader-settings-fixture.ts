@@ -1,5 +1,5 @@
 import { expect } from "vitest";
-import type { ReaderRow } from "../api/client.js";
+import type { ReaderRow } from "../api/payments-api.js";
 import { deep, mountReceiptApp } from "./department-receipt-app-fixture.js";
 export const reader: ReaderRow = {
   id: "r1",

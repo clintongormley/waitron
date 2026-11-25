@@ -47,7 +47,9 @@ import {
   folderPresentation,
 } from "@waitron/menu/src/include-folder-presentation.js";
 import type { MemberRef, Presentation } from "@waitron/shared";
-import type { CategorySummary, MenuStructureNode, MenuSummary, Product } from "../api/client.js";
+import type { Product } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
+import type { MenuStructureNode, MenuSummary } from "../api/menu-api.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { setMenuAddress, leftToBrowser } from "../navigation.js";
 

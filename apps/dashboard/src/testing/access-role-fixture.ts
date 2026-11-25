@@ -1,4 +1,4 @@
-import type { AccessRole } from "../api/client.js";
+import type { AccessRole } from "../api/staff-api.js";
 
 export const accessRoleChoices: AccessRole[] = [
   { id: "staff", builtInKey: "staff", name: null, permissions: ["payment.take"], holderCount: 0 },

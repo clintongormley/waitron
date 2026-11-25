@@ -1,6 +1,6 @@
 import { CEREAL_KINDS, NUT_KINDS, type Kind } from "@waitron/shared";
 import { ALLERGEN_CODES, allergenName, allergenKindName } from "../i18n/domain.js";
-import type { AllergenDeclaration } from "../api/client.js";
+import type { AllergenDeclaration } from "../api/orders-api.js";
 
 export const ALLERGEN_CHOICES = ALLERGEN_CODES.flatMap((code) =>
   code === "gluten"

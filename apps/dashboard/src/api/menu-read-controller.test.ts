@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import type { ReactiveController, ReactiveControllerHost } from "lit";
-import { DashboardApi, type HomeOrder, type MenuReadResult } from "./client.js";
+import { DashboardApi, type HomeOrder } from "./client.js";
+import { type MenuReadResult } from "./menu-api.js";
 import { MenuReadController } from "./menu-read-controller.js";
 
 const controllers: MenuReadController[] = [];

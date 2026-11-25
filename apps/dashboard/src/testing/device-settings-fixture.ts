@@ -1,4 +1,5 @@
-import type { DeviceProfile, DeviceRow, KitchenScreenKind, Station } from "../api/client.js";
+import type { DeviceProfile, DeviceRow, KitchenScreenKind } from "../api/devices-api.js";
+import type { Station } from "../api/kitchen-api.js";
 import { deep, mountReceiptApp } from "./department-receipt-app-fixture.js";
 export const deviceProfile: DeviceProfile = {
   id: "dp1",

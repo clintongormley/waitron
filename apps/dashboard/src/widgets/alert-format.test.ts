@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { AlertView, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { AlertView } from "../api/servers-api.js";
 import { es } from "../i18n/strings.js";
 import { setLocale, t } from "../i18n/t.js";
 import {

@@ -5,7 +5,8 @@ import { baseStyles, pageTitleStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import { t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
-import type { DashboardApi, PlannedVsActualRow } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PlannedVsActualRow } from "../api/staff-api.js";
 import { MS_PER_DAY, mondayOf, today } from "../date-utils.js";
 import { personNameMap, resolvePersonName } from "../person-utils.js";
 

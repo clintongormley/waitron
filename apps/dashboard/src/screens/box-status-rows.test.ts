@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { formatBytes } from "@waitron/dashboard-kit";
-import type { AlertView, BoxHealth } from "../api/client.js";
+import type { AlertView, BoxHealth } from "../api/servers-api.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { es } from "../i18n/strings.js";

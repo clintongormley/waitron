@@ -8,13 +8,8 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import type {
-  AlertView,
-  BoxHealth,
-  BoxNetwork,
-  DashboardApi,
-  FiscalRetryView,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { AlertView, BoxHealth, BoxNetwork, FiscalRetryView } from "../api/servers-api.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";

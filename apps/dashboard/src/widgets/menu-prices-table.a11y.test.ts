@@ -1,7 +1,8 @@
 import { page } from "vitest/browser";
 import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
+import type { SectionDetails, MenuPriceRow, Product } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 import { t, currentLocale, setLocale } from "../i18n/t.js";
 import type { MenuPricesTable } from "./menu-prices-table.js";
 import "./menu-prices-table.js";

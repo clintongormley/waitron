@@ -6,7 +6,8 @@ import "./my-schedule-screen.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { MyScheduleScreen } from "./my-schedule-screen.js";
-import type { DashboardApi, MyAbsence, MyShift, MySwap, RosterEntry } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { MyAbsence, MyShift, MySwap, RosterEntry } from "../api/staff-api.js";
 
 const roster: RosterEntry[] = [
   { personId: "me", displayName: "Me" },

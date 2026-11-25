@@ -62,7 +62,8 @@ import {
   withLanguageText,
   type FieldContext,
 } from "./form-fields.js";
-import type { CategorySummary, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 import type { ProductModifierRef } from "@waitron/shared";
 import type { ExtraOfferUsage } from "@waitron/menu/src/extra-usage.js";
 import type {

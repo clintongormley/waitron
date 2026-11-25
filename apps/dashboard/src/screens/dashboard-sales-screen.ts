@@ -22,6 +22,7 @@ import {
   topSellersStyles,
   type TopSellersLabels,
 } from "../widgets/top-sellers-table.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
   CashUpDto,
   CategoryReportMode,
@@ -29,11 +30,10 @@ import type {
   CategoryTotalDto,
   ClosureSummaryDto,
   DailyCloseDto,
-  DashboardApi,
   ReportPrinter,
   SalesPeriodDto,
   VatSummaryDto,
-} from "../api/client.js";
+} from "../api/reporting-api.js";
 import { today } from "../date-utils.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
 

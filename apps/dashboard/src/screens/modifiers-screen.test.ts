@@ -17,7 +17,6 @@ import {
 import { WtCombobox } from "@waitron/ui";
 import { ModifiersScreen } from "./modifiers-screen.js";
 import type {
-  MenuSummary,
   DashboardApi,
   ExtraList,
   ExtraListDependants,
@@ -26,6 +25,7 @@ import type {
   OptionListRow,
   Product,
 } from "../api/client.js";
+import type { MenuSummary } from "../api/menu-api.js";
 import type { ExtraListForm } from "../widgets/extra-list-form.js";
 import type { OptionListForm } from "../widgets/option-list-form.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";

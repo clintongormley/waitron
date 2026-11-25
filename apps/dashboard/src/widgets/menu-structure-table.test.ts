@@ -6,7 +6,9 @@ import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpe
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { MenuStructureTable } from "./menu-structure-table.js";
-import type { CategorySummary, MenuHome, MenuStructureNode, Product } from "../api/client.js";
+import type { MenuHome, Product } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
+import type { MenuStructureNode } from "../api/menu-api.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 

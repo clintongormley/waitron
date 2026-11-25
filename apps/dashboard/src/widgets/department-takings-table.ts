@@ -1,6 +1,6 @@
 import { css, html } from "lit";
 import { formatMoney } from "@waitron/shared";
-import type { DepartmentTakingsDto } from "../api/client.js";
+import type { DepartmentTakingsDto } from "../api/reporting-api.js";
 import { currentLocale, t } from "../i18n/t.js";
 
 export function renderDepartmentTakings(rows: DepartmentTakingsDto[]) {

@@ -13,7 +13,8 @@ import {
   type LeaveReason,
 } from "@waitron/ui";
 import { foldName } from "@waitron/menu/src/name-uniqueness.js";
-import type { MenuSummary, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { MenuSummary } from "../api/menu-api.js";
 import { fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { LocaleChangeController } from "../state/locale-controller.js";

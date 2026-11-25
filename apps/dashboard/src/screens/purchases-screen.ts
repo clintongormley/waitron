@@ -12,7 +12,8 @@ import {
   type PurchaseFormErrors,
   type UpdatePurchaseDetail,
 } from "../widgets/purchase-form.js";
-import type { DashboardApi, PurchaseInvoice, PurchaseInvoiceInput } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PurchaseInvoice, PurchaseInvoiceInput } from "../api/reporting-api.js";
 
 @customElement("dashboard-purchases-screen")
 export class PurchasesScreen extends LitElement {

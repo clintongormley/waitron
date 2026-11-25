@@ -1,4 +1,5 @@
-import type { DashboardApi, PasskeySignals } from "./api/client.js";
+import type { DashboardApi } from "./api/client.js";
+import type { PasskeySignals } from "./api/account-api.js";
 
 /**
  * The WebAuthn signal methods (WebAuthn Level 3, §5.1.10), absent from some browsers. Each resolves

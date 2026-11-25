@@ -2,7 +2,8 @@ import { selectProfileTab, profileAction, profileListRoot } from "../testing/pro
 import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import type { DashboardApi, DeviceProfile } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { DeviceProfile } from "../api/devices-api.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
 import "./device-profiles-screen.js";

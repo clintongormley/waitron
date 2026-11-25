@@ -2,7 +2,8 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import type { DashboardApi, RecoveryPackReason, RecoveryPackStatus } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { RecoveryPackReason, RecoveryPackStatus } from "../api/backup-api.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";

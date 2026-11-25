@@ -1,5 +1,5 @@
 import { formatBytes } from "@waitron/dashboard-kit";
-import type { AlertView, BoxHealth, BoxNetwork, SpareFollowView } from "../api/client.js";
+import type { AlertView, BoxHealth, BoxNetwork, SpareFollowView } from "../api/servers-api.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { currentLocale, fill, t } from "../i18n/t.js";

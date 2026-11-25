@@ -68,17 +68,15 @@ import { DashboardQueries } from "../api/query-controller.js";
 import { PairingHold, type PairingHoldStatus } from "../api/pairing-hold.js";
 import { bottomMessage, refusal } from "../i18n/form-message.js";
 import { SETTING_WIDTHS, textGrid } from "@waitron/printing/src/layout.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
   BluetoothCommandStatus,
   BluetoothFailureReason,
   BluetoothUnavailableReason,
-  DashboardApi,
   DiscoveredPrinter,
-  JoinRequestRow,
   OfficePrinterReport,
   PagePrinterEntry,
   PagePrinterRow,
-  PairingModeState,
   PrintAgentRow,
   PrintJobRow,
   PrintJobStatus,
@@ -91,7 +89,8 @@ import type {
   PrinterAddressProbe,
   PrinterProfileOffer,
   PrinterStationName,
-} from "../api/client.js";
+} from "../api/printing-api.js";
+import type { JoinRequestRow, PairingModeState } from "../api/devices-api.js";
 
 function isProbeIpAddress(host: string): boolean {
   try {

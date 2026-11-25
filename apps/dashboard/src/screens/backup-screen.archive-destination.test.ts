@@ -3,12 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
   BackupDestinationStatus,
   BackupStatusView,
   BackupWriteAnswer,
-  DashboardApi,
-} from "../api/client.js";
+} from "../api/backup-api.js";
 import "./backup-screen.js";
 import type { BackupScreen } from "./backup-screen.js";
 import type { RecoveryPackCard } from "./recovery-pack-card.js";

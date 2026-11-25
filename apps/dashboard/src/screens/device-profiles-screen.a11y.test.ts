@@ -7,14 +7,11 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
-import type {
-  DeviceProfile,
-  DashboardApi,
-  PersonSummary,
-  Printer,
-  ProfileScopeChoices,
-  Station,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PersonSummary } from "../api/staff-api.js";
+import type { Printer } from "../api/printing-api.js";
+import type { DeviceProfile, ProfileScopeChoices } from "../api/devices-api.js";
+import type { Station } from "../api/kitchen-api.js";
 
 /** Finds `selector` in the screen, or in the editor's Save row, which draws the form's message. */
 function inScreenOrRow(el: DeviceProfilesScreen, selector: string): Element | null {

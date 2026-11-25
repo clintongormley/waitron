@@ -1,7 +1,8 @@
 import { combinedFixture } from "./test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { CategorySummary, SectionDetails, MenuPriceRow, Product } from "../api/client.js";
+import type { SectionDetails, MenuPriceRow, Product } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";

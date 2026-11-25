@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { LiveData } from "@waitron/dashboard-kit";
 import { applyTokens, LeaveController, type WtFloorPlanCanvas } from "@waitron/ui";
-import type { DashboardApi, FloorPlan } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { FloorPlan } from "../api/venue-api.js";
 import "./floor-plan-editor.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 

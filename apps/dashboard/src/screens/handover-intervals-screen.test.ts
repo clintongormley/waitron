@@ -5,7 +5,7 @@ import type {
   ReturnedInvoicesQuery,
   ReturnedInvoices,
   ReturnedInvoiceRecord,
-} from "../api/client.js";
+} from "../api/reporting-api.js";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";

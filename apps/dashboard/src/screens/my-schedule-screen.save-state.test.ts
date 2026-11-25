@@ -4,7 +4,8 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { DashboardApi, MyShift, RosterEntry } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { MyShift, RosterEntry } from "../api/staff-api.js";
 import "./my-schedule-screen.js";
 import type { MyScheduleScreen } from "./my-schedule-screen.js";
 

@@ -3,7 +3,8 @@ import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import type { DashboardApi, OwnProfile } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { OwnProfile } from "../api/account-api.js";
 import type { ProfileScreen } from "./profile-screen.js";
 import "./profile-screen.js";
 

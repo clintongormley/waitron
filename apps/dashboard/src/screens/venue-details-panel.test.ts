@@ -10,7 +10,8 @@ import {
 } from "../widgets/test-helpers.js";
 import { venueDetailsFixture } from "../testing/venue-details-fixture.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { DashboardApi, VenueDetailsModel, VenueDetailWrite } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { VenueDetailsModel, VenueDetailWrite } from "../api/venue-api.js";
 import "./venue-details-panel.js";
 
 type Panel = LitElement & { api: DashboardApi; readOnly: boolean };

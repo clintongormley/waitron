@@ -1,5 +1,5 @@
 import { normalisePrefix } from "@waitron/shared";
-import type { ArchiveChoice, BackupDestinationView, BackupStatusView } from "../api/client.js";
+import type { ArchiveChoice, BackupDestinationView, BackupStatusView } from "../api/backup-api.js";
 
 export type BucketChoice = "none" | "custom-s3";
 

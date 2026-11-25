@@ -5,16 +5,12 @@ import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import type {
-  DashboardApi,
-  DeviceProfile,
-  PersonSummary,
-  Printer,
-  ProfileReaderList,
-  ProfileScopeChoices,
-  ReaderRow,
-  Station,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PersonSummary } from "../api/staff-api.js";
+import type { ReaderRow } from "../api/payments-api.js";
+import type { Printer } from "../api/printing-api.js";
+import type { DeviceProfile, ProfileReaderList, ProfileScopeChoices } from "../api/devices-api.js";
+import type { Station } from "../api/kitchen-api.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
 

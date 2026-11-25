@@ -7,15 +7,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./products-screen.js";
 import type { ProductsScreen } from "./products-screen.js";
-import type {
-  MenuSummary,
-  CategorySummary,
-  DashboardApi,
-  SectionDetails,
-  MenuStructure,
-  Product,
-  ProductEditorInput,
-} from "../api/client.js";
+import type { DashboardApi, SectionDetails, Product, ProductEditorInput } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
+import type { MenuSummary, MenuStructure } from "../api/menu-api.js";
 
 registerIcons(DASHBOARD_ICONS);
 

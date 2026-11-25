@@ -4,7 +4,8 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, timesAcrossLines } from "../widgets/test-helpers.js";
 import { chooseOptions } from "@waitron/ui/src/test-helpers.js";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { AlertView, AlertsResponse, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { AlertView, AlertsResponse } from "../api/servers-api.js";
 import "./alerts-screen.js";
 import type { AlertsScreen } from "./alerts-screen.js";
 

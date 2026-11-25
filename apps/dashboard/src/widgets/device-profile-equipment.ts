@@ -1,7 +1,7 @@
 import { type TemplateResult, html, nothing } from "lit";
 import { repeat } from "lit/directives/repeat.js";
 import type { WtButton } from "@waitron/ui";
-import type { Printer } from "../api/client.js";
+import type { Printer } from "../api/printing-api.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { renderSwitchGroup } from "./device-profile-switch-group.js";

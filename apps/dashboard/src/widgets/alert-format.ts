@@ -1,7 +1,8 @@
 import { css, html, type TemplateResult } from "lit";
 import { t as tKit } from "@waitron/dashboard-kit";
 import { currentLocale, fill, t } from "../i18n/t.js";
-import type { AlertView, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { AlertView } from "../api/servers-api.js";
 import type { StringKey } from "../i18n/strings.js";
 
 const INCIDENT_PREFIX = "incident:";

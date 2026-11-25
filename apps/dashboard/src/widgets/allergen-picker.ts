@@ -14,7 +14,7 @@ import {
   allergensFromChoices,
   allergenChoiceName,
 } from "./allergen-choices.js";
-import type { AllergenDeclaration } from "../api/client.js";
+import type { AllergenDeclaration } from "../api/orders-api.js";
 
 /** Review is explicit: null is unreviewed, while {} is reviewed with none declared. */
 @customElement("dashboard-allergen-picker")

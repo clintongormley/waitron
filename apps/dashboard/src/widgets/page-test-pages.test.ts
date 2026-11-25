@@ -5,7 +5,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
-import type { PagePrinterRow, PageTestPage } from "../api/client.js";
+import type { PagePrinterRow, PageTestPage } from "../api/printing-api.js";
 import { PageTestPages, type PageTestPagesApi } from "./page-test-pages.js";
 
 afterEach(cleanupWidgets);

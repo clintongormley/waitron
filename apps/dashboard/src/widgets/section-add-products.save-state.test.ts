@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
-import type { CategorySummary } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 import { t } from "../i18n/t.js";
 import { SectionAddProducts } from "./section-add-products.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";

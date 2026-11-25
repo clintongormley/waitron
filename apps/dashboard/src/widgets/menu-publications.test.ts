@@ -10,12 +10,8 @@ import {
 } from "./test-helpers.js";
 import "./menu-publications.js";
 import { overtakeSentence, type MenuPublicationsPanel } from "./menu-publications.js";
-import type {
-  ActivationTime,
-  DashboardApi,
-  MenuPreview,
-  MenuPublicationsAnswer,
-} from "../api/client.js";
+import type { DashboardApi, MenuPreview, MenuPublicationsAnswer } from "../api/client.js";
+import type { ActivationTime } from "../api/menu-api.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 

@@ -1,7 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtCombobox } from "@waitron/ui";
-import type { DashboardApi, VenueDefaults } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { VenueDefaults } from "../api/venue-api.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { VenueDefaultsPanel } from "./venue-defaults-panel.js";

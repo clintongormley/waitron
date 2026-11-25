@@ -3,13 +3,13 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
   CategorySalesDto,
   CategoryTotalDto,
   DailyCloseDto,
-  DashboardApi,
   SalesPeriodDto,
-} from "../api/client.js";
+} from "../api/reporting-api.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { today } from "../date-utils.js";

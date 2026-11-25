@@ -3,7 +3,7 @@ import { formatMoney } from "@waitron/shared";
 import { visuallyHiddenStyles } from "@waitron/ui";
 import { quantity } from "../quantity.js";
 import { currentLocale } from "../i18n/t.js";
-import type { TopSellerRow } from "../api/client.js";
+import type { TopSellerRow } from "../api/reporting-api.js";
 
 /**
  * Each screen passes its OWN resolved i18n values — the overview through its `overview.*` keys, the

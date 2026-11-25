@@ -5,12 +5,8 @@ import type { CardProviderPanel } from "@waitron/dashboard-kit";
 import { createRequest, LiveData, registerCatalogue, type FetchLike } from "@waitron/dashboard-kit";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type {
-  DashboardApi,
-  PaymentProviderRow,
-  ReaderRow,
-  ReaderStatusView,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PaymentProviderRow, ReaderRow, ReaderStatusView } from "../api/payments-api.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import {
   chooseOptions,

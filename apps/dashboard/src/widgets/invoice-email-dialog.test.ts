@@ -4,7 +4,8 @@ import type { WtButton, WtDialog, WtFormActions, WtInput } from "@waitron/ui";
 import { cleanupWidgets, dialogClosed, mountWidget } from "./test-helpers.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { DashboardApi, OrderDeliveryAttempt } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { OrderDeliveryAttempt } from "../api/orders-api.js";
 import "./invoice-email-dialog.js";
 import type { InvoiceEmailDialog } from "./invoice-email-dialog.js";
 

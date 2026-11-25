@@ -1,11 +1,11 @@
 import { css, html, nothing } from "lit";
+import type { Product } from "../api/client.js";
 import type {
   CategorySummary,
   FolderContents,
   FolderSummary,
-  Product,
   ProductSelection,
-} from "../api/client.js";
+} from "../api/catalog-api.js";
 import { conjunctionList } from "../i18n/list.js";
 import { fill, t } from "../i18n/t.js";
 import { categoryAncestors, PATH_SEPARATOR, categoryWithDescendants } from "./category-form.js";

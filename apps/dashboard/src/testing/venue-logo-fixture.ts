@@ -1,6 +1,7 @@
 import { vi, type Mock } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
-import type { DashboardApi, SalesOverview } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { SalesOverview } from "../api/reporting-api.js";
 
 export { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 

@@ -1,6 +1,9 @@
 import { BUILT_IN_ROLE_NAMES, PERSON_STATUS_NAMES } from "@waitron/shared";
 import { currentLocale, resolveNameTable, type NameTable } from "@waitron/dashboard-kit";
-import type { AccessRole, AllergenDeclaration, PersonRole, Printer } from "../api/client.js";
+import type { AccessRole } from "../api/staff-api.js";
+import type { PersonRole } from "../api/account-api.js";
+import type { Printer } from "../api/printing-api.js";
+import type { AllergenDeclaration } from "../api/orders-api.js";
 import { fill, t } from "./t.js";
 
 const UNIT_NAMES: NameTable = {

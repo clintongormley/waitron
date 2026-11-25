@@ -4,7 +4,7 @@ import { LeaveController, type WtInput, type WtTextarea } from "@waitron/ui";
 import { expect, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { DepartmentReceiptWrite } from "@waitron/shared";
-import type { ReceiptPreview } from "../api/client.js";
+import type { ReceiptPreview } from "../api/venue-api.js";
 import { mountWidget } from "../widgets/test-helpers.js";
 import { t } from "../i18n/t.js";
 import type {

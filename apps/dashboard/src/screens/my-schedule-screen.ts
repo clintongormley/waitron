@@ -25,14 +25,8 @@ import {
   swapDirectionName,
   swapStatusName,
 } from "../i18n/domain.js";
-import type {
-  AbsenceKind,
-  DashboardApi,
-  MyAbsence,
-  MyShift,
-  MySwap,
-  RosterEntry,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { AbsenceKind, MyAbsence, MyShift, MySwap, RosterEntry } from "../api/staff-api.js";
 
 import type { DashboardRequest, LiveData } from "@waitron/dashboard-kit";
 import { dashboardPath } from "../navigation.js";

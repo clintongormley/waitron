@@ -2,7 +2,8 @@ import { afterEach, describe, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./dashboard-overview-screen.js";
 import type { OverviewScreen } from "./dashboard-overview-screen.js";
-import type { DashboardApi, SalesOverview } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { SalesOverview } from "../api/reporting-api.js";
 
 const overview: SalesOverview = {
   businessDay: "2026-08-29",

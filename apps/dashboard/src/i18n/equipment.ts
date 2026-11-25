@@ -1,4 +1,4 @@
-import type { EquipmentHolder } from "../api/client.js";
+import type { EquipmentHolder } from "../api/devices-api.js";
 import { fill, t } from "./t.js";
 
 /** The device holding an item and, when someone is signed in on it, who. */

@@ -3,7 +3,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { LeaveController, registerIcons } from "@waitron/ui";
 import { chooseOptions } from "@waitron/ui/src/test-helpers.js";
-import type { DashboardApi, MenuHome, MenuReadPart } from "../api/client.js";
+import type { DashboardApi, MenuHome } from "../api/client.js";
+import type { MenuReadPart } from "../api/menu-api.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { t } from "../i18n/t.js";
 import {

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebAuthnAbortService } from "@simplewebauthn/browser";
-import type { DashboardApi, OwnProfile } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { OwnProfile } from "../api/account-api.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";

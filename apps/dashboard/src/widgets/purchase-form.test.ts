@@ -7,7 +7,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { regimeName, vatKindName } from "../i18n/domain.js";
 import { PurchaseForm, purchaseRefusalErrors } from "./purchase-form.js";
-import type { PurchaseInvoice } from "../api/client.js";
+import type { PurchaseInvoice } from "../api/reporting-api.js";
 
 useLocale("es-ES");
 

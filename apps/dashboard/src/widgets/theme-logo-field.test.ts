@@ -2,7 +2,8 @@ import { mediaTestReference, mediaTestRendition } from "@waitron/ui/src/test-hel
 import type { ThemeLogo } from "@waitron/ui-core/theme";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { DashboardApi, ThemeLogoPrint } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ThemeLogoPrint } from "../api/email-theme-api.js";
 import { en, es } from "../i18n/strings.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";

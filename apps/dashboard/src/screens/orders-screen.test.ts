@@ -4,7 +4,8 @@ import { NavigationGuard, type WtDataTable } from "@waitron/ui";
 import { LiveData, tableNoMatches } from "@waitron/dashboard-kit";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import type { DashboardApi, OrderRowDto, OrdersPageDto, OrdersPageQuery } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { OrderRowDto, OrdersPageDto, OrdersPageQuery } from "../api/orders-api.js";
 import "./orders-screen.js";
 import type { OrdersScreen } from "./orders-screen.js";
 

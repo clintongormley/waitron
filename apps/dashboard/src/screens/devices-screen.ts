@@ -50,21 +50,19 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { a4Choices, a4PrinterName, printerLabel } from "../i18n/domain.js";
 import type { StringKey } from "../i18n/strings.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ReaderHolderRow, ReaderRow } from "../api/payments-api.js";
+import type { PagePrinterRow, Printer } from "../api/printing-api.js";
 import type {
-  DashboardApi,
   DeviceProfile,
   DeviceRow,
   EquipmentRole,
   FormFactor,
   JoinRequestRow,
   PairingModeState,
-  PagePrinterRow,
-  Printer,
   ProfileReaderList,
-  ReaderHolderRow,
-  ReaderRow,
-  Station,
-} from "../api/client.js";
+} from "../api/devices-api.js";
+import type { Station } from "../api/kitchen-api.js";
 type PairField = "name" | "profile";
 type EditField = PairField | "receipt" | "slip" | "drawer" | "invoice" | "reader" | "approved";
 type IdentityErrors = Record<PairField, string>;

@@ -71,26 +71,28 @@ import "../widgets/include-folder-form.js";
 import { ListWriteQueue } from "../widgets/section-writes.js";
 import { countOf } from "../widgets/count-text.js";
 import type {
-  MenuSummary,
-  CategorySummary,
   DashboardApi,
   HomeOrder,
   IncludeFolderInput,
   MenuHome,
-  MenuReadModels,
-  MenuReadPart,
-  MenuReadResult,
   SectionDetails,
   SectionInput,
   MemberRef,
   MenuPreview,
   MenuPriceRow,
   MenuStatus,
-  MenuStructure,
-  MenuStructureNode,
   Product,
   SectionMember,
 } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
+import type {
+  MenuSummary,
+  MenuReadModels,
+  MenuReadPart,
+  MenuReadResult,
+  MenuStructure,
+  MenuStructureNode,
+} from "../api/menu-api.js";
 import { MenuReadController } from "../api/menu-read-controller.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { HOME_ORDERS } from "@waitron/shared";

@@ -6,7 +6,7 @@ import type { DashboardApp } from "./dashboard-app.js";
 import "./dashboard-app.js";
 import { setLocale } from "./i18n/t.js";
 import { stubShellApi, type ShellLocale } from "./testing/venue-logo-fixture.js";
-import type { AlertView } from "./api/client.js";
+import type { AlertView } from "./api/servers-api.js";
 
 const station: AlertView = {
   key: "incident:s1",

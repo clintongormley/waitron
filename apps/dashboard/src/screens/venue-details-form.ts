@@ -1,6 +1,6 @@
 import { getCountryPack } from "@waitron/country-packs";
 import { classifySavedTimeZone, classifyTimeZone } from "@waitron/shared";
-import type { VenueDetailPatch, VenueDetailValues, VenueDetailField } from "../api/client.js";
+import type { VenueDetailPatch, VenueDetailValues, VenueDetailField } from "../api/venue-api.js";
 
 export const VENUE_DETAIL_FIELDS: readonly VenueDetailField[] = [
   "name",

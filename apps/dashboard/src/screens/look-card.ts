@@ -42,7 +42,8 @@ import {
   type ThemeLogo,
 } from "@waitron/ui-core/theme";
 import { WAITRON_DEFAULTS, deriveTheme } from "@waitron/ui-core/theme/waitron";
-import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ThemeList, ThemeView } from "../api/email-theme-api.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
 import { colorField, colorFieldStyles } from "../widgets/color-field.js";

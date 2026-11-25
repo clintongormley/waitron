@@ -4,7 +4,8 @@ import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import "./profile-screen.js";
 import type { ProfileScreen } from "./profile-screen.js";
-import type { DashboardApi, OwnProfile } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { OwnProfile } from "../api/account-api.js";
 import { codeMessage } from "../i18n/codes.js";
 
 function stubApi(): DashboardApi {

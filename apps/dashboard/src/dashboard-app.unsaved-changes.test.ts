@@ -2,7 +2,8 @@ import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-
 import { render } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { leaveCoordinatorFor, navigationGuardFor, type WtInput } from "@waitron/ui";
-import type { DashboardApi, MenuPriceRow, MenuPreview, OwnProfile, Product } from "./api/client.js";
+import type { DashboardApi, MenuPriceRow, MenuPreview, Product } from "./api/client.js";
+import type { OwnProfile } from "./api/account-api.js";
 import { DashboardApp } from "./dashboard-app.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import type { MenuPricesTable } from "./widgets/menu-prices-table.js";

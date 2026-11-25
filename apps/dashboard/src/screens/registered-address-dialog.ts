@@ -17,7 +17,7 @@ import {
   type RegisteredAddressError,
   type RegisteredAddressParts,
 } from "@waitron/country-packs";
-import type { VenueDetailValues } from "../api/client.js";
+import type { VenueDetailValues } from "../api/venue-api.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import {

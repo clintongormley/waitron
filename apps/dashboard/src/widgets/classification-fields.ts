@@ -1,6 +1,6 @@
 import { html } from "lit";
 import type { ComboboxOption } from "@waitron/ui";
-import type { CategorySummary } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 import { byLabel, categoryPath } from "./category-form.js";
 import { t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-combobox.js";

@@ -10,7 +10,8 @@ import { fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { alertMessage, hasAlertMessage } from "../i18n/alerts.js";
 import { DashboardQueries } from "../api/query-controller.js";
-import type { AlertView, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { AlertView } from "../api/servers-api.js";
 import {
   areaLabel,
   formatAlertTime,

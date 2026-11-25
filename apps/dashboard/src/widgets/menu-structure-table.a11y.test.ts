@@ -4,7 +4,9 @@ import { registerIcons } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { MenuStructureTable } from "./menu-structure-table.js";
-import type { CategorySummary, MenuStructureNode, Product } from "../api/client.js";
+import type { Product } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
+import type { MenuStructureNode } from "../api/menu-api.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 

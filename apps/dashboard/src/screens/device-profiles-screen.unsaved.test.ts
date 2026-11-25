@@ -2,7 +2,10 @@ import { profileAction, withProfileListRead } from "../testing/profile-table.js"
 import { afterEach, expect, it, onTestFinished } from "vitest";
 import { LitElement, html } from "lit";
 import { LeaveController, NavigationGuard, registerIcons } from "@waitron/ui";
-import type { DashboardApi, DeviceProfile, Printer, Station } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { Printer } from "../api/printing-api.js";
+import type { DeviceProfile } from "../api/devices-api.js";
+import type { Station } from "../api/kitchen-api.js";
 import { DASHBOARD_ICONS } from "../icons.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";

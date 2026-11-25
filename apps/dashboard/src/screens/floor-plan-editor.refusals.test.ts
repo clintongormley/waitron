@@ -6,7 +6,8 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./floor-plan-editor.js";
 import type { FloorPlanEditor } from "./floor-plan-editor.js";
 import type { FloorPlanTablesPanel } from "./floor-plan-tables-panel.js";
-import type { DashboardApi, FloorPlan } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { FloorPlan } from "../api/venue-api.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import {

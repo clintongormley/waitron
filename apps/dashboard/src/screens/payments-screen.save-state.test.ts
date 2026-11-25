@@ -5,14 +5,14 @@ import { LeaveController } from "@waitron/ui";
 import { chooseOption, formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
+import type { DashboardApi } from "../api/client.js";
 import type {
   AvailableReader,
   BillRecoveryOutcome,
-  DashboardApi,
   PaymentProviderRow,
   ReaderRow,
   ReaderStatusView,
-} from "../api/client.js";
+} from "../api/payments-api.js";
 import "./payments-screen.js";
 import type { PaymentsScreen } from "./payments-screen.js";
 

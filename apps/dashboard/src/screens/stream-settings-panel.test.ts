@@ -6,7 +6,8 @@ import { alertMessage } from "../i18n/alerts.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import type { DashboardApi, StreamSettingsView, StreamStatusView } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { StreamSettingsView, StreamStatusView } from "../api/backup-api.js";
 import type { StreamSettingsPanel } from "./stream-settings-panel.js";
 import "./stream-settings-panel.js";
 

@@ -4,7 +4,8 @@ import { baseStyles, draftScopeFor, saveActionState, type DraftScope } from "@wa
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
-import type { DashboardApi, PaymentSettingsView } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { PaymentSettingsView } from "../api/payments-api.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";

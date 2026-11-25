@@ -7,7 +7,8 @@ import { codeMessage } from "../i18n/codes.js";
 import { allergenLabel } from "../i18n/domain.js";
 import { es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import type { DashboardApi, OrderDetailDto } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { OrderDetailDto } from "../api/orders-api.js";
 import "./order-detail-dialog.js";
 import type { OrderDetailDialog } from "./order-detail-dialog.js";
 

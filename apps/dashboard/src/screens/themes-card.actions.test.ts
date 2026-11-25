@@ -11,7 +11,8 @@ import type {
 import { createLeaveCoordinator } from "@waitron/ui-core/unsaved-changes";
 import { WAITRON_CHOICES, type ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
-import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ThemeList, ThemeView } from "../api/email-theme-api.js";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, setLocale } from "../i18n/t.js";
 import {

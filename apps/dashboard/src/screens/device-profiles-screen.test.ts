@@ -11,20 +11,18 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import "./device-profiles-screen.js";
 import type { DeviceProfilesScreen } from "./device-profiles-screen.js";
+import type { DashboardApi } from "../api/client.js";
+import type { JobRole, PersonSummary } from "../api/staff-api.js";
+import type { PersonRole } from "../api/account-api.js";
+import type { ReaderRow } from "../api/payments-api.js";
+import type { PagePrinterRow, Printer } from "../api/printing-api.js";
 import type {
   DeviceProfile,
-  DashboardApi,
-  JobRole,
-  PersonRole,
-  PersonSummary,
-  PagePrinterRow,
-  Printer,
   ProfileKitchenScreens,
   ProfileReaderList,
   ProfileScopeChoices,
-  ReaderRow,
-  Station,
-} from "../api/client.js";
+} from "../api/devices-api.js";
+import type { Station } from "../api/kitchen-api.js";
 import { DashboardApi as RealDashboardApi } from "../api/client.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";

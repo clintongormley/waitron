@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { BoxHealth } from "../api/client.js";
+import type { BoxHealth } from "../api/servers-api.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { es } from "../i18n/strings.js";
 import { fill, setLocale, t } from "../i18n/t.js";

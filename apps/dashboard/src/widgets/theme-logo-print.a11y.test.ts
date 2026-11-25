@@ -1,6 +1,7 @@
 import { mediaTestRendition, useMediaPresentations } from "@waitron/ui/src/test-helpers.js";
 import { afterEach, expect, it, vi } from "vitest";
-import type { DashboardApi, ThemeLogoPrint } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ThemeLogoPrint } from "../api/email-theme-api.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import type { ThemeLogoPrintFigure } from "./theme-logo-print.js";

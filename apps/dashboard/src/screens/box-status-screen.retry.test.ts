@@ -2,13 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { LiveData } from "@waitron/dashboard-kit";
 import { setHelpMode } from "@waitron/ui";
-import type {
-  AlertView,
-  AlertsResponse,
-  BoxHealth,
-  DashboardApi,
-  FiscalRetryView,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { AlertView, AlertsResponse, BoxHealth, FiscalRetryView } from "../api/servers-api.js";
 import { codeMessage } from "../i18n/codes.js";
 import { es } from "../i18n/strings.js";
 import { fill, setLocale, t } from "../i18n/t.js";

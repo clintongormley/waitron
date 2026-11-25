@@ -16,13 +16,8 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import type {
-  DashboardApi,
-  JobRole,
-  PersonEditDetails,
-  AccessRole,
-  PersonSummary,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { JobRole, PersonEditDetails, AccessRole, PersonSummary } from "../api/staff-api.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { accessRoleName, statusName } from "../i18n/domain.js";
 import { fill, t } from "../i18n/t.js";

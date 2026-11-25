@@ -1,7 +1,8 @@
 import { css, html, nothing } from "lit";
 import { categoryColorSource } from "@waitron/shared";
 import type { DataTableColumn } from "@waitron/ui";
-import type { CategorySummary, Product } from "../api/client.js";
+import type { Product } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 import { t } from "../i18n/t.js";
 import { categoryAncestors, PATH_SEPARATOR } from "./category-form.js";
 import { categoryTree } from "./classification-fields.js";

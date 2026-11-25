@@ -4,7 +4,7 @@ import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { PrintJobPreview } from "../api/client.js";
+import type { PrintJobPreview } from "../api/printing-api.js";
 import { t } from "../i18n/t.js";
 import { PrintPaper, paperStyles } from "./print-paper.js";
 

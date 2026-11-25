@@ -3,7 +3,8 @@ import type { WtButton, WtDialog } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { en, es, type StringKey } from "../i18n/strings.js";
-import type { BackupLoadFailure, BackupSettingsEvidence, DashboardApi } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { BackupLoadFailure, BackupSettingsEvidence } from "../api/backup-api.js";
 import {
   apiAnswering,
   deferred,

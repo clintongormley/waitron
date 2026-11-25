@@ -1,6 +1,7 @@
 import { LiveData } from "@waitron/dashboard-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DashboardApi, EmailInbox } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { EmailInbox } from "../api/email-theme-api.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { EmailScreen } from "./email-screen.js";
 import { codeMessage } from "../i18n/codes.js";

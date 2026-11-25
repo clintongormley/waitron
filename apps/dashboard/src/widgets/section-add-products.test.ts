@@ -4,7 +4,7 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 // Value import: pulls the module in for its `@customElement` side effect.
 import { SectionAddProducts } from "./section-add-products.js";
-import type { CategorySummary } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 import { setContentLanguages } from "@waitron/ui";
 import { setLocale, t } from "../i18n/t.js";
 

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { render, type TemplateResult } from "lit";
 import { categoryPathField, categoryPathText } from "./classification-fields.js";
-import type { CategorySummary } from "../api/client.js";
+import type { CategorySummary } from "../api/catalog-api.js";
 
 let host: HTMLDivElement;
 beforeEach(() => {

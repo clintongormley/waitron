@@ -2,7 +2,7 @@ import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./staff-list.js";
 import type { StaffList } from "./staff-list.js";
-import type { PersonSummary } from "../api/client.js";
+import type { PersonSummary } from "../api/staff-api.js";
 
 const people: PersonSummary[] = [
   {

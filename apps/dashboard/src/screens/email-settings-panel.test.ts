@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import type { DashboardApi, EmailSettingsView } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { EmailSettingsView } from "../api/email-theme-api.js";
 import "./email-settings-panel.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";

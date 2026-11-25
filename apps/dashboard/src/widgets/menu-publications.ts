@@ -23,12 +23,12 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import type {
-  ActivationTime,
   DashboardApi,
   LocalTime,
   MenuPreview,
   MenuPublicationsAnswer,
 } from "../api/client.js";
+import type { ActivationTime } from "../api/menu-api.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { conjunctionList } from "../i18n/list.js";
 import type { StringKey } from "../i18n/strings.js";

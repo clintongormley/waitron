@@ -14,7 +14,8 @@ import {
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { DashboardApi, VenueDetailsModel } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { VenueDetailsModel } from "../api/venue-api.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";

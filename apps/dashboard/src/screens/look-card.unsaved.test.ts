@@ -9,7 +9,8 @@ import {
 } from "@waitron/ui/src/test-helpers.js";
 import type { ThemeChoices } from "@waitron/ui-core/theme";
 import { deriveTheme } from "@waitron/ui-core/theme/waitron";
-import type { DashboardApi, ThemeList, ThemeView } from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { ThemeList, ThemeView } from "../api/email-theme-api.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
   cleanupWidgets,

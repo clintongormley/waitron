@@ -6,14 +6,10 @@ import { t, currentLocale, setLocale } from "../i18n/t.js";
 import type { DeleteImpact } from "@waitron/shared";
 import "./devices-screen.js";
 import type { DevicesScreen } from "./devices-screen.js";
-import type {
-  DashboardApi,
-  DeviceProfile,
-  DeviceRow,
-  JoinRequestRow,
-  Printer,
-  Station,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { Printer } from "../api/printing-api.js";
+import type { DeviceProfile, DeviceRow, JoinRequestRow } from "../api/devices-api.js";
+import type { Station } from "../api/kitchen-api.js";
 
 /**
  * Scanned in the device table, the Edit dialog with a Name error, the Add a device dialog (with

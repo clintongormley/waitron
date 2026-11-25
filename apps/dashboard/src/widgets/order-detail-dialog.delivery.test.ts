@@ -10,12 +10,8 @@ import {
 } from "./test-helpers.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
-import type {
-  DashboardApi,
-  OrderDeliveries,
-  OrderDeliveryAttempt,
-  OrderDetailDto,
-} from "../api/client.js";
+import type { DashboardApi } from "../api/client.js";
+import type { OrderDeliveries, OrderDeliveryAttempt, OrderDetailDto } from "../api/orders-api.js";
 import "./order-detail-dialog.js";
 import type { OrderDetailDialog } from "./order-detail-dialog.js";
 

@@ -5,23 +5,19 @@ import { LitElement, html } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import type {
-  MenuSettingsAnswer,
-  MenuSummary,
-  ProductSaveBody,
-  CategorySummary,
-  Course,
   DashboardApi,
   ExtraList,
   ExtraListInput,
   SectionDetails,
-  MenuStructure,
   OptionList,
   OptionListInput,
   Product,
   ProductEditorInput,
   ProductEditorValue,
-  Unit,
 } from "../api/client.js";
+import type { Course } from "../api/kitchen-api.js";
+import type { ProductSaveBody, CategorySummary, Unit } from "../api/catalog-api.js";
+import type { MenuSettingsAnswer, MenuSummary, MenuStructure } from "../api/menu-api.js";
 import type { ProductChildKind } from "../state/product-child-create.js";
 import type { AddToMenus } from "../widgets/add-to-menus.js";
 import type { CourseList } from "../widgets/course-list.js";

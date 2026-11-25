@@ -2,7 +2,7 @@ import { LitElement, html } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import type { PrintJobPreview } from "../api/client.js";
+import type { PrintJobPreview } from "../api/printing-api.js";
 import { PrintPaper, paperStyles, rasterUrl, type PaperMark } from "./print-paper.js";
 
 @customElement("test-print-paper-host")
