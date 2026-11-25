@@ -347,25 +347,25 @@ describe("invoice SMTP transport", () => {
   });
 
   it.each([
-    ["es-ES", "Adjuntamos la factura FF-0EBGA/4, de 2,00 €. Juniper Test Cafe"],
-    ["en-GB", "Attached is invoice FF-0EBGA/4 for €2.00. Juniper Test Cafe"],
-    ["ca-ES", "Us adjuntem la factura FF-0EBGA/4, per un import de 2,00 €. Juniper Test Cafe"],
-    ["gl-ES", "Achegamos a factura FF-0EBGA/4, por importe de 2,00 €. Juniper Test Cafe"],
-    [
-      "eu-ES",
-      "Erantsita bidaltzen dizugu FF-0EBGA/4 zenbakiko faktura (2,00 €). Juniper Test Cafe",
-    ],
-    ["fr-FR", "Adjuntamos la factura FF-0EBGA/4, de 2,00 €. Juniper Test Cafe"],
-  ])("composes the invoice sentence in %s", async (invoiceLocale, body) => {
+    ["es-ES", "F1", "Adjuntamos la factura FF-0EBGA/4, de 2,00 €."],
+    ["en-GB", "F1", "Attached is invoice FF-0EBGA/4 for €2.00."],
+    ["ca-ES", "F1", "Us adjuntem la factura FF-0EBGA/4, per un import de 2,00 €."],
+    ["gl-ES", "F1", "Achegamos a factura FF-0EBGA/4, por importe de 2,00 €."],
+    ["eu-ES", "F1", "Erantsita bidaltzen dizugu FF-0EBGA/4 zenbakiko faktura (2,00 €)."],
+    ["fr-FR", "F1", "Adjuntamos la factura FF-0EBGA/4, de 2,00 €."],
+    ["ca-ES", "F2", "Us adjuntem la factura simplificada FF-0EBGA/4, per un import de 2,00 €."],
+    ["gl-ES", "R5", "Achegamos a factura rectificativa FF-0EBGA/4, por importe de 2,00 €."],
+    ["eu-ES", "F2", "Erantsita bidaltzen dizugu FF-0EBGA/4 zenbakiko faktura erraztua (2,00 €)."],
+  ] as const)("composes the %s %s email sentence", async (invoiceLocale, invoiceType, body) => {
     const message = await composeInvoiceEmail({
       document: {
         ...fixture,
         invoiceLocale,
         receiptHeader: { printTradingName: true, tradingName: "Juniper Test Cafe" },
-        result: { ...fixture.result, invoiceNumber: "FF-0EBGA/4", total: "2.00" },
+        result: { ...fixture.result, invoiceType, invoiceNumber: "FF-0EBGA/4", total: "2.00" },
       },
     });
-    expect(message.text).toBe(body);
+    expect(message.text).toBe(`${body} Juniper Test Cafe`);
     expect(message.attachments?.[0]?.filename).toBe("FF-0EBGA-4.pdf");
   });
 

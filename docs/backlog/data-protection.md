@@ -301,8 +301,10 @@ by the answers):
     for an invoice in English. A Girona venue's invoice email has the subject `Factura F1/23` and
     the Spanish notice. Alternative: the notice in each of Spain's receipt languages, whose
     Catalan, Galician and Basque words would need a native speaker's check before they ship.
-  - **E. The notice shows on duplicates too.** Staff resend Jordi's invoice; the email's text
-    starts "Factura F1/23 — DUPLICADO" and carries the same notice. Alternative: the original only.
+  - **E. The notice shows on duplicates too.** Staff resend Jordi's invoice and the copy carries
+    the same notice. On 27 October its text started "Factura F1/23 — DUPLICADO".
+    [A1587](../superpowers/plans/2026-11-25-a1587-invoice-email-copy.md) puts the duplicate mark on
+    the line below the opening sentence. Alternative: the original only.
   - **F. If the notice's facts cannot be read, the invoice email is not sent.** The read of the
     Privacy card's values fails for Jordi's invoice; the attempt is recorded with an unknown
     outcome, as when the invoice itself cannot be read. Nothing retries it by itself. Orders shows
