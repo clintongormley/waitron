@@ -108,14 +108,7 @@ async function threeBeersOnOneLine(): Promise<Party> {
   return party;
 }
 
-/** The party's dishes served and its bill printed. */
-async function printed(party: Party): Promise<Party> {
-  const served = await fixture.serve(venue, party, party.tabId);
-  expect(served.status, JSON.stringify(served.json)).toBe(200);
-  const ticket = await fixture.printBill(venue, party, party.tabId);
-  expect(ticket.status, JSON.stringify(ticket.json)).toBe(200);
-  return party;
-}
+const printed = (party: Party) => fixture.printed(venue, party);
 
 async function lineOf(billId: string, dish: Dish): Promise<string> {
   const [row] = await inTx(venue, (tx) =>
@@ -169,25 +162,8 @@ function preview(billId: string, body: unknown): Promise<Answer> {
   );
 }
 
-async function payInCash(billId: string, amount: string, ownReceipt = false): Promise<void> {
-  const paid = await send(
-    venue.app,
-    venue.cookie,
-    "POST",
-    `/api/working-orders/${billId}/payments`,
-    {
-      submissionId: randomUUID(),
-      kind: "contribution",
-      amount,
-      method: "cash",
-      tendered: amount,
-      applied: amount,
-      tip: "0.00",
-      ...(ownReceipt ? { ownReceipt: true } : {}),
-    },
-  );
-  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-}
+const payInCash = (billId: string, amount: string, ownReceipt = false) =>
+  fixture.payInCash(venue, billId, amount, ownReceipt);
 
 /** The bills reopened from `printedId`. */
 async function reopenedFrom(printedId: string): Promise<string[]> {
@@ -233,9 +209,7 @@ async function ticketsOf(billId: string): Promise<number[]> {
   return rows.map((row) => row.total);
 }
 
-function balanceOf(billId: string): Promise<Answer> {
-  return send(venue.app, venue.cookie, "GET", `/api/working-orders/${billId}/payments`);
-}
+const balanceOf = (billId: string) => fixture.balanceOf(venue, billId);
 
 describe("Pay for items on a printed bill", () => {
   it("cash pays for chosen items on a printed bill", async () => {
@@ -344,6 +318,38 @@ describe("Pay for items on a printed bill", () => {
     const left = { workingOrderId: reopened, status: "open", total: "6.00", outstanding: "6.00" };
     expect(first.json.sourceBalance).toMatchObject(left);
     expect(again.json.sourceBalance).toMatchObject(left);
+  });
+
+  it("a replay after the table's bill was reopened again answers the bill the table owes on now", async () => {
+    const party = await printed(await seated("soup", "hake", "beer"));
+    const firstBody = await itemsBody(
+      party,
+      [{ lineId: await lineOf(party.tabId, "hake") }],
+      cashFor("15.00"),
+    );
+    const first = await payItems(party.tabId, firstBody);
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    const [firstReopen] = await reopenedFrom(party.tabId);
+    const next = { partyId: party.partyId, tabId: firstReopen! };
+    const reprinted = await fixture.printBill(venue, next, next.tabId);
+    expect(reprinted.status, JSON.stringify(reprinted.json)).toBe(200);
+    const second = await payItems(
+      next.tabId,
+      await itemsBody(next, [{ lineId: await lineOf(next.tabId, "beer") }], cashFor("2.50")),
+    );
+    expect(second.status, JSON.stringify(second.json)).toBe(200);
+    const [current] = await reopenedFrom(firstReopen!);
+
+    const replay = await payItems(party.tabId, firstBody);
+
+    expect(replay.status, JSON.stringify(replay.json)).toBe(200);
+    expect(replay.json.billId).toBe(first.json.billId);
+    expect(replay.json.payment).toEqual(first.json.payment);
+    expect(replay.json.sourceBalance).toMatchObject({
+      workingOrderId: current,
+      status: "open",
+      outstanding: "6.00",
+    });
   });
 
   it("a declined card leaves every dish on the reopened bill", async () => {

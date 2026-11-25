@@ -28,6 +28,7 @@ import {
   abandonPlacedOrder,
   lockPlacedOrder,
   recordPlacedOrderCancelled,
+  type BillRead,
 } from "./working-order-counter.js";
 import { createOpenOrder } from "./working-order-open.js";
 import { readInvoiceNumber } from "./stored-order-lines.js";
@@ -39,15 +40,17 @@ export interface SplitAfterPrint {
   correctiveNumber: string;
 }
 
-/** A printed bill reopened: its new open bill, the corrective filed, and each dish's copy. */
+/** A printed bill reopened: its new open bill and its party, the corrective filed, and each dish's
+ * copy. */
 export interface ReopenedBill extends SplitAfterPrint {
+  party: { id: string; revision: number };
   /** Each dish of the printed bill, by id, to its copy on the new bill. */
   lineCopies: Map<string, string>;
 }
 
 /**
- * Credit a table's printed, unpaid ticket in full and put copies of its dishes on a new open bill
- * of the same party, so each guest's dishes can be moved to their own bill and printed. Refuses in
+ * Credit a table's printed ticket in full and put copies of its dishes on a new open bill of the
+ * same party, so each guest's dishes can be moved to their own bill and printed. Refuses in
  * the order the till offers the fix: the bill's state, then its money, then its unserved dishes.
  */
 export async function splitAfterPrint(
@@ -62,14 +65,16 @@ export async function splitAfterPrint(
   });
 }
 
-/** Reopen to split's refusals, which write nothing; answers the bill's party and ticket. */
+/** Reopen to split's refusals, which write nothing; answers the bill's party and ticket. `read` is
+ * the bill as the caller has read it in this transaction, when it has. */
 export async function refuseReopen(
   tx: Transaction,
   deps: Pick<TillSaleDeps, "admission">,
   cfg: DeviceRequestConfig,
   id: string,
+  read?: BillRead,
 ): Promise<{ partyId: string; invoice: IssuedInvoice }> {
-  const placed = await lockPlacedOrder(tx, deps, cfg, id);
+  const placed = await lockPlacedOrder(tx, deps, cfg, id, read);
   const refused = await refuseSplitBill(tx, id, placed.partyId, placed.invoice);
   await refuseSplitMoney(tx, id);
   await refuseUnservedDishes(tx, id);
@@ -87,8 +92,9 @@ export async function reopenToSplitIn(
   cfg: DeviceRequestConfig,
   id: string,
   operator: { personId: string; sessionId: string },
+  read?: BillRead,
 ): Promise<ReopenedBill> {
-  const { partyId, invoice } = await refuseReopen(tx, deps, cfg, id);
+  const { partyId, invoice } = await refuseReopen(tx, deps, cfg, id, read);
   const opened = await openSplitBill(tx, cfg, id, partyId);
   const correctiveId = await creditWholeInvoice(tx, deps, cfg, invoice, {
     reopenedBillId: opened.billId,
@@ -96,7 +102,7 @@ export async function reopenToSplitIn(
   });
   await abandonPlacedOrder(tx, cfg, id);
   await carryReceivedPayments(tx, id, opened.billId);
-  await bumpPartyRevision(tx, partyId);
+  const revision = (await bumpPartyRevision(tx, partyId))!;
   await recordPlacedOrderCancelled(
     tx,
     deps,
@@ -108,6 +114,7 @@ export async function reopenToSplitIn(
   return {
     billId: opened.billId,
     correctiveNumber: await readInvoiceNumber(tx, correctiveId),
+    party: { id: partyId, revision },
     lineCopies: opened.lineCopies,
   };
 }

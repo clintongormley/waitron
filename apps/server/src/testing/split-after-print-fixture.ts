@@ -9,7 +9,6 @@ import { readBillEditState } from "../bill-editing.js";
 import { inTx, send, statusOf, type Answer } from "./bill-venue.js";
 import type { OrderVenue } from "./order-venue.js";
 
-/** The routes of Reopen to split's tests, and what they read back. */
 type Party = { partyId: string };
 
 export function revisionOf(venue: OrderVenue, partyId: string): number {
@@ -66,6 +65,50 @@ export async function printBill(
     submissionId: randomUUID(),
     ...(printAnyway ? { printAnyway: true } : {}),
   });
+}
+
+/** The party's dishes served and its bill printed. */
+export async function printed<P extends Party & { tabId: string }>(
+  venue: OrderVenue,
+  party: P,
+): Promise<P> {
+  const served = await serve(venue, party, party.tabId);
+  expect(served.status, JSON.stringify(served.json)).toBe(200);
+  const ticket = await printBill(venue, party, party.tabId);
+  expect(ticket.status, JSON.stringify(ticket.json)).toBe(200);
+  return party;
+}
+
+/** Pays `amount` of the bill in cash, on the payer's own receipt when `ownReceipt`; the payment's
+ * id. */
+export async function payInCash(
+  venue: OrderVenue,
+  billId: string,
+  amount: string,
+  ownReceipt = false,
+): Promise<string> {
+  const paid = await send(
+    venue.app,
+    venue.cookie,
+    "POST",
+    `/api/working-orders/${billId}/payments`,
+    {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount,
+      method: "cash",
+      tendered: amount,
+      applied: amount,
+      tip: "0.00",
+      ...(ownReceipt ? { ownReceipt: true } : {}),
+    },
+  );
+  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+  return (paid.json.payment as { id: string }).id;
+}
+
+export function balanceOf(venue: OrderVenue, billId: string): Promise<Answer> {
+  return send(venue.app, venue.cookie, "GET", `/api/working-orders/${billId}/payments`);
 }
 
 export function split(

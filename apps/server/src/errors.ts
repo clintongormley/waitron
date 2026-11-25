@@ -935,11 +935,13 @@ declare module "@waitron/shared" {
      * Money has been taken on the bill. Paying it in one go by the
      * single-payment routes, placing it, merging it with another bill and moving items between it
      * and another are refused while it has any pending or received bill payment, even one given
-     * back in full; abandoning it and finishing its table are refused while it still holds money.
+     * back in full; abandoning it and finishing its table are refused while it still holds money,
+     * except by Reopen to split, which moves the money to the reopened bill and raises this code
+     * only for a received items payment.
      */
     "bill.payments_received": { workingOrderId: string };
-    /** Reopen to split on a printed bill holding an advance: the advance's money is on its own
-     * ticket, which the printed ticket takes off, so it cannot follow the dishes. */
+    /** Reopen to split on a printed bill on which an advance was ever taken, even one given back
+     * in full since: an advance's money is on its own ticket, so it cannot follow the dishes. */
     "bill.has_advance": { workingOrderId: string };
     /** The bill has been presented (placed), so it takes no new order. */
     "bill.presented": { workingOrderId: string };

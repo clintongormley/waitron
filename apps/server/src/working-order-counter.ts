@@ -219,21 +219,26 @@ export async function withRectifyPinAhead<T>(
     transaction(withCheck(override, checked)),
   );
 }
-/** The placed order's party and invoice, else `working_order.not_placed`. */
+/** A bill's status and party, as a caller has read them in this transaction. */
+export type BillRead = Pick<typeof workingOrders.$inferSelect, "status" | "partyId">;
+
+/** The placed order's party and invoice, else `working_order.not_placed`; `read` is the order as the
+ * caller has read it in this transaction, when it has. */
 export async function lockPlacedOrder(
   tx: Transaction,
   deps: Pick<TillSaleDeps, "admission">,
   cfg: DeviceRequestConfig,
   id: string,
+  read?: BillRead,
 ): Promise<{ partyId: string | null; invoice: OrderInvoice | undefined }> {
   await requireEconomicWrite(tx, cfg, deps.admission);
-  const [locked] = await tx
-    .select({
-      status: workingOrders.status,
-      partyId: workingOrders.partyId,
-    })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, id));
+  const [locked] =
+    read === undefined
+      ? await tx
+          .select({ status: workingOrders.status, partyId: workingOrders.partyId })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, id))
+      : [read];
   if (locked === undefined || locked.status !== "placed") {
     throw new AppError("working_order.not_placed", { workingOrderId: id });
   }

@@ -21,7 +21,13 @@ import {
   thousandthsToDecimal,
   type Decimal,
 } from "@waitron/shared";
-import { guardPathParty, moveDishes, refuseClosedBill, type BillCommand } from "./bill-actions.js";
+import {
+  guardBillParty,
+  guardPathParty,
+  moveDishes,
+  refuseClosedBill,
+  type BillCommand,
+} from "./bill-actions.js";
 import { readBillAdvances } from "./bill-advances.js";
 import {
   invalid,
@@ -53,7 +59,8 @@ import { assertProfileAction, type DeviceBinding } from "./device-session.js";
 import { outsideCardDetails } from "./outside-card.js";
 import { withSettledSlip } from "./payment-slip-print.js";
 import type { BillEditExpected } from "./order-drafts.js";
-import { fingerprint, partyRevisionOfOrder } from "./parties.js";
+import { fingerprint } from "./parties.js";
+import { lastReopenedBill } from "./reopened-bills.js";
 import { refuseReopen, reopenToSplitIn } from "./split-after-print.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
@@ -325,8 +332,9 @@ function retryPrintOf(req: PayForItemsRequest): string {
 
 /**
  * The bill an earlier request with this submission id paid for items of `fromBillId` on (D6), or,
- * when `fromBillId` was a printed bill, of the bill reopened from it (PR4-D7); and the bill those
- * items came from.
+ * when `fromBillId` was a printed bill, of the bill reopened from it (PR4-D7); and the table's bill
+ * those items came from, as it is now: the last bill reopened from that one, if it was printed and
+ * reopened again since.
  */
 async function earlierItemsBill(
   tx: Transaction,
@@ -350,7 +358,9 @@ async function earlierItemsBill(
         eq(billPayments.submissionId, submissionId),
       ),
     );
-  return row === undefined ? undefined : { billId: row.billId, sourceId: row.sourceId! };
+  return row === undefined
+    ? undefined
+    : { billId: row.billId, sourceId: await lastReopenedBill(tx, row.sourceId!) };
 }
 
 /** The bill the items move from, and the move's party read and picks, as the till sent them. */
@@ -376,26 +386,27 @@ async function reopenIfPrinted(
   device: DeviceBinding | null,
 ): Promise<ItemsSource> {
   const [bill] = await tx
-    .select({ status: workingOrders.status })
+    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
     .where(eq(workingOrders.id, sent.fromBillId));
   if (bill?.status !== "placed") return sent;
   assertProfileAction(device, "take-orders");
-  await guardPathParty(
-    tx,
-    sent.fromBillId,
-    { operatorId: operator.personId, ...sent.party },
-    { bump: false },
-  );
+  await guardBillParty(tx, bill, { operatorId: operator.personId, ...sent.party }, { bump: false });
   await requireBillEditors(tx, [sent.fromBillId], operator.personId, sent.expectedEdits);
-  const { billId, lineCopies } = await reopenToSplitIn(tx, deps, cfg, sent.fromBillId, operator);
+  const { billId, party, lineCopies } = await reopenToSplitIn(
+    tx,
+    deps,
+    cfg,
+    sent.fromBillId,
+    operator,
+    bill,
+  );
   const picks = sent.picks.map((pick) => {
     const copy = lineCopies.get(pick.lineId);
     if (copy === undefined)
       throw new AppError("tab.line_not_found", { tabId: sent.fromBillId, lineId: pick.lineId });
     return { ...pick, lineId: copy };
   });
-  const party = (await partyRevisionOfOrder(tx, billId))!;
   return {
     fromBillId: billId,
     picks,
@@ -441,8 +452,8 @@ export async function payForItems(
     ...outsideCardDetails(req),
   });
   /** The bill an earlier request paid on, else the new bill the items move to, and its edit state;
-   * and the bill the items came from, which on a replay is the earlier bill's, not `fromBillId`:
-   * on a printed bill that names the abandoned bill, not the reopened one (PR4-D10). */
+   * and the bill the items came from, on a replay as {@link earlierItemsBill} answers it, never
+   * `fromBillId`, which on a printed bill names the abandoned bill (PR4-D10). */
   const billFor = async (tx: Transaction, holdSourceInvoice: boolean) => {
     const earlier = await earlierItemsBill(tx, fromBillId, req.submissionId);
     if (earlier !== undefined) return { ...earlier, request: payment(null) };
@@ -581,13 +592,13 @@ export async function previewPayForItems(
     throw invalid("tendered");
   return withTransaction(deps.db, async (tx) => {
     const [bill] = await tx
-      .select({ status: workingOrders.status })
+      .select({ status: workingOrders.status, partyId: workingOrders.partyId })
       .from(workingOrders)
       .where(eq(workingOrders.id, fromBillId));
     if (bill === undefined) throw new AppError("tab.not_open", { tabId: fromBillId });
     if (bill.status === "placed") {
       assertProfileAction(device, "take-orders");
-      await refuseReopen(tx, deps, cfg, fromBillId);
+      await refuseReopen(tx, deps, cfg, fromBillId, bill);
     } else refuseClosedBill(fromBillId, bill.status);
     if (ask.picks.length === 0) throw new AppError("sale.empty_basket", {});
     const total = await priceItemPicks(tx, fromBillId, ask.picks);

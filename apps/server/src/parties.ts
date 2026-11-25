@@ -542,12 +542,18 @@ export async function refuseMovedParty(tx: Transaction, partyId: string): Promis
 /**
  * Move the party's revision on without comparing it: for a write that is not a party command of its
  * own and carries no revision (D19), such as a line edit or a void, whose bill's revision guards it.
+ * Answers the new revision.
  */
-export async function bumpPartyRevision(tx: Transaction, partyId: string): Promise<void> {
-  await tx
+export async function bumpPartyRevision(
+  tx: Transaction,
+  partyId: string,
+): Promise<number | undefined> {
+  const [bumped] = await tx
     .update(parties)
     .set({ revision: sql`${parties.revision} + 1` })
-    .where(eq(parties.id, partyId));
+    .where(eq(parties.id, partyId))
+    .returning({ revision: parties.revision });
+  return bumped?.revision;
 }
 
 /**

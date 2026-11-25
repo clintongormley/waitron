@@ -200,13 +200,8 @@ function billsOf(partyId: string) {
 }
 
 /** Served dishes, printed: the bill holds its ticket and nothing is left to serve. */
-async function printed(...lines: (string | Line)[]): Promise<Party> {
-  const party = await seat(...lines);
-  expect((await serve(party, party.tabId)).status).toBe(200);
-  const answer = await printBill(party, party.tabId);
-  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-  return party;
-}
+const printed = async (...lines: (string | Line)[]): Promise<Party> =>
+  fixture.printed(venue, await seat(...lines));
 
 describe("POST /api/working-orders/:id/split-after-print", () => {
   it("prints, splits, and each guest gets a ticket", async () => {
@@ -448,7 +443,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect(await advancesOf()).toEqual([advance]);
   });
 
-  it("refuses a full invoice naming a customer before its unserved dishes or the permission", async () => {
+  it("refuses a full invoice naming a customer before its unserved dishes", async () => {
     venue.db.run(sql`update taxpayer set taxpayer_domicile = 'Calle Fiscal 8, Madrid'`);
     onTestFinished(() => {
       venue.db.run(sql`update taxpayer set taxpayer_domicile = null`);

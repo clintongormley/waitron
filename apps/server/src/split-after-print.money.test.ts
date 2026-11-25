@@ -45,14 +45,8 @@ useVenueDb({
 type Party = { partyId: string; tabId: string };
 
 /** A party's dishes, served and printed. */
-async function printed(...names: string[]): Promise<Party> {
-  const party = await seatedWith(venue, ...names);
-  const served = await fixture.serve(venue, party, party.tabId);
-  expect(served.status, JSON.stringify(served.json)).toBe(200);
-  const ticket = await fixture.printBill(venue, party, party.tabId);
-  expect(ticket.status, JSON.stringify(ticket.json)).toBe(200);
-  return party;
-}
+const printed = async (...names: string[]): Promise<Party> =>
+  fixture.printed(venue, await seatedWith(venue, ...names));
 
 /** Reopen to split by an operator who does not hold `sale.rectify`. */
 const split = (billId: string) => fixture.split(venue, billId, venue.cookie);
@@ -68,20 +62,8 @@ function pay(billId: string, body: Record<string, unknown>): Promise<Answer> {
   });
 }
 
-async function payInCash(billId: string, amount: string): Promise<string> {
-  const paid = await pay(billId, {
-    kind: "contribution",
-    amount,
-    tendered: amount,
-    applied: amount,
-  });
-  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-  return (paid.json.payment as { id: string }).id;
-}
-
-function balanceOf(billId: string): Promise<Answer> {
-  return send(venue.app, venue.cookie, "GET", `/api/working-orders/${billId}/payments`);
-}
+const payInCash = (billId: string, amount: string) => fixture.payInCash(venue, billId, amount);
+const balanceOf = (billId: string) => fixture.balanceOf(venue, billId);
 
 /** The split refused with `code`: nothing written, the bill still printed, its ticket uncredited. */
 async function refused(billId: string, code: string): Promise<void> {
@@ -91,6 +73,36 @@ async function refused(billId: string, code: string): Promise<void> {
   });
   expect(answered.json.params).toEqual({ workingOrderId: billId });
   expect(await creditsOf((await invoiceOf(billId)).id)).toEqual([]);
+}
+
+/** The provider row of a card bill payment: its bill and the sale it is linked to. */
+async function providerRowOf(billPaymentId: string) {
+  const [row] = await inTx(venue, (tx) =>
+    tx
+      .select({ id: payments.id, workingOrderId: payments.workingOrderId, saleId: payments.saleId })
+      .from(payments)
+      .where(eq(payments.billPaymentId, billPaymentId)),
+  );
+  return row!;
+}
+
+async function payByCard(billId: string, amount: string, keyed?: string): Promise<string> {
+  const paid = await pay(billId, {
+    kind: "contribution",
+    amount,
+    method: "card",
+    applied: amount,
+    ...(keyed === undefined ? { entry: "reader" } : { entry: "manual", externalRef: keyed }),
+  });
+  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+  return (paid.json.payment as { id: string }).id;
+}
+
+/** Splits the printed bill, answering the reopened bill's id. */
+async function splitOk(billId: string): Promise<string> {
+  const answer = await split(billId);
+  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  return answer.json.billId as string;
 }
 
 describe("Reopen to split on a part-paid printed bill", () => {
@@ -198,6 +210,85 @@ describe("Reopen to split on a part-paid printed bill", () => {
     ).toEqual([[received, "received"]]);
   });
 
+  it("a resend of a carried payment to the printed bill answers the recorded payment", async () => {
+    const party = await printed("Red wine bottle");
+    const body = {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "10.00",
+      tendered: "10.00",
+      applied: "10.00",
+    };
+    const first = await pay(party.tabId, body);
+    expect(first.status, JSON.stringify(first.json)).toBe(200);
+    const newBill = await splitOk(party.tabId);
+
+    const again = await pay(party.tabId, body);
+
+    expect(again.status, JSON.stringify(again.json)).toBe(200);
+    expect(again.json).toMatchObject({
+      outcome: "received",
+      payment: { id: (first.json.payment as { id: string }).id, applied: "10.00" },
+      balance: { workingOrderId: newBill, received: "10.00", outstanding: "20.00" },
+    });
+    expect((await paymentRows(venue, newBill)).map((row) => row.submissionId)).toEqual([
+      body.submissionId,
+    ]);
+  });
+
+  it("a resend with the carried payment's id and a different amount is refused", async () => {
+    const party = await printed("Red wine bottle");
+    const body = {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "10.00",
+      tendered: "10.00",
+      applied: "10.00",
+    };
+    expect((await pay(party.tabId, body)).status).toBe(200);
+    await splitOk(party.tabId);
+
+    const other = await pay(party.tabId, {
+      ...body,
+      amount: "5.00",
+      tendered: "5.00",
+      applied: "5.00",
+    });
+
+    expect({ status: other.status, code: other.json.code }).toEqual({
+      status: 409,
+      code: "submission.id_reused",
+    });
+  });
+
+  it("a carried payment is refunded on the new bill", async () => {
+    const party = await printed("Red wine bottle");
+    const card = await payByCard(party.tabId, "10.00");
+    const newBill = await splitOk(party.tabId);
+
+    const refunded = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${newBill}/payments/${card}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "5.00",
+        tipAmount: "0.00",
+        reason: "The guest overpaid",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+
+    expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
+    expect(refunded.json).toMatchObject({ refund: { state: "completed", appliedAmount: "5.00" } });
+    expect((await balanceOf(newBill)).json).toMatchObject({
+      status: "open",
+      received: "5.00",
+      outstanding: "25.00",
+    });
+  });
+
   it("a pending card still refuses", async () => {
     const party = await printed("Red wine bottle");
     await payInCash(party.tabId, "10.00");
@@ -269,36 +360,6 @@ describe("Reopen to split on a part-paid printed bill", () => {
   });
 });
 
-/** The provider row of a card bill payment: its bill and the sale it is linked to. */
-async function providerRowOf(billPaymentId: string) {
-  const [row] = await inTx(venue, (tx) =>
-    tx
-      .select({ id: payments.id, workingOrderId: payments.workingOrderId, saleId: payments.saleId })
-      .from(payments)
-      .where(eq(payments.billPaymentId, billPaymentId)),
-  );
-  return row!;
-}
-
-async function payByCard(billId: string, amount: string, keyed?: string): Promise<string> {
-  const paid = await pay(billId, {
-    kind: "contribution",
-    amount,
-    method: "card",
-    applied: amount,
-    ...(keyed === undefined ? { entry: "reader" } : { entry: "manual", externalRef: keyed }),
-  });
-  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-  return (paid.json.payment as { id: string }).id;
-}
-
-/** Splits the printed bill, answering the reopened bill's id. */
-async function splitOk(billId: string): Promise<string> {
-  const answer = await split(billId);
-  expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-  return answer.json.billId as string;
-}
-
 describe("Reopen to split carries a card's provider row", () => {
   it("a card paid before printing is linked to the new ticket", async () => {
     const party = await seatedWith(venue, "Red wine bottle");
@@ -352,33 +413,5 @@ describe("Reopen to split carries a card's provider row", () => {
     const ticket = await invoiceOf(newBill);
     const tender = await inTx(venue, (tx) => readTenderBlock(tx, brandSaleId(ticket.id), newBill));
     expect(tender).toMatchObject({ method: "card", charged: "10.00", reference: "OP-4B" });
-  });
-
-  it("a carried payment is refunded on the new bill", async () => {
-    const party = await printed("Red wine bottle");
-    const card = await payByCard(party.tabId, "10.00");
-    const newBill = await splitOk(party.tabId);
-
-    const refunded = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${newBill}/payments/${card}/refunds`,
-      {
-        submissionId: randomUUID(),
-        appliedAmount: "5.00",
-        tipAmount: "0.00",
-        reason: "The guest overpaid",
-        override: { personId: venue.adminId, pin: "1234" },
-      },
-    );
-
-    expect(refunded.status, JSON.stringify(refunded.json)).toBe(200);
-    expect(refunded.json).toMatchObject({ refund: { state: "completed", appliedAmount: "5.00" } });
-    expect((await balanceOf(newBill)).json).toMatchObject({
-      status: "open",
-      received: "5.00",
-      outstanding: "25.00",
-    });
   });
 });
