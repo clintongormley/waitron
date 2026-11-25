@@ -2571,40 +2571,52 @@ describe("POST …/give-back on a card reader", () => {
     ]);
   });
 
-  it("leaves only the extra to give back when the cancelled dish's reader refund is pending", async () => {
-    const b = await tab(FIVE);
-    const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
-    const reader = await tenderOf(saleId, "card");
-    await cancel(b, "Paella", "1", true);
-    const paella = lineOf(await read(saleId), "Paella").id;
-    const body = await giveBody(
-      saleId,
-      ask("dishes", "18.50", {
-        way: reader,
-        lineIds: [paella],
-        extra: "3.00",
-      }),
-    );
-    venue.card.scriptNextRefund({ made: false, answer: { kind: "uncertain", reason: "network" } });
-    const calls = cardCallsNow();
+  it.each(["pending", "failed"] as const)(
+    "leaves only the extra to give back when the cancelled dish's refund is %s",
+    async (state) => {
+      const b = await tab(FIVE);
+      const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
+      const reader = await tenderOf(saleId, "card");
+      await cancel(b, "Paella", "1", true);
+      const paella = lineOf(await read(saleId), "Paella").id;
+      const body = await giveBody(
+        saleId,
+        ask("dishes", "18.50", {
+          way: reader,
+          lineIds: [paella],
+          extra: "3.00",
+        }),
+      );
+      venue.card.scriptNextRefund(
+        state === "pending"
+          ? { made: false, answer: { kind: "uncertain", reason: "network" } }
+          : { made: "failed", answer: "made" },
+      );
+      const calls = cardCallsNow();
 
-    const answer = await give(saleId, body);
+      const answer = await give(saleId, body);
 
-    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    expect(await refundRowsOf(saleId)).toMatchObject([
-      { appliedAmount: 1850, tipAmount: 0, state: "pending" },
-    ]);
-    expect(answer.json).toMatchObject({
-      parts: [
-        { kind: "refund", state: "pending" },
-        { kind: "extra", state: "not_started" },
-      ],
-      refusal: null,
-      rest: { purpose: "extra", amount: "3.00", extra: "0.00", way: reader },
-      underWay: null,
-    });
-    expect(cardCallsSince(calls).refunds).toEqual(["18.50"]);
-  });
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      const [refund] = await refundRowsOf(saleId);
+      expect(refund).toMatchObject({ appliedAmount: 1850, tipAmount: 0, state });
+      expect(answer.json).toMatchObject({
+        parts: [
+          { kind: "refund", state },
+          { kind: "extra", state: "not_started" },
+        ],
+        refusal:
+          state === "pending"
+            ? null
+            : {
+                code: "give_back.refund_failed",
+                params: { refundId: refund!.id, tenderId: reader },
+              },
+        rest: { purpose: "extra", amount: "3.00", extra: "0.00", way: reader },
+        underWay: null,
+      });
+      expect(cardCallsSince(calls).refunds).toEqual(["18.50"]);
+    },
+  );
 
   it("leaves the goodwill to try again when the reader declines the extra", async () => {
     const saleId = await pay(await tab(FIVE), [{ reader: "34.00" }], "3.00");
