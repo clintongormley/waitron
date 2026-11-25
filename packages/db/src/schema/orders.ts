@@ -122,8 +122,8 @@ export const workingOrders = table(
     // Whether the bill's saved set menus were proven the cheapest; false when the calculation
     // stopped at its search limit.
     setMenusExact: flag("set_menus_exact").notNull().default(true),
-    // On the bill Reopen to split opened: the printed bill it reopened. Set once (core.sql's
-    // working_orders_reopened_from_* triggers); a received payment may move only along it.
+    // On the bill Reopen to split opened: the printed bill it reopened. An update sets it once
+    // (core.sql's working_orders_reopened_from_* triggers); a received payment may move only along it.
     reopenedFrom: id("reopened_from"),
   },
   (t) => [
