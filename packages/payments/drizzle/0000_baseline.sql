@@ -135,9 +135,10 @@ BEGIN
     new.id IS old.id
     -- A card's row follows its bill payment off an abandoned bill (Reopen to split's carry).
     AND (new.working_order_id IS old.working_order_id
-      OR (new.working_order_id = (SELECT working_order_id FROM bill_payments
-            WHERE id = old.bill_payment_id)
-        AND (SELECT status FROM working_orders WHERE id = old.working_order_id) = 'abandoned'
+      OR (EXISTS (SELECT 1 FROM bill_payments
+            WHERE id = old.bill_payment_id AND working_order_id = new.working_order_id)
+        AND EXISTS (SELECT 1 FROM working_orders
+            WHERE id = old.working_order_id AND status = 'abandoned')
         AND new.sale_id IS NULL))
     AND new.source IS old.source
     AND new.device_id IS old.device_id
@@ -152,7 +153,8 @@ BEGIN
     AND (old.sale_id IS NULL OR new.sale_id IS old.sale_id
       OR (new.sale_id IS NULL
         AND new.working_order_id IS NOT old.working_order_id
-        AND old.sale_id = (SELECT id FROM sales WHERE working_order_id = old.working_order_id)))
+        AND EXISTS (SELECT 1 FROM sales
+            WHERE id = old.sale_id AND working_order_id = old.working_order_id)))
     AND (old.reader_id IS NULL OR new.reader_id IS old.reader_id)
     AND (old.reconcile_remediated_at IS NULL
       OR new.reconcile_remediated_at IS old.reconcile_remediated_at)

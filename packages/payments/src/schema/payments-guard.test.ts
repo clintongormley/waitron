@@ -281,9 +281,9 @@ describe("a card's row follows its bill payment off an abandoned bill", () => {
   /**
    * A printed bill holding a received card payment and its provider row, the bill reopened from
    * it, and the printed bill abandoned. The provider row names the printed ticket's sale when
-   * `linkedToSale`.
+   * `linkedToSale`; the printed bill has no ticket unless `issued`.
    */
-  async function reopenedCard(linkedToSale = false) {
+  async function reopenedCard(linkedToSale = false, issued = true) {
     const seeded = await seedWorkingOrder(suite.db);
     const printed = seeded.workingOrderId;
     const requestedBy = await seedPerson(suite.db, { displayName: "Cashier" });
@@ -303,7 +303,7 @@ describe("a card's row follows its bill payment off an abandoned bill", () => {
         deviceId: seeded.deviceId,
       })
       .returning({ id: billPayments.id });
-    const ticket = await saleOf(seeded, printed);
+    const ticket = issued ? await saleOf(seeded, printed) : null;
     const [row] = await suite.db
       .insert(payments)
       .values({
@@ -420,5 +420,26 @@ describe("a card's row follows its bill payment off an abandoned bill", () => {
   it("…not without the move", async () => {
     const { providerRow } = await reopenedCard(true);
     await expectRefused(providerRow, sql`sale_id = null`);
+  });
+
+  it("…not when it names no bill payment", async () => {
+    const [unlinked] = await suite.db
+      .select({ workingOrderId: payments.workingOrderId })
+      .from(payments)
+      .where(sql`${payments.id} = ${paymentId}`);
+    await suite.db.execute(
+      sql`update working_orders set status = 'abandoned' where id = ${unlinked!.workingOrderId}`,
+    );
+    const other = (await seedWorkingOrder(suite.db)).workingOrderId;
+    await expectRefused(paymentId, sql`working_order_id = ${other}`);
+  });
+
+  it("…not from a sale when the old bill has none", async () => {
+    const { seeded, reopened, providerRow } = await reopenedCard(false, false);
+    const elsewhere = await saleOf(seeded, await openBill(seeded));
+    await suite.db.execute(
+      sql`update payments set sale_id = ${elsewhere} where id = ${providerRow}`,
+    );
+    await expectRefused(providerRow, sql`working_order_id = ${reopened}, sale_id = null`);
   });
 });
