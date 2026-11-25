@@ -3,25 +3,25 @@ import type { MadeHereItem } from "../api/client.js";
 
 export class MakeNowController {
   readonly #host: ReactiveControllerHost;
-  #deviceId?: string;
+  #source?: string | symbol;
   #items: MadeHereItem[] = [];
 
   constructor(host: ReactiveControllerHost) {
     this.#host = host;
   }
 
-  get deviceId(): string | undefined {
-    return this.#deviceId;
+  get source(): string | symbol | undefined {
+    return this.#source;
   }
 
   get items(): MadeHereItem[] {
     return this.#items;
   }
 
-  selectDevice(deviceId: string | undefined): void {
-    if (this.#deviceId === deviceId) return;
-    this.#deviceId = deviceId;
-    this.#replaceItems(deviceId === undefined ? [] : this.#read(deviceId));
+  selectDevice(source: string | symbol | undefined): void {
+    if (this.#source === source) return;
+    this.#source = source;
+    this.#replaceItems(typeof source === "string" ? this.#read(source) : []);
   }
 
   #replaceItems(items: MadeHereItem[]): void {
@@ -103,9 +103,14 @@ export class MakeNowController {
     }
   }
 
-  readonly receive = (items: MadeHereItem[], deviceId: string): void => {
-    const visible = deviceId === this.#deviceId;
-    const existing = visible ? this.#items : this.#read(deviceId);
+  readonly receive = (items: MadeHereItem[], source: string | symbol): void => {
+    const visible = source === this.#source;
+    const existing = visible
+      ? this.#items
+      : typeof source === "string"
+        ? this.#read(source)
+        : undefined;
+    if (existing === undefined) return;
     const seen = new Set(existing.map((item) => item.lineId));
     const added: MadeHereItem[] = [];
     for (const item of items) {
@@ -115,11 +120,11 @@ export class MakeNowController {
     }
     const updated = [...existing, ...added];
     if (visible) this.#replaceItems(updated);
-    this.#save(deviceId, updated);
+    if (typeof source === "string") this.#save(source, updated);
   };
 
   readonly dismiss = (): void => {
     this.#replaceItems([]);
-    if (this.#deviceId !== undefined) this.#save(this.#deviceId, []);
+    if (typeof this.#source === "string") this.#save(this.#source, []);
   };
 }

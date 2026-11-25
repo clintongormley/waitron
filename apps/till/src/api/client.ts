@@ -2839,8 +2839,8 @@ export interface BoxClockConfirmed {
 }
 
 export class TillApi {
-  #madeHereListener?: (items: MadeHereItem[], deviceId: string) => void;
-  #madeHereDevice?: () => string | undefined;
+  #madeHereListener?: (items: MadeHereItem[], source: string | symbol) => void;
+  #madeHereSource?: () => string | symbol | undefined;
   readonly #unansweredWholeBills = new Map<
     string,
     {
@@ -2851,11 +2851,11 @@ export class TillApi {
   >();
 
   onMadeHere(
-    listener: (items: MadeHereItem[], deviceId: string) => void,
-    device: () => string | undefined,
+    listener: (items: MadeHereItem[], source: string | symbol) => void,
+    source: () => string | symbol | undefined,
   ): void {
     this.#madeHereListener = listener;
-    this.#madeHereDevice = device;
+    this.#madeHereSource = source;
   }
   readonly #baseUrl: string;
   readonly #fetchImpl: FetchLike;
@@ -5731,7 +5731,7 @@ export class TillApi {
     if (headers !== undefined)
       init.headers = { ...(init.headers as Record<string, string> | undefined), ...headers };
     if (signal !== undefined) init.signal = signal;
-    const deviceId = this.#madeHereDevice?.();
+    const madeHereSource = this.#madeHereSource?.();
     const res = await this.#fetchFor(person)(this.#baseUrl + path, init);
     if (!res.ok) {
       // The body is untrusted: it may not be JSON, and the literal `null` is valid JSON, so the parsed
@@ -5749,12 +5749,12 @@ export class TillApi {
     const text = await res.text();
     const answer: unknown = text === "" ? undefined : JSON.parse(text);
     if (
-      deviceId !== undefined &&
+      madeHereSource !== undefined &&
       isRecord(answer) &&
       Array.isArray(answer.madeHere) &&
       answer.madeHere.length > 0
     )
-      this.#madeHereListener?.(answer.madeHere as MadeHereItem[], deviceId);
+      this.#madeHereListener?.(answer.madeHere as MadeHereItem[], madeHereSource);
     rememberInvoiceEvidence(answer);
     return answer as T;
   }

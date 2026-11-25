@@ -1768,8 +1768,7 @@ describe("till-app content languages", () => {
 });
 
 describe("till-app receipt issuance", () => {
-  it("shows Make now after a counter cash payment reports a drink", async () => {
-    let receive: ((items: MadeHereItem[]) => void) | undefined;
+  it.each([true, false])("shows Make now after cash payment, device known %s", async (known) => {
     const item = {
       lineId: "lager-pay",
       name: "Lager",
@@ -1780,12 +1779,16 @@ describe("till-app receipt issuance", () => {
       extras: [],
       note: null,
     };
+    const client = new TillClient("", async () => Response.json({ madeHere: [item] }));
     const { el } = await mountApp({
-      onMadeHere: vi.fn((listener) => {
-        receive = (items) => listener(items, "till-dev");
-      }),
+      ...(!known
+        ? {
+            getDeviceIdentity: vi.fn().mockRejectedValue({ code: "server.internal", status: 500 }),
+          }
+        : {}),
+      onMadeHere: client.onMadeHere.bind(client),
       recordSale: vi.fn(async () => {
-        receive!([item]);
+        await client.getTill();
         return saleResult;
       }),
     });
@@ -1793,9 +1796,9 @@ describe("till-app receipt issuance", () => {
     c.store.addProduct(c.products[0]!, "1");
     emit(c, "confirm-payment", { method: "cash", amount: "5" });
     await flush(el);
-    expect(el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!.textContent).toContain(
-      "Lager",
-    );
+    const card = el.shadowRoot!.querySelector("till-make-now")!.shadowRoot!;
+    await vi.waitFor(() => expect(card.textContent).toContain("Lager"));
+    expect(localStorage.getItem("waitron.makeNow.till-dev") !== null).toBe(known);
   });
 
   it("takes pay timing from the zone context when no zone chooser is supplied", async () => {

@@ -5439,7 +5439,7 @@ export class TillApp extends LitElement {
     this.#syncEditDeadEnds();
     if (changed.has("api")) {
       const api = this.api;
-      api.onMadeHere?.(this.#makeNow.receive, () => this.#makeNow.deviceId);
+      api.onMadeHere?.(this.#makeNow.receive, () => this.#makeNow.source);
       api.namePersonFrom?.(
         () => this.#tabPerson,
         (person) => {
@@ -5702,6 +5702,9 @@ export class TillApp extends LitElement {
         this.#makeNow.selectDevice(undefined);
         if (await this.#openDevChooser(overtaken)) return;
         this.frontDoor = "enrol";
+      } else if (this.#makeNow.source === undefined) {
+        // A sellable till can show the instruction even when there is no device list to update.
+        this.#makeNow.selectDevice(Symbol());
       }
     }
     this.#configureSessionActivity();
