@@ -27,7 +27,7 @@ export function equipmentLabelItems(
       nfcWriter() === undefined
         ? nothing
         : html`<wt-button
-            icon="menu-default"
+            icon="menu-nfc-sticker"
             data-test=${`nfc-sticker-${id}`}
             @click=${press("nfc")}
             >${t("equipment.nfc_sticker")}</wt-button

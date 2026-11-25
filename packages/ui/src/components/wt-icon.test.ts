@@ -58,6 +58,7 @@ const ICONS = [
   "menu-check",
   "menu-download",
   "menu-equipment-label",
+  "menu-nfc-sticker",
 ];
 
 it("lists every icon it registers", () => {

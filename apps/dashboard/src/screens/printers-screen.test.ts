@@ -10405,6 +10405,12 @@ describe("portable printers, their QR label and their NFC sticker", () => {
       ]);
       expect(text(el, `[data-test="qr-label-${PORTABLE_ID}"]`)).toBe(t("equipment.qr_label"));
       expect(text(el, `[data-test="nfc-sticker-${PORTABLE_ID}"]`)).toBe(t("equipment.nfc_sticker"));
+      expect((q(el, `[data-test="qr-label-${PORTABLE_ID}"]`) as WtButton).icon).toBe(
+        "menu-equipment-label",
+      );
+      expect((q(el, `[data-test="nfc-sticker-${PORTABLE_ID}"]`) as WtButton).icon).toBe(
+        "menu-nfc-sticker",
+      );
       expect(menuOf(el, printers[1]!.id)).toEqual([
         "edit-printer",
         "print-test-page",
