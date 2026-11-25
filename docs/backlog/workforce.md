@@ -113,10 +113,9 @@ contract start, sum each overtime measure over the spans and show the separate c
 the export.
 Check both January examples in `pay-period-closure.test.ts`.
 
-## MONTH-CLOSE. Reminder and adjustments after a month closes
+## MONTH-CLOSE. A reminder before monthly Hours closes
 
-At each close, save earlier months' changes that have yet to be included and show them in the next
-working-time export. Send a reminder the day before closure if managers still have work to do.
+Send a reminder the day before closure if managers still have work to do.
 See [the monthly Hours follow-up](../superpowers/plans/2026-11-25-month-close-follow-up.md).
 
 ## A588. A solver drafts the rota, as a paid Waitron Cloud feature (owner, 2026-10-22)
@@ -148,8 +147,8 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 2 entries, size M.
 
-- **MONTH-CLOSE. Send a reminder and include later adjustments in the next export.**
-  [Detail](workforce.md#month-close-reminder-and-adjustments-after-a-month-closes).
+- **MONTH-CLOSE. Remind managers before closing a month with unresolved hours.**
+  [Detail](workforce.md#month-close-a-reminder-before-monthly-hours-closes).
 - **Pay-period cadence changes need a rule after closure.** A future editor refuses changes after
   the first closed period until the owner approves a transition rule (owner, 2026-10-15); leave it
   in the backlog until then.

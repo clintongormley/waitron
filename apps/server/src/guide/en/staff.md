@@ -239,3 +239,6 @@ do not use up that time. Set it to zero to close when the venue’s day changes 
 
 After close, use **Closed total** for the month. If you correct hours later, **Change after closure**
 shows you the closed total, the current total and the difference.
+
+In the next closed month's export, look under **Adjustments from earlier months** for the
+month you corrected and the minutes to add or subtract.

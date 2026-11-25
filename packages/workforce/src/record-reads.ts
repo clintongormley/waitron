@@ -64,6 +64,9 @@ function snapshotOf(snapshot: PayPeriodSnapshot, personId: string): PayPeriodSna
     entries: ownEntries,
     summaries: snapshot.summaries.filter((s) => s.personId === personId),
     markedAutomaticEntryIds: snapshot.markedAutomaticEntryIds.filter((id) => ownIds.has(id)),
+    ...(snapshot.adjustments !== undefined && {
+      adjustments: snapshot.adjustments.filter((adjustment) => adjustment.personId === personId),
+    }),
   };
 }
 

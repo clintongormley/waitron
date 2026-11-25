@@ -394,6 +394,56 @@ it("keeps a closed 480 frozen after a later accepted 540 and worker confirmation
   ]);
   expect(await close()).toEqual(frozen);
 });
+it("carries a closed month's increase once and rolls back the carried minutes after reversal", async () => {
+  const target = await automatic();
+  const october = await close();
+  const correct = async (correctsEntryId: string, at: string) => {
+    const proposal = await run((tx) =>
+      backend.proposeCorrection(tx, {
+        nodeId,
+        correctsEntryId,
+        at,
+        offsetMinutes: 0,
+        reason: "Corrected finish",
+        actorPersonId: manager,
+        origin,
+      }),
+    );
+    return run((tx) =>
+      backend.acceptCorrection(tx, {
+        nodeId,
+        correctionId: proposal,
+        actorPersonId: worker,
+        origin,
+      }),
+    );
+  };
+  const later = await correct(target, "2026-10-05T18:00:00Z");
+  const november = { start: "2026-11-01", end: "2026-12-01" };
+  const novemberClose = await close({ period: november, now: "2026-12-01T05:00:00Z" });
+  expect(novemberClose.snapshot.sessions).toEqual([]);
+  expect(novemberClose.snapshot.adjustments).toEqual([
+    { personId: worker, sourcePeriodStart: "2026-10-01", workedMinutes: 60 },
+  ]);
+  expect(await api.readPayPeriodClosures(suite.db, { period: november })).toEqual([novemberClose]);
+
+  const december = await close({
+    period: { start: "2026-12-01", end: "2027-01-01" },
+    now: "2027-01-01T05:00:00Z",
+  });
+  expect(december.snapshot).not.toHaveProperty("adjustments");
+
+  await correct(later, "2026-10-05T17:00:00Z");
+  const january = await close({
+    period: { start: "2027-01-01", end: "2027-02-01" },
+    now: "2027-02-01T05:00:00Z",
+  });
+  expect(january.snapshot.adjustments).toEqual([
+    { personId: worker, sourcePeriodStart: "2026-10-01", workedMinutes: -60 },
+  ]);
+  expect(await close()).toEqual(october);
+  expect(await close({ period: november, now: "2027-02-01T05:00:00Z" })).toEqual(novemberClose);
+});
 it.each([
   { start: "2026-10-02", end: "2026-11-01" },
   { start: "2026-10-01", end: "2026-10-15" },

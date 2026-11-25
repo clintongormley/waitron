@@ -221,6 +221,24 @@ it("canonicalizes object and collection order without omitting optional entry fi
     }),
   ).toBe(computeClosureHash(two));
 });
+it("commits each saved adjustment regardless of row and property order", () => {
+  const row = rich();
+  const own = { personId: "p", sourcePeriodStart: "2025-11-01", workedMinutes: 60 };
+  const other = { personId: "q", sourcePeriodStart: "2025-12-01", workedMinutes: -30 };
+  row.snapshot.adjustments = [own, other];
+  row.closureHash = computeClosureHash(row);
+  row.snapshot.adjustments = [
+    other,
+    { workedMinutes: 60, sourcePeriodStart: "2025-11-01", personId: "p" },
+  ];
+  expect(api.verifyPayPeriodClosures([row])).toEqual({ ok: true });
+  row.snapshot.adjustments[1]!.workedMinutes = 61;
+  expect(api.verifyPayPeriodClosures([row])).toEqual({
+    ok: false,
+    reason: "hash_mismatch",
+    sequenceNo: 1,
+  });
+});
 it.each([
   [
     "capture origin",

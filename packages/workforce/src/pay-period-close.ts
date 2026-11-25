@@ -15,10 +15,10 @@ import { invalidPeriod, readPayPeriodSettings, resolvePayPeriod } from "./pay-pe
 import { isRecordDate } from "./record-dates.js";
 import { recordInPeriod } from "./record-period.js";
 import { projectTimeRecord } from "./record-projection.js";
-import { readPeriodEntries } from "./record-reads.js";
+import { readPeriodEntries, readTimeRecord } from "./record-reads.js";
 import { automaticEntryIdsWithoutMarker } from "./effective-entries.js";
 import { dailyContractedTargetMinutes, summarisePeriod, type Period } from "./projection.js";
-import type { PayPeriodClosure } from "./record-types.js";
+import type { PayPeriodAdjustment, PayPeriodClosure } from "./record-types.js";
 import type { WorkSummaryRuleset } from "./clocking.js";
 import { payPeriodClosures } from "./schema/pay-period-closures.js";
 import { employments } from "./schema/employments.js";
@@ -40,6 +40,35 @@ export async function readPayPeriodClosures(
   validatePeriod(input.period);
   return readClosures(tx, { period: input.period });
 }
+async function readAdjustments(
+  tx: Transaction,
+  closingPeriod: Period,
+): Promise<PayPeriodAdjustment[]> {
+  const earlier = await readClosures(tx, { endingBy: closingPeriod.start });
+  const balances = new Map<string, Map<string, number>>();
+  for (const closure of earlier) {
+    for (const adjustment of closure.snapshot.adjustments ?? []) {
+      const { sourcePeriodStart, personId, workedMinutes } = adjustment;
+      const people = balances.get(sourcePeriodStart) ?? new Map<string, number>();
+      people.set(personId, (people.get(personId) ?? 0) - workedMinutes);
+      balances.set(sourcePeriodStart, people);
+    }
+  }
+  const adjustments: PayPeriodAdjustment[] = [];
+  for (const closure of earlier.sort((a, b) => a.period.start.localeCompare(b.period.start))) {
+    const sourcePeriodStart = closure.period.start;
+    const people = balances.get(sourcePeriodStart) ?? new Map<string, number>();
+    const { closedPeriodImpacts } = await readTimeRecord(tx, { period: closure.period }, null, [
+      closure,
+    ]);
+    for (const { personId, deltaWorkedMinutes } of closedPeriodImpacts)
+      people.set(personId, (people.get(personId) ?? 0) + deltaWorkedMinutes);
+    for (const [personId, workedMinutes] of people)
+      if (workedMinutes !== 0) adjustments.push({ personId, sourcePeriodStart, workedMinutes });
+  }
+  return adjustments;
+}
+
 export async function closePayPeriod(
   tx: Transaction,
   input: {
@@ -60,7 +89,8 @@ export async function closePayPeriod(
   );
   if (replay !== undefined) return replay;
   if (existing.length) invalidPeriod("overlap");
-  const expected = resolvePayPeriod(await readPayPeriodSettings(tx), input.period.start);
+  const settings = await readPayPeriodSettings(tx);
+  const expected = resolvePayPeriod(settings, input.period.start);
   if (expected.start !== input.period.start || expected.end !== input.period.end)
     invalidPeriod("cadence");
   if (
@@ -79,6 +109,8 @@ export async function closePayPeriod(
   if (closedAt < scheduledCloseAt)
     throw new AppError("pay_period.not_due", { closeAt: scheduledCloseAt });
   const entries = await readPeriodEntries(tx, { period: input.period });
+  const adjustments =
+    settings.frequency === "monthly" ? await readAdjustments(tx, input.period) : [];
   const closureId = newId();
   const record = recordInPeriod(
     projectTimeRecord(entries, [], input.paidBreakPolicy),
@@ -100,6 +132,7 @@ export async function closePayPeriod(
       .map((entry) => entry.entryId)
       .sort(),
     ...(input.paidBreakPolicy === null ? {} : { paidBreakPolicy: input.paidBreakPolicy }),
+    ...(adjustments.length === 0 ? {} : { adjustments }),
   };
   const people = [...new Set(snapshot.entries.map((e) => e.entry.personId))].sort();
   const { ruleset } = input;

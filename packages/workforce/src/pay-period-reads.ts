@@ -6,16 +6,18 @@ import { payPeriodClosures } from "./schema/pay-period-closures.js";
 
 export async function readClosures(
   tx: Database | Transaction,
-  input: { period: Period },
+  input: { period: Period } | { endingBy: string },
 ): Promise<PayPeriodClosure[]> {
   const rows = await tx
     .select()
     .from(payPeriodClosures)
     .where(
-      and(
-        lt(payPeriodClosures.periodStart, input.period.end),
-        gt(payPeriodClosures.periodEnd, input.period.start),
-      ),
+      "period" in input
+        ? and(
+            lt(payPeriodClosures.periodStart, input.period.end),
+            gt(payPeriodClosures.periodEnd, input.period.start),
+          )
+        : lte(payPeriodClosures.periodEnd, input.endingBy),
     );
   return rows.map(({ periodStart, periodEnd, ...row }) => ({
     ...row,
