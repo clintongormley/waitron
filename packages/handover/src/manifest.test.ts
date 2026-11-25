@@ -48,6 +48,16 @@ describe("the node-local manifest", () => {
     ]);
   });
 
+  it.each(["replaced-reset.json", "identity-change.json"])(
+    "lists %s as state that belongs to its own box",
+    (item) => {
+      expect(NODE_LOCAL_MANIFEST.find((row) => row.item === item)).toMatchObject({
+        where: "state",
+        class: "destination-owned",
+      });
+    },
+  );
+
   it("never sends M1's private signing key, and carries the key ring and the venue's credentials", () => {
     const classOf = (item: string) => NODE_LOCAL_MANIFEST.find((row) => row.item === item)?.class;
     expect(classOf("box.signing_key")).toBe("source-only");
