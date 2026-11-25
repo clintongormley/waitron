@@ -476,6 +476,7 @@ describe("till-equipment-dialog", () => {
 
     const picker = combobox(el, "receiptPrinterId")!;
     expect(picker.value).toBe("P2");
+    expect(picker.options[0]?.valueLabel).toBe("Counter printer");
     expect(picker.options.at(-1)).toEqual({
       value: "P2",
       fixed: true,
