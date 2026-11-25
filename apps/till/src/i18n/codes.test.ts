@@ -615,6 +615,15 @@ it("words each refusal a cancel and credit can meet, in both languages, naming n
   }
 });
 
+it("words a corrective receipt larger than what is left of its receipt", () => {
+  expect(codeMessage("sale.correction_exceeds_total", "en")).toBe(
+    "That corrective receipt is more than is left of the receipt after its earlier corrective receipts",
+  );
+  expect(codeMessage("sale.correction_exceeds_total", "es")).toBe(
+    "Ese ticket rectificativo supera lo que queda del ticket tras sus tickets rectificativos anteriores",
+  );
+});
+
 it("says in both languages that a printer cannot be chosen for this device, naming no identifier", () => {
   const generic = {
     en: codeMessage("server.internal", "en"),

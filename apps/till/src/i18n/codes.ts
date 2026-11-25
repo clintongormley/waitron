@@ -566,8 +566,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta factura no se puede rectificar.",
   },
   "sale.correction_exceeds_total": {
-    en: "That correction is more than is left of the invoice after its earlier corrections",
-    es: "Esa rectificación supera lo que queda de la factura tras sus rectificaciones anteriores",
+    en: "That corrective receipt is more than is left of the receipt after its earlier corrective receipts",
+    es: "Ese ticket rectificativo supera lo que queda del ticket tras sus tickets rectificativos anteriores",
   },
   "sale.correction_not_whole": {
     en: "This invoice has already been corrected, so it cannot be credited in full",

@@ -815,7 +815,7 @@ export const en = {
   "find_page.sale": "Sale",
   "find_page.full-invoice": "Full invoice",
   "find_page.correction": "Corrective receipt",
-  "find_page.replacement": "Replacement receipt",
+  "find_page.replacement": "Replacement corrective receipt",
   "find_page.any_zone": "Any zone",
   "find_page.any_staff": "Any staff",
   "find_page.any_state": "Any state",
@@ -1933,7 +1933,7 @@ export const en = {
   "meal_end.cannot_file":
     "This bill's ticket cannot be filed with the tax agency as it stands, so no ticket was issued and nothing was printed. Trying again will not help. If this bill has a full invoice, check its customer's details.",
   "meal_end.unserved_full_invoice":
-    "Some dishes on this bill are not marked served. This is a full invoice naming a customer, and the till cannot file a correction for it, so take off any dish that may not come before you print.",
+    "Some dishes on this bill are not marked served. This is a full invoice naming a customer, and the till cannot issue a corrective invoice for it, so take off any dish that may not come before you print.",
   // The confirmation before closing a whole bill as a deferred payment.
   "deferred_close.title": "Close as deferred payment",
   "deferred_close.bill": "Bill",
@@ -2150,14 +2150,14 @@ export const en = {
   "cancel_credit.action": "Cancel and credit",
   "cancel_credit.title": "Cancel and credit",
   "cancel_credit.scope":
-    "Invoice {invoice} ({amount}) will be credited in full: a money back receipt is issued and the bill is cancelled.",
+    "Invoice {invoice} ({amount}) will be credited in full: a corrective receipt is issued and the bill is cancelled.",
   "cancel_credit.scope_unnumbered":
-    "This bill's invoice ({amount}) will be credited in full: a money back receipt is issued and the bill is cancelled.",
+    "This bill's invoice ({amount}) will be credited in full: a corrective receipt is issued and the bill is cancelled.",
   "cancel_credit.reason": "Reason",
   "cancel_credit.reason_invalid": "Say why the bill is cancelled",
   "cancel_credit.reason_long": "Keep the reason to 500 characters or fewer",
   "cancel_credit.approval_next":
-    "If you cannot issue corrective invoices yourself, someone who can approves it with their PIN next.",
+    "If you cannot issue corrective receipts and invoices yourself, someone who can approves it with their PIN next.",
   "cancel_credit.confirm": "Cancel and credit",
   "cancel_credit.keep": "Keep the bill",
   "cancel_credit.approvers_failed": "Could not read who can approve this. Try again.",
@@ -2168,9 +2168,9 @@ export const en = {
   "cancel_credit.refused_payment_in_flight":
     "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it before cancelling.",
   "cancel_credit.refused_not_permitted":
-    "The person who approved this cannot issue corrective invoices. Choose someone who can.",
-  "cancel_credit.done": "Money back receipt {number} issued. The bill is cancelled.",
-  "cancel_credit.done_unnumbered": "A money back receipt was issued and the bill is cancelled.",
+    "The person who approved this cannot issue corrective receipts and invoices. Choose someone who can.",
+  "cancel_credit.done": "Corrective receipt {number} issued. The bill is cancelled.",
+  "cancel_credit.done_unnumbered": "A corrective receipt was issued and the bill is cancelled.",
   "cancel_credit.done_action": "Done",
   // Reopen bill: a printed receipt is credited in full and its dishes go onto a new open bill
   "split.action": "Reopen bill",
@@ -3214,7 +3214,7 @@ export const es: Record<StringKey, string> = {
   "find_page.sale": "Venta",
   "find_page.full-invoice": "Factura completa",
   "find_page.correction": "Ticket rectificativo",
-  "find_page.replacement": "Ticket de sustitución",
+  "find_page.replacement": "Ticket rectificativo por sustitución",
   "find_page.any_zone": "Cualquier zona",
   "find_page.any_staff": "Cualquier persona",
   "find_page.any_state": "Cualquier estado",
@@ -4308,7 +4308,7 @@ export const es: Record<StringKey, string> = {
   "meal_end.cannot_file":
     "El ticket de esta cuenta no se puede registrar en Hacienda tal como está, así que no se ha emitido ningún ticket y no se ha impreso nada. Reintentar no servirá de nada. Si esta cuenta lleva factura completa, revisa los datos del cliente.",
   "meal_end.unserved_full_invoice":
-    "Algunos platos de esta cuenta no están marcados como servidos. Es una factura completa a nombre de un cliente y la caja no puede presentar una rectificación para ella, así que quita antes de imprimir los platos que puedan no llegar.",
+    "Algunos platos de esta cuenta no están marcados como servidos. Es una factura completa a nombre de un cliente y la caja no puede emitir una factura rectificativa para ella, así que quita antes de imprimir los platos que puedan no llegar.",
   "deferred_close.title": "Cerrar como pago aplazado",
   "deferred_close.bill": "Cuenta",
   "deferred_close.invoice": "Factura",
@@ -4525,14 +4525,14 @@ export const es: Record<StringKey, string> = {
   "cancel_credit.action": "Cancelar y abonar",
   "cancel_credit.title": "Cancelar y abonar",
   "cancel_credit.scope":
-    "La factura {invoice} ({amount}) se abona por completo: se emite un ticket de devolución y se cancela la cuenta.",
+    "La factura {invoice} ({amount}) se abona por completo: se emite un ticket rectificativo y se cancela la cuenta.",
   "cancel_credit.scope_unnumbered":
-    "La factura de esta cuenta ({amount}) se abona por completo: se emite un ticket de devolución y se cancela la cuenta.",
+    "La factura de esta cuenta ({amount}) se abona por completo: se emite un ticket rectificativo y se cancela la cuenta.",
   "cancel_credit.reason": "Motivo",
   "cancel_credit.reason_invalid": "Indica por qué se cancela la cuenta",
   "cancel_credit.reason_long": "Usa 500 caracteres como mucho para el motivo",
   "cancel_credit.approval_next":
-    "Si tú no puedes emitir facturas rectificativas, a continuación lo aprueba alguien que pueda con su PIN.",
+    "Si tú no puedes emitir tickets y facturas rectificativos, a continuación lo aprueba alguien que pueda con su PIN.",
   "cancel_credit.confirm": "Cancelar y abonar",
   "cancel_credit.keep": "Mantener la cuenta",
   "cancel_credit.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
@@ -4543,9 +4543,9 @@ export const es: Record<StringKey, string> = {
   "cancel_credit.refused_payment_in_flight":
     "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo antes de cancelar.",
   "cancel_credit.refused_not_permitted":
-    "La persona que lo ha aprobado no puede emitir facturas rectificativas. Elige a alguien que pueda.",
-  "cancel_credit.done": "Ticket de devolución {number} emitido. La cuenta queda cancelada.",
-  "cancel_credit.done_unnumbered": "Se emitió el ticket de devolución y la cuenta queda cancelada.",
+    "La persona que lo ha aprobado no puede emitir tickets y facturas rectificativos. Elige a alguien que pueda.",
+  "cancel_credit.done": "Ticket rectificativo {number} emitido. La cuenta queda cancelada.",
+  "cancel_credit.done_unnumbered": "Se emitió el ticket rectificativo y la cuenta queda cancelada.",
   "cancel_credit.done_action": "Hecho",
   "split.action": "Reabrir cuenta",
   "split.title": "Reabrir cuenta",

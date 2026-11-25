@@ -112,10 +112,19 @@ describe("Give money back replaces the two old buttons in the till's words", () 
   const codes: [string, string, string][] = [];
   pairs(CODE_TABLES, "codes", codes);
 
-  it.each(codes)("%s names neither old button, nor a corrective", (_, english, spanish) => {
+  // Cancel and credit's refusal of its corrective receipt.
+  const CORRECTIVE_CODES = new Set(["codes.CODE_MESSAGES.sale.correction_exceeds_total"]);
+
+  it.each(codes)("%s names neither old button, nor a corrective", (at, english, spanish) => {
     expect(english).not.toMatch(OLD_EN);
-    expect(english).not.toMatch(/corrective/i);
+    if (CORRECTIVE_CODES.has(at)) expect(english).toMatch(/corrective receipt/i);
+    else expect(english).not.toMatch(/corrective/i);
     expect(spanish).not.toMatch(OLD_ES);
+  });
+
+  it("lists only codes the till still has", () => {
+    const known = new Set(codes.map(([at]) => at));
+    expect([...CORRECTIVE_CODES].filter((at) => !known.has(at))).toEqual([]);
   });
 
   // Refund on the Pay window keeps its own title.
