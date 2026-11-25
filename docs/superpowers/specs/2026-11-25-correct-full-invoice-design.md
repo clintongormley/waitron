@@ -1,7 +1,9 @@
 # Giving money back on a full invoice files a corrective full invoice (CORRECT-FULL-INVOICE)
 
-Status: draft for the owner, 2026-11-25. Nothing here is built. Every "I recommend" is mine (lane L),
-not the owner's.
+Status: the owner answered all four questions on 2026-11-25 (section 6, "Owner's answers"); where an
+answer changes a statement below, a dated note says so. Nothing here is built yet. The plan is
+[2026-11-25-correct-full-invoice.md](../plans/2026-11-25-correct-full-invoice.md). Every "I
+recommend" is mine (lane L), not the owner's.
 
 **Words used here.** A *ticket* is the simplified invoice most guests get (no customer named). A
 *full invoice* names the customer, usually a business, with its tax number and address. A
@@ -40,8 +42,12 @@ AEAT. Nothing simpler meets the ask.
   card or cash steps. The end screen adds one line saying the customer gets a new invoice, for
   example "€10.00 given back in cash. Give it to the customer. **A new invoice for Acme Foods SL,
   showing the €10.00 off, is printing.**" Staff still never see the word "corrective" on the till.
+  _2026-11-25, the owner's answers 1 and 3 replace part of this: staff choose how the corrective
+  invoice is delivered before the money goes back (it starts on the way the original was), and the
+  end screen says "A corrective invoice for Acme Foods SL (−€10.00) is printing." Against a receipt it
+  says "A corrective receipt (−€10.00) is printing."_
 - **The customer** receives a corrective full invoice (section 4), delivered the way the original
-  full invoice was (question 1).
+  full invoice was (question 1). _2026-11-25: unless staff choose another way (answer 1)._
 - **The accountant:** the refund no longer appears on the "Refunds, no corrective invoice" sheet,
   because it now has one. The corrective counts in the VAT return like any other.
 
@@ -130,7 +136,9 @@ what makes it a corrective:
   as on the original;
 - **the invoice it corrects**: number and date;
 - the dishes and amounts given back, each negative, with the base and VAT at each rate, and the
-  negative total (shared by menu price when no dish was ticked, as for tickets);
+  negative total (shared by menu price when no dish was ticked, as for tickets). _2026-11-25, answer
+  4: a line given back only in part prints no quantity and no unit price; a whole dish keeps
+  −1 × price;_
 - the Veri\*Factu QR code and words, as on every invoice.
 
 Pictures: 80 mm and A4, Spanish and English, in `~/waitron-campaign-shared/desk/correct-full-invoice/`.
@@ -150,12 +158,15 @@ Pictures: 80 mm and A4, Spanish and English, in `~/waitron-campaign-shared/desk/
    checking, the waits).
 2. **Give money back** sends a full invoice down the same route as a ticket; it no longer falls back
    to a plain refund for it (the "refused for good" lists in `invoice-corrections.ts` lose that case).
-   The accountant's sheet keeps listing refunds that still have no corrective for other reasons.
+   The accountant's sheet keeps listing refunds that still have no corrective for other reasons. _2026-11-25,
+   answer 2: a cancelled dish's money goes on the corrective too, so on a full invoice Give money back
+   makes no plain refund of it._
 3. **Paper:** the full-invoice layout with both parties and the corrected invoice (pictures). Every
    place that types "a corrective naming a customer" as R4 learns R1: `invoice-typing.ts`
    (`printsAsFullInvoice` and the typing), `tax-office-list.ts` and the dashboard's kinds list, the
    email title (`invoice-email.ts`), the till's invoice type.
-4. **Delivery (question 1).** Today a corrective prints only on the receipt printer
+4. **Delivery (question 1).** _2026-11-25: answered; option 1, with staff able to change it before the
+   money goes back (answer 1)._ Today a corrective prints only on the receipt printer
    (`fileCorrectionIn`), and the full-invoice delivery (A4, email, the saved choice, the "not
    delivered" buttons) refuses correctives (`deliversAsFullInvoice`, `reserveInvoiceDelivery`). If you
    choose option 1, those learn a full invoice's corrective; with option 2, only the receipt printer
@@ -168,11 +179,16 @@ Pictures: 80 mm and A4, Spanish and English, in `~/waitron-campaign-shared/desk/
 `@waitron/verifactu` library's live test, must come back accepted. AEAT's test service has accepted
 an R1 before (run 37286368370, cited in `docs/compliance/2026-11-06-adviser-questions.md`), but not
 this exact shape. I recommend holding the pull request on that run rather than adding a switch like
-A1407's.
+A1407's. _2026-11-25: "not this exact shape" was wrong. Run 37286368370's control credit was an R1 "I"
+naming a customer, correcting one full invoice, and came back `Correcto`
+([plan](../plans/2026-11-25-correct-full-invoice.md), section 5)._
 
 **Size (estimate):** about 700 production lines and 1,300 test lines with question 1's option 1,
 in two pull requests: (1) writer, filing and receipt-printer paper; (2) A4 and email delivery. With
 option 2, the first alone. No new table, no migration, no venue reset.
+_2026-11-25: superseded by the plan's sizes. Keeping the delivery staff chose on a give-back still
+under way needs one new column, so core's starting migration is rebuilt and every box is reset when
+the delivery pull request lands._
 
 ## 6. Questions for the owner (each with my recommendation)
 
@@ -196,6 +212,32 @@ option 2, the first alone. No new table, no migration, no venue reset.
    line given back only in part, on full invoices' correctives (a whole dish given back keeps
    −1 × price). Alternative: leave it as tickets print it.
 
+### Owner's answers, 2026-11-25
+
+Relayed by the watcher in lane L's `questions.md`: "WATCHER 2026-11-25 10:35" (1 to 3) and "12:21"
+(4). The words in quotation marks are the owner's; "For the build" is this design's.
+
+1. **Delivery:** "default to the original but allow the staff to change it". For the build: the
+   choice starts on how the original full invoice was delivered, with the choices a full invoice has
+   today, and is made in Give money back before the money goes back. The "not delivered, try again"
+   buttons come with it.
+2. **A cancelled dish's money:** "so yes we should file a corrective. but once we have issues a full
+   invoice i believe we have to keep with full invoices, and not switch back to receipts". For the
+   build: on a full invoice it goes on the corrective full invoice. Every path that issues a document
+   against an original is checked never to issue a receipt-type one against a full invoice, and a
+   refusal today stays a refusal (the watcher's list). On a receipt nothing changes here: the October
+   decision stays its own backlog item.
+3. **Words:** "A corrective invoice, and change receipt to the same wording", then, asked to
+   clarify: "what i mean is that we should refer to them as corrective receipts and corrective
+   invoices everywhere". For the build: «ticket rectificativo» / «factura rectificativa» in Spanish.
+   The till's lines (the watcher's wording of the answer): "A corrective invoice for Acme Foods SL
+   (−€10.00) is printing.", emailed "… has been emailed to accounts@acme.es.", and for a receipt "A
+   corrective receipt (−€10.00) is printing." GIVE-MONEY-BACK PR 3 rewords what is already on `main`;
+   this item owns only the words it adds.
+4. **A line given back in part:** "Blank those two columns (Recommended)", on corrective invoices
+   and corrective receipts. For the build: no quantity and no unit price on such a line; a whole dish
+   keeps −1 × price.
+
 ## 7. Left out
 
 - Cancelling a placed order or splitting a printed bill when its invoice is a full invoice: they
@@ -206,4 +248,5 @@ option 2, the first alone. No new table, no migration, no venue reset.
   (`docs/backlog/fiscal.md`, A1e: "no route calls `recordSubstitution`").
 - Changing a customer's details on an issued invoice: a different corrective (R4 by substitution),
   not money back.
-- Tickets' cancelled-dish correctives (question 2): unchanged here.
+- Tickets' cancelled-dish correctives (question 2): unchanged here. _2026-11-25: still so, by answer 2.
+  Receipts' correctives do change in one way: the two blank columns of answer 4._
