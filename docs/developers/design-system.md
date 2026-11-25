@@ -6173,11 +6173,9 @@ While Delete or Unpair is at the provider, another Unpair, Delete or adoption is
 Refresh may still be disabled while status reads finish.
 
 Products and variants offer **Delete** in their row menus. In the Products toolbar you can delete
-any selection of products and categories. The window names one category, counts several, or names
-all selected items when you mix categories and products. Choose whether to keep the remaining
-contents in the surviving parent categories or delete them too. Each choice counts the station
-routing rules it removes. Review any changes of station and open **Details** for the full table.
-Directly selected products go with either choice.
+any selection of products and categories. The window names one selected item and shows counts for
+multiple items. Choose whether to move the remaining contents to the surviving parent categories
+or delete them too. Directly selected products go with either choice.
 
 Print agents offer **Delete** in the row menu and keep only active agents in the main list, with
 no lifecycle status column/filter. The shared Delete confirmation explains that printers reached only

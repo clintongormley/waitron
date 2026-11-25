@@ -52,11 +52,10 @@ import { deleteExtraListWarning } from "./delete-extra-lists.js";
 import { offMenusSentence } from "./off-menus.js";
 import { countOf } from "./count-text.js";
 import {
-  categoryDeleteHeading,
+  deleteSelectionHeading,
   categoryDeleteChoices,
   categoryDeletePaths,
   categoryDeleteImpact,
-  categoryDeleteRouting,
   productCategoryDeleteStyles,
 } from "./product-category-delete.js";
 
@@ -244,14 +243,10 @@ export class ProductBrowser extends LitElement {
       [
         "operation",
         "destination",
-        "contents",
-        "summaries",
         "operationSelection",
         "categories",
         "products",
         "routing",
-        "summaryLoading",
-        "summaryFailed",
         "operationBusy",
       ].some((key) => changed.has(key)) &&
       !this.operationBusy
@@ -377,17 +372,12 @@ export class ProductBrowser extends LitElement {
     };
   }
   #routingChange(): ProductItemsChange | null {
-    if (!this.operation || this.summaryLoading || this.summaryFailed) return null;
-    if (this.operation === "move")
-      return this.destination
-        ? {
-            kind: "move",
-            selection: this.operationSelection,
-            to: this.destination === "top" ? null : this.destination,
-          }
-        : null;
-    return this.operationSelection.categoryIds.length
-      ? { kind: "delete", selection: this.operationSelection, contents: this.#contentsChoice() }
+    return this.operation === "move" && this.destination
+      ? {
+          kind: "move",
+          selection: this.operationSelection,
+          to: this.destination === "top" ? null : this.destination,
+        }
       : null;
   }
   get #routingReady(): boolean {
@@ -603,9 +593,8 @@ export class ProductBrowser extends LitElement {
     }
     return fresh as FolderSummary[];
   }
-  /** When the subcategories, switched-on products or routing rules the dialog showed have changed,
-   * shows the new counts instead. The delete sends this read's counts, disabled products included,
-   * for the server to check against. */
+  /** Require another confirmation if contents or routing changed. Pass the entire fresh summary
+   * to the delete request so the server can also check changes after this read. */
   async #unchanged(): Promise<boolean> {
     const fresh = await this.#readAgain();
     if (!fresh) return false;
@@ -661,12 +650,10 @@ export class ProductBrowser extends LitElement {
     ];
     const categoryDelete = this.operation === "delete" && selection.categoryIds.length > 0;
     const impact = categoryDelete ? this.#contentsImpact() : null;
-    const heading = categoryDelete
-      ? categoryDeleteHeading(selection, this.categories, this.products)
-      : countOf(
-          this.operation === "move" ? "folders.move_heading" : "folders.delete_products_heading",
-          count,
-        );
+    const heading =
+      this.operation === "move"
+        ? countOf("folders.move_heading", count)
+        : deleteSelectionHeading(selection, this.categories, this.products);
     const deletesContents =
       impact !== null && (impact.folders > 0 || impact.active > 0) && this.contents === "delete";
     const deletingCount = this.#productsToDelete.length;
@@ -691,8 +678,8 @@ export class ProductBrowser extends LitElement {
       "",
     );
     return html`<wt-modal
-      size=${!categoryDelete && this.routingPreview?.moves.length ? "wide" : "compact"}
-      .height=${!categoryDelete && this.routingPreview?.moves.length ? "medium" : undefined}
+      size=${this.operation === "move" && this.routingPreview?.moves.length ? "wide" : "compact"}
+      .height=${this.operation === "move" && this.routingPreview?.moves.length ? "medium" : undefined}
       .open=${true}
       .heading=${heading}
       .dismissible=${!this.operationBusy && !this.summaryLoading}
@@ -742,7 +729,8 @@ export class ProductBrowser extends LitElement {
                 ${
                   selection.productIds.length
                     ? html`<p>
-                        ${t("folders.delete_products_body")} ${deletesContents ? nothing : offMenus}
+                        ${t(categoryDelete ? "folders.delete_contents_warning" : "folders.delete_products_body")}
+                        ${deletesContents ? nothing : offMenus}
                       </p>`
                     : nothing
                 }
@@ -761,8 +749,8 @@ export class ProductBrowser extends LitElement {
                     : nothing
                 }
                 ${
-                  deletesContents && deletingCount
-                    ? html`${!selection.productIds.length ? html`<p>${t("folders.delete_products_body")}</p>` : nothing}
+                  deletesContents
+                    ? html`${!selection.productIds.length ? html`<p>${t("folders.delete_contents_warning")}</p>` : nothing}
                       ${offMenus ? html`<p>${offMenus}</p>` : nothing}`
                     : nothing
                 }
@@ -773,23 +761,15 @@ export class ProductBrowser extends LitElement {
             ? deleteExtraListWarning(this.products, this.#productsToDelete, this.extraLists)
             : nothing
         }
-        <div data-test="folder-routing-preview">
-          ${this.previewBusy ? html`<p role="status">${t("folders.preview_loading")}</p>` : nothing}
-          ${
-            this.routingPreview
-              ? impact
-                ? this.previewBusy
-                  ? nothing
-                  : categoryDeleteRouting(
-                      this.routingPreview,
-                      this.routing,
-                      deletesContents ? null : impact.kept,
-                    )
-                : routingPreviewTable(this.routingPreview)
-              : nothing
-          }
-          ${this.previewRetry ? html`<wt-button data-test="retry-routing-preview" variant="secondary" @click=${() => void this.#readRoutingPreview()}>${t("folders.preview_retry")}</wt-button>` : nothing}
-        </div>
+        ${
+          this.operation === "move"
+            ? html`<div data-test="folder-routing-preview">
+                ${this.previewBusy ? html`<p role="status">${t("folders.preview_loading")}</p>` : nothing}
+                ${this.routingPreview ? routingPreviewTable(this.routingPreview) : nothing}
+                ${this.previewRetry ? html`<wt-button data-test="retry-routing-preview" variant="secondary" @click=${() => void this.#readRoutingPreview()}>${t("folders.preview_retry")}</wt-button>` : nothing}
+              </div>`
+            : nothing
+        }
       </form>
       <div slot="footer" class="operation-footer">
         ${formMessage(bottom)}

@@ -8,7 +8,7 @@ Implement PRODUCTS-LIST-4 from [§7.4, Delivery and Spanish](../specs/2026-11-24
 - [ ] **Tests and size.** `product-browser.test.ts` covers headings and one mixed title with two categories and a product, overlapping selections, different parents with numbered paths, no rules or contents lost, pair identity, and the “All” rule with both zones moving and one zone moving. Update the copy assertions while preserving the count, retry and refusal checks. Run its a11y and draft suites. `prep-stations-screen.test.ts` keeps the shared grouping cases. Run the file-size guard and lower the cap if required. Estimate 270 production lines added and 150 removed, and 155 test lines added and 45 removed.
 - [ ] **Guide and screenshots.** Update `docs/developers/product-categories.md`, the Delete paragraph in `design-system.md`, both `apps/server/src/guide/{en,es}/products.md` guides and `docs/backlog.md`. Capture 1440/1180/390 px × light/dark × EN/ES, showing both choices, expanded Details and a long mixed selection. Send the captures to the watcher for the owner’s decision before landing.
 
-On 25 November at 05:42 the watcher chose “usually” and “normalmente” for ordinary moves,
-and “depending on the order” for a pair that includes a move with an extra. The review
-found that some variants ordered as extras have no parent id in the preview. A pair
-with an extra names the two destinations, and Details shows the individual rows.
+The owner revised the window on 25 November at 09:20 and 09:29, as recorded in the
+lane's questions. The [updated design](../specs/2026-11-24-products-list-redesign-design.md)
+records the shorter wording, a count for larger selections, and removal of the Delete station
+preview and rules copy. The Move preview and the Delete request's checks still apply.

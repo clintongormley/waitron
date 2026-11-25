@@ -112,10 +112,8 @@ También puedes soltar los elementos en **Todos los productos** para sacarlos de
 Revisa también los cambios de estación al abrir **Mover a…** desde la barra de herramientas.
 
 Al eliminar una categoría, elige si quieres conservar su contenido o eliminarlo también.
-Comprueba adónde va el contenido y qué reglas de envío a la estación elimina cada opción. Si
-cambia la estación donde se prepara algún producto, abre **Detalles** para ver los cambios por
-producto, zona y horario. Los productos que hayas marcado se eliminan con cualquiera de las dos
-opciones.
+Comprueba adónde se moverá el contenido si lo conservas. Los productos que hayas marcado se
+eliminan con cualquiera de las dos opciones.
 
 Mientras añades una categoría o le cambias el nombre, el cuadrado junto al nombre muestra su propio
 color, o el que hereda de la categoría superior más cercana que tenga color y, después, el

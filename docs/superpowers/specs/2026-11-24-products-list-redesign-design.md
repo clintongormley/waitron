@@ -153,15 +153,17 @@ Show archived and the Archived state are gone before the list here is built).
    `opening-hours-screen.ts` does), so one Back then leaves Products and does not reopen the product.
    A product opened straight from a link closes to the list. After a reload one spare step is allowed.
    Opening and closing categories still adds no step (**my call**).
-4. **Deleting a category.** The title names it: "Delete Cheeses?", or "Delete 3 categories?" over
-   their names. Two choices: "Keep its 5 products, with no category" (or "in Wine and beer" when it has
-   a parent) and "Delete its 5 products too". Each choice also counts the categories inside, and says
-   the routing rules that go. With different parents it says each category's own parent; categories
-   with the same path stay numbered; products ticked as well are named in the title. An empty category
-   with no routing rule still asks nothing. Changes of station are one line each where they agree,
-   "All 5 will be made in Kitchen instead of Deli prep", with the full table folded under **Details**;
-   where they do not agree, one line per pair of stations. Every check and refusal of today stays. This
-   rewrites A296's words.
+4. **Deleting a category.** The title names a single selected item, “Delete Cheeses?”, or counts
+   each kind in a larger selection, “Delete 2 categories and 3 products?”. Selected categories
+   are listed by path, with numbers when paths match. “What happens to its contents?” offers
+   “Keep its 5 products, move to Deli” (or “with no category”) and “Delete its 5 products too”.
+   Keep counts the remaining categories and products and lists separate destinations when the
+   parents differ. The delete warning says “This can't be undone.” An empty category with no
+   routing rules still needs no confirmation. The Delete request retains its contents and conflict
+   checks. This rewrites A296's words.
+
+   On 25 November the owner said “i don't think we need the named products” and, when asked about
+   the station summary and Details, “Remove it too; land when green”.
 
 ## Other text this changes
 

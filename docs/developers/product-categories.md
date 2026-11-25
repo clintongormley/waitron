@@ -432,25 +432,21 @@ Deleting a product deletes its variants, removes draft placements and extras mem
 clears variant prices in the same transaction. A Device Home shortcut becomes a missing tile at
 its saved position. Configuration export leaves deleted rows and their dependent rows behind.
 
-The Delete title names a single category or counts several. It names every selected category
-and product when you select both kinds. The list gives the paths when more than one category is
+The Delete title names a single category or product. For a larger selection it counts each kind. The list gives the paths when more than one category is
 selected, or when the path adds to a single category's name. It adds “(2 of 3)” where categories
 share a path. When there are contents beyond the selected items,
 the window counts them once, excluding deleted products.
 
-- **Keep its 1 category and 3 products, in Drinks** moves the contents up. Unselected
+- **Keep its 1 category and 3 products, move to Drinks** moves the contents up. Unselected
   subcategories move together with their products and routing rules. When the destinations
   differ, the window pairs the selected categories' paths with their surviving parent paths.
 - **Delete its 1 category and 3 products too** deletes the additional categories and active
   products. Retained product rows move to the surviving parent of the outermost selected category
   that held them.
 
-Each choice counts the routing rules it removes. Keep counts the rules on the selected categories
-themselves. Delete too counts the rules across the whole subtree.
-
 A category is deleted without confirmation only when it holds no products (deleted ones
 included), no subcategories and no routing rules. When only the selected items are affected, the
-confirmation skips the contents question and counts any routing rules that go. A category's
+confirmation skips the contents question. A category's
 row-menu Delete uses the same path. If the summary cannot be read, deletion waits for a successful
 new attempt.
 Pressing **Delete** in the dialog reads the counts
@@ -476,8 +472,7 @@ A refused action
 keeps its dialog open with a message at the bottom.
 Deleting a category removes every routing cell on its row through `routing_cells_category_fk`.
 Move shows a table of products changing station, with old and new destinations, zones and periods.
-Delete shows one line per pair of old and new destinations and puts the same table under **Details**.
-Changing the choice refreshes the preview. Choose **Retry preview** if it fails to load.
+Choose **Retry preview** if it fails to load.
 A variant is routed by its product's category, and a variant still storing a deleted category has it cleared.
 
 ## API
@@ -534,9 +529,7 @@ repeated IDs are `management.request_invalid` (400), and a malformed UUID is `sh
 (400); a missing or malformed `shown` is `management.request_invalid` with `field: "shown"`.
 Category-summary counts cover each complete subtree. The `ownRoutes` count covers just the
 category's own row. For display the browser sums disjoint outermost subtrees and subtracts
-directly selected categories and active products from the contents counts. The two routing
-counts sum `ownRoutes` across all selected categories and `routes` across the outermost ones.
-The delete request still sends each selected category's freshly read counts.
+directly selected categories and active products from the contents counts. The delete request sends each selected category's freshly read counts.
 
 The former per-category delete, dependants and product-membership routes are retired. Use the
 category selection operations above. The product editor still saves `primaryCategoryId`, which

@@ -107,9 +107,8 @@ any preparation station changes and choose **Move to…** to save. You can also 
 **Move to…** from the toolbar too.
 
 When you delete a category, choose whether to keep its contents or delete them too. Check where
-the contents go and which station routing rules each choice removes. If preparation moves to
-another station, open **Details** to see the changes by product, zone and time. Products you ticked
-yourself are deleted with either choice.
+the contents will move if you keep them. Products you ticked yourself are deleted with either
+choice.
 
 While you add or rename a category, the square beside its name shows its own colour, or the colour
 it inherits from the nearest coloured category above it, then the venue's default. A dashed border

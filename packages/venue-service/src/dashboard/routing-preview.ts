@@ -1,6 +1,6 @@
 import { css, html } from "lit";
 import type { ProductItemsRoutingPreview, RoutingMove } from "../routing-types.js";
-import { targetKey, type RouteTarget } from "../routing.js";
+import type { RouteTarget } from "../routing.js";
 import { format } from "./hours-view.js";
 import { t } from "./strings.js";
 
@@ -69,39 +69,12 @@ function moveName(move: RoutingMove, periods: ProductItemsRoutingPreview["period
       });
 }
 
-export function groupRoutingMoves(
-  moves: readonly RoutingMove[],
-  scope: (move: RoutingMove) => readonly unknown[],
-) {
-  const groups = new Map<
-    string,
-    { move: RoutingMove; moves: RoutingMove[]; products: Set<string> }
-  >();
-  for (const move of moves) {
-    const key = JSON.stringify([
-      ...scope(move),
-      targetKey(move.from),
-      targetKey(move.to),
-      move.to === null && move.toNoReplacement,
-    ]);
-    const group = groups.get(key) ?? { move, moves: [], products: new Set<string>() };
-    group.moves.push(move);
-    group.products.add(move.variantOf?.productId ?? move.productId);
-    groups.set(key, group);
-  }
-  return [...groups.values()];
-}
-
-export function previewTargetName(stations: ProductItemsRoutingPreview["stations"]) {
-  return (target: RouteTarget) =>
-    target.kind === "no_preparation"
-      ? t("prep.no_preparation")
-      : (stations.find(({ id }) => id === target.stationId)?.name ?? target.stationId);
-}
-
 export function routingPreviewTable(preview: ProductItemsRoutingPreview) {
   if (preview.moves.length === 0) return html`<p>${t("prep.preview_none")}</p>`;
-  const targetName = previewTargetName(preview.stations);
+  const targetName = (target: RouteTarget) =>
+    target.kind === "no_preparation"
+      ? t("prep.no_preparation")
+      : (preview.stations.find(({ id }) => id === target.stationId)?.name ?? target.stationId);
   return html`<div
     class="routing-preview-table"
     data-test="routing-preview-table"

@@ -1,13 +1,4 @@
-import {
-  groupRoutingMoves,
-  previewFrom,
-  previewTargetName,
-  previewTo,
-  routingPreviewTable,
-} from "@waitron/venue-service/dashboard/routing-preview";
-import type { ProductItemsRoutingPreview, RoutingModel } from "@waitron/venue-service/routing";
 import { css, html, nothing } from "lit";
-import "@waitron/ui/src/components/wt-disclosure.js";
 import type {
   CategorySummary,
   FolderContents,
@@ -22,8 +13,7 @@ import { countOf } from "./count-text.js";
 
 export const productCategoryDeleteStyles = css`
   .category-delete-paths,
-  .category-delete-choices,
-  .category-delete-routing > p {
+  .category-delete-choices {
     overflow-wrap: anywhere;
   }
   .category-delete-choices {
@@ -43,10 +33,6 @@ export const productCategoryDeleteStyles = css`
     flex-shrink: 0;
     margin: 0;
     accent-color: var(--wt-color-primary);
-  }
-  .category-delete-choice small {
-    display: block;
-    color: var(--wt-color-text-muted);
   }
 `;
 
@@ -69,15 +55,12 @@ export function categoryDeleteImpact(
   });
   const subtree = new Set(roots.flatMap(({ id }) => [...categoryWithDescendants(id, categories)]));
   const selectedProducts = new Set(selection.productIds);
-  const kept = new Set<string>();
   let selectedInside = 0;
   for (const { id, active, primaryCategoryId } of products) {
     if (!active || primaryCategoryId === null || !subtree.has(primaryCategoryId)) continue;
     if (selectedProducts.has(id)) selectedInside++;
-    else kept.add(id);
   }
   return {
-    kept,
     folders: Math.max(
       0,
       roots.reduce((count, root) => count + root.folders, 0) -
@@ -87,25 +70,30 @@ export function categoryDeleteImpact(
       0,
       roots.reduce((count, root) => count + root.activeProducts, 0) - selectedInside,
     ),
-    keepRules: selectedSummaries.reduce((count, summary) => count + summary.ownRoutes, 0),
-    deleteRules: roots.reduce((count, root) => count + root.routes, 0),
   };
 }
 
-export function categoryDeleteHeading(
+export function deleteSelectionHeading(
   selection: ProductSelection,
   categories: readonly CategorySummary[],
   products: readonly Product[],
 ): string {
-  if (!selection.productIds.length && selection.categoryIds.length > 1)
-    return countOf("folders.delete_categories_heading", selection.categoryIds.length);
-  const names = [
-    ...selection.categoryIds.map(
-      (id) => categories.find((category) => category.id === id)?.name ?? id,
-    ),
-    ...selection.productIds.map((id) => products.find((product) => product.id === id)?.name ?? id),
-  ];
-  return fill("folders.delete_named_heading", { names: conjunctionList(names) });
+  const [categoryId] = selection.categoryIds;
+  const [productId] = selection.productIds;
+  const categoryCount = selection.categoryIds.length;
+  const productCount = selection.productIds.length;
+  if (categoryCount + productCount === 1) {
+    const name =
+      categoryId !== undefined
+        ? (categories.find(({ id }) => id === categoryId)?.name ?? categoryId)
+        : (products.find(({ id }) => id === productId)?.name ?? productId!);
+    return fill("folders.delete_named_heading", { name });
+  }
+  const items = conjunctionList([
+    ...(categoryCount ? [countOf("folders.count", categoryCount)] : []),
+    ...(productCount ? [countOf("folders.product_count", productCount)] : []),
+  ]);
+  return fill("folders.delete_selection_heading", { items });
 }
 
 /** Number matching paths in the tree's depth-first order, using the list's order for ties. */
@@ -156,12 +144,6 @@ export function categoryDeletePaths(
   </ul>`;
 }
 
-function routeRemoval(count: number) {
-  return count
-    ? fill("folders.remove_routes", { rules: countOf("folders.route_count", count) })
-    : "";
-}
-
 export function categoryDeleteChoices(
   selection: ProductSelection,
   categories: readonly CategorySummary[],
@@ -170,8 +152,8 @@ export function categoryDeleteChoices(
   busy: boolean,
   change: (event: Event) => void,
 ) {
-  const { folders, active, keepRules, deleteRules } = impact;
-  if (!folders && !active) return keepRules ? html`<p>${routeRemoval(keepRules)}</p>` : nothing;
+  const { folders, active } = impact;
+  if (!folders && !active) return nothing;
   const selected = new Set(selection.categoryIds);
   const parentOf = (category: CategorySummary) =>
     categoryAncestors(category, categories)
@@ -190,7 +172,7 @@ export function categoryDeleteChoices(
   const placement = differingParents
     ? t("folders.keep_each_parent")
     : parent
-      ? fill("folders.keep_in", { parent: after(parent) })
+      ? fill("folders.keep_move_to", { parent: after(parent) })
       : t(folders ? "folders.keep_top" : "folders.keep_no_category");
   const items = conjunctionList([
     ...(folders ? [countOf("folders.contents_category_count", folders)] : []),
@@ -198,14 +180,14 @@ export function categoryDeleteChoices(
   ]);
   const ownership = selection.categoryIds.length === 1 ? "one" : "many";
   return html`<fieldset class="category-delete-choices" .disabled=${busy}>
-    <legend>${t("folders.contents_question")} *</legend>
+    <legend>${t(`folders.contents_question_${ownership}`)} *</legend>
     ${(
       [
-        ["move_up", fill(`folders.keep_contents_${ownership}`, { items, placement }), keepRules],
-        ["delete", fill(`folders.delete_contents_${ownership}`, { items }), deleteRules],
+        ["move_up", fill(`folders.keep_contents_${ownership}`, { items, placement })],
+        ["delete", fill(`folders.delete_contents_${ownership}`, { items })],
       ] as const
     ).map(
-      ([value, label, rules]) => html`
+      ([value, label]) => html`
         <label class="category-delete-choice">
           <input
             type="radio"
@@ -215,10 +197,7 @@ export function categoryDeleteChoices(
             .checked=${choice === value}
             @change=${change}
           />
-          <span
-            ><span>${label}</span>
-            ${rules ? html`<small>${routeRemoval(rules)}</small>` : nothing}</span
-          >
+          <span>${label}</span>
         </label>
         ${
           value === "move_up" && before
@@ -238,63 +217,4 @@ export function categoryDeleteChoices(
       `,
     )}
   </fieldset>`;
-}
-
-export function categoryDeleteRouting(
-  preview: ProductItemsRoutingPreview,
-  routing: RoutingModel | null,
-  kept: ReadonlySet<string> | null,
-) {
-  if (!preview.moves.length) return routingPreviewTable(preview);
-  const targetName = previewTargetName(preview.stations);
-  const groups = groupRoutingMoves(preview.moves, () => []);
-  const zones = routing?.zones.length ? routing.zones.map(({ id }) => id) : [null];
-  return html`<div class="category-delete-routing">
-    ${groups.map(({ move, moves, products }) => {
-      const baselineAcrossZones =
-        routing !== null &&
-        moves.every(({ periodIds }) => periodIds === null) &&
-        [...products].every((id) =>
-          zones.every((zone) =>
-            moves.some(
-              (entry) =>
-                (entry.variantOf?.productId ?? entry.productId) === id && entry.zoneId === zone,
-            ),
-          ),
-        );
-      const asExtra = moves.some(({ dish }) => dish !== undefined);
-      const ordinary = baselineAcrossZones && !asExtra;
-      const all =
-        ordinary &&
-        groups.length === 1 &&
-        products.size > 1 &&
-        products.size === kept?.size &&
-        [...products].every((id) => kept.has(id));
-      const from = previewFrom(move, targetName);
-      const to = previewTo(move, targetName);
-      const scope = asExtra
-        ? t("folders.station_order")
-        : ordinary
-          ? ""
-          : t("folders.station_scoped");
-      const usually = ordinary ? t("folders.station_usually") : "";
-      const count = String(products.size);
-      const stationPair = !asExtra && move.from?.kind === "station" && move.to?.kind === "station";
-      const key = stationPair
-        ? all
-          ? "folders.station_all"
-          : products.size === 1
-            ? "folders.station_one"
-            : "folders.station_many"
-        : ordinary
-          ? "folders.station_other_usual"
-          : "folders.station_other";
-      return html`<p data-test="category-delete-station">
-        ${fill(key, { count, from, to, scope, usually })}
-      </p>`;
-    })}
-    <wt-disclosure heading=${t("folders.station_details")}
-      >${routingPreviewTable(preview)}</wt-disclosure
-    >
-  </div>`;
 }

@@ -1,6 +1,5 @@
 import {
   routingPreviewTable,
-  groupRoutingMoves,
   routingPreviewStyles,
   previewFrom,
   previewTo,
@@ -1366,16 +1365,26 @@ export class PrepStationsScreen extends LitElement {
    */
   #moveSummary(moves: readonly RoutingMove[], row: RoutingChange["address"]["row"]): string[] {
     const zoneOrder = new Map(this.view!.routing.zones.map((zone, index) => [zone.id, index]));
+    const groups = new Map<
+      string,
+      { move: RoutingMove; periods: string | null; products: Set<string> }
+    >();
+    for (const move of moves) {
+      const periods = move.periodIds ? this.#periodNames(move.periodIds) : null;
+      const key = JSON.stringify([
+        move.zoneId,
+        move.periodIds ? [...move.periodIds].sort() : null,
+        move.from,
+        move.to,
+        move.to === null && move.toNoReplacement,
+      ]);
+      const group = groups.get(key) ?? { move, periods, products: new Set<string>() };
+      group.products.add(move.variantOf?.productId ?? move.productId);
+      groups.set(key, group);
+    }
     const zoneRank = ({ move }: { move: RoutingMove }) =>
       move.zoneId === null ? -1 : (zoneOrder.get(move.zoneId) ?? zoneOrder.size);
-    return groupRoutingMoves(moves, (move) => [
-      move.zoneId,
-      move.periodIds ? [...move.periodIds].sort() : null,
-    ])
-      .map((group) => ({
-        ...group,
-        periods: group.move.periodIds ? this.#periodNames(group.move.periodIds) : null,
-      }))
+    return [...groups.values()]
       .sort(
         (a, b) =>
           zoneRank(a) - zoneRank(b) ||
