@@ -245,3 +245,16 @@ Introduce las fechas y horas reales y un **Motivo**, y pulsa **Guardar** para re
 solicitud. Pide a otro supervisor, encargado o administrador que elija **Aprobar con PIN**,
 seleccione su nombre e introduzca su PIN. Si eres administrador, puedes aprobar tu propia
 solicitud. Consulta su estado en **Mis horas**.
+
+## Cerrar las horas del mes {#monthly-hours-close}
+
+Abre **Horas** en el panel y elige el mes. Consulta la fecha de cierre y revisa las horas
+pendientes antes de que se cierre el mes.
+
+Si puedes gestionar los ajustes del sistema, cambia **Días laborables antes del cierre** y
+pulsa **Guardar**. Por defecto tienes tres días laborables para revisar las horas. Los fines
+de semana y los festivos del calendario del local no consumen ese plazo. Elige cero para
+cerrar a la hora de cambio de día del local el primer día del mes siguiente.
+
+Después del cierre, usa el **Total al cierre** del mes. Si corriges horas más adelante, **Cambio
+posterior al cierre** te muestra el total al cierre, el total actual y la diferencia.

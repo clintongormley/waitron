@@ -1854,14 +1854,6 @@ Whatever their browser sends counts:
   signed in on an enrolled till during such a stop can set any time from 28-10-2024 to 2100, with
   that person named ([Q61](../compliance/asesor-questions.md#q61-a-system-that-corrects-its-own-clock-from-a-tills-clock-when-it-has-no-internet-added-2026-11-01)). Left open by A798-B slice 9 (#2025).
 
-## Closing a pay period trusts the box's clock.
-
-`closePayPeriod` (`packages/workforce/src/pay-period-close.ts`) refuses `pay_period.not_due` until
-the clock passes the period's end. A clock wrongly days ahead could close a period that has not
-ended, and the closure is append-only. No production code calls it yet; the caller that is added
-needs a clock check. Left open by
-A798-B slice 9b, Task 15 (its audit table, `docs/developers/conventions-data.md`).
-
 ## timesyncd's clock file after a backward set has not been watched across a reboot.
 
 The host handler moves the time of timesyncd's clock file (`/var/lib/systemd/timesync/clock`) back

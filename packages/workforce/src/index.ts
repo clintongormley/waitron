@@ -132,7 +132,16 @@ export { WORKFORCE_CHANGE_SOURCES } from "./classification.js";
 export { payPeriodSettings } from "./schema/pay-period-settings.js";
 export { payPeriodClosures } from "./schema/pay-period-closures.js";
 export { verifyPayPeriodClosures } from "./pay-period-chain.js";
-export { resolvePayPeriod, readPayPeriodSettings, setPayPeriodSettings } from "./pay-periods.js";
+export {
+  resolvePayPeriod,
+  readPayPeriodSettings,
+  setPayPeriodSettings,
+  WORKFORCE_SETTINGS,
+  readPayPeriodCloseGraceDays,
+  setPayPeriodCloseGraceDays,
+  payPeriodCloseBoundary,
+  readNextMonthlyPayPeriod,
+} from "./pay-periods.js";
 export type { PayPeriodSettings } from "./pay-periods.js";
 export { closePayPeriod, readPayPeriodClosures } from "./pay-period-close.js";
 export type {

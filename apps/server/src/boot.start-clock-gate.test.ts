@@ -4,6 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
+import { jobOrigin } from "@waitron/shared";
+import { WorkforceBackend } from "@waitron/workforce";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -53,13 +55,17 @@ const built = vi.hoisted(() => ({
   start: undefined as StartClockState | undefined,
   correction: undefined as ReturnType<typeof clockCorrection> | undefined,
   watch: undefined as ClockWatch | undefined,
+  wallOffset: 0,
 }));
 vi.mock("./clock-watch.js", async (original) => {
   const actual = await original<typeof import("./clock-watch.js")>();
   return {
     ...actual,
     createClockWatch: (...args: Parameters<typeof actual.createClockWatch>) =>
-      (built.watch = actual.createClockWatch(...args)),
+      (built.watch = actual.createClockWatch({
+        ...args[0],
+        wall: () => (args[0].wall ?? Date.now)() + built.wallOffset,
+      })),
   };
 });
 vi.mock("./start-clock-check.js", async (original) => {
@@ -137,6 +143,7 @@ const suite = useVenueDb({
 
 const scratches: string[] = [];
 afterEach(async () => {
+  built.wallOffset = 0;
   await Promise.all(scratches.splice(0).map((d) => rm(d, { recursive: true, force: true })));
 });
 
@@ -203,13 +210,16 @@ async function sell() {
 }
 
 /** Starts the server, runs `during`, and closes it. */
-async function serving<T>(boxHost: BoxHostClient, during: () => Promise<T>): Promise<T> {
+async function serving<T>(
+  boxHost: BoxHostClient,
+  during: (server: StartedServer) => Promise<T>,
+): Promise<T> {
   const env = await tradingEnv();
   let server: StartedServer | undefined;
   try {
     // The tests' requests come from this machine, which the clock routes refuse as the box's own.
     server = await startServer(env, env, { boxHost, requestFromBox: () => false });
-    return await during();
+    return await during(server);
   } finally {
     if (server !== undefined) await server.close();
   }
@@ -225,6 +235,49 @@ function sellOnce(boxHost: BoxHostClient, after?: () => Promise<void>) {
 }
 
 describe("the start clock gate as boot wires it", () => {
+  it("freezes due hours after the box confirms its clock and the watch checks a jump", async () => {
+    const today = new Date();
+    const month = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 2, 1))
+      .toISOString()
+      .slice(0, 10);
+    const backend = new WorkforceBackend();
+    const [person] = await seedPersons(suite.db, { displayName: "Monthly close worker" });
+    await withTransaction(suite.db, async (tx) => {
+      const event = {
+        personId: person!.id,
+        nodeId: venue.cfg.nodeId,
+        offsetMinutes: 60,
+        origin: jobOrigin("dashboard"),
+      };
+      await backend.clockIn(tx, { ...event, at: `${month}T09:00:00Z` });
+      await backend.clockOut(tx, { ...event, at: `${month}T17:00:00Z` });
+    });
+    const closed = () =>
+      venue.db.all(sql`select period_start from pay_period_closures where period_start = ${month}`);
+    let synchronised = false;
+    const { host } = unsynchronisedHost();
+    host.clockStatus = async () => clockServiceAnswer(synchronised);
+    await serving(host, async (server) => {
+      const job = () => server.health.readJobs?.()["attendance.end_of_day"];
+      await vi.waitFor(() => expect(job()?.lastOkAt).toEqual(expect.any(String)));
+      const waitingAt = job()!.lastOkAt;
+      expect(built.start!.unconfirmed()).toBe(true);
+      expect(closed()).toEqual([]);
+
+      built.wallOffset = 120_000;
+      built.start!.confirm("by_devices", {});
+      await vi.waitFor(() => expect(job()?.lastOkAt).not.toBe(waitingAt), { timeout: 5_000 });
+      expect(closed()).toEqual([]);
+
+      synchronised = true;
+      await built.watch!.check();
+      expect(built.start!.unconfirmed()).toBe(false);
+      await vi.waitFor(() => expect(closed()).toEqual([{ period_start: month }]), {
+        timeout: 5_000,
+      });
+    });
+  });
+
   it("asks the time service before the listener opens and, not synchronised, sets nothing and refuses a sale with 409 clock.unconfirmed", async () => {
     const records = fiscalRecordCount(venue);
     const { host, listeningAtRead, sets } = unsynchronisedHost();

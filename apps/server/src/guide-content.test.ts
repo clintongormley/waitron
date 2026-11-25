@@ -264,6 +264,7 @@ it.each(GUIDE_LANGUAGES)(
       "device-profiles",
       "device-profile-sign-in",
       "hours",
+      "monthly-hours-close",
     ]);
   },
 );

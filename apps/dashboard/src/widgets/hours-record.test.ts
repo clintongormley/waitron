@@ -117,9 +117,24 @@ it("separates open break, worker acknowledgement, frozen month and later impact"
   expect(root.textContent).toContain("Self-approved by an admin");
   expect(root.textContent).toContain("Disputed");
   expect(root.textContent).toContain("Corrected");
-  expect(root.querySelector("[data-closure]")!.textContent).toContain("2026-01-31");
-  expect(root.querySelector("[data-closure]")!.textContent).toContain("8 h 00 min");
-  expect(root.querySelector("[data-impact]")!.textContent).toContain("+1 h 00 min");
+  const closed = root.querySelector("[data-closure]")!;
+  expect(closed.querySelector("h2")!.textContent!.trim()).toBe("January 2026 is closed");
+  expect([...closed.querySelectorAll("dt, dd")].map((el) => el.textContent!.trim())).toEqual([
+    "Closed total",
+    "8 h 00 min",
+    "Closed on",
+    "1 Feb 2026, 05:00",
+  ]);
+  expect(closed.textContent).not.toContain(view.clock.timeZone);
+  const impact = root.querySelector("[data-impact]")!;
+  expect([...impact.querySelectorAll("dt, dd")].map((el) => el.textContent!.trim())).toEqual([
+    "Closed total",
+    "8 h 00 min",
+    "Now",
+    "9 h 00 min",
+    "Difference",
+    "+1 h 00 min",
+  ]);
 });
 it("does not describe a replaced automatic finish as still counted", async () => {
   const view = hoursView({ pending: { prompts: [], items: [], automaticEntryIds: [] } });

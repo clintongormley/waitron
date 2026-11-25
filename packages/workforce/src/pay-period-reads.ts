@@ -1,4 +1,4 @@
-import { and, gt, lt } from "drizzle-orm";
+import { and, gt, lt, lte } from "drizzle-orm";
 import type { Database, Transaction } from "@waitron/db";
 import type { Period } from "./projection.js";
 import type { PayPeriodClosure } from "./record-types.js";
@@ -21,4 +21,16 @@ export async function readClosures(
     ...row,
     period: { start: periodStart, end: periodEnd },
   }));
+}
+
+export async function readClosedPeriodContaining(
+  tx: Transaction,
+  date: string,
+): Promise<Period | null> {
+  const [period] = await tx
+    .select({ start: payPeriodClosures.periodStart, end: payPeriodClosures.periodEnd })
+    .from(payPeriodClosures)
+    .where(and(lte(payPeriodClosures.periodStart, date), gt(payPeriodClosures.periodEnd, date)))
+    .limit(1);
+  return period ?? null;
 }

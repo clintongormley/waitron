@@ -4,6 +4,11 @@ import type { WaitronModule } from "./module.js";
 import "./errors.js";
 
 export interface ModuleTimeRecordExport {
+  workSummaryRules?(tx: Transaction): Promise<{
+    workingDaysPerWeek: number;
+    overtimeModel: "daily-accrual" | "period-net";
+    dailyTargetMinutes: number | null;
+  } | null>;
   paidBreakPolicy?(tx: Transaction): Promise<{
     thresholdMinutes: number;
     allowanceMinutes: number;

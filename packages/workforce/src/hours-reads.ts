@@ -12,7 +12,8 @@ import type {
 } from "./attendance-contract.js";
 import { projectAttendanceInboxWork, readAttendanceInboxInputs } from "./attendance-reads.js";
 import { compareEvents, compareRecording, effectiveClockEntries } from "./effective-entries.js";
-import { readClosures } from "./pay-period-reads.js";
+import { readClosedPeriodContaining, readClosures } from "./pay-period-reads.js";
+import type { PayPeriodClosure } from "./record-types.js";
 import { readPayPeriodSettings, resolvePayPeriod } from "./pay-periods.js";
 import type { Period, TimeEntryRecord } from "./projection.js";
 import { isRecordDate } from "./record-dates.js";
@@ -51,10 +52,10 @@ async function windowFor(
   const date = input.selection.date === undefined ? businessDay : input.selection.date;
   if (!isRecordDate(date)) throw invalid();
   if (input.selection.kind === "pay-period") {
-    const saved = await readClosures(tx, { period: { start: date, end: nextDate(date) } });
+    const saved = await readClosedPeriodContaining(tx, date);
     return {
       businessDay,
-      period: saved[0]?.period ?? resolvePayPeriod(await readPayPeriodSettings(tx), date),
+      period: saved ?? resolvePayPeriod(await readPayPeriodSettings(tx), date),
     };
   }
   const start = new Date(`${date}T00:00:00Z`);
@@ -95,6 +96,7 @@ async function personInWindow(
   input: HoursInput & { personId: string },
   window: { period: Period; businessDay: string },
   policy: PaidBreakPolicy | null,
+  saved: readonly PayPeriodClosure[],
 ): Promise<PersonHours> {
   const { personId } = input;
   if (typeof personId !== "string" || !personId) throw invalid();
@@ -113,7 +115,7 @@ async function personInWindow(
     questionWindows: inputs.questions.map((q) => [q.startAt, q.endAt]),
     questionEntryIds,
   });
-  const record = await readTimeRecord(tx, { personId, period }, policy);
+  const record = await readTimeRecord(tx, { personId, period }, policy, saved);
   const inbox = projectAttendanceInboxWork(personId, entries, inputs);
   const fullRecord = projectTimeRecord(entries);
   const openShifts = openShiftsFor(entries);
@@ -157,7 +159,6 @@ async function personInWindow(
       workedMinutes: sessions.reduce((sum, s) => sum + s.workedMinutes, 0),
     });
   }
-  const saved = await readClosures(tx, { period });
   const closures = record.closures.map((view) => {
     const closure = saved.find((row) => row.id === view.closureId)!;
     return {
@@ -190,7 +191,9 @@ export async function readPersonHours(
   input: HoursInput & { personId: string },
   policy: PaidBreakPolicy | null = null,
 ): Promise<PersonHours> {
-  return personInWindow(tx, input, await windowFor(tx, input), policy);
+  const window = await windowFor(tx, input);
+  const saved = await readClosures(tx, { period: window.period });
+  return personInWindow(tx, input, window, policy, saved);
 }
 export async function readManagerHours(
   tx: Transaction,
@@ -202,11 +205,12 @@ export async function readManagerHours(
     .select({ personId: persons.id, displayName: persons.displayName })
     .from(persons)
     .orderBy(asc(persons.displayName), asc(persons.id));
+  const saved = await readClosures(tx, { period: window.period });
   const people: ManagerHours["people"] = [];
   for (const row of rows)
     people.push({
       ...row,
-      hours: await personInWindow(tx, { ...input, personId: row.personId }, window, policy),
+      hours: await personInWindow(tx, { ...input, personId: row.personId }, window, policy, saved),
     });
   return {
     selection: { ...input.selection },

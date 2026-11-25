@@ -99,6 +99,7 @@ import {
   WORKFORCE_CHANGE_SOURCES,
   WORKFORCE_HANDOVER,
   WORKFORCE_PERMISSIONS,
+  WORKFORCE_SETTINGS,
   WORKFORCE_PERSONAL_DATA,
 } from "@waitron/workforce";
 import {
@@ -249,6 +250,7 @@ export const ALL_MODULES: readonly WaitronModule[] = [
     classification: WORKFORCE_CLASSIFICATION,
     changes: WORKFORCE_CHANGE_SOURCES,
     permissions: WORKFORCE_PERMISSIONS,
+    settings: [WORKFORCE_SETTINGS],
     configurationTransfer: WORKFORCE_CONFIGURATION_TRANSFER,
     personalData: WORKFORCE_PERSONAL_DATA,
     handover: WORKFORCE_HANDOVER,

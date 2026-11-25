@@ -1,8 +1,9 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
+import { dateTimeFormat } from "@waitron/dashboard-kit";
 import type { PersonHours } from "@waitron/dashboard-modules";
-import { t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { attendanceHistory, attendanceStatus, storedAttendanceTime } from "./attendance-history.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -81,6 +82,16 @@ export class HoursRecord extends LitElement {
       }
       .error {
         color: var(--wt-color-danger);
+      }
+      dl {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: var(--wt-space-2) var(--wt-space-3);
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+      dd {
+        margin: 0;
       }
       [data-total] {
         font-weight: var(--wt-font-weight-bold);
@@ -185,24 +196,51 @@ export class HoursRecord extends LitElement {
             </section>`
           : nothing
       }
-      ${view.closures.map(
-        (closure) =>
-          html`<section data-closure=${closure.closureId}>
-            <h2>${t("hours.frozen")}</h2>
-            <p>${closure.period.start} · ${dateAfter(closure.period.end, -1)}</p>
-            <p>${duration(closure.frozenWorkedMinutes)}</p>
-            <p>${closure.clock.timeZone} · ${closure.clock.dayCutover}</p>
-            <time datetime=${closure.closedAt}>${closure.closedAt}</time>
-          </section>`,
-      )}
+      ${view.closures.map((closure) => {
+        const { start, end } = closure.period;
+        const lastDay = dateAfter(end, -1);
+        const wholeMonth =
+          start.endsWith("-01") && lastDay.startsWith(start.slice(0, 7)) && end.endsWith("-01");
+        const month = dateTimeFormat(currentLocale(), {
+          month: "long",
+          year: "numeric",
+          timeZone: "UTC",
+        });
+        return html`<section data-closure=${closure.closureId}>
+          <h2>
+            ${wholeMonth ? fill("hours.closed_month", { month: month.format(new Date(start)) }) : t("hours.frozen")}
+          </h2>
+          ${wholeMonth ? nothing : html`<p>${dateTimeFormat(currentLocale(), { dateStyle: "medium", timeZone: "UTC" }).formatRange(new Date(start), new Date(lastDay))}</p>`}
+          <dl>
+            <dt>${t("hours.closed_total")}</dt>
+            <dd>${duration(closure.frozenWorkedMinutes)}</dd>
+            <dt>${t("hours.closed_on")}</dt>
+            <dd>
+              <time datetime=${closure.closedAt}
+                >${dateTimeFormat(currentLocale(), {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                  timeZone: closure.clock.timeZone,
+                }).format(new Date(closure.closedAt))}</time
+              >
+            </dd>
+          </dl>
+        </section>`;
+      })}
       ${view.record.closedPeriodImpacts.map(
         (impact) =>
           html`<section data-impact=${impact.closureId}>
             <h2>${t("hours.late_change")}</h2>
-            <p>
-              ${duration(impact.beforeWorkedMinutes)} · ${duration(impact.afterWorkedMinutes)} ·
-              ${impact.deltaWorkedMinutes >= 0 ? "+" : ""}${duration(impact.deltaWorkedMinutes)}
-            </p>
+            <dl>
+              <dt>${t("hours.closed_total")}</dt>
+              <dd>${duration(impact.beforeWorkedMinutes)}</dd>
+              <dt>${t("hours.current_total")}</dt>
+              <dd>${duration(impact.afterWorkedMinutes)}</dd>
+              <dt>${t("hours.total_difference")}</dt>
+              <dd>
+                ${impact.deltaWorkedMinutes >= 0 ? "+" : ""}${duration(impact.deltaWorkedMinutes)}
+              </dd>
+            </dl>
           </section>`,
       )}
     </div>`;

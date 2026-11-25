@@ -12,6 +12,50 @@ it("reads monthly settings when no row has been written", async () => {
   });
 });
 it.each([
+  [0, [], "2026-12-01T05:00:00.000Z"],
+  [3, [], "2026-12-04T05:00:00.000Z"],
+  [3, ["2026-12-02", "2026-12-03"], "2026-12-08T06:00:00.000Z"],
+] as const)(
+  "closes at the boundary after %i working days with holidays %j",
+  async (days, holidays, at) => {
+    expect(
+      await api.payPeriodCloseBoundary(
+        {
+          timeZone: "Europe/Madrid",
+          dayCutover: "06:00",
+          cutoverChanges: [{ effectiveBusinessDay: "2026-12-08", dayCutover: "07:00" }],
+        },
+        "2026-12-01",
+        days,
+        (date) => Promise.resolve(holidays.some((holiday) => holiday === date)),
+      ),
+    ).toBe(at);
+  },
+);
+
+it("keeps an adjusted monthly grace period when the cadence is saved", async () => {
+  expect(await api.readPayPeriodCloseGraceDays(suite.db)).toBe(3);
+  await withTransaction(suite.db, (tx) => api.setPayPeriodCloseGraceDays(tx, 0));
+  await withTransaction(suite.db, (tx) =>
+    api.setPayPeriodSettings(tx, { frequency: "fortnightly", anchorDate: "2026-10-12" }),
+  );
+  expect(await api.readPayPeriodCloseGraceDays(suite.db)).toBe(0);
+  await withTransaction(suite.db, (tx) => api.setPayPeriodCloseGraceDays(tx, 10));
+  expect(await api.readPayPeriodCloseGraceDays(suite.db)).toBe(10);
+  expect(await api.readPayPeriodSettings(suite.db)).toEqual({
+    frequency: "fortnightly",
+    anchorDate: "2026-10-12",
+  });
+});
+
+it.each([-1, 11, 1.5, "3", null])("refuses invalid grace days %j", async (value) => {
+  await expect(
+    withTransaction(suite.db, (tx) => api.setPayPeriodCloseGraceDays(tx, value)),
+  ).rejects.toMatchObject({ code: "pay_period.invalid" });
+  expect(await api.readPayPeriodCloseGraceDays(suite.db)).toBe(3);
+});
+
+it.each([
   ["2024-02-29", { start: "2024-02-01", end: "2024-03-01" }],
   ["2026-12-31", { start: "2026-12-01", end: "2027-01-01" }],
 ])("resolves calendar month for %s", (date, period) => {

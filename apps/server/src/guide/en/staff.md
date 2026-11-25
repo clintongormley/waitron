@@ -226,3 +226,15 @@ Enter the actual dates and times and a **Reason**, then choose **Save** to recor
 Ask another supervisor, manager or administrator to choose **Approve with a PIN**, select their
 name and enter their PIN. As an administrator, you can approve your own request. Check **My hours**
 for the request's progress.
+
+## Close monthly hours {#monthly-hours-close}
+
+Open **Hours** in the dashboard and choose the month. Check the closing date, then review any
+unresolved hours before it closes.
+
+If you manage system settings, change **Working days before close** and choose **Save**. The default
+gives you three working days to check the hours. Weekends and public holidays on the venue's calendar
+do not use up that time. Set it to zero to close when the venue’s day changes on the first of the next month.
+
+After close, use **Closed total** for the month. If you correct hours later, **Change after closure**
+shows you the closed total, the current total and the difference.

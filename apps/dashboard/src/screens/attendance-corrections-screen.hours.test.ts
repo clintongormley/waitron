@@ -42,6 +42,65 @@ it("opens the configured pay period, counted automatic hours and retained worker
   expect(m.root.querySelector("[data-add-shift]")).toBeTruthy();
 });
 
+it("shows the monthly close date and saves a changed whole number of working days", async () => {
+  const m = await mountManagerHours({
+    monthClose: {
+      graceDays: 3,
+      canEdit: true,
+      scheduledCloseAt: "2026-02-05T04:00:00.000Z",
+      closedAt: null,
+      holidayCoverageComplete: false,
+      timeZone: "Europe/Madrid",
+    },
+  });
+  await record(m.root);
+  expect(m.root.querySelector("[data-month-close]")?.textContent).toContain("5 Feb 2026");
+  const save = () => m.root.querySelector("[data-save-close-grace]")!;
+  expect(save()).toHaveProperty("disabled", true);
+  await change(m.root, "closeGraceDays", "1.5");
+  await m.el.updateComplete;
+  expect(save()).toHaveProperty("disabled", true);
+  await change(m.root, "closeGraceDays", "0");
+  await m.el.updateComplete;
+  expect(save()).toHaveProperty("disabled", false);
+  await click(m.root, "[data-save-close-grace]");
+  await expect.poll(() => m.graceWrites).toEqual([0]);
+  await expect.poll(() => save()).toHaveProperty("disabled", true);
+});
+
+it("keeps the existing unresolved hours view beside the read-only close date", async () => {
+  const m = await mountManagerHours({
+    monthClose: {
+      graceDays: 3,
+      canEdit: false,
+      scheduledCloseAt: "2026-02-05T04:00:00.000Z",
+      closedAt: null,
+      holidayCoverageComplete: true,
+      timeZone: "Europe/Madrid",
+    },
+  });
+  await record(m.root);
+  expect(m.root.querySelector("[data-month-close]")?.textContent).toContain("5 Feb 2026");
+  expect(m.root.querySelector("[data-save-close-grace]")).toBeNull();
+  expect(m.root.textContent).toContain("Old pending hours");
+  expect(m.root.querySelector("[data-month-issues]")).toBeNull();
+});
+
+it("shows no closing panel to a supervisor when there is no closing date", async () => {
+  const m = await mountManagerHours({
+    monthClose: {
+      graceDays: 3,
+      canEdit: false,
+      scheduledCloseAt: null,
+      closedAt: null,
+      holidayCoverageComplete: true,
+      timeZone: "Europe/Madrid",
+    },
+  });
+  await record(m.root);
+  expect(m.root.querySelector("[data-month-close]")).toBeNull();
+});
+
 it.each(["approve", "decline"])(
   "%s reads the current day before using the existing command owner and rereads Hours with a silent feed",
   async (action) => {
@@ -280,6 +339,8 @@ it("starts one stream with Hours before lookups, hiding day actions until the vi
     await new Promise((r) => setTimeout(r, 0));
     expect(streams).toHaveLength(1);
     expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"pay_period_settings"');
+    expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"settings.workforce"');
+    expect(decodeURIComponent(streams[0]!.url)).toContain('"type":"taxpayer"');
     expect(m.root.querySelector("[data-detail]")).toBeNull();
     expect(
       m.root.querySelector("[data-open-day]")!.shadowRoot!.querySelector("button")!.disabled,

@@ -4,15 +4,15 @@ import { nodes, type Database, type Transaction } from "@waitron/db";
 import { readOrigin } from "@waitron/shared";
 import { timeEntries } from "./schema/time-entries.js";
 import type { TimeEntryRecord } from "./projection.js";
-import type { Period } from "./projection.js";
+import { localWallClock, type Period } from "./projection.js";
 import { AppError } from "@waitron/shared";
-import type { PayPeriodSnapshot, TimeRecord } from "./record-types.js";
+import type { PayPeriodClosure, PayPeriodSnapshot, TimeRecord } from "./record-types.js";
 import { projectTimeRecord } from "./record-projection.js";
 import { recordInPeriod } from "./record-period.js";
 import { readClosures } from "./pay-period-reads.js";
 import "./errors.js";
 import { isRecordDate } from "./record-dates.js";
-import { compareEvents, liveClockEntries } from "./effective-entries.js";
+import { compareEvents, effectiveClockEntries, liveClockEntries } from "./effective-entries.js";
 
 export interface TimeRecordQuery {
   period: Period;
@@ -22,6 +22,7 @@ export async function readTimeRecord(
   tx: Database | Transaction,
   query: TimeRecordQuery,
   policy: PaidBreakPolicy | null = null,
+  loadedClosures?: readonly PayPeriodClosure[],
 ): Promise<TimeRecord> {
   if (
     (query.personId !== undefined && (typeof query.personId !== "string" || !query.personId)) ||
@@ -32,7 +33,7 @@ export async function readTimeRecord(
     query.period.start >= query.period.end
   )
     throw new AppError("attendance.invalid", { reason: "record_scope_or_period" });
-  const closures = await readClosures(tx, { period: query.period });
+  const closures = loadedClosures ?? (await readClosures(tx, { period: query.period }));
   const personId = query.personId;
   const period = { ...query.period };
   for (const closure of closures) {
@@ -58,6 +59,7 @@ function snapshotOf(snapshot: PayPeriodSnapshot, personId: string): PayPeriodSna
   const ownEntries = snapshot.entries.filter((e) => e.entry.personId === personId);
   const ownIds = new Set(ownEntries.map((e) => e.entry.entryId));
   return {
+    ...snapshot,
     sessions: snapshot.sessions.filter((s) => s.personId === personId),
     entries: ownEntries,
     summaries: snapshot.summaries.filter((s) => s.personId === personId),
@@ -127,6 +129,31 @@ async function readSelectedEntries(
     .where(sql`${timeEntries.id} in (${selected})`)
     .orderBy(sql`time_entries.rowid`);
   return rows.map(recordFromRow);
+}
+
+export async function readFirstEffectiveClockInDate(tx: Transaction): Promise<string | null> {
+  const entries = await readSelectedEntries(
+    tx,
+    sql`
+    with recursive
+    ${entryFamily(sql`
+      select ${seedColumns}
+      from time_entries seed
+      where seed.entry_kind = 'in' or (
+        seed.entry_kind = 'correction' and seed.correction_status = 'approved'
+        and seed.missing_entry_kind = 'in' and seed.corrects_entry_id is null
+      )
+    `)}
+    select id from family
+  `,
+  );
+  let first: string | null = null;
+  for (const entry of effectiveClockEntries(entries)) {
+    if (entry.entryKind !== "in") continue;
+    const date = localWallClock(entry.eventAt, entry.offsetMinutes).slice(0, 10);
+    if (first === null || date < first) first = date;
+  }
+  return first;
 }
 
 /** Filter projected sessions by the requested work dates. Rows outside the period supply context. */

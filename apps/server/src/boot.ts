@@ -2764,7 +2764,10 @@ async function bootServer(
   }
   tradingAdmission.admit();
   const jobRunner = createJobRunner({ now, log });
-  wakeOnClockReleased = () => jobRunner.wake("bills.close_of_day");
+  wakeOnClockReleased = () => {
+    jobRunner.wake("bills.close_of_day");
+    jobRunner.wake("attendance.end_of_day");
+  };
   const stopJobRunner = async () => {
     await jobRunner.stopJobs();
     await jobRunner.stopServices();
@@ -3090,11 +3093,15 @@ async function bootServer(
     },
     log,
   );
+  // Daily attendance can run during startup. A month close needs the clock watch's anchor.
+  let monthCloseClockUnconfirmed = () => true;
   if (workforceEnabled) {
     jobRunner.add(
       attendanceJob({
         db,
+        exporter: timeRecordExporter,
         nodeId: tradingContext.nodeId,
+        clockUnconfirmed: () => monthCloseClockUnconfirmed(),
         now,
         isPrimary: () => holders.singletonRole.current === "primary",
         maxSleepMs: timings.maxTickMs,
@@ -4014,11 +4021,14 @@ async function bootServer(
       },
     },
     readTimeService: readClockService,
+    onJumpChecked: () => jobRunner.wake("attendance.end_of_day"),
     log,
     monotonic: boxBoot.elapsed,
   });
   correction.addAnchor(clockWatch);
   jobRunner.add(clockWatchJob(clockWatch, CLOCK_WATCH_MS));
+  monthCloseClockUnconfirmed = () => startClockHolds() || clockWatch.hasUncheckedJump();
+  if (workforceEnabled) jobRunner.wake("attendance.end_of_day");
   const paymentsEnabled = enabledAtStart.some((module) => module.name === "payments");
   const translationContext = translationContextFor({ venueLocale, contentLanguageRules });
   const serverAlertSources: AlertSource[] = [

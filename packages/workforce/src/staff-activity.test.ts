@@ -11,6 +11,7 @@ import { recordStaffActivity, readStaffActivityFacts } from "./staff-activity.js
 import { staffActivity } from "./schema/attendance.js";
 import { attendanceDays } from "./schema/attendance.js";
 import { appendToChain } from "./chain.js";
+import { closePayPeriod } from "./pay-period-close.js";
 import { enqueueAttendanceDay } from "./attendance-state.js";
 
 const nextDay = {
@@ -293,6 +294,34 @@ it("an overnight shift's finish includes its later overrun and the overrun reque
     entryKind: "out",
     eventAt: "2026-01-06T06:30:00.000Z",
   });
+});
+
+it("keeps an overnight order on the same business day when the month closes", async () => {
+  await rota([["2026-01-06T02:00:00Z", "2026-01-06T06:00:00Z"]]);
+  const openEntryId = await f.open("2026-01-06T02:00:00Z");
+  const automatic = f.event("2026-01-06T06:10:00Z");
+  await f.run((tx) => f.backend.recordAutomaticClose(tx, { ...automatic, openEntryId }));
+  const afterShift = "2026-01-06T06:30:00.000Z";
+  await record(afterShift);
+  const dayFacts = async () => [
+    (await facts()).map((fact) => fact.at),
+    (await f.run((tx) => readStaffActivityFacts(tx, nextDay))).map((fact) => fact.at),
+  ];
+  expect(await dayFacts()).toEqual([[afterShift], []]);
+
+  await f.run((tx) =>
+    closePayPeriod(tx, {
+      nodeId: f.nodeId,
+      period: { start: "2026-01-01", end: "2026-02-01" },
+      clock: { timeZone: "UTC", dayCutover: "04:00", cutoverChanges: [] },
+      now: "2026-02-01T04:00:00Z",
+      ruleset: { workingDaysPerWeek: 5, overtimeModel: "daily-accrual", dailyTargetMinutes: null },
+      paidBreakPolicy: null,
+      origin: automatic.origin,
+    }),
+  );
+
+  expect(await dayFacts()).toEqual([[afterShift], []]);
 });
 
 it.each([

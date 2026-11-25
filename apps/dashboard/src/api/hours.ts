@@ -37,6 +37,10 @@ export class HoursApi {
       { passive: true },
     );
   }
+  async saveCloseGraceDays(graceDays: number): Promise<void> {
+    await this.request("/management-api/attendance/month-close", "POST", { graceDays });
+    this.invalidate();
+  }
   invalidate(): void {
     this.liveData?.invalidate(ATTENDANCE_QUERY_DEPENDENCIES.hours.map((type) => ({ type })));
   }

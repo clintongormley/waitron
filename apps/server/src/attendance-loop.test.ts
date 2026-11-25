@@ -18,6 +18,7 @@ import {
   WorkforceBackend,
   attendanceDays,
   attendanceQuestions,
+  payPeriodClosures,
   readChain,
   rosterVersions,
   shifts,
@@ -35,7 +36,13 @@ const suite = useVenueDb({
 const backend = new WorkforceBackend();
 let nodeId: string, personId: string, primary: boolean;
 const now = new Date("2026-01-07T09:00:00Z");
-const deps = () => ({ db: suite.db, nodeId, now: () => now, isPrimary: () => primary });
+const deps = () => ({
+  db: suite.db,
+  nodeId,
+  now: () => now,
+  isPrimary: () => primary,
+  clockUnconfirmed: () => false,
+});
 beforeEach(async () => {
   primary = true;
   await suite.db.execute(sql`drop trigger if exists reject_question`);
@@ -392,6 +399,7 @@ describe("attendance job lifecycle", () => {
     const { attendanceJob } = await import("./attendance-loop.js");
     const { runTestJob } = await import("./testing/run-job.js");
     return runTestJob(attendanceJob({ ...options, maxSleepMs: 60_000 }), options.signal, {
+      now: options.now,
       sleep: options.sleep,
       log: (_level, event) => {
         if (event === "job.failed") options.onError(new Error(event));
@@ -529,6 +537,157 @@ describe("attendance job lifecycle", () => {
 });
 
 describe("attendance runner job", () => {
+  it("runs due attendance while a monthly freeze waits for confirmed time", async () => {
+    await seed();
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const at = new Date("2026-02-05T04:00:00Z");
+    let waiting = true;
+    const job = attendanceJob({
+      ...deps(),
+      now: () => at,
+      maxSleepMs: 86_400_000,
+      clockUnconfirmed: () => waiting,
+    });
+    const pass = () => job.pass({ now: at, signal: new AbortController().signal });
+
+    for (let i = 0; i < 4; i++) await pass();
+    expect((await snapshot()).entries.find((entry) => entry.entryKind === "out")?.authorKind).toBe(
+      "automatic",
+    );
+    expect(await suite.db.select().from(payPeriodClosures)).toEqual([]);
+
+    expect(await pass()).toEqual({ nextDueAt: null });
+
+    waiting = false;
+    await pass();
+    expect(await suite.db.select().from(payPeriodClosures)).toHaveLength(1);
+  });
+
+  it("leaves monthly hours open if the clock becomes unconfirmed in the write queue", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const event = { nodeId, personId, origin: jobOrigin("dashboard"), offsetMinutes: 60 };
+      await backend.clockIn(tx, { ...event, at: "2026-01-05T09:00:00Z" });
+      await backend.clockOut(tx, { ...event, at: "2026-01-05T17:00:00Z" });
+    });
+    await settle();
+    const { attendanceJob, attendanceWorkPending } = await import("./attendance-loop.js");
+    const at = new Date("2026-02-05T04:00:00Z");
+    expect(await attendanceWorkPending(suite.db, at)).toBe(false);
+    let waiting = false;
+    const job = attendanceJob({
+      ...deps(),
+      now: () => at,
+      maxSleepMs: 86_400_000,
+      clockUnconfirmed: () => waiting,
+    });
+    const withWriteLock = suite.db.withWriteLock.bind(suite.db);
+    const lock = vi.spyOn(suite.db, "withWriteLock").mockImplementationOnce(async (work) => {
+      waiting = true;
+      return withWriteLock(work);
+    });
+    try {
+      expect(await job.pass({ now: at, signal: new AbortController().signal })).toEqual({
+        nextDueAt: at,
+      });
+      expect(await suite.db.select().from(payPeriodClosures)).toHaveLength(0);
+      expect(lock).toHaveBeenCalledOnce();
+    } finally {
+      lock.mockRestore();
+    }
+  });
+
+  it("wakes at the monthly close, and a restarted primary freezes the completed hours once", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const event = { nodeId, personId, origin: jobOrigin("dashboard"), offsetMinutes: 60 };
+      await backend.clockIn(tx, { ...event, at: "2026-01-05T09:00:00Z" });
+      await backend.clockOut(tx, { ...event, at: "2026-01-05T17:00:00Z" });
+    });
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const signal = new AbortController().signal;
+    let at = new Date("2026-02-05T03:59:59Z");
+    const job = () => attendanceJob({ ...deps(), now: () => at, maxSleepMs: 86_400_000 });
+    expect(await job().pass({ now: at, signal })).toEqual({
+      nextDueAt: new Date("2026-02-05T04:00:00Z"),
+    });
+    expect(await suite.db.select().from(payPeriodClosures)).toEqual([]);
+
+    at = new Date("2026-02-05T04:00:00Z");
+    primary = false;
+    await job().pass({ now: at, signal });
+    expect(await suite.db.select().from(payPeriodClosures)).toEqual([]);
+
+    primary = true;
+    await job().pass({ now: at, signal });
+    const closures = await suite.db.select().from(payPeriodClosures);
+    expect(closures).toMatchObject([
+      {
+        periodStart: "2026-01-01",
+        periodEnd: "2026-02-01",
+        scheduledCloseAt: "2026-02-05T04:00:00.000Z",
+        snapshot: {
+          sessions: [{ personId, workedMinutes: 480 }],
+          summaries: [{ personId, summary: null }],
+        },
+      },
+    ]);
+    await job().pass({ now: at, signal });
+    expect(await suite.db.select().from(payPeriodClosures)).toEqual(closures);
+  });
+
+  it("processes an outstanding clock-out before freezing the month", async () => {
+    await seed();
+    const { attendanceJob } = await import("./attendance-loop.js");
+    const at = new Date("2026-02-05T04:00:00Z");
+    const job = attendanceJob({ ...deps(), now: () => at, maxSleepMs: 86_400_000 });
+    const pass = () => job.pass({ now: at, signal: new AbortController().signal });
+
+    expect(await pass()).toEqual({ nextDueAt: at });
+    expect(await suite.db.select().from(payPeriodClosures)).toEqual([]);
+    const automatic = (await snapshot()).entries.find((entry) => entry.entryKind === "out");
+    expect(automatic?.authorKind).toBe("automatic");
+
+    for (let i = 0; i < 5; i++) {
+      await pass();
+      const [closure] = await suite.db.select().from(payPeriodClosures);
+      if (closure) {
+        expect(closure.snapshot.sessions).toMatchObject([{ personId, workedMinutes: 460 }]);
+        return;
+      }
+    }
+    throw new Error("The month did not close after attendance settled");
+  });
+
+  it("gives newly due attendance work precedence while a close waits for its write turn", async () => {
+    await withTransaction(suite.db, async (tx) => {
+      const event = { nodeId, personId, origin: jobOrigin("dashboard"), offsetMinutes: 60 };
+      await backend.clockIn(tx, { ...event, at: "2026-01-02T09:00:00Z" });
+      await backend.clockOut(tx, { ...event, at: "2026-01-02T17:00:00Z" });
+    });
+    await settle();
+    const { attendanceJob, attendanceWorkPending } = await import("./attendance-loop.js");
+    const at = new Date("2026-02-05T04:00:00Z");
+    expect(await attendanceWorkPending(suite.db, at)).toBe(false);
+    const job = attendanceJob({ ...deps(), now: () => at, maxSleepMs: 86_400_000 });
+    const withWriteLock = suite.db.withWriteLock.bind(suite.db);
+    const lock = vi.spyOn(suite.db, "withWriteLock").mockImplementationOnce(async (work) => {
+      await seed();
+      return withWriteLock(work);
+    });
+    try {
+      expect(await job.pass({ now: at, signal: new AbortController().signal })).toEqual({
+        nextDueAt: at,
+      });
+      expect(await suite.db.select().from(payPeriodClosures)).toEqual([]);
+      expect((await snapshot()).entries.map((entry) => entry.entryKind)).toEqual([
+        "in",
+        "out",
+        "in",
+      ]);
+    } finally {
+      lock.mockRestore();
+    }
+  });
+
   it("an idle pass opens no write transaction and waits for the next day end", async () => {
     await seed();
     let at = new Date("2026-01-05T18:00:00Z");

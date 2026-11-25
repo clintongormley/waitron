@@ -66,12 +66,13 @@ export function createClockWatch(deps: {
    * the shared one-minute reading of a host wrapped by `keepTimeServiceOn`, so reading it is
    * what switches a switched-off time service back on without waiting for a request. */
   readTimeService?: () => Promise<unknown>;
+  onJumpChecked?: () => void;
   log: Logger;
   wall?: () => number;
   /** The steady clock; the boot reader's elapsed time when absent, which counts a suspend, so
    * waking from one is not a jump. NaN, from a failed read, is never a jump. */
   monotonic?: () => number;
-}): ClockAnchor & { check(): Promise<void>; halt(): void } {
+}): ClockAnchor & { check(): Promise<void>; halt(): void; hasUncheckedJump(): boolean } {
   let stopped = false;
   const inTurn = deps.correction?.inTurn ?? (<T>(fn: () => Promise<T>) => fn());
   const wall = deps.wall ?? Date.now;
@@ -79,6 +80,10 @@ export function createClockWatch(deps: {
   const steps = () => deps.correction?.steps() ?? 0;
   const reading = () => ({ wallMs: wall(), monoMs: monotonic(), steps: steps() });
   let baseline = reading();
+  let checkingJump = false;
+  const jumped = (before: typeof baseline, after: typeof baseline) =>
+    after.steps === before.steps &&
+    Math.abs(after.wallMs - before.wallMs - (after.monoMs - before.monoMs)) > JUMP_MS;
   /** The highest refused position judged while the time service was synchronised: handled, so
    * a later look never sends the box back to waiting for it. */
   let judgedSynchronised = 0;
@@ -160,19 +165,23 @@ export function createClockWatch(deps: {
     await inTurn(async () => {
       const before = baseline;
       baseline = reading();
-      if (baseline.steps !== before.steps) return;
-      const steadyMs = baseline.monoMs - before.monoMs;
-      if (!(Math.abs(baseline.wallMs - before.wallMs - steadyMs) > JUMP_MS)) return;
-      const start = deps.start;
-      start?.clearClockStatus?.();
-      const backToWaiting =
-        start === undefined ? null : await backToWaitingUnlessSynchronised(start, "clock_jumped");
-      deps.log(backToWaiting === true ? "warn" : "info", "clock_watch.jumped", {
-        wallBefore: new Date(before.wallMs).toISOString(),
-        wallAfter: new Date(baseline.wallMs).toISOString(),
-        steadyMs,
-        backToWaiting,
-      });
+      if (!jumped(before, baseline)) return;
+      checkingJump = true;
+      try {
+        const start = deps.start;
+        start?.clearClockStatus?.();
+        const backToWaiting =
+          start === undefined ? null : await backToWaitingUnlessSynchronised(start, "clock_jumped");
+        deps.log(backToWaiting === true ? "warn" : "info", "clock_watch.jumped", {
+          wallBefore: new Date(before.wallMs).toISOString(),
+          wallAfter: new Date(baseline.wallMs).toISOString(),
+          steadyMs: baseline.monoMs - before.monoMs,
+          backToWaiting,
+        });
+      } finally {
+        checkingJump = false;
+        deps.onJumpChecked?.();
+      }
     });
   }
 
@@ -212,6 +221,7 @@ export function createClockWatch(deps: {
   }
 
   return {
+    hasUncheckedJump: () => checkingJump || jumped(baseline, reading()),
     // Runs inside the set's turn, so never between a look's readings and its comparison.
     reanchor: async () => {
       baseline = reading();
@@ -232,7 +242,10 @@ export function createClockWatch(deps: {
 
 export type ClockWatch = ReturnType<typeof createClockWatch>;
 
-export function clockWatchJob(watch: ClockWatch, intervalMs: number): JobDefinition {
+export function clockWatchJob(
+  watch: Pick<ClockWatch, "check" | "halt">,
+  intervalMs: number,
+): JobDefinition {
   let listening = false;
   return {
     name: "clock.watch",

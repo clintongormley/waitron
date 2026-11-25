@@ -163,6 +163,53 @@ it("manager hours refuses staff and permits a supervisor with minimal people dat
     value.people.every((p) => Object.keys(p).sort().join() === "displayName,hours,personId"),
   ).toBe(true);
 });
+it("lets only a system manager change the working days before monthly close", async () => {
+  const settings = "/management-api/attendance/month-close";
+  const hours = "/management-api/attendance/" + path("pay-period");
+  await setBuiltInRoleForTest(suite.db, venue.personId, "supervisor");
+  expect(await (await ask(hours)).json()).toMatchObject({
+    monthClose: {
+      graceDays: 3,
+      canEdit: false,
+      closedAt: null,
+      scheduledCloseAt: "2026-02-05T04:00:00.000Z",
+    },
+  });
+  expect((await ask(settings, { graceDays: 0 })).status).toBe(403);
+  expect((await ask(settings, { graceDays: 1.5 }, ownerCookie)).status).toBe(400);
+  expect((await ask(settings, { graceDays: 0 }, ownerCookie)).status).toBe(204);
+  expect(
+    (
+      await suite.db.execute(
+        sql`select module, doc, updated_by from settings where module = 'workforce'`,
+      )
+    ).rows,
+  ).toEqual([{ module: "workforce", doc: '{"closeGraceDays":0}', updated_by: owner }]);
+  expect(await (await ask(hours, undefined, ownerCookie)).json()).toMatchObject({
+    monthClose: {
+      graceDays: 0,
+      canEdit: true,
+      closedAt: null,
+      scheduledCloseAt: "2026-02-01T04:00:00.000Z",
+    },
+  });
+});
+
+it("keeps the grace setting available before the first clock entry without promising a close", async () => {
+  const route = "/management-api/attendance/hours?kind=pay-period&date=2025-03-01";
+  const response = await ask(route, undefined, ownerCookie);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    monthClose: {
+      graceDays: 3,
+      canEdit: true,
+      scheduledCloseAt: null,
+      closedAt: null,
+      holidayCoverageComplete: true,
+    },
+  });
+});
+
 it.each(["absent", "ended", "expired", "suspended"] as const)(
   "every new route refuses an %s management session",
   async (kind) => {

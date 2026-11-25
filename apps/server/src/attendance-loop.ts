@@ -1,10 +1,18 @@
-import { withTransaction, readVenueClock, type Database } from "@waitron/db";
+import { withTransaction, readVenueClock, type Database, type Transaction } from "@waitron/db";
 import { and, eq, gt, sql } from "drizzle-orm";
-import { attendanceDays, processAttendanceDay } from "@waitron/workforce";
+import {
+  attendanceDays,
+  closePayPeriod,
+  processAttendanceDay,
+  type WorkSummaryRuleset,
+  type PaidBreakPolicy,
+} from "@waitron/workforce";
 import { nextAttendanceDay } from "./attendance-discovery.js";
 import { readAttendanceFacts, readPlannedAttendanceShifts } from "./attendance-facts.js";
 import type { JobDefinition } from "./job-runner.js";
-import { businessDayBounds } from "@waitron/shared";
+import { businessDayBounds, jobOrigin } from "@waitron/shared";
+import { nextMonthlyHoursClose } from "./monthly-hours-close.js";
+import type { ModuleTimeRecordExport } from "@waitron/module";
 
 export type AttendancePassDeps = {
   db: Database;
@@ -12,7 +20,7 @@ export type AttendancePassDeps = {
   now: () => Date;
   isPrimary: () => boolean;
 };
-export async function attendanceWorkPending(db: Database, now: Date): Promise<boolean> {
+export async function attendanceWorkPending(db: Transaction, now: Date): Promise<boolean> {
   const [due] = await db
     .select({ id: attendanceDays.id })
     .from(attendanceDays)
@@ -55,7 +63,13 @@ export async function nextAttendanceDueAt(db: Database, now: Date): Promise<Date
   return row?.at ? new Date(row.at) : null;
 }
 
-export function attendanceJob(deps: AttendancePassDeps & { maxSleepMs: number }): JobDefinition {
+export function attendanceJob(
+  deps: AttendancePassDeps & {
+    maxSleepMs: number;
+    exporter?: ModuleTimeRecordExport;
+    clockUnconfirmed: () => boolean;
+  },
+): JobDefinition {
   return {
     name: "attendance.end_of_day",
     applies: deps.isPrimary,
@@ -65,16 +79,52 @@ export function attendanceJob(deps: AttendancePassDeps & { maxSleepMs: number })
       "workforce_chains",
       "day_cutover_changes",
       "settings.business_day",
+      "settings.venue",
+      "taxpayer",
+      "pay_period_settings",
+      "settings.workforce",
     ],
     minSleepMs: 500,
     maxSleepMs: deps.maxSleepMs,
     backoff: { firstMs: 5_000, maxMs: 300_000 },
     async pass({ now, signal }) {
+      const isPrimary = () => !signal.aborted && deps.isPrimary();
+      if (!isPrimary()) return { nextDueAt: null };
       const more =
         (await attendanceWorkPending(deps.db, now)) &&
-        (await runAttendancePass({ ...deps, isPrimary: () => !signal.aborted && deps.isPrimary() }))
-          .more;
-      return { nextDueAt: more ? now : await nextAttendanceDueAt(deps.db, now) };
+        (await runAttendancePass({ ...deps, isPrimary })).more;
+      if (more) return { nextDueAt: now };
+      const attendanceAt = await nextAttendanceDueAt(deps.db, now);
+      if (deps.clockUnconfirmed()) return { nextDueAt: attendanceAt };
+      const close = await nextMonthlyHoursClose(deps.db);
+      if (close === null) return { nextDueAt: attendanceAt };
+      const closeAt = new Date(close.scheduledCloseAt);
+      if (closeAt <= now) {
+        await withTransaction(deps.db, async (tx) => {
+          if (!isPrimary() || deps.clockUnconfirmed()) return;
+          const closingAt = deps.now();
+          if (await attendanceWorkPending(tx, closingAt)) return;
+          const due = await nextMonthlyHoursClose(tx);
+          if (due === null || new Date(due.scheduledCloseAt) > closingAt) return;
+          const ruleset: WorkSummaryRuleset | null =
+            (await deps.exporter?.workSummaryRules?.(tx)) ?? null;
+          const paidBreakPolicy: PaidBreakPolicy | null =
+            (await deps.exporter?.paidBreakPolicy?.(tx)) ?? null;
+          if (!isPrimary() || deps.clockUnconfirmed()) return;
+          await closePayPeriod(tx, {
+            ...due,
+            nodeId: deps.nodeId,
+            now: closingAt.toISOString(),
+            ruleset,
+            paidBreakPolicy,
+            origin: jobOrigin("business_day_close"),
+          });
+        });
+        return { nextDueAt: now };
+      }
+      return {
+        nextDueAt: attendanceAt !== null && attendanceAt < closeAt ? attendanceAt : closeAt,
+      };
     },
   };
 }

@@ -926,9 +926,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **Payroll export waits for the gestoría's import format.**
   [Detail](backlog/workforce.md#payroll-export-and-unused-scheduling-tables).
 
-- **MONTH-CLOSE. A month's hours close by themselves 3 working days after it ends, adjustable** — queued
-  (lane I). Owner, 2026-11-24: "3 working days of grace, adjustable". The bundle also keeps the rule a
-  cadence change needs after a close. [Detail](backlog/workforce.md#bundle-closing-a-months-hours-then-its-cadence-rule)
+- **MONTH-CLOSE. Work out overtime when contracts change, remind managers before close and carry later corrections into the next export.**
+  The month’s overtime by contract, issues list, reminder and saved adjustments remain in this bundle with the cadence rule.
+  [Detail](backlog/workforce.md#bundle-closing-a-months-hours-then-its-cadence-rule)
 
 - **A586. Each person's contract terms, from ready-made rule sets that warn and never refuse
   (owner, 2026-10-22).** Waitron does not follow or enforce each country's or region's law.
@@ -1082,9 +1082,6 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   retains earlier designs, decisions and library limits.
 
 - **Finish the clock work: a check at every start and every change** (bundle of 3, 1 go-live, 2 important, size L, waits for another entry). Holds A798. [Detail](backlog/box.md#bundle-finish-the-clock-work-a-check-at-every-start-and-every-change)
-
-- **Closing a pay period trusts the box's clock.**
-  [Detail](backlog/box.md#closing-a-pay-period-trusts-the-boxs-clock)
 
 - **Remaining bucket-copy limits** (an outage on a physical box at a venue's rate of sales; bundle of 1, size S, needs a physical box). [Detail](backlog/box.md#bundle-remaining-bucket-copy-limits)
 

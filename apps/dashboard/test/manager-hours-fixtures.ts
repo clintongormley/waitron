@@ -69,6 +69,7 @@ export async function mountManagerHours(
     held?: Promise<ManagerHours>;
     hold?: { match: string; promise: Promise<unknown> };
     exportOptions?: { available: boolean; canExportAll: boolean };
+    monthClose?: ManagerHours["monthClose"];
   } = {},
 ) {
   const data = {
@@ -79,8 +80,10 @@ export async function mountManagerHours(
       people: [{ personId: "worker", displayName: "Ana Worker" }],
     } satisfies AttendanceLookups,
   };
+  data.hours.monthClose = options.monthClose;
   const reads: { path: string; passive: string | null }[] = [],
     commands: AttendanceCommand[] = [];
+  const graceWrites: number[] = [];
   let fail = options.fail ?? false,
     refusal = "",
     receipt: unknown = null,
@@ -92,6 +95,12 @@ export async function mountManagerHours(
   const request = createRequest({
     fetchImpl: async (path, init) => {
       if (init.method === "POST") {
+        if (path.endsWith("/month-close")) {
+          const { graceDays } = JSON.parse(init.body as string) as { graceDays: number };
+          graceWrites.push(graceDays);
+          data.hours.monthClose!.graceDays = graceDays;
+          return new Response(null, { status: 204 });
+        }
         const command = JSON.parse(init.body as string) as AttendanceCommand;
         commands.push(command);
         if (refusal === "lost") throw new Error("lost answer");
@@ -160,6 +169,7 @@ export async function mountManagerHours(
     root,
     data,
     commands,
+    graceWrites,
     reads,
     liveData,
     fail: (value = true) => {

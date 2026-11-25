@@ -11,6 +11,7 @@ import { seedAttendanceDay } from "../test/fixtures.js";
 import * as api from "./index.js";
 import * as attendanceReads from "./attendance-reads.js";
 import * as recordReads from "./record-reads.js";
+import * as closureReads from "./pay-period-reads.js";
 import { readAttendanceRevision } from "./attendance-responses.js";
 import type { AttendanceCommandPayload, HoursSelection } from "./attendance-contract.js";
 
@@ -138,6 +139,27 @@ function freeze() {
     }),
   );
 }
+
+it("reads the venue snapshot once for the whole team and keeps each person's total separate", async () => {
+  await shift();
+  await freeze();
+  const readClosures = vi.spyOn(closureReads, "readClosures");
+  try {
+    const hours = await manager({ kind: "pay-period", date: "2026-01-05" });
+    expect(hours.people.length).toBeGreaterThan(1);
+    expect(
+      hours.people.find((person) => person.personId === f.personId)?.hours.closures[0]
+        ?.frozenWorkedMinutes,
+    ).toBe(480);
+    expect(
+      hours.people.find((person) => person.personId !== f.personId)?.hours.closures[0]
+        ?.frozenWorkedMinutes,
+    ).toBe(0);
+    expect(readClosures).toHaveBeenCalledTimes(1);
+  } finally {
+    readClosures.mockRestore();
+  }
+});
 
 it("defaults the window to the venue business date while the local calendar is in November", async () => {
   const value = await read({ kind: "month" });

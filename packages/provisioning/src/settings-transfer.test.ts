@@ -40,6 +40,12 @@ it("exports each saved transferring document at the code's version", async () =>
   await save();
   expect(await exportSettingsDocuments(suite.db, ALL_MODULES)).toEqual(entries);
 });
+it("transfers the monthly close grace in the workforce document", async () => {
+  const value = { workforce: { version: 1, doc: { closeGraceDays: 0 } } };
+  await withTransaction(suite.db, (tx) => importSettingsDocuments(tx, value, ALL_MODULES));
+  expect(await exportSettingsDocuments(suite.db, ALL_MODULES)).toEqual(value);
+});
+
 it("exports nothing for a document never saved", async () => {
   expect(await exportSettingsDocuments(suite.db, ALL_MODULES)).toEqual({});
 });

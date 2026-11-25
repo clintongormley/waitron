@@ -361,6 +361,21 @@ it("keeps recorded DST offsets and elapsed minutes after subtracting a break", a
     workedMinutes: 90,
   });
 });
+it("adds frozen totals without changing the live working-time export", async () => {
+  await day(true);
+  const before = await doc();
+  expect(cells(before, "totals")).toEqual([{ workedMinutes: 480 }]);
+  expect(cells(before, "history")).toHaveLength(2);
+
+  const frozen = await close();
+  const after = await doc();
+  for (const key of ["totals", "sessions", "history"]) {
+    expect(cells(after, key), key).toEqual(cells(before, key));
+  }
+  expect(cells(after, "closures")).toMatchObject([{ closureId: frozen.id }]);
+  expect(cells(after, "frozen-sessions")).toMatchObject([{ workedMinutes: 480 }]);
+});
+
 it("keeps the full frozen period and empty and populated summary values", async () => {
   const { seedEmployment } = await import("../test/fixtures.js");
   await seedEmployment(suite.db, { personId: worker, contractedMinutesPerWeek: 1200 });
