@@ -422,10 +422,9 @@ export class ProductEditorDialog implements ReactiveController {
   render(choices: ProductEditorChoices, busy = this.busy) {
     const locales = choices.contentLanguages?.languages ?? [];
     const refusals = this.#childRefusalErrors();
-    for (const { id } of choices.categories) this.#savedCategories.delete(id);
-    const categories = this.#savedCategories.size
-      ? [...choices.categories, ...this.#savedCategories.values()]
-      : choices.categories;
+    const saved = this.#savedCategories;
+    for (const { id } of saved.size ? choices.categories : []) saved.delete(id);
+    const categories = saved.size ? [...choices.categories, ...saved.values()] : choices.categories;
     return html`
       <dashboard-product-editor
         @wt-close=${(event: Event) => this.#afterClose(event)}
@@ -452,8 +451,7 @@ export class ProductEditorDialog implements ReactiveController {
         @wt-cancel=${(event: Event) => this.#cancel(event)}
         @wt-create-related=${(event: CustomEvent<{ kind: ProductChildKind; text?: string }>) => {
           event.stopPropagation();
-          if (this.#child.kind !== null) return;
-          if (event.detail.kind === "categories") {
+          if (event.detail.kind === "categories" && this.#child.kind === null) {
             this.#categorySeed = event.detail.text ?? "";
             this.#categoryParent = this.#editor()!.currentValue.primaryCategoryId;
           }

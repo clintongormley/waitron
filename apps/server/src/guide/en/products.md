@@ -207,8 +207,8 @@ in the table, including the Available switch, are saved when you save the produc
 
 **Open** takes you to the variant's own page, where it can have its own VAT when taken away, allergens and the other
 product details. Its main category and its unit are always its product's: the page shows the
-product's category path and unit as plain text, with the unit
-beside the price, such as "per kg", or "Each" when the product has none. If one form of a product
+product's category path and puts the unit beside the price. The unit might read "per kg", or "Each"
+when the product has none. If one form of a product
 needs a different unit, make it a product of its own. Apart from the names, each detail you leave
 blank there shows the product's value greyed out as a hint or, where the product has none, what will
 be used, such as "Not yet reviewed" for allergens nobody has reviewed, and the variant uses the

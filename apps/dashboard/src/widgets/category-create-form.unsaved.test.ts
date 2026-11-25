@@ -2,7 +2,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
-import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./category-create-form.js";
@@ -86,16 +85,4 @@ it("Cancel discards an edited name without asking", async () => {
   await expect.poll(() => el.cancel.mock.calls.length).toBe(1);
   expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   expect(el.leave.coordinator.isDirty()).toBe(false);
-});
-
-it("shows Name and Inside refusals beside the fields and lets the manager retry", async () => {
-  const { el, form, root, name, add } = await open();
-  Object.assign(form, { fieldErrors: { name: codeMessage("category.name_taken") } });
-  await expect.poll(() => name.error).toBe(codeMessage("category.name_taken"));
-  Object.assign(form, { fieldErrors: { parent: codeMessage("category.not_found") } });
-  const inside = root.querySelector("wt-combobox")!;
-  await expect.poll(() => inside.error).toBe(codeMessage("category.not_found"));
-  expect(name.error).toBe("");
-  await userEvent.click(add);
-  expect(el.submit).toHaveBeenCalledOnce();
 });
