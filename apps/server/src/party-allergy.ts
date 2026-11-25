@@ -256,14 +256,21 @@ export async function readAllergySendView(
         : [],
     );
   } else if (target.kind === "held-line") {
-    const group = current.groups.find((g) => g.rows.some((r) => r.lineId === target.lineId));
-    if (group === undefined) throw new AppError("group.not_found", { lineId: target.lineId });
+    const { lineId, lineIds } = target;
+    const group = current.groups.find((g) => g.rows.some((r) => r.lineId === lineId));
+    if (group === undefined) throw new AppError("group.not_found", { lineId });
     if (group.state !== "held") throw new AppError("group.not_held", { groupId: group.id });
-    chosen = new Set(
-      group.rows
-        .filter((r) => r.lineId === target.lineId && active(r))
-        .map((r) => `working:${r.lineId}`),
+    const billId = group.rows.find((row) => row.lineId === lineId)!.workingOrderId;
+    const named = new Set(lineIds ?? [lineId]);
+    const selected = group.rows.filter(
+      (row) => named.has(row.lineId) && row.workingOrderId === billId && active(row),
     );
+    if (
+      lineIds !== undefined &&
+      (!named.has(lineId) || named.size !== lineIds.length || selected.length !== named.size)
+    )
+      invalid("lineIds");
+    chosen = new Set(selected.map((row) => `working:${row.lineId}`));
   } else {
     const [bill] = await tx
       .select()

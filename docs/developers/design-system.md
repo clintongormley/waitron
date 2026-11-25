@@ -6475,8 +6475,9 @@ received from a card payment still in progress.
 On the till, Mark served and Undo served on a grouped row ask how many and act on its first that
 many members; Move station takes every member; Change dish changes every member; Move dishes… picks the row's first members whole
 ([The dish picker](#the-dish-picker)); Comp, discounts and Void act on the row, all of it
-or a count of it; Fire now fires the first member only, because its request names one line. On the
-station screen a tap or a move takes every member, and the pass only draws the rows. These lists keep
+or a count of it. Fire now releases every member of the row with its extras in one group.
+Finish table keeps a cancellation for each dish and groups the slips according to the station's
+setting. On the station screen a tap or a move takes every member, and the pass only draws the rows. These lists keep
 one row per portion: Items in Pay, until the A739 payment window releases its files; the counter basket
 once any of its order is paid (`foldRetrievedPortions`); and MOVED slips, which lay out each line
 alone (`printMovedSlips`, `apps/server/src/kitchen-ticket-moves.ts`).

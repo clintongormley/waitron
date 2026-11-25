@@ -633,7 +633,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   open by A1382, #3605 and #3604; fiscal and invoice wording remains).** Listed by code in the detail.
   [Detail](backlog/till.md#other-till-sentences-still-send-the-person-to-somebody-else-against-the-refusal-rule)
 
-- **An action on a grouped row covers every portion (A1193, A1194)** — queued as GROUPED-ROW (lane F).
   Owner, 2026-11-24: "firing that line now should send all 3. the kitchen has the choice of how they want
   to receive them: 3 lines or 1 line".
   [Detail](backlog/till.md#a1193-and-a1194-an-action-on-a-grouped-row-covers-every-portion)

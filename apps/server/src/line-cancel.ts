@@ -54,7 +54,6 @@ import { refusePaidLines } from "./bill-payments.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import { requireOrderBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
-import { holdPaperFor } from "./order-group-hold-paper.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueHoldCorrections } from "./kitchen-ticket-corrections.js";
 import { isStarted } from "./kitchen-ticket-state.js";
@@ -103,6 +102,8 @@ export type CancelItemCommand = Omit<CancelItemAsk, "approver"> & {
   approver?: CheckedApprover;
   /** Finish table checked the free items' pairing over its whole request, and cancels each itself. */
   freeItemsChecked?: boolean;
+  /** Finish table queues the bill's corrections before any cancel discards ticket details. */
+  correctionsQueued?: true;
 };
 
 type Line = typeof workingOrderLines.$inferSelect;
@@ -571,7 +572,7 @@ export async function cancelItem(
             }),
           });
         }
-        const corrections = (
+        if (ask.correctionsQueued !== true)
           await enqueueServiceCancellation(
             tx,
             cfg,
@@ -579,42 +580,8 @@ export async function cancelItem(
             [...families, ...freeFamilies],
             work,
             (dish) => ask.preparationStarted === true && !freeIds.includes(dish.id),
-          )
-        ).map(({ dish, ...correction }) => ({ ...correction, group: groupOf(dish) }));
-        if (corrections.length > 0) {
-          const holdPaper = await holdPaperFor(
-            tx,
-            corrections.flatMap(({ group, requested }) =>
-              requested && group !== undefined ? [group.id] : [],
-            ),
+            { groupOf },
           );
-          await enqueueHoldCorrections(
-            tx,
-            cfg,
-            bill!.id,
-            corrections.flatMap(({ group, requested, requestedAt, holdPaperQueued, item }) => {
-              if (item.fired) return [];
-              if (group === undefined) return requested && holdPaperQueued ? [item] : [];
-              if (
-                requested &&
-                holdPaper(group.id, {
-                  stationId: item.stationId,
-                  requestedAt,
-                  firedAt: null,
-                }) === undefined
-              )
-                return [];
-              return [
-                {
-                  ...item,
-                  group: group.displayNumber,
-                  ...(group.holdPrintedAt === null ? {} : { holdGroupId: group.id }),
-                },
-              ];
-            }),
-            { kind: "HOLD CANCELLED" },
-          );
-        }
         await writeServiceCancellations(tx, families, operatorId, started);
         for (const [i, family] of freeFamilies.entries())
           await writeServiceCancellations(tx, [family], operatorId, freeStarted[i]!);

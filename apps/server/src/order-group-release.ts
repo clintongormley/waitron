@@ -132,17 +132,21 @@ export async function fireGroup(
     cfg.madeHereSink,
   );
 }
-/** Fire a whole held dish and its extras without changing its bill's financial facts. */
+/** Fire the selected held dishes and their extras in a single group. */
 export async function fireHeldLine(
   tx: Transaction,
   cfg: OriginConfig,
   partyId: string,
   lineId: string,
-  args: PartyFireArgs,
+  args: PartyFireArgs & { lineIds?: string[] },
   attendance?: OrderAttendance,
 ): Promise<{ revision: number }> {
   const routing = routingOnce(tx, new Date());
   if (args.allergy !== undefined) args = { ...args, allergy: normaliseAllergyPatch(args.allergy) };
+  const named = args.lineIds?.toSorted();
+  if (named !== undefined && (!named.includes(lineId) || new Set(named).size !== named.length))
+    throw new AppError("management.request_invalid", { field: "lineIds" });
+  const lineIds = named ?? [lineId];
   return runServiceCommand(
     tx,
     { kind: "party", partyId },
@@ -151,13 +155,15 @@ export async function fireHeldLine(
     {
       partyId,
       lineId,
+      ...(named === undefined ? {} : { lineIds: named }),
       operatorId: args.operatorId,
       ...(args.allergy === undefined ? {} : { allergy: args.allergy }),
     },
     async () => {
       const revision = await checkAndBumpParty(tx, partyId, args.expectedPartyRevision, "open");
-      const [line] = await tx
+      const lines = await tx
         .select({
+          id: workingOrderLines.id,
           groupId: workingOrderLines.groupId,
           quantity: workingOrderLines.quantity,
           setMenuRole: workingOrderLines.setMenuRole,
@@ -173,35 +179,46 @@ export async function fireHeldLine(
         .leftJoin(unpaidDepartures, eq(unpaidDepartures.workingOrderId, workingOrders.id))
         .where(
           and(
-            eq(workingOrderLines.id, lineId),
+            inArray(workingOrderLines.id, lineIds),
             // The NULL-parent index range includes historical top-level dishes.
             isNull(sql`+${workingOrderLines.parentLineId}`),
             inArray(workingOrders.partyId, await partyFamily(tx, partyId)),
             eq(orderGroups.partyId, partyId),
             ne(orderGroups.state, "removed"),
           ),
-        );
+        )
+        .orderBy(asc(workingOrderLines.lineNo));
+      const line = lines.find((row) => row.id === lineId);
       if (line === undefined) throw new AppError("group.not_found", { lineId });
       if (line.state !== "held") throw new AppError("group.not_held", { groupId: line.groupId! });
       if (line.billStatus === "abandoned" || line.departureId !== null)
         throw new AppError("tab.not_open", { tabId: line.workingOrderId });
-      const cancelled = (await readLineCancellations(tx, [lineId])).get(lineId) ?? 0;
-      if (line.quantity <= cancelled) throw new AppError("group.line_cancelled", { lineId });
+      if (
+        lines.length !== lineIds.length ||
+        lines.some(
+          (row) => row.groupId !== line.groupId || row.workingOrderId !== line.workingOrderId,
+        )
+      )
+        throw new AppError("management.request_invalid", { field: "lineIds" });
+      const cancelled = await readLineCancellations(tx, lineIds);
+      const inactive = lines.find((row) => row.quantity <= (cancelled.get(row.id) ?? 0));
+      if (inactive !== undefined)
+        throw new AppError("group.line_cancelled", { lineId: inactive.id });
       await prepareAllergyRelease(
         tx,
         cfg,
         partyId,
-        { kind: "held-line", lineId },
+        { kind: "held-line", lineId, ...(named === undefined ? {} : { lineIds: named }) },
         args.allergy,
         args.operatorId,
       );
-      await judgeHeldSetMenuDishes(tx, [{ id: lineId, ...line }], args.lateSend);
+      await judgeHeldSetMenuDishes(tx, lines, args.lateSend);
       const source = line.groupId!;
       const printed = (await printedHeldGroups(tx, [source])).get(source);
       const heldPaper = (await heldPaperStations(tx, [source])).get(source) ?? new Set<string>();
       const labels = await readGroupNumberLabels(tx, [partyId]);
       if (printed !== undefined) {
-        const items = (await heldItemsOf(tx, [lineId])).get(lineId) ?? [];
+        const items = [...(await heldItemsOf(tx, lineIds)).values()].flat();
         await correctHoldTickets(
           tx,
           cfg,
@@ -225,8 +242,20 @@ export async function fireHeldLine(
       await tx
         .update(workingOrderLines)
         .set({ groupId })
-        .where(or(eq(workingOrderLines.id, lineId), eq(workingOrderLines.parentLineId, lineId)));
-      await fireOrderLines(tx, cfg, line.workingOrderId, [lineId], { heldPaper }, routing);
+        .where(
+          or(
+            inArray(workingOrderLines.id, lineIds),
+            inArray(workingOrderLines.parentLineId, lineIds),
+          ),
+        );
+      await fireOrderLines(
+        tx,
+        cfg,
+        line.workingOrderId,
+        lines.map((row) => row.id),
+        { heldPaper },
+        routing,
+      );
       const snapshot =
         attendance === undefined
           ? undefined
@@ -241,7 +270,7 @@ export async function fireHeldLine(
           groupId,
           kind: "group.fired",
           actorId: args.operatorId,
-          detail: { lineId, from: source },
+          detail: { lineId, from: source, ...(named === undefined ? {} : { lineIds: named }) },
         },
         snapshot,
       );

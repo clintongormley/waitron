@@ -3,6 +3,8 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
+  lineServiceCancellations,
+  orderGroups,
   sales,
   workingOrderLines,
   workingOrders,
@@ -23,6 +25,8 @@ import {
   type CancellationContext,
 } from "./line-cancel-context.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
+import { dishKitchenItems } from "./dish-kitchen.js";
+import { enqueueServiceCancellation, serviceCancellationFamilies } from "./line-service-cancel.js";
 import {
   freeItemRefusal,
   freeItemsLeft,
@@ -165,13 +169,10 @@ async function finish(
     );
   }
   const requested = args.cancellations ?? [];
-  if (
-    dishes.length !== requested.length ||
-    new Set(requested.map((item) => item.lineId)).size !== requested.length
-  )
-    throw refused();
+  const byLine = new Map(requested.map((item) => [item.lineId, item]));
+  if (dishes.length !== requested.length || byLine.size !== requested.length) throw refused();
   for (const dish of dishes) {
-    const item = requested.find((item) => item.lineId === dish.lineId);
+    const item = byLine.get(dish.lineId);
     if (
       item === undefined ||
       item.quantity !== dish.quantity ||
@@ -181,15 +182,52 @@ async function finish(
       throw refused();
   }
   await checkFreeItemPairing(tx, dishes, requested);
-  const refundLinks: RefundLink[] = [];
   for (const dish of dishes) {
-    const item = requested.find((item) => item.lineId === dish.lineId)!;
+    const item = byLine.get(dish.lineId)!;
     if (
       dish.context.stage === "not_started" &&
       dish.context.components.some((component) => component.firedAt !== null) &&
       item.preparationStarted === undefined
     )
       throw invalid("preparationStarted");
+  }
+  const byBill = new Map<string, { dish: (typeof remaining)[number]["line"]; off: number }[]>();
+  for (const { line, quantity } of remaining) {
+    const taken = byBill.get(line.workingOrderId) ?? [];
+    taken.push({ dish: line, off: quantity });
+    byBill.set(line.workingOrderId, taken);
+  }
+  for (const [billId, taken] of byBill) {
+    const ids = taken.map(({ dish }) => dish.id);
+    const rows = await tx
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, billId));
+    const priors = await tx
+      .select()
+      .from(lineServiceCancellations)
+      .where(inArray(lineServiceCancellations.lineId, ids));
+    const groups = await tx
+      .select()
+      .from(orderGroups)
+      .where(
+        inArray(orderGroups.id, [...new Set(taken.flatMap(({ dish }) => dish.groupId ?? []))]),
+      );
+    const byGroup = new Map(groups.map((group) => [group.id, group]));
+    await enqueueServiceCancellation(
+      tx,
+      cfg,
+      billId,
+      serviceCancellationFamilies(rows, taken, priors),
+      await dishKitchenItems(tx, ids),
+      (dish) => byLine.get(dish.id)!.preparationStarted === true,
+      { groupOf: (dish) => byGroup.get(dish.groupId ?? ""), stationGrouping: true },
+    );
+  }
+
+  const refundLinks: RefundLink[] = [];
+  for (const dish of dishes) {
+    const item = byLine.get(dish.lineId)!;
     const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, dish.billId));
     const answer = await cancelItem(
       tx,
@@ -209,6 +247,7 @@ async function finish(
         approver: args.approver,
         refundApprovedBy: args.refundApprovedBy,
         freeItemsChecked: true,
+        correctionsQueued: true,
       },
       args.operatorId,
       attendance,

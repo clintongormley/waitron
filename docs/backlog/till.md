@@ -2271,28 +2271,11 @@ booking stays, and seating it is refused `table.in_joined_table` once the reset 
 must move it by hand. Left open by A503 part 2 (#1601, design gap 2). Part of the owner's
 redesign of the table screens: whether the save refuses it, as a delete is refused, or only warns.
 
-## A1193 and A1194. An action on a grouped row covers every portion
-
-Queued as GROUPED-ROW (lane F). Owner, 2026-11-24: "order lines are stored with one item per line,
-collapsed lines are a display artifact, but they are treated as single entities. so firing that line
-now should send all 3. the kitchen has the choice of how they want to receive them: 3 lines or 1
-line".
-
-- **A1193.** Fire now on a till row that groups identical portions fires only its first portion,
-  because the server's fire route names one line and firing members one by one would start a fire
-  group and a ticket for each.
-- **A1194.** Finish table cancels a grouped row one portion at a time: three identical unserved
-  burgers give three keep-charge cancels of one and three "1 x" slips, where one line of three gives
-  one cancel and one "3 x" slip. Pinned as it is by the "Finish table" case in
-  `apps/server/src/order-portions.adjustments.test.ts`.
-
-The ticket and the cancel slip follow the station's own Identical dishes setting.
-
 ## A803. Bills and tables: one portion per order line, one bill switcher, one picker
 
 **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
 2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
-ticket/receipt grouping, has landed. What it leaves open is A1193–A1195, A1201 and A1217 under
+ticket/receipt grouping, has landed. What it leaves open is A1195, A1201 and A1217 under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
 landed; it leaves open A1235. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
 main bill, has landed (#2360); it leaves open A1261 and A1265. Slice

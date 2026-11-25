@@ -16105,20 +16105,17 @@ export class TillApp extends LitElement {
   }
 
   async #onFireHeldLine(event: Event): Promise<void> {
-    const { lineId } = (event as CustomEvent<{ lineId: string }>).detail;
-    await this.#fireHeldLine(lineId);
-  }
-
-  async #fireHeldLine(lineId: string): Promise<void> {
+    const { lineId, ...members } = (event as CustomEvent<{ lineId: string; lineIds?: string[] }>)
+      .detail;
     await this.#onGroupCommand(async (party) => {
       const allergy = await this.#prepareTableAllergy(
         party.id,
-        { kind: "held-line", lineId },
+        { kind: "held-line", lineId, ...members },
         () => true,
       );
       if (allergy === null) return;
       const written = await this.#writeTableAllergy(allergy, (command, signal) =>
-        allergy.api.fireHeldLine(party.id, lineId, command, { signal }),
+        allergy.api.fireHeldLine(party.id, lineId, { ...command, ...members }, { signal }),
       );
       if (written === null || !allergy.current()) return;
       this.#notePartyRevision(party.id, written.value.revision);

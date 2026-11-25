@@ -2523,6 +2523,57 @@ it("direct group HTTP cannot claim an existing bill line using the internal rese
 });
 
 describe("POST one held dish's Fire now", () => {
+  it.each(["missing", "duplicate", "other-group", "null"] as const)(
+    "refuses a grouped Fire now with %s members without writes",
+    async (shape) => {
+      const party = await withGroups();
+      const lineId = party.cake.lineIds[0]!;
+      const other = party.croquettes.lineIds[0]!;
+      const lineIds = {
+        missing: [other],
+        duplicate: [lineId, lineId],
+        "other-group": [lineId, other],
+        null: null,
+      }[shape];
+      const before = await snapshot(party);
+      const answer = await call("POST", `/api/parties/${party.partyId}/groups/fire-line`, {
+        lineId,
+        lineIds,
+        submissionId: randomUUID(),
+        expectedPartyRevision: await revisionOf(party.partyId),
+      });
+      expect(answer.status).toBe(400);
+      expect(answer.json).toEqual(refusal("management.request_invalid", { field: "lineIds" }));
+      expect(await snapshot(party)).toEqual(before);
+    },
+  );
+
+  it("replays the same grouped Fire now when members arrive in another order", async () => {
+    const party = await seated();
+    const submitted = await submit(party.partyId, [
+      { lines: [dish("Croquettes"), dish("Croquettes")], release: "hold" },
+    ]);
+    expect(submitted.status).toBe(200);
+    const [group] = (submitted.json as unknown as SubmitAnswer).groups;
+    const lineIds = group!.lineIds;
+    expect(lineIds).toHaveLength(2);
+    const path = `/api/parties/${party.partyId}/groups/fire-line`;
+    const command = {
+      lineId: lineIds[0]!,
+      lineIds,
+      submissionId: randomUUID(),
+      expectedPartyRevision: await revisionOf(party.partyId),
+    };
+    const answer = await call("POST", path, command);
+    expect(answer.status).toBe(200);
+    const fired = await dishLines((submitted.json as unknown as SubmitAnswer).tabId);
+    expect(fired.map((line) => line.groupId)).toEqual([fired[0]!.groupId, fired[0]!.groupId]);
+    expect(fired[0]!.groupId).not.toBe(group!.id);
+    const before = await snapshot(party);
+    expect(await call("POST", path, { ...command, lineIds: lineIds.toReversed() })).toEqual(answer);
+    expect(await snapshot(party)).toEqual(before);
+  });
+
   it("fires the named dish using the authenticated operator, leaves other held groups and replays once", async () => {
     const party = await withGroups();
     const command = {

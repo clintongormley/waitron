@@ -29,6 +29,7 @@ import {
   joinGroupOf,
   billOf,
   parseLineQuantities,
+  requireLineIds,
   parseMoveTarget,
 } from "./till-request-fields.js";
 import { run, runSubmitGroups, runBodyGroup } from "./till-api-errors.js";
@@ -300,6 +301,7 @@ export function mountTillGroupRoutes(
       const command = { ...groupCommand(session.personId, body), ...allergyCommand(body) };
       if (typeof body.lineId !== "string" || !isUuid(body.lineId)) throw invalid("lineId");
       const lineId = body.lineId.toLowerCase();
+      const members = body.lineIds === undefined ? {} : { lineIds: requireLineIds(body.lineIds) };
       const answer = await withLateSendCheck(deps.db, session, pinThrottle, lateSend, (late) =>
         withTransaction(deps.db, async (tx) => {
           await assertStillSignedIn(tx, session);
@@ -318,7 +320,7 @@ export function mountTillGroupRoutes(
             cfg,
             partyId,
             lineId,
-            { ...command, lateSend: late },
+            { ...command, ...members, lateSend: late },
             deps.attendance === undefined
               ? undefined
               : { recorder: deps.attendance, clock: deps.clock },

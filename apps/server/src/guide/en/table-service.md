@@ -334,7 +334,8 @@ under **Refund a payment on a receipt**.
 
 When you choose **Finish table** and a paid bill still has dishes nobody has served, a window
 headed, for example, **2 dishes not served** lists them, and you either cancel them all or, when one has a station ticket, send the food to the
-counter.
+counter. You choose a refund for each dish. The kitchen's cancellation slip follows the
+[station's grouping setting](kitchen-service.md#identical-dishes).
 
 For a dish that has gone to the station but is not marked started, answer **Has preparation
 started?**. For the others, the window shows the answer. Tick **Refund** beside each dish whose
@@ -501,7 +502,8 @@ row in **Sent** marks all of it served; **Mark served** in the row's details ask
 [**Move dishes…**](table-service.md#move-dishes) lets you choose how many of a row go to another bill, each with
 its own extras. **Comp** and **Void** work on the row and let you choose how many of its dishes.
 **Change dish**, in the row's details, changes every dish of the row and lets you increase its
-count. To reduce the count, use **Void…**, which opens **Cancel item**.
+count. To reduce the count, use **Void…**, which opens **Cancel item**. Choose **Fire now** in
+a held row's details to send every dish in that row, with its extras.
 
 Allergens and diet labels update from the live product while you keep the order open. You do not
 need to publish the menu or save the order.

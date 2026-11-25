@@ -3784,7 +3784,7 @@ export class TillTableOrderScreen extends LitElement {
     if (
       members === undefined ||
       slice === undefined ||
-      (action === "fire" && !this.#canFireSent(slice)) ||
+      (action === "fire" && !members.every((member) => this.#canFireSent(member))) ||
       (action === "station" && !members.every((member) => this.#canMoveSent(member))) ||
       (action === "void" && !this.#canVoidSent(slice)) ||
       (action === "comp" && members.some((member) => this.#sentOrderLine(member) === undefined))
@@ -3792,11 +3792,10 @@ export class TillTableOrderScreen extends LitElement {
       return;
     this.sentLinePending = null;
     this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
-    // Fire now acts on the first portion of a grouped row: its request names one line, and firing
-    // members one by one would start a fire group and a ticket for each.
     const lineIds =
       members.length > 1 ? { lineIds: members.map((member) => member.row.lineId) } : {};
-    if (action === "fire") this.#dispatch("fire-held-line", { lineId: slice.row.lineId });
+    if (action === "fire")
+      this.#dispatch("fire-held-line", { lineId: slice.row.lineId, ...lineIds });
     else if (action === "comp") {
       const line = this.#sentOrderLine(slice)!;
       const priced = (target: AdjustTarget) =>
@@ -3839,7 +3838,7 @@ export class TillTableOrderScreen extends LitElement {
   ): TemplateResult | typeof nothing {
     const slice = members?.[0];
     if (members === undefined || slice === undefined) return nothing;
-    const fire = this.#canFireSent(slice);
+    const fire = members.every((member) => this.#canFireSent(member));
     const station = members.every((member) => this.#canMoveSent(member));
     const unserve =
       slice.kind === "served" && members.every((member) => this.#sentBillOpen(member.row));

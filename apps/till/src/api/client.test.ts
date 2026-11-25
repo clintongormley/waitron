@@ -5077,6 +5077,28 @@ describe("TillApi: a seated party", () => {
     });
   });
 
+  it("sends the grouped Fire now selection to both preview and write", async () => {
+    const fetchStub = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ revision: 8 }))
+      .mockResolvedValueOnce(jsonResponse({ revision: 9 }));
+    const api = new TillApi("", fetchStub);
+    const lineId = "line-2";
+    const lineIds = ["line-2", "line-3", "line-4"];
+    const command = { submissionId: "sub-row", expectedPartyRevision: 8 };
+    await api.previewPartyAllergy("v1", { kind: "held-line", lineId, lineIds });
+    await api.fireHeldLine("v1", lineId, { ...command, lineIds });
+    expect(fetchStub).toHaveBeenNthCalledWith(
+      1,
+      "/api/parties/v1/allergy/send-preview",
+      post({ kind: "held-line", lineId, lineIds }),
+    );
+    const [url, request] = fetchStub.mock.calls[1]!;
+    expect(url).toBe("/api/parties/v1/groups/fire-line");
+    expect(request?.method).toBe("POST");
+    expect(JSON.parse(String(request?.body))).toEqual({ ...command, lineId, lineIds });
+  });
+
   it("fireGroup surfaces an already-fired group as { code }", async () => {
     const fetchStub = vi
       .fn()

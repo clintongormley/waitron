@@ -330,7 +330,8 @@ const en = {
   "prep.ticket_grouping": "Identical dishes on a station ticket",
   "prep.ticket_grouping.combined": "One line: 3 x Burger",
   "prep.ticket_grouping.separate": "A line each: 1 x Burger, three times",
-  "prep.ticket_grouping_hint": "Applies to new station tickets and to reprints.",
+  "prep.ticket_grouping_hint":
+    "Applies to new station tickets, reprints and Finish table cancellation slips.",
   "prep.bump_mode": "Done on the screen",
   "prep.bump_mode.line": "One item at a time",
   "prep.bump_mode.ticket": "Whole ticket at once",
@@ -1274,7 +1275,8 @@ const es: Record<keyof typeof en, string> = {
   "prep.ticket_grouping": "Platos iguales en una comanda de estación",
   "prep.ticket_grouping.combined": "Una línea: 3 x Hamburguesa",
   "prep.ticket_grouping.separate": "Una por plato: 1 x Hamburguesa, tres veces",
-  "prep.ticket_grouping_hint": "Se aplica a las comandas de estación nuevas y a las reimpresiones.",
+  "prep.ticket_grouping_hint":
+    "Se aplica a las comandas nuevas, las reimpresiones y los tickets de anulación al cerrar mesa.",
   "prep.bump_mode": "Marcado en la pantalla",
   "prep.bump_mode.line": "Un plato cada vez",
   "prep.bump_mode.ticket": "Toda la comanda a la vez",
