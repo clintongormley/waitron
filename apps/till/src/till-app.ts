@@ -355,6 +355,7 @@ import "./screens/till-drawer-close.js";
 import "./screens/till-drawer-cash.js";
 import "./widgets/find-bill-dialog.js";
 import { canScan } from "./widgets/equipment-dialog.js";
+import { pickedUpMessage } from "./widgets/equipment-labels.js";
 import "./widgets/profile-dialog.js";
 import type { ProfileNotice } from "./widgets/profile-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
@@ -12424,27 +12425,7 @@ export class TillApp extends LitElement {
         this.#equipmentStale = true;
       }
       if (nfc !== undefined) {
-        const selection = change.selection;
-        const printer =
-          "kind" in change && change.kind === "printer" && typeof selection === "object";
-        const printerFor = (name: "receipt" | "payment_slip") =>
-          printer &&
-          stored.roles.some(
-            (role) =>
-              role.role === name &&
-              (role.chosenId === selection.id || role.resolved?.id === selection.id),
-          );
-        const receipt = printerFor("receipt");
-        const slip = printerFor("payment_slip");
-        this.nfcNotice = {
-          message:
-            printer && !receipt && !slip
-              ? t("equipment.no_printer_role")
-              : printer && !receipt
-                ? t("equipment.picked_up_slip_only").replace("{item}", () => nfc.name)
-                : t("equipment.picked_up").replace("{item}", () => nfc.name),
-          tone: "info",
-        };
+        this.nfcNotice = { message: pickedUpMessage(change, stored, nfc.name), tone: "info" };
       }
       return stored;
     } catch (error) {

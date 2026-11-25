@@ -186,6 +186,14 @@ function choose(
   });
 }
 
+function tap(cookie: string, printerId: string) {
+  return send(deviceApp, cookie, "PUT", "/api/device/equipment", {
+    kind: "printer",
+    selection: { id: printerId },
+    via: "scan",
+  });
+}
+
 async function equipmentOf(cookie: string): Promise<RoleEquipment[]> {
   const res = await send(deviceApp, cookie, "GET", "/api/device/equipment");
   expect(res.status).toBe(200);
@@ -343,6 +351,40 @@ describe("choosing a portable printer, by scan or by a confirmed list choice", (
     });
     expect(res.status).toBe(400);
     expect(res.json).toEqual({ code: "printer.not_found", params: { id: office } });
+  });
+
+  it("a tap answers 200 with only the role this device may use the printer for set", async () => {
+    await printerLists({ receiptPrinterIds: [fp] });
+    expect((await choose(venue.cookie, "receipt", { id: fp }, "list")).status).toBe(200);
+
+    const res = await tap(venue.cookie, pp);
+
+    expect(res.status).toBe(200);
+    const roles = (res.json as { roles: RoleEquipment[] }).roles;
+    expect(roles.map((role) => [role.role, role.chosenId])).toEqual([
+      ["receipt", fp],
+      ["payment_slip", pp],
+      ["cash_drawer", null],
+      ["invoice", null],
+      ["card_terminal", r1],
+    ]);
+    expect(await columns(a)).toEqual({ receipt: fp, slip: pp, drawer: null });
+    expect(await printerHolder(pp)).toBe(a);
+    expect(await equipmentOf(venue.cookie)).toEqual(roles);
+  });
+
+  it("a tap of a printer this device may use for nothing it picks up is refused and changes nothing", async () => {
+    await printerLists({ receiptPrinterIds: [fp], paymentSlipPrinterIds: [fp] });
+
+    const res = await tap(venue.cookie, pp);
+
+    expect(res.status).toBe(400);
+    expect(res.json).toEqual({
+      code: "device.binding_invalid",
+      params: { field: "receiptPrinterId" },
+    });
+    expect(await columns(a)).toEqual({ receipt: null, slip: null, drawer: null });
+    expect(await printerHolder(pp)).toBeNull();
   });
 
   it("a legitimate selection of a free item succeeds", async () => {

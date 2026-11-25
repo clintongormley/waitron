@@ -349,6 +349,10 @@ export type EquipmentSelection = {
   takeOver?: boolean;
 };
 
+/**
+ * A sticker's tap or scan naming no role. A pick-up role the profile does not allow the printer for
+ * is skipped; a printer with pick-up roles is refused when all of them are skipped.
+ */
 export type EquipmentPickup = {
   deviceId: string;
   role?: undefined;
@@ -386,18 +390,15 @@ export async function selectDeviceEquipment(
     if (!printer.active || device === undefined) {
       throw new AppError("device.binding_invalid", { field });
     }
-    if (pickupRoles.length === 0) {
-      const lists = await readProfilePrinterLists(tx, device.profileId);
-      if (
-        !lists.receiptPrinterIds.includes(input.selection.id) &&
-        !lists.paymentSlipPrinterIds.includes(input.selection.id)
-      )
-        throw new AppError("device.binding_invalid", { field });
-    }
-
-    for (const role of pickupRoles) {
-      await selectDeviceEquipment(tx, { ...input, role });
-    }
+    const lists = await readProfilePrinterLists(tx, device.profileId);
+    const listed = {
+      receipt: lists.receiptPrinterIds.includes(input.selection.id),
+      payment_slip: lists.paymentSlipPrinterIds.includes(input.selection.id),
+    };
+    const allowed = pickupRoles.filter((role) => listed[role]);
+    if (pickupRoles.length === 0 ? !listed.receipt && !listed.payment_slip : allowed.length === 0)
+      throw new AppError("device.binding_invalid", { field });
+    for (const role of allowed) await selectDeviceEquipment(tx, { ...input, role });
     return;
   }
   const { deviceId, role, selection, via } = input;
