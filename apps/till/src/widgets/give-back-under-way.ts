@@ -363,7 +363,12 @@ export class TillGiveBackUnderWay extends LitElement {
   #cardDone(result: TenderRefundView): void {
     this.lostCard = null;
     this.terminal = null;
-    if (result.state === "failed") this.message = t("give_back.uw_card_failed");
+    this.cardAnswered = true;
+    if (result.state === "failed")
+      this.message =
+        result.refusalReason === "provider_balance_unavailable"
+          ? `${t("tender_refund.failed")} ${t("refund.provider_balance_unavailable")}`
+          : t("give_back.uw_card_failed");
   }
   /** The separate terminal's refund is always confirmed with a PIN (plan 5.4). */
   async #record(step: Terminal): Promise<void> {

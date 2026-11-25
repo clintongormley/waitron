@@ -3,7 +3,7 @@ import { deferred } from "../../test/clock-app.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { es } from "../i18n/strings.js";
+import { en, es } from "../i18n/strings.js";
 import { codeMessage, giveBackFilingMessage } from "../i18n/codes.js";
 import type { TillApi } from "../api/client.js";
 import type {
@@ -677,6 +677,29 @@ describe("a card", () => {
     press(el, "card");
     await vi.waitFor(() => expect(bottom(el)).toBe(t("give_back.uw_card_failed")));
   });
+
+  it.each([
+    ["en", en],
+    ["es-ES", es],
+  ] as const)(
+    "says in %s that the card company cannot refund yet, not to press the card's button again",
+    async (locale, words) => {
+      setLocale(locale);
+      const api = fakeApi();
+      api.refundTransaction.mockImplementationOnce(async (saleId, request) => ({
+        ...refundOf(saleId, request, "failed"),
+        refusalReason: "provider_balance_unavailable" as const,
+      }));
+      const { el } = await mount(OPEN, api);
+
+      press(el, "card");
+      await vi.waitFor(() =>
+        expect(bottom(el)).toBe(
+          `${words["tender_refund.failed"]} ${words["refund.provider_balance_unavailable"]}`,
+        ),
+      );
+    },
+  );
 
   it("sends nothing when the card's payment changed since it was shown", async () => {
     const api = fakeApi();

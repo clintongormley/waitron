@@ -9,6 +9,7 @@ import {
 } from "@waitron/db";
 import type { TrustedReading } from "@waitron/fiscal";
 import type { Authorization } from "@waitron/identity";
+import type { RefundRefusalReason } from "@waitron/payments";
 import { AppError, centsToDecimal, decimal, isUuid, type SaleId } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import { parseGiveBackRequest, type GiveBackPart, type GiveBackRequest } from "./give-back-plan.js";
@@ -49,6 +50,8 @@ export interface GiveBackOutcome {
   }[];
   /** A later part refused after an earlier one moved money. */
   refusal: { code: string; params: object } | null;
+  /** Why the card company made no refund; only the answer to the send it refused says so. */
+  refusalReason?: RefundRefusalReason;
   underWay: InvoiceCorrectionView | null;
   /** What was not sent yet; needs fresh ids. */
   rest: null | GiveBackRequest;

@@ -198,11 +198,16 @@ function outcomeLines(
         money(sumOf([outcome.rest!.amount, outcome.rest!.extra])),
       ),
     );
-  if (outcome.refusal !== null)
-    lines.push(
+  if (outcome.refusal !== null) {
+    const said =
       recoveryText(outcome.refusal) ??
-        codeMessage(outcome.refusal.code, currentLocale(), outcome.refusal.params),
+      codeMessage(outcome.refusal.code, currentLocale(), outcome.refusal.params);
+    lines.push(
+      outcome.refusalReason === "provider_balance_unavailable"
+        ? `${said} ${t("refund.provider_balance_unavailable")}`
+        : said,
     );
+  }
   if (notice !== null) lines.push(notice);
   return html`<div class="body-step" data-outcome role="status">
     ${

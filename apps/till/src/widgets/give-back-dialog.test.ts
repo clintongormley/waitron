@@ -4,7 +4,7 @@ import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import { es } from "../i18n/strings.js";
+import { en, es } from "../i18n/strings.js";
 import { guideHref } from "../help-guide.js";
 import { formatMoney } from "@waitron/shared";
 import type {
@@ -1577,6 +1577,42 @@ describe("sending", () => {
     await vi.waitFor(() => expect(outcomeText(el)).toContain("€2.00 is back on card ···4242."));
     expect(outcomeText(el)).toContain(codeMessage("give_back.refund_failed", "en"));
     expect(root(el).querySelector("[data-check-again]")).toBeNull();
+  });
+
+  it.each([
+    ["en", en],
+    ["es-ES", es],
+  ] as const)(
+    "says in %s that the card company cannot refund yet, when it says so",
+    async (locale, words) => {
+      setLocale(locale);
+      const api = fakeGiveBackApi();
+      api.giveBack.mockImplementation(async (_saleId: string, body: GiveBackWrite) => ({
+        ...completedFor(body),
+        parts: [{ kind: "refund", amount: "5.00", state: "failed", refundId: "refund-1" }],
+        refusal: { code: "give_back.refund_failed", params: {} },
+        refusalReason: "provider_balance_unavailable",
+      }));
+      const el = await press(api, "card-1");
+      await vi.waitFor(() =>
+        expect(outcomeText(el)).toBe(
+          `${codeMessage("give_back.refund_failed", locale)} ${words["refund.provider_balance_unavailable"]}`,
+        ),
+      );
+    },
+  );
+
+  it("says only that a card refund was not made, when the card company gives no reason", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockImplementationOnce(async (_saleId: string, body: GiveBackWrite) => ({
+      ...completedFor(body),
+      parts: [{ kind: "refund", amount: "5.00", state: "failed", refundId: "refund-1" }],
+      refusal: { code: "give_back.refund_failed", params: {} },
+    }));
+    const el = await press(api, "card-1");
+    await vi.waitFor(() =>
+      expect(outcomeText(el)).toBe(codeMessage("give_back.refund_failed", "en")),
+    );
   });
 
   it("moves to the under-way view when money is left under way", async () => {

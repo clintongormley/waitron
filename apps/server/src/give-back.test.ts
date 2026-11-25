@@ -2753,6 +2753,48 @@ describe("POST …/give-back on a card reader", () => {
     expect(view.choices.goodwill).toEqual({ available: true, reason: null });
   });
 
+  it.each([
+    ["the plain refund of a cancelled dish", true],
+    ["a correction's leg", false],
+  ])(
+    "says the card company cannot refund yet when it refuses %s so, on the first answer only, as Refund a payment's route does",
+    async (_part, cancelled) => {
+      const b = await tab(FIVE);
+      const saleId = await pay(b, [{ reader: "34.00" }]);
+      const reader = await tenderOf(saleId, "card");
+      if (cancelled) await cancel(b, "Paella", "1", true);
+      const body = await giveBody(
+        saleId,
+        cancelled
+          ? ask("dishes", "18.50", {
+              way: reader,
+              lineIds: [lineOf(await read(saleId), "Paella").id],
+            })
+          : ask("goodwill", "10.00", { way: reader }),
+      );
+      venue.card.scriptNextRefund({
+        made: false,
+        answer: {
+          kind: "refused",
+          documented: true,
+          httpStatus: 409,
+          reason: "provider_balance_unavailable",
+        },
+      });
+
+      const first = await give(saleId, body);
+      expect(first.status, JSON.stringify(first.json)).toBe(200);
+      expect(first.json).toMatchObject({
+        parts: [{ state: "failed" }],
+        refusal: { code: "give_back.refund_failed" },
+        refusalReason: "provider_balance_unavailable",
+      });
+      const again = await give(saleId, body);
+      expect(again.json).toMatchObject({ refusal: { code: "give_back.refund_failed" } });
+      expect(again.json).not.toHaveProperty("refusalReason");
+    },
+  );
+
   it("keeps the extra given back when the box's time stops being confirmed before the leg, and refuses the rest with clock.unconfirmed", async () => {
     const b = await tab(FIVE);
     const saleId = await pay(b, [{ reader: "34.00" }], "3.00");
