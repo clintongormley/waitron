@@ -429,7 +429,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect(await statusOf(venue, party.tabId)).toBe("placed");
   });
 
-  it("refuses a part-paid bill before its unserved dishes", async () => {
+  it("a part-paid bill names its unserved dishes, its money moving nowhere", async () => {
     const party = await seat("Tarta");
     expect((await printBill(party, party.tabId, true)).status).toBe(200);
     await inTx(venue, (tx) =>
@@ -449,10 +449,20 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
       }),
     );
 
-    await expectRefused(party.tabId, () => split(party.tabId), {
+    const refused = await expectRefused(party.tabId, () => split(party.tabId), {
       status: 409,
-      code: "bill.payments_received",
+      code: "bill.unserved_dishes",
     });
+
+    expect(refused.json.params).toMatchObject({ workingOrderId: party.tabId });
+    expect(
+      await inTx(venue, (tx) =>
+        tx
+          .select({ id: billPayments.id })
+          .from(billPayments)
+          .where(eq(billPayments.workingOrderId, party.tabId)),
+      ),
+    ).toHaveLength(1);
   });
 
   it("refuses a bill holding an advance, whose ticket takes the advance off", async () => {
@@ -500,7 +510,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
 
     await expectRefused(party.tabId, () => split(party.tabId), {
       status: 409,
-      code: "bill.payments_received",
+      code: "bill.has_advance",
     });
 
     expect(await salesOf()).toEqual(issued);

@@ -938,6 +938,9 @@ declare module "@waitron/shared" {
      * back in full; abandoning it and finishing its table are refused while it still holds money.
      */
     "bill.payments_received": { workingOrderId: string };
+    /** Reopen to split on a printed bill holding an advance: the advance's money is on its own
+     * ticket, which the printed ticket takes off, so it cannot follow the dishes. */
+    "bill.has_advance": { workingOrderId: string };
     /** The bill has been presented (placed), so it takes no new order. */
     "bill.presented": { workingOrderId: string };
     /** The bill is closed (paid, or closed as a deferred payment), so it takes no new order. */

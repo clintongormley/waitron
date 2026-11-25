@@ -22,12 +22,12 @@ import { unservedDishes } from "./meal-end.js";
 import { carryLineReductions } from "./order-portions.js";
 import { bumpPartyRevision } from "./parties.js";
 import { carryBillSetMenuCopies } from "./set-menu-bill.js";
+import { carryReceivedPayments, refuseSplitMoney } from "./split-after-print-money.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   abandonPlacedOrder,
   lockPlacedOrder,
   recordPlacedOrderCancelled,
-  refusePlacedOrderMoney,
 } from "./working-order-counter.js";
 import { createOpenOrder } from "./working-order-open.js";
 import { readInvoiceNumber } from "./stored-order-lines.js";
@@ -71,7 +71,7 @@ export async function refuseReopen(
 ): Promise<{ partyId: string; invoice: IssuedInvoice }> {
   const placed = await lockPlacedOrder(tx, deps, cfg, id);
   const refused = await refuseSplitBill(tx, id, placed.partyId, placed.invoice);
-  await refusePlacedOrderMoney(tx, id);
+  await refuseSplitMoney(tx, id);
   await refuseUnservedDishes(tx, id);
   return refused;
 }
@@ -95,6 +95,7 @@ export async function reopenToSplitIn(
     sessionId: operator.sessionId,
   });
   await abandonPlacedOrder(tx, cfg, id);
+  await carryReceivedPayments(tx, id, opened.billId);
   await bumpPartyRevision(tx, partyId);
   await recordPlacedOrderCancelled(
     tx,
