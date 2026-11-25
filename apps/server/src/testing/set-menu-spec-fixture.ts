@@ -26,6 +26,7 @@ import { stringToCents, thousandthsToDecimal } from "@waitron/shared";
 import { readBillEditState } from "../bill-editing.js";
 import { endMeal } from "../meal-end.js";
 import { readDrafts, submitDraft } from "../order-drafts.js";
+import { readGroupingCopies, saveBillGrouping } from "../set-menu-regroup.js";
 import { markServed } from "../working-order-serving.js";
 import { expectedDraftEditForTest } from "./draft-command-fixture.js";
 import {
@@ -277,6 +278,80 @@ export async function lunchBill(
   );
   await sendSpecDraft(spec, bill.partyId, draft.id, "fire");
   return bill;
+}
+
+/**
+ * Groups the bill by hand rather than by the cheapest grouping: each of `menus` holds the dish rows
+ * it names, at no charge, and every other dish row is charged a la carte. A set-menu row already on
+ * the bill for the same copy is kept. For a grouping the calculation would not choose, such as a
+ * dish at 0.00 inside a set menu.
+ */
+export function groupSpecBillByHand(
+  spec: SpecVenue,
+  billId: string,
+  menus: readonly { menuId: string; lineIds: readonly string[] }[],
+) {
+  return inTx(spec.venue, async (tx) =>
+    saveBillGrouping(tx, billId, await readGroupingCopies(tx, billId), (input) => {
+      const saved = [...(input.previous?.setMenus ?? [])];
+      const chosen = menus.map(({ menuId }, index) => {
+        const offer = input.offers.find(({ id }) => id.startsWith(`${menuId}:`))!;
+        const kept = saved.findIndex(({ offerId }) => offerId === offer.id);
+        const id = kept === -1 ? `menu-${index}` : saved.splice(kept, 1)[0]!.id;
+        return { id, offer };
+      });
+      const placed = new Map(
+        menus.flatMap(({ lineIds }, index) => lineIds.map((lineId) => [lineId, index] as const)),
+      );
+      const dishes = input.dishes.map(({ id, courseId, aLaCarteCents, extrasCents }) => {
+        const index = placed.get(id);
+        if (index === undefined)
+          return { id, place: null, chargeCents: aLaCarteCents, extrasCents };
+        const { id: setMenuId, offer } = chosen[index]!;
+        const lineIndex = offer.lines.findIndex(({ courseIds }) => courseIds.includes(courseId));
+        return { id, place: { setMenuId, lineIndex }, chargeCents: 0, extrasCents };
+      });
+      return {
+        exact: true,
+        totalCents:
+          chosen.reduce((sum, { offer }) => sum + offer.priceCents, 0) +
+          dishes.reduce((sum, { chargeCents, extrasCents }) => sum + chargeCents + extrasCents, 0),
+        unusedDiscountIds: [],
+        setMenus: chosen.map(({ id, offer }) => ({
+          id,
+          offerId: offer.id,
+          discountId: null,
+          baseCents: offer.priceCents,
+          discountCents: 0,
+        })),
+        dishes,
+      };
+    }),
+  );
+}
+
+/**
+ * Groups a {@link lunchBill} by hand: its first Soup, Hake, Lemonade and every other dish it sent
+ * into its Lunch menu, and any Soup or Hake sent after them into one Daily menu.
+ */
+export async function groupLunchBillByHand(spec: SpecVenue, lunch: SpecLunch, billId: string) {
+  const dishes = (await specRows(spec, billId)).filter(
+    ({ setMenuRole, parentLineId }) => setMenuRole !== "set_menu" && parentLineId === null,
+  );
+  const named = new Set<string>();
+  const inLunch: string[] = [];
+  const inDaily: string[] = [];
+  for (const { id, name } of dishes) {
+    if (named.has(name)) inDaily.push(id);
+    else {
+      named.add(name);
+      inLunch.push(id);
+    }
+  }
+  return groupSpecBillByHand(spec, billId, [
+    { menuId: lunch.menuId, lineIds: inLunch },
+    ...(inDaily.length === 0 ? [] : [{ menuId: spec.daily.menuId, lineIds: inDaily }]),
+  ]);
 }
 
 /**

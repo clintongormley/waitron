@@ -20,6 +20,7 @@ import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { inTx, order, type PartyVenue } from "./testing/party-venue.js";
 import {
   addSpecLunch,
+  groupLunchBillByHand,
   lunchBill,
   printSpecBill,
   serveSpecBill,
@@ -318,14 +319,16 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
 
   it("lists a dish with no weight under its divided set menu, with the letter of the rate it is filed at", async () => {
     const bill = await lunchBill(spec, lunch, lunch.versionId, [rollItem]);
+    // The grouping leaves a dish at 0.00 out of every set menu, so the bill is grouped by hand.
+    await groupLunchBillByHand(spec, lunch, bill.tabId);
     await printSpecBill(spec, bill.partyId, bill.tabId);
     const { original, settled, bySaleId } = await prints(bill.tabId);
     expect(itemsAndVat(original)).toEqual([
-      "1 Lunch menu 14,00",
       "1 Soup A",
       "1 Hake A",
       "1 Lemonade B",
       "1 Bread roll B",
+      "1 Lunch menu 14,00",
       "A 10% 10,65 1,07 11,72",
       "B 21% 1,88 0,40 2,28",
     ]);
@@ -340,14 +343,16 @@ describe("a takeaway set menu divided between 10% and 21%", () => {
       { dish: "Soup", from: daily },
       { dish: "Hake", from: daily },
     ]);
+    // The grouping leaves a dish at 0.00 out of every set menu, so the bill is grouped by hand.
+    await groupLunchBillByHand(spec, lunch, bill.tabId);
     await printSpecBill(spec, bill.partyId, bill.tabId);
     const { original, settled, bySaleId } = await prints(bill.tabId);
     expect(itemsAndVat(original)).toEqual([
-      "1 Lunch menu 14,00",
       "1 Soup A",
       "1 Hake A",
       "1 Lemonade B",
       "1 Bread roll B",
+      "1 Lunch menu 14,00",
       "1 Daily menu 14,00 A",
       "A 10% 23,38 2,34 25,72",
       "B 21% 1,88 0,40 2,28",

@@ -24,6 +24,7 @@ import { inTx, type PartyVenue } from "./testing/party-venue.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   addSpecLunch,
+  groupLunchBillByHand,
   lunchBill,
   sendSpecDishes,
   setupSetMenuSpecVenue,
@@ -296,6 +297,8 @@ describe("the full invoice of a takeaway set menu divided between 10% and 21%", 
       { dish: "Soup", from: daily },
       { dish: "Hake", from: daily },
     ]);
+    // The grouping leaves a dish at 0.00 out of every set menu, so the bill is grouped by hand.
+    await groupLunchBillByHand(spec, lunch, bill.tabId);
     await payWhole(bill.tabId, "28.00");
     const { settled, document } = await both(bill.tabId);
     const expected = [...DIVIDED_FIGURES, ["Daily menu", "1", "12.73", "12.73", "10.00", "14.00"]];
