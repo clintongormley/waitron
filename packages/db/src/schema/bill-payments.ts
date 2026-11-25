@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import { check, foreignKey, unique } from "drizzle-orm/sqlite-core";
 import {
   count,
   enumCheck,
@@ -10,7 +10,6 @@ import {
   money,
   newId,
   nowIso,
-  quantity,
   table,
   tsString,
 } from "./columns.js";
@@ -19,7 +18,7 @@ import { persons } from "./identity/persons.js";
 import { workingOrders } from "./orders.js";
 import { originChecks, saleSourceColumn } from "./origin.js";
 
-export const billPaymentKind = enumType(["items", "contribution", "share"]);
+export const billPaymentKind = enumType(["contribution", "share"]);
 export const billPaymentMethod = enumType(["cash", "card"]);
 export const billPaymentState = enumType(["pending", "received", "failed", "declined"]);
 
@@ -29,12 +28,11 @@ export const billPaymentState = enumType(["pending", "received", "failed", "decl
  *
  * Its state moves only pending → received, pending → failed, and received → declined while no
  * tender names it. Applied money and tip change only as a pending card payment becomes received,
- * or when a received payment that no tender names and that is not for chosen items (`items`, whose
- * applied money its lines record), on an open or placed bill, moves money from applied to tip,
- * keeping their sum and leaving applied at least what its pending and completed refunds give back
- * of it. Its bill changes only when a received payment moves from an abandoned bill to the bill
- * reopened from it. `bill_payments_guard_update` and `bill_payments_no_delete` enforce these rules
- * (`triggers/core.sql`).
+ * or when a received payment that no tender names, on an open or placed bill, moves money from
+ * applied to tip, keeping their sum and leaving applied at least what its pending and completed
+ * refunds give back of it. Its bill changes only when a received payment moves from an abandoned
+ * bill to the bill reopened from it. `bill_payments_guard_update` and `bill_payments_no_delete`
+ * enforce these rules (`triggers/core.sql`).
  */
 export const billPayments = table(
   "bill_payments",
@@ -111,34 +109,5 @@ export const billPayments = table(
       "bill_payments_attestation_ck",
       sql`(${t.attestedBy} is null) = (${t.attestationNote} is null) and (${t.attestedBy} is null or (${t.state} <> 'pending' and coalesce(length(trim(${t.attestationNote})), 0) > 0))`,
     ),
-  ],
-);
-
-/**
- * Which lines an item payment covers, and what those units cost when paid (design §2.2).
- * Append-only.
- *
- * `line_id` is a plain id with no key: a void deletes a working-order line, and a key from an
- * append-only row would turn that delete into a refusal. The application refuses to void, reduce
- * or move a paid quantity instead.
- */
-export const billPaymentLines = table(
-  "bill_payment_lines",
-  {
-    id: id("id").primaryKey().$defaultFn(newId),
-    billPaymentId: id("bill_payment_id").notNull(),
-    lineId: id("line_id").notNull(),
-    quantity: quantity("quantity").notNull(),
-    amount: money("amount").notNull(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.billPaymentId],
-      foreignColumns: [billPayments.id],
-      name: "bill_payment_lines_payment_fk",
-    }).onDelete("restrict"),
-    index("bill_payment_lines_payment_idx").on(t.billPaymentId),
-    check("bill_payment_lines_quantity_ck", sql`${t.quantity} > 0`),
-    check("bill_payment_lines_amount_ck", sql`${t.amount} >= 0`),
   ],
 );

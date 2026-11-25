@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "5afcb61e-6f24-4a57-928b-b36641feceb5",
+  "id": "2a5b7a4c-7e73-4f71-af53-f14163275dfd",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -8677,82 +8677,6 @@
         }
       }
     },
-    "bill_payment_lines": {
-      "name": "bill_payment_lines",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "bill_payment_id": {
-          "name": "bill_payment_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "line_id": {
-          "name": "line_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "quantity": {
-          "name": "quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "amount": {
-          "name": "amount",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        }
-      },
-      "indexes": {
-        "bill_payment_lines_payment_idx": {
-          "name": "bill_payment_lines_payment_idx",
-          "columns": [
-            "bill_payment_id"
-          ],
-          "isUnique": false
-        }
-      },
-      "foreignKeys": {
-        "bill_payment_lines_payment_fk": {
-          "name": "bill_payment_lines_payment_fk",
-          "tableFrom": "bill_payment_lines",
-          "tableTo": "bill_payments",
-          "columnsFrom": [
-            "bill_payment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "checkConstraints": {
-        "bill_payment_lines_quantity_ck": {
-          "name": "bill_payment_lines_quantity_ck",
-          "value": "\"bill_payment_lines\".\"quantity\" > 0"
-        },
-        "bill_payment_lines_amount_ck": {
-          "name": "bill_payment_lines_amount_ck",
-          "value": "\"bill_payment_lines\".\"amount\" >= 0"
-        }
-      }
-    },
     "bill_payments": {
       "name": "bill_payments",
       "columns": {
@@ -8983,7 +8907,7 @@
       "checkConstraints": {
         "bill_payments_kind_ck": {
           "name": "bill_payments_kind_ck",
-          "value": "\"bill_payments\".\"kind\" in ('items', 'contribution', 'share')"
+          "value": "\"bill_payments\".\"kind\" in ('contribution', 'share')"
         },
         "bill_payments_source_ck": {
           "name": "bill_payments_source_ck",

@@ -563,6 +563,7 @@ const REMOVED_TABLES = [
   "pass_item_marks",
   "content_languages",
   "holiday_geographies",
+  "bill_payment_lines",
 ];
 // The baseline rebuild moves these columns before the named anchor, retaining their metadata.
 const REBUILT_COLUMN_ORDER: Record<string, readonly (readonly string[])[]> = {

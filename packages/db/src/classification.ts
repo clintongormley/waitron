@@ -74,11 +74,6 @@ export const CORE_OWN_CLASSIFICATION: readonly ClassifiedTable[] = [
     "money taken against a bill before its invoice; only its outcome moves, under a trigger",
   ),
   appendOnly(
-    "bill_payment_lines",
-    "ledger",
-    "which lines an item payment paid for; never corrected, refunded by a refund row instead",
-  ),
-  appendOnly(
     "bill_advances",
     "ledger",
     "which advance invoice was issued against which bill; never corrected",
