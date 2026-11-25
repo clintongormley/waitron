@@ -523,6 +523,7 @@ import {
   NO_ORDERING_COPIES,
   withCopiesRead,
   type OrderingCopy,
+  type OwnSetMenuOffers,
   type SetMenuChange,
   type SetMenuOfferLookup,
 } from "./state/set-menus.js";
@@ -3399,6 +3400,8 @@ export class TillApp extends LitElement {
   #counterSetMenuLookup(): SetMenuOfferLookup {
     return this.#counterOffers.setMenuLookup(this.#currentCounterSetMenuBill);
   }
+  readonly #ownCounterSetMenuOffer: OwnSetMenuOffers = (line) =>
+    this.#counterOffers.ownSetMenuLookup(this.#currentCounterSetMenuBill)(line);
   readonly #counterGridOffers = new ZoneOfferIndex();
   readonly #tableOffers = new ZoneOfferIndex();
   readonly #tableGridOffers = new ZoneOfferIndex();
@@ -14678,6 +14681,11 @@ export class TillApp extends LitElement {
     );
   }
 
+  readonly #ownTableSetMenuOffer: OwnSetMenuOffers = (line) =>
+    this.#tableOffers.ownSetMenuLookup(
+      this.partyBills.find((bill) => bill.workingOrderId === this.activeTabId),
+    )(line);
+
   #reshowDraftOffers(): void {
     const sync = this.#draftSync;
     if (sync === undefined || !this.#tableOffers.loaded) return;
@@ -24711,6 +24719,7 @@ export class TillApp extends LitElement {
         .sumUpConnected=${this.sumUpConnected}
         .setMenuBill=${bill?.setMenus}
         .setMenuCopies=${copies}
+        .ownSetMenuOffer=${this.#ownCounterSetMenuOffer}
         .setMenuCourses=${copies.length === 0 ? {} : Object.fromEntries(this.courses.map(({ id, name }) => [id, name]))}
         .saveSetMenuCount=${this.#saveCounterSetMenuCount}
         .moveSetMenuDishes=${this.#moveCounterSetMenuDishes}
@@ -24826,6 +24835,7 @@ export class TillApp extends LitElement {
       .draftActionsAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "", true)}
       .productSelectable=${this.#tableProductSelectable}
       .setMenuCopies=${this.#tableSetMenuCopies()}
+      .ownSetMenuOffer=${this.#ownTableSetMenuOffer}
       .changeSetMenu=${this.#changeSetMenu}
       .loading=${this.tableOpening}
       embedded
@@ -25041,6 +25051,7 @@ export class TillApp extends LitElement {
           .draftActionsAllowed=${this.#deviceZoneAllows(this.#tableZoneId ?? "", true)}
           .productSelectable=${this.#tableProductSelectable}
           .setMenuCopies=${this.#tableSetMenuCopies()}
+          .ownSetMenuOffer=${this.#ownTableSetMenuOffer}
           .changeSetMenu=${this.#changeSetMenu}
           .loading=${this.tableOpening}
           slot="drill"

@@ -11,6 +11,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { blurAll, cleanupWidgets, measured, mountWidget, type Theme } from "./test-helpers.js";
 import { TillMenuBrowser } from "./menu-browser.js";
 import { setMenuProduct } from "./product-pick.js";
+import type { OwnSetMenuOffers } from "../state/set-menus.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
 
@@ -560,6 +561,108 @@ describe("set-menu folders", () => {
     );
     await el.updateComplete;
     expect(root(el).querySelector("[data-set-menu-place]")).toBeNull();
+  });
+
+  describe("a correction published while a set-menu dish is being placed", () => {
+    const declared = (allergens: TillProduct["allergens"], variants = false) => {
+      const dish = { ...daily.offers[1]!, allergens: allergens ?? null };
+      if (!variants) return dish;
+      const rare = {
+        ...dish,
+        id: "rare",
+        name: "Rare",
+        menuPrice: null,
+        pricingUnit: "each" as const,
+      };
+      return { ...dish, variants: [rare], variantCountsAs: { rare: "main" } };
+    };
+    const none = declared({});
+    /** Only Daily's recorded version answers, as a till's own offers do. */
+    const corrected = (offer = declared({ milk: {} })): OwnSetMenuOffers =>
+      vi.fn((line) =>
+        line.setMenuId === daily.menuId && line.menuVersionId === "lunch" ? offer : undefined,
+      );
+
+    async function mountPlacing(offer = none, onBill = false) {
+      const copy = { ...daily, offers: [offer] };
+      const withDaily = { ...setMenuBill, copies: [setMenuCopyOf(copy, "lunch")], dishes: [] };
+      withDaily.setMenus = withDaily.setMenus.filter(({ copyId }) => copyId === daily.key);
+      const mounted = await mount({
+        menu: lunch({ structure: { members: [dailyMember] } }),
+        setMenuCopies: [{ copy, versionId: "lunch" }],
+        setMenuBill: onBill ? withDaily : { ...withDaily, setMenus: [] },
+        ownSetMenuOffer: corrected(offer),
+      });
+      const { el } = mounted;
+      el.addSetMenu = async () => {
+        el.setMenuBill = withDaily;
+        await el.updateComplete;
+        return undefined;
+      };
+      const tapDish = async () => {
+        await tap(el, entry(el, "structure", daily.name));
+        const folder = root(el).querySelector("till-set-menu-folder")!;
+        await folder.updateComplete;
+        await userEvent.click(page.elementLocator(folder).getByRole("button", { name: /Sirloin/ }));
+        await el.updateComplete;
+      };
+      const addDaily = () =>
+        userEvent.click(
+          page
+            .elementLocator(root(el).querySelector("[data-set-menu-place]")!)
+            .getByRole("button", { name: /Add a Daily menu/ }),
+        );
+      return { ...mounted, tapDish, addDaily };
+    }
+
+    it("is taken by a dish picked before its set menu was added", async () => {
+      const { el, store, tapDish, addDaily } = await mountPlacing();
+      await tapDish();
+      el.ownSetMenuOffer = corrected();
+      await addDaily();
+      await vi.waitFor(() => expect(store.lines).toHaveLength(1));
+      expect(store.lines[0]!.product.allergens).toEqual({ milk: {} });
+    });
+
+    it("is kept by a line whose place is chosen again", async () => {
+      const { el, store, addDaily } = await mountPlacing();
+      const pick = { offer: none, setMenuId: daily.menuId, versionId: "lunch" };
+      store.addProduct(setMenuProduct(pick), "1", {
+        setMenu: { id: daily.menuId },
+        note: "No salt",
+      });
+      const line = store.lines[0]!;
+      expect(el.openSetMenuPlace(line)).toBe(true);
+      await el.updateComplete;
+      const own = corrected();
+      el.ownSetMenuOffer = own;
+      store.refreshDeclarations([], own);
+      await addDaily();
+      await vi.waitFor(() => expect(store.lines[0]).not.toBe(line));
+      expect(store.lines).toMatchObject([
+        { note: "No salt", setMenuId: daily.menuId, product: { allergens: { milk: {} } } },
+      ]);
+    });
+
+    it("reaches the variants in choices kept open while no menu is chosen", async () => {
+      const { el, store, tapDish } = await mountPlacing(declared({}, true), true);
+      await tapDish();
+      const picker = root(el).querySelector("till-modifier-picker")!;
+      await picker.updateComplete;
+      picker.shadowRoot!.querySelector<HTMLInputElement>('input[name="product-variant"]')!.click();
+      el.hasMenuPicker = true;
+      el.menu = undefined;
+      await el.updateComplete;
+      el.ownSetMenuOffer = corrected(declared({ milk: {} }, true));
+      await el.updateComplete;
+      await picker.updateComplete;
+
+      expect(picker.product.variants![0]!.allergens).toEqual({ milk: {} });
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      expect(store.lines).toMatchObject([
+        { product: { variantId: "rare", allergens: { milk: {} } } },
+      ]);
+    });
   });
 
   it("hides set menus on a surface without set-menu ordering", async () => {

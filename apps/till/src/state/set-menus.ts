@@ -77,7 +77,10 @@ export function ownSetMenuOffer(
     ?.offers.find((dish) => dish.id === line.menuItemId);
 }
 
-export function setMenuLineOf(line: OrderLine): SetMenuLine {
+/** {@link ownSetMenuOffer} against a till's offers, as a set-menu line's declarations follow it. */
+export type OwnSetMenuOffers = (line: SetMenuLine) => TillMenuOffer | undefined;
+
+export function setMenuLineOf(line: Pick<OrderLine, "product" | "setMenuId">): SetMenuLine {
   return {
     setMenuId: line.setMenuId,
     menuItemId: line.product.menuItemId ?? "",

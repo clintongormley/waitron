@@ -36,7 +36,7 @@ import type {
   TillSaleResult,
   ZoneOffers,
 } from "./api/client.js";
-import { DEFAULT_HOME_ORDER, setMenuCopyOf } from "@waitron/shared";
+import { DEFAULT_HOME_ORDER, setMenuCopyOf, type SetMenuTerms } from "@waitron/shared";
 
 // Lunch is published as v1 and then as v2. Lemonade and Burger are on it; Burger offers an extras list
 // (cheese) and an options list (rare / medium).
@@ -3478,7 +3478,7 @@ function hakeDish(allergens: TillMenuOffer["allergens"], price = "5.00") {
   return {
     ...offer("menu-hake", "Hake", price, { allergens, menuId: "daily" }),
     ordering: "not_sold_separately" as const,
-    countsAsCourseId: null,
+    countsAsCourseId: null as string | null,
     variantCountsAs: {},
   };
 }
@@ -3494,7 +3494,7 @@ function dailyCopy(dish: ReturnType<typeof hakeDish>, key = "daily-copy") {
       vatClass: "reduced" as const,
       takeawayVatClass: "reduced" as const,
       names: {},
-      lines: [],
+      lines: [] as SetMenuTerms["lines"],
     },
     structure: { members: [] },
     offers: [dish],
@@ -3992,6 +3992,149 @@ it("drops a late answer about the copies of an order opened again since", async 
 
   expect(store.lines[0]!.product.allergens).toEqual({ fish: {}, sesame: {} });
 });
+
+/** Daily with a place for a main, whose Hake offers an extra: `allergens` are the dish's and the
+ * extra's. */
+function chosenDaily(allergens: TillMenuOffer["allergens"], menuId = "daily") {
+  const [extras] = burgerOffer().offeredModifiers;
+  if (extras?.kind !== "extras") throw new Error("extras");
+  const copy = dailyCopy({
+    ...hakeDish(allergens),
+    offeredModifiers: [
+      { ...extras, items: extras.items.map((item) => ({ ...item, addAllergens: allergens })) },
+    ],
+    countsAsCourseId: "mains",
+  });
+  return {
+    ...copy,
+    key: `${menuId}-copy`,
+    menuId,
+    name: menuId === "daily" ? "Daily" : "Special",
+    terms: { ...copy.terms, lines: [{ id: "main", count: 1, courseIds: ["mains"] }] },
+  };
+}
+
+/** A bill holding one of `copy`'s set menu, with nothing ordered on it. */
+const oneOf = (copy: ReturnType<typeof chosenDaily>) => ({
+  setMenus: {
+    copies: [setMenuCopyOf(copy, "v1")],
+    recorded: { [copy.menuId]: "v1" },
+    exact: true,
+    setMenus: [{ lineId: "held-menu", copyId: copy.key, lineNo: 1 }],
+    dishes: [],
+  },
+  setMenuCopies: [copy],
+});
+
+/** The till at `kind` on a bill whose set menus are `bill`, with Hake's extras open from the folders
+ * named `path`. */
+async function openHakeChoices(
+  kind: Surface,
+  zone: ZoneOffers,
+  bill: ReturnType<typeof oneOf>,
+  path: string[],
+) {
+  const stream = liveReadFixture();
+  const order = (held: ReturnType<typeof oneOf>) => ({
+    ...heldDaily(dailyCopy(hakeDish({}))),
+    ...held,
+    lines: [],
+  });
+  const opened = await openSelling(kind, zone, menuState("v1"), {
+    retrieveWorkingOrder: vi.fn().mockResolvedValue(order(bill)),
+    getTabLines: vi.fn().mockResolvedValue({ revision: 7, lines: [] }),
+    getBillBalance: vi.fn().mockRejectedValue(new Error("not under test")),
+    getPartyBills: vi.fn().mockResolvedValue([partyBillOf("party-a", "wo-7", 1, bill)]),
+    readLiveEvents: stream.read,
+  });
+  const { el, browser } = opened;
+  stream.event("ready");
+  if (kind === "counter") emit(counter(el), "retrieve-order", { id: "held-order" });
+  await flush(el);
+  for (const name of path) {
+    [...browser.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")]
+      .find((button) => button.querySelector(".name")?.textContent === name)!
+      .click();
+    await browser.updateComplete;
+  }
+  const folder = browser.shadowRoot!.querySelector("till-set-menu-folder")!;
+  await folder.updateComplete;
+  [...folder.shadowRoot!.querySelectorAll<HTMLElement>("wt-button")]
+    .find((button) => button.textContent!.includes("Hake"))!
+    .click();
+  await browser.updateComplete;
+  const picker = browser.shadowRoot!.querySelector("till-modifier-picker")!;
+  await picker.updateComplete;
+  const shown = () => picker.shadowRoot!.textContent;
+  expect(shown()).not.toContain("Milk");
+  return {
+    ...opened,
+    shown,
+    /** The bill's recorded copies read again as `held`, Lunch having been published. */
+    correct: async (held: ReturnType<typeof oneOf>) => {
+      api.retrieveWorkingOrder!.mockResolvedValue(order(held));
+      api.getPartyBills!.mockResolvedValue([partyBillOf("party-a", "wo-7", 1, held)]);
+      if (kind === "counter") await opened.serve(menu("v2", V1.offers), menuState("v2"));
+      else stream.event("change", JSON.stringify([{ type: "menu_versions" }]));
+      await vi.waitFor(async () => {
+        await flush(el);
+        expect(shown()).toContain("Milk");
+      });
+    },
+    confirm: async () => {
+      picker.shadowRoot!.querySelector<HTMLElement>(".confirm")!.click();
+      await flush(el);
+      expect(browser.shadowRoot!.querySelector("till-modifier-picker")).toBeNull();
+    },
+  };
+}
+
+it.each(["counter", "table"] as const)(
+  "shows, and adds with, a correction to the copy its bill recorded that arrives while a set-menu dish's choices are open (%s)",
+  async (kind) => {
+    const { store, correct, confirm } = await openHakeChoices(kind, V1, oneOf(chosenDaily({})), [
+      t("set_menu.folders"),
+      "Daily",
+    ]);
+
+    await correct(oneOf(chosenDaily({ milk: {} })));
+    await confirm();
+
+    expect(store.lines).toHaveLength(1);
+    const { product } = store.lines[0]!;
+    expect(product.allergens).toEqual({ milk: {} });
+    const [extras] = product.offeredModifiers!;
+    expect(extras?.kind === "extras" && extras.items[0]!.addAllergens).toEqual({ milk: {} });
+  },
+);
+
+it.each(["counter", "table"] as const)(
+  "shows the republished copy's allergens in a set-menu dish's open choices, and adds nothing at the old version (%s)",
+  async (kind) => {
+    const selling = (allergens: TillMenuOffer["allergens"], version: string): ZoneOffers => ({
+      ...menu(version, V1.offers),
+      menus: menu(version, V1.offers).menus.map((each) => ({
+        ...each,
+        structure: { members: [{ kind: "set_menu", menuId: "daily", name: "Daily" }] },
+      })),
+      setMenus: [onSale(chosenDaily(allergens), version)],
+    });
+    // The dish is picked from Daily, which no bill records, into the bill's Special.
+    const { el, store, serve, shown, confirm } = await openHakeChoices(
+      kind,
+      selling({}, "v1"),
+      oneOf(chosenDaily({}, "special")),
+      ["Daily"],
+    );
+
+    await serve(selling({ milk: {} }, "v2"), menuState("v2"));
+    await flush(el);
+
+    expect(shown()).toContain("Milk");
+    await confirm();
+    expect(store.lines).toEqual([]);
+  },
+);
 
 /** A held Daily order opened, and a re-read of its copies still out after Lunch was published. */
 async function rereadOut(

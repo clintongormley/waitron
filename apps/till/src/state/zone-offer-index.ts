@@ -14,7 +14,7 @@ import {
   orderingCopies,
   ownSetMenuOffer,
   type OrderingCopy,
-  type SetMenuLine,
+  type OwnSetMenuOffers,
   type SetMenuOfferLookup,
 } from "./set-menus.js";
 import type { OrderLine } from "./working-order.js";
@@ -140,9 +140,9 @@ export class ZoneOfferIndex {
   }
 
   /** For the declarations a line shows, whether or not it can still be sold. */
-  ownSetMenuLookup(bill?: Parameters<typeof orderingCopies>[0]) {
+  ownSetMenuLookup(bill?: Parameters<typeof orderingCopies>[0]): OwnSetMenuOffers {
     const lookup = this.setMenuLookup(bill);
-    return (line: SetMenuLine) => ownSetMenuOffer(line, lookup(line), this);
+    return (line) => ownSetMenuOffer(line, lookup(line), this);
   }
 
   /** Why each line cannot be sold as it stands. A line with no menu version is the server's to price

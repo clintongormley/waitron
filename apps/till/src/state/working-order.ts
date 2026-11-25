@@ -21,14 +21,13 @@ import { lineGross, takesExtras } from "./order-line.js";
 import { deriveOptionSelections } from "./held-options.js";
 import { orderLineMergeKey } from "./draft-lines.js";
 import { refreshProductDeclarations, type BlockReason } from "./menu-refresh.js";
-import { setMenuLineOf, type SetMenuLine } from "./set-menus.js";
+import { setMenuLineOf, type OwnSetMenuOffers } from "./set-menus.js";
 import type { EndedPeriod } from "./late-send.js";
 import {
   menuOfferToTillProduct,
   type KitchenNoteSnapshot,
   type HeldExtra,
   type TillCourse,
-  type TillMenuOffer,
   type TillProduct,
   type ZoneDining,
 } from "../api/client.js";
@@ -888,7 +887,7 @@ export class WorkingOrderStore {
   /** A set-menu line follows its own menu's copy, found by `setMenuOffer`, and never `products`. */
   refreshDeclarations(
     products: readonly TillProduct[] = [],
-    setMenuOffer?: (line: SetMenuLine) => TillMenuOffer | undefined,
+    setMenuOffer?: OwnSetMenuOffers,
     keep: ReadonlySet<string> = new Set(),
   ): void {
     const byMenuItem = new Map<string, TillProduct>();
