@@ -3421,12 +3421,13 @@ and the staffing grid's block editor in the A761 entry):
   no reason is chosen or the reasons are loading, `primary` once a reason is chosen, keeping
   `primary` while its own refund is being sent. It stays enabled and explains a missing reason on
   press.
-  A receipt's Give money back button is disabled until a payment is chosen (and, for A dish, a
-  dish), and while a press has shown field errors that remain; it is drawn `secondary` until the
-  box's check of the money back has answered, a reason is chosen and no field error is shown, then
-  `primary`. Before a press it stays enabled with no reason chosen, and the press marks the reason.
+  The **Give back** button in a receipt's Give money back window is disabled until a payment is
+  chosen (and, for **A dish**, a dish is ticked) and while field errors shown by a press remain; it
+  is drawn `secondary` until the box's check of the money back has answered, a reason is chosen and
+  no field error is shown, then `primary`, keeping `primary` while its money back is sent. Before a
+  press it stays enabled with no reason chosen, and the press marks the reason.
   Not covered: a button disabled only while a request is being sent, an action blocked by its own
-  field checks and the sign-in screens. Nothing guards it across screens.
+  field checks on other screens, and the sign-in screens. Nothing guards it across screens.
 
 These forms follow the rule
 ([backlog](../backlog/dashboard.md#a-forms-save-stays-quiet-and-disabled-until-something-changes-a331-owner-2026-10-07) A331,

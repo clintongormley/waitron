@@ -436,7 +436,7 @@ Si cierras la ventana antes de que vuelva todo el dinero, busca el recibo en **B
 dinero** en el recibo para continuar. Si está, elígelo en **Buscar cuenta** para continuar:
 
 - **Devolver … en efectivo** o **Devolver … a la tarjeta** devuelve lo que queda de esa forma.
-- **Terminar** registra lo devuelto.
+- **Terminar** registra lo devuelto. Si el ticket no lo admite, la ventana explica por qué y **Terminar** acaba la devolución; lo devuelto queda devuelto.
 - **Parar aquí**, que aparece en su lugar mientras queda dinero, se queda con lo ya devuelto y
   no devuelve más.
 - **Anular esta devolución** termina una que no ha devuelto nada.

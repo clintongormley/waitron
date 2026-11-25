@@ -522,12 +522,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Es más de lo que queda por devolver de los pagos de esta cuenta. Escribe un importe menor.",
   },
   "invoice_correction.chain_unsound": {
-    en: "The box's receipt records need checking, so money for dishes or goodwill cannot go back now.",
-    es: "Hay que revisar los registros de tickets del servidor, así que ahora no se puede devolver dinero de platos o por cortesía.",
+    en: "The box's receipt records need checking, so money for dishes or goodwill cannot go back or be recorded now. Money already given back stays given back.",
+    es: "Hay que revisar los registros de tickets del servidor, así que ahora no se puede devolver ni registrar dinero de platos o por cortesía. El dinero ya devuelto queda devuelto.",
   },
   "sale.correction_amount_invalid": {
-    en: "Enter an amount above zero and no more than is left to give back for the dishes chosen.",
-    es: "Escribe un importe mayor que cero y no superior a lo que queda por devolver de los platos elegidos.",
+    en: "Enter an amount above zero and no more than is left to give back on this receipt for the dishes chosen or as goodwill.",
+    es: "Escribe un importe mayor que cero y no superior a lo que queda por devolver en este ticket por los platos elegidos o por cortesía.",
   },
   "sale.correction_scope_invalid": {
     en: "The dishes chosen are not on this receipt. Close this window and open Give money back again.",
@@ -1400,8 +1400,9 @@ export function giveBackReasonMessage(
     : codeMessage(code, locale, params);
 }
 
-/** Why Money back under way cannot record the money given back on the receipt, for the reasons
- * that never change (`closable`: Finish then ends it without recording, keeping what is back). */
+/** Why Money back under way cannot record the money given back, by the refusal's reason: the first
+ * four never change and let Finish end it unrecorded; a refused filing lasts until the receipt is
+ * fixed. */
 const GIVE_BACK_NEVER_RECORDED: Record<string, { en: string; es: string }> = {
   replaced: {
     en: "This receipt was replaced by a full invoice, so the money given back cannot be recorded on it.",

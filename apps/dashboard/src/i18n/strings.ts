@@ -10,7 +10,7 @@ export const en = {
   "permission.sale.void.help":
     "Void a recorded sale or authorise recording that a party left without paying. Other staff can ask for your PIN approval.",
   "permission.sale.refund.help":
-    "Refund payments and authorise removing charges for dishes already sent or served. Give money back on the till needs it too, unless the money is only for cancelled dishes whose cancellation already approved giving it back.",
+    "Refund payments and authorise removing charges for dishes already sent or served. Give money back on the till needs it too, except when a window opened by Cancel and refund or Finish table gives back only the cancelled dishes' money, and not on a separate card terminal.",
   "permission.sale.rectify.help":
     "Authorise correcting an issued invoice, including cancelling an invoiced order. Give money back on the till may need it when money for dishes or goodwill goes back beyond what is owed for cancelled dishes. Refunding its payment is a separate permission.",
   "permission.order.custom_item.help":
@@ -4798,7 +4798,7 @@ export const es: Record<StringKey, string> = {
   "permission.sale.void.help":
     "Anula una venta registrada o autoriza registrar que un grupo se ha ido sin pagar. Otros empleados pueden pedir tu autorización con PIN.",
   "permission.sale.refund.help":
-    "Devuelve pagos y autoriza quitar cargos de platos ya enviados o servidos. Devolver dinero en la caja también lo necesita, salvo si el dinero es solo de platos cancelados cuya cancelación ya aprobó devolverlo.",
+    "Devuelve pagos y autoriza quitar cargos de platos ya enviados o servidos. Devolver dinero en la caja también lo necesita, salvo cuando una ventana abierta desde Cancelar y devolver o Cerrar mesa devuelve solo el dinero de los platos cancelados, y no en un datáfono aparte.",
   "permission.sale.rectify.help":
     "Autoriza rectificar una factura emitida, incluida la cancelación de un pedido facturado. Devolver dinero en la caja puede necesitarlo cuando se devuelve dinero de platos o por cortesía por encima de lo que se debe por platos cancelados. Devolver su pago requiere un permiso aparte.",
   "permission.order.custom_item.help":

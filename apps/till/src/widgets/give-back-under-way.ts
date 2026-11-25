@@ -432,7 +432,7 @@ export class TillGiveBackUnderWay extends LitElement {
         ? this.#choice(
             stop ? "stop" : "finish",
             t(stop ? "give_back.uw_stop" : "give_back.uw_finish"),
-            // Finish without a split ends it unrecorded, keeping what is back, as Stop here does.
+            // Without a split, Finish closes it unrecorded; like Stop here, it gives no more back.
             t(
               stop || split === null ? "give_back.uw_stop_hint" : "give_back.uw_finish_hint",
             ).replace("{amount}", () => back),

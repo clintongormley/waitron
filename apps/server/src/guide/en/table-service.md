@@ -414,7 +414,7 @@ money back** on the receipt again to carry on. If it is there, choose it in **Fi
 on:
 
 - **Give back … in cash** or **Give back … to card** returns what is left that way.
-- **Finish** records what has been given back.
+- **Finish** records what has been given back. When the receipt cannot take it, the window says why, and **Finish** ends the money back, keeping what has gone back.
 - **Stop here**, offered instead while money is left, keeps what has already gone back and gives
   no more back.
 - **Cancel this money back** ends one that has given nothing back.
