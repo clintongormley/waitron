@@ -466,7 +466,8 @@ controls or the "No place" question.
   supplement is listed on its own (`payLines`), yet leaves with its set menu (`readPicks`,
   `pay-for-items.ts:164-171`), so picking every other line reaches it. Its till words exist from
   PR 1 and say what to do: "These are all the items on this bill. Pay the whole bill instead."
-  (`apps/till/src/i18n/codes.ts`, `bill.all_items_chosen`).
+  (`apps/till/src/i18n/codes.ts`, `bill.all_items_chosen`). _2026-11-25: since A1515-3 PR 2c such a
+  dish can be paid for alone, unless it leaves only with its set menu (`refuseMovingFrozenDishes`)._
 - **PR2-D4. Frozen request.** The items body (picks, the source's `expectedEdits`, and for a table
   `expectedPartyRevision`/`partyId` from `#billRevisions()`) is fixed when the waiter confirms and
   stored in the confirmation, because the server's retry fingerprint includes them
@@ -546,7 +547,9 @@ controls or the "No place" question.
   "the other bill", Move dishes' words; answering an items payment, the till shows its own instead:
   "{dishName} is part of a set menu. Choose its set menu too, or leave it on this bill." / "{dishName}
   forma parte de un menú. Elige también su menú o deja el plato en esta cuenta." The preview refuses
-  it already (`readPicks`, `pay-for-items.ts:160-161`), so it shows on the form, before any money.
+  it already (`readPicks`, `pay-for-items.ts:160-161`), so it shows on the form, before any money. _2026-11-25: since A1515-3 PR 2c only a dish
+  with a comp, a discount, a payment by item or a kept-charge cancel of its own or on an extra is
+  refused alone, in words for why._
 - **PR2-D13. A printed bill's Items stays on the old route** (see **What stays**). The till chooses
   by the bill's status as the Pay window last read it (`open.balance.status`, else the party bills
   row): `placed` sends `paymentAsk`'s items ask to `previewBillPayment`/`takeBillPayment` as today.

@@ -54,7 +54,6 @@ export async function setMenuBill(
         setMenuId: copy.menuId,
         setMenuLineId: menuLineId,
         setMenuPlace: 0,
-        setMenuCountsAsCourseId: copy.courseId,
         unitPriceGross: 0,
         lineTotal: 0,
       })

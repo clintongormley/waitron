@@ -183,7 +183,6 @@ const coursesOf = (tabId: string) =>
       setMenuRole: workingOrderLines.setMenuRole,
       parentLineId: workingOrderLines.parentLineId,
       courseId: workingOrderLines.courseId,
-      setMenuCountsAsCourseId: workingOrderLines.setMenuCountsAsCourseId,
       countsAsCourseId: workingOrderLines.countsAsCourseId,
     })
     .from(workingOrderLines)
@@ -506,7 +505,6 @@ it("records the product's course on a dish tapped in a set menu, not the copy's,
   expect(await coursesOf(bill.tabId)).toMatchObject([
     {
       setMenuRole: "dish",
-      setMenuCountsAsCourseId: supplement.courseId,
       countsAsCourseId: supplement.courseId,
     },
     { setMenuRole: null, parentLineId: expect.any(String), countsAsCourseId: null },

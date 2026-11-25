@@ -113,7 +113,6 @@ function dish(
     setMenuVersionId: null,
     setMenuLineId: null,
     setMenuPlace: null,
-    setMenuCountsAsCourseId: null,
     ...over,
   };
 }
@@ -130,7 +129,6 @@ function placed(
     setMenuId: "daily",
     setMenuLineId,
     setMenuPlace: place,
-    setMenuCountsAsCourseId: line.countsAsCourseId,
     unitPriceGross: chargeCents,
     lineTotal: chargeCents,
   };
@@ -238,7 +236,6 @@ describe("planBillGrouping", () => {
           setMenuRole: "dish",
           setMenuLineId: "menu-a",
           setMenuPlace: 1,
-          setMenuCountsAsCourseId: "mains",
           unitPriceGross: 0,
           lineTotal: 0,
         },
@@ -247,7 +244,6 @@ describe("planBillGrouping", () => {
           setMenuRole: "dish",
           setMenuLineId: "menu-a",
           setMenuPlace: 0,
-          setMenuCountsAsCourseId: "starters",
           unitPriceGross: 0,
           lineTotal: 0,
         },
@@ -275,7 +271,6 @@ describe("planBillGrouping", () => {
       setMenuRole: "dish",
       setMenuLineId: "menu-a",
       setMenuPlace: 1,
-      setMenuCountsAsCourseId: "mains",
       unitPriceGross: 500,
       lineTotal: 500,
     });
@@ -381,7 +376,6 @@ describe("planBillGrouping", () => {
         setMenuRole: "dish",
         setMenuLineId: "menu-a",
         setMenuPlace: 1,
-        setMenuCountsAsCourseId: "mains",
         unitPriceGross: 0,
         lineTotal: 0,
       },
@@ -404,7 +398,6 @@ describe("planBillGrouping", () => {
         setMenuRole: "dish",
         setMenuLineId: "menu-b",
         setMenuPlace: 0,
-        setMenuCountsAsCourseId: "starters",
         unitPriceGross: 0,
         lineTotal: 0,
       },
@@ -422,7 +415,6 @@ describe("planBillGrouping", () => {
         setMenuRole: null,
         setMenuLineId: null,
         setMenuPlace: null,
-        setMenuCountsAsCourseId: null,
         unitPriceGross: 600,
         lineTotal: 600,
       },
@@ -530,7 +522,6 @@ describe("planBillGrouping", () => {
       setMenuRole: null,
       setMenuLineId: null,
       setMenuPlace: null,
-      setMenuCountsAsCourseId: null,
     };
     const lines = [
       placed(dish("soup", 1, "soup"), "menu-a", 0),
@@ -588,7 +579,6 @@ describe("planBillGrouping", () => {
         setMenuRole: null,
         setMenuLineId: null,
         setMenuPlace: null,
-        setMenuCountsAsCourseId: null,
         unitPriceGross: 1200,
         lineTotal: 1200,
       },
@@ -597,7 +587,6 @@ describe("planBillGrouping", () => {
         setMenuRole: null,
         setMenuLineId: null,
         setMenuPlace: null,
-        setMenuCountsAsCourseId: null,
         unitPriceGross: 600,
         lineTotal: 600,
       },

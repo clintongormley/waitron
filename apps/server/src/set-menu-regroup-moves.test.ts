@@ -1,15 +1,13 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
-import { ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
+import { workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { addProducts, menuItems, requireMenuRoot } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SimulatorPaymentProvider } from "@waitron/payments";
 import type { SetMenuGroupingInput } from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
-import { cancelItem } from "./line-cancel.js";
 import { namedFrozenLineIds } from "./set-menu-freeze.js";
 import { splitHeldLineIntoUnits } from "./order-group-edits.js";
 import { insertPartyBill } from "./parties.js";
@@ -17,16 +15,9 @@ import { payForItems, priceItemPicks, type PayForItemsRequest } from "./pay-for-
 import { readGroupingCopies, saveBillGrouping } from "./set-menu-regroup.js";
 import { splitAfterPrint } from "./split-after-print.js";
 import { readOrderRevision } from "./working-order-context.js";
-import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { moveOrderLines } from "./working-order-transfer.js";
 import { mergeBills, moveDishes } from "./testing/bill-action-fixture.js";
-import {
-  cancelReasonId,
-  ensureOperator,
-  GIVE_AWAY_REASON,
-  observedCancelItem,
-  reasonIdOf,
-} from "./testing/cancel-line.js";
+import { ensureOperator, GIVE_AWAY_REASON, reasonIdOf } from "./testing/cancel-line.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import {
@@ -38,12 +29,19 @@ import {
   seatWithNoAllergies,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
+  addSpecDishesToFullMenu,
+  cancelSpecLineKeepingCharge,
+  compSpecLine,
+  makeSpecRowOfTwo,
   printSpecBill,
   serveSpecBill,
   setupSetMenuSpecVenue,
   specDeps,
+  specDishOf,
+  specGrouping,
+  specLineId,
+  specPayRequest,
   specRows,
   type SpecDish,
   type SpecVenue,
@@ -76,25 +74,8 @@ useVenueDb({
   setup: async (db) => {
     spec = await setupSetMenuSpecVenue(db);
     venue = spec.venue;
+    ordinary = await addSpecDishesToFullMenu(spec);
     await inTx(venue, async (tx) => {
-      const productIds = Object.values(spec.productIds);
-      await addProducts(tx, await requireMenuRoot(tx, venue.tables.menuId), productIds);
-      spec.daily.versionId = spec.special.versionId = await publishWorkingMenu(
-        tx,
-        venue.tables.menuId,
-      );
-      const rows = await tx
-        .select({ id: menuItems.id, productId: menuItems.productId })
-        .from(menuItems)
-        .where(
-          and(eq(menuItems.menuId, venue.tables.menuId), inArray(menuItems.productId, productIds)),
-        );
-      ordinary = Object.fromEntries(
-        (Object.keys(spec.productIds) as SpecDish[]).map((dish) => [
-          dish,
-          rows.find(({ productId }) => productId === spec.productIds[dish])!.id,
-        ]),
-      ) as Record<SpecDish, string>;
       await ensureOperator(tx, venue.operator.personId);
     });
   },
@@ -128,45 +109,16 @@ function send(bill: Bill, dishes: SpecDish[], release: "hold" | "fire" = "fire")
   );
 }
 
-function dishOf(row: { productId: string | null }): string | undefined {
-  return (Object.keys(spec.productIds) as SpecDish[]).find(
-    (dish) => spec.productIds[dish] === row.productId,
-  );
+function dishOf(row: { productId: string | null }) {
+  return specDishOf(spec, row);
 }
 
-/**
- * The bill's saved grouping, in line order: each top-level row's dish or set-menu name, its price,
- * and the set-menu row it is placed in, by that row's name and position among the bill's set menus.
- */
-async function grouping(billId: string) {
-  const rows = (await specRows(spec, billId)).filter(({ parentLineId }) => parentLineId === null);
-  const menus = rows.filter(({ setMenuRole }) => setMenuRole === "set_menu").map(({ id }) => id);
-  const menuName = (id: string | null) => {
-    if (id === null) return null;
-    const index = menus.indexOf(id);
-    return index < 0
-      ? `elsewhere ${id}`
-      : `${rows.find((row) => row.id === id)!.name} ${index + 1}`;
-  };
-  return {
-    rows: rows.map((row) =>
-      row.setMenuRole === "set_menu"
-        ? { what: `${row.name} ${menus.indexOf(row.id) + 1}`, price: row.unitPriceGross }
-        : {
-            what: dishOf(row) ?? row.name,
-            price: row.unitPriceGross,
-            in: menuName(row.setMenuLineId),
-          },
-    ),
-    total: rows.reduce((sum, { lineTotal }) => sum + lineTotal, 0),
-  };
+function grouping(billId: string) {
+  return specGrouping(spec, billId);
 }
 
-async function idOf(billId: string, what: string, nth = 0) {
-  const rows = (await specRows(spec, billId)).filter(
-    (row) => row.parentLineId === null && (dishOf(row) ?? row.name) === what,
-  );
-  return rows[nth]!.id;
+function idOf(billId: string, what: string, nth = 0) {
+  return specLineId(spec, billId, what, nth);
 }
 
 async function move(from: Bill, to: Bill, lineIds: string[]) {
@@ -174,27 +126,8 @@ async function move(from: Bill, to: Bill, lineIds: string[]) {
   return inTx(venue, (tx) => moveDishes(tx, venue.cfg, from.tabId, to.tabId, lineIds, command));
 }
 
-/** Comps the bill's line whole, under the give-away reason. */
-async function comp(billId: string, lineId: string) {
-  await inTx(venue, async (tx) =>
-    applyAdjustment(
-      tx,
-      venue.cfg,
-      {
-        admission: testTradingAdmission(),
-        orderId: billId,
-        expectedEdit: await readBillEditState(tx, billId),
-        submissionId: randomUUID(),
-        expectedRevision: await readOrderRevision(tx, billId),
-        lineId,
-        reasonId: await reasonIdOf(tx, GIVE_AWAY_REASON),
-        action: "comp",
-        note: null,
-        operatorId: venue.operator.personId,
-      },
-      venue.cfg.locale,
-    ),
-  );
+function comp(billId: string, lineId: string) {
+  return compSpecLine(spec, billId, lineId);
 }
 
 /** Soup and Hake grouped as a Special at 20.00, not the cheapest (a Daily at 14.00), through the
@@ -354,28 +287,7 @@ it("refuses moving alone a dish whose cancel kept its charge (D18)", async () =>
   const source = await seated();
   await send(source, ["Soup", "Hake"]);
   const hake = await idOf(source.tabId, "Hake");
-  await inTx(venue, async (tx) => {
-    const [ticket] = await tx
-      .select({ id: ticketItems.id })
-      .from(ticketItems)
-      .where(eq(ticketItems.workingOrderLineId, hake));
-    await advanceTicketItem(tx, ticket!.id, "preparing");
-    const [row] = (await specRows(spec, source.tabId)).filter(({ id }) => id === hake);
-    const { target, lineId, body } = await observedCancelItem(tx, source.tabId, row!.lineNo);
-    await cancelItem(
-      tx,
-      venue.cfg,
-      target,
-      lineId,
-      {
-        ...body,
-        outcome: "keep_charge",
-        reasonId: await cancelReasonId(tx),
-        admission: testTradingAdmission(),
-      },
-      venue.operator.personId,
-    );
-  });
+  await cancelSpecLineKeepingCharge(spec, source.tabId, hake);
   const target = await partyBill(source);
   const before = await grouping(source.tabId);
 
@@ -528,20 +440,17 @@ function payDeps() {
   };
 }
 
-async function payRequest(
+function payRequest(
   bill: Bill,
   lineIds: string[],
-  pay: Pick<PayForItemsRequest, "method" | "applied" | "tendered" | "entry" | "simulationOutcome">,
+  pay: Parameters<typeof specPayRequest>[3],
 ): Promise<PayForItemsRequest> {
-  return {
-    submissionId: randomUUID(),
-    picks: lineIds.map((lineId) => ({ lineId })),
-    ...(await commandFor(venue, bill.partyId)),
-    partyId: bill.partyId,
-    expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, bill.tabId))],
-    tip: "0.00",
-    ...pay,
-  };
+  return specPayRequest(
+    spec,
+    bill,
+    lineIds.map((lineId) => ({ lineId })),
+    pay,
+  );
 }
 
 const DAILY_AND_SEA_BASS = {
@@ -610,7 +519,7 @@ it("a declined reader card for a Daily puts both bills back to their first group
   expect(await grouping(paid.billId)).toEqual({ rows: [], total: 0 });
 });
 
-it("refuses Pay for items of a not-cheapest Special at its preview's 20.00, as the new bill groups to 14.00 (D21)", async () => {
+it("prices Pay for items of a not-cheapest Special at the 14.00 its new bill groups to, and pays it (D21)", async () => {
   const source = await seated();
   await send(source, ["Soup", "Hake", "Sea bass"]);
   await seedSpecial(source.tabId);
@@ -618,7 +527,7 @@ it("refuses Pay for items of a not-cheapest Special at its preview's 20.00, as t
   expect(before.total).toBe(3900);
   const special = await idOf(source.tabId, "Special menu");
   expect(await inTx(venue, (tx) => priceItemPicks(tx, source.tabId, [{ lineId: special }]))).toBe(
-    "20.00",
+    "14.00",
   );
 
   await expect(
@@ -632,6 +541,21 @@ it("refuses Pay for items of a not-cheapest Special at its preview's 20.00, as t
     ),
   ).rejects.toMatchObject({ code: "bill.allocation_changed" });
   expect(await grouping(source.tabId)).toEqual(before);
+
+  const paid = await payForItems(
+    payDeps(),
+    venue.cfg,
+    source.tabId,
+    await payRequest(source, [special], { method: "cash", applied: "14.00", tendered: "14.00" }),
+    venue.operator,
+    null,
+  );
+  expect(paid.payment.outcome).toBe("received");
+  expect(await grouping(paid.billId)).toEqual(SOUP_AND_HAKE_DAILY);
+  expect(await grouping(source.tabId)).toEqual({
+    rows: [{ what: "Sea bass", price: 1900, in: null }],
+    total: 1900,
+  });
 });
 
 /** A seated bill of Soup and Hake held as a Special at 20.00, and two waters in one held row. */
@@ -646,17 +570,7 @@ async function specialBill() {
     }),
   );
   const [water] = (await specRows(spec, bill.tabId)).filter(({ name }) => name === "Water");
-  // Two waters as one row, as a counted product leaves them: a send stores one row a portion.
-  await inTx(venue, async (tx) => {
-    await tx
-      .update(workingOrderLines)
-      .set({ quantity: 2000, lineTotal: 400, countAsPortions: false })
-      .where(eq(workingOrderLines.id, water!.id));
-    await tx
-      .update(ticketItems)
-      .set({ quantity: 2000 })
-      .where(and(eq(ticketItems.workingOrderLineId, water!.id), isNotNull(ticketItems.quantity)));
-  });
+  await makeSpecRowOfTwo(spec, water!.id, 400);
   expect((await specRows(spec, bill.tabId)).find(({ id }) => id === water!.id)!.quantity).toBe(
     2000,
   );

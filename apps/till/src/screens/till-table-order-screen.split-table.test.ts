@@ -2987,6 +2987,75 @@ describe("A803 split: a read and a selected bill", () => {
   });
 });
 
+describe("Split a table's mark on a set menu", () => {
+  it("names the dishes it moves with, so two of the same can be told apart", async () => {
+    const daily = { name: "Daily", productId: "daily", menuItemId: "offer-daily" };
+    const held = (setMenuLineId: string, ...lineIds: string[]) =>
+      lineIds.map((lineId, place) => ({
+        lineId,
+        setMenuLineId,
+        place,
+        productId: lineId,
+        variantId: null,
+        priceCents: 0,
+        countsAsCourseId: "main",
+        movable: true,
+      }));
+    const el = await mountScreen({
+      bills: [
+        partyBill("b1", 1, "30.00", {
+          setMenus: {
+            copies: [
+              {
+                id: "daily",
+                setMenuId: "daily",
+                versionId: "daily-v1",
+                name: "Daily",
+                priceCents: 1400,
+                lines: [],
+                dishes: [],
+              },
+            ],
+            recorded: {},
+            exact: true,
+            setMenus: [
+              { lineId: "d1", lineNo: 1, copyId: "daily" },
+              { lineId: "d2", lineNo: 4, copyId: "daily" },
+            ],
+            dishes: [...held("d1", "soup", "hake"), ...held("d2", "salad")],
+          },
+        }),
+      ],
+      splitRead: read(
+        {
+          b1: [
+            dish("d1", 1, "14.00", daily),
+            dish("soup", 2, "0.00"),
+            dish("hake", 3, "0.00"),
+            dish("d2", 4, "14.00", daily),
+            dish("salad", 5, "0.00", { waitsInHeldGroup: true }),
+            dish("water", 6, "2.00"),
+          ],
+        },
+        { b1: "30.00" },
+      ),
+    });
+    await toPanel(el);
+
+    const picker = splitPicker(el)!.shadowRoot!.querySelector("till-portion-picker")!;
+    expect(
+      [...picker.shadowRoot!.querySelectorAll<HTMLElement>("[data-pick-mark]")].map((mark) => [
+        mark.dataset.pickMark,
+        mark.textContent!.trim(),
+      ]),
+    ).toEqual([
+      ["d1", "Moves with soup and hake"],
+      ["d2", "Moves with salad"],
+      ["salad", t("table.group_held")],
+    ]);
+  });
+});
+
 describe("Split a table's mark on a dish waiting for its course", () => {
   const mains = { id: "c-mains", name: "Mains", displayOrder: 2, fireNowZoneIds: [] };
   const group = (id: string, state: "held" | "fired") => ({

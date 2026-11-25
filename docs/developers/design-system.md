@@ -6569,21 +6569,25 @@ Split a table draws every open and presented bill of the party, in number order,
 (`apps/till/src/widgets/split-picker.ts`), which holds no picks of its own: the selection model
 (`apps/till/src/state/split-selection.ts`) gives each change, the widget emits `split-picks`, and the
 screen hands the selection back and keeps it in its action draft scope. Each bill's dishes are this
-same `till-portion-picker`, with these additions.
+same `till-portion-picker`, with these additions. Here and in Move dishes…, a set menu and each
+dish of one have a row of their own, never a counted row, and a set menu holding dishes is marked with
+their names (`table.move_dishes_includes`).
 
 - **The whole-bill header** is a shaded row (`--wt-color-bg`, edged in `--wt-color-border`), set out so
   that its tick stays in line with its dishes' ticks: a native tick labelled with the bill's name, then `{amount} paid` when
   the bill has received money (money a card in progress has only reserved is not counted), then the
   bill's total. The tick is checked for a whole bill and indeterminate for a bill with picks. Pressing
   it makes an unticked or part-ticked bill whole and clears a whole one; a held bill's tick only clears.
-  Picking every dish of a bill
-  makes it whole too, unless a dish is paid or the bill holds this person's own unsent dishes, which
+  Picking every dish of a bill, a set menu's dishes counting as picked with it and a set menu that
+  goes with its last dish needing no pick, makes it whole too, unless a dish is paid or the bill
+  holds this person's own unsent dishes, which
   say `table.split_own_unsent` under the header and go only with the whole bill.
 - **A `whole` row** of a whole bill draws ticked with no stepper, in muted text with its tick in full
   colour, as a paler tick falls under 3:1 on the page (Departures in the A803 4c plan). A paid dish stays ticked and
   disabled, saying why; a row the floor stops is not stopped, because the whole bill keeps its
   payments. Unticking a row turns the bill into picks of every other row, each up to its limit, so a
-  part-paid bill's floor can leave some unticked.
+  part-paid bill's floor can leave some unticked. Where those picks would make the bill whole again,
+  unticking a set menu's dish unticks the set menu too, and unticking a set menu unticks its dishes.
 - **The summary** under the bills says what the leaving table takes and the staying table keeps, each
   with its amount (`table.split_takes`, `table.split_keeps`, `an empty bill` for a side with nothing).
   `table.split_nothing_to_pay` replaces the staying line when what stays owes nothing and holds its

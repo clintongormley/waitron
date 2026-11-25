@@ -558,7 +558,7 @@ describe("till-app: Pay for items on a bill of their own", () => {
     expect(formError(el)).toContain(`its own receipt (${money("15.00")})`);
   });
 
-  it("a set-menu dish chosen alone says to choose its set menu too", async () => {
+  it("a cancelled set-menu dish still charged, chosen alone, says to choose its set menu too", async () => {
     const { el } = await mountApp({
       previewItemPayment: vi.fn().mockRejectedValue({
         code: "set_menu.moves_with_set_menu",
@@ -570,6 +570,22 @@ describe("till-app: Pay for items on a bill of their own", () => {
     await type(el, "tendered", "50");
     await press(el, "[data-pay-continue]");
     expect(formError(el)).toBe(fill(t("bill_pay.items_set_menu_dish"), { dishName: "Tarta" }));
+  });
+
+  it("a comped or discounted set-menu dish chosen alone says to choose its set menu too", async () => {
+    const { el } = await mountApp({
+      previewItemPayment: vi.fn().mockRejectedValue({
+        code: "set_menu.move_adjusted",
+        status: 409,
+        dishNames: ["Tarta", "Vino"],
+      }),
+    });
+    await chooseItems(el, [4, 5]);
+    await type(el, "tendered", "50");
+    await press(el, "[data-pay-continue]");
+    expect(formError(el)).toBe(
+      fill(t("bill_pay.items_set_menu_adjusted"), { dishNames: "Tarta and Vino" }),
+    );
   });
 
   it("a changed allocation shows the items' new total", async () => {

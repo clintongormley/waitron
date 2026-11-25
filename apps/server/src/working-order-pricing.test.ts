@@ -270,7 +270,7 @@ describe("a dish's extras children", () => {
         setMenuRole: "dish",
         setMenuId: setMenu.id,
         setMenuPlace: 2,
-        setMenuCountsAsCourseId: randomUUID(),
+        countsAsCourseId: randomUUID(),
       } as const;
       await tx
         .update(workingOrderLines)

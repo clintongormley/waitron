@@ -9,6 +9,7 @@ import {
 } from "@waitron/shared";
 import type { BillBalance, Draft, PartyBill, SplitSelection, TabLine } from "../api/client.js";
 import { owing, shownBills } from "./bill-state.js";
+import { apartInSetMenus } from "./portion-groups.js";
 import {
   type PickGroups,
   type PickRow,
@@ -92,15 +93,51 @@ function without(split: SplitPicks, id: string): { whole: Set<string>; picks: Ma
   return { whole, picks };
 }
 
+const setMenuDishes = (source: SplitSource) => source.bill.setMenus?.dishes ?? [];
+
+/** The set menus that hold a dish here and go with the last one. A comp or discount on the set menu,
+ * on a dish of it or on that dish's extra keeps it here, as does a dish that leaves only with it. */
+function setMenusThatGo(source: SplitSource): Set<string> {
+  const kept = new Set(
+    source.groups.groups.flatMap(({ members, extras }) =>
+      [...members, ...extras].some((line) => line.listUnitPriceGross !== undefined)
+        ? members.map(({ id }) => id)
+        : [],
+    ),
+  );
+  for (const { lineId, setMenuLineId, movable } of setMenuDishes(source))
+    if (!movable || kept.has(lineId)) kept.add(setMenuLineId);
+  return new Set(
+    setMenuDishes(source).flatMap(({ setMenuLineId }) =>
+      kept.has(setMenuLineId) ? [] : [setMenuLineId],
+    ),
+  );
+}
+
 /** Whole keeps the bill's name and payments, so a paid dish or this person's unsent dishes,
- * which go only if the whole bill is chosen, leave the picks as picks. */
+ * which go only if the whole bill is chosen, leave the picks as picks. A picked set menu takes its
+ * dishes along. */
 function picksEveryDish(source: SplitSource, picks: Picks): boolean {
+  const goes = setMenusThatGo(source);
+  for (const { lineId, setMenuLineId } of setMenuDishes(source))
+    if (picks.has(setMenuLineId)) goes.add(lineId);
   return (
     !source.ownUnsent &&
     source.groups.groups.every(
-      (group) => !group.paid && group.members.every((member) => picks.has(member.id)),
+      (group) => !group.paid && group.members.every(({ id }) => picks.has(id) || goes.has(id)),
     )
   );
+}
+
+/** A whole bill's picks after an untick that would leave it whole, a set menu or a dish of it: the
+ * other is unticked too. */
+function untickTogether(source: SplitSource, picks: Picks): Picks {
+  const next = new Set(picks);
+  for (const { lineId, setMenuLineId } of setMenuDishes(source)) {
+    if (!picks.has(lineId)) next.delete(setMenuLineId);
+    if (!picks.has(setMenuLineId)) next.delete(lineId);
+  }
+  return next;
 }
 
 function place(
@@ -125,7 +162,9 @@ export function pickOnBill(source: SplitSource, split: SplitPicks, next: Picks):
   if (source.held !== null || presented(source)) return split;
   const out = without(split, idOf(source));
   const { groups } = source;
-  place(out, source, tidyPicks(pickRows(groups, next), groups, next));
+  const picks = tidyPicks(pickRows(groups, next), groups, next);
+  const stillWhole = split.whole.has(idOf(source)) && picksEveryDish(source, picks);
+  place(out, source, stillWhole ? untickTogether(source, picks) : picks);
   return out;
 }
 
@@ -281,7 +320,7 @@ export function splitSourcesFrom(
     return [
       {
         bill,
-        groups: pickGroups(lines, keyFor(lines, balance), balance),
+        groups: pickGroups(lines, apartInSetMenus(bill.setMenus, keyFor(lines, balance)), balance),
         held:
           holder === undefined
             ? null

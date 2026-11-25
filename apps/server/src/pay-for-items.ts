@@ -14,9 +14,8 @@ import {
   centsToDecimal,
   compareDecimal,
   decimal,
+  decimalToCents,
   decimalToThousandths,
-  divideDecimal,
-  multiplyDecimal,
   sumDecimals,
   thousandthsToDecimal,
   type Decimal,
@@ -59,8 +58,11 @@ import { assertProfileAction, type DeviceBinding } from "./device-session.js";
 import { outsideCardDetails } from "./outside-card.js";
 import { withSettledSlip } from "./payment-slip-print.js";
 import type { BillEditExpected } from "./order-drafts.js";
+import { grossLineTotal } from "./order-line-quantities.js";
 import { fingerprint } from "./parties.js";
 import { lastReopenedBill } from "./reopened-bills.js";
+import { refuseMovingFrozenDishes } from "./set-menu-moves.js";
+import { totalLeftBehind, totalOnOwnBill, type TakenRows } from "./set-menu-regroup.js";
 import { refuseReopen, reopenToSplitIn } from "./split-after-print.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
@@ -85,57 +87,47 @@ export interface ItemPick {
 interface PickedLine {
   id: string;
   lineNo: number;
-  /** The dish's line total and its extras', in cents; a set menu's adds its dishes' and theirs. */
-  familyCents: number;
-  /** The part of the line chosen, when less than all of it. */
-  part?: { quantity: string; ofQuantity: number };
+  /** The quantity chosen, when less than all of the line. */
+  part?: string;
 }
 
 async function readPicks(
   tx: Transaction,
   billId: string,
   picks: readonly ItemPick[],
-): Promise<{ picked: PickedLine[]; everyDish: boolean }> {
+): Promise<{ picked: PickedLine[]; taken: TakenRows }> {
   const rows = await tx
     .select({
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
       parentLineId: workingOrderLines.parentLineId,
+      setMenuRole: workingOrderLines.setMenuRole,
       setMenuLineId: workingOrderLines.setMenuLineId,
-      name: workingOrderLines.name,
       quantity: workingOrderLines.quantity,
-      lineTotal: workingOrderLines.lineTotal,
       unitPriceGross: workingOrderLines.unitPriceGross,
       priceQuantity: workingOrderLines.priceQuantity,
       unitPrecision: workingOrderLines.unitPrecision,
     })
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, billId));
+  type Row = (typeof rows)[number];
   const byId = new Map(rows.map((row) => [row.id, row]));
-  const extrasCents = new Map<string, number>();
-  const extrasOf = new Map<string, PartLine[]>();
-  const asPart = (row: (typeof rows)[number]): PartLine => ({
+  const extrasOf = new Map<string, Row[]>();
+  const dishesOf = new Map<string, Row[]>();
+  for (const row of rows) {
+    if (row.parentLineId !== null)
+      extrasOf.set(row.parentLineId, [...(extrasOf.get(row.parentLineId) ?? []), row]);
+    else if (row.setMenuLineId !== null)
+      dishesOf.set(row.setMenuLineId, [...(dishesOf.get(row.setMenuLineId) ?? []), row]);
+  }
+  const asPart = (row: Row): PartLine & { id: string } => ({
+    id: row.id,
     lineNo: row.lineNo,
     quantity: thousandthsToDecimal(row.quantity),
     unitPriceGross: centsToDecimal(row.unitPriceGross),
     priceQuantity: thousandthsToDecimal(row.priceQuantity),
     unitPrecision: row.unitPrecision,
   });
-  for (const row of rows) {
-    if (row.parentLineId === null) continue;
-    extrasCents.set(row.parentLineId, (extrasCents.get(row.parentLineId) ?? 0) + row.lineTotal);
-    extrasOf.set(row.parentLineId, [...(extrasOf.get(row.parentLineId) ?? []), asPart(row)]);
-  }
-  const ownCents = (id: string) => byId.get(id)!.lineTotal + (extrasCents.get(id) ?? 0);
-  // A set menu's dishes move with it (`resolveMoveLines`), so they are priced with it.
-  const dishesCents = new Map<string, number>();
-  for (const row of rows) {
-    if (row.setMenuLineId === null || row.parentLineId !== null) continue;
-    dishesCents.set(
-      row.setMenuLineId,
-      (dishesCents.get(row.setMenuLineId) ?? 0) + ownCents(row.id),
-    );
-  }
   const chosen = picks.map((pick) => {
     const row = byId.get(pick.lineId);
     if (row === undefined)
@@ -148,40 +140,60 @@ async function readPicks(
     billId,
     chosen.map(({ row }) => row),
   );
+  const resized = new Map<string, { quantity: number; lineTotal: number }>();
+  const resize = (line: PartLine & { id: string }, quantity: Decimal) =>
+    resized.set(line.id, {
+      quantity: decimalToThousandths(quantity),
+      lineTotal: decimalToCents(grossLineTotal(line.unitPriceGross, quantity, line.priceQuantity)),
+    });
   const picked = chosen.map(({ row, quantity }): PickedLine => {
-    const familyCents = ownCents(row.id) + (dishesCents.get(row.id) ?? 0);
+    const line = asPart(row);
     // Refused here as the split would refuse it, so a preview never prices a part it cannot cut.
-    return quantity === undefined ||
-      checkLinePart(billId, asPart(row), quantity, extrasOf.get(row.id) ?? [], {
-        splitExtras: true,
-      }) === null
-      ? { id: row.id, lineNo: row.lineNo, familyCents }
-      : {
-          id: row.id,
-          lineNo: row.lineNo,
-          familyCents,
-          part: { quantity, ofQuantity: row.quantity },
-        };
+    const extras =
+      quantity === undefined
+        ? null
+        : checkLinePart(billId, line, quantity, (extrasOf.get(row.id) ?? []).map(asPart), {
+            splitExtras: true,
+          });
+    if (quantity === undefined || extras === null) return { id: row.id, lineNo: row.lineNo };
+    resize(line, decimal(quantity));
+    for (const extra of extras) resize(extra.row, extra.moved);
+    return { id: row.id, lineNo: row.lineNo, part: quantity };
   });
-  // A set menu's dish chosen with its set menu is already in the set menu's price.
   const ids = new Set(picked.map((line) => line.id));
-  const priced = picked.map((line) => {
-    const row = byId.get(line.id)!;
-    if (row.setMenuLineId === null) return line;
-    if (!ids.has(row.setMenuLineId))
-      throw new AppError("set_menu.moves_with_set_menu", { dishName: row.name });
-    return { ...line, familyCents: 0 };
-  });
+  // Refused here as the move would refuse it, so a preview does not price a set-menu dish that
+  // leaves only with its set menu.
+  await refuseMovingFrozenDishes(
+    tx,
+    chosen.flatMap(({ row }) =>
+      row.setMenuRole === "dish" && (row.setMenuLineId === null || !ids.has(row.setMenuLineId))
+        ? [row.id]
+        : [],
+    ),
+  );
+  const taken = new Set<string>();
+  for (const id of ids) {
+    // A set menu's dishes move with it (`resolveMoveLines`).
+    for (const dishId of [id, ...(dishesOf.get(id) ?? []).map((dish) => dish.id)]) {
+      taken.add(dishId);
+      for (const extra of extrasOf.get(dishId) ?? []) taken.add(extra.id);
+    }
+  }
   // A dish leaves whole when chosen whole or brought along by a set menu chosen whole; a part
-  // always leaves the rest behind.
+  // always leaves the rest behind. A set menu counts as leaving when its every dish does, a comped
+  // one included: the move would leave that behind and charge its dishes again.
   const whole = new Set(picked.filter((line) => line.part === undefined).map((line) => line.id));
   const everyDish = rows.every(
     (row) =>
       row.parentLineId !== null ||
       whole.has(row.id) ||
-      (row.setMenuLineId !== null && whole.has(row.setMenuLineId)),
+      (row.setMenuLineId !== null && whole.has(row.setMenuLineId)) ||
+      dishesOf.has(row.id),
   );
-  return { picked: priced, everyDish };
+  // D7, before the move: `moveDishes` would ask its merge-invoice question of a move that empties
+  // the bill.
+  if (everyDish) throw new AppError("bill.all_items_chosen", { workingOrderId: billId });
+  return { picked, taken: { ids: taken, resized } };
 }
 
 function pickedThousandths(quantity: string): number | null {
@@ -192,34 +204,31 @@ function pickedThousandths(quantity: string): number | null {
   }
 }
 
-function priceOf(picked: readonly PickedLine[]): Decimal {
-  return sumDecimals(
-    picked.map(({ familyCents, part }) =>
-      part === undefined
-        ? centsToDecimal(familyCents)
-        : divideDecimal(
-            multiplyDecimal(centsToDecimal(familyCents), decimal(part.quantity)),
-            thousandthsToDecimal(part.ofQuantity),
-            2,
-          ),
-    ),
-  );
-}
-
-/** What the chosen items come to: each line's total and its extras', pro rata for a part. */
+/** What the chosen items come to on a bill of their own, its set menus worked out. */
 export async function priceItemPicks(
   tx: Transaction,
   fromBillId: string,
   picks: readonly ItemPick[],
 ): Promise<Decimal> {
-  return priceOf((await readPicks(tx, fromBillId, picks)).picked);
+  const { taken } = await readPicks(tx, fromBillId, picks);
+  // Refused here as the move would refuse it, before a hand-keyed card is charged on its machine.
+  await refuseBelowAdvances(tx, fromBillId, async () =>
+    centsToDecimal(await totalLeftBehind(tx, fromBillId, taken)),
+  );
+  return centsToDecimal(await totalOnOwnBill(tx, fromBillId, taken));
 }
 
-/** Refuse (D4) a bill the move left owing less than its advances credit, read as it was left. */
-async function refuseBelowAdvances(tx: Transaction, billId: string): Promise<void> {
-  const advances = await readBillAdvances(tx, [billId]);
-  const credited = sumDecimals((advances.credits.get(billId) ?? []).map((credit) => credit.gross));
-  if (compareDecimal(await storedOrderTotal(tx, billId), credited) < 0)
+/** Refuse (D4) a bill whose `left` total is less than its advances credit; with none, `left` is not
+ * worked out. */
+async function refuseBelowAdvances(
+  tx: Transaction,
+  billId: string,
+  left: () => Promise<Decimal>,
+): Promise<void> {
+  const credits = (await readBillAdvances(tx, [billId])).credits.get(billId);
+  if (credits === undefined) return;
+  const credited = sumDecimals(credits.map((credit) => credit.gross));
+  if (compareDecimal(await left(), credited) < 0)
     throw new AppError("bill.below_advances", {
       workingOrderId: billId,
       advances: money(credited),
@@ -249,12 +258,9 @@ export async function moveItemsToNewBill(
   await requireEconomicWrite(tx, cfg, command.admission);
   const path = await guardPathParty(tx, fromBillId, command, { bump: false });
   refuseClosedBill(fromBillId, path.status);
-  const { picked, everyDish } = await readPicks(tx, fromBillId, picks);
-  // D7, before the move: `moveDishes` would ask its merge-invoice question of a move that empties
-  // the bill.
-  if (everyDish) throw new AppError("bill.all_items_chosen", { workingOrderId: fromBillId });
+  const { picked } = await readPicks(tx, fromBillId, picks);
   const parts = picked.flatMap((line) =>
-    line.part === undefined ? [] : [{ lineNo: line.lineNo, quantity: line.part.quantity }],
+    line.part === undefined ? [] : [{ lineNo: line.lineNo, quantity: line.part }],
   );
   const split: ReadonlyMap<string, SplitRow> =
     parts.length === 0
@@ -275,7 +281,7 @@ export async function moveItemsToNewBill(
     .update(workingOrders)
     .set({ itemsPaidFrom: fromBillId, receiptLocale: sql`(${sourceLocale})` })
     .where(eq(workingOrders.id, billId));
-  await refuseBelowAdvances(tx, fromBillId);
+  await refuseBelowAdvances(tx, fromBillId, () => storedOrderTotal(tx, fromBillId));
   if (options.holdSourceInvoice === true) {
     // Another action on the source can still issue it while the card is collected; a declined card
     // then leaves the items on their own bill (`putItemsBack`), which keeps the money consistent.

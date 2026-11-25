@@ -204,7 +204,11 @@ import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
 import { paidQuantities, payLines } from "../state/bill-payment.js";
 import { billHasUnsent, billUnsentText } from "../state/bill-unsent.js";
-import { sentSlicePortionKey, tabLinePortionKey } from "../state/portion-groups.js";
+import {
+  apartInSetMenus,
+  sentSlicePortionKey,
+  tabLinePortionKey,
+} from "../state/portion-groups.js";
 import {
   pickGroups,
   pickRows,
@@ -6602,6 +6606,8 @@ export class TillTableOrderScreen extends LitElement {
     );
     const sources = this.#splitSources();
     this.#splitDrawn = sources;
+    const placed = this.bills.flatMap(({ setMenus }) => setMenus?.dishes ?? []);
+    const lines = this.#splitAnswered?.bills.flatMap((bill) => bill.lines) ?? [];
     if (sources !== undefined)
       this.#splitNames = new Map(
         sources.map((source) => [source.bill.workingOrderId, billLabel(source.bill)]),
@@ -6639,7 +6645,7 @@ export class TillTableOrderScreen extends LitElement {
                 .sources=${sources}
                 .split=${this.splitPicks}
                 .nameOf=${(line: TabLine) => this.#nameForLine(line)}
-                .markOf=${(line: TabLine) => this.#waitingMark(line)}
+                .markOf=${(line: TabLine) => this.#pickMark(line, placed, lines)}
                 .money=${(amount: string) => this.#money(amount)}
                 @split-picks=${(event: CustomEvent<{ split: SplitPicks }>) => {
                   event.stopPropagation();
@@ -7223,16 +7229,8 @@ export class TillTableOrderScreen extends LitElement {
   #dishGroupsFor(sources: DishSources): PickGroups {
     const grouped = this.#dishGroups;
     if (grouped !== undefined && sameSources(grouped.sources, sources)) return grouped.groups;
-    const separate = new Set([
-      ...(sources.setMenus?.setMenus.map(({ lineId }) => lineId) ?? []),
-      ...(sources.setMenus?.dishes.map(({ lineId }) => lineId) ?? []),
-    ]);
-    const keyOf = fallbackPortionKeys(sources);
-    const groups = pickGroups(
-      sources.lines,
-      (dish) => (separate.has(dish.id) ? null : keyOf(dish)),
-      sources.balance,
-    );
+    const keyOf = apartInSetMenus(sources.setMenus, fallbackPortionKeys(sources));
+    const groups = pickGroups(sources.lines, keyOf, sources.balance);
     this.#dishGroups = { sources, groups };
     return groups;
   }
@@ -7302,6 +7300,19 @@ export class TillTableOrderScreen extends LitElement {
     return { blocked: false };
   }
 
+  /** A set menu's mark names its dishes on the bill; any other dish's says it is waiting. */
+  #pickMark(line: TabLine, dishes: readonly PlacedDish[], lines: readonly TabLine[]): string {
+    const names = dishes
+      .filter(({ setMenuLineId }) => setMenuLineId === line.id)
+      .flatMap(({ lineId }) => {
+        const dish = lines.find(({ id }) => id === lineId);
+        return dish === undefined ? [] : [this.#nameForLine(dish)];
+      });
+    return names.length > 0
+      ? fill(t("table.move_dishes_includes"), { dishes: conjunctionList(names, currentLocale()) })
+      : this.#waitingMark(line);
+  }
+
   #moveDishesStep(): TemplateResult {
     const sources = this.#dishSources();
     const rows = this.#moveDishesRows(this.moveDishesPicks, sources);
@@ -7310,17 +7321,6 @@ export class TillTableOrderScreen extends LitElement {
     const chosen = this.#moveDishesChosen();
     const blocker = this.#moveDishesBlocker(chosen, sources.setMenus, lineIds);
     const canMove = lineIds.length > 0 && chosen !== undefined && !blocker.blocked;
-    const mark = (line: TabLine) => {
-      const names = sources.setMenus?.dishes
-        .filter(({ setMenuLineId }) => setMenuLineId === line.id)
-        .flatMap(({ lineId }) => {
-          const dish = sources.lines.find(({ id }) => id === lineId);
-          return dish === undefined ? [] : [this.#nameForLine(dish)];
-        });
-      return names?.length
-        ? fill(t("table.move_dishes_includes"), { dishes: conjunctionList(names, currentLocale()) })
-        : this.#waitingMark(line);
-    };
     const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
     const destination = (key: string, label: string, to: string | null) =>
       html`<button
@@ -7348,7 +7348,7 @@ export class TillTableOrderScreen extends LitElement {
         .rows=${rows}
         .picks=${this.moveDishesPicks}
         .nameOf=${(line: TabLine) => this.#nameForLine(line)}
-        .markOf=${mark}
+        .markOf=${(line: TabLine) => this.#pickMark(line, sources.setMenus?.dishes ?? [], sources.lines)}
         .money=${(amount: string) => this.#money(amount)}
         @portion-picks=${(event: CustomEvent<{ picks: string[] }>) => {
           event.stopPropagation();

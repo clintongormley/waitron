@@ -795,6 +795,15 @@ describe("working_order_lines", () => {
   });
 
   describe("the course a dish counts as", () => {
+    it("has one column, beside the course the line is sent with", async () => {
+      const columns = await rows<{ name: string }>(
+        db,
+        sql`select name from pragma_table_info('working_order_lines')
+          where name like '%course%' order by name`,
+      );
+      expect(columns.map(({ name }) => name)).toEqual(["counts_as_course_id", "course_id"]);
+    });
+
     it("stores and reads it back, and keeps it fixed while service is recorded on a placed bill", async () => {
       const bill = await openOrder(db);
       const [line] = await db

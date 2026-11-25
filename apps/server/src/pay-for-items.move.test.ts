@@ -34,7 +34,12 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { splitLinesWithinOrder } from "./working-order-transfer.js";
 import { type TabRoundLine } from "./working-order-open.js";
 import { storedOrderTotal } from "./stored-order-lines.js";
-import { moveItemsToNewBill, priceItemPicks, type ItemPick } from "./pay-for-items.js";
+import {
+  moveItemsToNewBill,
+  previewPayForItems,
+  priceItemPicks,
+  type ItemPick,
+} from "./pay-for-items.js";
 import "./errors.js";
 
 let v: PartyVenue;
@@ -222,6 +227,12 @@ async function payFor(partyId: string | null, billId: string, picks: ItemPick[])
   return inTx(v, (tx) => moveItemsToNewBill(tx, v.cfg, billId, picks, command, sale()));
 }
 
+async function preview(billId: string, picks: ItemPick[]): Promise<string> {
+  const deps = { db: v.db, admission: testTradingAdmission() };
+  const { total } = await previewPayForItems(deps, v.cfg, billId, { picks, method: "card" }, null);
+  return total;
+}
+
 async function receive(billId: string, amount: string, ownReceipt = false) {
   await takeBillPayment(
     { admission: testTradingAdmission(), db: v.db, backend: v.backend, clock: v.clock },
@@ -397,14 +408,37 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
       { product: "beer", quantity: "4" },
     );
     await receive(billId, "15.00", true);
-
-    await expect(
-      payFor(partyId, billId, [{ lineId: await lineOf(billId, "salad") }]),
-    ).rejects.toMatchObject({
+    const picks = [{ lineId: await lineOf(billId, "salad") }];
+    const refusal = {
       code: "bill.below_advances",
       params: { workingOrderId: billId, advances: "15.00" },
-    });
+    };
+
+    await expect(preview(billId, picks)).rejects.toMatchObject(refusal);
+    await expect(payFor(partyId, billId, picks)).rejects.toMatchObject(refusal);
     expect(await billsNaming(billId)).toEqual([]);
+  });
+
+  it("refuses a part of a line only when the rest is below the bill's advances", async () => {
+    const { partyId, billId } = await seatedBill(
+      { product: "soup" },
+      { product: "beer", quantity: "4" },
+    );
+    await receive(billId, "9.00", true);
+    const beer = await lineOf(billId, "beer");
+    const refusal = {
+      code: "bill.below_advances",
+      params: { workingOrderId: billId, advances: "9.00" },
+    };
+
+    const three = [{ lineId: beer, quantity: "3" }];
+    await expect(preview(billId, three)).rejects.toMatchObject(refusal);
+    await expect(payFor(partyId, billId, three)).rejects.toMatchObject(refusal);
+    const two = [{ lineId: beer, quantity: "2" }];
+    expect(await preview(billId, two)).toBe("5.00");
+    const moved = await payFor(partyId, billId, two);
+
+    expect(await dishesOf(moved.billId)).toEqual([["beer", "2.000", "5.00"]]);
   });
 
   it("refuses choosing a set menu that is everything on the bill, moving nothing", async () => {
@@ -443,18 +477,21 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
     ]);
   });
 
-  it("prices no set menu's dish chosen without its set menu, as the move refuses it", async () => {
+  it("prices a set menu's dish chosen without its set menu as the set menu its new bill makes of it", async () => {
     const { partyId, billId, dishId } = await setMenuParty();
     await place({ partyId, tabId: billId }, [{ product: "soup" }]);
     const picks = [{ lineId: dishId }];
 
-    await expect(inTx(v, (tx) => priceItemPicks(tx, billId, picks))).rejects.toMatchObject({
-      code: "set_menu.moves_with_set_menu",
-    });
-    await expect(payFor(partyId, billId, picks)).rejects.toMatchObject({
-      code: "set_menu.moves_with_set_menu",
-    });
-    expect(await billsNaming(billId)).toEqual([]);
+    expect(await inTx(v, (tx) => priceItemPicks(tx, billId, picks))).toBe("16.00");
+    const moved = await payFor(partyId, billId, picks);
+
+    expect(await billsNaming(billId)).toEqual([{ id: moved.billId }]);
+    expect((await rowsOf(moved.billId)).map(({ id, lineTotal }) => [id, lineTotal])).toEqual([
+      [dishId, 200],
+      [expect.any(String), 1400],
+    ]);
+    expect(await inTx(v, (tx) => storedOrderTotal(tx, moved.billId))).toBe("16.00");
+    expect(await dishesOf(billId)).toEqual([["soup", "1.000", "6.00"]]);
   });
 
   it("accepts leaving the bill owing exactly its advances", async () => {
@@ -463,8 +500,10 @@ describe("A1515 pay for items: moving the chosen items to a new bill", () => {
       { product: "beer", quantity: "4" },
     );
     await receive(billId, "10.00", true);
+    const picks = [{ lineId: await lineOf(billId, "salad") }];
 
-    const moved = await payFor(partyId, billId, [{ lineId: await lineOf(billId, "salad") }]);
+    expect(await preview(billId, picks)).toBe("10.00");
+    const moved = await payFor(partyId, billId, picks);
 
     expect(await dishesOf(moved.billId)).toEqual([["salad", "1.000", "10.00"]]);
     expect(await dishesOf(billId)).toEqual([["beer", "4.000", "10.00"]]);

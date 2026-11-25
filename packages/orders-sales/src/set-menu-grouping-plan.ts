@@ -36,7 +36,6 @@ export interface GroupingLine {
   setMenuVersionId: string | null;
   setMenuLineId: string | null;
   setMenuPlace: number | null;
-  setMenuCountsAsCourseId: string | null;
 }
 
 export interface GroupingCopy {
@@ -49,7 +48,6 @@ export interface GroupingDishUpdate {
   setMenuRole: "dish" | null;
   setMenuLineId: string | null;
   setMenuPlace: number | null;
-  setMenuCountsAsCourseId: string | null;
   unitPriceGross: number;
   lineTotal: number;
 }
@@ -73,7 +71,10 @@ const ONE_PORTION = 1000;
 /** D2/D15: a dish is frozen by one of its extras, a set-menu row by one of its dishes, and every
  *  dish of a frozen set-menu row with it. A row stamped with a list price counts as named. */
 export function frozenLinesOf(
-  lines: readonly GroupingLine[],
+  lines: readonly Pick<
+    GroupingLine,
+    "id" | "parentLineId" | "setMenuLineId" | "listUnitPriceGross"
+  >[],
   named: ReadonlySet<string>,
 ): Set<string> {
   const frozen = new Set(named);
@@ -106,7 +107,6 @@ const A_LA_CARTE = {
   setMenuRole: null,
   setMenuLineId: null,
   setMenuPlace: null,
-  setMenuCountsAsCourseId: null,
 } as const;
 
 /** An unfrozen dish the calculation is not handed still loses any place or charge a set menu gave
@@ -137,7 +137,6 @@ function sameDish(line: GroupingLine, update: GroupingDishUpdate): boolean {
     line.setMenuRole === update.setMenuRole &&
     line.setMenuLineId === update.setMenuLineId &&
     line.setMenuPlace === update.setMenuPlace &&
-    line.setMenuCountsAsCourseId === update.setMenuCountsAsCourseId &&
     line.unitPriceGross === update.unitPriceGross &&
     line.lineTotal === update.lineTotal
   );
@@ -286,7 +285,6 @@ export function planBillGrouping(
             setMenuRole: "dish",
             setMenuLineId: rowIds.get(place.setMenuId)!,
             setMenuPlace: place.lineIndex,
-            setMenuCountsAsCourseId: line.countsAsCourseId,
           }
         : A_LA_CARTE),
     };

@@ -60,6 +60,7 @@ describe("the Spanish strings call a restaurant menu a carta", () => {
       .filter(([, text]) => menuWord.test(text.replace(/\{[^}]*\}/g, "")))
       .map(([key]) => key);
     expect(saysMenu.sort()).toEqual([
+      "bill_pay.items_set_menu_adjusted",
       "bill_pay.items_set_menu_dish",
       "set_menu.folders",
       "set_menu.many",

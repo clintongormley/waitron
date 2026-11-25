@@ -169,7 +169,6 @@ it("edits an option from the recorded offer without moving or repricing the dish
     id: before!.id,
     setMenuLineId: menu!.id,
     setMenuPlace: 0,
-    setMenuCountsAsCourseId: daily.courseId,
     lineTotal: 0,
     optionSnapshots: [{ labelName: { es: "Without spoon" } }],
   });
@@ -258,7 +257,7 @@ it("keeps the set-menu classification when the kitchen course changes", async ()
   );
   expect((await rows(tab.tabId))[0]).toMatchObject({
     courseId: null,
-    setMenuCountsAsCourseId: daily.courseId,
+    countsAsCourseId: daily.courseId,
   });
 });
 

@@ -1247,6 +1247,10 @@ export const CODE_TABLES: Readonly<Record<string, unknown>> = {
   DINING_FIXED,
 };
 
+export function listDishNames(names: readonly string[], locale: string): string {
+  return new Intl.ListFormat(pickLocale({ en: "en-GB", es: "es-ES" }, locale)).format(names);
+}
+
 /** Always a readable sentence, never the raw code. `locale` may be a full BCP-47 tag ("es-ES"). */
 export function codeMessage(
   code: string,
@@ -1323,7 +1327,7 @@ export function codeMessage(
     : [];
   const listed =
     dishNames.length > 0
-      ? new Intl.ListFormat(pickLocale({ en: "en-GB", es: "es-ES" }, locale)).format(dishNames)
+      ? listDishNames(dishNames, locale)
       : pickLocale({ en: "the dishes", es: "los platos" }, locale);
   return message.replace(/\{(setMenuName|dishName|dishNames)\}/g, (_, field: string) => {
     if (field === "setMenuName") return setMenuName;

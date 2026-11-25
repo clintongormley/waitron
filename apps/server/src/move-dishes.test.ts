@@ -51,6 +51,16 @@ import {
   invoiceTo,
   setReceiptLanguage,
 } from "./testing/bill-invoice-fixture.js";
+import {
+  addEmptySpecSetMenus,
+  compSpecLine,
+  sendSpecDishes,
+  setupSetMenuSpecVenue,
+  specGrouping,
+  specLineId,
+  type SpecDish,
+  type SpecVenue,
+} from "./testing/set-menu-spec-fixture.js";
 import { readLineCancellations } from "./line-service-state.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { storedOrderTotal } from "./stored-order-lines.js";
@@ -1232,5 +1242,147 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
 
     expect(await dishIds(p.bill2)).toEqual(dishes);
     expect(await invoiceOf(v, p.bill2)).toMatchObject(invoiceTo(ACME));
+  });
+
+  describe("when the dishes are in set menus", () => {
+    let spec: SpecVenue;
+
+    useVenueDb({
+      resetPerTest: false,
+      migrations: migrationOptionsFor(manifestSets(), null),
+      timeoutMs: 60_000,
+      setup: async (db) => {
+        spec = await setupSetMenuSpecVenue(db);
+      },
+    });
+
+    const DAILY = {
+      rows: [
+        { what: "Soup", price: 0, in: "Daily menu 1" },
+        { what: "Hake", price: 0, in: "Daily menu 1" },
+        { what: "Daily menu 1", price: 1400 },
+      ],
+      total: 1400,
+    };
+    const NONE = { rows: [], total: 0 };
+
+    /** A bill of one Daily (Soup and `main`) with a full invoice for Acme, and an empty simplified
+     *  bill. */
+    async function dailyBill(main: "Hake" | "Sirloin" = "Hake") {
+      const { partyId, tabId } = await seat(spec.venue, await spec.venue.table(randomUUID()));
+      await sendSpecDishes(
+        spec,
+        { partyId, tabId },
+        (["Soup", main] as const).map((name) => ({ dish: name, from: spec.daily })),
+        "fire",
+      );
+      const bill2 = await inTx(spec.venue, (tx) => insertPartyBill(tx, spec.venue.cfg, partyId));
+      await fullInvoice(spec.venue, tabId, ACME);
+      if (main === "Hake") expect(await specGrouping(spec, tabId)).toEqual(DAILY);
+      return { partyId, bill1: tabId, bill2 };
+    }
+
+    async function moveNamed(
+      p: { partyId: string; bill1: string; bill2: string },
+      dishes: SpecDish[],
+      invoiceChoice?: unknown,
+    ) {
+      const lineIds: string[] = [];
+      for (const name of dishes) lineIds.push(await specLineId(spec, p.bill1, name));
+      const command = await commandFor(spec.venue, p.partyId);
+      return inTx(spec.venue, (tx) =>
+        moveDishes(tx, spec.venue.cfg, p.bill1, p.bill2, lineIds, { ...command, invoiceChoice }),
+      );
+    }
+
+    async function state(p: { bill1: string; bill2: string }) {
+      return {
+        bills: [await specGrouping(spec, p.bill1), await specGrouping(spec, p.bill2)],
+        invoices: [await invoiceOf(spec.venue, p.bill1), await invoiceOf(spec.venue, p.bill2)],
+      };
+    }
+
+    async function refusedUnchanged(
+      p: { partyId: string; bill1: string; bill2: string },
+      dishes: SpecDish[],
+      error: { code: string; params: unknown },
+      invoiceChoice?: unknown,
+    ) {
+      const before = await state(p);
+      await expect(moveNamed(p, dishes, invoiceChoice)).rejects.toMatchObject(error);
+      expect(await state(p)).toEqual(before);
+    }
+
+    const choiceRequired = (p: { bill1: string; bill2: string }) => ({
+      code: "bill.merge_invoice_choice_required",
+      params: { workingOrderId: p.bill1, intoWorkingOrderId: p.bill2 },
+    });
+
+    it("A1519 move dishes refuses: a set menu's every dish named one by one, without a choice, is bill.merge_invoice_choice_required", async () => {
+      const p = await dailyBill();
+
+      await refusedUnchanged(p, ["Soup", "Hake"], choiceRequired(p));
+    });
+
+    it("A1519 move dishes: a set menu's every dish named one by one empties the bill, and its invoice is kept when told to", async () => {
+      const p = await dailyBill();
+
+      await moveNamed(p, ["Soup", "Hake"], KEEP_ACME);
+
+      expect(await specGrouping(spec, p.bill1)).toEqual(NONE);
+      expect(await specGrouping(spec, p.bill2)).toEqual(DAILY);
+      expect(await invoiceOf(spec.venue, p.bill2)).toMatchObject(invoiceTo(ACME));
+    });
+
+    it("A1519 move dishes: asks nothing when every dish leaves a comped set menu, whose row stays, and refuses a choice", async () => {
+      const p = await dailyBill();
+      await compSpecLine(spec, p.bill1, await specLineId(spec, p.bill1, "Daily menu"));
+      const comped = await specGrouping(spec, p.bill1);
+
+      await refusedUnchanged(p, ["Soup", "Hake"], choiceRequired(p), KEEP_ACME);
+      await moveNamed(p, ["Soup", "Hake"]);
+
+      expect(await specGrouping(spec, p.bill1)).toEqual({
+        rows: comped.rows.filter(({ what }) => what === "Daily menu 1"),
+        total: comped.total,
+      });
+      expect(await specGrouping(spec, p.bill2)).toEqual(DAILY);
+      expect(await invoiceOf(spec.venue, p.bill1)).toMatchObject(invoiceTo(ACME));
+      expect(await invoiceOf(spec.venue, p.bill2)).toMatchObject(SIMPLIFIED);
+    });
+
+    it("A1519 move dishes: asks nothing when one of a set menu's two dishes stays", async () => {
+      const p = await dailyBill();
+
+      await moveNamed(p, ["Hake"]);
+
+      expect(await specGrouping(spec, p.bill1)).toEqual({
+        rows: [{ what: "Soup", price: 600, in: null }],
+        total: 600,
+      });
+      expect(await invoiceOf(spec.venue, p.bill1)).toMatchObject(invoiceTo(ACME));
+      expect(await invoiceOf(spec.venue, p.bill2)).toMatchObject(SIMPLIFIED);
+    });
+
+    it("A1519 move dishes refuses: every dish named beside a set menu holding none, without a choice, is bill.merge_invoice_choice_required, and with one empties the bill", async () => {
+      const p = await dailyBill();
+      await addEmptySpecSetMenus(spec, p.bill1, spec.special);
+
+      await refusedUnchanged(p, ["Soup", "Hake"], choiceRequired(p));
+      await moveNamed(p, ["Soup", "Hake"], KEEP_ACME);
+
+      expect(await specGrouping(spec, p.bill1)).toEqual(NONE);
+      expect(await invoiceOf(spec.venue, p.bill2)).toMatchObject(invoiceTo(ACME));
+    });
+
+    it("A1519 move dishes refuses: every dish named, one of them comped, is set_menu.move_adjusted before any invoice question", async () => {
+      const p = await dailyBill("Sirloin");
+      await compSpecLine(spec, p.bill1, await specLineId(spec, p.bill1, "Sirloin"));
+
+      await refusedUnchanged(p, ["Soup", "Sirloin"], {
+        code: "set_menu.move_adjusted",
+        params: { dishNames: ["Sirloin"] },
+      });
+    });
   });
 });

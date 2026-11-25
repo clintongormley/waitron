@@ -104,7 +104,6 @@ async function placeDish(id: string, lineNo: number) {
         setMenuId: daily.menuId,
         setMenuLineId,
         setMenuPlace: 0,
-        setMenuCountsAsCourseId: daily.courseId,
         unitPriceGross: 0,
         lineTotal: 0,
       })
@@ -162,6 +161,18 @@ it("reads the old copy and the copy a moved line brought with it", async () => {
       movable: true,
     },
   ]);
+});
+
+it("gives a placed dish the course recorded on its own line, not its copy's", async () => {
+  const id = await tableBill();
+  const { lineId } = await placeDish(id, 1);
+  await inTx(venue, (tx) =>
+    tx
+      .update(workingOrderLines)
+      .set({ countsAsCourseId: "recorded-course" })
+      .where(eq(workingOrderLines.id, lineId)),
+  );
+  expect((await read(id)).dishes).toMatchObject([{ lineId, countsAsCourseId: "recorded-course" }]);
 });
 
 it("returns one copy when the recorded copy and another full-menu version have the same contents", async () => {

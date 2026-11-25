@@ -820,7 +820,6 @@ it("shows and records the bill's whole drop when a cancel takes part of a line (
       setMenuRole: null,
       setMenuLineId: null,
       setMenuPlace: null,
-      setMenuCountsAsCourseId: null,
     };
     await tx
       .update(workingOrderLines)

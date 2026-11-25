@@ -426,7 +426,6 @@ async function carveLines(
         setMenuVersionId: workingOrderLines.setMenuVersionId,
         setMenuLineId: workingOrderLines.setMenuLineId,
         setMenuPlace: workingOrderLines.setMenuPlace,
-        setMenuCountsAsCourseId: workingOrderLines.setMenuCountsAsCourseId,
         menuItemId: workingOrderLines.menuItemId,
         menuId: workingOrderLines.menuId,
         menuName: workingOrderLines.menuName,

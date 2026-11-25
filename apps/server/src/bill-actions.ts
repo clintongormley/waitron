@@ -1,7 +1,8 @@
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
-import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { newId, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
+import { frozenLinesOf } from "@waitron/orders-sales/set-menu-grouping-plan.js";
 import { AppError } from "@waitron/shared";
 import { assertBillInvariant, refuseBillWithPayments } from "./bill-payments.js";
 import { enqueueMovedSlips } from "./kitchen-ticket-moves.js";
@@ -21,6 +22,7 @@ import {
 import { moveDraftsToBill } from "./order-drafts.js";
 import { inheritKitchenNote } from "./order-kitchen-note.js";
 import { guardParty, refuseMovedParty, requireBillOfParty } from "./parties.js";
+import { namedFrozenLineIds } from "./set-menu-freeze.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
 import {
   assertDistinctTransferLines,
@@ -257,21 +259,42 @@ export async function resolveMoveLines(
   return { transfers };
 }
 
-/** Whether moving `moving` distinct dishes of the bill leaves it with none: extras are not dishes. */
-async function takesEveryDish(tx: Transaction, billId: string, moving: number): Promise<boolean> {
-  const [row] = await tx
-    .select({ dishes: count() })
+/**
+ * Whether the move leaves the bill with nothing. An extra goes with its dish, and the bill's
+ * regrouping deletes a set menu none of whose dishes is left on it, unless it is frozen (D15).
+ */
+async function takesEveryDish(
+  tx: Transaction,
+  billId: string,
+  transfers: Transfers,
+): Promise<boolean> {
+  const rows = await tx
+    .select({
+      id: workingOrderLines.id,
+      lineNo: workingOrderLines.lineNo,
+      parentLineId: workingOrderLines.parentLineId,
+      setMenuRole: workingOrderLines.setMenuRole,
+      setMenuLineId: workingOrderLines.setMenuLineId,
+      listUnitPriceGross: workingOrderLines.listUnitPriceGross,
+    })
     .from(workingOrderLines)
-    .where(
-      and(eq(workingOrderLines.workingOrderId, billId), isNull(workingOrderLines.parentLineId)),
-    );
-  return row!.dishes === moving;
+    .where(eq(workingOrderLines.workingOrderId, billId));
+  const moving = new Set(transfers.map(({ lineNo }) => lineNo));
+  const left = rows.filter((row) => row.parentLineId === null && !moving.has(row.lineNo));
+  if (left.length === 0) return true;
+  if (left.some(({ setMenuRole }) => setMenuRole !== "set_menu")) return false;
+  const named = await namedFrozenLineIds(
+    tx,
+    rows.map(({ id }) => id),
+  );
+  const frozen = frozenLinesOf(rows, named);
+  return !left.some(({ id }) => frozen.has(id));
 }
 
 /**
  * A move that empties the bill is a merge for its invoice, asked as {@link checkMergeInvoice}
- * asks. A choice sent with a move that leaves a dish is refused rather than dropped: the till sent
- * it for a bill it saw emptied.
+ * asks. A choice sent with a move that leaves something on the bill is refused rather than dropped:
+ * the till sent it for a bill it saw emptied.
  */
 async function checkMoveInvoice(
   tx: Transaction,
@@ -325,7 +348,7 @@ export async function moveDishes(
     await assertServiceModesMatch(tx, fromBillId, toBillId);
   }
   const { transfers } = await resolveMoveLines(tx, fromBillId, lineIds);
-  const empties = await takesEveryDish(tx, fromBillId, transfers.length);
+  const empties = await takesEveryDish(tx, fromBillId, transfers);
   let invoices =
     toBillId === null
       ? null

@@ -1,4 +1,5 @@
-import { and, eq, max } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, eq, inArray, isNotNull, max } from "drizzle-orm";
 import {
   devices,
   kitchenCourses,
@@ -6,12 +7,14 @@ import {
   products,
   saleLines,
   sales,
+  ticketItems,
   workingOrderLines,
   workingOrders,
   type Database,
 } from "@waitron/db";
 import {
   addMember,
+  addProducts,
   addSetMenuDishes,
   createCategory,
   createExtraList,
@@ -23,11 +26,17 @@ import {
   writeProductModifiers,
 } from "@waitron/menu";
 import { stringToCents, thousandthsToDecimal } from "@waitron/shared";
+import { applyAdjustment } from "../adjustments-apply.js";
 import { readBillEditState } from "../bill-editing.js";
+import { cancelItem } from "../line-cancel.js";
 import { endMeal } from "../meal-end.js";
 import { readDrafts, submitDraft } from "../order-drafts.js";
+import type { PayForItemsRequest } from "../pay-for-items.js";
 import { readGroupingCopies, saveBillGrouping } from "../set-menu-regroup.js";
+import { readOrderRevision } from "../working-order-context.js";
+import { advanceTicketItem } from "../working-order-kitchen-service.js";
 import { markServed } from "../working-order-serving.js";
+import { cancelReasonId, GIVE_AWAY_REASON, observedCancelItem, reasonIdOf } from "./cancel-line.js";
 import { expectedDraftEditForTest } from "./draft-command-fixture.js";
 import {
   commandFor,
@@ -175,6 +184,34 @@ export async function setupSetMenuSpecVenue(db: Database): Promise<SpecVenue> {
     );
     daily.versionId = special.versionId = await publishWorkingMenu(tx, fullMenuId);
     return { venue, daily, special, productIds, bread };
+  });
+}
+
+/**
+ * Adds the dishes to the full menu and publishes it again, every set menu of `spec` carrying the
+ * new version; answers the full menu's offer of each dish.
+ */
+export function addSpecDishesToFullMenu(spec: SpecVenue): Promise<Record<SpecDish, string>> {
+  const { venue } = spec;
+  return inTx(venue, async (tx) => {
+    const productIds = Object.values(spec.productIds);
+    await addProducts(tx, await requireMenuRoot(tx, venue.tables.menuId), productIds);
+    spec.daily.versionId = spec.special.versionId = await publishWorkingMenu(
+      tx,
+      venue.tables.menuId,
+    );
+    const rows = await tx
+      .select({ id: menuItems.id, productId: menuItems.productId })
+      .from(menuItems)
+      .where(
+        and(eq(menuItems.menuId, venue.tables.menuId), inArray(menuItems.productId, productIds)),
+      );
+    return Object.fromEntries(
+      (Object.keys(spec.productIds) as SpecDish[]).map((dish) => [
+        dish,
+        rows.find(({ productId }) => productId === spec.productIds[dish])!.id,
+      ]),
+    ) as Record<SpecDish, string>;
   });
 }
 
@@ -471,6 +508,134 @@ export function specRows(spec: SpecVenue, billId: string) {
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, billId))
     .orderBy(workingOrderLines.lineNo);
+}
+
+/** The dish a row of the bill holds, when it is one of `spec`'s. */
+export function specDishOf(spec: SpecVenue, row: { productId: string | null }): string | undefined {
+  return (Object.keys(spec.productIds) as SpecDish[]).find(
+    (dish) => spec.productIds[dish] === row.productId,
+  );
+}
+
+/**
+ * The bill's saved grouping, in line order: each top-level row's dish or set-menu name, its price,
+ * and the set-menu row it is placed in, by that row's name and position among the bill's set menus.
+ */
+export async function specGrouping(spec: SpecVenue, billId: string) {
+  const rows = (await specRows(spec, billId)).filter(({ parentLineId }) => parentLineId === null);
+  const menus = rows.filter(({ setMenuRole }) => setMenuRole === "set_menu").map(({ id }) => id);
+  const menuName = (id: string | null) => {
+    if (id === null) return null;
+    const index = menus.indexOf(id);
+    return index < 0
+      ? `elsewhere ${id}`
+      : `${rows.find((row) => row.id === id)!.name} ${index + 1}`;
+  };
+  return {
+    rows: rows.map((row) =>
+      row.setMenuRole === "set_menu"
+        ? { what: `${row.name} ${menus.indexOf(row.id) + 1}`, price: row.unitPriceGross }
+        : {
+            what: specDishOf(spec, row) ?? row.name,
+            price: row.unitPriceGross,
+            in: menuName(row.setMenuLineId),
+          },
+    ),
+    total: rows.reduce((sum, { lineTotal }) => sum + lineTotal, 0),
+  };
+}
+
+/** The id of the bill's `nth` top-level row of this dish or set-menu name, in line order. */
+export async function specLineId(spec: SpecVenue, billId: string, what: string, nth = 0) {
+  const rows = (await specRows(spec, billId)).filter(
+    (row) => row.parentLineId === null && (specDishOf(spec, row) ?? row.name) === what,
+  );
+  return rows[nth]!.id;
+}
+
+/** Comps the bill's line whole, under the give-away reason. */
+export async function compSpecLine(spec: SpecVenue, billId: string, lineId: string) {
+  const { venue } = spec;
+  await inTx(venue, async (tx) =>
+    applyAdjustment(
+      tx,
+      venue.cfg,
+      {
+        admission: testTradingAdmission(),
+        orderId: billId,
+        expectedEdit: await readBillEditState(tx, billId),
+        submissionId: randomUUID(),
+        expectedRevision: await readOrderRevision(tx, billId),
+        lineId,
+        reasonId: await reasonIdOf(tx, GIVE_AWAY_REASON),
+        action: "comp",
+        note: null,
+        operatorId: venue.operator.personId,
+      },
+      venue.cfg.locale,
+    ),
+  );
+}
+
+/** Cancels the bill's sent line once the kitchen has started it, keeping its charge. */
+export async function cancelSpecLineKeepingCharge(spec: SpecVenue, billId: string, id: string) {
+  const { venue } = spec;
+  await inTx(venue, async (tx) => {
+    const [ticket] = await tx
+      .select({ id: ticketItems.id })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, id));
+    await advanceTicketItem(tx, ticket!.id, "preparing");
+    const [row] = (await specRows(spec, billId)).filter((line) => line.id === id);
+    const { target, lineId, body } = await observedCancelItem(tx, billId, row!.lineNo);
+    await cancelItem(
+      tx,
+      venue.cfg,
+      target,
+      lineId,
+      {
+        ...body,
+        outcome: "keep_charge",
+        reasonId: await cancelReasonId(tx),
+        admission: testTradingAdmission(),
+      },
+      venue.operator.personId,
+    );
+  });
+}
+
+/** Makes the bill's row hold two, as a counted product leaves them: a send stores one row a portion. */
+export async function makeSpecRowOfTwo(spec: SpecVenue, lineId: string, lineTotal: number) {
+  await inTx(spec.venue, async (tx) => {
+    await tx
+      .update(workingOrderLines)
+      .set({ quantity: 2000, lineTotal, countAsPortions: false })
+      .where(eq(workingOrderLines.id, lineId));
+    await tx
+      .update(ticketItems)
+      .set({ quantity: 2000 })
+      .where(and(eq(ticketItems.workingOrderLineId, lineId), isNotNull(ticketItems.quantity)));
+  });
+}
+
+/** What the till sends to pay for `picks` of the bill, which is in `partyId` or in no party. */
+export async function specPayRequest(
+  spec: SpecVenue,
+  bill: { partyId: string | null; tabId: string },
+  picks: PayForItemsRequest["picks"],
+  pay: Pick<PayForItemsRequest, "method" | "applied" | "tendered" | "entry" | "simulationOutcome">,
+): Promise<PayForItemsRequest> {
+  const { venue } = spec;
+  return {
+    submissionId: randomUUID(),
+    picks,
+    ...(bill.partyId === null
+      ? {}
+      : { ...(await commandFor(venue, bill.partyId)), partyId: bill.partyId }),
+    expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, bill.tabId))],
+    tip: "0.00",
+    ...pay,
+  };
 }
 
 export function specDeps(spec: SpecVenue) {

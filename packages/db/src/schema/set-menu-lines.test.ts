@@ -63,19 +63,18 @@ describe("set menu storage on a bill", () => {
     menu = MENU as string | null,
     setLine = SET_LINE as string | null,
     place = 1 as number | null,
-    course = COURSE as string | null,
   } = {}) {
     return suite.db.execute(sql`insert into working_order_lines
       (id, working_order_id, line_no, name, descriptions, product_id, quantity,
        unit_price_gross, line_total, vat_class, takeaway_vat_class,
        menu_item_id, menu_id, menu_name, offer_department_id, department_name, unit_id,
        sold_in_each, offer_unit_name, offer_unit_precision, offer_vat_class, offer_category_name,
-       set_menu_role, set_menu_id, set_menu_line_id, set_menu_place, set_menu_counts_as_course_id)
+       set_menu_role, set_menu_id, set_menu_line_id, set_menu_place, counts_as_course_id)
       values (${id}, ${billId}, ${id === DISH ? 2 : 3}, 'Soup', '{"en":"Soup"}', ${productId}, 1000,
        250, 250, 'reduced', 'reduced',
        ${menuItemId}, ${fullMenuId}, 'Lunch', 'dining-room', 'Dining room', 'each',
        1, '{"en":"portion"}', 0, 'reduced', 'Starters',
-       ${role}, ${menu}, ${setLine}, ${place}, ${course})`);
+       ${role}, ${menu}, ${setLine}, ${place}, ${COURSE})`);
   }
 
   function updateLine(lineId: string, column: string, value: string | number | null) {
@@ -103,7 +102,7 @@ describe("set menu storage on a bill", () => {
   it("requires the place and counts-as course on a placed dish", async () => {
     await addSetMenu();
     await addDish();
-    for (const column of ["set_menu_place", "set_menu_counts_as_course_id"]) {
+    for (const column of ["set_menu_place", "counts_as_course_id"]) {
       await expectCheck(() => updateLine(DISH, column, null));
     }
     await expectCheck(() => updateLine(DISH, "set_menu_version_id", VERSION));
@@ -112,7 +111,7 @@ describe("set menu storage on a bill", () => {
 
   it("keeps where a dish was ordered from when it is in no set menu, and groups a dish tapped a la carte", async () => {
     await addSetMenu();
-    await addDish({ role: null, setLine: null, place: null, course: null });
+    await addDish({ role: null, setLine: null, place: null });
     await addDish({ id: "a-la-carte-dish", menu: null });
     expect(
       await suite.db.all(sql`select id, set_menu_role, set_menu_id from working_order_lines
@@ -123,22 +122,21 @@ describe("set menu storage on a bill", () => {
     ]);
   });
 
-  it("refuses a line in no set menu that keeps a set menu's line, place, course or copy", async () => {
+  it("refuses a line in no set menu that keeps a set menu's line, place or copy", async () => {
     await addSetMenu();
     for (const values of [
-      { setLine: SET_LINE, place: null, course: null },
-      { setLine: null, place: 1, course: null },
-      { setLine: null, place: null, course: COURSE },
+      { setLine: SET_LINE, place: null },
+      { setLine: null, place: 1 },
     ]) {
       await expectCheck(() => addDish({ role: null, ...values }));
     }
-    await addDish({ role: null, setLine: null, place: null, course: null });
+    await addDish({ role: null, setLine: null, place: null });
     await expectCheck(() => updateLine(DISH, "set_menu_version_id", VERSION));
   });
 
   it("refuses a line in no set menu that keeps where it was ordered from without a menu item", async () => {
     await addSetMenu();
-    await addDish({ role: null, setLine: null, place: null, course: null });
+    await addDish({ role: null, setLine: null, place: null });
     const withoutMenuItem = () =>
       suite.db.execute(sql`update working_order_lines
         set menu_item_id = null, menu_id = null, menu_name = null, offer_department_id = null,
@@ -172,7 +170,6 @@ describe("set menu storage on a bill", () => {
       ["set_menu_version_id", VERSION],
       ["set_menu_line_id", SET_LINE],
       ["set_menu_place", 1],
-      ["set_menu_counts_as_course_id", COURSE],
     ] as const) {
       await expectCheck(() => updateLine("extra", column, value));
     }
@@ -296,7 +293,6 @@ describe("set menu storage on a bill", () => {
       ["set_menu_version_id", VERSION],
       ["set_menu_line_id", null],
       ["set_menu_place", 2],
-      ["set_menu_counts_as_course_id", "main"],
     ] as const) {
       const error = await captureError(() =>
         serveDish(sql`, ${sql.identifier(column)} = ${value}`),

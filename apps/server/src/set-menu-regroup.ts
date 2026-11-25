@@ -77,7 +77,6 @@ export async function readGroupingLines(tx: Transaction, billId: string): Promis
       setMenuVersionId: workingOrderLines.setMenuVersionId,
       setMenuLineId: workingOrderLines.setMenuLineId,
       setMenuPlace: workingOrderLines.setMenuPlace,
-      setMenuCountsAsCourseId: workingOrderLines.setMenuCountsAsCourseId,
     })
     .from(workingOrderLines)
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
@@ -250,8 +249,16 @@ async function readOpenBill(
     .from(workingOrders)
     .where(eq(workingOrders.id, billId));
   if (bill?.status !== "open") return null;
-  const copies = isSetMenuBillRow(bill) ? await readGroupingCopies(tx, billId) : [];
-  return { setMenusExact: bill.setMenusExact, copies };
+  return { setMenusExact: bill.setMenusExact, copies: await copiesOf(tx, billId, bill) };
+}
+
+/** The copies a bill is grouped over: none when it takes no set menus. */
+async function copiesOf(
+  tx: Transaction,
+  billId: string,
+  bill: Parameters<typeof isSetMenuBillRow>[0],
+): Promise<GroupingCopy[]> {
+  return isSetMenuBillRow(bill) ? readGroupingCopies(tx, billId) : [];
 }
 
 /** A removal's line writes: rows deleted with their extras, and rows left at a new size. */
@@ -277,10 +284,79 @@ export async function regroupDropAfter(
   const lines = (await readGroupingLines(tx, billId)).flatMap((line) =>
     gone(line) ? [] : [{ ...line, ...removal.resized.get(line.id) }],
   );
-  if (bill.copies.length === 0 && !lines.some(({ setMenuRole }) => setMenuRole !== null)) return 0;
-  const plan = await planGrouping(tx, lines, bill.copies);
+  return planDrop(tx, lines, bill.copies);
+}
+
+/** A bill's rows taken to a bill of their own: whole with their extras, or at a new size. */
+export interface TakenRows {
+  ids: ReadonlySet<string>;
+  resized: ReadonlyMap<string, { quantity: number; lineTotal: number }>;
+}
+
+/**
+ * What a new bill holding only `taken` would come to, in cents, once {@link regroupBills} had
+ * grouped it over the set menus `billId` records, writing nothing. The payment refuses
+ * `bill.allocation_changed` where the bill turns out otherwise.
+ */
+export async function totalOnOwnBill(
+  tx: Transaction,
+  billId: string,
+  taken: TakenRows,
+): Promise<number> {
+  return totalOfRows(tx, billId, (line) =>
+    taken.ids.has(line.id) ? { ...line, ...taken.resized.get(line.id) } : null,
+  );
+}
+
+/**
+ * What `billId` would come to, in cents, once `taken` had left it and {@link regroupBills} had
+ * grouped what stays, writing nothing.
+ */
+export async function totalLeftBehind(
+  tx: Transaction,
+  billId: string,
+  taken: TakenRows,
+): Promise<number> {
+  return totalOfRows(tx, billId, (line) => {
+    const part = taken.resized.get(line.id);
+    if (part === undefined) return taken.ids.has(line.id) ? null : line;
+    const { quantity, lineTotal } = line;
+    return { ...line, quantity: quantity - part.quantity, lineTotal: lineTotal - part.lineTotal };
+  });
+}
+
+/** What the bill's rows, each as `rowOf` answers it (null for none), come to once grouped. */
+async function totalOfRows(
+  tx: Transaction,
+  billId: string,
+  rowOf: (line: GroupingLine) => GroupingLine | null,
+): Promise<number> {
+  const [bill] = await tx
+    .select({
+      dining: workingOrders.dining,
+      partyId: workingOrders.partyId,
+      serviceMode: workingOrders.serviceMode,
+    })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, billId));
+  const lines = (await readGroupingLines(tx, billId)).flatMap((line) => rowOf(line) ?? []);
+  const drop = await planDrop(tx, lines, await copiesOf(tx, billId, bill!));
+  return sum(lines.map(({ lineTotal }) => lineTotal)) - drop;
+}
+
+function sum(cents: readonly number[]): number {
+  return cents.reduce((total, one) => total + one, 0);
+}
+
+/** By how much, in cents, grouping `lines` over `copies` would lower their total. */
+async function planDrop(
+  tx: Transaction,
+  lines: readonly GroupingLine[],
+  copies: readonly GroupingCopy[],
+): Promise<number> {
+  if (copies.length === 0 && !lines.some(({ setMenuRole }) => setMenuRole !== null)) return 0;
+  const plan = await planGrouping(tx, lines, copies);
   const was = new Map(lines.map(({ id, lineTotal }) => [id, lineTotal]));
-  const sum = (cents: number[]) => cents.reduce((total, one) => total + one, 0);
   return (
     sum(plan.deletes.map((id) => was.get(id)!)) +
     sum(plan.dishUpdates.map(({ id, lineTotal }) => was.get(id)! - lineTotal)) +

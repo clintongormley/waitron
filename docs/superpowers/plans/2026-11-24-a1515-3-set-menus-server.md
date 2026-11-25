@@ -770,7 +770,8 @@ export function planBillGrouping(
 - [ ] **Step 1: Write the failing tests** in `set-menu-grouping-plan.test.ts`, with hand-built lines
   and a hand-built copy (Daily: 14.00, "1 × Starter, 1 × Main", Soup and Hake included, Sirloin +5.00):
   - Soup and Hake, unplaced at 6.00 and 16.00, plan one insert at 1400 and two dish updates at 0, places 0 and 1.
-  - Hake alone plans nothing (it stays at 16.00).
+  - Hake alone plans nothing (it stays at 16.00). _2026-11-25: 14.00; a lone Hake
+    is a Daily (see 2c)._
   - Planning again from the planned state plans nothing (no shuffling, spec anti-goals).
   - D5: a saved menu that keeps a dish keeps its id (update, no insert); a saved menu left empty is deleted, and its dish updates come first in the plan.
   - A placed dish whose menu goes is planned à la carte, role null.
@@ -826,7 +827,8 @@ export function planBillGrouping(
     stored total 14.00, `setMenusExact` true, and `GET /api/bills/:id/set-menus` answers that menu
     with `exact: true`.
   - Soup and Sirloin: a Daily with Sirloin at 500 (19.00, cheaper than Special's 20.00).
-  - Hake alone: stays 16.00, no set-menu row.
+  - Hake alone: stays 16.00, no set-menu row. _2026-11-25: 14.00; a lone Hake
+    is a Daily (see 2c)._
   - D5: Soup and Hake grouped, then a second Soup and Sea bass sent and regrouped: the Daily row keeps
     its id and its two dishes, and a Special row is inserted for the new pair; then the first Hake is
     cancelled (`cancelItem`) and the bill regrouped: the Daily row is deleted (Soup alone at 6.00 beats
@@ -900,7 +902,8 @@ and is not a failing test.
   bill total):
   - Draft send (`submitDraft`): Soup and Hake from the à la carte folders form a Daily at 14.00.
   - D10: Hake tapped in the Daily folder on a bill with nothing else is stored at 16.00, role null,
-    `set_menu_id` the Daily's (D11); then Soup sent: the Daily forms, Hake 0.
+    `set_menu_id` the Daily's (D11); then Soup sent: the Daily forms, Hake 0. _2026-11-25: 14.00; a lone Hake
+    is a Daily (see 2c)._
   - Held send (`placeGroups` with `release: "hold"`) and a second round joining a held group group the same way.
   - `openTab` with lines (`createOpenOrder`): Soup and Hake on opening form a Daily at 14.00; given an
     invoice choice, `selectOrderInvoice` receives 14.00, not the à la carte 22.00.
@@ -1011,7 +1014,8 @@ _2026-11-25: D14 was dropped in Task 2b.8 (VAT-RATES B1 landed first): takeaway 
 - [ ] **Step 1: Write the failing tests** in `set-menu-regroup-moves.test.ts`, each asserting both
   bills' saved grouping after it:
   - `moveDishes` of Hake alone from a Daily (Soup, Hake) to another bill of the party: the source's
-    Soup returns to 6.00; on the target Hake is 16.00, or joins a Soup there in a Daily.
+    Soup returns to 6.00; on the target Hake is 16.00, or joins a Soup there in a Daily. _2026-11-25: 14.00; a lone Hake
+    is a Daily (see 2c)._
   - **D26 (owner):** `moveDishes` of the Daily row with its dishes (`resolveMoveLines`,
     `bill-actions.ts:198-247`): the target keeps that row's id when it still groups. To a bill
     recording another version of Daily whose contents differ (another price and another dish), the
@@ -1140,9 +1144,12 @@ _2026-11-25: D14 was dropped in Task 2b.8 (VAT-RATES B1 landed first): takeaway 
   totals, plus extras.
 
 - [ ] **Step 1: Write the failing tests:** for each, the preview's `total` equals the new bill's
-  stored total after `payForItems`: Hake alone from a Daily (16.00; the source's Soup becomes 6.00);
+  stored total after `payForItems`: Hake alone from a Daily (14.00; the source's Soup becomes 6.00);
   Soup and Hake from two different Dailies (14.00); a Daily with its dishes (14.00); Sirloin chosen
   with Soup (19.00); a comped dish of its own (its stored price).
+
+  _2026-11-25, corrected in 2c: this said 16.00 for Hake alone. The new bill groups a lone Hake as a
+  Daily, at 14.00 (`apps/server/src/pay-for-items.set-menus.test.ts`)._
 - [ ] **Step 2: Run and see them fail:** `pnpm --filter @waitron/server exec vitest run src/pay-for-items.set-menus.test.ts`.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run** Step 2's command and `src/pay-for-items.test.ts src/pay-for-items.move.test.ts src/pay-for-items.card.test.ts`; the case pinning the old refusal changes (spec §7: "Paying for some items … Both bills are grouped again").
