@@ -5,14 +5,12 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "./migrations.js";
 import { box } from "./schema/box.js";
 import { readNodeMode, readNodeModeRow } from "./mode.js";
-import { readRecoveryKey } from "./recovery-key.js";
 import { readMirrorLink } from "./mirror-link.js";
 import { readPinnedPrimaryKey } from "./primary-key.js";
 import {
   deleteBoxRowsOtherThanTx,
   writeBoxMirrorLinkTx,
   writeBoxPinnedKeyTx,
-  writeBoxRecoveryKeyTx,
   writeBoxRoleTx,
   writeBoxSigningKeyTx,
 } from "./box.js";
@@ -23,12 +21,20 @@ const STAMP = "2026-11-16T08:00:00.000Z";
 describe("box column groups", () => {
   const suite = useVenueDb({ migrations: [NODE_MIGRATIONS] });
 
+  it("box has no recovery-key columns and no recovery-key check", () => {
+    const columns = suite.node
+      .all<{ name: string }>(sql`select name from pragma_table_info('box')`)
+      .map((column) => column.name);
+    expect(columns).toContain("signing_key_ciphertext");
+    expect(columns.filter((column) => column.includes("recovery"))).toEqual([]);
+    const table = suite.node.get<{ sql: string }>(
+      sql`select sql from sqlite_schema where type = 'table' and name = 'box'`,
+    );
+    expect(table?.sql).toContain("box_signing_key_group_ck");
+    expect(table?.sql).not.toMatch(/recovery/i);
+  });
+
   it.each([
-    {
-      name: "recovery_key",
-      columns: ["recovery_key_verifier", "recovery_key_name", "recovery_key_changed_at"],
-      values: ["verifier", "key-name", STAMP],
-    },
     {
       name: "signing_key",
       columns: [
@@ -129,8 +135,14 @@ describe("box group writers", () => {
       boxCaPem: "ca",
       originNodeId: "origin",
     };
+    const signing = {
+      ciphertext: new Uint8Array([1]),
+      iv: new Uint8Array(12),
+      authTag: new Uint8Array(16),
+      keyVersion: 1,
+    };
     await withNodeTransaction(suite.node, async (tx) => {
-      await writeBoxRecoveryKeyTx(tx, NODE, { verifier: "verifier", keyName: "key-name" });
+      await writeBoxSigningKeyTx(tx, NODE, signing);
       expect(await readNodeMode(tx, NODE)).toEqual({ mode: "primary", singletonRole: "primary" });
       expect(await readNodeModeRow(tx, NODE)).toBeNull();
       expect(await readMirrorLink(tx, NODE)).toBeNull();
@@ -138,12 +150,7 @@ describe("box group writers", () => {
       await writeBoxRoleTx(tx, NODE, { mode: "mirror", singletonRole: "secondary" });
       await writeBoxMirrorLinkTx(tx, NODE, mirror);
       await writeBoxPinnedKeyTx(tx, NODE, { primaryNodeId: "origin", publicKey: "public-key" });
-      await writeBoxSigningKeyTx(tx, "signing-only", {
-        ciphertext: new Uint8Array([1]),
-        iv: new Uint8Array(12),
-        authTag: new Uint8Array(16),
-        keyVersion: 1,
-      });
+      await writeBoxSigningKeyTx(tx, "signing-only", signing);
     });
     expect(await readNodeMode(suite.node, NODE)).toEqual({
       mode: "mirror",
@@ -153,16 +160,12 @@ describe("box group writers", () => {
       mode: "mirror",
       singletonRole: "secondary",
     });
-    expect(await readRecoveryKey(suite.node, NODE)).toEqual({
-      verifier: "verifier",
-      keyName: "key-name",
-    });
     expect(await readMirrorLink(suite.node, NODE)).toEqual(mirror);
     expect(await readPinnedPrimaryKey(suite.node, NODE)).toEqual({
       primaryNodeId: "origin",
       publicKey: "public-key",
     });
-    expect(await readRecoveryKey(suite.node, "signing-only")).toBeNull();
+    expect(await readMirrorLink(suite.node, "signing-only")).toBeNull();
     expect(await readNodeMode(suite.node, "absent")).toEqual({
       mode: "primary",
       singletonRole: "primary",
@@ -171,7 +174,6 @@ describe("box group writers", () => {
   });
 
   it("upserts only its own group, including when replacing each one", async () => {
-    const recovery = { verifier: "verifier", keyName: "key-name" };
     const signing = {
       ciphertext: new Uint8Array([1]),
       iv: new Uint8Array(12),
@@ -187,7 +189,6 @@ describe("box group writers", () => {
     };
     const pinned = { primaryNodeId: "origin", publicKey: "public-key" };
     await withNodeTransaction(suite.node, async (tx) => {
-      await writeBoxRecoveryKeyTx(tx, NODE, recovery);
       await writeBoxSigningKeyTx(tx, NODE, signing);
       await writeBoxRoleTx(tx, NODE, role);
       await writeBoxMirrorLinkTx(tx, NODE, mirror);
@@ -196,8 +197,6 @@ describe("box group writers", () => {
     const [row] = await suite.node.select().from(box);
     expect(row).toMatchObject({
       nodeId: NODE,
-      recoveryKeyVerifier: "verifier",
-      recoveryKeyName: "key-name",
       signingKeyCiphertext: new Uint8Array([1]),
       signingKeyIv: new Uint8Array(12),
       signingKeyAuthTag: new Uint8Array(16),
@@ -211,20 +210,11 @@ describe("box group writers", () => {
       primaryNodeId: "origin",
       primaryPublicKey: "public-key",
     });
-    expect(row?.recoveryKeyChangedAt).toBeInstanceOf(Date);
     expect(row?.signingKeyChangedAt).toBeInstanceOf(Date);
     expect(row?.roleChangedAt).toBeInstanceOf(Date);
     expect(row?.mirrorAdoptedAt).toBeInstanceOf(Date);
     expect(row?.primaryPinnedAt).toBeInstanceOf(Date);
     await withNodeTransaction(suite.node, async (tx) => {
-      await writeBoxRecoveryKeyTx(tx, NODE, { verifier: "next-verifier", keyName: "next-name" });
-      const [after] = await tx.select().from(box);
-      expect(after).toEqual({
-        ...row,
-        recoveryKeyVerifier: "next-verifier",
-        recoveryKeyName: "next-name",
-        recoveryKeyChangedAt: expect.any(Date),
-      });
       await writeBoxSigningKeyTx(tx, NODE, {
         ...signing,
         ciphertext: new Uint8Array([2]),
@@ -232,7 +222,7 @@ describe("box group writers", () => {
       });
       const [afterSigning] = await tx.select().from(box);
       expect(afterSigning).toEqual({
-        ...after,
+        ...row,
         signingKeyCiphertext: new Uint8Array([2]),
         signingKeyVersion: 2,
         signingKeyChangedAt: expect.any(Date),
@@ -262,11 +252,11 @@ describe("box group writers", () => {
   it("sweeps other boxes without changing this box's groups", async () => {
     await withNodeTransaction(suite.node, async (tx) => {
       for (const nodeId of [NODE, "other-box"])
-        await writeBoxRecoveryKeyTx(tx, nodeId, { verifier: nodeId, keyName: nodeId });
+        await writeBoxPinnedKeyTx(tx, nodeId, { primaryNodeId: nodeId, publicKey: nodeId });
       await deleteBoxRowsOtherThanTx(tx, NODE);
     });
-    expect(suite.node.all(sql`select node_id, recovery_key_verifier from box`)).toEqual([
-      { node_id: NODE, recovery_key_verifier: NODE },
+    expect(suite.node.all(sql`select node_id, primary_public_key from box`)).toEqual([
+      { node_id: NODE, primary_public_key: NODE },
     ]);
   });
 });

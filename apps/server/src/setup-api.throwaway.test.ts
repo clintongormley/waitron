@@ -24,7 +24,6 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { parseModuleConfig } from "@waitron/module";
 import { NODE_FILE, VENUE_FILE } from "@waitron/store";
-import { readRecoveryKeyName } from "@waitron/node-db";
 import { buildManifest } from "./backup-manifest.js";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import type { DeploymentEnvironment } from "./config.js";
@@ -662,8 +661,6 @@ describe("POST /setup-api/provision with the real provisionVenue", () => {
       recoveryPackPdf: expect.any(String),
     });
     expectThrowawayVenue("preproduction");
-    const [{ id }] = venueDb.db.all<{ id: string }>(sql`select id from nodes`);
-    expect(await readRecoveryKeyName(venueDb.node, id)).toBeNull();
   });
 
   it("a preparation setup makes the master key and its pack, and no box key", async () => {

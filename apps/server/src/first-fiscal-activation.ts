@@ -244,12 +244,7 @@ export async function publishCheckedFirstFiscal(
         const binding = firstSetupModuleContext(current, module).binding;
         if (!(await host.delivery.has(binding))) return;
         const stage = await host.keys.readStage({ ...owner, revision: current.revision }, hold);
-        await host.keys.installStagedNodeKey(
-          { venue: deps.db!, node: deps.node! },
-          current,
-          stage,
-          hold,
-        );
+        await host.keys.installStagedNodeKey(deps.db!, current, stage, hold);
       },
       sealSettings: async (result) => {
         if (payload.required)

@@ -9,7 +9,6 @@ import { parseModuleConfig } from "@waitron/module";
 import { loadKeyRing } from "@waitron/credentials";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
-import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { readCurrentMasterKey } from "@waitron/db";
 import { firstFiscalPublicDigest } from "./first-fiscal-delivery.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
@@ -262,7 +261,6 @@ it("kept confirmation installs the staged master key and no box key, with only p
   await f.kept();
   await f.activate();
   expect(f.counts()).toEqual({ activations: 1, publications: 1 });
-  expect(await readRecoveryKeyVerifier(suite.node, f.staged.stage.nodeId)).toBeNull();
   expect(await readCurrentMasterKey(suite.db)).toMatchObject({ name: f.staged.masterKeyName });
   const database = join(f.venueDir, "venue.db");
   await suite.db.archiveTo(database);

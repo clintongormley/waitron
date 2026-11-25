@@ -1,7 +1,7 @@
 import { isDeepStrictEqual as equal } from "node:util";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor, type WaitronModule } from "@waitron/module";
-import type { VenueAndNodeHandles } from "@waitron/node-db";
+import type { Database } from "@waitron/db";
 import {
   readSetupFlowRecord,
   updateSetupFlowSection,
@@ -323,7 +323,7 @@ export function createFirstSetupRecoveryDelivery(options: Options) {
       });
     },
     install(
-      db: VenueAndNodeHandles,
+      db: Database,
       state: FirstSetupState,
       owner: FirstSetupOwnerAttempt,
       module: string,

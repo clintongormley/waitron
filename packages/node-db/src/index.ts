@@ -44,12 +44,6 @@ export {
   setSingletonRoleTx,
 } from "./mode.js";
 export type { BoxRoleCause } from "./mode.js";
-export {
-  readRecoveryKey,
-  readRecoveryKeyName,
-  readRecoveryKeyVerifier,
-  setRecoveryKeyTx,
-} from "./recovery-key.js";
 export { pinPrimaryKeyTx, readPinnedPrimaryKey } from "./primary-key.js";
 export type { PinnedPrimaryKey } from "./primary-key.js";
 export {

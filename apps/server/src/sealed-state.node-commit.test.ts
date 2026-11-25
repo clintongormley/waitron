@@ -6,7 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { expect, it, vi } from "vitest";
 import { withNodeTransaction, withTransaction, type NodeDatabase } from "@waitron/db";
-import { setRecoveryKeyTx } from "@waitron/node-db";
+import { recordTakeFailureTx } from "@waitron/node-db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { writeRecoveryKey } from "./backup-env-writer.js";
@@ -67,7 +67,7 @@ const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 const KEY = "recovery-key-sealed-after-node-commits";
 
-async function verifierInSealedRow(nodeId: string, scratch: string): Promise<string | null> {
+async function failuresInSealedRow(nodeId: string, scratch: string): Promise<number | null> {
   const sealed = await withTransaction(suite.db, (tx) => readSealedStateRow(tx, nodeId));
   if (sealed === null) return null;
   const entry = unsealNodeState(sealed, KEY).find((e) => e.name === "node.dump");
@@ -77,25 +77,23 @@ async function verifierInSealedRow(nodeId: string, scratch: string): Promise<str
   const copy = new DatabaseSync(file, { readOnly: true });
   try {
     const row = copy
-      .prepare("select recovery_key_verifier as verifier from box where node_id = ?")
-      .get(nodeId) as { verifier: string } | undefined;
-    return row?.verifier ?? null;
+      .prepare("select failures from node_take_failures where node_id = ?")
+      .get(nodeId) as { failures: number } | undefined;
+    return row?.failures ?? null;
   } finally {
     copy.close();
   }
 }
 
-async function putVerifier(node: NodeDatabase, nodeId: string, verifier: string): Promise<void> {
-  await withNodeTransaction(node, async (tx) => {
-    await setRecoveryKeyTx(tx, nodeId, verifier, "key-one", null);
-  });
+async function addFailure(node: NodeDatabase, nodeId: string): Promise<void> {
+  await withNodeTransaction(node, (tx) => recordTakeFailureTx(tx, nodeId, new Date()));
 }
 
-/** Starts a set-up box on the suite's venue, its node holding `verifier`, with state in `scratch`. */
-async function startBox(scratch: string, verifier: string) {
+/** Starts a set-up box on the suite's venue, its node holding one failed take, with state in `scratch`. */
+async function startBox(scratch: string) {
   const venue = await setupVenue(suite.db);
   const nodeId = venue.cfg.nodeId;
-  await putVerifier(suite.node, nodeId, verifier);
+  await addFailure(suite.node, nodeId);
   const migrationsRoot = join(scratch, "migrations");
   for (const [index, set] of manifestSets().entries()) {
     await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
@@ -128,26 +126,26 @@ async function startBox(scratch: string, verifier: string) {
   return { nodeId, server: await startServer(env, env) };
 }
 
-it("a recovery key replaced after the last refresh is in the next sealed row", async () => {
+it("a node change committed after the last refresh is in the next sealed row", async () => {
   seen.refresherDeps.length = 0;
   beforeServerStarts();
   const scratch = await mkdtemp(join(tmpdir(), "waitron-sealed-node-commit-"));
   let server: StartedServer | undefined;
   try {
-    const started = await startBox(scratch, "verifier-before-start");
+    const started = await startBox(scratch);
     const nodeId = started.nodeId;
     server = started.server;
 
-    // The start's own refresh sealed the verifier the box held then.
-    expect(await verifierInSealedRow(nodeId, scratch)).toBe("verifier-before-start");
+    // The start's own refresh sealed the count the box held then.
+    expect(await failuresInSealedRow(nodeId, scratch)).toBe(1);
     expect(seen.refresherDeps).toHaveLength(1);
     const { node } = seen.refresherDeps[0] as SealedStateDeps;
 
-    await putVerifier(node, nodeId, "verifier-after-refresh");
+    await addFailure(node, nodeId);
 
     await vi.waitFor(
       async () => {
-        expect(await verifierInSealedRow(nodeId, scratch)).toBe("verifier-after-refresh");
+        expect(await failuresInSealedRow(nodeId, scratch)).toBe(2);
       },
       { timeout: 10_000, interval: 100 },
     );
@@ -164,18 +162,18 @@ it("a node change committed just before close is sealed before the database clos
   const scratch = await mkdtemp(join(tmpdir(), "waitron-sealed-node-commit-"));
   let server: StartedServer | undefined;
   try {
-    const started = await startBox(scratch, "verifier-before-start");
+    const started = await startBox(scratch);
     server = started.server;
     const { node } = seen.refresherDeps[0] as SealedStateDeps;
     seen.refreshes.length = 0;
     seen.logs.length = 0;
 
-    await putVerifier(node, started.nodeId, "verifier-before-close");
+    await addFailure(node, started.nodeId);
     expect(seen.refreshes).toHaveLength(0);
     await server.close();
     server = undefined;
     await Promise.all(seen.refreshes);
-    expect(await verifierInSealedRow(started.nodeId, scratch)).toBe("verifier-before-close");
+    expect(await failuresInSealedRow(started.nodeId, scratch)).toBe(2);
 
     expect(seen.logs).toEqual([["info", "backup.sealed_state_refreshed", expect.anything()]]);
   } finally {

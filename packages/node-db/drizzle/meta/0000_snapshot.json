@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "9a13743a-dd1b-4f1c-96eb-006cd9753c45",
+  "id": "9e8798a9-ff69-4b13-a9a6-b989dd52a7eb",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "box": {
@@ -12,27 +12,6 @@
           "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "autoincrement": false
-        },
-        "recovery_key_verifier": {
-          "name": "recovery_key_verifier",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "recovery_key_name": {
-          "name": "recovery_key_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "recovery_key_changed_at": {
-          "name": "recovery_key_changed_at",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
         "signing_key_ciphertext": {
@@ -153,10 +132,6 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "checkConstraints": {
-        "box_recovery_key_group_ck": {
-          "name": "box_recovery_key_group_ck",
-          "value": "(\"box\".\"recovery_key_verifier\" is null and \"box\".\"recovery_key_name\" is null and \"box\".\"recovery_key_changed_at\" is null) or (\"box\".\"recovery_key_verifier\" is not null and \"box\".\"recovery_key_name\" is not null and \"box\".\"recovery_key_changed_at\" is not null)"
-        },
         "box_signing_key_group_ck": {
           "name": "box_signing_key_group_ck",
           "value": "(\"box\".\"signing_key_ciphertext\" is null and \"box\".\"signing_key_iv\" is null and \"box\".\"signing_key_auth_tag\" is null and \"box\".\"signing_key_version\" is null and \"box\".\"signing_key_changed_at\" is null) or (\"box\".\"signing_key_ciphertext\" is not null and \"box\".\"signing_key_iv\" is not null and \"box\".\"signing_key_auth_tag\" is not null and \"box\".\"signing_key_version\" is not null and \"box\".\"signing_key_changed_at\" is not null)"

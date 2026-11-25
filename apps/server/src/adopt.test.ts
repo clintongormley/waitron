@@ -24,7 +24,6 @@ import {
   readNodeMode,
   readPairLink,
   readPinnedPrimaryKey,
-  readRecoveryKey,
 } from "@waitron/node-db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { isEnabled, type ModuleConfig } from "@waitron/module";
@@ -266,7 +265,6 @@ describe("adoptFromPrimary (mirror adopt)", () => {
       NO_HOOKS,
     );
     expect(answer).toBeUndefined();
-    expect(await readRecoveryKey(suite.node, ownNodeId)).toBeNull();
 
     // Stands for the master key row the spare's copy of venue.db carries.
     const { name: firstMasterKey } = await mintMasterKey(suite.db);
@@ -315,7 +313,6 @@ describe("adoptFromPrimary (mirror adopt)", () => {
         [1, firstMasterKey],
         [2, shownName],
       ]);
-      expect(await readRecoveryKey(suite.node, ownNodeId)).toBeNull();
     } finally {
       socket.destroy();
     }

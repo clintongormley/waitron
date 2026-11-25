@@ -1,16 +1,16 @@
+import { sql } from "drizzle-orm";
 import { readSetupFlowRecord, updateSetupFlowSection } from "@waitron/provisioning";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CORE_MIGRATIONS, readCurrentMasterKey, stampDeployment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { NODE_MIGRATIONS, readRecoveryKeyName, readRecoveryKeyVerifier } from "@waitron/node-db";
+import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { firstFiscalFixture, PASSWORD } from "../test/first-fiscal.js";
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
 
 const suite = useVenueDb({
   migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
-const handles = () => ({ venue: suite.db, node: suite.node });
 const fixtures: Awaited<ReturnType<typeof firstFiscalFixture>>[] = [];
 afterEach(async () => {
   await Promise.all(fixtures.splice(0).map((f) => f.dispose()));
@@ -99,12 +99,11 @@ it("installs the staged master key once after commit, nothing in node.db, and a 
   const f = await fixture();
   const { stage } = await f.stage();
   const state = await committed(f);
-  await f.keys.installStagedNodeKey(handles(), state, stage);
-  expect(await readRecoveryKeyName(suite.node, stage.nodeId)).toBeNull();
-  expect(await readRecoveryKeyVerifier(suite.node, stage.nodeId)).toBeNull();
+  await f.keys.installStagedNodeKey(suite.db, state, stage);
+  expect(suite.node.all(sql`select * from box`)).toEqual([]);
   const installed = await readCurrentMasterKey(suite.db);
   expect(installed).toMatchObject({ number: 1, name: stage.masterKeyName });
-  await f.keys.installStagedNodeKey(handles(), state, stage);
+  await f.keys.installStagedNodeKey(suite.db, state, stage);
   expect(await readCurrentMasterKey(suite.db)).toEqual(installed);
 });
 it.each(["before commit", "wrong node result", "wrong frozen request", "wrong stage"])(
@@ -119,11 +118,11 @@ it.each(["before commit", "wrong node result", "wrong frozen request", "wrong st
     if (why === "wrong frozen request")
       state = { ...state, frozen: { ...state.frozen, sourceId: "other" } };
     if (why === "wrong stage") supplied = { ...stage, stageId: "other" };
-    const before = await readRecoveryKeyVerifier(suite.node, state.frozen.nodeId);
-    await expect(f.keys.installStagedNodeKey(handles(), state, supplied)).rejects.toMatchObject({
+    const before = suite.node.all(sql`select * from box`);
+    await expect(f.keys.installStagedNodeKey(suite.db, state, supplied)).rejects.toMatchObject({
       code: "setup.attempt_uncertain",
     });
-    expect(await readRecoveryKeyVerifier(suite.node, state.frozen.nodeId)).toBe(before);
+    expect(suite.node.all(sql`select * from box`)).toEqual(before);
     expect(await readCurrentMasterKey(suite.db)).toBeNull();
   },
 );
@@ -155,8 +154,8 @@ it("a supplied committed marker cannot replace the exact retained checked state"
     status: "committed" as const,
     result: { venue: { nodeId: current.frozen.nodeId }, modules: {} },
   };
-  await expect(f.keys.installStagedNodeKey(handles(), forged, stage)).rejects.toMatchObject({
+  await expect(f.keys.installStagedNodeKey(suite.db, forged, stage)).rejects.toMatchObject({
     code: "setup.attempt_uncertain",
   });
-  expect(await readRecoveryKeyVerifier(suite.node, current.frozen.nodeId)).toBeNull();
+  expect(suite.node.all(sql`select * from box`)).toEqual([]);
 });

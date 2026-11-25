@@ -198,7 +198,7 @@ export async function publishCheckedFirstSetup(
   for (const module of state.frozen.modules) {
     if (initialSetupFor(host.modules, module.module)?.recoveryDocument !== undefined) {
       await host.recoveryDelivery.install(
-        { venue: deps.db, node: deps.node },
+        deps.db,
         state,
         { ...owner, revision: state.revision },
         module.module,

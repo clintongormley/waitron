@@ -500,8 +500,8 @@ Receipts moved on 2026-11-24 are in [conventions-ui](docs/developers/conventions
   decision, never a default.** **Await queries on one transaction in turn, never `Promise.all`.**
   No guard enforces this convention.
 - **Across `venue.db` and `node.db`, take `node.db`'s write lock outside `venue.db`'s; save
-  `venue.db` first and `node.db` after, so a re-run repairs `node.db` (a signing key and, until A1323
-  PR 3b, a new master key's row are the stated exceptions); write `node.db` through `withNodeTransaction`, since `withTransaction` refuses the node
+  `venue.db` first and `node.db` after, so a re-run repairs `node.db` (a signing key is the stated
+  exception); write `node.db` through `withNodeTransaction`, since `withTransaction` refuses the node
   handle at compile time.** Nothing guards the first two. [Rules and sites](docs/developers/conventions-data.md#a-local-row-belongs-to-one-node-so-no-foreign-key-may-join-a-local-table-to-a-ledgerstate-one).
 - **Housekeeping writes must not take reads down on a full disk.** Last-seen stamps give way;
   reads that must answer while a change waits use `withWriteLock` turns without draining, a stated

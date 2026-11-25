@@ -1,7 +1,6 @@
 import { allocationRows } from "@waitron/fiscal-verifactu/test/allocation-rows.js";
 import { vi } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { readRecoveryKeyVerifier } from "@waitron/node-db";
 import { readCurrentMasterKey } from "@waitron/db";
 import { loadKeyRing } from "@waitron/credentials";
 import { parseModuleConfig } from "@waitron/module";
@@ -98,7 +97,6 @@ async function fixture(certificate?: { pfxBase64: string; passphrase: string; ce
         "https://test.example",
       ),
     persistTrading: async () => {
-      expect(await readRecoveryKeyVerifier(suite.node, staged.stage.nodeId)).toBeNull();
       expect(await readCurrentMasterKey(suite.db)).toMatchObject({ name: staged.masterKeyName });
       publications++;
     },

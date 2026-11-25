@@ -1,8 +1,5 @@
 CREATE TABLE `box` (
 	`node_id` text PRIMARY KEY NOT NULL,
-	`recovery_key_verifier` text,
-	`recovery_key_name` text,
-	`recovery_key_changed_at` text,
 	`signing_key_ciphertext` blob,
 	`signing_key_iv` blob,
 	`signing_key_auth_tag` blob,
@@ -19,7 +16,6 @@ CREATE TABLE `box` (
 	`primary_node_id` text,
 	`primary_public_key` text,
 	`primary_pinned_at` text,
-	CONSTRAINT "box_recovery_key_group_ck" CHECK(("box"."recovery_key_verifier" is null and "box"."recovery_key_name" is null and "box"."recovery_key_changed_at" is null) or ("box"."recovery_key_verifier" is not null and "box"."recovery_key_name" is not null and "box"."recovery_key_changed_at" is not null)),
 	CONSTRAINT "box_signing_key_group_ck" CHECK(("box"."signing_key_ciphertext" is null and "box"."signing_key_iv" is null and "box"."signing_key_auth_tag" is null and "box"."signing_key_version" is null and "box"."signing_key_changed_at" is null) or ("box"."signing_key_ciphertext" is not null and "box"."signing_key_iv" is not null and "box"."signing_key_auth_tag" is not null and "box"."signing_key_version" is not null and "box"."signing_key_changed_at" is not null)),
 	CONSTRAINT "box_signing_key_version_ck" CHECK("box"."signing_key_version" >= 1),
 	CONSTRAINT "box_signing_key_iv_len_ck" CHECK(octet_length("box"."signing_key_iv") = 12),

@@ -15,7 +15,6 @@ import { invoiceSeries, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { type ModuleRouteContext, type LiveModuleOperationBridge } from "@waitron/module";
-import { readRecoveryKey } from "@waitron/node-db";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { seriesId } from "@waitron/shared";
 import { recordSale } from "@waitron/core";
@@ -301,8 +300,6 @@ it.each([
 );
 
 it("the conflict switch on a spare takes the master key", async () => {
-  // A promoted spare holds no key of its own in node.db.
-  expect(await readRecoveryKey(suite.node, node.nodeId)).toBeNull();
   const m = mounted();
   const refused = await m.send(request({ recoveryKey: WRONG_MASTER_KEY }));
   expect([refused.status, await refused.json()]).toEqual([

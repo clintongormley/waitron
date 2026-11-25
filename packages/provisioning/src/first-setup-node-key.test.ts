@@ -36,7 +36,6 @@ import { createFirstSetupNodeKeys, readFirstSetupStagedKey } from "./first-setup
 const database = useVenueDb({
   migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS],
 });
-const handles = () => ({ venue: database.db, node: database.node });
 const storedKeys = () => database.node.select().from(box);
 const storedMasterKeys = () => database.db.select().from(masterKeys);
 const otherPublicKey = () => sealingPublicKey(makeMasterKey()).toString("base64");
@@ -224,7 +223,7 @@ it.each(["uncommitted", "missing result", "different node"])(
         : await f.committed(part === "missing result" ? null : { venue: { nodeId: randomUUID() } });
     await stampDeployment(database.db, "preproduction");
     await expect(
-      f.keys.installStagedNodeKey(handles(), state, f.staged!.stage),
+      f.keys.installStagedNodeKey(database.db, state, f.staged!.stage),
     ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
     expect(await storedKeys()).toEqual([]);
   },
@@ -245,7 +244,7 @@ it.each(["stale state", "supplied stage", "stored stage", "changed frozen reques
       }));
     else state.frozen.request.legalName = "Another business";
     const retained = await readFile(f.path);
-    await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({
+    await expect(f.keys.installStagedNodeKey(database.db, state, stage)).rejects.toMatchObject({
       code: "setup.attempt_uncertain",
     });
     expect(await storedKeys()).toEqual([]);
@@ -259,7 +258,7 @@ it("installing the staged key writes pack 1 and the master key in one venue tran
   const stage = f.staged!.stage;
   await stampDeployment(database.db, "preproduction");
   const before = await storedKeys();
-  await f.keys.installStagedNodeKey(handles(), state, stage);
+  await f.keys.installStagedNodeKey(database.db, state, stage);
   expect(await storedKeys()).toEqual(before);
   const [pack] = await readRecoveryPacks(database.db, stage.nodeId);
   expect(await readCurrentMasterKey(database.db)).toMatchObject({
@@ -273,7 +272,7 @@ it("records recovery pack 1 as received beside the installed key, once across a 
   const state = await f.committed();
   await stampDeployment(database.db, "preproduction");
   const before = Date.now();
-  await f.keys.installStagedNodeKey(handles(), state, f.staged!.stage);
+  await f.keys.installStagedNodeKey(database.db, state, f.staged!.stage);
   const after = Date.now();
   const packs = await readRecoveryPacks(database.db, state.frozen.nodeId);
   expect(packs).toEqual([
@@ -294,7 +293,7 @@ it("records recovery pack 1 as received beside the installed key, once across a 
   expect(receivedAt).toBeLessThanOrEqual(after);
   expect(packs[0]!.madeAt.getTime()).toBe(receivedAt);
   await f.coordinator.run((hold) =>
-    f.keys.installStagedNodeKey(handles(), state, f.staged!.stage, hold),
+    f.keys.installStagedNodeKey(database.db, state, f.staged!.stage, hold),
   );
   expect(await readRecoveryPacks(database.db, state.frozen.nodeId)).toEqual(packs);
 });
@@ -308,7 +307,7 @@ it("Live setup installs the master_keys row with pack 1 in one venue transaction
     sql`create trigger interrupt_master_key before insert on master_keys begin select raise(abort, 'interrupted'); end`,
   );
   try {
-    await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toThrow(
+    await expect(f.keys.installStagedNodeKey(database.db, state, stage)).rejects.toThrow(
       /interrupted/,
     );
   } finally {
@@ -317,7 +316,7 @@ it("Live setup installs the master_keys row with pack 1 in one venue transaction
   expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual([]);
   expect(await storedMasterKeys()).toEqual([]);
   expect(await storedKeys()).toEqual([]);
-  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(handles(), state, stage, hold));
+  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(database.db, state, stage, hold));
   const [pack] = await readRecoveryPacks(database.db, stage.nodeId);
   expect(await readCurrentMasterKey(database.db)).toEqual({
     number: 1,
@@ -327,7 +326,7 @@ it("Live setup installs the master_keys row with pack 1 in one venue transaction
     madeAt: pack!.madeAt,
     madeBy: null,
   });
-  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(handles(), state, stage, hold));
+  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(database.db, state, stage, hold));
   expect(await storedMasterKeys()).toHaveLength(1);
 });
 
@@ -358,11 +357,11 @@ it("a re-run finds pack 1 and writes nothing", async () => {
   const state = await f.committed();
   const stage = f.staged!.stage;
   await stampDeployment(database.db, "preproduction");
-  await f.keys.installStagedNodeKey(handles(), state, stage);
+  await f.keys.installStagedNodeKey(database.db, state, stage);
   const packs = await readRecoveryPacks(database.db, stage.nodeId);
   const masterKeys = await storedMasterKeys();
   const keys = await storedKeys();
-  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(handles(), state, stage, hold));
+  await f.coordinator.run((hold) => f.keys.installStagedNodeKey(database.db, state, stage, hold));
   expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual(packs);
   expect(await storedMasterKeys()).toEqual(masterKeys);
   expect(await storedKeys()).toEqual(keys);
@@ -400,7 +399,7 @@ it.each(["no master key", "another master key"] as const)(
     });
     const packs = await readRecoveryPacks(database.db, stage.nodeId);
     const masterKeys = await storedMasterKeys();
-    await expect(f.keys.installStagedNodeKey(handles(), state, stage)).rejects.toMatchObject({
+    await expect(f.keys.installStagedNodeKey(database.db, state, stage)).rejects.toMatchObject({
       code: "setup.attempt_uncertain",
     });
     expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual(packs);

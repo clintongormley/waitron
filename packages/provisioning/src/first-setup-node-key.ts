@@ -10,8 +10,8 @@ import {
   readCurrentMasterKey,
   readRecoveryPack,
   withTransaction,
+  type Database,
 } from "@waitron/db";
-import type { VenueAndNodeHandles } from "@waitron/node-db";
 import { makeNewMasterKey, type MadeMasterKey } from "./new-master-key.js";
 import { readSetupFlowRecord, updateSetupFlowSection } from "./setup-flow-record.js";
 import type {
@@ -170,7 +170,7 @@ export function createFirstSetupNodeKeys(options: Options) {
       });
     },
     installStagedNodeKey(
-      db: VenueAndNodeHandles,
+      db: Database,
       state: FirstSetupState,
       stage: StagedNodeKey,
       hold?: FirstSetupHold,
@@ -190,7 +190,7 @@ export function createFirstSetupNodeKeys(options: Options) {
           uncertain();
         // Pack 1 and the master key are written in one venue.db transaction, so a publication
         // retry that finds pack 1 finds this stage's master key with it and writes nothing.
-        await withTransaction(db.venue, async (tx) => {
+        await withTransaction(db, async (tx) => {
           if ((await readRecoveryPack(tx, stage.nodeId, 1)) !== null) {
             if ((await readCurrentMasterKey(tx))?.name !== stage.masterKeyName) uncertain();
             return;
