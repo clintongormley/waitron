@@ -162,6 +162,8 @@ function plannerSkip(options, run, jobs, reason) {
 }
 const assigned = (job) =>
   job.status !== "completed" && (job.status === "in_progress" || job.runner_id > 0);
+const waitingForRunner = (job) =>
+  ["queued", "pending", "waiting", "requested"].includes(job.status);
 const old = (job, now) => now - Date.parse(job.started_at || job.created_at) >= 300_000;
 
 async function readInventory(read, unavailable) {
@@ -199,6 +201,7 @@ export async function serverHealth(options, unavailable, staleQueuedCount, plann
   const stuck = [],
     deferredPlanners = [];
   let running = 0,
+    queued = 0,
     progressing = false,
     recent = false;
   for (const run of runs.values()) {
@@ -255,6 +258,7 @@ export async function serverHealth(options, unavailable, staleQueuedCount, plann
       );
     }
     running += jobs.filter(assigned).length;
+    queued += jobs.filter((job) => waitingForRunner(job) && !assigned(job)).length;
     progressing ||= jobs.some(
       (job) =>
         job.runner_id > 0 &&
@@ -282,6 +286,7 @@ export async function serverHealth(options, unavailable, staleQueuedCount, plann
   return {
     stuck: !options.plannersOnly && (running || progressing) ? [] : stuck,
     running,
+    queued,
     recent,
     ...(options.plannersOnly ? { deferredPlanners } : {}),
   };
@@ -359,14 +364,13 @@ export async function serverRoute(options) {
       reason: `CI inventory could not be verified; using GitHub: ${unavailable.join("; ")}`,
     };
   const now = options.now ?? Date.now();
-  let capacity;
+  let capacity, currentCapacity;
   try {
     capacity = typeof options.capacity === "function" ? options.capacity() : options.capacity;
     assert.ok(validCapacity(capacity), "Unknown server capacity");
-    if (stalled) {
-      const age = now - capacity.observedAt;
-      assert.ok(age >= 0 && age < 300_000, "Capacity snapshot is out of date");
-    }
+    const age = now - capacity.observedAt;
+    currentCapacity = age >= 0 && age < 300_000;
+    if (stalled) assert.ok(currentCapacity, "Capacity snapshot is out of date");
   } catch (error) {
     if (stalled)
       return {
@@ -376,12 +380,35 @@ export async function serverRoute(options) {
     throw error;
   }
   const capacitySummary = `Server: ${capacity.serverRunning} running, ${capacity.serverWaiting} queued / ${capacity.slots} slots; snapshot age ${Math.max(0, now - capacity.observedAt)} ms.`;
-  if (firstBatch)
+  if (firstBatch) {
+    const { slots, serverRunning, serverWaiting, hostedRunning, hostedWaiting, observedAt } =
+      capacity;
+    let serverJobLimit = Math.max(0, slots - serverRunning - serverWaiting);
+    let balanceSummary = "";
+    if (
+      slots > 0 &&
+      !stalled &&
+      currentCapacity &&
+      [hostedRunning, hostedWaiting].every((count) => Number.isSafeInteger(count) && count >= 0)
+    ) {
+      const batch = options.families.reduce(
+        (sum, family) => sum + (family.enabled ? family.count : 0),
+        0,
+      );
+      const serverLoad = serverRunning + Math.max(serverWaiting, state.queued);
+      const freeSlots = Math.max(0, slots - serverLoad);
+      const hostedLoad = hostedRunning + hostedWaiting;
+      // Solve (serverLoad + s) / slots = (hostedLoad + batch - s) / 20.
+      const balanced = Math.ceil(((hostedLoad + batch) * slots - serverLoad * 20) / (slots + 20));
+      serverJobLimit = Math.min(batch, Math.max(freeSlots, balanced));
+      balanceSummary = ` Capacity observed at ${observedAt}; ${state.queued} visible unassigned server jobs; GitHub: ${hostedRunning} running, ${hostedWaiting} queued / 20 slots; ${serverJobLimit} of ${batch} jobs on server (${Math.max(0, serverJobLimit - freeSlots)} beyond free slots).`;
+    }
     return {
       route: "hosted",
-      freeSlots: Math.max(0, capacity.slots - capacity.serverRunning - capacity.serverWaiting),
-      reason: `${stalled ? stalled + " " : ""}${capacitySummary} Dependent jobs use GitHub on the first attempt.`,
+      serverJobLimit,
+      reason: `${stalled ? stalled + " " : ""}${capacitySummary}${balanceSummary} Dependent jobs use GitHub on the first attempt.`,
     };
+  }
   if (capacity.slots > 0 && capacity.serverRunning === 0 && capacity.serverWaiting === 0)
     return {
       route: "server",
@@ -404,7 +431,7 @@ export async function serverRoute(options) {
     for (const job of await runJobs(options, run)) {
       if (!job.labels.length || job.labels.includes("self-hosted")) continue;
       if (job.status === "in_progress") running++;
-      if (["queued", "pending", "waiting", "requested"].includes(job.status)) queued++;
+      if (waitingForRunner(job)) queued++;
     }
   }
   return {
@@ -668,13 +695,13 @@ export async function healthCommand(command, options, { report, output }) {
       }
       if (options.families) {
         const families = options.families.filter((family) => family.enabled);
-        let freeSlots = answer.freeSlots ?? 0;
+        let remaining = answer.serverJobLimit ?? 0;
         const serverJobs = {};
         for (const { id, count } of families) {
-          if (freeSlots === 0) break;
-          const selected = Math.min(count, freeSlots);
+          if (remaining === 0) break;
+          const selected = Math.min(count, remaining);
           serverJobs[id] = selected;
-          freeSlots -= selected;
+          remaining -= selected;
         }
         output(`server_families=${JSON.stringify(families)}`);
         output(`server_jobs=${JSON.stringify(serverJobs)}`);

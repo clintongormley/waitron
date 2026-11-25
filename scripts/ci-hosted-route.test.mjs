@@ -97,6 +97,98 @@ describe("queue-pressure routing", () => {
   });
 
   it.each([
+    ["a lively hosted queue", 39, 1_000, 0, 31],
+    ["earlier server assignments visible in the queue", 39, 1_000, 25, 16],
+    ["a full batch worth moving", 119, 1_000, 0, 45],
+    ["a quiet GitHub pool", 0, 1_000, 0, 9],
+    ["missing hosted counts", undefined, 1_000, 0, 0],
+    ["an expired snapshot", 39, 300_000, 0, 0],
+    ["a future snapshot", 39, -1, 0, 0],
+  ])("places first-batch jobs with %s", async (_case, hostedWaiting, age, visible, selected) => {
+    const { options, run, jobs } = fixture(0, visible);
+    run.head_repository.id = 42;
+    options.now = Date.parse("2026-01-01T00:10:00Z");
+    options.capacity = {
+      observedAt: options.now - age,
+      slots: 12,
+      serverRunning: 12,
+      serverWaiting: 1,
+      hostedRunning: hostedWaiting === 0 ? 0 : 20,
+      hostedWaiting,
+    };
+    options.families = [
+      { id: "typecheck", count: 1, enabled: true },
+      { id: "test-server", count: 24, enabled: true },
+      { id: "test-server-stream", count: 1, enabled: true },
+      { id: "test-ui", count: 1, enabled: true },
+      { id: "test-till", count: 7, enabled: true },
+      { id: "test-dashboard", count: 6, enabled: true },
+      { id: "test-venue-service", count: 4, enabled: true },
+      { id: "bundle-smoke", count: 1, enabled: true },
+      { id: "test-heavy", count: 3, enabled: false },
+    ];
+    for (const [index, job] of jobs.entries()) {
+      job.labels = ["self-hosted", `dt-42-50-2-test-server-${index + 1}`];
+      job.created_at = "2026-01-01T00:09:00Z";
+      if (index === 0) job.status = "pending";
+    }
+    const read = options.request;
+    options.request = (path, requestOptions) => {
+      if (path.includes("/workflows/ci.yml/runs?status=in_progress"))
+        return { total_count: 1, workflow_runs: [run] };
+      if (path.includes("/actions/runs?")) throw new Error("Unexpected hosted queue read");
+      return read(path, requestOptions);
+    };
+    const outputs = [];
+    await healthCommand("route", options, {
+      output: (line) => outputs.push(line),
+      report: () => {},
+    });
+    expect(outputs).toContain("server_route=hosted");
+    const expected = {
+      0: {},
+      9: { typecheck: 1, "test-server": 8 },
+      16: { typecheck: 1, "test-server": 15 },
+      31: {
+        typecheck: 1,
+        "test-server": 24,
+        "test-server-stream": 1,
+        "test-ui": 1,
+        "test-till": 4,
+      },
+      45: Object.fromEntries(
+        options.families
+          .filter((family) => family.enabled)
+          .map((family) => [family.id, family.count]),
+      ),
+    };
+    expect(outputs).toContain(`server_jobs=${JSON.stringify(expected[selected])}`);
+  });
+
+  it("fills free server slots even when GitHub has less work per slot", async () => {
+    const { options } = fixture();
+    options.now = 2;
+    options.capacity = {
+      observedAt: 1,
+      slots: 12,
+      serverRunning: 11,
+      serverWaiting: 0,
+      hostedRunning: 0,
+      hostedWaiting: 0,
+    };
+    options.families = [
+      { id: "typecheck", count: 1, enabled: true },
+      { id: "lint", count: 1, enabled: true },
+    ];
+    const outputs = [];
+    await healthCommand("route", options, {
+      output: (line) => outputs.push(line),
+      report: () => {},
+    });
+    expect(outputs).toContain('server_jobs={"typecheck":1}');
+  });
+
+  it.each([
     ["one stalled job", 1, 299_999, 11],
     ["capacity observed at the decision time", 1, 0, 11],
     ["twelve stalled jobs", 12, 1_000, 0],
@@ -115,6 +207,8 @@ describe("queue-pressure routing", () => {
             slots: 12,
             serverRunning: 0,
             serverWaiting: waiting,
+            hostedRunning: 20,
+            hostedWaiting: 119,
           };
     options.families = [{ id: "test-server", count: 24, enabled: true }];
     for (const [index, job] of jobs.entries()) {
@@ -560,7 +654,7 @@ describe("queue-pressure routing", () => {
       };
       f.options.families = [{ id: "test-server", count: 24, enabled: true }];
       const firstBatch = await serverRoute(f.options);
-      expect(firstBatch.freeSlots).toBeUndefined();
+      expect(firstBatch.serverJobLimit).toBeUndefined();
       expect(firstBatch.reason).toContain("server work has waited five minutes in runs 60");
       expect(firstBatch.reason).toContain("Other CI inventory could not be verified");
     },
@@ -695,7 +789,7 @@ describe("queue-pressure routing", () => {
         };
       };
       const result = await serverRoute(f.options);
-      if (drift === "settles") expect(result.freeSlots).toBe(12);
+      if (drift === "settles") expect(result.serverJobLimit).toBe(12);
       else expect(result).toMatchObject({ route: "hosted", blind: true });
       expect(waits).toEqual(rerun ? [] : [10_000]);
       expect(reports).toEqual(
