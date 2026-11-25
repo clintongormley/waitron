@@ -12,6 +12,7 @@ import {
   masterKeys,
   readCurrentMasterKey,
   readRecoveryPacks,
+  recoveryPacks,
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
@@ -38,6 +39,7 @@ const database = useVenueDb({
 });
 const storedKeys = () => database.node.select().from(box);
 const storedMasterKeys = () => database.db.select().from(masterKeys);
+const storedPacks = () => database.db.select().from(recoveryPacks);
 const otherPublicKey = () => sealingPublicKey(makeMasterKey()).toString("base64");
 const roots: string[] = [];
 afterEach(async () => {
@@ -214,7 +216,7 @@ it("a completed activation cannot stage another key", async () => {
 });
 
 it.each(["uncommitted", "missing result", "different node"])(
-  "refuses verifier installation for %s and leaves role storage empty",
+  "refuses installation for %s and writes nothing",
   async (part) => {
     const f = await fixture();
     const state =
@@ -226,11 +228,13 @@ it.each(["uncommitted", "missing result", "different node"])(
       f.keys.installStagedNodeKey(database.db, state, f.staged!.stage),
     ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
     expect(await storedKeys()).toEqual([]);
+    expect(await storedPacks()).toEqual([]);
+    expect(await storedMasterKeys()).toEqual([]);
   },
 );
 
 it.each(["stale state", "supplied stage", "stored stage", "changed frozen request"])(
-  "refuses installation from %s without writing a verifier",
+  "refuses installation from %s and writes nothing",
   async (part) => {
     const f = await fixture();
     const state = await f.committed();
@@ -248,6 +252,8 @@ it.each(["stale state", "supplied stage", "stored stage", "changed frozen reques
       code: "setup.attempt_uncertain",
     });
     expect(await storedKeys()).toEqual([]);
+    expect(await storedPacks()).toEqual([]);
+    expect(await storedMasterKeys()).toEqual([]);
     expect(await readFile(f.path)).toEqual(retained);
   },
 );

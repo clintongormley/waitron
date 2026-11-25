@@ -148,16 +148,6 @@ async function checkMasterKey(
     : { authorised: false, current };
 }
 
-/** The venue's current master key when `secret` (a typed master key or a staged authority key)
- * is that key; `null` otherwise, and before the venue has one. */
-export async function masterKeyAuthorising(
-  db: Database | Transaction,
-  secret: unknown,
-): Promise<MasterKeyRecord | null> {
-  const check = await checkMasterKey(db, secret);
-  return check?.authorised ? check.current : null;
-}
-
 const switchSignedIn = new WeakSet<object>();
 declare const signedIn: unique symbol;
 export type SwitchSignedIn = { readonly personId: string; readonly [signedIn]: true };

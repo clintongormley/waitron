@@ -11,7 +11,7 @@ import { authorityKey, makeMasterKey } from "@waitron/credentials";
 import { CORE_MIGRATIONS } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError, decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
-import { masterKeyAuthorising } from "./operation-authentication.js";
+import { withRecoveryKeyAuthority } from "./operation-authentication.js";
 import * as operations from "./recovery-module-operation.js";
 import {
   readStagedMasterKeyName,
@@ -205,7 +205,10 @@ it.each(["archive", "stream"])(
     expect(runner).toHaveBeenCalledOnce();
     const handed = runner.mock.calls[0]![2];
     expect(typeof handed).not.toBe("string");
-    expect(await masterKeyAuthorising(suite.db, handed)).toMatchObject({ number: 1 });
+    const venue = { db: suite.db, node: suite.node, nodeId: operation.binding.targetNodeId };
+    expect(
+      await withRecoveryKeyAuthority(venue, operation.binding, handed, async () => "authorised"),
+    ).toBe("authorised");
   },
 );
 

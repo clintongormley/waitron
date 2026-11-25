@@ -2,7 +2,13 @@ import { sql } from "drizzle-orm";
 import { readSetupFlowRecord, updateSetupFlowSection } from "@waitron/provisioning";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { CORE_MIGRATIONS, readCurrentMasterKey, stampDeployment } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  masterKeys,
+  readCurrentMasterKey,
+  recoveryPacks,
+  stampDeployment,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { firstFiscalFixture, PASSWORD } from "../test/first-fiscal.js";
@@ -145,7 +151,7 @@ it.each(["extra secret", "a box-key verifier", "wrong binding", "bad stage"])(
     });
   },
 );
-it("a supplied committed marker cannot replace the exact retained checked state", async () => {
+it("a supplied committed marker cannot replace the exact retained checked state, and nothing is written", async () => {
   const f = await fixture();
   const { stage } = await f.stage();
   const current = (await f.store.read())!;
@@ -158,4 +164,6 @@ it("a supplied committed marker cannot replace the exact retained checked state"
     code: "setup.attempt_uncertain",
   });
   expect(suite.node.all(sql`select * from box`)).toEqual([]);
+  expect(await suite.db.select().from(recoveryPacks)).toEqual([]);
+  expect(await suite.db.select().from(masterKeys)).toEqual([]);
 });
