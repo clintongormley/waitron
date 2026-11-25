@@ -22,6 +22,7 @@ import {
 import type { OrderLine } from "../state/working-order.js";
 import { lineProductName } from "./product-name.js";
 import {
+  notCheapestText,
   setMenuCourseName,
   setMenuPrice,
   setMenuTag,
@@ -104,10 +105,9 @@ export class TillSetMenuSummary extends LitElement {
   override render() {
     const bill = this.bill;
     if (bill === null) return nothing;
+    const note = notCheapestText(bill);
     if (bill.setMenus.length === 0)
-      return bill.exact
-        ? nothing
-        : html`<p class="open" data-not-cheapest>${t("set_menu.none_maybe_cheaper")}</p>`;
+      return note === undefined ? nothing : html`<p class="open" data-not-cheapest>${note}</p>`;
     const held = draftPlacements(bill, this.draft).placed;
     const draftNames = new Map(
       this.draft.map((line, index) => [
@@ -200,7 +200,7 @@ export class TillSetMenuSummary extends LitElement {
       <summary>
         ${total} · ${types}
         ${places === "" ? nothing : html`<span class="open">${fill(t("set_menu.open_places"), { places })}</span>`}
-        ${bill.exact === false ? html`<span class="open" data-not-cheapest>${t("set_menu.not_cheapest")}</span>` : nothing}
+        ${note === undefined ? nothing : html`<span class="open" data-not-cheapest>${note}</span>`}
       </summary>
       ${repeat(
         rows,

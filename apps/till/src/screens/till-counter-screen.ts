@@ -33,6 +33,7 @@ import {
 import { lineGross } from "../state/order-line.js";
 import { lineProductName } from "../widgets/product-name.js";
 import { PHONE_WIDTH } from "../widgets/chooser-styles.js";
+import { notCheapestText } from "../widgets/set-menu-presentation.js";
 import "../widgets/menu-browser.js";
 import "../widgets/basket.js";
 import "../widgets/last-added.js";
@@ -143,6 +144,13 @@ export class TillCounterScreen extends LitElement {
       .total-cell {
         grid-column: 2;
         grid-row: 2;
+      }
+      .not-cheapest {
+        margin: 0;
+        padding: 0 var(--wt-space-4) var(--wt-space-3);
+        font-family: var(--wt-font-family);
+        font-size: var(--wt-font-size-md);
+        color: var(--wt-color-text-muted);
       }
       .payment-cell {
         grid-column: 2;
@@ -426,6 +434,8 @@ export class TillCounterScreen extends LitElement {
 
   #gridBody(): TemplateResult {
     const { placedPrice, total } = this.#setMenuPrices();
+    const notCheapest =
+      this.setMenuBill === undefined ? undefined : notCheapestText(this.setMenuBill);
     const balance = this.overpaidBalance;
     const overpaid = balance != null && overpaidOf(balance) !== null ? balance : null;
     return html`<div class="body grid-body">
@@ -470,6 +480,7 @@ export class TillCounterScreen extends LitElement {
         </div>
         <div class="total-cell">
           <till-total .store=${this.store} .previewTotal=${total}></till-total>
+          ${notCheapest === undefined ? nothing : html`<p class="not-cheapest" data-not-cheapest>${notCheapest}</p>`}
         </div>
         <div class="payment-cell">
           ${

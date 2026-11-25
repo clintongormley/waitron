@@ -1,4 +1,4 @@
-import { formatMoney } from "@waitron/shared";
+import { formatMoney, type BillSetMenuState } from "@waitron/shared";
 import { css, html, nothing } from "lit";
 import { currentLocale, t } from "../i18n/t.js";
 
@@ -27,4 +27,10 @@ export function setMenuTag(price: string | undefined) {
   return price === undefined
     ? nothing
     : html` <span class="set-menu-tag">${setMenuPrice(price, "set_menu.tag")}</span>`;
+}
+
+/** The note for a bill whose server search stopped before proving its set menus the cheapest. */
+export function notCheapestText(bill: BillSetMenuState): string | undefined {
+  if (bill.exact) return undefined;
+  return t(bill.setMenus.length === 0 ? "set_menu.none_maybe_cheaper" : "set_menu.not_cheapest");
 }
