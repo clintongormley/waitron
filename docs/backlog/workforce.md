@@ -91,12 +91,25 @@ the labour advisor to confirm: a collective agreement can change each of them.
   menos». So annual holiday can be planned into quiet seasons, but not moved shift by shift the way
   time off for overtime can.
 
-## MONTH-CLOSE. Reminder and adjustments after a month closes
+### Overtime when a contract changes
 
-When a contract starts, ends or changes during the month, calculate overtime separately for the
-part covered by each contract and add the results. Days without a contract contribute to worked
-hours only (owner choice recorded by the watcher on 25 November 2026 at 10:02). Plan two worked
-examples, one for a change from 40 to 20 hours on the 15th and one for a contract starting on the 20th.
+When a contract starts, ends or changes during the month, calculate overtime separately for each
+contract's part of the month, then add those amounts. Days without a contract contribute to worked
+hours only. The watcher recorded the owner's calculation decision on 25 November 2026 at 10:02
+and the owner's choice to deliver it “With the contracts screen (Recommended)” at 16:37.
+
+- Ana moves from 40 to 20 hours a week on 15 January. She works 5,100 minutes against 4,800
+  contracted minutes in the first part and 2,800 against 2,914 in the second. The month has 300
+  minutes of overtime.
+- Ana starts a 20-hour contract on 20 January. She works 600 minutes before it starts and
+  2,357 against 2,057 contracted minutes afterwards. The month has 2,957 worked minutes and
+  300 minutes of overtime.
+
+Reuse `summarisePeriod` for each contract span, including its last day. Use the latest applicable
+contract start and show the separate calculations in the export.
+Check both January examples in `pay-period-closure.test.ts`.
+
+## MONTH-CLOSE. Reminder and adjustments after a month closes
 
 At each close, save earlier months' changes that have yet to be included and show them in the next
 working-time export. Send a reminder the day before closure if managers still have work to do.
@@ -131,7 +144,7 @@ exists unused. Shown in A585's picker and warnings. After A586.
 
 2 entries, size M.
 
-- **MONTH-CLOSE. Calculate overtime by contract, send a reminder and include later adjustments in the next export.**
+- **MONTH-CLOSE. Send a reminder and include later adjustments in the next export.**
   [Detail](workforce.md#month-close-reminder-and-adjustments-after-a-month-closes).
 - **Pay-period cadence changes need a rule after closure.** A future editor refuses changes after
   the first closed period until the owner approves a transition rule (owner, 2026-10-15); leave it
