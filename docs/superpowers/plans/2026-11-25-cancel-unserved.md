@@ -1,210 +1,191 @@
 # CANCEL-UNSERVED: a receipt for a bill nobody was served and nobody paid is cancelled at AEAT
 
-Status: plan, revised 2026-11-25 after one fresh read (`~/waitron-campaign-l/receipts/cancel-unserved/plan-read-1.md`).
-Not started; nobody has approved it. FISCAL: the owner lands every pull request (PR). Base `main` at `3b672aee5a`.
-"Run" = a throwaway test in a detached worktree, removed afterwards: by this revision unless it says "(draft)" or
-"(read 1)". "Read" = only read.
-
-**Words.** A *receipt* is the simplified invoice (AEAT's F2). A *cancellation* is the record telling AEAT the receipt
-should never have existed (*registro de anulación*; `recordVoid`, `sale_voids`). A *corrective* is the negative invoice
-(R5) that takes a receipt back to zero. A *printed bill* has its receipt issued and unpaid (order status `placed`). *Set
-aside* (`retenido`) is a record that is never sent and holds nothing behind it.
+Status: cleared 2026-11-25 by the watcher (16:41, five changes) and, for PR 2, by the owner (16:43, relayed). Not started.
+FISCAL: the owner lands every pull request (PR). Base: `main` at `bb1389b737`. "Run": a throwaway change in a detached
+worktree for this revision (server halves only; not the till, not the other-box refusal); "run (earlier)": a previous one.
+**Words.** *Receipt*: the simplified invoice (F2). *Cancellation*: the record telling AEAT the receipt should never have
+existed (`recordVoid`). *Corrective*: the negative invoice (R5). *Printed bill*: its receipt is issued and unpaid
+(`placed`). *Set aside*: a record never sent. *1112*: AEAT refusing a receipt as dated in the future.
 
 ## 1. Should this exist?
 
-**The ask:** the owner's "yes" (25 Nov, relayed, lane L `questions.md` "11:19") to "Should Waitron send a cancellation
-when nothing was served and nothing was paid?", replacing C126 there; adviser answer 1.7
-(`docs/compliance/2026-11-15-adviser-answers.md`, B3). Food served and not paid: the receipt is not undone. Paid then
-refunded: the corrective, as today. The `queue.md` runner line adds "reports, reprints and the accountant's files with a
-voided receipt, what happens when AEAT refuses it". **Simplest alternative:** nothing, since today's corrective already
-takes the VAT back to zero; that is not what the adviser answered. **This plan** is today's menu entry and route, one
-question, the writer that exists, and the readers that would print, charge or sum a cancelled receipt wrongly.
+Yes: the owner's "yes" (25 Nov, relayed, lane L `questions.md` 11:19), replacing C126 when nothing was served and nothing
+paid (adviser answer 1.7, `docs/compliance/2026-11-15-adviser-answers.md` B3; AEAT developer FAQ v1.3 §17 case 2.d). Food
+served and not paid: the receipt is not undone. Paid then refunded: the corrective, as today. It is today's menu entry,
+window and route, the writer that exists, and the readers that would print, charge or sum a cancelled receipt wrongly.
 
-**Sources.** Developer FAQ v1.3 §17 case 2.d (pinned PDF, run (draft)): a whole invoice that «no debería haberse emitido»
-«se podrá "anular"»; «Estos casos deberían ser MUY POCO FRECUENTES»; invoices for «operaciones realmente efectuadas … no
-pueden anularse»; not having handed it over «favorecería» cancelling. AEAT's taxpayer FAQ on an invoice «emitida por
-error … (ej. operación inexistente)»: «se dará de baja mediante un registro de facturación de anulación», with no
-condition on the paper (run (draft)).
+**AEAT has accepted one:** on 22 October its test service answered a cancellation `Correcto`, and a lookup after its repeat
+`Anulado` (`docs/compliance/verifactu-findings.md` §19, run 39721604913, red only because the repeat was accepted too). It
+was the library's record, not Waitron's; no new run (watcher).
 
-## 2. What reaches it, and the rule
+## 2. The rule
 
-Only a table's receipt is issued before payment: Print the bill, Record unpaid departure, close of day (four callers of
-`issueUnpaidInvoice`, run (read 1); the fourth, deferred close, settles at once). What undoes one today: the table menu's
-**Cancel and credit**, on a printed bill that never took a payment and names no customer (**this changes**); **Reopen
-bill** (the watcher's note of the owner's words, `questions.md` 11:53 and 11:55: kept, with its corrective). Give money back needs a paid receipt. An order
-with no receipt files nothing and is unchanged.
+The table menu's **Cancel and credit** (`till-table-order-screen.ts:7051`), on a printed bill that holds no payment and names
+no customer. Same route and body, one transaction: `POST /api/working-orders/:id/cancel`, `{ reason, override? }`.
 
-**"Nothing was served"** is staff's answer. Waitron contradicts it only where it knows better: a dish, extra or drink
-marked served, or a dish cancelled with its charge kept (that lowers the served mark, `line-service-cancel.ts:147`, read).
-"Not marked served" proves nothing: **Print anyway** prints with dishes unmarked.
-
-1. ⋮ → **Nothing was served** (today's **Cancel and credit** place and conditions).
-2. One window, one tap: **Nothing was served** / **Some was served** / **Keep the bill**. It lists the dishes the kitchen
-   has marked ready, which the till already has (`CurrentOrderRow.kitchen.state`). It does not show the receipt's age: the
-   till does not have it (`PartyBill` holds no issue time, read). No Reason field: the reason stored is the fixed text
-   `Nothing was served`, as Reopen stores its own.
-3. **Nothing was served** → the cancellation is filed, the bill abandoned, the kitchen told VOID as today; a PIN when the
-   person lacks `sale.void` (supervisor and manager hold it), from the existing `/api/unpaid-departure-authorizers` list.
-4. **Some was served** → nothing happens. The window offers **Take payment**, **Reopen bill**, **Record unpaid
-   departure**, **Keep the bill** (a bill already recorded as left unpaid: only Take payment and Keep the bill).
-5. With any dish marked served the window opens on step 4, naming what is marked; it never suggests taking a mark back.
-   **Every dish served:** the same step, and Reopen bill works there (run: 200). **Partly served:** Reopen refuses today
-   until every dish is marked served (run: 409 `bill.unserved_dishes`), so a dish that is never coming has no truthful way
-   out; PR 2 gives it one, and PR 3 does not land before it.
-
-**Server**, same route `POST /api/working-orders/:id/cancel`, `{ nothingServed: true }`, one transaction. A bill that ever
-took a payment, or holds a corrective, a replacement or a full invoice keeps today's code; no till screen reaches that
-(`!bill.hasPayments`, read), so no words are built for it.
-
-| Refused | Answer | The window |
+| The bill's receipt | Filed | Permission |
 | --- | --- | --- |
-| an issued bill without `nothingServed: true` | `management.request_invalid` | never sent by the till |
-| a dish marked served, or a kept charge | `bill.served_dishes` with the dishes | becomes step 4 |
-| a payment on its way; time not confirmed; box handed over | today's codes | as today |
-| receipt issued by **another box's chain** and not yet answered by AEAT | `fiscal.original_unanswered` | "The other box has not finished sending its receipts. Try again later." |
+| never paid (`holdsPayment`: one given back counts), no corrective or replacement, names no customer | **cancellation**, with today's typed Reason | `sale.void` |
+| anything else, as today | corrective | `sale.rectify` |
 
-**Why that one refusal (run).** A cancellation of another chain's *held* receipt stopped every later record of this box:
-five passes over 100 hours, nothing sent. A queued one can become held, so "not yet answered" is the line. It is thrown
-inside Veri*Factu's `recordVoid`, so no new seat method: with a throwaway check there, 17 fiscal files gave 1 failure of
-330 (`backend.test.ts`, another box's unanswered sale) and 15 server files 451 of 451. *What happens then:* only after a
-box switch. This box sends the old box's queued receipts itself (run), so the next passes usually clear it; until then
-the bill stays, can be paid, and **Move this bill** (offered on it, read) frees the table.
-**Dropped, not needed (run).** Own chain, receipt **queued**: sent first, the cancellation next pass. **Refused**: the
-cancellation is set aside and later records go. **Held**: the cancellation waits behind it, as every later record does.
+The till reaches the second row with a 1112 receipt that was replaced and never paid: its bill meets the entry's conditions
+(the bills answer, run), gets its corrective (200, run), and the bills read that follows names it (`["R/2"]`, run), so
+"Corrective invoice {number} issued" stays.
 
-**The written zone (run).** With the box on `TZ=UTC` the receipt says +60 minutes and its cancellation +0; with
-`prepareIssueClock` inside Veri*Factu's `recordVoid`, both +60. Same instant, and no golden `huella` changes: 11 fiscal
-files 257 of 257, and `write-path.e2e` (the golden), `void-path.e2e` and `inmutabilidad` 25 of 25.
+| Refused | Answer |
+| --- | --- |
+| a dish, extra or drink served, or a dish cancelled with its charge kept | `bill.served_dishes`, naming them |
+| a payment on its way; time not confirmed; box handed over | today's codes |
+| a receipt **another box's chain** issued and AEAT has not answered | `fiscal.original_unanswered` |
 
-**When AEAT refuses.** *The receipt, after the cancel:* set aside, alert and case «Cancellation set aside» (words exist).
-AEAT holds neither, which is the truth. Both cases stay open, as a refused receipt's does today for every code but two;
-nothing is built to close them. *The cancellation:* the usual **Refused** case; later records go; Waitron counts the
-receipt as voided and AEAT does not. A resend is not built until one is seen. *Wrong answer:* a real sale leaves AEAT for
-good; staff ring it again under a new number.
+- **Served:** any line's `served_quantity`, or a `line_service_cancellations` row (keeping a served dish's charge puts its
+  mark back to 0, run), except rows Record unpaid departure wrote for dishes it stopped: those with `cancelled_at` at or
+  after its `recorded_at` (`unpaid-departure.ts:142`, then `:151`).
+- **Other box:** a cancellation of another chain's *held* receipt stopped every later record here (five passes, 100 hours,
+  run (earlier)); a waiting one can become held. Thrown in Veri\*Factu's `recordVoid`, no seat method: one expected failure
+  of 330 fiscal tests, 451 of 451 server ones (run (earlier)). Only after a box switch. On the box's own chain a waiting,
+  refused or held receipt needs nothing (run (earlier)).
+- **After** (run): the bill is abandoned, a seated party gets a fresh one, Orders says **Voided**. If AEAT refuses the
+  cancellation: the usual **Refused** case, no resend. Staff's answer decides: Print anyway leaves dishes unmarked, so no
+  mark proves nothing, and a wrong answer takes a real sale out of AEAT for good.
 
 ## 3. PR 1. A voided receipt is read as voided (nothing reaches it yet)
 
-Readers already right (run (draft), part re-run (read 1)): daily close, category sales, modelo 303, VAT corrections,
-tax-office list, Find a bill, owed lists, settle, second cancel, Orders status **Voided / «Anulada»**. Wrong:
+Every task: the named test red first, then the code, then that package's typecheck and `pnpm exec prettier --check` on
+the changed files. Commands run as `pnpm --filter @waitron/<package> exec vitest run src/<file>`.
 
-1. **Zone.** The one line above; delete `prepareFiscalVoidClock` (called only by tests), its cases moved onto `recordVoid`.
-   First: `TZ=UTC`, offset is the venue's; golden test unchanged.
-2. **A voided receipt owes nothing, and a returned void ends its bill.** Real (run): the actual return
-   (`receiveReturnedOriginals`) of a void against a placed bill answers complete and leaves it `placed`; on such a bill a
-   €1.00 payment is **taken**, and Cancel and Reopen refuse, so the money can never settle. Smallest fix, both halves
-   needed (run): `readIssuedSales` answers 0.00 for a voided sale (payment then 409 `bill.nothing_outstanding`; alone it
-   leaves **Finish** refused, `party.bill_outstanding`), and the return abandons the void's placed bill when it holds no
-   payment. First: a returned void, then payment, Finish; a live bill still payable. A bill this box had already taken
-   part payment on stays, owing nothing, until the money is given back.
-3. **Nothing owed on paper.** `stillOwed`, retry, resend, email and A4 refuse a voided sale. Today a given-up original is
-   retried by itself, and the till's retry answers 200 (run (read 1)). First: those two, email; a live receipt still
-   prints.
-4. **Copies** of a voided receipt, ticket and A4, gain one line, "ANULADA" / "VOIDED", beside DUPLICADO.
-   `orders-reprint.test.ts:226` keeps allowing the copy. First: the ticket text.
-5. **Accountant's spreadsheet.** A second row, kind **Voided / «Anulada»**, dated the day it was voided, minus amounts, as
-   a corrective's row is. Today (run (draft)) its columns sum too high against the modelo 303 report. First: one period,
-   and two. The old-box workbook keys the same list by invoice id, so it must not gain the row
-   (`old-box-data-workbook.ts:263`).
-6. **Fiscal filing** offers no replacement and no description fix for a refused receipt whose sale is voided (a flag on
-   the case view, one condition in `putRightFor`). Without it the replacement always refuses (`record-replacement.ts:78`)
-   and the description fix can put a voided receipt live at AEAT. First: `put-right.test.ts`, the route's view.
+**Task 1, fiscal-verifactu:** `void-issue-clock`, `record-remedy`, `backend`, `void-path.e2e`, `inmutabilidad` (the golden
+`huella` unedited); server: `zone-core-capabilities`.
 
-**`Sale-path read changed:`** yes, one `sale_voids` lookup by its unique `sale_id` in `readIssuedSales`, read by payment.
+- *First:* `void-issue-clock.test.ts`'s annulments on a plain `backend()` at offset 0 expect the venue's offset. *Code:*
+  `backend.ts:496` reads `prepareIssueClock(tx, { nodeId: issuingNodeId }, this.clock)`. Under `TZ=UTC` the cancellation
+  says 0 beside its receipt's 60; with it, 60 (run). Delete `prepareFiscalVoidClock`, which only tests call, and two of
+  its cases: the unfiled sale (`backend.test.ts:313` holds it) and the helper's own node check.
+- *First:* `record-remedy.test.ts`: a description fix on a voided sale whose cancellation is set aside refuses
+  `fiscal.remedy_invalid`. Today it is applied (run), putting a voided receipt live at AEAT. *Code:* one `sale_voids`
+  condition in `record-remedy.ts`'s list. No case-view flag. The replacement refuses already (`record-replacement.ts:81`).
 
-## 4. PR 2. Reopen bill can let go of dishes that never came (if the watcher says yes)
+  34 fiscal files, 1,002 of 1,002, with both (run).
 
-7. Server: `split-after-print` takes `stopUnserved: true`, honoured only when some dish is marked served (an entirely
-   unserved bill is cancelled, not corrected); without it, today's refusal. `pay-for-items` unchanged. First: partly
-   served with and without the flag, nothing served, part paid, a held group, a set menu.
-8. Till: Reopen's not-served list gains **Stop these dishes and reopen** / «Parar estos platos y reabrir».
+**Task 2, server:** `owed-receipts`, `orders-reprint`, `receipt-payments`, `find-bill-bills`, `bill-payments-api`.
 
-Run, with the refusal switched off, on one steak and one served beer: Reopen 200 and its R5; Print on the new bill still
-lists the steak (409 `meal_end.unserved_dishes`); an ordinary waiter takes it off with no PIN; the new receipt is 3.00.
-Only that two-dish bill was run. The kitchen's VOID slip is `abandonPlacedOrder`'s (read).
-**If no:** a partly served bill keeps only Take payment then Give money back for the dish, or waiting for it.
+- *First:* `orders-reprint.test.ts:226`: the voided copy has no "Pendiente" line, a live unpaid one has. Today it prints
+  **Pendiente 18,00 €**; with the change that line alone goes (run). *Code:* `readIssuedSales` (`sale-due.ts`) joins
+  `sale_voids` by its unique `sale_id` and answers 0.00. `Sale-path read changed:` yes, that join.
+- *First:* `owed-receipts.test.ts`: a given-up original, and a sale with no original job, owed before the void and not
+  after. Run: 1 then 0, both. *Code:* one `notExists(sale_voids)` in `stillOwed` (`owed-receipts.ts:55`).
 
-## 5. PR 3. The question
+**Task 3, server:** `accountant-export`, `old-box-data-invoices`, `report-api`.
 
-9. Server, new `cancel-unserved.ts`: the rule above; every line read, not only top ones. The PIN's permission is chosen
-   ahead (`sale.void`, or `sale.rectify` on today's path); inside, `authorize` runs with `attempts` before the money
-   checks and before `recordVoid`, which counts no wrong PIN itself (`record-void.ts:41`, read); if the path changed
-   meanwhile, the ordinary conflict. It ends a waiting original, email or A4 (`receipt.voided`, beside `PRINT_JOB_MOVED`;
-   also `ENDED_NOT_FAILED`, `printers-screen.ts:270`, the till's `codes.ts`): today a queued original stays queued (run
-   (read 1)). First: each row of the table; no waiting paper afterwards. Two dispatches.
-10. 11. 12. `cancel-invoiced-order.test.ts` (2,089 lines), three dispatches: corrective-content cases move onto a bill paid
-    and given back, assertions unchanged; permission and PIN cases also run on the new path; "left without paying" becomes
-    a cancellation on an open table.
-13. Till: the window (mode `cancel` of `cancel-credit-dialog.ts`, Reason and its field removed), ready dishes, step 4's
-    choices; `till-app.ts` has 39 lines left, so logic goes in the window and a helper. EN, ES, phone, tablet, a11y,
-    unsaved.
-14. Words and guides: `table-service.md` in both languages, `fiscal.md` C126, `backlog.md`, `asesor-questions.md` Q32, B3,
-    `conventions-ui.md:630`; and Reopen's words, which also say "cancels the receipt" / «anula el ticket» while filing a
-    corrective (`split.scope`, `split.done`, `split.credited_elsewhere`, `bill_pay.items_own_bill_printed`): "This takes
-    the receipt back and reopens the bill." / «Esto retira el ticket y reabre la cuenta.»
+- *First:* two cases. One period: the bases add up to modelo 303's (run: 50.00). Two: the sale stays in its period, the
+  minus row goes in the one it was voided in, as a corrective's does. *Code:* a second query in `readAccountantInvoices`'
+  **range** branch, by the void's day in the sale's offset (`vat-movements.ts:185`), listed last: kind **Voided /
+  «Anulada»**, amounts negated, the receipt's number, the receipt as its original. The id-list branch, the old-box
+  workbook's, is untouched (13 of 13, run). The notes heading's "voids flagged, not netted" / «se indican, no se restan»
+  becomes "voids listed again as minus rows" / «las anulaciones figuran además como filas en negativo».
+
+Dropped (watcher): VOIDED on copies; refusing a resend, email or A4; ending a placed bill whose void returns from another
+box (it then takes no payment, where today €1.00 is taken; Finish and unpaid departure refuse it; run).
+
+## 4. PR 2. Reopen bill can let go of dishes that never came
+
+**Task 4, server:** `split-after-print`, `split-after-print.money`, `pay-for-items.printed`.
+
+- *First:* partly served with and without the flag; nothing served; only a kept charge; a held group; a set menu. *Code:*
+  new `served-dishes.ts`, section 2's **Served** read, used by PR 3 too; the split route takes `{ stopUnserved: true }`,
+  honoured only when that read finds something; today's refusal gains whether it can be. Pay for items unchanged.
+- Run with the refusal off, one steak and one served beer: Reopen 200 and its R5; Print on the new bill 409
+  `meal_end.unserved_dishes`; a waiter takes the steak off with no PIN; the new receipt is 3.00. Only that bill was run.
+
+**Task 5, till:** `widgets/cancel-credit-dialog` (with a11y and unsaved), `till-app-parties-closing`,
+`widgets/bill-pay-dialog`; guides in both languages.
+
+- **Stop these dishes and reopen** / «Parar estos platos y reabrir» in the not-served list, when offered. Words:
+  `split.scope`, `bill_pay.items_own_bill_printed` "This takes the receipt back and reopens the bill." / «Esto retira el
+  ticket y reabre la cuenta.»; `split.done` "Receipt taken back. Take off any dish that never came, move each guest's
+  dishes to their own bill, then print each one." / «Ticket retirado. Quita los platos que no llegaron, pasa los platos de
+  cada cliente a su propia cuenta y después imprime cada una.»; `split.credited_elsewhere` "already taken back" / «ya se
+  había retirado».
+
+## 5. PR 3. Nothing was served
+
+On PR 2's branch; the server half can start now, but it lands after PR 2 (a partly served bill is refused by both, run)
+and after Give money back PR 3, which rewords neighbouring strings.
+
+**Task 6, server:** `cancel-invoiced-order`, `cancel-placed-order.kitchen`; fiscal `backend`, `drain.cases`;
+`scripts/corrective-sums.test.ts` (one allowed line; red without it, run).
+
+- *First:* one case a row of section 2's tables, plus a served extra and a departure's own rows. *Code:* in
+  `cancelPlacedOrder` (`working-order-counter.ts:175`) the permission is read ahead of the PIN check and again inside;
+  `authorize` with `attempts` stays before the money checks (`recordVoid` counts no wrong PIN, `record-void.ts:41`).
+
+**Tasks 7a, 7b, existing checks.** Of 28 server files, 26 checks of `cancel-invoiced-order.test.ts` and 8 of six others
+went red with Task 6 in place (run). Void mechanics stay in `record-void.test.ts`.
+
+| Checks | What happens |
+| --- | --- |
+| `cancel-invoiced-order`: credits the whole invoice; list prices; two rates; names each line; three-pick extra; Mosto; Zumo | **moved** to `cancel-credit.test.ts` on `creditWholeInvoice` (Reopen's too); two rates and names each line merged; set-up shared, not copied |
+| four stored-invoice 409s | **removed**: `record-correction.test.ts` holds each code |
+| no live series; two live; not permitted before a series is looked for | **removed**: `reserved-identity.test.ts:220`, `:262`; the last has nothing to look for |
+| not permitted; second cancel; left unpaid; two at once; a later write fails; four PIN cases; key outside the lock; declined card; party's bills; counter list | **re-pointed** once each, to the cancellation and `sale.void` |
+| the other 35 | unchanged; the replaced bill is the route's new corrective case |
+| `split-after-print`: "still needs sale.rectify"; waiting for its time; comped dish | **removed** (as not permitted); asserts `clock.unconfirmed`; left unserved |
+| `orders-list` (2), `orders-api` | Voided, no corrective |
+| `clock-unconfirmed-gate`; `clock-behind-stop.records` | grows `records` only; backend built on the 2001 clock, which dates a cancellation |
+| `fingerprint-refusal.implicit` credit refusal | **removed**: its fault is in the invoice builder; `fingerprint-refusal.test.ts:126` holds a void's |
+
+**Task 8, till:** `widgets/cancel-credit-dialog` (with a11y and unsaved), `till-app-parties-closing`,
+`screens/till-table-order-screen.table-menu`, `i18n/codes`.
+
+- Today's window, Reason and buttons, new words. `bill.served_dishes` is listed as the not-served list is, with no Mark
+  served. The approver list follows the permission the refusal names (`refusalOf` carries it): `sale.void`'s is
+  `/api/unpaid-departure-authorizers`. Done is the corrective's text when the bills read names one, else the receipt's.
+  `till-app.ts` has 58 lines left under its cap.
 
 | Where | English | Spanish |
 | --- | --- | --- |
-| Menu, title, answer | Nothing was served | No se sirvió nada |
-| Other answer | Some was served | Se sirvió algo |
-| Window | If the receipt printed, take it back. | Si el ticket se ha impreso, recupéralo. |
-| Ready | Ready in the kitchen: {dishes} | Listo en cocina: {dishes} |
-| Step 4 | The receipt can't be cancelled. | El ticket no se puede anular. |
-| Step 4, marked | Marked served: {dishes} | Marcado como servido: {dishes} |
+| Menu, title, confirm | Nothing was served | No se sirvió nada |
+| Window | Only when nothing was served. If the receipt printed, take it back. | Solo si no se sirvió nada. Si el ticket se ha impreso, recupéralo. |
+| Approval | If you cannot void sales yourself, someone who can approves it with their PIN next. | Si tú no puedes anular ventas, a continuación lo aprueba alguien que pueda con su PIN. |
+| Served | These dishes were served or charged, so the receipt can't be cancelled. Take payment, or use Reopen bill where it is offered. | Estos platos se sirvieron o se cobran, así que el ticket no se puede anular. Cobra la cuenta o, si se ofrece, usa Reabrir cuenta. |
+| Payment held | This bill holds a payment, so its receipt cannot be cancelled. | Esta cuenta tiene un pago, así que no se puede anular su ticket. |
+| Approver can't | The person who approved this cannot do it. Choose someone who can. | La persona que lo ha aprobado no puede hacerlo. Elige a alguien que pueda. |
 | Other box | The other box has not finished sending its receipts. Try again later. | El otro servidor aún no ha terminado de enviar sus tickets. Inténtalo más tarde. |
-| Done | Receipt {number} cancelled. | Ticket {number} anulado. |
+| Done (no number) | Receipt {number} cancelled. (The receipt is cancelled.) | Ticket {number} anulado. (El ticket queda anulado.) |
 
-**AEAT, before landing PR 3.** A cancellation was accepted there on 22 October (run 39721604913, original and cancellation
-`Correcto`, lookup `Anulado`; `docs/compliance/verifactu-findings.md` §19; the run is red for another stage) and on 1
-November (run 41328471424, green, its log "anulación, and final consulta succeeded", run). Neither was Waitron's own
-record. One more dispatch, its log in the PR:
-`gh workflow run live-aeat.yml --repo waitron-io/verifactu --ref main -f mode=submit`.
+**Task 9, words:** both `table-service.md` guides; the dashboard help of both permissions; `conventions-ui.md:630`,
+`design-system.md:1231`, `backlog.md`; dated pointers in `fiscal.md` C126, `asesor-questions.md` Q32, adviser answers B3.
 
-## True size
+## 6. Size by file, and pictures
 
-By file, then three times that (Give money back's built against estimated, `2026-11-25-correct-full-invoice.md`).
+| | Production | Test |
+| --- | --- | --- |
+| PR 1, tasks 1–3 | 75, about 35 removed | 250 |
+| PR 2, tasks 4–5 | 60 | 220 |
+| PR 3, tasks 6, 7a, 7b, 8, 9 | 165 | 550, plus about 300 moved and 200 removed |
 
-| | Tasks | By file (production / test) | Expect |
-| --- | --- | --- | --- |
-| PR 1 | 1–6 | 170 / 700 | 500 / 2,100 |
-| PR 2 | 7–8 | 60 / 220 | 180 / 650 |
-| PR 3 | 9–14, eight dispatches | 350 / 1,600 | 1,050 / 4,800 |
+PRs 1 and 3: 240 / 800, estimates; earlier plans in this lane came out near three times by-file. No migration, venue reset,
+generated file or new route. Each task is one dispatch under 80 calls; each PR leaves `main` green. Two Codex reviews each.
 
-Each dispatch is meant to stay under 80 calls; split one that passes 60 unfinished. No generated file, migration, reset or new
-route; about 40 guide lines per language. All three full path, two Codex reviews. Order: Give money back PR 3 first (it
-rewords the same till strings), then PR 1, 2, 3; each leaves `main` green and working.
+**Pictures for the owner,** phone and tablet, English and Spanish, before the till code. PR 3: the ⋮ menu; the window; the
+window refusing with its dishes; the PIN step; done. PR 2: Reopen's list with the new button; its new words; done. PR 1: none.
 
-## What this plan does not do
+## Cleared 2026-11-25 16:41
 
-Cancel a full invoice, a deferred bill, or a receipt that ever took money; a closed table's departure (question 1);
-"Send the cancellation" on Fiscal filing, or closing a set-aside case; resend a cancellation AEAT refused; who, when and
-why on the order page; a screen listing cancellations (Orders filters **Voided**).
+Changes 1–5 are applied above. Answers: 1 a one-bill table recorded "left without paying" (B3's example): not here, the
+owner is told. 2 Reopen: yes, the owner (16:43). 3 cancel while guests hold the paper: yes. 4 no Reason field: no, it
+stays. 5 kitchen-ready dishes: no. 6 menu name: yes, mock-up; Reopen's words only in PR 2. 7 "Void sales" PIN: yes.
+8 VOIDED on copies: no. 9 minus row: yes, two tests. 10 the other box's unanswered receipt waits: yes. 11 new AEAT run: no.
 
-## For the watcher
+## Found while applying (for the watcher)
 
-Each needs a yes; the recommended answer follows the dash.
-
-1. **A one-bill table recorded as "left without paying" by mistake** is closed by that, so no screen can cancel it. It is
-   the adviser paper's own example (B3), and the server would take it — not in this item, unless the owner wants it: once
-   PR 3 is in, the same window on Find a bill, about 60 + 200 lines estimated, 180 + 600 expected, and a mock-up.
-2. **PR 2:** let Reopen bill go on when some dishes were served and others never came; the kitchen is told to stop and
-   staff take them off the reopened bill. The watcher's 11:53 note keeps Reopen as it is, so ask —
-   yes. Without it staff's easiest way out is a false mark.
-3. **Guests still hold the printed receipt:** cancel anyway, telling staff to take it back — yes. AEAT says not having
-   handed it over helps; its other FAQ and the adviser set no such condition.
-4. **No Reason field** (staff type one today); the two answers are the question — yes. Other way: keep it, one more step.
-5. **The question shows the kitchen's ready dishes but not how old the receipt is**, which the till does not have — yes;
-   adding it is one more column on the bill the till reads.
-6. **The menu entry becomes "Nothing was served"** instead of "Cancel and credit", and **Reopen's lines stop saying
-   "cancels the receipt"** — yes to both: otherwise staff meet "Anular" for two different things.
-7. **The approver's PIN** is now for "Void sales" instead of "Correct invoices"; supervisors and managers hold
-   both by default, so it differs only where a venue changed its roles — yes.
-8. **A copy of a voided receipt says VOIDED / ANULADA** — yes. Other way: leave copies as they are.
-9. **The accountant's spreadsheet gains a minus row for a voided receipt**, so its columns add up — yes. Other
-   way: one row with its "Voided at" date.
-10. **A receipt the other box issued and AEAT has not answered waits** ("Try again later") — yes. Other way: today's
-    corrective, for that rare bill only.
-11. **One AEAT test run in `submit` mode counts as the proof**, though the record is the library's, not Waitron's — yes.
-
-**Mock-ups to the owner, phone and tablet, English and Spanish:** before PR 3, the question with its ready dishes, step 4
-(with and without marked dishes), done. Before PR 2, Reopen's list with the new button. Before PR 1, a copy headed
-ANULADA and the spreadsheet's two rows.
+1. **Record unpaid departure writes the same rows as a kept charge** for dishes it stops, so the rule as cleared refuses a
+   bill whose guests left before eating (409, run), naming dishes nobody had. Section 2 leaves those rows out (200, run).
+2. **A kept charge with nothing marked served had no way out:** Cancel refuses the charge, Reopen the unserved dishes (run).
+   PR 2's flag and PR 3's refusal now use one read, "served, or charge kept", slightly wider than the owner's words. (The
+   first read's 400 for "keep the charge" on a printed bill is not a rule: with a reason it answers 200, run.)
+3. **The fix refusal must read `sale_voids`,** not "any cancellation": `record-remedy-held.test.ts` corrects an original
+   whose seeded cancellation is set aside.
+4. **False words:** the sheet's notes ("not netted", changed in PR 1) and the dashboard's help ("Correct invoices …
+   including cancelling an invoiced order", PR 3).
+5. **The test changes reach seven files,** not one.
