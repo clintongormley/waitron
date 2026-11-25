@@ -1320,7 +1320,15 @@ describe("Reopen bill stopping the dishes that never came", () => {
     expect(reprinted.json.total).toBe("28.00");
   });
 
-  it("cancels a held extra at a station waiting for the pass, and voids its fired dish, once each", async () => {
+  /**
+   * Croquettes routed to a new Fryer station that prints held work and waits for the pass, and a
+   * party whose steak with a croquette extra, and a beer, fire as one group: the steak and beer
+   * reach the kitchen while the croquettes wait at the Fryer, held. The beer is served.
+   */
+  async function steakFiredCroquettesHeld(
+    run: (party: Party, slips: () => Promise<(string | undefined)[]>) => Promise<void>,
+    steaks = "1",
+  ) {
     const fryer = await inTx(venue, async (tx) => {
       const stationId = (await createStation(tx, { name: `Fryer ${randomUUID()}` })).id;
       const printer = await createPrinter(tx, {
@@ -1349,6 +1357,7 @@ describe("Reopen bill stopping the dishes that never came", () => {
         "hold",
         {
           name: "Steak",
+          quantity: steaks,
           extras: [{ listId: extraListId, picks: [{ productId: croquettesId, quantity: 1 }] }],
         },
         "Small beer",
@@ -1369,11 +1378,28 @@ describe("Reopen bill stopping the dishes that never came", () => {
         from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
         where l.working_order_id = ${party.tabId} order by l.line_no`);
       expect(kitchen).toEqual([
-        { name: "Steak", fired: 1, requested: 1 },
-        { name: "Croquettes", fired: 0, requested: 1 },
+        ...Array.from({ length: Number(steaks) }, () => [
+          { name: "Steak", fired: 1, requested: 1 },
+          { name: "Croquettes", fired: 0, requested: 1 },
+        ]).flat(),
         { name: "Small beer", fired: 1, requested: 1 },
       ]);
       await serveSome(party, "Small beer", "1");
+      await run(party, slips);
+    } finally {
+      await inTx(venue, async (tx) => {
+        await clearRoutingCell(tx, fryer.cell);
+        await tx
+          .update(kitchenStations)
+          .set({ active: false })
+          .where(eq(kitchenStations.id, fryer.stationId));
+      });
+    }
+  }
+
+  it("cancels a held extra at a station waiting for the pass, and voids its fired dish, once each", async () => {
+    await steakFiredCroquettesHeld(async (party, slips) => {
+      const words = kitchenTicketWords("es");
       expect((await printBill(party, party.tabId, true)).status).toBe(200);
       const before = kitchenNotices(party.tabId).length;
 
@@ -1387,15 +1413,68 @@ describe("Reopen bill stopping the dishes that never came", () => {
       expect(await slips()).toEqual([`*** ${words.hold} ***`, `*** ${words.holdCancelled} ***`]);
       const copies = await dishesOf(answer.json.billId as string);
       expect(copies.map((line) => line.name)).toEqual(["Small beer"]);
-    } finally {
-      await inTx(venue, async (tx) => {
-        await clearRoutingCell(tx, fryer.cell);
-        await tx
-          .update(kitchenStations)
-          .set({ active: false })
-          .where(eq(kitchenStations.id, fryer.stationId));
-      });
-    }
+    });
+  });
+
+  it("keeps a started dish's charge but takes off its extra the kitchen was told not to make", async () => {
+    await steakFiredCroquettesHeld(async (party, slips) => {
+      const words = kitchenTicketWords("es");
+      venue.db.run(sql`update ticket_items set state = 'preparing' where working_order_line_id in
+        (select id from working_order_lines where working_order_id = ${party.tabId} and name = 'Steak')`);
+      const printedBill = await printBill(party, party.tabId, true);
+      expect(printedBill.status).toBe(200);
+      expect(printedBill.json.total).toBe("29.00");
+      const before = kitchenNotices(party.tabId).length;
+
+      const answer = await stop(party.tabId);
+
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      expect(kitchenNotices(party.tabId).slice(before)).toEqual([
+        { kind: "void", lineName: "CROQ", quantity: 1000 },
+        { kind: "void", lineName: "CHULETA", quantity: 1000 },
+      ]);
+      expect(await slips()).toEqual([`*** ${words.hold} ***`, `*** ${words.holdCancelled} ***`]);
+      const newBill = answer.json.billId as string;
+      const reprinted = await printBill(party, newBill);
+      expect(reprinted.status, JSON.stringify(reprinted.json)).toBe(200);
+      expect(reprinted.json.total).toBe("28.00");
+      const copies = await dishesOf(newBill);
+      expect(copies.map((line) => [line.name, line.quantity])).toEqual([
+        ["Steak", 1000],
+        ["Small beer", 1000],
+      ]);
+      expect(await keptCharges(copies.map((line) => line.id))).toEqual([
+        { lineId: copies[0]!.id, quantity: 1000 },
+      ]);
+    });
+  });
+
+  it("takes off the extra of a started portion left unserved, keeping its served portion's", async () => {
+    await steakFiredCroquettesHeld(async (party) => {
+      const [, , stopped] = await dishesOf(party.tabId);
+      await serveSome(party, "Steak", "1");
+      venue.db.run(sql`update ticket_items set state = 'preparing'
+        where working_order_line_id = ${stopped!.id}`);
+      expect((await printBill(party, party.tabId, true)).status).toBe(200);
+
+      const answer = await stop(party.tabId);
+
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      const newBill = answer.json.billId as string;
+      const copies = await dishesOf(newBill);
+      expect(copies.map((line) => [line.name, line.servedQuantity])).toEqual([
+        ["Steak", 1000],
+        ["Croquettes", 1000],
+        ["Steak", 0],
+        ["Small beer", 1000],
+      ]);
+      expect(await keptCharges(copies.map((line) => line.id))).toEqual([
+        { lineId: copies[2]!.id, quantity: 1000 },
+      ]);
+      const reprinted = await printBill(party, newBill);
+      expect(reprinted.status, JSON.stringify(reprinted.json)).toBe(200);
+      expect(reprinted.json.total).toBe("54.00");
+    }, "2");
   });
 
   it("a started dish's kept charge comes off the reopened bill with a Comp and its reason", async () => {

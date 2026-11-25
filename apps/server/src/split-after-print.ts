@@ -187,14 +187,14 @@ async function refuseUnservedDishes(
 /**
  * Stops each unfired kitchen item of the unserved dishes, a dish's or an extra's, as a cancel of a
  * sent dish does; abandoning the bill voids every fired quantity still unserved, so each item is
- * corrected once. Answers the dishes the kitchen had started.
+ * corrected once. Answers each dish the kitchen had started, with its extras the kitchen had not.
  */
 async function stopHeldDishes(
   tx: Transaction,
   cfg: DeviceRequestConfig,
   billId: string,
   unserved: readonly UnservedBillDish[],
-): Promise<Set<string>> {
+): Promise<Map<string, string[]>> {
   const work = await dishKitchenItems(
     tx,
     unserved.map(({ lineId }) => lineId),
@@ -242,25 +242,52 @@ async function stopHeldDishes(
       { groupOf: (dish) => (dish.groupId === null ? undefined : groupById.get(dish.groupId)) },
     );
   }
-  return new Set(
-    unserved.flatMap(({ lineId }) =>
-      (work.get(lineId) ?? []).some((item) => isStarted(item.state)) ? [lineId] : [],
-    ),
+  return new Map(
+    unserved.flatMap(({ lineId }) => {
+      const items = work.get(lineId) ?? [];
+      if (!items.some((item) => isStarted(item.state))) return [];
+      const unstarted = items.filter((item) => item.extra && !isStarted(item.state));
+      return [[lineId, unstarted.map((item) => item.workingOrderLineId)] as const];
+    }),
   );
 }
 
 /**
  * Takes the stopped quantities off the reopened bill's copies as Take off does on an open bill,
- * except a dish the kitchen had started, whose copy keeps its charge.
+ * except a dish the kitchen had started, whose copy keeps its charge and loses each extra the
+ * kitchen made apart from it and had not started. A dish with extras is one portion, served only
+ * whole, so a started one is stopped whole and those extras come off whole, as Take off removes one.
  */
 async function takeOffCopies(
   tx: Transaction,
   cfg: DeviceRequestConfig,
   opened: { billId: string; lineCopies: Map<string, string> },
   unserved: readonly UnservedBillDish[],
-  started: ReadonlySet<string>,
+  started: ReadonlyMap<string, readonly string[]>,
   operatorId: string,
 ): Promise<void> {
+  const takeOff = async (lineId: string, quantity: number | null) => {
+    const [copy] = await tx
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, opened.lineCopies.get(lineId)!));
+    await removeFromLine(
+      tx,
+      cfg,
+      opened.billId,
+      {
+        ...copy!,
+        ticketItemId: null,
+        firedAt: null,
+        stationId: null,
+        state: null,
+        firedQuantity: 0,
+      },
+      quantity === copy!.quantity ? null : quantity,
+      operatorId,
+    );
+  };
+  for (const extraId of [...started.values()].flat()) await takeOff(extraId, null);
   if (started.size > 0) {
     const rows = await tx
       .select()
@@ -289,29 +316,8 @@ async function takeOffCopies(
       true,
     );
   }
-  for (const { lineId, quantity } of unserved) {
-    if (started.has(lineId)) continue;
-    const [copy] = await tx
-      .select()
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.id, opened.lineCopies.get(lineId)!));
-    const off = stringToThousandths(quantity);
-    await removeFromLine(
-      tx,
-      cfg,
-      opened.billId,
-      {
-        ...copy!,
-        ticketItemId: null,
-        firedAt: null,
-        stationId: null,
-        state: null,
-        firedQuantity: 0,
-      },
-      off === copy!.quantity ? null : off,
-      operatorId,
-    );
-  }
+  for (const { lineId, quantity } of unserved)
+    if (!started.has(lineId)) await takeOff(lineId, stringToThousandths(quantity));
 }
 
 /** A new open bill of the party, made as Move dishes makes one, holding copies of the bill's dishes. */
