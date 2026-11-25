@@ -289,7 +289,7 @@ export async function createOpenOrder(
       };
     }),
   );
-  if (lineRows.length > 0) await recordOrderedPeriods(tx, id, routing.at);
+  if (lineRows.length > 0) await recordOrderedPeriods(tx, id, routing);
   await linkSetMenusFor(tx, id, pricedLines.setMenuLinks);
   const regrouped = (await regroupBills(tx, [id])).has(id);
   const total = regrouped ? await storedOrderTotal(tx, id) : gross.total;

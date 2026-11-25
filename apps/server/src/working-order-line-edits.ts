@@ -996,7 +996,7 @@ export async function applyLineEdits(
     plan.edits.some(
       ({ parent, intent }) => compareDecimal(decimal(intent.quantity), parent.quantity) > 0,
     );
-  if (ordersDishes) await recordOrderedPeriods(tx, orderId, routing.at);
+  if (ordersDishes) await recordOrderedPeriods(tx, orderId, routing);
   await linkSetMenusFor(tx, orderId, priced.setMenuLinks);
   const addedToExisting = changes.filter(
     (change) =>

@@ -270,7 +270,7 @@ export async function placeGroups(
   }));
   const inserted = round === null ? [] : await insertTabRound(tx, cfg, round, rows);
   if (round !== null) {
-    await recordOrderedPeriods(tx, tabId, routing.at, input.draftAddTimes);
+    await recordOrderedPeriods(tx, tabId, routing, input.draftAddTimes);
   }
   const portionsOfLine: string[][] = lines.map(() => []);
   rows.forEach((row, i) => {

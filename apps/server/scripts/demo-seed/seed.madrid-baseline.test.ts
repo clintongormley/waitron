@@ -482,6 +482,7 @@ const SET_MENU_TABLES = [
 ] as const;
 
 const ADDED_TABLES = [
+  "bill_ordered_periods",
   "verifactu_history",
   "sign_in_challenges",
   "staff_activity",
@@ -2013,6 +2014,11 @@ for (const locale of ["en", "es"] as const) {
         );
       }
       const draftLines = expected[phase].tables.order_draft_lines!;
+      draftLines.columns.splice(
+        draftLines.columns.findIndex((column) => column.name === "draft_id") + 1,
+        0,
+        { name: "added_at", type: "TEXT", notnull: 1, dflt_value: null, pk: 0 },
+      );
       for (const [name, type] of [
         ["set_menu_id", "TEXT"],
         ["set_menu_reserved_line_id", "TEXT"],

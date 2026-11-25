@@ -376,7 +376,7 @@ export async function priceOrderLines(
     // after a sent dish's period they are late like a new dish of it.
     if (requestedLines.some((line) => line[ADDED_EXTRAS_ONLY] !== true))
       await VENUE_SERVICE.assertZoneTakesNewOrders(tx, context.zoneId, at);
-    service = await VENUE_SERVICE.resolveDepartmentService(tx, context.departmentId, at);
+    service = await routing.departmentService(context.departmentId);
     for (const menu of service.endedMenus) periodOf.set(menu.menuId, menu);
     const items: { productId: string; variantId: string | null }[] = [];
     type Candidate = Parameters<typeof lastOrderDishes<(typeof requestedLines)[number]>>[2][number];
