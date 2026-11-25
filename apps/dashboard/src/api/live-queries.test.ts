@@ -354,11 +354,11 @@ it.each([
     ],
   ],
   ["getMenuHome", ["menu-1"], ["sections", "section_members", "products", "menus"]],
-  // `/management-api/printer-profiles` (apps/server/src/print-api.ts): the list rows, joined to
+  // `/management-api/printer-profiles` (apps/server/src/print-assignments-routes.ts): the list rows, joined to
   // their profile, and the profile's department. Not `devices`,
   // which a device's heartbeat changes every minute.
   ["listPrinterProfiles", [], ["device_profiles", "departments"]],
-  // `/management-api/printer-stations` (apps/server/src/print-api.ts): the station rows, joined to
+  // `/management-api/printer-stations` (apps/server/src/print-assignments-routes.ts): the station rows, joined to
   // their station's name.
   ["listPrinterStationNames", [], ["kitchen_stations"]],
   // `printerDeleteRules` (apps/server/src/printer-delete.ts): the printer, its live jobs and

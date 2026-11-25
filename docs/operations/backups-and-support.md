@@ -73,5 +73,5 @@ Use **Delete** to remove the Bluetooth printer and ask its boxes to unpair. If W
 a box may still be paired, make sure the box is on and wait for any Bluetooth request to finish. Then add the printer and choose **Delete** again.
 
 See the [printer screen](../../apps/dashboard/src/screens/printers-screen.ts),
-[printer API](../../apps/server/src/print-api.ts) and the
+[printer API](../../apps/server/src/print-printers-routes.ts) and the
 [box installation instructions](../../deploy/README.md) for the host's Bluetooth setup.

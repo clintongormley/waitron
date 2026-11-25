@@ -1,3 +1,4 @@
+import "./errors.js";
 import { withTransaction, printAgents } from "@waitron/db";
 import { routableServers } from "@waitron/membership";
 import type { InvoicePrintClaim } from "@waitron/print-agent";

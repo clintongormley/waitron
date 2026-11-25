@@ -1,3 +1,4 @@
+import "./errors.js";
 import { receiptPrintTransport } from "@waitron/db";
 import {
   type OfficePrinterReport,

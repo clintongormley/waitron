@@ -1,3 +1,4 @@
+import "./errors.js";
 import { requireString } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 

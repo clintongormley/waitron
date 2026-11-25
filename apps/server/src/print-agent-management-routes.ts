@@ -1,3 +1,4 @@
+import "./errors.js";
 import { type Transaction, printAgents } from "@waitron/db";
 import { isBluetoothAddress, isBluetoothPin } from "@waitron/print-agent";
 import {
