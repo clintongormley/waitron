@@ -12,12 +12,15 @@
  * exactly that string.
  *
  * KNOWN LIMIT: an Android tablet asking for the desktop site sends no "Android" in its user-agent
- * (a Pixel Tablet's Chrome 158, 2026-11-25), so it answers `linux`. `trust-page.ts` corrects that in
- * the browser; the connection page does not.
+ * (a Pixel Tablet's Chrome 158, 2026-11-25), so it answers `linux`. The certificate and connection
+ * pages correct that in the browser with `TOUCH_FIRST_CONDITION`.
  */
 
 export type TrustDevice =
   "macos" | "windows" | "linux" | "chromeos" | "android" | "ios" | "firefox-linux" | "unknown";
+
+/** Browser code: true on a device whose main pointer is a touchscreen. */
+export const TOUCH_FIRST_CONDITION = `navigator.maxTouchPoints>0&&matchMedia("(pointer: coarse)").matches`;
 
 /**
  * The `sec-ch-ua-platform` client hint, which Chromium sends quoted (`"macOS"`). "Unknown" is a value

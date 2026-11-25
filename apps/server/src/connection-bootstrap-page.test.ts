@@ -1,12 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { chromium, type Browser, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContextOptions, type Page } from "playwright";
 import { renderTrustPage, type TrustPageInput } from "./trust-page.js";
 import { connectionLocale } from "./connection-bootstrap-page.js";
 import { CONNECTION_TEXT, CONNECTION_DEVICE_ES } from "./connection-bootstrap-strings.js";
 import type { BoxTlsInspection } from "./box-tls-repair.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
+import { DEVICE_HELP, DEVICE_ORDER } from "./trust-page-devices.js";
 
 let browser: Browser | undefined;
 beforeAll(async () => {
@@ -539,6 +540,76 @@ it.each(["en", "es"] as const)(
       await page.close();
     }
   },
+);
+
+const TOUCH: BrowserContextOptions = { hasTouch: true, isMobile: true };
+const DESKTOP: BrowserContextOptions = { hasTouch: false, isMobile: false };
+
+async function expectHelpOpenedFor(
+  options: BrowserContextOptions,
+  guessed: TrustPageInput["device"],
+  opened: TrustPageInput["device"],
+  extra: {
+    locale?: "en" | "es";
+    maxTouchPoints?: number;
+    coarse?: boolean;
+  } = {},
+): Promise<void> {
+  const { locale = "en", maxTouchPoints, coarse } = extra;
+  const context = await browser!.newContext(options);
+  try {
+    if (maxTouchPoints !== undefined)
+      await context.addInitScript(
+        (points) => Object.defineProperty(navigator, "maxTouchPoints", { get: () => points }),
+        maxTouchPoints,
+      );
+    const page = await context.newPage();
+    await open(page, retained, undefined, { locale, device: guessed });
+    if (maxTouchPoints !== undefined)
+      expect(await page.evaluate("navigator.maxTouchPoints")).toBe(maxTouchPoints);
+    if (coarse !== undefined)
+      expect(await page.evaluate("matchMedia('(pointer: coarse)').matches")).toBe(coarse);
+    const help = locale === "es" ? CONNECTION_DEVICE_ES : DEVICE_HELP;
+    const order =
+      opened === "unknown"
+        ? DEVICE_ORDER
+        : [opened, ...DEVICE_ORDER.filter((device) => device !== opened)];
+    expect(
+      await page
+        .locator("#connection-help > details")
+        .evaluateAll((nodes) =>
+          nodes.map((node) => [
+            node.querySelector("summary")!.textContent,
+            node.hasAttribute("open"),
+          ]),
+        ),
+    ).toEqual(order.map((device) => [help[device].summary, device === opened]));
+  } finally {
+    await context.close();
+  }
+}
+
+it.each(["en", "es"] as const)(
+  "opens Android's steps first on a touch device that says it is Linux (%s)",
+  (locale) => expectHelpOpenedFor(TOUCH, "linux", "android", { locale, coarse: true }),
+);
+
+it.each(["en", "es"] as const)("opens a Linux PC's own steps first (%s)", (locale) =>
+  expectHelpOpenedFor(DESKTOP, "linux", "linux", { locale, coarse: false }),
+);
+
+it("leaves the Linux steps first when the page's script cannot run", () =>
+  expectHelpOpenedFor({ ...TOUCH, javaScriptEnabled: false }, "linux", "linux"));
+
+it("leaves a Linux laptop with a touchscreen and a mouse its own steps first", () =>
+  expectHelpOpenedFor(DESKTOP, "linux", "linux", { maxTouchPoints: 10, coarse: false }));
+
+it("leaves a coarse pointer with no touchscreen the Linux steps first", () =>
+  expectHelpOpenedFor(TOUCH, "linux", "linux", { maxTouchPoints: 0, coarse: true }));
+
+it.each(["firefox-linux", "macos", "unknown"] as const)(
+  "leaves a touch device guessed as %s the order that guess gives",
+  (device) => expectHelpOpenedFor(TOUCH, device, device, { coarse: true }),
 );
 
 it.each(["en", "es"] as const)(

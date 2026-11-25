@@ -1,6 +1,7 @@
 import { PAGE_THEME_SCRIPT, PAGE_THEME_STYLE } from "./page-theme.js";
 import type { BoxTlsInspection } from "./box-tls-repair.js";
 import { renderConnectionPage } from "./connection-bootstrap-page.js";
+import { TOUCH_FIRST_CONDITION } from "./detect-device.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
 import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 import { DEVICE_HELP, DEVICE_ORDER, type DeviceHelp, type DeviceId } from "./trust-page-devices.js";
@@ -95,7 +96,7 @@ function installSection(device: DeviceId | "unknown"): string {
       .join("")}</details>`;
 }
 
-const TOUCH_STEPS_SCRIPT = `if(navigator.maxTouchPoints>0&&matchMedia("(pointer: coarse)").matches)document.getElementById("steps").replaceChildren(document.getElementById("touch-steps").content)`;
+const TOUCH_STEPS_SCRIPT = `if(${TOUCH_FIRST_CONDITION})document.getElementById("steps").replaceChildren(document.getElementById("touch-steps").content)`;
 
 function certificateSteps(device: DeviceId | "unknown", caDownloadPath: string): string {
   return `${removeSection(device)}
