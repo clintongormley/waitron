@@ -2860,7 +2860,7 @@ export class TillApp extends LitElement {
           }
           if (this.#store.persisted && this.#store.id === row.tabId) {
             if (this.#store.dirty || this.#basketPayload() !== this.#basketBaseline)
-              this.#keepTransferLocalCopy(this.#store, this.#store.label ?? "");
+              this.#keepTransferLocalCopy(this.#store, this.#counterBillName() ?? "");
             this.#dismissStationChoices();
             this.#counterSends++;
             this.#clearBasket();
@@ -4034,7 +4034,19 @@ export class TillApp extends LitElement {
    * open a bill payment on it that {@link TillApp.#onCounterBillPay} does not ignore outright, whether
    * or not the dialog then opens. */
   #counterSends = 0;
-  #counterBillEdit?: { id: string; visit: number; expectedEdit: BillEditExpected | null };
+  #counterBillEdit?: {
+    id: string;
+    visit: number;
+    expectedEdit: BillEditExpected | null;
+    name?: string;
+  };
+
+  #counterBillName(): string | undefined {
+    const order = this.#counterBillEdit;
+    return order?.id === this.#store.id && order.visit === this.#store.loadGeneration
+      ? order.name
+      : undefined;
+  }
 
   #counterExpectedEdit(id: string): BillEditExpected | null {
     const observation = this.#counterBillEdit;
@@ -10744,6 +10756,7 @@ export class TillApp extends LitElement {
       id: order.id,
       visit: this.#store.loadGeneration,
       expectedEdit: structuredClone(order.expectedEdit),
+      name: order.billName,
     };
     this.#counterStoredInvoice = storedInvoiceOf(order.id, order);
     this.counterDiningChoice = { orderId: order.id, choice: order.diningChoice };
@@ -12911,7 +12924,7 @@ export class TillApp extends LitElement {
           receiptLanguage: this.#chosenReceiptLanguage(billId),
         },
         open.visit,
-        this.#store.label ?? t("tab.counter"),
+        this.#counterBillName() ?? t("tab.counter"),
       );
       return;
     }
@@ -25903,7 +25916,7 @@ export class TillApp extends LitElement {
                               ? nothing
                               : html`<till-department-transfers
                                   .currentTabId=${this.#currentTransferTabId()}
-                                  .currentTabLabel=${this.#store.label ?? ""}
+                                  .currentTabLabel=${this.#counterBillName() ?? ""}
                                   .serviceZones=${this.deviceZoneSelection?.zones ?? this.profileServiceZones}
                                   @transfer-changed=${() => this.#departmentTransfers?.refresh()}
                                   .api=${this.api}

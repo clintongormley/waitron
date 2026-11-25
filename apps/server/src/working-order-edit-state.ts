@@ -180,12 +180,13 @@ export async function requireEditableOrder(
   tx: Transaction,
   orderId: string,
   revision: number,
-): Promise<{ label: string | null }> {
+): Promise<{ label: string | null; partyId: string | null }> {
   const [order] = await tx
     .select({
       status: workingOrders.status,
       revision: workingOrders.revision,
       label: workingOrders.label,
+      partyId: workingOrders.partyId,
     })
     .from(workingOrders)
     .where(eq(workingOrders.id, orderId));
@@ -198,7 +199,7 @@ export async function requireEditableOrder(
       revision: order.revision,
     });
   }
-  return { label: order.label };
+  return { label: order.label, partyId: order.partyId };
 }
 /**
  * Refuse `bill.refund_in_progress` while a card refund of any of these bills is pending (bill

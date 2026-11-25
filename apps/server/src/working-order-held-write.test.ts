@@ -285,6 +285,7 @@ describe("an order whose card payment is in flight", () => {
     expect(renamed).toEqual({
       ...before.order,
       label: "Window",
+      billName: "Window",
       revision: before.order!.revision + 1,
     });
 
@@ -297,6 +298,7 @@ describe("an order whose card payment is in flight", () => {
     expect(saved).toEqual({
       ...before.order,
       label: "Terrace",
+      billName: "Terrace",
       revision: before.order!.revision + 2,
     });
     expect(

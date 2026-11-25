@@ -763,6 +763,30 @@ describe("till-tender-pay", () => {
     expect(spy).toHaveBeenCalledWith({ label: undefined });
   });
 
+  it("shows an inline error for a long Park name and accepts a corrected name", async () => {
+    const store = new WorkingOrderStore();
+    store.addProduct(coffee, "2");
+    const { el } = await mountWidget<TillTenderPay>("till-tender-pay", { store });
+    const parked = vi.fn();
+    el.addEventListener("park-order", (event) => parked((event as CustomEvent).detail));
+    click(el, ".hold");
+    await el.updateComplete;
+    await typeLabel(el, "A".repeat(41));
+    click(el, ".park");
+    await el.updateComplete;
+    expect(parked).not.toHaveBeenCalled();
+    expect(el.shadowRoot!.querySelector("wt-input.label-input")?.getAttribute("name")).toBe(
+      "label",
+    );
+    expect(
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(".label-input")?.error,
+    ).toBe(t("table.name_too_long"));
+    await typeLabel(el, "Riley");
+    await el.updateComplete;
+    click(el, ".park");
+    expect(parked).toHaveBeenCalledWith({ label: "Riley" });
+  });
+
   it("returns to idle after Hold is confirmed", async () => {
     const store = new WorkingOrderStore();
     store.addProduct(coffee, "2");

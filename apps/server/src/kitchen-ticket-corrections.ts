@@ -44,7 +44,6 @@ import {
 import { VENUE_SERVICE } from "./modules.js";
 import { heldPaperStations } from "./order-group-hold-paper.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
-import { readPartyNames } from "./order-places.js";
 import { readWholePortionLines } from "./order-portions.js";
 import { partyFamily } from "./parties.js";
 import type { TradingContext } from "./trading-context.js";
@@ -238,19 +237,13 @@ export async function enqueueOrderKitchenNoteChange(
       ? {
           createdAt: at,
           labels: new Map(
-            [...numbers].map(([id, values]) => [
-              id,
-              [...values]
-                .sort(
-                  (a, b) =>
-                    Number(headers.get(a)!.orderNumber) - Number(headers.get(b)!.orderNumber),
-                )
-                .map((value) => {
-                  const header = headers.get(value)!;
-                  return `#${header.orderNumber}${header.billLabel === null ? "" : ` · ${header.billLabel}`}`;
-                })
-                .join(", "),
-            ]),
+            [...numbers].map(([id, values]) => {
+              const orders = [...values].map((value) => headers.get(value)!);
+              orders.sort((a, b) => Number(a.orderNumber) - Number(b.orderNumber));
+              const numberText = orders.map((order) => `#${order.orderNumber}`).join(", ");
+              const places = new Set(orders.flatMap((order) => order.tableLabel ?? []));
+              return [id, [numberText, ...places].join(" · ")];
+            }),
           ),
         }
       : undefined;
@@ -292,7 +285,6 @@ async function printKitchenNoteChanges(
   const lineIds = [...new Set(items.map((item) => item.workingOrderLineId))];
   const built = await buildTicketItems(tx, cfg, lineIds, language);
   const stations = await readStations(tx, stationIds);
-  const names = await readPartyNames(tx, [...orders.keys()]);
   const byStation = new Map<
     string,
     { orderId: string; lineNo: number; position: number | null; item: KitchenTicketItem }[]
@@ -326,7 +318,7 @@ async function printKitchenNoteChanges(
       ...new Set(route.stationIds.flatMap((id) => byStation.get(id)!.map((item) => item.orderId))),
     ].sort((a, b) => Number(headers.get(a)!.orderNumber) - Number(headers.get(b)!.orderNumber));
     const first = headers.get(visible[0]!)!;
-    const partyName = names.get(visible[0]!)!;
+    const partyName = first.partyName;
     const label =
       visible.length === 1
         ? first.tableLabel
@@ -694,7 +686,7 @@ async function printCorrectionSlips(
   ]);
   const stationNames = await readStations(tx, stationIds);
   const header = await readOrderHeader(tx, orderId);
-  const partyName = (await readPartyNames(tx, [orderId])).get(orderId)!;
+  const partyName = header.partyName;
   const kitchenNote = (await readOrderKitchenNotes(tx, [orderId])).get(orderId)!.note;
 
   const printersByStation = new Map<string, (EscSetting & { printerId: string })[]>();

@@ -255,6 +255,7 @@ async function moveBillOnce(
       .set({
         partyId: null,
         billNumber: null,
+        billName: sql`coalesce(${workingOrders.billName}, ${source.name})`,
         revision: movedRevision,
         ...(open ? { label: await counterLabel(tx, source) } : {}),
       })
@@ -346,9 +347,14 @@ export async function moveSettledBillToCounter(
   const before = await workStillToCome(tx, await readSentWork(tx, billId));
   await inheritKitchenNote(tx, cfg, from, { workingOrderId: billId }, "copy");
   await leaveParty(tx, billId, "refuse");
+  const source = await readSourceParty(tx, from.partyId);
   await tx
     .update(workingOrders)
-    .set({ partyId: null, billNumber: null })
+    .set({
+      partyId: null,
+      billNumber: null,
+      billName: sql`coalesce(${workingOrders.billName}, ${source.name})`,
+    })
     .where(eq(workingOrders.id, billId));
   await relocateBillEditor(tx, billId, expectedEdit);
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);

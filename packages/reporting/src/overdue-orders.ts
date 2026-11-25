@@ -2,12 +2,12 @@ import { and, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
   kitchenStations,
-  orderTableLabels,
+  readOrderPlaces,
   ticketItems,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
-import { BAND_RANK, classifyBand, worstBand } from "@waitron/shared";
+import { BAND_RANK, classifyBand, partyTablesName, worstBand } from "@waitron/shared";
 import type { StationThresholds, TimingBand } from "@waitron/shared";
 import type { OverdueOrder } from "./types.js";
 
@@ -49,10 +49,6 @@ export async function computeOverdueOrders(tx: Transaction): Promise<OverdueOrde
       warmAfterMinutes: kitchenStations.warmAfterMinutes,
       overdueAfterMinutes: kitchenStations.overdueAfterMinutes,
       forgottenAfterMinutes: kitchenStations.forgottenAfterMinutes,
-      partyId: workingOrders.partyId,
-      deliveryTableId: workingOrders.deliveryTableId,
-      deliveryTableLabel: workingOrders.deliveryTableLabel,
-      label: workingOrders.label,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
@@ -77,10 +73,6 @@ export async function computeOverdueOrders(tx: Transaction): Promise<OverdueOrde
   }
   interface Candidate {
     orderNumber: number;
-    partyId: string | null;
-    deliveryTableId: string | null;
-    deliveryTableLabel: string | null;
-    label: string | null;
     lines: Line[];
   }
   const byOrder = new Map<string, Candidate>();
@@ -98,10 +90,6 @@ export async function computeOverdueOrders(tx: Transaction): Promise<OverdueOrde
     if (order === undefined) {
       order = {
         orderNumber: row.orderNumber,
-        partyId: row.partyId,
-        deliveryTableId: row.deliveryTableId,
-        deliveryTableLabel: row.deliveryTableLabel,
-        label: row.label,
         lines: [],
       };
       byOrder.set(row.orderId, order);
@@ -126,18 +114,22 @@ export async function computeOverdueOrders(tx: Transaction): Promise<OverdueOrde
   }
 
   if (late.length === 0) return [];
-  const tableLabels = await orderTableLabels(
+  const places = await readOrderPlaces(
     tx,
-    late.map(({ orderId, order }) => ({ id: orderId, ...order })),
+    late.map(({ orderId }) => orderId),
   );
-  const results: OverdueOrder[] = late.map(({ orderId, order, band, worstLine }) => ({
-    orderId,
-    orderNumber: order.orderNumber,
-    tableLabel: tableLabels.get(orderId)!,
-    stationName: worstLine.stationName,
-    ageMinutes: worstLine.ageMinutes,
-    band,
-  }));
+  const results: OverdueOrder[] = late.map(({ orderId, order, band, worstLine }) => {
+    const place = places.get(orderId)!;
+    return {
+      orderId,
+      orderNumber: order.orderNumber,
+      tableLabel: place.names.length === 0 ? place.billName : partyTablesName(place.names),
+      ...(place.counter ? { counter: true as const } : {}),
+      stationName: worstLine.stationName,
+      ageMinutes: worstLine.ageMinutes,
+      band,
+    };
+  });
 
   // Worst-first: band rank desc, then age desc, then order number for a deterministic tiebreak.
   results.sort(

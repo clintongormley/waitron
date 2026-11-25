@@ -34,7 +34,7 @@ import {
 } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
-import { readPlacedOrders, type OrderPlaces, type PlacedOrder } from "./order-places.js";
+import { readPlacedOrders, type OrderPlaces, type PlacedOrder } from "@waitron/db";
 import type { TradingContext } from "./trading-context.js";
 
 /**
@@ -205,7 +205,10 @@ async function notifyMoved(
     });
     const slipItems = printable(items);
     if (printing === null || slipItems.length === 0) continue;
-    const partyName = after.partyId === null ? before.places.partyName : after.sittingWith;
+    const partyName =
+      after.partyId === null
+        ? (after.places.billName ?? before.places.partyName)
+        : after.sittingWith;
     const toNumber = after.places.orderNumber;
     await printMovedSlips(tx, printing, slipItems, {
       kitchenNote:

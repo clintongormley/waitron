@@ -3,6 +3,7 @@ import { and, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import {
   AppError,
   createLabelComparator,
+  partyTablesName,
   type DeleteImpact,
   type DeleteImpactItem,
   type DeleteTarget,
@@ -13,7 +14,7 @@ import {
   kitchenStations,
   orderDrafts,
   orderDraftLines,
-  orderTableLabels,
+  readOrderPlaces,
   parties,
   isReceiptPrinter,
   printers,
@@ -50,10 +51,6 @@ async function stationDeleteRules(tx: Transaction, id: string) {
   const preparation = await tx
     .select({
       id: workingOrders.id,
-      partyId: workingOrders.partyId,
-      deliveryTableId: workingOrders.deliveryTableId,
-      deliveryTableLabel: workingOrders.deliveryTableLabel,
-      label: workingOrders.label,
       orderNumber: workingOrders.orderNumber,
     })
     .from(ticketItems)
@@ -67,9 +64,7 @@ async function stationDeleteRules(tx: Transaction, id: string) {
         or(isNull(ticketItems.firedAt), inArray(ticketItems.state, ["queued", "preparing"])),
       ),
     );
-  const orderLabels = await orderTableLabels(tx, [
-    ...new Map(preparation.map((row) => [row.id, row])).values(),
-  ]);
+  const places = await readOrderPlaces(tx, [...new Set(preparation.map((row) => row.id))]);
   const unsent = await tx
     .select({ id: workingOrderLines.id, orderId: workingOrders.id })
     .from(workingOrderLines)
@@ -125,10 +120,15 @@ async function stationDeleteRules(tx: Transaction, id: string) {
       params: { stationId: id, count: preparation.length },
       targets: named(
         "",
-        preparation.map((row) => ({
-          id: row.id,
-          name: orderLabels.get(row.id) ?? `#${row.orderNumber}`,
-        })),
+        preparation.map((row) => {
+          const place = places.get(row.id)!;
+          return {
+            id: row.id,
+            name:
+              (place.names.length > 0 ? partyTablesName(place.names) : place.billName) ??
+              `#${row.orderNumber}`,
+          };
+        }),
       ).targets,
     });
   const removes = [

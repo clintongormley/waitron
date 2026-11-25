@@ -18,6 +18,7 @@ import {
   dayCutoverChanges,
   withTransaction,
   workingOrderLines,
+  workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -399,6 +400,10 @@ describe("recordKitchenNotices", () => {
   it("records each item as the kitchen saw it: the order label, the kitchen name and the line's note", async () => {
     const v = await venue();
     const order = await seedOrder(12, "Table 4");
+    await db
+      .update(workingOrders)
+      .set({ billName: "Riley", deliveryTableLabel: "Table 4" })
+      .where(eq(workingOrders.id, order.orderId));
     await inTx((tx) =>
       recordKitchenNotices(
         tx,
@@ -427,7 +432,7 @@ describe("recordKitchenNotices", () => {
         id: expect.any(String),
         stationId: v.grill,
         workingOrderId: order.orderId,
-        orderLabel: "#12 · Table 4",
+        orderLabel: "#12 · Riley",
         kind: "void",
         lineName: "BRGR",
         unitName: null,
@@ -1014,6 +1019,10 @@ describe("recordKitchenNotices", () => {
       { workingOrderLineId: o.burgerLineId, stationId: v.grill, quantity: ONE, wasStarted: false },
     ];
     await inTx(async (tx) => {
+      await tx
+        .update(workingOrders)
+        .set({ billName: "Table 4" })
+        .where(eq(workingOrders.id, labelled.orderId));
       await recordKitchenNotices(tx, order.orderId, burger(order), "moved", {
         movedTo: "Table 7",
         fromNumber: 28,

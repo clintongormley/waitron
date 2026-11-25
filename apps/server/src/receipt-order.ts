@@ -10,6 +10,21 @@ import {
 } from "@waitron/db";
 import { AppError, partyReceiptLabel } from "@waitron/shared";
 
+/** A split copies the source's label for receipts, including a place it used to have. */
+export async function readSplitOrderLabel(tx: Transaction, id: string): Promise<string | null> {
+  const [order] = await tx
+    .select({
+      id: workingOrders.id,
+      partyId: workingOrders.partyId,
+      deliveryTableId: workingOrders.deliveryTableId,
+      deliveryTableLabel: workingOrders.deliveryTableLabel,
+      label: workingOrders.label,
+    })
+    .from(workingOrders)
+    .where(eq(workingOrders.id, id));
+  return (await orderTableLabels(tx, [order!])).get(id)!;
+}
+
 /**
  * Resolve the commercial grouping shown on receipts and payment slips. A party bill shows the party's
  * name and its active tables ({@link partyReceiptLabel}), or its own label once the party holds none;

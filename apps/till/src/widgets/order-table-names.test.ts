@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { TillApi } from "../api/client.js";
-import { currentLocale, setLocale } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { TillHeldOrders } from "./held-orders.js";
 import { TillCounterWaiting } from "./counter-waiting.js";
@@ -42,23 +42,25 @@ const transfer = {
 };
 
 describe("A765 visible order table names", () => {
-  it("identifies a party's held bill in the row and action names, keeping its own label", async () => {
+  it("identifies a party's held bill by its new place and typed name", async () => {
     const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
       orders: [
         {
           ...base,
+          label: "Former patio",
           counts: { ordered: 2, unsent: 0, held: 0, waiting: 0, ready: 0 },
           outstanding: "18.50",
           hasPayments: false,
           partyId: "party",
           billNumber: 1,
-          billName: null,
+          billName: base.label,
           signals: [],
         },
       ],
     });
     expect(el.shadowRoot!.querySelector(".summary")!.textContent).toContain(tableLabel);
     expect(el.shadowRoot!.querySelector(".summary")!.textContent).toContain(base.label);
+    expect(el.shadowRoot!.querySelector(".summary")!.textContent).not.toContain("Former patio");
     expect(el.shadowRoot!.querySelector(".retrieve")!.getAttribute("aria-label")).toContain(
       tableLabel,
     );
@@ -168,7 +170,7 @@ describe.each(["en-GB", "es-ES"])("A765 native table names %s", (locale) => {
                 hasPayments: false,
                 partyId: "party",
                 billNumber: 1,
-                billName: null,
+                billName: base.label,
                 signals: [],
               },
             ],
@@ -181,11 +183,14 @@ describe.each(["en-GB", "es-ES"])("A765 native table names %s", (locale) => {
             orders: [
               {
                 ...base,
-                status: "placed",
-                settledAt: null,
+                label: "Riley",
+                tableLabel: undefined,
+                counter: true,
+                status: "settled",
+                settledAt: base.openedAt,
                 collectedAt: null,
                 canHandOver: true,
-                serviceMode: "ticket_then_pay",
+                serviceMode: null,
                 movableDishes: [],
                 counts: { ordered: 1, unsent: 0, held: 0, waiting: 0, ready: 0 },
               },
@@ -193,16 +198,19 @@ describe.each(["en-GB", "es-ES"])("A765 native table names %s", (locale) => {
           },
           theme,
         );
-        for (const { el, host } of [held, waiting]) {
+        for (const [{ el, host }, place] of [
+          [held, tableLabel],
+          [waiting, `${t("station.counter")} · Riley`],
+        ] as const) {
           const label = el.shadowRoot!.querySelector<HTMLElement>(".label")!;
-          expect(label.textContent).toContain(tableLabel);
+          expect(label.textContent).toContain(place);
           expect(label.checkVisibility()).toBe(true);
           expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(width);
           await expectNoA11yViolations(host);
         }
         expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
         await page.screenshot({
-          path: `__screenshots__/a765-table-names/${locale}-${theme}-${width}.png`,
+          path: `__screenshots__/moved-order-place/${locale}-${theme}-${width}-counter.png`,
         });
         const detail = {
           request: transfer,

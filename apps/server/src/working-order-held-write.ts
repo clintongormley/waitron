@@ -1,7 +1,7 @@
 import "./errors.js";
 import { withIssuanceTransaction } from "@waitron/core";
 import { type Database, withTransaction, workingOrders, type Transaction } from "@waitron/db";
-import { AppError, addDecimal } from "@waitron/shared";
+import { AppError, addDecimal, normalisePartyName } from "@waitron/shared";
 import { eq } from "drizzle-orm";
 import { type OrderEditAuthority, requireOrderBillEditor } from "./bill-editing.js";
 import { issueIfFullyPaid, refuseBillHoldingMoney } from "./bill-payments.js";
@@ -40,13 +40,16 @@ export async function setWorkingOrderLabel(
   attendance?: OrderAttendance & { personId: string },
 ): Promise<number> {
   return withTransaction(db, async (tx) => {
-    const { label } = await requireEditableOrder(tx, orderId, request.revision);
+    const { label, partyId } = await requireEditableOrder(tx, orderId, request.revision);
     await requireOrderBillEditor(tx, orderId, request);
     const changed = label !== request.label;
     if (changed) {
       await tx
         .update(workingOrders)
-        .set({ label: request.label })
+        .set({
+          label: request.label,
+          ...(partyId === null ? { billName: normalisePartyName(request.label) } : {}),
+        })
         .where(eq(workingOrders.id, orderId));
     }
     const revision = await countEdit(tx, orderId, request.revision, changed, true);
@@ -109,7 +112,7 @@ export async function saveHeldOrderIn(
   req: UpdateHeldOrderRequest,
   attendance?: OrderAttendance,
 ) {
-  const { label } = await requireEditableOrder(tx, id, req.revision);
+  const { label, partyId } = await requireEditableOrder(tx, id, req.revision);
   await requireOrderDining(tx, id, req.dining);
   await requireOrderBillEditor(tx, id, {
     operatorId: req.operatorId,
@@ -174,7 +177,10 @@ export async function saveHeldOrderIn(
   if (relabelled) {
     await tx
       .update(workingOrders)
-      .set({ label: req.label ?? null })
+      .set({
+        label: req.label ?? null,
+        ...(partyId === null ? { billName: normalisePartyName(req.label) } : {}),
+      })
       .where(eq(workingOrders.id, id));
   }
   const revision = await countEdit(

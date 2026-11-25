@@ -286,6 +286,14 @@ export { allocateInvoiceNumber, nextInvoiceNumberOf } from "./allocate-number.js
 export { allocateOrderNumber } from "./allocate-order-number.js";
 export { insertInChunks, statementChunks } from "./insert-in-chunks.js";
 export {
+  orderPlaceFactsSql,
+  readOrderPlaces,
+  readPlacedOrders,
+  type OrderPlaceFacts,
+  type OrderPlaces,
+  type PlacedOrder,
+} from "./order-places.js";
+export {
   billParties,
   billPartyTableLabels,
   billPartyTables,

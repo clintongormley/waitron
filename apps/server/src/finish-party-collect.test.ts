@@ -729,7 +729,7 @@ async function get(path: string) {
 }
 
 /** Where a waiting order shows: the pass, its monitor, the station, Waiting orders and Find a bill. */
-async function whereItShows(billId: string, itemId: string, label: string) {
+async function whereItShows(billId: string, itemId: string, orderNumber: number) {
   const boards = await inTx(venue, async (tx) => {
     const pass = await readScopedPassBoard(tx, EVERY);
     const monitor = await readScopedPassBoard(tx, EVERY, { release: false });
@@ -743,8 +743,7 @@ async function whereItShows(billId: string, itemId: string, label: string) {
   });
   const waiting = await get("/api/orders/counter-waiting");
   expect(waiting.status).toBe(200);
-  // Searched by its label, so other tests' bills in this shared database cannot push it off page 1.
-  const bills = await get(`/api/bills?state=paid-not-handed-over&q=${encodeURIComponent(label)}`);
+  const bills = await get(`/api/bills?state=paid-not-handed-over&q=${orderNumber}`);
   expect(bills.status).toBe(200);
   return {
     ...boards,
@@ -767,18 +766,26 @@ describe("a bill sent to the counter waits there until handed over", () => {
       await advanceTicketItem(tx, item!.id, "ready");
     });
     await pay(billId, "12.00");
-    const label = (await billRow(billId)).label;
+    const { label, orderNumber } = await billRow(billId);
     expect(label).not.toBeNull();
     const body = await collect(t.partyId, await bodyFor(t));
     expect(await post(t.partyId, body)).toEqual({ status: 200, body: { state: "closed" } });
 
-    const shown = await whereItShows(billId, item!.id, label!);
+    const shown = await whereItShows(billId, item!.id, orderNumber);
     expect(shown.screen).toHaveLength(1);
     expect(shown.monitor).toHaveLength(1);
     expect(shown.station).toHaveLength(1);
+    expect(shown.station[0]).toMatchObject({ counter: true, label: null });
     expect(shown.waiting).toEqual([
-      expect.objectContaining({ id: billId, status: "settled", canHandOver: true, label }),
+      expect.objectContaining({
+        id: billId,
+        status: "settled",
+        canHandOver: true,
+        counter: true,
+        label: null,
+      }),
     ]);
+    expect((await billRow(billId)).label).toBe(label);
     expect(shown.bills).toEqual([
       expect.objectContaining({
         workingOrderId: billId,
@@ -795,7 +802,7 @@ describe("a bill sent to the counter waits there until handed over", () => {
     });
     expect(handOver.status, await handOver.clone().text()).toBe(200);
 
-    expect(await whereItShows(billId, item!.id, label!)).toEqual({
+    expect(await whereItShows(billId, item!.id, orderNumber)).toEqual({
       screen: [],
       monitor: [],
       station: [],

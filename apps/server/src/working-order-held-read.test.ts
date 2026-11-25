@@ -1,11 +1,11 @@
-import { withTransaction, products } from "@waitron/db";
+import { withTransaction, products, workingOrders } from "@waitron/db";
 import { createProduct } from "@waitron/menu";
 import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { createStation } from "./kitchen.js";
 import { openPartyTab } from "./testing/serve-line.js";
-import { listHeldOrders } from "./working-order-held-read.js";
+import { getHeldOrder, listHeldOrders } from "./working-order-held-read.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { parkOrder } from "./working-order-open.js";
 import { listStationQueue } from "./working-order-station-queue.js";
@@ -31,6 +31,21 @@ import {
 } from "./testing/working-order.test-support.js";
 
 describe("listHeldOrders", () => {
+  it("retrieves the typed name beside the receipt label the basket sends back", async () => {
+    const { cfg, coffeeId } = await setupVenue();
+    const id = randomUUID();
+    await parkProducts(cfg, {
+      id,
+      label: "Riley",
+      lines: [{ productId: coffeeId, quantity: "1" }],
+    });
+    await db.update(workingOrders).set({ label: "Former table" }).where(eq(workingOrders.id, id));
+    expect(await getHeldOrder({ db }, id)).toMatchObject({
+      label: "Former table",
+      billName: "Riley",
+    });
+  });
+
   it("lists the venue's open orders with item counts, GROSS total and label, ordered by number", async () => {
     const { cfg, coffeeId, waterId, zoneId } = await setupVenue();
     await withTransaction(db, async (tx) => {
@@ -78,6 +93,7 @@ describe("listHeldOrders", () => {
         items: [coffee, coffee],
         orderNumber: 1,
         label: "Table 4",
+        counter: true,
         counts: { ordered: 2, unsent: 2, held: 0, waiting: 0, ready: 0 },
         total: grossA,
         outstanding: grossA,
@@ -94,6 +110,7 @@ describe("listHeldOrders", () => {
         items: [coffee, water, water, water],
         orderNumber: 2,
         label: null,
+        counter: true,
         counts: { ordered: 4, unsent: 4, held: 0, waiting: 0, ready: 0 },
         total: grossB,
         outstanding: grossB,

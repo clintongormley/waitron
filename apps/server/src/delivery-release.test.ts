@@ -14,7 +14,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { releaseDeliveries } from "./delivery-release.js";
-import { orderTableLabel } from "./kitchen-ticket-items.js";
+import { readOrderHeader } from "./kitchen-ticket-items.js";
 import { listOrders } from "./orders-list.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import {
@@ -225,7 +225,7 @@ describe("an order whose delivery table was let go", () => {
     });
   });
 
-  it("is named after the table on kitchen paper and its receipt, and keeps the name once paid", async () => {
+  it("drops a released table from live orders and kitchen paper while keeping the receipt label", async () => {
     const v = await setupPartyVenue(suite.db);
     await inTx(v, async (tx) => {
       await tx.execute(sql`
@@ -252,8 +252,27 @@ describe("an order whose delivery table was let go", () => {
     await inTx(v, (tx) => handOverOrder(tx, v.cfg, id));
     await inTx(v, (tx) => releaseDeliveries(tx, t7, "Terrace 7"));
 
-    expect(await inTx(v, (tx) => orderTableLabel(tx, id))).toBe("Terrace 7");
+    expect(await inTx(v, async (tx) => (await readOrderHeader(tx, id)).tableLabel)).toBeNull();
     expect((await inTx(v, (tx) => readReceiptOrder(tx, id))).orderLabel).toBe("Terrace 7");
+    const filter = {
+      status: "waiting_for_payment",
+      dates: "any",
+      credited: false,
+      limit: 50,
+      scope: "all",
+    } as const;
+    expect(
+      (await inTx(v, (tx) => listOrders(tx, filter))).rows.find((row) => row.id === id),
+    ).toMatchObject({
+      tables: [],
+      counter: true,
+      label: null,
+    });
+    expect(
+      (await inTx(v, (tx) => listOrders(tx, { ...filter, search: "Terrace 7" }))).rows.map(
+        (row) => row.id,
+      ),
+    ).not.toContain(id);
 
     await pay(v, id, "12.00");
 

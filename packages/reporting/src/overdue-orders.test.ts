@@ -299,7 +299,10 @@ describe("computeOverdueOrders", () => {
       [check.orderId, "T1"],
       [tab.orderId, "Terrace"],
     ] as const) {
-      await suite.db.update(workingOrders).set({ label }).where(eq(workingOrders.id, orderId));
+      await suite.db
+        .update(workingOrders)
+        .set({ label: "Former table", billName: label })
+        .where(eq(workingOrders.id, orderId));
     }
     const rows = await run();
     expect(Object.fromEntries(rows.map((row) => [row.orderId, row.tableLabel]))).toEqual({
@@ -339,7 +342,7 @@ describe("computeOverdueOrders", () => {
     expect(rows).toEqual([expect.objectContaining({ orderId, tableLabel: "Table 5, 4" })]);
   });
 
-  it("names a party's bill by its own label once the party holds no table", async () => {
+  it("drops the former place when the party holds no table", async () => {
     const seed = {
       deviceId: venue.deviceId,
       nodeId: venue.nodeId,
@@ -357,7 +360,7 @@ describe("computeOverdueOrders", () => {
 
     const rows = await run();
 
-    expect(rows).toEqual([expect.objectContaining({ orderId, tableLabel: "Ana" })]);
+    expect(rows).toEqual([expect.objectContaining({ orderId, tableLabel: null })]);
   });
 
   it("names a bill left on a party combined away after the tables of the party it ended in, as the pass does", async () => {

@@ -64,7 +64,7 @@ const list = (values: Record<string, string> = {}) =>
 async function named(label: string, ...names: string[]) {
   const id = await parked(venue, ...(names.length ? names : ["Small beer"]));
   await inTx(venue, (tx) =>
-    tx.update(workingOrders).set({ label }).where(eq(workingOrders.id, id)),
+    tx.update(workingOrders).set({ label, billName: label }).where(eq(workingOrders.id, id)),
   );
   return id;
 }
@@ -90,6 +90,20 @@ async function contribute(
 }
 
 describe("Find Bills SQL paging", () => {
+  it("finds a moved order by its typed name and drops its former table from search", async () => {
+    const id = await named("Old terrace");
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrders)
+        .set({ billName: "Riley", deliveryTableLabel: "Old terrace" })
+        .where(eq(workingOrders.id, id)),
+    );
+    expect((await list({ q: "Old terrace" })).rows).toEqual([]);
+    expect((await list({ q: "Riley" })).rows).toMatchObject([
+      { workingOrderId: id, label: "Riley", tables: [] },
+    ]);
+  });
+
   it("counts whole portions and ignores extras and cancelled portions", async () => {
     const id = await named("Counted dishes", "Small beer");
     let parentId!: string;
@@ -711,7 +725,7 @@ describe("Find Bills SQL paging", () => {
     await inTx(venue, async (tx) => {
       await tx
         .update(workingOrders)
-        .set({ label: "Birthday", openedAt: "2026-10-01T02:00:00.000Z" })
+        .set({ label: "Former table", billName: "Birthday", openedAt: "2026-10-01T02:00:00.000Z" })
         .where(eq(workingOrders.id, party.tabId));
       const [line] = await tx
         .select({ id: workingOrderLines.id })
@@ -887,11 +901,11 @@ describe("Find Bills SQL paging", () => {
     await inTx(venue, async (tx) => {
       await tx
         .update(workingOrders)
-        .set({ label: "Zulu", openedAt: "2026-10-12T12:00:00.000Z" })
+        .set({ label: "Alpha", billName: "Zulu", openedAt: "2026-10-12T12:00:00.000Z" })
         .where(eq(workingOrders.id, first));
       await tx
         .update(workingOrders)
-        .set({ label: "Alpha", openedAt: "2026-10-13T12:00:00.000Z" })
+        .set({ label: "Zulu", billName: "Alpha", openedAt: "2026-10-13T12:00:00.000Z" })
         .where(eq(workingOrders.id, second));
       // A placed order's label and opened time cannot be rewritten. Its real opening is newest.
       await tx
@@ -978,8 +992,8 @@ describe("Find Bills SQL paging", () => {
       stillOwed: "18.00",
     });
     expect(debt.departedAt).not.toBeNull();
-    expect(debt.tables).toHaveLength(1);
-    expect((await list({ q: debt.tables[0]! })).rows.map((r) => r.workingOrderId)).toEqual([
+    expect(debt.tables).toEqual([]);
+    expect((await list({ q: debt.invoiceNumber! })).rows.map((r) => r.workingOrderId)).toEqual([
       party.tabId,
     ]);
   });

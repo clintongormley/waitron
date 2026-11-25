@@ -7,7 +7,7 @@ import {
   workingOrders,
   orderGroups,
   parties,
-  orderTableLabels,
+  readOrderPlaces,
 } from "@waitron/db";
 import {
   type KitchenAllergyBlock,
@@ -19,6 +19,7 @@ import {
   kitchenPresentationName,
   thousandthsToDecimal,
   classifyBand,
+  partyTablesName,
 } from "@waitron/shared";
 import { type SQL, sql, eq, and } from "drizzle-orm";
 import { readFormerNumbers } from "./former-numbers.js";
@@ -33,7 +34,6 @@ import {
   type QueueGroup,
   queueGroupColumns,
   readQueueSubItems,
-  readBillTableShortNames,
   queueGroup,
   optional,
   minutesSince,
@@ -129,10 +129,7 @@ export async function readPassRows(
       groupPartyRevision: sql<number | null>`(
         select own.revision from parties own where own.id = ${orderGroups.partyId}
       )`,
-      // Not exposed; read only to name the order's table (`orderTableLabels`).
       deliveryTableId: workingOrders.deliveryTableId,
-      deliveryTableLabel: workingOrders.deliveryTableLabel,
-      label: workingOrders.label,
     })
     .from(ticketItems)
     .innerJoin(workingOrderLines, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
@@ -174,22 +171,12 @@ export async function readPassRows(
     tx,
     rows.map((row) => row.orderId),
   );
-  const bills = [...new Map(rows.map((row) => [row.orderId, row])).values()];
-  const tableLabels = await orderTableLabels(
-    tx,
-    bills.map((row) => ({
-      id: row.orderId,
-      partyId: row.partyId,
-      deliveryTableId: row.deliveryTableId,
-      deliveryTableLabel: row.deliveryTableLabel,
-      label: row.label,
-    })),
-  );
-  const tableShortNames = withShortNames
-    ? await readBillTableShortNames(tx, bills)
-    : new Map<string, string[]>();
+  const places = await readOrderPlaces(tx, [...new Set(rows.map((row) => row.orderId))], {
+    withShortNames,
+  });
 
   return rows.map((row) => {
+    const place = places.get(row.orderId)!;
     const thresholds: StationThresholds = {
       warmAfterMinutes: row.warmAfterMinutes,
       overdueAfterMinutes: row.overdueAfterMinutes,
@@ -264,8 +251,13 @@ export async function readPassRows(
       lineNo: row.lineNo,
       order: {
         orderNumber: row.orderNumber,
-        ...optional("tableLabel", tableLabels.get(row.orderId) ?? undefined),
-        ...optional("tableShortNames", tableShortNames.get(row.orderId)),
+        ...optional(
+          "tableLabel",
+          place.names.length === 0 ? undefined : partyTablesName(place.names),
+        ),
+        ...optional("tableShortNames", place.tableShortNames),
+        ...optional("billName", place.billName ?? undefined),
+        ...(place.counter ? { counter: true as const } : {}),
         kitchenNote: kitchenNotes.get(row.orderId)!.note,
         ...optional("formerNumbers", former.get(row.orderId)),
         dining: row.dining,

@@ -32,8 +32,8 @@ export interface HeldRelocationOpenDetail {
 
 /** A table bill is named by its place in the table screen's bill wording ({@link billName}). */
 function heldLabel(order: HeldOrderSummary): string | null {
-  const place = orderLabel(order);
-  return order.partyId === null || place === null ? place : billName(place, order);
+  if (order.partyId === null) return orderLabel(order);
+  return order.tableLabel === undefined ? order.billName : billName(order.tableLabel, order);
 }
 
 @customElement("till-held-orders")

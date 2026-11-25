@@ -894,6 +894,7 @@ describe("move a bill to the counter (A82)", () => {
     const held = await listHeldOrders({ db: v.db });
     expect(held.find((h) => h.id === second)).toMatchObject({
       label: "Ann",
+      counter: true,
       counts: expect.objectContaining({ ordered: 1 }),
     });
     expect(await zoneOf(v, second)).toBe(v.counter.zoneId);
@@ -909,6 +910,10 @@ describe("move a bill to the counter (A82)", () => {
     await move(second, { counter: { zoneId: null } });
 
     expect((await billRow(v, second)).label).toBe("Table C5");
+    expect((await listHeldOrders({ db: v.db })).find((bill) => bill.id === second)).toMatchObject({
+      label: null,
+      counter: true,
+    });
     expect(await zoneOf(v, second)).toBe(v.tables.zoneId);
   });
 });

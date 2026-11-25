@@ -2,7 +2,7 @@ import "./errors.js";
 import {
   workingOrders,
   workingOrderLines,
-  orderTableLabels,
+  readOrderPlaces,
   billSetMenuCopies,
   products,
 } from "@waitron/db";
@@ -18,6 +18,7 @@ import {
   type DietaryLabel,
   rawCentsToDecimal,
   AppError,
+  partyTablesName,
   thousandthsToDecimal,
   centsToDecimal,
 } from "@waitron/shared";
@@ -50,12 +51,10 @@ export interface HeldOrderSummary {
   items: OrderPreviewItem[];
   id: string;
   orderNumber: number;
-  /**
-   * The operator-supplied label; on an open bill moved to the counter, the party's display
-   * name the server set; null when neither gave one.
-   */
+  /** The typed name of an order without a party. */
   label: string | null;
   tableLabel?: string;
+  counter?: true;
   counts: OrderStateCounts;
   /** The GROSS total the operator saw; the filed `sale_lines.line_total` is net. */
   total: string;
@@ -87,6 +86,7 @@ export interface HeldOrder {
   kitchenNote: KitchenNoteSnapshot;
   orderNumber: number;
   label: string | null;
+  billName?: string;
   /** What an edit of this copy sends back, so a save from a copy since changed is refused. */
   revision: number;
   /** The receipt language staff chose for the order; absent while the venue's own applies. */
@@ -171,10 +171,7 @@ export async function listHeldOrders(deps: WorkingOrderDeps): Promise<HeldOrderS
       .select({
         id: workingOrders.id,
         orderNumber: workingOrders.orderNumber,
-        label: workingOrders.label,
         partyId: workingOrders.partyId,
-        deliveryTableId: workingOrders.deliveryTableId,
-        deliveryTableLabel: workingOrders.deliveryTableLabel,
         // Cast to text for `rawCentsToDecimal`; see its doc comment.
         total: sql<string>`cast(coalesce(sum(${workingOrderLines.lineTotal}), 0) as text)`,
         openedAt: workingOrders.openedAt,
@@ -186,16 +183,12 @@ export async function listHeldOrders(deps: WorkingOrderDeps): Promise<HeldOrderS
       .groupBy(
         workingOrders.id,
         workingOrders.orderNumber,
-        workingOrders.label,
         workingOrders.partyId,
         workingOrders.openedAt,
       )
       .orderBy(workingOrders.orderNumber);
-    const tableLabels = await orderTableLabels(
-      tx,
-      rows.map((row) => ({ ...row, label: null })),
-    );
     const ids = rows.map((row) => row.id);
+    const places = await readOrderPlaces(tx, ids);
     const { received, holding } = await readPaymentsByBill(tx, ids);
     const signals = await readBillSignals(tx, ids, Date.now());
     const former = await readFormerNumbers(tx, ids);
@@ -209,17 +202,22 @@ export async function listHeldOrders(deps: WorkingOrderDeps): Promise<HeldOrderS
     return rows.map((row) => {
       const total = rawCentsToDecimal(row.total);
       const identity = identities.get(row.id);
+      const place = places.get(row.id)!;
       return {
         id: row.id,
         orderNumber: row.orderNumber,
-        label: row.label,
+        label: row.partyId === null ? place.billName : null,
         partyId: row.partyId,
         billNumber: identity?.number ?? null,
         billName: identity?.name ?? null,
         counts: counts.get(row.id)!,
         openedAt: row.openedAt,
         zoneId: zones.get(row.id) ?? null,
-        ...optional("tableLabel", tableLabels.get(row.id) ?? undefined),
+        ...optional(
+          "tableLabel",
+          place.names.length === 0 ? undefined : partyTablesName(place.names),
+        ),
+        ...(place.counter ? { counter: true as const } : {}),
         items: items.get(row.id)!,
         total,
         outstanding: outstandingOf(total, received.get(row.id)),
@@ -254,6 +252,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
         serviceMode: workingOrders.serviceMode,
         orderNumber: workingOrders.orderNumber,
         label: workingOrders.label,
+        billName: workingOrders.billName,
         revision: workingOrders.revision,
         receiptLocale: workingOrders.receiptLocale,
         invoiceType: workingOrders.invoiceType,
@@ -441,6 +440,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
             },
       orderNumber: order.orderNumber,
       label: order.label,
+      ...optional("billName", order.billName ?? undefined),
       revision: order.revision,
       kitchenNote,
       ...(order.receiptLocale === null ? {} : { receiptLanguage: order.receiptLocale }),

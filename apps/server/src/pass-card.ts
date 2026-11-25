@@ -54,6 +54,8 @@ export interface PassRow {
   order: {
     orderNumber: number;
     tableLabel?: string;
+    counter?: true;
+    billName?: string;
     /** Read for a board only: {@link PassCard.orders}' `tableShortNames`. */
     tableShortNames?: string[];
     kitchenNote: string | null;
@@ -92,9 +94,9 @@ export interface PassCard {
     orderId: string;
     orderNumber: number;
     tableLabel?: string;
-    /** The short names, else labels, of the tables the bill is at: its party's, or the table a
-     *  counter order is delivered to, or the name kept once that table was let go; absent when
-     *  none. */
+    counter?: true;
+    billName?: string;
+    /** The short names of the order's current tables. */
     tableShortNames?: string[];
     kitchenNote: string | null;
     formerNumbers?: number[];

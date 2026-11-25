@@ -27,6 +27,7 @@ import {
   compareDecimal,
   decimal,
   formatMoney,
+  PARTY_NAME_MAX,
   subtractDecimal,
   type Decimal,
 } from "@waitron/shared";
@@ -352,6 +353,7 @@ export class TillTenderPay extends LitElement {
   @state() private view: View = "idle";
   @state() private entry = "";
   @state() private labelEntry = "";
+  readonly #labelFeedback = new FormFeedback(this);
   @state() private refEntry = "";
   @state() private outside: OutsideCardDetails = {};
   @state() private selected?: TillProduct;
@@ -648,6 +650,7 @@ export class TillTenderPay extends LitElement {
   #startHolding(): void {
     if (!this.isConnected || this.#parkDisabled || this.view !== "idle") return;
     this.labelEntry = "";
+    this.#labelFeedback.reset();
     this.view = "holding";
     void this.updateComplete.then(async () => {
       const dialog = this.shadowRoot!.querySelector("wt-dialog")!;
@@ -805,8 +808,10 @@ export class TillTenderPay extends LitElement {
    * idle. */
   #park(): void {
     if (!this.isConnected || this.#parkDisabled || this.view !== "holding") return;
-    this.#finishEntry();
     const label = this.labelEntry.trim();
+    this.#labelFeedback.press();
+    if (label.length > PARTY_NAME_MAX) return;
+    this.#finishEntry();
     this.view = "idle";
     this.labelEntry = "";
     this.dispatchEvent(
@@ -1415,6 +1420,8 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderHolding() {
+    const invalidName =
+      this.#labelFeedback.attempted && this.labelEntry.trim().length > PARTY_NAME_MAX;
     return html`
       <wt-dialog
         ${trackDialog()}
@@ -1439,15 +1446,17 @@ export class TillTenderPay extends LitElement {
                   class="label-input"
                   .value=${live(this.labelEntry)}
                   .label=${t("held.label_prompt")}
+                  .error=${invalidName ? t("table.name_too_long") : ""}
                   ?disabled=${this.busy}
                   @wt-change=${(event: Event) => this.#onLabelChange(event)}
                 ></wt-input>
+                ${invalidName ? formMessage(t("form.fix_fields")) : nothing}
                 <div slot="footer" class="actions">
                   <wt-button
                     class="park"
                     variant="primary"
                     size="lg"
-                    ?disabled=${this.#parkDisabled}
+                    ?disabled=${this.#parkDisabled || invalidName}
                     @click=${() => this.#park()}
                   >
                     ${t("action.hold")}

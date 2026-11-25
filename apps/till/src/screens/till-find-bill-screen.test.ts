@@ -103,6 +103,25 @@ it("a declined Back leaves the page active and able to search again", async () =
     expect(requests(fetcher).at(-1)?.searchParams.get("q")).toBe("after Stay"),
   );
 });
+it("names a ready order at the counter with its typed name", async () => {
+  const source = findBillApi(async (url) =>
+    json(
+      url.pathname.endsWith("options")
+        ? billOptions
+        : listPage([
+            billRow({
+              partyId: null,
+              partyName: null,
+              tables: [],
+              label: "Riley",
+              state: "paid-not-handed-over",
+            }),
+          ]),
+    ),
+  );
+  const { el } = await mount(source);
+  expect((await ready(el)).shadowRoot!.textContent).toContain(`${t("station.counter")} · Riley`);
+});
 it("opens Bills newest first using the shared table and renders all original server values without local sorting", async () => {
   const source = findBillApi(async (url) =>
     json(

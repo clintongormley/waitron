@@ -9,7 +9,7 @@ import {
   nowIso,
   readVenueClock,
   workingOrderLines,
-  workingOrders,
+  readOrderPlaces,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { KitchenAllergyBlock, KitchenNoteChange, StationNoticeDish } from "@waitron/module";
@@ -17,6 +17,7 @@ import { kitchenPresentationName } from "@waitron/menu";
 import { businessDayStart } from "@waitron/reporting";
 import {
   AppError,
+  partyTablesName,
   decimalToThousandths,
   thousandthsToDecimal,
   type Decimal,
@@ -131,10 +132,7 @@ export async function recordKitchenNotices(
     throw new AppError("kitchen_notice.invalid", { field: "allergyBlock" });
   }
   if (items.length === 0) return;
-  const [order] = await tx
-    .select({ orderNumber: workingOrders.orderNumber, label: workingOrders.label })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, orderId));
+  const order = (await readOrderPlaces(tx, [orderId])).get(orderId);
   if (order === undefined) {
     throw new AppError("working_order.not_found", { workingOrderId: orderId });
   }
@@ -194,7 +192,8 @@ export async function recordKitchenNotices(
     fromNumber === null || fromNumber === order.orderNumber
       ? `#${order.orderNumber}`
       : `#${fromNumber} → #${order.orderNumber}`;
-  const orderLabel = order.label === null ? number : `${number} · ${order.label}`;
+  const label = order.names.length > 0 ? partyTablesName(order.names) : order.billName;
+  const orderLabel = label === null ? number : `${number} · ${label}`;
   const createdAt = noteEvent?.createdAt ?? nowIso();
   await insertInChunks(
     tx,

@@ -248,8 +248,8 @@ export interface DailyClose {
 export interface OverdueOrder {
   orderId: string;
   orderNumber: number;
-  /** The order's table, as `orderTableLabels` (`@waitron/db`) names it. */
   tableLabel: string | null;
+  counter?: true;
   stationName: string;
   ageMinutes: number;
   /** Only ever `"overdue"` or `"forgotten"` — a `"fresh"`/`"warm"` order never reaches this list. */

@@ -48,6 +48,12 @@ import {
   type InvoiceDeliveryStatus,
   type PrinterOffer,
 } from "./invoice-delivery-status.js";
+import {
+  LIVE_ORDER_PLACE,
+  liveTableNames,
+  ordersWordRank,
+  readOrderListPlaces,
+} from "./orders-list-places.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { LineNutrition } from "./line-nutrition.js";
 import "./errors.js";
@@ -179,7 +185,7 @@ function rowsSql(filter: OrderListFilter): SQL {
          cast(s.total as text) as sale_total,
          cast((select coalesce(sum(l.line_total), 0) from working_order_lines l where l.working_order_id = wo.id) as text) as lines_total,
          ${CORRECTIONS} as corrections, null as operator_id, null as operator_name,
-         ${BILL_STATUS} as status, ud.recorded_at as departed_at, p.table_names as party_table_names
+         ${BILL_STATUS} as status, ud.recorded_at as departed_at, p.table_names as party_table_names, wo.bill_name, wo.delivery_table_id
   from working_orders wo
   left join parties p on p.id = wo.party_id
   left join dining_tables dd on dd.id = wo.delivery_table_id
@@ -195,7 +201,7 @@ function rowsSql(filter: OrderListFilter): SQL {
          s.counterparty_tax_id,
          cast(s.total as text), '0', ${CORRECTIONS}, s.operator_id, op.display_name,
          case when sv.id is not null then 'voided' when ss.id is not null then 'paid' else 'waiting_for_payment' end,
-         null, null
+         null, null, null, null
   from sales s
   join invoice_series sr on sr.id = s.series_id
   left join sale_settlements ss on ss.sale_id = s.id
@@ -214,6 +220,8 @@ interface RawRow extends Record<string, unknown> {
   party_id: string | null;
   party_name: string | null;
   delivery_label: string | null;
+  bill_name: string | null;
+  delivery_table_id: string | null;
   sale_id: string | null;
   series_code: string | null;
   invoice_number: number | null;
@@ -293,10 +301,11 @@ function staffClause(staffId: string): SQL {
 }
 
 function tableClause(table: string): SQL {
-  return sql`(r.delivery_label = ${table} collate nocase
+  return sql`case when ${LIVE_ORDER_PLACE} then exists (select 1 from json_each(${liveTableNames})
+    where value = ${table} collate nocase) else (r.delivery_label = ${table} collate nocase
     or exists (select 1 from party_tables pt join dining_tables dt on dt.id = pt.table_id
                where pt.party_id = r.party_id and dt.label = ${table} collate nocase)
-    or exists (select 1 from json_each(r.party_table_names) n where n.value = ${table} collate nocase))`;
+    or exists (select 1 from json_each(r.party_table_names) n where n.value = ${table} collate nocase)) end`;
 }
 
 function filterClauses(filter: OrderListFilter): SQL[] {
@@ -389,11 +398,7 @@ export function ordersPageSql(filter: OrderListFilter): SQL {
   return sql`
     with base as (${rowsSql(filter)}),
     ranked as materialized (
-      select r.*, waitron_search_rank(${words}, r.party_name, r.delivery_label,
-        coalesce(
-          (select group_concat(dt.label, ' ') from party_tables pt join dining_tables dt on dt.id = pt.table_id
-           where pt.party_id = r.party_id),
-          (select group_concat(n.value, ' ') from json_each(r.party_table_names) n))) as search_rank
+      select r.*, ${ordersWordRank(words)} as search_rank
       from base r where ${whereOf(clauses)}
     )
     select r.*, ${CREDITED} as credited
@@ -428,10 +433,7 @@ export function ordersTableSql(
     words === undefined
       ? sql`with r as (${rowsSql(filter)}), matched as (select r.* from r where ${whereOf(filterClauses(filter))})`
       : sql`with base as (${rowsSql(filter)}), ranked as materialized (
-        select r.*, waitron_search_rank(${words}, r.party_name, r.delivery_label,
-          coalesce(
-            (select group_concat(dt.label, ' ') from party_tables pt join dining_tables dt on dt.id = pt.table_id where pt.party_id = r.party_id),
-            (select group_concat(n.value, ' ') from json_each(r.party_table_names) n))) as search_rank
+        select r.*, ${ordersWordRank(words)} as search_rank
         from base r where ${whereOf(filterClauses(filter))}
       ), matched as (select r.* from ranked r where r.search_rank is not null)`;
   if (count) return sql`${matches} select count(*) as total from matched`;
@@ -479,15 +481,15 @@ async function hydrateOrderRows(tx: Transaction, raw: RawRow[]): Promise<OrderRo
     tx,
     raw.flatMap((row) => row.sale_id ?? []),
   );
-  const tables = await readPartyTables(tx, [
-    ...new Set(
-      bills.flatMap((row) => (row.party_table_names === null ? (row.party_id ?? []) : [])),
+  const live = (row: RawRow) => row.status === "open" || row.status === "waiting_for_payment";
+  const places = await readOrderListPlaces(
+    tx,
+    bills.flatMap((row) =>
+      live(row) || (row.party_id !== null && row.party_table_names === null)
+        ? [{ id: row.id, live: live(row) }]
+        : [],
     ),
-  ]);
-  for (const row of bills) {
-    if (row.party_table_names !== null)
-      tables.set(row.party_id!, JSON.parse(row.party_table_names) as string[]);
-  }
+  );
   const staff = await readStaff(
     tx,
     bills.map((row) => row.id),
@@ -505,21 +507,25 @@ async function hydrateOrderRows(tx: Transaction, raw: RawRow[]): Promise<OrderRo
             ? issued.get(row.id)!.amountDue
             : outstandingOf(total, received.get(row.id));
     }
+    const currentPlace = row.kind === "bill" && live(row);
     return {
       kind: row.kind,
       id: row.id,
       at: row.at,
       orderNumber: row.order_number,
-      label: row.label,
+      label: currentPlace ? row.bill_name : row.label,
       partyId: row.party_id,
-      partyName: row.party_name,
-      tables:
-        row.party_id !== null
-          ? (tables.get(row.party_id) ?? [])
-          : row.delivery_label !== null
-            ? [row.delivery_label]
-            : [],
-      counter: row.party_id === null && row.delivery_label === null && row.kind === "bill",
+      partyName: currentPlace ? places.get(row.id)!.partyName : row.party_name,
+      tables: currentPlace
+        ? places.get(row.id)!.names
+        : row.party_table_names !== null
+          ? (JSON.parse(row.party_table_names) as string[])
+          : (places.get(row.id)?.names ??
+            (row.delivery_label === null ? [] : [row.delivery_label])),
+      counter:
+        row.party_id === null &&
+        row.kind === "bill" &&
+        (currentPlace ? row.delivery_table_id === null : row.delivery_label === null),
       saleId: row.sale_id,
       invoiceNumber:
         row.sale_id === null ? null : formatInvoiceNumber(row.series_code!, row.invoice_number!),
