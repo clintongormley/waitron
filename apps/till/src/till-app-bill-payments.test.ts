@@ -622,7 +622,10 @@ describe("till-app: the three ways to pay part of a bill", () => {
     const search = form.shadowRoot!.querySelector("wt-address-lookup")!;
     expect(form.shadowRoot!.querySelector('wt-input[name="address"]')).not.toBeNull();
     expect(search.hidden).toBe(true);
-    expect(addressLookup).toHaveBeenCalledExactlyOnceWith({ kind: "available" });
+    expect(addressLookup).toHaveBeenCalledExactlyOnceWith(
+      { kind: "available" },
+      expect.any(AbortSignal),
+    );
     answer({ available: true });
     await vi.waitFor(() => expect(search.hidden).toBe(false));
   });

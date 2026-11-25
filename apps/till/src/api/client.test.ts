@@ -84,13 +84,15 @@ describe("TillApi", () => {
     const api = new TillApi("", fetchStub);
     api.namePersonFrom(() => ({ personId: "cashier" }), vi.fn());
 
-    expect(await api.addressLookup({ kind: "available" })).toEqual({ available: true });
+    const signal = new AbortController().signal;
+    expect(await api.addressLookup({ kind: "available" }, signal)).toEqual({ available: true });
     expect(fetchStub).toHaveBeenCalledExactlyOnceWith(
       "/api/address-lookup",
       expect.objectContaining({
         method: "POST",
         credentials: "include",
         body: JSON.stringify({ kind: "available" }),
+        signal,
         headers: { "content-type": "application/json", [PERSON_HEADER]: "cashier" },
       }),
     );

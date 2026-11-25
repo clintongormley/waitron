@@ -159,7 +159,9 @@ asks the notice to say:
 - why you use the data, and the legal basis for each use;
 - where a use rests on legitimate interests, the interests you or someone else pursue;
 - who receives the data, or which kinds of recipient, if anyone does, such as the Tax Agency for
-  invoices, your email provider and the provider of your backup storage. If your staff can
+  invoices, your email provider and the provider of your backup storage. If staff search for an
+  invoice customer's address, list Waitron Cloud and Google Maps as recipients of the search
+  text and the selected suggestion. If your staff can
   send problem reports, include Waitron as a recipient through Waitron Cloud. It receives the
   error codes, their sources, the Waitron version, the report time and basic installation details
   linked to your box’s Cloud registration, plus any description an administrator sends. If you turn

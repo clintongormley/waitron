@@ -68,4 +68,15 @@ describe.each(["light", "dark"] as const)("wt-address-lookup a11y (%s theme)", (
     await el.updateComplete;
     await expectNoA11yViolations(host);
   });
+
+  test.each(["search available", "search unavailable"] as const)(
+    "an address credit with %s",
+    async (state) => {
+      const el = await mountWith(theme);
+      if (state === "search unavailable") el.provider = undefined;
+      el.appliedAttribution = "Google Maps";
+      await el.updateComplete;
+      await expectNoA11yViolations(host);
+    },
+  );
 });

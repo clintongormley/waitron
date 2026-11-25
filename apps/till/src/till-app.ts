@@ -2491,8 +2491,8 @@ export class TillApp extends LitElement {
 
   /** The HTTP face of the till. Defaults to a real same-origin client; a test injects a stub. */
   @property({ attribute: false }) api: TillApi = new TillApi();
-  readonly #lookupInvoiceAddress: TillApi["addressLookup"] = (operation) =>
-    this.api.addressLookup(operation);
+  readonly #lookupInvoiceAddress: TillApi["addressLookup"] = (operation, signal) =>
+    this.api.addressLookup(operation, signal);
 
   /** Set by `main.ts`; undefined in tests that inject none. */
   @property({ attribute: false }) router?: ServerRouter;

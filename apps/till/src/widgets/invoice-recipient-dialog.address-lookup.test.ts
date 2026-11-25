@@ -1,4 +1,4 @@
-import { countryNameFor, getCountryPack } from "@waitron/country-packs";
+import { countryNameFor, getCountryPack, type CloudAddressOperation } from "@waitron/country-packs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type {
@@ -7,6 +7,7 @@ import type {
   WtAddressLookup,
 } from "@waitron/ui/src/components/wt-address-lookup.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { TillApi } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import "./invoice-recipient-dialog.js";
@@ -109,10 +110,13 @@ describe("the invoice recipient dialog's address search", () => {
     const availability = new Promise<{ available: boolean }>((resolve) => {
       answer = resolve;
     });
-    const lookupAddress = vi.fn(() => availability);
+    const lookupAddress = vi.fn(
+      (_operation: CloudAddressOperation, _signal?: AbortSignal) => availability,
+    );
     const el = await mountDialog({ lookupAddress });
-    await vi.waitFor(() => expect(lookupAddress).toHaveBeenCalledWith({ kind: "available" }));
+    await vi.waitFor(() => expect(lookupAddress.mock.calls[0]?.[0]).toEqual({ kind: "available" }));
     await chooseCountry(el, "FR");
+    expect(lookupAddress.mock.calls[0]?.[1]?.aborted).toBe(true);
     answer({ available: true });
     await flush(el);
     expect(lookup(el)!.hidden).toBe(true);
@@ -120,10 +124,57 @@ describe("the invoice recipient dialog's address search", () => {
     expect(value(el, "address")).toBe("2 Rue de Rivoli");
   });
 
+  it("frees the box connection when a newer search starts and before Save sends the invoice", async () => {
+    const pending: (AbortSignal | null | undefined)[] = [];
+    const api = new TillApi("", async (_url, options) => {
+      const operation = JSON.parse(options?.body as string) as CloudAddressOperation;
+      if (operation.kind === "available") return Response.json({ available: true });
+      const signal = options?.signal;
+      pending.push(signal);
+      return new Promise((_, reject) => {
+        signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+      });
+    });
+    const el = await mountDialog({ lookupAddress: api.addressLookup.bind(api) });
+    const search = lookup(el)!;
+    await vi.waitFor(() => expect(search.hidden).toBe(false));
+    await fill(el, "taxId", "12345678Z");
+    await fill(el, "legalName", "Ana García");
+    await choose(el, MADRID);
+    const input = search.shadowRoot!.querySelector("input")!;
+    search.delay = 0;
+    input.focus();
+    for (const [index, query] of ["Calle Mayor", "Calle Mayor 1"].entries()) {
+      input.value = query;
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await vi.waitFor(() => expect(pending).toHaveLength(index + 1));
+    }
+    expect(pending[0]?.aborted).toBe(true);
+    expect(pending[1]?.aborted).toBe(false);
+    const abortedWhenSaving: (boolean | undefined)[] = [];
+    el.addEventListener("invoice-recipient-confirm", () =>
+      abortedWhenSaving.push(pending[1]?.aborted),
+    );
+    save(el).click();
+    await el.updateComplete;
+    expect(abortedWhenSaving).toEqual([true]);
+  });
+
+  it("removes the Google Maps credit when the country changes", async () => {
+    const el = await mountDialog();
+    await choose(el, { ...MADRID, attribution: "Google Maps" });
+    const credit = () => lookup(el)!.shadowRoot!.querySelector('[part="attribution"]')?.textContent;
+    expect(credit()).toBe("Google Maps");
+    await chooseCountry(el, "FR");
+    expect(credit()).toBeUndefined();
+  });
+
   it("leaves manual entry available when the box refuses the availability check", async () => {
     const lookupAddress = vi.fn().mockRejectedValue({ code: "cloud.unavailable" });
     const el = await mountDialog({ lookupAddress });
-    await vi.waitFor(() => expect(lookupAddress).toHaveBeenCalledWith({ kind: "available" }));
+    await vi.waitFor(() =>
+      expect(lookupAddress).toHaveBeenCalledWith({ kind: "available" }, expect.any(AbortSignal)),
+    );
     await flush(el);
     expect(lookup(el)!.hidden).toBe(true);
     await fill(el, "address", "Calle Mía 5");

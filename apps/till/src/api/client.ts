@@ -2990,8 +2990,8 @@ export class TillApi {
     );
   }
 
-  addressLookup(operation: CloudAddressOperation): Promise<CloudAddressReply> {
-    return this.#request("/api/address-lookup", "POST", operation);
+  addressLookup(operation: CloudAddressOperation, signal: AbortSignal): Promise<CloudAddressReply> {
+    return this.#request("/api/address-lookup", "POST", operation, signal);
   }
 
   /** A challenge for "Check the time": the box's time, valid for a few seconds, and `keepOffered`

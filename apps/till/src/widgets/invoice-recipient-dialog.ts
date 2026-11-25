@@ -137,10 +137,11 @@ export class TillInvoiceRecipientDialog extends LitElement {
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
   @property({ attribute: false }) lookupAddress?: (
     operation: CloudAddressOperation,
+    signal: AbortSignal,
   ) => Promise<CloudAddressReply>;
   @state() private cloudProvider?: AddressLookupProvider;
   @state() private addressAttribution?: string;
-  #addressRequest?: object;
+  #addressRequest?: { controller: AbortController; isAvailability: boolean };
   /** Offers a simplified invoice instead, for a bill already saved as a full one. */
   @property({ attribute: false }) offerSimplified = false;
   @state() private attempted = false;
@@ -271,6 +272,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
         if (scope?.isDirty()) return false;
       }
       this.active = false;
+      this.#cancelAddressSearch();
       this.addressAttribution = undefined;
       scope?.dispose();
       this.#scope = undefined;
@@ -348,7 +350,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
           return canonical(a) === canonical(b);
         }),
       restore: (value) => {
-        this.#cancelAddressSearch();
+        this.#cancelAddressSearch({ keepAvailability: true });
         this.addressAttribution = undefined;
         Object.assign(this, value);
       },
@@ -360,21 +362,32 @@ export class TillInvoiceRecipientDialog extends LitElement {
   }
 
   #readAddressProvider(): void {
+    this.#cancelAddressSearch();
     this.cloudProvider = undefined;
-    this.#addressRequest = undefined;
-    if (this.countryCode !== "ES" || this.addressProvider || !this.lookupAddress) return;
+    const lookup = this.lookupAddress;
+    if (this.countryCode !== "ES" || this.addressProvider || !lookup) return;
 
-    const request = (this.#addressRequest = {});
-    void cloudAddressProvider(this.lookupAddress, () => (currentLocale() === "es-ES" ? "es" : "en"))
+    const availability = new AbortController();
+    this.#addressRequest = { controller: availability, isAvailability: true };
+    void cloudAddressProvider(
+      (operation) => {
+        if (operation.kind === "available") return lookup(operation, availability.signal);
+        this.#addressRequest?.controller.abort();
+        const controller = new AbortController();
+        this.#addressRequest = { controller, isAvailability: false };
+        return lookup(operation, controller.signal);
+      },
+      () => (currentLocale() === "es-ES" ? "es" : "en"),
+    )
       .then((provider) => {
-        if (this.active && this.#addressRequest === request) this.cloudProvider = provider;
+        if (this.active && !availability.signal.aborted) this.cloudProvider = provider;
       })
       .catch(() => {});
   }
 
   override disconnectedCallback(): void {
     this.#opening = {};
-    this.#addressRequest = undefined;
+    this.#cancelAddressSearch();
     this.addressAttribution = undefined;
     this.#scope?.dispose();
     this.#scope = undefined;
@@ -496,6 +509,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
     event.stopPropagation();
     if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
     this.active = false;
+    this.#cancelAddressSearch();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.dispatchEvent(
@@ -512,8 +526,8 @@ export class TillInvoiceRecipientDialog extends LitElement {
     if (field === "identifierType")
       this.identifierType = event.detail.value as RecipientIdentifierType;
     else this[field] = event.detail.value;
-    if (SEARCH_FILLS.has(field)) {
-      this.#cancelAddressSearch();
+    if (SEARCH_FILLS.has(field) || field === "countryCode") {
+      this.#cancelAddressSearch({ keepAvailability: field !== "countryCode" });
       this.addressAttribution = undefined;
     }
     if (field === "countryCode") this.foreignAddressCountry = undefined;
@@ -523,9 +537,13 @@ export class TillInvoiceRecipientDialog extends LitElement {
       this.#edited("identifierCountryCode");
   }
 
-  /** So an address still on its way cannot overwrite what the person typed or saved. */
-  #cancelAddressSearch(): void {
-    this.shadowRoot!.querySelector<WtAddressLookup>("wt-address-lookup")?.cancelSearch();
+  /** Free the box connection as well as invalidating the answer. */
+  #cancelAddressSearch({ keepAvailability = false } = {}): void {
+    if (!(keepAvailability && this.#addressRequest?.isAvailability)) {
+      this.#addressRequest?.controller.abort();
+      this.#addressRequest = undefined;
+    }
+    this.shadowRoot?.querySelector<WtAddressLookup>("wt-address-lookup")?.cancelSearch();
   }
 
   #onAddressChosen(event: CustomEvent<AddressChosenDetail>): void {

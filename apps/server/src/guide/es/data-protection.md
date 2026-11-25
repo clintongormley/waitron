@@ -169,7 +169,9 @@ y los que tienen alergias. Para cada grupo, la ley pide que el aviso diga:
 - cuando un uso se basa en intereses legítimos, los intereses que persigues tú o un tercero;
 - quién recibe los datos, o qué categorías de destinatarios, si alguien los recibe, como la Agencia
   Tributaria para las facturas, tu proveedor de correo y el proveedor de tu almacenamiento de copias
-  de seguridad. Si tu personal puede enviar informes sobre problemas, incluye a Waitron como
+  de seguridad. Si el personal busca la dirección de un cliente para una factura, incluye a
+  Waitron Cloud y Google Maps como destinatarios del texto de la búsqueda y la sugerencia
+  seleccionada. Si tu personal puede enviar informes sobre problemas, incluye a Waitron como
   destinatario a través de Waitron Cloud. Recibe los códigos de error, sus orígenes, la versión de
   Waitron, la fecha del informe y datos básicos de la instalación vinculados al registro de tu
   servidor en Cloud, además de las descripciones que envíe un administrador. Si activas los
