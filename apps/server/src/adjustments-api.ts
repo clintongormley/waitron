@@ -269,7 +269,7 @@ export function mountAdjustmentsApi(
       const ask = parseAsk(id, personId, asObject(await readRawJsonBody<unknown>(c)));
       const preview = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, session, [{ orderId: id }]);
-        return previewAdjustment(tx, ask, deps.venueLocale);
+        return previewAdjustment(tx, deps.cfg, ask, deps.venueLocale);
       });
       return c.json(preview);
     }),

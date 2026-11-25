@@ -505,7 +505,7 @@ it.each(["comp", "discount_percent", "discount_amount"] as const)(
   async (action) => {
     const id = await bill();
     const args = await adjustmentArgs(id, 1, action);
-    await inTx(venue, (tx) => previewAdjustment(tx, args, venue.cfg.locale));
+    await inTx(venue, (tx) => previewAdjustment(tx, venue.cfg, args, venue.cfg.locale));
     await applyArgs(args);
     expect(
       await venue.db

@@ -54,6 +54,7 @@ import {
   type SpecVenue,
 } from "./testing/set-menu-spec-fixture.js";
 import { splitTable } from "./testing/table-action-fixture.js";
+import { insertTabRound, priceTabRound } from "./working-order-open.js";
 
 let spec: SpecVenue;
 let venue: PartyVenue;
@@ -210,7 +211,8 @@ async function adjust(billId: string, lineId: string | null, action: Action, how
 
 async function preview(billId: string, lineId: string | null, action: Action, how: How = {}) {
   const ask = await askFor(billId, lineId, action, how);
-  return inTx(venue, (tx) => previewAdjustment(tx, ask, venue.cfg.locale));
+  const { cfg = venue.cfg } = how;
+  return inTx(venue, (tx) => previewAdjustment(tx, cfg, ask, cfg.locale));
 }
 
 /** What the bill's adjustments recorded, oldest first. */
@@ -600,6 +602,30 @@ it("discounts a bill already over the simplified-invoice limit when it does not 
   expect(await total(tabId)).toBe(1700);
 });
 
+it("refuses in the preview, as the apply does, a discount that raises the bill over the simplified-invoice limit", async () => {
+  const { tabId } = await billOf(["Soup", "Hake"]);
+  const [hake] = await idsOf(tabId, "Hake");
+  const limited: How = { cfg: { ...venue.cfg, simplifiedInvoiceLimit: decimal("20.00") } };
+  const refusal = {
+    code: "sale.total_exceeds_simplified_limit",
+    params: { total: decimal("20.40"), limit: decimal("20.00") },
+  };
+
+  await expect(preview(tabId, hake!, percent(1000), limited)).rejects.toMatchObject(refusal);
+  await expect(adjust(tabId, hake!, percent(1000), limited)).rejects.toMatchObject(refusal);
+});
+
+it("previews a discount on a bill already over the simplified-invoice limit when it does not rise", async () => {
+  const { tabId } = await billOf(["Soup", "Soup", "Hake"]);
+  const loose = (await linesOf(tabId, "Soup")).find(({ setMenuRole }) => setMenuRole === null)!;
+  const limited: How = { cfg: { ...venue.cfg, simplifiedInvoiceLimit: decimal("10.00") } };
+
+  expect((await preview(tabId, loose.id, percent(5000), limited)).billTotal).toEqual({
+    before: "20.00",
+    after: "17.00",
+  });
+});
+
 it("takes a dish out of its Daily at its a la carte price though it carries an old list price", async () => {
   const { tabId } = await billOf(["Soup", "Hake"]);
   const [hake] = await idsOf(tabId, "Hake");
@@ -673,6 +699,7 @@ async function expectPreviewAsApplied(
   const { billTotal } = await inTx(venue, (tx) =>
     previewAdjustment(
       tx,
+      venue.cfg,
       action.action === "cancel" ? { ...ask, action: "cancel" } : ask,
       venue.cfg.locale,
     ),
@@ -737,7 +764,7 @@ it.each<
   ],
   ["a comped Soup of a Daily", ["Soup", "Hake"], theLast("Soup"), FREE, {}, 1400, 1400],
   [
-    "10% off one of two Hakes sent as one line beside a Soup",
+    "10% off one of two Hakes sent together, which the send stores as two rows, beside a Soup",
     ["Soup", { dish: "Hake", quantity: "2" }],
     theLast("Hake"),
     percent(1000),
@@ -777,6 +804,34 @@ it("previews the bill's total for a comped Soup with Bread, a row of two Hakes a
     }),
   ).toEqual({ before: 2800, after: 2000 });
 });
+
+/** A Soup sent, then `hakes` Hakes written as one stored line, as a send never stores them. */
+async function oneLineOfHakes(hakes: string) {
+  const bill = await billOf(["Soup"]);
+  await inTx(venue, async (tx) => {
+    const round = await priceTabRound(tx, venue.cfg, bill.tabId, [
+      { menuItemId: ordinary.Hake, quantity: hakes },
+    ]);
+    await insertTabRound(tx, venue.cfg, round, round.rows);
+  });
+  return bill;
+}
+
+it.each<[string, string, Action, string, number, number]>([
+  ["10% off one of a line of two Hakes beside a Soup", "2", percent(1000), "1", 3800, 2840],
+  ["0.01 off 2 of a line of three Hakes beside a Soup", "3", off("0.01"), "2", 5400, 4399],
+])(
+  "previews the bill's total as applying it leaves it, carving one stored line: %s",
+  async (_, hakes, action, quantity, before, after) => {
+    const { tabId } = await oneLineOfHakes(hakes);
+    const [line] = await linesOf(tabId, "Hake");
+    expect(line!.quantity).toBe(Number(hakes) * 1000);
+    expect(await expectPreviewAsApplied(tabId, line!.id, action, { quantity })).toEqual({
+      before,
+      after,
+    });
+  },
+);
 
 /** Soup and Hake with 10% off the Hake: Soup 6.00 and Hake 14.40 a la carte. */
 async function discountedHakeBill(release: "hold" | "fire" = "hold") {

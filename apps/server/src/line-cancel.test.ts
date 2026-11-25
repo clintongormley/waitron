@@ -435,6 +435,7 @@ describe("Cancel item service command", () => {
     const preview = await inTx(venue, (tx) =>
       previewAdjustment(
         tx,
+        venue.cfg,
         {
           orderId: order.billId,
           expectedRevision: ask.expectedBillRevision,

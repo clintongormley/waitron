@@ -288,9 +288,11 @@ export async function totalBeforeEdit(
  * without first becoming payable. */
 export async function refuseOrderOverSimplifiedLimit(
   tx: Transaction,
-  cfg: TradingContext,
+  cfg: Pick<TradingContext, "simplifiedInvoiceLimit">,
   workingOrderId: string,
   before: Decimal | null,
+  /** What an edit not yet written would leave; else the order's total as stored. */
+  after?: Decimal,
 ): Promise<void> {
   if (cfg.simplifiedInvoiceLimit === null) return;
   const [order] = await tx
@@ -298,9 +300,9 @@ export async function refuseOrderOverSimplifiedLimit(
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
   if (order?.invoiceType === "F1") return;
-  const after = await storedOrderTotal(tx, workingOrderId);
-  if (before !== null && compareDecimal(after, before) <= 0) return;
-  refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, after);
+  const total = after ?? (await storedOrderTotal(tx, workingOrderId));
+  if (before !== null && compareDecimal(total, before) <= 0) return;
+  refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, total);
 }
 /** {@link priceStoredOrder}, with the working-order line each gross line was priced from. */
 export async function readStoredOrder(

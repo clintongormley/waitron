@@ -85,7 +85,12 @@ import {
 import { bumpRevision, refusePaymentInFlight } from "./working-order-edit-state.js";
 import { billTotalOf } from "./adjustment-bill-total.js";
 import { atReleasedPrices, regroupAdjusted, releaseDishes } from "./set-menu-dish-release.js";
-import { assertTabOpen, readLockedLines, totalBeforeEdit } from "./stored-order-lines.js";
+import {
+  assertTabOpen,
+  readLockedLines,
+  refuseOrderOverSimplifiedLimit,
+  totalBeforeEdit,
+} from "./stored-order-lines.js";
 import {
   captureOrderEdit,
   type OrderAttendance,
@@ -172,6 +177,8 @@ export interface Plan {
   reason: AdjustmentReason;
   reasonName: string;
   maxBillComp: Decimal | null;
+  /** Every line of the bill as {@link readRows} read it, before any dish was released. */
+  rows: readonly Row[];
   /** The dish or the extra the action names; null on a bill-level discount. */
   line: Row | null;
   /** The part of the line covered, in thousandths; null on a bill-level discount. */
@@ -530,7 +537,8 @@ export async function planAdjustment(
   await refusePaymentInFlight(tx, [orderId]);
   await requireOrderBillEditor(tx, orderId, ask);
   const reason = await findAdjustmentReason(tx, ask.reasonId);
-  const { rows, released } = await atReleasedPrices(tx, ask, await readRows(tx, orderId));
+  const read = await readRows(tx, orderId);
+  const { rows, released } = await atReleasedPrices(tx, ask, read);
 
   let line: Row | null = null;
   let covered: number | null = null;
@@ -746,6 +754,7 @@ export async function planAdjustment(
     reason,
     reasonName: reasonNameIn(reason, actor.locale, venueLocale),
     maxBillComp,
+    rows: read,
     line,
     covered,
     removed,
@@ -883,9 +892,11 @@ function dishPrices(
   return dishes;
 }
 
-/** What the adjustment would do, writing nothing: the same plan {@link applyAdjustment} writes. */
+/** What the adjustment would do, writing nothing: the same plan {@link applyAdjustment} writes, and
+ * its refusal of a bill raised past the simplified-invoice limit. */
 export async function previewAdjustment(
   tx: Transaction,
+  cfg: Pick<TradingContext, "simplifiedInvoiceLimit">,
   ask: AdjustmentAsk,
   venueLocale: string,
 ): Promise<AdjustmentPreview> {
@@ -919,10 +930,19 @@ export async function previewAdjustment(
           })),
         }));
   const reduction = addDecimal(plan.reduction, centsToDecimal(regrouped));
+  const billTotal = await billTotalOf(
+    tx,
+    ask.orderId,
+    plan,
+    ask.action === "cancel" ? reduction : null,
+  );
+  if (ask.action !== "cancel") {
+    await refuseOrderOverSimplifiedLimit(tx, cfg, ask.orderId, billTotal.before, billTotal.after);
+  }
   return {
     reduction: money(reduction),
     nominalValue: money(plan.nominal),
-    billTotal: await billTotalOf(tx, ask.orderId, plan, ask.action === "cancel" ? reduction : null),
+    billTotal: { before: money(billTotal.before), after: money(billTotal.after) },
     needsApproval: plan.approval === null ? null : wireApproval(plan.approval),
     lines,
   };

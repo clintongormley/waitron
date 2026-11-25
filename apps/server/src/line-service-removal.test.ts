@@ -155,7 +155,8 @@ describe("off-bill cancellation beside charged service cancellation", () => {
       const before = await snapshot(order);
       await expect(
         inTx(venue, async (tx) => {
-          if (operation === "preview") await previewAdjustment(tx, args, venue.venueLocale);
+          if (operation === "preview")
+            await previewAdjustment(tx, venue.cfg, args, venue.venueLocale);
           else
             await applyAdjustment(
               tx,

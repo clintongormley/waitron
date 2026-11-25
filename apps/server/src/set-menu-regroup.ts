@@ -20,6 +20,7 @@ import type { MenuDocument, SetMenuGrouping, SetMenuGroupingInput } from "@waitr
 import { serveRecordedSetMenus } from "@waitron/venue-service";
 import {
   hasBillSetMenuLines,
+  isSetMenuBill,
   isSetMenuBillRow,
   readBillSetMenuVersions,
   setMenuLineDescriptions,
@@ -231,6 +232,13 @@ export async function regroupBills(
     }
   }
   return changed;
+}
+
+/** Whether {@link regroupBills} groups the bill over any set menu: a set-menu bill recording one. */
+export async function takesSetMenus(tx: Transaction, billId: string): Promise<boolean> {
+  return (
+    (await isSetMenuBill(tx, billId)) && (await readBillSetMenuVersions(tx, billId)).length > 0
+  );
 }
 
 /** An open bill's stored `set_menus_exact` and the copies it is grouped over; null when not open. */

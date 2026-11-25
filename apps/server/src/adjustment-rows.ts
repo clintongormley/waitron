@@ -38,6 +38,7 @@ export interface Row {
   quantity: number;
   priceQuantity: number;
   unit: number;
+  lineTotal: number;
   list: number | null;
   aLaCarte: number | null;
   unitPrecision: number | null;
@@ -84,6 +85,7 @@ export async function readRows(tx: Transaction, orderId: string): Promise<Row[]>
       quantity: workingOrderLines.quantity,
       priceQuantity: workingOrderLines.priceQuantity,
       unit: workingOrderLines.unitPriceGross,
+      lineTotal: workingOrderLines.lineTotal,
       list: workingOrderLines.listUnitPriceGross,
       aLaCarte: workingOrderLines.aLaCarteUnitPrice,
       unitPrecision: workingOrderLines.unitPrecision,

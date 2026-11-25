@@ -863,6 +863,23 @@ describe("till-app: a refused adjustment", () => {
     ).toBe(false);
   });
 
+  it("shows a preview refused for passing the simplified-invoice limit in its own words on the form", async () => {
+    const { el } = await mountApp({
+      previewAdjustment: vi.fn().mockRejectedValue({
+        code: "sale.total_exceeds_simplified_limit",
+        status: 409,
+        total: "20.40",
+        limit: "20.00",
+      }),
+    });
+    const order = await openTable4(el);
+    await previewComp(el, order);
+
+    expect(bottomMessage(el)).toBe(codeMessage("sale.total_exceeds_simplified_limit"));
+    expect(dialog(el)!.shadowRoot!.querySelector("[data-adjust-confirm]")).toBeNull();
+    expect(api.applyAdjustment).not.toHaveBeenCalled();
+  });
+
   it("goes back to the form with a refusal naming a field under that field", async () => {
     const { el } = await mountApp({
       previewAdjustment: vi

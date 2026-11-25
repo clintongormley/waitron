@@ -1412,6 +1412,7 @@ async function asked(billId: string, ask: Ask) {
   const preview = await inTx(venue, async (tx) =>
     previewAdjustment(
       tx,
+      venue.cfg,
       await argsFor(tx, billId, { ...ask, operatorId: venue.staffId }),
       venue.venueLocale,
     ),
@@ -2212,6 +2213,7 @@ async function steakOff(billId: string, amount: string) {
   const preview = await inTx(venue, async (tx) =>
     previewAdjustment(
       tx,
+      venue.cfg,
       await argsFor(
         tx,
         billId,
@@ -3487,7 +3489,7 @@ describe("the preview's bill total", () => {
         const full: Ask = { ...ask, ...(bound ? rowOf(ids) : { lineId: ids[0]! }) };
         const before = await totalOf(billId);
         const preview = await inTx(venue, async (tx) =>
-          previewAdjustment(tx, await argsFor(tx, billId, full), venue.venueLocale),
+          previewAdjustment(tx, venue.cfg, await argsFor(tx, billId, full), venue.venueLocale),
         );
         await adjust(billId, full);
         expect(await totalOf(billId), `bound ${bound}`).toBe(after);

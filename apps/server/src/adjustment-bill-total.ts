@@ -1,5 +1,4 @@
-import { eq } from "drizzle-orm";
-import { workingOrderLines, type Transaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import {
   aLaCarteLineTotal,
   type GroupingLine,
@@ -11,10 +10,9 @@ import {
   subtractDecimal,
   type Decimal,
 } from "@waitron/shared";
-import { familyAt, gross, readRows, type Row } from "./adjustment-rows.js";
+import { familyAt, gross, type Row } from "./adjustment-rows.js";
 import type { Plan } from "./adjustments-apply.js";
-import { money } from "./bill-allocation.js";
-import { totalAfterAdjusting } from "./set-menu-regroup.js";
+import { takesSetMenus, totalAfterAdjusting } from "./set-menu-regroup.js";
 
 /** A row as a comp's or discount's writes leave it; `lineTotal` null keeps the stored one. */
 interface Part {
@@ -28,26 +26,31 @@ interface Part {
   released: boolean;
 }
 
+type Planned = Pick<Plan, "rows" | "released" | "stamped" | "carve" | "writes" | "reduction">;
+
 /**
  * The bill's total now and once the plan is applied: less `cancelDrop` (a cancel's whole drop), or,
- * for a comp or discount, its rows as {@link applyAdjustment} writes them, grouped again.
+ * for a comp or discount, its rows as {@link applyAdjustment} writes them, grouped again; on a bill
+ * with no set menus to group, less the plan's reduction.
  */
 export async function billTotalOf(
   tx: Transaction,
   orderId: string,
-  plan: Pick<Plan, "released" | "stamped" | "carve" | "writes">,
+  plan: Planned,
   cancelDrop: Decimal | null,
-): Promise<{ before: string; after: string }> {
-  const totals = await tx
-    .select({ lineTotal: workingOrderLines.lineTotal })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, orderId));
-  const before = centsToDecimal(totals.reduce((sum, { lineTotal }) => sum + lineTotal, 0));
-  const after =
-    cancelDrop === null
-      ? centsToDecimal(await totalAfterAdjusting(tx, orderId, await rowsAfter(tx, orderId, plan)))
-      : subtractDecimal(before, cancelDrop);
-  return { before: money(before), after: money(after) };
+): Promise<{ before: Decimal; after: Decimal }> {
+  const before = centsToDecimal(plan.rows.reduce((sum, { lineTotal }) => sum + lineTotal, 0));
+  if (cancelDrop !== null) return { before, after: subtractDecimal(before, cancelDrop) };
+  if (
+    !plan.rows.some(({ setMenuRole }) => setMenuRole !== null) &&
+    !(await takesSetMenus(tx, orderId))
+  ) {
+    return { before, after: subtractDecimal(before, plan.reduction) };
+  }
+  return {
+    before,
+    after: centsToDecimal(await totalAfterAdjusting(tx, orderId, rowsAfter(plan))),
+  };
 }
 
 /**
@@ -55,12 +58,8 @@ export async function billTotalOf(
  * their list price, the carved part split off its dish and extras, then each change's prices, its
  * second price split off. A split-off row's id is `<its row's id>#<part>`.
  */
-async function rowsAfter(
-  tx: Transaction,
-  orderId: string,
-  plan: Pick<Plan, "released" | "stamped" | "carve" | "writes">,
-): Promise<(line: GroupingLine) => GroupingLine[]> {
-  const rows = await readRows(tx, orderId);
+function rowsAfter(plan: Planned): (line: GroupingLine) => GroupingLine[] {
+  const { rows } = plan;
   const byId = new Map(rows.map((row) => [row.id, row]));
   const released = new Set(plan.released);
   const touched = new Set([...plan.writes.map(({ row }) => row.id), ...plan.stamped]);

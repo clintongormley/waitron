@@ -154,7 +154,7 @@ function preview(billId: string, ask: Ask) {
     const { submissionId, approver, ...args } = await argsFor(tx, billId, ask);
     void submissionId;
     void approver;
-    return previewAdjustment(tx, args, venue.venueLocale);
+    return previewAdjustment(tx, venue.cfg, args, venue.venueLocale);
   });
 }
 
@@ -3536,7 +3536,7 @@ describe("what an adjustment reads (B11d)", () => {
       void submissionId;
       void approver;
       const probe = counting(tx);
-      await previewAdjustment(probe.tx, args, venue.venueLocale);
+      await previewAdjustment(probe.tx, venue.cfg, args, venue.venueLocale);
       return probe.counts;
     });
   }

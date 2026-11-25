@@ -692,7 +692,12 @@ function adjustmentCancel(billId: string, lineIds: string[], operatorId = venue.
 /** What the till is shown before {@link adjustmentCancel} makes the same cancel. */
 function previewCancel(billId: string, lineIds: string[], operatorId = venue.operator.personId) {
   return inTx(venue, async (tx) =>
-    previewAdjustment(tx, await cancelAsk(tx, billId, lineIds, operatorId), venue.cfg.locale),
+    previewAdjustment(
+      tx,
+      venue.cfg,
+      await cancelAsk(tx, billId, lineIds, operatorId),
+      venue.cfg.locale,
+    ),
   );
 }
 
@@ -844,7 +849,7 @@ it("shows and records the bill's whole drop when a cancel takes part of a line (
   const before = await saved(bill.tabId);
   // One Hake's own 16.00, and 8.00 more as the Hake left joins Soup in a Daily.
   const preview = await inTx(venue, async (tx) =>
-    previewAdjustment(tx, await ask(tx), venue.cfg.locale),
+    previewAdjustment(tx, venue.cfg, await ask(tx), venue.cfg.locale),
   );
   expect(preview.reduction).toBe("24.00");
   expect(await saved(bill.tabId)).toEqual(before);
