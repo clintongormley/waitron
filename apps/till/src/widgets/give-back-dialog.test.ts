@@ -1388,6 +1388,60 @@ describe("sending", () => {
       expect(Object.values(sent(api, 0).submissionIds)).not.toContain(id);
   });
 
+  it("sends no rest when the window is taken away while Check again reads the card company's answer", async () => {
+    const api = fakeGiveBackApi();
+    withRest(api);
+    let release!: () => void;
+    api.getTenderRefund.mockImplementationOnce(
+      () => new Promise((resolve) => (release = () => resolve({ state: "completed" }))),
+    );
+    const el = await press(api, "card-1");
+    await vi.waitFor(() => expect(root(el).querySelector("[data-check-again]")).not.toBeNull());
+    root(el).querySelector<HTMLElement>("[data-check-again]")!.click();
+    await vi.waitFor(() => expect(api.getTenderRefund).toHaveBeenCalledOnce());
+    el.remove();
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(api.giveBack).toHaveBeenCalledOnce();
+  });
+
+  it("asks no approver when the window is taken away while it reads who may approve", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce({
+      code: "authorization.not_permitted",
+      permission: "sale.rectify",
+      status: 403,
+    });
+    let release!: () => void;
+    api.listApprovers.mockImplementationOnce(
+      () =>
+        new Promise(
+          (resolve) => (release = () => resolve([{ personId: "boss", displayName: "Boss" }])),
+        ),
+    );
+    const el = await press(api);
+    await vi.waitFor(() => expect(api.listApprovers).toHaveBeenCalledOnce());
+    el.remove();
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.updateComplete;
+    expect(approval(el)).toBeNull();
+    expect(api.giveBack).toHaveBeenCalledOnce();
+    expect(new GiveBackSession(SCOPE, api).read("sale-1")?.sent).toBeTruthy();
+  });
+
+  it("says to close and open the window again when a press finds money back already under way", async () => {
+    const api = fakeGiveBackApi();
+    api.giveBack.mockRejectedValueOnce({ code: "invoice_correction.already_open", status: 409 });
+    const el = await press(api);
+    await vi.waitFor(() =>
+      expect(bottom(el)).toBe(codeMessage("invoice_correction.already_open", "en")),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(api.giveBack).toHaveBeenCalledOnce();
+    expect(root(el).querySelector("[data-outcome]")).toBeNull();
+  });
+
   it("drops the rest when the card company did not make the first refund", async () => {
     const api = fakeGiveBackApi();
     withRest(api);
