@@ -8,7 +8,7 @@ const waitPageHeaders = {
   "clock confirmation": "X-Waitron-Waiting",
   "standing down": "X-Waitron-Standing-Down",
 } as const;
-export type WaitPage = keyof typeof waitPageHeaders;
+export type WaitPage = keyof typeof waitPageHeaders | "Primary";
 type Scenario = "reconnect" | "retire" | WaitPage;
 
 export const probeOfflineNavigation: BrowserCommand<
@@ -26,6 +26,11 @@ export const probeOfflineNavigation: BrowserCommand<
     if (url.pathname === "/till/offline-worker.js") {
       response.writeHead(script ? 200 : 404, { "Content-Type": "text/javascript" });
       response.end(script);
+      return;
+    }
+    if (state === "Primary" && url.pathname !== "/primary") {
+      const port = (server.address() as AddressInfo).port;
+      response.writeHead(302, { Location: `http://localhost:${port}/primary` }).end();
       return;
     }
     if (url.pathname === "/till/tabs/redirect") {
@@ -90,7 +95,7 @@ export const probeOfflineNavigation: BrowserCommand<
       const sameDocument = (await subject.locator("body").getAttribute("data-original")) === "yes";
       await subject.close();
       const reopened = await browser.newPage();
-      await reopened.goto(entry);
+      await reopened.goto(entry, { timeout: 8_000 });
       const registrations = await reopened.evaluate(
         async () => (await navigator.serviceWorker.getRegistrations()).length,
       );
@@ -107,7 +112,7 @@ export const probeOfflineNavigation: BrowserCommand<
     if (scenario !== "reconnect") {
       state = scenario;
       await subject.getByRole("heading", { name: scenario }).waitFor();
-      return { sameUrl: subject.url() === entry };
+      return { path: new URL(subject.url()).pathname, hostname: new URL(subject.url()).hostname };
     }
     const heading = await subject.locator("h1").textContent();
     const paragraphs = await subject.locator("main > p").allTextContents();

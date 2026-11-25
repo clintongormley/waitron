@@ -72,11 +72,16 @@ it("retires the worker without reloading the open till", async () => {
   });
 }, 60_000);
 
-it.each(["clock confirmation", "standing down"] as const)(
-  "opens the box's %s page from the reconnect page",
-  async (scenario) => {
+it.each([
+  ["clock confirmation", "/till/", "127.0.0.1"],
+  ["standing down", "/till/", "127.0.0.1"],
+  ["Primary", "/primary", "localhost"],
+] as const)(
+  "opens %s from the reconnect page",
+  async (scenario, path, hostname) => {
     expect(await commands.probeOfflineNavigation(worker, retired, "/till/", scenario)).toEqual({
-      sameUrl: true,
+      path,
+      hostname,
     });
   },
   60_000,
