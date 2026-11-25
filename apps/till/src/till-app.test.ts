@@ -1,3 +1,4 @@
+import { deferred } from "../test/clock-app.js";
 import { liveReadFixture } from "../test/live-connection.js";
 import { balanceOf, diskFullNotice, pollDiskNotice } from "../test/bill-pay-app.js";
 import { equipmentItem, roleOf } from "../test/pay-equipment-fixtures.js";
@@ -12050,9 +12051,9 @@ describe("till-app", () => {
       "keeps %s advice for %s visible during the disk stop",
       async (advice, method, refusal) => {
         vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-        onTestFinished(() => vi.useRealTimers());
+        onTestFinished(() => void vi.useRealTimers());
         const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
-        const { promise, reject } = Promise.withResolvers<never>();
+        const { promise, reject } = deferred<never>();
         const sentDuringStop = advice === "sale.charged_disk_full";
         const send = vi
           .fn()
@@ -13209,7 +13210,7 @@ describe("till-app", () => {
       async (destination) => {
         const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
         vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-        onTestFinished(() => vi.useRealTimers());
+        onTestFinished(() => void vi.useRealTimers());
         const { el } = await mountApp({
           getTill: vi.fn().mockResolvedValue({
             ...till,
@@ -15006,7 +15007,7 @@ describe("till-app", () => {
 
     it("collect single-flight: a second collect-order while the first is pending collects EXACTLY ONCE", async () => {
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-      onTestFinished(() => vi.useRealTimers());
+      onTestFinished(() => void vi.useRealTimers());
       const collectOrder = vi.fn(() => new Promise<TillSaleResult>(() => {}));
       const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
       const { el } = await mountApp({

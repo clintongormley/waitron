@@ -1,3 +1,4 @@
+import { deferred } from "./testing/backup-settings-evidence-fixture.js";
 import { withStaffPages } from "./testing/staff-page-fixture.js";
 import { profileAction, profileListRoot } from "./testing/profile-table.js";
 import { accessRoleChoices } from "./testing/access-role-fixture.js";
@@ -1690,7 +1691,7 @@ describe("dashboard-app", () => {
 
   it("keeps the disk warning above a product editor that loads after it", async () => {
     history.replaceState(null, "", "/products/product/p1");
-    const { promise, resolve } = Promise.withResolvers<typeof productEditorValue>();
+    const { promise, resolve } = deferred<typeof productEditorValue>();
     const { el, editor } = await mountOnMenu({
       getDiskStop: vi.fn().mockResolvedValue({ stopped: true }),
       getProductEditor: vi.fn(() => promise),
@@ -1698,7 +1699,6 @@ describe("dashboard-app", () => {
     const warning = () => el.shadowRoot!.querySelector("wt-stop-screen");
     await expect.poll(() => warning()?.shadowRoot?.querySelector("dialog:modal")).toBeTruthy();
     expect(editor()?.open).not.toBe(true);
-
     resolve(productEditorValue);
     await expect.poll(() => editor()?.shadowRoot?.querySelector("wt-modal")?.open).toBe(true);
     expect(el.shadowRoot!.elementFromPoint(innerWidth / 2, innerHeight / 2)?.localName).toBe(

@@ -1,3 +1,4 @@
+import { deferred } from "../test/clock-app.js";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
 import { TillApi as RealTillApi } from "./api/client.js";
 import { ServerRouter, withServerTarget } from "./api/server-router.js";
@@ -4455,17 +4456,16 @@ describe("till-app: a change refused on a bill that holds money", () => {
 
   it("keeps the disk warning above a refund opened after reading another bill", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-    onTestFinished(() => vi.useRealTimers());
-    const equipment = { roles: [], notices: [] };
-    const getDeviceEquipment = vi.fn().mockResolvedValue(equipment);
+    onTestFinished(() => void vi.useRealTimers());
+    const getDeviceEquipment = vi.fn().mockResolvedValue({ roles: [], notices: [] });
     const { el, order } = await openHolding({ getDeviceEquipment });
     const lines = vi.mocked(api.getTabLines);
     const last = await lines.mock.results.at(-1)!.value;
-    const { promise, resolve } = Promise.withResolvers<typeof last>();
+    const { promise, resolve } = deferred<typeof last>();
     lines.mockReturnValueOnce(promise);
     emit(order, "refund-excess", { billId: "wo-9", excess: "20.00" });
     await vi.waitFor(() => expect(lines).toHaveBeenLastCalledWith("wo-9"));
-    getDeviceEquipment.mockResolvedValue({ ...equipment, notices: [diskFullNotice] });
+    getDeviceEquipment.mockResolvedValue({ roles: [], notices: [diskFullNotice] });
     await pollDiskNotice(el);
     const warning = el.shadowRoot!.querySelector("wt-stop-screen")!;
     expect(warning.shadowRoot?.querySelector("dialog:modal")).toBeTruthy();
@@ -6248,7 +6248,7 @@ describe("till-app: a bill payment on the card reader", () => {
     );
     const getDeviceEquipment = vi.fn().mockResolvedValue(equipment);
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-    onTestFinished(() => vi.useRealTimers());
+    onTestFinished(() => void vi.useRealTimers());
     const el = await takeOnReader(
       takeBillPayment,
       {
@@ -9558,7 +9558,7 @@ it("offers whole payment on a presented bill that already has an invoice", async
 
 it("a handheld opens the remaining bill payment after a short presented-bill capture", async () => {
   vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
-  onTestFinished(() => vi.useRealTimers());
+  onTestFinished(() => void vi.useRealTimers());
   const balance = balanceOf({
     status: "placed",
     received: "110.00",
@@ -9567,7 +9567,7 @@ it("a handheld opens the remaining bill payment after a short presented-bill cap
   });
   const equipment = equipmentWith(equipmentItem("r2", "Reader 2", { provider: "sumup" }));
   const getDeviceEquipment = vi.fn().mockResolvedValue(equipment);
-  const { promise, resolve } = Promise.withResolvers<{
+  const { promise, resolve } = deferred<{
     outcome: "partial";
     balance: BillBalance;
   }>();
