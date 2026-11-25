@@ -136,11 +136,14 @@ function aLaCarteUpdate(line: GroupingLine): GroupingDishUpdate | null {
     id: line.id,
     ...A_LA_CARTE,
     unitPriceGross: line.aLaCarteUnitPrice,
-    lineTotal: decimalToCents(
-      grossOf(centsToDecimal(line.aLaCarteUnitPrice), thousandthsToDecimal(line.quantity)),
-    ),
+    lineTotal: aLaCarteLineTotal(line.aLaCarteUnitPrice, line.quantity),
     listUnitPriceGross: null,
   };
+}
+
+/** A dish's line total at its a la carte price, in cents, for `quantity` thousandths of it. */
+export function aLaCarteLineTotal(aLaCarteUnitPrice: number, quantity: number): number {
+  return decimalToCents(grossOf(centsToDecimal(aLaCarteUnitPrice), thousandthsToDecimal(quantity)));
 }
 
 function copyKey(copies: readonly GroupingCopy[], row: GroupingLine): string {

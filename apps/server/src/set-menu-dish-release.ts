@@ -1,13 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import { workingOrderLines, type Transaction } from "@waitron/db";
-import { frozenLinesOf } from "@waitron/orders-sales/set-menu-grouping-plan.js";
-import {
-  centsToDecimal,
-  decimalToCents,
-  grossOf,
-  thousandthsToDecimal,
-  type Decimal,
-} from "@waitron/shared";
+import { aLaCarteLineTotal, frozenLinesOf } from "@waitron/orders-sales/set-menu-grouping-plan.js";
+import type { Decimal } from "@waitron/shared";
 import type { Row } from "./adjustment-rows.js";
 import type { AdjustmentAsk } from "./adjustments-apply.js";
 import { assertBillInvariant } from "./bill-payments.js";
@@ -15,45 +9,6 @@ import { frozenLineIdSources } from "./set-menu-freeze.js";
 import { regroupBills } from "./set-menu-regroup.js";
 import { refuseOrderOverSimplifiedLimit } from "./stored-order-lines.js";
 import type { TradingContext } from "./trading-context.js";
-
-/** The dishes among `dishIds` that sit in a set menu that is not frozen: out of a frozen one they
- * would leave its charge behind (D31). */
-export async function releasableDishIds(
-  tx: Transaction,
-  orderId: string,
-  dishIds: readonly string[],
-): Promise<Set<string>> {
-  const lines = await tx
-    .select({
-      id: workingOrderLines.id,
-      parentLineId: workingOrderLines.parentLineId,
-      setMenuLineId: workingOrderLines.setMenuLineId,
-      listUnitPriceGross: workingOrderLines.listUnitPriceGross,
-      unitPriceGross: workingOrderLines.unitPriceGross,
-      aLaCarte: workingOrderLines.aLaCarteUnitPrice,
-    })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, orderId));
-  const frozen = frozenLinesOf(
-    lines,
-    await frozenLineIdSources(
-      tx,
-      lines.map(({ id }) => id),
-    ),
-  );
-  const asked = new Set(dishIds);
-  return new Set(
-    lines
-      .filter(
-        ({ id, setMenuLineId, aLaCarte }) =>
-          asked.has(id) &&
-          setMenuLineId !== null &&
-          !frozen.has(setMenuLineId) &&
-          aLaCarte !== null,
-      )
-      .map(({ id }) => id),
-  );
-}
 
 /**
  * A bill's rows as a comp or discount on a dish prices them (D31): each dish it acts on that can
@@ -72,10 +27,24 @@ export async function atReleasedPrices(
   const dishes = rows.filter(({ id }) => named.has(id));
   const placed = dishes.filter(({ setMenuLineId }) => setMenuLineId !== null);
   if (placed.length === 0) return unchanged;
-  const released = await releasableDishIds(
-    tx,
-    ask.orderId,
-    placed.map(({ id }) => id),
+  const frozen = frozenLinesOf(
+    rows.map(({ id, parentLineId, setMenuLineId, list, unit }) => ({
+      id,
+      parentLineId,
+      setMenuLineId,
+      listUnitPriceGross: list,
+      unitPriceGross: unit,
+    })),
+    await frozenLineIdSources(
+      tx,
+      rows.map(({ id }) => id),
+    ),
+  );
+  // Out of a frozen set menu a dish would leave its charge behind.
+  const released = new Set(
+    placed
+      .filter(({ setMenuLineId, aLaCarte }) => !frozen.has(setMenuLineId!) && aLaCarte !== null)
+      .map(({ id }) => id),
   );
   if (released.size < placed.length) return unchanged;
   const priced = (row: Row): Row =>
@@ -104,9 +73,7 @@ export async function releaseDishes(tx: Transaction, dishIds: readonly string[])
         setMenuPlace: null,
         listUnitPriceGross: null,
         unitPriceGross: aLaCarte!,
-        lineTotal: decimalToCents(
-          grossOf(centsToDecimal(aLaCarte!), thousandthsToDecimal(quantity)),
-        ),
+        lineTotal: aLaCarteLineTotal(aLaCarte!, quantity),
       })
       .where(eq(workingOrderLines.id, id));
   }

@@ -567,6 +567,36 @@ it("refuses a discount that raises the bill over the simplified-invoice limit", 
   expect(await total(tabId)).toBe(2040);
 });
 
+it("discounts a bill already over the simplified-invoice limit when it does not rise", async () => {
+  const { tabId } = await billOf(["Soup", "Soup", "Hake"]);
+  const loose = (await linesOf(tabId, "Soup")).find(({ setMenuRole }) => setMenuRole === null)!;
+
+  await adjust(tabId, loose.id, percent(5000), {
+    cfg: { ...venue.cfg, simplifiedInvoiceLimit: decimal("10.00") },
+  });
+
+  expect(await total(tabId)).toBe(1700);
+});
+
+it("takes a dish out of its Daily at its a la carte price though it carries an old list price", async () => {
+  const { tabId } = await billOf(["Soup", "Hake"]);
+  const [hake] = await idsOf(tabId, "Hake");
+  await inTx(venue, (tx) =>
+    tx
+      .update(workingOrderLines)
+      .set({ listUnitPriceGross: 0 })
+      .where(eq(workingOrderLines.id, hake!)),
+  );
+
+  await adjust(tabId, hake!, FREE);
+
+  expect(await shape(tabId)).toEqual([
+    { what: "Soup", price: 600, list: null, in: null },
+    { what: "Hake", price: 0, list: 1600, in: null },
+  ]);
+  expect(await recorded(tabId)).toEqual([{ before: 1600, after: 0, reduction: 1600 }]);
+});
+
 it("still takes nothing off a dish of a comped Daily", async () => {
   const { tabId } = await billOf(["Soup", "Hake"]);
   const [daily] = await menuIds(tabId);

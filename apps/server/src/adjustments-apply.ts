@@ -192,7 +192,8 @@ interface Plan {
   /** On a row, every line of each stand-in line the action prices, taken or not: each gets its list
    * price, as one grouped line does before part of it is carved off (plan D32). */
   stamped: string[];
-  /** The dishes among `writes` that leave their set menus, read at their a la carte price (D31). */
+  /** The dishes among `writes` read at their a la carte price and written out of their set menus
+   * (D31); one the action takes nothing off can be grouped straight back in. */
   released: string[];
   /** On a row, the split one grouped line's second price would record (plan D33). */
   rowSplits: AdjustmentSplit[];
