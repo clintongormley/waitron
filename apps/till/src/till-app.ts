@@ -24091,8 +24091,6 @@ export class TillApp extends LitElement {
     this.#openBillRefunding(open, payment, suggested);
   }
 
-  /** Refund on a payment that paid an advance closes the Pay window and opens Give money back on
-   * the advance's own ticket, before the bill has an invoice or once that invoice took it off. */
   async #openAdvanceTicket(open: BillPaying, saleId: string): Promise<void> {
     if (this.#billPayingNow(open.id) === null) return;
     const origin = this.drill;

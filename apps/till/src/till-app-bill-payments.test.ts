@@ -9776,6 +9776,7 @@ describe("till-app: Refund on a payment that has its own ticket", () => {
       expect(el.shadowRoot!.querySelector("till-give-back-dialog")).not.toBeNull(),
     );
     expect(api.getTransactionReceipt).toHaveBeenCalledWith("advance-sale", expect.anything());
+    expect(api.getRefundableTenders).toHaveBeenCalledWith("advance-sale", {});
     expect(api.readGiveBack).toHaveBeenCalledWith("advance-sale", {});
     expect(el.shadowRoot!.querySelector("till-give-back-dialog")!.saleId).toBe("advance-sale");
     expect(dialog(el)).toBeNull();
