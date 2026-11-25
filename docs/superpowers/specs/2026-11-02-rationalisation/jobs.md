@@ -318,6 +318,9 @@ records the existing startup catch-up, clock gate, retired mirror-session except
 command step's available close times and the watcher's 30-day measurement clearance. Those
 dated corrections supersede the older table and measurement wording below.
 
+**2026-11-25, A1592 b:** The disabled command-answer cleanup was removed because manual till
+retries have no expiry. See [the retention decision](../../../backlog/architecture.md#command-answers-stay-available-for-till-retries).
+
 | Step | Deletes | Decided in |
 | --- | --- | --- |
 | Sign-in challenges | Expired `sign_in_challenges` rows | README U10; `tables-people.md` |

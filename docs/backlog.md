@@ -1403,8 +1403,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A1308 closeout.** The 174 tables comprise 144 of the 145 planned tables, 24 later feature
   tables and six retained by recorded decisions. A1325 retired the planned `daily_closes` table.
   The audit found no missed removals. A1323 and A586 own the two conditional removals.
-  Open work is the A1306 history rewrite, a physical power-cut test for the till before go-live,
-  and removal of the disabled command-answer cleanup.
+  Open work is the A1306 history rewrite and a physical power-cut test for the till before go-live.
   [Detail](backlog/architecture.md#a1308-rationalise-the-tables-background-jobs-environment-variables-and-files)
 
 - **`drawer_opens`: decide the remaining UPDATE/DELETE restriction (A805 follow-up).**

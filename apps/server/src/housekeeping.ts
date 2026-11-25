@@ -18,11 +18,9 @@ import type { Logger } from "./logger.js";
 import type { JobDefinition } from "./job-runner.js";
 
 export const HOUSEKEEPING_BATCH = 100;
-export const HOUSEKEEPING_SERVICE_COMMANDS = false;
 
 export interface HousekeepingStep {
-  readonly name: "sign_in_challenges" | "dashboard_sessions" | "media_blobs" | "service_commands";
-  readonly enabled: boolean;
+  readonly name: "sign_in_challenges" | "dashboard_sessions" | "media_blobs";
   deleteBatch(
     tx: Transaction,
     now: Date,
@@ -37,12 +35,10 @@ export interface HousekeepingStep {
 
 function deletionStep(
   name: HousekeepingStep["name"],
-  enabled: boolean,
   eligible: (now: Date) => SQL,
 ): HousekeepingStep {
   return {
     name,
-    enabled,
     async deleteBatch(tx, now, limit, after = 0) {
       const table = sql.identifier(name);
       const rows = await tx.all<{ rowid: number }>(sql`
@@ -59,31 +55,21 @@ function deletionStep(
 export const HOUSEKEEPING_STEPS: readonly HousekeepingStep[] = [
   deletionStep(
     "sign_in_challenges",
-    true,
     (now) => sql`
     expires_at <= ${now.toISOString()} or expires_at > ${new Date(now.getTime() + LONGEST_CHALLENGE_LIFETIME_MS).toISOString()}`,
   ),
   deletionStep(
     "dashboard_sessions",
-    true,
     (now) => sql`
     ended_at is not null or last_seen_at < ${new Date(now.getTime() - IDLE_TIMEOUT_MS).toISOString()}
       or last_seen_at > ${new Date(now.getTime() + IDLE_TIMEOUT_MS).toISOString()}`,
   ),
   deletionStep(
     "media_blobs",
-    true,
     () => sql`
     not exists (select 1 from media_images where original_hash = media_blobs.hash)
       and not exists (select 1 from media_images where source_hash = media_blobs.hash)`,
   ),
-  deletionStep("service_commands", HOUSEKEEPING_SERVICE_COMMANDS, (now) => {
-    const cutoff = new Date(now.getTime() - 86400000).toISOString();
-    return sql`(scope_kind = 'party' and exists (select 1 from parties p
-        where p.id = service_commands.scope_id and p.closed_at < ${cutoff}))
-      or (scope_kind = 'bill' and exists (select 1 from working_orders b
-        where b.id = service_commands.scope_id and b.settled_at < ${cutoff}))`;
-  }),
 ];
 
 async function clearStep(db: Database, step: HousekeepingStep, now: Date, signal: AbortSignal) {
@@ -197,15 +183,13 @@ export function housekeepingJob(deps: {
               if (!deps.clockUnconfirmed()) await clearOldActivityLog(deps.db, ctx.now, ctx.signal);
             },
           },
-          ...(deps.steps ?? HOUSEKEEPING_STEPS)
-            .filter((step) => step.enabled)
-            .map((step) => ({
-              name: step.name,
-              run: async () => {
-                if (step.name === "media_blobs" || !deps.clockUnconfirmed())
-                  await clearStep(deps.db, step, ctx.now, ctx.signal);
-              },
-            })),
+          ...(deps.steps ?? HOUSEKEEPING_STEPS).map((step) => ({
+            name: step.name,
+            run: async () => {
+              if (step.name === "media_blobs" || !deps.clockUnconfirmed())
+                await clearStep(deps.db, step, ctx.now, ctx.signal);
+            },
+          })),
         ];
         const failures: unknown[] = [];
         for (const step of runs) {

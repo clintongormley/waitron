@@ -165,6 +165,9 @@ only while a retry can arrive, so the daily tidy-up job (`jobs.md`) deletes reco
 party or bill closes (owner, 2026-11-04). That is a separate small job, and it waits until the longest
 possible till retry is confirmed (§8 M10).
 
+**2026-11-25, A1592 b:** The disabled command-answer cleanup was removed because manual till
+retries have no expiry. See [the retention decision](../../../backlog/architecture.md#command-answers-stay-available-for-till-retries).
+
 ### 1.9 `bill_payments` and 1.10 `bill_payment_lines`
 
 Keep both as they are, plus an index on `bill_payments.created_at` for attendance (`tables-people.md`;
