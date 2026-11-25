@@ -301,6 +301,17 @@ run blocks recovery. The controller ignores a successful `changes` job and the w
 checking for work already started. Rounding the planner’s share up can cross the queue threshold.
 [Controller overflow check](https://github.com/waitron-io/waitron-cloud/blob/b938005f99ce868486d5920203ca4b60c4ae582e/scripts/disposable-tests/ci-canary.mjs#L171-L262)
 
+On 25 November, the first ordinary PR run with the #4323 routing script read a 167-second-old
+observation with 10 of 12 server slots busy and no server jobs waiting. GitHub showed 20 running
+and 146 waiting. The inventory showed one server job and 147 hosted jobs. Planner job
+139170115400 (runner 39341) assigned all 45 eligible jobs to the servers, 43 beyond the two
+free slots it calculated. Fifteen got a disposable runner on attempt 1 while all three fixed
+GitHub jobs from the same batch were still unassigned. Two examples are `test-light-b`
+(job 139171598726, runner 39345) and `test-heavy (1)` (job 139171599081, runner 39344), both of
+which passed. This qualifies pickup beyond free slots. The observed checkout steps took up to
+43 seconds in the first wave, so this run supplies placement evidence only.
+[Run 45603920474, attempt 1](https://github.com/clintongormley/waitron/actions/runs/45603920474/attempts/1).
+
 Under the former whole-run rule, [44036225100](https://github.com/clintongormley/waitron/actions/runs/44036225100) and [44036195836](https://github.com/clintongormley/waitron/actions/runs/44036195836) chose hosted on 17 November from snapshots about 51 seconds old (server 2/13, hosted 0/20), then the server emptied while those placements persisted; the watcher kept the policy at 08:28 CET.
 
 Check the jobs' runner labels as well as the routing log. The server shards and their
