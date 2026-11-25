@@ -30,13 +30,13 @@ export async function cloudAddressProvider(
   const workflows = new Map<string, string>();
   const spain = getCountryPack("ES")!;
   return {
-    async suggest({ query, sessionToken }, signal) {
+    async suggest({ query, sessionToken }, ...options) {
       const workflowId = workflows.get(sessionToken) ?? makeBrowserUuid();
       workflows.set(sessionToken, workflowId);
       try {
         const { candidates } = await lookup(
           { kind: "suggest", workflowId, query, language: language() },
-          signal,
+          ...options,
         );
         return (candidates ?? []).map(({ text }) => ({
           id: text,
@@ -52,11 +52,14 @@ export async function cloudAddressProvider(
         throw error;
       }
     },
-    async resolve({ suggestionId, sessionToken }) {
+    async resolve({ suggestionId, sessionToken }, ...options) {
       const workflowId = workflows.get(sessionToken);
       if (!workflowId) throw new Error("No address search");
       workflows.delete(sessionToken);
-      const { fields } = await lookup({ kind: "validate", workflowId, selectedText: suggestionId });
+      const { fields } = await lookup(
+        { kind: "validate", workflowId, selectedText: suggestionId },
+        ...options,
+      );
       if (!fields?.addressLine1.trim() || !fields.postalCode.trim() || !fields.city.trim())
         throw new Error("Incomplete address fields");
       const area = findAdministrativeArea(spain, fields.province);

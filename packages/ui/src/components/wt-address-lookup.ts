@@ -32,10 +32,10 @@ export interface AddressLookupProvider {
     },
     signal?: AbortSignal,
   ): Promise<readonly AddressLookupSuggestion[]>;
-  resolve(input: {
-    readonly suggestionId: string;
-    readonly sessionToken: string;
-  }): Promise<AddressLookupResult>;
+  resolve(
+    input: { readonly suggestionId: string; readonly sessionToken: string },
+    signal?: AbortSignal,
+  ): Promise<AddressLookupResult>;
 }
 
 export interface AddressChosenDetail {
@@ -136,11 +136,11 @@ export class WtAddressLookup extends WtInput {
 
   #generation = 0;
   #query = "";
-  #lastAsked?: string;
+  #lastAsked?: { query: string; key: string };
   /** The generation of the chosen suggestion being resolved, which leaving the field keeps. */
   #resolving?: number;
   #timer?: ReturnType<typeof setTimeout>;
-  #suggestionRequest?: AbortController;
+  #request?: AbortController;
   #automaticSearches = 0;
   #session = sessionToken();
   private readonly listId = uniqueId("wt-address-lookup-list");
@@ -150,7 +150,6 @@ export class WtAddressLookup extends WtInput {
     super.willUpdate(changed);
     if (changed.has("message")) this.messageCurrent = true;
     const contextChanged = changed.has("provider") || changed.has("countryCode");
-    if (contextChanged) this.#lastAsked = undefined;
     if (
       contextChanged ||
       changed.has("disabled") ||
@@ -176,8 +175,9 @@ export class WtAddressLookup extends WtInput {
   /** Drops any pending ask and any answer still on its way. */
   #forget(): void {
     clearTimeout(this.#timer);
-    this.#suggestionRequest?.abort();
-    this.#suggestionRequest = undefined;
+    this.#request?.abort();
+    this.#request = undefined;
+    this.#lastAsked = undefined;
     this.#generation += 1;
   }
 
@@ -189,48 +189,52 @@ export class WtAddressLookup extends WtInput {
   protected override afterInput(): void {
     this.messageCurrent = false;
     this.resolveFailed = false;
+    this.activeIndex = -1;
     const query = streetQuery(this.value);
-    if (query !== this.#query) {
-      this.#query = query;
+    if (
+      this.#resolving === this.#generation ||
+      (this.#lastAsked && !query.startsWith(this.#lastAsked.query))
+    )
       this.cancelSearch();
-    }
+    this.#query = query;
+    clearTimeout(this.#timer);
     if (
       this.disabled ||
       this.readonly ||
       this.provider === undefined ||
-      query === this.#lastAsked ||
       this.#automaticSearches >= AUTOMATIC_SEARCH_LIMIT
     )
       return;
     const ignored = this.ignoredSearchWords?.map(foldForSearch) ?? [];
-    const words = foldForSearch(query).match(/[\p{L}\p{N}]+/gu) ?? [];
-    if (!words.some((word) => /\p{L}/u.test(word) && !ignored.includes(word))) return;
+    const words = (foldForSearch(query).match(/[\p{L}\p{N}]+/gu) ?? []).filter(
+      (word) => !ignored.includes(word),
+    );
+    const key = words.join(" ");
+    if (key === this.#lastAsked?.key || !words.some((word) => /\p{L}/u.test(word))) return;
 
-    clearTimeout(this.#timer);
-    const generation = this.#generation;
     const delay = TRAILING_WORD_BREAK.test(this.value) ? 0 : this.delay;
     this.#timer = setTimeout(() => {
-      this.#lastAsked = query;
+      this.cancelSearch();
+      this.#lastAsked = { query, key };
       this.#automaticSearches += 1;
-      void this.#ask(query, generation);
+      void this.#ask(query, this.#generation);
     }, delay);
   }
 
   async #ask(query: string, generation: number): Promise<void> {
     const provider = this.provider;
     if (provider === undefined) return;
-    const request = (this.#suggestionRequest = new AbortController());
+    const request = (this.#request = new AbortController());
     try {
       const found = await provider.suggest(
         { query, countryCode: this.countryCode, sessionToken: this.#session },
         request.signal,
       );
-      if (generation === this.#generation && query === streetQuery(this.value))
-        this.suggestions = found;
+      if (generation === this.#generation) this.suggestions = found;
     } catch {
       // A suggestion is optional while the person types the address.
     } finally {
-      if (this.#suggestionRequest === request) this.#suggestionRequest = undefined;
+      if (this.#request === request) this.#request = undefined;
     }
   }
 
@@ -243,14 +247,19 @@ export class WtAddressLookup extends WtInput {
     const session = this.#session;
     this.#close();
     this.#resolving = generation;
+    const request = (this.#request = new AbortController());
     let address: AddressLookupResult;
     try {
-      address = await provider.resolve({ suggestionId: suggestion.id, sessionToken: session });
+      address = await provider.resolve(
+        { suggestionId: suggestion.id, sessionToken: session },
+        request.signal,
+      );
     } catch {
       if (generation === this.#generation) this.resolveFailed = true;
       return;
     } finally {
       if (this.#resolving === generation) this.#resolving = undefined;
+      if (this.#request === request) this.#request = undefined;
     }
     if (generation !== this.#generation) return;
     this.#session = sessionToken();

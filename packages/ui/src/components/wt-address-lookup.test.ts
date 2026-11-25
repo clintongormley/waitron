@@ -150,6 +150,47 @@ test("waits for a word break or a one-second pause after typing", async () => {
   expect(options(el)).toHaveLength(2);
 });
 
+test("shows a search answer during continued typing and skips added joining words", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const queries: string[] = [];
+  const answers: ((suggestions: AddressLookupSuggestion[]) => void)[] = [];
+  const el = await mountLookup(
+    fakeProvider([], {
+      suggest: ({ query }) => {
+        queries.push(query);
+        return new Promise((resolve) => answers.push(resolve));
+      },
+    }),
+    false,
+    1000,
+  );
+  el.ignoredSearchWords = ["calle", "de", "la"];
+  type(el, "Calle de Nuestra ");
+  await vi.advanceTimersByTimeAsync(0);
+  type(el, "Calle de Nuestra Señ");
+  answers[0]!([MAYOR]);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(options(el)).toHaveLength(1);
+
+  type(el, "Calle de Nuestra Señora ");
+  await vi.advanceTimersByTimeAsync(0);
+  expect(options(el)).toHaveLength(0);
+  answers[1]!([MAYOR]);
+  await vi.advanceTimersByTimeAsync(0);
+  input(el).dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
+  await el.updateComplete;
+  expect(input(el).hasAttribute("aria-activedescendant")).toBe(true);
+  type(el, "Calle de Nuestra Señora de la ");
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(options(el)).toHaveLength(1);
+  expect(input(el).hasAttribute("aria-activedescendant")).toBe(false);
+  expect(queries).toEqual(["Calle de Nuestra", "Calle de Nuestra Señora"]);
+
+  type(el, "Calle de Nuestra Señora de la Paz 3");
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(queries.at(-1)).toBe("Calle de Nuestra Señora de la Paz 3");
+});
+
 test("the pause is one second unless set", () => {
   expect(document.createElement("wt-address-lookup").delay).toBe(1000);
 });
@@ -518,19 +559,26 @@ test("a resolve that throws at once says suggestions are unavailable", async () 
   expect(status(el)).toBe("Suggestions are not available.");
 });
 
-test("a resolve answer is dropped once a newer search began or the field left the page", async () => {
-  for (const after of ["typing", "removed"] as const) {
+test("a resolve answer is dropped when the street is edited or the field leaves the page", async () => {
+  for (const after of ["typing a new street", "typing a comma", "removed"] as const) {
     const answers: ((address: AddressLookupResult) => void)[] = [];
+    let pending: AbortSignal | undefined;
     const el = await mountLookup(
-      fakeProvider([MAYOR], { resolve: () => new Promise((resolve) => answers.push(resolve)) }),
+      fakeProvider([MAYOR], {
+        resolve: (_input, signal?: AbortSignal) => {
+          pending = signal;
+          return new Promise((resolve) => answers.push(resolve));
+        },
+      }),
     );
     const chosen = vi.fn();
     el.addEventListener("wt-address-chosen", chosen);
     type(el, "Calle Mayor");
     await settle(el);
     await userEvent.click(options(el)[0]!);
-    if (after === "typing") type(el, "Calle Real");
-    else el.remove();
+    if (after === "removed") el.remove();
+    else type(el, after === "typing a comma" ? "Calle Mayor," : "Calle Real");
+    expect(pending?.aborted, after).toBe(true);
     answers[0]!(RESOLVED);
     await settle(el);
     expect(chosen, after).not.toHaveBeenCalled();
@@ -738,7 +786,7 @@ test("cancelSearch drops a chosen suggestion still on its way and the open list,
   expect(chosen).not.toHaveBeenCalled();
   expect(input(el).value).toBe("Calle Mayor");
 
-  type(el, "Calle Real");
+  type(el, "Calle Mayor");
   await settle(el);
   expect(options(el)).toHaveLength(1);
   el.cancelSearch();

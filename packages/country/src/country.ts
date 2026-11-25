@@ -234,10 +234,10 @@ export interface AddressAutocompleteProvider {
     },
     signal?: AbortSignal,
   ): Promise<readonly AddressSuggestion[]>;
-  resolve(input: {
-    readonly suggestionId: string;
-    readonly sessionToken: string;
-  }): Promise<ResolvedAddress>;
+  resolve(
+    input: { readonly suggestionId: string; readonly sessionToken: string },
+    signal?: AbortSignal,
+  ): Promise<ResolvedAddress>;
 }
 
 function comparisonKey(value: string): string {

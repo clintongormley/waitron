@@ -130,7 +130,16 @@ describe("the venue screen's address search", () => {
     const street = lookup(el)!;
     street.delay = 0;
     const input = street.shadowRoot!.querySelector("input")!;
-    for (const text of ["PLAÇA ", "placa,", "C/ ", "Carrer de la ", "rúa ", "kalea ", "12 "]) {
+    for (const text of [
+      "PLAÇA ",
+      "placa,",
+      "C/ ",
+      "Carrer de la ",
+      "Pg. ",
+      "rúa ",
+      "kalea ",
+      "12 ",
+    ]) {
       await userEvent.fill(input, text);
       await new Promise((resolve) => setTimeout(resolve, 0));
     }

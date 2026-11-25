@@ -372,13 +372,13 @@ export class TillInvoiceRecipientDialog extends LitElement {
 
     const availability = (this.#availabilityRequest = new AbortController());
     void cloudAddressProvider(
-      (operation, suggestionSignal) => {
+      (operation, signal) => {
         if (operation.kind === "available") return lookup(operation, availability.signal);
         this.#addressRequest?.abort();
         const request = (this.#addressRequest = new AbortController());
         return lookup(
           operation,
-          suggestionSignal ? AbortSignal.any([request.signal, suggestionSignal]) : request.signal,
+          signal ? AbortSignal.any([request.signal, signal]) : request.signal,
         );
       },
       () => (currentLocale() === "es-ES" ? "es" : "en"),

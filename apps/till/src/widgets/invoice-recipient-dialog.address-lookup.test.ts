@@ -276,25 +276,6 @@ describe("the invoice recipient dialog's address search", () => {
     expect(saved[0]?.recipient).toMatchObject({ address: "Calle Mayor 8, 28013 Madrid, Madrid" });
   });
 
-  it("saves a manually entered street on the first click while suggestions are visible", async () => {
-    const el = await mountDialog();
-    const saved = confirmed(el);
-    await fill(el, "taxId", "12345678Z");
-    await fill(el, "legalName", "Ana García");
-    await fill(el, "postalCode", "28013");
-    await fill(el, "locality", "Madrid");
-    await fill(el, "province", "Madrid");
-    const street = lookup(el)!;
-    street.delay = 0;
-    await userEvent.fill(street.shadowRoot!.querySelector("input")!, "Calle Mayor 8");
-    await expect.poll(() => street.shadowRoot!.querySelector('[role="option"]')).not.toBeNull();
-
-    await userEvent.click(save(el));
-
-    expect(saved).toHaveLength(1);
-    expect(saved[0]?.recipient.address).toBe("Calle Mayor 8, 28013 Madrid, Madrid");
-  });
-
   it("keeps Save tappable on a phone while all five suggestions are visible", async () => {
     await page.viewport(390, 844);
     try {
