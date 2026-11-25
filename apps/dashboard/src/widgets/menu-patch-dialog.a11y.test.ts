@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import type { DashboardApi, LiveMenu } from "../api/client.js";
-import { setLocale } from "../i18n/t.js";
+import { productDeclarationValues } from "@waitron/menu/src/declaration-values.js";
+import type { DashboardApi, PatchDraftAnswer } from "../api/client.js";
+import { allergenName } from "../i18n/domain.js";
+import { fill, setLocale, t } from "../i18n/t.js";
 import {
   cleanupWidgets,
   documentProduct,
@@ -14,10 +16,19 @@ import {
 import "./menu-patch-dialog.js";
 import type { MenuPatchDialog } from "./menu-patch-dialog.js";
 
-const LIVE: LiveMenu = {
+const MILK = productDeclarationValues({
+  allergens: { milk: {} },
+  dietOverride: null,
+  dietaryDeclarations: [],
+});
+
+const LIVE: PatchDraftAnswer = {
   versionId: "v-3",
   number: 3,
+  revision: "r-1",
   since: "2026-10-27T09:00:00.000Z",
+  declarations: { "p-soup": MILK, "v-cup": MILK },
+  queued: [],
   document: menuDocument(
     [
       documentSection("sec-starters", "Starters", [
@@ -29,7 +40,7 @@ const LIVE: LiveMenu = {
   ),
 };
 
-const states = ["nothing picked", "form", "field error", "review", "refused"] as const;
+const states = ["nothing picked", "form", "field error", "review", "refused", "changed"] as const;
 
 const savedLanguages = currentContentLanguages();
 
@@ -79,7 +90,7 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
         editions: [],
       })),
       patchLiveMenu: vi.fn().mockRejectedValue({
-        code: "menu_patch.unchanged",
+        code: state === "changed" ? "menu_patch.declarations_changed" : "menu_patch.unchanged",
         params: { menuId: "menu-lunch" },
       }),
       imageLibraryRequest: vi.fn(),
@@ -102,13 +113,16 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
       await press(el, "review");
       expect(bottom(el)).toBe("Correct the fields marked on Salad to continue.");
     }
-    if (state === "review" || state === "refused") {
+    if (state === "review" || state === "refused" || state === "changed") {
       await press(el, "review");
       expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).not.toBeNull();
     }
-    if (state === "refused") {
+    if (state === "refused" || state === "changed") {
       await press(el, "put-live");
       await vi.waitFor(() => expect(bottom(el)).not.toBe(""));
+      expect(el.shadowRoot!.querySelector('[data-test="reload"]') !== null).toBe(
+        state === "changed",
+      );
     }
     await settle(el);
     await expectNoA11yViolations(host);
@@ -139,6 +153,128 @@ describe.each(["light", "dark"] as const)("the patch dialog (%s)", (theme) => {
     await pick(el, "Starters");
     expect(el.shadowRoot!.querySelector(".locked-note")!.textContent!.trim()).toBe(
       "The included folder sets this name.",
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it.each(["en", "es"])("renders the scheduled versions accessibly, in %s", async (locale) => {
+    setLocale(locale);
+    const queued = ["2026-11-03", "2026-11-10"].map((date, index) => ({
+      versionId: `v-q${index}`,
+      activatesAt: `${date}T07:00:00.000Z`,
+      local: { date, time: "08:00", offset: "+01:00", repeated: false },
+      targets: [
+        {
+          target: { kind: "offer", menuItemId: "mi-soup" },
+          ...(index === 0
+            ? { stillOld: true }
+            : {
+                stillOld: false,
+                replaces: [
+                  {
+                    productId: "p-soup",
+                    name: "Soup",
+                    values: { ...MILK, allergens: { mustard: {} } },
+                  },
+                ],
+              }),
+        },
+      ],
+    }));
+    const api = {
+      getLiveMenu: vi.fn(async () => ({ ...LIVE, queued })),
+      getMenuPublications: vi.fn(async () => ({
+        timeZone: "Europe/Madrid",
+        live: null,
+        editions: queued.map((version) => ({ ...version, state: "queued" })),
+      })),
+      patchLiveMenu: vi.fn().mockRejectedValue({
+        code: "menu_patch.invalid",
+        params: { change: 0, field: "declarations" },
+      }),
+      imageLibraryRequest: vi.fn(),
+    } as unknown as DashboardApi;
+    const { el, host } = await mountWidget<MenuPatchDialog>(
+      "dashboard-menu-patch-dialog",
+      { api, menuId: "menu-lunch", menuName: "Lunch Menu", open: true },
+      theme,
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="tree"] button')).not.toBeNull(),
+    );
+    await pick(el, "Soup");
+    const boxes = () => [
+      ...el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    ];
+    expect(boxes()).toHaveLength(1);
+    await expectNoA11yViolations(host);
+    boxes()[0]!.click();
+    await settle(el);
+    expect(boxes().map(({ checked }) => checked)).toEqual([true]);
+    await expectNoA11yViolations(host);
+    await press(el, "review");
+    expect(boxes().map(({ checked }) => checked)).toEqual([true, false]);
+    expect(el.shadowRoot!.querySelectorAll('[data-test="review-note"]')).toHaveLength(2);
+    expect(
+      [...el.shadowRoot!.querySelectorAll('[data-test="scheduled-line"]')].map(
+        (line) => line.textContent,
+      ),
+    ).toEqual([
+      fill("menu_patch.change_line", {
+        item: "Soup",
+        field: t("product.allergens"),
+        from: allergenName("mustard"),
+        to: allergenName("milk"),
+      }),
+    ]);
+    await expectNoA11yViolations(host);
+    await press(el, "put-live");
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('input[aria-invalid="true"]')).not.toBeNull(),
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  it("renders a variant whose dish is ticked accessibly", async () => {
+    const document = structuredClone(LIVE.document);
+    (document.offers["mi-soup"] as { variants: unknown }).variants = [
+      {
+        id: "v-cup",
+        name: "Cup",
+        customerName: null,
+        kitchenName: null,
+        unitPrice: "2.00",
+        ...productDeclarationValues(),
+      },
+    ];
+    const api = {
+      getLiveMenu: vi.fn(async () => ({ ...LIVE, document })),
+      getMenuPublications: vi.fn(async () => ({
+        timeZone: "Europe/Madrid",
+        live: null,
+        editions: [],
+      })),
+      imageLibraryRequest: vi.fn(),
+    } as unknown as DashboardApi;
+    const { el, host } = await mountWidget<MenuPatchDialog>(
+      "dashboard-menu-patch-dialog",
+      { api, menuId: "menu-lunch", menuName: "Lunch Menu", open: true },
+      theme,
+    );
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector('[data-test="tree"] button')).not.toBeNull(),
+    );
+    const box = () => el.shadowRoot!.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    await pick(el, "Soup");
+    box().click();
+    await settle(el);
+    await expectNoA11yViolations(host);
+    await pick(el, "Cup");
+    expect(box().disabled).toBe(true);
+    await expectNoA11yViolations(host);
+    await press(el, "review");
+    expect(el.shadowRoot!.querySelector('[data-test="review-line"]')!.textContent).toContain(
+      "Milk",
     );
     await expectNoA11yViolations(host);
   });

@@ -111,6 +111,47 @@ export const menuPatchDialogStyles = [
       color: var(--wt-color-primary-text);
       text-decoration: underline;
     }
+    .tick {
+      display: flex;
+      align-items: center;
+      gap: var(--wt-space-2);
+      min-height: var(--wt-tap-min);
+      cursor: pointer;
+    }
+    .tick input {
+      flex: none;
+      margin: 0;
+      accent-color: var(--wt-color-primary);
+    }
+    .field-error {
+      margin: 0;
+      color: var(--wt-color-danger);
+      font-size: var(--wt-font-size-sm);
+    }
+    fieldset {
+      min-width: 0;
+      margin: 0;
+      padding: 0;
+      border: 0;
+    }
+    .scheduled-items {
+      display: block;
+      color: var(--wt-color-text-muted);
+      font-size: var(--wt-font-size-sm);
+    }
+    fieldset .tick {
+      align-items: baseline;
+      padding-block: var(--wt-space-1);
+    }
+    .scheduled-line {
+      display: block;
+      margin-block-start: var(--wt-space-1);
+      font-size: var(--wt-font-size-sm);
+    }
+    legend {
+      padding: 0;
+      color: var(--wt-color-text-muted);
+    }
     .variant {
       display: flex;
       flex-wrap: wrap;
@@ -152,6 +193,7 @@ export const menuPatchDialogStyles = [
     .review {
       display: grid;
       gap: var(--wt-space-3);
+      overflow-wrap: anywhere;
     }
     .changes {
       display: grid;

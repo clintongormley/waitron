@@ -1,5 +1,16 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import type { FrozenExtraItem, FrozenOfferVariant, MenuDocument } from "@waitron/shared";
+import type {
+  FrozenExtraItem,
+  FrozenOffer,
+  FrozenOfferVariant,
+  MenuDocument,
+  PublishedSetMenu,
+} from "@waitron/shared";
+import {
+  productDeclarationValues,
+  type DeclarationValues,
+} from "@waitron/menu/src/declaration-values.js";
+import type { MenuPatchTarget } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale } from "../i18n/t.js";
 import { changeLines, placeRefusal, refusalWords, reviewNotes } from "./menu-patch-review.js";
@@ -79,6 +90,161 @@ it("words each change as its item, field, old value and new value", () => {
     "Soup: Price €3.00 → €3.50",
     "Soup: Prep station name SOUP KITCHEN → (empty)",
     "Starters: Internal name Starters → First",
+  ]);
+});
+
+const reviewed = (
+  allergens: DeclarationValues["allergens"],
+  dietaryDeclarations: DeclarationValues["dietaryDeclarations"] = [],
+  dietOverride: DeclarationValues["dietOverride"] = null,
+) => productDeclarationValues({ allergens, dietaryDeclarations, dietOverride });
+
+/** {@link lunch}, its lemonade, Large and soup holding milk, its bread gluten from wheat. */
+function declaredLunch(): MenuDocument {
+  const document = lunch();
+  const { "mi-soup": soup, "mi-lemonade": lemonade } = document.offers;
+  for (const dish of [soup!, lemonade!, lemonade!.variants[0]!])
+    Object.assign(dish, reviewed({ milk: {} }));
+  const [toppings] = soup!.offeredModifiers;
+  if (toppings!.kind !== "extras") throw new Error("not the extras list");
+  Object.assign(toppings!.items[0]!, {
+    addAllergens: { gluten: { kinds: ["wheat"] } },
+    suitableFor: ["halal"],
+  });
+  return document;
+}
+
+const lemonade = { kind: "offer", menuItemId: "mi-lemonade" } as const;
+const large = { kind: "variant", menuItemId: "mi-lemonade", variantId: "v-large" } as const;
+const bread = { kind: "extra", listId: "l-toppings", productId: "p-bread" } as const;
+
+const declarationLines = (
+  target: MenuPatchTarget,
+  current: Record<string, DeclarationValues>,
+  document = declaredLunch(),
+) =>
+  changeLines(document, [{ target, field: "declarations", value: "product" }], languages, current);
+
+it("words a dish's old and new allergens and diets, in the screen language", () => {
+  const current = { "p-soup": reviewed({ milk: {}, gluten: { kinds: ["rye"] } }, ["vegetarian"]) };
+  expect(declarationLines(soup, current)).toEqual([
+    "Soup: Allergens Milk → Milk, Cereals containing gluten (Rye)",
+    "Soup: Dietary info (empty) → Vegetarian, No meat, No fish",
+  ]);
+  setLocale("es");
+  expect(declarationLines(soup, current)).toEqual([
+    "Soup: Alérgenos Leche → Leche, Cereales con gluten (Centeno)",
+    "Soup: Info dietética (vacío) → Vegetariano, Sin carne, Sin pescado",
+  ]);
+});
+
+it("words only what changes", () => {
+  expect(declarationLines(soup, { "p-soup": reviewed({}) })).toEqual([
+    "Soup: Allergens Milk → None",
+  ]);
+  expect(declarationLines(soup, { "p-soup": reviewed({ milk: {} }, ["halal"]) })).toEqual([
+    "Soup: Dietary info (empty) → Halal",
+  ]);
+});
+
+it("words a diet answered for a dish itself", () => {
+  const current = {
+    "p-soup": reviewed({ milk: {} }, ["halal"], { vegan: "no", addContains: ["meat"] }),
+  };
+  expect(declarationLines(soup, current)).toEqual([
+    "Soup: Dietary info (empty) → Halal, Vegan: No, Contains meat",
+  ]);
+});
+
+it("says when the product's allergens and diets are already live", () => {
+  const current = { "p-soup": reviewed({ milk: {} }) };
+  expect(declarationLines(soup, current)).toEqual(["Soup: Allergens and diets: no change"]);
+  setLocale("es");
+  expect(declarationLines(soup, current)).toEqual(["Soup: Alérgenos y dietas: sin cambios"]);
+});
+
+it("says when the product's allergens are not yet reviewed, whether or not that changes", () => {
+  const current = { "p-soup": reviewed(null) };
+  expect(declarationLines(soup, current)).toEqual(["Soup: Allergens Milk → Not yet reviewed"]);
+  const unreviewed = declaredLunch();
+  Object.assign(unreviewed.offers["mi-soup"]!, reviewed(null));
+  expect(declarationLines(soup, current, unreviewed)).toEqual([
+    "Soup: Allergens not yet reviewed: no change",
+  ]);
+  expect(declarationLines(soup, { "p-soup": reviewed(null, ["halal"]) }, unreviewed)).toEqual([
+    "Soup: Allergens not yet reviewed: no change",
+    "Soup: Dietary info (empty) → Halal",
+  ]);
+  setLocale("es");
+  expect(declarationLines(soup, current)).toEqual(["Soup: Alérgenos Leche → Sin revisar todavía"]);
+});
+
+it("words a dish's variants with it, and lists one only where its own result differs", () => {
+  const eggs = reviewed({ eggs: {} });
+  const withEggs = "Lemonade, variants included: Allergens Milk → Eggs";
+  expect(declarationLines(lemonade, { "p-lemonade": eggs, "v-large": eggs })).toEqual([withEggs]);
+  expect(
+    declarationLines(lemonade, { "p-lemonade": eggs, "v-large": reviewed({ milk: {} }) }),
+  ).toEqual([withEggs, "Lemonade › Large: Allergens and diets: no change"]);
+  // The same values after, from other ones before.
+  const fish = declaredLunch();
+  Object.assign(fish.offers["mi-lemonade"]!.variants[0]!, reviewed({ fish: {} }));
+  expect(declarationLines(lemonade, { "p-lemonade": eggs, "v-large": eggs }, fish)).toEqual([
+    withEggs,
+    "Lemonade › Large: Allergens Fish → Eggs",
+  ]);
+  setLocale("es");
+  expect(declarationLines(lemonade, { "p-lemonade": eggs, "v-large": eggs })).toEqual([
+    "Lemonade, variantes incluidas: Alérgenos Leche → Huevos",
+  ]);
+});
+
+/** A set menu holding `dishes`, whose copies hold their own declarations. */
+function withSetMenu(document: MenuDocument, ...dishes: FrozenOffer[]): MenuDocument {
+  const offers = Object.fromEntries(dishes.map((offer) => [offer.id, offer]));
+  document.setMenus = { "sm-day": { offers } as unknown as PublishedSetMenu };
+  return document;
+}
+
+it("words every copy a dish's change corrects, a set menu's and the variants only it holds included", () => {
+  const document = declaredLunch();
+  const { "mi-soup": ordinary, "mi-lemonade": drink } = document.offers;
+  Object.assign(ordinary!, reviewed(null));
+  const jug = { ...structuredClone(drink!.variants[0]!), id: "v-jug", name: "Jug" };
+  withSetMenu(
+    document,
+    { ...structuredClone(ordinary!), ...reviewed({ milk: {} }) },
+    { ...structuredClone(drink!), variants: [{ ...jug, ...reviewed({ fish: {} }) }] },
+  );
+  expect(declarationLines(soup, { "p-soup": reviewed(null) }, document)).toEqual([
+    "Soup: Allergens Milk → Not yet reviewed",
+  ]);
+  const eggs = reviewed({ eggs: {} });
+  const current = { "p-lemonade": eggs, "v-large": eggs, "v-jug": eggs };
+  expect(declarationLines(lemonade, current, document)).toEqual([
+    "Lemonade, variants included: Allergens Milk → Eggs",
+    "Lemonade › Jug: Allergens Fish → Eggs",
+  ]);
+  Object.assign(document.setMenus!["sm-day"]!.offers["mi-lemonade"]!, reviewed({ nuts: {} }));
+  expect(declarationLines(lemonade, current, document)).toEqual([
+    "Lemonade, variants included: Allergens Milk → Eggs",
+    "Lemonade, variants included: Allergens Nuts → Eggs",
+    "Lemonade › Large: Allergens Milk → Eggs",
+    "Lemonade › Jug: Allergens Fish → Eggs",
+  ]);
+});
+
+it("words a variant's and an extra's own allergens and diets", () => {
+  expect(declarationLines(large, { "v-large": reviewed({ eggs: {} }) })).toEqual([
+    "Lemonade › Large: Allergens Milk → Eggs",
+  ]);
+  expect(declarationLines(bread, { "p-bread": reviewed({}, ["vegan"]) })).toEqual([
+    "Toppings › Bread: Allergens Cereals containing gluten (Wheat) → None",
+    "Toppings › Bread: Dietary info Halal → Vegan, Vegetarian, No meat, No fish",
+  ]);
+  const same = reviewed({ gluten: { kinds: ["wheat"] } }, ["halal"]);
+  expect(declarationLines(bread, { "p-bread": same })).toEqual([
+    "Toppings › Bread: Allergens and diets: no change",
   ]);
 });
 
@@ -199,17 +365,17 @@ it("writes money in the screen language", () => {
   ).toEqual(["Soup: Precio 3,00\u00a0€ → 3,50\u00a0€"]);
 });
 
-it("always notes open orders and the products, and names each queued version by its date", () => {
+it("notes open orders and the products for a price, and names each queued version by its date", () => {
   const openOrders = "Lines already on open orders keep their old price.";
   const products =
     "The next normal publish from the products puts the old values back unless you fix the products too.";
-  expect(reviewNotes([])).toEqual([openOrders, products]);
-  expect(reviewNotes(["3 Nov 2026, 08:00"])).toEqual([
+  expect(reviewNotes([price], [])).toEqual([openOrders, products]);
+  expect(reviewNotes([price], ["3 Nov 2026, 08:00"])).toEqual([
     openOrders,
     "The version going live on 3 Nov 2026, 08:00 does not include these changes.",
     products,
   ]);
-  expect(reviewNotes(["3 Nov 2026, 08:00", "10 Nov 2026, 08:00"])).toEqual([
+  expect(reviewNotes([price], ["3 Nov 2026, 08:00", "10 Nov 2026, 08:00"])).toEqual([
     openOrders,
     "The versions going live on 3 Nov 2026, 08:00 and 10 Nov 2026, 08:00 do not include these changes.",
     products,
@@ -218,10 +384,48 @@ it("always notes open orders and the products, and names each queued version by 
 
 const price = { target: soup, field: "price", value: "4.00" };
 const kitchen = { target: soup, field: "kitchenName", value: "SOUP" };
+const declared = { target: soup, field: "declarations", value: "product" };
 
 function refused(code: string, params: Record<string, unknown>): Error {
   return Object.assign(new Error(code), { code, params });
 }
+
+it("says which scheduled versions get the allergens and diets, apart from those that get nothing", () => {
+  expect(
+    reviewNotes([price, declared], ["10 Nov 2026, 08:00"], ["3 Nov 2026, 08:00"]).slice(1, 3),
+  ).toEqual([
+    "The version going live on 3 Nov 2026, 08:00 also gets these allergens and diets, but no other change.",
+    "The version going live on 10 Nov 2026, 08:00 does not include these changes.",
+  ]);
+  const both = ["3 Nov 2026, 08:00", "10 Nov 2026, 08:00"];
+  expect(reviewNotes([price, declared], [], both).slice(1, -1)).toEqual([
+    "The versions going live on 3 Nov 2026, 08:00 and 10 Nov 2026, 08:00 also get these allergens and diets, but no other change.",
+  ]);
+  setLocale("es");
+  expect(reviewNotes([price, declared], [], both.slice(0, 1)).slice(1, -1)).toEqual([
+    "La versión que se publica el 3 Nov 2026, 08:00 también recibe estos alérgenos y dietas, pero ninguna otra corrección.",
+  ]);
+  expect(reviewNotes([price, declared], [], both).slice(1, -1)).toEqual([
+    "Las versiones que se publican en estas fechas (3 Nov 2026, 08:00 y 10 Nov 2026, 08:00) también reciben estos alérgenos y dietas, pero ninguna otra corrección.",
+  ]);
+});
+
+it("says allergens and diets stay when the products' next publish puts other values back", () => {
+  expect(reviewNotes([declared, price], []).at(-1)).toBe(
+    "The next normal publish from the products puts the old values back, except allergens and diets, unless you fix the products too.",
+  );
+  setLocale("es");
+  expect(reviewNotes([kitchen, declared], []).at(-1)).toBe(
+    "La próxima publicación normal desde los productos vuelve a poner los valores anteriores, menos los alérgenos y dietas, salvo que corrijas también los productos.",
+  );
+});
+
+it("says nothing of old prices unless a price changes, nor of old values when every value is the products' own", () => {
+  const openOrders = "Lines already on open orders keep their old price.";
+  expect(reviewNotes([declared], [])).toEqual([]);
+  expect(reviewNotes([kitchen], [])).not.toContain(openOrders);
+  expect(reviewNotes([declared, price], [])).toContain(openOrders);
+});
 
 it("places a refused value under the field of the change it names", () => {
   expect(

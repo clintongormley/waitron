@@ -270,6 +270,8 @@ suitability of its own, because it is a way of asking for the same dish rather t
 to eat. The till and station show each item's own list.
 
 Allergens and diet labels are part of the published menu: publish the menu to put a change live.
+[Patch live menu](products.md#patch-live-menu) can also put a product's current allergens and diets
+live without publishing.
 
 In the Products list, **Not reviewed**, **None** and **Declared** distinguish a dish you have not
 checked from one you have checked. A variant shows the status of the allergens it uses.
@@ -388,33 +390,37 @@ publish, check the version and publication time in the menu heading.
 
 Use a patch when you find a mistake in the menu that is live now, such as a wrong price, while the
 products already hold work for the next menu that you do not want on the till yet. Publishing would
-put that work live as well. A patch changes only the values you correct, in the live version of one
-menu.
+put that work live as well. A patch changes only the values you correct, in one menu:
+its live version and, for allergens and diets, the scheduled versions left ticked.
 
 Find the live menu in **Products and menus → Menus**. Open its row menu and choose
 **Patch live menu…**. The window lists the items in the live menu, with a search box,
 and its extras and options lists under **Extras and options**. Pick an item to see what you can
 change:
 
-- A dish: its name, customer-facing name, prep station name, description, image and price.
+- A dish: its name, customer-facing name, prep station name, description, image, price, and
+  allergens and diets.
 - A variant or an extra: the same, without a description.
 - An options list's choice, and the name of an extras list or an options list: its three names.
 - A section: its internal name, customer-facing name and image.
 
 Customer-facing names and descriptions show a field for each content language. Choose or remove an
 image as you would in the product editor. A dish with variants is charged at each variant's own
-price, so correct the price on its variants, which its form lists with their price; correcting the dish never changes them. A
-change to an extra, an options list's choice or a list's name is made everywhere that list appears
-in this menu. A product sold both as a dish and as an extra is corrected in each place separately. A
-section shown inside an included menu's folder keeps any name or picture that folder sets for it,
+price, so correct the price on its variants, which its form lists with their price; correcting the dish
+never changes them, except their allergens and diets. A change to an extra, an options list's choice
+or a list's name is made everywhere that list appears in this menu. A product sold both as a dish and as an extra, or in two
+extras lists, is corrected in each place separately. A section shown inside an included menu's folder keeps any name or picture that folder sets for it,
 and a language's name that the folders set in every place the section appears is shown greyed out,
 with **The included folder sets this name.** under it, and cannot be changed here.
 
-A patch cannot change anything else. Allergens and diet labels are declared on the product itself
-and go live when you publish the menu;
-see [Declare allergens and dietary suitability directly](products.md#allergens). Nor can it change
-the unit, availability, course or category, the order of items, colours, or which items and
-sections the menu holds.
+To correct allergens or diet labels, [change them on the product](products.md#allergens) first, then
+select **Use the product's current allergens and diets** on its item in the patch. **Review** shows
+what changes, and lists the scheduled versions that differ from the product. Those that still
+have the old value are already ticked: untick any to leave as it is, and tick any other to correct.
+A dish sold only inside a set menu is not in the list of items: publish the menu to correct it.
+
+A patch cannot change anything else: not the unit, availability, course or category, the order of
+items, colours, or which items and sections the menu holds.
 
 Each item you change is marked with a dot. A value the patch cannot take is pointed out when you
 choose **Review**: its field says what to correct, its item is marked with **!**, and **Review** stays
@@ -426,7 +432,8 @@ remove it.
 value → the new one. Choose **Keep editing** to go back, or **Put live now**. What putting a patch live does:
 
 - It goes live at once as a new version of this menu, under the next number. Lines added to orders
-  from then on use the corrected values. Lines already on open orders keep their old price.
+  from then on use the corrected values. Lines already on open orders keep their old price, but
+  kitchen screens show their corrected allergens and diets.
 - On a parked counter order, renaming an options list or one of its choices does what it does after
   a publish, as [What the till does with a list](modifiers.md#till) describes: with a new staff name
   the order keeps the answer it holds, and a new customer-facing or prep station name
@@ -434,10 +441,10 @@ value → the new one. Choose **Keep editing** to go back, or **Put live now**. 
 - It changes nothing else: not the products, not the menu's own items and sections, not your other
   menus. A product on two menus is patched on each one.
 - A version scheduled to go live later keeps its date and its content, and goes live then without
-  the patch. It is given a new number after the patch's, under **Scheduled versions** on the
-  **Preview** tab.
-- The next normal publish builds the menu from the products again, so it puts the old values back
-  unless you correct the products too.
+  the patch, except for the allergens and diets of the versions left ticked. It is given a new number
+  after the patch's, under **Scheduled versions** on the **Preview** tab.
+- The next normal publish builds the menu from the products again, so it puts the old values back,
+  except allergens and diets, unless you correct the products too.
 
 A field set back to its live value is not counted as a change. If another version goes live while
 you have changes or a field to correct in the window, the window keeps showing the version you were

@@ -4,6 +4,7 @@ import { products, sectionMembers, withTransaction, type Transaction } from "@wa
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, product, type MenusFixture } from "../test/menus-fixture.js";
+import { productDeclarationValues } from "./declaration-values.js";
 import { deleteMenu } from "./delete.js";
 import { updateExtraList } from "./extras.js";
 import {
@@ -16,7 +17,6 @@ import {
 } from "./menu-publication.js";
 import { cancelMenuPublication, queueMenuPublication } from "./menu-schedule.js";
 import { createMenu, deactivateMenu, updateProduct } from "./operations.js";
-import { productDeclarationValues } from "./product-declarations.js";
 import {
   declarationsInDocument,
   readPublishedDeclarations,
@@ -61,6 +61,19 @@ const patchName = (menuId: string, baseVersionId: string, menuItemId: string, va
       [{ target: { kind: "offer", menuItemId }, field: "name", value }],
       PERSON,
     ),
+  );
+const patchDeclarations = (
+  tx: Transaction,
+  menuId: string,
+  baseVersionId: string,
+  menuItemId: string,
+) =>
+  patchLiveMenu(
+    tx,
+    menuId,
+    baseVersionId,
+    [{ target: { kind: "offer", menuItemId }, field: "declarations", value: "product" }],
+    PERSON,
   );
 const declare = (
   productId: string,
@@ -135,8 +148,27 @@ it("reads a dish from its menu's live version after a later publish and a patch"
   await declare(f.soup, "eggs");
   expect(await allergensOf(soup)).toEqual({ fish: {} });
 
-  await patchName(f.lunch, v2, soup.menuItemId!, "Broth");
+  const named = await patchName(f.lunch, v2, soup.menuItemId!, "Broth");
   expect(await allergensOf(soup)).toEqual({ fish: {} });
+
+  // Both reads share one handle, and so the documents it keeps.
+  const [before, after] = await app(async (tx) => {
+    const held = async () => (await readPublishedDeclarations(tx, [soup])).get(soup.id)?.allergens;
+    const before = await held();
+    await patchDeclarations(tx, f.lunch, named.versionId, soup.menuItemId!);
+    return [before, await held()];
+  });
+  expect(before).toEqual({ fish: {} });
+  expect(after).toEqual({ eggs: {} });
+});
+
+it("reads a variant's inherited allergens corrected by a patch of its dish", async () => {
+  const v1 = await publish(f.lunch);
+  const large = await line(f.lunch, v1, f.lemonade, { productId: f.large });
+  await declare(f.lemonade, "milk");
+  expect(await allergensOf(large)).toEqual({});
+  await app((tx) => patchDeclarations(tx, f.lunch, v1, large.menuItemId!));
+  expect(await allergensOf(large)).toEqual({ milk: {} });
 });
 
 it("falls back to the line's own version when the live version dropped the dish", async () => {

@@ -1,4 +1,5 @@
-import type { MenuDocument, QueuedEdition } from "@waitron/shared";
+import type { LocalTime, MenuDocument, QueuedEdition } from "@waitron/shared";
+import type { DeclarationValues } from "./declaration-values.js";
 
 /** The patch wire shapes. A browser-safe LEAF: types and the field table only. */
 
@@ -18,9 +19,9 @@ export interface MenuPatchChange {
 
 /** The only fields a patch may change, per kind of target; anything else is refused. */
 export const PATCH_FIELDS: { readonly [K in MenuPatchTarget["kind"]]: readonly string[] } = {
-  offer: ["name", "customerName", "kitchenName", "description", "image", "price"],
-  variant: ["name", "customerName", "kitchenName", "image", "price"],
-  extra: ["name", "customerName", "kitchenName", "image", "price"],
+  offer: ["name", "customerName", "kitchenName", "description", "image", "price", "declarations"],
+  variant: ["name", "customerName", "kitchenName", "image", "price", "declarations"],
+  extra: ["name", "customerName", "kitchenName", "image", "price", "declarations"],
   option_label: ["name", "customerName", "kitchenName"],
   list: ["name", "customerName", "kitchenName"],
   section: ["internalName", "names", "image"],
@@ -37,4 +38,37 @@ export interface LiveMenu {
   number: number;
   since: string;
   document: MenuDocument;
+}
+
+/** A copy holding declarations: a dish, a variant or an extra. */
+export interface DeclaredCopy {
+  productId: string;
+  name: string;
+  values: Record<string, unknown>;
+}
+
+/** A queued version holding declarations that are not the products' current ones. */
+export interface QueuedDeclarationDrift {
+  versionId: string;
+  activatesAt: string;
+  /** The targets whose copies here differ, a dish's including its variants; `stillOld` when every
+   * differing copy holds the value being corrected. When not, or when a differing copy is of a
+   * variant the live version lacks whose product's current values are not its dish's, `replaces`
+   * holds each distinct value of the copies a correction writes over, the target's own product's
+   * first. */
+  targets: { target: MenuPatchTarget; stillOld: boolean; replaces?: DeclaredCopy[] }[];
+}
+
+export interface PatchDraft extends LiveMenu {
+  /** Differs whenever `declarations` or `queued` does. */
+  revision: string;
+  /** Every dish's, variant's and extra's current values, by product id: what a declarations change
+   * copies. */
+  declarations: Record<string, DeclarationValues>;
+  queued: QueuedDeclarationDrift[];
+}
+
+/** A `PatchDraft` as the management API answers it, each time in the venue's zone. */
+export interface PatchDraftAnswer extends PatchDraft {
+  queued: (QueuedDeclarationDrift & { local: LocalTime })[];
 }

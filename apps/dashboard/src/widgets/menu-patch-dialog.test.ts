@@ -1,3 +1,4 @@
+import { productDeclarationValues } from "@waitron/menu/src/declaration-values.js";
 import { applyMenuPatch } from "@waitron/menu/src/menu-patch.js";
 import { LiveData } from "@waitron/dashboard-kit";
 import { createLeaveCoordinator } from "@waitron/ui-core/unsaved-changes";
@@ -9,9 +10,10 @@ import "./menu-patch-dialog.js";
 import type { MenuPatchDialog } from "./menu-patch-dialog.js";
 import type {
   DashboardApi,
-  LiveMenu,
   MenuPatchResult,
+  MenuPatchTarget,
   MenuPublicationsAnswer,
+  PatchDraftAnswer,
 } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
@@ -106,8 +108,37 @@ function lunch(soupName = "Soup"): MenuDocument {
   return document;
 }
 
-function live(number = 3, document = lunch()): LiveMenu {
-  return { versionId: `v-${number}`, number, since: "2026-10-27T09:00:00.000Z", document };
+const MILK = productDeclarationValues({
+  allergens: { milk: {} },
+  dietOverride: null,
+  dietaryDeclarations: [],
+});
+
+const CURRENT: PatchDraftAnswer["declarations"] = {
+  "p-soup": MILK,
+  "p-salad": MILK,
+  "p-lemonade": MILK,
+  "v-small": MILK,
+  "v-large": MILK,
+  "p-bread": MILK,
+};
+
+/** Its revision differs whenever its declarations or queued versions do, as the server's does. */
+function live(
+  number = 3,
+  document = lunch(),
+  queued: PatchDraftAnswer["queued"] = [],
+  declarations = CURRENT,
+): PatchDraftAnswer {
+  return {
+    versionId: `v-${number}`,
+    number,
+    since: "2026-10-27T09:00:00.000Z",
+    document,
+    revision: JSON.stringify([declarations, queued]),
+    declarations,
+    queued,
+  };
 }
 
 function publications(
@@ -189,7 +220,9 @@ const form = (el: MenuPatchDialog) => el.shadowRoot!.querySelector('[data-test="
 /** Each field in the form, by its input name; the picture by its element. */
 const fieldNames = (el: MenuPatchDialog) =>
   [
-    ...form(el).querySelectorAll("wt-input, wt-price-input, wt-combobox, dashboard-image-upload"),
+    ...form(el).querySelectorAll(
+      'wt-input, wt-price-input, wt-combobox, dashboard-image-upload, input[type="checkbox"]',
+    ),
   ].map((field) => field.getAttribute("name") ?? field.localName);
 
 function field<K extends "wt-input" | "wt-price-input">(el: MenuPatchDialog, tag: K, name: string) {
@@ -421,6 +454,7 @@ it("shows a dish's patchable fields and nothing else, in every content language"
     "description-es",
     "dashboard-image-upload",
     "price",
+    "declarations",
   ]);
   expect(field(el, "wt-input", "name").value).toBe("Soup");
   expect(field(el, "wt-input", "name").required).toBe(true);
@@ -609,6 +643,7 @@ it("lists a dish's variants as links that pick them, and says it sells through t
     "kitchen-name",
     "dashboard-image-upload",
     "price",
+    "declarations",
   ]);
   expect(form(el).querySelector('[data-test="variants-note"]')).toBeNull();
 });
@@ -1726,7 +1761,7 @@ it("ignores a refusal or a reload once the dialog has closed", async () => {
   expect(footerButton(el, "review")).not.toBeNull();
   expect(bottomMessage(el)).toBe("");
 
-  let reread!: (value: LiveMenu) => void;
+  let reread!: (value: PatchDraftAnswer) => void;
   const getLiveMenu = vi
     .fn()
     .mockResolvedValueOnce(live(3))
@@ -2232,7 +2267,7 @@ it("keeps correcting the version read when a newer one goes live with changes st
 
 it("never moves back to an older version that a delayed Reload reads", async () => {
   const data = new LiveData();
-  let answerReload!: (value: LiveMenu) => void;
+  let answerReload!: (value: PatchDraftAnswer) => void;
   const getLiveMenu = vi
     .fn()
     .mockResolvedValueOnce(live(3))
@@ -2342,7 +2377,7 @@ it("leaves a typed value alone when the version shown is delivered again", async
 });
 
 it("moves onto the version a Reload reads even when the read comes back during a send", async () => {
-  let answerReload!: (value: LiveMenu) => void;
+  let answerReload!: (value: PatchDraftAnswer) => void;
   const getLiveMenu = vi
     .fn()
     .mockResolvedValueOnce(live(3))
@@ -2478,7 +2513,7 @@ it("keeps a failed Reload's message when the version it offered is delivered aga
  * send, and `refuseSecond` then answers the send. */
 async function reloadThenSend(
   el: MenuPatchDialog,
-  answerReload: () => (value: LiveMenu) => void,
+  answerReload: () => (value: PatchDraftAnswer) => void,
   document = lunch(),
 ) {
   await press(el, "review");
@@ -2490,7 +2525,7 @@ async function reloadThenSend(
 }
 
 function reloadDuringSend() {
-  let answerReload!: (value: LiveMenu) => void;
+  let answerReload!: (value: PatchDraftAnswer) => void;
   let refuseSecond!: (error: Error) => void;
   const getLiveMenu = vi
     .fn()
@@ -3330,3 +3365,817 @@ it("retires a server refusal when a newer folder locks its language, keeping the
   expect(el.changes).toHaveLength(1);
   expect(footerButton(el, "review")!.disabled).toBe(false);
 });
+
+const declarations = (el: MenuPatchDialog) =>
+  form(el).querySelector<HTMLInputElement>('input[name="declarations"]')!;
+
+const review = (el: MenuPatchDialog) =>
+  el.shadowRoot!.querySelector<HTMLElement>('[data-test="review-step"]')!;
+
+const scheduled = (el: MenuPatchDialog) => [
+  ...review(el).querySelectorAll<HTMLInputElement>('input[name="scheduled"]'),
+];
+
+/** Each scheduled row as its date, the items it names, and whether it is ticked. */
+const scheduledRows = (el: MenuPatchDialog) =>
+  scheduled(el).map((box) => {
+    const words = box.closest("label")!;
+    const part = (name: string) =>
+      words.querySelector(`[data-test="${name}"]`)!.textContent!.trim();
+    return [part("scheduled-date"), part("scheduled-items"), box.checked];
+  });
+
+async function declare(el: MenuPatchDialog, ...labels: string[]): Promise<void> {
+  for (const label of labels) {
+    await pick(el, label);
+    await tick(el, declarations(el));
+  }
+}
+
+async function reviewing(el: MenuPatchDialog, ...labels: string[]): Promise<void> {
+  await declare(el, ...labels);
+  await press(el, "review");
+}
+
+async function tick(el: MenuPatchDialog, box: HTMLInputElement): Promise<void> {
+  await userEvent.click(page.elementLocator(box));
+  await el.updateComplete;
+}
+
+const salad = { kind: "offer", menuItemId: "mi-salad" } as const;
+const small = { kind: "variant", menuItemId: "mi-lemonade", variantId: "v-small" } as const;
+const bread = { kind: "extra", listId: "l-toppings", productId: "p-bread" } as const;
+const fromProduct = (target: MenuPatchTarget) => ({
+  target,
+  field: "declarations",
+  value: "product",
+});
+
+/** A queued version that differs from the products, at the time `publications` gives `date`. */
+const differing = (
+  versionId: string,
+  date: string,
+  ...targets: [MenuPatchTarget, boolean][]
+): PatchDraftAnswer["queued"][number] => ({
+  versionId,
+  activatesAt: `${date}T07:00:00.000Z`,
+  local: {
+    date,
+    time: date === "2026-11-10" ? "09:30" : "08:00",
+    offset: "+01:00",
+    repeated: false,
+  },
+  targets: targets.map(([target, stillOld]) =>
+    stillOld ? { target, stillOld } : { target, stillOld, replaces: [mustard(target)] },
+  ),
+});
+
+const mustard = (target: MenuPatchTarget) => ({
+  productId: { offer: "p-soup", variant: "v-small", extra: "p-bread" }[
+    target.kind as "offer" | "variant" | "extra"
+  ],
+  name: "Mustard holder",
+  values: { ...MILK, allergens: { mustard: {} } },
+});
+
+const twoDates = () =>
+  publications({ date: "2026-11-03", time: "08:00" }, { date: "2026-11-10", time: "09:30" });
+
+const scheduledApi = (
+  queued: PatchDraftAnswer["queued"],
+  overrides: Parameters<typeof stubApi>[0] = {},
+) =>
+  stubApi({
+    getLiveMenu: vi.fn(async () => live(3, lunch(), queued)),
+    getMenuPublications: vi.fn(async () => twoDates()),
+    ...overrides,
+  });
+
+it.each([
+  ["Soup", soup],
+  ["Small", small],
+  ["Bread", bread],
+] as const)(
+  "offers %s the product's current allergens and diets with one checkbox, staging and unstaging it",
+  async (label, target) => {
+    const el = await mount();
+    await pick(el, label);
+    const boxes = form(el).querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+    expect(boxes).toHaveLength(1);
+    const box = declarations(el);
+    expect(box.labels![0]!.textContent!.trim()).toBe(
+      "Use the product's current allergens and diets",
+    );
+    expect(box.checked).toBe(false);
+    await tick(el, box);
+    expect(el.changes).toEqual([fromProduct(target)]);
+    expect(changedDot(el, label)).not.toBeNull();
+    expect(footerButton(el, "review")!.disabled).toBe(false);
+    await pick(el, "Salad");
+    expect(declarations(el).checked).toBe(false);
+    await pick(el, label);
+    expect(declarations(el).checked).toBe(true);
+    await tick(el, declarations(el));
+    expect(el.changes).toEqual([]);
+    expect(changedDot(el, label)).toBeNull();
+    expect(footerButton(el, "review")!.disabled).toBe(true);
+  },
+);
+
+it("corrects a dish's variants through the dish's checkbox alone", async () => {
+  const lemonade = { kind: "offer", menuItemId: "mi-lemonade" } as const;
+  const el = await mount();
+  await pick(el, "Small");
+  await tick(el, declarations(el));
+  expect(el.changes).toEqual([fromProduct(small)]);
+  await pick(el, "Lemonade");
+  expect(declarations(el).labels![0]!.textContent!.trim()).toBe(
+    "Use the product's current allergens and diets, variants included",
+  );
+  await tick(el, declarations(el));
+  expect(el.changes).toEqual([fromProduct(lemonade)]);
+  await pick(el, "Small");
+  expect(changedDot(el, "Small")).toBeNull();
+  expect(declarations(el).checked).toBe(true);
+  expect(declarations(el).disabled).toBe(true);
+  const why = el.shadowRoot!.getElementById(declarations(el).getAttribute("aria-describedby")!)!;
+  expect(why.textContent!.trim()).toBe("Corrected with the dish.");
+  setLocale("es");
+  await el.updateComplete;
+  expect(why.textContent!.trim()).toBe("Se corrige junto con el plato.");
+  await pick(el, "Lemonade");
+  expect(declarations(el).labels![0]!.textContent!.trim()).toBe(
+    "Usar los alérgenos y dietas actuales del producto, también en sus variantes",
+  );
+  await tick(el, declarations(el));
+  expect(el.changes).toEqual([]);
+  await pick(el, "Small");
+  expect(declarations(el).checked).toBe(false);
+  expect(declarations(el).disabled).toBe(false);
+});
+
+it("offers no allergens checkbox for a section or a list", async () => {
+  const el = await mount();
+  for (const label of ["Drinks", "Toppings"]) {
+    await pick(el, label);
+    expect(form(el).querySelector('input[type="checkbox"]')).toBeNull();
+  }
+});
+
+it("words the checkbox in Spanish", async () => {
+  setLocale("es");
+  const el = await mount();
+  await pick(el, "Soup");
+  expect(declarations(el).labels![0]!.textContent!.trim()).toBe(
+    "Usar los alérgenos y dietas actuales del producto",
+  );
+});
+
+it("lists on the review step, and nowhere else, each scheduled version that differs for a ticked item", async () => {
+  const el = await mount(
+    scheduledApi([
+      differing("v-q0", "2026-11-03", [soup, true], [salad, true]),
+      differing("v-q1", "2026-11-10", [salad, true], [bread, true]),
+    ]),
+  );
+  await declare(el, "Soup", "Salad");
+  expect(el.shadowRoot!.querySelector('input[name="scheduled"], fieldset')).toBeNull();
+  await press(el, "review");
+  expect(review(el).querySelectorAll("fieldset")).toHaveLength(1);
+  const legend = () => review(el).querySelector("fieldset legend")!.textContent!.trim();
+  expect(legend()).toBe("Correct these scheduled versions too");
+  expect(scheduledRows(el)).toEqual([
+    ["3 Nov 2026, 08:00", "Soup and Salad", true],
+    ["10 Nov 2026, 09:30", "Salad", true],
+  ]);
+  setLocale("es");
+  await el.updateComplete;
+  expect(legend()).toBe("Corregir también estas versiones programadas");
+  expect(scheduledRows(el).map(([date, items]) => [date, items])).toEqual([
+    ["3 nov 2026, 08:00", "Soup y Salad"],
+    ["10 nov 2026, 09:30", "Salad"],
+  ]);
+});
+
+it("lists nothing on the review step when no scheduled version differs for a ticked item", async () => {
+  const el = await mount(scheduledApi([differing("v-q0", "2026-11-03", [bread, true])]));
+  await reviewing(el, "Soup");
+  expect(review(el).querySelector("fieldset")).toBeNull();
+  await press(el, "keep-editing");
+  await reviewing(el, "Bread");
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Toppings › Bread", true]]);
+});
+
+it("ticks a scheduled version only when it holds the old value for every ticked item", async () => {
+  const api = scheduledApi([
+    differing("v-q0", "2026-11-03", [soup, true], [salad, false]),
+    differing("v-q1", "2026-11-10", [soup, true], [salad, true]),
+  ]);
+  const el = await mount(api);
+  await reviewing(el, "Soup");
+  expect(scheduledRows(el).map(([, , ticked]) => ticked)).toEqual([true, true]);
+  await press(el, "keep-editing");
+  await reviewing(el, "Salad");
+  expect(scheduledRows(el).map(([, , ticked]) => ticked)).toEqual([false, true]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu.mock.calls[0]![1]).toMatchObject({ queued: ["v-q1"] });
+});
+
+it("never carries a tick given for one item over another item's copy that differs on purpose", async () => {
+  const el = await mount(
+    scheduledApi([differing("v-q0", "2026-11-03", [soup, false], [salad, false])]),
+  );
+  await reviewing(el, "Soup");
+  await tick(el, scheduled(el)[0]!);
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Soup", true]]);
+  await press(el, "keep-editing");
+  await press(el, "review");
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Soup", true]]);
+  await press(el, "keep-editing");
+  await reviewing(el, "Salad");
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Soup and Salad", false]]);
+});
+
+it("keeps a scheduled version the person unticked unticked when another item is ticked", async () => {
+  const el = await mount(
+    scheduledApi([differing("v-q0", "2026-11-03", [soup, true], [salad, true])]),
+  );
+  await reviewing(el, "Soup");
+  await tick(el, scheduled(el)[0]!);
+  await press(el, "keep-editing");
+  await reviewing(el, "Salad");
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Soup and Salad", false]]);
+});
+
+it("lists the scheduled versions when the live one already has the product's values", async () => {
+  const document = lunch();
+  Object.assign(document.offers["mi-soup"]!, MILK);
+  const api = scheduledApi([], {
+    getLiveMenu: vi.fn(async () =>
+      live(3, document, [differing("v-q0", "2026-11-03", [soup, false])]),
+    ),
+  });
+  const el = await mount(api);
+  await reviewing(el, "Soup");
+  expect(reviewLines(el)).toEqual(["Soup: Allergens and diets: no change"]);
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Soup", false]]);
+  await tick(el, scheduled(el)[0]!);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledWith("menu-lunch", {
+    baseVersionId: "v-3",
+    changes: [fromProduct(soup)],
+    queued: ["v-q0"],
+    reviewed: expect.any(String),
+  });
+});
+
+const EGGS = { ...MILK, allergens: { eggs: {} } };
+const withEggs = (number = 3, queued: PatchDraftAnswer["queued"] = []) =>
+  live(number, lunch(), queued, { ...CURRENT, "p-soup": EGGS });
+const soupToMilk = "Soup: Allergens Not yet reviewed → Milk";
+const soupToEggs = "Soup: Allergens Not yet reviewed → Eggs";
+const declarationsChanged = codeMessage("menu_patch.declarations_changed", "en");
+
+/** A dialog on its review step with Soup's declarations staged, and a way to deliver the dialog's
+ * next reads of the live menu. */
+async function reviewingSoup(
+  overrides: Parameters<typeof stubApi>[0] = {},
+  first = live(),
+): Promise<{
+  el: MenuPatchDialog;
+  api: ReturnType<typeof stubApi>;
+  deliver: (answer: PatchDraftAnswer) => Promise<void>;
+}> {
+  const data = new LiveData();
+  const getLiveMenu = vi.fn(async () => first);
+  const api = scheduledApi([], { liveData: data, getLiveMenu, ...overrides });
+  const el = await mount(api);
+  await reviewing(el, "Soup");
+  const deliver = async (answer: PatchDraftAnswer) => {
+    const reads = getLiveMenu.mock.calls.length;
+    getLiveMenu.mockResolvedValue(answer);
+    data.invalidate([{ type: "products", id: "p-soup" }]);
+    await vi.waitFor(() => expect(getLiveMenu.mock.calls.length).toBeGreaterThan(reads));
+    await flush(el);
+  };
+  return { el, api, deliver };
+}
+
+it("keeps what is under review when the product's values change, until Reload brings the new ones to review", async () => {
+  const { el, api, deliver } = await reviewingSoup();
+  expect(reviewLines(el)).toEqual([soupToMilk]);
+  expect(footerButton(el, "reload")).toBeNull();
+  const late = withEggs(3, [differing("v-q0", "2026-11-03", [soup, true])]);
+  await deliver(late);
+  expect(bottomMessage(el)).toBe(declarationsChanged);
+  expect(reviewLines(el)).toEqual([soupToMilk]);
+  expect(scheduledRows(el)).toEqual([]);
+  await press(el, "reload");
+  expect(bottomMessage(el)).toBe("");
+  expect(footerButton(el, "reload")).toBeNull();
+  expect(el.changes).toEqual([fromProduct(soup)]);
+  await press(el, "review");
+  expect(reviewLines(el)).toEqual([soupToEggs]);
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Soup", true]]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledWith("menu-lunch", {
+    baseVersionId: "v-3",
+    changes: [fromProduct(soup)],
+    queued: ["v-q0"],
+    reviewed: late.revision,
+  });
+});
+
+it("says in Spanish that what is under review has changed", async () => {
+  setLocale("es");
+  const { el, deliver } = await reviewingSoup();
+  await deliver(withEggs());
+  expect(bottomMessage(el)).toBe(codeMessage("menu_patch.declarations_changed", "es"));
+});
+
+it("follows the product's values on the edit step, and while reviewing no allergens", async () => {
+  const { el, deliver } = await reviewingSoup();
+  await press(el, "keep-editing");
+  await deliver(withEggs());
+  expect(bottomMessage(el)).toBe("");
+  await press(el, "review");
+  expect(reviewLines(el)).toEqual([soupToEggs]);
+  await press(el, "keep-editing");
+  await tick(el, declarations(el));
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  await deliver(live());
+  expect(bottomMessage(el)).toBe("");
+  await press(el, "keep-editing");
+  await reviewing(el, "Soup");
+  expect(reviewLines(el)).toContain(soupToMilk);
+});
+
+it("takes an answer that changes nothing under review", async () => {
+  const { el, deliver } = await reviewingSoup();
+  await deliver(live());
+  expect(bottomMessage(el)).toBe("");
+  expect(footerButton(el, "reload")).toBeNull();
+});
+
+it("goes back to review the new values when the send is refused because they changed", async () => {
+  const { el, api, deliver } = await reviewingSoup({
+    patchLiveMenu: vi
+      .fn()
+      .mockRejectedValueOnce(refusal("menu_patch.declarations_changed", { menuId: "menu-lunch" }))
+      .mockResolvedValue(patched),
+  });
+  await press(el, "put-live");
+  expect(api.patchLiveMenu.mock.calls[0]![1]).toMatchObject({ reviewed: live().revision });
+  expect(bottomMessage(el)).toBe(declarationsChanged);
+  expect(reviewLines(el)).toEqual([soupToMilk]);
+  await press(el, "keep-editing");
+  // A read from before the change says nothing of it.
+  await deliver(live());
+  expect(bottomMessage(el)).toBe(declarationsChanged);
+  await deliver(withEggs());
+  expect(bottomMessage(el)).toBe("");
+  await press(el, "review");
+  expect(reviewLines(el)).toEqual([soupToEggs]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu.mock.calls[1]![1]).toMatchObject({ reviewed: withEggs().revision });
+});
+
+it("makes Reload, not Put live now, the review's action once the values changed, until Reload", async () => {
+  const { el, api, deliver } = await reviewingSoup({
+    patchLiveMenu: vi
+      .fn()
+      .mockRejectedValueOnce(refusal("menu_patch.declarations_changed", { menuId: "menu-lunch" }))
+      .mockResolvedValue(patched),
+  });
+  const buttons = () =>
+    ["put-live", "reload"].map((name) => {
+      const button = footerButton(el, name);
+      return button === null ? null : [button.variant, button.disabled];
+    });
+  expect(buttons()).toEqual([["primary", false], null]);
+  footerButton(el, "put-live")!.focus();
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(bottomMessage(el)).toBe(declarationsChanged));
+  // Focus is lost from a disabled button only once the page is drawn.
+  await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve)));
+  expect(el.shadowRoot!.activeElement).toBe(footerButton(el, "reload"));
+  const refused = [
+    ["secondary", true],
+    ["primary", false],
+  ];
+  expect(buttons()).toEqual(refused);
+  await press(el, "put-live");
+  await press(el, "keep-editing");
+  expect(footerButton(el, "reload")!.variant).toBe("secondary");
+  await press(el, "review");
+  expect(bottomMessage(el)).toBe(declarationsChanged);
+  expect(buttons()).toEqual(refused);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledTimes(1);
+  await press(el, "reload");
+  await press(el, "review");
+  expect(buttons()).toEqual([["primary", false], null]);
+  // A refusal raised by the values changing under the review, not by a send, is the same.
+  footerButton(el, "keep-editing")!.focus();
+  await deliver(withEggs());
+  expect(buttons()).toEqual(refused);
+  expect(el.shadowRoot!.activeElement).toBe(footerButton(el, "keep-editing"));
+  await press(el, "reload");
+  await press(el, "review");
+  expect(buttons()).toEqual([["primary", false], null]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledTimes(2);
+  expect(api.patchLiveMenu.mock.calls[1]![1]).toMatchObject({ reviewed: withEggs().revision });
+});
+
+it.each([
+  ["nothing", "menu_patch.unchanged", {}, declarationsChanged],
+  ["a newer version", "menu_patch.base_changed", { liveNumber: 4 }, newerNotice(4)],
+])(
+  "keeps what was reviewed when new values arrive during a send refused for %s",
+  async (_why, code, params, message) => {
+    let refuse!: (error: Error) => void;
+    const { el, deliver } = await reviewingSoup({
+      patchLiveMenu: vi.fn(() => new Promise((_resolve, reject) => (refuse = reject))),
+    });
+    await press(el, "put-live");
+    await deliver(withEggs());
+    expect(reviewLines(el)).toEqual([soupToMilk]);
+    refuse(refusal(code, params));
+    await flush(el);
+    expect(reviewLines(el)).toEqual([soupToMilk]);
+    expect(bottomMessage(el)).toBe(message);
+    await press(el, "reload");
+    await press(el, "review");
+    expect(reviewLines(el)).toEqual([soupToEggs]);
+  },
+);
+
+it("a Reload answered during a send that is then refused brings the new values to review", async () => {
+  let refuse!: (error: Error) => void;
+  let reread!: (answer: PatchDraftAnswer) => void;
+  const { el, api } = await reviewingSoup({
+    patchLiveMenu: vi
+      .fn(() => new Promise((_resolve, reject) => (refuse = reject)))
+      .mockRejectedValueOnce(refusal("menu_patch.invalid", { change: 0, field: "target" })),
+  });
+  await press(el, "put-live");
+  expect(footerButton(el, "reload")).not.toBeNull();
+  api.getLiveMenu.mockReturnValueOnce(new Promise((resolve) => (reread = resolve)));
+  await press(el, "reload");
+  await press(el, "put-live");
+  reread(withEggs());
+  await flush(el);
+  refuse(refusal("menu_patch.declarations_changed", { menuId: "menu-lunch" }));
+  await flush(el);
+  expect(bottomMessage(el)).toBe("");
+  await press(el, "review");
+  expect(reviewLines(el)).toEqual([soupToEggs]);
+});
+
+it("says both that a newer version went live and that the values changed, until Reload", async () => {
+  const { el, deliver } = await reviewingSoup();
+  await deliver(withEggs());
+  await deliver(withEggs(4));
+  expect(bottomMessage(el)).toBe(`${declarationsChanged} ${newerNotice(4)}`);
+  expect(reviewLines(el)).toEqual([soupToMilk]);
+  await press(el, "reload");
+  expect(bottomMessage(el)).toBe("");
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+});
+
+it("forgets that the values changed once a newer version is followed", async () => {
+  const { el, deliver } = await reviewingSoup();
+  await deliver(withEggs());
+  await press(el, "keep-editing");
+  await tick(el, declarations(el));
+  expect(el.changes).toEqual([]);
+  await deliver(live(4));
+  expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
+  expect(bottomMessage(el)).toBe("");
+});
+
+it("lists and sends the scheduled versions without the dates read beside them", async () => {
+  const draft = live(3, lunch(), [differing("v-q0", "2026-11-03", [soup, true])]);
+  const { el, api } = await reviewingSoup(
+    { getMenuPublications: vi.fn(async () => publications()) },
+    draft,
+  );
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Soup", true]]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu.mock.calls[0]![1]).toMatchObject({ queued: ["v-q0"] });
+});
+
+/** The lines under each scheduled row. */
+const scheduledLines = (el: MenuPatchDialog) =>
+  scheduled(el).map((box) =>
+    [...box.closest("label")!.querySelectorAll('[data-test="scheduled-line"]')].map((line) =>
+      line.textContent!.trim(),
+    ),
+  );
+
+it("shows what a scheduled version's correction replaces, unless it is the live version's old value", async () => {
+  const lemonade = { kind: "offer", menuItemId: "mi-lemonade" } as const;
+  const held = (productId: string, name: string, allergens: object) => ({
+    productId,
+    name,
+    values: { ...MILK, allergens },
+  });
+  const lemonades = {
+    ...differing("v-q1", "2026-11-10"),
+    targets: [
+      {
+        target: lemonade,
+        stillOld: false,
+        replaces: [
+          held("p-lemonade", "Lemonade", { mustard: {} }),
+          held("v-small", "Small", { mustard: {} }),
+          held("v-jug", "Jug", { milk: {} }),
+        ],
+      },
+      { target: soup, stillOld: true },
+    ],
+  };
+  const { el } = await reviewingSoup(
+    {},
+    live(3, lunch(), [differing("v-q0", "2026-11-03", [soup, false]), lemonades], {
+      ...CURRENT,
+      "v-jug": MILK,
+    }),
+  );
+  expect(scheduledRows(el)).toEqual([
+    ["3 Nov 2026, 08:00", "Soup", false],
+    ["10 Nov 2026, 09:30", "Soup", true],
+  ]);
+  expect(scheduledLines(el)).toEqual([["Soup: Allergens Mustard → Milk"], []]);
+  await press(el, "keep-editing");
+  await reviewing(el, "Lemonade");
+  expect(scheduledLines(el)).toEqual([
+    ["Soup: Allergens Mustard → Milk"],
+    [
+      "Lemonade, variants included: Allergens Mustard → Milk",
+      "Lemonade › Jug: Allergens and diets: no change",
+    ],
+  ]);
+  setLocale("es");
+  await el.updateComplete;
+  expect(scheduledLines(el)[0]).toEqual(["Soup: Alérgenos Mostaza → Leche"]);
+});
+
+it("shows under a ticked row what its correction replaces at a variant the live version lacks", async () => {
+  const lemonade = { kind: "offer", menuItemId: "mi-lemonade" } as const;
+  const held = (productId: string, name: string) => ({
+    productId,
+    name,
+    values: { ...MILK, allergens: { mustard: {} } },
+  });
+  const replaces = [held("p-lemonade", "Lemonade"), held("v-jug", "Jug")];
+  const row = {
+    ...differing("v-q0", "2026-11-03"),
+    targets: [{ target: lemonade, stillOld: true, replaces }],
+  };
+  const el = await mount(
+    stubApi({
+      getLiveMenu: vi.fn(async () =>
+        live(3, lunch(), [row], { ...CURRENT, "v-jug": { ...MILK, allergens: {} } }),
+      ),
+    }),
+  );
+  await reviewing(el, "Lemonade");
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Lemonade", true]]);
+  expect(scheduledLines(el)).toEqual([
+    [
+      "Lemonade, variants included: Allergens Mustard → Milk",
+      "Lemonade › Jug: Allergens Mustard → None",
+    ],
+  ]);
+});
+
+it("keeps the scheduled ticks fixed while the patch is being sent", async () => {
+  const el = await mount(
+    scheduledApi([differing("v-q0", "2026-11-03", [soup, true])], {
+      patchLiveMenu: vi.fn(() => new Promise(() => undefined)),
+    }),
+  );
+  await reviewing(el, "Soup");
+  expect(scheduled(el)[0]!.disabled).toBe(false);
+  await press(el, "put-live");
+  expect(scheduled(el)[0]!.disabled).toBe(true);
+});
+
+it("reviews and sends only the scheduled versions left ticked", async () => {
+  const api = scheduledApi([
+    differing("v-q0", "2026-11-03", [soup, true]),
+    differing("v-q1", "2026-11-10", [soup, true]),
+  ]);
+  const el = await mount(api);
+  await reviewing(el, "Soup");
+  await tick(el, scheduled(el)[1]!);
+  expect(reviewLines(el)).toEqual(["Soup: Allergens Not yet reviewed → Milk"]);
+  expect(reviewNotes(el)).toEqual([
+    "The version going live on 3 Nov 2026, 08:00 also gets these allergens and diets, but no other change.",
+    "The version going live on 10 Nov 2026, 09:30 does not include these changes.",
+  ]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledWith("menu-lunch", {
+    baseVersionId: "v-3",
+    changes: [fromProduct(soup)],
+    queued: ["v-q0"],
+    reviewed: expect.any(String),
+  });
+});
+
+it("says nothing in the review of a scheduled version that already has the product's values, unless something else changes", async () => {
+  const el = await mount(scheduledApi([differing("v-q0", "2026-11-03", [soup, true])]));
+  await reviewing(el, "Soup");
+  const corrected =
+    "The version going live on 3 Nov 2026, 08:00 also gets these allergens and diets, but no other change.";
+  const openOrders = "Lines already on open orders keep their old price.";
+  expect(reviewNotes(el)).toEqual([corrected]);
+  await press(el, "keep-editing");
+  await type(el, "wt-price-input", "price", "4");
+  await press(el, "review");
+  expect(reviewNotes(el)).toEqual([
+    openOrders,
+    corrected,
+    "The version going live on 10 Nov 2026, 09:30 does not include these changes.",
+    "The next normal publish from the products puts the old values back, except allergens and diets, unless you fix the products too.",
+  ]);
+});
+
+it("sends no scheduled version once the checkbox is unticked or every row is", async () => {
+  const api = scheduledApi([differing("v-q0", "2026-11-03", [soup, true])], {
+    patchLiveMenu: vi.fn(async () => {
+      throw refusal("menu_patch.unchanged", { menuId: "menu-lunch" });
+    }),
+  });
+  const el = await mount(api);
+  await pick(el, "Soup");
+  await type(el, "wt-price-input", "price", "4");
+  await tick(el, declarations(el));
+  await tick(el, declarations(el));
+  await press(el, "review");
+  await press(el, "put-live");
+  const price = { target: soup, field: "price", value: "4.00" };
+  expect(api.patchLiveMenu).toHaveBeenLastCalledWith("menu-lunch", {
+    baseVersionId: "v-3",
+    changes: [price],
+  });
+  await press(el, "keep-editing");
+  await reviewing(el, "Soup");
+  await tick(el, scheduled(el)[0]!);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenLastCalledWith("menu-lunch", {
+    baseVersionId: "v-3",
+    changes: [price, fromProduct(soup)],
+    reviewed: expect.any(String),
+  });
+  expect(bottomMessage(el)).toBe("These values are already live. Nothing was saved.");
+});
+
+it("lists a scheduled version that starts to differ while the same live version is being edited", async () => {
+  const { el, deliver } = await reviewingSoup();
+  expect(scheduledRows(el)).toEqual([]);
+  await press(el, "keep-editing");
+  await deliver(live(3, lunch(), [differing("v-q0", "2026-11-03", [soup, true])]));
+  await press(el, "review");
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Soup", true]]);
+});
+
+it("keeps the change, but no choice, when reloaded onto a newer version that renumbered the scheduled one", async () => {
+  const data = new LiveData();
+  const getLiveMenu = vi
+    .fn()
+    .mockResolvedValueOnce(live(3, lunch(), [differing("v-q0", "2026-11-03", [soup, true])]))
+    .mockResolvedValue(live(4, lunch(), [differing("v-q9", "2026-11-03", [soup, true])]));
+  const api = scheduledApi([], { liveData: data, getLiveMenu });
+  const el = await mount(api);
+  await reviewing(el, "Soup");
+  await tick(el, scheduled(el)[0]!);
+  data.invalidate([{ type: "menu_versions", id: "v-4" }]);
+  await reloadOnto(el, 4);
+  expect(el.changes).toEqual([fromProduct(soup)]);
+  await press(el, "review");
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Soup", true]]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu).toHaveBeenCalledWith("menu-lunch", {
+    baseVersionId: "v-4",
+    changes: [fromProduct(soup)],
+    queued: ["v-q9"],
+    reviewed: live(4, lunch(), [differing("v-q9", "2026-11-03", [soup, true])]).revision,
+  });
+});
+
+it("never carries a tick to another version scheduled for the same time", async () => {
+  const { el, api, deliver } = await reviewingSoup(
+    {},
+    live(3, lunch(), [differing("v-q0", "2026-11-03", [soup, false])]),
+  );
+  await tick(el, scheduled(el)[0]!);
+  await press(el, "keep-editing");
+  await deliver(live(3, lunch(), [differing("v-q9", "2026-11-03", [soup, false])]));
+  await press(el, "review");
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Soup", false]]);
+  await press(el, "put-live");
+  expect(api.patchLiveMenu.mock.calls[0]![1]).not.toHaveProperty("queued");
+});
+
+it("forgets the scheduled choices when the dialog opens again", async () => {
+  const el = await mount(scheduledApi([differing("v-q0", "2026-11-03", [soup, true])]));
+  await reviewing(el, "Soup");
+  await tick(el, scheduled(el)[0]!);
+  el.open = false;
+  await flush(el);
+  el.open = true;
+  await flush(el);
+  await pick(el, "Soup");
+  expect(declarations(el).checked).toBe(false);
+  await reviewing(el, "Soup");
+  expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Soup", true]]);
+});
+
+it("forgets the scheduled choices when its changes are discarded", async () => {
+  const coordinator = createLeaveCoordinator(async () => "discard", window);
+  const answer = (event: Event) =>
+    (event as CustomEvent<{ accept(value: typeof coordinator): void }>).detail.accept(coordinator);
+  document.body.addEventListener("wt-leave-coordinator", answer);
+  try {
+    const el = await mount(scheduledApi([differing("v-q0", "2026-11-03", [soup, true])]));
+    await reviewing(el, "Soup");
+    await tick(el, scheduled(el)[0]!);
+    await coordinator.request({ scopes: "all", reason: "cancel", proceed() {} });
+    await el.updateComplete;
+    expect(declarations(el).checked).toBe(false);
+    await reviewing(el, "Soup");
+    expect(scheduledRows(el)).toEqual([["3 Nov 2026, 08:00", "Soup", true]]);
+  } finally {
+    document.body.removeEventListener("wt-leave-coordinator", answer);
+    coordinator.dispose();
+  }
+});
+
+it("puts a refused allergens change back under its checkbox, until it is unticked", async () => {
+  const el = await mount(
+    stubApi({
+      patchLiveMenu: vi.fn(async () => {
+        throw refusal("menu_patch.invalid", { change: 0, field: "declarations" });
+      }),
+    }),
+  );
+  await pick(el, "Soup");
+  await tick(el, declarations(el));
+  await press(el, "review");
+  await press(el, "put-live");
+  const box = declarations(el);
+  expect(box.checked).toBe(true);
+  expect(box.getAttribute("aria-invalid")).toBe("true");
+  const message = el.shadowRoot!.getElementById(box.getAttribute("aria-describedby")!)!;
+  expect(message.textContent!.trim()).toBe("Check this value.");
+  expect(el.shadowRoot!.activeElement).toBe(box);
+  expect(bottomMessage(el)).toBe("Correct the fields marked on Soup to continue.");
+  await tick(el, box);
+  expect(declarations(el).getAttribute("aria-invalid")).toBe("false");
+  expect(form(el).querySelector(".field-error")).toBeNull();
+  expect(bottomMessage(el)).toBe("");
+});
+
+it.each([
+  ["an ordinary name", "Soup"],
+  ["one long word", "Soup".repeat(20)],
+])(
+  "shows the checkbox inside the form, and the scheduled rows inside the review, at 390 px in Spanish with %s",
+  async (_what, name) => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    try {
+      setLocale("es");
+      const el = await mount(
+        scheduledApi([], {
+          getLiveMenu: vi.fn(async () =>
+            live(3, lunch(name), [
+              differing("v-q0", "2026-11-03", [soup, true], [salad, true]),
+              differing("v-q1", "2026-11-10", [soup, false]),
+            ]),
+          ),
+        }),
+      );
+      const fits = (inside: Element, boxes: HTMLInputElement[]) => {
+        const right = inside.getBoundingClientRect().right + 0.5;
+        for (const label of boxes.map((box) => box.closest("label")!)) {
+          const box = label.getBoundingClientRect();
+          expect(box.right).toBeLessThanOrEqual(right);
+          expect(label.scrollWidth).toBeLessThanOrEqual(label.clientWidth);
+          expect(box.height).toBeGreaterThanOrEqual(44);
+        }
+      };
+      await declare(el, name, "Salad");
+      fits(form(el), [declarations(el)]);
+      await press(el, "review");
+      expect(scheduledLines(el).map((lines) => lines.length)).toEqual([0, 1]);
+      fits(review(el), scheduled(el));
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);

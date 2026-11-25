@@ -78,10 +78,21 @@ Lane's own calls, for the watcher to confirm:
   - A queued version is listed when one of its copies of the product (dish, variant, extra, set-menu
     copy) differs from the product's current declarations.
   - "Still has the old value" compares each differing copy with the value being corrected: after a
-    save, the product's declarations before that save; in Patch live menu, that copy's declarations
-    on the live version the patch is built on. Ticked when every differing copy equals it; a copy
-    holding anything else (someone already changed that version on purpose), or one the live version
-    lacks, leaves the menu unticked.
+    save, the product's declarations before that save; in Patch live menu, that product's (an
+    extra's: that product's in that list) declarations on the live version the patch is built on.
+    Ticked when every differing copy equals it; a copy holding anything else (someone already
+    changed that version on purpose) leaves the menu unticked. (Changed 2026-11-25 by lane A, agreed
+    by the watcher at 12:27, not the owner: it read "that copy's declarations on the live version",
+    and any copy in a place the live version lacked left the menu unticked although it still held
+    the old value. Where the live version's own copies of one product disagree, there is no one old
+    value, so the menu is unticked. Patch live menu has no item for a dish the live version lacks, or
+    an extra in a list it lacks, so such a copy is neither listed nor counted.)
+  - A variant the live version lacks, under a dish it holds: its old value is its dish's on the live
+    version, so a variant copy equal to that keeps the menu ticked, and one holding anything else
+    unticks it. It is corrected with its dish; a patch of the live menu cannot pick it. (The
+    watcher's, 2026-11-25 15:52, not the owner's: "the same rule as 12:27 (ticked when every
+    differing copy, the variant's own included, still has the old value); unticked leaves the wrong
+    allergen on the likeliest menu". The plan left such a menu unticked.)
   - A ticked queued version is cancelled and queued again under a new number with the corrected
     document, at its own time, by `requeueAfter`, which already does that with the document
     unchanged. An unticked one is requeued as today. A menu with only a scheduled version goes
@@ -515,8 +526,8 @@ tests about +300.
     languages: ContentLanguages,
     declarations?: ReadonlyMap<string, DeclarationValues>, // by product id; required for a declarations change
   ): MenuDocument;
-  /** The product ids a list's declarations changes copy from: the offer copies' productId, the
-   * variant's id, the extra's productId. */
+  /** The product ids a list's declarations changes copy from: the offer copies' productId and
+   * their variants' ids, the variant's id, the extra's productId. */
   export function declarationProductIds(
     document: MenuDocument,
     changes: readonly MenuPatchChange[],
@@ -525,7 +536,11 @@ tests about +300.
 - `applyMenuPatch` for `declarations`: each dish copy takes the four fields of
   `declarations.get(copy.productId)`, each variant copy of `declarations.get(copy.id)`, each extra
   copy `extraDeclarationValues`'s two fields; a missing entry throws `menu_patch.invalid` with
-  `field: "declarations"`.
+  `field: "declarations"`. A dish's change also takes the variants of each copy it changes, each
+  from its own effective values, live and in a named queued version, and a variant's drift is
+  listed under its dish as well as under itself. (Changed 2026-11-25 by lane A, agreed by the watcher at 12:27, not the owner:
+  it changed the dish copies alone, so correcting a dish sold by its variants changed nothing a
+  guest can order.)
 - `patchLiveMenu` reads `readProductDeclarationValues(tx, declarationProductIds(...))` before
   applying.
 - `patchLiveMenu`'s options gain `queued?: readonly string[]` (version ids), and `requeueAfter`
@@ -534,9 +549,18 @@ tests about +300.
   builds the corrections by applying only its `declarations` changes, for the copies the queued
   version holds, to each named queued document. Any other field of a patch never reaches a queued
   version (A1151).
-- `GET` of the patch draft answers, for a `declarations` target, the queued versions that differ:
-  `{ versionId, activatesAt, stillOld }[]` (the route the dialog already loads from; a pure
-  `queuedDeclarationDrift(queued, live, current)` in `menu-patch.ts`, also used by PR 3b).
+- `GET` of the patch draft answers the live version, `declarations` (the products' current values),
+  the queued versions that differ,
+  `{ versionId, activatesAt, local, targets: { target, stillOld, replaces? }[] }[]`, and `revision`, a
+  hash of `declarations` and `queued` before `local` is added (the route the dialog already loads
+  from; a pure `queuedDeclarationDrift(queued, current, correctedFrom)` in
+  `menu-patch-declarations.ts`, also
+  used by PR 3b: `correctedFrom` gives each copy's target and old value, Patch passing
+  `liveDeclarations(live)`). The patch route takes that revision back as `reviewed` and refuses a
+  declarations patch of another one `menu_patch.declarations_changed` (`assertPatchReviewed`).
+  (Changed 2026-11-25 by the review wave: it read `{ versionId, activatesAt, stillOld }[]`, with
+  nothing to check on the way back; a tick is now for one version id and never carried to another;
+  and `requeueAfter`'s corrections hold each document with its hash.)
 
 - [ ] **Step 1: Failing tests.** `menu-patch.test.ts`: `declarations copies the product's values to
   the dish, its set-menu copies, a variant and an extra`; `refuses a declarations value other than
@@ -545,8 +569,9 @@ tests about +300.
   request is queued again at its own time with the corrected allergens, and one not named keeps its
   document`; `a price in the same patch does not reach the named queued version` (A1151); `an id
   that is not queued is ignored`. `menu-patch.test.ts`: `stillOld is true only when every differing
-  copy holds the live version's value` (a third value, and a copy the live version lacks, give
-  false).
+  copy holds the live version's value of its product` (a third value, and live copies that
+  disagree, give false; a copy in a place the live version lacks, true; a variant the live version
+  lacks, true only with its dish's value there: the watcher, 2026-11-25 15:52).
 - [ ] **Step 2: Run** `pnpm --filter @waitron/menu exec vitest run src/menu-patch.test.ts src/menu-patch.live.test.ts`; FAIL.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4: Run**; PASS. Commit `-s`.
@@ -561,14 +586,17 @@ tests about +300.
 
 The dialog also lists each scheduled version that differs, with its date: a checkbox ticked when
 `stillOld`, sent as `queued` (owner, 2026-11-25 10:02). Nothing is listed until the declarations
-checkbox is ticked.
+checkbox is ticked. (Changed 2026-11-25 by a review: one list for the whole patch, on the review
+step, each version naming the items it differs for; per item it let a tick given for one cover
+another's deliberate copy. The review shows old → new values, from a `declarations` map the draft
+also answers, where it read "from the product".)
 
 - [ ] **Step 1: Failing tests.** The scheduled list: ticked and unticked rows, the date in the
   screen's language, only ticked ids are sent, nothing listed with the box unticked or no queued
   version. For a dish, a variant and an extra target, the dialog draws one
   checkbox "Use the product's current allergens and diets"; ticking it adds exactly
-  `{ target, field: "declarations", value: "product" }`; the review lists "Allergens and diets:
-  from the product". No free-typed allergen field exists (default 2). The Products guide, EN and
+  `{ target, field: "declarations", value: "product" }`; the review lists the old and new
+  values. No free-typed allergen field exists (default 2). The Products guide, EN and
   ES, gains one sentence: "Patch live menu can also put a product's current allergens and diets
   live without publishing." 
 - [ ] **Step 2–4:** run, implement (field primitives only, CLAUDE.md §3), run. Commit `-s`.
@@ -597,6 +625,9 @@ corrects-all, second-call-empty and rollback. Task 3.4 owns who gets a slip.
 **Interfaces:**
 - Reads documents through `readLiveDocuments` and the queued versions' rows; a product save is rare,
   so one read per save that changed declarations is enough.
+- `QueuedDeclarationDrift` is already exported by 3a, from `menu-patch-types.ts`, as
+  `{ versionId, activatesAt, targets: { target, stillOld, replaces? }[] }`: use or rename around it
+  (2026-11-25).
 - Produces:
   ```ts
   export interface DeclarationDrift {

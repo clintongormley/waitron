@@ -321,12 +321,12 @@ export type {
 import type { MenuPriceRow, MenuPriceVariant } from "@waitron/shared";
 export type { MenuPriceRow, MenuPriceVariant };
 import type {
-  LiveMenu,
   MenuPatchChange,
   MenuPatchResult,
   MenuPatchTarget,
+  PatchDraftAnswer,
 } from "@waitron/menu/src/menu-patch-types.js";
-export type { LiveMenu, MenuPatchChange, MenuPatchResult, MenuPatchTarget };
+export type { MenuPatchChange, MenuPatchResult, MenuPatchTarget, PatchDraftAnswer };
 import type {
   DocumentMember,
   FrozenOffer,
@@ -3768,14 +3768,22 @@ export class DashboardApi {
   }
 
   /** `null` when the menu has never been published. */
-  getLiveMenu(menuId: string): Promise<LiveMenu | null> {
-    return this.#request<LiveMenu | null>(`/management-api/menus/${menuId}/live`, "GET");
+  getLiveMenu(menuId: string): Promise<PatchDraftAnswer | null> {
+    return this.#request<PatchDraftAnswer | null>(`/management-api/menus/${menuId}/live`, "GET");
   }
 
-  /** A live version other than `baseVersionId` is refused `menu_patch.base_changed`. */
+  /** A live version other than `baseVersionId` is refused `menu_patch.base_changed`. `queued` names
+   * the scheduled versions that take the declarations changes too. A declarations change needs
+   * `reviewed`, the reviewed answer's `revision`; another is refused
+   * `menu_patch.declarations_changed`. */
   patchLiveMenu(
     menuId: string,
-    body: { baseVersionId: string; changes: MenuPatchChange[] },
+    body: {
+      baseVersionId: string;
+      changes: MenuPatchChange[];
+      queued?: string[];
+      reviewed?: string;
+    },
   ): Promise<MenuPatchResult> {
     return this.#request<MenuPatchResult>(`/management-api/menus/${menuId}/patch`, "POST", body);
   }

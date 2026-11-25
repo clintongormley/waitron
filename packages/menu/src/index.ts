@@ -243,7 +243,11 @@ export type {
   MenuPatchChange,
   MenuPatchResult,
   MenuPatchTarget,
+  PatchDraft,
+  PatchDraftAnswer,
+  QueuedDeclarationDrift,
 } from "./menu-patch-types.js";
+export { assertPatchReviewed, readPatchDraft } from "./menu-patch-draft.js";
 export {
   activateDueMenuPublications,
   cancelMenuPublication,
@@ -334,7 +338,7 @@ export {
 
 export { MENU_BACKUP_VERIFICATION } from "./backup-verification.js";
 
-export { productDeclarationValues, extraDeclarationValues } from "./product-declarations.js";
+export { productDeclarationValues, extraDeclarationValues } from "./declaration-values.js";
 export { readPublishedDeclarations, type PublishedLine } from "./published-declarations.js";
 
 export { MENU_PERSONAL_DATA } from "./personal-data.js";

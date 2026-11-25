@@ -3967,7 +3967,7 @@ export const en = {
   "menus.patch_live": "Patch live menu…",
   "menus.patch_live_help_label": "What a patch changes",
   "menus.patch_live_help":
-    "A patch corrects wording, prices or pictures in the version that is live now, without publishing your work in the products. Only this menu's live version changes.",
+    "A patch corrects wording, prices, pictures, or allergens and diets in the version that is live now, without publishing your work in the products. Only this menu changes: its live version, and the allergens and diets of the scheduled versions left ticked.",
   "menus.patch_live_help_guide": "More about patching the live menu",
   "menus.changes_link": "Unpublished changes",
   "menus.price_clash": "1 price clash",
@@ -4098,6 +4098,18 @@ export const en = {
   "menu_patch.image_not_found":
     "This image is no longer in the image library. Choose another, or remove it.",
   "menu_patch.open_orders_note": "Lines already on open orders keep their old price.",
+  "menu_patch.declarations": "Use the product's current allergens and diets",
+  "menu_patch.declarations_variants":
+    "Use the product's current allergens and diets, variants included",
+  "menu_patch.declarations_by_dish": "Corrected with the dish.",
+  "menu_patch.declarations_label": "Allergens and diets",
+  "menu_patch.declarations_same": "{item}: {field}: no change",
+  "menu_patch.variants_included": "{item}, variants included",
+  "menu_patch.scheduled": "Correct these scheduled versions too",
+  "menu_patch.corrected_note":
+    "The version going live on {date} also gets these allergens and diets, but no other change.",
+  "menu_patch.corrected_note_many":
+    "The versions going live on {dates} also get these allergens and diets, but no other change.",
   "menu_patch.queued_note": "The version going live on {date} does not include these changes.",
   "menu_patch.queued_note_many": "The versions going live on {dates} do not include these changes.",
   "menu_patch.needs_correcting": "Needs correcting",
@@ -4106,6 +4118,8 @@ export const en = {
     "One of these changes no longer fits the live menu, for example because the venue's content languages changed while you were editing. Nothing was put live. Reload reads the live menu and content languages again and checks each change: it drops each one that does not fit, says how many, and keeps the rest.",
   "menu_patch.products_note":
     "The next normal publish from the products puts the old values back unless you fix the products too.",
+  "menu_patch.products_note_declared":
+    "The next normal publish from the products puts the old values back, except allergens and diets, unless you fix the products too.",
   "menu_patch.keep_editing": "Keep editing",
   "menu_patch.put_live": "Put live now",
   "menu_patch.reload": "Reload",
@@ -8814,7 +8828,7 @@ export const es: Record<StringKey, string> = {
   "menus.patch_live": "Corregir la carta publicada…",
   "menus.patch_live_help_label": "Qué cambia una corrección",
   "menus.patch_live_help":
-    "Una corrección cambia textos, precios o imágenes en la versión publicada ahora, sin publicar lo que has cambiado en los productos. Solo cambia la versión publicada de esta carta.",
+    "Una corrección cambia textos, precios, imágenes, o alérgenos y dietas en la versión publicada ahora, sin publicar lo que has cambiado en los productos. Solo cambia esta carta: su versión publicada, y los alérgenos y dietas de las versiones programadas que queden marcadas.",
   "menus.patch_live_help_guide": "Más sobre corregir la carta publicada",
   "menus.changes_link": "Cambios sin publicar",
   "menus.price_clash": "1 conflicto de precio",
@@ -8949,6 +8963,18 @@ export const es: Record<StringKey, string> = {
     "Esta imagen ya no está en la biblioteca de imágenes. Elige otra o quítala.",
   "menu_patch.open_orders_note":
     "Las líneas que ya están en pedidos abiertos mantienen su precio anterior.",
+  "menu_patch.declarations": "Usar los alérgenos y dietas actuales del producto",
+  "menu_patch.declarations_variants":
+    "Usar los alérgenos y dietas actuales del producto, también en sus variantes",
+  "menu_patch.declarations_by_dish": "Se corrige junto con el plato.",
+  "menu_patch.declarations_label": "Alérgenos y dietas",
+  "menu_patch.declarations_same": "{item}: {field}: sin cambios",
+  "menu_patch.variants_included": "{item}, variantes incluidas",
+  "menu_patch.scheduled": "Corregir también estas versiones programadas",
+  "menu_patch.corrected_note":
+    "La versión que se publica el {date} también recibe estos alérgenos y dietas, pero ninguna otra corrección.",
+  "menu_patch.corrected_note_many":
+    "Las versiones que se publican en estas fechas ({dates}) también reciben estos alérgenos y dietas, pero ninguna otra corrección.",
   "menu_patch.queued_note": "La versión que se publica el {date} no incluye estas correcciones.",
   "menu_patch.queued_note_many":
     "Las versiones que se publican en estas fechas no incluyen estas correcciones: {dates}.",
@@ -8958,6 +8984,8 @@ export const es: Record<StringKey, string> = {
     "Una de estas correcciones ya no encaja en la carta publicada, por ejemplo porque los idiomas del contenido del local han cambiado mientras editabas. No se ha publicado nada. Volver a cargar lee de nuevo la carta publicada y los idiomas del contenido y comprueba cada corrección: descarta las que no encajan, dice cuántas y conserva el resto.",
   "menu_patch.products_note":
     "La próxima publicación normal desde los productos vuelve a poner los valores anteriores, salvo que corrijas también los productos.",
+  "menu_patch.products_note_declared":
+    "La próxima publicación normal desde los productos vuelve a poner los valores anteriores, menos los alérgenos y dietas, salvo que corrijas también los productos.",
   "menu_patch.keep_editing": "Seguir editando",
   "menu_patch.put_live": "Publicar la corrección",
   "menu_patch.reload": "Volver a cargar",

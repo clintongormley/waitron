@@ -131,8 +131,9 @@ quítala del grupo Modificadores de ese producto concreto.
 
 Un elemento de extras declara sus alérgenos y su aptitud dietética a través del producto que nombra, así
 que los mantienes en ese producto, en **Productos**, no aquí. Los alérgenos y las etiquetas dietéticas
-forman parte de la carta publicada: publica la carta para que un cambio entre en vigor. Las opciones
-son texto y no llevan declaraciones.
+forman parte de la carta publicada: publica la carta para que un cambio entre en vigor, o
+[corrige la carta publicada](products.md#patch-live-menu). Las opciones son texto y no llevan
+declaraciones.
 
 ## Qué hace la caja con una lista {#till}
 

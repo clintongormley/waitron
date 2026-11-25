@@ -237,7 +237,8 @@ an unknown menu `menu.not_found` (404).
 A menu edition can also be queued to go live at a set minute, then moved or cancelled until then.
 Its content is fixed when it is queued; a later change to the working menu is not in it. A patch
 (below) cancels every queued edition and queues a copy of each under a new number and version id,
-with the same content and time; the original then reads `cancelled`, with the patch's moment as its
+with the same time and, except for the allergens and diets of the versions the patch names, the same
+content; the original then reads `cancelled`, with the patch's moment as its
 `cancelledAt`. The routes below take the time as a date and time on the venue's clock,
 answer the instant, and list each time as that clock shows it. Each of them, the publish route and
 the two patch routes need the `menu.manage` permission (403 `authorization.not_permitted`). A
@@ -270,7 +271,8 @@ On the two routes that take a time, the time refusals come before any of these: 
 clock skips `menu_publication.time_skipped` (400, `date`, `time`); a minute it shows twice, sent
 without `occurrence: "earlier" | "later"`, `menu_publication.time_repeated` (400, `date`, `time`,
 `occurrences: [{ at, offset }]`); a venue time zone that is not a named zone
-`time_zone.unreadable` (500), which the list answers too. Malformed ids answer
+`time_zone.unreadable` (500), which the list answers too, and the live read below when it lists a
+scheduled version. Malformed ids answer
 `shared.invalid_id` (400).
 
 The routes keep a menu's editions going live in number order. A new edition, queued or published now, overtakes every queued
@@ -289,23 +291,41 @@ every waiting edition again after itself.
 A manager can correct the live version itself, leaving the products and the working menu as they
 were.
 
-- `GET /management-api/menus/:id/live` gives `{ versionId, number, since, document }` for the
-  version live now, with `since` as `publishedAt` above, or `null` when the menu has none. An
-  unknown menu answers `menu.not_found` (404).
-- `POST /management-api/menus/:id/patch`, with `{ baseVersionId, changes }`, puts the changes
+- `GET /management-api/menus/:id/live` gives `{ versionId, number, since, document, revision,
+  declarations, queued }` for the version live now, with `since` as `publishedAt` above, or `null` when the menu has none. `declarations` holds
+  the current allergens and diets of each dish, variant and extra, by product id. `queued` lists each
+  scheduled version that differs from the products' current ones at a dish, variant or extra a patch
+  of the live version would correct, as
+  `{ versionId, activatesAt, local, targets }`, `local` being `activatesAt` in the venue's zone, as
+  `GET /management-api/menus/:id/publications` gives it; each target is
+  `{ target, stillOld, replaces? }`, `stillOld` when every
+  differing copy holds the value being corrected (its dish's, for a variant the live version lacks),
+  and a dish's takes in its variants. A target that is not `stillOld`, or holding a variant the live
+  version lacks that differs and takes other values than its dish, has `replaces`: each distinct
+  value of the copies a correction writes over, as `{ productId, name, values }`, the target's own
+  product's first, the copies that agree already included. `revision` is a hash of `declarations` and
+  `queued`, taken before `local` is added. An unknown menu answers `menu.not_found` (404).
+- `POST /management-api/menus/:id/patch`, with `{ baseVersionId, changes, queued?, reviewed? }`, puts the changes
   live at once as a new version under the next number and gives `{ versionId, number, requeued }`
   (200). `requeued` lists each queued edition's copy as `{ versionId, number, activatesAt }`, lowest
-  number first. Each change is `{ target, field, value }`; the fields each kind of target takes are
-  `PATCH_FIELDS` in `packages/menu/src/menu-patch-types.ts`. A missing or non-string
-  `baseVersionId`, or a `changes` that is not a list, answers `management.request_invalid` (400,
-  `field` naming it); a malformed menu id or `baseVersionId` answers `shared.invalid_id` (400). An
+  number first. With nothing to change on the live version, it stays live and is the version answered. Each change is `{ target, field, value }`; the fields each kind of target takes are
+  `PATCH_FIELDS` in `packages/menu/src/menu-patch-types.ts`. A `declarations` change takes only
+  `"product"` and copies the product's current allergens and diets, a dish's onto its variants too
+  from their own; the scheduled versions `queued`
+  names take those changes and no others. A missing or non-string
+  `baseVersionId`, a `changes` that is not a list, or a `queued` that is not a list of strings, answers
+  `management.request_invalid` (400, `field` naming it); a malformed menu id, `baseVersionId` or id in
+  `queued` answers `shared.invalid_id` (400). An
   unknown menu answers `menu.not_found` (404), a menu with no live version
   `menu_patch.not_published` (409, `menuId`), and a live version other than `baseVersionId`
-  `menu_patch.base_changed` (409, `menuId`, `baseVersionId`, `liveVersionId`, `liveNumber`). A change the route cannot apply
+  `menu_patch.base_changed` (409, `menuId`, `baseVersionId`, `liveVersionId`, `liveNumber`). With a
+  `declarations` change, `reviewed` must be the `revision` of the answer that was reviewed: anything
+  but a string answers `management.request_invalid`, and one that is no longer the live version's
+  `revision` `menu_patch.declarations_changed` (409, `menuId`), writing nothing. A change the route cannot apply
   answers `menu_patch.invalid` (400, `change` as its index, `field` naming `target`, `field` or the
   refused field, and `reason` with the code behind a refused translation, or `image.not_found`
   for a picture the image library does not hold). A patch that leaves the
-  live version as it was answers `menu_patch.unchanged` (409, `menuId`).
+  live version and every scheduled version it names as they were answers `menu_patch.unchanged` (409, `menuId`).
 
 Tills sell from live versions of active menus. Reading a live version outside document format 6 refuses
 with `menu.reset_required`. Status reads check their requested menus; preview checks its own menu
