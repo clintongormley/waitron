@@ -649,12 +649,13 @@ describe("the clock watch and a jump of the box's clock", () => {
   );
 
   it("reports a jump before and during the host check for a monthly close", async () => {
-    const checking = Promise.withResolvers<void>();
-    const host = Promise.withResolvers<typeof SYNCHRONISED>();
+    let checking = false;
+    let release!: (status: typeof SYNCHRONISED) => void;
+    const host = new Promise<typeof SYNCHRONISED>((resolve) => (release = resolve));
     const h = harness({
       host: () => {
-        checking.resolve();
-        return host.promise;
+        checking = true;
+        return host;
       },
       startState: confirmed("by_internet"),
     });
@@ -664,10 +665,10 @@ describe("the clock watch and a jump of the box's clock", () => {
     expect(unchecked()).toBe(true);
     const tick = h.tick();
     try {
-      await checking.promise;
+      await vi.waitFor(() => expect(checking).toBe(true));
       expect(unchecked()).toBe(true);
     } finally {
-      host.resolve(SYNCHRONISED);
+      release(SYNCHRONISED);
       await tick;
     }
     expect(unchecked()).toBe(false);
