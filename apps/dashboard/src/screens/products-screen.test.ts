@@ -501,6 +501,27 @@ describe("menu-screen", () => {
     await vi.waitFor(() => expect(el.shadowRoot!.activeElement?.localName).toBe("h1"));
   });
 
+  it.each(["listCategories", "listProducts"] as const)(
+    "opens the linked editor when a failed first %s read recovers on its own",
+    async (read) => {
+      const before = location.href;
+      onTestFinished(() => history.replaceState(null, "", before));
+      history.replaceState(null, "", "/products/product/p1");
+      const api = Object.assign(stubApi(), { liveData: new LiveData() });
+      vi.mocked(api[read]).mockRejectedValueOnce({ code: "connection.failed" });
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+      const retry = () => el.shadowRoot!.querySelector('[data-test="products-retry"]');
+      await vi.waitFor(() => expect(retry()).not.toBeNull());
+      expect(editor(el).open).toBe(false);
+
+      api.liveData.refresh();
+      await vi.waitFor(() => expect(editor(el).open).toBe(true));
+      expect(editor(el).value?.id).toBe("p1");
+      expect((await productTable(el)).checkVisibility()).toBe(true);
+      expect(retry()).toBeNull();
+    },
+  );
+
   it("reveals a deep-linked category when the list first becomes visible", async () => {
     const before = location.href;
     onTestFinished(() => history.replaceState(null, "", before));
@@ -508,23 +529,34 @@ describe("menu-screen", () => {
     const pending = deferred<Product[]>();
     const api = stubApi({
       listProducts: vi.fn().mockReturnValue(pending.promise),
-      listCategories: vi
-        .fn()
-        .mockResolvedValue([
-          ...categories,
-          { id: "child", name: "Child category", parentId: "c1", color: null },
-        ]),
+      listCategories: vi.fn().mockResolvedValue([
+        ...categories,
+        ...Array.from({ length: 20 }, (_, index) => ({
+          id: `earlier-${index}`,
+          name: `Earlier category ${index}`,
+          parentId: "c1",
+          color: null,
+        })),
+        { id: "child", name: "Zested dishes", parentId: "c1", color: null },
+      ]),
     });
-    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    const { el, host } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    host.style.setProperty("--wt-table-max", "280px");
     const table = await productTable(el);
     await vi.waitFor(() => expect(api.listProducts).toHaveBeenCalledOnce());
     expect(table.checkVisibility()).toBe(false);
     pending.resolve(products);
-    await vi.waitFor(() =>
-      expect(
-        table.shadowRoot!.querySelector('tr[data-row-key="folder:child"]')?.checkVisibility(),
-      ).toBe(true),
-    );
+    await vi.waitFor(() => {
+      const root = table.shadowRoot!;
+      const row = root.querySelector('tr[data-row-key="folder:child"]');
+      expect(row?.checkVisibility()).toBe(true);
+      expect(row!.getBoundingClientRect().top).toBeGreaterThanOrEqual(
+        root.querySelector("thead th")!.getBoundingClientRect().bottom,
+      );
+      expect(row!.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        root.querySelector(".scroll")!.getBoundingClientRect().bottom + 1,
+      );
+    });
     expect(table.isExpanded("folder:child")).toBe(true);
   });
 

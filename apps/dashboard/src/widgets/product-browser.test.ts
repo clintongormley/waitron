@@ -3995,6 +3995,8 @@ it("shows a late name refusal above the table and leaves the newer name box alon
   expect(
     el.shadowRoot!.querySelector('[slot="toolbar-bottom"][role="alert"]')?.textContent?.trim(),
   ).toBe(codeMessage("category.invalid"));
+  await menuAction(el, "add-category-d");
+  expect(el.shadowRoot!.querySelector('[slot="toolbar-bottom"][role="alert"]')).toBeNull();
 });
 
 it("Add category clears a typed search, so its name box shows", async () => {
