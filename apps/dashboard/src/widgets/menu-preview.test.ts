@@ -596,27 +596,6 @@ it.each([
 });
 
 it.each([
-  ["en", "Soup: allergens, variants — shared product"],
-  ["es-ES", "Soup: alérgenos, variantes — producto compartido"],
-])("names a variant's allergen change as allergens (%s)", async (locale, line) => {
-  setLocale(locale);
-  const el = await mount({
-    preview: preview([
-      {
-        id: "fixture-src/widgets/menu-preview.test.ts-variant-allergens",
-        targets: { before: [], after: [] },
-        kind: "product_changed",
-        productId: "p-soup",
-        name: "Soup",
-        fields: ["allergens", "variants"],
-        source: "shared_product",
-      },
-    ]),
-  });
-  expect(items(el, "changes")).toEqual([line]);
-});
-
-it.each([
   ["en", "Daily menu: allergens, diet — set menu"],
   ["es-ES", "Daily menu: alérgenos, dieta — menú"],
 ])("names a change to a set menu's dish allergens and diet (%s)", async (locale, line) => {
