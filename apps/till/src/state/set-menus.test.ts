@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { setMenuCopyOf, type BillSetMenuState, type ServedSetMenu } from "@waitron/shared";
-import { draftPlacements, orderingCopies } from "./set-menus.js";
+import { draftPlacements, orderingCopies, ownSetMenuOffer } from "./set-menus.js";
 import type { OrderLine } from "./working-order.js";
 
 function copy(menuId: string, versionId: string, newestOnSale = true): ServedSetMenu {
@@ -106,4 +106,52 @@ it("holds a saved reservation before an earlier unsent dish can take it", () => 
   expect(
     draftPlacements(bill, [fresh("a"), held]).placed.map((place) => place.setMenuLineId),
   ).toEqual(["third", "second"]);
+});
+
+it("finds a line's own menu's dish, and never another full menu's", () => {
+  const selling = (versionId: string, dish: string, setMenuId = "Daily") =>
+    ({
+      ...copy(setMenuId, versionId),
+      offers: [{ id: "hake", name: dish }],
+    }) as unknown as ServedSetMenu;
+  const dinner = selling("d1", "Dinner's").offers[0]!;
+  const sold = { offer: dinner, versionId: "d1" };
+  const zone = {
+    setMenus: [
+      selling("l2", "Evening's", "Evening"),
+      selling("d1", "Dinner's"),
+      selling("l2", "Lunch's"),
+    ],
+    versions: new Map([
+      ["lunch", "l2"],
+      ["dinner", "d1"],
+    ]),
+    menuOfVersion: new Map([
+      ["l1", "lunch"],
+      ["l2", "lunch"],
+      ["d1", "dinner"],
+    ]),
+  };
+  const line = (menuVersionId: string | null, menuId?: string, menuItemId = "hake") => ({
+    setMenuId: "Daily",
+    menuItemId,
+    menuVersionId,
+    ...(menuId === undefined ? {} : { menuId }),
+  });
+  const named = (...args: Parameters<typeof line>) =>
+    ownSetMenuOffer(line(...args), sold, zone)?.name;
+
+  expect(named("d1")).toBe("Dinner's");
+  expect(named("l1")).toBe("Lunch's");
+  expect(ownSetMenuOffer(line("l1"), undefined, zone)?.name).toBe("Lunch's");
+  expect(named("l1", undefined, "cod")).toBeUndefined();
+  // A version this till never saw: only the full menu a line read back names can place it.
+  expect(named("l0")).toBeUndefined();
+  expect(named("l0", "Daily")).toBeUndefined();
+  expect(named("l0", "lunch")).toBe("Lunch's");
+  expect(named(null)).toBeUndefined();
+  const dropped = { ...zone, setMenus: [selling("d1", "Dinner's")] };
+  expect(ownSetMenuOffer(line("l1"), sold, dropped)).toBeUndefined();
+  const left = { ...zone, versions: new Map([["dinner", "d1"]]) };
+  expect(ownSetMenuOffer(line("l1"), sold, left)).toBeUndefined();
 });

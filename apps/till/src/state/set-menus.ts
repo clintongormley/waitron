@@ -41,16 +41,71 @@ export function orderingCopies(
   return copies;
 }
 
-export type SetMenuOfferLookup = (
-  line: Pick<FreshDraftLine, "setMenuId" | "menuItemId" | "menuVersionId">,
-) => { offer: TillMenuOffer; versionId: string } | undefined;
+/** `menuId` is the full menu of a line read back from the server; on a line the till built it is the
+ * set menu. */
+export type SetMenuLine = Pick<FreshDraftLine, "setMenuId" | "menuItemId" | "menuVersionId"> & {
+  menuId?: string;
+};
 
-export function lookupSetMenuLine(line: OrderLine, lookup?: SetMenuOfferLookup) {
-  return lookup?.({
+/** What the line is sold from now, which can be another full menu's copy; `own` is
+ * {@link ownSetMenuOffer}'s answer. */
+export type SetMenuOfferLookup = (
+  line: SetMenuLine,
+) => { offer: TillMenuOffer; versionId: string; own?: TillMenuOffer } | undefined;
+
+/**
+ * The offer whose declarations are the line's: the copy its own version names, else the one the live
+ * version of its own full menu holds, as the kitchen reads them. Undefined when neither holds the
+ * dish, or that menu is not known: another full menu's copy can declare it differently.
+ */
+export function ownSetMenuOffer(
+  line: SetMenuLine,
+  sold: { offer: TillMenuOffer; versionId: string } | undefined,
+  zone: {
+    setMenus: readonly ServedSetMenu[];
+    versions: ReadonlyMap<string, string>;
+    /** Every version seen, to its full menu: a line can name one no longer live. */
+    menuOfVersion: ReadonlyMap<string, string>;
+  },
+): TillMenuOffer | undefined {
+  if (sold !== undefined && sold.versionId === line.menuVersionId) return sold.offer;
+  const menuId = zone.menuOfVersion.get(line.menuVersionId ?? "") ?? line.menuId;
+  const live = zone.versions.get(menuId ?? "");
+  if (live === undefined) return undefined;
+  return zone.setMenus
+    .find((copy) => copy.menuId === line.setMenuId && copy.versionIds.includes(live))
+    ?.offers.find((dish) => dish.id === line.menuItemId);
+}
+
+export function setMenuLineOf(line: OrderLine): SetMenuLine {
+  return {
     setMenuId: line.setMenuId,
     menuItemId: line.product.menuItemId ?? "",
     menuVersionId: line.product.menuVersionId ?? null,
-  });
+    ...(line.product.menuId === undefined ? {} : { menuId: line.product.menuId }),
+  };
+}
+
+export function lookupSetMenuLine(line: OrderLine, lookup?: SetMenuOfferLookup) {
+  return lookup?.(setMenuLineOf(line));
+}
+
+/** The bill with each recorded copy `read` holds at the version the bill names it at: two full
+ * menus' copies can share a key. */
+export function withCopiesRead<B extends BillCopies>(bill: B, read: BillCopies): B {
+  const versions = new Map(bill.setMenus?.copies.map((copy) => [copy.id, copy.versionId]));
+  const same = new Set(
+    read.setMenus?.copies.flatMap(({ id, versionId }) =>
+      versions.get(id) === versionId ? [id] : [],
+    ),
+  );
+  const fresh = new Map(read.setMenuCopies?.map((copy) => [copy.key, copy]));
+  return {
+    ...bill,
+    setMenuCopies: bill.setMenuCopies?.map((copy) =>
+      same.has(copy.key) ? (fresh.get(copy.key) ?? copy) : copy,
+    ),
+  };
 }
 
 export function draftMenuDishes(draft: readonly OrderLine[]): DishToPlace[] {

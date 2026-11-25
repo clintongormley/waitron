@@ -1070,12 +1070,17 @@ In an open till view, the existing menu-state poll reads the menu again when the
 moves and refreshes declarations in open lines and choices,
 without editing saved orders or their prices. Sent details continue to show first-send captures.
 An ordinary line follows its own menu item and never another menu's offer of the same product; an
-extra follows its own list. A set-menu line follows its set menu's copy, found as a price refresh
-finds it: a table takes a bill's recorded copies from each read of its bills, and the counter reads
-an open order's recorded copies again after it refreshes its offers, asking again at the next poll if
-that read fails for any reason but the order being gone. A dish, variant or extra none of these holds
-keeps its last open-view declaration until retrieval or reload. The watcher cleared that limit for
-A1150 PR 2 on 15 November 2026 at 21:52, then worded as a product absent from every offer.
+extra follows its own list. A set-menu line follows the copy its own menu version names, else the
+copy the live version of its own full menu holds (`ownSetMenuOffer`,
+`apps/till/src/state/set-menus.ts`); it shows another full menu's declarations only once it takes
+that menu's version, as a price refresh makes it. A table takes a bill's recorded copies from each
+read of its bills, and the counter reads an open order's recorded copies again after it refreshes its
+offers, asking again at the next poll if that read fails for any reason but the order being gone. A
+dish, variant or extra none of these holds keeps its last open-view declaration until retrieval or
+reload. The watcher cleared that limit for A1150 PR 2 on 15 November 2026 at 21:52, then worded as a
+product absent from every offer. A line rebuilt from a saved draft is not reviewed where the menu no
+longer holds its variant, or, for a set-menu dish, where the till cannot tell which full menu its
+version belongs to or that menu no longer holds the dish.
 
 
 ### Regional practice names

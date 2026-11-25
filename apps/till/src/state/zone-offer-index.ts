@@ -12,7 +12,9 @@ import { type BlockReason, lineBlock, withUnavailable } from "./menu-refresh.js"
 import {
   lookupSetMenuLine,
   orderingCopies,
+  ownSetMenuOffer,
   type OrderingCopy,
+  type SetMenuLine,
   type SetMenuOfferLookup,
 } from "./set-menus.js";
 import type { OrderLine } from "./working-order.js";
@@ -45,6 +47,7 @@ export class ZoneOfferIndex {
   live: TillMenuOffer[] = [];
   byId = new Map<string, TillMenuOffer>();
   versions = new Map<string, string>();
+  readonly menuOfVersion = new Map<string, string>();
   selectable = new Set<string>();
   /** Each menu whose period ended earlier today, to that period's name. */
   ended = new Map<string, string>();
@@ -73,6 +76,7 @@ export class ZoneOfferIndex {
     this.#unavailableKey = null;
     this.#setLive(zoneOffers.offers);
     this.versions = new Map(zoneOffers.menus.map((menu) => [menu.id, menu.versionId]));
+    for (const menu of zoneOffers.menus) this.menuOfVersion.set(menu.versionId, menu.id);
     this.liveFields = zoneOffers.liveFields;
     this.loaded = loaded;
   }
@@ -113,7 +117,8 @@ export class ZoneOfferIndex {
         row,
       ]),
     );
-    return ({ setMenuId, menuItemId, menuVersionId }) => {
+    return (line) => {
+      const { setMenuId, menuItemId, menuVersionId } = line;
       if (setMenuId === undefined) return undefined;
       const recorded = Object.hasOwn(bill?.setMenus?.recorded ?? {}, setMenuId);
       const held =
@@ -128,10 +133,16 @@ export class ZoneOfferIndex {
           : copies.get(setMenuId);
       // Bill reads apply availability to recorded copies, including dishes absent from the zone.
       const offer = selected?.copy.offers.find((dish) => dish.id === menuItemId);
-      return selected === undefined || offer === undefined
-        ? undefined
-        : { offer, versionId: selected.versionId };
+      if (selected === undefined || offer === undefined) return undefined;
+      const sold = { offer, versionId: selected.versionId };
+      return { ...sold, own: ownSetMenuOffer(line, sold, this) };
     };
+  }
+
+  /** For the declarations a line shows, whether or not it can still be sold. */
+  ownSetMenuLookup(bill?: Parameters<typeof orderingCopies>[0]) {
+    const lookup = this.setMenuLookup(bill);
+    return (line: SetMenuLine) => ownSetMenuOffer(line, lookup(line), this);
   }
 
   /** Why each line cannot be sold as it stands. A line with no menu version is the server's to price

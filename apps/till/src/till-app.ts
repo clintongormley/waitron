@@ -516,9 +516,11 @@ import {
   isStale,
   refreshBasket,
   repriceRebuilt,
+  setMenuDish,
 } from "./state/menu-refresh.js";
 import {
   NO_ORDERING_COPIES,
+  withCopiesRead,
   type OrderingCopy,
   type SetMenuChange,
   type SetMenuOfferLookup,
@@ -7073,13 +7075,12 @@ export class TillApp extends LitElement {
     );
     this.#store.refreshDeclarations(
       this.#counterOffers.products(),
-      this.#counterSetMenuLookup(),
+      this.#counterOffers.ownSetMenuLookup(this.#currentCounterSetMenuBill),
       keep,
     );
   }
 
-  /** The recorded copies the open order came with hold the allergens published when it was read.
-   * A copy the answer holds at another version, or not at all, keeps its own. */
+  /** The recorded copies the open order came with hold the allergens published when it was read. */
   async #rereadCounterSetMenuCopies(): Promise<void> {
     const id = this.#currentCounterSetMenuBill?.id;
     if (id === undefined || this.stage === "collect") return;
@@ -7098,19 +7099,7 @@ export class TillApp extends LitElement {
       const read = await api.retrieveWorkingOrder(id, { signal: limit.signal });
       const bill = this.#currentCounterSetMenuBill;
       if (bill === undefined || !current()) return;
-      const versions = new Map(bill.setMenus?.copies.map((copy) => [copy.id, copy.versionId]));
-      const same = new Set(
-        read.setMenus?.copies.flatMap((copy) =>
-          versions.get(copy.id) === copy.versionId ? [copy.id] : [],
-        ),
-      );
-      const fresh = new Map(read.setMenuCopies?.map((copy) => [copy.key, copy]));
-      this.#counterSetMenuBill = {
-        ...bill,
-        setMenuCopies: bill.setMenuCopies?.map((copy) =>
-          same.has(copy.key) ? (fresh.get(copy.key) ?? copy) : copy,
-        ),
-      };
+      this.#counterSetMenuBill = withCopiesRead(bill, read);
       this.#refreshCounterDeclarations();
       this.requestUpdate();
     } catch (error) {
@@ -7187,7 +7176,8 @@ export class TillApp extends LitElement {
 
   #refreshDraftDeclarations(products?: readonly TillProduct[]): void {
     const sync = this.#draftSync;
-    sync?.store.refreshDeclarations(products, this.#tableSetMenuLookup(sync.billId));
+    const bill = this.partyBills.find((row) => row.workingOrderId === sync?.billId);
+    sync?.store.refreshDeclarations(products, this.#tableOffers.ownSetMenuLookup(bill));
   }
 
   /** A round refused because a dish in it cannot be sold as it stands is marked against the table's
@@ -10872,10 +10862,11 @@ export class TillApp extends LitElement {
               setMenuId: line.setMenuId,
               menuItemId: line.menuItemId ?? "",
               menuVersionId: line.menuVersionId ?? null,
+              ...(line.product?.menuId === undefined ? {} : { menuId: line.product.menuId }),
             });
       const live =
         line.setMenuId !== undefined
-          ? recorded && menuOfferToTillProduct(recorded.offer, recorded.versionId)
+          ? recorded && setMenuDish(recorded, line.menuVersionId ?? null)
           : line.menuItemId === undefined
             ? undefined
             : liveByMenuItem.get(line.menuItemId);

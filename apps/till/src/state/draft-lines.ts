@@ -9,6 +9,7 @@ import {
   type TillProduct,
 } from "../api/client.js";
 import type { SetMenuOfferLookup } from "./set-menus.js";
+import { notReviewed, setMenuDish } from "./menu-refresh.js";
 import { optionSnapshotOf } from "./held-options.js";
 import {
   displayQuantity,
@@ -93,10 +94,11 @@ export function fromDraftLine(
     (selected !== undefined
       ? selected.versionId !== line.menuVersionId
       : liveVersions !== undefined && liveVersions.get(offer.menuId) !== line.menuVersionId);
-  const offered =
-    offer === undefined
-      ? unofferedProduct(line)
-      : asVariant(menuOfferToTillProduct(offer, line.menuVersionId ?? undefined), line.variantId);
+  const dish =
+    selected !== undefined
+      ? setMenuDish(selected, line.menuVersionId)
+      : offer && menuOfferToTillProduct(offer, line.menuVersionId ?? undefined);
+  const offered = dish === undefined ? unofferedProduct(line) : asVariant(dish, line.variantId);
   const unit = productUnit(offered);
   const fits = quantityPlaces(line.quantity) <= unit.precision;
   const product = fits ? offered : { ...offered, unit: { ...unit, precision: QUANTITY_SCALE } };
@@ -184,14 +186,7 @@ function asVariant(dish: TillProduct, variantId: string | null): TillProduct {
   if (variantId === null) return dish;
   const variant = dish.variants?.find((candidate) => candidate.id === variantId);
   return variant === undefined
-    ? {
-        ...dish,
-        variantId,
-        allergens: null,
-        diet: undefined,
-        dietOverride: undefined,
-        dietaryDeclarations: undefined,
-      }
+    ? notReviewed({ ...dish, variantId })
     : productAsVariant(dish, variant);
 }
 

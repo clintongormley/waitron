@@ -316,6 +316,53 @@ function partsRepriced(line: OrderLine, adopted: OrderLine, lineNo: number): Cha
     .map((part) => ({ lineNo, ...part, units }));
 }
 
+const NOT_REVIEWED = {
+  allergens: null,
+  diet: undefined,
+  dietOverride: undefined,
+  dietaryDeclarations: undefined,
+} satisfies Partial<TillProduct>;
+
+/** `product` claiming nothing of its own allergens and diet. */
+export function notReviewed<
+  T extends Pick<TillProduct, "allergens" | "diet" | "dietOverride" | "dietaryDeclarations">,
+>(product: T): T {
+  return { ...product, ...NOT_REVIEWED };
+}
+
+/**
+ * The dish `sold` offers a set-menu line naming `menuVersionId`. From a copy of another version it
+ * says only what `own`, the offer its line's own menu holds, says: a dish, variant or extra that
+ * `own` does not hold is not reviewed.
+ */
+export function setMenuDish(
+  sold: NonNullable<ReturnType<SetMenuOfferLookup>>,
+  menuVersionId: string | null,
+): TillProduct {
+  const dish = menuOfferToTillProduct(sold.offer, menuVersionId ?? undefined);
+  if (sold.versionId === menuVersionId) return dish;
+  const modifiers = <T extends NonNullable<TillProduct["offeredModifiers"]>[number]>(
+    entries: T[] | undefined,
+  ): T[] | undefined =>
+    entries?.map((entry) =>
+      entry.kind !== "extras"
+        ? entry
+        : {
+            ...entry,
+            items: entry.items.map((item) => ({ ...item, addAllergens: null, suitableFor: [] })),
+          },
+    );
+  return refreshProductDeclarations(
+    {
+      ...notReviewed(dish),
+      variants: dish.variants?.map(notReviewed),
+      offeredModifiers: modifiers(dish.offeredModifiers),
+      modifierAvailability: modifiers(dish.modifierAvailability),
+    },
+    sold.own && menuOfferToTillProduct(sold.own),
+  );
+}
+
 /**
  * `product` with the declarations of `live`, its own menu item as offered now. Never those of another
  * menu's offer of the same product, whose published allergens can differ: a dish, variant or extra

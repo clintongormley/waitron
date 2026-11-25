@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { DietaryLabel } from "@waitron/shared";
 import {
   fromDraftLine,
   orderLineMergeKey,
@@ -897,4 +898,119 @@ it("restores a set-menu draft line from its recorded offer and preserves its wir
     setMenuReservedPlace: 0,
   });
   expect(orderLineMergeKey(restored)).toBeNull();
+});
+
+describe("a set-menu draft line whose own version is not the copy on sale", () => {
+  const toppings = (
+    ...items: [id: string, addAllergens: TillMenuOffer["allergens"], suitableFor: DietaryLabel[]][]
+  ): LiveModifier => ({
+    id: "toppings",
+    name: "toppings",
+    customerName: null,
+    kitchenName: null,
+    minPicks: 0,
+    maxPicks: null,
+    kind: "extras",
+    items: items.map(([id, addAllergens, suitableFor]) => ({
+      ...extraItem(id, "1.00"),
+      addAllergens,
+      suitableFor,
+    })),
+  });
+  const onSale = offer({
+    id: "hake",
+    productId: "hake",
+    menuId: "daily",
+    allergens: {},
+    diet: { vegan: "yes", vegetarian: "yes", contains: [] },
+    dietOverride: { vegan: "yes" },
+    dietaryDeclarations: ["vegan"],
+    variants: [
+      { ...variant("v-small", "5.00"), allergens: {}, dietaryDeclarations: ["vegan"] },
+      { ...variant("v-large", "7.00"), allergens: { eggs: {} } },
+    ],
+    offeredModifiers: [toppings(["p-cheese", {}, ["vegetarian"]], ["p-bacon", { eggs: {} }, []])],
+  });
+  const line = (variantId: string | null): FreshDraftLine => ({
+    ...saved(
+      toDraftLineInput({ product: menuOfferToTillProduct(onSale, "v1"), quantity: "1" }),
+      "1.000",
+    ),
+    variantId,
+    setMenuId: "daily",
+  });
+  const shown = (restored: OrderLine) => ({
+    dish: restored.product.allergens,
+    labels: nutritionDietLabels(asServedDiet(restored), restored.product.dietaryDeclarations),
+    variants: restored.product.variants!.map(({ id, allergens }) => [id, allergens]),
+    extras: [restored.product.offeredModifiers!, restored.product.modifierAvailability!].map(
+      (lists) =>
+        lists.flatMap((list) =>
+          list.kind === "extras"
+            ? list.items.map((item) => [item.addAllergens, item.suitableFor])
+            : [],
+        ),
+    ),
+  });
+  const unknown = [null, []];
+
+  it.each([null, "v-small"])(
+    "is not reviewed, with its extras, when its own menu's dish is not known (variant %s)",
+    (variantId) => {
+      const restored = fromDraftLine(line(variantId), new Map(), undefined, () => ({
+        offer: onSale,
+        versionId: "d1",
+      }));
+      expect(restored.product.menuVersionId).toBe("v1");
+      expect(restored.earlierPriceUnknown).toBe(true);
+      expect(shown(restored)).toEqual({
+        dish: null,
+        labels: [],
+        variants: [
+          ["v-small", null],
+          ["v-large", null],
+        ],
+        extras: [
+          [unknown, unknown],
+          [unknown, unknown],
+        ],
+      });
+      expect(onSale.allergens).toEqual({});
+    },
+  );
+
+  it.each([
+    [null, { milk: {} }],
+    ["v-small", { fish: {} }],
+    ["v-large", null],
+  ] as const)(
+    "says what its own menu's dish says, and is not reviewed where that holds nothing (variant %s)",
+    (variantId, dish) => {
+      const own = {
+        ...onSale,
+        allergens: { milk: {} },
+        dietaryDeclarations: ["kosher"],
+        variants: [{ ...variant("v-small", "5.00"), allergens: { fish: {} } }],
+        offeredModifiers: [toppings(["p-cheese", { milk: {} }, ["kosher"]])],
+      } satisfies TillMenuOffer;
+      const restored = fromDraftLine(line(variantId), new Map(), undefined, () => ({
+        offer: onSale,
+        versionId: "d1",
+        own,
+      }));
+      const cheese = [{ milk: {} }, ["kosher"]];
+      expect(shown(restored)).toEqual({
+        dish,
+        labels: variantId === null ? ["kosher"] : [],
+        variants: [
+          ["v-small", { fish: {} }],
+          ["v-large", null],
+        ],
+        extras: [
+          [cheese, unknown],
+          [cheese, unknown],
+        ],
+      });
+    },
+  );
 });

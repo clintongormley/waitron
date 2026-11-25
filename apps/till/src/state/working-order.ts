@@ -21,13 +21,14 @@ import { lineGross, takesExtras } from "./order-line.js";
 import { deriveOptionSelections } from "./held-options.js";
 import { orderLineMergeKey } from "./draft-lines.js";
 import { refreshProductDeclarations, type BlockReason } from "./menu-refresh.js";
-import { lookupSetMenuLine, type SetMenuOfferLookup } from "./set-menus.js";
+import { setMenuLineOf, type SetMenuLine } from "./set-menus.js";
 import type { EndedPeriod } from "./late-send.js";
 import {
   menuOfferToTillProduct,
   type KitchenNoteSnapshot,
   type HeldExtra,
   type TillCourse,
+  type TillMenuOffer,
   type TillProduct,
   type ZoneDining,
 } from "../api/client.js";
@@ -884,10 +885,10 @@ export class WorkingOrderStore {
     this.emit("changed");
   }
 
-  /** A set-menu line follows its own copy, found by `setMenuOffer`, and never `products`. */
+  /** A set-menu line follows its own menu's copy, found by `setMenuOffer`, and never `products`. */
   refreshDeclarations(
     products: readonly TillProduct[] = [],
-    setMenuOffer?: SetMenuOfferLookup,
+    setMenuOffer?: (line: SetMenuLine) => TillMenuOffer | undefined,
     keep: ReadonlySet<string> = new Set(),
   ): void {
     const byMenuItem = new Map<string, TillProduct>();
@@ -896,8 +897,8 @@ export class WorkingOrderStore {
         byMenuItem.set(product.menuItemId, product);
     const liveOf = (line: OrderLine): TillProduct | undefined => {
       if (line.setMenuId === undefined) return byMenuItem.get(line.product.menuItemId ?? "");
-      const copied = lookupSetMenuLine(line, setMenuOffer);
-      return copied && menuOfferToTillProduct(copied.offer, copied.versionId);
+      const own = setMenuOffer?.(setMenuLineOf(line));
+      return own && menuOfferToTillProduct(own);
     };
     let changed = false;
     for (const line of this.#lines) {
