@@ -499,7 +499,7 @@ export function menuDocument(
   };
   walk(members);
   return {
-    format: 5,
+    format: 6,
     menuId: "menu-lunch",
     menuName,
     root: { members },

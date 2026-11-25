@@ -98,7 +98,7 @@ export type {
   MenuState,
 } from "@waitron/shared";
 
-export const MENU_DOCUMENT_FORMAT = 5;
+export const MENU_DOCUMENT_FORMAT = 6;
 
 export interface OmittedShortcut {
   ref: TileRef;

@@ -132,7 +132,7 @@ function section(
 function document(): MenuDocument {
   const drinks = section("drinks", [{ kind: "product", menuItemId: "mi-soup", productId: "soup" }]);
   return {
-    format: 5,
+    format: 6,
     menuId: "lunch",
     menuName: "Lunch",
     root: { members: [drinks, section("favourites", [drinks])] },

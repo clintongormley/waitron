@@ -109,7 +109,7 @@ type MenuPriceOrigin =
   { kind: "product" } | { kind: "this_menu" } | { kind: "included_menu"; id: string; name: string };
 
 export interface MenuDocument {
-  format: 5;
+  format: 6;
   /** Direct active inclusions' working hashes. */
   includedMenuHashes?: Record<string, string>;
   menuId: string;

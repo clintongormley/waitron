@@ -233,7 +233,7 @@ describe("buildMenuDocument", () => {
     const lager = await app((tx) => offerOf(tx, f.lunch, f.lager));
     const soup = await app((tx) => offerOf(tx, f.lunch, f.soup));
     expect(document).toMatchObject({
-      format: 5,
+      format: 6,
       menuId: f.lunch,
       menuName: "Lunch Menu",
       home: {

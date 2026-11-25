@@ -1761,7 +1761,7 @@ for (const locale of ["en", "es"] as const) {
             }
           >;
         };
-        document.format = 5;
+        document.format = 6;
         if ("handheld" in document.home) {
           expect(document.home.handheld.order).toBe(document.home.till.order);
           document.home = { shortcuts: document.home.shortcuts, order: document.home.till.order };
@@ -2798,14 +2798,7 @@ for (const locale of ["en", "es"] as const) {
         );
         phases[phase]!.activity_log! += 1;
       }
-      recomputeMadridHashes(expected[phase], {
-        editDocumentRow(row) {
-          if (typeof row.format === "number" && "offers" in row) {
-            if (row.format !== 4) throw new Error(`Madrid document format ${row.format}, not 4`);
-            row.format = 5;
-          }
-        },
-      });
+      recomputeMadridHashes(expected[phase]);
       const tables = expected[phase].tables;
       const rows = [
         ...Object.values(tables.zone_day_ranges!.rows).map((range) => ({

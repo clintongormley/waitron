@@ -307,7 +307,7 @@ were.
   for a picture the image library does not hold). A patch that leaves the
   live version as it was answers `menu_patch.unchanged` (409, `menuId`).
 
-Tills sell from live versions of active menus. Reading a live version outside document format 5 refuses
+Tills sell from live versions of active menus. Reading a live version outside document format 6 refuses
 with `menu.reset_required`. Status reads check their requested menus; preview checks its own menu
 and other menus when comparing shared changes; publishing checks its own menu; serving checks
 the zone's assigned active menus. Reset the venue before using its
