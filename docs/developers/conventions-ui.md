@@ -851,10 +851,14 @@ sync path, not every screen's snapshot updates.
 
 ## Where to put a Dashboard API call
 
-Put the call and its local types in the matching area under `apps/dashboard/src/api/`.
-Import local types from their area files. Screens that need a client still use
-`DashboardApi` from `client.ts`, where request setup, background requests and fresh
-sign-in are wired. The area methods use that shared request.
+Put a call and its local types in the matching area under `apps/dashboard/src/api/`. Import
+local types from their area files. Screens construct `DashboardApi` from `client.ts`. Its area
+classes extend one another and use the same request function. Keep calls that use the background
+client, unprompted requests, the base URL or the locale cache beside that state in `client.ts`.
+
+Most area response types mirror the server's JSON in a separate declaration. TypeScript cannot
+compare those declarations with the server's answers. Product and modifier-list types come from
+the shared declarations. See [the Dashboard browser import guard](../../scripts/dashboard-browser-purity.test.ts).
 
 ## A background API client does not make POST requests passive
 

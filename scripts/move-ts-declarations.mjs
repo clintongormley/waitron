@@ -370,6 +370,56 @@ function verifyClientImports(source, targets, allowedType, readFile) {
   for (const file of files) visit(file);
 }
 
+function clientImportNotes(source) {
+  return source.statements
+    .filter(ts.isImportDeclaration)
+    .flatMap((node) =>
+      (ts.getLeadingCommentRanges(source.text, node.getFullStart()) ?? [])
+        .map(({ pos, end }) => source.text.slice(pos, end))
+        .filter((note) => note.startsWith("/**")),
+    );
+}
+
+function verifyClientRuntimeImports(source, targets, readFile) {
+  const dependencies = new Map();
+  function imports(file) {
+    if (!dependencies.has(file)) {
+      const text = readFile(file);
+      const imported = [];
+      if (text !== undefined) {
+        for (const node of parse(file, text).statements) {
+          const specifier =
+            (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly) ||
+            (ts.isExportDeclaration(node) && !node.isTypeOnly)
+              ? node.moduleSpecifier
+              : undefined;
+          if (specifier && ts.isStringLiteral(specifier)) {
+            const target = localModule(file, specifier);
+            if (target) imported.push(target);
+          }
+        }
+      }
+      dependencies.set(file, imported);
+    }
+    return dependencies.get(file);
+  }
+
+  for (const root of [source, ...Object.keys(targets)]) {
+    const seen = new Set();
+    function visit(file, trail) {
+      if (file === root && trail.length) {
+        throw new Error(
+          `client import cycle: ${[...trail, file].map((path) => relative(dirname(source), path)).join(" -> ")}`,
+        );
+      }
+      if (seen.has(file)) return;
+      seen.add(file);
+      for (const imported of imports(file)) visit(imported, [...trail, file]);
+    }
+    visit(root, []);
+  }
+}
+
 function clientMethods(source, name) {
   const declaration = source.statements.find((node) => nameOf(node) === name);
   return declaration.members.filter(ts.isMethodDeclaration).map((method) => method.getText(source));
@@ -647,6 +697,7 @@ export async function main([mapFile], root) {
         );
       }
       if (classLift) {
+        const notes = clientImportNotes(original);
         original = liftClient(retainTypeReexports(original), classLift);
         const destinations = Object.fromEntries(
           Object.entries(targets).map(([target, names]) => [resolve(root, target), names]),
@@ -664,7 +715,7 @@ export async function main([mapFile], root) {
           file: resolve(root, classLift.allowClientTypeFrom),
           name: classLift.name,
         };
-        clients.push({ file, destinations, methods, allowedType });
+        clients.push({ file, destinations, methods, allowedType, notes });
       }
       validateMap(original, targets, keep);
       for (const [target, names] of Object.entries(targets)) {
@@ -702,7 +753,15 @@ export async function main([mapFile], root) {
     }
     verifyMoves(expected, (file) => formatted.get(file));
     verifyMoves(mounts, (file) => formatted.get(file));
-    for (const { file, destinations, methods, allowedType } of clients) {
+    for (const { file, destinations, methods, allowedType, notes } of clients) {
+      const output = [file, ...Object.keys(destinations)].map((path) => formatted.get(path));
+      const detachedNotes = notes.filter((note) => !output.some((text) => text.includes(note)));
+      if (detachedNotes.length) {
+        formatted.set(
+          file,
+          await formatFile(file, [...detachedNotes, formatted.get(file)].join("\n\n")),
+        );
+      }
       for (const [target, [name, originals]] of methods) {
         const actual = clientMethods(parse(target, formatted.get(target)), name);
         if (JSON.stringify(actual) !== JSON.stringify(originals)) {
@@ -710,6 +769,11 @@ export async function main([mapFile], root) {
         }
       }
       verifyClientImports(file, destinations, allowedType, (path) => formatted.get(path));
+      verifyClientRuntimeImports(
+        file,
+        destinations,
+        (path) => formatted.get(path) ?? project.readFile(path),
+      );
     }
 
     for (const [file, text] of formatted) writeFileSync(file, text);

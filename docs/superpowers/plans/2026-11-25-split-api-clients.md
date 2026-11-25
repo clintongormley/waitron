@@ -26,8 +26,8 @@ with `addSectionMember`. Record measured lines and file names in the lane log be
    `dashboard-client-split.json` and `till-client-split.json`. Start with failing mover tests for an
    edited member, inline type imports and unmapped methods. Compare method bodies and signatures
    before and after formatting, and compare type tokens. Only the two client constructors change.
-   Refuse runtime and type-only import cycles. Allow the type-only DashboardApi reference in
-   `copyDeviceProfile`.
+   Refuse runtime cycles involving the split through local imports and type-only cycles among
+   the split files. Allow the type-only DashboardApi reference in `copyDeviceProfile`.
    Stage new files before the file-size guard. Remove each cap when its client fits the default.
 3. Run changed API suites, both app typechecks, `handover-browser.e2e.test.ts` for Dashboard, and
    the file-size, mover and A4 guards. Keep both `client.test.ts` files whole. Repoint A4 paths without touching its assertions. Leave

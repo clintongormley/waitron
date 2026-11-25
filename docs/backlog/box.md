@@ -1263,6 +1263,9 @@ process-relative by replacing its clock read.
 
 #### Related descriptions and excluded matches
 
+**2026-11-25:** The Dashboard description of `latestLoadFailed` is now in
+`BackupSettingsEvidence` in `apps/dashboard/src/api/backup-api.ts`.
+
 | File(s) from the source search | Classification and rule/meaning |
 | --- | --- |
 | `apps/dashboard/src/api/client.ts:2225–2227` | Backup-evidence interface description: latest load failure is ordered by recording order, not wall dates. Server implementation is `apps/server/src/backup-settings-evidence.ts`; no duration guard here. |

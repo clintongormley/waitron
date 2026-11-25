@@ -137,6 +137,26 @@ describe("move-ts-declarations", () => {
       expect(read("client.ts")).not.toContain("import type { TicketAmount }");
     });
 
+    it("keeps an import comment when the import moves out of the client", async () => {
+      write("receipt.ts", "export interface Receipt { cents: number; }\n");
+      const note = "/** Receipt amounts are recorded in cents. */";
+      write(
+        "client.ts",
+        client
+          .replace(
+            "export class Api",
+            note + '\nimport type { Receipt } from "./receipt.js";\n\nexport class Api',
+          )
+          .replace("(): Ticket", "(): Ticket & Receipt")
+          .replace("#request<Ticket>", "#request<Ticket & Receipt>"),
+      );
+
+      await moveClient(["readTicket"]);
+
+      expect(read("client.ts")).not.toContain("import type { Receipt }");
+      expect(read("client.ts") + read("tickets.ts")).toContain(note);
+    });
+
     it("uses a type-only import when the retained client uses a moved type", async () => {
       write(
         "tsconfig.json",
@@ -162,6 +182,28 @@ describe("move-ts-declarations", () => {
       await expect(moveClient(["readTicket"])).rejects.toThrow(/client import cycle/);
 
       expect(read("client.ts")).toBe(cyclic);
+      expect(() => read("tickets.ts")).toThrow(/ENOENT/);
+    });
+
+    it("refuses a runtime import cycle through a helper outside the split", async () => {
+      const source =
+        'import { validate } from "./helper.js";\n' +
+        client.replace(
+          'return this.#request<Ticket>("/ticket/branch-edit");',
+          'return validate(this.#request<Ticket>("/ticket/branch-edit"));',
+        );
+      write("client.ts", source);
+      write(
+        "helper.ts",
+        'import { Api } from "./client.js";\n' +
+          "export function validate<T>(value: T): T {\n" +
+          '  if (value instanceof Api) throw new TypeError("Expected a ticket.");\n' +
+          "  return value;\n}\n",
+      );
+
+      await expect(moveClient(["readTicket"])).rejects.toThrow(/client import cycle/);
+
+      expect(read("client.ts")).toBe(source);
       expect(() => read("tickets.ts")).toThrow(/ENOENT/);
     });
 
