@@ -4210,7 +4210,7 @@ export class TillApp extends LitElement {
   @state() private nfcNotice: { message: string; tone: "info" | "error" } | null = null;
   readonly #equipmentNfc = new EquipmentNfc(
     (code) => {
-      if (code === null) this.nfcNotice = { message: t("equipment.scan_not_ours"), tone: "error" };
+      if (code === null) this.nfcNotice = { message: t("equipment.nfc_not_ours"), tone: "error" };
       else {
         this.#onInteraction();
         if (this.operatorName === "" || this.#loginPending) this.#pendingNfc = code;

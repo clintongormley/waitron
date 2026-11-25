@@ -160,7 +160,7 @@ export class TillEquipmentDialog extends LitElement {
   @state() private qrScanning = false;
   @state() private nfcPermission: PermissionState | null = null;
   @state() private nfcMessage:
-    | "equipment.scan_not_ours"
+    | "equipment.nfc_not_ours"
     | "equipment.scan_not_printer"
     | "equipment.scan_not_reader"
     | "equipment.scan_not_available"
@@ -284,7 +284,7 @@ export class TillEquipmentDialog extends LitElement {
     });
     const code = codes.length === 1 ? codes[0] : undefined;
     if (code === undefined) {
-      this.nfcMessage = "equipment.scan_not_ours";
+      this.nfcMessage = "equipment.nfc_not_ours";
       return;
     }
     const row = this.scanning;

@@ -537,7 +537,9 @@ describe("NFC throughout the till", () => {
         },
       }),
     );
-    await vi.waitFor(() => expect(notice(el)?.message).toContain("not a Waitron"));
+    await vi.waitFor(() =>
+      expect(notice(el)?.message).toContain("could not be read as Waitron equipment"),
+    );
     expect(requests).toEqual([]);
     nfc.read(`waitron-equipment:reader:${READER_ID}`);
     await vi.waitFor(() => expect(requests).toHaveLength(1));
@@ -630,10 +632,25 @@ describe("NFC throughout the till", () => {
     },
   );
   it.each([
-    ["not-equipment", "text", "utf-8", "not a Waitron"],
-    [`waitron-equipment:drawer:${PRINTER_ID}`, "text", "utf-8", "not a Waitron"],
-    [`waitron-equipment:reader:${READER_ID}`, "url", "utf-8", "not a Waitron"],
-    [`waitron-equipment:reader:${READER_ID}`, "text", "invalid-encoding", "not a Waitron"],
+    ["not-equipment", "text", "utf-8", "could not be read as Waitron equipment"],
+    [
+      `waitron-equipment:drawer:${PRINTER_ID}`,
+      "text",
+      "utf-8",
+      "could not be read as Waitron equipment",
+    ],
+    [
+      `waitron-equipment:reader:${READER_ID}`,
+      "url",
+      "utf-8",
+      "could not be read as Waitron equipment",
+    ],
+    [
+      `waitron-equipment:reader:${READER_ID}`,
+      "text",
+      "invalid-encoding",
+      "could not be read as Waitron equipment",
+    ],
     [
       "waitron-equipment:reader:c45f83b1-3333-4333-8333-333333333333",
       "text",
@@ -653,6 +670,16 @@ describe("NFC throughout the till", () => {
       await vi.waitFor(() => expect(requests).toHaveLength(1));
     },
   );
+  it.each([
+    ["en-GB", "That sticker could not be read as Waitron equipment. Hold it still and try again."],
+    ["es-ES", es["equipment.nfc_not_ours"]],
+  ] as const)("says how to retry a sticker it does not recognise (%s)", async (locale, words) => {
+    const { el } = await mountEquipmentApp();
+    await signIn(el, locale);
+    const nfc = await reader();
+    nfc.read("not-equipment");
+    await vi.waitFor(() => expect(notice(el)?.message).toBe(words));
+  });
   it("a reading error changes no assignment and keeps listening", async () => {
     const { el, requests } = await mountEquipmentApp();
     await signIn(el);

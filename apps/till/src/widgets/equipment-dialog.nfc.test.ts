@@ -3,6 +3,7 @@ import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
 import { TillApi, type EquipmentChange } from "../api/client.js";
 import { setLocale, t } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import {
   FakeNdefReader,
@@ -514,15 +515,15 @@ describe("equipment dialog NFC", () => {
     expect(el.shadowRoot!.querySelector("[data-equipment-row]")).not.toBeNull();
   });
   it.each([
-    ["garbage", "text", "not a Waitron"],
-    [code("printer", "bad-id"), "text", "not a Waitron"],
+    ["garbage", "text", "could not be read as Waitron equipment"],
+    [code("printer", "bad-id"), "text", "could not be read as Waitron equipment"],
     [
       code("reader", "c45f83b1-3333-4333-8333-333333333333"),
       "text",
       "not available to this device",
     ],
-    [code("reader", READER_ID), "url", "not a Waitron"],
-    [code("drawer", PRINTER_ID), "text", "not a Waitron"],
+    [code("reader", READER_ID), "url", "could not be read as Waitron equipment"],
+    [code("drawer", PRINTER_ID), "text", "could not be read as Waitron equipment"],
   ])("ignores malformed, foreign or non-text record %s/%s", async (text, type, message) => {
     installNfc();
     const el = await mount();
@@ -533,6 +534,19 @@ describe("equipment dialog NFC", () => {
     expect(el.equipment).toBe(NFC_EQUIPMENT);
     expect(el.shadowRoot!.querySelector("[data-equipment-nfc-message]")!.textContent).toContain(
       message,
+    );
+  });
+  it.each([
+    ["en", "That sticker could not be read as Waitron equipment. Hold it still and try again."],
+    ["es", es["equipment.nfc_not_ours"]],
+  ] as const)("says how to retry a sticker it does not recognise (%s)", async (locale, words) => {
+    installNfc();
+    setLocale(locale);
+    const el = await mount();
+    (await reader()).read("garbage");
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-equipment-nfc-message]")!.textContent!.trim()).toBe(
+      words,
     );
   });
   it("a wrong-kind tap leaves the armed row waiting for its own kind", async () => {
@@ -826,7 +840,7 @@ describe("equipment dialog NFC", () => {
       let shown = HINT;
       if (later === "a later tap") {
         (await reader()).read("garbage");
-        shown = "That is not a Waitron equipment label";
+        shown = "That sticker could not be read as Waitron equipment. Hold it still and try again.";
       } else if (later === "a later choice")
         await chooseOption(
           el.shadowRoot!.querySelector<WtCombobox>('wt-combobox[name="receiptPrinterId"]')!,
