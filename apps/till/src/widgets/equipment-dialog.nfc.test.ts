@@ -744,7 +744,7 @@ describe("equipment dialog NFC", () => {
     await el.updateComplete;
     expect(line(el)).toBe(words);
   });
-  it("an unarmed printer tap says which role took it, as the till does", async () => {
+  it("an unarmed printer tap says whether a pick-up role took it", async () => {
     installNfc();
     const el = await mount();
     const seen = changes(el);
