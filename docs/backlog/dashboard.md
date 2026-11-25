@@ -380,10 +380,9 @@ registered as `venue-service:week`, and the others register theirs when they exi
 - **Which dialogs take the medium height (A735, owner 2026-10-15).** These short dialogs open at
   `wt-modal`'s `height="medium"`: Add department and Add zone (Add to department shares that
   dialog), the floor plan's Add tables and Add joined table, the Edit dialog of a menu included in
-  another, the Prep stations route-change notice, the printers' Add agent and Calibrate, Pair device
-  (Enable shares that dialog), and only the password step of setting up an authenticator app on the
-  profile. The Units and Modifiers Delete dialogs do not: depending on the data they show a table or
-  nothing, and a fixed height could squeeze the table.
+  another, the Prep stations route-change notice, the printers' Add agent and Calibrate, and
+  Pair device (Enable shares that dialog). The Units and Modifiers Delete dialogs do not: depending on
+  the data they show a table or nothing, and a fixed height could squeeze the table.
 
 - **The sidebar folds to a strip of icons (A654, owner 2026-10-15).** Every sidebar icon draws in
   the text colour, never the primary colour, and the current section is marked by its highlight

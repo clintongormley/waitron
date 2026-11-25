@@ -3,9 +3,8 @@
 ## Añadir una impresora {#add-printer}
 
 En **Impresoras**, abre la pestaña **Impresoras** y elige **Añadir impresora**. Waitron busca
-impresoras de red, USB y Bluetooth. Elige **Añadir** junto a una impresora de recibos, cambia el
-nombre si quieres y vuelve a elegir **Añadir**; después se abre la calibración. Una impresora de
-oficina muestra en su lugar **Añadir como impresora A4**.
+impresoras de red, USB y Bluetooth. Elige **Añadir** junto a una impresora, cambia el nombre si
+quieres y vuelve a elegir **Añadir**. Si es una impresora de recibos, después se abre la calibración.
 
 Una impresora Bluetooth debe estar antes en modo de emparejamiento. Elige **Emparejar y añadir**
 junto a ella, introduce su PIN y vuelve a elegir **Emparejar y añadir**. Si es una impresora nueva, se
@@ -56,7 +55,7 @@ idioma del ticket del local, marcado como prueba y no como factura.
 Los detalles de una impresora A4 no tienen calibración;
 **Imprimir página de prueba** la comprueba. Para quitarla, elige **Eliminar** en su menú. La
 confirmación indica las asignaciones que se eliminan y el trabajo que finaliza. Para volver a
-usarla, elige **Añadir impresora**, después **Añadir como impresora A4** junto a ella y **Añadir**.
+usarla, elige **Añadir impresora**, después **Añadir** junto a ella y otra vez **Añadir**.
 Conserva su nombre y ajustes guardados. Vuelve a asignar sus dispositivos y perfiles de dispositivo.
 
 Después de importar una configuración, busca sus impresoras A4 con **Añadir impresora** y vuelve a añadirlas.

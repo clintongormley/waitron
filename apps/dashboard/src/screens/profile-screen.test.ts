@@ -144,6 +144,10 @@ async function bottomOf(el: ProfileScreen): Promise<string> {
   const actions = el.shadowRoot!.querySelector("wt-form-actions")!;
   return (await formMessageOf(actions))?.textContent?.trim() ?? "";
 }
+/** The message under Passkeys; "" when there is none. */
+function passkeyRefusal(el: ProfileScreen): string {
+  return el.shadowRoot!.querySelector("[data-test=start-error-passkey]")?.textContent?.trim() ?? "";
+}
 function input(el: ProfileScreen, name: string, value: string) {
   el.shadowRoot!.querySelector<import("@waitron/ui").WtInput>(
     `wt-input[name=${name}]`,
@@ -508,8 +512,6 @@ describe("your profile", () => {
   it("starts Google linking when the installation is configured", async () => {
     const { el, api } = await mount();
     await click(el, "setup-google");
-
-    await click(el, "save");
     expect(api.beginGoogleLink).toHaveBeenCalledWith({});
     expect(el.navigate as ReturnType<typeof vi.fn>).toHaveBeenCalledWith(
       "https://accounts.google.test/link",
@@ -675,8 +677,7 @@ describe("your profile", () => {
     const warn = vi.spyOn(console, "warn");
     const { el, api } = await mount();
     await click(el, "add-passkey");
-
-    await click(el, "save");
+    await flush(el);
     expect(api.passkeyRegisterOptions).toHaveBeenCalledWith({});
     // The library warns if optionsJSON is omitted and its deprecated call shape is used.
     expect(warn).not.toHaveBeenCalled();
@@ -715,8 +716,7 @@ describe("your profile", () => {
   it("tells the browser's password manager which passkeys are accepted after adding one and after removing one", async () => {
     const { el, api } = await mount();
     await click(el, "add-passkey");
-
-    await click(el, "save");
+    await flush(el);
     await flush(el);
     expect(api.getProfile).toHaveBeenCalledTimes(2);
     expect(api.passkeySignals).not.toHaveBeenCalled();
@@ -815,9 +815,7 @@ describe("your profile", () => {
       passkeyRegisterVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
     });
     await click(el, "add-passkey");
-
-    await click(el, "save");
-    await click(el, "cancel");
+    await flush(el);
     await click(el, "change-pin");
 
     input(el, "pin", "4321");
@@ -836,10 +834,7 @@ describe("your profile", () => {
     expect(modal.hasAttribute("height")).toBe(false);
     await click(el, "cancel");
     await click(el, "setup-authenticator");
-    expect(modal.getAttribute("size")).toBe("compact");
-    expect(modal.hasAttribute("height")).toBe(false);
-
-    await click(el, "save");
+    await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=authenticator-qr]")).not.toBeNull();
     expect(modal.getAttribute("size")).toBe("standard");
     expect(modal.hasAttribute("height")).toBe(false);
@@ -847,8 +842,7 @@ describe("your profile", () => {
   it("sets up an authenticator and shows recovery codes once", async () => {
     const { el, api } = await mount();
     await click(el, "setup-authenticator");
-
-    await click(el, "save");
+    await flush(el);
     expect(api.beginTotp).toHaveBeenCalledWith({});
     const qr = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=authenticator-qr]")!;
     expect(qr.src).toMatch(/^data:image\/png;base64,/);
@@ -970,20 +964,23 @@ describe("your profile", () => {
       new DOMException("already registered", "InvalidStateError"),
     );
     await click(el, "add-passkey");
-
-    await click(el, "save");
+    await flush(el);
     expect(api.passkeyRegisterVerify).not.toHaveBeenCalled();
-    expect(await bottomOf(el)).toBe(codeMessage("passkey.already_registered"));
-    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+    expect(passkeyRefusal(el)).toBe(codeMessage("passkey.already_registered"));
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
   });
 
   it("puts the already-registered message in the Add passkey dialog's footer, above its buttons, not in the body", async () => {
-    const { el } = await mount();
+    const profile = await apiStub().getProfile();
+    const { el } = await mount({
+      getProfile: vi.fn().mockResolvedValue({ ...profile, hasTotp: true }),
+    });
     vi.mocked(navigator.credentials.create).mockRejectedValueOnce(
       new DOMException("already registered", "InvalidStateError"),
     );
     await click(el, "add-passkey");
-
+    input(el, "totp", "123456");
+    await flush(el);
     await click(el, "save");
     const modal = el.shadowRoot!.querySelector("wt-modal")!;
     await modal.updateComplete;
@@ -1013,25 +1010,23 @@ describe("your profile", () => {
       new DOMException("authenticator failed", "UnknownError"),
     );
     await click(el, "add-passkey");
-
-    await click(el, "save");
+    await flush(el);
     expect(api.passkeyRegisterVerify).not.toHaveBeenCalled();
-    const bottom = await bottomOf(el);
-    expect(bottom).toContain(codeMessage("passkey.verification_failed"));
-    expect(bottom).not.toContain(codeMessage("__unmapped__"));
-    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+    const refusal = passkeyRefusal(el);
+    expect(refusal).toContain(codeMessage("passkey.verification_failed"));
+    expect(refusal).not.toContain(codeMessage("__unmapped__"));
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
   });
 
-  it("stays quiet and keeps the modal open when the passkey prompt is cancelled", async () => {
+  it("stays quiet when the passkey prompt is cancelled", async () => {
     const { el } = await mount();
     vi.mocked(navigator.credentials.create).mockRejectedValueOnce(
       new DOMException("cancelled", "NotAllowedError"),
     );
     await click(el, "add-passkey");
-
-    await click(el, "save");
-    expect(await bottomOf(el)).toBe("");
-    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(true);
+    await flush(el);
+    expect(passkeyRefusal(el)).toBe("");
+    expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
   });
 
   it("still surfaces a specific server verify failure for a passkey", async () => {
@@ -1039,9 +1034,8 @@ describe("your profile", () => {
       passkeyRegisterVerify: vi.fn().mockRejectedValue({ code: "passkey.challenge_expired" }),
     });
     await click(el, "add-passkey");
-
-    await click(el, "save");
-    expect(await bottomOf(el)).toBe(codeMessage("passkey.challenge_expired"));
+    await flush(el);
+    expect(passkeyRefusal(el)).toBe(codeMessage("passkey.challenge_expired"));
   });
 });
 
@@ -1142,8 +1136,6 @@ describe("your profile — validation, refusals and the remaining actions", () =
     });
     await flush(el);
     await click(el, "setup-google");
-
-    await click(el, "save");
     expect(location.hash).toBe("#google-link-probe");
   });
 
@@ -1336,8 +1328,7 @@ describe("your profile — validation, refusals and the remaining actions", () =
       finishTotp: vi.fn().mockRejectedValue({ code: "totp.invalid" }),
     });
     await click(el, "setup-authenticator");
-
-    await click(el, "save");
+    await flush(el);
     input(el, "setupCode", "000000");
     await click(el, "save");
     input(el, "setupCode", "");
@@ -1608,18 +1599,16 @@ describe("your profile — errors at the bottom of the form, not above it", () =
     expect(await nativeSaveDisabled(el)).toBe(false);
   });
 
-  it("keeps a passkey refusal for an unshown field beside Add", async () => {
+  it("keeps a passkey refusal naming a field beside Add passkey", async () => {
     const { el } = await mount({
       passkeyRegisterVerify: vi
         .fn()
         .mockRejectedValue({ code: "profile.invalid", params: { field: "displayName" } }),
     });
     await click(el, "add-passkey");
-
-    await click(el, "save");
+    await flush(el);
     expect(el.shadowRoot!.querySelector("[name=passkeyName]")).toBeNull();
-    expect(await bottomOf(el)).toBe(codeMessage("profile.invalid"));
-    expect(await nativeSaveDisabled(el)).toBe(false);
+    expect(passkeyRefusal(el)).toBe(codeMessage("profile.invalid"));
   });
 
   it("puts a refused authenticator code under the new authenticator's code field, leaving Save working", async () => {
@@ -1627,8 +1616,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
       finishTotp: vi.fn().mockRejectedValue({ code: "totp.invalid" }),
     });
     await click(el, "setup-authenticator");
-
-    await click(el, "save");
+    await flush(el);
     input(el, "setupCode", "000000");
     await click(el, "save");
     expect(field(el, "setupCode").error).toBe(codeMessage("totp.invalid"));
@@ -1831,8 +1819,7 @@ describe("your profile — errors at the bottom of the form, not above it", () =
   it("asks nothing of the authenticator code until the code step's own Save", async () => {
     const { el } = await mount();
     await click(el, "setup-authenticator");
-
-    await click(el, "save");
+    await flush(el);
     expect(field(el, "setupCode").error).toBe("");
     expect(await bottomOf(el)).toBe("");
     expect([save(el).variant, save(el).disabled]).toEqual(["secondary", true]);
@@ -1881,32 +1868,37 @@ describe("your profile — a save's message across an outage", () => {
       new DOMException("already registered", "InvalidStateError"),
     );
     await click(el, "add-passkey");
-
-    await click(el, "save");
-    expect(await bottomOf(el)).toBe(codeMessage("passkey.already_registered"));
+    await flush(el);
+    expect(passkeyRefusal(el)).toBe(codeMessage("passkey.already_registered"));
     api.getProfile.mockRejectedValue({ code: "connection.failed" });
     const before = api.getProfile.mock.calls.length;
     liveData.refresh();
     await vi.waitFor(() => expect(api.getProfile.mock.calls.length).toBeGreaterThan(before));
     await flush(el);
-    expect(await bottomOf(el)).toBe(codeMessage("passkey.already_registered"));
+    expect(passkeyRefusal(el)).toBe(codeMessage("passkey.already_registered"));
     api.getProfile.mockResolvedValue({ ...value, displayName: "Back again" });
     liveData.refresh();
     await vi.waitFor(() => expect(displayName(el)).toBe("Back again"));
-    expect(await bottomOf(el)).toBe(codeMessage("passkey.already_registered"));
+    expect(passkeyRefusal(el)).toBe(codeMessage("passkey.already_registered"));
   });
 });
 
 describe("A403 passkey controls", () => {
-  it("offers Add after identity proof without asking for a passkey name", async () => {
-    const { el } = await mount();
+  it("offers Add after the authenticator code without asking for a passkey name", async () => {
+    const profile = await apiStub().getProfile();
+    const { el } = await mount({
+      getProfile: vi.fn().mockResolvedValue({ ...profile, hasTotp: true }),
+    });
     await click(el, "add-passkey");
     expect(el.shadowRoot!.querySelector("wt-input[name=passkeyName]")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=save]")!.textContent!.trim()).toBe(
       t("action.add"),
     );
 
+    input(el, "totp", "123456");
+    await flush(el);
     await click(el, "save");
+    await flush(el);
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
   });
 

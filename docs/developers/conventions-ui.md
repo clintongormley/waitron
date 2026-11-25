@@ -1923,8 +1923,8 @@ earlier staff credential-subform description is superseded; Profile owns its pas
 inputs. Its modal forms are wired on W69; the page/navigation rollout remains pending.
 
 Profile registers each detail/credential editor after its defaults. It commits the submitted
-snapshot before refresh and retains later delivered input. Authenticator proof/code stages commit
-independently; recovery-code output needs no scope. A successful Google proof disposes its scope
+snapshot before refresh and retains later delivered input. An authenticator's setup registers at its
+code window; recovery-code output needs no scope, nor does an action that starts with no window. A successful Google proof disposes its scope
 before redirect, and disconnect clears sensitive input/output and invalidates in-flight replies.
 Focused command: `pnpm --filter @waitron/dashboard exec vitest run
 src/screens/profile-screen.unsaved.test.ts src/screens/profile-screen.test.ts`. Outer Profile

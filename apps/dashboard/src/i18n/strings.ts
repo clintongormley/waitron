@@ -1177,7 +1177,6 @@ export const en = {
   "printers.bluetooth_unavailable.not_enabled": "Bluetooth not enabled.",
   "printers.add_help":
     "Waitron lists the printers its print agents find. Not listed? Check it is on; for a network printer, type its address under Check a known address.",
-  "printers.seen_on": "Seen on",
   "menu_settings.default_takeaway_vat": "New products start at (VAT when taken away)",
   "menu_settings.takeaway_invalid": "Choose the VAT when taken away for new products.",
   "action.save": "Save",
@@ -1645,7 +1644,6 @@ export const en = {
   "profile.passkeys": "Passkeys",
   "profile.no_passkeys": "You haven’t added a passkey yet.",
   "profile.remove_passkey": "Remove this passkey?",
-  "profile.confirm_identity": "You may be asked to confirm it is you before this change.",
   "profile.password_recovery":
     "To set a password, sign out and choose “I’ve forgotten my password” when logging in.",
   "fresh_sign_in.password": "Password",
@@ -2263,9 +2261,8 @@ export const en = {
   "printers.no_discovered":
     "No printers found. Check that the printer is on and connected, then scan again.",
   "printers.discovered_all_added": "Every printer found is already added.",
-  "printers.discovered_seen_on": "Seen on {agent}",
+  "printers.discovered_found_by": "Found by {agent}",
   "printers.page_printer_new_name": "Name for a new printer",
-  "printers.page_printer_add": "Add as A4 printer",
   "printers.page_printer_use_agent": "Use this agent",
   "printers.page_printer_other_agent": "Added; it prints through another agent",
   "printers.page_printer_no_agent": "Added; the agent it printed through is gone",
@@ -5993,7 +5990,6 @@ export const es: Record<StringKey, string> = {
   "printers.bluetooth_unavailable.not_enabled": "Bluetooth no activado.",
   "printers.add_help":
     "Waitron muestra las impresoras que encuentran sus agentes de impresión. ¿No aparece? Comprueba que esté encendida; si es de red, escribe su dirección en Comprobar una dirección conocida.",
-  "printers.seen_on": "Detectada en",
   "menu_settings.default_takeaway_vat": "Los productos nuevos empiezan con (IVA para llevar)",
   "menu_settings.takeaway_invalid": "Elige el IVA para llevar de los productos nuevos.",
   "action.save": "Guardar",
@@ -6468,7 +6464,6 @@ export const es: Record<StringKey, string> = {
   "profile.passkeys": "Passkeys",
   "profile.no_passkeys": "Todavía no has añadido ninguna passkey.",
   "profile.remove_passkey": "¿Eliminar esta passkey?",
-  "profile.confirm_identity": "Es posible que debas confirmar que eres tú antes de este cambio.",
   "profile.password_recovery":
     "Para crear una contraseña, cierra la sesión y elige «¿Has olvidado tu contraseña?» al iniciar sesión.",
   "fresh_sign_in.password": "Contraseña",
@@ -7100,9 +7095,8 @@ export const es: Record<StringKey, string> = {
   "printers.no_discovered":
     "No se ha encontrado ninguna impresora. Comprueba que esté encendida y conectada, y vuelve a buscar.",
   "printers.discovered_all_added": "Todas las impresoras encontradas ya están añadidas.",
-  "printers.discovered_seen_on": "Detectada en {agent}",
+  "printers.discovered_found_by": "Detectada por {agent}",
   "printers.page_printer_new_name": "Nombre para una impresora nueva",
-  "printers.page_printer_add": "Añadir como impresora A4",
   "printers.page_printer_use_agent": "Usar este agente",
   "printers.page_printer_other_agent": "Añadida; imprime a través de otro agente",
   "printers.page_printer_no_agent": "Añadida; el agente por el que imprimía ya no existe",
