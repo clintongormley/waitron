@@ -23,6 +23,7 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
     "not-painted",
     "add-from-page",
     "floor-plan",
+    "last-orders",
   ])("%s", async (state) => {
     setLocale("en");
     const el = (await mountThemed("<period-dialog></period-dialog>", theme)) as PeriodDialog;
@@ -77,6 +78,13 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
         },
       ];
     }
+    if (state === "last-orders") {
+      el.departmentId = "restaurant";
+      el.watchLastOrderChoices = (_draft, apply) => {
+        apply([{ kind: "station", stationId: "bar", name: "Bar" }]);
+        return () => {};
+      };
+    }
     if (state === "add-from-page")
       el.departments = [
         { id: "restaurant", name: "Restaurant", colourUsers: [{ name: "Lunch", colour: "red" }] },
@@ -84,6 +92,10 @@ describe.each(["light", "dark"] as const)("Period dialog (%s)", (theme) => {
       ];
     el.open = true;
     await el.updateComplete;
+    if (state === "last-orders") {
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[name="lastOrders.bar"]')).not.toBeNull();
+    }
     if (state.startsWith("painted-in"))
       expect(el.shadowRoot!.querySelectorAll("[data-test=painted-in] .chip")).toHaveLength(5);
     if (state === "not-painted")

@@ -32,7 +32,7 @@ In Month or Week, choose **All prep stations** in **Show** to compare station ho
 
 If you’re a supervisor, choose one station in **Show** to read its **Changes after sending** rule above the Calendar.
 
-To change when a station gets orders, edit its periods and menus in **Periods**, its routes in **Prep stations**, or the closing times of the zones that send to it. Open a date to read the times in words. When you show one station or **All prep stations**, the day box shows the station hours.
+If a station takes orders after a period ends, its row shows the longer hours. To change when a station gets orders, edit its periods, menus or **Last orders** times in **Periods**, its routes in **Prep stations**, or the closing times of the zones that send to it. Open a date to read the times in words. When you show one station or **All prep stations**, the day box shows the station hours.
 
 ## Select days together {#select-days}
 
@@ -72,3 +72,5 @@ Open the **Rota** tab to see the week of the last date you selected in **Staffin
 Open **Periods** under **Venue operations**, beside **Calendar**. Choose a row to edit it, or **Add period** to create one. Use the row’s **⋯** menu to edit or delete it.
 
 In **Painted in**, choose a season or special day to check its timetable.
+
+In **Last orders**, choose when each prep station stops taking orders for that period. For example, set Kitchen to **15 minutes before the end** and Bar to **1 hour after the end**. Follow **Prep stations** to change where dishes go.

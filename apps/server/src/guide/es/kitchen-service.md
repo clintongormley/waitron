@@ -377,6 +377,8 @@ Los platos al peso siempre se imprimen uno a uno.
 
 ## Un plato enviado tras acabar su periodo {#after-period}
 
+Para elegir cuándo recibe cada estación sus últimos pedidos de un periodo, abre [Periodos](opening-hours.md#periods). En **Estaciones de preparación** → **Rutas**, añade una ruta para el periodo. Después, usa **Resto del día y tras últimos pedidos** para elegir la estación fuera de los periodos de la lista.
+
 En el terminal, un plato sin enviar cuyo periodo acabó antes en el mismo día de servicio muestra un
 signo de aviso y **Ha terminado Almuerzo**. Cuando lo envías desde una mesa, o cobras, envías o
 aparcas el pedido en el mostrador, el terminal muestra esos platos. Consulta con la estación que los

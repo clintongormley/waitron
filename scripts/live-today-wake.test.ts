@@ -34,6 +34,7 @@ const baseOnlyReaders = [
   "venue-service:period-floor-plans", // Period choices include zone layouts.
   "venue-service:pass-coverage", // Pass coverage follows zones.
   "venue-service:routing", // Routing shows zones and station assignments.
+  "venue-service:last-order-choices", // The station choices follow the department's zones.
   "venue-service:opening-hours-month", // The month includes zone opening times.
   "venue-service:opening-hours", // The editor includes zone settings.
   "venue-service:operations", // Operations shows each department and zone.

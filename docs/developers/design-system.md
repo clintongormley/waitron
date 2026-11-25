@@ -5592,7 +5592,7 @@ query starts again from its own opening, and clearing the field brings back the 
 (the "search" cases in `routing-grid.test.ts`).
 
 A cell's button opens the routing cell editor (`routing-cell-editor.ts`): the cell's own station is
-labelled "Station" while there are no period routes, and "Any other time" while there is at least
+labelled "Station" while there are no period routes, and "Any other time, and after last orders" while there is at least
 one. Each route splits Periods and Station evenly beside Remove, and the fallback field ends
 where the route's Station field ends. "+ Add route" adds a line of periods with a station. A zone column offers only its
 department's periods, and none when the zone has no department; a line offers only periods whose
@@ -7296,11 +7296,14 @@ The editor has “Periods ›” above its h1. `PeriodEditing` uses `period-dial
 without a modal, sharing its fields, validation, submitted baseline and draft scope with the
 painters’ existing dialog presentation. It asks for Department when adding, then Name, Colour,
 Customer menu, Staff-only menus and Floor plan where offered. The plan chooser offers Inherit with
-the current default's name and a named choice for every plan, including the default. An edited
-period shows Painted in. The page’s footer is Cancel and Save;
-Delete stays in the list menu. Save returns to the list and refreshes it; a refresh failure is a
-list load error. Cancel, parent,
-sidebar and browser navigation ask before discarding changed input. Invalid and viewer-only edit
+the current default's name and a named choice for every plan, including the default.
+Last orders gives each station its own time and links to Routes in Prep stations. When the choices
+read fails, its message is above the buttons. An edited period shows Painted in.
+The page’s footer is Cancel and Save. Delete stays in the list menu.
+Save refreshes the list. A successful creation closes Add, even if the choices read has yet to
+answer. An edit with an unsaved time waits in the form for the choices to be available. A list
+refresh failure is a load error. Cancel, parent, sidebar and browser navigation ask before
+discarding changed input. Invalid and viewer-only edit
 addresses return to the list after loading; a period removed from live data closes its editor.
 The Calendar painters retain their period pop-ups pending the owner’s answer to the watcher’s
 2026-11-15 A1545 question. Their pencils, New period and Add-and-paint retain the painted draft.

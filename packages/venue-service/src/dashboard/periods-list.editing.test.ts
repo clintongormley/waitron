@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { page, userEvent } from "vitest/browser";
 import { LiveData, setLocale, type DashboardRequest } from "@waitron/dashboard-kit";
-import { applyTokens, LeaveController, type WtDataTable } from "@waitron/ui";
+import { applyTokens, LeaveController, NavigationGuard, type WtDataTable } from "@waitron/ui";
 import { CALENDAR_COLOURS } from "../hours-types.js";
 import type { OpeningHoursModel } from "../menu-timetable-types.js";
 import { OpeningHoursApi, type PaintedInRow } from "./opening-hours-client.js";
@@ -113,13 +113,14 @@ function withPaintedIn(
 async function mount(
   request: DashboardRequest = (async () => structuredClone(model())) as DashboardRequest,
   readOnly = false,
+  parent: HTMLElement = document.body,
 ) {
   const el = document.createElement("periods-list") as PeriodsList;
   el.api = new OpeningHoursApi(withPaintedIn(request));
   el.readOnly = readOnly;
   applyTokens(el);
   hosts.push(el);
-  document.body.append(el);
+  parent.append(el);
   await expect.poll(() => table(el)).not.toBeNull();
   await table(el)!.updateComplete;
   return el;
@@ -155,7 +156,7 @@ async function edit(el: PeriodsList, existing?: string) {
 }
 async function change(dialog: PeriodDialog, name: string, value: string) {
   dialog
-    .shadowRoot!.querySelector<HTMLElement>(`[name=${name}]`)!
+    .shadowRoot!.querySelector<HTMLElement>(`[name="${name}"]`)!
     .dispatchEvent(
       new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
     );
@@ -214,6 +215,100 @@ it("creates the changed draft, returns to the list and shows its refreshed data"
     },
   ]);
   await expect.poll(() => periodRow(el, "p2")?.name).toBe("Dinner");
+});
+
+it("returns to the list after adding a period whose changed station choices are still loading", async () => {
+  const writes: unknown[] = [];
+  const app = document.body.appendChild(new LeaveApp());
+  hosts.push(app);
+  const leave = app.leave.coordinator;
+  const guard = new NavigationGuard(window, {
+    isDirty: () => leave.isDirty(),
+    request: (proceed, signal) =>
+      leave.request({ scopes: "all", reason: "navigation", proceed, signal }),
+  });
+  onTestFinished(() => guard.dispose());
+  const el = await mount(
+    (async (path, method, body) => {
+      if (path.includes("/last-order-choices?")) {
+        if (new URL(path, location.origin).searchParams.get("menuId") === "desserts")
+          return new Promise<never>(() => {});
+        return [{ kind: "station", stationId: "bar", name: "Bar" }];
+      }
+      if (method === "GET") return model();
+      writes.push(body);
+      return { id: "p2" };
+    }) as DashboardRequest,
+    false,
+    app,
+  );
+  const dialog = await edit(el);
+  await change(dialog, "name", "Dinner");
+  await change(dialog, "menuId", "lunch");
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector('[name="lastOrders.bar"]'))
+    .not.toBeNull();
+  await change(dialog, "lastOrders.bar", "60");
+  await change(dialog, "menuId", "desserts");
+  submit(dialog);
+  await expect.poll(() => location.pathname).toBe("/periods");
+  await expect.poll(() => dialogOf(el)).toBeNull();
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).not.toHaveProperty("lastOrders");
+});
+
+it("keeps an unsaved offset through a failed refresh without sending an empty second patch", async () => {
+  let refused = false;
+  const readChoices = vi.fn();
+  const writes: unknown[] = [];
+  const el = await mount((async (path, method, body, options) => {
+    if (path.includes("/last-order-choices?")) {
+      readChoices(
+        options?.passive,
+        new URL(path, location.origin).searchParams.getAll("staffMenuId"),
+      );
+      if (refused) throw new Error("could not refresh choices");
+      return [{ kind: "station", stationId: "bar", name: "Bar" }];
+    }
+    if (method === "GET") return model();
+    writes.push(body);
+  }) as DashboardRequest);
+  const dialog = await edit(el, "p1");
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector('[name="lastOrders.bar"]'))
+    .not.toBeNull();
+  expect(readChoices).toHaveBeenNthCalledWith(1, true, ["staff"]);
+  await change(dialog, "lastOrders.bar", "60");
+  await change(dialog, "name", "Late Lunch");
+  refused = true;
+  el.api!.rereadWatches();
+  await expect
+    .poll(() => dialog.shadowRoot!.querySelector("wt-form-actions")!.error)
+    .toContain("Could not load Last orders");
+  submit(dialog);
+  await expect.poll(() => writes).toHaveLength(1);
+  await expect.poll(() => dialog.busy).toBe(false);
+  await dialog.updateComplete;
+  expect(writes[0]).not.toHaveProperty("lastOrders");
+  expect(dialogOf(el)).toBe(dialog);
+  expect(saveButton(dialog).disabled).toBe(true);
+  refused = false;
+  el.api!.rereadWatches();
+  await expect
+    .poll(
+      () =>
+        dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+          '[name="lastOrders.bar"]',
+        )?.value,
+    )
+    .toBe("60");
+  expect(saveButton(dialog).disabled).toBe(false);
+  submit(dialog);
+  await expect.poll(() => dialogOf(el)).toBeNull();
+  expect(writes).toHaveLength(2);
+  expect(writes[1]).toMatchObject({
+    lastOrders: [{ kind: "station", stationId: "bar", minutes: 60 }],
+  });
 });
 
 it("updates the existing period and preserves every other submitted value", async () => {

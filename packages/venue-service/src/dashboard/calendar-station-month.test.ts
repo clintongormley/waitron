@@ -276,7 +276,7 @@ describe("A725 Calendar station month, migrated from Times", () => {
       "Changes after sending: While held or waiting",
     );
     const hint = text(monthRoot(el)!.querySelector("[data-test=station-explanation]"));
-    expect(hint).toBe("A prep station is open while a period sends it orders.");
+    expect(hint).toBe("Last orders after a period ends extend the station's hours shown here.");
     cell(el, "2026-12-01")!.querySelector<HTMLElement>(".day")!.click();
     const box = () => el.shadowRoot!.querySelector("calendar-day-box");
     await expect.poll(() => box()?.shown).toBe(true);

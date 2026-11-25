@@ -1037,7 +1037,9 @@ describe("a prep station in the Calendar", () => {
     expect(policy()!.children).toHaveLength(0);
     const hint = () =>
       week(el)!.shadowRoot!.querySelector("[data-test=station-explanation]")?.textContent;
-    expect(hint()?.trim()).toBe("A prep station is open while a period sends it orders.");
+    expect(hint()?.trim()).toBe(
+      "Last orders after a period ends extend the station's hours shown here.",
+    );
     for (const date of ["2026-12-09", "2026-12-14"]) {
       if (date === "2026-12-14") {
         week(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=next-week]")!.click();
@@ -1061,7 +1063,9 @@ describe("a prep station in the Calendar", () => {
     await expect.poll(policy).toBeNull();
 
     await toPhone(el);
-    expect(hint()?.trim()).toBe("A prep station is open while a period sends it orders.");
+    expect(hint()?.trim()).toBe(
+      "Last orders after a period ends extend the station's hours shown here.",
+    );
   });
 
   it.each(["pointer", "keyboard"] as const)(

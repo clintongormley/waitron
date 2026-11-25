@@ -216,7 +216,7 @@ the change (plan PR 8 Decision 1).
   category under a closed parent still lists all its products. Search fills the toolbar's row,
   sharing it with Period where there are periods; on a phone, Period takes its own row below
   Search. The editor calls its fallback Station (Estación) until it holds a period route, then Any
-  other time (El resto del tiempo). Its two route fields share the row evenly, and both station
+  other time, and after last orders (Resto del día y tras últimos pedidos). Its two route fields share the row evenly, and both station
   fields end together. Clear setting stays red and sits at the left of the editor's bottom row,
   after Cancel; Save is alone on the right — since 2026-10-16 the house rule for every destructive
   action in a form's bottom row ([design-system.md](../developers/design-system.md)).

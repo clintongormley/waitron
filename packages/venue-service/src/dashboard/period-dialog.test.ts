@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { setLocale } from "@waitron/dashboard-kit";
 import { applyTokens } from "@waitron/ui";
@@ -27,11 +27,12 @@ afterEach(() => {
   for (const host of hosts.splice(0)) host.remove();
   setLocale("en");
 });
-async function mount(edit = false) {
+async function mount(edit = false, configure?: (el: PeriodDialog) => void) {
   const el = document.createElement("period-dialog");
   el.menus = menus;
   el.departmentName = "Restaurant";
   if (edit) el.period = structuredClone(period);
+  configure?.(el);
   el.open = true;
   applyTokens(el);
   hosts.push(el);
@@ -1229,3 +1230,108 @@ it("a stored set that is now the default stays fixed when another field changes"
   expect(writes).toHaveLength(1);
   expect(writes[0]!.input).toHaveProperty("floorPlanSetId", "house");
 });
+
+function lastOrderDraft(el: PeriodDialog) {
+  const bar = { kind: "station", stationId: "bar" } as const;
+  el.departmentId = "restaurant";
+  el.period = { ...period, lastOrders: [{ ...bar, minutes: 60 }] };
+  el.watchLastOrderChoices = (_draft, apply) => {
+    apply([
+      { ...bar, name: "Bar" },
+      { kind: "no_preparation", name: null },
+    ]);
+    return () => {};
+  };
+}
+
+function submittedInput(el: PeriodDialog) {
+  const wrote = vi.fn();
+  el.addEventListener("period-save", wrote, { once: true });
+  save(el).click();
+  expect(wrote).toHaveBeenCalledTimes(1);
+  return (wrote.mock.calls[0]![0] as CustomEvent).detail.input;
+}
+
+it("shows saved choices, saves a changed offset and keeps Save quiet until the draft changes", async () => {
+  const el = await mount(true, lastOrderDraft);
+  expect(field(el, "lastOrders.bar").value).toBe("60");
+  expect(field(el, "lastOrders.noPreparation").value).toBe("0");
+  expect(save(el).disabled).toBe(true);
+  await change(el, "lastOrders.bar", { value: "30" });
+  expect(submittedInput(el).lastOrders).toEqual([
+    { kind: "station", stationId: "bar", minutes: 30 },
+  ]);
+});
+
+it("preserves the saved time of a station hidden by the current menu and routing", async () => {
+  const hidden = { kind: "station", stationId: "hidden", minutes: -15 } as const;
+  const el = await mount(true, (dialog) => {
+    lastOrderDraft(dialog);
+    dialog.period = { ...dialog.period!, lastOrders: [...dialog.period!.lastOrders!, hidden] };
+  });
+  await change(el, "lastOrders.bar", { value: "30" });
+  expect(submittedInput(el).lastOrders).toEqual([
+    { kind: "station", stationId: "bar", minutes: 30 },
+    hidden,
+  ]);
+});
+
+it("lists last-order times from earliest to latest", async () => {
+  const el = await mount(true, lastOrderDraft);
+  const fieldControl = field(el, "lastOrders.bar");
+  const trigger = fieldControl.shadowRoot!.querySelector<HTMLElement>("[role=combobox]")!;
+  await userEvent.click(trigger);
+  expect(
+    [...fieldControl.shadowRoot!.querySelectorAll("[role=option]")].map((row) =>
+      row.textContent?.trim(),
+    ),
+  ).toEqual([
+    "1 hour before the end",
+    "45 minutes before the end",
+    "30 minutes before the end",
+    "15 minutes before the end",
+    "At the end",
+    "15 minutes after the end",
+    "30 minutes after the end",
+    "45 minutes after the end",
+    "1 hour after the end",
+    "1½ hours after the end",
+    "2 hours after the end",
+  ]);
+});
+
+type LastOrderRead = Parameters<NonNullable<PeriodDialog["watchLastOrderChoices"]>>;
+it.each(["pending", "refused", "outdated"] as const)(
+  "omits Last orders while the choices are %s",
+  async (readState) => {
+    const watches: LastOrderRead[] = [];
+    const el = await mount(true, (dialog) => {
+      lastOrderDraft(dialog);
+      dialog.watchLastOrderChoices = (...args) => {
+        watches.push(args);
+        return () => {};
+      };
+    });
+    const choices = [{ kind: "station" as const, stationId: "bar", name: "Bar" }];
+    await vi.waitFor(() => expect(watches).toHaveLength(1));
+    if (readState === "refused") {
+      watches[0]![2](new Error("read failed"));
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toContain(
+        "Could not load Last orders",
+      );
+    }
+    if (readState === "outdated") {
+      watches[0]![1](choices);
+      await el.updateComplete;
+      await change(el, "lastOrders.bar", { value: "30" });
+      await change(el, "menuId", { value: "drinks" });
+      await vi.waitFor(() => expect(watches).toHaveLength(2));
+      watches[0]![1](choices);
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[name="lastOrders.bar"]')).toBeNull();
+    }
+    await change(el, "name", { value: "Early lunch" });
+    expect(submittedInput(el)).not.toHaveProperty("lastOrders");
+  },
+);

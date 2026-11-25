@@ -52,6 +52,7 @@ import {
   updateDepartment,
 } from "./operations.js";
 import { readOpeningHoursModel, saveMenuPeriod, updateMenuPeriod } from "./menu-timetable.js";
+import { readLastOrderChoices } from "./last-order-routing.js";
 import { isLocalDate, parseCalendarMonth, parseCalendarYear } from "./hours-rules.js";
 import {
   CALENDAR_COLOURS,
@@ -1142,6 +1143,24 @@ export const VENUE_SERVICE_ROUTES: ModuleRoutes = {
         };
         const period = await gated(sessionId, (tx) => saveMenuPeriod(tx, departmentId, input));
         return c.json(period, 201);
+      }),
+    );
+
+    app.get("/management-api/venue-service/menu-periods/last-order-choices", (c) =>
+      run(c, log, async () => {
+        const sessionId = requireManagementSession(c);
+        const departmentId = requireUuidParam(c.req.query("departmentId") ?? "", "DepartmentId");
+        const menuId = requireUuidParam(c.req.query("menuId") ?? "", "MenuId");
+        const asked = c.req.query("periodId");
+        const periodId = asked === undefined ? undefined : requireUuidParam(asked, "MenuPeriodId");
+        const staffMenuIds = (c.req.queries("staffMenuId") ?? []).map((id) =>
+          requireUuidParam(id, "MenuId"),
+        );
+        return c.json(
+          await viewed(sessionId, (tx) =>
+            readLastOrderChoices(tx, { departmentId, menuId, periodId, staffMenuIds }),
+          ),
+        );
       }),
     );
 

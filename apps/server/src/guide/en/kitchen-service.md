@@ -344,6 +344,8 @@ one by one.
 
 ## A dish sent after its period ended {#after-period}
 
+To set when each station takes its last orders for a period, open [Periods](opening-hours.md#periods). In **Prep stations** → **Routes**, add a period route. Then use **Any other time, and after last orders** to choose the station for times outside the listed periods.
+
 On the till, an unsent dish whose period ended earlier the same business day shows a warning sign
 and **Lunch ended**. When you send it from a table, or pay for, send or park the order at the
 counter, the till lists the dishes. Check with the station that handles them for the period shown.

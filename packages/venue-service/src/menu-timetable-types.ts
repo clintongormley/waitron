@@ -7,6 +7,13 @@ import type { Season } from "./season-rules.js";
 import type { RouteTarget } from "./routing.js";
 
 export type LastOrderAdjustment = RouteTarget & { minutes: number };
+export type LastOrderChoice = RouteTarget & { name: string | null };
+export interface LastOrderDraftMenus {
+  departmentId: string;
+  periodId?: string;
+  menuId: string;
+  staffMenuIds: readonly string[];
+}
 
 export interface MenuPeriodInput {
   name: string;

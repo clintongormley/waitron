@@ -32,7 +32,7 @@ En Mes o Semana, elige **Todas las estaciones de preparación** en **Mostrar** p
 
 Si tienes el rol de supervisor, elige una estación en **Mostrar** para consultar su ajuste de **Cambios tras el envío** encima del calendario.
 
-Para cambiar cuándo recibe pedidos una estación, edita sus periodos y cartas en **Periodos**, sus rutas en **Estaciones de preparación** o los horarios de cierre de las zonas que le envían pedidos. Abre una fecha para leer el horario por escrito. Si muestras una estación o **Todas las estaciones de preparación**, la ventana del día muestra los horarios de las estaciones.
+Si una estación recibe pedidos después de que termine un periodo, su fila muestra el horario ampliado. Para cambiar cuándo recibe pedidos una estación, edita sus periodos, cartas o **Últimos pedidos** en **Periodos**, sus rutas en **Estaciones de preparación** o los horarios de cierre de las zonas que le envían pedidos. Abre una fecha para leer el horario por escrito. Si muestras una estación o **Todas las estaciones de preparación**, la ventana del día muestra los horarios de las estaciones.
 
 ## Selecciona varios días {#select-days}
 
@@ -72,3 +72,5 @@ Abre la pestaña **Turnos** para ver la semana de la última fecha que elegiste 
 Abre **Periodos** en **Operaciones del local**, junto a **Calendario**. Elige una fila para editarla, o **Añadir periodo** para crear uno. Usa el menú **⋯** de la fila para editarlo o eliminarlo.
 
 En **Pintado en**, elige una temporada o un día especial para consultar su horario.
+
+En **Últimos pedidos**, elige cuándo deja de aceptar pedidos cada estación de preparación para ese periodo. Por ejemplo, selecciona **15 minutos antes del final** para Cocina y **1 hora después del final** para Barra. Abre **Estaciones de preparación** para cambiar adónde van los platos.

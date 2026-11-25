@@ -20,6 +20,8 @@ import {
 import { holidayReadsAt, type HolidayReads } from "./holidays.js";
 import { specialDayOccurrences, specialDaysOn, type SpecialDayOccurrence } from "./special-days.js";
 
+import { storedSpecialDayOccurrences } from "./special-day-occurrences.js";
+
 export interface ResolvedDepartmentDay {
   businessDay: LocalDate;
   seasonId: string | null;
@@ -109,18 +111,25 @@ export async function readSpecialDayPlan(
 ): Promise<{ name: string; dates: SpecialDayOccurrence[]; plan: DayPlan } | null> {
   const found = await specialDayOccurrences(tx, specialDayId);
   if (found === null) return null;
-  const seasons = await readSeasons(tx);
   const dates = found.occurrences;
+  return { name: found.name, dates, plan: storedSpecialPlan(dates, await readSeasons(tx)) };
+}
+
+function storedSpecialPlan(
+  dates: readonly SpecialDayOccurrence[],
+  seasons: readonly Season[],
+): DayPlan {
   return {
-    name: found.name,
-    dates,
-    plan: {
-      seasonIdOn: new Map(
-        dates.map((d) => [d.storedDate, seasonOn(seasons, d.storedDate)?.id ?? null]),
-      ),
-      special: new Map(dates.map((d) => [d.storedDate, d])),
-    },
+    seasonIdOn: new Map(
+      dates.map((d) => [d.storedDate, seasonOn(seasons, d.storedDate)?.id ?? null]),
+    ),
+    special: new Map(dates.map((d) => [d.storedDate, d])),
   };
+}
+
+export async function readStoredSpecialDayPlan(tx: Transaction): Promise<DayPlan> {
+  const dates = await storedSpecialDayOccurrences(tx);
+  return storedSpecialPlan(dates, dates.length ? await readSeasons(tx) : []);
 }
 
 /** A clock and day plan read once for several reads; `moment` is `at`'s place on the clock. */
