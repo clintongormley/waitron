@@ -426,17 +426,6 @@ const PERIOD_CHANGES: Record<"en" | "es", MadridPeriodChange> = {
   }),
 };
 
-function madridWithDocumentFormat5(semantics: CanonicalMadridSemantics): void {
-  recomputeMadridHashes(semantics, {
-    editDocumentRow(row) {
-      if (typeof row.format === "number" && "offers" in row) {
-        if (row.format !== 4) throw new Error(`Madrid document format ${row.format}, not 4`);
-        row.format = 5;
-      }
-    },
-  });
-}
-
 const DROPPED_COLUMNS: MadridColumnDrops = {
   invoice_series: ["next_number"],
   webauthn_credentials: ["name"],
@@ -2784,7 +2773,14 @@ for (const locale of ["en", "es"] as const) {
         );
         phases[phase]!.activity_log! += 1;
       }
-      madridWithDocumentFormat5(expected[phase]);
+      recomputeMadridHashes(expected[phase], {
+        editDocumentRow(row) {
+          if (typeof row.format === "number" && "offers" in row) {
+            if (row.format !== 4) throw new Error(`Madrid document format ${row.format}, not 4`);
+            row.format = 5;
+          }
+        },
+      });
       const tables = expected[phase].tables;
       const rows = [
         ...Object.values(tables.zone_day_ranges!.rows).map((range) => ({
