@@ -9,6 +9,7 @@ import {
   currentContentLanguages,
   formatDecimalInput,
   Gestures,
+  preventTouchContextMenu,
 } from "@waitron/ui";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -232,6 +233,8 @@ export class TillBasket extends LitElement {
         grid-column: 1 / -1;
       }
       :host([line-details]) .line .name {
+        -webkit-user-select: none;
+        user-select: none;
         grid-column: 1;
         min-width: 0;
       }
@@ -908,6 +911,9 @@ export class TillBasket extends LitElement {
                         )
                         ? line
                         : null;
+                  }}
+                  @contextmenu=${(event: PointerEvent) => {
+                    if (this.#pressedLine === line) preventTouchContextMenu(event);
                   }}
                   @dblclick=${(event: MouseEvent) => {
                     if (

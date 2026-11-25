@@ -4,7 +4,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
-import { baseStyles, formatDecimalInput, Gestures } from "@waitron/ui";
+import { baseStyles, formatDecimalInput, Gestures, preventTouchContextMenu } from "@waitron/ui";
 import { scrollAncestors } from "@waitron/ui/src/reorder-table.js";
 import {
   MONEY_SCALE,
@@ -158,6 +158,8 @@ export class TillSentOrders extends LitElement {
         border-bottom: 1px solid var(--wt-color-border);
       }
       .dish {
+        -webkit-user-select: none;
+        user-select: none;
         display: flex;
         flex: 1;
         min-width: 0;
@@ -559,6 +561,7 @@ export class TillSentOrders extends LitElement {
               ?disabled=${this.busy || !slice.row.released}
               aria-description=${t("table.serve")}
               @pointerdown=${(event: PointerEvent) => this.#pressLine(members, event)}
+              @contextmenu=${preventTouchContextMenu}
               @click=${(event: MouseEvent) => this.#clickServe(members, event)}
             >
               ${contents}
@@ -566,6 +569,7 @@ export class TillSentOrders extends LitElement {
           : html`<div
               class="dish"
               @pointerdown=${(event: PointerEvent) => this.#pressLine(members, event)}
+              @contextmenu=${preventTouchContextMenu}
             >
               ${contents}
             </div>`
@@ -622,6 +626,7 @@ export class TillSentOrders extends LitElement {
         <h4
           class="group-title"
           data-group-drag=${entry.group.id}
+          @contextmenu=${preventTouchContextMenu}
           @pointerdown=${(event: PointerEvent) => this.#pressHeading(entry.group.id, event)}
           .textContent=${this.#heldTitle(entry)}
         ></h4>

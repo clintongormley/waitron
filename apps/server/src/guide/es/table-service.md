@@ -585,6 +585,10 @@ enviarlo todo, el terminal de camarero se queda en la mesa hasta que tocas **Sal
 pantalla de 720 px de ancho o más, como la de una tableta, la carta y el pedido aparecen uno junto
 al otro.
 
+En un móvil o una tableta, para mover un plato de **Nuevo pedido**, mantén pulsado su nombre
+hasta que aparezca el contorno. Sin levantar el dedo, arrástralo al título del grupo que quieras y
+suéltalo.
+
 Usa el campo **Carta** junto a **Buscar** para cambiar entre las cartas disponibles. Desplázate
 más allá del primer bloque para encontrar el otro, **Accesos directos** o **Carta completa**.
 Toca un botón con una carpeta para abrir esa sección. Un intervalo de precios indica cuánto

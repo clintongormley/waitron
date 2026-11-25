@@ -9,7 +9,7 @@ import {
   now,
   row,
 } from "../screens/till-table-order-screen.current-orders.test-helpers.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, mountWidget, touchContextMenu } from "./test-helpers.js";
 import { TillSentOrders } from "./sent-orders.js";
 
 beforeEach(() => setLocale("en"));
@@ -189,6 +189,13 @@ it("one held group has no empty More menu", async () => {
   expect(q(el, "[data-group-more]")).toBeNull();
   expect(q(el, '[data-group-fire="g3"]')).not.toBeNull();
 });
+
+it.each(['[data-group-drag="g3"]', '[data-held-group="g3"] [data-held-line] .dish'])(
+  "keeps the browser menu off the held-order target %s",
+  async (selector) => {
+    expect(touchContextMenu(q(await mount(), selector))).toBe(true);
+  },
+);
 
 it("only the heading reserves touch dragging; the fold controls retain native scrolling", async () => {
   const el = await mount();

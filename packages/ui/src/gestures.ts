@@ -1,3 +1,8 @@
+// A native touch menu can take over a hold that the control uses for its own action.
+export function preventTouchContextMenu(event: PointerEvent): void {
+  if (event.pointerType === "touch") event.preventDefault();
+}
+
 export const LONG_PRESS_MS = 500;
 export const DOUBLE_TAP_MS = 300;
 export const SLOP_PX = 8;

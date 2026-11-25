@@ -110,7 +110,14 @@ export {
   snapToSquare,
 } from "./floor-plan-geometry.js";
 export type { PlanPlacement, PlanRect, PlanShape } from "./floor-plan-geometry.js";
-export { DOUBLE_TAP_MS, DOUBLE_TAP_PX, Gestures, LONG_PRESS_MS, SLOP_PX } from "./gestures.js";
+export {
+  DOUBLE_TAP_MS,
+  DOUBLE_TAP_PX,
+  Gestures,
+  LONG_PRESS_MS,
+  SLOP_PX,
+  preventTouchContextMenu,
+} from "./gestures.js";
 export type { GestureHandlers, GesturePoint } from "./gestures.js";
 export { FLOOR_MAP_FILLS, floorMapFillStyles } from "./floor-map-fills.js";
 export type {

@@ -1007,6 +1007,21 @@ export function notingPersonRefusals<T extends object>(api: T): T {
   });
 }
 
+export function touchContextMenu(target: HTMLElement): boolean {
+  const init = {
+    bubbles: true,
+    composed: true,
+    cancelable: true,
+    pointerType: "touch",
+    pointerId: 91,
+  };
+  target.dispatchEvent(new PointerEvent("pointerdown", init));
+  const menu = new PointerEvent("contextmenu", init);
+  target.dispatchEvent(menu);
+  window.dispatchEvent(new PointerEvent("pointercancel", init));
+  return menu.defaultPrevented;
+}
+
 /** The computed colour a `--wt-*` colour token resolves to inside `host`, read through a probe. */
 export function tokenColour(host: HTMLElement | ShadowRoot, token: string): string {
   const probe = document.createElement("span");

@@ -25,7 +25,7 @@ import {
   stepInside,
 } from "../floor-plan-geometry.js";
 import { ROTATION_STEP, snapRotation } from "../floor.js";
-import { Gestures, type GesturePoint } from "../gestures.js";
+import { Gestures, preventTouchContextMenu, type GesturePoint } from "../gestures.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import { holdPageCursor, releasePageCursor } from "../reorder-table.js";
 import { registerIcons } from "./wt-icon.js";
@@ -695,6 +695,7 @@ export class WtFloorPlanCanvas extends LitElement {
       <div
         class="viewport"
         part="viewport"
+        @contextmenu=${preventTouchContextMenu}
         ?data-resizing=${this.resizing !== null}
         style=${styleMap({ cursor: this.resizing?.cursor })}
       >
