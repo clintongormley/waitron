@@ -12902,11 +12902,12 @@ describe("office printers in discovery", () => {
   });
 
   it.each([
-    ["en-GB", "Added through the main box", "Use this agent"],
-    ["es-ES", "Añadida a través del servidor principal", "Usar este agente"],
+    ["en-GB", "Use this agent", "Added through the main box"],
+    ["es-ES", "Usar este agente", "Añadida a través del servidor principal"],
+    ["en-GB", undefined, "Added through the main box"],
   ] as const)(
-    "confirms the main-box add in its row until Add a printer is reopened (%s)",
-    async (locale, confirmation, move) => {
+    "confirms the main-box add until reopening (%s, move on reopen: %s)",
+    async (locale, move, confirmation) => {
       const before = currentLocale();
       setLocale(locale);
       try {
@@ -12914,7 +12915,11 @@ describe("office printers in discovery", () => {
         const local = { ...agents[0]!, onThisBox: true };
         const spare = { ...agents[1]!, active: true, onThisBox: false };
         const { el } = await mountWith(
-          [office(), office({ agentId: spare.id, agentName: spare.name }), ...discoveredNetwork],
+          [
+            office(),
+            ...(move ? [office({ agentId: spare.id, agentName: spare.name })] : []),
+            ...discoveredNetwork,
+          ],
           {
             listAgents: vi.fn().mockResolvedValue([local, spare]),
             listPagePrinters,
@@ -12937,8 +12942,12 @@ describe("office printers in discovery", () => {
 
         await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
         await openDiscovery(el);
-        expect(text(el, moveButton)).toBe(move);
-        expect(text(el, hpRow)).not.toContain(confirmation);
+        if (move) {
+          expect(text(el, moveButton)).toBe(move);
+          expect(text(el, hpRow)).not.toContain(confirmation);
+        } else {
+          expect(q(el, hpRow)).toBeNull();
+        }
       } finally {
         setLocale(before);
       }
