@@ -54,6 +54,7 @@ vi.mock("@waitron/dashboard-modules", async (original) => {
           id: "diagnosis-test",
           navLabelKey: "nav.diagnosis-test",
           group: "operations",
+          order: 0,
           requiresPermission: "system.manage",
           readPermission: "fiscal.view",
         },

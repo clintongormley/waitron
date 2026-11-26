@@ -301,6 +301,7 @@ it("opens Rota from Team and restores it on Back from Calendar", async () => {
   await userEvent.click(row("opening-hours"));
   await vi.waitFor(() => expect(location.pathname).toBe("/opening-hours"));
   expect(current()).toEqual(["nav-opening-hours"]);
+  await vi.waitFor(() => expect(document.title).toBe("Calendar · Waitron"));
 
   history.back();
   await vi.waitFor(() => expect(current()).toEqual(["nav-opening-hours-rota"]));
@@ -310,6 +311,7 @@ it("opens Rota from Team and restores it on Back from Calendar", async () => {
 
 it("opens Team on a fresh Rota address", async () => {
   const { el } = await mount({ path: "/opening-hours/view/rota" });
+  await vi.waitFor(() => expect(document.title).toBe("Rota · Waitron"));
   const root = el.shadowRoot!;
   expect(root.querySelector("[data-test=nav-group-team]")!.getAttribute("aria-expanded")).toBe(
     "true",
@@ -317,6 +319,16 @@ it("opens Team on a fresh Rota address", async () => {
   expect(root.querySelector('.nav-item[aria-current="page"]')?.getAttribute("data-test")).toBe(
     "nav-opening-hours-rota",
   );
+});
+
+it("leaves Rota out when someone can manage staffing but cannot read Calendar", async () => {
+  const { el } = await mount({
+    path: "/staff-roles",
+    waitForScreen: "dashboard-staff-roles-screen",
+    permissions: ["schedule.manage"],
+  });
+  await search(el, "rota");
+  expect(el.shadowRoot!.querySelector("[data-test=nav-opening-hours-rota]")).toBeNull();
 });
 
 it("rebuilds destinations when modules and permissions change at the next session probe", async () => {

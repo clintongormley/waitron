@@ -50,7 +50,7 @@ import { html } from ${JSON.stringify(join(repo, "apps/dashboard/node_modules/li
 import { DASHBOARD_MODULES } from ${JSON.stringify(join(repo, "packages/dashboard-modules/src/index.ts"))};
 DASHBOARD_MODULES.push({
   module: "test-continuation", strings: {en:{"nav.test-continuation":"Evidence"},es:{"nav.test-continuation":"Evidence"}},
-  screen: {id:"test-continuation",navLabelKey:"nav.test-continuation",group:"service",requiresPermission:"system.manage",readPermission:"venue.view"},
+  screen: {id:"test-continuation",navLabelKey:"nav.test-continuation",group:"operations",order:0,requiresPermission:"system.manage",readPermission:"venue.view"},
   create(ctx) { window.testPermissionContinuation = ctx.permissionContinuation; return {render:()=>html\`<p data-test="test-evidence">Empty evidence</p><wt-button data-test="test-sign-in" @click=\${()=>{window.testSignIn = ctx.permissionContinuation.signIn({permission:"system.manage",signal:new AbortController().signal});}}>Sign in</wt-button>\`}; }
 });
 await import(${JSON.stringify(join(repo, "apps/dashboard/src/main.ts"))});

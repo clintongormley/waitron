@@ -7,6 +7,7 @@ const placement = (id: string) => ({
   id,
   navLabelKey: `nav.${id}`,
   group: "reports",
+  order: 0,
   requiresPermission: "test.use",
 });
 const create = () => ({ render: () => html`` });

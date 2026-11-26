@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 describe("ADJUSTMENTS_DASHBOARD", () => {
-  it("puts Voids and comps under Venue setup for managers of adjustments, beside the report", () => {
+  it("puts Voids and comps under Venue setup for managers of adjustments", () => {
     expect(ADJUSTMENTS_DASHBOARD.module).toBe("adjustments");
     expect(ADJUSTMENTS_DASHBOARD.screen).toEqual({
       id: "adjustment-report",

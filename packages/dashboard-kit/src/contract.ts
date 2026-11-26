@@ -46,7 +46,7 @@ export interface DashboardScreenPlacement {
   id: string;
   navLabelKey: string;
   group: NavGroupId;
-  order?: number;
+  order: number;
   icon?: string;
   requiresPermission: string;
   readPermission?: string;

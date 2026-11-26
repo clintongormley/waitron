@@ -23,6 +23,7 @@ vi.mock("@waitron/dashboard-modules", async (importOriginal) => ({
         id: "venue-operations",
         navLabelKey: "fixture.departments",
         group: "operations",
+        order: 0,
         requiresPermission: "venue.configure",
         readPermission: "venue.view",
       },

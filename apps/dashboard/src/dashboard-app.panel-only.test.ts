@@ -37,6 +37,7 @@ function screenedModule() {
       id: "gauges",
       navLabelKey: "nav.gauges",
       group: "reports",
+      order: 0,
       requiresPermission: "test.use",
     },
     create: () => ({ render: () => html`<p data-test="screen-gauges">Gauges</p>` }),

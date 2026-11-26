@@ -1924,7 +1924,7 @@ export class DashboardApp extends LitElement {
     this.#placeStripPanel();
     const page = this.#permittedNav()
       .flatMap(({ pages }) => pages)
-      .find((entry) => entry.screen === this.screen);
+      .find((entry) => this.#isCurrentNavPage(entry));
     document.title =
       page === undefined
         ? t("nav.document_title_none")
@@ -3184,7 +3184,7 @@ export class DashboardApp extends LitElement {
       const modules = (this.#navGroups.get(group.id) ?? []).map((screen) => ({
         screen: screen.id,
         label: tKit(screen.navLabelKey),
-        order: screen.order ?? 0,
+        order: screen.order,
         icon: screen.icon,
       }));
       const views = [...this.#calendarNav].flatMap(([calendarView, placement]) =>

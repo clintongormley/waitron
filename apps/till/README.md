@@ -149,7 +149,7 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
 | ----------------- | -------- | ------- | -------------------------------------- |
 | `WAITRON_NODE_ID` | yes      | —       | The identity of this box in the venue. |
 
-To offer tips at the till, open **Card payments** in the dashboard and turn on **Offer tips at the till** under **Settings**.
+To offer tips at the till, open **Card readers** under **Hardware** in the dashboard and turn on **Offer tips at the till** under **Settings**.
 
 Kitchen-ticket frames and collection-number captions read the saved default content language at
 each new render: Spanish selects Spanish, every other default or missing setting selects English.

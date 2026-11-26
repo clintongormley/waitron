@@ -9,7 +9,7 @@ import type { DashboardApp } from "./dashboard-app.js";
 
 // The shipped registry has no two modules in one group that state an `order`, so the sort is
 // exercised against a registry of its own.
-function contribution(id: string, order?: number): DashboardContribution {
+function contribution(id: string, order: number): DashboardContribution {
   return {
     module: id,
     screen: {
@@ -17,7 +17,7 @@ function contribution(id: string, order?: number): DashboardContribution {
       navLabelKey: `nav.${id}`,
       group: "reports",
       requiresPermission: "test.use",
-      ...(order === undefined ? {} : { order }),
+      order,
     },
     strings: { en: { [`nav.${id}`]: id }, es: { [`nav.${id}`]: id } },
     create: () => ({ render: () => html`<p>${id}</p>` }),
@@ -28,7 +28,7 @@ vi.mock("@waitron/dashboard-modules", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@waitron/dashboard-modules")>()),
   DASHBOARD_MODULES: [
     contribution("second", 15),
-    contribution("unordered"),
+    contribution("leading", 0),
     contribution("first", 10),
     contribution("third", 15),
   ],
@@ -39,7 +39,7 @@ afterEach(() => {
   setLocale("es-ES");
 });
 
-function stubApi(modules: string[] = ["second", "unordered", "first", "third"]): DashboardApi {
+function stubApi(modules: string[] = ["second", "leading", "first", "third"]): DashboardApi {
   const pending = () => vi.fn(() => new Promise(() => undefined));
   return {
     getMe: vi.fn().mockResolvedValue({
@@ -76,7 +76,7 @@ it("interleaves core and module pages, with core first and declaration order on 
     ...el.shadowRoot!.querySelectorAll<HTMLElement>("#nav-group-panel-reports [data-test]"),
   ].map((item) => item.dataset.test);
   expect(reports).toEqual([
-    "nav-unordered",
+    "nav-leading",
     "nav-sales",
     "nav-first",
     "nav-second",

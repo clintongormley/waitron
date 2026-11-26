@@ -16,7 +16,7 @@ import type { PaymentsScreen } from "./screens/payments-screen.js";
 
 function screen(id: string, label: string, group: string, requiresPermission: string) {
   return {
-    screen: { id, navLabelKey: `nav.${id}`, group, requiresPermission },
+    screen: { id, navLabelKey: `nav.${id}`, group, order: 0, requiresPermission },
     create: () => ({ render: () => html`<p data-test=${`screen-${id}`}>${label}</p>` }),
     label,
   };

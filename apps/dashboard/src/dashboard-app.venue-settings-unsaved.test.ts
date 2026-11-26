@@ -41,6 +41,7 @@ vi.mock("@waitron/dashboard-modules", async (importOriginal) => {
       id: "kitchen-test-home",
       navLabelKey: "nav.kitchen-test",
       group: "reports",
+      order: 0,
       requiresPermission: "test.use",
     },
     strings: {

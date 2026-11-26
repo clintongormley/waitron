@@ -23,6 +23,7 @@ vi.mock("@waitron/dashboard-modules", async (original) => ({
         id: "test-evidence",
         navLabelKey: "nav.test-evidence",
         group: "operations",
+        order: 0,
         requiresPermission: "system.manage",
         readPermission: "fiscal.view",
       },
