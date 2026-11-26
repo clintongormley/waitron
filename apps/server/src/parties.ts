@@ -658,7 +658,9 @@ export async function readPartyBills(
   );
   const notices = await readBillsDiscountNotices(
     tx,
-    bills.map((bill) => bill.workingOrderId),
+    bills.flatMap(({ workingOrderId, status }) =>
+      status === "open" || status === "placed" ? [workingOrderId] : [],
+    ),
   );
   return bills.map((bill) => {
     const sale = filed.get(bill.workingOrderId);

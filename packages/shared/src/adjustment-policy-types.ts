@@ -34,9 +34,9 @@ export const DISCOUNT_NOTICE_WHYS = [
 
 export type DiscountNoticeWhy = (typeof DISCOUNT_NOTICE_WHYS)[number];
 
-/** A comp or discount that came off a bill because of a change, until one given on that bill names
- * it in `reapplies` or the bill closes. `reapplyOn` is the line to give it again on, null when
- * staff choose. */
+/** A comp or discount that came off an open bill because of a change, until one given on that bill
+ * names it in `reapplies`, the bill is paid or abandoned, or (a dish's) its line leaves the bill.
+ * `reapplyOn` is the line to give it again on, null when staff choose. */
 export interface DiscountNotice {
   adjustmentId: string;
   why: DiscountNoticeWhy;

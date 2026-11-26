@@ -19,6 +19,7 @@ import { readOrderRevision } from "./working-order-context.js";
 import { getHeldOrder } from "./working-order-held-read.js";
 import { updateHeldOrder, updateOrderLine } from "./working-order-held-write.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import {
   cancelReasonId,
   COMP_BILL_REASON,
@@ -33,6 +34,7 @@ import {
   addSpecDishesToFullMenu,
   sendSpecDraft,
   setupSetMenuSpecVenue,
+  specDeps,
   specDishOf,
   specRows,
   type SpecDish,
@@ -411,4 +413,35 @@ it("refuses to give again a comp or discount that still stands", async () => {
 
   await expect(preview(bill.tabId, soup, 1000, given)).rejects.toMatchObject(REFUSED);
   await expect(give(bill.tabId, soup, 1000, given)).rejects.toMatchObject(REFUSED);
+});
+
+it("answers no notice on a paid bill while its party stays open", async () => {
+  const bill = await billOf([dish("Soup"), dish("Sirloin")]);
+  await give(bill.tabId, (await rowOf(bill.tabId, "Daily menu")).id, 1000);
+  const target = await otherBill(bill);
+  await move(bill, target, [(await rowOf(bill.tabId, "Sirloin")).id]);
+  expect(await noticesOn(bill)).toHaveLength(1);
+
+  await takeBillPayment(
+    specDeps(spec),
+    venue.cfg,
+    bill.tabId,
+    {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount: "6.00",
+      method: "cash",
+      tendered: "6.00",
+      applied: "6.00",
+      tip: "0.00",
+      ownReceipt: true,
+    },
+    venue.operator,
+  );
+
+  const bills = await inTx(venue, (tx) => readPartyBills(tx, bill.partyId));
+  const paid = bills.find(({ workingOrderId }) => workingOrderId === bill.tabId)!;
+  expect(paid.status).toBe("settled");
+  expect("discountNotices" in paid).toBe(false);
+  expect(bills.find(({ workingOrderId }) => workingOrderId === target.tabId)!.status).toBe("open");
 });
