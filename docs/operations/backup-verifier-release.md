@@ -44,6 +44,40 @@ The [v2 recovery suite](../../apps/server/src/cloud-recovery-v2.test.ts) retains
 request, signed proof and descriptor comparisons alongside unchanged v1 exchanges. Preserve
 unrecognised or invalid saved state for diagnosis. Do not erase it to force a version fallback.
 
+## Recover through setup
+
+Start a fresh recovery in setup on the qualified build. Setup asks Cloud for a checked copy
+matched to this build's verification target. Review that copy, use your venue's master key to
+prepare recovery and confirm that the old box is offline and this is your only recovery. After
+the box restarts, check that Cloud acknowledges the same request and copy while approval is live.
+
+If setup holds an unfinished version 1 request, close the old request in Cloud if you can. Keep
+the old setup state and start a new request from an unprovisioned box with an empty state folder.
+If a restore is already staged, keep its state and resolve the staged operation before starting
+another recovery. A completed restore can still report to Cloud using its saved version 1 proof.
+
+### Local setup trial, 26 November 2026
+
+The trial used Waitron source `247a1659d54d5411e298813e30f7caa946707a0d` and box image
+`sha256:8607c91caeb4683851bcdc6ca9d0e1f3a57198f2ecd2e64ef137321076b03bdb`.
+The local Cloud ran `0502b1c6b1ba40f58de2d2df987f4600104a3000`, including Cloud #1382,
+in image `sha256:816d845e593be827b0ff3cc08f9845c41cabfa5c6255b13152a226f76d3aa1a9`.
+Its checker used the candidate's compiled verifier and migrations in
+`sha256:34353c9e6ca6e34184f787ad30283df5e7be840bc2c2bcc87fece17126cfc547`.
+Setup and Cloud both recorded target
+`79581efc8b7753ced1b022e03c7ad15619ac4678303c789e7f212f571eeafd01`
+with runtime fingerprint `d5dcc3239bc2e4174040a00cc7d487d79a40b07d34b0a2fc6315b4bd2cc58fdd`.
+
+The isolated venue had no continuous copy or stream objects. Cloud admitted the 105,744-byte
+archive with SHA-256 `9928998e89adb1b8291e64320f06aacd9e748b19638a86a8fc68d37c081151e3`.
+The checker passed all eight module checks, recorded `activation: "not_attempted"` and
+removed its child container. The disposable venue's owner approved that copy after signing
+in and confirming their identity in Cloud. Setup reviewed it, used the venue's master key and confirmed the
+time and isolation before staging. After a restart, SQLite reported integrity `ok`, the six
+sales included `A-0CNNY/123` and `A-0CNNY/124`, and four new series used installation `0EFE3`.
+The box recorded `reported` and Cloud recorded `restored` for the same request and copy at
+13:23:07 UTC, before approval expired at 14:21:00 UTC.
+
 ## Complete the joint qualification
 
 Before enabling verified-snapshot admission or deployment enforcement, retain exact-build

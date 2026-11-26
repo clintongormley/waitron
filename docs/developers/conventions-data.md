@@ -5839,9 +5839,13 @@ The trusted Cloud parent must still validate the complete result against the req
 child and pinned image, its current claim and deadline, and its own cleanup before menu
 admission. Keep snapshots unavailable until the joint release checks pass. The
 [verifier release procedure](../operations/backup-verifier-release.md) records the protocol vectors,
-local checks and joint release gates. The current host setup caller uses recovery version 1;
-version 2 remains opt-in until Cloud supports the target-bound exchange.
-
+local checks and joint release gates. Preproduction setup sends version 2 with the running build's
+verification target. It computes the target lazily and keeps the first successful result for that
+setup server. A saved version 1 session cannot resume in version 2 setup. The post-start report
+and replacement retry use the saved protocol version. Version 2 checks the running build's target
+before it sends a proof, and recognised version 1 keeps its existing proof.
+The [local setup trial](../operations/backup-verifier-release.md#local-setup-trial-26-november-2026)
+records the tested source, image, target and Cloud acknowledgment.
 
 An ordinary archive restore ignores a recognised v1 Cloud cache: its key or file permissions
 cannot establish a target-bound approval. A saved v2 operation still requires its complete binding
