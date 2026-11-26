@@ -22,7 +22,7 @@
   - **The original** keeps its row, number, unchosen dishes, `placed` status, money and `order_placed` record.
   - **Every dish chosen:** refused with `bill.all_items_chosen` before anything moves (`pay-for-items.ts:177-186`); staff pay with Whole bill instead.
   - **A card that charges nothing:** every dish goes back on the original (`movedItemsBack`, `bill-payments.ts:2363-2420`), with the original opened for that move too (D3).
-  - **A card that charges nothing after the original was paid or cancelled meanwhile:** the dishes stay on their own *open* Counter bill, as they do on a table today (`bill-payments.ts:2319-2322`). Waiting does not list it, because Waiting reads only sent or paid orders (`working-order-counter.ts:467-479`). It shows under Held orders (`working-order-held-read.ts:195`, numbered "3 (was 2)" by `held-orders.ts:258`), where it is paid as any held order.
+  - **A card that charges nothing after the original was paid, cancelled or moved to a table meanwhile:** the dishes stay on their own *open* Counter bill, as they do on a table today (`bill-payments.ts:2319-2322`); after a move to a table the put-back is refused `tab.not_open`. Waiting does not list it, because Waiting reads only sent or paid orders (`working-order-counter.ts:467-479`). It shows under Held orders (`working-order-held-read.ts:195`, numbered "3 (was 2)" by `held-orders.ts:258`), where it is paid as any held order.
 - **D2. Order number: a new number, shown as "(was N)". Needs the watcher's or owner's decision.** The watcher asked for the new bill to keep the original number, but the unique index refuses two rows with one number.
   - **Recommended:** what every move of sent dishes already does. The new bill takes the next number, and its kitchen items carry the number they were sent under (`stampSentOrderNumber`, `working-order-transfer.ts:192`, `:206-240`). The kitchen screen, the pass board and Counter > Waiting show "3 (was 2)" (`former-numbers.ts:9-37`; till `counter-waiting.ts:147`, `station-queue.ts:1171`, `pass-board.ts:424`).
   - **Keeping the same number**, measured by the reviewer:
@@ -61,7 +61,7 @@
 1. A card declined, or cancelled at the reader: the dishes go back to the original, which is `placed` again and not left `open`.
 2. An original handed over before payment: the paid part never reappears on a kitchen screen.
 3. An original part-paid with An amount: what is left, if exactly covered, issues and settles; if overpaid, it keeps the money and issues nothing.
-4. Part of a sent line (1 of 3 beers): its kitchen item splits and nothing is sent again.
+4. Part of a sent line (100 g of 300 g of a dish sold by weight): its kitchen item splits and nothing is sent again.
 5. A placed order with a receipt, or one at a table, is never switched to open.
 
 ### Task 1: Let a sent order with no receipt go back to open (database)
@@ -98,7 +98,7 @@
     - the moved line's `ticket_items` keep `id`, `fired_at`, `state` and `station_id`, and carry `sent_order_number` = the original's number;
     - control: `moveDishes` of a sent dish on an open table bill raises the count (as at `pay-for-items.move.test.ts:590-595`).
   - `"prints the paid part's receipt and no collection slip"`: the baseline is taken after the order is sent, when its slip has printed. Counting *every* receipt-printer job (the slip is also a `document`, `receipt-print.ts:386-391`), exactly one is new, and it is linked to the new sale.
-  - `"part of a sent line"`: 1 of 3 moves, the rest stays, and no kitchen job appears.
+  - `"part of a sent line"`: 100 g of 300 g of a dish sold by weight moves, the rest stays, and no kitchen job appears.
   - `"every dish chosen is refused, the order still placed"`: `bill.all_items_chosen`, and the rows are unchanged.
   - `"a sent Counter order with a receipt is still refused bill.not_at_table"` and `"a sent order at a table is still refused bill.not_issued"`, each left `placed`.
 
@@ -151,8 +151,8 @@
 
 ## Try in the real till
 
-1. `wa-wt demo <worktree>`. Set the Counter's zone to take payment after sending, with numbered collections. Send Burger, Paella and 3 beers without paying. Slip "N" prints and the kitchen screen shows N.
-2. Pay > Items: choose Burger and 1 beer, then cash. A receipt for those two prints with no new number slip. The kitchen screen shows "M (was N)" with Burger and the beer, and N with the rest; nothing new prints in the kitchen.
+1. `wa-wt demo <worktree>`. Set the Counter's zone to take payment after sending, with numbered collections. Send Burger, Paella and 300 g of a dish sold by weight (such as Sliced Iberian ham) without paying. Slip "N" prints and the kitchen screen shows N.
+2. Pay > Items: choose Burger and 100 g of the weighed dish, then cash. A receipt for those two prints with no new number slip. The kitchen screen shows "M (was N)" with Burger and the 100 g, and N with the rest; nothing new prints in the kitchen.
 3. Counter > Waiting shows "M (was N)" as paid (at the bottom) and N as still sent, with its lower total. Hand over each.
 4. Again with a reader card set to decline: every dish is back on N, and nothing prints.
 5. Hand N over before paying, then pay for items: the paid part never reappears on the kitchen screen.

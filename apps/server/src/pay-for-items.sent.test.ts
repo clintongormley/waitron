@@ -13,10 +13,12 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createProduct } from "@waitron/menu";
+import { payments } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
-import { centsToDecimal } from "@waitron/shared";
+import { centsToDecimal, decimal } from "@waitron/shared";
 import { setRoutingCell, setZoneSalePolicyOverride } from "@waitron/venue-service";
+import { settlePendingBillPayments } from "./bill-payments-loop.js";
 import { readBillEditState } from "./bill-editing.js";
 import { moveBill } from "./move-bill.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
@@ -69,8 +71,8 @@ useVenueDb({
       const ham = await createProduct(tx, {
         categoryId: categoryId!,
         name: "Ham",
-        customerName: { [v.cfg.locale]: "Jamón" },
-        kitchenName: "JAMON",
+        customerName: { [v.cfg.locale]: "Cured ham" },
+        kitchenName: "HAM",
         pricingUnit: "weight",
         unitPrice: "20.00",
         vatClass: "general",
@@ -647,6 +649,57 @@ describe("Pay for items on a sent Counter order", () => {
     expect(await dishesOf(orderId)).toEqual([["Paella", "1.000"]]);
     expect(await salesOf(orderId)).toEqual([]);
     expect([kitchenJobs(), kitchenNotices()]).toEqual(before);
+  });
+
+  it("a put-back refused after a stalled card leaves the original placed and the dish on its own open bill", async () => {
+    const orderId = await sentOrder("Burger", "Paella");
+    card.stallNextCollect();
+    const paid = await payByReader(orderId, [{ lineId: await lineOf(orderId, "Burger") }], "12.00");
+    expect(paid.payment.outcome).toBe("timeout");
+    const [payment] = await v.db
+      .select({ id: billPayments.id })
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, paid.billId));
+    await inTx(v, (tx) =>
+      tx
+        .update(payments)
+        .set({
+          state: "failed",
+          resolvedBy: null,
+          resolutionOutcome: "failed",
+          resolutionCancelledAtProvider: true,
+          resolutionProviderStatus: "canceled",
+          resolvedAt: v.clock.now().instant.toISOString(),
+        })
+        .where(eq(payments.billPaymentId, payment!.id)),
+    );
+    const atReader = await billOf(orderId);
+    expect(atReader.status).toBe("placed");
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let warned: unknown[][] = [];
+    // The lowered limit refuses the move back once the original is open again.
+    await settlePendingBillPayments({
+      ...deps(),
+      cfg: { ...v.cfg, simplifiedInvoiceLimit: decimal("25.00") },
+    }).finally(() => {
+      warned = [...warn.mock.calls];
+      warn.mockRestore();
+    });
+
+    expect(warned).toContainEqual([
+      "payment.items_put_back_refused",
+      expect.objectContaining({
+        billPaymentId: payment!.id,
+        code: "sale.total_exceeds_simplified_limit",
+      }),
+    ]);
+    const after = await billOf(orderId);
+    expect(after.status).toBe("placed");
+    expect(after.revision).toBe(atReader.revision);
+    expect(await dishesOf(orderId)).toEqual([["Paella", "1.000"]]);
+    expect((await billOf(paid.billId)).status).toBe("open");
+    expect(await dishesOf(paid.billId)).toEqual([["Burger", "1.000"]]);
   });
 
   it("a declined card after the original was paid meanwhile leaves the dishes on an open bill listed under Held orders", async () => {
