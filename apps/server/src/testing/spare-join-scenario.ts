@@ -842,7 +842,8 @@ async function runCaptured(fixture: SpareJoinFixture, log: readonly string[]): P
       const rotated = await fetch(`${urlM}/api/backup/rotate`, {
         ...viaM,
         method: "POST",
-        headers: managing,
+        // A key change is taken only from the page at the address it used.
+        headers: { ...managing, origin: urlM },
         body: JSON.stringify({ masterKey: m.nodeSecret }),
       });
       expect(rotated.status, await rotated.text()).toBe(200);

@@ -265,7 +265,6 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
       return deps.turns(async () => {
         guardPrimary();
         await refuseArchiveOverlap(bucket); // Again: archive settings may have changed meanwhile.
-        await requireKey();
         await deps.sealedState.refresh();
         // Again, under node.db's lock: a join checks for these settings and writes its pair link
         // under the same lock (`mirror-bundle-api.ts`), so one of the two sees the other.

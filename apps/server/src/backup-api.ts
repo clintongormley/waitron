@@ -59,6 +59,8 @@ import type { StreamHost } from "./stream-host.js";
 import type { Turns } from "./backup-turns.js";
 import { cloudArchiveAvailable } from "./cloud-archive-target.js";
 import type { CloudConnectionStatus } from "./cloud-client.js";
+import { isSecure } from "./encrypted-connection.js";
+import { sentFromThisOrigin } from "./own-page.js";
 import "./errors.js";
 
 /** Everything the authenticated backup admin routes need. `stateDir` is where `backup.env`, which
@@ -101,6 +103,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.reload_in_progress": 409,
   "backup.recovery_key_too_short": 409,
   "master_key.wrong": 403,
+  "backup.key_change_page_required": 403,
   "backup.destinations_invalid": 400,
   "backup.request_invalid": 400,
   "backup.cloud_needs_daily": 400,
@@ -433,7 +436,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         if (body.cloud === true && (await deps.readCloudStatus?.())?.environment !== "test") {
           throw new AppError("backup.cloud_unavailable", { field: "cloud" });
         }
-        // Archives are locked with the key the box holds; only a key change writes one.
+        // Archives are locked with the key the box holds; this route never writes one.
         const held = await readHeldKey(heldKey);
         const recoveryKey = held.key;
         if (recoveryKey === undefined) {
@@ -542,6 +545,9 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       const personId = await authorize(c);
       guardWritable();
       await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
+      if (!isSecure(c) || !sentFromThisOrigin(c)) {
+        throw new AppError("backup.key_change_page_required", {});
+      }
       const { masterKey } = await readRotateBody(c);
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.

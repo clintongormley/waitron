@@ -121,7 +121,6 @@ import { createHourTestClock } from "./testing/hour-test-clock.js";
 import { DEVICE_CLOCK_HEADER, DEV_DEVICE_HEADER } from "./device-session.js";
 import { enqueuePrintJob, esc } from "@waitron/printing";
 import type { Turns } from "./backup-turns.js";
-import { WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { freePort } from "./testing/free-ports.js";
 import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
@@ -3967,7 +3966,7 @@ describe("startServer — what a trading boot wires behind its management routes
     }
   }, 60_000);
 
-  it("gives the archive routes and the bucket-copy routes one queue: switching the bucket copy off waits behind a held rotation", async () => {
+  it("gives the archive routes and the bucket-copy routes one queue: switching the bucket copy off waits behind a held archive write", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -3976,10 +3975,12 @@ describe("startServer — what a trading boot wires behind its management routes
     const started = backupQueue.started;
     backupQueue.gate = gate;
     try {
-      const rotation = fetch(`http://127.0.0.1:${httpPort()}/api/backup/rotate`, {
+      // Switching archives off, not a key change: a key change is refused before the queue over
+      // this plain-HTTP listener.
+      const rotation = fetch(`http://127.0.0.1:${httpPort()}/api/backup/disable`, {
         method: "POST",
         headers: { cookie, origin: ORIGIN, "content-type": "application/json" },
-        body: JSON.stringify({ masterKey: WRONG_MASTER_KEY }),
+        body: "{}",
       });
       await vi.waitFor(() => expect(backupQueue.started).toBe(started + 1), {
         timeout: POLL_TRIES * POLL_INTERVAL_MS,
@@ -3998,9 +3999,9 @@ describe("startServer — what a trading boot wires behind its management routes
       backupQueue.gate = undefined;
       release();
       const rotationResponse = await rotation;
-      expect(rotationResponse.status).toBe(403);
-      expect(await rotationResponse.json()).toMatchObject({
-        error: { code: "master_key.wrong" },
+      expect(rotationResponse.status).toBe(409);
+      expect(await rotationResponse.json()).toEqual({
+        error: { code: "backup.not_configured", params: {} },
       });
       const switchOffResponse = await switchOff;
       expect(backupQueue.started).toBe(started + 2);

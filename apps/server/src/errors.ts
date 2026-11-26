@@ -1470,6 +1470,9 @@ declare module "@waitron/shared" {
     /** "Change the backup key" was sent a master key that is not the venue's current one; `keyName`
      * names the current key, when there is one. */
     "master_key.wrong": { keyName?: string };
+    /** "Change the backup key", which carries the venue's master key, came over a connection that
+     * is not encrypted or from a page on another site (`Origin` or `Sec-Fetch-Site`). */
+    "backup.key_change_page_required": Record<string, never>;
     /**
      * `retireSelf` was invoked on a node that is NOT fenced (serving, absent from the chart, or with
      * no membership document). Only a fenced node retires itself.
@@ -1779,7 +1782,7 @@ declare module "@waitron/shared" {
      * `reason` names the part that failed, never its value, which could be a secret. */
     "backup.archive_settings_invalid": { reason: string };
     /** A stored archive record could not be read. `disable` has no settings to keep switched off,
-     * `rotate` with no destination loaded and no key held has no key to change, the bucket copy's Save (`PUT /api/backup/stream`) cannot check its folder against the
+     * the bucket copy's Save (`PUT /api/backup/stream`) cannot check its folder against the
      * archive's, and a recovery pack's archives page (`backup-recovery-pack-parts.ts`) fails; an
      * archive Save replaces the record. `reason` is the read's error code, never the
      * record. */

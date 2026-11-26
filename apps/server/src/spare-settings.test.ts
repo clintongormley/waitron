@@ -1,5 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,7 +44,7 @@ import { runSpareSettings, sendBackupSettings } from "./spare-settings.js";
 import { mountSpareSettingsApi } from "./spare-settings-api.js";
 import { pinMainBoxKey } from "./testing/pinned-main-box.js";
 import { heldBackupKey } from "./testing/backup-key.js";
-import { mintMasterKey } from "./testing/master-key.js";
+import { mintMasterKey, WRONG_MASTER_KEY } from "./testing/master-key.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
@@ -296,10 +298,8 @@ describe("runSpareSettings", () => {
     expect(await digestIn(spareDir)).toBe(changed);
   });
 
-  it("the spare is sent N+1", async () => {
-    const master = makeMasterKey();
-    const { secret } = await mintMasterKey(mainBox.db, { bytes: master });
-    await writeBackupKey(mainDir, heldBackupKey(master, 1));
+  /** This box's "Change the backup key", over a stand-in TLS socket as its HTTPS listener hands it on. */
+  async function keyChange(): Promise<(masterKey: string) => Promise<Response>> {
     const { token } = await openManagementSession(mainBox.db);
     await withTransaction(mainBox.db, (tx) => setFreshManagementSignIn(tx, token));
     const mainApp = new Hono();
@@ -324,15 +324,53 @@ describe("runSpareSettings", () => {
       },
       logger(),
     );
+    return async (masterKey) => {
+      const socket = new TLSSocket(new Socket());
+      try {
+        return await mainApp.request(
+          "/api/backup/rotate",
+          {
+            method: "POST",
+            headers: {
+              cookie: `${MANAGEMENT_COOKIE}=${token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ masterKey }),
+          },
+          { incoming: { socket } },
+        );
+      } finally {
+        socket.destroy();
+      }
+    };
+  }
+
+  it("with no master key, a key change answers master_key.wrong naming none, and the spare keeps key 1", async () => {
+    await writeBackupKey(mainDir, heldBackupKey(makeMasterKey(), 1));
+    const change = await keyChange();
+    await link("streaming");
+    await start();
+    const sent = await digestIn(mainDir);
+    expect(await digestIn(spareDir)).toBe(sent);
+    const refused = await change(WRONG_MASTER_KEY);
+    expect(refused.status).toBe(403);
+    expect(await refused.json()).toEqual({ error: { code: "master_key.wrong", params: {} } });
+    await tick(CHECK_MS);
+    expect(await digestIn(mainDir)).toBe(sent);
+    expect(await digestIn(spareDir)).toBe(sent);
+    expect(requests).toHaveLength(1);
+  });
+
+  it("the spare is sent N+1", async () => {
+    const master = makeMasterKey();
+    const { secret } = await mintMasterKey(mainBox.db, { bytes: master });
+    await writeBackupKey(mainDir, heldBackupKey(master, 1));
+    const change = await keyChange();
     await link("streaming");
     await start();
     expect((await readBackupSettings(spareDir))?.WAITRON_BACKUP_KEY_NUMBER).toBe("1");
 
-    const changed = await mainApp.request("/api/backup/rotate", {
-      method: "POST",
-      headers: { cookie: `${MANAGEMENT_COOKIE}=${token}`, "content-type": "application/json" },
-      body: JSON.stringify({ masterKey: secret }),
-    });
+    const changed = await change(secret);
     expect(changed.status).toBe(200);
     const sent = await digestIn(mainDir);
     expect(await digestIn(spareDir)).not.toBe(sent);

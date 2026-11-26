@@ -15,7 +15,9 @@ import { chmod, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { SingletonRole } from "@waitron/db";
 import { readActivityForSubject, settings, withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -77,6 +79,10 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { omitStoredStreamField } from "./testing/old-stream-credential.js";
 
 const LOCALE = "es-ES";
+const TLS_SOCKET = new TLSSocket(new Socket());
+afterAll(() => {
+  TLS_SOCKET.destroy();
+});
 const PASSWORD = "correct horse"; // the seeded manager's dashboard password
 const MANAGER_EMAIL = "manager@x.com";
 const MASTER_BYTES = makeMasterKey();
@@ -294,6 +300,10 @@ function buildApp(
     },
     log,
   );
+  // As the box's HTTPS listener hands a request on, unless the test passes its own `env`.
+  const plain = app.request.bind(app);
+  app.request = ((input, init, env, ctx) =>
+    plain(input, init, env ?? { incoming: { socket: TLS_SOCKET } }, ctx)) as typeof app.request;
   return app;
 }
 
@@ -409,21 +419,22 @@ describe("backup admin routes", () => {
     MASTER = await mintMasterKey(suite.db, { bytes: MASTER_BYTES });
   }, 180_000);
 
-  it.each([["/api/backup/run-now", "POST"]])(
-    "refuses staff at %s by permission before asking for proof",
-    async (path, method) => {
-      const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
-      const { token } = await openManagementSession(suite.db, "staff");
-      const response = await buildApp(makeSupervisor(sc), sc.stateDir).request(path, {
-        method,
-        headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
-      });
-      expect(response.status).toBe(403);
-      expect(await response.json()).toMatchObject({
-        error: { code: "authorization.not_permitted" },
-      });
-    },
-  );
+  it.each([
+    ["/api/backup/run-now", "POST"],
+    ["/api/backup/rotate", "POST"],
+    ["/api/backup/apply", "POST"],
+  ])("refuses staff at %s by permission before asking for proof", async (path, method) => {
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const { token } = await openManagementSession(suite.db, "staff");
+    const response = await buildApp(makeSupervisor(sc), sc.stateDir).request(path, {
+      method,
+      headers: { cookie: `${MANAGEMENT_COOKIE}=${token}` },
+    });
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      error: { code: "authorization.not_permitted" },
+    });
+  });
 
   it("unauthenticated requests 401", async () => {
     const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
@@ -825,7 +836,7 @@ describe("backup admin routes", () => {
     }
   }, 60_000);
 
-  it("apply fails loud when the effective key differs from the requested one", async () => {
+  it("apply fails loud when the effective key differs from the held one", async () => {
     // The orphan-prevention guard: a supervisor whose reloaded config resolves a DIFFERENT recovery
     // key than the operator asked for (here forced via buildConfig) must be refused, not silently
     // encrypt future archives under a key the operator never recorded.
@@ -1064,7 +1075,7 @@ describe("backup admin routes", () => {
     expect(file.WAITRON_BACKUP_RECOVERY_KEY).toBe(KEY_1);
   }, 60_000);
 
-  it("still refuses to turn archives on with a too-short held key when no key is sent", async () => {
+  it("still refuses to turn archives on with a too-short held key", async () => {
     const stateDir = await makeStateDir();
     await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_RECOVERY_KEY=short\n");
     const sc: Scenario = { stateDir, base: {}, role: "primary" };
@@ -1481,13 +1492,24 @@ describe("backup admin routes", () => {
         stream: { reload },
       });
       const cookie = await login(app);
-      const change = (body: unknown) =>
-        app.request("/api/backup/rotate", {
+      const send = (body: unknown, headers: Record<string, string> = {}, env?: object) =>
+        app.request(
+          "/api/backup/rotate",
+          {
+            method: "POST",
+            headers: { cookie, "content-type": "application/json", ...headers },
+            body: JSON.stringify(body),
+          },
+          env,
+        );
+      const change = (body: unknown) => send(body);
+      const post = (path: string, body: unknown) =>
+        app.request(path, {
           method: "POST",
           headers: { cookie, "content-type": "application/json" },
           body: JSON.stringify(body),
         });
-      return { change, refresh, reload };
+      return { change, send, post, refresh, reload };
     }
     const keyFile = async (stateDir: string) =>
       parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"));
@@ -1537,8 +1559,55 @@ describe("backup admin routes", () => {
         const { change, refresh, reload } = await keyApp(stateDir);
         const res = await change({ masterKey: masterKey() });
         expect(res.status).toBe(403);
-        expect(await res.json()).toMatchObject({
+        expect(await res.json()).toEqual({
           error: { code: "master_key.wrong", params: { keyName: MASTER.name } },
+        });
+        expect(await readFile(join(stateDir, "backup.env"))).toEqual(before);
+        expect(reload).not.toHaveBeenCalled();
+        expect(refresh).not.toHaveBeenCalled();
+      },
+      60_000,
+    );
+
+    it("a wrong master key leaves applied archives' record and revision as they were", async () => {
+      const stateDir = await makeStateDir();
+      const { change, post, refresh, reload } = await keyApp(stateDir);
+      const applied = await post("/api/backup/apply", {
+        destinations: [{ kind: "local-fs", dir: makeDestDir() }],
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      });
+      expect(applied.status).toBe(200);
+      const sealed = await readSealed();
+      expect(sealed).not.toBeNull();
+      const before = await readFile(join(stateDir, "backup.env"));
+      refresh.mockClear();
+      reload.mockClear();
+      const res = await change({ masterKey: WRONG_MASTER_KEY });
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({
+        error: { code: "master_key.wrong", params: { keyName: MASTER.name } },
+      });
+      expect(await readSealed()).toEqual(sealed);
+      expect(await readFile(join(stateDir, "backup.env"))).toEqual(before);
+      expect(reload).not.toHaveBeenCalled();
+      expect(refresh).not.toHaveBeenCalled();
+    }, 60_000);
+
+    it.each([
+      ["over a connection that is not encrypted", {}, {}],
+      ["from a page on another site", { origin: "https://elsewhere.example" }, undefined],
+      ["from a cross-site page", { "sec-fetch-site": "cross-site" }, undefined],
+    ])(
+      "a key change sent %s changes nothing and answers backup.key_change_page_required",
+      async (_label, headers, env) => {
+        const stateDir = await makeStateDir();
+        const before = await readFile(join(stateDir, "backup.env"));
+        const { send, refresh, reload } = await keyApp(stateDir);
+        const res = await send({ masterKey: MASTER.secret }, headers, env);
+        expect(res.status).toBe(403);
+        expect(await res.json()).toEqual({
+          error: { code: "backup.key_change_page_required", params: {} },
         });
         expect(await readFile(join(stateDir, "backup.env"))).toEqual(before);
         expect(reload).not.toHaveBeenCalled();
@@ -2534,6 +2603,32 @@ describe("backup admin routes", () => {
       expect(await readSealed()).toBeNull();
       expect(bucket.calls).toEqual([]);
       expect(await keyFileOf(sc.stateDir)).toEqual(KEY_ONE_FILE);
+    }, 60_000);
+
+    it("a settings write the database refuses answers server.internal, stores nothing, and leaves archives off", async () => {
+      const { sc, sup, post, status } = await primaryApp();
+      suite.db.run(
+        sql.raw(`create trigger refuse_archive_settings before insert on settings
+          when new.module = 'backup' begin select raise(abort, 'refused'); end`),
+      );
+      try {
+        const res = await post(
+          "/api/backup/apply",
+          applyBody({ kind: "local-fs", dir: makeDestDir() }),
+        );
+        expect(res.status).toBe(500);
+        expect(await res.json()).toEqual({ error: { code: "server.internal" } });
+      } finally {
+        suite.db.run(sql.raw("drop trigger refuse_archive_settings"));
+      }
+      expect(await fileKey(sc.stateDir)).toBe(KEY_1);
+      expect(await readSealed()).toBeNull();
+      expect(sup.current().enabled).toBe(false);
+      expect(await status()).toMatchObject({
+        enabled: false,
+        recoveryKeySet: true,
+        recoveryKeyTooShort: false,
+      });
     }, 60_000);
 
     it("a Save with no backup key held answers backup.recovery_key_missing and writes nothing", async () => {

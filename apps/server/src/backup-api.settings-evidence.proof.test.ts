@@ -8,7 +8,9 @@ import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js"
 // a real supervisor loading the record as boot does.
 import { mkdtempSync } from "node:fs";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { Socket } from "node:net";
 import { tmpdir } from "node:os";
+import { TLSSocket } from "node:tls";
 import { join } from "node:path";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
@@ -218,12 +220,23 @@ async function evidence(app: Hono): Promise<Record<string, unknown>> {
   return (await res.json()) as Record<string, unknown>;
 }
 
-const post = (app: Hono, path: string, body: unknown) =>
-  app.request(path, {
-    method: "POST",
-    headers: { cookie: cookies.manager, "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+/** Over a stand-in TLS socket, as the box's HTTPS listener hands a request on. */
+const post = async (app: Hono, path: string, body: unknown) => {
+  const socket = new TLSSocket(new Socket());
+  try {
+    return await app.request(
+      path,
+      {
+        method: "POST",
+        headers: { cookie: cookies.manager, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      },
+      { incoming: { socket } },
+    );
+  } finally {
+    socket.destroy();
+  }
+};
 
 const write = (settings: Omit<ArchiveSettings, "revision">) =>
   withTransaction(suite.db, (tx) => writeArchiveSettings(tx, RING, settings, null));
