@@ -124,6 +124,7 @@ test.each(["", 'sheet-variant="menu"'])(
       `<wt-row-actions label="Actions" bottom-sheet ${variant}><button>Edit</button></wt-row-actions>`,
     );
     el.style.setProperty("--wt-color-scrim", "rgb(9, 10, 11)");
+    if (variant) el.style.setProperty("--wt-menu-sheet-bottom-offset", "64px");
     const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
     const choice = el.querySelector("button")!;
     const picked = vi.fn();
@@ -142,6 +143,7 @@ test.each(["", 'sheet-variant="menu"'])(
     await userEvent.click(trigger);
     expect(getComputedStyle(popup).backgroundColor).toBe("rgb(9, 10, 11)");
     if (variant) {
+      expect(popup.getBoundingClientRect().bottom).toBe(296);
       expect(document.activeElement).toBe(choice);
       expect(popup.querySelector('[role="dialog"]')?.getAttribute("aria-label")).toBe("Actions");
     }

@@ -51,6 +51,14 @@ test("lays out a slotted control as a plain row and keeps its native behavior", 
   expect(control.checked).toBe(true);
 });
 
+test("clicking a row inside a native choice focuses the choice", async () => {
+  const choice = await mount(
+    '<button type="button"><wt-menu-row label="Bill 1" value="2" chevron></wt-menu-row></button>',
+  );
+  await page.getByText("Bill 1", { exact: true }).click();
+  expect(document.activeElement).toBe(choice);
+});
+
 test("keeps the help badge beside the new action", async () => {
   setHelpMode(true);
   const row = await mount(

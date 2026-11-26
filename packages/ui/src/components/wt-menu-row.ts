@@ -1,13 +1,11 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
-import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import "./wt-help-tooltip.js";
 import "./wt-icon.js";
 
 @customElement("wt-menu-row")
 export class WtMenuRow extends LitElement {
-  static override shadowRootOptions = delegatesFocusShadowRootOptions;
   static override styles = [
     baseStyles,
     css`
@@ -64,11 +62,11 @@ export class WtMenuRow extends LitElement {
         font-size: var(--wt-font-size-md);
       }
       .trailing wt-icon {
-        color: inherit;
+        --wt-action-native-icon-color: var(--wt-color-text-muted);
         flex: none;
       }
       .trailing wt-icon[name="check"] {
-        color: var(--wt-color-primary);
+        --wt-action-native-icon-color: var(--wt-color-primary);
       }
       .row ::slotted(*) {
         flex: none;
@@ -85,15 +83,6 @@ export class WtMenuRow extends LitElement {
         margin: 0;
         flex: none;
         --wt-help-badge-target: var(--wt-tap-min);
-      }
-
-      @media (forced-colors: active) {
-        :host([divider]) {
-          border-block-end-color: CanvasText;
-        }
-        button.row:focus-visible {
-          outline-color: Highlight;
-        }
       }
     `,
   ];

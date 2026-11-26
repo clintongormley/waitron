@@ -173,6 +173,8 @@ test("a native bill choice uses the shared row layout and keeps checked focus an
   const row = checked!.querySelector("wt-menu-row")!;
   const value = row.shadowRoot!.querySelector(".value")!;
   const icon = row.shadowRoot!.querySelector("wt-icon[name='check']")!;
+  host.style.setProperty("--wt-color-primary", "rgb(7, 8, 9)");
+  expect(getComputedStyle(icon).color).toBe("rgb(7, 8, 9)");
   expect(getComputedStyle(checked!).paddingInlineStart).toBe("0px");
   expect(checked!.getBoundingClientRect().height).toBe(52);
   expect(icon.getBoundingClientRect().left - value.getBoundingClientRect().right).toBeCloseTo(6);
