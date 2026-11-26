@@ -154,13 +154,13 @@ it("drops station and department children from a retired Station hours destinati
 });
 
 it("preserves the explicit menu price filter when the dashboard rewrites its destination", () => {
-  history.replaceState(null, "", "/menus/menu/drinks/view/prices/filter/clashes");
+  history.replaceState(null, "", "/menus/menu/drinks/view/structure/filter/clashes");
   const host = document.createElement("test-dashboard-navigation-host") as NavigationHost;
   hosts.push(host);
   const url = new UrlStateController(host, () => {}, dashboardPath);
   document.body.append(host);
   url.write({ dashboard: "menus" }, true);
-  expect(location.pathname).toBe("/menus/menu/drinks/view/prices/filter/clashes");
+  expect(location.pathname).toBe("/menus/menu/drinks/view/structure/filter/clashes");
   expect(url.read("price-filter")).toBe("clashes");
 });
 

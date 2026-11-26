@@ -1148,7 +1148,7 @@ it("puts one blocker card above the phone selector and labels the disputed price
   );
   const choose = blockers.querySelector<HTMLAnchorElement>('[data-test="clash-prices"]')!;
   expect(text(choose)).toContain("Choose a price");
-  expect(new URL(choose.href).pathname).toMatch(/\/view\/prices\/filter\/clashes$/);
+  expect(new URL(choose.href).pathname).toMatch(/\/view\/structure\/filter\/clashes$/);
   await selectPreviewPane(el, "menu");
   expect(blockers.getBoundingClientRect().bottom).toBeLessThanOrEqual(
     picker.getBoundingClientRect().top,

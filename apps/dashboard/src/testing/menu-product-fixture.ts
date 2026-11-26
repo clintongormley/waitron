@@ -82,7 +82,6 @@ export function menuProductApi(product: Product = menuProduct): MenuProductApi {
     getMenuStatus: async () => ({ state: "unpublished", clashes: 0 }),
     getMenuStatuses: async () => ({}),
     getMenuStructure: async () => structure,
-    getMenuPrices: async () => [],
     getMenuRead(id, parts) {
       return menuReadFixture(this as DashboardApi, id, parts);
     },

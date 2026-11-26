@@ -106,6 +106,44 @@ test("Clear all over a multi-select filter with an initial choice reports the al
   expect(changes).toEqual([{ status: ["off", "paused"] }, { status: [] }]);
 });
 
+test("restores the remembered rows on a table leaving a temporary filter", async () => {
+  const el = await peopleTable({ viewKey: "people.temporary", columns: [name, statusColumn({})] });
+  el.chooseFilter("status", ["off"]);
+  el.chooseFilter("status", ["paused"], { remember: false });
+  await el.updateComplete;
+  expect(shownKeys(el)).toEqual(["3"]);
+
+  el.restoreFilter("status");
+  await el.updateComplete;
+  expect(shownKeys(el)).toEqual(["2"]);
+});
+
+test("reopening a view reads its saved filter until a person picks the temporary value", async () => {
+  const view = { viewKey: "people.temporary", columns: [name, statusColumn({})] };
+  const el = await peopleTable(view);
+  el.chooseFilter("status", ["off"]);
+  el.chooseFilter("status", ["paused"], { remember: false });
+  await el.updateComplete;
+  expect(shownKeys(await peopleTable(view))).toEqual(["2"]);
+
+  await chooseOption(statusSelect(el), "paused");
+  el.restoreFilter("status");
+  await el.updateComplete;
+  expect(shownKeys(el)).toEqual(["3"]);
+  expect(shownKeys(await peopleTable(view))).toEqual(["3"]);
+});
+
+test("changing the view key ends a temporary filter on the retained table", async () => {
+  const el = await peopleTable({ viewKey: "people.first", columns: [name, statusColumn({})] });
+  el.chooseFilter("status", ["paused"], { remember: false });
+  await el.updateComplete;
+  expect(shownKeys(el)).toEqual(["3"]);
+
+  el.viewKey = "people.second";
+  await el.updateComplete;
+  expect(shownKeys(el)).toEqual(["1", "2", "3"]);
+});
+
 test("a stored multi-select choice holding a value that is not text is ignored whole", async () => {
   sessionStorage.setItem("people.mixed", JSON.stringify({ filters: { status: [1, "off"] } }));
   const el = await peopleTable({

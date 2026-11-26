@@ -1295,33 +1295,12 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
-  it("reads a menu's prices and saves one product's settings on it", async () => {
-    const row = {
-      menuItemId: "mi1",
-      productId: "p1",
-      name: "Lemonade",
-      categoryId: null,
-      placements: [[]],
-      override: null,
-      effectivePrice: "3.00",
-      available: true,
-      variants: [],
-    };
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse([row]))
-      .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(emptyResponse());
+  it("sets the supplement on a set-menu dish", async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce(emptyResponse());
     const api = new DashboardApi("", fetchImpl);
-
-    await expect(api.getMenuPrices("c1")).resolves.toEqual([row]);
     await expect(api.updateMenuItem("c1", "mi1", { grossPrice: null })).resolves.toBeUndefined();
-    await expect(api.setMenuVariantPrice("c1", "mi1", "v1", "2.20")).resolves.toBeUndefined();
-
     expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/menus/c1/prices", "GET", undefined],
       ["/management-api/menus/c1/items/mi1", "PATCH", { grossPrice: null }],
-      ["/management-api/menus/c1/items/mi1/variants/v1", "PATCH", { price: "2.20" }],
     ]);
   });
 

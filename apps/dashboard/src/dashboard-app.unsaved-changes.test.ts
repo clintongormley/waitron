@@ -2,7 +2,7 @@ import { mediaTestReference, useMediaPresentations } from "@waitron/ui/src/test-
 import { render } from "lit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { leaveCoordinatorFor, navigationGuardFor, type WtInput } from "@waitron/ui";
-import type { DashboardApi, MenuPriceRow, MenuPreview, Product } from "./api/client.js";
+import type { DashboardApi, MenuPreview, Product } from "./api/client.js";
 import type { OwnProfile } from "./api/account-api.js";
 import { DashboardApp } from "./dashboard-app.js";
 import {
@@ -11,8 +11,6 @@ import {
   menuProductEditorValue,
 } from "./testing/menu-product-fixture.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
-import type { MenuPricesTable } from "./widgets/menu-prices-table.js";
-import "./widgets/menu-prices-table.js";
 import type { MenuStructureTable } from "./widgets/menu-structure-table.js";
 import "./widgets/menu-structure-table.js";
 import { MenuPublicationsPanel } from "./widgets/menu-publications.js";
@@ -21,7 +19,6 @@ import type { ProductEditor } from "./widgets/product-editor.js";
 import { productMedia } from "./widgets/product-media.js";
 import {
   cleanupWidgets,
-  combinedFixture,
   mountWidget,
   attachScheduleAction,
   menuDocument,
@@ -959,7 +956,6 @@ it.each([
           includable: [],
           includedBy: [{ id: "menu-two", name: "Dinner" }],
         }),
-        getMenuPrices: async () => [],
         getMenuRead(id, parts) {
           return menuReadFixture(this as DashboardApi, id, parts);
         },
@@ -1242,104 +1238,6 @@ describe("a product swatch link under the app's link router", () => {
     const url = new URL(String(write.mock.calls[0]![0]));
     expect(`${url.pathname}${url.search}`).toBe("/products/product/probe?field=image");
     await expect.poll(() => location.pathname).toBe("/products/product/probe");
-  });
-});
-
-describe("a price override row's Edit product link under the app's link router", () => {
-  const burger: MenuPriceRow = {
-    menuItemId: "mi-burger",
-    combined: combinedFixture("p-burger", "12.00", [], null, "12.00", {}),
-    productId: "p-burger",
-    name: "Burger",
-    categoryId: null,
-    placements: [[]],
-    override: null,
-    effectivePrice: "12.00",
-    available: true,
-    variants: [],
-  };
-  const lemonade: MenuPriceRow = {
-    menuItemId: "mi-lemonade",
-    combined: combinedFixture(
-      "p-lemonade",
-      "2.50",
-      [{ variantId: "v-large", price: null }],
-      null,
-      "2.50",
-      { "v-large": "3.40" },
-    ),
-    productId: "p-lemonade",
-    name: "Lemonade",
-    categoryId: null,
-    placements: [[]],
-    override: null,
-    effectivePrice: "2.50",
-    available: true,
-    variants: [{ variantId: "v-large", price: null, available: true }],
-  };
-  const lemonadeProduct = {
-    id: "p-lemonade",
-    name: "Lemonade",
-    variants: [{ id: "v-large", name: "Large", unitPrice: "3.40", available: true }],
-  } as unknown as Product;
-
-  it.each([
-    ["mi-burger", "p-burger"],
-    ["mi-lemonade:v-large", "v-large"],
-  ])("is routed in the app to the editor: %s opens %s", async (key, id) => {
-    const m = await mount({
-      getMe: async () => ({
-        personId: "p1",
-        email: "ada@example.com",
-        roleIds: ["manager"],
-        locale: "en-GB",
-        venueLocale: "en-GB",
-        sessionDefault: "en-GB",
-        venueName: "Venue",
-        permissions: ["product.manage", "venue.view"],
-        modules: [],
-      }),
-    });
-    const host = document.createElement("div");
-    host.attachShadow({ mode: "open" });
-    m.screen.shadowRoot!.append(host);
-    const prices = document.createElement("dashboard-menu-prices-table") as MenuPricesTable;
-    prices.rows = [burger, lemonade];
-    prices.products = [lemonadeProduct];
-    prices.menuName = "Lunch";
-    host.shadowRoot!.append(prices);
-    await prices.updateComplete;
-    const table = prices.shadowRoot!.querySelector("wt-data-table")!;
-    await table.updateComplete;
-    if (key.includes(":")) {
-      table
-        .shadowRoot!.querySelector<HTMLButtonElement>(
-          'tr[data-row-key="mi-lemonade"] button.tree-toggle',
-        )!
-        .click();
-      await table.updateComplete;
-    }
-    const menu = table.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-row-actions"]>(
-      `tr[data-row-key="${key}"] td[data-pinned="end"] wt-row-actions`,
-    )!;
-    menu.show();
-    const link = menu.querySelector<HTMLAnchorElement>(`a[data-test="edit-product-${key}"]`)!;
-    let leaked = false;
-    link.addEventListener("click", (event) => {
-      if (event.defaultPrevented) return;
-      leaked = true;
-      event.preventDefault();
-    });
-    const write = vi.spyOn(navigationGuardFor(window)!, "write");
-    const event = new MouseEvent("click", { bubbles: true, composed: true, cancelable: true });
-    link.dispatchEvent(event);
-    expect(event.defaultPrevented).toBe(true);
-    expect(leaked).toBe(false);
-    // The first write is the link's; the app then rewrites the same address in place.
-    expect(write).toHaveBeenCalled();
-    expect(new URL(String(write.mock.calls[0]![0])).pathname).toBe(`/products/product/${id}`);
-    await expect.poll(() => location.pathname).toBe(`/products/product/${id}`);
-    expect(m.app.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
   });
 });
 

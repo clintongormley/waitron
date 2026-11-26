@@ -64,7 +64,6 @@ for (const kind of ["menu", "section"] as const) {
           if (written) throw { code: "connection.failed" };
           return { rootSectionId: "root", root, includable: [], includedBy: [], nodes: [] };
         },
-        getMenuPrices: async () => [],
         getMenuRead(id: string, parts: readonly MenuReadPart[]) {
           return menuReadFixture(this as DashboardApi, id, parts);
         },

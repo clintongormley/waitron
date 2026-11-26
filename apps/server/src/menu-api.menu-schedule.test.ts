@@ -146,11 +146,11 @@ async function lunchWithSoup(app: Hono): Promise<{ menuId: string; itemId: strin
     }),
     201,
   );
-  const prices = await json<{ menuItemId: string; productId: string }[]>(
-    await send(app, "GET", `/management-api/menus/${menuId}/prices`),
-    200,
-  );
-  const itemId = prices.find((row) => row.productId === productId)!.menuItemId;
+  const { prices } = await json<{
+    prices: { status: number; body: { menuItemId: string; productId: string }[] };
+  }>(await send(app, "GET", `/management-api/menus/${menuId}/read?part=prices`), 200);
+  expect(prices.status).toBe(200);
+  const itemId = prices.body.find((row) => row.productId === productId)!.menuItemId;
   await setSoupPrice(app, menuId, itemId, "5.00");
   const published = await send(app, "POST", `/management-api/menus/${menuId}/publish`, {
     body: { expectedHash: await previewHash(app, menuId) },

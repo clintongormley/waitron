@@ -2,6 +2,10 @@ import { encodePathSegment, type UrlPathConfig } from "@waitron/ui";
 
 export { leftToBrowser } from "@waitron/ui";
 
+export function menuClashesAddress(menuId: string): string {
+  return `/menus/menu/${encodeURIComponent(menuId)}/view/structure/filter/clashes`;
+}
+
 export function setMenuAddress(id: string): string {
   return `/set-menus/menu/${encodePathSegment(id)}`;
 }

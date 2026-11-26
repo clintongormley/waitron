@@ -5,7 +5,13 @@ import { commands, page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, expect, vi } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { formMessageOf } from "@waitron/ui/src/test-helpers.js";
-import type { DashboardApi, DocumentMember, FrozenOffer, MenuDocument } from "../api/client.js";
+import type {
+  DashboardApi,
+  DocumentMember,
+  FrozenOffer,
+  MenuDocument,
+  MenuPriceRow,
+} from "../api/client.js";
 import type { MenuReadPart, MenuReadResult } from "../api/menu-api.js";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { DEFAULT_HOME_ORDER } from "@waitron/shared";
@@ -473,10 +479,11 @@ export async function menuReadFixture(
   api: DashboardApi,
   id: string,
   parts: readonly MenuReadPart[],
+  priceRows: (id: string) => Promise<MenuPriceRow[]> = async () => [],
 ): Promise<MenuReadResult> {
   const reads = {
     structure: () => api.getMenuStructure(id),
-    prices: () => api.getMenuPrices(id),
+    prices: () => priceRows(id),
     home: () => api.getMenuHome(id),
     status: () => api.getMenuStatus(id),
     preview: () => api.getMenuPreview(id),

@@ -283,6 +283,88 @@ it("shows the same staged price at an included dish and the other place it appea
   );
 });
 
+it.each([false, true])(
+  "explains a price clash until the draft supplies a price (variant: %s)",
+  async (withVariant) => {
+    const before = currentLocale();
+    setLocale("en-GB");
+    onTestFinished(() => setLocale(before));
+    const dish = withVariant ? burgerWithVariants() : product("p-burger", "Burger");
+    const variantId = withVariant ? "v-large" : undefined;
+    const nodes = [productNode("m-burger", dish.id), wines()];
+    const structure = (rootSectionId: string, nodes: MenuStructureNode[]) => ({
+      rootSectionId,
+      nodes,
+      root: {
+        id: rootSectionId,
+        internalName: "Menu",
+        names: {},
+        color: null,
+        image: null,
+        members: [],
+      },
+      includable: [],
+      placeableSetMenus: [],
+      includedBy: [],
+    });
+    const draft = new MenuStructureDraft();
+    draft.accept(structure("lunch-root", nodes), []);
+    draft.include("wine", structure("wine-root", [productNode("wine-burger", dish.id)]), [
+      {
+        productId: dish.id,
+        menuItemId: "wine-price",
+        name: dish.name,
+        categoryId: null,
+        override: withVariant ? null : "4.00",
+        effectivePrice: "4.00",
+        available: true,
+        variants: [],
+        placements: [[]],
+        combined: combinedFixture(
+          dish.id,
+          "4.00",
+          withVariant ? [{ variantId: "v-large", price: "4.00" }] : [],
+          withVariant ? null : "4.00",
+          "2.00",
+          withVariant ? { "v-large": "3.00" } : {},
+        ),
+      },
+    ]);
+    const pricing = () => ({
+      draft,
+      offers: draft.offers([dish], new Map([["wine", "Wines"]])),
+      errors: new Map(),
+    });
+    const el = await mount({ nodes, products: [dish], pricing: pricing() });
+    const key = variantId ? `m-burger/${variantId}` : "m-burger";
+    const clash = (rowKey: string) => row(el, rowKey)!.querySelector('[part="structure-clash"]');
+    if (variantId) {
+      expect(clash("m-burger")?.textContent).toBe(
+        "Double portion: €3.00 in this menu's sections, €4.00 in Wines.",
+      );
+      expect(row(el, "m-burger")!.querySelector("wt-price-input")).toBeNull();
+      await el.setExpanded("m-burger", true);
+    }
+    const field = () => row(el, key)!.querySelector("wt-price-input")!;
+    const sentence = variantId
+      ? "Price set to €3.00 in this menu's sections, €4.00 in Wines."
+      : "Price set to €2.00 in this menu's sections, €4.00 in Wines.";
+    expect(clash(key)?.textContent).toBe(sentence);
+    expect(field().placeholder).toBe("Set a price");
+    expect(field().hint).toBe(sentence);
+
+    draft.setPrice(dish.id, variantId, "3.50");
+    el.pricing = pricing();
+    await settle(el);
+    expect(clash(key)).toBeNull();
+
+    draft.setPrice(dish.id, variantId, "");
+    el.pricing = pricing();
+    await settle(el);
+    expect(clash(key)?.textContent).toBe(sentence);
+  },
+);
+
 function table(el: MenuStructureTable) {
   return el.shadowRoot!.querySelector("wt-data-table")!;
 }

@@ -129,9 +129,8 @@ the 2026-09-30 folders design; what remains:
   before it, checked at `002b79f69`).
 - **The Menus screen (#664).** If someone exactly undoes a move while it is saving, the move's
   answer is shown over their change until the menu is next read.
-- **The Price overrides tab (named Prices until W89; #670, #680).** The owner decided 2026-09-26
-  that removing a product's last placement needs no warning before it clears the menu price and
-  variant settings.
+- **Removing a product's last placement (#670, #680).** The owner decided 2026-09-26 that this
+  clears the menu price and variant settings without a warning.
 - **Publishing (#677).** The status and preview reads build every menu's frozen copy inside
   `withTransaction`, the venue's write lock. Measured about 21 ms median for 4 menus and 300
   dishes on a dev laptop. The figure for the box is unknown. At phone width the list keeps a
@@ -664,15 +663,11 @@ From "Extras and Options — deliberate limits, and what is left open"
   published menu with the dish's unit, so a change reaches the till and the server at the next
   publish.
 
-From A344 (#1375, a menu's Price overrides tab shows its clashes):
+From A344 (#1375, the original clash filter):
 
-- Decided as built: a filter choice the person made earlier in the browser tab (the table keeps
-  one for every menu) wins over starting on Clashes; the red line still gives the count. Under
-  Clashes a product that clashes itself stays folded until opened, as the table folds any row
-  that matches a filter in its own right. Once a load has had no clash, a clash that comes back
-  (Undo, a live re-read) does not switch the filter back to Clashes. Update, 2026-11-22: the
-  [Save bar](../developers/design-system.md#a-value-saved-from-its-own-table-row) replaced Undo.
-  A live re-read still follows the same rule.
+- The 2e menu editor uses the Structure price filter. A clash link sets Clashes for its destination
+  and the previous price choice returns on leaving. A filter you choose yourself is remembered
+  across menus. A live re-read keeps the current choice.
 
 From A294 (#1300, the Products and Structure trees show drag grips only in a mode):
 
@@ -761,7 +756,7 @@ From the owner's answers to A774's keep/drop list (owner, 2026-10-17):
 
 _2026-11-24: Menus, set menus, products and variants use permanent Delete. [Owner’s design](../superpowers/specs/2026-11-24-delete-menus-and-products-design.md)._
 
-_2026-11-25: The [menu editor redesign](../superpowers/specs/2026-11-24-menu-editor-redesign-design.md) has its new heading, the live menu’s Patch action in the list and a Preview that points to the prices and set menus you need to fix. You can edit a product from Structure and return to the same row. A menu other than a set menu no longer sets its own price on a product with variants: its variants carry the price, and the till's variant picker shows each one's full price. Structure saves arrangement and prices together. Removing Price overrides and the requests that only it uses is still to come. The guest menu preview becomes the [customer menu](../superpowers/specs/2026-11-24-customer-menu-design.md), approved the same day._
+_2026-11-26: The [customer menu](../superpowers/specs/2026-11-24-customer-menu-design.md) work continues under its own design._
 
 _2026-11-24: The owner reworked set menus in [set menus worked out by the bill](../superpowers/specs/2026-11-24-set-menus-automatic-grouping-design.md). The waiter only adds dishes. The bill groups them at the cheapest price it finds on every change, and each dish keeps its own course. Paying for items moves them to a bill of their own. The remaining work connects the shared calculation to the server and till, updates the dashboard and checks the whole flow._
 

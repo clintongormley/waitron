@@ -114,7 +114,7 @@ for a code its table leaves out, except `authorization.inspection_only`, which a
 `resolveManagementSession` throws it on any route that does not admit a sign-in holding only
 `invoice.inspect`, whether or not the route's table lists it, and a full disk anywhere in the error's causes, which answers
 `storage.disk_full`, at 507 unless the table names it; a route that needs another status for one code gets a second
-boundary over a spread of the table, as `runVariant` in `apps/server/src/menu-api-errors.ts` does.
+boundary over a spread of the table, as `runBodyCategory` in `apps/server/src/menu-api-errors.ts` does.
 On 2026-10-08 `git grep -E 'status (===|!==) ?[0-9]{3}'` over the client trees found three
 status reads: the till's 403 check (`department-transfer-monitor.ts`), the setup app's 404 read as
 "already set up" (`setup-app.ts`) and the menus screen's `!== 200`; refusals are told apart by

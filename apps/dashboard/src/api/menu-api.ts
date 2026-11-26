@@ -216,9 +216,6 @@ export class MenuApi {
   saveMenuStructure(id: string, input: MenuStructureSaveInput): Promise<MenuStructureSaveResult> {
     return this.#request(`/management-api/menus/${encodeURIComponent(id)}/structure`, "PUT", input);
   }
-  getMenuPrices(id: string): Promise<MenuPriceRow[]> {
-    return this.#request<MenuPriceRow[]>(`/management-api/menus/${id}/prices`, "GET");
-  }
   getMenuStatuses(): Promise<Record<string, MenuStatus>> {
     return this.#request<Record<string, MenuStatus>>("/management-api/menus/status", "GET");
   }
@@ -302,19 +299,6 @@ export class MenuApi {
       `/management-api/menus/${menuId}/items/${menuItemId}`,
       "PATCH",
       input,
-    );
-  }
-  /** A null `price` clears this menu's price for the variant, so it inherits again. */
-  setMenuVariantPrice(
-    menuId: string,
-    menuItemId: string,
-    variantId: string,
-    price: string | null,
-  ): Promise<void> {
-    return this.#request<void>(
-      `/management-api/menus/${menuId}/items/${menuItemId}/variants/${variantId}`,
-      "PATCH",
-      { price },
     );
   }
   setVenueDefaultMenu(menuId: string): Promise<void> {

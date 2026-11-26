@@ -105,7 +105,9 @@ it.each(["en", "es-ES"])("shows clashes with their prices and sources in %s", as
         ? "Lager 2,80 € en las secciones de esta carta 3,00 € en Drinks Elegir un precio ›"
         : "Lager €2.80 in this menu's sections €3.00 in Drinks Choose a price ›",
     );
-    expect(row.querySelector("a")?.getAttribute("href")).toContain("/view/prices/filter/clashes");
+    expect(row.querySelector("a")?.getAttribute("href")).toContain(
+      "/view/structure/filter/clashes",
+    );
   }
 });
 it("places both kinds of publishing blocker before any folded warning", async () => {
@@ -182,7 +184,7 @@ it.each(["ctrlKey", "metaKey", "shiftKey", "altKey"])(
     );
     expect(prevented).toBe(false);
     expect(heard).not.toHaveBeenCalled();
-    expect(link.getAttribute("href")).toBe("/menus/menu/menu-lunch/view/prices/filter/clashes");
+    expect(link.getAttribute("href")).toBe("/menus/menu/menu-lunch/view/structure/filter/clashes");
   },
 );
 
@@ -190,7 +192,6 @@ it("uses conflicto throughout the Spanish Prices vocabulary", () => {
   setLocale("es-ES");
   expect(t("menu_prices.clash")).toBe("Conflicto");
   expect(t("menu_prices.clashes_only")).toBe("Con conflictos");
-  expect(t("menu_prices.show_clashes")).toBe("Ver conflictos");
   expect(t("menus.publish_waits_clash")).toBe("No se puede publicar hasta resolver 1 conflicto");
   expect(t("menus.publish_waits_clashes").replace("{count}", "2")).toBe(
     "No se puede publicar hasta resolver 2 conflictos",

@@ -53,7 +53,7 @@
           },
           "mountMenuItemPriceRoutes": {
             "first": "patch /management-api/menus/:id/items/:itemId",
-            "last": "patch /management-api/menus/:id/items/:itemId/variants/:variantId",
+            "last": "patch /management-api/menus/:id/items/:itemId",
             "parameters": {
               "app": "Hono",
               "gated": "GatedWork",
@@ -106,8 +106,7 @@
           "runBodySection",
           "runBodyRole",
           "runBodySetMenu",
-          "runStructureSave",
-          "runVariant"
+          "runStructureSave"
         ],
         "apps/server/src/menu-request-fields.ts": [
           "nullOrUuid",

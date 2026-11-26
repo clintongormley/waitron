@@ -3847,7 +3847,6 @@ export class DashboardApp extends LitElement {
           .canEditProducts=${this.#permittedScreen("products") === "products"}
           .permissionContinuation=${this.#permissionContinuation}
           .reportLateSave=${this.#lateSaveReporter("menus.schedule_not_saved")}
-          .reportLatePriceSave=${this.#lateSaveReporter("menus.price_not_saved")}
         ></dashboard-menus-screen>`;
       case "set-menus":
         return html`<dashboard-set-menus-screen

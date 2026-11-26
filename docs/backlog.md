@@ -454,9 +454,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   The [cleared new-selection plan](https://github.com/clintongormley/waitron/blob/465e5915389b464a5d6f34937b02f777a0305ec0/docs/superpowers/plans/2026-11-12-a1517-2-allergen-choices.md) leaves option-list labels unfiltered because they carry no allergen data.
   [Proposal](superpowers/specs/2026-11-11-a1517-allergen-proposal.md) · [Detail](backlog/menu.md#a1517-allergen-points-to-revisit-before-go-live)
 
-- **Menu prices' narrow-layout CI failure still needs a cause (A613).**
-  [Detail](backlog/ci.md#menu-prices-narrow-layout-ci-failure-still-needs-a-cause-a613)
-
 - **Tabs selected visible** (bundle of 1, size S, needs the owner). [Detail](backlog/menu.md#bundle-tabs-selected-visible)
 
 - **The customer menu, online and printed (owner, 2026-11-24).** Each menu gets a Customer menu

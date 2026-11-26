@@ -798,22 +798,6 @@ historical wait cause remains unknown; these observations do not measure a
   widen the guard if that gap ever costs something.
 
 
-## Menu prices' narrow-layout CI failure still needs a cause (A613)
-
-Main run [38505417966](https://github.com/clintongormley/waitron/actions/runs/38505417966/job/115661820912)
-failed the cleared-price range case in `apps/dashboard/src/widgets/menu-prices-table.test.ts`:
-its 320 px table did not acquire `narrow` during the existing wait. The cause remains unverified.
-That case went when a product with variants stopped having a price field of its own (menu editor
-redesign piece 2(a)). The same wait for `narrow` is still in the file's phone-width helper,
-`atPhoneWidth`, the only place the file waits for it; the cases that call it at 320 px are the
-range-as-text case ("shows a product's range as text, …") and "shows a single stored price whole
-in the field at 320 px".
-
-The phone-width helper attaches a geometry and font snapshot to that failed assertion, without
-changing its check or wait. Next: if one of those cases fails the same way, use that snapshot and
-the failure screenshot to distinguish a wide scrolling box, delayed layout and missing resize
-delivery before changing the screen or its test.
-
 ## Explain the two older silent pnpm setup stalls
 
 Reproduce the two earlier silent setup failures before assigning their cause. Main run

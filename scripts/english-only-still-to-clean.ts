@@ -119,7 +119,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/dashboard/src/widgets/menu-preview-top.test.ts",
   "apps/dashboard/src/widgets/menu-preview-tree.test.ts",
   "apps/dashboard/src/widgets/menu-preview.test.ts",
-  "apps/dashboard/src/widgets/menu-prices-table.test.ts",
   "apps/dashboard/src/widgets/menu-publications.test.ts",
   "apps/dashboard/src/widgets/menu-structure-table.test.ts",
   "apps/dashboard/src/widgets/option-list-form.a11y.test.ts",

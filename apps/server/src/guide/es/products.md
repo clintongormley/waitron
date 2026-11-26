@@ -275,11 +275,9 @@ ninguno, se vende al precio de su producto.
 Deja vacío el precio de una carta para que lo decidan esas contribuciones. Por ejemplo, si Bebidas pone
 la cerveza a 3,00 € y Noche incluye solo la cerveza de Bebidas, Noche cobra 3,00 €. Si Noche también
 pone esa cerveza en una sección propia al precio del producto, 2,80 €, los precios no coinciden. Fija
-el precio de la cerveza en Noche para resolver ese desacuerdo antes de publicar. La pestaña **Precios
-propios** de la carta muestra de dónde viene cada precio y qué ajustes aún necesitan tu decisión. Un
-producto con variantes muestra ahí, sin campo, el precio o el rango al que se venden sus variantes:
-fija los precios en las filas de sus variantes. Edita los precios ahí y elige **Guardar** al pie de la tabla. Elige **Cancelar** para descartar
-los cambios.
+el precio de la cerveza en Noche para resolver ese desacuerdo antes de publicar. En **Estructura**,
+el conflicto muestra qué precios discrepan. Si el plato tiene variantes, despliégalo para fijar el
+precio en la fila de la variante afectada.
 
 ## Declara los alérgenos y la aptitud dietética directamente {#allergens}
 
@@ -349,7 +347,7 @@ Consulta **Carta principal** para ver qué periodos empiezan con esa carta y **C
 
 **Cambios sin publicar** bajo el estado de una carta significa que las cajas aún no tienen tus
 últimos cambios: elígelo para revisarlos y publicar. Los **conflictos de precio** que aparecen ahí
-deben resolverse antes de poder publicar la carta: elígelos para verlos.
+deben resolverse antes de publicar la carta. Pulsa el enlace para verlos en **Estructura**.
 
 Cuando guardas un producto nuevo, el editor se cierra y una ventana como **Añadir Flat white a las
 cartas** pregunta dónde va. Muestra el **Nivel principal** de cada carta y sus secciones: marca los
@@ -367,7 +365,8 @@ Arrastra una fila por su control para moverla. Para mover o quitar varias filas 
 Escribe un precio junto a un plato para fijarlo en esta carta. Despliega un plato con variantes
 para fijar el precio de cada una. Borra el precio que has escrito para usar el habitual. Si cambias
 un precio, se aplica en todos los sitios de esta carta donde aparezca el plato o la variante.
-También puedes usar la pestaña **Precios propios**.
+Pulsa el enlace de conflictos en la lista de Cartas o en el encabezado de la carta, o elige
+**Elegir un precio** en Vista previa, para abrir Estructura con el filtro **Con conflictos**.
 
 Elige **Guardar** al pie de Estructura para guardar la organización y los precios juntos. Elige
 **Cancelar** y confirma para volver a la carta guardada.

@@ -17,6 +17,7 @@ import type { MenuDocumentTree } from "../widgets/menu-document-tree.js";
 import type {
   DashboardApi,
   MenuHome,
+  MenuPriceRow,
   SectionDetails,
   MenuPreview,
   Product,
@@ -109,6 +110,20 @@ type State =
 
 function api(state: State): DashboardApi {
   const never = () => new Promise(() => undefined);
+  const prices = async (): Promise<MenuPriceRow[]> => [
+    {
+      menuItemId: "mi-lager",
+      combined: combinedFixture("p-lager", "1.80", [], "1.80", "2.00"),
+      productId: "p-lager",
+      name: "Lager",
+      categoryId: null,
+      placements: [["s-drinks"]],
+      override: "1.80",
+      effectivePrice: "1.80",
+      available: true,
+      variants: [],
+    },
+  ];
   return {
     listMenus:
       state === "failed"
@@ -190,7 +205,7 @@ function api(state: State): DashboardApi {
       hash: "a".repeat(64),
     }),
     getMenuRead(id: string, parts: readonly MenuReadPart[]) {
-      return menuReadFixture(this as DashboardApi, id, parts);
+      return menuReadFixture(this as DashboardApi, id, parts, prices);
     },
     getMenuPreview: vi.fn().mockResolvedValue({
       live: null,
@@ -255,20 +270,6 @@ function api(state: State): DashboardApi {
       ],
       order: "home_first",
     } satisfies MenuHome),
-    getMenuPrices: vi.fn().mockResolvedValue([
-      {
-        menuItemId: "mi-lager",
-        combined: combinedFixture("p-lager", "1.80", [], "1.80", "2.00"),
-        productId: "p-lager",
-        name: "Lager",
-        categoryId: null,
-        placements: [["s-drinks"]],
-        override: "1.80",
-        effectivePrice: "1.80",
-        available: true,
-        variants: [],
-      },
-    ]),
   } as unknown as DashboardApi;
 }
 
@@ -518,13 +519,6 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
       await expectNoA11yViolations(host);
     },
   );
-
-  it("accessible Price overrides tab", async () => {
-    const { el, host } = await mount("populated", theme, "/menus/menu/menu-lunch/view/prices");
-    const prices = q(el, "dashboard-menu-prices-table") as HTMLElement & { rows: unknown[] };
-    await vi.waitFor(() => expect(prices.rows).toHaveLength(1));
-    await expectNoA11yViolations(host);
-  });
 
   it("accessible Preview tab", async () => {
     const { el, host } = await mount("populated", theme, "/menus/menu/menu-lunch/view/preview");
