@@ -4305,20 +4305,11 @@ it("steps through the sorted and filtered queue, skipping jobs without a printou
   const api = stubApi({
     listRecentJobs: vi.fn().mockResolvedValue([invoice, failed, hidden, drawer, first]),
   });
-  vi.mocked(api.getPrintJobPreview).mockImplementation(async (id) =>
-    id === "invoice"
-      ? { kind: "a4", pages: [] }
-      : {
-          widthDots: 512,
-          columns: 42,
-          text: id,
-          blocks: [{ kind: "text", text: id }],
-          qrData: [],
-          omittedGraphics: false,
-          truncated: false,
-          unsupported: false,
-        },
-  );
+  const getPreview = vi.mocked(api.getPrintJobPreview);
+  const receipt = await getPreview("j2");
+  getPreview
+    .mockClear()
+    .mockImplementation(async (id) => (id === "invoice" ? { kind: "a4", pages: [] } : receipt));
   const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
   await flush(el);
   const table = q(el, "[data-test=jobs-table]") as import("@waitron/ui").WtDataTable;
@@ -4340,6 +4331,11 @@ it("steps through the sorted and filtered queue, skipping jobs without a printou
   expect(q(el, "[data-test=preview-time]")?.getAttribute("datetime")).toBe(failed.createdAt);
   expect(q(el, "[data-test=preview-reprint]")).toBeNull();
 
+  next.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "ArrowRight", repeat: true, bubbles: true }),
+  );
+  await flush(el);
+  expect(getPreview).toHaveBeenLastCalledWith("j1");
   await userEvent.keyboard("{ArrowRight}");
   await flush(el);
   expect(next.disabled).toBe(true);
@@ -4355,10 +4351,10 @@ it("steps through the sorted and filtered queue, skipping jobs without a printou
 });
 
 it("ignores a late printout after stepping and retries the failed read", async () => {
-  const api = stubApi();
+  const liveData = new LiveData();
+  const api = Object.assign(stubApi(), { liveData });
   const getPreview = vi.mocked(api.getPrintJobPreview);
   const sample = await api.getPrintJobPreview("sample");
-  getPreview.mockClear();
   let finish!: (preview: Awaited<typeof sample>) => void;
   getPreview
     .mockResolvedValueOnce(sample)
@@ -4376,7 +4372,11 @@ it("ignores a late printout after stepping and retries the failed read", async (
   q(el, "[data-test=preview-previous]")!.click();
   await flush(el);
   finish(sample);
-  await flush(el);
+  vi.mocked(api.listRecentJobs).mockResolvedValue([{ ...jobs[0]!, status: "printing" }, jobs[1]!]);
+  liveData.invalidate([{ type: "print_jobs", id: "j1" }]);
+  await vi.waitFor(() =>
+    expect(text(el, "[data-test=preview-status]")).toBe(jobStatusName("printing")),
+  );
   expect(text(el, "[data-test=preview-error]")).toBe(codeMessage("server.internal"));
   expect(q(el, "dashboard-print-job-preview")!.shadowRoot!.querySelector(".paper")).toBeNull();
   next!.click();

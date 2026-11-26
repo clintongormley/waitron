@@ -96,7 +96,7 @@ alongside the last reported printing error.
 If prints take several seconds to start over Bluetooth, switch the printer off and on again.
 
 Choose **View printout** to see the job and its status. Use the arrows at the bottom or the Left
-and Right keys to move through the jobs shown in the queue. On a small screen, scroll sideways
+and Right keys to move through the printouts on that queue page. On a small screen, scroll sideways
 across a wide printout. Choose **Reprint** from the preview or the queue when it is offered.
 
 If the queue shows an A4 invoice printed, **Reprint** sends a marked copy to any active receipt

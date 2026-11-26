@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, registerIcons } from "@waitron/ui";
+import { columnsFor } from "@waitron/printing/src/layout.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
@@ -251,7 +252,7 @@ export class PrintJobPreviewDialog extends LitElement {
                           tabindex="0"
                           role="region"
                           aria-label=${t("printers.preview_paper")}
-                          style=${`--columns:${preview.columns};--roll-mm:${preview.columns <= 30 ? 58 : 80}`}
+                          style=${`--columns:${preview.columns};--roll-mm:${preview.columns <= columnsFor("58mm") ? 58 : 80}`}
                         >
                           ${this.#paper.render(preview)}
                         </div>`

@@ -35,11 +35,8 @@ export class PrintQueuePreview {
 
   #neighbour(step: PreviewStep, rows: PrintJobRow[]): PrintJobRow | undefined {
     if (!this.job) return undefined;
-    for (
-      let index = this.#order.indexOf(this.job.id) + step;
-      index >= 0 && index < this.#order.length;
-      index += step
-    ) {
+    const current = this.#order.indexOf(this.job.id);
+    for (let index = current + step; index >= 0 && index < this.#order.length; index += step) {
       const row = rows.find(({ id }) => id === this.#order[index]);
       if (row && canViewPrintout(row)) return row;
     }

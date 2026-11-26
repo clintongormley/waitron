@@ -105,7 +105,7 @@ conexión puede aparecer junto al último error de impresión comunicado.
 Si la impresora tarda varios segundos en empezar a imprimir por Bluetooth, apágala y vuelve a encenderla.
 
 Elige **Ver impresión** para consultar el trabajo y su estado. Usa las flechas de abajo o las
-teclas de flecha izquierda y derecha para recorrer los trabajos que muestra la cola. En una
+teclas de flecha izquierda y derecha para recorrer las impresiones de esa página de la cola. En una
 pantalla pequeña, desplázate de lado para ver una página ancha. Elige **Reimprimir** desde la
 vista previa o la cola cuando esté disponible.
 
