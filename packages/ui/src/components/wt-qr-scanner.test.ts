@@ -239,6 +239,30 @@ describe("wt-qr-scanner", () => {
     expect(drawn).not.toHaveBeenCalled();
   });
 
+  test("a camera that stops by itself before its video is drawn is said to be unavailable once", async () => {
+    const stream = film("hello");
+    const track = stream.getVideoTracks()[0]!;
+    const attach = track.addEventListener.bind(track);
+    vi.spyOn(track, "addEventListener").mockImplementation((type, listener, options) => {
+      attach(type, listener, options);
+      if (type === "ended") queueMicrotask(() => track.dispatchEvent(new Event("ended")));
+    });
+    const unavailable = vi.fn();
+    document.addEventListener("wt-qr-unavailable", unavailable);
+    try {
+      const el = (await mountInShadowRoot(SCANNER)) as WtQrScanner;
+
+      await expect.poll(() => message(el)).toBe("The camera did not start");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(ended(stream)).toBe(true);
+      expect(el.shadowRoot!.querySelector("video")).toBeNull();
+      expect(unavailable).toHaveBeenCalledTimes(1);
+      expect((unavailable.mock.calls[0]![0] as CustomEvent).detail).toEqual({ reason: "failed" });
+    } finally {
+      document.removeEventListener("wt-qr-unavailable", unavailable);
+    }
+  });
+
   test("a track that ends after stop() says nothing", async () => {
     const stream = film("hello");
     const unavailable = vi.fn();

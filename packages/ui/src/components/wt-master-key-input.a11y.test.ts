@@ -39,7 +39,7 @@ const COPY = {
   scan: "Scan the recovery pack",
   scanning: "Hold the master key's QR code up to the camera.",
   notKeyCode: "That is not the master key's QR code.",
-  cameraFailed: "The camera did not start. Type the key or choose the PDF.",
+  cameraFailed: "The camera is not available. Type the key or choose the PDF.",
   camera: "Camera",
   stopScan: "Stop scanning",
 };

@@ -52,7 +52,7 @@ export class WtQrScanner extends LitElement {
   @property() hint = "";
   /** The caller's line about the latest code; empty shows `hint`. */
   @property() message = "";
-  /** Shown in place of everything else once the camera cannot start or stops by itself. */
+  /** Shown in place of everything else once the scanner fires `wt-qr-unavailable`. */
   @property() unavailable = "";
   @state() private phase: "starting" | "filming" | "failed" = "starting";
   @query("video") private video?: HTMLVideoElement;
@@ -103,7 +103,6 @@ export class WtQrScanner extends LitElement {
       return;
     }
     this.#stream = stream;
-    // `ended` fires only when the camera stops by itself, never for this element's own `stop()`.
     this.#watch = new AbortController();
     for (const track of stream.getTracks())
       track.addEventListener("ended", () => this.#fail("failed"), { signal: this.#watch.signal });
