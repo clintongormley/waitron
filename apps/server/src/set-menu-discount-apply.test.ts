@@ -1,14 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { adjustmentEndings, createAdjustmentReason } from "@waitron/adjustments";
+import {
+  adjustmentEndings,
+  createAdjustmentReason,
+  endAdjustment,
+  readReasonStanding,
+} from "@waitron/adjustments";
 import { adjustments, sales } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { centsToDecimal, decimal } from "@waitron/shared";
 import { applyAdjustment, previewAdjustment, type AdjustmentAsk } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { buildReceiptDocument } from "./receipt-document.js";
+import { splitAfterPrint } from "./split-after-print.js";
 import { readSettledTicket } from "./till-sale.js";
 import { readOrderRevision } from "./working-order-context.js";
 import { REASONS } from "./testing/adjustment-venue.js";
@@ -21,6 +28,7 @@ import {
   lunchBill,
   printSpecBill,
   sendSpecDraft,
+  serveSpecBill,
   setupSetMenuSpecVenue,
   specDeps,
   specDishOf,
@@ -35,6 +43,8 @@ let spec: SpecVenue;
 let venue: PartyVenue;
 /** The ordinary menu's offer of each dish. */
 let ordinary: Record<SpecDish, string>;
+/** Holds `adjustment.apply` and not `adjustment.approve`. */
+const WAITER = "cccccccc-0000-4000-8000-00000000d152";
 
 useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -44,6 +54,9 @@ useVenueDb({
     spec = await setupSetMenuSpecVenue(db);
     venue = spec.venue;
     ordinary = await addSpecDishesToFullMenu(spec);
+    await inTx(venue, (tx) =>
+      seedPersons(tx, { id: WAITER, displayName: "Waiter", role: "staff" }),
+    );
   },
 });
 
@@ -306,4 +319,75 @@ describe("a whole-bill comp or discount on a bill whose Daily holds 10% previews
       reduction: centsToDecimal(record.reduction),
     });
   });
+});
+
+it("previews a Daily's Free replaced by 10.00 off under the same reason as its apply counts the reason's limit, without the Free", async () => {
+  const { tabId } = await billOf(["Soup", "Hake"]);
+  const daily = await dailyOf(tabId);
+  const reasonId = await inTx(venue, async (tx) => {
+    const reason = await createAdjustmentReason(tx, {
+      ...REASONS.house,
+      name: `House ${randomUUID()}`,
+      maxAmount: decimal("20.00"),
+    });
+    return reason.id;
+  });
+  const under = async (terms: Terms) => ({
+    ...(await askFor(tabId, daily, terms)),
+    reasonId,
+    operatorId: WAITER,
+  });
+  await apply(await under(FREE));
+  expect(await total(tabId)).toBe(0);
+
+  const ask = await under(off("10.00"));
+  const preview = await inTx(venue, (tx) =>
+    previewAdjustment(tx, venue.cfg, ask, venue.cfg.locale),
+  );
+  expect(preview).toMatchObject({ replaces: { action: "comp" }, needsApproval: null });
+  await apply(ask);
+
+  expect(await total(tabId)).toBe(400);
+  expect(preview.billTotal.after).toBe("4.00");
+});
+
+it("copies only a Daily's standing 20%, not the 10% it replaced, when its printed bill is reopened", async () => {
+  const bill = await billOf(["Soup", "Hake"], "fire");
+  const daily = await dailyOf(bill.tabId);
+  const first = await previewThenApply(bill.tabId, daily, percent(1000));
+  const second = await previewThenApply(bill.tabId, daily, percent(2000));
+  await serveSpecBill(spec, bill.partyId, bill.tabId);
+  await printSpecBill(spec, bill.partyId, bill.tabId);
+
+  const { billId } = await splitAfterPrint(specDeps(spec), venue.cfg, bill.tabId, venue.operator);
+
+  expect(await total(billId)).toBe(1120);
+  const [firstReason, secondReason] = await Promise.all(
+    [first.id, second.id].map(async (id) => {
+      const [row] = await venue.db
+        .select({ reasonId: adjustments.reasonId })
+        .from(adjustments)
+        .where(eq(adjustments.id, id));
+      return row!.reasonId;
+    }),
+  );
+  const standing = await inTx(venue, async (tx) => ({
+    replaced: await readReasonStanding(tx, { workingOrderId: billId, reasonId: firstReason! }),
+    holding: await readReasonStanding(tx, { workingOrderId: billId, reasonId: secondReason! }),
+  }));
+  expect(standing).toEqual({
+    replaced: [],
+    holding: [{ reduction: "2.80", quantityThen: "1.000", quantityNow: "1.000" }],
+  });
+  await expect(
+    inTx(venue, (tx) =>
+      endAdjustment(tx, {
+        adjustmentId: first.id,
+        workingOrderId: billId,
+        why: "replaced",
+        dishName: "Daily menu",
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "adjustment.not_standing" });
+  expect(await total(billId)).toBe(1120);
 });

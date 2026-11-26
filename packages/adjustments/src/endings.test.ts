@@ -5,10 +5,9 @@ import {
   adjustmentLines,
   captureError,
   CORE_MIGRATIONS,
-  refusalOn,
-  UNIQUE_VIOLATION,
   withTransaction,
   workingOrderLines,
+  type AdjustmentEndingWhy,
   type Database,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -34,7 +33,7 @@ beforeEach(async () => {
 
 let lineCount = 0;
 
-/** A row of `quantity` à la carte Hakes (16.00) on `workingOrderId`, at 10% off: 14.40 each. */
+/** A row of `quantity` a la carte Hakes (16.00) on `workingOrderId`, at 10% off: 14.40 each. */
 async function discountedHakes(workingOrderId: string, quantity: string): Promise<string> {
   lineCount += 1;
   const count = Number(quantity);
@@ -103,6 +102,43 @@ async function tenPercentOff(
   });
 }
 
+/** Records `cents` off one Hake of `lineId`, written as the comp window writes it. */
+async function amountOff(workingOrderId: string, lineId: string, cents: number): Promise<string> {
+  const reason = await seedReason(db);
+  return withTransaction(db, async (tx) => {
+    const id = await recordAdjustment(tx, {
+      workingOrderId,
+      line: {
+        id: lineId,
+        name: "Hake",
+        quantity: "1",
+        listUnitPriceGross: decimal("16.00"),
+        creditedTo: WAITER,
+        stage: "served",
+      },
+      quantity: "1",
+      reason: {
+        id: reason.id,
+        name: reason.name,
+        policy: policySnapshotOf(reason, { maxBillComp: null }),
+      },
+      action: "discount_amount",
+      percentBp: null,
+      beforeAmount: decimal("16.00"),
+      afterAmount: decimal((16 - cents / 100).toFixed(2)),
+      reduction: decimal((cents / 100).toFixed(2)),
+      nominalValue: decimal("16.00"),
+      requestedBy: WAITER,
+      approvedBy: null,
+      note: null,
+    });
+    await tx
+      .insert(adjustmentLines)
+      .values({ adjustmentId: id, lineId, reduction: cents, quantity: stringToThousandths("1") });
+    return id;
+  });
+}
+
 async function priceOf(lineId: string) {
   const [row] = await db
     .select({
@@ -128,7 +164,7 @@ async function endingsOf(adjustmentId: string) {
 }
 
 describe("ending a comp or discount", () => {
-  it("gives an à la carte Hake its 16.00 back, clears its list price and records one ending, as endingRestores answered beforehand without writing", async () => {
+  it("gives an a la carte Hake its 16.00 back, clears its list price and records one ending, as endingRestores answered beforehand without writing", async () => {
     const order = await seedWorkingOrder(db);
     const hake = await discountedHakes(order, "1");
     const adjustmentId = await tenPercentOff(order, hake, "1");
@@ -165,7 +201,7 @@ describe("ending a comp or discount", () => {
     ]);
   });
 
-  it("ends a discount on each bill its rows reached at most once, giving back only that bill's rows", async () => {
+  it("gives back each row a discount took something off once, on whichever bill the row is on", async () => {
     const first = await seedWorkingOrder(db);
     const second = await seedWorkingOrder(db);
     const stayed = await discountedHakes(first, "2");
@@ -198,13 +234,10 @@ describe("ending a comp or discount", () => {
       listUnitPriceGross: 1600,
     });
 
-    const again = await captureError(() => endOn(second));
-    expect(
-      refusalOn(again, UNIQUE_VIOLATION, {
-        table: "adjustment_endings",
-        columns: ["adjustment_id", "working_order_id"],
-      }),
-    ).toBe(true);
+    await expect(endOn(second)).rejects.toMatchObject({
+      code: "adjustment.not_standing",
+      params: { adjustmentId, workingOrderId: second },
+    });
     expect(await priceOf(moved)).toEqual({
       unitPriceGross: 1600,
       lineTotal: 1600,
@@ -220,5 +253,104 @@ describe("ending a comp or discount", () => {
     expect(
       (await endingsOf(adjustmentId)).map(({ workingOrderId }) => workingOrderId).sort(),
     ).toEqual([first, second].sort());
+  });
+
+  it("keeps a row given back on one bill given back once the row moves to another keeping its id", async () => {
+    const first = await seedWorkingOrder(db);
+    const second = await seedWorkingOrder(db);
+    const hake = await discountedHakes(first, "1");
+    const adjustmentId = await tenPercentOff(first, hake, "1");
+    const endOn = (workingOrderId: string) =>
+      withTransaction(db, (tx) =>
+        endAdjustment(tx, { adjustmentId, workingOrderId, why: "dish_moved", dishName: "Hake" }),
+      );
+    await endOn(first);
+
+    await db
+      .update(workingOrderLines)
+      .set({ workingOrderId: second })
+      .where(eq(workingOrderLines.id, hake));
+
+    expect(
+      await withTransaction(db, (tx) =>
+        endingRestores(tx, { workingOrderId: second, adjustmentIds: [adjustmentId] }),
+      ),
+    ).toEqual([]);
+    await expect(endOn(second)).rejects.toMatchObject({ code: "adjustment.not_standing" });
+    expect(await priceOf(hake)).toEqual({
+      unitPriceGross: 1600,
+      lineTotal: 1600,
+      listUnitPriceGross: null,
+    });
+    expect(await endingsOf(adjustmentId)).toHaveLength(1);
+  });
+
+  it("refuses an ending on a bill holding none of the discount's rows, recording nothing", async () => {
+    const first = await seedWorkingOrder(db);
+    const other = await seedWorkingOrder(db);
+    const hake = await discountedHakes(first, "1");
+    const adjustmentId = await tenPercentOff(first, hake, "1");
+
+    await expect(
+      withTransaction(db, (tx) =>
+        endAdjustment(tx, {
+          adjustmentId,
+          workingOrderId: other,
+          why: "dish_moved",
+          dishName: "Hake",
+        }),
+      ),
+    ).rejects.toMatchObject({ code: "adjustment.not_standing" });
+    expect(await endingsOf(adjustmentId)).toEqual([]);
+  });
+
+  it("never gives a row back more than its stamped list price while another discount still stands on it", async () => {
+    const order = await seedWorkingOrder(db);
+    const hake = await discountedHakes(order, "1");
+    // A row whose recorded share overstates what it took (as a share of a row split by price can).
+    const overstated = await amountOff(order, hake, 200);
+    await amountOff(order, hake, 10);
+
+    await withTransaction(db, (tx) =>
+      endAdjustment(tx, {
+        adjustmentId: overstated,
+        workingOrderId: order,
+        why: "dish_moved",
+        dishName: "Hake",
+      }),
+    );
+
+    expect(await priceOf(hake)).toEqual({
+      unitPriceGross: 1600,
+      lineTotal: 1600,
+      listUnitPriceGross: null,
+    });
+  });
+
+  it("leaves every price as it was when the ending itself is refused inside a transaction that carries on", async () => {
+    const order = await seedWorkingOrder(db);
+    const hake = await discountedHakes(order, "1");
+    const adjustmentId = await tenPercentOff(order, hake, "1");
+
+    const refused = await withTransaction(db, async (tx) => {
+      const error = await captureError(() =>
+        endAdjustment(tx, {
+          adjustmentId,
+          workingOrderId: order,
+          why: "not_a_why" as AdjustmentEndingWhy,
+          dishName: "Hake",
+        }),
+      );
+      return {
+        error,
+        price: await tx
+          .select({ unit: workingOrderLines.unitPriceGross })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.id, hake)),
+      };
+    });
+
+    expect(refused.error).toBeInstanceOf(Error);
+    expect(refused.price).toEqual([{ unit: 1440 }]);
   });
 });

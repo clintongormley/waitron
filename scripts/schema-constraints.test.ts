@@ -51,6 +51,8 @@ const EXPECTED_FOREIGN_KEYS = [
   ["adjustment_lines", ["adjustment_id"], "adjustments"],
   ["adjustment_endings", ["adjustment_id"], "adjustments"],
   ["adjustment_endings", ["working_order_id"], "working_orders"],
+  ["adjustment_ending_lines", ["ending_id"], "adjustment_endings"],
+  ["adjustment_ending_lines", ["adjustment_line_id"], "adjustment_lines"],
   ["adjustments", ["reapplies_adjustment_id"], "adjustments"],
   ["adjustments", ["working_order_id"], "working_orders"],
   ["adjustments", ["requested_by"], "persons"],
@@ -326,7 +328,7 @@ const EXPECTED_FOREIGN_KEYS = [
 const EXPECTED_UNIQUE_INDEXES = [
   "menus_one_default_uq",
   "adjustment_lines_adjustment_line_key",
-  "adjustment_endings_adjustment_order_key",
+  "adjustment_ending_lines_line_key",
   "adjustment_reasons_name_key",
   "refunds_bill_submission_key",
   "bill_payments_submission_key",

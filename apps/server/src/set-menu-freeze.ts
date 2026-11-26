@@ -1,11 +1,10 @@
 import { and, eq, gt, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import type { Ending } from "@waitron/adjustments";
 import {
-  adjustmentEndings,
+  adjustmentEndingLines,
   adjustmentLines,
   adjustments,
   lineServiceCancellations,
-  workingOrderLines,
   type Transaction,
 } from "@waitron/db";
 import type { FrozenLineSources } from "@waitron/orders-sales/set-menu-grouping-plan.js";
@@ -46,8 +45,8 @@ export async function frozenLineIdSources(
 }
 
 /**
- * Which of `lineIds` a comp or discount took something off that has not ended on the bill the line
- * is on now, leaving out `ended` as well.
+ * Which of `lineIds` a comp or discount took something off that has not given it back, leaving out
+ * `ended` as well.
  */
 export async function reducedLineIds(
   tx: Transaction,
@@ -60,14 +59,7 @@ export async function reducedLineIds(
   const reduced = await tx
     .select({ lineId: adjustmentLines.lineId })
     .from(adjustmentLines)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
-    .leftJoin(
-      adjustmentEndings,
-      and(
-        eq(adjustmentEndings.adjustmentId, adjustmentLines.adjustmentId),
-        eq(adjustmentEndings.workingOrderId, workingOrderLines.workingOrderId),
-      ),
-    )
+    .leftJoin(adjustmentEndingLines, eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id))
     .where(
       and(
         inArray(
@@ -75,7 +67,7 @@ export async function reducedLineIds(
           sql`(select value from json_each(${JSON.stringify(lineIds)}))`,
         ),
         gt(adjustmentLines.reduction, 0),
-        isNull(adjustmentEndings.id),
+        isNull(adjustmentEndingLines.id),
         notInArray(adjustmentLines.adjustmentId, [...ended]),
       ),
     );

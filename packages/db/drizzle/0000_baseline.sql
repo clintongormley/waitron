@@ -2447,6 +2447,16 @@ CREATE TABLE `adjustment_lines` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `adjustment_lines_adjustment_line_key` ON `adjustment_lines` (`adjustment_id`,`line_id`);--> statement-breakpoint
 CREATE INDEX `adjustment_lines_line_idx` ON `adjustment_lines` (`line_id`);--> statement-breakpoint
+CREATE TABLE `adjustment_ending_lines` (
+	`id` text PRIMARY KEY NOT NULL,
+	`ending_id` text NOT NULL,
+	`adjustment_line_id` text NOT NULL,
+	FOREIGN KEY (`ending_id`) REFERENCES `adjustment_endings`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`adjustment_line_id`) REFERENCES `adjustment_lines`(`id`) ON UPDATE no action ON DELETE restrict
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `adjustment_ending_lines_line_key` ON `adjustment_ending_lines` (`adjustment_line_id`);--> statement-breakpoint
+CREATE INDEX `adjustment_ending_lines_ending_idx` ON `adjustment_ending_lines` (`ending_id`);--> statement-breakpoint
 CREATE TABLE `adjustment_endings` (
 	`id` text PRIMARY KEY NOT NULL,
 	`adjustment_id` text NOT NULL,
@@ -2461,7 +2471,7 @@ CREATE TABLE `adjustment_endings` (
 	CONSTRAINT "adjustment_endings_line_ck" CHECK("adjustment_endings"."line_id" is null or "adjustment_endings"."why" in ('extras_changed', 'variant_changed'))
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `adjustment_endings_adjustment_order_key` ON `adjustment_endings` (`adjustment_id`,`working_order_id`);--> statement-breakpoint
+CREATE INDEX `adjustment_endings_adjustment_idx` ON `adjustment_endings` (`adjustment_id`,`working_order_id`);--> statement-breakpoint
 CREATE TABLE `departments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,

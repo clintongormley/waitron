@@ -109,6 +109,7 @@ const FOLDED_APPEND_ONLY = [
   "adjustment_refunds",
   "adjustment_lines",
   "adjustment_endings",
+  "adjustment_ending_lines",
   "handover_activations",
 ] as const;
 
@@ -162,6 +163,13 @@ const ROWS: Record<(typeof FOLDED_APPEND_ONLY)[number], { insert: SQL[]; update:
           values ('adjustment-ending-1', 'adjustment-1', 'order-1', 'dish_cancelled', 'Hake', ${AT})`,
     ],
     update: sql`update adjustment_endings set dish_name = 'Soup'`,
+  },
+  adjustment_ending_lines: {
+    insert: [
+      sql`insert into adjustment_ending_lines (id, ending_id, adjustment_line_id)
+          values ('adjustment-ending-line-1', 'adjustment-ending-1', 'adjustment-line-1')`,
+    ],
+    update: sql`update adjustment_ending_lines set ending_id = 'adjustment-ending-2'`,
   },
   handover_activations: {
     insert: [

@@ -1,6 +1,7 @@
 import "./errors.js";
 
 export {
+  adjustmentEndingLines,
   adjustmentEndings,
   adjustmentEndingWhy,
   adjustmentLines,

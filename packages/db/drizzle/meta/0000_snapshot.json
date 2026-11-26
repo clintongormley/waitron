@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ae39cd65-d2d8-4c5e-ab71-e95c4743bc98",
+  "id": "8b226e48-79c3-4d04-8812-6003b2917a27",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activity_log": {
@@ -16087,6 +16087,79 @@
       "uniqueConstraints": {},
       "checkConstraints": {}
     },
+    "adjustment_ending_lines": {
+      "name": "adjustment_ending_lines",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ending_id": {
+          "name": "ending_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "adjustment_line_id": {
+          "name": "adjustment_line_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "adjustment_ending_lines_line_key": {
+          "name": "adjustment_ending_lines_line_key",
+          "columns": [
+            "adjustment_line_id"
+          ],
+          "isUnique": true
+        },
+        "adjustment_ending_lines_ending_idx": {
+          "name": "adjustment_ending_lines_ending_idx",
+          "columns": [
+            "ending_id"
+          ],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "adjustment_ending_lines_ending_fk": {
+          "name": "adjustment_ending_lines_ending_fk",
+          "tableFrom": "adjustment_ending_lines",
+          "tableTo": "adjustment_endings",
+          "columnsFrom": [
+            "ending_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "adjustment_ending_lines_line_fk": {
+          "name": "adjustment_ending_lines_line_fk",
+          "tableFrom": "adjustment_ending_lines",
+          "tableTo": "adjustment_lines",
+          "columnsFrom": [
+            "adjustment_line_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
     "adjustment_endings": {
       "name": "adjustment_endings",
       "columns": {
@@ -16141,13 +16214,13 @@
         }
       },
       "indexes": {
-        "adjustment_endings_adjustment_order_key": {
-          "name": "adjustment_endings_adjustment_order_key",
+        "adjustment_endings_adjustment_idx": {
+          "name": "adjustment_endings_adjustment_idx",
           "columns": [
             "adjustment_id",
             "working_order_id"
           ],
-          "isUnique": true
+          "isUnique": false
         }
       },
       "foreignKeys": {

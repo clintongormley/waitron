@@ -12,6 +12,7 @@ const immutableTables = [
   "adjustment_refunds",
   "adjustment_lines",
   "adjustment_endings",
+  "adjustment_ending_lines",
 ];
 const addedAdjustmentColumns: Readonly<Record<string, BackupValue>> = {
   charge_kept: 0n,

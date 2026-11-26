@@ -1,6 +1,7 @@
 import { and, asc, eq, gt, isNull, ne } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import {
-  adjustmentEndings,
+  adjustmentEndingLines,
   adjustmentLines,
   adjustments,
   endAdjustment,
@@ -30,13 +31,17 @@ export interface Replaced {
   amount: string;
 }
 
+/** A row a held comp or discount took something off. */
+const covered = alias(workingOrderLines, "covered");
+
 interface Held {
   id: string;
   setMenuName: string;
   replaced: Replaced;
 }
 
-/** The comps or discounts given on the set-menu row `ask` names that still stand on its bill. */
+/** The comps or discounts given on the set-menu row `ask` names that still take something off a row
+ * on its bill. */
 async function heldBySetMenu(tx: Transaction, ask: AdjustmentAsk): Promise<Held[]> {
   if (ask.action === "cancel" || ask.lineId === null) return [];
   const held = await tx
@@ -49,23 +54,19 @@ async function heldBySetMenu(tx: Transaction, ask: AdjustmentAsk): Promise<Held[
       createdAt: adjustments.createdAt,
     })
     .from(adjustments)
-    .innerJoin(adjustmentLines, eq(adjustmentLines.adjustmentId, adjustments.id))
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, adjustments.lineId))
-    .leftJoin(
-      adjustmentEndings,
-      and(
-        eq(adjustmentEndings.adjustmentId, adjustments.id),
-        eq(adjustmentEndings.workingOrderId, ask.orderId),
-      ),
-    )
+    .innerJoin(adjustmentLines, eq(adjustmentLines.adjustmentId, adjustments.id))
+    .innerJoin(covered, eq(covered.id, adjustmentLines.lineId))
+    .leftJoin(adjustmentEndingLines, eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id))
     .where(
       and(
         eq(adjustments.lineId, ask.lineId),
         ne(adjustments.action, "cancel"),
         eq(workingOrderLines.workingOrderId, ask.orderId),
         eq(workingOrderLines.setMenuRole, "set_menu"),
+        eq(covered.workingOrderId, ask.orderId),
         gt(adjustmentLines.reduction, 0),
-        isNull(adjustmentEndings.id),
+        isNull(adjustmentEndingLines.id),
       ),
     )
     .orderBy(asc(adjustments.createdAt));

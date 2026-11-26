@@ -149,6 +149,7 @@ describe("adjustment backup evidence", () => {
         "adjustment_refunds",
         "adjustment_lines",
         "adjustment_endings",
+        "adjustment_ending_lines",
       ],
       checks: ["data"],
     });

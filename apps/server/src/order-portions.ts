@@ -1,6 +1,6 @@
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
-import { adjustmentLines } from "@waitron/adjustments";
+import { adjustmentEndingLines, adjustmentLines } from "@waitron/adjustments";
 import {
   newId,
   insertInChunks,
@@ -138,8 +138,9 @@ function share(row: Row, count: number): Row {
 }
 
 /** For each `{ from, to }`, a copy or a part split off `from`, give `to` every row of what a comp or
- * discount took off `from`, its amount and quantity unchanged: a row says what was taken off the
- * quantity its line held then. */
+ * discount took off `from` and has not given back, its amount and quantity unchanged: a row says
+ * what was taken off the quantity its line held then. One given back is not carried, since `to`
+ * copies the price it was given back at. */
 export async function carryLineReductions(
   tx: Transaction,
   pairs: readonly { from: string; to: string }[],
@@ -153,7 +154,13 @@ export async function carryLineReductions(
       quantity: adjustmentLines.quantity,
     })
     .from(adjustmentLines)
-    .where(inArray(adjustmentLines.lineId, [...new Set(pairs.map(({ from }) => from))]));
+    .leftJoin(adjustmentEndingLines, eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id))
+    .where(
+      and(
+        inArray(adjustmentLines.lineId, [...new Set(pairs.map(({ from }) => from))]),
+        isNull(adjustmentEndingLines.id),
+      ),
+    );
   const byLine = new Map<string, typeof covered>();
   for (const row of covered) {
     const held = byLine.get(row.lineId);

@@ -7,7 +7,7 @@ import {
   type EntryCursor,
 } from "@waitron/adjustments";
 import {
-  adjustmentEndings,
+  adjustmentEndingLines,
   adjustmentLines,
   departments,
   invoiceSeries,
@@ -171,13 +171,7 @@ export async function listFreeItems(
     .from(adjustmentLines)
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, adjustmentLines.lineId))
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .leftJoin(
-      adjustmentEndings,
-      and(
-        eq(adjustmentEndings.adjustmentId, adjustmentLines.adjustmentId),
-        eq(adjustmentEndings.workingOrderId, workingOrderLines.workingOrderId),
-      ),
-    )
+    .leftJoin(adjustmentEndingLines, eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id))
     .where(
       and(
         inIds(
@@ -185,7 +179,7 @@ export async function listFreeItems(
           entries.map((entry) => entry.id),
         ),
         ne(workingOrders.status, "abandoned"),
-        isNull(adjustmentEndings.id),
+        isNull(adjustmentEndingLines.id),
       ),
     )
     .orderBy(asc(workingOrderLines.lineNo));

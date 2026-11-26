@@ -1341,15 +1341,21 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
   say it took. An ending belongs to the bill the adjustment's rows are on when it ends, which after a
   whole set menu moved (D51) is not the bill it was given on: a comp's record stays on the bill it
   was given on while its rows move (`apps/server/src/set-menu-freeze.ts:49-51`), and
-  `readBillAdjustments` reads by that bill (`packages/adjustments/src/record.ts:162`). So an
-  adjustment ends at most once on each bill (unique on the adjustment and the bill): a 3a dish
-  discount whose portions were split over two bills ends only on the bill whose dish changed. Every
-  reader of standing discounts leaves out an `adjustment_lines` row whose adjustment has an ending
-  on the bill its line is on now: the freeze (`reducedLineIds`, `set-menu-freeze.ts:45-65`, which
+  `readBillAdjustments` reads by that bill (`packages/adjustments/src/record.ts:162`). _2026-11-26,
+  after review:_ what an ending gave back is kept per row, in a second append-only table,
+  `adjustment_ending_lines` (the ending, and the `adjustment_lines` row it gave back, each such row
+  at most once), because a move keeps a line's id: keyed by the bill alone, a discount ended on one
+  bill came back once its rows reached another, and could be given back there a second time. So a
+  3a dish discount whose portions were split over two bills ends only on the bill whose dish
+  changed, and only for the rows there; an ending that would give nothing back is refused
+  (`adjustment.not_standing`); and a copy or split of a row (`carryLineReductions`) does not carry
+  a reduction that was given back, since the copy has the price it was given back at. Every
+  reader of standing discounts leaves out an `adjustment_lines` row that an ending gave back,
+  wherever its line is now: the freeze (`reducedLineIds`, `set-menu-freeze.ts:45-65`, which
   also gives a set-menu dish's `movable`, `apps/server/src/set-menu-bill.ts:357`, and through
   `frozenLineIdSources` feeds `refuseMovingFrozenDishes` and the grouping); the reason's standing on
-  the bill (`readReasonStanding`, `record.ts:98`); the receipt (`readBillAdjustments`, `record.ts:145`,
-  which leaves out one with an ending on its bill); the corrections report's free items
+  the bill (`readReasonStanding`, `record.ts:98`, which also takes a preview's ending); the receipt
+  (`readBillAdjustments`, `record.ts:145`, which leaves out one with an ending on its own bill); the corrections report's free items
   (`listFreeItems`, `apps/server/src/free-items.ts:119`, read at `report-api.ts:342`); and the
   adjustments report (D55). Without that, its `adjustment_lines` would freeze the set menu for good
   (D30), and the receipt would print per dish, since its records would no longer add up
@@ -1778,18 +1784,22 @@ about 60, 3b1.2 about 50, 3b1.3a about 65, 3b1.3b about 75, 3b1.4 about 25, 3b1.
 
 **Files:** Create `packages/db/src/schema/adjustments/adjustment-endings.ts` (`adjustment_endings`:
 `id`; `adjustment_id`, a foreign key to `adjustments.id`; `working_order_id`, a foreign key, the
-bill the adjustment's rows were on when it ended (D47); a unique index on those two; `why`:
+bill the adjustment's rows were on when it ended (D47); an index on those two; `why`:
 `extras_changed`, `variant_changed`, `dish_cancelled`, `dish_moved`, `dish_paid_alone`,
 `replaced` or `set_menu_cancelled`; `dish_name`, the dish that left or changed; `line_id`, the line
 a notice offers it again on, for `extras_changed` and `variant_changed`, else null, with no key, as
 `adjustment_lines.line_id` has none, for the reason stated at
-`packages/db/src/schema/adjustments/adjustment-lines.ts:5-9`; `ended_at`), exported beside the other
-adjustments tables. Create `packages/adjustments/src/endings.ts`: `endingRestores(tx, {
+`packages/db/src/schema/adjustments/adjustment-lines.ts:5-9`; `ended_at`) and
+`adjustment_ending_lines` (`ending_id`, a foreign key to `adjustment_endings.id`;
+`adjustment_line_id`, a foreign key to `adjustment_lines.id`, unique: each row given back once,
+wherever it moves, since a move keeps line ids; D47 as revised after review), exported beside the
+other adjustments tables. Create `packages/adjustments/src/endings.ts`: `endingRestores(tx, {
 workingOrderId, adjustmentIds })`, which writes nothing and answers, for each row now on that bill
 that those adjustments' `adjustment_lines` took something off, its unit price, line total and list
 price once that is given back (the list price cleared once the price is back at it); and
-`endAdjustment(tx, { adjustmentId, workingOrderId, why, dishName, lineId? })`, which writes exactly
-what `endingRestores` answers, then the ending. Modify
+`endAdjustment(tx, { adjustmentId, workingOrderId, why, dishName, lineId? })`, which records the
+ending and the rows it gives back, then writes exactly what `endingRestores` answers, and refuses
+`adjustment.not_standing` when it would give nothing back. Modify
 `packages/db/src/schema/adjustments/adjustments.ts` (`reapplies_adjustment_id`, a foreign key to
 its own `id`, for 3b2, so only 3b1 resets venues).
 
@@ -1811,7 +1821,7 @@ append-only table travels in its set's migration descriptor and the manifest):
   la carte Hake (14.40) ended: 16.00, no list price, one ending on that bill, and `endingRestores`
   answered the same beforehand and wrote nothing; a row of two à la carte Hakes at 10%, one moved to
   another bill of the party: ending it there gives back only that Hake, ending it there again is
-  refused by the unique index, and ending it on the first bill is accepted; the new foreign keys in
+  refused `adjustment.not_standing`, and ending it on the first bill is accepted; the new foreign keys in
   `EXPECTED_FOREIGN_KEYS`; the table in each pinned list.
 - [ ] **Run them failing**, implement, rebuild, then `pnpm exec vitest run
   scripts/schema-constraints.test.ts scripts/append-only-triggers.test.ts
@@ -1847,7 +1857,8 @@ its reduced rows, `:149-182`, the same rule); `apps/server/src/adjustment-rows.t
   0.00, `readBillAdjustments` leaves it out and the corrections report's free items leave it out;
   the same Daily not ended but read with `ending` naming the Free: `totalAfterAdjusting` answers
   14.00, the freeze leaves the Free's rows out, and every row and `adjustment_endings` are as they
-  were; an ending on another bill leaves this bill's readers as they were.
+  were; an ending on a bill holding none of its rows is refused, leaving this bill's readers as
+  they were.
 - [ ] **Run them failing**; implement; drop the ending rule from `reducedLineIds` and see the
   freeze case fail; restore. Run `pnpm --filter @waitron/server exec vitest run
   src/set-menu-discount-ending.test.ts src/set-menu-regroup.test.ts src/set-menu-adjustments.test.ts

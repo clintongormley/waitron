@@ -490,6 +490,7 @@ const ADDED_TABLES = [
   "outgoing_mail",
   "adjustment_lines",
   "adjustment_endings",
+  "adjustment_ending_lines",
   "device_invoice_save_operations",
   "document_delivery_requests",
   "document_delivery_sequences",

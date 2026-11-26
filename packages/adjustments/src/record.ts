@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, ne, notExists, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
   centsToDecimal,
@@ -97,14 +97,14 @@ export interface ReasonStandingRow {
   quantityNow: Decimal;
 }
 
-/** What the reason's comps and discounts, recorded on any bill and not ended on this one, took off
- * each line now on this bill. Only comps and discounts write rows today; a cancel's would be left out all the same, since
- * a reason changed from Void to Comp keeps its id. */
+/** What the reason's comps and discounts, recorded on any bill, took off each line now on this bill
+ * and have not given back, leaving out `ended` as well. Only comps and discounts write rows today; a
+ * cancel's would be left out all the same, since a reason changed from Void to Comp keeps its id. */
 export async function readReasonStanding(
   tx: Transaction,
-  query: { workingOrderId: string; reasonId: string },
+  query: { workingOrderId: string; reasonId: string; ended?: readonly string[] },
 ): Promise<ReasonStandingRow[]> {
-  const { workingOrderId, reasonId } = query;
+  const { workingOrderId, reasonId, ended = [] } = query;
   const rows = await tx.execute<{
     reduction: string;
     quantityThen: string;
@@ -116,10 +116,10 @@ export async function readReasonStanding(
     from adjustment_lines taken
     join adjustments record on record.id = taken.adjustment_id
     join working_order_lines line on line.id = taken.line_id
-    left join adjustment_endings ended
-      on ended.adjustment_id = taken.adjustment_id and ended.working_order_id = line.working_order_id
+    left join adjustment_ending_lines given on given.adjustment_line_id = taken.id
     where record.reason_id = ${reasonId} and record.action <> 'cancel'
-      and line.working_order_id = ${workingOrderId} and ended.id is null`);
+      and line.working_order_id = ${workingOrderId} and given.id is null
+      and taken.adjustment_id not in (select value from json_each(${JSON.stringify(ended)}))`);
   return rows.rows.map((row) => ({
     reduction: rawCentsToDecimal(row.reduction),
     quantityThen: rawThousandthsToDecimal(row.quantityThen),
@@ -166,18 +166,21 @@ export async function readBillAdjustments(
       afterAmount: adjustments.afterAmount,
     })
     .from(adjustments)
-    .leftJoin(
-      adjustmentEndings,
-      and(
-        eq(adjustmentEndings.adjustmentId, adjustments.id),
-        eq(adjustmentEndings.workingOrderId, adjustments.workingOrderId),
-      ),
-    )
     .where(
       and(
         eq(adjustments.workingOrderId, workingOrderId),
         ne(adjustments.action, "cancel"),
-        isNull(adjustmentEndings.id),
+        notExists(
+          tx
+            .select({ id: adjustmentEndings.id })
+            .from(adjustmentEndings)
+            .where(
+              and(
+                eq(adjustmentEndings.adjustmentId, adjustments.id),
+                eq(adjustmentEndings.workingOrderId, adjustments.workingOrderId),
+              ),
+            ),
+        ),
       ),
     )
     .orderBy(asc(adjustments.createdAt), asc(adjustments.id));

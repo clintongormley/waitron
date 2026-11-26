@@ -415,6 +415,7 @@ export {
 } from "./schema/menu/suggestions.js";
 export type { SuggestionJobRow, SuggestionRow } from "./schema/menu/suggestions.js";
 export {
+  adjustmentEndingLines,
   adjustmentEndings,
   adjustmentEndingWhy,
   adjustmentLines,

@@ -755,6 +755,7 @@ export async function planAdjustment(
       ? evaluateCancel(reason, { actorPermissions, note: ask.note, stage: stage! })
       : await judgeComp(tx, reason, {
           orderId,
+          ended: ending?.adjustmentIds,
           action: ask.action,
           rows,
           writes: writes ?? changes,
@@ -799,6 +800,8 @@ async function judgeComp(
   reason: AdjustmentReason,
   ask: {
     orderId: string;
+    /** Read as ended (D59). */
+    ended: readonly string[] | undefined;
     action: CompAction;
     /** Every line of the bill, as {@link readRows} reads it. */
     rows: readonly Row[];
@@ -815,7 +818,11 @@ async function judgeComp(
 ): Promise<AdjustmentVerdict> {
   const { orderId, rows } = ask;
   const standingOnBill = standingOff(
-    await readReasonStanding(tx, { workingOrderId: orderId, reasonId: reason.id }),
+    await readReasonStanding(tx, {
+      workingOrderId: orderId,
+      reasonId: reason.id,
+      ended: ask.ended,
+    }),
   );
   const billComped = sumDecimals(
     rows.map((row) => {
