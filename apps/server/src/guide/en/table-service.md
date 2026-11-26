@@ -537,7 +537,10 @@ back to that table. The table you are at is highlighted. Once nothing of yours i
 example after you send everything, its button stays highlighted without the ✎ until you leave, and
 then goes, while a table you leave with dishes still unsent keeps its ✎ button. If someone else takes over your bill, it stops counting as yours: at once at the
 table you are at, and at any other table when the Floor next updates its tables. When there are
-more buttons than fit, slide them sideways. A faded edge shows where there are more.
+more buttons than fit, slide them sideways. A faded edge shows where there are more. On a wide
+handheld floor, **Floor** is first. With a keyboard, use Left and Right to switch between **Floor**
+and the table buttons. Home opens **Floor** and End opens the last table. On a narrow floor, use Tab
+to reach a table shortcut and Enter to open it.
 
 Choose **Floor** after a table to open that table's zone, if this device shows it. On a narrow
 floor, choose another zone by tapping its name at the bottom. Open **More** (☰) there for your

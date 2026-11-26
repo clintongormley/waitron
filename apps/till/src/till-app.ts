@@ -25611,8 +25611,8 @@ export class TillApp extends LitElement {
                         html`<till-shell
                           .formFactor=${shellFormFactor}
                           .activeScreen=${this.activeTabKey}
-                          @floor-bar-resized=${(event: CustomEvent<number>) => {
-                            this.style.setProperty("--wt-floor-bar-height", `${event.detail}px`);
+                          @floor-controls-resized=${(event: CustomEvent<number>) => {
+                            this.style.setProperty("--wt-floor-controls-height", `${event.detail}px`);
                           }}
                           .counterZones=${this.deviceZoneSelection?.zones.filter((zone) => this.#deviceNavigation()?.counterZoneIds.includes(zone.id)) ?? []}
                           .selectedCounterZoneId=${this.counterServiceZoneId}

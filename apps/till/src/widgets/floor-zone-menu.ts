@@ -17,6 +17,10 @@ export class TillFloorZoneMenu extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      :host([embedded]) {
+        display: contents;
+      }
+
       wt-row-actions[hidden] {
         display: none;
       }
@@ -168,24 +172,26 @@ export class TillFloorZoneMenu extends LitElement {
           : nothing
       }
       <wt-button
-        icon="menu-add"
+        icon=${embedded ? nothing : "menu-add"}
         data-menu-item="spares"
         @click=${() => this.openPlanAction("spares")}
       >
         ${t("floor.add_spare")}
+        ${embedded ? html`<span data-floor-count>${sparesOf(this.tables).length}</span>` : nothing}
       </wt-button>
       <wt-button
-        icon="menu-open"
+        icon=${embedded ? nothing : "menu-open"}
         data-menu-item="taken-off"
         @click=${() => this.openPlanAction("taken-off")}
       >
         ${t(embedded ? "floor.taken_off_service" : "floor.taken_off")}
+        ${embedded ? html`<span data-floor-count>${takenOffOf(this.tables).length}</span>` : nothing}
       </wt-button>
       ${
         setName === null
           ? nothing
           : html`<wt-button
-              icon="menu-reset-plan"
+              icon=${embedded ? nothing : "menu-reset-plan"}
               data-menu-item="reset"
               @click=${() => this.openPlanAction("reset")}
             >

@@ -1,11 +1,10 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TillShell } from "./till-shell.js";
 import type { TillFloorScreen } from "../screens/till-floor-screen.js";
 import type { TableState } from "../api/floor-api.js";
-import { PHONE_WIDTH } from "./chooser-styles.js";
 import "../till-app.js";
 import "./till-shell.js";
 import "../screens/till-floor-screen.js";
@@ -98,43 +97,40 @@ for (const locale of ["en-GB", "es-ES"]) {
         });
         el.appendChild(floor);
         await floor.updateComplete;
+        const narrow = width === 390;
+        const footer = () => el.shadowRoot!.querySelector<HTMLElement>("[data-floor-bar]");
+        await vi.waitFor(() => expect(footer() !== null).toBe(narrow));
         const zoneMenu = floor.shadowRoot!.querySelector("till-floor-zone-menu")!;
-        await zoneMenu.updateComplete;
-        const zoneActions = zoneMenu.shadowRoot!.querySelector("wt-row-actions")!;
-        await zoneActions.updateComplete;
-        // Below the phone width the List/Map toggle is the zone menu's first item.
+        const actions = narrow
+          ? footer()!.querySelector('wt-row-actions[data-test="more-menu"]')!
+          : zoneMenu.shadowRoot!.querySelector("wt-row-actions")!;
+        const view = (narrow ? footer()! : floor.shadowRoot!).querySelector<HTMLElement>(
+          "[data-view-toggle]",
+        )!;
         const pressView = async () => {
-          if (matchMedia(PHONE_WIDTH).matches) {
-            await userEvent.click(zoneActions.shadowRoot!.querySelector("button")!);
-            await userEvent.click(
-              zoneMenu.shadowRoot!.querySelector<HTMLElement>('[data-menu-item="view"]')!,
-            );
-          } else {
-            const view = floor.shadowRoot!.querySelector<HTMLElement>("[data-view-toggle]")!;
-            await (view as TillShell).updateComplete;
-            await userEvent.click(view);
-          }
+          await userEvent.click(view);
           await floor.updateComplete;
-          await zoneMenu.updateComplete;
         };
         await pressView();
         expect(floor.shadowRoot!.querySelector("wt-floor-map")).toBeNull();
         await pressView();
         expect(floor.shadowRoot!.querySelector("wt-floor-map")).not.toBeNull();
-        await userEvent.click(zoneActions.shadowRoot!.querySelector("button")!);
-        expect(zoneActions.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(
-          true,
-        );
+        await userEvent.click(actions.shadowRoot!.querySelector("button")!);
+        const popupOpen = () =>
+          actions.shadowRoot!.querySelector("[popover]")!.matches(":popover-open");
+        expect(popupOpen()).toBe(true);
         await userEvent.keyboard("{Escape}");
-        expect(zoneActions.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(
-          false,
-        );
-        const actions = floor.shadowRoot!.querySelector<HTMLElement>(".actions")!;
-        const pill = floor.shadowRoot!.querySelector<HTMLElement>(".tabs wt-button")!;
-        expect(actions.getBoundingClientRect().right).toBeLessThanOrEqual(width);
-        expect(
-          Math.abs(actions.getBoundingClientRect().top - pill.getBoundingClientRect().top),
-        ).toBeLessThan(1);
+        expect(popupOpen()).toBe(false);
+        const zoneControl = narrow
+          ? footer()!.querySelector("[data-floor-zone-chooser]")!
+          : floor.shadowRoot!.querySelector(".tabs wt-button")!;
+        const controlRow = narrow ? footer()! : floor.shadowRoot!.querySelector(".actions")!;
+        expect(controlRow.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+        const mid = (element: Element) => {
+          const { top, height } = element.getBoundingClientRect();
+          return top + height / 2;
+        };
+        expect(Math.abs(mid(view) - mid(zoneControl))).toBeLessThan(1);
         await page.screenshot({
           path: `__screenshots__/a740-zones/floor-${locale}-${theme}-${width}.png`,
         });

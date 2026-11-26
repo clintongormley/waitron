@@ -125,7 +125,8 @@ export class WtRowActions extends LitElement {
           var(--wt-keyboard-inset),
           var(--wt-row-actions-bottom-offset, 0px)
         );
-        padding: var(--wt-keyboard-top) 0 var(--bottom-sheet-inset);
+        padding: var(--wt-keyboard-top) var(--wt-row-actions-sheet-inline-inset, 0px)
+          var(--bottom-sheet-inset);
         overflow: hidden;
         border: 0;
         border-radius: 0;
@@ -513,7 +514,12 @@ export class WtRowActions extends LitElement {
         @keydown=${this.onKeydown}
         @click=${this.onPopupClick}
       >
-        <div class="actions" @click=${this.judgeAction} @auxclick=${this.judgeAuxclick}>
+        <div
+          class="actions"
+          part=${this.bottomSheet ? "sheet" : nothing}
+          @click=${this.judgeAction}
+          @auxclick=${this.judgeAuxclick}
+        >
           <slot @slotchange=${this.onSlotChange} @click=${this.onAction}></slot>
         </div>
       </div>

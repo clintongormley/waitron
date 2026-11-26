@@ -6550,28 +6550,34 @@ it.each([["till", "floor", "till-floor-screen"]] as const)(
 it.each(["phone-portrait", "tablet-landscape"] as const)(
   "puts the narrow Floor controls at the bottom on a %s",
   async (formFactor) => {
-    const { el } = await mountApp({
-      getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
-      getDeviceIdentity: vi
-        .fn()
-        .mockResolvedValue({ deviceId: "fixed-device", name: "Fixed", formFactor }),
-    });
-    await toCounter(el);
-    const fixedShell = el.shadowRoot!.querySelector("till-shell")!;
-    await vi.waitFor(() =>
-      expect(
-        fixedShell.shadowRoot!.querySelector("[data-floor-bar] [data-floor-zone-chooser]"),
-      ).not.toBeNull(),
-    );
-    expect(fixedShell.shadowRoot!.querySelectorAll<HTMLButtonElement>(".tab")).toHaveLength(0);
-    openOrderAddress();
-    await flush(el);
-    const screen = el.shadowRoot!.querySelector("till-table-order-screen") as HTMLElement & {
-      embedded: boolean;
-    };
-    expect(screen).not.toBeNull();
-    expect(screen.embedded).toBe(true);
-    expect(location.pathname).toBe("/till/tabs/order");
+    const priorViewport = [innerWidth, innerHeight] as const;
+    await page.viewport(390, 844);
+    try {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, formFactor }),
+        getDeviceIdentity: vi
+          .fn()
+          .mockResolvedValue({ deviceId: "fixed-device", name: "Fixed", formFactor }),
+      });
+      await toCounter(el);
+      const fixedShell = el.shadowRoot!.querySelector("till-shell")!;
+      await vi.waitFor(() =>
+        expect(
+          fixedShell.shadowRoot!.querySelector("[data-floor-bar] [data-floor-zone-chooser]"),
+        ).not.toBeNull(),
+      );
+      expect(fixedShell.shadowRoot!.querySelectorAll<HTMLButtonElement>(".tab")).toHaveLength(0);
+      openOrderAddress();
+      await flush(el);
+      const screen = el.shadowRoot!.querySelector("till-table-order-screen") as HTMLElement & {
+        embedded: boolean;
+      };
+      expect(screen).not.toBeNull();
+      expect(screen.embedded).toBe(true);
+      expect(location.pathname).toBe("/till/tabs/order");
+    } finally {
+      await page.viewport(...priorViewport);
+    }
   },
 );
 
@@ -7251,12 +7257,23 @@ for (const locale of ["en-GB", "es-ES"] as const)
               await screen!.updateComplete;
               expect(screen!.shadowRoot!.querySelector("till-counter-waiting")).not.toBeNull();
             }
-            if (view.formFactor === "kds")
-              expect(shell(el)!.shadowRoot!.querySelector("header")).toBeNull();
-            else
-              expect(shell(el)!.shadowRoot!.querySelectorAll(".tab")).toHaveLength(
+            const shellRoot = shell(el)!.shadowRoot!;
+            if (view.formFactor === "kds") {
+              expect(shellRoot.querySelector("header")).toBeNull();
+            } else if (width < 800 && view.name.endsWith("-floor")) {
+              await vi.waitFor(() =>
+                expect(
+                  shellRoot.querySelector("[data-floor-bar] [data-floor-zone-chooser]"),
+                ).not.toBeNull(),
+              );
+              expect(shellRoot.querySelectorAll(".tab")).toHaveLength(
+                view.formFactor === "till" ? 1 : 0,
+              );
+            } else {
+              expect(shellRoot.querySelectorAll(".tab")).toHaveLength(
                 view.formFactor === "till" ? 2 : 1,
               );
+            }
             if (view.name === "kitchen-monitor")
               expect((screen as unknown as { monitor: boolean }).monitor).toBe(true);
             await new Promise((resolve) => requestAnimationFrame(resolve));

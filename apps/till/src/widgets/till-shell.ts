@@ -23,9 +23,13 @@ import {
 } from "@waitron/ui";
 // `baseStyles` pulls `@waitron/ui`'s module graph, which registers `wt-button` as a side effect.
 import { countText, currentLocale, t } from "../i18n/t.js";
-import type { StringKey } from "../i18n/strings.js";
 import type { TillFloorScreen } from "../screens/till-floor-screen.js";
-import { floorBarStyles } from "./floor-bar.js";
+import {
+  floorBarStyles,
+  floorMenuSection,
+  floorOperatorLine,
+  measureFloorControls,
+} from "./floor-bar.js";
 import { type HelpKey, helpBadgeLabel, helpText } from "../i18n/help-strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { canPressBuzz } from "../press-buzz.js";
@@ -169,9 +173,9 @@ export class TillShell extends LitElement {
   }
 
   /** More's About Waitron: focus goes back to More's own button, the menu having closed. */
-  #aboutOption(): TemplateResult {
+  #aboutOption(inFloorMenu = false): TemplateResult {
     return html`<wt-button
-      icon="menu-details"
+      icon=${inFloorMenu ? nothing : "menu-details"}
       class="about"
       @click=${(event: Event) =>
         this.#openAbout((event.currentTarget as HTMLElement).closest("wt-row-actions")!)}
@@ -549,7 +553,7 @@ export class TillShell extends LitElement {
 
   @state() private phone = false;
   @state() private narrowFloor = false;
-  #floorBar?: HTMLElement;
+  #floorControls?: HTMLElement;
   #phoneWidth?: MediaQueryList;
   readonly #onPhoneWidth = (event: MediaQueryListEvent) => {
     this.phone = event.matches;
@@ -571,8 +575,8 @@ export class TillShell extends LitElement {
     this.#phoneWidth = undefined;
     this.#observer?.disconnect();
     this.#observer = undefined;
-    if (this.#floorBar) this.#emit("floor-bar-resized", 0);
-    this.#floorBar = undefined;
+    if (this.#floorControls) this.#emit("floor-controls-resized", 0);
+    this.#floorControls = undefined;
     this.#stripObserver?.disconnect();
     this.#stripObserver = undefined;
     this.#barObserver?.disconnect();
@@ -797,14 +801,15 @@ export class TillShell extends LitElement {
       this.#observer = new ResizeObserver((entries) => {
         for (const entry of entries) {
           if (entry.target !== this) {
-            if (entry.target !== this.#floorBar) continue;
-            const height = entry.target.getBoundingClientRect().height;
-            this.#floorBar.style.setProperty("--wt-floor-bar-height", `${height}px`);
-            this.#emit("floor-bar-resized", height);
+            if (entry.target !== this.#floorControls) continue;
+            this.#emit("floor-controls-resized", measureFloorControls(this.#floorControls));
             continue;
           }
           this.#setNarrowFloor(entry.contentRect.width < 800);
-          if (this.formFactor === "till") continue;
+          if (this.formFactor === "till") {
+            void this.#measureCounterLogo();
+            continue;
+          }
           if (entry.contentRect.width > this.#fittedWidth) this.#stepBackOwed = true;
           this.#fittedWidth = entry.contentRect.width;
         }
@@ -812,12 +817,12 @@ export class TillShell extends LitElement {
       });
       this.#observer.observe(this);
     }
-    const floorBar = this.renderRoot.querySelector<HTMLElement>("[data-floor-bar]") ?? undefined;
-    if (floorBar !== this.#floorBar) {
-      if (this.#floorBar) this.#observer.unobserve(this.#floorBar);
-      if (floorBar) this.#observer.observe(floorBar, { box: "border-box" });
-      else this.#emit("floor-bar-resized", 0);
-      this.#floorBar = floorBar;
+    const controls = this.renderRoot.querySelector<HTMLElement>(".floor-controls") ?? undefined;
+    if (controls !== this.#floorControls) {
+      if (this.#floorControls) this.#observer.unobserve(this.#floorControls);
+      if (controls) this.#observer.observe(controls, { box: "border-box" });
+      else this.#emit("floor-controls-resized", 0);
+      this.#floorControls = controls;
     }
     if (this.formFactor === "till") return;
     this.#observeStrip();
@@ -839,9 +844,19 @@ export class TillShell extends LitElement {
   #setNarrowFloor(narrow: boolean): void {
     if (this.narrowFloor === narrow) return;
     this.narrowFloor = narrow;
-    if (narrow || !this.#floorBar) return;
-    const open = [...this.#floorBar.querySelectorAll<WtRowActions>("wt-row-actions")].find((menu) =>
-      menu.shadowRoot?.querySelector("[popover]")?.matches(":popover-open"),
+    if (narrow) {
+      const focused = this.shadowRoot!.activeElement;
+      if (focused?.matches('.head wt-row-actions[data-test="more-menu"]'))
+        void this.updateComplete.then(() =>
+          this.renderRoot
+            .querySelector<WtRowActions>('.floor-bar [data-test="more-menu"]')
+            ?.focus(),
+        );
+      return;
+    }
+    if (!this.#floorControls) return;
+    const open = [...this.#floorControls.querySelectorAll<WtRowActions>("wt-row-actions")].find(
+      (menu) => menu.shadowRoot?.querySelector("[popover]")?.matches(":popover-open"),
     );
     if (!open) return;
     open.hide();
@@ -914,12 +929,9 @@ export class TillShell extends LitElement {
   #observeCounter(): void {
     if (!this.isConnected) return;
     this.#counterObserver ??= new ResizeObserver(() => void this.#measureCounterLogo());
-    const targets = new Set<Element>([
-      this,
-      ...this.renderRoot.querySelectorAll(
-        ".head > .counter-logo, .head > .session, .till-strip > *",
-      ),
-    ]);
+    const targets = new Set<Element>(
+      this.renderRoot.querySelectorAll(".head > .counter-logo, .head > .session, .till-strip > *"),
+    );
     for (const target of this.#counterTargets)
       if (!targets.has(target)) this.#counterObserver.unobserve(target);
     for (const target of targets)
@@ -1134,7 +1146,9 @@ export class TillShell extends LitElement {
   }
 
   /** A handheld's More entries for the screens and settings. */
-  #items(): Record<
+  #items(
+    inFloorMenu = false,
+  ): Record<
     | "find-bill"
     | "expo"
     | "station"
@@ -1155,11 +1169,18 @@ export class TillShell extends LitElement {
     ): TemplateResult =>
       this.#withHelp(
         html`<wt-button
-          icon=${cls === "zones" || cls === "equipment" ? "menu-settings" : "menu-open"}
+          icon=${inFloorMenu ? nothing : cls === "zones" || cls === "equipment" ? "menu-settings" : "menu-open"}
           class=${cls}
           ?data-open-transfers=${opensTransfers}
           @click=${() => this.#emit(type)}
-          >${label}</wt-button
+          >${label}
+          ${
+            inFloorMenu && opensTransfers && this.transferCount !== undefined
+              ? html`<span data-floor-count data-test="department-transfers"
+                  >${this.transferCount}</span
+                >`
+              : nothing
+          }</wt-button
         >`,
         help,
         label,
@@ -1233,9 +1254,9 @@ export class TillShell extends LitElement {
     const disabled = this.clockBusy || state === null;
     const action = (kind: TillClockAction, label: string) =>
       html`<wt-button
-        icon=${{ in: "menu-clock-in", out: "menu-logout", "break-start": "menu-start-break", "break-end": "menu-end-break" }[kind]}
+        icon=${inFloorMenu ? nothing : { in: "menu-clock-in", out: "menu-logout", "break-start": "menu-start-break", "break-end": "menu-end-break" }[kind]}
         data-clock-action=${kind}
-        variant=${disabled ? "secondary" : "primary"}
+        variant=${disabled || inFloorMenu ? "secondary" : "primary"}
         .disabled=${disabled}
         @click=${() => this.#emit("clock-action", { action: kind })}
         >${label}</wt-button
@@ -1244,22 +1265,7 @@ export class TillShell extends LitElement {
       this.clockAvailable && state !== null && state.state !== "out"
         ? action("out", t("clock.out"))
         : nothing;
-    const initials = inFloorMenu
-      ? this.operatorName
-          .trim()
-          .split(/\s+/u, 2)
-          .map((word) => Array.from(word)[0])
-          .join("")
-          .toLocaleUpperCase(currentLocale())
-      : "";
-    return html` ${
-      inFloorMenu
-        ? html`<div class="floor-operator">
-            <span class="floor-operator-initials" aria-hidden="true">${initials}</span>
-            ${this.#operatorName()}${clockOut}
-          </div>`
-        : nothing
-    }
+    return html`${inFloorMenu ? floorOperatorLine(this.operatorName, this.#operatorName(), clockOut) : nothing}
     ${
       this.clockAvailable
         ? html`
@@ -1267,7 +1273,7 @@ export class TillShell extends LitElement {
             ${
               state === null
                 ? html`<wt-button
-                    icon="menu-retry"
+                    icon=${inFloorMenu ? nothing : "menu-retry"}
                     data-clock-retry
                     .disabled=${this.clockBusy}
                     @click=${() => this.#emit("retry-clock-read")}
@@ -1284,11 +1290,11 @@ export class TillShell extends LitElement {
     }${theme ? this.#themeChoices() : nothing}`;
   }
 
-  #operatorHours(): TemplateResult | typeof nothing {
+  #operatorHours(inFloorMenu = false): TemplateResult | typeof nothing {
     if (!this.clockAvailable) return nothing;
     return html`
       <wt-button
-        icon="menu-hours"
+        icon=${inFloorMenu ? nothing : "menu-hours"}
         data-my-hours
         .disabled=${this.hoursBusy}
         @click=${() => this.#emit("my-hours")}
@@ -1296,7 +1302,7 @@ export class TillShell extends LitElement {
       >
       ${this.#withHelp(
         html`<wt-button
-          icon="menu-edit"
+          icon=${inFloorMenu ? nothing : "menu-edit"}
           data-fix-hours
           .disabled=${this.hoursBusy}
           @click=${() => this.#emit("fix-my-hours")}
@@ -1409,12 +1415,8 @@ export class TillShell extends LitElement {
   }
 
   #floorMenu(floor: TillFloorScreen): TemplateResult {
-    const items = this.#items();
+    const items = this.#items(true);
     const pending = this.transferCount !== undefined && this.transferCount > 0;
-    const section = (label: StringKey, rows: TemplateResult) =>
-      html` <section class="settings-group" aria-label=${t(label)}>
-        <span class="settings-heading">${t(label)}</span>${rows}
-      </section>`;
     return html`<wt-row-actions
       data-test="more-menu"
       icon="hamburger"
@@ -1425,9 +1427,9 @@ export class TillShell extends LitElement {
       ${pending ? html`<wt-count-badge slot="badge" tone="warning" .count=${this.transferCount!}></wt-count-badge>` : nothing}
       <section aria-label=${t("floor.menu_you")}>${this.#operatorActions(false, true)}</section>
       ${floor.zonePlanRows()}
-      ${section("floor.menu_bills_cash", html`${items["find-bill"]}${this.#drawerItem("cash")}${this.#drawerItem("close")}${items["transfer-count"]}${items["transfer-button"]}`)}
-      ${section("floor.menu_time", html`${this.#operatorHours()}${items.schedule}`)}
-      ${section(
+      ${floorMenuSection("floor.menu_bills_cash", html`${items["find-bill"]}${this.#drawerItem("cash", true)}${this.#drawerItem("close", true)}${items["transfer-button"]}`)}
+      ${floorMenuSection("floor.menu_time", html`${this.#operatorHours(true)}${items.schedule}`)}
+      ${floorMenuSection(
         "floor.menu_device",
         html`
           ${this.#chooser("group")}${this.#helpSwitch()}
@@ -1436,8 +1438,8 @@ export class TillShell extends LitElement {
             ${items.equipment}${items.profile}${this.#themeChoices()}
           </details>
           ${items.expo}${this.formFactor !== "till" || this.testingKitchen ? items.station : nothing}
-          ${this.#reportOption()}${this.#aboutOption()}
-          <wt-button icon="menu-logout" class="logout" @click=${() => this.#emit("logout")}
+          ${this.#reportOption(true)}${this.#aboutOption(true)}
+          <wt-button class="logout" @click=${() => this.#emit("logout")}
             >${t("shell.logout")}</wt-button
           >
           ${this.#poweredBy()}
@@ -1446,10 +1448,10 @@ export class TillShell extends LitElement {
     </wt-row-actions>`;
   }
 
-  #reportOption(): TemplateResult | typeof nothing {
+  #reportOption(inFloorMenu = false): TemplateResult | typeof nothing {
     return reportAvailable()
       ? html`<wt-button
-          icon="menu-report"
+          icon=${inFloorMenu ? nothing : "menu-report"}
           data-report-problem
           class="report-problem"
           @click=${(event: Event) => {
@@ -1471,16 +1473,16 @@ export class TillShell extends LitElement {
       : nothing;
   }
 
-  #drawerItem(action: "close" | "cash") {
+  #drawerItem(action: "close" | "cash", inFloorMenu = false) {
     return this.canCloseDrawer
       ? html`<wt-button
-          icon=${action === "close" ? "menu-drawer" : "menu-cash"}
+          icon=${inFloorMenu ? nothing : action === "close" ? "menu-drawer" : "menu-cash"}
           class=${`drawer-${action}`}
           @click=${(event: Event) =>
             this.#emit(`open-drawer-${action}`, {
               opener: (event.currentTarget as HTMLElement).closest("wt-row-actions"),
             })}
-          >${t(action === "close" ? "drawer_close.title" : "drawer_entry.title")}</wt-button
+          >${t(action === "cash" ? "drawer_entry.title" : inFloorMenu ? "floor.close_drawer" : "drawer_close.title")}</wt-button
         >`
       : nothing;
   }
@@ -1712,10 +1714,12 @@ export class TillShell extends LitElement {
         </div>
         ${
           bottomFloor
-            ? html`${bottomFloor.otherZoneLine()}
+            ? html`<div class="floor-controls">
+                ${bottomFloor.otherZoneLine()}
                 <footer data-floor-bar class="floor-bar">
                   ${bottomFloor.footerControls(() => this.#emit("open-device-zones"))}${this.#floorMenu(bottomFloor)}
-                </footer>`
+                </footer>
+              </div>`
             : nothing
         }
       </div>

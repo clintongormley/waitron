@@ -3028,6 +3028,40 @@ describe("a handheld's zones", () => {
       expect(cue()?.querySelector("span")?.textContent?.trim()).toBe("Room · 2 ready");
     });
 
+    it("the map fills the available narrow floor at phone width", async () => {
+      await pageAt(390, 844);
+      applyTokens(document.documentElement);
+      const room = {
+        ...tableIn("t-room", "room"),
+        today: {
+          placement: { x: 0, y: 0, width: 2, height: 2, shape: "round", rotation: 0 },
+          seats: 4,
+          fixed: false,
+          takenOff: false,
+          joinId: null,
+          joinSeats: null,
+          zoneRevision: 0,
+        },
+      };
+      const { el } = await mountHandheld(selection(["room"], "room"), "phone-portrait", {
+        listZones: vi
+          .fn()
+          .mockResolvedValue(
+            orderedFloorZones.map((zone) =>
+              zone.id === "room" ? { ...zone, hasPlan: true } : zone,
+            ),
+          ),
+        getTablesState: vi.fn().mockResolvedValue([room]),
+      });
+      el.parentElement!.id = "app";
+      await vi.waitFor(() => {
+        const map = floor(el).shadowRoot!.querySelector("wt-floor-map")!.getBoundingClientRect();
+        const bar = floorBar(el)!.getBoundingClientRect();
+        expect(map.height).toBeGreaterThan(600);
+        expect(bar.top - map.bottom).toBeLessThanOrEqual(16);
+      });
+    });
+
     it("the zone sheet leaves the narrow floor bar visible in the real page", async () => {
       await pageAt(700, 500);
       applyTokens(document.documentElement);
@@ -3037,7 +3071,10 @@ describe("a handheld's zones", () => {
       const rows = chooser.shadowRoot!.querySelector(".actions")!;
       await vi.waitFor(() => {
         const bar = floorBar(el)!.getBoundingClientRect();
-        expect(rows.getBoundingClientRect().bottom).toBeCloseTo(bar.top, 0);
+        const sheet = rows.getBoundingClientRect();
+        expect(sheet.bottom).toBeCloseTo(bar.top, 0);
+        expect(sheet.left).toBeCloseTo(bar.left, 0);
+        expect(sheet.right).toBeCloseTo(bar.right, 0);
       });
     });
 
@@ -3197,7 +3234,7 @@ describe("a handheld's zones", () => {
       const { el, api } =
         formFactor === "till"
           ? await mount(selection(["room"], "room"), over)
-          : await mountHandheld(selection(["room"], "room"), formFactor, over);
+          : await mountHandheld(selection(["room", "garden"], "room"), formFactor, over);
       Object.assign(api, answeredPartyAllergy(el));
       el.parentElement!.id = "app";
       await onReadyFloor(el);
@@ -3274,7 +3311,13 @@ describe("a handheld's zones", () => {
           const box = toast.getBoundingClientRect();
           expect(box.height).toBeGreaterThan(0);
           expect(bar.bottom).toBeLessThanOrEqual(window.innerHeight);
-          expect(box.bottom).toBeLessThanOrEqual(bar.top);
+          const nearestControl =
+            width < 800
+              ? shell(el)
+                  .shadowRoot!.querySelector("[data-floor-other-zone]")!
+                  .getBoundingClientRect()
+              : bar;
+          expect(box.bottom).toBeLessThanOrEqual(nearestControl.top);
         });
       },
     );

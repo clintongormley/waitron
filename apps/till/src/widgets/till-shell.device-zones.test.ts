@@ -301,6 +301,7 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
         lastEntryId: "clock-in",
       },
       activeScreen: "floor",
+      canCloseDrawer: true,
       transferAvailable: true,
       transferCount: 2,
     });
@@ -328,14 +329,23 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     expect(root.querySelectorAll('[data-test="more-menu"]')).toHaveLength(1);
     expect(bar()!.querySelector("[data-floor-zone-chooser]")!.textContent).toContain("Dining room");
     expect(bar()!.querySelector('[slot="badge"]')).toHaveProperty("count", 2);
+    const trigger = bar()!
+      .querySelector("[data-floor-zone-chooser]")!
+      .shadowRoot!.querySelector("button")!;
+    expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(48);
     const more = () => root.querySelector<HTMLElement>('[data-test="more-menu"]')!;
     const openMore = () => userEvent.click(more().shadowRoot!.querySelector("button")!);
     await openMore();
+    expect(more().querySelector("[data-open-transfers] [data-floor-count]")?.textContent).toBe("2");
+    expect(more().querySelector(".drawer-close")?.textContent?.trim()).toBe("Close the drawer");
     const person = more().querySelector(".operator")!;
     expect(person.parentElement?.querySelector('[data-clock-action="out"]')).not.toBeNull();
-    expect(more().querySelector('[data-menu-item="taken-off"]')?.textContent?.trim()).toBe(
-      "Taken off",
-    );
+    expect(
+      more()
+        .querySelector('[data-menu-item="taken-off"]')
+        ?.textContent?.trim()
+        .replace(/\s+/g, " "),
+    ).toBe("Taken off 0");
     expect(more().querySelector('[data-menu-item="reset"]')?.textContent?.trim()).toBe(
       "Back to the Dinner plan",
     );
@@ -347,6 +357,14 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
         true,
       ),
     );
+    await page.viewport(820, 844);
+    await vi.waitFor(() => expect(bar()).toBeNull());
+    const wideMenu = floor.shadowRoot!.querySelector("till-floor-zone-menu")!;
+    expect(wideMenu).toBe(zoneMenu);
+    expect(wideMenu.shadowRoot!.querySelector('[data-dialog="spares"]')).toHaveProperty(
+      "open",
+      true,
+    );
     await userEvent.keyboard("{Escape}");
     await vi.waitFor(() =>
       expect(zoneMenu.shadowRoot!.querySelector('[data-dialog="spares"]')).toHaveProperty(
@@ -356,7 +374,8 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     );
     await page.viewport(700, 844);
     await vi.waitFor(() => expect(bar()).not.toBeNull());
-    expect(floor.shadowRoot!.querySelector(".zone-toolbar")!.hasAttribute("hidden")).toBe(true);
+    expect(floor.shadowRoot!.querySelector(".zone-toolbar [data-zone]")).toBeNull();
+    expect(zoneMenu.shadowRoot!.querySelector("wt-row-actions")?.hidden).toBe(true);
     await openMore();
     await page.viewport(800, 844);
     await vi.waitFor(() => {
@@ -364,6 +383,10 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
       expect(more().shadowRoot!.activeElement).toBe(more().shadowRoot!.querySelector("button"));
     });
     expect(floor.shadowRoot!.querySelector(".zone-toolbar")).not.toBeNull();
+    await page.viewport(700, 844);
+    await vi.waitFor(() =>
+      expect(more().shadowRoot!.activeElement).toBe(more().shadowRoot!.querySelector("button")),
+    );
   } finally {
     await page.viewport(1280, 900);
   }

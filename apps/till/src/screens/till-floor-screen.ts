@@ -1,5 +1,6 @@
 import {
   floorOtherZone,
+  floorScreenFooterStyles,
   floorZoneControls,
   zoneTabMarks,
   type ZoneTabMark,
@@ -340,6 +341,7 @@ export class TillFloorScreen extends LitElement {
     servicePeriodStyles,
     edgeFadeStyles,
     floorTrayStyles,
+    floorScreenFooterStyles,
     floorRingStyles,
     signalChipStyles,
     stepChipStyles,
@@ -385,10 +387,6 @@ export class TillFloorScreen extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
         margin-inline-start: auto;
-      }
-
-      .zone-toolbar[hidden] {
-        display: none;
       }
 
       .zone-toolbar {
@@ -1123,11 +1121,12 @@ export class TillFloorScreen extends LitElement {
   }
 
   @property({ attribute: false }) useFloorFooter = false;
+  #footerZone?: ZoneOnScreen;
 
   override updated(): void {
-    if (this.useFloorFooter)
+    if (this.useFloorFooter && this.#footerZone !== this.#zone)
       this.dispatchEvent(new Event("floor-footer-update", { bubbles: true }));
-    // Read by the app, which lifts the Sent and Served toasts clear of the bar.
+    this.#footerZone = this.useFloorFooter ? this.#zone : undefined;
     this.toggleAttribute("ready-bar", this.shadowRoot!.querySelector("[data-ready-bar]") !== null);
     this.#watchReminders();
     this.#watchFloor();
@@ -2294,6 +2293,7 @@ export class TillFloorScreen extends LitElement {
       this.zones,
       this.activeZone,
       this.useFloorFooter,
+      this.canChangeToday,
       this.refusedZoneId,
       this.viewOverride,
       this.viewMemory,
@@ -2391,11 +2391,15 @@ export class TillFloorScreen extends LitElement {
   override render() {
     const { tabs, marks, refusedZone, activeKey, planned, view, listed, onMap, unplaced } =
       this.#zone;
-    // A read still out keeps the empty list or map.
     const empty = listed.length === 0 && onMap.length === 0 ? this.#emptyFloor(activeKey) : nothing;
     return html`
-      <section class="screen" tabindex="-1" aria-label=${t("floor.title")}>
-        <div class="zone-toolbar" ?hidden=${this.useFloorFooter}>
+      <section
+        class="screen"
+        ?data-floor-footer=${this.useFloorFooter}
+        tabindex="-1"
+        aria-label=${t("floor.title")}
+      >
+        <div class="zone-toolbar">
           ${
             !this.useFloorFooter && tabs.length > 1
               ? html`${this.#tabsEdge("start", tabs, marks)}
@@ -2422,7 +2426,7 @@ export class TillFloorScreen extends LitElement {
                     ${view === "map" ? t("floor.view_list") : t("floor.view_map")}
                   </wt-button>`
             }
-            ${this.useFloorFooter ? nothing : this.#zoneMenu(planned, activeKey, view)}
+            ${this.#zoneMenu(planned, activeKey, view)}
             ${helpBadge(
               view === "list"
                 ? "help.floor.tables_list"
@@ -2434,7 +2438,6 @@ export class TillFloorScreen extends LitElement {
             )}
           </div>
         </div>
-        ${this.useFloorFooter ? this.#zoneMenu(planned, activeKey, view) : nothing}
         ${this.#layoutBanner(activeKey)}
         ${
           refusedZone === undefined
@@ -2478,7 +2481,6 @@ export class TillFloorScreen extends LitElement {
     `;
   }
 
-  /** Keyed on what would be drawn, not on `visible`: tables taken off today's plan are not drawn. */
   #emptyFloor(activeKey: string | undefined): TemplateResult | typeof nothing {
     if (this.tablesAnswered && activeKey !== undefined)
       return html`<p data-floor-no-tables role="status">

@@ -567,7 +567,10 @@ botón sigue resaltado sin el ✎ hasta que sales, y entonces desaparece, mientr
 que sales con platos aún sin enviar conserva su botón con ✎. Si
 otra persona se queda con tu cuenta, deja de contar como tuya: al momento en la mesa en la que
 estás, y en cualquier otra mesa cuando Sala vuelva a actualizar sus mesas. Cuando hay más botones
-de los que caben, deslízalos hacia un lado. Un borde difuminado indica dónde hay más.
+de los que caben, deslízalos hacia un lado. Un borde difuminado indica dónde hay más. En una
+tableta con la sala en pantalla ancha, **Sala** aparece primero. Con un teclado, usa las flechas
+izquierda y derecha para pasar de **Sala** a tus mesas. Inicio abre **Sala** y Fin abre la última
+mesa. En una pantalla estrecha, usa Tab para llegar al botón de una mesa y Enter para abrirla.
 
 Elige **Sala** después de una mesa para abrir su zona, si este dispositivo la muestra. En una
 pantalla estrecha, toca el nombre de la zona abajo para cambiar de zona. Abre **Más** (☰) abajo

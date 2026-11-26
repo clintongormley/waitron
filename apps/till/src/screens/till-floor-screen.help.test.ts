@@ -141,6 +141,13 @@ describe("Floor's help badges", () => {
     await expectText(badge, "help.floor.tables_map");
   });
 
+  it("opens map help on the narrow floor while its controls are in the footer", async () => {
+    await page.viewport(390, 844);
+    const { el } = await mount({ useFloorFooter: true });
+    await helpOn(el);
+    await expectText(toolbarBadge(el)!, "help.floor.tables_map");
+  });
+
   it("with help on, the toolbar's badge explains the map without dragging when today's plan cannot be changed", async () => {
     const { el } = await mount({ canChangeToday: false });
     await helpOn(el);

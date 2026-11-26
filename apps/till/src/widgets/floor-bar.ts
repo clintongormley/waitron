@@ -1,18 +1,22 @@
-import { css, html, nothing } from "lit";
+import { css, html, nothing, type TemplateResult } from "lit";
 import type { FloorCueIcon, ZoneTab } from "@waitron/ui";
 import type { TableState } from "../api/floor-api.js";
-import { t } from "../i18n/t.js";
+import type { StringKey } from "../i18n/strings.js";
+import { currentLocale, t } from "../i18n/t.js";
 import { kindCue, kindWords, mapKinds, topTabKind, type MapKind } from "../state/floor-look.js";
 
 type Marks = ReadonlyMap<string, { kind: MapKind; words: string }>;
 
 export const floorToastStyles = css`
+  :host {
+    --wt-floor-controls-height: 0px;
+  }
   .submitted-toast {
     position: fixed;
     inset-inline: var(--wt-space-3);
     bottom: max(
       calc(var(--wt-tap-min) + 2 * var(--wt-space-3) + env(safe-area-inset-bottom)),
-      calc(var(--wt-floor-bar-height, 0px) + var(--wt-page-padding, 0px) + var(--wt-space-2))
+      calc(var(--wt-floor-controls-height) + var(--wt-page-padding, 0px) + var(--wt-space-2))
     );
     z-index: 10;
   }
@@ -24,9 +28,40 @@ export const floorToastStyles = css`
   }
 `;
 
+export const floorScreenFooterStyles = css`
+  .screen[data-floor-footer] {
+    position: relative;
+    padding-block: 0;
+  }
+  .screen[data-floor-footer] .zone-toolbar,
+  .screen[data-floor-footer] .actions {
+    display: contents;
+  }
+  .screen[data-floor-footer] .actions > wt-help-tooltip {
+    inset-block-start: var(--wt-space-2);
+    inset-inline-end: var(--wt-space-2);
+  }
+  .screen[data-floor-footer] .map {
+    flex: 1;
+  }
+  .screen[data-floor-footer] wt-floor-map {
+    flex: 1;
+    inline-size: 100%;
+    aspect-ratio: auto;
+    min-block-size: calc(var(--wt-tap-min) * 3);
+    border-radius: var(--wt-radius-md);
+  }
+`;
+
 export const floorBarStyles = css`
+  .floor-controls {
+    display: flex;
+    flex-direction: column;
+    flex: none;
+  }
   .floor-bar {
     --wt-floor-bar-height: 0px;
+    --wt-row-actions-sheet-inline-inset: var(--wt-page-padding, 0px);
     --wt-row-actions-bottom-offset: calc(
       var(--wt-floor-bar-height, 0px) + var(--wt-page-padding, 0px)
     );
@@ -43,6 +78,10 @@ export const floorBarStyles = css`
     background: var(--wt-color-surface);
     border-block-start: 1px solid var(--wt-color-border);
   }
+  .floor-bar > wt-row-actions::part(trigger),
+  .floor-bar > [data-view-toggle]::part(button) {
+    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
+  }
   .floor-bar > wt-row-actions::part(trigger) {
     inline-size: 100%;
     border: 1px solid var(--wt-color-border);
@@ -51,8 +90,27 @@ export const floorBarStyles = css`
   .floor-bar [data-floor-zone-chooser]::part(trigger) {
     overflow-wrap: anywhere;
     justify-content: start;
+    font-size: var(--wt-font-size-lg);
     font-weight: var(--wt-font-weight-bold);
     text-align: start;
+  }
+  .floor-bar [data-test="more-menu"]::part(trigger) {
+    min-inline-size: calc(var(--wt-tap-min) + var(--wt-space-1));
+  }
+  .floor-bar [slot="badge"] {
+    inset-block-start: calc(-1 * var(--wt-space-1));
+    inset-inline-end: calc(-1 * var(--wt-space-1));
+  }
+  .floor-bar wt-row-actions::part(sheet)::before {
+    content: "";
+    display: block;
+    inline-size: var(--wt-tap-min);
+    block-size: var(--wt-space-1);
+    flex: none;
+    align-self: center;
+    margin-block: var(--wt-space-1) var(--wt-space-2);
+    border-radius: var(--wt-radius-full);
+    background: var(--wt-color-border);
   }
   .floor-bar [data-floor-zone] {
     border-block-end: 1px solid var(--wt-color-border);
@@ -73,6 +131,51 @@ export const floorBarStyles = css`
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
     font-weight: var(--wt-font-weight-bold);
+    text-transform: uppercase;
+  }
+  .floor-bar summary.settings-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-sizing: border-box;
+    min-block-size: var(--wt-tap-min);
+    color: var(--wt-color-text);
+    font-size: var(--wt-font-size-md);
+    font-weight: var(--wt-font-weight-normal);
+    text-transform: none;
+    cursor: pointer;
+  }
+  .floor-bar summary.settings-heading::after {
+    content: "›" / "";
+  }
+  .floor-bar details[open] > summary.settings-heading::after {
+    content: "⌄" / "";
+  }
+  .floor-bar [data-test="more-menu"] wt-button::part(button) {
+    min-block-size: var(--wt-tap-min);
+    padding-inline: var(--wt-space-4);
+  }
+  .floor-bar [data-floor-zone] {
+    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
+  }
+  .floor-bar [data-test="more-menu"] wt-button:not([data-clock-action="out"]) {
+    inline-size: 100%;
+  }
+  .floor-bar [data-test="more-menu"] wt-button:not([data-clock-action="out"])::part(button) {
+    border-block-end: 1px solid var(--wt-color-border);
+    border-radius: 0;
+  }
+  .floor-bar [data-test="more-menu"] wt-button:not([data-clock-action="out"])::part(button)::after {
+    content: "›" / "";
+    margin-inline-start: auto;
+    color: var(--wt-color-text-muted);
+  }
+  .floor-bar [data-floor-count] {
+    margin-inline-start: auto;
+    color: var(--wt-color-text-muted);
+  }
+  .floor-bar [data-test="more-menu"] wt-button:has([data-floor-count])::part(button)::after {
+    margin-inline-start: 0;
   }
   .floor-operator {
     display: flex;
@@ -97,11 +200,16 @@ export const floorBarStyles = css`
   .floor-operator [data-clock-action] {
     width: auto;
   }
+  .floor-operator [data-clock-action]::part(button) {
+    border: 1px solid var(--wt-color-border);
+    border-radius: var(--wt-radius-md);
+  }
   [data-floor-other-zone] {
     margin: var(--wt-space-1) max(var(--wt-space-3), env(safe-area-inset-right)) var(--wt-space-2)
       max(var(--wt-space-3), env(safe-area-inset-left));
   }
   [data-floor-other-zone]::part(button) {
+    min-block-size: var(--wt-tap-min);
     justify-content: start;
     background: var(--wt-color-tab-warning-tint);
     font-weight: var(--wt-font-weight-normal);
@@ -121,6 +229,35 @@ export const floorBarStyles = css`
     color: var(--wt-color-on-success);
   }
 `;
+
+export function floorMenuSection(label: StringKey, rows: TemplateResult) {
+  return html`<section class="settings-group" aria-label=${t(label)}>
+    <span class="settings-heading">${t(label)}</span>${rows}
+  </section>`;
+}
+
+export function floorOperatorLine(
+  name: string,
+  operator: TemplateResult,
+  clockOut: TemplateResult | typeof nothing,
+) {
+  const initials = name
+    .trim()
+    .split(/\s+/u, 2)
+    .map((word) => Array.from(word)[0])
+    .join("")
+    .toLocaleUpperCase(currentLocale());
+  return html`<div class="floor-operator">
+    <span class="floor-operator-initials" aria-hidden="true">${initials}</span
+    >${operator}${clockOut}
+  </div>`;
+}
+
+export function measureFloorControls(controls: HTMLElement): number {
+  const bar = controls.querySelector("footer")!;
+  bar.style.setProperty("--wt-floor-bar-height", `${bar.getBoundingClientRect().height}px`);
+  return controls.getBoundingClientRect().height;
+}
 
 export function floorZoneControls(
   tabs: readonly ZoneTab[],
