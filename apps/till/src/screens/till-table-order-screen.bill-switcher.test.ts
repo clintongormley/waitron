@@ -280,6 +280,9 @@ describe("A803 switcher: the table screen's bill switcher", () => {
 
   it.each([
     ["en", "4", "Bills on Table 4"],
+    ["en", "12A", "Bills on Table 12A"],
+    ["en", "4, 5", "Bills on Tables 4, 5"],
+    ["es", "4, 5", "Cuentas de las mesas 4, 5"],
     ["en", "Table 4", "Bills on Table 4"],
     ["en", "Ventana", "Bills on Ventana"],
     ["es", "Mesa 4", "Cuentas de Mesa 4"],

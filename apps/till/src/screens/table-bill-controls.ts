@@ -4,7 +4,7 @@ import {
   actionChoiceStyles,
   actionDividerStyles,
 } from "@waitron/ui/src/components/wt-row-actions.js";
-import { decimal, formatMoney } from "@waitron/shared";
+import { decimal, formatMoney, TABLE_SEPARATOR } from "@waitron/shared";
 import type { PartyBill, TableParty } from "../api/floor-api.js";
 import { countText, currentLocale, fill, named, t } from "../i18n/t.js";
 import { billLabel, billNumberLabel, shownBills } from "../state/bill-state.js";
@@ -83,6 +83,18 @@ export function billRowContent(bill: PartyBill, party: TableParty, marked = fals
     )}`;
 }
 
+function billSheetHeading(party: TableParty): string {
+  const words = { party: party.displayName };
+  if (party.name !== null) return fill(t("table.bills_for_party"), words);
+  const labels = party.displayName.split(TABLE_SEPARATOR);
+  if (labels.some((label) => !/^\d+[a-z]?$/i.test(label)))
+    return fill(t("table.bills_on_table"), words);
+  return fill(
+    t(labels.length === 1 ? "table.bills_on_numbered_table" : "table.bills_on_numbered_tables"),
+    words,
+  );
+}
+
 export interface BillSwitcherOptions {
   party: TableParty | null;
   bills: readonly PartyBill[];
@@ -113,13 +125,7 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
     shown !== undefined && bills.length > 1
       ? ` · ${fill(t("table.bill_position"), { position: String(index + 1), count: String(bills.length) })}`
       : "";
-  const headingKey =
-    party.name !== null
-      ? "table.bills_for_party"
-      : /^\d+$/.test(party.displayName)
-        ? "table.bills_on_numbered_table"
-        : "table.bills_on_table";
-  const heading = bottomSheet ? fill(t(headingKey), { party: party.displayName }) : undefined;
+  const heading = bottomSheet ? billSheetHeading(party) : undefined;
   const marked = othersUnsent(bills, party, billId, options.personId);
   const words = marked.length === 0 ? undefined : unsentWords(marked);
   const label = shown === undefined ? closed : `${t("table.bills_title")}: ${closed}${position}`;

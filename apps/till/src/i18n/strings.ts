@@ -1918,6 +1918,7 @@ export const en = {
   "table.bills_title": "Bills",
   "table.bills_on_table": "Bills on {party}",
   "table.bills_on_numbered_table": "Bills on Table {party}",
+  "table.bills_on_numbered_tables": "Bills on Tables {party}",
   "table.bills_for_party": "Bills for {party}",
   // `{party}` is the party's display name; `{n}` the number the bill holds at its table; `{name}`
   // the name staff gave the bill.
@@ -4352,6 +4353,7 @@ export const es: Record<StringKey, string> = {
   "table.bills_title": "Cuentas",
   "table.bills_on_table": "Cuentas de {party}",
   "table.bills_on_numbered_table": "Cuentas de la mesa {party}",
+  "table.bills_on_numbered_tables": "Cuentas de las mesas {party}",
   "table.bills_for_party": "Cuentas de {party}",
   "table.bill_of": "{party} · Cuenta {n}",
   "table.bill_of_named": "{party} · Cuenta {n} · {name}",
