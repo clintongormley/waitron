@@ -1,19 +1,62 @@
 # A1418 box stop intent
 
-[Design §10](../specs/2026-11-07-a1418-box-stop-intent-design.md#10-order-of-work-and-what-it-waits-for) starts with marks and bucket checks. The [old plan](2026-11-07-a1418-part-1-stop-marks.md) is historical. Each PR stands on main and opens within three active hours. Test first and run Lane H’s golden fiscal and menu gates unedited.
+A manager can take a box out of service with a checked backup. If that box starts again, it waits
+for an administrator. After a power cut a one-box venue waits up to a minute for configured
+sources, while a restart can sell at once. A box that verifies it has been replaced stops selling
+and filing. Each PR works on its own. Test first, run Lane H’s fiscal and menu gates unedited, and
+open each PR within three active hours.
+[Design](../specs/2026-11-07-a1418-box-stop-intent-design.md)
+[November 7 plan](2026-11-07-a1418-part-1-stop-marks.md)
 
-## Record stops and alert managers (100–150 code / 120–180 test lines)
+1. **Record stops and alert managers (140–200 code / 170–250 test lines).** Write a durable local
+   `restart` mark on the first stop signal to an admitted primary via `run-server.ts` and its two
+   entry points. Keep the deadline and log write failure. Consume that mark once under the venue
+   lock, even on starts that wait or enter repair. Keep it out of archives and clear it on restore
+   placement and reset. Capture the previous heartbeat
+   while taking the lock and before writing the new holder. Date unplanned-stop email and incidents
+   from it in `box-alert-email.ts`. A valid mark records intent
+   even if closing reaches its deadline. Test signal versus force kill and direct close in
+   `run-server.signals.test.ts` and `run-server.test.ts`. Add `boot.stop-mark.test.ts` for one-time
+   use, restart while waiting, fresh setup, restore and incident delivery.
 
-Write one durable, box-local `restart` mark when a trading box takes a stop signal. Wire `run-server.ts` through `node-entry.ts` and `bin.ts` and keep direct `close()` for cleanup. Log write failure and keep the deadline. Read and clear the mark on the next established start. Declare the file in `state-layout.ts` for reset and archive checks. Use the previous holder heartbeat for an unplanned-stop incident and manager email through `box-alert-email.ts`. Read it before the new holder overwrites it. Run `run-server.signals.test.ts` and `run-server.test.ts` for clean and forced stops, write failure and direct close. Add `boot.stop-mark.test.ts` for one-time use, fresh setup, failed start and restore placement clearing stale marks. Startup timing stays as it is in this slice.
+2. **Start a restored box above its bucket (180–270 / 200–320).** In `rebuild-first-start.ts`, take
+   a membership term above the pointer and all generation names. Reuse `waiting-start.ts` if a
+   configured bucket cannot be read. Hold sales and filing until it answers, or an administrator
+   explicitly confirms the old box is off and carries on. Test a higher generation than the
+   pointer, a silent bucket and resuming once in `rebuild-first-start.test.ts` and `waiting-start.test.ts`.
 
-## Later PRs (code and test lines)
+3. **Stop a replaced box (250–350 / 280–400).** Preserve A1342’s endorsed-peer rule in
+   `stream-host.ts`. Prove a real archive and bucket restore can supply newer signed evidence
+   using the old box’s local public key while they share an identity. Exclude the restore’s own
+   first start. Use the waiting surface and stop admitting work as soon as replacement is verified. Save the
+   venue and newer term in a box-local `replaced.json` before restart, then check it before acting on
+   `restart`. Keep it out of archives. Restore and reset clear it. After HTTPS confirmation that the replacement is off,
+   `carry-on.ts` raises the term before clearing the record. Test forged evidence and a late
+   answer followed by an offline reboot in `stream-host.test.ts` and `boot.stop-mark.test.ts`.
+   Email managers on replacement. Early signed claims and equal-term evidence need a separate
+   decision. A1425’s fresh identities will also change the trust case.
 
-**Bucket startup and late answers (150–220 code / 180–260 test lines).** Extend `stream-host.ts`’s `readNewerBucketMain`, which currently accepts only a newer pointer signed by another box this box endorsed. Prove archive and bucket restores produce verifiable evidence, including the same-id case, and check the old-box confirmation in `restore-stream.ts`. Skip self-replacement during `restore-flow.ts` first start. Reuse A1342’s boot restriction and runtime fencing paths where they fit. Settle trust and the reversible stop with the watcher before changing admission. In `waiting-start.test.ts`, `stream-host.test.ts` and `handover-stepdown.test.ts`, prove a solo restart asks alongside trading, an unplanned stop holds sales and filing until a clear answer or 60 seconds even if a read hangs, and no configured source means immediate admission. Untrusted evidence neither releases the wait nor fences. A verified late replacement stops both duties and survives restart. Reuse `carry-on.ts` for HTTPS confirmation that the replacement is off, then claim a higher term. Counted peers still decide role or keep the box waiting. Show why on the box and till (`server-router.test.ts`), email managers on replacement or expiry without any answer, and update English and Spanish guides and the §9 rules.
+4. **Bound the power-cut wait (190–280 / 230–350).** Reuse that reader and `waiting-start.ts`.
+   Check alongside selling on restart and continue checking after the minute. With no configured
+   source a solo box starts immediately. A successful clear reply releases the wait. Keep the
+   peer decision on paired starts. Show the reason on the box and till, and alert managers when
+   silence expires. Test hanging reads and reason display in `waiting-start.test.ts` and
+   `server-router.test.ts`. Update both languages’ guides and the design’s §9 repository rules.
 
-**Early bucket evidence (75–120 / 100–150).** After the pointer path, sign generation claims in `generations.ts` and check them through the same reader before a full copy lands. Prove the restore starts above existing claims in `rebuild-first-start.test.ts`. In `stream-host.test.ts`, reject forged claims and same-box, same-term rollover. Settle equal-term evidence and restore admission during bucket outages with the watcher.
+5. **Shut down a primary (300–420 / 340–500).** Start with a saved archive destination and no
+   stream. Qualify `verifyBackupArtifact` on the exact A1557 `BackupSupervisor` output. Prove its
+   existing limits on a real copy before changing them. Box status asks for fresh HTTPS
+   `node.promote` sign-in, offers the recovery pack and shows staff still clocked in. Drain work
+   and pause sales, filing and clocking. Offer wait, explicit shutdown anyway or cancel on failure,
+   with a recorded incident and email. Preserve `shutdown` before power-off and across starts
+   until authorized carry-on. Offer **Keep it stopped**. Cover success, cancel and refusal in
+   `backup-supervisor.test.ts`, `box-status-screen.test.ts` and `waitron-box-sh.test.mjs`.
 
-**Primary shutdown (180–260 / 200–300).** Qualify `verifyBackupArtifact` on the exact stored archive from A1557’s shared `BackupSupervisor`, with a progress-based timeout and scratch space sized to the copy. Box status offers **Shut down this box** after fresh HTTPS `node.promote` sign-in. Offer the recovery pack, show clocked-in staff, and reversibly pause sales, filing and clocking. Drain admitted work before backup and show catch-up. Download when no destination is configured. If backup, catch-up or verification stalls or fails, email and offer wait, explicit shutdown anyway or cancel back to trading. Cancel writes no mark. Persist `shutdown` before power-off or safe-to-unplug advice. Keep it through later stops until HTTPS admin carry-on clears it or a trusted peer decides. Cover in `backup-supervisor.test.ts`, `box-status-screen.test.ts` and `waitron-box-sh.test.mjs`.
+6. **Cover other backup destinations and pairs (200–350 / 260–430 per PR).** Add checked download
+   and stream catch-up to the primary action. Reuse controlled handover as the paired primary’s
+   second choice and accept a trusted peer’s role on start. Spare shutdown waits for qualified
+   stream switching and automatic reseed while the primary sells. Exercise both directions in
+   `handover-controlled.e2e.test.ts` and `stream-host.test.ts`. Update English and Spanish guides.
 
-**Paired shutdown (120–200 / 140–220).** After primary shutdown, reuse controlled handover before stopping the former primary, or stop just the primary and pause selling. Qualify `StreamHost` retargeting before offering spare shutdown. Send the primary’s stream directly to the bucket first, then finish the spare’s upload while the primary sells. Automatically reseed the returning spare and show the one-copy warning until current. Extend `handover-controlled.e2e.test.ts` and `stream-host.test.ts`.
-
-**Cloud (60–100 / 80–130).** Once A1188 supplies a declaration answer via the installation credential, reuse the wait and stop paths. Test late confirmation and silence in `cloud-client.emergency.test.ts`. Until then, peer and bucket checks apply and a Cloud-only replacement can go unseen.
+7. **Ask Cloud (80–140 / 110–180).** Wait for A1188’s authenticated declaration answer. Reuse the
+   wait and stop paths. Test a late answer and silence in `cloud-client.emergency.test.ts`.
