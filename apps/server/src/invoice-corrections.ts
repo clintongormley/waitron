@@ -1,6 +1,7 @@
 import { and, asc, eq, sql } from "drizzle-orm";
 import { findAdjustmentReason } from "@waitron/adjustments";
 import {
+  correctionTargetFor,
   formatInvoiceNumber,
   previewCorrectionAmounts,
   readCorrectableLines,
@@ -111,6 +112,28 @@ export type InvoiceCorrectionEndDeps = InvoiceCorrectionDeps &
 
 const ZERO = decimal("0.00");
 
+/** Asks core for a full invoice's corrective rather than a receipt's. */
+export type CorrectionKind = { fullInvoice?: true };
+
+/**
+ * Whether a correction of `saleId` is a full invoice's: the mark the regime's admission puts on
+ * the invoice the correction is filed against (its replacement, once one took its place). Read
+ * from the stored records at every call, the same way when an open correction is read again later.
+ */
+export async function correctionKindOf(
+  tx: Transaction,
+  backend: FiscalBackend,
+  saleId: SaleId,
+  nodeId: DeviceRequestConfig["nodeId"],
+): Promise<CorrectionKind> {
+  const admission = await backend.correctionAdmissionFor?.(
+    tx,
+    await correctionTargetFor(tx, saleId),
+    nodeId,
+  );
+  return admission?.fullInvoice === true ? { fullInvoice: true } : {};
+}
+
 /**
  * The checks both the preview and Open run, in order, so the preview refuses what Open refuses
  * about the invoice with the same code. Answers what correcting `selection.gross` would file and
@@ -123,6 +146,7 @@ async function checkCorrectionOpenable(
   reading: TrustedReading,
   saleId: SaleId,
   selection: { gross: Decimal; lineIds?: readonly string[] },
+  kind: CorrectionKind,
 ): Promise<CorrectionPreview & { moneyRefundable: Decimal }> {
   const [settled] = await tx
     .select({ id: saleSettlements.id })
@@ -139,7 +163,7 @@ async function checkCorrectionOpenable(
       refundId: pending.pendingRefundId!,
     });
   const moneyRefundable = appliedRemainingOf(refundable);
-  const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection);
+  const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection, kind);
   if (compareDecimal(moneyRefundable, preview.gross) < 0)
     throw new AppError("invoice_correction.money_short", {
       saleId,
@@ -228,7 +252,8 @@ export async function readCorrectableNow(
       .where(eq(saleSettlements.saleId, saleId));
     if (settled === undefined) throw new AppError("invoice_correction.not_settled", { saleId });
     await refuseTakenOffAdvance(tx, saleId);
-    lines = await readCorrectableLines(tx, backend, saleId, cfg.nodeId);
+    const kind = await correctionKindOf(tx, backend, saleId, cfg.nodeId);
+    lines = await readCorrectableLines(tx, backend, saleId, cfg.nodeId, kind);
   } catch (error) {
     const none = { refundable, correctable: 0 };
     if (refusesForGood(error)) return { tenders, lines: null, amounts: none, waiting: null };
@@ -263,11 +288,20 @@ export async function previewInvoiceCorrection(
   reading: TrustedReading,
   saleId: SaleId,
   selection: { gross: string; lineIds?: readonly string[] },
+  kind: CorrectionKind = {},
 ): Promise<CorrectionPreview & { moneyRefundable: Decimal }> {
-  return checkCorrectionOpenable(tx, backend, cfg, reading, saleId, {
-    gross: moneyOf(selection.gross, "gross"),
-    ...(selection.lineIds === undefined ? {} : { lineIds: selection.lineIds }),
-  });
+  return checkCorrectionOpenable(
+    tx,
+    backend,
+    cfg,
+    reading,
+    saleId,
+    {
+      gross: moneyOf(selection.gross, "gross"),
+      ...(selection.lineIds === undefined ? {} : { lineIds: selection.lineIds }),
+    },
+    kind,
+  );
 }
 
 /**
@@ -282,6 +316,7 @@ export async function openInvoiceCorrection(
   saleId: SaleId,
   ask: InvoiceCorrectionAsk,
   actor: { personId: string; authorization: Authorization },
+  kind: CorrectionKind = {},
 ): Promise<{ correction: InvoiceCorrectionView; replayed: boolean }> {
   const print = fingerprint({
     gross: ask.gross,
@@ -311,10 +346,15 @@ export async function openInvoiceCorrection(
   if (reason.noteRequired && ask.note === null) throw new AppError("adjustment.note_required", {});
 
   const reading = deps.clock.now();
-  const preview = await checkCorrectionOpenable(tx, deps.backend, cfg, reading, saleId, {
-    gross: ask.gross,
-    ...(ask.lineIds === undefined ? {} : { lineIds: ask.lineIds }),
-  });
+  const preview = await checkCorrectionOpenable(
+    tx,
+    deps.backend,
+    cfg,
+    reading,
+    saleId,
+    { gross: ask.gross, ...(ask.lineIds === undefined ? {} : { lineIds: ask.lineIds }) },
+    kind,
+  );
   await refuseChangedSplit(tx, saleId, preview, ask.expectedSplit, preview.moneyRefundable);
 
   const [row] = await tx
@@ -420,11 +460,12 @@ export async function listOpenInvoiceCorrections(
 }
 
 /**
- * Files the R5 of the open correction `correctionId` for the money its refunds have given back,
+ * Files the corrective of the open correction `correctionId` (an R1 in the full invoices' series
+ * where {@link correctionKindOf} says so, else an R5) for the money its refunds have given back,
  * after the filing checks run again, and marks the correction filed. The one place a correction's
- * R5 is filed. When a person asked (`asked`) and `cfg`'s device may print receipts, queues the
- * R5's original on that device's receipt printer when one resolves; an automatic filing passes
- * none and queues nothing.
+ * corrective is filed. When a person asked (`asked`) and `cfg`'s device may print receipts, queues
+ * the corrective's original on that device's receipt printer when one resolves; an automatic
+ * filing passes none and queues nothing.
  */
 export async function fileCorrectionIn(
   tx: Transaction,
@@ -440,17 +481,31 @@ export async function fileCorrectionIn(
   const { completed } = await readSettledMoney(tx, correction);
   if (completed === 0) throw new AppError("invoice_correction.nothing_back", { correctionId });
   const saleId = correction.originalSaleId as SaleId;
-  const preview = await previewCorrectionAmounts(tx, deps.backend, saleId, cfg.nodeId, {
-    gross: centsToDecimal(completed),
-    ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
-  });
+  const kind = await correctionKindOf(tx, deps.backend, saleId, cfg.nodeId);
+  const preview = await previewCorrectionAmounts(
+    tx,
+    deps.backend,
+    saleId,
+    cfg.nodeId,
+    {
+      gross: centsToDecimal(completed),
+      ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
+    },
+    kind,
+  );
   if (asked?.expectedSplit !== undefined)
     await refuseChangedSplit(tx, saleId, preview, asked.expectedSplit);
   if ((await deps.backend.checkIntegrity(tx, cfg.nodeId)).issues.length > 0)
     throw new AppError("invoice_correction.chain_unsound", { saleId });
 
   const clock = await prepareIssueClock(tx, cfg, deps.clock);
-  const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "corrective"));
+  const seriesId = brandSeriesId(
+    await readLiveSeriesIdTx(
+      tx,
+      cfg.nodeId,
+      kind.fullInvoice === true ? "full_corrective" : "corrective",
+    ),
+  );
   const { saleId: correctiveSaleId } = await recordCorrection(tx, deps.backend, {
     operationDescription: await readSaleOperationDescription(tx, cfg, { kind: "sale", saleId }),
     origin: cfg.origin,
@@ -466,6 +521,7 @@ export async function fileCorrectionIn(
     })),
     authz,
     clock,
+    ...kind,
   });
 
   const filed = await tx
@@ -494,8 +550,8 @@ export async function fileCorrectionIn(
 }
 
 /**
- * Files the R5 of the open correction `correctionId` for the money its refunds have given back so
- * far.
+ * Files the corrective of the open correction `correctionId` for the money its refunds have given
+ * back so far.
  */
 export async function fileInvoiceCorrectionNow(
   tx: Transaction,
@@ -617,7 +673,9 @@ export async function previewOrRefusal(
   selection: { gross: Decimal; lineIds?: readonly string[] },
 ): Promise<CorrectionPreview | { refusal: AppError; closable: boolean }> {
   try {
-    return await previewCorrectionAmounts(tx, backend, saleId as SaleId, cfg.nodeId, selection);
+    const id = saleId as SaleId;
+    const kind = await correctionKindOf(tx, backend, id, cfg.nodeId);
+    return await previewCorrectionAmounts(tx, backend, id, cfg.nodeId, selection, kind);
   } catch (error) {
     if (!(error instanceof AppError)) throw error;
     return {
