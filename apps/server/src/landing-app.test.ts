@@ -63,6 +63,7 @@ describe("landing app", () => {
       });
       const html = await res.text();
       expect(html).toContain('<html lang="es">');
+      expect(html).toContain(`<title>${TRUST_PAGE_WORDS.es.title}</title>`);
       expect(html).toContain(`<h1>${TRUST_PAGE_WORDS.es.heading}</h1>`);
       expect(res.headers.get("vary")).toBe("Accept-Language");
       expect(res.headers.get("cache-control")).toBe("no-cache");
