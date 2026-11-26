@@ -4283,8 +4283,9 @@ Tests: `apps/dashboard/src/dashboard-app.disk-stop.test.ts` and
 
 A sidebar page uses a flat `.nav-item` button. Resting pages use regular `--wt-font-size-md` text in
 `--wt-color-text-muted`. Hover uses `--wt-color-text` on `--wt-color-surface`. The current page
-has `aria-current="page"`, a `--wt-color-primary` leading edge and bold `--wt-color-primary-text`
-text. The line and weight make the current page identifiable by more than colour.
+has `aria-current="page"`, a `--wt-color-primary` leading edge, a `--wt-color-surface-raised` band
+across the row and bold `--wt-color-primary-text` text. The line and weight make the current page
+identifiable by more than colour.
 
 Section headings and folded panel titles use sentence case, normal letter spacing, 14 px
 `--wt-font-size-md` and weight 600 (`--wt-font-weight-bold`) in `--wt-color-text`. Each heading has

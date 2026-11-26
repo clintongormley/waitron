@@ -110,7 +110,8 @@ is used daily, and a Service section with one page would be a heading over one r
 
 **26 November 2026, visual follow-up.** See the
 [dashboard sidebar contract](../../developers/design-system.md#dashboard-sidebar-navigation)
-for the top-level labels, divider, section spacing and folded tile.
+for the top-level labels, divider, section spacing and folded tile. The owner then said “Add the
+band, then land” in the sidebar screenshot review. The current page has a raised background across its row.
 
 ### 6. Pages get no icons
 

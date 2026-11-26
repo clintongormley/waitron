@@ -698,6 +698,7 @@ export class DashboardApp extends LitElement {
 
       .nav-item[aria-current="page"] {
         border-inline-start-color: var(--wt-color-primary);
+        background: var(--wt-color-surface-raised);
         color: var(--wt-color-primary-text);
         font-weight: var(--wt-font-weight-bold);
       }

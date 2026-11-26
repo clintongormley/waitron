@@ -154,11 +154,32 @@ it("gives top-level labels the weight of section names and keeps the current pag
     const bookings = el.shadowRoot!.querySelector("[data-test=nav-bookings]")!;
     expect(overview.getAttribute("aria-current")).toBe("page");
     expect.soft(getComputedStyle(overview).color).toBe("rgb(4, 5, 6)");
-    expect.soft(getComputedStyle(overview).backgroundColor).toBe("rgba(0, 0, 0, 0)");
     expect.soft(getComputedStyle(bookings).color).toBe("rgb(1, 2, 3)");
     expect(getComputedStyle(bookings).fontWeight).toBe("600");
   });
 });
+
+it.each(["light", "dark"] as const)(
+  "paints the current page's band at rest in %s",
+  async (theme) => {
+    await atSize(1280, 800, async () => {
+      history.replaceState(null, "", "/devices");
+      const { el, host } = await mountApp({}, theme);
+      const current = sidebar(el).querySelector("[data-test=nav-devices]")!;
+      const idle = current.parentElement!.querySelector(".nav-item:not([aria-current])")!;
+      await commands.parkPointer();
+      expect(current.matches(":hover")).toBe(false);
+      expect(current.getAttribute("aria-current")).toBe("page");
+      const raisedSurface = document.createElement("div");
+      raisedSurface.style.backgroundColor = "var(--wt-color-surface-raised)";
+      host.append(raisedSurface);
+      expect(getComputedStyle(current).backgroundColor).toBe(
+        getComputedStyle(raisedSurface).backgroundColor,
+      );
+      expect(getComputedStyle(idle).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    });
+  },
+);
 
 it("leaves 12px between Bookings and the visible divider", async () => {
   await atSize(1280, 800, async () => {
