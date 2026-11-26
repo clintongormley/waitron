@@ -127,7 +127,9 @@ describe("ensureLeaf", () => {
   it("control: a leaf another authority signed is refused by a client pinning this one", async () => {
     const stateDir = await box(leafFrom(other, HOSTNAMES, ["127.0.0.1", ADDRESS]));
 
-    expect(await handshake(stateDir, own.caCertPem, OWN_NAME)).toBe("CERT_SIGNATURE_FAILURE");
+    expect(await handshake(stateDir, own.caCertPem, OWN_NAME)).toBe(
+      "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+    );
   });
 
   it("a leaf naming everything under this authority but paired with another key is reissued", async () => {

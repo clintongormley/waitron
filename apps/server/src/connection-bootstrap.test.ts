@@ -234,7 +234,8 @@ it("offers one public repair action, retains installed trust and omits private c
   const html = await (await app.request("http://waitron.local:8080/setup/connection")).text();
   expect(html).toContain('id="connection-repair"');
   expect(html).toContain("Set up secure connection");
-  expect(html).toContain("Keep your installed Waitron certificate.");
+  expect(html).toContain("Keep this box’s current certificate.");
+  expect(html).toContain("Current certificate (SHA-256 fingerprint)");
   expect(html).not.toContain("Remove any old Waitron certificate");
   expect(html).not.toMatch(/<(input|textarea|select|form)\b/);
 });
@@ -400,12 +401,20 @@ it("an explicit repair replaces a public root with its private key appended", as
   expect(content).not.toContain("PRIVATE KEY");
   const result = JSON.parse(content);
   const replaced = await readFile(caFile, "utf8");
+  const oldCa = new X509Certificate(material.caCertPem);
+  const newCa = new X509Certificate(replaced);
   expect(replaced.includes("PRIVATE KEY")).toBe(false);
   expect(result).toEqual({
     caAvailable: true,
     caCertificate: replaced,
     continuationRequired: true,
-    fingerprint: new X509Certificate(replaced).fingerprint256,
+    certificateName: newCa.subject.slice(3),
+    fingerprint: newCa.fingerprint256,
+    previousCertificate: {
+      name: oldCa.subject.slice(3),
+      fingerprint: oldCa.fingerprint256,
+      thumbprint: oldCa.fingerprint.replaceAll(":", ""),
+    },
     state: "healthy",
     trust: "new-required",
   });

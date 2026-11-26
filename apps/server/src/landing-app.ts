@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { readBoxPublicCa } from "./box-tls-repair.js";
+import { readBoxCertificateDetails, readBoxPublicCa } from "./box-tls-repair.js";
 import type { Logger } from "./logger.js";
 import type { VenueNameState } from "./mdns.js";
 import { trustDeviceForRequest } from "./detect-device.js";
@@ -67,21 +67,15 @@ export function buildLandingApp(deps: LandingDeps): Hono {
     false,
   );
 
-  // A page view is not a deliberate download, so any read failure is `false` and nothing is logged;
-  // the `/ca.crt` route below is the deliberate action and distinguishes ENOENT from other failures.
-  const caExists = (): Promise<boolean> =>
-    readBoxPublicCa(deps.stateDir).then(
-      (pem) => pem !== null,
-      () => false,
-    );
-
   app.on("GET", ["/", "/setup/trust"], async (c) => {
     const reachUrls = reachUrlsNow();
     const ipUrls = reachUrls.filter((url) => /^\d+\.\d+\.\d+\.\d+$/.test(new URL(url).hostname));
+    const certificate = await readBoxCertificateDetails(deps.stateDir);
     const html = renderTrustPage({
+      ...certificate,
       locale: connectionLocale(c.req.header("accept-language")),
       reachUrls,
-      caAvailable: await caExists(),
+      caAvailable: certificate.fingerprint !== undefined,
       caDownloadPath: CA_DOWNLOAD_PATH,
       httpsUrl:
         c.req.query("app") === "till" ? new URL("/till/", deps.httpsUrl).href : deps.httpsUrl,

@@ -15,6 +15,7 @@ import { SERVER_THEME_DEFAULTS } from "./theme-defaults.js";
 const base: TrustPageInput = {
   reachUrls: ["https://waitron.local", "https://192.168.1.50"],
   caAvailable: true,
+  previousCertificate: { name: "waitron-setup-ca", fingerprint: "CC:DD", thumbprint: "ABCD" },
   caDownloadPath: "/ca.crt",
   httpsUrl: "https://waitron.local",
   device: "unknown",
@@ -63,7 +64,7 @@ describe("the guessed device", () => {
   it.each(DEVICE_ORDER)("walks %s through remove, get, install, open", (device) => {
     const html = renderTrustPage({ ...base, device });
     const help = DEVICE_HELP[device];
-    expect(html).toMatch(heading("1. Remove any old Waitron certificate"));
+    expect(html).toMatch(heading("1. Remove this box’s previous certificate"));
     expect(html).toContain(help.removal[0]);
     expect(html).toMatch(heading("2. Get the certificate"));
     expect(html).toMatch(heading(`3. ${help.heading}`));
@@ -86,7 +87,7 @@ describe("the guessed device", () => {
     for (const device of DEVICE_ORDER)
       expect(html).not.toMatch(heading(`3. ${DEVICE_HELP[device].heading}`));
     expect(html).not.toContain("Using a different device?");
-    expect(html).toMatch(heading("1. Remove any old Waitron certificate"));
+    expect(html).toMatch(heading("1. Remove this box’s previous certificate"));
     expect(html).toContain("Find your device in step 3");
     expect(html).toMatch(heading("3. Install it on your device"));
   });
@@ -102,6 +103,8 @@ describe("the Spanish guide", () => {
   it("gives the detected device's removal and installation steps", () => {
     const html = renderTrustPage({ ...base, locale: "es", device: "macos" });
     const mac = CONNECTION_DEVICE_ES.macos;
+    expect(html).toMatch(heading("1. Elimina el certificado anterior de este servidor"));
+    expect(html).toContain("espera a que se restablezca y se vuelva a unir al local");
     expect(html).toContain(mac.removal[0]);
     expect(html).toMatch(heading(`3. ${mac.heading}`));
     expect(html).toContain(mac.install[0]);
@@ -237,7 +240,7 @@ it("gives operator-certificate guidance without referring to missing instruction
   expect(html).not.toContain("The instructions above include replacement");
   expect(html).toContain("This page cannot replace a separately installed certificate.");
   expect(html).not.toContain("Using a different device?");
-  expect(html).not.toContain("Remove any old Waitron certificate");
+  expect(html).not.toContain("Remove this box’s previous certificate");
 });
 
 it("does not describe a plain HTTP recovery destination as secure", () => {
@@ -255,9 +258,7 @@ it("does not describe a plain HTTP recovery destination as secure", () => {
 
 it("gives a safe device alternative when certificate removal or installation is blocked", () => {
   const html = renderTrustPage({ ...base, device: "linux" });
-  expect(html).toContain(
-    "If you cannot identify the old Waitron entry, stop and use another venue device.",
-  );
+  expect(html).toContain("If the name or fingerprint differs, leave that entry alone.");
   expect(html).toContain("If installation is blocked, use a venue device that permits it.");
   expect(html).not.toMatch(/ask whoever|an administrator may have to/);
 });
@@ -270,7 +271,9 @@ describe("a page opened while another box answers waitron.local", () => {
   it("leads with the spare's way in, above the certificate steps, and keeps those steps", () => {
     const html = renderTrustPage({ ...base, ownAddress: "https://192.168.1.50" });
     expect(html).toContain(LEAD);
-    expect(html.indexOf(LEAD)).toBeLessThan(html.indexOf("1. Remove any old Waitron certificate"));
+    expect(html.indexOf(LEAD)).toBeLessThan(
+      html.indexOf("1. Remove this box’s previous certificate"),
+    );
     const plain = renderTrustPage(base);
     const stepsOf = (page: string) =>
       page.slice(page.indexOf("<section><h2>1."), page.indexOf('<section class="go">'));
@@ -376,7 +379,7 @@ describe("a box that is not set up yet", () => {
     const en = `<p class="warning-words">${NOT_SET_UP_WORDS.en}</p>`;
     const es = `<p class="warning-words" lang="es">${NOT_SET_UP_WORDS.es}</p>`;
     expect(html).toContain(`${en}${es}`);
-    const stepOne = heading("Remove any old Waitron certificate").exec(html)?.[0];
+    const stepOne = heading("Remove this box’s previous certificate").exec(html)?.[0];
     expect(stepOne).toBeDefined();
     expect(html.indexOf(es)).toBeLessThan(html.indexOf(stepOne!));
   });

@@ -1,4 +1,5 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { X509Certificate } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, beforeAll } from "vitest";
@@ -43,7 +44,11 @@ describe("landing app", () => {
       expect(res.status).toBe(200); // not a 3xx
       expect(res.headers.get("strict-transport-security")).toBeNull();
       // The download link points at the landing-local path, not /setup-api/ca.crt (which is HTTPS-only).
-      expect(await res.text()).toContain('href="/ca.crt"');
+      const html = await res.text();
+      const ca = new X509Certificate(material.caCertPem);
+      expect(html).toContain('href="/ca.crt"');
+      expect(html).toContain(ca.subject.slice(3));
+      expect(html).toContain(ca.fingerprint256);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

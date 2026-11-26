@@ -5,7 +5,7 @@ import type { ReachInfo } from "./box-reach.js";
 import type { Logger } from "./logger.js";
 import type { VenueNameState } from "./mdns.js";
 import { trustDeviceForRequest } from "./detect-device.js";
-import { readBoxPublicCa } from "./box-tls-repair.js";
+import { readBoxCertificateDetails, readBoxPublicCa } from "./box-tls-repair.js";
 import { mountConnectionBootstrap } from "./connection-bootstrap.js";
 import { connectionLocale } from "./connection-bootstrap-page.js";
 import { CA_CONTENT_TYPE, CA_FILENAME, ownAddressFor, renderTrustPage } from "./trust-page.js";
@@ -138,14 +138,15 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
 
   app.get("/setup/trust", async (c) => {
     const reach = getReach();
-    const [qr, caAvailable] = await Promise.all([
+    const [qr, certificate] = await Promise.all([
       reach.qrTarget ? renderQrSvg(reach.qrTarget) : Promise.resolve(null),
-      caExists(),
+      deps.serveBoxCa === false ? {} : readBoxCertificateDetails(deps.stateDir),
     ]);
     const html = renderTrustPage({
+      ...certificate,
       locale: connectionLocale(c.req.header("accept-language")),
       reachUrls: [reach.hostnameUrl, ...reach.ipUrls],
-      caAvailable,
+      caAvailable: "fingerprint" in certificate && certificate.fingerprint !== undefined,
       caDownloadPath: CA_DOWNLOAD_PATH,
       qrSvg: qr ?? undefined,
       httpsUrl: reach.hostnameUrl,

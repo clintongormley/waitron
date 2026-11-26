@@ -63,11 +63,11 @@ describe("a device trusting the venue's box and a second box answering waitron.l
     }
   }
 
-  it("the two boxes' authorities share a name but not a key", async () => {
+  it("the two boxes' authorities have distinct names and keys", async () => {
     const [a, b] = await Promise.all(
       [venueBox, secondBox].map(async (box) => new X509Certificate(await readFile(box.caCertFile))),
     );
-    expect(a!.subject).toBe(b!.subject);
+    expect(a!.subject).not.toBe(b!.subject);
     expect(a!.publicKey.equals(b!.publicKey)).toBe(false);
   });
 
@@ -78,7 +78,7 @@ describe("a device trusting the venue's box and a second box answering waitron.l
   it("refuses a second box's certificate for waitron.local", async () => {
     expect(await handshake(secondBox)).toEqual({
       authorized: false,
-      error: "CERT_SIGNATURE_FAILURE",
+      error: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
     });
   });
 });

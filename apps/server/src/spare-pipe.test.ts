@@ -175,7 +175,7 @@ describe("startStoreListener", () => {
   });
 
   it("a client certificate another authority signed is refused", async () => {
-    await expectRefused(clientFor(other, MAIN_NAME), "CERT_SIGNATURE_FAILURE");
+    await expectRefused(clientFor(other, MAIN_NAME), "UNABLE_TO_GET_ISSUER_CERT_LOCALLY");
   });
 
   it("the box's server leaf presented as a client certificate is refused", async () => {
@@ -342,13 +342,13 @@ describe("startStorePipe", () => {
     expect(await getThrough(loopbackUrl)).not.toBe("200 stored");
 
     expect(problem()).toEqual({
-      reason: "CERT_SIGNATURE_FAILURE",
+      reason: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
       since: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
     });
     expect(logged).toContainEqual({
       level: "warn",
       event: "stream.spare_store_refused",
-      fields: { reason: "CERT_SIGNATURE_FAILURE" },
+      fields: { reason: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY" },
     });
     expect(seen).toEqual([]);
   });

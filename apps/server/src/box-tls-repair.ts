@@ -1,4 +1,10 @@
-import { TLS_DIR, TLS_REPAIR_DIR, TLS_REPAIR_FLOW_DIR, SCRATCH_DIR } from "@waitron/store";
+import {
+  TLS_DIR,
+  TLS_PREVIOUS_CERTIFICATE_FILE,
+  TLS_REPAIR_DIR,
+  TLS_REPAIR_FLOW_DIR,
+  SCRATCH_DIR,
+} from "@waitron/store";
 import { X509Certificate, createPrivateKey, randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import * as fs from "node:fs/promises";
@@ -10,7 +16,7 @@ import { withRecoveryLock } from "./recovery-lock.js";
 import {
   boxCertCurrent,
   boxLeafChain,
-  boxRoot,
+  boxRootIdentity,
   boxSigner,
   leafIpv4s,
   mintSelfSignedServerCert,
@@ -26,11 +32,20 @@ export interface BoxTlsRepairDeps {
   listIpv4: () => string[];
   now: () => Date;
 }
-export interface BoxTlsInspection {
+export interface PreviousCertificate {
+  name: string;
+  fingerprint: string;
+  thumbprint: string;
+}
+export interface CertificateDetails {
+  certificateName?: string;
+  fingerprint?: string;
+  previousCertificate?: PreviousCertificate;
+}
+export interface BoxTlsInspection extends CertificateDetails {
   state: "healthy" | "repair-required" | "refused";
   trust: "retained" | "new-required";
   caAvailable: boolean;
-  fingerprint?: string;
 }
 const names = ["ca.crt", "ca.key", "server.pem"] as const;
 type Member = (typeof names)[number];
@@ -52,7 +67,7 @@ const refused = () => new AppError("setup.not_ready", {});
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
 const tlsDir = (deps: BoxTlsRepairDeps) => join(deps.stateDir, TLS_DIR);
 const flowDir = (deps: BoxTlsRepairDeps) => join(deps.stateDir, TLS_REPAIR_FLOW_DIR);
-const pendingPath = (deps: BoxTlsRepairDeps) => join(flowDir(deps), "record.json");
+const pendingPath = (stateDir: string) => join(stateDir, TLS_REPAIR_FLOW_DIR, "record.json");
 async function regularDirectory(path: string) {
   const info = await fs.lstat(path);
   if (!info.isDirectory() || info.isSymbolicLink()) throw refused();
@@ -86,8 +101,8 @@ async function snapshot(deps: BoxTlsRepairDeps, directory = tlsDir(deps)): Promi
   for (const name of names) result[name] = await readMember(join(directory, name));
   return result;
 }
-async function pending(deps: BoxTlsRepairDeps): Promise<Pending | null> {
-  const value = await readDurableHostJson(pendingPath(deps), limit);
+async function pending(stateDir: string): Promise<Pending | null> {
+  const value = await readDurableHostJson(pendingPath(stateDir), limit);
   if (value === null) return null;
   const p = value as Pending;
   if (
@@ -99,10 +114,10 @@ async function pending(deps: BoxTlsRepairDeps): Promise<Pending | null> {
     throw refused();
   return p;
 }
-function caPublic(pem: string, now: Date): X509Certificate | null {
+function caPublic(pem: string, now: Date) {
   try {
-    const ca = boxRoot(pem);
-    return ca && boxCertCurrent(ca, now) ? ca : null;
+    const ca = boxRootIdentity(pem);
+    return ca && boxCertCurrent(ca.cert, now) ? ca : null;
   } catch {
     return null;
   }
@@ -117,13 +132,56 @@ export async function readBoxPublicCa(stateDir: string, now = new Date()): Promi
   const publicPem = firstCertificatePem(pem);
   if (!publicPem) return null;
   const ca = caPublic(publicPem, now);
-  return ca?.toString().replaceAll("\n", publicPem.includes("\r\n") ? "\r\n" : "\n") ?? null;
+  return ca?.cert.toString().replaceAll("\n", publicPem.includes("\r\n") ? "\r\n" : "\n") ?? null;
+}
+
+async function previousCertificateFor(
+  stateDir: string,
+  fingerprint: string | undefined,
+): Promise<PreviousCertificate | undefined> {
+  if (!fingerprint) return;
+  const record = (await readDurableHostJson(
+    join(stateDir, TLS_PREVIOUS_CERTIFICATE_FILE),
+    limit,
+  ).catch(() => null)) as { replacement?: string; previous?: PreviousCertificate } | null;
+  const previous = record?.previous;
+  if (
+    record?.replacement === fingerprint &&
+    typeof previous?.name === "string" &&
+    previous.name.length > 0 &&
+    typeof previous.fingerprint === "string" &&
+    /^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(previous.fingerprint) &&
+    previous.fingerprint !== fingerprint &&
+    typeof previous.thumbprint === "string" &&
+    /^[0-9A-F]{40}$/.test(previous.thumbprint)
+  )
+    return {
+      name: previous.name,
+      fingerprint: previous.fingerprint,
+      thumbprint: previous.thumbprint,
+    };
+}
+
+export async function readBoxCertificateDetails(stateDir: string): Promise<CertificateDetails> {
+  const pem = await readBoxPublicCa(stateDir).catch(() => null);
+  const ca = pem && boxRootIdentity(pem);
+  if (!ca) return {};
+  const fingerprint = ca.cert.fingerprint256;
+  const complete = await pending(stateDir).then(
+    (repair) => repair?.complete !== false,
+    () => false,
+  );
+  return {
+    certificateName: ca.name,
+    fingerprint,
+    previousCertificate: complete ? await previousCertificateFor(stateDir, fingerprint) : undefined,
+  };
 }
 
 function signingAuthority(s: Snapshot, now: Date): boolean {
   try {
     const ca = caPublic(s["ca.crt"]?.toString("utf8") ?? "", now);
-    const signer = ca && s["ca.key"] && boxSigner(s["ca.key"].toString("utf8"), ca);
+    const signer = ca && s["ca.key"] && boxSigner(s["ca.key"].toString("utf8"), ca.cert);
     return signer !== null && boxCertCurrent(signer.cert, now);
   } catch {
     return false;
@@ -139,7 +197,7 @@ function healthy(
     const now = deps.now();
     const ca = caPublic(s["ca.crt"]?.toString("utf8") ?? "", now);
     if (ca === null || s["server.pem"] === null) return false;
-    const chain = boxLeafChain(s["server.pem"].toString("utf8"), ca, "server");
+    const chain = boxLeafChain(s["server.pem"].toString("utf8"), ca.cert, "server");
     if (chain === null) return false;
     const { leaf, signer } = chain;
     if (
@@ -159,19 +217,23 @@ function healthy(
     return false;
   }
 }
-function inspection(
+async function inspection(
   s: Snapshot,
   deps: BoxTlsRepairDeps,
   p: Pending | null,
   checkAddresses = true,
-): BoxTlsInspection {
-  const now = deps.now();
+): Promise<BoxTlsInspection> {
   const pem = s["ca.crt"]?.toString("utf8") ?? "";
+  const now = deps.now();
   const ca = caPublic(pem, now);
   const downloadable = ca ?? caPublic(firstCertificatePem(pem), now);
   const usable = healthy(s, deps, checkAddresses);
+  const state = usable && p?.complete !== false ? "healthy" : "repair-required";
+  const fingerprint = downloadable?.cert.fingerprint256;
+  const previousCertificate =
+    state === "healthy" ? await previousCertificateFor(deps.stateDir, fingerprint) : undefined;
   return {
-    state: usable && p?.complete !== false ? "healthy" : "repair-required",
+    state,
     trust:
       p?.complete === false
         ? p.trust
@@ -181,9 +243,11 @@ function inspection(
             ? "retained"
             : "new-required",
     caAvailable: ca !== null && (usable || signingAuthority(s, deps.now())),
-    ...(downloadable === null ? {} : { fingerprint: downloadable.fingerprint256 }),
+    ...(downloadable && { certificateName: downloadable.name, fingerprint }),
+    ...(previousCertificate && { previousCertificate }),
   };
 }
+
 export async function inspectBoxTls(
   deps: BoxTlsRepairDeps,
   options: { allowLinkedTlsDirectory?: boolean; requireCurrentAddresses?: boolean } = {},
@@ -191,10 +255,10 @@ export async function inspectBoxTls(
   try {
     const directory =
       options.allowLinkedTlsDirectory === true ? await fs.realpath(tlsDir(deps)) : tlsDir(deps);
-    return inspection(
+    return await inspection(
       await snapshot(deps, directory),
       deps,
-      await pending(deps),
+      await pending(deps.stateDir),
       options.requireCurrentAddresses !== false,
     );
   } catch {
@@ -264,8 +328,8 @@ export async function repairBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspec
   await fs.mkdir(deps.stateDir, { recursive: true, mode: 0o700 });
   return withRecoveryLock(deps.stateDir, async () => {
     const s = await snapshot(deps);
-    let p = await pending(deps);
-    const inspected = inspection(s, deps, p);
+    let p = await pending(deps.stateDir);
+    const inspected = await inspection(s, deps, p);
     if (inspected.state === "healthy") return inspected;
     await fs.mkdir(tlsDir(deps), { recursive: true, mode: 0o700 });
     await fs.chmod(tlsDir(deps), 0o700);
@@ -291,7 +355,7 @@ export async function repairBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspec
       };
       await fs.rm(join(flowDir(deps), "candidate.json"), { force: true });
       await mkdirDurable(flowDir(deps), 0o700);
-      await writeDurableHostJson(pendingPath(deps), p, limit);
+      await writeDurableHostJson(pendingPath(deps.stateDir), p, limit);
     }
     await regularDirectory(folder);
     let saved = await readDurableHostJson(join(flowDir(deps), "candidate.json"), limit);
@@ -339,6 +403,26 @@ export async function repairBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspec
     if (m.serverCertPem !== (saved as SelfSignedMaterial).serverCertPem)
       await writeDurableHostJson(join(flowDir(deps), "candidate.json"), m, limit);
     const candidate = candidateSnapshot(m);
+    if (p.trust === "new-required") {
+      const original = await readMember(join(folder, "ca.crt")).catch(() => null);
+      const previous = boxRootIdentity(firstCertificatePem(original?.toString("utf8") ?? ""), true);
+      const replacement = new X509Certificate(m.caCertPem).fingerprint256;
+      if (previous && previous.cert.fingerprint256 !== replacement) {
+        const { name, cert } = previous;
+        await writeDurableHostJson(
+          join(deps.stateDir, TLS_PREVIOUS_CERTIFICATE_FILE),
+          {
+            replacement,
+            previous: {
+              name,
+              fingerprint: cert.fingerprint256,
+              thumbprint: cert.fingerprint.replaceAll(":", ""),
+            },
+          },
+          limit,
+        );
+      }
+    }
     for (const name of names) {
       if (p.trust === "retained" && (name === "ca.crt" || name === "ca.key")) {
         if (!s[name]?.equals(candidate[name]!)) throw refused();
@@ -363,7 +447,7 @@ export async function repairBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspec
       await syncDirectory(tlsDir(deps));
     }
     p = { ...p, complete: true };
-    await writeDurableHostJson(pendingPath(deps), p, limit);
+    await writeDurableHostJson(pendingPath(deps.stateDir), p, limit);
     return inspection(installed, deps, p);
   });
 }

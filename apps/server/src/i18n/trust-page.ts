@@ -3,6 +3,29 @@ export const NOT_SET_UP_WORDS = {
   es: "Este servidor aún no está configurado. Si el local ya tiene un servidor Waitron, no instales este certificado: cambia al servidor de reserva.",
 } as const;
 
+export const CERTIFICATE_WORDS = {
+  en: {
+    current: "Current certificate (SHA-256 fingerprint)",
+    previous: "Previous certificate (SHA-256 fingerprint)",
+    match: "Remove the previous certificate only if both its name and fingerprint match.",
+    shared:
+      "If a spare or another box still uses the previous certificate, keep it installed until that box has its new certificate. For a spare, wait until it has been reset and rejoined. Then remove the old certificate.",
+    unavailable:
+      "Leave installed certificates alone. Download and install the certificate shown here.",
+    thumbprint: "Windows: open Details and compare Thumbprint (SHA-1).",
+  },
+  es: {
+    current: "Certificado actual (huella SHA-256)",
+    previous: "Certificado anterior (huella SHA-256)",
+    match: "Elimina el certificado anterior solo si coinciden el nombre y la huella.",
+    shared:
+      "Si un servidor de reserva u otro servidor aún usa el certificado anterior, consérvalo hasta que ese servidor tenga el nuevo. Si es el de reserva, espera a que se restablezca y se vuelva a unir al local. Después, elimina el certificado anterior.",
+    unavailable:
+      "Deja los certificados instalados como están. Descarga e instala el certificado que se muestra aquí.",
+    thumbprint: "En Windows, abre Detalles y compara la Huella digital (SHA-1).",
+  },
+} as const;
+
 export const TRUST_PAGE_WORDS = {
   en: {
     title: "Waitron — connect to this box",
@@ -11,14 +34,13 @@ export const TRUST_PAGE_WORDS = {
       `Adding a spare? You don't need this box's certificate: open this address (${link}) and accept your browser's warning once.`,
     intro: (spare: boolean) =>
       `${spare ? "Otherwise, you" : "You"} need to install the Waitron secure certificate before entering passwords and sensitive information into this website:`,
-    remove: "Remove any old Waitron certificate",
+    remove: "Remove this box’s previous certificate",
     removeIntro:
-      "If you have installed a Waitron certificate on this device before, then you will need to remove it before installing the new certificate. Remove only Waitron's own entry. If you cannot identify the old Waitron entry, stop and use another venue device.",
+      "If you have installed a Waitron certificate on this device before, compare it with the previous certificate below. If the name or fingerprint differs, leave that entry alone.",
     findDevice:
       "Find your device in step 3 — each one's steps begin with how to remove an old certificate.",
     reopen: "Then quit your browser completely and reopen this page.",
-    removeFirst: "First, remove any old Waitron certificate:",
-    installNext: "Then install the new one:",
+    removeFirst: "Follow the removal instructions in step 1.",
     managed:
       "These steps use your device's own settings, with no terminal. Menu names vary by version. If installation is blocked, use a venue device that permits it.",
     install: "Install it on your device",
@@ -41,14 +63,13 @@ export const TRUST_PAGE_WORDS = {
       `¿Vas a añadir un servidor de reserva? No necesitas el certificado de este servidor. Abre esta dirección (${link}) y acepta el aviso del navegador una sola vez.`,
     intro: (spare: boolean) =>
       `${spare ? "En los demás casos, instala" : "Instala"} el certificado de Waitron antes de introducir contraseñas o datos sensibles en este sitio.`,
-    remove: "Elimina el certificado anterior de Waitron",
+    remove: "Elimina el certificado anterior de este servidor",
     removeIntro:
-      "Si ya instalaste un certificado de Waitron en este dispositivo, elimínalo antes de instalar el nuevo. Elimina solo el de Waitron. Si no puedes identificarlo, detente y usa otro dispositivo del local.",
+      "Si ya instalaste un certificado de Waitron en este dispositivo, compáralo con el certificado anterior que se muestra abajo. Si el nombre o la huella no coinciden, deja esa entrada como está.",
     findDevice:
       "Busca tu dispositivo en el paso 3. Sus instrucciones empiezan por cómo eliminar el certificado anterior.",
     reopen: "Después, cierra por completo el navegador y vuelve a abrir esta página.",
-    removeFirst: "Primero, elimina el certificado anterior de Waitron.",
-    installNext: "Después, instala el nuevo.",
+    removeFirst: "Sigue las instrucciones para eliminar el certificado del paso 1.",
     managed:
       "Sigue estos pasos en los ajustes del dispositivo. Los nombres de los menús varían según la versión. Si el dispositivo impide instalar el certificado, usa otro del local que lo permita.",
     install: "Instala el certificado en tu dispositivo",

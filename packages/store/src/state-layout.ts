@@ -80,6 +80,7 @@ export const PAIR_COPY_DIR = "pair-copy";
 export const TLS_DIR = "tls";
 export const TLS_REPAIR_FLOW_DIR = "flows/tls-repair";
 export const TLS_REPAIR_DIR = "tls/repair";
+export const TLS_PREVIOUS_CERTIFICATE_FILE = "tls/previous-certificate.json";
 export const SERVER_PEM_FILE = "tls/server.pem";
 export const TLS_JOINED_FILE = "tls/joined.json";
 export const TLS_CLIENT_CERT_FILE = "tls/client.crt";

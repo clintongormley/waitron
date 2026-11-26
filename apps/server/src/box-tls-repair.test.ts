@@ -3,6 +3,7 @@ import { X509Certificate, createPrivateKey } from "node:crypto";
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { createSecureContext } from "node:tls";
+import { TLS_PREVIOUS_CERTIFICATE_FILE } from "@waitron/store";
 import forge from "node-forge";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
@@ -225,6 +226,8 @@ it.each([
 it("replaces the old certificate set and retains no key for the new root", async () => {
   const root = forge.pki.certificateFromPem(material.caCertPem);
   const signer = forge.pki.certificateFromPem(material.caKeyPem);
+  root.setSubject([{ name: "commonName", value: "waitron-setup-ca" }]);
+  root.setIssuer(root.subject.attributes);
   root.setExtensions(signer.extensions);
   root.sign(keys.privateKey, forge.md.sha256.create());
   const leaf = forge.pki.certificateFromPem(material.serverCertPem);
@@ -248,6 +251,31 @@ it("replaces the old certificate set and retains no key for the new root", async
   expect(
     newRoot.checkPrivateKey(createPrivateKey(forge.pki.privateKeyToPem(keys.privateKey))),
   ).toBe(false);
+
+  const previous = new X509Certificate(forge.pki.certificateToPem(root));
+  const previousCertificate = {
+    name: "waitron-setup-ca",
+    fingerprint: previous.fingerprint256,
+    thumbprint: previous.fingerprint.replaceAll(":", ""),
+  };
+  await tlsRepair.endFinishedTlsRepair(f.stateDir);
+  await expect(stat(join(f.stateDir, "tls/repair"))).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await inspectBoxTls(f)).toMatchObject({
+    state: "healthy",
+    fingerprint: newRoot.fingerprint256,
+    previousCertificate,
+  });
+  await rm(join(f.stateDir, "tls/server.pem"));
+  expect(await repairBoxTls(f)).toMatchObject({ trust: "retained", previousCertificate });
+  expect(await tlsRepair.readBoxCertificateDetails(f.stateDir)).toMatchObject({
+    fingerprint: newRoot.fingerprint256,
+    previousCertificate,
+  });
+  await writeFile(join(f.stateDir, "tls/ca.crt"), material.caCertPem);
+  expect(await tlsRepair.readBoxCertificateDetails(f.stateDir)).toMatchObject({
+    fingerprint: new X509Certificate(material.caCertPem).fingerprint256,
+    previousCertificate: undefined,
+  });
 });
 
 it("keeps healthy TLS byte-identical even without the CA signing key", async () => {
@@ -263,6 +291,27 @@ it("keeps healthy TLS byte-identical even without the CA signing key", async () 
     expect(await readFile(join(f.stateDir, "tls", name))).toEqual(before[name]);
   await expect(stat(join(f.stateDir, "tls", "repair"))).rejects.toMatchObject({
     code: "ENOENT",
+  });
+});
+
+it("does not name the current certificate for removal when a saved record repeats it", async () => {
+  const f = await fixture();
+  const ca = new X509Certificate(material.caCertPem);
+  const previous = {
+    name: ca.subject.slice(3),
+    fingerprint: ca.fingerprint256,
+    thumbprint: ca.fingerprint.replaceAll(":", ""),
+  };
+  await writeFile(
+    join(f.stateDir, TLS_PREVIOUS_CERTIFICATE_FILE),
+    JSON.stringify({
+      replacement: ca.fingerprint256,
+      previous,
+    }),
+  );
+  expect(await tlsRepair.readBoxCertificateDetails(f.stateDir)).toMatchObject({
+    fingerprint: ca.fingerprint256,
+    previousCertificate: undefined,
   });
 });
 
@@ -361,7 +410,9 @@ it("reuses a candidate saved just before an interruption, without minting anothe
 });
 
 it("a complete TLS pair waits for the interrupted completion marker before being served", async () => {
-  const f = await fixture(null);
+  const f = await fixture();
+  await rm(join(f.stateDir, "tls", "ca.key"));
+  await rm(join(f.stateDir, "tls", "server.pem"));
   const original = faults.rename.getMockImplementation()!;
   let markers = 0;
   faults.rename.mockImplementation(async (from, to) => {
@@ -376,8 +427,16 @@ it("a complete TLS pair waits for the interrupted completion marker before being
   }
   const before = await contents(f.stateDir);
   expect(await inspectBoxTls(f)).toMatchObject({ state: "repair-required", trust: "new-required" });
+  expect(
+    (await tlsRepair.readBoxCertificateDetails(f.stateDir)).previousCertificate,
+  ).toBeUndefined();
   expect(await repairBoxTls({ ...f })).toMatchObject({ state: "healthy", trust: "new-required" });
   expect(await contents(f.stateDir)).toEqual(before);
+  expect((await tlsRepair.readBoxCertificateDetails(f.stateDir)).previousCertificate).toMatchObject(
+    {
+      fingerprint: new X509Certificate(material.caCertPem).fingerprint256,
+    },
+  );
 });
 
 it("refuses linked TLS material without reading or changing its target", async () => {
@@ -536,13 +595,15 @@ it.each([
   expect(await contents(f.stateDir)).toEqual(before);
 });
 
-it("returns only connection facts and the public CA fingerprint", async () => {
+it("returns only connection facts and the public CA identity", async () => {
   const f = await fixture();
+  const certificate = new X509Certificate(material.caCertPem);
   expect(await inspectBoxTls(f)).toEqual({
     state: "healthy",
     trust: "retained",
     caAvailable: true,
-    fingerprint: new X509Certificate(material.caCertPem).fingerprint256,
+    fingerprint: certificate.fingerprint256,
+    certificateName: certificate.subject.slice(3),
   });
 });
 
@@ -620,6 +681,7 @@ it("a second repair keeps only its own old files in the fixed archive", async ()
   expect(await readdir(join(f.stateDir, "tls"))).toEqual([
     "ca.crt",
     "ca.key",
+    "previous-certificate.json",
     "repair",
     "server.pem",
   ]);

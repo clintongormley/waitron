@@ -78,6 +78,7 @@ failing, stop here. This page cannot repair every saved certificate layout or re
 installed certificate. For a separately installed certificate, check the box’s HTTPS address
 and stop if it shows a warning. If your device blocks certificate installation, use a venue
 device that allows it.
+Before removing a certificate, compare its name and fingerprint with the ones shown by this box.
 
 Stop the former box and coordinate with the other venues:
 only one person should recover this taxpayer at a time.

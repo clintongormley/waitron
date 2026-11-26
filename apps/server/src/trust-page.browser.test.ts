@@ -16,12 +16,48 @@ afterAll(async () => {
 const base: TrustPageInput = {
   reachUrls: ["https://waitron.local"],
   caAvailable: true,
+  previousCertificate: { name: "waitron-setup-ca", fingerprint: "CC:DD", thumbprint: "ABCD" },
   caDownloadPath: "/ca.crt",
   httpsUrl: "https://waitron.local",
   device: "linux",
 };
 const TOUCH: BrowserContextOptions = { hasTouch: true, isMobile: true };
 const DESKTOP: BrowserContextOptions = { hasTouch: false, isMobile: false };
+
+it("identifies the exact Windows certificate to remove", () =>
+  withPage(
+    DESKTOP,
+    {
+      ...base,
+      device: "windows",
+      certificateName: "Waitron box 2026-11-26 0123456789ab",
+      fingerprint: "AA:BB",
+      previousCertificate: { name: "waitron-setup-ca", fingerprint: "CC:DD", thumbprint: "ABCD" },
+    },
+    async (page) => {
+      const removal = await page.locator("section").first().textContent();
+      expect(removal).toContain("waitron-setup-ca");
+      expect(removal).toContain("CC:DD");
+      expect(removal).toMatch(/Thumbprint[\s\S]*ABCD/);
+      expect(removal).toContain("If a spare or another box still uses the previous certificate");
+      expect(removal).toContain("For a spare, wait until it has been reset and rejoined.");
+      expect(await page.locator("section").nth(1).textContent()).toContain(
+        "Waitron box 2026-11-26 0123456789ab",
+      );
+    },
+  ));
+
+it("offers only installation when this box cannot identify a previous certificate", () =>
+  withPage(TOUCH, { ...base, previousCertificate: undefined }, async (page) => {
+    expect(await page.locator("h2").allTextContents()).toEqual([
+      "1. Get the certificate",
+      `2. ${DEVICE_HELP.android.heading}`,
+      "3. Open Waitron",
+    ]);
+    expect(await page.locator("main").textContent()).toContain(
+      "Leave installed certificates alone",
+    );
+  }));
 
 async function withPage(
   options: BrowserContextOptions,
@@ -46,7 +82,7 @@ async function withPage(
 async function expectStepsFor(page: Page, device: DeviceId, other: DeviceId): Promise<void> {
   const help = DEVICE_HELP[device];
   expect(await page.locator("h2").allTextContents()).toEqual([
-    "1. Remove any old Waitron certificate",
+    "1. Remove this box’s previous certificate",
     "2. Get the certificate",
     `3. ${help.heading}`,
     "4. Open Waitron",

@@ -44,7 +44,7 @@ export const DEVICE_HELP: Record<DeviceId, DeviceHelp> = {
       "Quit your browser completely, then reopen this page.",
     ],
     removal: [
-      "Find the old Waitron entry in Keychain Access and delete it. Check both the login and System keychains: it may have been installed more than once.",
+      "In Keychain Access, check the fingerprint of the matching certificate, then delete it. Check both the login and System keychains: it may have been installed more than once.",
     ],
     notes: [
       "Using Firefox? In its Settings, under Privacy &amp; Security, Certificates, turn on “Allow Firefox to automatically trust third-party root certificates you install”.",
@@ -59,7 +59,7 @@ export const DEVICE_HELP: Record<DeviceId, DeviceHelp> = {
       "Close every browser window to quit the browser, then reopen this page.",
     ],
     removal: [
-      "Search the Start menu for “Manage user certificates”. Under Trusted Root Certification Authorities, then Certificates, delete the old Waitron entry.",
+      "Search the Start menu for “Manage user certificates”. Under Trusted Root Certification Authorities, then Certificates, delete the matching certificate.",
       "For a copy installed for the whole computer, sign in to Windows with an administrator account to remove it.",
     ],
     notes: [
@@ -76,7 +76,7 @@ export const DEVICE_HELP: Record<DeviceId, DeviceHelp> = {
       "Quit the browser completely, then reopen this page.",
     ],
     removal: [
-      "Remove the old Waitron entry from the same browser's Custom certificates or Authorities list. Repeat in every browser you installed it in.",
+      "Remove the matching certificate from the same browser's Custom certificates or Authorities list. Repeat in every browser you installed it in.",
     ],
     notes: [
       "Install the file in each browser you will use. Firefox on Linux keeps its own list — see its instructions.",
@@ -91,7 +91,9 @@ export const DEVICE_HELP: Record<DeviceId, DeviceHelp> = {
       "Import the downloaded file under Custom certificates, then Trusted certificates. If your version shows Authorities instead, import it there and allow it to identify websites.",
       "Close Chrome completely, then reopen this page.",
     ],
-    removal: ["Delete the old Waitron entry in the same certificate manager you imported it into."],
+    removal: [
+      "Delete the matching certificate in the same certificate manager you imported it into.",
+    ],
     notes: ["If importing or removing is blocked, use a venue device that permits it."],
   },
   android: {
@@ -103,7 +105,7 @@ export const DEVICE_HELP: Record<DeviceId, DeviceHelp> = {
       "Close your browser completely by swiping it away in the app switcher, then reopen this page.",
     ],
     removal: [
-      "On a Pixel, open Encryption &amp; credentials, then Trusted credentials, then User. On some other phones, such as OPPO, open Credential storage, then Trusted certificates, then User. Remove only the old Waitron certificate.",
+      "On a Pixel, open Encryption &amp; credentials, then Trusted credentials, then User. On some other phones, such as OPPO, open Credential storage, then Trusted certificates, then User. Open the matching certificate to check its fingerprint, then remove it.",
     ],
     notes: [
       "Installing a certificate authority grants trust across the whole device. Use a venue-owned device if you would rather not grant that on a personal phone.",
@@ -119,7 +121,7 @@ export const DEVICE_HELP: Record<DeviceId, DeviceHelp> = {
       "Close the browser you want to use by swiping it away in the app switcher, then reopen this page.",
     ],
     removal: [
-      "Open Settings, then General, then VPN &amp; Device Management, select the old Waitron profile, and choose Remove Profile. Install and trust the new file afterwards.",
+      "Open Settings, then General, then VPN &amp; Device Management. Open the profile and check its certificate. If it matches, choose Remove Profile.",
     ],
   },
   "firefox-linux": {
@@ -131,7 +133,7 @@ export const DEVICE_HELP: Record<DeviceId, DeviceHelp> = {
       "Quit Firefox completely, then reopen this page.",
     ],
     removal: [
-      "In the same Authorities list, select the old Waitron entry and choose Delete or Distrust.",
+      "In the same Authorities list, select the matching certificate and choose Delete or Distrust.",
     ],
     notes: [
       "Firefox on Linux does not read the system's certificate list, so it needs this import even if you already installed the file for Chrome.",

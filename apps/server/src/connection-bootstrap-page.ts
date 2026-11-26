@@ -4,7 +4,7 @@ import { CONNECTION_TEXT, CONNECTION_DEVICE_ES } from "./connection-bootstrap-st
 import { TOUCH_FIRST_CONDITION } from "./detect-device.js";
 import { DEVICE_HELP, DEVICE_ORDER, type DeviceId } from "./trust-page-devices.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
-import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
+import { CERTIFICATE_WORDS, NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
 import { RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
 import type { TrustPageInput } from "./trust-page.js";
@@ -58,7 +58,7 @@ li { margin-block: var(--wt-space-2); }
 .secondary { background: var(--wt-color-border); color: var(--wt-color-text); }
 #connection-error { color: var(--wt-color-danger); }
 .warning-words { color: var(--wt-color-danger); font-weight: 600; }
-#connection-fingerprint { overflow-wrap: anywhere; font-family: var(--wt-font-family); }
+#connection-fingerprint, [data-previous-fingerprint], [data-previous-thumbprint] { overflow-wrap: anywhere; }
 :focus-visible { outline: 2px solid var(--wt-color-focus); outline-offset: var(--wt-space-1); }
 [hidden] { display: none !important; }
 `;
@@ -81,6 +81,7 @@ export function renderConnectionPage(
 ): string {
   const locale = input.locale ?? "en";
   const words = CONNECTION_TEXT[locale];
+  const labels = CERTIFICATE_WORDS[locale];
   const status = input.connection;
   const recoveryLocale = locale === "es" ? "es-ES" : "en-GB";
   const operator = status.repairAllowed === false;
@@ -94,11 +95,17 @@ export function renderConnectionPage(
       : `<section data-storage-warning role="status"><h2>${words.spaceLow}</h2><p>${escape(RECOVERY_PAGE_WORDS[recoveryLocale].freeSpace(`${new Intl.NumberFormat(recoveryLocale, { maximumFractionDigits: 1 }).format(status.storageFreeBytes / 1_000_000)} MB`))}</p><p>${words.spaceAction.replace("{retry}", repairOffered ? words.spaceRetry : words.spaceCheckAgain)}</p></section>`;
   const hidden = (visible: boolean) => (visible ? "" : " hidden");
   const help = locale === "es" ? CONNECTION_DEVICE_ES : DEVICE_HELP;
+  const previous = status.previousCertificate;
   const details = helpOrder(input.device)
     .map((id) => {
       const entry = help[id];
       return `<details data-device="${id}"${id === input.device ? " open" : ""}><summary>${entry.summary}</summary>
-    <div data-removal${hidden(status.trust === "new-required")}><p>${words.remove}</p><ul>${entry.removal.map((line) => `<li>${line}</li>`).join("")}</ul></div>
+    <div data-removal${hidden(Boolean(previous))}><p>${labels.match}</p>
+    <p>${labels.shared}</p>
+    <p>${labels.previous}<br />
+    <span data-previous-name>${escape(previous?.name ?? "")}</span> <code data-previous-fingerprint>${escape(previous?.fingerprint ?? "")}</code></p>
+    ${id === "windows" ? `<p>${labels.thumbprint} <code data-previous-thumbprint>${escape(previous?.thumbprint ?? "")}</code></p>` : ""}
+    <ul>${entry.removal.map((line) => `<li>${line}</li>`).join("")}</ul></div>
     <ol>${entry.install.map((line) => `<li>${line}</li>`).join("")}</ol>
     ${(entry.notes ?? []).map((line) => `<p class="note">${line}</p>`).join("")}</details>`;
     })
@@ -159,10 +166,20 @@ button?.addEventListener("click", async () => {
     const newTrust = result.trust === "new-required";
     document.getElementById("trust-retained").hidden = newTrust;
     document.getElementById("trust-new").hidden = !newTrust;
-    document.querySelectorAll("[data-removal]").forEach((node) => { node.hidden = !newTrust; });
+    const previous = result.previousCertificate;
+    document.getElementById("connection-identity-unavailable").hidden = !newTrust || Boolean(previous);
+    document.querySelectorAll("[data-removal]").forEach((node) => {
+      node.hidden = !previous;
+      if (!previous) return;
+      node.querySelector("[data-previous-name]").textContent = previous.name;
+      node.querySelector("[data-previous-fingerprint]").textContent = previous.fingerprint;
+      const thumbprint = node.querySelector("[data-previous-thumbprint]");
+      if (thumbprint) thumbprint.textContent = previous.thumbprint;
+    });
     document.getElementById("connection-download").hidden = false;
     document.getElementById("connection-help").hidden = false;
     document.getElementById("connection-continue").hidden = continuationRequired;
+    document.getElementById("connection-certificate-name").textContent = typeof result.certificateName === "string" ? result.certificateName : "";
     document.getElementById("connection-fingerprint").textContent = typeof result.fingerprint === "string" ? result.fingerprint : "";
     status.textContent = continuationRequired ? words.certificateReady : words.ready;
     button.hidden = !continuationRequired;
@@ -193,7 +210,7 @@ button?.addEventListener("click", async () => {
 ${repairOffered ? `<button id="connection-repair" type="button" hidden>${words.repair}</button>` : ""}
 <section${hidden(!operator)}><div id="trust-retained"${hidden(status.trust === "retained")}><h2>${words.retained}</h2><p>${words.retainedHelp}</p></div>
 <div id="trust-new"${hidden(status.trust === "new-required")}><h2>${words.newTrust}</h2><p>${words.newTrustHelp}</p></div>
-<div id="connection-download"${hidden(status.caAvailable)}>${input.notSetUp ? `<p class="warning-words">${escape(NOT_SET_UP_WORDS[locale])}</p>` : ""}<p><a id="connection-certificate" class="button" href="${escape(input.caDownloadPath)}" download="waitron-ca.crt">${words.download}</a></p><p class="note">${words.downloadHelp}</p><p class="note">${words.fingerprint}</p><p id="connection-fingerprint">${escape(status.fingerprint ?? "")}</p></div>
+<div id="connection-download"${hidden(status.caAvailable)}>${input.notSetUp ? `<p class="warning-words">${escape(NOT_SET_UP_WORDS[locale])}</p>` : ""}<p id="connection-identity-unavailable"${hidden(status.trust === "new-required" && !previous)}>${labels.unavailable}</p><p><a id="connection-certificate" class="button" href="${escape(input.caDownloadPath)}" download="waitron-ca.crt">${words.download}</a></p><p class="note">${words.downloadHelp}</p><p>${labels.current}<br /><span id="connection-certificate-name">${escape(status.certificateName ?? "")}</span> <code id="connection-fingerprint">${escape(status.fingerprint ?? "")}</code></p></div>
 <div id="connection-help"${hidden(status.caAvailable)}><h2>${words.install}</h2><p class="note">${words.managed}</p>${details}</div></section>
 <section id="connection-actions">${ready && retry && !operator && !elsewhere ? `<button id="connection-reconnect" type="button" hidden>${words.reconnect}</button>` : ""}<p>${words.warning}</p><a id="connection-continue" class="button" href="${escape(input.httpsUrl)}" target="_blank" rel="noopener noreferrer"${hidden((ready && !retry) || operator)}>${words.continue}</a><ul>${input.reachUrls.map((url) => `<li><a href="${escape(url)}">${escape(url)}</a></li>`).join("")}</ul></section>
 </div>

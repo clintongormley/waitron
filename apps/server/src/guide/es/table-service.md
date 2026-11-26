@@ -289,6 +289,7 @@ conectar con el servidor** en lugar del aviso del navegador o de la página del 
 caja. En la red WiFi del local, elige **Ver cómo hacerlo** para abrir los pasos en otra pestaña.
 El enlace necesita la página local del certificado, que no está disponible en un servidor de
 reserva, si el acceso HTTP está desactivado o si el local usa su propio certificado TLS.
+Antes de eliminar un certificado, compara su nombre y su huella con los que muestra este servidor.
 
 En un dispositivo que nunca ha confiado en el servidor, el navegador puede avisar de la conexión
 antes de que la caja pueda abrirse. Abre en su lugar `http://` seguido de la dirección IP del

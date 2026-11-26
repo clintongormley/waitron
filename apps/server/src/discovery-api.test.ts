@@ -1,4 +1,5 @@
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { X509Certificate } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -104,8 +105,11 @@ it("renders a trust page with the CA link and the inline QR", async () => {
   expect(res.status).toBe(200);
   expect(res.headers.get("content-type")).toContain("text/html");
   const html = await res.text();
+  const ca = new X509Certificate(material.caCertPem);
   expect(html).toContain('<html lang="en">');
   expect(html).toContain("/setup-api/ca.crt");
+  expect(html).toContain(ca.subject.slice(3));
+  expect(html).toContain(ca.fingerprint256);
   expect(html).toContain('data-qr="https://192.168.1.5:8080"'); // the injected QR svg
   expect(html).toMatch(/iOS/); // per-OS steps present
 });
