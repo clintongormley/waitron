@@ -561,6 +561,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **Till and handheld redesign, pass 1: the map, the order, the menu and payment (TILL-REDESIGN-1).**
+  Design decided with the owner on 26 November 2026, one picture at a time; the write-up waits for the
+  owner's approval, then the build is queued. Phone first, layout by screen width, one order screen
+  for counter and tables, full-screen panels instead of dialogs, a guest-facing bill with a tip
+  question. [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md).
+
 - **Overpaid open bills (OVERPAID-BILLS, lane L; design approved by the owner, 24 November 2026).** A
   cancel, discount, move or split may leave more on a bill than it comes to, settled before it closes;
   cash back for a card payment with its own permission. Four pull requests, fiscal (the day close
