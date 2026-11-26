@@ -20,17 +20,13 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import {
-  followsClash,
   productInherited,
   variantClash,
   variantSetting,
-  variantsInheritedFrom,
   variantInherited,
   variantInheritedFrom,
   withoutOwn,
   type Inherited,
-  type InheritedFrom,
-  type ParentPrice,
 } from "./menu-price-inheritance.js";
 import type { Setting } from "../api/client.js";
 import type { Decimal } from "@waitron/shared";
@@ -60,15 +56,6 @@ export interface PriceSaveResult {
 
 const blankToNull = (text: string): string | null => (text.trim() === "" ? null : text.trim());
 
-/** A product field's text as the price its variants follow: undefined while untouched or holding text
- * that is not a price, null once emptied, else the price typed. */
-const parentPriceOf = (draft: string | undefined): ParentPrice => {
-  const text = draft?.trim();
-  if (text === undefined) return undefined;
-  if (text === "") return null;
-  return isProductPrice(text) ? text : undefined;
-};
-
 /** By amount, so "2.5" typed over a stored "2.50" is no change. */
 const samePrice = (a: string | null, b: string | null): boolean =>
   a === null || b === null ? a === b : stringToCents(a) === stringToCents(b);
@@ -93,11 +80,6 @@ const parentKey = ({ item, variant }: Line): string | null => (variant ? item.me
 const toggleLabel = ({ item }: Line, expanded: boolean): string =>
   fill(expanded ? "menu_prices.collapse" : "menu_prices.expand", { name: item.name });
 const keepsVariantOrder = ({ variant }: Line): boolean => variant === null;
-
-/** Whether a clash in the product's own price, as its field reads now, stops publishing: it has
- * no variant, or a variant charges that clashing price. */
-const ownPriceSold = (item: MenuPriceRow, parent: ParentPrice = undefined): boolean =>
-  item.variants.length === 0 || followsClash(item, parent);
 
 /** A product with variants charges what they charge, so only its variants' rows have a field. */
 const hasField = ({ item, variant }: Line): boolean =>
@@ -291,12 +273,8 @@ export class MenuPricesTable extends LitElement {
   #lines: Line[] = [];
   #lineOf: ReadonlyMap<string, Line> = new Map();
   #columns: DataTableColumn<Line>[] = [];
-  /** Per product, what it charges with its field blank and where each variant's price comes
-   * from, neither of which typing changes. */
-  #productInheritance: ReadonlyMap<
-    MenuPriceRow,
-    { inherited: Inherited; variants: ReturnType<typeof variantsInheritedFrom> }
-  > = new Map();
+  /** Per product, what it charges with no price of this menu's own. */
+  #productInheritance: ReadonlyMap<MenuPriceRow, Inherited> = new Map();
   /** Each row that clashes as this menu stores it, drafts aside, so a row under the Clashes filter
    * stays while a price is typed into it. */
   #clashing: ReadonlyMap<string, "variant" | "own"> = new Map();
@@ -306,17 +284,10 @@ export class MenuPricesTable extends LitElement {
    * undefined until then. Dropped for the rest of a load once it has no clash, so a clash that
    * comes back does not move the filter. */
   #startOnClashes: boolean | undefined = undefined;
-  /** Per row key, what depends on its product's field, with the reading of that field it was
-   * worked out for. */
-  readonly #underParent = new Map<
+  /** Per row key, what its inherited price and clash are, worked out once per read. */
+  readonly #worked = new Map<
     string,
-    {
-      parent: ParentPrice;
-      from?: InheritedFrom;
-      inherited?: Inherited;
-      variantClash?: boolean;
-      ownSold?: boolean;
-    }
+    { from?: Setting<Decimal>; inherited?: Inherited; variantClash?: boolean }
   >();
 
   protected override willUpdate(changed: PropertyValues<this>): void {
@@ -327,13 +298,8 @@ export class MenuPricesTable extends LitElement {
     if (changed.has("rows")) {
       this.#saved.clear();
       this.#reached = new Map(this.rows.map((row) => [row, row.placements.flat()]));
-      this.#productInheritance = new Map(
-        this.rows.map((row) => [
-          row,
-          { inherited: productInherited(row), variants: variantsInheritedFrom(row) },
-        ]),
-      );
-      this.#underParent.clear();
+      this.#productInheritance = new Map(this.rows.map((row) => [row, productInherited(row)]));
+      this.#worked.clear();
       this.#readClashes();
     }
     if (changed.has("products"))
@@ -379,14 +345,14 @@ export class MenuPricesTable extends LitElement {
       count += clashesOf(item.combined).length;
       const own =
         item.override === null &&
-        ownPriceSold(item) &&
+        item.variants.length === 0 &&
         (item.combined.price.state === "clash" ||
-          this.#productInheritance.get(item)!.inherited.state === "clash");
+          this.#productInheritance.get(item)!.state === "clash");
       const product = variantClash(item) ? "variant" : own ? "own" : null;
       if (product !== null) clashing.set(item.menuItemId, product);
       for (const { variantId, price } of item.variants) {
         if (price !== null) continue;
-        if (variantInherited(item, variantId, undefined).state !== "clash") continue;
+        if (variantInherited(item, variantId).state !== "clash") continue;
         clashing.set(`${item.menuItemId}:${variantId}`, "own");
       }
     }
@@ -506,12 +472,6 @@ export class MenuPricesTable extends LitElement {
       if (field !== null && field.value !== (now ?? this.#stored(line) ?? "")) return true;
       if (this.#holds(line, was) !== this.#holds(line, now)) return true;
       if (field !== null && field.error !== this.#error(key)) return true;
-      if (
-        line.item.variants.length > 0 &&
-        line.variant === null &&
-        parentPriceOf(was) !== parentPriceOf(now)
-      )
-        return true;
     }
     return false;
   }
@@ -599,33 +559,26 @@ export class MenuPricesTable extends LitElement {
     return this.#stored(line) !== null || (line.variant === null && pricesAVariant(line.item));
   }
 
-  /** What depends on the row's product's field, worked out again only once that field reads
-   * another price. */
-  #withParent(line: Line) {
-    const keyOfProduct = line.item.menuItemId;
-    const saved = this.#saved.get(keyOfProduct);
-    const staged = parentPriceOf(this.drafts.get(keyOfProduct));
-    const parent = staged === undefined ? saved : staged;
+  #workedOut(line: Line) {
     const key = keyOf(line);
-    const known = this.#underParent.get(key);
-    if (known !== undefined && known.parent === parent) return known;
+    const known = this.#worked.get(key);
+    if (known !== undefined) return known;
     const { item, variant } = line;
     const worked = variant
       ? {
-          parent,
-          from: variantInheritedFrom(item, variant.variantId, parent),
-          inherited: variantInherited(item, variant.variantId, parent),
+          from: variantInheritedFrom(item, variant.variantId),
+          inherited: variantInherited(item, variant.variantId),
         }
-      : { parent, variantClash: variantClash(item, parent), ownSold: ownPriceSold(item, parent) };
-    this.#underParent.set(key, worked);
+      : { variantClash: variantClash(item) };
+    this.#worked.set(key, worked);
     return worked;
   }
 
   /** What the row charges with its field left blank. */
   #inherited(line: Line): Inherited {
     return line.variant
-      ? this.#withParent(line).inherited!
-      : this.#productInheritance.get(line.item)!.inherited;
+      ? this.#workedOut(line).inherited!
+      : this.#productInheritance.get(line.item)!;
   }
 
   /** What the row charges: its stored price, else what it inherits. */
@@ -634,13 +587,12 @@ export class MenuPricesTable extends LitElement {
     return stored === null ? this.#inherited(line) : { state: "price", low: stored, high: stored };
   }
 
-  /** A row's mark, its product's field as it reads now: "variant" on a product row by
-   * `variantClash`; "own" on a row whose field holds no price and whose own price, or what it
-   * inherits, clashes, on a product row only while `ownPriceSold`. */
+  /** A row's mark: "variant" on a product row by `variantClash`; "own" on a row with a field that
+   * holds no price, whose own price, or what it inherits, clashes. */
   #clash(line: Line): "variant" | "own" | null {
-    if (line.variant === null && this.#withParent(line).variantClash) return "variant";
+    if (line.variant === null && this.#workedOut(line).variantClash) return "variant";
+    if (!hasField(line)) return null;
     if (this.#holds(line, this.drafts.get(keyOf(line)))) return null;
-    if (line.variant === null && !this.#withParent(line).ownSold) return null;
     return (line.variant === null && this.#priceSetting(line).state === "clash") ||
       this.#inherited(line).state === "clash"
       ? "own"
@@ -649,15 +601,11 @@ export class MenuPricesTable extends LitElement {
 
   #clashSentence(line: Line, clash: "variant" | "own"): string {
     const { item, variant } = line;
-    if (variant) return pricesSentence(this.#withParent(line).from!.setting);
-    const own = withoutOwn(item.combined.price);
-    if (clash === "own" && own.state === "clash") return pricesSentence(own);
-    const variants =
-      clash === "variant"
-        ? item.variants
-            .map(({ variantId }) => ({ variantId, setting: variantSetting(item, variantId) }))
-            .filter(({ setting }) => setting.level === "variant")
-        : this.#productInheritance.get(item)!.variants;
+    if (variant) return pricesSentence(this.#workedOut(line).from!);
+    if (clash === "own") return pricesSentence(withoutOwn(item.combined.price));
+    const variants = item.variants
+      .map(({ variantId }) => ({ variantId, setting: variantSetting(item, variantId) }))
+      .filter(({ setting }) => setting.level === "variant");
     return [
       t("menu_prices.variant_clash_lead"),
       ...variants

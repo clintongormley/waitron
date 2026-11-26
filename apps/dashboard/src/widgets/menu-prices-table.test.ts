@@ -2551,28 +2551,6 @@ it("drops a product's clash sentence once this menu's saved price decides it, an
   expect(override(el, "mi-lager").placeholder).toBe(t("menu_prices.clash_placeholder"));
 });
 
-it("marks a product whose following variant charges its clashing price, so the clash shows with the product closed", async () => {
-  const following = {
-    ...lemonade,
-    override: null,
-    combined: {
-      ...lemonade.combined,
-      price: clashPrice,
-      variants: lemonade.combined.variants.map((v, at) =>
-        at === 0 ? { ...v, price: { ...clashPrice, level: "product" } } : v,
-      ),
-    },
-  } as MenuPriceRow;
-  const el = await allPrices(await mount({ rows: [following] }));
-  expect(row(el, "mi-lemonade:v-small")).toBeNull();
-  expect(clashMarker(el, "mi-lemonade")).toBe(clashSentences["es-ES"].prices);
-  expect(derivedPrice(el, "mi-lemonade")!.textContent).toBe("—");
-  toggleOf(el, "mi-lemonade")!.click();
-  await table(el).updateComplete;
-  expect(clashMarker(el, "mi-lemonade:v-small")).toBe(clashSentences["es-ES"].prices);
-  expect(override(el, "mi-lemonade:v-small").placeholder).toBe(t("menu_prices.clash_placeholder"));
-});
-
 it("drops a product's clash sentence while a price is typed for it, and not for text that is no price", async () => {
   const el = await mount({ rows: [clashRow(lager)] });
   expect(clashMarker(el, "mi-lager")).toBe(clashSentences["es-ES"].prices);
@@ -3270,27 +3248,6 @@ describe("the clash message and the Clashes filter", () => {
       price: { state: "decided", value: "2.20", source: { kind: "own" }, otherwise: clashPrice },
     } as MenuPriceRow["combined"],
   };
-  /** Lemonade with no price of this menu's own, its clash followed by both its variants, as
-   * `combineOffer` builds it. */
-  function followedClashRow(): MenuPriceRow {
-    const followed = { ...clashPrice, level: "product" };
-    return {
-      ...lemonade,
-      override: null,
-      combined: {
-        productId: "p-lemonade",
-        price: clashPrice,
-        variants: [
-          { variantId: "v-small", price: followed },
-          { variantId: "v-large", price: followed },
-        ],
-      },
-      variants: [
-        { variantId: "v-small", price: null, available: true },
-        { variantId: "v-large", price: null, available: true },
-      ],
-    } as MenuPriceRow;
-  }
   const message = (el: MenuPricesTable) =>
     el.shadowRoot!.querySelector<HTMLElement>('[data-test="clash-message"]');
 
@@ -3313,10 +3270,10 @@ describe("the clash message and the Clashes filter", () => {
       start: ["mi-lager"],
     },
     {
-      kind: "a product whose two variants follow its clash",
-      rows: () => [burger, followedClashRow()],
+      kind: "two clashing products without variants",
+      rows: () => [clashRow(burger), clashRow(lager)],
       count: 2,
-      start: ["mi-lemonade"],
+      start: ["mi-burger", "mi-lager"],
     },
     {
       kind: "a variant clash on one variant",
@@ -3360,12 +3317,6 @@ describe("the clash message and the Clashes filter", () => {
     const el = await mount({ rows: [burger, variantClashRow()] });
     await expand(el, "mi-lemonade");
     expect(shown(el)).toEqual(["mi-lemonade", "mi-lemonade:v-small"]);
-  });
-
-  it("under Clashes keeps both variants that follow their product's clash, once it is opened", async () => {
-    const el = await mount({ rows: [burger, followedClashRow()] });
-    await expand(el, "mi-lemonade");
-    expect(shown(el)).toEqual(["mi-lemonade", "mi-lemonade:v-small", "mi-lemonade:v-large"]);
   });
 
   it("says nothing and starts on all prices, offering no Clashes, on a load without a clash", async () => {
@@ -3651,7 +3602,7 @@ describe("the clash message and the Clashes filter", () => {
     expect(text(message(one))).toBe(
       "1 precio tiene un conflicto. Resuélvelo antes de poder publicar esta carta.",
     );
-    const two = await mount({ rows: [burger, followedClashRow()] });
+    const two = await mount({ rows: [clashRow(burger), clashRow(lager)] });
     expect(text(message(two))).toBe(
       "2 precios tienen conflictos. Resuélvelos antes de poder publicar esta carta.",
     );
