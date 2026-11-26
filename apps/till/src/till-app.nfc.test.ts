@@ -90,8 +90,8 @@ describe("NFC throughout the till", () => {
     expect(notice(el)?.tone).toBe("info");
   });
   it.each([
-    ["receipt", "Ahora usas Portable printer para tickets"],
-    ["payment_slip", "Ahora usas Portable printer para justificantes de pago"],
+    ["receipt", es["equipment.picked_up_receipt_only"]],
+    ["payment_slip", es["equipment.picked_up_slip_only"]],
   ])("in Spanish, an accepted printer scan names the %s role it set", async (target, message) => {
     const stored = {
       roles: NFC_EQUIPMENT.roles.map((role) =>
@@ -104,7 +104,9 @@ describe("NFC throughout the till", () => {
     const { el } = await mountEquipmentApp({ setDeviceEquipment });
     await signIn(el, "es-ES");
     (await reader()).read(`waitron-equipment:printer:${PRINTER_ID}`);
-    await vi.waitFor(() => expect(notice(el)?.message).toBe(message));
+    await vi.waitFor(() =>
+      expect(notice(el)?.message).toBe(message.replace("{item}", "Portable printer")),
+    );
     expect(notice(el)?.tone).toBe("info");
     expect(setDeviceEquipment).toHaveBeenCalledTimes(1);
   });
@@ -617,7 +619,7 @@ describe("NFC throughout the till", () => {
   });
   it.each([
     ["en-GB", "Picked up Portable reader"],
-    ["es-ES", "Ahora usas Portable reader"],
+    ["es-ES", es["equipment.picked_up"].replace("{item}", "Portable reader")],
   ])(
     "announces a successful pickup in %s without leaving the current screen",
     async (locale, message) => {
