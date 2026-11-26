@@ -191,8 +191,11 @@ describe("saveMenuHome", () => {
       ],
       dropped: [],
     });
-    const { dropped, ...savedPage } = saved;
-    expect(await app((tx) => readMenuHome(tx, f.lunch))).toEqual(savedPage);
+    expect(await app((tx) => readMenuHome(tx, f.lunch))).toEqual({
+      homeSectionId: saved.homeSectionId,
+      order: saved.order,
+      shortcuts: saved.shortcuts,
+    });
     expect(await tileRefs(await homeOf(f.dinner))).toEqual([]);
   });
 
