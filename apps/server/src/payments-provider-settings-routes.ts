@@ -1,12 +1,15 @@
 import "./errors.js";
 import { validatePayload, putCredential, deleteCredential } from "@waitron/credentials";
-import { type Transaction, saveSettings, venueCredentials, readSettings } from "@waitron/db";
+import { type Transaction, newId, saveSettings, venueCredentials, readSettings } from "@waitron/db";
 import { requireFreshManagementSignIn, authorizeManager } from "@waitron/identity";
 import {
   readPaymentsSettings,
   PAYMENTS_SETTINGS,
   cardProviderById,
   cardReaders,
+  otherCardMachineFault,
+  otherCardMachineNameKey,
+  type OtherCardMachine,
 } from "@waitron/payments";
 import { type Logger, requireManagementSession, readJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
@@ -22,6 +25,38 @@ function screenStringMap(body: Record<string, unknown>): Record<string, string> 
     out[field] = value;
   }
   return out;
+}
+
+function requireRevision(revision: unknown): number {
+  if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0)
+    throw new AppError("management.request_invalid", { field: "revision" });
+  return revision;
+}
+
+function otherCardMachinesFrom(value: unknown, storedIds: ReadonlySet<string>): OtherCardMachine[] {
+  if (!Array.isArray(value))
+    throw new AppError("management.request_invalid", { field: "otherCardMachines" });
+  const ids = new Set<string>();
+  const names = new Set<string>();
+  return value.map((entry: unknown, index) => {
+    const refuse = (key?: string) =>
+      new AppError("management.request_invalid", {
+        field: `otherCardMachines.${index}${key === undefined ? "" : `.${key}`}`,
+      });
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) throw refuse();
+    const row = entry as Record<string, unknown>;
+    const id = row.id === undefined ? newId() : row.id;
+    if (typeof id !== "string" || (row.id !== undefined && !storedIds.has(id)) || ids.has(id))
+      throw refuse("id");
+    ids.add(id);
+    const name = typeof row.name === "string" ? row.name.trim() : row.name;
+    const fault = otherCardMachineFault({ ...row, id, name });
+    if (fault !== null) throw refuse(fault);
+    const key = otherCardMachineNameKey(name as string);
+    if (names.has(key)) throw refuse("name");
+    names.add(key);
+    return { id, name: name as string, paysInto: row.paysInto as OtherCardMachine["paysInto"] };
+  });
 }
 
 export function mountPaymentsProviderSettingsRoutes(
@@ -58,13 +93,12 @@ export function mountPaymentsProviderSettingsRoutes(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const { tipsEnabled, testProviders, revision } = body;
+      const { tipsEnabled, testProviders } = body;
       if (typeof tipsEnabled !== "boolean")
         throw new AppError("management.request_invalid", { field: "tipsEnabled" });
       if (typeof testProviders !== "boolean")
         throw new AppError("management.request_invalid", { field: "testProviders" });
-      if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0)
-        throw new AppError("management.request_invalid", { field: "revision" });
+      const revision = requireRevision(body.revision);
       const { saved, practiceChanged } = await gated(sessionId, async (tx, personId) => {
         if (testProviders && !testProvidersAvailable)
           throw new AppError("payment.test_providers_prepare_only", {});
@@ -78,6 +112,44 @@ export function mountPaymentsProviderSettingsRoutes(
       });
       if (practiceChanged && testProvidersAvailable) await deps.cardSimulator?.reapply();
       return c.json(paymentSettingsAnswer(saved));
+    }),
+  );
+
+  const machinesAnswer = ({ doc, revision }: Awaited<ReturnType<typeof readPaymentsSettings>>) => ({
+    otherCardMachines: doc.otherCardMachines,
+    revision,
+  });
+
+  app.get("/management-api/payments/other-card-machines", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      return c.json(machinesAnswer(await gated(sessionId, readPaymentsSettings)));
+    }),
+  );
+
+  app.put("/management-api/payments/other-card-machines", (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const revision = requireRevision(body.revision);
+      const saved = await gated(sessionId, async (tx, personId) => {
+        const { doc, revision: current } = await readPaymentsSettings(tx);
+        if (current !== revision)
+          throw new AppError("settings.out_of_date", {
+            module: PAYMENTS_SETTINGS.module,
+            revision: current,
+          });
+        const otherCardMachines = otherCardMachinesFrom(
+          body.otherCardMachines,
+          new Set(doc.otherCardMachines.map((machine) => machine.id)),
+        );
+        return saveSettings(tx, PAYMENTS_SETTINGS, {
+          doc: { ...doc, otherCardMachines },
+          expectedRevision: revision,
+          personId,
+        });
+      });
+      return c.json(machinesAnswer(saved));
     }),
   );
 

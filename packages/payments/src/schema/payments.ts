@@ -21,6 +21,7 @@ import {
   workingOrders,
 } from "@waitron/db";
 import { cardReaders } from "./card-readers.js";
+import { OTHER_CARD_MACHINE_DESTINATIONS } from "../settings.js";
 
 /**
  * Mirrors `PaymentState` in ../provider.ts. `attempting` is written before an integrated adapter's
@@ -39,7 +40,7 @@ export const paymentState = enumType([
 export const paymentResolutionOutcome = enumType(["captured", "failed"]);
 export const paymentHoldOutcome = enumType(["refunded_at_provider", "put_on_bill"]);
 
-const externalProviderType = enumType(["connected_account", "other"]);
+const externalProviderType = enumType(OTHER_CARD_MACHINE_DESTINATIONS);
 
 /**
  * One row per electronic tender, updated as it moves through its states — unlike core's immutable

@@ -3337,7 +3337,12 @@ describe("payments settings", () => {
   it("saves tips on Live, refuses practice providers and preserves provider choices", async () => {
     await withTransaction(suite.db, (tx) =>
       saveSettings(tx, PAYMENTS_SETTINGS, {
-        doc: { providers: { stripe: false }, tipsEnabled: false, testProviders: false },
+        doc: {
+          providers: { stripe: false },
+          tipsEnabled: false,
+          testProviders: false,
+          otherCardMachines: [],
+        },
         expectedRevision: 0,
         personId: null,
       }),
@@ -3357,7 +3362,12 @@ describe("payments settings", () => {
       error: { code: "settings.out_of_date", params: { module: "payments", revision: 2 } },
     });
     expect(await readPaymentsSettings(suite.db)).toEqual({
-      doc: { providers: { stripe: false }, tipsEnabled: true, testProviders: false },
+      doc: {
+        providers: { stripe: false },
+        tipsEnabled: true,
+        testProviders: false,
+        otherCardMachines: [],
+      },
       revision: 2,
     });
   });
@@ -3382,13 +3392,201 @@ describe("payments settings", () => {
   });
 });
 
+describe("other card machines", () => {
+  const path = "/management-api/payments/other-card-machines";
+  let venue: Venue;
+  let app: Hono;
+  beforeEach(async () => {
+    venue = await seedVenueWithStaff();
+    app = mountApp(venue);
+  });
+  const put = (body: object) => send(app, "PUT", path, { cookie: venue.managerCookie, body });
+
+  it("answers an empty list and requires hardware management", async () => {
+    const response = await send(app, "GET", path, { cookie: venue.managerCookie });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ otherCardMachines: [], revision: 0 });
+    for (const method of ["GET", "PUT"] as const) {
+      const refused = await send(app, method, path, {
+        cookie: venue.staffCookie,
+        ...(method === "PUT" ? { body: { otherCardMachines: [], revision: 0 } } : {}),
+      });
+      expect(refused.status).toBe(403);
+      expect(await refused.json()).toMatchObject({
+        error: { code: "authorization.not_permitted" },
+      });
+    }
+    expect((await readPaymentsSettings(suite.db)).revision).toBe(0);
+  });
+
+  it("gives new machines ids, trims names, keeps the other settings and accepts the SumUp account while SumUp is not connected", async () => {
+    expect(
+      await tryGetCredential(suite.db, RING, { purpose: SUMUP_CARD_PROVIDER.credentialPurpose }),
+    ).toBeNull();
+    await withTransaction(suite.db, (tx) =>
+      saveSettings(tx, PAYMENTS_SETTINGS, {
+        doc: {
+          providers: { stripe: false },
+          tipsEnabled: true,
+          testProviders: true,
+          otherCardMachines: [],
+        },
+        expectedRevision: 0,
+        personId: null,
+      }),
+    );
+    const saved = await put({
+      otherCardMachines: [
+        { name: "  Bar terminal ", paysInto: "connected_account" },
+        { name: "Terrace", paysInto: "other" },
+      ],
+      revision: 1,
+    });
+    expect(saved.status).toBe(200);
+    const body = (await saved.json()) as {
+      otherCardMachines: { id: string; name: string; paysInto: string }[];
+      revision: number;
+    };
+    expect(body).toEqual({
+      otherCardMachines: [
+        { id: expect.any(String), name: "Bar terminal", paysInto: "connected_account" },
+        { id: expect.any(String), name: "Terrace", paysInto: "other" },
+      ],
+      revision: 2,
+    });
+    const [bar, terrace] = body.otherCardMachines;
+    expect(bar!.id).not.toBe(terrace!.id);
+    expect(await readPaymentsSettings(suite.db)).toEqual({
+      doc: {
+        providers: { stripe: false },
+        tipsEnabled: true,
+        testProviders: true,
+        otherCardMachines: body.otherCardMachines,
+      },
+      revision: 2,
+    });
+
+    const renamed = await put({
+      otherCardMachines: [{ id: terrace!.id, name: "Patio", paysInto: "connected_account" }],
+      revision: 2,
+    });
+    expect(await renamed.json()).toEqual({
+      otherCardMachines: [{ id: terrace!.id, name: "Patio", paysInto: "connected_account" }],
+      revision: 3,
+    });
+    const got = await send(app, "GET", path, { cookie: venue.managerCookie });
+    expect(await got.json()).toEqual({
+      otherCardMachines: [{ id: terrace!.id, name: "Patio", paysInto: "connected_account" }],
+      revision: 3,
+    });
+  });
+
+  it("refuses a stale revision and saves nothing", async () => {
+    expect((await put({ otherCardMachines: [], revision: 0 })).status).toBe(200);
+    const stale = await put({
+      otherCardMachines: [{ name: "Bar", paysInto: "other" }],
+      revision: 0,
+    });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({
+      error: { code: "settings.out_of_date", params: { module: "payments", revision: 1 } },
+    });
+    expect((await readPaymentsSettings(suite.db)).doc.otherCardMachines).toEqual([]);
+  });
+
+  it("answers a stale editor naming a machine another manager removed as out of date", async () => {
+    const created = await put({
+      otherCardMachines: [{ name: "Bar", paysInto: "other" }],
+      revision: 0,
+    });
+    const [bar] = ((await created.json()) as { otherCardMachines: { id: string }[] })
+      .otherCardMachines;
+    expect((await put({ otherCardMachines: [], revision: 1 })).status).toBe(200);
+    const stale = await put({
+      otherCardMachines: [{ id: bar!.id, name: "Bar", paysInto: "connected_account" }],
+      revision: 1,
+    });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({
+      error: { code: "settings.out_of_date", params: { module: "payments", revision: 2 } },
+    });
+    expect(await readPaymentsSettings(suite.db)).toMatchObject({
+      doc: { otherCardMachines: [] },
+      revision: 2,
+    });
+  });
+
+  it("refuses a stored id named twice and saves nothing", async () => {
+    const created = await put({
+      otherCardMachines: [{ name: "Bar", paysInto: "other" }],
+      revision: 0,
+    });
+    const [bar] = ((await created.json()) as { otherCardMachines: { id: string }[] })
+      .otherCardMachines;
+    const response = await put({
+      otherCardMachines: [
+        { id: bar!.id, name: "Bar", paysInto: "other" },
+        { id: bar!.id, name: "Terrace", paysInto: "other" },
+      ],
+      revision: 1,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "otherCardMachines.1.id" } },
+    });
+    expect((await readPaymentsSettings(suite.db)).revision).toBe(1);
+  });
+
+  const good = { name: "Bar", paysInto: "other" };
+  it.each([
+    ["otherCardMachines.1.name", [good, { name: "   ", paysInto: "other" }]],
+    ["otherCardMachines.1.name", [good, { name: "x".repeat(61), paysInto: "other" }]],
+    ["otherCardMachines.1.name", [good, { name: " bar ", paysInto: "other" }]],
+    [
+      "otherCardMachines.1.name",
+      [
+        { name: "Sal\u00f3n", paysInto: "other" },
+        { name: "Salo\u0301n", paysInto: "other" },
+      ],
+    ],
+    ["otherCardMachines.1.name", [good, { name: 7, paysInto: "other" }]],
+    ["otherCardMachines.0.paysInto", [{ name: "Bar", paysInto: "bank" }]],
+    ["otherCardMachines.0.id", [{ id: "unknown", ...good }]],
+    ["otherCardMachines.0.id", [{ id: 4, ...good }]],
+    ["otherCardMachines.0.id", [{ id: null, ...good }]],
+    ["otherCardMachines.0.colour", [{ ...good, colour: "red" }]],
+    ["otherCardMachines.0", ["Bar"]],
+    ["otherCardMachines", { 0: good }],
+  ])("refuses %s and saves nothing", async (field, machines) => {
+    const response = await put({ otherCardMachines: machines, revision: 0 });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field } },
+    });
+    expect((await readPaymentsSettings(suite.db)).revision).toBe(0);
+  });
+
+  it.each([-1, 0.5, "0"])("refuses the revision %j", async (revision) => {
+    const response = await put({ otherCardMachines: [], revision });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "management.request_invalid", params: { field: "revision" } },
+    });
+  });
+});
+
 describe("provider On/Off", () => {
   it("preserves the saved tips and practice switches when an administrator changes a provider", async () => {
     const venue = await seedVenueWithStaff();
     const [admin] = await seedPersons(suite.db, { displayName: "Administrator", role: "admin" });
     const session = await withTransaction(suite.db, async (tx) => {
       await saveSettings(tx, PAYMENTS_SETTINGS, {
-        doc: { providers: { sumup: false }, tipsEnabled: true, testProviders: true },
+        doc: {
+          providers: { sumup: false },
+          tipsEnabled: true,
+          testProviders: true,
+          otherCardMachines: [],
+        },
         expectedRevision: 0,
         personId: null,
       });
@@ -3405,7 +3603,12 @@ describe("provider On/Off", () => {
     );
     expect(response.status).toBe(200);
     expect(await readPaymentsSettings(suite.db)).toEqual({
-      doc: { providers: { sumup: false, stripe: false }, tipsEnabled: true, testProviders: true },
+      doc: {
+        providers: { sumup: false, stripe: false },
+        tipsEnabled: true,
+        testProviders: true,
+        otherCardMachines: [],
+      },
       revision: 2,
     });
   });

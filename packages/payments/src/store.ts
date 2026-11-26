@@ -16,6 +16,7 @@ import { payments } from "./schema/payments.js";
 import { reconciliationRuns } from "./schema/reconciliation-runs.js";
 import { paymentRefunds } from "./schema/payment-refunds.js";
 import { readerHeldBy, readerPaymentInProgress } from "./device-readers.js";
+import type { OtherCardMachineDestination } from "./settings.js";
 import type { CardDetails, CollectionOwners, PaymentState } from "./provider.js";
 
 /** `amount` is the exact decimal for the column's count of cents, never a float. */
@@ -48,7 +49,7 @@ interface NewPayment {
   paymentRef: string;
   amount: Decimal;
   externalRef?: string;
-  externalProvider?: "connected_account" | "other";
+  externalProvider?: OtherCardMachineDestination;
   externalMachine?: string;
   card?: CardDetails;
   /** The bill payment this attempt charges for; absent for a payment of a whole order. */
