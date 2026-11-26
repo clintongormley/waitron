@@ -1,5 +1,8 @@
 # Lane K · Customer menu search and section links
 
+The owner's [26 November wording decision](../specs/2026-11-24-customer-menu-design.md) supersedes
+the empty search wording and the page-wide allergen advice in this plan.
+
 [Delivery 3, section 3](../specs/2026-11-24-customer-menu-design.md#3-the-customers-page). Builds on #4440, including the owner’s 20:20 allergen wording. Claude reviewed the plan on 26 November. The watcher cleared the plan at 20:44 on 26 November, with the placement and scrolling changes below.
 
 In **Customer menu**, staff can find a dish by name, jump to a top-level section and see which section they are reading in either preview size. Keep the published preview read and its permission. Filters, details, Online settings, public routing, print and styles follow separately. The preview’s language picker stands in for the page’s own language choice until the page is public.

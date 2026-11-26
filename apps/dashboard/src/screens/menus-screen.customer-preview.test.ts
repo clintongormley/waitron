@@ -18,8 +18,7 @@ afterEach(cleanupWidgets);
 
 const address = "/menus/menu/lunch/view/customer-menu";
 const path = "/management-api/menus/lunch/customer-preview";
-const noResults =
-  "No dishes match your search. Try another word, or clear the search to see the whole menu.";
+const noResults = "No dishes match your search.";
 const photoReference = `${"a".repeat(64)}.webp`;
 const languages = { defaultLanguage: "en", languages: ["en", "es"] };
 const status: MenuStatus = {
@@ -214,6 +213,7 @@ describe("the customer menu Online preview", () => {
     await expect.element(page.getByRole("heading", { name: "Lunch for guests" })).toBeVisible();
     await expect.element(page.getByText("This preview shows the published menu.")).toBeVisible();
     await expect.element(page.getByText("Two courses")).toBeVisible();
+    await expect.element(page.getByRole("heading", { name: "Allergen key" })).toBeVisible();
     await expect
       .element(
         page.getByText(
@@ -221,7 +221,7 @@ describe("the customer menu Online preview", () => {
           { exact: true },
         ),
       )
-      .toBeVisible();
+      .not.toBeInTheDocument();
     await expect
       .element(page.getByRole("img", { name: "Cereals containing gluten (Wheat)" }))
       .toBeVisible();
@@ -244,7 +244,7 @@ describe("the customer menu Online preview", () => {
     });
   });
 
-  it("searches displayed dish and set-menu names without losing focus or allergen advice", async () => {
+  it("searches displayed dish and set-menu names without losing focus or the allergen key", async () => {
     await open(() => Response.json(publishedSections()));
     const search = page.getByRole("searchbox", { name: "Search dishes" });
     await expect.element(search, { timeout: 1000 }).toBeVisible();
@@ -266,7 +266,7 @@ describe("the customer menu Online preview", () => {
     await expect
       .element(page.getByText(noResults, { exact: true }), { timeout: 1000 })
       .toHaveRole("status");
-    await expect.element(page.getByText(/Ask staff about allergens/)).toBeVisible();
+    await expect.element(page.getByRole("heading", { name: "Allergen key" })).toBeVisible();
     await search.fill("");
     await expect.element(page.getByText("House bread", { exact: true })).toBeVisible();
     await expect.element(page.getByText("Two courses", { exact: true })).toBeVisible();

@@ -73,7 +73,6 @@ function legend({ language, text }: Words) {
       ${codes.map((code) => html`<li><wt-icon name=${`${prefix}-${code}`}></wt-icon>${text[code]}</li>`)}
     </ul>`;
   return html`<footer lang=${language}>
-    <p>${text.note}</p>
     <h3>${text.key}</h3>
     ${key(ALLERGEN_CODES, "allergen")}
     <h3>${text.diet}</h3>
