@@ -95,6 +95,7 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
   "recovery.passphrase_invalid",
   "backup.artifact_invalid",
   "backup.archive_invalid",
+  "backup.archive_key_invalid",
 ]);
 
 /**

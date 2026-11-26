@@ -335,6 +335,26 @@ describe("waitron-restore restore", () => {
     ]);
   });
 
+  it("words backup.archive_key_invalid as a key or file refusal, not by its prefix", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "restore-command-archive-key-"));
+    const artifactPath = await makeArtifact(dir);
+    const out: string[] = [];
+    const code = await runRestore({
+      argv: ["restore", artifactPath],
+      env: { WAITRON_BACKUP_RECOVERY_KEY: RECOVERY_KEY },
+      lockVenue: unlockedVenue,
+      out: (line) => out.push(line),
+      restore: async () => {
+        throw new AppError("backup.archive_key_invalid", { input: "backup_key" });
+      },
+    });
+    expect(code).toBe(1);
+    expect(out).toEqual([
+      COLD_RESTORE_NOTICE,
+      "restore failed: wrong recovery key or corrupt artifact",
+    ]);
+  });
+
   it("reports a gate/guard AppError by code and returns 1", async () => {
     const dir = mkdtempSync(join(tmpdir(), "restore-command-gate-"));
     const artifactPath = await makeArtifact(dir);

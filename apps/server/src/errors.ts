@@ -1473,9 +1473,10 @@ declare module "@waitron/shared" {
      * This request could not use the venue’s master key. On a wrong or replaced key, `keyName` is
      * the name of the current master key of the database checked, when it has one; on the restore
      * clock routes it is the name staging read from the backup copy and saved beside the key, when
-     * it saved one. The binding refusals carry none.
+     * it saved one. The binding refusals carry none. When a typed master key does not open a backup
+     * file, `masterKeyId` (16 hex characters) and `keyNumber` are what the file's header names.
      */
-    "promotion.break_glass_invalid": { keyName?: string };
+    "promotion.break_glass_invalid": { keyName?: string; masterKeyId?: string; keyNumber?: number };
     /** "Change the backup key" was sent a master key that is not the venue's current one; `keyName`
      * names the current key, when there is one. */
     "master_key.wrong": { keyName?: string };
