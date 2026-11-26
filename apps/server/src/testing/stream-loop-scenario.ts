@@ -465,9 +465,19 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
         expect(made.status).toBe(200);
         const pdf = new Uint8Array(await made.arrayBuffer());
         const pack = await readRecoveryPackPdf(pdf);
+        const rotatedKey = recoveryKey;
+        const rotatedGeneration = pointerA.pointer.body.generation;
+        recoveryKey = (await readBackupSettings(dirsA.state))!.WAITRON_BACKUP_RECOVERY_KEY!;
+        expect(recoveryKey === rotatedKey).toBe(false);
         expect(parseRecoveryKit(pack.bucketCode!).recoveryKey === recoveryKey).toBe(true);
         nodeSecret = pack.masterKey!;
         await writeFile(kitPath, pdf);
+        pointerA = await waitFor("the new master key's generation", POINTER_WAIT_MS, async () => {
+          const read = await readPointer(store, streamId);
+          return read !== null && read.pointer.body.generation !== rotatedGeneration
+            ? read
+            : undefined;
+        });
         await waitFor("the PDF's master key to reach the bucket", UPLOAD_WAIT_MS, () =>
           saleInGeneration(pointerA.pointer.body.generation, saleA.saleId, nodeSecret),
         );
