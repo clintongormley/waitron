@@ -52,6 +52,7 @@ import type { BillEditExpected } from "./order-drafts.js";
 import { grossLineTotal } from "./order-line-quantities.js";
 import { fingerprint } from "./parties.js";
 import { lastReopenedBill } from "./reopened-bills.js";
+import { carryHandover, isSentCounterOrder, withSentOrderOpen } from "./sent-order-open.js";
 import { refuseMovingFrozenDishes } from "./set-menu-moves.js";
 import { totalLeftBehind, totalOnOwnBill, type TakenRows } from "./set-menu-regroup.js";
 import { refuseReopen, reopenToSplitIn } from "./split-after-print.js";
@@ -210,11 +211,11 @@ export async function priceItemPicks(
 }
 
 /**
- * Move the chosen items, part of a line included, from an open bill to a new bill of its party (a
- * new counter order when it has none) that names the bill they came from, and issue the source
- * when what is left of it is paid, unless `holdSourceInvoice`: a card reader's payment can still
- * charge nothing and put the items back, so its source is issued once that payment is received
- * (`completeBillPayment`). The source may be left holding more than it owes; the kitchen is not
+ * Move the chosen items, part of a line included, from an open bill or a sent Counter order with no
+ * receipt ({@link withSentOrderOpen}) to a new bill of its party (a new counter order when it has
+ * none) that names the bill they came from, and issue the source when what is left of it is paid,
+ * unless `holdSourceInvoice`: a card reader's payment can still charge nothing and put the items
+ * back, so its source is issued once that payment is received (`completeBillPayment`). The source may be left holding more than it owes; the kitchen is not
  * told, as the items stay where they are served.
  */
 export async function moveItemsToNewBill(
@@ -230,23 +231,26 @@ export async function moveItemsToNewBill(
   // `moveDishes` runs these too; here they come before the split, so a stale or closed bill gets
   // its own refusal.
   await requireEconomicWrite(tx, cfg, command.admission);
-  const path = await guardPathParty(tx, fromBillId, command, { bump: false });
-  refuseClosedBill(fromBillId, path.status);
-  const { picked } = await readPicks(tx, fromBillId, picks);
-  const parts = picked.flatMap((line) =>
-    line.part === undefined ? [] : [{ lineNo: line.lineNo, quantity: line.part }],
-  );
-  const split: ReadonlyMap<string, SplitRow> =
-    parts.length === 0
-      ? new Map()
-      : await splitLinesWithinOrder(tx, cfg, fromBillId, parts, { splitExtras: true });
-  const lineIds = picked.map((line) =>
-    line.part === undefined ? line.id : split.get(line.id)!.id,
-  );
-  const { billId } = await moveDishes(tx, cfg, fromBillId, null, lineIds, command, {
-    sourceMayBeOverpaid: true,
-    tellKitchen: false,
+  const { billId } = await withSentOrderOpen(tx, fromBillId, async () => {
+    const path = await guardPathParty(tx, fromBillId, command, { bump: false });
+    refuseClosedBill(fromBillId, path.status);
+    const { picked } = await readPicks(tx, fromBillId, picks);
+    const parts = picked.flatMap((line) =>
+      line.part === undefined ? [] : [{ lineNo: line.lineNo, quantity: line.part }],
+    );
+    const split: ReadonlyMap<string, SplitRow> =
+      parts.length === 0
+        ? new Map()
+        : await splitLinesWithinOrder(tx, cfg, fromBillId, parts, { splitExtras: true });
+    const lineIds = picked.map((line) =>
+      line.part === undefined ? line.id : split.get(line.id)!.id,
+    );
+    return moveDishes(tx, cfg, fromBillId, null, lineIds, command, {
+      sourceMayBeOverpaid: true,
+      tellKitchen: false,
+    });
   });
+  await carryHandover(tx, fromBillId, billId);
   const sourceLocale = tx
     .select({ receiptLocale: workingOrders.receiptLocale })
     .from(workingOrders)
@@ -369,7 +373,8 @@ async function reopenIfPrinted(
     .select({ status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
     .where(eq(workingOrders.id, sent.fromBillId));
-  if (bill?.status !== "placed") return sent;
+  if (bill?.status !== "placed" || (await isSentCounterOrder(tx, sent.fromBillId, bill)))
+    return sent;
   assertProfileAction(device, "take-orders");
   await guardBillParty(tx, bill, { operatorId: operator.personId, ...sent.party }, { bump: false });
   await requireBillEditors(tx, [sent.fromBillId], operator.personId, sent.expectedEdits);
@@ -577,8 +582,10 @@ export async function previewPayForItems(
       .where(eq(workingOrders.id, fromBillId));
     if (bill === undefined) throw new AppError("tab.not_open", { tabId: fromBillId });
     if (bill.status === "placed") {
-      assertProfileAction(device, "take-orders");
-      await refuseReopen(tx, deps, cfg, fromBillId, bill);
+      if (!(await isSentCounterOrder(tx, fromBillId, bill))) {
+        assertProfileAction(device, "take-orders");
+        await refuseReopen(tx, deps, cfg, fromBillId, bill);
+      }
     } else refuseClosedBill(fromBillId, bill.status);
     if (ask.picks.length === 0) throw new AppError("sale.empty_basket", {});
     const total = await priceItemPicks(tx, fromBillId, ask.picks);
