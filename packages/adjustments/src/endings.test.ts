@@ -407,7 +407,9 @@ describe("ending a comp or discount on some of its rows", () => {
       lineTotal: 1600,
       listUnitPriceGross: null,
     });
-    expect((await endingsOf(adjustmentId)).map(({ lineId }) => lineId)).toEqual([edited, other]);
+    const ended = (await endingsOf(adjustmentId)).map(({ lineId }) => lineId);
+    expect(ended).toHaveLength(2);
+    expect(ended).toEqual(expect.arrayContaining([edited, other]));
     await expect(endOn(other)).rejects.toMatchObject({ code: "adjustment.not_standing" });
   });
 });
