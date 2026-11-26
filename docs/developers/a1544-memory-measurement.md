@@ -1,5 +1,7 @@
 # A1544: sale requests with a year of history and limited memory
 
+[26 November follow-up on the installed test box](#installed-test-box-baseline-26-november-2026).
+
 Measured on 17 November 2026. The uncapped, 7 GiB and 8 GiB conditions all completed.
 At 7 GiB, the counter-sale median rose from 12.323 to 13.752 ms (11.6%); partial and final
 payments rose by 2.6% and 9.8%. The 8 GiB run varied more and overlapped other host workloads.
@@ -162,3 +164,23 @@ attempts are retained as partial logs, separate from these complete results.
 Claude reviewed the plan in 243 and 128 seconds; the watcher cleared it on 16 November at 22:40,
 and cleared docs-only publication on 17 November at 15:38. The owner decides any change to
 A1531's recommendation; this measurement makes none.
+
+## Installed test-box baseline, 26 November 2026
+
+Three read-only samples from 12:42:12 to 12:42:23 local time on the shared test box
+(Linux 6.12.115+deb13.1-amd64) found 5.59–5.61 GiB available out of 7.66 GiB total.
+There was no configured swap. The counter-sale workload was unobserved, so confirmed idle
+and counter-sale readings are still open.
+
+`docker top <container> -eo pid,rss,comm` showed about 345 MiB of resident process
+memory in the Waitron app, 79 MiB in the print agent, 18 MiB in Mailpit and 3 MiB in
+the tunnel container's two processes. The app's Linux control group reported 367 MiB
+in `memory.current`, including about 43 MiB of file memory in `memory.stat`. Both
+`memory.high` and `memory.max` read `max` for the app and its parent `system.slice`.
+
+The kernel describes `MemAvailable` in `/proc/meminfo` as an estimate of memory
+available “for starting new applications, without swapping”. The 5.59–5.61 GiB
+range describes headroom shared by the whole box. The app's file-memory reading
+covers the whole container. The amount available for database pages during counter
+sales and SQLite's own cache allocation remain unmeasured.
+[Linux kernel documentation for /proc](https://docs.kernel.org/filesystems/proc.html).
