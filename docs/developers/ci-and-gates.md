@@ -2895,13 +2895,13 @@ The full CI typecheck gives each Go compiler process a soft memory target (`GOME
 Disposable runners use `6GiB` and GitHub-hosted runners use `8GiB`. Go can exceed the target
 while it manages time spent collecting memory. [Go garbage collector guide](https://go.dev/doc/gc-guide#Memory_limit).
 
-In the [hosted Server comparison](https://github.com/clintongormley/waitron/actions/runs/45782727177/job/139781855396),
-the runner had at least 5.97 GiB available and wrote no pages to swap at 8 GiB. Server took
-74 seconds and used 273 CPU-seconds. At the compiler default, the runner went down to 0.27 GiB
-available and wrote to swap. Server took 52 seconds and used 180 CPU-seconds. A
+In one [hosted Server pair on an Intel Xeon Platinum 8370C](https://github.com/clintongormley/waitron/actions/runs/45782727177/job/139781855396),
+at the 8 GiB target the runner had at least 5.97 GiB available and the swap-out counter stayed at
+zero. Server took 74 seconds and used 273 seconds of CPU time (user plus system). At the compiler
+default the runner went down to 0.27 GiB available and wrote to swap. Server took 52 seconds and
+used 180 seconds of CPU time. A
 [full hosted probe](https://github.com/clintongormley/waitron/actions/runs/45781577832/job/139778076732)
-at 8 GiB finished the job in 169 seconds on a different processor model. Ordinary main jobs will
-show whether timeouts recur.
+at 8 GiB finished the job in 169 seconds on an AMD EPYC 9V45.
 
 In the [24 November probe](https://github.com/clintongormley/waitron/actions/runs/45492983300/job/138795935538),
 the previously failing `01ec75f7e0` passed `pnpm typecheck` in 94 seconds, with 123 seconds for the
