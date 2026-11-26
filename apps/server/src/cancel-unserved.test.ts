@@ -167,9 +167,8 @@ function replacedAfterRefusal(saleId: SaleId): Promise<SaleId> {
 
 /** Stamps the bill handed over, as a counter handover does before the order is moved to a table. */
 function handOver(billId: string): void {
-  venue.db.run(
-    sql`update working_orders set collected_at = ${new Date(Date.now() - 60_000).toISOString()} where id = ${billId}`,
-  );
+  const minuteAgo = new Date(Date.now() - 60_000).toISOString();
+  venue.db.run(sql`update working_orders set collected_at = ${minuteAgo} where id = ${billId}`);
 }
 
 function cancel(billId: string, cookie = venue.supervisorTill, app = venue.app): Promise<Answer> {
