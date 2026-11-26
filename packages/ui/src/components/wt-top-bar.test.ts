@@ -38,14 +38,18 @@ test("Back emits one composed event from the bar", async () => {
     '<wt-top-bar heading="Pay" back-label="Table 4"></wt-top-bar>',
   );
   const listener = vi.fn();
+  const original = vi.fn();
   document.addEventListener("wt-back", listener);
+  document.addEventListener("click", original);
   try {
     const back = bar.shadowRoot?.querySelector("wt-button")?.shadowRoot?.querySelector("button");
     expect(back).toBeInstanceOf(HTMLButtonElement);
     await userEvent.click(back!);
     expect(listener).toHaveBeenCalledOnce();
     expect(listener.mock.calls[0]![0]).toMatchObject({ bubbles: true, composed: true, detail: {} });
+    expect(original).not.toHaveBeenCalled();
   } finally {
     document.removeEventListener("wt-back", listener);
+    document.removeEventListener("click", original);
   }
 });

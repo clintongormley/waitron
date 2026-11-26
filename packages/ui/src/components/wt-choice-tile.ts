@@ -1,10 +1,13 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
+import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import "./wt-icon.js";
 
 @customElement("wt-choice-tile")
 export class WtChoiceTile extends LitElement {
+  static override shadowRootOptions = delegatesFocusShadowRootOptions;
+
   static override styles = [
     baseStyles,
     css`

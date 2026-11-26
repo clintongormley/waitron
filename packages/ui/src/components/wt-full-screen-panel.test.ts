@@ -24,6 +24,7 @@ test("only the named panel body scrolls, between fixed header and footer slots",
   expect(getComputedStyle(panel).backgroundColor).toBe("rgb(9, 15, 23)");
   expect(box.height).toBe(260);
   expect(body!.scrollHeight).toBeGreaterThan(body!.clientHeight);
+  expect(getComputedStyle(body!).overscrollBehaviorY).toBe("contain");
   body!.scrollTop = 100;
   expect(body!.scrollTop).toBe(100);
   expect(head.getBoundingClientRect().top).toBe(box.top);

@@ -866,16 +866,17 @@ this floor — removing the `min-width` regresses that guard.
 
 Use `wt-full-screen-panel` when your actions need to stay visible while the details scroll. Give
 the panel a container with a set height. Put the top bar in `header` and the actions in `footer`.
-The default slot scrolls between them. `body-label` names that area when it needs a keyboard tab
-stop. For a modal, put the panel inside `wt-dialog full-screen` and give the dialog an `aria-label`.
-Put the visible heading in the top bar and send Back through `requestClose` to keep the dialog's
-leave check. Keep validation messages and recovery links immediately above your foot actions.
+The default slot scrolls between them. Supply `body-label` to name that area when it needs a
+keyboard tab stop. For a modal, put the panel inside `wt-dialog full-screen`. Set the dialog's
+`aria-label` and put any heading or description in the panel itself. Send Back through
+`requestClose` to keep the dialog's leave check. Keep validation messages and recovery links
+immediately above your foot actions.
 
-`wt-top-bar` centres its `heading` and optional `subtitle` between the Back and action areas. Set
-`back-label` to the previous screen's name. Handle `wt-back` to navigate. Use `title` to supply a
-title button and `action` for a named icon button. Put the formatted amount in the default slot of
-`wt-amount-block`. Give it a `label` and, when needed, a `breakdown` with the amount and any tip or
-adjustment.
+`wt-top-bar` centres its heading and optional `subtitle` between the Back and action areas. Supply
+`heading` or put a title button in the `title` slot. Set `back-label` to the previous screen's name
+and handle `wt-back` to navigate. The `action` slot holds a named icon button. Put the formatted
+amount in the default slot of `wt-amount-block`. Give it a `label` and, when needed, a `breakdown`
+with the amount and any tip or adjustment.
 
 Place your `wt-button` actions in `wt-foot-button-bar`. It stacks them by default. Use `layout="row"`
 for the order buttons. A ghost button in the `link` slot goes below the main actions. Use

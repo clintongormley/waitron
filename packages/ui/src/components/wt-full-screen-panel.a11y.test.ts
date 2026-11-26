@@ -53,7 +53,9 @@ describe.each(["light", "dark"] as const)("wt-full-screen-panel (%s)", (theme) =
       theme,
     );
     await expect.element(page.getByRole("dialog", { name: "Pay" })).toBeVisible();
+    const panel = host.querySelector("wt-full-screen-panel")!;
+    expect(panel.querySelector("wt-top-bar")!.getBoundingClientRect().top).toBe(0);
+    expect(panel.querySelector("wt-foot-button-bar")!.getBoundingClientRect().bottom).toBe(844);
     await expectNoA11yViolations(host);
-    await page.screenshot({ path: `__screenshots__/till-pay-primitives-${theme}.png` });
   });
 });

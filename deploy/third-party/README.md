@@ -87,8 +87,8 @@ header is the only part of this notice that reaches `/etc/apparmor.d`.
 The dashboard, till and setup web apps, served from `/app/web/` in the image, carry icon paths
 adapted from Google's Material Symbols icon set (<https://fonts.google.com/icons>), Copyright
 Google, licensed under the Apache License, Version 2.0: some of the dashboard's icons in
-`apps/dashboard/src/icons.ts`, and the dropdown's `check` icon in `DROPDOWN_ICONS`
-(`packages/ui/src/components/wt-combobox.ts`), which all three apps register, and the `allergies`
+`apps/dashboard/src/icons.ts`, the shared `check` path in `packages/ui/src/components/wt-icon.ts`
+used by choice tiles and dropdowns, and the `allergies`
 mark in `packages/ui-core/src/nutrition-icons.ts`, registered by the dashboard and till.
 The shared action menus use outlined paths in `packages/ui/src/components/wt-icon.ts`,
 adapted from Google material-design-icons revision `10ecc14790612ca8fd164e3f4ffe9c16fc50d5b7`.

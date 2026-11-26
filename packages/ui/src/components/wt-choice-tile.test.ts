@@ -39,9 +39,11 @@ test("supports native activation and disables it when asked", async () => {
   expect(button).toBeInstanceOf(HTMLButtonElement);
   const pressed = vi.fn();
   tile.addEventListener("click", pressed);
-  await userEvent.click(button!);
-  expect(pressed).toHaveBeenCalledOnce();
+  tile.focus();
+  expect(tile.shadowRoot!.activeElement).toBe(button);
   await userEvent.keyboard("{Enter}");
+  expect(pressed).toHaveBeenCalledOnce();
+  await userEvent.click(button!);
   expect(pressed).toHaveBeenCalledTimes(2);
 
   tile.setAttribute("disabled", "");
