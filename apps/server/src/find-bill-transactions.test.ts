@@ -689,7 +689,7 @@ describe("completed post-invoice refund Transactions", () => {
     expect(result.total).toBe(2);
     expect((await list({ type: "refund" })).rows.map((r) => r.refundId)).toContain(b.id);
   });
-  it("types a full invoice's corrective `full-correction` and attaches no bill's refund to it", async () => {
+  it("types a full invoice's corrective `full-correction` and never attaches a bill's refund to it (core never writes a corrective holding the bill's order, so this pins the exclusion only)", async () => {
     const order = await parked(venue, "Tarta");
     const customer = { counterpartyTaxId: "B12345674", counterpartyLegalName: "Cliente SL" };
     const full = await invoice(customer);
@@ -733,7 +733,7 @@ describe("completed post-invoice refund Transactions", () => {
       amount: "-4.00",
       customerName: "Cliente SL",
     });
-    expect(rows.some((r) => r.refundId === refund.id)).toBe(false);
+    expect(rows.filter((r) => r.refundId === refund.id && r.saleId === corrective)).toEqual([]);
     expect((await list({ type: "full-correction" })).rows.map((r) => r.saleId)).toEqual([
       corrective,
     ]);

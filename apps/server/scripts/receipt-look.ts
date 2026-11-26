@@ -594,7 +594,7 @@ const deferred = (
   deferredPayment: { account },
 });
 const corrective = fixture();
-corrective.result.invoiceType = "R4";
+corrective.result.invoiceType = "R1";
 corrective.result.invoiceNumber = "FR/1";
 corrective.result.corrects = { invoiceNumber: "FF/1", issuedAt: "2026-08-17T22:34:00.000Z" };
 const simplifiedReplacement: ReceiptDocumentInput = {

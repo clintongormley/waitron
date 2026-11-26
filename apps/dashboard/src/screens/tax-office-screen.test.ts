@@ -289,6 +289,18 @@ it("reads the filters from the address", async () => {
   });
 });
 
+it("offers R1 in the kind filter and reads it from the address", async () => {
+  history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30/kind/R1");
+  const listTaxOfficeInvoices = vi.fn().mockResolvedValue(page([]));
+  const el = await mount({ listTaxOfficeInvoices });
+  await vi.waitFor(() => expect(listTaxOfficeInvoices).toHaveBeenCalled());
+
+  expect(lastQuery(listTaxOfficeInvoices).kind).toBe("R1");
+  const options = (field(el, "kind") as unknown as { options: { value: string; label: string }[] })
+    .options;
+  expect(options).toContainEqual({ value: "R1", label: "R1 Corrective invoice" });
+});
+
 it("asks for the next page with the keyset the last page named, and adds its rows", async () => {
   history.replaceState(null, "", "/invoices/from/2026-11-01/to/2026-11-30/kind/F2");
   const next = { at: "2026-11-05T10:30:00.000Z", id: "sale-1" };
