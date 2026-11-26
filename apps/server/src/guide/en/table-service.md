@@ -15,6 +15,9 @@ limits; supervisors, managers and administrators can approve.
 
 When a comp brings the bill to zero, Waitron closes the bill and issues the invoice straight away. Give the guest that invoice.
 
+If you change the extras of a dish you comped or discounted, or its variant in a parked order, the
+comp or discount comes off that dish.
+
 In **Voids and comps** under **Venue setup**, set a limit to **0** when each comp needs approval.
 New reasons start at 0; change the amount or clear it when you want to allow comps without a limit.
 **Complaint**, **On the house** and **Discount** start at 0; **Staff meal** allows up to 50% off
@@ -588,8 +591,7 @@ cannot be cancelled: cancel or move its dishes instead.
 
 A comp or discount on a set menu covers its price and its supplements, not paid extras. If some
 of its dishes are cancelled, moved or paid for on their own, the discount comes off; moving or
-paying for all of them takes it along. If you change a discounted dish's extras or variant, its
-discount comes off.
+paying for all of them takes it along.
 
 To move a set menu to another bill, open **Move dishes…** and select the set menu. Its dishes move
 with it.

@@ -157,7 +157,7 @@ export interface HeldOrder {
   diningChoice: DiningChoice;
   setMenus?: BillSetMenuState;
   setMenuCopies?: ServedSetMenuCopy[];
-  /** Each comp or discount that came off the order because of a change; absent when none did. */
+  /** Absent when it has no open notice (D54). */
   discountNotices?: DiscountNotice[];
   lines: (Omit<SaleLine, "extras" | "options"> & {
     productId?: string;

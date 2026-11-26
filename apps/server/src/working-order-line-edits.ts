@@ -114,8 +114,10 @@ import { clampServed } from "./working-order-serving.js";
  * ones, as plan D10 rules:
  *
  * - A stored line keeps its gross price, names and the other facts it was added with; only what the
- *   edit adds is priced now — a new line, and an extra added to a line. A note or an options answer
- *   carries no price. A kept extra is matched by list, product and quantity.
+ *   edit adds is priced now — a new line, and an extra added to a line — except that a dish's own
+ *   comp or discount gives its share back when its extras change or a basket save swaps its
+ *   variant ({@link endRepricedDishDiscounts}). A note or an options answer carries no price. A
+ *   kept extra is matched by list, product and quantity.
  * - A line with no ticket item, or a held one, is changed in place, except that units
  *   added to one a comp or a discount repriced go on a new line, priced now (ruling R12), and any
  *   other whole portion rises by copies of itself in its cohort (a measured one rises in place). A
@@ -446,7 +448,8 @@ export async function applyLineEdits(
       optionSnapshots !== parent.optionSnapshots ||
       extrasChanged;
     if (!changed && rise === 0) return;
-    // A stored line keeps its unit price, so its extras and its quantity move what it charges; its
+    // A stored line keeps its unit price (bar a dish's own comp or discount, which ends once its
+    // extras change), so its extras and its quantity move what it charges; its
     // options answer is filed on the sale line, and a card at the reader files the answer it priced.
     if (extrasChanged || rise !== 0 || optionSnapshots !== parent.optionSnapshots)
       chargesUnchanged = false;

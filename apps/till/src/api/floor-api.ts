@@ -133,7 +133,7 @@ export interface BillSetMenusReply {
 export interface PartyBill {
   setMenus?: BillSetMenuState;
   setMenuCopies?: ServedSetMenuCopy[];
-  /** Each comp or discount that came off the bill because of a change; absent when none did. */
+  /** Absent when it has no open notice (D54). */
   discountNotices?: DiscountNotice[];
   workingOrderId: string;
   revision: number;

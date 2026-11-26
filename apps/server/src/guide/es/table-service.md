@@ -21,6 +21,9 @@ personal** permite hasta un 50% de descuento por artículo antes de pedir autori
 
 Si una invitación deja la cuenta a cero, Waitron la cierra y emite la factura en el momento. Entrega esa factura al cliente.
 
+Si cambias los extras de un plato con invitación o descuento, o su variante en un pedido aparcado,
+la invitación o el descuento se quita de ese plato.
+
 ## Repartir una cuenta del mostrador {#counter-part-payments}
 
 Pulsa **Cobrar** para cobrar toda o parte de una cuenta del mostrador. Empiezas con **Toda la cuenta**
@@ -624,8 +627,7 @@ lo que le descuentas. Un menú no se puede anular: anula o mueve sus platos.
 
 Una invitación o un descuento en un menú cubre su precio y sus suplementos, no los extras de pago.
 Si se anulan, se mueven o se pagan aparte algunos de sus platos, el descuento se quita; si mueves o
-pagas todos, se va con ellos. Si cambias los extras o la variante de un plato con descuento, el
-descuento se quita.
+pagas todos, se va con ellos.
 
 Para pasar un menú a otra cuenta, abre **Mover platos…** y selecciona el menú. Sus platos se
 mueven con él.

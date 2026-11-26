@@ -112,7 +112,7 @@ export interface HeldOrder {
   diningChoice: DiningChoice;
   setMenus?: BillSetMenuState;
   setMenuCopies?: ServedSetMenuCopy[];
-  /** Absent when no discount came off it (D54). */
+  /** Absent when it has no open notice (D54). */
   discountNotices?: DiscountNotice[];
   /**
    * PARENT rows only, each dish's child lines nested as `extras`.

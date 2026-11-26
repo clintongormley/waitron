@@ -95,7 +95,7 @@ export function storedBillRecipient(row: {
 export interface PartyBill {
   workingOrderId: string;
   setMenus: BillSetMenuState;
-  /** Absent when no discount came off it (D54). */
+  /** Absent when it has no open notice (D54). */
   discountNotices?: DiscountNotice[];
   setMenuCopies: ServedSetMenuCopy[];
   revision: number;

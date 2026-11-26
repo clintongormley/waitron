@@ -6,8 +6,7 @@ import "./errors.js";
 
 /**
  * The line to give an ended comp or discount again on: the dish whose extras or variant changed.
- * A set menu's answers null, since nothing records which dishes it held once it broke up (ruling
- * of 26 November); staff choose in the comp window.
+ * A set menu's answers null (D54); staff choose in the comp window.
  */
 function reapplyOn(ended: EndedDiscount): DiscountNotice["reapplyOn"] {
   return ended.lineId === null ? null : { lineId: ended.lineId };
