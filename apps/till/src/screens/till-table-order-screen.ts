@@ -197,7 +197,11 @@ import {
 } from "../state/draft-layout.js";
 import { billRequestOf } from "../state/table-signals.js";
 import { defaultReceiptGuestCount } from "../state/receipt-guests.js";
-import { seatsGuests, shownName as tableShownName } from "../state/floor-today.js";
+import {
+  seatsGuests,
+  shownName as tableShownName,
+  tablePartyHeading,
+} from "../state/floor-today.js";
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
@@ -241,7 +245,8 @@ import {
   sameGuestCount,
   type SplitGuestsDetail,
 } from "../widgets/guest-count.js";
-import { billControlStyles, billSwitcher, tableMenu } from "./table-bill-controls.js";
+import { billActions, billControlStyles, billSwitcher } from "./table-bill-controls.js";
+import { tablePartyMenu, tablePartyMenuStyles, type TablePartyAction } from "./table-party-menu.js";
 import {
   beingPaidNotice,
   billMoneyNoticeStyles,
@@ -673,6 +678,7 @@ export class TillTableOrderScreen extends LitElement {
   static override styles = [
     priceWasStyles,
     billControlStyles,
+    tablePartyMenuStyles,
     billMoneyNoticeStyles,
     guestsStepperStyles,
     formMessageStyles,
@@ -1461,6 +1467,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) embedded = false;
   /** The move and join target lists read this; merge and Move dishes… offer {@link bills}. */
   @property({ attribute: false }) tables: TableState[] = [];
+  @property({ attribute: false }) activeTableId?: string;
   /** The floor's zones, whose service mode decides whether a free table there may take guests. */
   @property({ attribute: false }) zones: FloorZone[] = [];
   /** The area Move this bill's counter destination puts the bill in; empty when the till has none
@@ -2580,16 +2587,15 @@ export class TillTableOrderScreen extends LitElement {
     this.#tellSplitDeclined();
   }
 
-  /** The naming and guests windows open from the ⋮, so focus goes back to it when the last of them
-   * closes. */
+  /** Return focus to the menu that opened the naming or guests window. */
   #refocusMenu(): void {
     const open = this.naming !== null || this.billNaming !== null || this.counting !== null;
-    if (this.#menuWindowOpen && !open)
-      this.renderRoot.querySelector<HTMLElement>("[data-table-menu]")?.focus();
+    if (this.#menuWindowOpen && !open) this.#menuOpener?.focus();
     this.#menuWindowOpen = open;
   }
 
   #menuWindowOpen = false;
+  #menuOpener: HTMLElement | null = null;
 
   /** A step the ⋮ opens is drawn in the side panel, which can be below the order: focus and scroll
    * go to its heading. A step replaced or closed while focus is in the panel would drop focus to the
@@ -2610,7 +2616,7 @@ export class TillTableOrderScreen extends LitElement {
     const focus = this.#stepFocus;
     this.#stepFocus = undefined;
     if (focus === "menu") {
-      this.renderRoot.querySelector<HTMLElement>("[data-table-menu]")?.focus();
+      this.#menuOpener?.focus();
       return;
     }
     if (focus !== "step") return;
@@ -3110,6 +3116,7 @@ export class TillTableOrderScreen extends LitElement {
                 <h1 class="title">${t("table.title")}</h1>
               </header>`
         }
+        ${this.#partyMenu()}
         <div class="head-actions">
           <till-table-status .tables=${this.tables} .party=${this.party}></till-table-status>
           ${billSwitcher({
@@ -3124,7 +3131,7 @@ export class TillTableOrderScreen extends LitElement {
             onNewBill: () => this.#leavingActions(() => this.#dispatch("new-bill", {})),
           })}
           ${diningControl(diningShown(this.dining, this.diningChoice, this.diningStart), this)}
-          ${this.#tableMenu()} ${this.#floorBackButton()}
+          ${this.#billActions()} ${this.#floorBackButton()}
         </div>
         ${
           this.billGone === null
@@ -6881,7 +6888,11 @@ export class TillTableOrderScreen extends LitElement {
 
   #fromMenu(event: Event, choose: () => void): void {
     if (!this.#actionControlCurrent(event)) return;
-    this.#leavingActions(choose);
+    const opener = (event.currentTarget as HTMLElement).closest<HTMLElement>("wt-row-actions");
+    this.#leavingActions(() => {
+      this.#menuOpener = opener;
+      choose();
+    });
   }
 
   /** A ⋮ item or switcher choice that leaves an open step asks first, as Back does, while the step
@@ -6910,7 +6921,9 @@ export class TillTableOrderScreen extends LitElement {
     });
   }
 
-  #tableMenu(): TemplateResult {
+  #billActions(): TemplateResult | typeof nothing {
+    const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
+    if (this.party === null || shown === undefined) return nothing;
     const action = (
       name: string,
       icon: string,
@@ -6928,78 +6941,78 @@ export class TillTableOrderScreen extends LitElement {
         ${t(key)}
       </wt-button>`;
     const verb = (name: ActionVerb, key: StringKey) =>
-      action(name, name === "merge" || name === "join" ? "menu-merge" : "menu-move", key, () =>
+      action(name, name === "merge" ? "menu-merge" : "menu-move", key, () =>
         this.#chooseVerb(name),
       );
-    const moveDishes = verb("move-dishes", "table.action_move_dishes");
-    const merge = verb("merge", "table.action_merge_bills");
-    const tableMoves = [
-      verb("join", "table.action_join"),
-      verb("move", "table.action_move_guests_dialog"),
-    ];
-    const party = this.party;
-    if (party === null)
-      return tableMenu({ billHeading: undefined, billItems: [], tableItems: tableMoves });
-    const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
-    return tableMenu({
-      billHeading: shown === undefined ? undefined : billLabel(shown),
-      billItems:
-        shown === undefined
-          ? []
-          : [
-              action("name-bill", "menu-rename", "table.action_name_bill", () =>
-                this.#openBillNaming(),
-              ),
-              ...(shown.status !== "open" ? [] : [moveDishes, merge]),
-              this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing,
-              this.#compBill(),
-              owing(shown) &&
-              !shown.leftUnpaid &&
-              compareDecimal(decimal(stillOwed(shown)), decimal("0")) > 0
-                ? action("left-unpaid", "menu-unpaid", "departure.record", () =>
-                    this.#dispatch("record-unpaid-departure", {
-                      workingOrderId: shown.workingOrderId,
-                    }),
-                  )
-                : nothing,
-              ...this.#billDocumentItems(
-                shown,
-                this.#printBillOffered(shown)
-                  ? action(
-                      "print-bill",
-                      "menu-print",
-                      "bill.print",
-                      () => this.#dispatch("end-meal", { workingOrderId: shown.workingOrderId }),
-                      this.busy || this.billPrintPending,
-                    )
-                  : nothing,
-              ),
-            ],
-      tableItems: [
-        action("allergy", "menu-edit", "allergy.title", () => {
-          this.#closeActions();
-          this.#dispatch("edit-party-allergy", {});
-        }),
-        action("name", "menu-rename", "table.action_name", () => this.#openNaming()),
-        action("guests", "menu-edit", "table.action_guests", () => this.#openCounting()),
-        this.#billRequestItem(party),
-        party.tableIds.length > 1
-          ? action("split-table", "menu-split", "table.action_split_table", () => {
-              this.actionStep = "split-table";
-              this.#stepFocus = "step";
-              this.#watchActions();
-            })
+    return billActions(billLabel(shown), [
+      action("name-bill", "menu-rename", "table.action_name_bill", () => this.#openBillNaming()),
+      ...(shown.status !== "open"
+        ? []
+        : [
+            verb("move-dishes", "table.action_move_dishes"),
+            verb("merge", "table.action_merge_bills"),
+          ]),
+      this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing,
+      this.#compBill(),
+      owing(shown) &&
+      !shown.leftUnpaid &&
+      compareDecimal(decimal(stillOwed(shown)), decimal("0")) > 0
+        ? action("left-unpaid", "menu-unpaid", "departure.record", () =>
+            this.#dispatch("record-unpaid-departure", {
+              workingOrderId: shown.workingOrderId,
+            }),
+          )
+        : nothing,
+      ...this.#billDocumentItems(
+        shown,
+        this.#printBillOffered(shown)
+          ? action(
+              "print-bill",
+              "menu-print",
+              "bill.print",
+              () => this.#dispatch("end-meal", { workingOrderId: shown.workingOrderId }),
+              this.busy || this.billPrintPending,
+            )
           : nothing,
-        ...tableMoves,
-        html`<wt-button
-          icon="menu-finish"
-          data-finish-table
-          @click=${() => this.#dispatch("finish-table", {})}
-        >
-          ${t("table.finish")}
-        </wt-button>`,
-      ],
+      ),
+    ]);
+  }
+
+  #partyMenu(): TemplateResult {
+    const party = this.party;
+    const table = this.tables.find((row) => row.id === (party?.tableIds[0] ?? this.activeTableId));
+    return tablePartyMenu({
+      heading: tablePartyHeading(this.tables, table, party),
+      party,
+      allergy: this.#allergy() ?? null,
+      requested: party !== null && billRequestOf(this.tables, party.id) !== undefined,
+      commandBusy: this.groupCommandBusy,
+      choose: (event, action) => this.#fromMenu(event, () => this.#chooseTableAction(action)),
+      requestBill: (requested) => this.#dispatch("request-bill", { requested }),
+      finish: () => this.#dispatch("finish-table", {}),
     });
+  }
+
+  #chooseTableAction(action: TablePartyAction): void {
+    switch (action) {
+      case "allergy":
+        this.#closeActions();
+        this.#dispatch("edit-party-allergy", {});
+        break;
+      case "name":
+        this.#openNaming();
+        break;
+      case "guests":
+        this.#openCounting();
+        break;
+      case "split-table":
+        this.actionStep = "split-table";
+        this.#stepFocus = "step";
+        this.#watchActions();
+        break;
+      default:
+        this.#chooseVerb(action);
+    }
   }
 
   /** Print the bill follows Full invoice, which has to be chosen before the bill is printed. */
@@ -7056,20 +7069,6 @@ export class TillTableOrderScreen extends LitElement {
           </wt-button>`
         : nothing,
     ];
-  }
-
-  #billRequestItem(party: TableParty): TemplateResult {
-    const requested = billRequestOf(this.tables, party.id) !== undefined;
-    const key = requested ? "table.cancel_bill_request" : "table.request_bill";
-    return html`<wt-button
-      icon=${requested ? "menu-undo" : "menu-bill"}
-      data-request-bill=${requested ? nothing : ""}
-      data-cancel-bill-request=${requested ? "" : nothing}
-      .disabled=${this.groupCommandBusy}
-      @click=${() => this.#dispatch("request-bill", { requested: !requested })}
-    >
-      ${t(key).replace("{party}", () => party.displayName)}
-    </wt-button>`;
   }
 
   /** A bill of the party moves whole unless it is paid or abandoned: the server refuses `bill.paid`

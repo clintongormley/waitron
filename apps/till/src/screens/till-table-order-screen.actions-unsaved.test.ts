@@ -125,7 +125,7 @@ async function mount(verb: "split-table" | "merge" | "move-dishes" = "move-dishe
   const screen = app.shadowRoot!.querySelector<TillTableOrderScreen>("till-table-order-screen")!;
   await screen.updateComplete;
   screen
-    .shadowRoot!.querySelector("[data-move-split]")!
+    .shadowRoot!.querySelector(verb === "split-table" ? "[data-party-menu]" : "[data-table-menu]")!
     .shadowRoot!.querySelector<HTMLElement>("button")!
     .click();
   await click(screen, `[data-action="${verb}"]`);
@@ -321,7 +321,7 @@ it("Move aborts an old leave answer before a new action flow opens", async () =>
   const oldDiscard = q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!;
   await click(screen, "[data-move-dishes-confirm]");
   await expect.poll(() => q.open).toBe(false);
-  await click(screen, "[data-move-split]");
+  await click(screen, "[data-table-menu]");
   await click(screen, '[data-action="move-dishes"]');
   await pickDish(screen, "line-2");
   oldDiscard.click();
@@ -353,7 +353,7 @@ it("departed Move dishes controls cannot change or submit a replacement flow", a
   const oldConfirm = screen.shadowRoot!.querySelector<HTMLElement>("[data-move-dishes-confirm]")!;
   const oldBack = screen.shadowRoot!.querySelector<HTMLElement>("[data-action-back]")!;
   await moveToOther(screen);
-  await click(screen, "[data-move-split]");
+  await click(screen, "[data-table-menu]");
   await click(screen, '[data-action="move-dishes"]');
   await pickDish(screen, "line-2");
   oldTick.click();
@@ -379,7 +379,7 @@ it("a departed destination and tick cannot alter a replacement flow", async () =
   const oldTick = picker.shadowRoot!.querySelector<HTMLElement>('[data-pick="line-1"]')!;
   await pickDish(screen, "line-2");
   await click(screen, "[data-move-dishes-confirm]");
-  await click(screen, "[data-move-split]");
+  await click(screen, "[data-table-menu]");
   await click(screen, '[data-action="move-dishes"]');
   oldTarget.click();
   oldTick.click();
@@ -426,7 +426,7 @@ it("bill replacement invalidates the old question without touching the new flow"
   await screen.updateComplete;
   await expect.poll(() => q.open).toBe(false);
   expect(unload()).toBe(false);
-  await click(screen, "[data-move-split]");
+  await click(screen, "[data-table-menu]");
   await click(screen, '[data-action="move-dishes"]');
   await pickDish(screen, "line-2");
   oldDiscard.click();
@@ -672,7 +672,7 @@ it("A803 move dishes unsaved: with nothing picked, Back and switching bill ask n
   await click(screen, "[data-action-back]");
   expect(moveOpen(screen)).toBe(false);
   expect((await question(app)).open).toBe(false);
-  await click(screen, "[data-move-split]");
+  await click(screen, "[data-table-menu]");
   await click(screen, '[data-action="move-dishes"]');
   await click(screen, '[data-bill-switcher] [data-switch-bill="other"]');
   await expect

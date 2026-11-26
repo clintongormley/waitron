@@ -46,7 +46,10 @@ import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 import type { TillBasket } from "../widgets/basket.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
-import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  openPartyMenu,
+  openTableMenu,
+} from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const coffee: TillProduct = {
   id: "cafe",
@@ -599,7 +602,7 @@ describe("till-table-order-screen", () => {
 
   it("keeps a pending dish in Sent alone, before and after it is served", async () => {
     const { el } = await mount({ lines: [pendingLine, servedLine] });
-    await openTableMenu(el);
+    await openPartyMenu(el);
     expect(el.shadowRoot!.querySelector(".pending-line")).toBeNull();
     expect((await sentFallbackFor(el)).querySelectorAll("[data-sent-fallback-line]")).toHaveLength(
       2,
@@ -658,7 +661,7 @@ describe("till-table-order-screen", () => {
 
   it("shows the tab total from the LOCKED add-time prices (never a menu recompute)", async () => {
     const { el } = await mount({ lines: [pendingLine, servedLine] });
-    await openTableMenu(el);
+    await openPartyMenu(el);
     // 2 × 1.50 + 1 × 1.50 = 4.50, summed at money scale from the locked unit prices.
     expect(el.shadowRoot!.querySelector("[data-order-total]")!.textContent).toContain(
       formatMoney("4.50", currentLocale()),
@@ -700,7 +703,7 @@ describe("till-table-order-screen", () => {
 
   it("hides the pay section when settlement is disabled (an order-only handheld)", async () => {
     const { el } = await mount({ lines: [pendingLine], canSettle: false });
-    await openTableMenu(el);
+    await openPartyMenu(el);
     expect(el.shadowRoot!.querySelector("section.pay")).toBeNull();
     // The total row stays visible — the waiter can see the tab total, just can't take payment.
     expect(el.shadowRoot!.querySelector("[data-order-total]")).not.toBeNull();
@@ -746,8 +749,7 @@ describe("till-table-order-screen", () => {
 
   it("has no Status section", async () => {
     const { el } = await mount({ lines: [pendingLine] });
-    await openTableMenu(el);
-    expect(tableMenuOpen(el)).toBe(true);
+    await openPartyMenu(el);
     expect(el.shadowRoot!.querySelector("section.status")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-status-clear]")).toBeNull();
   });
@@ -761,10 +763,11 @@ describe("till-table-order-screen", () => {
     expect(button.disabled).toBe(false);
     expect(button.getAttribute("aria-disabled")).not.toBe("true");
     expect(trigger.closest("[inert]")).toBeNull();
-    expect(tableMenuOpen(el)).toBe(false);
+    const popup = trigger.shadowRoot!.querySelector("[popover]")!;
+    expect(popup.matches(":popover-open")).toBe(false);
     button.click();
     await el.updateComplete;
-    expect(tableMenuOpen(el)).toBe(true);
+    expect(popup.matches(":popover-open")).toBe(true);
   });
 
   it("emits a composed, bubbling back-to-floor event from the back control", async () => {
@@ -781,7 +784,7 @@ describe("till-table-order-screen", () => {
     const { el } = await mount({ embedded: true });
     expect(el.shadowRoot!.querySelector("header.head")).toBeNull();
     expect(el.shadowRoot!.querySelector("[data-back]")).toBeNull();
-    expect(el.shadowRoot!.querySelector("[data-table-menu]")).not.toBeNull(); // body function stays
+    expect(el.shadowRoot!.querySelector("[data-party-menu]")).not.toBeNull();
   });
 
   it("renders its header + Back when standalone (default)", async () => {
@@ -792,7 +795,7 @@ describe("till-table-order-screen", () => {
 
   it("handles an empty tab: no Sent counts or pending-dishes card, zero total", async () => {
     const { el } = await mount({ orderId: "wo-4", lines: [], currentOrders: sentRows([]) });
-    await openTableMenu(el);
+    await openPartyMenu(el);
     expect(await sentSummary(el)).toBeUndefined();
     expect(el.shadowRoot!.querySelector(".pending")).toBeNull();
     expect(el.shadowRoot!.querySelector(".served")).toBeNull();
@@ -2784,7 +2787,7 @@ describe("till-table-order-screen", () => {
           await panel.updateComplete;
         }
       }
-      await openTableMenu(el);
+      await openPartyMenu(el);
       expect(el.shadowRoot!.querySelector('[data-send-line="3"]')).toBeNull();
       expect(panel.shadowRoot!.querySelector('[data-group-fire="g-held"]')).not.toBeNull();
       expect(el.shadowRoot!.querySelector('[data-group-fire="g-held"]')).toBeNull();
@@ -3780,7 +3783,7 @@ describe("till-table-order-screen", () => {
     it("with no party shows Join and Move guests, no Merge bills, Split by item or Transfer items, and a Back control", async () => {
       const { el } = await mount({ lines: [pendingLine], tables: [] });
       await toMenu(el);
-      const menu = el.shadowRoot!.querySelector<HTMLElement>("[data-table-menu]")!;
+      const menu = el.shadowRoot!.querySelector<HTMLElement>("[data-party-menu]")!;
       for (const verb of ["move", "join"]) {
         expect(menu.querySelector(`[data-action="${verb}"]`)).not.toBeNull();
       }
@@ -3789,7 +3792,7 @@ describe("till-table-order-screen", () => {
       }
       menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
       await el.updateComplete;
-      expect(tableMenuOpen(el)).toBe(false);
+      expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(false);
     });
 
     /** Ana at Table 4 (and Table 5 with `atTwo`), and the floor around her. */
@@ -3875,9 +3878,8 @@ describe("till-table-order-screen", () => {
           bills: partyBills().bills,
         });
         const moved = heard(el, "move-bill");
-        await toMenu(el);
-        for (const [index, id] of ["t7", "t9", "counter"].entries()) {
-          if (index > 0) click(el, "[data-move-split]");
+        for (const id of ["t7", "t9", "counter"]) {
+          await openTableMenu(el);
           await el.updateComplete;
           click(el, '[data-action="move-bill"]');
           await el.updateComplete;
@@ -3903,7 +3905,7 @@ describe("till-table-order-screen", () => {
         bills: partyBills().bills,
       });
       async function toMoveBill(el: TillTableOrderScreen): Promise<void> {
-        await toMenu(el);
+        await openTableMenu(el);
         click(el, '[data-action="move-bill"]');
         await el.updateComplete;
       }
@@ -3941,8 +3943,7 @@ describe("till-table-order-screen", () => {
         await el.updateComplete;
         expect(el.shadowRoot!.querySelector("[data-target-picker]")).toBeNull();
         const pickAgain = async (id: string) => {
-          click(el, "[data-move-split]");
-          await el.updateComplete;
+          await openTableMenu(el);
           click(el, '[data-action="move-bill"]');
           await el.updateComplete;
           target(el, id)!.click();
@@ -4062,9 +4063,9 @@ describe("till-table-order-screen", () => {
     it("offers Split a table only when the party holds two or more tables, and Name the party with a party", async () => {
       const alone = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       await toMenu(alone.el);
-      expect(alone.el.shadowRoot!.querySelector('[data-action="move"]')!.textContent!.trim()).toBe(
-        t("table.action_move_guests_dialog"),
-      );
+      expect(
+        alone.el.shadowRoot!.querySelector('[data-action="move"]')!.textContent!.trim(),
+      ).toContain(t("table.action_move_to_table"));
       expect(alone.el.shadowRoot!.querySelector('[data-action="split-table"]')).toBeNull();
       expect(alone.el.shadowRoot!.querySelector('[data-action="name"]')).not.toBeNull();
 
@@ -4072,7 +4073,7 @@ describe("till-table-order-screen", () => {
       await toMenu(atTwo.el);
       expect(
         atTwo.el.shadowRoot!.querySelector('[data-action="split-table"]')!.textContent!.trim(),
-      ).toBe(t("table.action_split_table"));
+      ).toContain(t("table.action_split_table"));
     });
 
     it("Move guests lists every other table with its condition, a table needing clearing disabled with its reason", async () => {
@@ -4815,7 +4816,7 @@ describe("till-table-order-screen", () => {
         bills: [tabBill, { ...checkBill, billName: "Desserts" }, paidBill],
       });
       async function openBillNaming(el: TillTableOrderScreen): Promise<BillDialog> {
-        await toMenu(el);
+        await openTableMenu(el);
         click(el, '[data-action="name-bill"]');
         await el.updateComplete;
         return billDialog(el)!;
@@ -4831,7 +4832,7 @@ describe("till-table-order-screen", () => {
 
       it("offers Name this bill, first under the bill on screen, for the bill on screen at a table", async () => {
         const { el } = await mount(onCheck());
-        await toMenu(el);
+        await openTableMenu(el);
 
         const action = el.shadowRoot!.querySelector('[data-action="name-bill"]')!;
         expect(action.textContent!.trim()).toBe(t("table.action_name_bill"));
@@ -4842,7 +4843,7 @@ describe("till-table-order-screen", () => {
         const { el } = await mount({ ...onCheck(), party: null });
         await toMenu(el);
 
-        expect(el.shadowRoot!.querySelector("[data-table-menu]")).not.toBeNull();
+        expect(el.shadowRoot!.querySelector("[data-table-menu]")).toBeNull();
         expect(el.shadowRoot!.querySelector('[data-action="name-bill"]')).toBeNull();
       });
 
@@ -4960,12 +4961,13 @@ describe("till-table-order-screen", () => {
       });
     });
 
-    it("offers Guests right after Name the party whenever a party is open", async () => {
+    it("offers Guests before Name the party with the saved count", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       await toMenu(el);
       const guests = el.shadowRoot!.querySelector('[data-action="guests"]')!;
-      expect(guests.textContent!.trim()).toBe(t("table.action_guests"));
-      expect(el.shadowRoot!.querySelector('[data-action="name"]')!.nextElementSibling).toBe(guests);
+      expect(guests.textContent).toContain(t("table.action_guests"));
+      expect(guests.textContent).toContain(String(el.party!.guestCount));
+      expect(guests.nextElementSibling).toBe(el.shadowRoot!.querySelector('[data-action="name"]'));
     });
 
     it("Guests opens the guests dialog with the party's count, and sends guests-party { guestCount }", async () => {

@@ -3,7 +3,7 @@ import type { TillSentOrders } from "./widgets/sent-orders.js";
 import type { WtToast } from "@waitron/ui/src/components/wt-toast.js";
 import { openDraftLine, showView } from "./screens/till-table-order-screen.test-helpers.js";
 import {
-  openTableMenu,
+  openPartyMenu,
   switchToBill,
 } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { withCurrentKitchenStamps } from "../test/kitchen-stamps.js";
@@ -2401,7 +2401,7 @@ describe("A803 name bill", () => {
     await flush(el);
     expect(tableOrder(el)!.orderId).toBe("wo-check");
     const screen = tableOrder(el)!.shadowRoot!;
-    screen.querySelector<HTMLElement>("[data-move-split]")!.click();
+    screen.querySelector<HTMLElement>("[data-table-menu]")!.click();
     await flush(el);
     screen.querySelector<HTMLElement>('[data-action="name-bill"]')!.click();
     await flush(el);
@@ -5764,13 +5764,12 @@ describe("till-app: the bill request", () => {
     ...seated({}, { revision }),
     signals: [{ kind: "bill_requested" as const, requestedAt }],
   });
-  /** The ⋮ offers to cancel the request only while the bill is requested. */
+  /** The table menu’s switch follows the saved request. */
   const requestedOnScreen = async (el: TillApp) => {
     await flush(el);
-    return (
-      tableOrder(el)!.shadowRoot!.querySelector("[data-table-menu] [data-cancel-bill-request]") !==
-      null
-    );
+    return tableOrder(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+      "[data-bill-request]",
+    )!.checked;
   };
 
   it("records the request under a submission id of its own, at the revision the party was shown at", async () => {
@@ -5827,10 +5826,12 @@ describe("till-app: the bill request", () => {
       { signal: expect.any(AbortSignal) },
     );
     expect(await requestedOnScreen(el)).toBe(false);
-    await openTableMenu(tableOrder(el)!);
+    await openPartyMenu(tableOrder(el)!);
     expect(
-      tableOrder(el)!.shadowRoot!.querySelector("[data-table-menu] [data-request-bill]"),
-    ).not.toBeNull();
+      tableOrder(el)!.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>(
+        "[data-bill-request]",
+      )!.checked,
+    ).toBe(false);
   });
 
   it("sends a request that got no answer again under the same submission id, and a new press under a new one", async () => {
@@ -11678,7 +11679,8 @@ describe("till-app: table relocation editing observations", () => {
   /** Picks Table 7 for `verb` through the screen, which asks no bill question. */
   async function relocationPrompt(el: TillApp, verb: string): Promise<void> {
     const order = tableOrder(el)!;
-    for (const selector of ["[data-move-split]", `[data-action="${verb}"]`, '[data-target="t7"]']) {
+    const trigger = verb === "move-bill" ? "[data-table-menu]" : "[data-party-menu]";
+    for (const selector of [trigger, `[data-action="${verb}"]`, '[data-target="t7"]']) {
       await userEvent.click(order.shadowRoot!.querySelector<HTMLElement>(selector)!);
       await flush(el);
     }

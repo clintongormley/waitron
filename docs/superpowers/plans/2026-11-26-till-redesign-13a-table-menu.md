@@ -4,24 +4,30 @@ Tap the table name to open a sheet with Allergies, Guests, Name the party, the B
 switch, Move to another table, Join tables and Split the table. Finish table sits by itself at the
 bottom. Each choice opens its current screen or runs its current command.
 
-The [design (§§6, 9.12 and frame i)](../specs/2026-11-26-till-handheld-redesign-design.md) at
-`46a29becbb` and the [pass-1 split](2026-11-26-till-handheld-redesign-pass-1.md#prs-after-the-bill-picker)
-set the scope. The 26 November 20:18 watcher note applies pass 2's removal of Floor plan details.
+The [design (§§6, 9.12 and §12)](../specs/2026-11-26-till-handheld-redesign-design.md) at
+`46a29becbb` and the [pass-1 split](2026-11-26-till-handheld-redesign-pass-1.md)
+set the scope. Its Status line records the owner's approval of both passes. Section 6 quotes the
+owner asking to split table and bill choices. On 26 November at 20:35 the watcher cleared this plan
+with the changes below. Picture i, frames 1 and 2 in light and dark, supplies the trigger, the
+sheet's heading and rows, the switch, and the separate Finish table button. Pass 2 drops the sheet's
+floor-edit row. Keep the existing status pin and floor edit routes while the floor slices land.
 PR 13b redesigns the bill menu. PRs 14a–d redesign the panels, including A1290 and A1359.
+Full invoice, Print and Receipt copy keep their handlers. This changes no receipt or invoice issuing.
 
 ## Build
 
 - Create `apps/till/src/screens/table-party-menu.ts` using PR 1’s `wt-row-actions` bottom sheet at
   phone and till widths. Show the known allergy summary, guest count and party name beside their
-  choices. In `till-table-order-screen.ts`, use `detailsHeading` for one table, `partyTablesLabel`
-  for a party spanning several, and Table actions as the fallback. Pass the active table ID from
-  both mounts in `till-app.ts`. The status pin opens table details. This table-name trigger occupies
+  choices. Use the status pin's naming rule in both places
+  (`detailsHeading` for an unnamed single table, `party.displayName` otherwise). Use the active
+  table's name when there is no party, with Table actions as fallback. Pass its ID from both app
+  mounts. Give the sheet trigger the same accessible and visible name. The status pin opens table details. This table-name trigger occupies
   the name position Lane F’s order header will use. Offer Join and Move when there is no party.
 - In `table-bill-controls.ts`, show the existing anchored ⋮ only when there is a current bill.
   Keep the selector used by Full invoice and reuse all bill eligibility and document handlers.
   The bill picker is the route to **+ New bill**. Keep Split for parties at two or more tables.
 - Use `wt-row-actions` in panel mode with ordinary controls. On open, focus the first enabled
-  choice. Bind `wt-switch` through Lit’s `live()` to the saved `billRequestOf` state. Keep the
+  choice in the `wt-row-actions-toggle` handler in `table-party-menu.ts`. Bind `wt-switch` through Lit’s `live()` to the saved `billRequestOf` state. Keep the
   busy guard, call the sheet’s `hide()` on an accepted toggle and send the existing `request-bill`
   event once. Use the saved state on reopening after a refusal. In `#refocusMenu` and
   `#placeStepFocus`, return focus to the actual opener. Verify return from the app’s allergy
@@ -30,8 +36,8 @@ PR 13b redesigns the bill menu. PRs 14a–d redesign the panels, including A1290
 ## Verify and hand off
 
 - Start test-first with a real click on the missing name trigger in `till-table-order-screen.table-menu.test.ts`.
-  Check both menus, absence of an empty ⋮, switch refusal and busy state, and Finish at A1265’s
-  390×844 and 1280×900 sizes. Check scrolling at shorter heights. Preserve the bill-state assertions.
+  At 390 px, check that the sheet rises from the bottom and Finish sits last, on its own. Check both
+  menus, absence of an empty ⋮, switch refusal and busy state. Preserve the bill-state assertions.
 - Run `pnpm --filter @waitron/till exec vitest run` with these `src/` tests and every changed test file.
   Include `till-app-parties`, `till-app-split-table`, `till-app-split-table.reads`,
   `till-app-split-table.snapshot`, `till-app-handheld-pay` and `till-app-allergy`. Under `screens/`,

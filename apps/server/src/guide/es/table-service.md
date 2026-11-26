@@ -668,17 +668,15 @@ Con el teclado, pulsa Intro para abrir el selector, usa las flechas arriba y aba
 a una cuenta y pulsa Intro para mostrarla. Inicio y Fin llevan a la primera y la última opción.
 Escape cierra la lista.
 
-Todo lo demás que haces en la mesa está en el menú **⋮**, junto al selector, en dos partes. La
-primera, con el nombre de la cuenta en pantalla como título, por ejemplo **Cuenta 2 · Clint**, actúa
-solo sobre esa cuenta: **Poner nombre a esta cuenta**, **Mover platos…**, **Juntar cuentas**,
-**Mover esta cuenta**, **Descuento en la cuenta**, **Registrar salida sin pagar**, **Factura
-completa**, **Imprimir la cuenta**, **Copia del ticket**, **No se sirvió nada** y **Reabrir
-cuenta**, cada una cuando corresponde. La segunda, **Toda la mesa**, actúa sobre todos los de la mesa:
-**Alergias**, **Poner nombre a los clientes**, **Comensales**, **Marcar cuenta pedida para …** con
-el nombre del grupo (una vez pedida, **Anular la petición de cuenta de …**), **Separar una mesa**
-(cuando el grupo ocupa más de una mesa), **Unir una mesa**, **Mover clientes** y **Cerrar mesa**.
-Una acción que necesita una elección, como con qué cuenta juntar, se abre junto al pedido, y
-**Atrás** la cierra.
+Toca el nombre de la mesa para ver las acciones que afectan a todo el grupo. Puedes consultar
+**Alergias**, cambiar **Comensales** o **Poner nombre a los clientes**, y activar o desactivar
+**Cuenta pedida**. Usa **Mover a otra mesa**, **Unir una mesa** o **Separar una mesa** para cambiar
+dónde se sienta el grupo. **Cerrar mesa** está al final. En una pantalla baja, desplázate por el
+panel hasta encontrarlo.
+
+Abre **⋮** junto al selector para ver las acciones de la cuenta que tienes en pantalla. Desde ahí
+puedes imprimirla, introducir los datos de la factura completa, mover platos o cambiar la cuenta.
+Cuando una acción requiere una elección, se abre junto al pedido. Pulsa **Atrás** para volver.
 
 Unir una mesa, o mover clientes a otra, conserva todas las cuentas: las que llegan toman los
 siguientes números del grupo que las recibe. Para juntar dos cuentas, abre la cuenta que debe
@@ -688,7 +686,7 @@ cliente que no figura en la cuenta que recibe, la caja pregunta antes: elige a q
 factura la cuenta juntada, o **No juntar**. Si mueves la última cuenta de la mesa, la caja sigue en
 la mesa con una cuenta nueva y vacía.
 
-Si hay pedidos sin enviar que impiden **Unir una mesa**, **Mover clientes**, **Mover esta cuenta**
+Si hay pedidos sin enviar que impiden **Unir una mesa**, **Mover a otra mesa**, **Mover esta cuenta**
 o **Juntar cuentas**, elige **Tomar el pedido** en las cuentas indicadas y vuelve a intentarlo.
 
 Si otra caja junta la cuenta que tienes en pantalla con otra, o la mueve a otra mesa, tu pantalla
@@ -860,8 +858,8 @@ destino y vuelve a elegir **Mover**.
 
 ## Separar una mesa {#split-table}
 
-Cuando parte de un grupo pasa a una mesa propia, abre el menú **⋮**, elige **Separar una mesa** y toca
-la mesa que se separa. Marca lo que se lleva: cuentas enteras o platos sueltos de cualquier cuenta.
+Cuando parte de un grupo pasa a una mesa propia, toca el nombre de la mesa, elige **Separar una
+mesa** y toca la mesa que se separa. Marca lo que se lleva: cuentas enteras o platos sueltos de cualquier cuenta.
 Indica los comensales de cada mesa y elige **Separar**.
 
 ## Mover una cuenta o separar una mesa con platos en espera {#held-dishes-move}
@@ -901,8 +899,8 @@ Las cuentas de unos clientes van numeradas, y la caja muestra cada una con su n�
 le pongas, como **Cuenta 2 · Clint**, y en algunos sitios con el nombre de los clientes delante,
 como **4 · Cuenta 2 · Clint**. Para poner nombre a la cuenta en pantalla, por ejemplo el del cliente
 que la paga, abre el menú **⋮**, elige **Poner nombre a esta cuenta**, escribe hasta 40 caracteres y
-elige **Guardar**. Vacía el campo para quitar el nombre. **Poner nombre a los clientes**, en **Toda
-la mesa** del mismo menú, pone nombre a todo el grupo. Si otra persona tiene platos sin enviar en
+elige **Guardar**. Vacía el campo para quitar el nombre. Para poner nombre a todo el grupo, toca
+el nombre de la mesa y elige **Poner nombre a los clientes**. Si otra persona tiene platos sin enviar en
 esa cuenta, elige **Tomar el pedido** antes de ponerle nombre.
 
 Para cambiar el nombre que ve la estación, usa **Poner nombre a los clientes**. Si queda trabajo

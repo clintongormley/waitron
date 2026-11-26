@@ -131,6 +131,21 @@ export function detailsHeading(table: TableState, mergeName: string | null): str
   );
 }
 
+export function tablePartyHeading(
+  tables: readonly TableState[],
+  table: TableState | undefined,
+  party: TableParty | null,
+): string {
+  if (party !== null && (party.name !== null || party.tableIds.length !== 1 || table === undefined))
+    return party.displayName;
+  return table === undefined
+    ? t("table.actions_title")
+    : detailsHeading(
+        table,
+        table.today?.joinId == null ? null : groupName(mergeMembersOf(tables, table)),
+      );
+}
+
 /** The table's saved name when its sheet's heading is a name for today, else null. */
 export function savedNameUnder(table: TableState, heading: string): string | null {
   const shown = shownUnder(table);

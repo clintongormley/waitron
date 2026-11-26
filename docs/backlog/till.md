@@ -752,7 +752,7 @@ more paid bill; when ready, the floor shows "Deliver to T3 · No. 44" under its 
 
 ## Bundle: For the owner's redesign of the table screens and review of the device screens
 
-18 entries. **Designed on 2026-11-26 in the till redesign's pass 2**: where each one went (answered
+17 entries. **Designed on 2026-11-26 in the till redesign's pass 2**: where each one went (answered
 by the design, decided, wording fixed in the build, or out of scope) is in
 [the spec's §9.12](../superpowers/specs/2026-11-26-till-handheld-redesign-design.md). The entries below
 are built with TILL-REDESIGN-1 and deleted as each lands. They were separate entries, many of them questions, until
@@ -808,9 +808,6 @@ are built with TILL-REDESIGN-1 and deleted as each lands. They were separate ent
   below the order (A803 slice 4c's LOOK). A1290: Back and its action can sit half below the window,
   and "+ New bill" touches Back
   ([detail](till.md#a1290-the-table-screens-action-panel-can-put-back-and-its-action-half-below-the-window-and--new-bill-touches-back)).
-- **A1265. The table screen's ⋮ list is taller than the room below it, so Finish table starts below
-  the fold.**
-  [Detail](till.md#a1265-the-table-screens--list-is-taller-than-the-room-below-it-so-finish-table-starts-below-the-fold)
 
 ## Bundle: Table screen panels that do not fit
 
@@ -2194,7 +2191,7 @@ redesign of the table screens: whether the save refuses it, as a delete is refus
 ticket/receipt grouping, has landed. What it leaves open is A1195 and A1217 under
 _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
 landed. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
-main bill, has landed (#2360); it leaves open A1261 and A1265. Slice
+main bill, has landed (#2360); it leaves open A1261. Slice
 4a, one dish picker behind the ⋮'s **Move dishes…** in place of Split by item and Transfer items,
 has landed (#2372); it leaves open A1290 and A1292–A1294. Slice 4b, waiting dishes that leave with their own copy of the course, has landed (#2454). Slice 4c, Split a table through the same picker with any whole bills and single
 dishes in one panel, has landed; it leaves open A1359. Remaining: pre-bills through A446, not
@@ -2213,19 +2210,6 @@ Owner question 2, #2360).** As built, the ⋮ offers Full invoice only for a bil
 not yet invoiced; for a paid bill it needs an invoice that replaces the paid ticket, which Give
 money back (A802) does not issue. Once something does, offer it from the ⋮ for a paid bill. If the owner instead picks "show it
 quiet and explain on tap", that needs a new sentence in English and Spanish first.
-
-## A1265. The table screen's ⋮ list is taller than the room below it, so Finish table starts below the fold
-
-**A1265. The table screen's ⋮ list is taller than the room below it, so Finish table starts
-below the fold (seen in A803 slice 3's LOOK, finding F8).** At 1280×900 the list holds 743 px
-in a 665 px box that scrolls; "Move guests" is cut and Finish table shows only after scrolling;
-the same at 390×844 (617 px box). Nothing is lost, but the whole-table actions are easy to miss.
-Decide whether the list gets shorter (fewer items, or tighter rows) or the table section comes
-first. Pictures `x-t1-menu-open`, `k5-*` in the LOOK's folder
-(`~/waitron-campaign-c/a803-3-shots/`, not in the repository). Since slice 4a the bill section is
-one item shorter (Move dishes… replaced Split by item and Transfer items). Measured then (slice
-4a's LOOK, list content 647 px): at 1280×900 it fits in English and Spanish (649 px); at 390×844
-it scrolls by 8 px in English and 78 px in Spanish, where the list starts lower.
 
 ## A1290. The table screen's action panel can put Back and its action half below the window, and "+ New bill" touches Back
 

@@ -24282,6 +24282,7 @@ export class TillApp extends LitElement {
       .setMenuCopies=${this.#tableSetMenuCopies()}
       .ownSetMenuOffer=${this.#ownTableSetMenuOffer}
       .changeSetMenu=${this.#changeSetMenu}
+      .activeTableId=${this.activeTableId}
       .loading=${this.tableOpening}
       embedded
       .lines=${this.tabLines}
@@ -24479,8 +24480,6 @@ export class TillApp extends LitElement {
     });
   }
 
-  /** Drill-ins mount non-embedded, so each keeps its own Back or Close; an `embedded` mount would trap
-   * the user with no way out. */
   #drillBody(): TemplateResult | typeof nothing {
     switch (this.drill?.kind) {
       case "find-bill":
@@ -24498,6 +24497,7 @@ export class TillApp extends LitElement {
           .setMenuCopies=${this.#tableSetMenuCopies()}
           .ownSetMenuOffer=${this.#ownTableSetMenuOffer}
           .changeSetMenu=${this.#changeSetMenu}
+          .activeTableId=${this.activeTableId}
           .loading=${this.tableOpening}
           slot="drill"
           .lines=${this.tabLines}

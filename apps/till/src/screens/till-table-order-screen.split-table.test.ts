@@ -1294,7 +1294,7 @@ describe("A803 split: the steps before the panel follow the party", () => {
 
     expect(listOpen(el)).toBe(false);
     expect(opened).toEqual([]);
-    expect(focused(el)?.matches("[data-table-menu]")).toBe(true);
+    expect(focused(el)?.matches("[data-party-menu]")).toBe(true);
   });
 
   it("another party taking over this bill closes the list", async () => {
@@ -1744,7 +1744,7 @@ describe("A803 split: reopening with a refusal", () => {
     expect(focused(el)?.matches("[data-split-pick] h2")).toBe(true);
   });
 
-  it("reopen: focus goes to the ⋮ after Split", async () => {
+  it("reopen: focus goes to the table name after Split", async () => {
     const { el, prompt } = await sentOnce();
     await refuse(el, reopenedAt({ prompt }));
 
@@ -1752,10 +1752,10 @@ describe("A803 split: reopening with a refusal", () => {
     await settled(el);
 
     expect(inPanel(el)).toBe(false);
-    expect(focused(el)?.matches("[data-table-menu]")).toBe(true);
+    expect(focused(el)?.matches("[data-party-menu]")).toBe(true);
   });
 
-  it("reopen: focus goes to the ⋮ after Back, which comes by way of the tables", async () => {
+  it("reopen: focus goes to the table name after Back, which comes by way of the tables", async () => {
     const { el, prompt } = await sentOnce();
     await refuse(el, reopenedAt({ prompt }));
 
@@ -1768,7 +1768,7 @@ describe("A803 split: reopening with a refusal", () => {
     await settled(el);
 
     expect(inPanel(el)).toBe(false);
-    expect(focused(el)?.matches("[data-table-menu]")).toBe(true);
+    expect(focused(el)?.matches("[data-party-menu]")).toBe(true);
   });
 });
 

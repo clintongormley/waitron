@@ -4,7 +4,7 @@ import { setLocale } from "../i18n/t.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { PrintProblem } from "../api/kitchen-api.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
-import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
+import { openPartyMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("en"));
 afterEach(cleanupWidgets);
@@ -28,6 +28,7 @@ describe("till-table-order-screen while loading", () => {
     expect(shown(el, "section.screen")?.getAttribute("aria-busy")).toBe("true");
     expect(shown(el, "[data-back]")).not.toBeNull();
     expect(shown(el, "[data-draft-pane]")).toBeNull();
+    expect(shown(el, "[data-party-menu]")).toBeNull();
     expect(shown(el, "[data-table-menu]")).toBeNull();
     expect(shown(el, "till-order-kitchen-note")).toBeNull();
     expect(shown(el, "till-table-status")).toBeNull();
@@ -36,8 +37,8 @@ describe("till-table-order-screen while loading", () => {
 
   it("a table menu step left open is not shown while loading", async () => {
     const { el } = await mount();
-    await openTableMenu(el);
-    shown(el, '[data-table-menu] [data-action="move"]')!.click();
+    await openPartyMenu(el);
+    shown(el, '[data-party-menu] [data-action="move"]')!.click();
     await el.updateComplete;
     expect(shown(el, "[data-action-panel]")).not.toBeNull();
     el.loading = true;
@@ -77,7 +78,7 @@ describe("till-table-order-screen while loading", () => {
     expect(shown(el, "[data-loading]")).toBeNull();
     expect(shown(el, "section.screen")?.hasAttribute("aria-busy")).toBe(false);
     expect(shown(el, "[data-draft-pane]")).not.toBeNull();
-    expect(shown(el, "[data-table-menu]")).not.toBeNull();
+    expect(shown(el, "[data-party-menu]")).not.toBeNull();
     expect(shown(el, "till-order-kitchen-note")).not.toBeNull();
   });
 });

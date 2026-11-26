@@ -2384,7 +2384,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
     }
 
     async function openMoveDishes(el: TillApp): Promise<void> {
-      await press(el, "[data-move-split]");
+      await press(el, "[data-table-menu]");
       await press(el, '[data-action="move-dishes"]');
     }
 

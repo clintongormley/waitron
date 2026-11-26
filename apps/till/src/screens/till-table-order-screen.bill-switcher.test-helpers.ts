@@ -70,6 +70,12 @@ export async function closeTableMenu(el: TillTableOrderScreen): Promise<void> {
   expect(tableMenuIsOpen(el)).toBe(false);
 }
 
+export async function openPartyMenu(el: TillTableOrderScreen): Promise<void> {
+  const menu = el.shadowRoot!.querySelector("[data-party-menu]")!;
+  await userEvent.click(menu.shadowRoot!.querySelector("button")!);
+  expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
+}
+
 const billSwitcher = (el: TillTableOrderScreen) =>
   el.shadowRoot!.querySelector("[data-bill-switcher]")!;
 

@@ -1,3 +1,4 @@
+import { openPartyMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decimal, formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
@@ -371,54 +372,42 @@ describe("till-table-order-screen: the bill request", () => {
     signals: requested ? [{ kind: "bill_requested", requestedAt: "2026-09-30T20:00:00.000Z" }] : [],
   });
 
-  it("offers to mark the bill requested, naming the party it is for", async () => {
-    const el = await mountScreen({ tables: [floorRow(false)] });
-    const asked = capture(el, "request-bill");
+  const requestSwitch = (el: TillTableOrderScreen) =>
+    el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-switch"]>("[data-bill-request]")!;
+  const input = (el: TillTableOrderScreen) => requestSwitch(el).shadowRoot!.querySelector("input")!;
 
-    const action = menu(el).querySelector<HTMLElement>("[data-request-bill]")!;
-    expect(action.textContent!.trim()).toBe("Mark bill requested for Ana");
-    expect(await requestedChip(el)).toBeNull();
-    expect(menu(el).querySelector("[data-cancel-bill-request]")).toBeNull();
-    action.click();
+  it.each([false, true])(
+    "shows the saved request state %s and sends its inverse",
+    async (requested) => {
+      const el = await mountScreen({ tables: [floorRow(requested)] });
+      const asked = capture(el, "request-bill");
+      await openPartyMenu(el);
+      expect(input(el).checked).toBe(requested);
+      requestSwitch(el).shadowRoot!.querySelector("label")!.click();
+      expect(asked).toEqual([{ requested: !requested }]);
+      expect((await requestedChip(el))?.textContent?.trim()).toBe(
+        requested ? "Bill requested" : undefined,
+      );
+    },
+  );
 
-    expect(asked).toEqual([{ requested: true }]);
-  });
+  it.each([false, true])(
+    "keeps state %s while another command on the party runs",
+    async (requested) => {
+      const el = await mountScreen({ tables: [floorRow(requested)], groupCommandBusy: true });
+      const asked = capture(el, "request-bill");
+      await openPartyMenu(el);
+      expect(input(el).disabled).toBe(true);
+      input(el).click();
+      expect(asked).toEqual([]);
+    },
+  );
 
-  it("shows a requested bill, and offers to cancel the request for the party it names", async () => {
-    const el = await mountScreen({ tables: [floorRow(true)] });
-    const asked = capture(el, "request-bill");
-
-    expect((await requestedChip(el))!.textContent!.trim()).toBe("Bill requested");
-    expect(menu(el).querySelector("[data-request-bill]")).toBeNull();
-    const cancel = menu(el).querySelector<HTMLElement>("[data-cancel-bill-request]")!;
-    expect(cancel.textContent!.trim()).toBe("Cancel the bill request for Ana");
-    cancel.click();
-
-    expect(asked).toEqual([{ requested: false }]);
-  });
-
-  it("holds the action while another command on the party runs", async () => {
-    const asking = await mountScreen({ tables: [floorRow(false)], groupCommandBusy: true });
-    const cancelling = await mountScreen({ tables: [floorRow(true)], groupCommandBusy: true });
-    const disabled = (el: TillTableOrderScreen, selector: string) =>
-      menu(el).querySelector<HTMLElement & { disabled: boolean }>(selector)!.disabled;
-
-    expect(disabled(asking, "[data-request-bill]")).toBe(true);
-    expect(disabled(cancelling, "[data-cancel-bill-request]")).toBe(true);
-  });
-
-  it("says it in Spanish", async () => {
+  it("names the switch and requested status in Spanish", async () => {
     setLocale("es");
-    const asking = await mountScreen({ tables: [floorRow(false)] });
-    const cancelling = await mountScreen({ tables: [floorRow(true)] });
-
-    expect(menu(asking).querySelector("[data-request-bill]")!.textContent!.trim()).toBe(
-      "Marcar cuenta pedida para Ana",
-    );
-    expect((await requestedChip(cancelling))!.textContent!.trim()).toBe("Cuenta pedida");
-    expect(menu(cancelling).querySelector("[data-cancel-bill-request]")!.textContent!.trim()).toBe(
-      "Anular la petición de cuenta de Ana",
-    );
+    const el = await mountScreen({ tables: [floorRow(true)] });
+    expect(input(el).getAttribute("aria-label")).toBe("Cuenta pedida");
+    expect((await requestedChip(el))!.textContent!.trim()).toBe("Cuenta pedida");
   });
 });
 
@@ -427,7 +416,7 @@ describe("till-table-order-screen: Finish table", () => {
     const el = await mountScreen();
     const asked = capture(el, "finish-table");
 
-    menu(el).querySelector<HTMLElement>("[data-finish-table]")!.click();
+    shadow(el).querySelector<HTMLElement>("[data-party-menu] [data-finish-table]")!.click();
 
     expect(asked).toHaveLength(1);
   });

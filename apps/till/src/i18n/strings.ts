@@ -1543,9 +1543,9 @@ export const en = {
     "The box did not answer your change to {line}. Open its table and check whether it was saved.",
   // Table actions
   "table.actions_title": "Table actions",
-  "table.whole_table": "Whole table",
+  "table.bill_actions": "Bill actions",
+  "table.action_move_to_table": "Move to another table…",
   "table.action_move_guests": "Move guests",
-  "table.action_move_guests_dialog": "Move guests…",
   "table.action_join": "Join a table…",
   "table.action_merge_bills": "Merge bills…",
   "table.merge_into": "Merge a bill into {bill}",
@@ -1959,8 +1959,6 @@ export const en = {
   "table.finish": "Finish table",
   "table.finish_bill_holds_money":
     "A bill on this table owes nothing but still holds money. Refund it before finishing the table",
-  "table.request_bill": "Mark bill requested for {party}",
-  "table.cancel_bill_request": "Cancel the bill request for {party}",
   "table.action_move_bill": "Move this bill…",
   "table.move_bill_heading": "Move {bill} to:",
   "table.to_counter": "The counter",
@@ -4001,9 +3999,9 @@ export const es: Record<StringKey, string> = {
   "table.change_unconfirmed_no_table":
     "El servidor no ha respondido a tu cambio en {line}. Abre su mesa y comprueba si se ha guardado.",
   "table.actions_title": "Acciones de mesa",
-  "table.whole_table": "Toda la mesa",
+  "table.bill_actions": "Acciones de cuenta",
+  "table.action_move_to_table": "Mover a otra mesa…",
   "table.action_move_guests": "Mover clientes",
-  "table.action_move_guests_dialog": "Mover clientes…",
   "table.action_join": "Unir una mesa…",
   "table.action_merge_bills": "Juntar cuentas…",
   "table.merge_into": "Juntar una cuenta con {bill}",
@@ -4412,8 +4410,6 @@ export const es: Record<StringKey, string> = {
   "table.finish": "Cerrar mesa",
   "table.finish_bill_holds_money":
     "Una cuenta de esta mesa no debe nada pero aún tiene dinero. Devuélvelo antes de cerrar la mesa",
-  "table.request_bill": "Marcar cuenta pedida para {party}",
-  "table.cancel_bill_request": "Anular la petición de cuenta de {party}",
   "table.action_move_bill": "Mover esta cuenta…",
   "table.move_bill_heading": "Mover {bill} a:",
   "table.to_counter": "El mostrador",

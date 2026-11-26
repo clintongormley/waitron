@@ -1,9 +1,6 @@
 import { type TemplateResult, css, html, nothing } from "lit";
 import "@waitron/ui/src/components/wt-icon.js";
-import {
-  actionChoiceStyles,
-  actionDividerStyles,
-} from "@waitron/ui/src/components/wt-row-actions.js";
+import { actionChoiceStyles } from "@waitron/ui/src/components/wt-row-actions.js";
 import { decimal, formatMoney, TABLE_SEPARATOR } from "@waitron/shared";
 import type { PartyBill, TableParty } from "../api/floor-api.js";
 import { countText, currentLocale, fill, named, t } from "../i18n/t.js";
@@ -193,46 +190,25 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
   </wt-row-actions>`;
 }
 
-export interface TableMenuOptions {
-  /** The bill section's heading: the bill on screen's short label. Left out when undefined. */
-  billHeading: string | undefined;
-  billItems: readonly (TemplateResult | typeof nothing)[];
-  tableItems: readonly (TemplateResult | typeof nothing)[];
-}
-
-/** The table screen's one ⋮: what acts on the bill on screen, under its label, then what acts on
- * the whole table. */
-export function tableMenu(options: TableMenuOptions): TemplateResult {
+export function billActions(
+  heading: string,
+  items: readonly (TemplateResult | typeof nothing)[],
+): TemplateResult {
   return html`<wt-row-actions
     class="table-menu"
     data-table-menu
-    data-move-split
     align="end"
     opens-below
-    label=${t("table.actions_title")}
+    label=${t("table.bill_actions")}
   >
-    ${
-      options.billHeading === undefined
-        ? nothing
-        : html`<div
-              class="table-menu-group"
-              data-table-menu-bill
-              role="group"
-              aria-labelledby="table-menu-bill"
-            >
-              <span id="table-menu-bill" class="table-menu-heading">${options.billHeading}</span>
-              ${options.billItems}
-            </div>
-            <hr class="table-menu-rule" />`
-    }
     <div
       class="table-menu-group"
-      data-table-menu-table
+      data-table-menu-bill
       role="group"
-      aria-labelledby="table-menu-table"
+      aria-labelledby="table-menu-bill"
     >
-      <span id="table-menu-table" class="table-menu-heading">${t("table.whole_table")}</span>
-      ${options.tableItems}
+      <span id="table-menu-bill" class="table-menu-heading">${heading}</span>
+      ${items}
     </div>
   </wt-row-actions>`;
 }
@@ -271,9 +247,6 @@ export const billControlStyles = css`
     padding: var(--wt-space-1) var(--wt-space-4);
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
-  }
-  .table-menu-rule {
-    ${actionDividerStyles}
   }
   .bill-row-unsent {
     color: var(--wt-color-text-muted);

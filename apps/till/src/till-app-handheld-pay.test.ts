@@ -75,7 +75,10 @@ import {
   till,
   type,
 } from "../test/bill-pay-app.js";
-import { openTableMenu } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
+import {
+  openPartyMenu,
+  openTableMenu,
+} from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { resized } from "./screens/till-table-order-screen.test-helpers.js";
 
 let api: TillApi;
@@ -184,8 +187,8 @@ async function closeDocuments(el: TillApp): Promise<void> {
 async function finishFromTable(el: TillApp): Promise<void> {
   await closeDocuments(el);
   const order = tableOrder(el);
-  await openTableMenu(order);
-  await userEvent.click(inOrder(order, "[data-table-menu] [data-finish-table]")!);
+  await openPartyMenu(order);
+  await userEvent.click(inOrder(order, "[data-party-menu] [data-finish-table]")!);
   await flush(el);
 }
 
@@ -4133,8 +4136,8 @@ describe("the document choice on a handheld", () => {
     ).toBe(false);
 
     await finishFromTable(el);
-    await openTableMenu(tableOrder(el));
-    await userEvent.click(inOrder(tableOrder(el), "[data-table-menu] [data-finish-table]")!);
+    await openPartyMenu(tableOrder(el));
+    await userEvent.click(inOrder(tableOrder(el), "[data-party-menu] [data-finish-table]")!);
     await flush(el);
 
     expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(1);
@@ -6762,8 +6765,8 @@ describe("till-app: Finish table refused from the ⋮ on a handheld opened from 
         order.shadowRoot!.querySelector("[data-view=order]")!.getAttribute("aria-pressed"),
       ).toBe("true");
 
-      await openTableMenu(order);
-      await userEvent.click(inOrder(order, "[data-table-menu] [data-finish-table]")!);
+      await openPartyMenu(order);
+      await userEvent.click(inOrder(order, "[data-party-menu] [data-finish-table]")!);
       await flush(el);
 
       expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(1);
