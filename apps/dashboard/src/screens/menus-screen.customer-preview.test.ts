@@ -18,6 +18,8 @@ afterEach(cleanupWidgets);
 
 const address = "/menus/menu/lunch/view/customer-menu";
 const path = "/management-api/menus/lunch/customer-preview";
+const noResults =
+  "No dishes match your search. Try another word, or clear the search to see the whole menu.";
 const photoReference = `${"a".repeat(64)}.webp`;
 const languages = { defaultLanguage: "en", languages: ["en", "es"] };
 const status: MenuStatus = {
@@ -261,12 +263,44 @@ describe("the customer menu Online preview", () => {
       .element(page.getByRole("navigation", { name: "Menu sections" }))
       .not.toBeInTheDocument();
     await search.fill("olive oil");
-    await expect.element(page.getByText("No dishes found", { exact: true })).toHaveRole("status");
+    await expect
+      .element(page.getByText(noResults, { exact: true }), { timeout: 1000 })
+      .toHaveRole("status");
     await expect.element(page.getByText(/Ask staff about allergens/)).toBeVisible();
     await search.fill("");
     await expect.element(page.getByText("House bread", { exact: true })).toBeVisible();
     await expect.element(page.getByText("Two courses", { exact: true })).toBeVisible();
   });
+
+  it.each([
+    [390, "Phone"],
+    [1200, "Computer"],
+  ] as const)(
+    "puts the empty search status in the section strip's place at %i px in %s",
+    async (width, size) => {
+      const viewport = [innerWidth, innerHeight] as const;
+      try {
+        await page.viewport(width, 800);
+        const { el } = await open(() => Response.json(publishedSections()));
+        await page.getByRole("radio", { name: size }).click();
+        const search = page.getByRole("searchbox", { name: "Search dishes" });
+        await search.fill("missing");
+        const message = customerPage(el)!.shadowRoot!.querySelector("article [role='status']")!;
+        await vi.waitFor(() => expect(message.textContent?.trim()).toMatch(/^No dishes /));
+        const text = document.createRange();
+        text.selectNodeContents(message);
+        const gap =
+          text.getBoundingClientRect().top - search.element().getBoundingClientRect().bottom;
+        expect(gap).toBeGreaterThanOrEqual(20);
+        expect(gap).toBeLessThanOrEqual(28);
+        await expect
+          .element(page.getByRole("navigation", { name: "Menu sections" }))
+          .not.toBeInTheDocument();
+      } finally {
+        await page.viewport(...viewport);
+      }
+    },
+  );
 
   it.each([
     [390, "Phone", "dashboard"],
@@ -397,7 +431,7 @@ describe("the customer menu Online preview", () => {
     });
     await expect.element(page.getByRole("heading", { name: "First lunch" })).toBeVisible();
     await page.getByRole("searchbox", { name: "Search dishes" }).fill("missing");
-    await expect.element(page.getByText("No dishes found", { exact: true })).toBeVisible();
+    await expect.element(page.getByText(noResults, { exact: true })).toBeVisible();
     const language = page.getByRole("combobox", { name: "Language" });
     await language.click();
     await page.getByRole("option", { name: "Spanish" }).click();
@@ -515,7 +549,7 @@ describe("the customer menu Online preview", () => {
       await expect.element(page.getByText("Roast pepper", { exact: true })).toBeVisible();
       await expectNoA11yViolations(host);
       await search.fill("missing");
-      await expect.element(page.getByText("No dishes found", { exact: true })).toBeVisible();
+      await expect.element(page.getByText(noResults, { exact: true })).toBeVisible();
       await expectNoA11yViolations(host);
     },
   );

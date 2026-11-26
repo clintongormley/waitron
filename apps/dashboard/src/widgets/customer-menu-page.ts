@@ -152,6 +152,9 @@ export class CustomerMenuPage extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
+      .no-results {
+        margin-block-start: calc(var(--wt-space-2) + var(--wt-space-3));
+      }
       header + [role="status"] + .members {
         margin-block-start: var(--wt-space-4);
       }
@@ -366,6 +369,7 @@ export class CustomerMenuPage extends LitElement {
       return member ? [{ member, sectionId: `section-${index}` }] : [];
     });
     const sections = visible.filter(({ member }) => member.kind === "section");
+    const noResults = query.length > 0 && visible.length === 0;
     const money = (value: string) => formatMoney(value, menu.language);
     const unit = (value: string) => (value === "" ? "" : `/${value}`);
     const quantity = new Intl.NumberFormat(menu.language, { maximumFractionDigits: 3 });
@@ -482,8 +486,8 @@ export class CustomerMenuPage extends LitElement {
             </nav>`
           : nothing
       }
-      <div role="status" lang=${words.language}>
-        ${query && !visible.length ? words.text.noDishes : nothing}
+      <div role="status" lang=${words.language} class=${noResults ? "no-results" : nothing}>
+        ${noResults ? words.text.noDishes : nothing}
       </div>
       ${members(visible, 3)} ${legend(words)}
     </article>`;

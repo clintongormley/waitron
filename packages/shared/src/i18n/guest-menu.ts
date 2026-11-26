@@ -39,7 +39,7 @@ no_meat|No meat|Sin carne|Sense carn|Sen carne
 no_fish|No fish|Sin pescado|Sense peix|Sen peixe
 languages|Languages|Idiomas|Idiomes|Idiomas
 searchDishes|Search dishes|Buscar platos|Cerca plats|Buscar pratos
-noDishes|No dishes found|No se han encontrado platos|No s’han trobat plats|Non se atoparon pratos
+noDishes|No dishes match your search. Try another word, or clear the search to see the whole menu.|Ningún plato coincide con tu búsqueda. Prueba con otra palabra o borra la búsqueda para ver toda la carta.|Cap plat coincideix amb la teva cerca. Prova una altra paraula o esborra la cerca per veure tota la carta.|Ningún prato coincide coa túa busca. Proba con outra palabra ou borra a busca para ver toda a carta.
 menuSections|Menu sections|Secciones de la carta|Seccions de la carta|Seccións da carta
 unavailable|Menu unavailable|Carta no disponible|Carta no disponible|Carta non dispoñible
 keyLanguage|Key in English|Leyenda en español|Llegenda en català|Lenda en galego
