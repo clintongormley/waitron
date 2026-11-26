@@ -1388,8 +1388,8 @@ async function bootServer(
   const ownPageCheck = requireManagementChangeFromOwnPage(isOwnPageOrigin, log);
   // Must stay ahead of every route, so a route added later is covered without being named.
   app.use("*", ownPageCheck);
-  let adminShutdown: ReturnType<typeof adminShutdownDuties> | undefined;
-  app.use("*", (c, next) => adminShutdown?.middleware(c, next) ?? next());
+  let shutdownGate: MiddlewareHandler = (_c, next) => next();
+  app.use("*", (c, next) => shutdownGate(c, next));
   app.use("*", venueDiskFullMiddleware(config.venueDir, seams.freeSpaceWatch?.statfs));
   app.use("*", async (c, next) => {
     if (c.req.method === "GET" && c.req.header("x-waitron-live") === "1") {
@@ -4101,7 +4101,7 @@ async function bootServer(
   mountAlertsApi(app, { db, registry: alertRegistry, now }, log);
   mountDiskStopApi(app, { db, disk: diskFull }, log);
 
-  adminShutdown = adminShutdownDuties({
+  const shutdown = adminShutdownDuties({
     db,
     node: store.node,
     nodeId: node.nodeId,
@@ -4111,7 +4111,7 @@ async function bootServer(
     backup: backupSupervisor,
     isMain: () => !handoverGate.isClosed() && cloudPrimary(),
   });
-  const shutdown = adminShutdown;
+  shutdownGate = shutdown.middleware;
   health.adminPaused = () => shutdown.status().phase !== "idle";
   undoOnFailure.push(shutdown.close);
   mountBoxStatusApi(
