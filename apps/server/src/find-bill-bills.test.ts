@@ -12,6 +12,7 @@ import {
   menuItems,
   workingOrders,
   workingOrderLines,
+  billAdvances,
   billPayments,
   refunds,
   floorZones,
@@ -56,6 +57,8 @@ import { readOrderStateCounts } from "./order-state-counts.js";
 import { deferredCloseKit } from "./testing/deferred-close-fixture.js";
 import { insertCorrective } from "./testing/replacement-fixture.js";
 import { listOrders } from "./orders-list.js";
+import type { GiveBackPlan, GiveBackRequest } from "./give-back-plan.js";
+import * as splitFixture from "./testing/split-after-print-fixture.js";
 
 const store = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let venue: OrderVenue;
@@ -1119,5 +1122,70 @@ describe("Find Bills SQL paging", () => {
       stillOwed: "18.00",
       collectionStatus: null,
     });
+  });
+});
+
+describe("Find a bill counts an advance given back as the Pay window does", () => {
+  async function advanceOn(billId: string, amount: string): Promise<string> {
+    await contribute(billId, amount, "0.00", { ownReceipt: true });
+    const [row] = await inTx(venue, (tx) =>
+      tx.select().from(billAdvances).where(eq(billAdvances.workingOrderId, billId)),
+    );
+    return row!.advanceSaleId;
+  }
+  async function giveBack(saleId: string, amount: string) {
+    const request: GiveBackRequest = { purpose: "goodwill", amount, extra: "0.00", way: "cash" };
+    const path = `/api/transactions/${saleId}/give-back`;
+    const shown = await send(venue.app, venue.cookie, "POST", `${path}/preview`, request);
+    expect(shown.status, JSON.stringify(shown.json)).toBe(200);
+    const [reason] = await inTx(venue, (tx) => listAdjustmentReasons(tx));
+    const given = await send(venue.app, venue.cookie, "POST", path, {
+      ...request,
+      reasonId: reason!.id,
+      note: "Money given back",
+      expected: (shown.json as unknown as GiveBackPlan).parts,
+      submissionIds: {
+        refund: randomUUID(),
+        extra: randomUUID(),
+        correction: randomUUID(),
+        leg: randomUUID(),
+      },
+      override: { personId: venue.adminId, pin: "1234" },
+    });
+    expect(given.status, JSON.stringify(given.json)).toBe(200);
+  }
+  async function expectAsPayWindow(billId: string, paid: string) {
+    const balance = await inTx(venue, (tx) => readBillBalance(tx, billId));
+    expect(balance.received).toBe(paid);
+    expect(await inTx(venue, (tx) => readFindBill(tx, billId))).toMatchObject({
+      paid,
+      stillOwed: balance.outstanding,
+    });
+  }
+  const wine = () => Array.from({ length: 4 }, () => "Red wine bottle");
+
+  it("an open bill whose advance was given back in full counts nothing paid", async () => {
+    const { tabId } = await seatedWith(venue, ...wine());
+    await giveBack(await advanceOn(tabId, "30.00"), "30.00");
+    await expectAsPayWindow(tabId, "0.00");
+  });
+  it("an open bill whose advance was given back in part counts what is left of it", async () => {
+    const { tabId } = await seatedWith(venue, ...wine());
+    await giveBack(await advanceOn(tabId, "30.00"), "10.00");
+    await expectAsPayWindow(tabId, "20.00");
+  });
+  it("a reopened bill whose advance was then given back in full counts nothing paid", async () => {
+    const party = await seatedWith(venue, ...wine());
+    const advanceId = await advanceOn(party.tabId, "30.00");
+    await store.db
+      .run(sql`update device_profiles set capabilities = json_insert(capabilities, '$[#]', 'print-receipt')
+      where name = 'Counter till'`);
+    await splitFixture.printed(venue, party);
+    const reopened = await splitFixture.split(venue, party.tabId, venue.cookie);
+    expect(reopened.status, JSON.stringify(reopened.json)).toBe(200);
+    const billId = reopened.json.billId as string;
+    await expectAsPayWindow(billId, "30.00");
+    await giveBack(advanceId, "30.00");
+    await expectAsPayWindow(billId, "0.00");
   });
 });
