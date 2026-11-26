@@ -1,4 +1,6 @@
 import { seedPerson } from "@waitron/db/testing/seed.js";
+import * as verificationRuntime from "./backup-verification-target.js";
+import { backupVerificationTargetDigests } from "./backup-verification-protocol.js";
 import * as cloudWorkerModule from "./cloud-worker.js";
 import * as cloudClientModule from "./cloud-client.js";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
@@ -156,6 +158,8 @@ import {
 import { TEST_PRODUCER, useTestProducer } from "./testing/test-producer.js";
 
 useTestProducer();
+
+vi.mock("./backup-verification-target.js", { spy: true });
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -1657,6 +1661,43 @@ describe("startServer, against a migrated venue directory", () => {
       const adoption = adoptRetainedListeners([held]);
       const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-cloud-seat-state-"));
       const venueDir = await mkdtemp(join(tmpdir(), "waitron-boot-cloud-seat-venue-"));
+      const input = {
+        runtime: { release: "test", revision: "a".repeat(40), fingerprint: "b".repeat(64) },
+        modules: [
+          {
+            name: "core",
+            packageVersion: "1.0.0",
+            requires: {},
+            schema: 1,
+            migrationTable: "__drizzle_migrations_db",
+            migrationDigest: "c".repeat(64),
+            semanticsVersion: 1,
+            policyDigest: "d".repeat(64),
+          },
+        ],
+      };
+      const target = { version: 1 as const, ...input, ...backupVerificationTargetDigests(input) };
+      const readTarget = vi.spyOn(verificationRuntime, "currentBackupVerificationTarget");
+      const outbound = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+        const { payload } = JSON.parse(String(init?.body));
+        const [, , requestId] = JSON.parse(Buffer.from(payload, "base64url").toString());
+        return Response.json({
+          version: 2,
+          requestId,
+          state: "awaiting_owner",
+          operationId: null,
+          expiresAt: new Date(Date.now() + 60000).toISOString(),
+        });
+      });
+      const localFetch = fetch;
+      readTarget.mockReturnValue(target);
+      const fetchSpy = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation((url, init) =>
+          String(url).startsWith("https://cloud.example.test/")
+            ? outbound(url, init)
+            : localFetch(url, init),
+        );
       let server: StartedServer | undefined;
       try {
         server = await startConfiguredServer({
@@ -1686,10 +1727,24 @@ describe("startServer, against a migrated venue directory", () => {
           expect(body.error.code).toBe(
             environment === "production" ? "setup.not_ready" : "server.internal",
           );
+          if (environment === "preproduction") {
+            const started = await localFetch(
+              `https://127.0.0.1:${port}/setup-api/cloud-recovery/start`,
+              { ...via, method: "POST" },
+            );
+            expect(JSON.parse(String(outbound.mock.calls[0]?.[1]?.body))).toMatchObject({
+              version: 2,
+              target,
+            });
+            expect(await started.json()).toMatchObject({ state: "awaiting_owner" });
+            expect(readTarget).toHaveBeenCalledOnce();
+          }
         } finally {
           await close();
         }
       } finally {
+        readTarget.mockRestore();
+        fetchSpy.mockRestore();
         adoption.restore();
         await server?.close();
         if (held.server.listening) await held.close();

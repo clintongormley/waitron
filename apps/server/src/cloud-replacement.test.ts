@@ -6,7 +6,10 @@ import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createCloudConnection } from "./cloud-client.js";
 import { createCloudReplacement } from "./cloud-replacement.js";
+import * as cloudRecovery from "./cloud-recovery.js";
 import { installationFixture } from "../test/cloud-installation-fixture.js";
+
+vi.mock("./cloud-recovery.js", { spy: true });
 
 const origin = "https://cloud.example";
 const nodeId = randomUUID(),
@@ -220,6 +223,22 @@ it("reports a completed local restore to Cloud before replacement prepare", asyn
   expect(f.requests.map((request) => request.action)).toEqual(["info", "restored", "prepare"]);
   const state = JSON.parse(await readFile(join(f.stateDir, "cloud/recovery.json"), "utf8"));
   expect(state.phase).toBe("reported");
+});
+
+it("refuses to prepare a replacement if Cloud cannot acknowledge the restore", async () => {
+  const f = await fixture("restored");
+  const report = vi
+    .spyOn(cloudRecovery, "reportSavedCloudRestore")
+    .mockClear()
+    .mockRejectedValue(new Error("Cloud offline"));
+  try {
+    await expect(
+      createCloudReplacement({ ...f.options, connection: f.connection }).prepare(),
+    ).rejects.toMatchObject({ code: "cloud.unavailable" });
+    expect(report).toHaveBeenCalledOnce();
+  } finally {
+    report.mockRestore();
+  }
 });
 
 it("refuses an unrestored recovery and imports an exact completion idempotently", async () => {

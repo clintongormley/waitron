@@ -1824,15 +1824,16 @@ container or menu admission.
 
 Keep Cloud snapshots unavailable until its integration uses the implementing pinned release,
 validates the complete private result, confirms its own child and scratch cleanup, and admits
-only a current claim. The opt-in target-bound recovery client uses version 2; the running setup
-caller stays on version 1 until Cloud implements that exchange. Joint acceptance must include
-recovery with the continuous source absent. Separate recovery authority still applies.
+only a current claim. Preproduction setup uses version 2 and checks the running build's
+verification target. The [pinned local trial](https://github.com/clintongormley/waitron/pull/4417)
+recovered a checked snapshot with the continuous source absent and Cloud acknowledged it after
+restart. Qualify the published build separately before enabling its snapshots.
 
 **A1017, 2026-10-22:** the existing `archiveHost()` / `archiveCommand()` fixture is qualified
 for a separately authorised ordinary restore at Waitron `0ee4ec275461cae439b74ef62bfba884b9466d12`.
 Use the
 [fixture recipe and qualification limits](../developers/authorised-cloud-restore-fixture.md).
-Cloud's same-run capture-to-recovery proof remains open. Its evidence must distinguish the
+The separate local setup trial records its own capture-to-recovery evidence. It distinguishes the
 verifier's non-activation from the ordinary restore's authorised fresh fiscal allocation;
 the existing Cloud refusal is retained, not converted to a pass by this independent receipt.
 

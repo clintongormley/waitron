@@ -56,6 +56,9 @@ import {
   type EntryDeps,
 } from "./node-entry.js";
 import type { StagedRestoreDeps } from "./restore-request.js";
+import * as cloudRecovery from "./cloud-recovery.js";
+
+vi.mock("./cloud-recovery.js", { spy: true });
 
 type StartServer = (env: NodeJS.ProcessEnv) => Promise<{ close: () => Promise<void> }>;
 
@@ -259,6 +262,10 @@ describe("runEntry", () => {
         deps({
           stateDir,
           baseEnv: { WAITRON_CLOUD_ORIGIN: origin },
+          startServer: async () => {
+            actions.push("startServer");
+            return { close: async () => {} };
+          },
           runStagedRestore: vi.fn(async ({ onManagedCloudRestored }) => {
             await onManagedCloudRestored?.({ requestId, pointId });
             return true;
@@ -268,10 +275,29 @@ describe("runEntry", () => {
       await vi.waitFor(async () => {
         expect(JSON.parse(await readFile(path, "utf8"))).toMatchObject({ phase: "reported" });
       });
-      expect(actions).toEqual(["info", "restored"]);
+      expect(actions).toEqual(["startServer", "info", "restored"]);
     } finally {
       vi.unstubAllGlobals();
       await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+  it("keeps the server started if the Cloud restore report fails", async () => {
+    const d = deps({ baseEnv: { WAITRON_CLOUD_ORIGIN: "https://cloud.example.test" } });
+    const report = vi
+      .spyOn(cloudRecovery, "reportSavedCloudRestore")
+      .mockClear()
+      .mockRejectedValue(new Error("Cloud offline"));
+    try {
+      await runEntry(d);
+      expect(report).toHaveBeenCalledWith({
+        stateDir: d.stateDir,
+        origin: "https://cloud.example.test",
+        environment: "preproduction",
+      });
+      expect(d.startServer).toHaveBeenCalledBefore(report);
+      expect(d.installShutdownHandlers).toHaveBeenCalledOnce();
+    } finally {
+      report.mockRestore();
     }
   });
   it("keeps the server stopped when the staged restore fails", async () => {

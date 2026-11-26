@@ -9,7 +9,7 @@ import { createPrivateKey, createPublicKey, generateKeyPairSync } from "node:cry
 import { link, lstat, readFile, unlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { AppError } from "@waitron/shared";
-import { createCloudRecoveryClient } from "./cloud-recovery.js";
+import { createCloudRecoveryClient, reportSavedCloudRestore } from "./cloud-recovery.js";
 import type { CloudConnection, CloudRegistration } from "./cloud-client.js";
 import "./errors.js";
 
@@ -67,12 +67,13 @@ function unavailable(): never {
 
 export function createCloudReplacement(options: ReplacementOptions) {
   const path = join(resolve(options.stateDir), CLOUD_REPLACEMENT_FILE);
-  const recovery = createCloudRecoveryClient({
+  const recoveryOptions = {
     stateDir: options.stateDir,
     origin: options.origin,
-    environment: "preproduction",
+    environment: "preproduction" as const,
     fetch: options.fetch,
-  });
+  };
+  const recovery = createCloudRecoveryClient(recoveryOptions);
   const fetchImpl = options.fetch ?? fetch;
   async function locked<T>(work: () => Promise<T>): Promise<T> {
     if (active.has(path)) throw new AppError("cloud.busy", {});
@@ -153,7 +154,7 @@ export function createCloudReplacement(options: ReplacementOptions) {
     }
     if (value.phase === "restored") {
       try {
-        await recovery.reportRestored();
+        await reportSavedCloudRestore(recoveryOptions);
       } catch {
         unavailable();
       }
