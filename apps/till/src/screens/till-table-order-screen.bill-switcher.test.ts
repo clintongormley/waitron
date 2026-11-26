@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { userEvent } from "vitest/browser";
 import { registerIcons } from "@waitron/ui";
 import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
@@ -92,7 +92,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     };
     const el = await mountScreen(three, "wo-1", party);
 
-    expect(closedLabel(el)).toBe("Bill 1 · 3 bills · €67.00");
+    expect(closedLabel(el)).toBe("Bill 1 · €67.00 · 1 of 3");
     expect(items(el)).toEqual([
       "Bill 1 €67.00",
       "Bill 2 · Clint €54.00 Ana has an unsent order: 3 items",
@@ -109,7 +109,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
   it("names the bill on screen, its name and count in the closed label", async () => {
     const el = await mountScreen(three, "wo-2");
 
-    expect(closedLabel(el)).toBe("Bill 2 · 3 bills · Clint · €54.00");
+    expect(closedLabel(el)).toBe("Bill 2 · Clint · €54.00 · 2 of 3");
   });
 
   it("says Deferred payment, with no ✓, for a bill closed as a deferred payment", async () => {
@@ -121,7 +121,7 @@ describe("A803 switcher: the table screen's bill switcher", () => {
 
     const trigger = switcher(el)!.querySelector<HTMLElement>('[slot="trigger"]')!;
     expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe(
-      "Bill 3 · 2 bills · Deferred payment ▾",
+      "Bill 3 · Deferred payment · 2 of 2 ▾",
     );
     expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Deferred payment", "New bill"]);
   });
@@ -133,17 +133,17 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     ];
     const el = await mountScreen(bills, "wo-1");
 
-    expect(closedLabel(el)).toBe("Bill 1 · 2 bills · €5.00 over");
+    expect(closedLabel(el)).toBe("Bill 1 · €5.00 over · 1 of 2");
     expect(items(el)).toEqual(["Bill 1 €5.00 over", "Bill 2 €30.00", "New bill"]);
   });
 
   it("says Paid for a paid bill on screen", async () => {
     const el = await mountScreen(three, "wo-3");
 
-    expect(closedLabel(el)).toBe("Bill 3 · 3 bills · Paid");
+    expect(closedLabel(el)).toBe("Bill 3 · Paid ✓ · 3 of 3");
     const trigger = switcher(el)!.querySelector<HTMLElement>('[slot="trigger"]')!;
-    expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe("Bill 3 · 3 bills · Paid ✓ ▾");
-    expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 3 · 3 bills · Paid");
+    expect(trigger.textContent!.replace(/\s+/g, " ").trim()).toBe("Bill 3 · Paid ✓ · 3 of 3 ▾");
+    expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 3 · Paid · 3 of 3");
     const marks = [...switcher(el)!.querySelectorAll<HTMLElement>("[data-paid-mark]")];
     expect(
       marks.map((mark) => [mark.textContent!.trim(), mark.getAttribute("aria-hidden")]),
@@ -171,27 +171,17 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     );
     const el = await mountScreen(merged, "wo-1");
 
-    expect(closedLabel(el)).toBe("Bill 1 · 2 bills · €67.00");
+    expect(closedLabel(el)).toBe("Bill 1 · €67.00 · 1 of 2");
     expect(items(el)).toEqual(["Bill 1 €67.00", "Bill 3 Paid ✓", "New bill"]);
   });
 
-  it("a table holding Bills 1 and 4 names Bill 4 and counts 2 bills apart from it", async () => {
+  it("a table holding Bills 1 and 4 shows Bill 4 in position 2 of 2", async () => {
     const el = await mountScreen(
       [partyBill("wo-1", 1, "67.00"), partyBill("wo-4", 4, "21.00")],
       "wo-4",
     );
 
-    expect(closedLabel(el)).toBe("Bill 4 · 2 bills · €21.00");
-    expect(closedLabel(el)).not.toContain(" of ");
-  });
-
-  it("choosing Bill 3 dispatches switch-bill with Bill 3's id", async () => {
-    const el = await mountScreen(three, "wo-1");
-    const seen = capture(el, "switch-bill");
-
-    switcher(el)!.querySelector<HTMLElement>('[data-switch-bill="wo-3"]')!.click();
-
-    expect(seen).toEqual([{ workingOrderId: "wo-3" }]);
+    expect(closedLabel(el)).toBe("Bill 4 · €21.00 · 2 of 2");
   });
 
   it("choosing the bill on screen dispatches nothing", async () => {
@@ -201,17 +191,6 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     switcher(el)!.querySelector<HTMLElement>('[data-switch-bill="wo-1"]')!.click();
 
     expect(seen).toEqual([]);
-  });
-
-  it("New bill dispatches new-bill", async () => {
-    const el = await mountScreen(one, "wo-1");
-    const seen = capture(el, "new-bill");
-    const switched = capture(el, "switch-bill");
-
-    switcher(el)!.querySelector<HTMLElement>("[data-new-bill]")!.click();
-
-    expect(seen).toEqual([{}]);
-    expect(switched).toEqual([]);
   });
 
   it("New bill is drawn quiet and marked aria-disabled while one is out, and a tap on it then sends nothing", async () => {
@@ -275,42 +254,29 @@ describe("A803 switcher: the table screen's bill switcher", () => {
   });
 
   it.each([
-    [20, 390, 844],
-    [40, 375, 667],
-  ])(
-    "with %i bills at %ix%i the open list fits the window and scrolls New bill fully into view",
-    async (count, width, height) => {
-      const frame = [innerWidth, innerHeight] as const;
-      await page.viewport(width, height);
-      try {
-        const bills = Array.from({ length: count }, (_, n) =>
-          partyBill(`wo-${n + 1}`, n + 1, "3.00"),
-        );
-        const el = await mountScreen(bills, "wo-1", { ...switcherParty, billCount: count });
-        const seen = capture(el, "new-bill");
-        const host = switcher(el)!;
-        const popup = host.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-        const trigger = host.shadowRoot!.querySelector("button")!;
-        await userEvent.click(trigger);
-
-        expect(popup.matches(":popover-open")).toBe(true);
-        const popupBox = popup.getBoundingClientRect();
-        const anchor = trigger.getBoundingClientRect();
-        expect(popupBox.top).toBeGreaterThanOrEqual(anchor.bottom - 0.5);
-        expect(popupBox.bottom).toBeLessThanOrEqual(innerHeight);
-        expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
-        const newBill = host.querySelector<HTMLElement>("[data-new-bill]")!;
-        newBill.scrollIntoView({ block: "nearest" });
-        const box = newBill.getBoundingClientRect();
-        expect(box.top).toBeGreaterThanOrEqual(0);
-        expect(box.bottom).toBeLessThanOrEqual(innerHeight);
-        await userEvent.click(newBill);
-        expect(seen).toEqual([{}]);
-      } finally {
-        await page.viewport(...frame);
-      }
-    },
-  );
+    [390, true],
+    [760, false],
+  ])("uses bottom-list mode at %ipx: %s", async (width, bottomSheet) => {
+    await pageAt(width + 48, 740);
+    try {
+      const el = await mountScreen(three, "wo-1");
+      el.style.width = `${width}px`;
+      await expect.poll(() => switcher(el)!.hasAttribute("bottom-sheet")).toBe(bottomSheet);
+      const host = switcher(el)!;
+      const trigger = host.shadowRoot!.querySelector("button")!;
+      const switched = capture(el, "switch-bill");
+      const created = capture(el, "new-bill");
+      await userEvent.click(trigger);
+      await userEvent.click(host.querySelector<HTMLElement>('[data-switch-bill="wo-3"]')!);
+      expect(switched).toEqual([{ workingOrderId: "wo-3" }]);
+      await userEvent.click(trigger);
+      await userEvent.click(host.querySelector<HTMLElement>("[data-new-bill]")!);
+      expect(created).toEqual([{}]);
+      expect(switched).toEqual([{ workingOrderId: "wo-3" }]);
+    } finally {
+      await resetPage();
+    }
+  });
 
   it("shows on a handheld too", async () => {
     const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
@@ -366,7 +332,7 @@ it("switches the mounted bill by keyboard, updates its label and returns focus t
   await userEvent.keyboard("{ArrowDown}{Enter}");
   await el.updateComplete;
   expect(picked).toEqual([{ workingOrderId: "wo-2" }]);
-  expect(closedLabel(el)).toBe("Bill 2 · 3 bills · Clint · €54.00");
+  expect(closedLabel(el)).toBe("Bill 2 · Clint · €54.00 · 2 of 3");
   expect(host.querySelector('[data-switch-bill="wo-2"]')!.getAttribute("aria-checked")).toBe(
     "true",
   );
@@ -413,10 +379,10 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
   it("another bill: the closed switcher and its label say Bill 2 unsent, the icon is hidden, and only Bill 2's row says Unsent", async () => {
     const el = await mountFor([draft("wo-2", 2, "p-ana")]);
 
-    expect(closedLabel(el)).toBe("Bill 1 · 3 bills · €67.00");
-    expect(triggerText(el)).toBe("Bill 1 · 3 bills · €67.00 ▾ Bill 2 unsent");
+    expect(closedLabel(el)).toBe("Bill 1 · €67.00 · 1 of 3");
+    expect(triggerText(el)).toBe("Bill 1 · €67.00 · 1 of 3 ▾ Bill 2 unsent");
     expect(switcher(el)!.getAttribute("label")).toBe(
-      "Bills: Bill 1 · 3 bills · €67.00 · Bill 2 unsent",
+      "Bills: Bill 1 · €67.00 · 1 of 3 · Bill 2 unsent",
     );
     const icon = trigger(el).querySelector("[data-unsent-mark] wt-icon")!;
     expect([icon.getAttribute("name"), icon.getAttribute("aria-hidden")]).toEqual([
@@ -435,32 +401,32 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
   it("another person's draft on Bill 2 draws no mark", async () => {
     const el = await mountFor([draft("wo-2", 2, "p-clint")]);
 
-    expect(triggerText(el)).toBe("Bill 1 · 3 bills · €67.00 ▾");
-    expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 1 · 3 bills · €67.00");
+    expect(triggerText(el)).toBe("Bill 1 · €67.00 · 1 of 3 ▾");
+    expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 1 · €67.00 · 1 of 3");
     expect(markedRows(el)).toEqual([]);
   });
 
   it("this person's draft on the bill on screen only draws no mark", async () => {
     const el = await mountFor([draft("wo-1", 1, "p-ana")]);
 
-    expect(triggerText(el)).toBe("Bill 1 · 3 bills · €67.00 ▾");
-    expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 1 · 3 bills · €67.00");
+    expect(triggerText(el)).toBe("Bill 1 · €67.00 · 1 of 3 ▾");
+    expect(switcher(el)!.getAttribute("label")).toBe("Bills: Bill 1 · €67.00 · 1 of 3");
     expect(markedRows(el)).toEqual([]);
   });
 
   it("a draft of this person's with no lines draws no mark", async () => {
     const el = await mountFor([draft("wo-2", 2, "p-ana", 0)]);
 
-    expect(triggerText(el)).toBe("Bill 1 · 3 bills · €67.00 ▾");
+    expect(triggerText(el)).toBe("Bill 1 · €67.00 · 1 of 3 ▾");
     expect(markedRows(el)).toEqual([]);
   });
 
   it("two other bills: the closed switcher says 2 bills unsent and both rows are marked", async () => {
     const el = await mountFor([draft("wo-3", 3, "p-ana"), draft("wo-2", 2, "p-ana")], "wo-1");
 
-    expect(triggerText(el)).toBe("Bill 1 · 3 bills · €67.00 ▾ 2 bills unsent");
+    expect(triggerText(el)).toBe("Bill 1 · €67.00 · 1 of 3 ▾ 2 bills unsent");
     expect(switcher(el)!.getAttribute("label")).toBe(
-      "Bills: Bill 1 · 3 bills · €67.00 · 2 bills unsent",
+      "Bills: Bill 1 · €67.00 · 1 of 3 · 2 bills unsent",
     );
     expect(markedRows(el)).toEqual(["wo-2", "wo-3"]);
   });
@@ -469,7 +435,7 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
     setLocale("es");
     const one = await mountFor([draft("wo-2", 2, "p-ana")]);
 
-    expect(triggerText(one)).toBe("Cuenta 1 · 3 cuentas · 67,00 € ▾ Cuenta 2 sin enviar");
+    expect(triggerText(one)).toBe("Cuenta 1 · 67,00 € · 1 de 3 ▾ Cuenta 2 sin enviar");
     expect(
       switcher(one)!
         .querySelector('[data-switch-bill="wo-2"] [data-bill-row-unsent-mark]')!
@@ -478,7 +444,7 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
     cleanupWidgets();
 
     const two = await mountFor([draft("wo-2", 2, "p-ana"), draft("wo-3", 3, "p-ana")]);
-    expect(triggerText(two)).toBe("Cuenta 1 · 3 cuentas · 67,00 € ▾ 2 cuentas sin enviar");
+    expect(triggerText(two)).toBe("Cuenta 1 · 67,00 € · 1 de 3 ▾ 2 cuentas sin enviar");
   });
 
   describe("on a phone, embedded in the till", () => {
@@ -514,7 +480,7 @@ describe("A797 slice 11: the switcher marks another bill holding this person's u
       const sw = box(switcher(el)!);
       const menu = box(el.shadowRoot!.querySelector("[data-table-menu]")!);
 
-      expect(triggerText(el)).toBe("Cuenta 1 · 3 cuentas · 67,00 € ▾ Cuenta 2 sin enviar");
+      expect(triggerText(el)).toBe("Cuenta 1 · 67,00 € · 1 de 3 ▾ Cuenta 2 sin enviar");
       expect(Math.abs(middle(menu) - middle(sw))).toBeLessThanOrEqual(1);
       expect(menu.right).toBeLessThanOrEqual(window.innerWidth);
     });

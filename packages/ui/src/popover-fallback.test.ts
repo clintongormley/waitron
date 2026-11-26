@@ -116,6 +116,23 @@ for (const width of [390, 1280]) {
   );
 }
 
+test("the fallback bottom sheet dims the page and lets a choice receive the tap", async () => {
+  await page.viewport(390, 360);
+  const el = await mount(
+    '<wt-row-actions label="Actions" bottom-sheet><button>Edit</button></wt-row-actions>',
+  );
+  el.style.setProperty("--wt-color-scrim", "rgb(9, 10, 11)");
+  const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  const choice = el.querySelector("button")!;
+  const picked = vi.fn();
+  choice.addEventListener("click", picked);
+  await userEvent.click(el.shadowRoot!.querySelector("button")!);
+  expect(getComputedStyle(popup).boxShadow).toContain("rgb(9, 10, 11)");
+  await userEvent.click(choice);
+  expect(picked).toHaveBeenCalledOnce();
+  expect(popup.matches(":popover-open")).toBe(false);
+});
+
 test("a modal's combobox is hittable and Escape closes only the list, then selection works", async () => {
   const dialog = (await mount(
     '<wt-dialog heading="Edit"><wt-combobox label="Station"></wt-combobox></wt-dialog>',

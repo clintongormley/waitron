@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
 import { popupIndex, popupPlacement } from "../popup-helpers.js";
@@ -114,6 +114,38 @@ export class WtRowActions extends LitElement {
         padding: var(--wt-space-2);
         min-width: 0;
       }
+      :host([bottom-sheet]) [popover] {
+        box-sizing: border-box;
+        inset: auto 0 var(--wt-keyboard-inset);
+        width: auto;
+        max-width: none;
+        min-width: 0;
+        max-height: calc(
+          100dvh - var(--wt-keyboard-top) - var(--wt-keyboard-inset) - var(--wt-space-2)
+        );
+        padding-right: max(var(--wt-space-1), env(safe-area-inset-right));
+        padding-bottom: max(var(--wt-space-1), env(safe-area-inset-bottom));
+        padding-left: max(var(--wt-space-1), env(safe-area-inset-left));
+        border-radius: var(--wt-radius-lg) var(--wt-radius-lg) 0 0;
+        overscroll-behavior: contain;
+      }
+      :host([bottom-sheet]) [popover]::backdrop {
+        background: var(--wt-color-scrim);
+      }
+      :host([bottom-sheet]) [popover].\\:popover-open {
+        box-shadow:
+          var(--wt-shadow-2),
+          0 0 0 100vmax var(--wt-color-scrim);
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        :host([bottom-sheet]) [popover]:popover-open {
+          transition: translate var(--wt-duration-move);
+          translate: 0 0;
+          @starting-style {
+            translate: 0 var(--wt-space-4);
+          }
+        }
+      }
       .actions {
         display: flex;
         flex-direction: column;
@@ -169,6 +201,7 @@ export class WtRowActions extends LitElement {
   /** Opens the popup under the trigger and scrolls what does not fit, rather than moving it up over
    * the trigger, where a second tap would land on an action. */
   @property({ type: Boolean, attribute: "opens-below" }) opensBelow = false;
+  @property({ type: Boolean, attribute: "bottom-sheet", reflect: true }) bottomSheet = false;
   @state() private expanded = false;
   @state() private isMenu = false;
   @state() private directDelete: HTMLElement | null = null;
@@ -249,8 +282,19 @@ export class WtRowActions extends LitElement {
 
   private readonly onWindowResize = (): void => this.positionPopup();
 
+  override updated(changed: PropertyValues<this>): void {
+    if (changed.has("bottomSheet")) this.positionPopup();
+  }
+
   private positionPopup(): void {
     if (!this.popup.matches(":popover-open")) return;
+    if (this.bottomSheet) {
+      const { style } = this.popup;
+      style.removeProperty("top");
+      style.removeProperty("left");
+      style.removeProperty("max-height");
+      return;
+    }
     const anchor = this.trigger.getBoundingClientRect();
     const style = getComputedStyle(this.popup);
     const border = this.popup.offsetHeight - this.popup.clientHeight;
