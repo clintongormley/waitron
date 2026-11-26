@@ -18,22 +18,31 @@ function editorKey(address: ProductsEditorAddress | null): string {
 
 export class ProductsEditorHistory {
   #current = "";
+  #deferred: ProductsEditorAddress | null = null;
   #epoch: string | undefined;
   readonly #pushed = new Map<number, string>();
   readonly #owner = crypto.randomUUID();
 
   constructor(private readonly url: UrlStateController) {}
 
-  accept(): ProductsEditorAddress | null | undefined {
+  accept(editorOpen: boolean): ProductsEditorAddress | null | undefined {
     const address = this.#read();
     const key = editorKey(address);
-    if (key === this.#current) return undefined;
+    const deferred = this.#deferred;
+    this.#deferred = null;
+    if (key === this.#current) {
+      if (editorOpen && deferred) this.push(deferred);
+      return undefined;
+    }
     this.#current = key;
     return address;
   }
 
   push(address: ProductsEditorAddress): void {
-    if (this.url.read("dashboard") !== "products") return;
+    const dashboard = this.url.read("dashboard");
+    // Profile owns the address while the retained Products screen can finish an editor read.
+    if (dashboard === "profile") this.#deferred = address;
+    if (dashboard !== "products") return;
     const guard = navigationGuardFor(window);
     const url = new URL(guard?.href ?? location.href);
     const category = this.url.read("category");
@@ -68,6 +77,7 @@ export class ProductsEditorHistory {
   }
 
   close(): void {
+    this.#deferred = null;
     if (this.url.read("dashboard") !== "products") return;
     const address = this.#read();
     if (address !== null && this.#owns(editorKey(address))) {

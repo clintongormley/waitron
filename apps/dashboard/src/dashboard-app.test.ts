@@ -1741,18 +1741,19 @@ describe("dashboard-app", () => {
     await passThroughYourProfile();
 
     expect(el.shadowRoot!.querySelector("wt-modal")!.open).toBe(false);
-    expect(location.pathname).toBe("/products");
+    expect(location.pathname).toBe("/products/editor/new");
     expect(editor()?.open).toBe(true);
     expect(price()?.value).toBe("9.25");
     expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
   });
 
   it.each([
-    ["/products", "/products/product/p1"],
-    ["/products/category/c1", "/products/product/p1/category/c1"],
+    ["/products", "/products/product/p1", "Close"],
+    ["/products/category/c1", "/products/product/p1/category/c1", "Close"],
+    ["/products", "/products/product/p1", "Back"],
   ])(
-    "a product editor whose read lands while Your profile shows over %s is named in the address once the window closes",
-    async (start, named) => {
+    "a product editor whose read lands while Your profile shows over %s is named %s after %s",
+    async (start, named, action) => {
       history.replaceState(null, "", start);
       let land!: () => void;
       const { el, editor, price, fromBrowser } = await mountOnMenu({
@@ -1772,13 +1773,17 @@ describe("dashboard-app", () => {
       expect(location.pathname).toBe("/profile");
       land();
       await expect.poll(() => price()?.value).toBe("8.50");
-      closeProfileButton(el);
+      if (action === "Back") history.back();
+      else closeProfileButton(el);
       await expect.poll(() => location.pathname).not.toBe("/profile");
       await flush(el);
 
       expect(location.pathname).toBe(named);
       expect(editor()?.open).toBe(true);
       expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
+      history.back();
+      await expect.poll(() => location.pathname).toBe(start);
+      await expect.poll(() => editor()?.open).toBe(false);
     },
   );
 

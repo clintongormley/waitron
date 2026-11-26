@@ -149,7 +149,7 @@ export class ProductsScreen extends LitElement {
     () => {
       if (this.#url.read("dashboard") !== "products") return;
       this.categoryId = this.#url.read("category");
-      const address = this.#history.accept();
+      const address = this.#history.accept(this.#editor.open);
       if (address === undefined) return;
       if (this.#editor.open || this.#editor.reading) this.#editor.close();
       this.#linkedEditor = address;
