@@ -1011,15 +1011,15 @@ export class TillBillPayDialog extends LitElement {
 
   #quietPay(): TemplateResult {
     const base = this.#quietAmount();
-    const cashEntry = this.quietEntry && this.method === "cash";
-    const tip = this.tipsEnabled && !cashEntry ? typedMoney(this.cardTip) : null;
+    const card = this.handheld ? this.takesReaderCard : this.cardReader !== "none";
+    const acceptsTip = this.quietEntry ? this.method !== "cash" : card;
+    const tip = this.tipsEnabled && acceptsTip ? typedMoney(this.cardTip) : null;
     const includingTip = (value: string) =>
       this.#money(tip === null ? value : moneyPlus(value, tip));
     const amount = base === null ? "" : includingTip(base);
     const reserved = this.balance?.reserved;
     const own = this.#feedback.attempted ? this.#ownErrors() : new Map<Field, string>();
     const errors = this.#fieldErrors(own);
-    const card = this.handheld ? this.takesReaderCard : this.cardReader !== "none";
     const manual = this.takesManualCard || (!this.handheld && this.cardReader === "none");
     return quietPay({
       title: t("action.pay"),
@@ -1130,9 +1130,13 @@ export class TillBillPayDialog extends LitElement {
     if (this.chosenWay === "contribution") return typedMoney(this.typedAmountValue);
     if (this.chosenWay === "items") return this.#pickedAmount();
     if (outstanding === undefined) return null;
-    if (this.chosenWay === "share" && PEOPLE.test(this.people.trim()))
-      return divideDecimal(decimal(outstanding), decimal(this.people.trim()), MONEY_SCALE);
-    return decimal(outstanding);
+    const available = decimal(outstanding);
+    if (this.chosenWay !== "share" || !PEOPLE.test(this.people.trim())) return available;
+    const people = decimal(this.people.trim());
+    const share = divideDecimal(available, people, MONEY_SCALE);
+    return compareDecimal(multiplyDecimal(share, people), available) < 0
+      ? moneyPlus(share, "0.01")
+      : share;
   }
 
   #quietMethod(method: "cash" | "manual"): void {
@@ -1585,7 +1589,11 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #enter(event: KeyboardEvent, selector: string): void {
-    submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(selector));
+    const target =
+      selector === "[data-pay-continue]"
+        ? `${selector}, [data-quiet-pay-card], [data-quiet-pay-cash], [data-quiet-pay-manual]`
+        : selector;
+    submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>(target));
   }
 
   #input(

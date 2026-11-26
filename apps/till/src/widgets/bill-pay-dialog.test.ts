@@ -126,6 +126,44 @@ it("chooses an amount, then opens the existing cash entry before asking for a pr
   ]);
 });
 
+it("rounds an equal share up on the balance after reserved money", async () => {
+  const el = await mount({
+    quiet: true,
+    way: "share",
+    cardReader: "simulator",
+    balance: balanceOf({ received: "10.00", reserved: "10.00", outstanding: "100.00" }),
+  });
+  await type(el, "people", "3");
+  expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("33.34"));
+  expect(text(root(el).querySelector("[data-quiet-pay-card]"))).toBe(`Charge ${money("33.34")}`);
+});
+
+it("asks for the server preview when Enter is pressed in the opening amount field", async () => {
+  const el = await mount({ quiet: true, way: "contribution", cardReader: "simulator" });
+  const previews = capture<PayRequest>(el, "bill-pay-preview");
+  await type(el, "amount", "40");
+  field(el, "amount")!
+    .shadowRoot!.querySelector("input")!
+    .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, composed: true }));
+  await el.updateComplete;
+  expect(previews).toEqual([
+    {
+      choice: { kind: "contribution", amount: "40" },
+      pay: { method: "card" },
+      card: { entry: "reader", simulationOutcome: "captured" },
+    },
+  ]);
+});
+
+it("leaves a tip entered for another card machine out of the opening amount when only that machine can take cards", async () => {
+  const el = await mount({ quiet: true, way: "whole", handheld: true, takesManualCard: true });
+  await click(el, "[data-quiet-pay-manual]");
+  await type(el, "cardTip", "10");
+  expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("130.00"));
+  await click(el, 'wt-form-actions [slot="cancel"]');
+  expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("120.00"));
+});
+
 it("adds a staff tip to the opening total and removes it before asking for any charge", async () => {
   const el = await mount({ quiet: true, way: "whole", cardReader: "simulator" });
   const previews = capture<PayRequest>(el, "bill-pay-preview");
