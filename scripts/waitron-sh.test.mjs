@@ -84,7 +84,7 @@ afterEach(() => {
 // profile into the running kernel. WT_AA_PARSE_FAIL makes `apparmor_parser` refuse the profile.
 // `install` copies a file only when the destination is inside the case's own directory (WT_SANDBOX),
 // which is where each case points the Bluetooth drop-in and the box's clock service, and applies
-// its `-m` mode there. WT_BOX_ENABLE_FAIL=1 makes `systemctl enable --now waitron-box.socket` fail. `systemctl show … FragmentPath` answers
+// its `-m` mode there; it fails when its destination ends with WT_INSTALL_FAIL. WT_BOX_ENABLE_FAIL=1 makes `systemctl enable --now waitron-box.socket` fail. `systemctl show … FragmentPath` answers
 // WT_BT_UNIT, the path of a stand-in bluetooth.service, or nothing, as a host without Bluetooth
 // does, and `systemctl show … DropInPaths` lists the `.conf` files in the drop-in's folder, sorted by
 // name, so the drop-in counts only once it exists; WT_BT_RESTART_FAIL=1 makes every

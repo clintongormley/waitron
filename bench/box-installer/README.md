@@ -175,17 +175,6 @@ match. The rig then asks the host to release the drives and requires at least on
 file gone from the container. `usb-drive.json` holds the answers. The image needs about 4.5 GB of
 free space in the tool container; it goes when the container does.
 
-After retaining the small results, remove your rehearsal resources. Do not remove
-shared images, volumes or build caches. Export the image first with `docker cp`
-if you need it; otherwise deleting this container also deletes the built image.
-
-```sh
-docker stop waitron-b3-rehearsal
-docker rm waitron-b3-rehearsal
-docker image rm waitron-b3-tools:rehearsal "$app" waitron-b3-agent:rehearsal
-rm -rf "$inputs"
-```
-
 ## Check a manual upgrade and interrupted recovery
 
 Supply a synthetic preproduction state archive as `B3_UPGRADE_STATE`, with its producer
@@ -205,3 +194,16 @@ restored container restart policies. The power-cut case kills QEMU during
 the initial copy and during restore, then checks the held boot and repeated restore.
 The guest needs real internet time synchronisation.
 These current-build synthetic checks create no qualified historical release in the index.
+
+## Remove the rehearsal resources
+
+After retaining the small results, remove your rehearsal resources. Do not remove
+shared images, volumes or build caches. Export the image first with `docker cp`
+if you need it; otherwise deleting this container also deletes the built image.
+
+```sh
+docker stop waitron-b3-rehearsal
+docker rm waitron-b3-rehearsal
+docker image rm waitron-b3-tools:rehearsal "$app" waitron-b3-agent:rehearsal
+rm -rf "$inputs"
+```

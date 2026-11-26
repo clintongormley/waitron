@@ -4967,7 +4967,8 @@ and 700-character limit. See the [host-read cut](https://github.com/clintongorml
 
 _2026-11-26, A1603:_ it also forwards `storage.list` and `storage.release` to
 `/opt/waitron-host/box/storage/storage-host.mjs`, one at a time under `storage.lock`, when that
-module and a Node.js it can run are there; otherwise they answer `unknown_request`.
+file is there and a `node` is on the service's path or at `/opt/waitron-host/node-v26.7.0/`;
+otherwise a line within the shell's existing limit answers `unknown_request`.
 
 **The host service** (`deploy/box/`). `waitron-box.socket` listens on `/run/waitron-box/box.sock`
 (`Accept=yes`, owner `root`, group `waitron-box`, mode `0660`, at most four connections at once) and

@@ -405,7 +405,7 @@ BOX_LIB_DIR="${WAITRON_TEST_HOST_ROOT:-}/usr/local/lib/waitron"
 BOX_UNIT_DIR="${WAITRON_TEST_HOST_ROOT:-}/etc/systemd/system"
 BOX_GROUP=waitron-box
 BOX_GID=10001
-# storage-host.mjs and every module it imports; nothing else, so no other host request switches on.
+# storage-host.mjs and every module it imports, and nothing else.
 BOX_STORAGE_MODULES="storage-host.mjs host-protocol.mjs name-tag.mjs upgrades/contracts.mjs wifi-boot-copy.mjs disk-key.mjs wifi-record.mjs"
 # A link to the folder holding the set, kept apart from the modules other host code imports.
 BOX_STORAGE="$WAITRON_HOST_DIR/box/storage"
@@ -460,7 +460,7 @@ install_box_service() {
     echo "waitron.sh: installed the box's clock service, so Waitron can set this machine's clock from a confirmed time"
     if ! node="$(storage_node)"; then
       env_unset WAITRON_BOX_DRIVES_MOUNT
-      echo "waitron.sh: this machine has no Node.js for the box's USB drive module to run on, so Waitron cannot see USB drives plugged into this machine; running waitron.sh install again once the box is running makes a checked upgrade, which keeps Node.js for the module" >&2
+      echo "waitron.sh: found no Node.js where the box's host service looks for one (systemd's service path, or $WAITRON_HOST_DIR/node-v26.7.0), so Waitron cannot see USB drives plugged into this machine; running waitron.sh install again once the box is running makes a checked upgrade, which keeps Node.js for the module" >&2
     elif install_storage_modules "$ref" "$tmp" "$node"; then
       env_set WAITRON_BOX_DRIVES_MOUNT /run/waitron-drives:/run/waitron-drives:ro,rslave
       echo "waitron.sh: installed the box's USB drive module, so Waitron can see USB drives plugged into this machine"
@@ -515,12 +515,12 @@ install_storage_modules() {
 }
 
 stage_storage_modules() {
-  local module
+  local from="$1" to="$2" module
   for module in $BOX_STORAGE_MODULES; do
     if [ "${module%/*}" != "$module" ]; then
-      as_root install -d -m 0755 -o root -g root "$2/${module%/*}" || return 1
+      as_root install -d -m 0755 -o root -g root "$to/${module%/*}" || return 1
     fi
-    as_root install -m 0644 -o root -g root "$1/${module##*/}" "$2/$module" || return 1
+    as_root install -m 0644 -o root -g root "$from/${module##*/}" "$to/$module" || return 1
   done
 }
 
