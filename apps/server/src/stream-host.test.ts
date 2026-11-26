@@ -1533,7 +1533,7 @@ describe("the live copy's wiring", () => {
         expect(await getThrough(endpoint)).not.toBe("200 stored");
 
         expect(rt.status()).toMatchObject({
-          bucketProblem: { reason: "CERT_SIGNATURE_FAILURE", since: expect.any(String) },
+          bucketProblem: { reason: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY", since: expect.any(String) },
         });
         expect(reached).toEqual([]);
       } finally {
@@ -1691,7 +1691,7 @@ describe("the live copy's wiring", () => {
         const outageSince = (rt.status() as StreamStatus).bucketProblem!.since;
         const pipe = await opened.mock.results[0]!.value;
         expect(await getThrough(pipe.loopbackUrl)).not.toBe("200 stored");
-        expect(pipe.problem()).toMatchObject({ reason: "CERT_SIGNATURE_FAILURE" });
+        expect(pipe.problem()).toMatchObject({ reason: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY" });
 
         expect(rt.status()).toMatchObject({ bucketProblem: { reason: "access_denied" } });
         expect((rt.status() as StreamStatus).bucketProblem!.since).toBe(outageSince);

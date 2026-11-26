@@ -277,7 +277,7 @@ describe("the main box's authority certificate, and a request pinned to it", () 
 
     const error = await send(other.url).catch((e: unknown) => e);
 
-    expect(error).toMatchObject({ code: "CERT_SIGNATURE_FAILURE" });
+    expect(error).toMatchObject({ code: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY" });
     expect(other.requests).toHaveLength(0);
     expect(await send(pinned.url)).toEqual({ status: 200, text: "{}" });
     expect(pinned.requests).toHaveLength(1);
@@ -295,7 +295,7 @@ describe("the main box's authority certificate, and a request pinned to it", () 
         signal: AbortSignal.timeout(5_000),
       }).catch((e: unknown) => e);
 
-      expect(error).toMatchObject({ code: "CERT_SIGNATURE_FAILURE" });
+      expect(error).toMatchObject({ code: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY" });
       expect(server.requests).toHaveLength(0);
     } finally {
       vi.unstubAllEnvs();
