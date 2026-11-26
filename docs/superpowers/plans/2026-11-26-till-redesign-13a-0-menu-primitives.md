@@ -1,0 +1,53 @@
+# Lane D · 13a-0 shared till menu components
+
+Give the table menu and Lane F’s ☰ menu a shared sheet and row in `packages/ui`.
+The spec’s Status records the owner’s design approval on 26 November. The watcher
+assigned this component slice in Lane D’s `questions.md` at 21:58. [Design §§9.9 and 14.2][design].
+
+- [ ] **Sheet.** Extend `packages/ui/src/components/wt-row-actions.ts` with
+  `sheet-variant="menu"` on `bottom-sheet`, independent of the optional visible
+  `sheet-heading`. Give the sheet a dialog role, named by its heading or the trigger label.
+  Use the existing popover, dismiss, scrolling and inset paths. Scope new paint to
+  the variant. In `i` frames 2–3 and `aj` frame 1, use a 40% scrim, 16px top
+  corners, an upward 0 −8px 24px shadow at black 20%, a centered 40×5 sunken
+  handle and 12px bold muted caps with `--wt-letter-spacing-caps`. Style direct slotted `data-sheet-heading` sections
+  for ☰. Let the sheet and dimming stop above a bottom bar, as in `aj` frame 1.
+  Clear outer padding and borders while keeping safe-area insets. Today’s
+  bill picker keeps its existing presentation and keyboard behavior.
+- [ ] **Row.** Extend `packages/ui/src/components/wt-menu-row.ts` with an opt-in
+  `action` that draws a native button with `label`, trailing `value` (text or
+  count), and optional `chevron`, `disabled` and `divider`. Keep the default slot and
+  the existing help badge beside the action. Style the plain slot too, so 13a can
+  place the existing Bill requested switch beside its label. Use a 52px minimum and the tap target
+  floor, 20px/16px inline insets, one 1px divider, 16px regular label, muted `md`
+  value and 6px before the decorative 18px icon. Register `chevron-right` once in
+  `packages/ui/src/components/wt-icon.ts`. Use existing tokens first and add missing
+  dimensions to `packages/ui-core/src/tokens/structure.css`.
+  The watcher’s 22:57 addition lets a native choice supply its own button and retain its
+  checked state and focus. Put a labelled row inside it for the value, chevron or check mark.
+- [ ] **Focus and action.** In the opt-in sheet, focus the first enabled control
+  on open. Tab between controls and dismiss at either end, returning focus to
+  the trigger. Keep the native composed click so the existing sheet handler
+  sees it. Include only action-mode rows in the existing anchored sizing query,
+  so `opens-below` can still show half the next row when more actions fit below.
+- [ ] **Checks.** Run new Chromium cases red, then green. In `packages/ui/src/components/`,
+  extend `wt-menu-row.test.ts` for token painting, value and icon, and help beside
+  the action. Extend `wt-row-actions.test.ts` for sheet tokens, focus in and out,
+  pointer and keyboard activation once, Escape and scrim dismissal, the bottom offset, and anchored
+  sizing. Extend both `.a11y.test.ts` files for named open and closed sheets, and
+  plain, value, count with chevron, disabled and help rows, in both themes. Assert
+  the open sheet’s dialog role and accessible name.
+  Verify a styled native bill choice still receives checked focus, arrows and activation.
+  Delete the action label once and verify axe fails. Add each
+  `.forced-colors.test.ts` for the sheet edge and the row’s divider and focus. Run the bottom-sheet case
+  in `packages/ui/src/popover-fallback.test.ts`, the UI chrome and type checks, and
+  the bottom-list and keyboard cases in
+  `apps/till/src/screens/till-table-order-screen.bill-switcher.test.ts`.
+
+**Finish line.** Document both APIs in `docs/developers/design-system.md` and add a
+workbench example in `packages/ui/demo/main.ts`. Compare it with the approved
+`i` and `aj` HTML at 390px in light and dark. Allow **150–210 production lines** and
+**260–330 test lines**. Screen wiring, Finish table, the active trigger and
+Bill requested stay in 13a. The redesign stays open in the backlog.
+
+[design]: ../specs/2026-11-26-till-handheld-redesign-design.md

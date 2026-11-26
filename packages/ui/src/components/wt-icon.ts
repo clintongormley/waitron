@@ -120,4 +120,5 @@ registerIcons({
   ...MENU_ICONS,
   check: CHECK_ICON_PATH,
   "chevron-left": "M10.5 2.5L5 8l5.5 5.5 1.1-1.1L7.2 8l4.4-4.4Z",
+  "chevron-right": "M5.5 2.7 10.8 8l-5.3 5.3-1.1-1.1L8.6 8 4.4 3.8z",
 });

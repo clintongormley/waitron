@@ -9,7 +9,8 @@ import "./wt-toast.js";
 import { WtDataTable } from "./wt-data-table.js";
 import { cleanup, host, mount } from "../test-helpers.js";
 import { expectNoA11yViolations } from "../a11y-helpers.js";
-import { WtRowActions } from "./wt-row-actions.js";
+import { setHelpMode } from "../help-mode.js";
+import { actionChoiceStyles, WtRowActions } from "./wt-row-actions.js";
 
 async function mountWidget<T extends HTMLElement>(tag: string, props: Partial<T>) {
   const el = (await mount(`<${tag}></${tag}>`)) as T & { updateComplete: Promise<unknown> };
@@ -33,6 +34,182 @@ registerIcons({
 });
 
 afterEach(cleanup);
+
+async function menuSheet(contents: string, attributes = "") {
+  const el = await mount(
+    `<wt-row-actions label="Table 4" bottom-sheet sheet-variant="menu" ${attributes}>${contents}</wt-row-actions>`,
+  );
+  const trigger = el.shadowRoot!.querySelector("button")!;
+  const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+  await userEvent.click(trigger);
+  return { el, trigger, popup };
+}
+
+test("the menu sheet and its scrim stop above the bottom bar and read their paint from tokens", async () => {
+  await page.viewport(390, 844);
+  try {
+    const { el, popup } = await menuSheet(
+      "<div data-sheet-heading>Service</div><button>Edit</button>",
+      'sheet-heading="Table actions" style="--wt-menu-sheet-bottom-offset: 80px"',
+    );
+    host.style.setProperty("--wt-color-scrim", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-surface-sunken", "rgb(4, 5, 6)");
+    host.style.setProperty("--wt-radius-lg", "19px");
+    const sheet = popup.querySelector(".actions")!;
+    const exposed = () => sheet.getBoundingClientRect();
+    await expect.poll(() => exposed().bottom).toBeCloseTo(764, 0);
+    expect(exposed().width).toBe(390);
+    expect(popup.getBoundingClientRect().bottom).toBe(764);
+    expect(getComputedStyle(popup).backgroundColor).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(sheet).borderTopLeftRadius).toBe("19px");
+    const handle = getComputedStyle(sheet, "::before");
+    expect([handle.width, handle.height, handle.backgroundColor]).toEqual([
+      "40px",
+      "5px",
+      "rgb(4, 5, 6)",
+    ]);
+    expect(handle.marginBlockEnd).toBe("2px");
+    const heading = getComputedStyle(sheet.querySelector("h2")!);
+    expect([heading.paddingTop, heading.paddingBottom]).toEqual(["10px", "4px"]);
+    expect(getComputedStyle(el.querySelector("[data-sheet-heading]")!).textTransform).toBe(
+      "uppercase",
+    );
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+test("the visible bar stays active and its sheet trigger closes on the second tap", async () => {
+  const { trigger, popup } = await menuSheet(
+    "<button>Find a bill</button>",
+    'style="position: fixed; bottom: 0; right: 0; --wt-menu-sheet-bottom-offset: 80px"',
+  );
+  const map = document.createElement("button");
+  map.textContent = "Map";
+  map.style.cssText = "position: fixed; bottom: 0; left: 0;";
+  const showMap = vi.fn();
+  map.addEventListener("click", showMap);
+  host.append(map);
+
+  expect(popup.matches(":popover-open")).toBe(true);
+  await userEvent.click(trigger);
+  expect(popup.matches(":popover-open")).toBe(false);
+  await userEvent.click(trigger);
+  expect(popup.matches(":popover-open")).toBe(true);
+  await userEvent.click(map);
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(showMap).toHaveBeenCalledOnce();
+  expect(document.activeElement).toBe(map);
+});
+
+test.each(["forward", "backward", "Escape"])(
+  "the menu sheet dismisses from the keyboard (%s)",
+  async (direction) => {
+    const { el, trigger, popup } = await menuSheet(
+      '<wt-menu-row action disabled label="Unavailable"></wt-menu-row><wt-menu-row action label="Edit"></wt-menu-row><div><button>Move</button></div>',
+    );
+    const edit = page.getByRole("button", { name: "Edit" });
+    expect(edit.element().matches(":focus")).toBe(true);
+    if (direction === "forward") {
+      await userEvent.tab();
+      expect(document.activeElement).toBe(el.querySelector("div > button"));
+      await userEvent.tab();
+    } else {
+      await userEvent.keyboard(direction === "Escape" ? "{Escape}" : "{Shift>}{Tab}{/Shift}");
+    }
+    expect(popup.matches(":popover-open")).toBe(false);
+    expect(el.shadowRoot!.activeElement).toBe(trigger);
+  },
+);
+
+test.each(["pointer", "keyboard"])(
+  "a %s action crosses the row's shadow root once and closes the sheet",
+  async (input) => {
+    const { el, trigger, popup } = await menuSheet(
+      '<wt-menu-row action label="Print"></wt-menu-row>',
+    );
+    const picked = vi.fn();
+    el.querySelector("wt-menu-row")!.addEventListener("click", picked);
+    if (input === "pointer") await page.getByRole("button", { name: "Print" }).click();
+    else await userEvent.keyboard("{Enter}");
+    expect(picked).toHaveBeenCalledTimes(1);
+    expect(popup.matches(":popover-open")).toBe(false);
+    expect(el.shadowRoot!.activeElement).toBe(trigger);
+  },
+);
+
+test("a plain row's slotted control precedes its help button in the sheet's Tab order", async () => {
+  setHelpMode(true);
+  try {
+    const { el, popup } = await menuSheet(
+      '<wt-menu-row label="Notifications" help="Send a reminder." help-label="Help: Notifications"><input type="checkbox" aria-label="Notifications"></wt-menu-row>',
+    );
+    expect(document.activeElement).toBe(el.querySelector("input"));
+    await userEvent.tab();
+    expect(
+      page.getByRole("button", { name: "Help: Notifications" }).element().matches(":focus"),
+    ).toBe(true);
+    await userEvent.tab();
+    expect(popup.matches(":popover-open")).toBe(false);
+  } finally {
+    setHelpMode(false);
+  }
+});
+
+test("a native bill choice uses the shared row layout and keeps checked focus and activation", async () => {
+  const { el, popup } = await menuSheet(`<style>${actionChoiceStyles.cssText}</style>
+    <div role="menu" aria-label="Bills">
+      <button type="button" data-row-choice role="menuitemradio" aria-checked="false">
+        <wt-menu-row label="Bill 1" value="2" chevron divider></wt-menu-row>
+      </button>
+      <button type="button" data-row-choice role="menuitemradio" aria-checked="true">
+        <wt-menu-row label="Bill 2" value="3" check></wt-menu-row>
+      </button>
+    </div>`);
+  const [first, checked] = el.querySelectorAll<HTMLButtonElement>("button");
+  expect(document.activeElement).toBe(checked);
+  const bill = page.getByRole("menuitemradio", { name: "Bill 2 3" });
+  await expect.element(bill).toBeVisible();
+  const row = checked!.querySelector("wt-menu-row")!;
+  const value = row.shadowRoot!.querySelector(".value")!;
+  const icon = row.shadowRoot!.querySelector("wt-icon[name='check']")!;
+  host.style.setProperty("--wt-color-primary", "rgb(7, 8, 9)");
+  expect(getComputedStyle(icon).color).toBe("rgb(7, 8, 9)");
+  expect(getComputedStyle(checked!).paddingInlineStart).toBe("0px");
+  expect(checked!.getBoundingClientRect().height).toBe(52);
+  expect(icon.getBoundingClientRect().left - value.getBoundingClientRect().right).toBeCloseTo(6);
+  await userEvent.keyboard("{ArrowUp}");
+  expect(document.activeElement).toBe(first);
+  const selected = vi.fn();
+  first!.addEventListener("click", selected);
+  await userEvent.keyboard("{Enter}");
+  expect(selected).toHaveBeenCalledOnce();
+  expect(popup.matches(":popover-open")).toBe(false);
+});
+
+test("an anchored menu clips through the middle of an opt-in action row", async () => {
+  await page.viewport(600, 400);
+  try {
+    const el = await mount(`<wt-row-actions label="Actions" opens-below>
+      <wt-menu-row action label="First"></wt-menu-row>
+      <wt-menu-row help="Details" help-label="Help: second"><span>Information</span></wt-menu-row>
+      <wt-menu-row action label="Second"></wt-menu-row>
+      <wt-menu-row action label="Third"></wt-menu-row>
+    </wt-row-actions>`);
+    el.style.cssText = "position: fixed; top: 225px; left: 16px;";
+    const trigger = el.shadowRoot!.querySelector("button")!;
+    const popup = el.shadowRoot!.querySelector("[popover]")!;
+    await userEvent.click(trigger);
+    const second = el.querySelectorAll("wt-menu-row")[2]!.getBoundingClientRect();
+    expect(popup.getBoundingClientRect().top).toBeCloseTo(
+      trigger.getBoundingClientRect().bottom,
+      0,
+    );
+    expect(popup.getBoundingClientRect().bottom).toBeCloseTo(second.top + second.height / 2 + 1, 0);
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
 
 async function mountActions() {
   const mounted = await mountWidget<WtRowActions>("wt-row-actions", {

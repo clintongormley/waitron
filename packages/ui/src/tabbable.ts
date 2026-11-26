@@ -36,13 +36,22 @@ export function isTabbable(node: Node): node is HTMLElement {
 /** The elements inside `root`, and inside the open shadow roots within it, that the Tab key can
  * stop on, in tree order and a host's shadow root first, leaving out `skip` and everything inside
  * it. */
-export function* tabbables(root: Node, skip: Set<Node> = new Set()): Generator<HTMLElement> {
+export function* tabbables(
+  root: Node,
+  skip: Set<Node> = new Set(),
+  followSlots = false,
+): Generator<HTMLElement> {
   const shadow = root instanceof Element ? root.shadowRoot : null;
-  if (shadow && !skip.has(shadow)) yield* tabbables(shadow, skip);
-  for (const child of root.childNodes) {
+  if (shadow && !skip.has(shadow)) yield* tabbables(shadow, skip, followSlots);
+  if (shadow && followSlots) return;
+  const children =
+    followSlots && root instanceof HTMLSlotElement
+      ? root.assignedNodes({ flatten: true })
+      : root.childNodes;
+  for (const child of children) {
     if (skip.has(child)) continue;
     if (isTabbable(child)) yield child;
-    yield* tabbables(child, skip);
+    yield* tabbables(child, skip, followSlots);
   }
 }
 
