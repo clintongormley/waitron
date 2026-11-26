@@ -41,6 +41,7 @@ import {
   type LegalAbout,
 } from "@waitron/shared";
 import { navMatches, destinationMatches, type NavSearchDestination } from "./nav-search.js";
+import { sidebarHeadingStyles } from "./sidebar-heading-styles.js";
 import { collectSearchDestinations, validSearchDestinationPath } from "./nav-destinations.js";
 import { departmentReceiptSearchDestinations } from "./department-receipt-setting-search.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -497,6 +498,7 @@ export class DashboardApp extends LitElement {
     baseStyles,
     iconButtonStyles,
     themeChoicesStyles,
+    sidebarHeadingStyles,
     css`
       /* Fills the page's content box (index.html sizes it to the window), so the page's own padding
          stays inside the window rather than below it. */
@@ -663,60 +665,6 @@ export class DashboardApp extends LitElement {
         margin: 0;
         padding-inline: var(--wt-space-3);
         color: var(--wt-color-text-muted);
-      }
-
-      .nav-group {
-        display: flex;
-        align-items: flex-start;
-        width: 100%;
-        min-height: var(--wt-tap-min);
-        margin: var(--wt-space-2) 0 0;
-        padding: var(--wt-space-3);
-        border: none;
-        border-inline-start: 3px solid transparent;
-        background: transparent;
-        font: inherit;
-        line-height: var(--wt-font-size-lg);
-        text-align: start;
-        cursor: pointer;
-      }
-
-      /* After .nav-group's own rule, whose font shorthand would reset the size and weight. */
-      .nav-group,
-      .strip-panel-label {
-        color: var(--wt-color-text);
-        font-size: var(--wt-font-size-md);
-        font-weight: var(--wt-font-weight-bold);
-      }
-
-      button.nav-group:hover {
-        background: var(--wt-color-surface);
-      }
-
-      div.nav-group {
-        cursor: default;
-      }
-
-      .nav-group-label {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .nav-group :is(.chevron-space, .chevron) {
-        flex-shrink: 0;
-        width: var(--wt-space-4);
-        margin-inline-start: var(--wt-space-1);
-      }
-
-      .nav-group .chevron {
-        height: var(--wt-space-4);
-        margin-block-start: calc((var(--wt-font-size-lg) - var(--wt-space-4)) / 2);
-        color: var(--wt-color-text-muted);
-        transition: transform 150ms ease;
-      }
-
-      .nav-group[aria-expanded="true"] .chevron {
-        transform: rotate(180deg);
       }
 
       .nav-item,
