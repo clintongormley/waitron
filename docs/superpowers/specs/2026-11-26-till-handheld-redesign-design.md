@@ -359,6 +359,75 @@ reader paired with Waitron is not on it: it cannot take a card on its own when t
 (owner, 2026-11-26). A hand-keyed card still opens a till's drawer for its slip, and a phone's never
 (§7.8).
 
+### 7.10 (pass 3) How the ways to pay look
+
+What the pictures `ba`–`bd` show, element by element, so the build does not have to guess. The
+colours and sizes are the design-system tokens (`--wt-*`); "lifted" is
+`--wt-color-surface-lifted`, "muted" is `--wt-color-text-muted`, "line" is a 1px
+`--wt-color-border`. Every screen is full screen on a phone, with the app bar of §4: a back link on
+the left (chevron-left icon and the previous screen's name, in the primary text colour), a centred
+title with a muted subtitle (the bill, and what is left where it matters), and on a screen that
+charges a card the device button on the right (a 44px square with a line border and the NFC icon,
+three arcs). Buttons at the foot sit in a bar with a line above it, full width, one under another,
+52px high: the main one filled in `--wt-color-primary`, the others plain (`--wt-color-surface`) with a line border, and a
+text link (primary text colour, no border) last.
+
+**The amount block** (`ba` 3, `bb` 2, `bd`): a muted label ("To pay", "Charge on the other
+machine") above, the amount centred in 42px bold with tabular figures, and a muted line under it
+("Share €24.44 + tip €2.44", "Dishes €17.70 + tip €1.77"). "Remove tip" sits on the same line,
+after it, as a bold text link in the primary text colour. On a Paid screen (`ba` 4, `bb` 3, `bc` 2)
+the amount is 30px and reads as a sentence ("€24.43 by card"), with where the receipt went under it.
+
+**Guest count** (`ba` 1): a muted question above; a round 56px button with "−" (line border, plain),
+the number in 44px bold, a round 56px "+"; centred on one row.
+
+**The list of shares** (`ba` 1, 3, 4): one card with a line border and rounded corners (10px), rows
+divided by lines. Each row: a round 22px marker on the left, the guest's name with a muted second
+line (what they did: "to pay", "paying now", "card · tip €2.44", "next"), and the share at the right
+end in tabular figures. The marker is an empty ring (line colour) for "to pay", a filled
+primary-colour dot for the guest paying now or next (that row's background lifted, its text bold),
+and a primary-colour ring with a tick (check icon) for a guest who has paid (that row's text muted).
+Under the card, a muted centred note when shares differ by a cent (`ba` 1), or a text link
+("Change the number of guests", `ba` 4).
+
+**The guest's share** (`ba` 2): the §7.1 guest screen. The language pill (line border, rounded) at
+the top left and "Skip ›" (muted text) at the top right; the venue's name (muted) above "Your share"
+in 24px bold, a muted line with the table, "Guest 1 of 3" and the bill; the share centred in 42px;
+"Leave a tip?" (muted) above three equal boxes (5%, 10%, 15%), each with a line border, the
+percentage in bold and its amount muted under it; "Custom amount" as a centred text link; and one
+plain button at the foot, "No tip · hand back to your waiter".
+
+**The dish rows** (`bb` 1): rows the full width, plain, with a line under each, at least 52px high.
+Left to right: a 24px square tick box with rounded corners, the quantity (bold), the name with any
+options muted under it, and the row's price at the right end (the whole row's price). The tick box
+is empty (line border) when not chosen, filled in the primary colour with a tick in the surface colour when the whole
+row is chosen, and primary-bordered with a "−" when part of it is. A chosen-in-part row gets a lifted
+strip under it, indented to the name: "Paying for" (muted), a stepper (− and +, rounded, line border)
+showing "1 of 3", and that part's price at the right end. On the Pay and Paid screens (`bb` 2, 3) the
+same rows show without tick boxes; a muted section label ("Paying for", "Still on Bill 1 · €55.50")
+heads them.
+
+**The paid bill card** (`bb` 3): a card with a line border, "Bill 2 · paid" in bold with its amount
+at the right end, and a muted line naming the dishes and the tip.
+
+**An amount** (`bc` 1): a muted question; the amount in a field 40px bold, centred, with a 2px
+primary border while it is being typed into; under it "Still to pay after this" on the left and the
+figure in bold at the right end; then a card with a line border holding "Their own receipt for
+€20.00" with a muted explanation under it and a switch at the right end (off: grey track); then
+the keypad of §7.5 (three columns, 46px keys with line borders, the decimal point bottom left and
+backspace bottom right).
+
+**The bill box** (`bc` 2): a card with a line border; "Bill 1" and its total; each payment as a
+muted row with its amount after a minus sign at the right end; a line, then "Still to pay" in bold.
+
+**Other card machine** (`bd`): under the amount block, a lifted panel with rounded corners holding
+the three numbered steps; then "Which card machine" (muted label) over a 48px dropdown with a line
+border: the machine's name in bold, where its payments go (muted, "bank", "SumUp") near the right
+end, then the chevron-down icon. Open, the list hangs under it in a card with a line border, the
+chosen machine's row lifted and bold. Then "Operation number (optional)" (muted label) over a 44px
+field with a line border and a muted placeholder ("from the machine's slip"). The foot holds "It went
+through · €80.52" (filled) over "It was declined" (plain).
+
 ## 8. The till: the same pieces side by side
 
 On a screen about 800 pixels wide or more (owner approved the drawing, 2026-11-26):
