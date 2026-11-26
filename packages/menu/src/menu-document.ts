@@ -98,7 +98,7 @@ export type {
   MenuState,
 } from "@waitron/shared";
 
-export const MENU_DOCUMENT_FORMAT = 6;
+export const MENU_DOCUMENT_FORMAT = 7;
 
 export interface OmittedShortcut {
   ref: TileRef;
@@ -434,6 +434,7 @@ export async function buildMenuDocuments(
         ),
         menuId: row.menuId,
         menuName: row.menuName,
+        menuNames: row.names,
         root,
         offers: Object.fromEntries([...onMenu.values()].map((offer) => [offer.id, offer])),
         ...(Object.keys(setMenus).length === 0 ? {} : { setMenus }),
@@ -561,7 +562,10 @@ export function menuDocumentHash(document: MenuDocument): string {
 }
 
 export function setMenuCopyHash(copy: PublishedSetMenu): string {
-  return createHash("sha256").update(canonicalJson(copy)).digest("hex");
+  // Menus with identical selling terms share one till choice even if their customer labels differ.
+  return createHash("sha256")
+    .update(canonicalJson(without(copy, ["courses"])))
+    .digest("hex");
 }
 
 /** Every photo the document names, each once, sorted. */
@@ -1302,6 +1306,9 @@ export function diffEntries(
   if (live !== null && live.menuName !== proposed.menuName)
     push({ kind: "menu_renamed", from: live.menuName, to: proposed.menuName, source: "this_menu" });
 
+  if (live !== null && !same(live.menuNames, proposed.menuNames))
+    push({ kind: "menu_customer_names_changed", source: "this_menu" });
+
   for (const [before, after, kind] of [
     [prev, next, "set_menu_removed"],
     [next, prev, "set_menu_added"],
@@ -1328,6 +1335,12 @@ export function diffEntries(
     if (was.terms.price !== copy.terms.price) fields.push("price");
     if (was.name !== copy.name || !same(was.terms.names, copy.terms.names)) fields.push("names");
     if (!same(was.terms.lines, copy.terms.lines)) fields.push("lines");
+    if (
+      Object.entries(copy.courses).some(
+        ([id, course]) => Object.hasOwn(was.courses, id) && !same(was.courses[id], course),
+      )
+    )
+      fields.push("course_names");
     const offersChanged = !same(was.offers, copy.offers);
     if (offersChanged) {
       const declarations = setMenuDeclarations(was.offers, copy.offers);

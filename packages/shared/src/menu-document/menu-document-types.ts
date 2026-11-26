@@ -96,6 +96,7 @@ export type SetMenuFrozenOffer = Omit<FrozenOffer, "variants"> & {
 export interface PublishedSetMenu {
   name: string;
   terms: SetMenuTerms;
+  courses: Record<string, { name: string; names: Record<string, string> }>;
   root: DocumentList;
   offers: Record<string, SetMenuFrozenOffer>;
   /** The draft row's stored updatedAt when the full menu took this copy. */
@@ -106,11 +107,12 @@ type MenuPriceOrigin =
   { kind: "product" } | { kind: "this_menu" } | { kind: "included_menu"; id: string; name: string };
 
 export interface MenuDocument {
-  format: 6;
+  format: 7;
   /** Direct active inclusions' working hashes. */
   includedMenuHashes?: Record<string, string>;
   menuId: string;
   menuName: string;
+  menuNames: Record<string, string>;
   /** The menu's top level. */
   root: DocumentList;
   /** Keyed by menu-item id: one per distinct product the menu offers. */
@@ -234,7 +236,8 @@ export interface MenuOccurrence {
 /** Where a change came from (spec §11.1). */
 export type MenuChangeSource = "this_menu" | "shared_product" | "included_menu" | "set_menu";
 
-export type SetMenuChangeField = "price" | "names" | "lines" | "allergens" | "diet" | "dishes";
+export type SetMenuChangeField =
+  "price" | "names" | "lines" | "course_names" | "allergens" | "diet" | "dishes";
 
 export type MenuChangeBody = {
   source: MenuChangeSource;
@@ -316,6 +319,7 @@ export type MenuChangeBody = {
   | { kind: "order_changed"; listSectionId: string | null; list: string[] }
   | { kind: "home_shortcuts_changed" }
   | { kind: "home_display_changed" }
+  | { kind: "menu_customer_names_changed" }
   | { kind: "menu_renamed"; from: string; to: string }
 );
 

@@ -250,6 +250,7 @@ export async function setDefaultStation(tx: Transaction, id: string): Promise<vo
 export interface Course {
   id: string;
   name: string;
+  customerNames: Record<string, string>;
   displayOrder: number;
   active: boolean;
   fireNowZoneIds: string[];
@@ -314,6 +315,7 @@ export async function listCourses(tx: Transaction): Promise<Course[]> {
     .select({
       id: kitchenCourses.id,
       name: kitchenCourses.name,
+      customerNames: kitchenCourses.customerNames,
       displayOrder: kitchenCourses.displayOrder,
       active: kitchenCourses.active,
     })
@@ -349,21 +351,20 @@ export async function moveCourse(tx: Transaction, id: string, to: number): Promi
 }
 
 /**
- * Edit a live course's name or firing order; a live name collision is `course.name_taken`.
+ * Edit a live course's names or firing order; a live name collision is `course.name_taken`.
  */
 export async function updateCourse(
   tx: Transaction,
   id: string,
-  patch: { name?: string; displayOrder?: number },
+  patch: Partial<Pick<Course, "name" | "displayOrder" | "customerNames">>,
 ): Promise<void> {
   if (Object.hasOwn(patch, "active")) {
     throw new AppError("management.request_invalid", { field: "active" });
   }
   await requireLiveCourse(tx, id);
-  const set: { name?: string; displayOrder?: number } = {};
-  if (patch.name !== undefined) set.name = patch.name;
-  if (patch.displayOrder !== undefined) set.displayOrder = patch.displayOrder;
-  if (Object.keys(set).length === 0) return;
+  const { name, displayOrder, customerNames } = patch;
+  const set = { name, displayOrder, customerNames };
+  if (name === undefined && displayOrder === undefined && customerNames === undefined) return;
 
   let updated: { id: string }[];
   try {

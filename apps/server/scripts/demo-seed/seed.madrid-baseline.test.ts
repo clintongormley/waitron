@@ -1749,9 +1749,15 @@ for (const locale of ["en", "es"] as const) {
         ...saleLines.foreignKeys.map((key) => ({ ...key, id: key.id + 1 })),
       ];
       type Classed = { vatClass: string; takeawayVatClass?: string };
+      const menuNames = new Map(
+        Object.values(expected[phase].tables.sections!.rows)
+          .filter(({ role }) => role === "menu_root")
+          .map(({ owner_menu_id, names }) => [owner_menu_id, names]),
+      );
       for (const row of Object.values(expected[phase].tables.menu_versions!.rows)) {
         const document = row.document as {
           format: number;
+          menuNames: unknown;
           home:
             | { shortcuts: unknown[]; handheld: { order: string }; till: { order: string } }
             | { shortcuts: unknown[]; order: string };
@@ -1764,7 +1770,8 @@ for (const locale of ["en", "es"] as const) {
             }
           >;
         };
-        document.format = 6;
+        document.format = 7;
+        document.menuNames = menuNames.get(row.menu_id);
         if ("handheld" in document.home) {
           expect(document.home.handheld.order).toBe(document.home.till.order);
           document.home = { shortcuts: document.home.shortcuts, order: document.home.till.order };
@@ -2573,15 +2580,18 @@ for (const locale of ["en", "es"] as const) {
       coursesNow.columns.splice(
         coursesNow.columns.findIndex((column) => column.name === "name") + 1,
         0,
+        { name: "customer_names", type: "TEXT", notnull: 1, dflt_value: "'{}'", pk: 0 },
         { name: "starter_key", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
       );
-      for (const row of Object.values(coursesNow.rows))
+      for (const row of Object.values(coursesNow.rows)) {
+        row.customer_names = {};
         row.starter_key =
           row.name === STARTER_COURSE_NAMES.Mains.es
             ? "mains"
             : row.name === STARTER_COURSE_NAMES.Desserts.es
               ? "desserts"
               : null;
+      }
       const overrides = Object.values(expected[phase].tables.departments!.rows).flatMap(
         (department) =>
           Object.values(coursesNow.rows)

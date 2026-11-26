@@ -1,4 +1,9 @@
-import { baseStyles, pageTitleStyles } from "@waitron/ui";
+import {
+  baseStyles,
+  ContentLanguageController,
+  currentContentLanguages,
+  pageTitleStyles,
+} from "@waitron/ui";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query } from "lit/decorators.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -54,6 +59,10 @@ export class CoursesScreen extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) readOnly = false;
   @query("dashboard-course-list") private list!: CourseList;
+  constructor() {
+    super();
+    new ContentLanguageController(this);
+  }
 
   override render() {
     return html`
@@ -76,6 +85,7 @@ export class CoursesScreen extends LitElement {
         <dashboard-course-list
           .api=${this.api}
           .readOnly=${this.readOnly}
+          .languages=${currentContentLanguages()}
           .showAddButton=${false}
           @focus-add-course=${() =>
             this.shadowRoot!.querySelector<HTMLElement>("[data-test=add-course]")?.focus()}

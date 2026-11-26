@@ -18,6 +18,7 @@ export interface Station {
 export interface Course {
   id: string;
   name: string;
+  customerNames?: Record<string, string>;
   displayOrder: number;
   active: boolean;
   inUse?: boolean;
@@ -90,7 +91,10 @@ export class KitchenApi extends EmailThemeApi {
   createCourse(input: { name: string; displayOrder?: number }): Promise<{ id: string }> {
     return this.#request<{ id: string }>("/management-api/courses", "POST", input);
   }
-  updateCourse(id: string, patch: { name?: string; displayOrder?: number }): Promise<void> {
+  updateCourse(
+    id: string,
+    patch: Partial<Pick<Course, "name" | "displayOrder" | "customerNames">>,
+  ): Promise<void> {
     return this.#request<void>(`/management-api/courses/${id}`, "PATCH", patch);
   }
   moveCourse(id: string, to: number): Promise<Course[]> {

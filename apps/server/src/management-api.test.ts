@@ -2626,6 +2626,22 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     expect(found).toMatchObject({ name, displayOrder: 3, active: true });
   });
 
+  it.each([null, [], { en: 3 }, { "not-a-language": "Name" }])(
+    "rejects malformed customer names %j on a course",
+    async (customerNames) => {
+      const id = await createCourse(unique("Customer course"));
+      const answer = await req(
+        `/courses/${id}`,
+        { method: "PATCH", body: JSON.stringify({ customerNames }) },
+        managerCookie,
+      );
+      expect(answer.status).toBe(400);
+      expect(await answer.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "customerNames" } },
+      });
+    },
+  );
+
   it("POST with a duplicate name → 409 course.name_taken", async () => {
     const name = unique("dupcourse");
     await createCourse(name);

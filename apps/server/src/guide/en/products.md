@@ -169,7 +169,8 @@ In the department’s **Tables** tab, choose **Fire now** to put new dishes stra
 Choose **Hold for later** to group the first order by course. On later orders, check the proposed
 group before sending; you can move dishes between groups. In **Courses**, add one with **Add course**, then
 save its name with Enter or by leaving the field. Open the row’s ⋮ menu to rename or delete a
-course.
+course. Choose **Customer-facing names** in the same menu to name the course in each language.
+To publish changes to course names, review and publish the full menu that offers the set menu.
 
 **Edit courses…** at the end of the **Course** list opens the course list in a window that
 saves each change as you make it. When you close it, the last course you added becomes the product's
@@ -405,6 +406,7 @@ choose **Save and review**. In **Fix before publishing**, choose a price or open
 you need to fix. Then open any warning you need to check. Select an item's name in
 the change list to find it in the proposed menu. On a phone, switch between **Changes** and **Menu**.
 Use the language picker above the menu to check translations or see **Internal names**.
+Check **Details** for changes to the menu’s customer names and to course names on set menus.
 
 Use **Publish now** or **Publish later** in the heading when you are ready. To check or change
 a waiting publication, find it under **Scheduled versions** below the menu preview. After you

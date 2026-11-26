@@ -743,6 +743,7 @@ CREATE UNIQUE INDEX `kitchen_stations_default_key` ON `kitchen_stations` (`is_de
 CREATE TABLE `kitchen_courses` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
+	`customer_names` text DEFAULT '{}' NOT NULL,
 	`starter_key` text,
 	`display_order` integer DEFAULT 0 NOT NULL,
 	`active` integer DEFAULT true NOT NULL,

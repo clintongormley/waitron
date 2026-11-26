@@ -21,7 +21,7 @@ import {
   MAX_SET_MENU_AMOUNT_CENTS,
   stringToCents,
 } from "@waitron/shared";
-import type { SetMenuLine, SetMenuProblem } from "@waitron/shared";
+import type { PublishedSetMenu, SetMenuLine, SetMenuProblem } from "@waitron/shared";
 import { batches } from "./batches.js";
 import { allTopLevelProducts } from "./categories.js";
 import { reachableMenuItem, requireMenuRoot, syncMenuOffers } from "./menu-structure.js";
@@ -120,9 +120,13 @@ export async function touchSetMenu(tx: Transaction, menuId: string): Promise<voi
     .where(and(eq(menus.id, menuId), eq(menus.kind, "set_menu")));
 }
 
-async function activeCourses(tx: Transaction): Promise<SetMenuDetails["courses"]> {
+async function activeCourses(tx: Transaction) {
   return tx
-    .select({ id: kitchenCourses.id, name: kitchenCourses.name })
+    .select({
+      id: kitchenCourses.id,
+      name: kitchenCourses.name,
+      names: kitchenCourses.customerNames,
+    })
     .from(kitchenCourses)
     .where(eq(kitchenCourses.active, true))
     .orderBy(kitchenCourses.displayOrder, kitchenCourses.name, kitchenCourses.id);
@@ -327,7 +331,7 @@ async function dishSettings(
 export type SetMenuDraft = Pick<
   SetMenuDetails,
   "name" | "names" | "price" | "dishes" | "lines" | "problems"
-> & { changedAt: string };
+> & { changedAt: string; courses: PublishedSetMenu["courses"] };
 
 export async function readSetMenuDrafts(
   tx: Transaction,
@@ -351,15 +355,19 @@ export async function readSetMenuDrafts(
     tx,
     rows.map(({ menuId }) => menuId),
   );
+  const namesByCourse = new Map(courses.map(({ id, ...names }) => [id, names]));
   return new Map(
     rows.map((row) => {
+      const draftLines = linesForDraft(lines.get(row.menuId)?.values() ?? []);
+      const courseIds = new Set(draftLines.flatMap(({ courseIds }) => courseIds));
       const draft = {
         name: row.menuName,
         names: row.names,
         price: centsToDecimal(row.setPrice!),
         changedAt: row.updatedAt.toISOString(),
         dishes: dishes.get(row.rootSectionId) ?? [],
-        lines: linesForDraft(lines.get(row.menuId)?.values() ?? []),
+        lines: draftLines,
+        courses: Object.fromEntries([...courseIds].map((id) => [id, namesByCourse.get(id)!])),
       };
       return [row.menuId, { ...draft, problems: setMenuProblems({ ...draft, courses }) }];
     }),
@@ -403,7 +411,7 @@ export async function readSetMenu(
     names: graph.section(root)?.names ?? {},
     dishes: await dishSettings(tx, root, courses),
     lines: linesForDraft(await storedLines(tx, menuId)),
-    courses,
+    courses: courses.map(({ id, name }) => ({ id, name })),
     heldBy: offeringMenus(graph, root),
   };
   return { ...details, problems: setMenuProblems(details) };

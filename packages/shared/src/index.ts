@@ -144,6 +144,7 @@ export type { SupportedLocale } from "./locales.js";
 export {
   contentLanguageCode,
   contentLanguageTag,
+  normalizeOptionalTranslations,
   contentLanguageDisplayName,
   isRegionalContentLanguage,
   mainContentLanguages,

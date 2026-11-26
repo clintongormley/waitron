@@ -7,6 +7,7 @@ import {
   contentLanguageDisplayName,
   isRegionalContentLanguage,
   languageDisplayName,
+  normalizeOptionalTranslations,
   resolveContentText,
   resolveEnabledContentText,
   resolveSnapshotText,
@@ -376,4 +377,39 @@ it("keeps aliases that canonicalize to extensions out of main variant identity",
   expect(contentLanguageTag("en-US-posix")).toBe("en-US");
   expect(isRegionalContentLanguage("en-US-posix")).toBe(true);
   expect(contentLanguageCode("en-US-u-va-posix")).toBe("en");
+});
+
+describe("optional translation maps", () => {
+  it.each([
+    null,
+    undefined,
+    [],
+    "text",
+    42,
+    new Date(),
+    { es: null },
+    { es: 1 },
+    { not_a_language: "x" },
+    { ES: "Hola" },
+  ])("refuses malformed maps or noncanonical keys: %j", (value) => {
+    expect(normalizeOptionalTranslations(value)).toBeNull();
+  });
+
+  it("accepts empty and partial maps without adding a default or staff value", () => {
+    expect(normalizeOptionalTranslations({})).toEqual({});
+    expect(
+      normalizeOptionalTranslations({
+        en: " Potatoes ",
+        es: "  ",
+        "ca-ES-valencia": "Valencian potatoes",
+      }),
+    ).toEqual({ en: "Potatoes", "ca-ES-valencia": "Valencian potatoes" });
+  });
+
+  it("bounds each nonblank value by UTF-8 bytes after trimming", () => {
+    expect(normalizeOptionalTranslations({ es: ` ${"é".repeat(2048)} ` })).toEqual({
+      es: "é".repeat(2048),
+    });
+    expect(normalizeOptionalTranslations({ es: "é".repeat(2048) + "a" })).toBeNull();
+  });
 });

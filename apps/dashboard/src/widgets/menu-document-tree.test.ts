@@ -98,12 +98,25 @@ it("shows only frozen members in document order, with collapsible nested section
   expect(row(el, "drinks/beer/mi")!.querySelector(".row-activate")).toBeNull();
 });
 
+it("shows the published menu title in the selected customer language", async () => {
+  const doc = fixture();
+  doc.menuNames = { es: "Carta del mediodía" };
+  const el = await mount(doc);
+  const rootName = () => row(el, "root")?.querySelector('[data-test="root-name"]');
+  expect(rootName()?.textContent).toBe("Frozen lunch");
+  el.view = { kind: "customer", language: "es" };
+  await settle(el);
+  expect(rootName()?.textContent).toBe("Carta del mediodía");
+  expect(rootName()?.getAttribute("lang")).toBe("es");
+});
+
 it("shows a placed set menu with the price and name saved in its frozen terms", async () => {
   const doc = fixture();
   doc.root.members.push({ kind: "set_menu", menuId: "daily", name: "Daily menu" });
   doc.setMenus = {
     daily: {
       name: "Daily special",
+      courses: {},
       terms: { names: { es: "Menú del día" }, price: "24.00", lines: [] },
       changedAt: "2026-11-25T10:00:00Z",
       root: { members: [] },

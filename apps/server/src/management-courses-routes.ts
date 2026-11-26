@@ -1,5 +1,5 @@
 import { type Logger, requireManagementSession, readJsonBody } from "@waitron/server-kit";
-import { isUuid, AppError } from "@waitron/shared";
+import { isUuid, AppError, normalizeOptionalTranslations } from "@waitron/shared";
 import type { Hono } from "hono";
 // Error declaration for `course.not_found` in the route and path id check.
 import "@waitron/venue-service";
@@ -64,13 +64,14 @@ export function mountManagementCourseRoutes(app: Hono, deps: ManagementApiDeps, 
         name?: unknown;
         displayOrder?: unknown;
         active?: unknown;
+        customerNames?: unknown;
       }>(c);
       if (typeof body !== "object" || body === null || Array.isArray(body)) {
         throw new AppError("management.request_invalid", { field: "body" });
       }
       if (Object.hasOwn(body, "active"))
         throw new AppError("management.request_invalid", { field: "active" });
-      const patch: { name?: string; displayOrder?: number } = {};
+      const patch: Parameters<typeof updateCourse>[2] = {};
       if (body.name !== undefined) {
         if (typeof body.name !== "string")
           throw new AppError("management.request_invalid", { field: "name" });
@@ -78,6 +79,12 @@ export function mountManagementCourseRoutes(app: Hono, deps: ManagementApiDeps, 
       }
       if (body.displayOrder !== undefined) {
         patch.displayOrder = parseDisplayOrder(body.displayOrder);
+      }
+      if (body.customerNames !== undefined) {
+        const names = normalizeOptionalTranslations(body.customerNames);
+        if (names === null)
+          throw new AppError("management.request_invalid", { field: "customerNames" });
+        patch.customerNames = names;
       }
       await withVenueAuth(deps, sessionId, (tx) => updateCourse(tx, id, patch));
       return c.body(null, 204);

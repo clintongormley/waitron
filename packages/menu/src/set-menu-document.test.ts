@@ -21,6 +21,7 @@ import {
   buildMenuDocuments,
   documentOffers,
   documentSetMenuOffers,
+  setMenuCopyHash,
 } from "./menu-document.js";
 import { patchLiveMenu, previewMenu, publishMenu, readLiveMenu } from "./menu-publication.js";
 import { queueMenuPublication } from "./menu-schedule.js";
@@ -210,6 +211,60 @@ it("freezes the terms and each kept variant's own course", async () => {
     Object.values(copy!.offers).find(({ productId }) => productId === f.soup)?.countsAsCourseId,
   ).toBe(f.starters);
   expect(copy?.offers[f.wineItem]?.variants[0]?.countsAsCourseId).toBe(f.drinks);
+});
+
+it("publishes customer titles and both names on a shared course line", async () => {
+  await place();
+  const lines = await app((tx) =>
+    saveSetMenuLines(tx, f.daily, [
+      { count: 1, courseIds: [f.starters] },
+      { count: 1, courseIds: [f.mains, f.drinks] },
+    ]),
+  );
+  await publish();
+  const first = (await live())!.document;
+  expect(first.menuNames).toEqual({});
+  expect(first.setMenus?.[f.daily]?.courses).toEqual({
+    [f.starters]: { name: "Starters", names: {} },
+    [f.mains]: { name: "Mains", names: {} },
+    [f.drinks]: { name: "Drinks", names: {} },
+  });
+  expect(first.setMenus?.[f.daily]?.terms.lines).toEqual(lines);
+
+  await app(async (tx) => {
+    await updateMenuDetails(tx, f.lunch, { names: { en: "Midday menu" } });
+    await tx
+      .update(kitchenCourses)
+      .set({ customerNames: { en: "Main dishes" } })
+      .where(eq(kitchenCourses.id, f.mains));
+    await tx
+      .update(kitchenCourses)
+      .set({ name: "Beverages" })
+      .where(eq(kitchenCourses.id, f.drinks));
+  });
+  expect((await preview()).changes).toEqual([
+    expect.objectContaining({
+      kind: "menu_customer_names_changed",
+      targets: {
+        before: [{ kind: "title", menuId: f.lunch }],
+        after: [{ kind: "title", menuId: f.lunch }],
+      },
+    }),
+    expect.objectContaining({ kind: "set_menu_changed", fields: ["course_names"] }),
+  ]);
+  expect((await live())!.document).toEqual(first);
+  await publish();
+  const next = (await live())!.document;
+  expect(next.menuNames).toEqual({ en: "Midday menu" });
+  expect(next.setMenus?.[f.daily]?.courses).toEqual({
+    [f.starters]: { name: "Starters", names: {} },
+    [f.mains]: { name: "Mains", names: { en: "Main dishes" } },
+    [f.drinks]: { name: "Beverages", names: {} },
+  });
+  expect(setMenuCopyHash(next.setMenus![f.daily]!)).toBe(
+    setMenuCopyHash(first.setMenus![f.daily]!),
+  );
+  expect(next.setMenus?.[f.daily]?.terms.lines).toEqual(lines);
 });
 
 it("can freeze two different courses for the same product", async () => {

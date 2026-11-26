@@ -15,7 +15,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-delete-dialog.js";
-import type { DeleteImpact } from "@waitron/shared";
+import type { ContentLanguages, DeleteImpact } from "@waitron/shared";
 import { courseDeleteCopy } from "./course-delete-copy.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import { DashboardQueries } from "../api/query-controller.js";
@@ -25,6 +25,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import "@waitron/ui/src/components/wt-help-tooltip.js";
 import { ListWriteQueue } from "./section-writes.js";
+import "./course-names-dialog.js";
 
 const NEW = "new";
 const SCOPE = "courses";
@@ -135,6 +136,8 @@ export class CourseList extends LitElement {
 
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) readOnly = false;
+  @property({ attribute: false }) languages?: ContentLanguages;
+  @state() private editingNames: Course | null = null;
   /** The active courses, in firing order: the only ones a move reorders. */
   @state() private courses: Course[] = [];
   @state() private edit: Edit | null = null;
@@ -194,7 +197,10 @@ export class CourseList extends LitElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
-    if (changed.has("readOnly") && this.readOnly) this.#setDeleting(null);
+    if (changed.has("readOnly") && this.readOnly) {
+      this.#setDeleting(null);
+      this.editingNames = null;
+    }
   }
 
   /** Settles once no change is left unanswered and no Delete confirmation waits for an answer,
@@ -500,6 +506,17 @@ export class CourseList extends LitElement {
           @click=${() => void this.#open(course.id, course.name)}
           >${t("kitchen.rename_course")}</wt-button
         >
+        ${
+          this.languages
+            ? html`<wt-button
+                data-action="customer-names"
+                @click=${() => {
+                  this.editingNames = course;
+                }}
+                >${t("sections.customer_names")}</wt-button
+              >`
+            : nothing
+        }
         ${rowActionTail(true, [
           html`<wt-button
             icon="menu-delete"
@@ -655,7 +672,22 @@ export class CourseList extends LitElement {
             >
           </div>`
     }
-    ${this.#deleteDialog()}`;
+    ${this.#deleteDialog()}
+    ${
+      this.editingNames && this.languages
+        ? html`<dashboard-course-names-dialog
+            .api=${this.api}
+            .course=${this.editingNames}
+            .languages=${this.languages}
+            @course-names-closed=${(event: CustomEvent<{ saved: boolean }>) => {
+              const id = this.editingNames!.id;
+              this.editingNames = null;
+              void this.#focusName(id);
+              if (event.detail.saved) void this.#load();
+            }}
+          ></dashboard-course-names-dialog>`
+        : nothing
+    }`;
   }
 
   @property({ type: Boolean }) showAddButton = true;

@@ -533,7 +533,8 @@ export function menuDocument(
   };
   walk(members);
   return {
-    format: 6,
+    format: 7,
+    menuNames: {},
     menuId: "menu-lunch",
     menuName,
     root: { members },

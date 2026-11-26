@@ -6,6 +6,7 @@ import {
   tableMerges,
   floorZones,
   floorPlanTables,
+  kitchenCourses,
   kitchenStations,
   printers,
   todaySet,
@@ -96,6 +97,10 @@ it("exports neither today's keep-open nor station closure, and imports both as o
     await tx.execute(
       sql`update floor_zones set today_business_day='2026-11-12', today_revision=7, today_layout_revision=3, today_occurrence='lunch' where id=${zone!.id}`,
     );
+    await tx.insert(kitchenCourses).values({
+      name: "Shared course",
+      customerNames: { en: "To share", es: "Para compartir" },
+    });
     const [destination] = await tx.select({ id: kitchenStations.id }).from(kitchenStations);
     await tx.insert(kitchenStations).values({
       name: "Grill closed today",
@@ -167,11 +172,45 @@ it("exports neither today's keep-open nor station closure, and imports both as o
   for (const row of bundle.tables.kitchen_stations!)
     for (const column of ["closed_on_day", "closed_sends_to_station_id"])
       expect(row).not.toHaveProperty(column);
+  expect(bundle.tables.kitchen_courses).toContainEqual(
+    expect.objectContaining({
+      name: "Shared course",
+      customer_names: '{"en":"To share","es":"Para compartir"}',
+    }),
+  );
+  await expect(
+    withTransaction(target.db, (tx) =>
+      importConfigurationTables(
+        tx,
+        {
+          ...bundle,
+          tables: {
+            ...bundle.tables,
+            kitchen_courses: bundle.tables.kitchen_courses!.map((row) => ({
+              ...row,
+              customer_names: '{"en":3}',
+            })),
+          },
+        },
+        ALL_MODULES,
+        versions,
+      ),
+    ),
+  ).rejects.toMatchObject({
+    code: "setup.request_invalid",
+    params: { field: "kitchen_courses.customer_names" },
+  });
   await applyHistoricalTestVenue(planVenue(request("B44001133"), ALL_MODULES), {
     db: target.db,
     modules: ALL_MODULES,
     beforeCommit: (tx) => importConfigurationTables(tx, bundle, ALL_MODULES, versions),
   });
+  expect(await target.db.select().from(kitchenCourses)).toContainEqual(
+    expect.objectContaining({
+      name: "Shared course",
+      customerNames: { en: "To share", es: "Para compartir" },
+    }),
+  );
   expect(bundle.tables).not.toHaveProperty("table_merges");
   expect(
     target.db.all(
