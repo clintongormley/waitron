@@ -5795,7 +5795,8 @@ with changes to publish offers **Review and publish**. From 360 to 640 px, the t
 Below it, the publication status and time wrap beside the button, with the version phrase and
 the time each kept together. The button is outlined while the current tab has edits to save or a Save is sending.
 The tabs are **Structure**, **Device home page** and **Preview**. At phone width the tabs use
-smaller horizontal padding so the labels fit side by side at 390 px. On Preview, the heading offers
+smaller horizontal padding and can shrink, so wider lettering can wrap inside its tab while all
+three tabs stay side by side at 390 px. On Preview, the heading offers
 **Publish later** and **Publish now** when each action is available. Both are disabled when changes
 in Preview have blockers. On the other tabs, the `--wt-color-danger` clash link opens Structure
 with the **Clashes** filter selected. On Structure, it applies the filter and keeps the draft. See

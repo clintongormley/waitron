@@ -93,7 +93,7 @@ describe.each(["light", "dark"] as const)("menu editor heading (%s)", (theme) =>
     await expectNoA11yViolations(host);
   });
 
-  it("accessible state line saying publishing waits on clashes, as a link to the Prices tab", async () => {
+  it("accessible state line saying publishing waits on clashes, as a link to filtered Structure", async () => {
     history.replaceState(null, "", "/menus/menu/menu-lunch/view/structure");
     const { el, host } = await mountWidget<MenusScreen>(
       "dashboard-menus-screen",

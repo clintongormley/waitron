@@ -293,6 +293,7 @@ export class MenusScreen extends LitElement {
       }
       @media (width <= 440px) {
         wt-tabs::part(tab) {
+          flex-shrink: 1;
           padding-inline: var(--wt-space-2);
         }
       }

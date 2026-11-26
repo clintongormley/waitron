@@ -666,18 +666,30 @@ describe("the menu editor's heading", () => {
     expect(text(q(el, '[data-test="menu-status"]'))).toBe(LIVE_WORDS);
   });
 
-  it.each(["en", "es-ES"])("fits all three menu tabs at 390 px in %s", async (locale) => {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-    onTestFinished(() => page.viewport(width, height));
-    await page.viewport(390, 900);
-    setLocale(locale);
-    const el = await mount();
-    const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
-    const strip = tabs.shadowRoot!.querySelector<HTMLElement>('[role="tablist"]')!;
-    expect(strip.querySelectorAll('[role="tab"]')).toHaveLength(3);
-    expect(strip.scrollWidth).toBeLessThanOrEqual(strip.clientWidth);
-  });
+  it.each([
+    ["en", "normal"],
+    ["es-ES", "normal"],
+    ["es-ES", "0.09em"],
+  ] as const)(
+    "fits all three menu tabs at 390 px in %s with %s letter spacing",
+    async (locale, letterSpacing) => {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      onTestFinished(() => page.viewport(width, height));
+      await page.viewport(390, 900);
+      setLocale(locale);
+      const el = await mount();
+      const tabs = q<HTMLElementTagNameMap["wt-tabs"]>(el, "wt-tabs")!;
+      const strip = tabs.shadowRoot!.querySelector<HTMLElement>('[role="tablist"]')!;
+      const buttons = [...strip.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+      for (const button of buttons) button.style.letterSpacing = letterSpacing;
+      expect(buttons).toHaveLength(3);
+      expect(strip.scrollWidth).toBeLessThanOrEqual(strip.clientWidth);
+      expect(new Set(buttons.map((button) => button.getBoundingClientRect().top)).size).toBe(1);
+      for (const button of buttons)
+        expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
+    },
+  );
 
   /** Mounts a menu named `name` at phone width, putting the viewport back afterwards. */
   async function onPhone(name: string, phoneWidth = 390): Promise<MenusScreen> {
