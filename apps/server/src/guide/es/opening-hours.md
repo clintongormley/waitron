@@ -67,7 +67,7 @@ En un día especial, las fechas que siguen su temporada muestran los bloques de 
 
 Si las fechas especiales tienen distintos inicios de jornada, usa la escala horaria junto a cada fecha. **Copiar a…** conserva las horas de los bloques. Si un bloque cruza el inicio de la jornada en una fecha seleccionada, quita esa fecha de la selección y píntala por separado.
 
-Abre **Turnos** en **Equipo** para ir directamente a los turnos. En Calendario, abre la pestaña **Turnos** para ver la semana de la última fecha que elegiste en **Personal**. Si aún no has elegido una fecha, la pestaña muestra la semana actual del local.
+Escribe **Turnos** en **Buscar páginas** y abre el resultado para ir directamente a los turnos. En Calendario, abre la pestaña **Turnos** para ver la semana de la última fecha que elegiste en **Personal**. Si aún no has elegido una fecha, la pestaña muestra la semana actual del local.
 
 ## Edita los periodos y consulta sus horarios {#periods}
 

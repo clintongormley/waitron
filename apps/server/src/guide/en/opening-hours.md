@@ -67,7 +67,7 @@ On a special day, a date that follows its season shows the season’s staffing i
 
 When special dates have different business-day starts, use the clock scale beside each date. **Copy to…** keeps the clock times of your blocks. If a block crosses the start on a selected date, remove that date from the selection and paint it separately.
 
-Open **Rota** under **Team** to go straight to the rota. In Calendar, open the **Rota** tab to see the week of the last date you selected in **Staffing**. Until you select a date, the tab shows the venue’s current week.
+Enter **Rota** in **Search pages** and open the result to go straight to the rota. In Calendar, open the **Rota** tab to see the week of the last date you selected in **Staffing**. Until you select a date, the tab shows the venue’s current week.
 
 ## Edit periods and check their hours {#periods}
 
