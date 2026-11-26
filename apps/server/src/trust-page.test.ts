@@ -7,8 +7,9 @@ import {
   type TrustPageInput,
 } from "./trust-page.js";
 import { DEVICE_HELP, DEVICE_ORDER } from "./trust-page-devices.js";
+import { CONNECTION_DEVICE_ES, CONNECTION_TEXT } from "./connection-bootstrap-strings.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
-import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
+import { NOT_SET_UP_WORDS, TRUST_PAGE_WORDS } from "./i18n/trust-page.js";
 import { SERVER_THEME_DEFAULTS } from "./theme-defaults.js";
 
 const base: TrustPageInput = {
@@ -94,6 +95,39 @@ describe("the guessed device", () => {
     const html = renderTrustPage({ ...base, device: "ios" });
     expect(html).toMatch(heading(`3. ${DEVICE_HELP.ios.heading}`));
     expect(html).not.toMatch(heading(`3. ${DEVICE_HELP.macos.heading}`));
+  });
+});
+
+describe("the Spanish guide", () => {
+  it("gives the detected device's removal and installation steps", () => {
+    const html = renderTrustPage({ ...base, locale: "es", device: "macos" });
+    const mac = CONNECTION_DEVICE_ES.macos;
+    expect(html).toContain(mac.removal[0]);
+    expect(html).toMatch(heading(`3. ${mac.heading}`));
+    expect(html).toContain(mac.install[0]);
+  });
+
+  it("offers the closed device list when no device is detected", () => {
+    const html = renderTrustPage({ ...base, locale: "es" });
+    expect(html).toMatch(heading(`3. ${TRUST_PAGE_WORDS.es.install}`));
+    expect(html).toContain(`<details><summary>${CONNECTION_DEVICE_ES.ios.summary}</summary>`);
+    expect(html).toContain(`<p class="note">${TRUST_PAGE_WORDS.es.removeFirst}</p>`);
+  });
+
+  it("explains when there is no certificate to download", () => {
+    const html = renderTrustPage({ ...base, locale: "es", caAvailable: false });
+    expect(html).toContain(TRUST_PAGE_WORDS.es.unavailable);
+    expect(html).not.toContain('href="/ca.crt"');
+  });
+
+  it("puts the Spanish setup warning first and marks the English warning", () => {
+    const html = renderTrustPage({ ...base, locale: "es", notSetUp: true });
+    const warnings = html.match(/<p class="warning-words"[^>]*>[^<]+<\/p>/g);
+    expect(warnings).toEqual([
+      `<p class="warning-words">${NOT_SET_UP_WORDS.es}</p>`,
+      `<p class="warning-words" lang="en">${NOT_SET_UP_WORDS.en}</p>`,
+    ]);
+    expect(html).toContain(`${warnings?.join("")}\n<section><h2>1.`);
   });
 });
 
@@ -249,6 +283,18 @@ describe("a page opened while another box answers waitron.local", () => {
     expect(html).toContain(
       '<ul><li><a href="https://192.168.1.50">https://192.168.1.50</a></li>' +
         '<li><a href="https://waitron.local">https://waitron.local</a></li></ul>',
+    );
+  });
+
+  it("gives the Spanish spare instructions and sends Continue to this box", () => {
+    const ownAddress = "https://192.168.1.50";
+    const html = renderTrustPage({ ...base, locale: "es", ownAddress });
+    const link = `<a href="${ownAddress}">${ownAddress}</a>`;
+    expect(html).toContain(`<p>${TRUST_PAGE_WORDS.es.spareLead(link)}</p>`);
+    expect(html).toContain(`<p>${TRUST_PAGE_WORDS.es.intro(true)}</p>`);
+    expect(html).toContain(`<p>${TRUST_PAGE_WORDS.es.openHelp}</p>`);
+    expect(html).toContain(
+      `<a class="button" href="${ownAddress}">${CONNECTION_TEXT.es.continue}</a>`,
     );
   });
 

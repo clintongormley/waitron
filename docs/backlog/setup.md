@@ -358,15 +358,6 @@ it lands. Before go-live: afterwards every device would have to install a new ce
 staff may use their own Android phones was waiting on this
 (B3 design §7.5 holds the same question for the preboot recovery name).
 
-## A1575. The box's certificate page in Spanish
-
-Owner, 2026-11-25: build it. `http://waitron.local` (`apps/server/src/trust-page.ts`) is in English
-apart from a few lines, and the till's own untrusted page, which is in both languages, sends people
-to it. Choose the language from the browser's `Accept-Language`, as the dashboard's login does. The
-certificate-repair page already has Spanish steps for each device
-(`apps/server/src/connection-bootstrap-strings.ts`); share the words rather than keeping two copies.
-Open the page in both languages and themes at phone width.
-
 ## Decisions and deliberate limits
 
 - **A stopped join is reset with no sign-in, since A1558 PR 9 (2026-11-22).** This is the join-by-code plan's decision, cleared by the watcher on 2026-11-21; the owner landed #4003 on 2026-11-22, whose question named it. `POST /setup-api/reset-incomplete-adopt` still refuses unless the setup record is a join that stopped partway. The plan's reason: anyone on the network can make such a box start over, but "the next start's checks (`reset-request.ts:79-94`) still refuse to wipe a box that has a `trading.env`, holds a tenant, or holds an operational venue."

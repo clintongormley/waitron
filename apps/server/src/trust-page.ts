@@ -1,9 +1,10 @@
 import { PAGE_THEME_SCRIPT, PAGE_THEME_STYLE } from "./page-theme.js";
 import type { BoxTlsInspection } from "./box-tls-repair.js";
 import { renderConnectionPage } from "./connection-bootstrap-page.js";
+import { CONNECTION_DEVICE_ES, CONNECTION_TEXT } from "./connection-bootstrap-strings.js";
 import { TOUCH_FIRST_CONDITION } from "./detect-device.js";
 import { DECLARATION_LINK_WORDS } from "./i18n/declaration-page.js";
-import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
+import { NOT_SET_UP_WORDS, TRUST_PAGE_WORDS } from "./i18n/trust-page.js";
 import { DEVICE_HELP, DEVICE_ORDER, type DeviceHelp, type DeviceId } from "./trust-page-devices.js";
 import { TRUST_PAGE_LOGO_SVG } from "./trust-page-logo.js";
 import type { VenueNameState } from "./mdns.js";
@@ -52,60 +53,60 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-const REMOVAL_INTRO = `If you have installed a Waitron certificate on this device before, then you
-  will need to remove it before installing the new certificate. Remove only Waitron's own entry.
-  If you cannot identify the old Waitron entry, stop and use another venue device.`;
+type Locale = keyof typeof TRUST_PAGE_WORDS;
+type TrustWords = (typeof TRUST_PAGE_WORDS)[Locale];
 
 function notes(help: DeviceHelp): string {
   return (help.notes ?? []).map((n) => `<p class="note">${n}</p>`).join("");
 }
 
-function removeSection(device: DeviceId | "unknown"): string {
-  const body =
-    device === "unknown"
-      ? `<p class="note">Find your device in step 3 — each one's steps begin with how to remove an
-         old certificate.</p>`
-      : `<ul>${DEVICE_HELP[device].removal.map((r) => `<li>${r}</li>`).join("")}</ul>
-         <p>Then quit your browser completely and reopen this page.</p>`;
-  return `<section><h2>1. Remove any old Waitron certificate</h2>
-    <p>${REMOVAL_INTRO}</p>${body}</section>`;
+function removeSection(help: DeviceHelp | undefined, words: TrustWords): string {
+  const body = help
+    ? `<ul>${help.removal.map((r) => `<li>${r}</li>`).join("")}</ul><p>${words.reopen}</p>`
+    : `<p class="note">${words.findDevice}</p>`;
+  return `<section><h2>1. ${words.remove}</h2><p>${words.removeIntro}</p>${body}</section>`;
 }
 
-function deviceDetails(id: DeviceId): string {
-  const help = DEVICE_HELP[id];
+function deviceDetails(help: DeviceHelp, words: TrustWords): string {
   const removal = help.removal.map((r) => `<li>${r}</li>`).join("");
   const install = help.install.map((i) => `<li>${i}</li>`).join("");
   return `<details><summary>${help.summary}</summary>
-    <p class="note">First, remove any old Waitron certificate:</p><ul>${removal}</ul>
-    <p class="note">Then install the new one:</p><ol>${install}</ol>${notes(help)}</details>`;
+    <p class="note">${words.removeFirst}</p><ul>${removal}</ul>
+    <p class="note">${words.installNext}</p><ol>${install}</ol>${notes(help)}</details>`;
 }
 
-const MANAGED = `<p class="note">These steps use your device's own settings, with no terminal. Menu
-  names vary by version. If installation is blocked, use a venue device that permits it.</p>`;
-
-function installSection(device: DeviceId | "unknown"): string {
+function installSection(
+  device: DeviceId | "unknown",
+  devices: Record<DeviceId, DeviceHelp>,
+  words: TrustWords,
+): string {
+  const managed = `<p class="note">${words.managed}</p>`;
   if (device === "unknown")
-    return `<section><h2>3. Install it on your device</h2>${MANAGED}
-      ${DEVICE_ORDER.map(deviceDetails).join("")}</section>`;
-  const help = DEVICE_HELP[device];
+    return `<section><h2>3. ${words.install}</h2>${managed}
+      ${DEVICE_ORDER.map((id) => deviceDetails(devices[id], words)).join("")}</section>`;
+  const help = devices[device];
   const steps = help.install.map((i) => `<li>${i}</li>`).join("");
   return `<section><h2>3. ${help.heading}</h2><ol>${steps}</ol>${notes(help)}</section>
-    <details class="others"><summary>Using a different device?</summary>${MANAGED}
+    <details class="others"><summary>${words.otherDevices}</summary>${managed}
     ${DEVICE_ORDER.filter((d) => d !== device)
-      .map(deviceDetails)
+      .map((id) => deviceDetails(devices[id], words))
       .join("")}</details>`;
 }
 
 const TOUCH_STEPS_SCRIPT = `if(${TOUCH_FIRST_CONDITION})document.getElementById("steps").replaceChildren(document.getElementById("touch-steps").content)`;
 
-function certificateSteps(device: DeviceId | "unknown", caDownloadPath: string): string {
-  return `${removeSection(device)}
-       <section><h2>2. Get the certificate</h2>
-       <p><a class="button" href="${escapeHtml(caDownloadPath)}" download="${CA_FILENAME}">Download the certificate</a></p>
-       <p class="note">Your browser may ask you to confirm the download — choose <strong>Keep</strong>
-       or <strong>Download</strong>, or the file never reaches the disk. If the download does not
-       start, delete the old <code>${CA_FILENAME}</code> from your downloads and try again.</p></section>
-       ${installSection(device)}`;
+function certificateSteps(
+  device: DeviceId | "unknown",
+  caDownloadPath: string,
+  locale: Locale,
+): string {
+  const words = TRUST_PAGE_WORDS[locale];
+  const devices = locale === "es" ? CONNECTION_DEVICE_ES : DEVICE_HELP;
+  return `${removeSection(device === "unknown" ? undefined : devices[device], words)}
+       <section><h2>2. ${words.get}</h2>
+       <p><a class="button" href="${escapeHtml(caDownloadPath)}" download="${CA_FILENAME}">${words.download}</a></p>
+       <p class="note">${words.downloadHelp(CA_FILENAME)}</p></section>
+       ${installSection(device, devices, words)}`;
 }
 
 /**
@@ -113,18 +114,23 @@ function certificateSteps(device: DeviceId | "unknown", caDownloadPath: string):
  * Android's steps. That is a guess too: "Using a different device?" still lists Linux. Without the
  * script, the Linux steps stay.
  */
-function stepsOrTouchSteps(device: DeviceId | "unknown", caDownloadPath: string): string {
-  const steps = certificateSteps(device, caDownloadPath);
+function stepsOrTouchSteps(
+  device: DeviceId | "unknown",
+  caDownloadPath: string,
+  locale: Locale,
+): string {
+  const steps = certificateSteps(device, caDownloadPath, locale);
   if (device !== "linux") return steps;
   return `<div id="steps">${steps}</div>
-    <template id="touch-steps">${certificateSteps("android", caDownloadPath)}</template>
+    <template id="touch-steps">${certificateSteps("android", caDownloadPath, locale)}</template>
     <script>${TOUCH_STEPS_SCRIPT}</script>`;
 }
 
 /** No external assets: certificate recovery must remain readable without internet access. */
 export function renderTrustPage(input: TrustPageInput): string {
   if (input.connection) return renderConnectionPage({ ...input, connection: input.connection });
-  const { caAvailable, caDownloadPath, qrSvg, device, ownAddress, notSetUp } = input;
+  const { caAvailable, caDownloadPath, qrSvg, device, ownAddress, notSetUp, locale = "en" } = input;
+  const words = TRUST_PAGE_WORDS[locale];
   const reachUrls = ownAddress
     ? [ownAddress, ...input.reachUrls.filter((url) => url !== ownAddress)]
     : input.reachUrls;
@@ -132,27 +138,25 @@ export function renderTrustPage(input: TrustPageInput): string {
     ? ownAddress + input.httpsUrl.slice(new URL(input.httpsUrl).origin.length)
     : input.httpsUrl;
   const lead = ownAddress
-    ? `<p>Adding a spare? You don't need this box's certificate: open this address (<a href="${escapeHtml(httpsUrl)}">${escapeHtml(ownAddress)}</a>) and accept your browser's warning once.</p>\n`
+    ? `<p>${words.spareLead(`<a href="${escapeHtml(httpsUrl)}">${escapeHtml(ownAddress)}</a>`)}</p>\n`
     : "";
   const urlItems = reachUrls
     .map((u) => `<li><a href="${escapeHtml(u)}">${escapeHtml(u)}</a></li>`)
     .join("");
 
+  const otherLocale = locale === "es" ? "en" : "es";
   const warning =
     notSetUp && !ownAddress
-      ? `<p class="warning-words">${escapeHtml(NOT_SET_UP_WORDS.en)}</p><p class="warning-words" lang="es">${escapeHtml(NOT_SET_UP_WORDS.es)}</p>\n`
+      ? `<p class="warning-words">${escapeHtml(NOT_SET_UP_WORDS[locale])}</p><p class="warning-words" lang="${otherLocale}">${escapeHtml(NOT_SET_UP_WORDS[otherLocale])}</p>\n`
       : "";
   const steps = caAvailable
-    ? `${warning}${stepsOrTouchSteps(device, caDownloadPath)}`
-    : `<section><h2>1. Get the certificate</h2>
-       <p>This box has no certificate to download. Check its known HTTPS address below and stop
-       if it shows a certificate warning. This page cannot replace a separately installed certificate.
-       A certificate downloaded before a re-image may no longer apply.</p></section>`;
+    ? `${warning}${stepsOrTouchSteps(device, caDownloadPath, locale)}`
+    : `<section><h2>1. ${words.get}</h2><p>${words.unavailable}</p></section>`;
 
   return `<!doctype html>
-<html lang="en"><head>
+<html lang="${locale}"><head>
 <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Waitron — connect to this box</title>
+<title>${words.title}</title>
 <style>
 :root { color-scheme: light dark; font: 17px/1.55 system-ui, sans-serif; }
 ${PAGE_THEME_STYLE}
@@ -183,15 +187,14 @@ code, a { overflow-wrap: anywhere; }
 :focus-visible { outline: 3px solid light-dark(#007392, #71cfeb); outline-offset: 4px; }
 </style><script>${PAGE_THEME_SCRIPT}</script></head><body><main>
 <div class="logo">${TRUST_PAGE_LOGO_SVG}</div>
-<h1>Connect <span class="accent">securely</span> to this Waitron box</h1>
-${lead}<p>${lead ? "Otherwise, you" : "You"} need to install the Waitron secure certificate before entering passwords and sensitive information into this website:</p>
+<h1>${words.heading}</h1>
+${lead}<p>${words.intro(Boolean(ownAddress))}</p>
 ${steps}
-<section class="go"><h2>${caAvailable ? "4" : "2"}. Open Waitron</h2>
-<p>Open Waitron with the link below, then check the address bar of the page it opens. If that still
-shows <span class="warning-words">Not secure</span>, come back here and start again from step 1.</p>
-<p class="continue"><a class="button" href="${escapeHtml(httpsUrl)}">Continue to Waitron</a></p>
+<section class="go"><h2>${caAvailable ? "4" : "2"}. ${words.open}</h2>
+<p>${words.openHelp}</p>
+<p class="continue"><a class="button" href="${escapeHtml(httpsUrl)}">${CONNECTION_TEXT[locale].continue}</a></p>
 <ul>${urlItems}</ul></section>
-${qrSvg ? `<section class="qr"><h2>Open this page on another device</h2><figure>${qrSvg}</figure></section>` : ""}
+${qrSvg ? `<section class="qr"><h2>${words.qr}</h2><figure>${qrSvg}</figure></section>` : ""}
 <p class="note"><a href="/legal/declaration" lang="es">${escapeHtml(DECLARATION_LINK_WORDS.title)}</a></p>
 </main></body></html>\n`;
 }

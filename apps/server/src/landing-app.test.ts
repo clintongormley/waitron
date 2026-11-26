@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { describe, expect, it, beforeAll } from "vitest";
 import { buildLandingApp } from "./landing-app.js";
 import { DECLARATION_LINK_WORDS, DECLARATION_PAGE_WORDS } from "./i18n/declaration-page.js";
-import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
+import { NOT_SET_UP_WORDS, TRUST_PAGE_WORDS } from "./i18n/trust-page.js";
 import { writeDeclarationFolder } from "./testing/declaration-folder.js";
 
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
@@ -44,6 +44,29 @@ describe("landing app", () => {
       expect(res.headers.get("strict-transport-security")).toBeNull();
       // The download link points at the landing-local path, not /setup-api/ca.crt (which is HTTPS-only).
       expect(await res.text()).toContain('href="/ca.crt"');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["/", "/setup/trust?app=till"])("serves the Spanish guide at %s", async (path) => {
+    const dir = stateDirWithCa();
+    try {
+      const app = buildLandingApp({
+        stateDir: dir,
+        reachUrls: [],
+        httpsUrl: "https://waitron.local",
+        log,
+      });
+      const res = await app.request(`http://waitron.local${path}`, {
+        headers: { "Accept-Language": "fr-FR,es-ES;q=0.9,en;q=0.8" },
+      });
+      const html = await res.text();
+      expect(html).toContain('<html lang="es">');
+      expect(html).toContain(`<title>${TRUST_PAGE_WORDS.es.title}</title>`);
+      expect(html).toContain(`<h1>${TRUST_PAGE_WORDS.es.heading}</h1>`);
+      expect(res.headers.get("vary")).toBe("Accept-Language");
+      expect(res.headers.get("cache-control")).toBe("no-cache");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
