@@ -7064,11 +7064,32 @@ describe("scoped selection commands", () => {
     },
   );
 
-  it("typechecks the whole workspace, never a scoped selection", () => {
-    const commands = workflowSteps(job("typecheck").body.join("\n"))
-      .map((entry) => entry.command)
-      .filter((command) => /\btypecheck\b/.test(command ?? ""));
-    expect(commands).toEqual(["pnpm typecheck"]);
+  it.each([false, true])("typechecks the whole workspace with hosted deadline=%s", (hosted) => {
+    const jobSteps = workflowSteps(job("typecheck").body.join("\n"));
+    const steps = jobSteps.filter(({ command }) => /\btypecheck\b/.test(command));
+    expect(jobSteps[0].if).toBe("runner.environment == 'github-hosted'");
+    expect(steps).toHaveLength(1);
+    expect(steps[0].if).toBeUndefined();
+    const result = spawnSync("bash", ["-eo", "pipefail"], {
+      encoding: "utf8",
+      timeout: 3000,
+      input: [
+        `pnpm() { printf 'pnpm <%s>\\n' "$*"; return 42; }`,
+        `node() { printf 'wrapper <%s>\\n' "$*"; shift 3; "$@"; }`,
+        "date() { echo 1000; }",
+        hosted
+          ? `export "$(GITHUB_ENV=/dev/stdout; ${jobSteps[0].command})"`
+          : "unset TYPECHECK_DEADLINE_AT",
+        "date() { echo 1025; }",
+        steps[0].command,
+      ].join("\n"),
+    });
+    expect(result.error).toBeUndefined();
+    expect(result.status, result.stderr).toBe(42);
+    expect(result.stdout.match(/^pnpm <.*>$/gm)).toEqual(["pnpm <typecheck>"]);
+    expect(result.stdout.match(/^wrapper .*$/gm) ?? []).toEqual(
+      hosted ? ["wrapper <scripts/run-with-deadline.mjs 255 -- pnpm typecheck>"] : [],
+    );
   });
 
   // The gates step runs for real, and its answers feed the test-ui job's condition, its shard

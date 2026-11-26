@@ -951,6 +951,10 @@ jobs:
     runs-on: ${{ (github.run_attempt == 1 && 1 <= fromJSON(needs.changes.outputs.server_jobs || '{}')['typecheck'] || github.run_attempt != 1 && github.run_attempt == needs.changes.outputs.server_route_attempt && needs.changes.outputs.server_route == 'server') && vars.DISPOSABLE_TESTS_MODE == 'server' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.id == github.repository_id && github.event.pull_request.head.repo.full_name == github.repository)) && (vars.DISPOSABLE_TESTS_HEAD == '' || vars.DISPOSABLE_TESTS_HEAD == (github.event.pull_request.head.sha || github.sha)) && fromJSON(vars.DISPOSABLE_TESTS_HOSTED_ATTEMPTS || '{}')[github.run_id] != github.run_attempt && fromJSON(format('["self-hosted",{0}]', toJSON(format('{0}-{1}-{2}-{3}-typecheck-{4}', vars.DISPOSABLE_TESTS_LABEL_PREFIX || 'dt', github.repository_id, github.run_id, github.run_attempt, 1)))) || 'ubuntu-latest' }}
     timeout-minutes: 5
     steps:
+      - name: Leave time to report a hosted typecheck deadline
+        if: runner.environment == 'github-hosted'
+        run: echo "TYPECHECK_DEADLINE_AT=$(( $(date +%s) + 280 ))" >> "$GITHUB_ENV"
+
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
@@ -1002,9 +1006,43 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm typecheck
+      - name: Run pnpm typecheck
         env:
           GOMEMLIMIT: ${{ runner.environment == 'self-hosted' && '6GiB' || '' }}
+        run: |
+          compiler=(pnpm typecheck)
+          if [ -n "${TYPECHECK_DEADLINE_AT:-}" ]; then
+            group=$(awk -F: '$1 == 0 {print "/sys/fs/cgroup" $3; exit}' /proc/self/cgroup 2>/dev/null || true)
+            model=$(awk -F': ' '/^model name/ {print $2; exit}' /proc/cpuinfo 2>/dev/null || true)
+            printf 'Typecheck CPU model: %s\n' "${model:-unavailable}"
+            read_metric() {
+              awk -v label="$1" -v pattern="$2" '$0 ~ pattern {print label, $0; found=1} END {if (!found) exit 1}' "$3" 2>/dev/null || echo "$1 unavailable"
+            }
+            sample() {
+              read_metric memory '^MemAvailable:' /proc/meminfo
+              read_metric paging '^(pswpin|pswpout|oom_kill) ' /proc/vmstat
+              for metric in memory.peak memory.events; do read_metric "$metric" . "${group:-/sys/fs/cgroup}/$metric"; done
+              for resource in cpu memory io; do read_metric "pressure/$resource" . "/proc/pressure/$resource"; done
+            }
+            sample
+            remaining=$(( TYPECHECK_DEADLINE_AT - $(date +%s) ))
+            if [ "$remaining" -le 0 ]; then
+              echo 'Typecheck deadline elapsed during runner setup (exit 124)'
+              exit 124
+            fi
+            # Stop the sampler as a group and keep its timer off the log pipes.
+            set -m
+            (while sleep 10 >/dev/null 2>&1; do sample; done) &
+            sampler=$!
+            set +m
+            trap 'kill -- "-$sampler" 2>/dev/null || true; wait "$sampler" 2>/dev/null || true; kill -- "-$sampler" 2>/dev/null || true; sample' EXIT
+            compiler=(node scripts/run-with-deadline.mjs "$remaining" -- "${compiler[@]}")
+          fi
+          started=$SECONDS
+          result=0
+          "${compiler[@]}" || result=$?
+          printf 'pnpm typecheck exit %s after %ss\n' "$result" "$(( SECONDS - started ))"
+          exit "$result"
 
   # packages/db, SHARDED THREE WAYS across parallel runners. It was the workspace's critical-path job
   # — 374s on the unfiltered `main` run 33890775789 (`gh run view 33890775789 --json jobs`), of which

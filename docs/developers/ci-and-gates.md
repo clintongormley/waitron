@@ -2905,6 +2905,16 @@ On a disposable-runner probe, add `GODEBUG=gctrace=1` to `pnpm typecheck`. To ca
 memory alongside the compiler trace, read `memory.peak` and `memory.events` for the group named by
 `/proc/self/cgroup`, and keep the kernel memory-kill log.
 
+#### When a hosted typecheck reaches its deadline
+
+Read the last package start and completion lines alongside the runner samples. Hosted typecheck
+prints the CPU model and samples available memory, peak memory, swap-in and swap-out counts,
+memory-kill counters and kernel stall readings.
+Exit 124 means the job ran out of time inside the compiler step, or setup used that time before the
+compiler could start. A compiler error keeps its own exit code. If GitHub cancels the entire job and
+there is no step exit or log, you have no compiler result. Both intentional timeouts on responsive
+runners kept their step logs in the [step and job deadline control](https://github.com/clintongormley/waitron/actions/runs/45783712133).
+
 #### Where Server's typecheck spends time
 
 The first code-selected main run after the setting landed used `GOMEMLIMIT=6GiB` on a disposable
