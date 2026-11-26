@@ -1786,6 +1786,7 @@ async function bootServer(
         db,
         node: store.node,
         ring,
+        stateDir: config.stateDir,
         persistTrading,
         requestRestart: signalRestart,
         setupAppDir: config.setupAppDir,

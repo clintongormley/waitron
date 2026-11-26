@@ -211,12 +211,14 @@ async function expectRepairPageDeletes(f: Awaited<ReturnType<typeof heldSetup>>)
   }
   for (const dir of [f.roots.stateDir, f.roots.venueDir])
     expect(
-      (await readdir(dir)).filter(
-        (name) =>
-          !name.endsWith(".lock") && (dir !== f.roots.stateDir || name !== "module-records"),
-      ),
+      (await readdir(dir))
+        .filter(
+          (name) =>
+            !name.endsWith(".lock") && (dir !== f.roots.stateDir || name !== "module-records"),
+        )
+        .sort(),
       dir,
-    ).toEqual(dir === f.roots.stateDir ? ["flows", SCRATCH_DIR] : []);
+    ).toEqual(dir === f.roots.stateDir ? ["backup.env", "flows", SCRATCH_DIR] : []);
   expect(await readdir(join(f.roots.stateDir, SCRATCH_DIR))).toEqual([]);
   expect(await readModuleRecord(f.roots.stateDir, "fiscal-verifactu")).toEqual({
     version: 1,

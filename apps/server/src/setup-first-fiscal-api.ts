@@ -15,6 +15,7 @@ import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { Context, Hono } from "hono";
 import { isSecure } from "./encrypted-connection.js";
 import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
+import { writeBackupKeyOne } from "./backup-key-record.js";
 import { initialSetupFor } from "@waitron/module";
 import {
   VENUE_FIELDS,
@@ -232,6 +233,14 @@ function boundedPublic(value: unknown, depth = 0): void {
     boundedPublic(item, depth + 1);
   }
 }
+/** The staged master key exists only in memory until publication, so its backup key is written
+ * when it is shown. */
+function writeStagedBackupKey(stateDir: string, masterKey: string, publicKey: string) {
+  return writeBackupKeyOne(stateDir, {
+    made: { masterKey },
+    publicKey: Buffer.from(publicKey, "base64"),
+  });
+}
 export function mountSetupFirstFiscalApi(
   app: Hono,
   host: FirstFiscalHost,
@@ -329,6 +338,7 @@ export function mountSetupFirstFiscalApi(
           reconfirmation,
           hold,
         );
+        await writeStagedBackupKey(host.roots.stateDir, masterKey, stage.masterKeyPublicKey);
         host.evidence.invalidate(owner.attemptId);
         return c.json({
           stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.masterKeyName },
@@ -361,6 +371,7 @@ export function mountSetupFirstFiscalApi(
               text(body.reconfirmation),
               hold,
             );
+            await writeStagedBackupKey(host.roots.stateDir, masterKey, stage.masterKeyPublicKey);
             return c.json({
               stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.masterKeyName },
               masterKey,

@@ -1,6 +1,8 @@
 import { seedModuleSettings } from "../test/module-settings.js";
 import { readModuleRecord } from "@waitron/provisioning";
+import { existsSync } from "node:fs";
 import { readdir, writeFile } from "node:fs/promises";
+import { BACKUP_ENV_FILE } from "@waitron/store";
 import { join } from "node:path";
 import type { Hono } from "hono";
 import { expect, it, vi } from "vitest";
@@ -57,14 +59,17 @@ async function repairIds(app: Hono) {
   };
 }
 
-async function onlyLockFiles(s: Server) {
+/** `backupKeyHeld`: setup had written `backup.env`, which Start again keeps. */
+async function onlyLockFiles(s: Server, backupKeyHeld = true) {
   for (const dir of [s.stateDir, s.venueDir])
     expect(
-      (await readdir(dir)).filter(
-        (name) => !name.endsWith(".lock") && (dir !== s.stateDir || name !== "module-records"),
-      ),
+      (await readdir(dir))
+        .filter(
+          (name) => !name.endsWith(".lock") && (dir !== s.stateDir || name !== "module-records"),
+        )
+        .sort(),
       dir,
-    ).toEqual(dir === s.stateDir ? ["flows"] : []);
+    ).toEqual(dir === s.stateDir ? [...(backupKeyHeld ? ["backup.env"] : []), "flows"] : []);
   expect(await readdir(join(s.stateDir, "flows"))).toEqual([]);
   expect(await readModuleRecord(s.stateDir, "fiscal-verifactu")).toEqual({
     version: 1,
@@ -118,6 +123,7 @@ it.each([
   "%s: then the repair entry serves Start again for it, and Start again deletes it",
   async (_, reach, before) => {
     const s = await reach();
+    const backupKeyHeld = existsSync(join(s.stateDir, BACKUP_ENV_FILE));
     expect((await resolveFirstSetupEntry(roots(s), {})).kind).toBe(before);
     const stopped = await s.stop(await s.ids());
     expect(stopped.status, await stopped.clone().text()).toBe(200);
@@ -128,7 +134,7 @@ it.each([
     expect(summary.status, await summary.clone().text()).toBe(200);
     const started = await s.post(app, START_AGAIN_ROUTES.startAgain.path, ids);
     expect(started.status, await started.clone().text()).toBe(200);
-    await onlyLockFiles(s);
+    await onlyLockFiles(s, backupKeyHeld);
   },
 );
 

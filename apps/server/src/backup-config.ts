@@ -24,8 +24,8 @@ export interface BackupConfig {
   cloud?: boolean;
   /** IDs are unique, and so are local folders' resolved directories. */
   destinations: BackupDestination[];
-  /** The operator-held passphrase every backup artifact is encrypted under. `undefined` only on a
-   * switched-off record whose box holds no usable key. */
+  /** The key every backup artifact is encrypted under. `undefined` only on a switched-off record
+   * whose box holds no usable key. */
   recoveryKey: string | undefined;
   schedule: BackupSchedule;
   /** The count cap: how many archives each destination keeps. */
@@ -38,6 +38,10 @@ export interface BackupConfig {
   destinationTimeoutMs: number;
   /** `undefined` when never rotated. Reported in `GET /api/box/status` only; it gates no behaviour. */
   keyRotatedAt: string | undefined;
+  /** Which backup key of the master key `recoveryKey` is; `undefined` when the file names none. */
+  keyNumber?: number | undefined;
+  /** The id of the master key `recoveryKey` comes from; `undefined` when the file names none. */
+  masterKeyId?: string | undefined;
 }
 
 export const BACKUP_STALE_AFTER_MS = 2 * 24 * 60 * 60 * 1000;
@@ -93,6 +97,33 @@ export async function readHeldKey(
   }
 }
 
+/** What a version 2 archive frame's four-byte field can name. */
+const LARGEST_KEY_NUMBER = 0xffff_ffff;
+
+function loadKeyNumber(env: Env): number | undefined {
+  const raw = readVariable(env, "WAITRON_BACKUP_KEY_NUMBER");
+  if (raw === undefined || !/^[1-9]\d{0,9}$/.test(raw)) return undefined;
+  const n = Number(raw);
+  return n <= LARGEST_KEY_NUMBER ? n : undefined;
+}
+
+function loadMasterKeyId(env: Env): string | undefined {
+  const raw = readVariable(env, "WAITRON_BACKUP_MASTER_KEY_ID");
+  return raw !== undefined && /^[0-9a-f]{16}$/.test(raw) ? raw : undefined;
+}
+
+/** The backup key with its number and master key id, or `undefined` unless the file holds all
+ * three. */
+export function loadBackupKey(
+  env: Env,
+): { key: string; keyNumber: number; masterKeyId: string } | undefined {
+  const key = loadRecoveryKey(env);
+  const keyNumber = loadKeyNumber(env);
+  const masterKeyId = loadMasterKeyId(env);
+  if (key === undefined || keyNumber === undefined || masterKeyId === undefined) return undefined;
+  return { key, keyNumber, masterKeyId };
+}
+
 /** When the recovery key was last rotated, as the box env records it. */
 export function loadKeyRotatedAt(env: Env): string | undefined {
   return isUnset(readVariable(env, "WAITRON_BACKUP_KEY_ROTATED_AT"))
@@ -125,6 +156,8 @@ export function resolveBackupConfig(input: {
     staleAfterMs: BACKUP_STALE_AFTER_MS,
     destinationTimeoutMs: sealed.destinationTimeoutMs,
     keyRotatedAt: loadKeyRotatedAt(env),
+    keyNumber: loadKeyNumber(env),
+    masterKeyId: loadMasterKeyId(env),
   };
 }
 

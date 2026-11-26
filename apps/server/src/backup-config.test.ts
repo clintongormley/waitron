@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { ArchiveSettings } from "./archive-settings.js";
 import { attachRecordMeta } from "./backup-settings-evidence.js";
-import { loadBackupSettings, loadRecoveryKey, resolveBackupConfig } from "./backup-config.js";
+import {
+  loadBackupKey,
+  loadBackupSettings,
+  loadRecoveryKey,
+  resolveBackupConfig,
+} from "./backup-config.js";
 
 describe("loadRecoveryKey", () => {
   it("is undefined when the key is unset or empty", () => {
@@ -18,6 +23,67 @@ describe("loadRecoveryKey", () => {
     expect(() => loadRecoveryKey({ WAITRON_BACKUP_RECOVERY_KEY: "short" })).toThrow(
       new AppError("backup.recovery_key_too_short", { min: 12 }),
     );
+  });
+});
+
+describe("loadBackupKey", () => {
+  const HELD = {
+    WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123",
+    WAITRON_BACKUP_KEY_NUMBER: "2",
+    WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
+  };
+
+  it("returns the key, its number and its master key id together", () => {
+    expect(loadBackupKey(HELD)).toEqual({
+      key: "held-recovery-key-0123",
+      keyNumber: 2,
+      masterKeyId: "0123456789abcdef",
+    });
+  });
+
+  it.each([
+    ["no key", { WAITRON_BACKUP_RECOVERY_KEY: undefined }],
+    ["no number", { WAITRON_BACKUP_KEY_NUMBER: undefined }],
+    ["an empty number", { WAITRON_BACKUP_KEY_NUMBER: "" }],
+    ["number 0", { WAITRON_BACKUP_KEY_NUMBER: "0" }],
+    ["a fractional number", { WAITRON_BACKUP_KEY_NUMBER: "1.5" }],
+    ["a padded number", { WAITRON_BACKUP_KEY_NUMBER: "01" }],
+    ["a number past four bytes", { WAITRON_BACKUP_KEY_NUMBER: "4294967296" }],
+    ["no master key id", { WAITRON_BACKUP_MASTER_KEY_ID: undefined }],
+    ["an upper-case id", { WAITRON_BACKUP_MASTER_KEY_ID: "0123456789ABCDEF" }],
+    ["a short id", { WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcde" }],
+  ])("is undefined with %s", (_, change) => {
+    expect(loadBackupKey({ ...HELD, ...change })).toBeUndefined();
+  });
+
+  it("control: the largest number a version 2 frame names is read", () => {
+    expect(loadBackupKey({ ...HELD, WAITRON_BACKUP_KEY_NUMBER: "4294967295" })?.keyNumber).toBe(
+      4294967295,
+    );
+  });
+
+  it("the backup settings carry the number and id they read, without requiring them", () => {
+    const sealed: ArchiveSettings = {
+      revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
+      enabled: true,
+      cloud: false,
+      destinations: [{ kind: "local-fs", id: "primary", dir: "/mnt/sealed" }],
+      schedule: { kind: "interval", ms: 3_600_000 },
+      retention: { count: 5, days: 12 },
+      destinationTimeoutMs: 120_000,
+    };
+    expect(resolveBackupConfig({ env: HELD, sealed })).toMatchObject({
+      recoveryKey: "held-recovery-key-0123",
+      keyNumber: 2,
+      masterKeyId: "0123456789abcdef",
+    });
+    const keyOnly = resolveBackupConfig({
+      env: { WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123" },
+      sealed,
+    });
+    expect(keyOnly).toMatchObject({ recoveryKey: "held-recovery-key-0123" });
+    expect(keyOnly?.keyNumber).toBeUndefined();
+    expect(keyOnly?.masterKeyId).toBeUndefined();
   });
 });
 

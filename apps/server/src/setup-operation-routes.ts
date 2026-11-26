@@ -23,6 +23,7 @@ import type { Hono, Context } from "hono";
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { makeMasterKeyRecoveryPack } from "./backup-recovery-pack-output.js";
+import { writeBackupKeyOne } from "./backup-key-record.js";
 import type { JoinedBox } from "./box-join-attempt.js";
 import { labelContactUrl } from "./box-name.js";
 import { isSecure } from "./encrypted-connection.js";
@@ -203,8 +204,7 @@ export function mountSetupOperationRoutes(
   });
 
   app.post("/setup-api/provision", async (c) => {
-    // Deps gate — before the latch, so an unwired box never engages it. Captured as consts so
-    // TypeScript narrows them for the async closure below.
+    // Deps gate — before the latch, so an unwired box never engages it.
     const provision = deps.provision;
     const recoverProvision = deps.recoverProvision;
     const seedDemo = deps.seedDemo;
@@ -373,6 +373,7 @@ export function mountSetupOperationRoutes(
           cloudStaffEmailUnavailable = staffEmail && enabled !== true;
         }
         await deps.clearConfiguration?.();
+        if (deps.stateDir !== undefined) await writeBackupKeyOne(deps.stateDir, masterKey);
         // Last venue.db write: a failure before it leaves no master_keys row.
         madeMasterKey = await saveNewMasterKey(db, masterKey, madeAt, null);
         await operation?.advance("publishing", { ...operation.data, cloudStaffEmailUnavailable });

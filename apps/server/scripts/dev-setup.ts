@@ -39,6 +39,7 @@ import { resolveConfigDir } from "../src/config.js";
 import { listStations } from "../src/kitchen.js";
 import { enrolDeviceForTest } from "../src/testing/enrol.js";
 import { saveNewMasterKey } from "../src/master-key-record.js";
+import { writeBackupKeyOne } from "../src/backup-key-record.js";
 import type { TradingContext } from "../src/trading-context.js";
 import { parseEnvFile } from "../src/env-file.js";
 import { seedDemoRestaurant, type SeedDemoResult } from "./demo-seed/seed.js";
@@ -356,16 +357,17 @@ async function writeFiscalModuleSettings(
 }
 
 /** The venue's last database write, so a run that failed before it is finished by the next. */
-async function saveMasterKeyIfNone(venueDir: string): Promise<MadeMasterKey | undefined> {
+async function saveMasterKeyIfNone(
+  venueDir: string,
+  stateDir: string,
+): Promise<MadeMasterKey | undefined> {
   const store = await openVenueDatabase(venueDir);
   try {
     if ((await readCurrentMasterKey(store.venue)) !== null) return undefined;
-    return await saveNewMasterKey(
-      store.venue,
-      makeNewMasterKey(new Date().toISOString().slice(0, 10)),
-      new Date(),
-      null,
-    );
+    const masterKey = makeNewMasterKey(new Date().toISOString().slice(0, 10));
+    mkdirSync(stateDir, { recursive: true, mode: 0o700 });
+    await writeBackupKeyOne(stateDir, masterKey);
+    return await saveNewMasterKey(store.venue, masterKey, new Date(), null);
   } finally {
     await store.close();
   }
@@ -394,7 +396,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   if (existing !== undefined && isCompleteDevEnv(existing) && hasExpected) {
     log("dev-setup: reusing the already-provisioned venue (no new fiscal chain)");
     await writeFiscalModuleSettings(venueDir, log);
-    const masterKey = await saveMasterKeyIfNone(venueDir);
+    const masterKey = await saveMasterKeyIfNone(venueDir, opts.stateDir);
     return { reused: true, env: existing, ...(masterKey === undefined ? {} : { masterKey }) };
   }
 
@@ -434,7 +436,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   writeFileSync(envPath, renderEnvFile(env));
   log(`dev-setup: wrote ${envPath}`);
   await writeFiscalModuleSettings(venueDir, log);
-  return { reused: false, env, masterKey: (await saveMasterKeyIfNone(venueDir))! };
+  return { reused: false, env, masterKey: (await saveMasterKeyIfNone(venueDir, opts.stateDir))! };
 }
 
 /**
