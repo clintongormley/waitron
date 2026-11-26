@@ -1859,7 +1859,6 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
   };
   const started = {
     es: es["table.change_dish_started"].replace("{dish}", "Burger"),
-    en: "The station has already started Burger, so it can't be changed.",
   } as const;
 
   /** The table with the started burger in Sent, its window open. */
@@ -1935,10 +1934,15 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     dialog.shadowRoot!.querySelector<HTMLElement>(".footer > .form-message")?.textContent?.trim();
 
   it.each(["es", "en"] as const)(
-    "shows a started dish's refusal inside its window, as it was left, with Void… and Comp… (%s)",
+    "shows a started item's refusal inside its window, as it was left, with Void… and Comp… (%s)",
     async (language) => {
+      const stationName = language === "en" ? "Grill" : undefined;
       const { el, screen, dialog } = await openBurgerWindow(
-        {},
+        {
+          updateOrderLine: vi
+            .fn()
+            .mockRejectedValue({ code: "ticket.already_started", stationName }),
+        },
         language === "es" ? "es-ES" : "en-GB",
       );
 
@@ -1953,7 +1957,13 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
         undefined,
       );
       await expect.poll(() => dialog.open).toBe(true);
-      await expect.poll(() => windowSentence(dialog)).toBe(started[language]);
+      await expect
+        .poll(() => windowSentence(dialog))
+        .toBe(
+          stationName === undefined
+            ? started.es
+            : fill(t("table.change_dish_started_named"), { dish: "Burger", name: stationName }),
+        );
       expect((await noteBox(screen)).value).toBe("no onions");
       const button = (selector: string) =>
         screen.shadowRoot!.querySelector<HTMLElement>(`[data-sent-line-dialog] ${selector}`);
@@ -2007,11 +2017,11 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
     expect(tableOrder(el)).not.toBe(screen);
 
-    refuse({ code: "ticket.already_started" });
+    refuse({ code: "ticket.already_started", stationName: "Grill" });
     await flush(el);
 
-    expect(banner(el)!.textContent).toContain(
-      "Burger is already being made and can no longer be changed. Use Void… to take it off the bill.",
+    expect(banner(el)!.textContent!.trim()).toBe(
+      fill(t("table.change_dish_started_void_named"), { dish: "Burger", name: "Grill" }),
     );
     expect(tableOrder(el)!.changeRefusal).toBeNull();
   });
@@ -2102,13 +2112,13 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       await changeNote(el, screen, "no onions");
       const flan = await openFlan(el, screen);
 
-      answers[0]!({ code: "ticket.already_started" });
+      answers[0]!({ code: "ticket.already_started", stationName: "Grill" });
       await flush(el);
 
       await expect
         .poll(() => banner(el)?.textContent ?? "")
         .toContain(
-          "Burger ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
+          fill(es["table.change_dish_started_void_named"], { dish: "Burger", name: "Grill" }),
         );
       expect(flan.open).toBe(true);
       expect(flan.textContent).toContain("Flan");
@@ -2190,14 +2200,21 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
       return { el, settle, reads: vi.mocked(api.getTabLines).mock.calls.length };
     }
 
-    it("says the change to the old table's line was refused, and touches nothing on the new table", async () => {
+    it("names the station when a change is refused after the waiter opens another table", async () => {
       const { el, settle, reads } = await changeThenOpenTable3();
 
-      settle.reject({ code: "ticket.already_started" });
+      settle.reject({ code: "ticket.already_started", stationName: "Grill" });
       await flush(el);
 
-      expect(banner(el)!.textContent).toContain(
-        "Tu cambio en Burger de la mesa 2 no se ha guardado. Burger ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
+      expect(banner(el)!.textContent!.trim()).toBe(
+        fill(t("table.change_not_saved"), {
+          line: "Burger",
+          table: "2",
+          reason: fill(t("table.change_dish_started_void_named"), {
+            dish: "Burger",
+            name: "Grill",
+          }),
+        }),
       );
       expect(banner(el)!.textContent).not.toContain("Tarta");
       await flush(el);
@@ -3127,9 +3144,11 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     expect(banner(el)!.textContent).not.toContain(t("table.error"));
   });
 
-  it("says the item has gone to the kitchen and cannot be changed, and reloads the line's actions", async () => {
+  it("names the station in the banner and reloads the sent item's actions", async () => {
     const { el, screen } = await openBurgerTab({
-      updateOrderLine: vi.fn().mockRejectedValue({ code: "ticket.already_fired" }),
+      updateOrderLine: vi
+        .fn()
+        .mockRejectedValue({ code: "ticket.already_fired", stationName: "Grill" }),
     });
     const reads = vi.mocked(api.getTabLines).mock.calls.length;
 
@@ -3137,7 +3156,7 @@ describe("till-app table ordering: changing and cancelling a sent line", () => {
     await flush(el);
 
     expect(banner(el)!.textContent).toContain(
-      es["table.change_dish_fired_void"].replace("{dish}", "Burger"),
+      fill(es["table.change_dish_fired_void_named"], { dish: "Burger", name: "Grill" }),
     );
     expect(api.getTabLines).toHaveBeenCalledTimes(reads + 1);
   });

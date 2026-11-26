@@ -1426,12 +1426,18 @@ export const en = {
   // Per-line kitchen actions
   "table.change_dish": "Change dish",
   "table.change_dish_lower": "To take one off, use Void…",
-  "table.change_dish_started": "The station has already started {dish}, so it can't be changed.",
+  "table.change_dish_started": "{dish} is already being made and can no longer be changed.",
+  "table.change_dish_started_named":
+    "{name} has already started {dish}, so it can no longer be changed.",
   // The banner's words when the dish's Sent window cannot say it.
   "table.change_dish_started_void":
     "{dish} is already being made and can no longer be changed. Use Void… to take it off the bill.",
+  "table.change_dish_started_void_named":
+    "{name} has already started {dish}, so it can no longer be changed. Use Void… to take it off the bill.",
   "table.change_dish_fired_void":
-    "{dish} has already gone to the station and can no longer be changed. Use Void… to take it off the bill.",
+    "{dish} has already been sent and can no longer be changed. Use Void… to take it off the bill.",
+  "table.change_dish_fired_void_named":
+    "{dish} has already been sent to {name} and can no longer be changed. Use Void… to take it off the bill.",
   "table.change_dish_served_void":
     "{dish} has already been served and can no longer be changed. Use Void… to take it off the bill.",
   "table.void_line": "Void…",
@@ -1619,21 +1625,25 @@ export const en = {
   "move_station.move": "Move",
   "table.move_station": "Move to station…",
   "move_station.refused.ticket.already_started":
-    "The station has started, finished or sent out this dish, so it stays where it is",
+    "Work on this item has already started, so it stays where it is",
+  "move_station.refused.ticket.already_started_named":
+    "{name} has already started this item, so it stays where it is",
   "move_station.refused.working_order.not_open": "This order has been discarded",
   "move_station.refused.working_order.already_collected": "This order has already been handed over",
-  "move_station.refused.tab.line_not_found": "This dish is no longer on this bill",
-  "move_station.refused.ticket.not_sent": "This dish has not gone to the station yet",
+  "move_station.refused.tab.line_not_found": "This item is no longer on this bill",
+  "move_station.refused.ticket.not_sent": "This item has not been sent yet",
   "move_station.refused.ticket.made_here":
-    "This dish is made here at the till, so it has no ticket at a station to move",
+    "This item is made here at the till, so it has no ticket at a station to move",
   "move_station.order_refused.ticket.already_started":
-    "The station has started, finished or sent out a dish of this order, so nothing was moved",
+    "Work has already started on an item in this order, so nothing was moved",
+  "move_station.order_refused.ticket.already_started_named":
+    "{name} has already started an item in this order, so nothing was moved",
   "move_station.order_refused.tab.line_not_found":
-    "A dish of this order is no longer on it, so nothing was moved",
+    "An item is no longer on this order, so nothing was moved",
   "move_station.order_refused.ticket.not_sent":
-    "A dish of this order has not gone to the station yet, so nothing was moved",
+    "An item in this order has not been sent yet, so nothing was moved",
   "move_station.order_refused.ticket.made_here":
-    "A dish of this order is made here at the till, so nothing was moved",
+    "An item in this order is made here at the till, so nothing was moved",
   "dead_end.choose_or_remove": "Choose where to make each dish, or remove it.",
   "dead_end.choose": "Choose where to make each dish.",
   "table.preview_confirm": "Confirm",
@@ -1848,13 +1858,17 @@ export const en = {
   "held.changed_elsewhere":
     "This order was changed on another device. It has been reloaded: check it and make your change again",
   "held.sent_dish_served":
-    "A dish on this order has already been served and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+    "An item on this order has already been served and can no longer be changed. The order has been reloaded: use Cancel on that item to take it off the bill, then make your other changes again",
   "held.sent_dish_started":
-    "The station has already started a dish on this order, and that dish can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+    "An item on this order has already been started and can no longer be changed. The order has been reloaded: use Cancel on that item to take it off the bill, then make your other changes again",
+  "held.sent_dish_started_named":
+    "{name} has already started an item on this order and it can no longer be changed. The order has been reloaded: use Cancel on that item to take it off the bill, then make your other changes again",
   "held.sent_dish_fired":
-    "A dish on this order has already gone to the station and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+    "An item on this order has already been sent and can no longer be changed. The order has been reloaded: use Cancel on that item to take it off the bill, then make your other changes again",
+  "held.sent_dish_fired_named":
+    "An item on this order has already been sent to {name} and can no longer be changed. The order has been reloaded: use Cancel on that item to take it off the bill, then make your other changes again",
   "held.sent_dish_sent":
-    "A dish on this order has already been sent and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
+    "An item on this order has already been sent and can no longer be changed. The order has been reloaded: use Cancel on that item to take it off the bill, then make your other changes again",
   "station.no_default_named":
     "No prep station can make {dishes}. Fix this in the dashboard, on the Prep stations page.",
   "place.error": "Could not send the order, try again",
@@ -3832,12 +3846,16 @@ export const es: Record<StringKey, string> = {
   "table.split_group_line": "Separar cantidad",
   "table.change_dish": "Cambiar plato",
   "table.change_dish_lower": "Para quitar uno, usa Cancelar…",
-  "table.change_dish_started":
-    "La estación ya ha empezado a preparar {dish}, así que no se puede cambiar.",
+  "table.change_dish_started": "{dish} ya se está preparando y no se puede cambiar.",
+  "table.change_dish_started_named": "{name} ya ha empezado {dish}, así que no se puede cambiar.",
   "table.change_dish_started_void":
     "{dish} ya se está preparando y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
+  "table.change_dish_started_void_named":
+    "{name} ya ha empezado {dish}, así que no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
   "table.change_dish_fired_void":
-    "{dish} ya ha ido a la estación y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
+    "{dish} ya se ha enviado y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
+  "table.change_dish_fired_void_named":
+    "{dish} ya se ha enviado a {name} y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
   "table.change_dish_served_void":
     "{dish} ya se ha servido y no se puede cambiar. Usa Cancelar… para quitarlo de la cuenta.",
   "table.void_line": "Cancelar…",
@@ -4026,21 +4044,25 @@ export const es: Record<StringKey, string> = {
   "move_station.move": "Pasar",
   "table.move_station": "Cambiar de estación…",
   "move_station.refused.ticket.already_started":
-    "La estación ya ha empezado, terminado o sacado este plato, así que se queda donde está",
+    "Este artículo ya se ha empezado a preparar, así que se queda donde está",
+  "move_station.refused.ticket.already_started_named":
+    "{name} ya ha empezado este artículo, así que se queda donde está",
   "move_station.refused.working_order.not_open": "Este pedido se ha descartado",
   "move_station.refused.working_order.already_collected": "Este pedido ya se ha entregado",
-  "move_station.refused.tab.line_not_found": "Este plato ya no está en esta cuenta",
-  "move_station.refused.ticket.not_sent": "Este plato aún no ha ido a la estación",
+  "move_station.refused.tab.line_not_found": "Este artículo ya no está en esta cuenta",
+  "move_station.refused.ticket.not_sent": "Este artículo aún no se ha enviado",
   "move_station.refused.ticket.made_here":
-    "Este plato se prepara aquí en la caja, así que no tiene comanda en ninguna estación que pasar",
+    "Este artículo se prepara aquí en la caja, así que no tiene comanda en ninguna estación que pasar",
   "move_station.order_refused.ticket.already_started":
-    "La estación ya ha empezado, terminado o sacado un plato de este pedido, así que no se ha pasado nada",
+    "Ya se ha empezado a preparar un artículo de este pedido, así que no se ha pasado nada",
+  "move_station.order_refused.ticket.already_started_named":
+    "{name} ya ha empezado un artículo de este pedido, así que no se ha pasado nada",
   "move_station.order_refused.tab.line_not_found":
-    "Un plato de este pedido ya no está en él, así que no se ha pasado nada",
+    "Un artículo ya no está en este pedido, así que no se ha pasado nada",
   "move_station.order_refused.ticket.not_sent":
-    "Un plato de este pedido aún no ha ido a la estación, así que no se ha pasado nada",
+    "Un artículo de este pedido aún no se ha enviado, así que no se ha pasado nada",
   "move_station.order_refused.ticket.made_here":
-    "Un plato de este pedido se prepara aquí en la caja, así que no se ha pasado nada",
+    "Un artículo de este pedido se prepara aquí en la caja, así que no se ha pasado nada",
   "dead_end.choose_or_remove": "Elige dónde preparar cada plato o quítalo.",
   "dead_end.choose": "Elige dónde preparar cada plato.",
   "table.preview_confirm": "Confirmar",
@@ -4254,13 +4276,17 @@ export const es: Record<StringKey, string> = {
   "held.changed_elsewhere":
     "Este pedido se ha cambiado en otro dispositivo. Se ha vuelto a cargar: revísalo y repite tu cambio",
   "held.sent_dish_served":
-    "Un plato de este pedido ya se ha servido y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+    "Un artículo de este pedido ya se ha servido y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese artículo para quitarlo de la cuenta y repite tus otros cambios",
   "held.sent_dish_started":
-    "La estación ya ha empezado a preparar un plato de este pedido, y ese plato no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+    "Ya se ha empezado a preparar un artículo de este pedido y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese artículo para quitarlo de la cuenta y repite tus otros cambios",
+  "held.sent_dish_started_named":
+    "{name} ya ha empezado un artículo de este pedido y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese artículo para quitarlo de la cuenta y repite tus otros cambios",
   "held.sent_dish_fired":
-    "Un plato de este pedido ya ha ido a la estación y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+    "Un artículo de este pedido ya se ha enviado y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese artículo para quitarlo de la cuenta y repite tus otros cambios",
+  "held.sent_dish_fired_named":
+    "Un artículo de este pedido ya se ha enviado a {name} y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese artículo para quitarlo de la cuenta y repite tus otros cambios",
   "held.sent_dish_sent":
-    "Un plato de este pedido ya se ha enviado y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
+    "Un artículo de este pedido ya se ha enviado y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese artículo para quitarlo de la cuenta y repite tus otros cambios",
   "station.no_default_named":
     "Ninguna estación de preparación puede preparar {dishes}. Corrígelo en el panel, en la página Estaciones de preparación.",
   "place.error": "No se pudo enviar el pedido, inténtalo de nuevo",

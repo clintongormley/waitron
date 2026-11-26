@@ -264,28 +264,49 @@ it("localises the refusals of changing a sent line in both languages", () => {
     expect(codeMessage(code, "en")).not.toBe(codeMessage(code, "es"));
   }
   expect(codeMessage("ticket.already_started", "en")).toBe(
-    "The station has already started this item, so it can no longer be changed. You can cancel it",
+    "This item has already been started, so it can no longer be changed. You can cancel it",
+  );
+  expect(codeMessage("ticket.already_started", "es")).toBe(
+    "Este artículo ya se ha empezado, así que ya no se puede cambiar. Puedes cancelarlo",
+  );
+  expect(codeMessage("ticket.already_started", "en", { stationName: "Grill" })).toBe(
+    "Grill has already started this item, so it can no longer be changed. You can cancel it",
+  );
+  expect(codeMessage("ticket.already_started", "es", { stationName: "Grill" })).toBe(
+    "Grill ya ha empezado este artículo, así que ya no se puede cambiar. Puedes cancelarlo",
+  );
+  expect(codeMessage("ticket.already_fired", "en")).toBe(
+    "This item has already been sent and cannot be changed. You can cancel it",
+  );
+  expect(codeMessage("ticket.already_fired", "es")).toBe(
+    "Este artículo ya se ha enviado y no se puede cambiar. Puedes cancelarlo",
+  );
+  expect(codeMessage("ticket.already_fired", "en", { stationName: "Bar" })).toBe(
+    "This item has already been sent to Bar and cannot be changed. You can cancel it",
+  );
+  expect(codeMessage("ticket.already_fired", "es", { stationName: "Bar" })).toBe(
+    "Este artículo ya se ha enviado a Bar y no se puede cambiar. Puedes cancelarlo",
   );
   expect(codeMessage("ticket.already_sent", "en")).toBe(
     "This item has already been sent and cannot be changed. You can cancel it",
   );
   expect(codeMessage("ticket.already_sent", "es")).toBe(
-    "Este plato ya se ha enviado y no se puede cambiar. Puedes cancelarlo",
+    "Este artículo ya se ha enviado y no se puede cambiar. Puedes cancelarlo",
   );
 });
 
 it("explains station move refusals in English and Spanish", () => {
   expect(codeMessage("ticket.not_sent", "en")).toBe(
-    "This dish has not gone to the station yet. Choose where it is made before sending it",
+    "This item has not been sent yet. Choose where it is made before sending it",
   );
   expect(codeMessage("ticket.not_sent", "es")).toBe(
-    "Este plato aún no ha ido a la estación. Elige dónde se prepara antes de enviarlo",
+    "Este artículo aún no se ha enviado. Elige dónde se prepara antes de enviarlo",
   );
   expect(codeMessage("ticket.made_here", "en")).toBe(
-    "This dish is made here at the till, so it cannot be moved to a station",
+    "This item is made here at the till, so it cannot be moved to a station",
   );
   expect(codeMessage("ticket.made_here", "es")).toBe(
-    "Este plato se prepara aquí en la caja, así que no se puede pasar a una estación",
+    "Este artículo se prepara aquí en la caja, así que no se puede pasar a una estación",
   );
   expect(codeMessage("route.station_inactive", "en")).toBe(
     "That station has been disabled. Choose another",

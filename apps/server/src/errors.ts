@@ -1213,7 +1213,7 @@ declare module "@waitron/shared" {
      */
     "ticket.invalid_transition": { ticketItemId: string };
     // `ticket_item.not_found` is declared in @waitron/venue-service's errors.ts.
-    "ticket.already_fired": { workingOrderId: string };
+    "ticket.already_fired": { workingOrderId: string; stationName?: string };
 
     "ticket.not_fired": { workingOrderId: string };
     /**
@@ -1241,7 +1241,7 @@ declare module "@waitron/shared" {
      * changing or lowering a started dish, or a whole-order save leaving it out, is refused the same
      * way.
      */
-    "ticket.already_started": { ticketItemId: string };
+    "ticket.already_started": { ticketItemId: string; stationName?: string };
     /**
      * An edit (`applyLineEdits`) would change a dish some of which has been marked served, or a
      * whole-order save (`updateHeldOrder`) would leave it out or lower its count. `lineId` is the

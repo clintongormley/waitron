@@ -414,6 +414,23 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
     expect(started.json).toMatchObject({ code: "ticket.already_started" });
   });
 
+  it("leaves the source name out of a started refusal to a display at another station", async () => {
+    const screen = await display(stationScreen(grill));
+    const { tabId, item } = await sentDish();
+    await inTx(venue, (tx) =>
+      tx.update(ticketItems).set({ state: "preparing" }).where(eq(ticketItems.id, item.id)),
+    );
+
+    const answer = await move(screen.cookie, tabId, {
+      lineIds: [item.workingOrderLineId],
+      stationId: grill,
+    });
+
+    expect(answer.status).toBe(409);
+    expect(answer.json.code).toBe("ticket.already_started");
+    expect(answer.json.params).toEqual({ ticketItemId: item.id });
+  });
+
   it("validates its order id and body as the till's route does", async () => {
     const screen = await display(stationScreen(bar));
     const { tabId, item } = await sentDish();

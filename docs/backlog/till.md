@@ -722,9 +722,6 @@ the owner's redesign.
 Queued as SETTLED-SMALL (lane F), in two or three pull requests by screen. Some are the owner's own
 answers; where an entry says a rule is read across, the owner was not asked that point.
 
-- **A1081. The till's refusals about a sent item name its station.** Owner, 2026-10-25: "don't mention
-  the kitchen. It's confusing. Why has the caña gone to the kitchen instead of the bar". Today's words
-  say "the station" and, in Spanish, «Este plato» (`apps/till/src/i18n/codes.ts`).
 - **The table's part-payment button reads "Take the rest"**, as the counter's does (Task 15, #956): the
   owner's concise-text rule, read across by the watcher, not an answer.
 - **A692. Editing a sent dish keeps its extras' "made here" choice**, as it keeps the dish's: the

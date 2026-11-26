@@ -2583,22 +2583,10 @@ describe("till-app: a counter save refused for a dish already sent", () => {
     getTabLines: vi.fn().mockResolvedValueOnce(listing(4)).mockResolvedValue(sentListing(5)),
   });
   const words = {
-    "ticket.already_served": {
-      en: "A dish on this order has already been served and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
-      es: "Un plato de este pedido ya se ha servido y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
-    },
-    "ticket.already_started": {
-      en: "The station has already started a dish on this order, and that dish can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
-      es: "La estación ya ha empezado a preparar un plato de este pedido, y ese plato no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
-    },
-    "ticket.already_fired": {
-      en: "A dish on this order has already gone to the station and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
-      es: "Un plato de este pedido ya ha ido a la estación y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
-    },
-    "ticket.already_sent": {
-      en: "A dish on this order has already been sent and can no longer be changed. The order has been reloaded: use Cancel on that dish to take it off the bill, then make your other changes again",
-      es: "Un plato de este pedido ya se ha enviado y no se puede cambiar. Se ha vuelto a cargar el pedido: usa Cancelar en ese plato para quitarlo de la cuenta y repite tus otros cambios",
-    },
+    "ticket.already_served": "held.sent_dish_served",
+    "ticket.already_started": "held.sent_dish_started",
+    "ticket.already_fired": "held.sent_dish_fired",
+    "ticket.already_sent": "held.sent_dish_sent",
   } as const;
   const codes = Object.keys(words) as (keyof typeof words)[];
   const removeCanaAddBravas = async (el: TillApp) => {
@@ -2624,7 +2612,9 @@ describe("till-app: a counter save refused for a dish already sent", () => {
   )(
     "in %s, a Park refused %s loads the order again, says what happened and that Cancel takes the dish off",
     async (language, code) => {
-      const updateWorkingOrder = vi.fn().mockRejectedValue({ code, status: 409 });
+      const stationName =
+        code === "ticket.already_started" && language === "en" ? "Grill" : undefined;
+      const updateWorkingOrder = vi.fn().mockRejectedValue({ code, status: 409, stationName });
       const el = await retrieved({ ...sentMeanwhile(), updateWorkingOrder });
       await inLanguage(language, async () => {
         expect(inBasket(el, '[data-cancel-line="1"]')).toBeNull();
@@ -2635,7 +2625,11 @@ describe("till-app: a counter save refused for a dish already sent", () => {
 
         expect(updateWorkingOrder).toHaveBeenCalledOnce();
         expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
-        expect(banner(el)!.textContent!.trim()).toBe(words[code][language]);
+        expect(banner(el)!.textContent!.trim()).toBe(
+          stationName === undefined
+            ? t(words[code])
+            : t("held.sent_dish_started_named").replace("{name}", stationName),
+        );
         const store = counter(el).store;
         expect(store.dirty).toBe(false);
         expect(store.revision).toBe(5);
@@ -2653,13 +2647,21 @@ describe("till-app: a counter save refused for a dish already sent", () => {
   it.each([
     ["Send", "place-order", {}, "placeOrder"],
     ["Pay in cash", "confirm-payment", { method: "cash", amount: "10" }, "recordSale"],
+    [
+      "Pay in cash (work already sent to Grill)",
+      "confirm-payment",
+      { method: "cash", amount: "10" },
+      "recordSale",
+      "Grill",
+    ],
     ["Pay by card", "collect-card", {}, "pay"],
     ["Pay the rest", "counter-bill-pay", {}, "getBillBalance"],
   ] as const)(
-    "a %s refused because a dish was served loads the order again and says so, going no further",
-    async (_, event, detail, next) => {
+    "a refused %s loads the order again and explains why it cannot go further",
+    async (_, event, detail, next, stationName?: string) => {
       const combined = next === "recordSale" || next === "pay";
-      const refuse = vi.fn().mockRejectedValue({ code: "ticket.already_served", status: 409 });
+      const code = stationName === undefined ? "ticket.already_served" : "ticket.already_fired";
+      const refuse = vi.fn().mockRejectedValue({ code, status: 409, stationName });
       const onward = vi.fn();
       const el = await (event === "place-order" ? placeCounter : retrieved)({
         ...sentMeanwhile(),
@@ -2675,7 +2677,11 @@ describe("till-app: a counter save refused for a dish already sent", () => {
       expect(onward).not.toHaveBeenCalled();
       expect(el.shadowRoot!.querySelector("till-bill-pay-dialog")).toBeNull();
       expect(api.retrieveWorkingOrder).toHaveBeenCalledTimes(2);
-      expect(banner(el)!.textContent!.trim()).toBe(words["ticket.already_served"].en);
+      expect(banner(el)!.textContent!.trim()).toBe(
+        stationName === undefined
+          ? t(words[code])
+          : t("held.sent_dish_fired_named").replace("{name}", stationName),
+      );
       expect(counter(el).store.dirty).toBe(false);
       expect(inBasket(el, '[data-cancel-line="1"]')).not.toBeNull();
     },

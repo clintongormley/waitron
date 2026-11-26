@@ -25,6 +25,7 @@ import { setRoutingCell, setStationToday } from "@waitron/venue-service";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { setupSplitExtrasVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { OPERATOR } from "./testing/party-venue.js";
+import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { fireGroup } from "./order-group-release.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
@@ -456,6 +457,20 @@ describe("editing split-off extras", () => {
     });
   });
 
+  it("names the extra’s station when its policy prevents a sent burger edit", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await addTabRound(tx, venue.cfg, venue.party.tabId, [line(venue, "burger", "1", 1)]);
+      await setChangesAfterSending(tx, "never", [venue.stations.fryer]);
+      await expect(
+        edit(tx, venue, 1, { portionLineNos: [], note: "No salt" }),
+      ).rejects.toMatchObject({
+        code: "ticket.already_fired",
+        params: { workingOrderId: venue.party.tabId, stationName: "Fryer" },
+      });
+    });
+  });
+
   it("refuses changing a burger when its chips have started", async () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
@@ -561,7 +576,7 @@ describe("editing split-off extras", () => {
     }));
     await expect(removeFirst(venue)).rejects.toMatchObject({
       code: "ticket.already_fired",
-      params: { workingOrderId: id },
+      params: { workingOrderId: id, stationName: "Fryer" },
     });
     await withTransaction(db, async (tx) => {
       expect(await state(tx, id)).toEqual(before.state);

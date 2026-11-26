@@ -560,7 +560,9 @@ it.each(["read failure", "preparing", "collected", "no capability"])(
 );
 
 it("A738 collection movement refusal keeps the station choice and refreshes its exact order", async () => {
-  const moveDishStation = vi.fn().mockRejectedValue({ code: "ticket.already_started" });
+  const moveDishStation = vi
+    .fn()
+    .mockRejectedValue({ code: "ticket.already_started", stationName: "Grill" });
   const { el, server, picker } = await inspectPlaced({ moveDishStation });
   await userEvent.click(picker.querySelector<HTMLElement>("[data-move-station]")!);
   await flush(el);
@@ -568,7 +570,9 @@ it("A738 collection movement refusal keeps the station choice and refreshes its 
   expect(moveDishStation).toHaveBeenCalledOnce();
   expect(server.retrievePlacedOrder).toHaveBeenCalledTimes(2);
   expect(dialog(el)?.busy).toBe(false);
-  expect(dialogRefusal(el)).toBe(t("move_station.refused.ticket.already_started"));
+  expect(dialogRefusal(el)).toBe(
+    t("move_station.refused.ticket.already_started_named").replace("{name}", "Grill"),
+  );
   expect(counter(el).stage).toBe("collect");
   expect(counter(el).storedLines).toBeNull();
   expect(counter(el).store.total).toBe("10.00");
@@ -799,7 +803,7 @@ describe("till-app: moving a paid counter order to another station", () => {
     const server = waitingServer();
     server.moveDishStation.mockImplementation(async () => {
       server.waiting = [];
-      throw { code: "ticket.already_started" };
+      throw { code: "ticket.already_started", stationName: "Grill" };
     });
     const el = await openMove(server);
 
@@ -807,7 +811,7 @@ describe("till-app: moving a paid counter order to another station", () => {
 
     expect(dialog(el)).toBeNull();
     expect(alert(el)!.textContent!.trim()).toBe(
-      t("move_station.order_refused.ticket.already_started"),
+      t("move_station.order_refused.ticket.already_started_named").replace("{name}", "Grill"),
     );
   });
 
