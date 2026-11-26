@@ -89,7 +89,7 @@ export interface GiveBackSubmissionIds {
   leg: string;
 }
 
-/** What one press sends, less its ids and any PIN. */
+/** What one press holds, less its ids and any PIN. */
 export interface GiveBackAsk {
   request: GiveBackRequest;
   reasonId: string;

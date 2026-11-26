@@ -5,6 +5,7 @@ import type { GiveBackAsk, GiveBackRequest } from "../apps/till/src/api/give-bac
 import { GiveBackSession } from "../apps/till/src/state/give-back.js";
 import { parseGiveBackRequest } from "../apps/server/src/give-back-plan.js";
 import { parseGiveBackWrite } from "../apps/server/src/give-back-press.js";
+import { overrideOf } from "../apps/server/src/tender-refund-api.js";
 
 const SALE = "0b8f3c1e-7a52-4d1e-9a8b-1f2e3d4c5b6a";
 const LINE_1 = "1d7e9a40-2c3b-4e5f-8a9b-0c1d2e3f4a5b";
@@ -93,7 +94,7 @@ it("a press the till sends parses on the server as the same request, ids and ove
     manualConfirmed: true,
   });
   expect(new Set(Object.values(sentIds)).size).toBe(4);
-  expect(body.override).toEqual({ personId: BOSS, pin: "1234" });
+  expect(overrideOf(body)).toEqual({ personId: BOSS, pin: "1234" });
 });
 
 it("a preview the till sends parses on the server as the same request", async () => {
