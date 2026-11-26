@@ -6500,6 +6500,19 @@ one row per portion: the counter basket
 once any of its order is paid (`foldRetrievedPortions`); and MOVED slips, which lay out each line
 alone (`printMovedSlips`, `apps/server/src/kitchen-ticket-moves.ts`).
 
+### The order's new rows (till)
+
+On a table's order, a dish not yet sent is one compact row (`apps/till/src/widgets/draft-row.ts`,
+drawn by `till-basket` with `compactRows`, which only the table order screen sets): a selection box
+in a `--wt-tap-min` square at the left (drawn 24 square, radius 6, a 2px border; ticked, the brand
+colour with a white `check`), then one button holding the quantity (`lg`, bold), the name (`lg`,
+medium), a muted `sm` second line of extras, answers and note, and the price (`md`) at the right,
+then the split control as a muted `chevron-down` on a row of more than one. The price is
+`draftLinePrice` (`apps/till/src/state/draft-layout.ts`), the same per-line rule the order total
+adds. The row added last is `--wt-color-surface-lifted`. A tap opens the dish's details; a press
+that moves drags the row; Remove, Move to… and Fire in the draft bar act on the ticked rows. Spec:
+§4 and §14.4 of `docs/superpowers/specs/2026-11-26-till-handheld-redesign-design.md`.
+
 ### The dish picker
 
 Move dishes… draws the bill's dishes through `till-portion-picker`
