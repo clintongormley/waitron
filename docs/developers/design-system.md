@@ -4781,7 +4781,7 @@ courses in place without a modal, saving each change as it is made, and asks in 
 button. A third: Profile's Add passkey
 and its authenticator and Google Set up start with no window of their own first (a stale sign-in is
 still asked to prove itself); an account with an authenticator app gets one for Add passkey and
-Google. A menu's Price overrides tab edits each product and size in its own row and saves with a
+Google. A menu's Price overrides tab edits each product without variants and each size in its own row and saves with a
 shared Save bar. In the Venue settings exception (owner, 2026-10-16, A755), the Venue details
 tab draws five cards — Business, Venue, Business day, Defaults and Privacy (A980 S1a), in that
 order — with `apps/dashboard/src/widgets/settings-card.ts`; with the Veri\*Factu module, a sixth,

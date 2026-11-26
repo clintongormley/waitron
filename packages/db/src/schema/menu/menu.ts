@@ -5,7 +5,7 @@ import { id, money, newId, table } from "../columns.js";
 /**
  * On a set menu, `gross_price` is a surcharge and blank means included. On an ordinary menu,
  * blank means the product's own price, and a product with an Active variant is priced on its
- * variants alone: the menu package refuses and clears a price for it, and reads one as blank.
+ * variants alone.
  */
 export const menuItems = table(
   "menu_items",

@@ -223,7 +223,7 @@ export interface ZoneMenuOffer {
   /** The menu's price, null when the menu sets none or, on a menu other than a set menu, when the
    * product has an Active variant; `unitPrice` is the one charged. */
   readonly grossPrice: string | null;
-  /** The price this offer charges, resolved along the menu's menu price chain. */
+  /** The price this offer charges. */
   readonly unitPrice: string;
   readonly menuName: string;
   /** Each path of section ids from the menu's root to a list holding the product; `[]` is the top

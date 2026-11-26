@@ -509,7 +509,7 @@ describe("counter basket payment", () => {
     }
   });
   // A variant follows its parent onto the menu; with nothing set for it there, it is charged its
-  // own price (3.80), neither the parent's menu price (2.25) nor the old override (4.80).
+  // own price (3.80), not the old override (4.80).
   it("sells a variant this menu sets nothing for at the variant's own price", async () => {
     const { cfg, zoneId, waterOfferId, variantIds } = await setupVenue({ variants: true });
     await withTransaction(suite.db, async (tx) => {
