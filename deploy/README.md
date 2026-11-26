@@ -179,12 +179,20 @@ saying Waitron cannot set this machine's clock itself or see whether it keeps in
 every start a box that files invoices takes no payment until two tills or handhelds that are
 switched on and connected agree with its clock or someone confirms it; it removes that `.env` line
 and carries on.
-Once the socket has started, `install` also copies `scripts/box/storage-host.mjs` and the modules it
-imports, and no other host module, from the ref into `/opt/waitron-host/box/` (mode `0644`), and
-writes `WAITRON_BOX_DRIVES_MOUNT=/run/waitron-drives:/run/waitron-drives:ro,rslave` to `.env`, so the
-app's container sees, read-only, the USB drives the host mounts under `/run/waitron-drives`. A
-checked upgrade does the same. When any of these steps fails, or the clock service was not
-installed, it removes that `.env` line, and the app sees no drive.
+Once the socket has started, `install` also installs the box's USB drive module: it copies
+`scripts/box/storage-host.mjs` and the modules it imports from the ref into a folder of their own,
+`/opt/waitron-host/box/storage/` (mode `0644`), and changes no other host module, not even the
+copies of the same modules that other host code in `/opt/waitron-host/box/` imports. The new set
+goes in beside the old one and replaces it in one step, so a failure part way leaves the old set
+in use. Then it writes `WAITRON_BOX_DRIVES_MOUNT=/run/waitron-drives:/run/waitron-drives:ro,rslave`
+to `.env`, so the app's container sees, read-only, the USB drives the host mounts under
+`/run/waitron-drives`. A checked upgrade does the same. The module runs on Node.js, so `install`
+does this only when the machine has it where the box's request service looks: in systemd's
+service path (`/usr/local/sbin`, `/usr/local/bin`, `/usr/sbin` or `/usr/bin`), or the copy a
+checked upgrade keeps in `/opt/waitron-host/node-v26.7.0/`. Without it, `install` says so, and
+running `install` again once the box is running, which is a checked upgrade, brings it. When there
+is no Node.js, a step fails, or the clock service was not installed, `install` removes that `.env`
+line, and the app sees no drive.
 `reset` leaves the service and the group alone.
 
 The service runs only when the app asks, and sets the clock only while the system says its clock is
