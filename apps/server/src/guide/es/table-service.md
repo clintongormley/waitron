@@ -622,6 +622,10 @@ libres. Para invitar o hacer un descuento en un menú, pulsa **Descuento…** en
 resumen. Un plato al que invitas o haces un descuento sale de su menú y se cobra a la carta, menos
 lo que le descuentas. Un menú no se puede anular: anula o mueve sus platos.
 
+Un descuento en un menú cubre su precio y sus suplementos, no los extras de pago. Si se anulan, se
+mueven o se pagan aparte algunos de sus platos, el descuento se quita; si mueves o pagas todos, se
+va con ellos.
+
 Para pasar un menú a otra cuenta, abre **Mover platos…** y selecciona el menú. Sus platos se
 mueven con él.
 

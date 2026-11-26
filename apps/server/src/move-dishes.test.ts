@@ -1280,21 +1280,25 @@ describe("A1519 moving every dish off a full-invoice bill", () => {
       expect(await invoiceOf(spec.venue, p.bill2)).toMatchObject(invoiceTo(ACME));
     });
 
-    it("A1519 move dishes: asks nothing when every dish leaves a comped set menu, whose row stays, and refuses a choice", async () => {
+    it("A1519 move dishes: every dish of a comped set menu takes its row along, so the move empties the bill and asks the invoice question (D51)", async () => {
       const p = await dailyBill();
       await compSpecLine(spec, p.bill1, await specLineId(spec, p.bill1, "Daily menu"));
       const comped = await specGrouping(spec, p.bill1);
-
-      await refusedUnchanged(p, ["Soup", "Hake"], choiceRequired(p), KEEP_ACME);
-      await moveNamed(p, ["Soup", "Hake"]);
-
-      expect(await specGrouping(spec, p.bill1)).toEqual({
-        rows: comped.rows.filter(({ what }) => what === "Daily menu 1"),
-        total: comped.total,
+      expect(comped).toEqual({
+        rows: [
+          { what: "Soup", price: 0, in: "Daily menu 1" },
+          { what: "Hake", price: 0, in: "Daily menu 1" },
+          { what: "Daily menu 1", price: 0 },
+        ],
+        total: 0,
       });
-      expect(await specGrouping(spec, p.bill2)).toEqual(DAILY);
-      expect(await invoiceOf(spec.venue, p.bill1)).toMatchObject(invoiceTo(ACME));
-      expect(await invoiceOf(spec.venue, p.bill2)).toMatchObject(SIMPLIFIED);
+
+      await refusedUnchanged(p, ["Soup", "Hake"], choiceRequired(p));
+      await moveNamed(p, ["Soup", "Hake"], KEEP_ACME);
+
+      expect(await specGrouping(spec, p.bill1)).toEqual(NONE);
+      expect(await specGrouping(spec, p.bill2)).toEqual(comped);
+      expect(await invoiceOf(spec.venue, p.bill2)).toMatchObject(invoiceTo(ACME));
     });
 
     it("A1519 move dishes: asks nothing when one of a set menu's two dishes stays", async () => {

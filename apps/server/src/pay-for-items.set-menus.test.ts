@@ -378,7 +378,7 @@ describe("Pay for items prices chosen items as their own bill groups them", () =
     expect(await totalOf(bill.tabId)).toBe("2.00");
   });
 
-  it("prices a dish with no comp of its own out of a comped Daily, which stays (D18)", async () => {
+  it("prices a dish with no comp of its own out of a comped Daily, the comp coming off: the Soup left at 6.00 (D18, D50)", async () => {
     const bill = await seatedBill("Soup", "Hake");
     await compSpecLine(spec, bill.tabId, await specLineId(spec, bill.tabId, "Daily menu"));
     expect(await totalOf(bill.tabId)).toBe("0.00");
@@ -389,8 +389,7 @@ describe("Pay for items prices chosen items as their own bill groups them", () =
 
     expect(await totalOf(newBill)).toBe("14.00");
     expect((await specGrouping(spec, bill.tabId)).rows).toEqual([
-      { what: "Soup", price: 0, in: "Daily menu 1" },
-      { what: "Daily menu 1", price: 0 },
+      { what: "Soup", price: 600, in: null },
     ]);
   });
 
@@ -677,7 +676,7 @@ describe("Pay for items of every dish", () => {
     });
   });
 
-  it("accepts every dish but a comped Daily whose own dishes have left, which stays", async () => {
+  it("refuses the Water as every dish once a comped Daily went with its dishes to another bill (D51)", async () => {
     const bill = await seatedBill("Soup", "Hake");
     await compSpecLine(spec, bill.tabId, await specLineId(spec, bill.tabId, "Daily menu"));
     const water = await sendWater(bill);
@@ -689,10 +688,13 @@ describe("Pay for items of every dish", () => {
     const command = await commandFor(venue, bill.partyId);
     await inTx(venue, (tx) => moveDishes(tx, venue.cfg, bill.tabId, elsewhere, dishes, command));
 
-    const newBill = await pay(bill, [{ lineId: water }], "2.00");
-
-    expect(await totalOf(newBill)).toBe("2.00");
-    expect((await specGrouping(spec, bill.tabId)).rows).toEqual([
+    await refusesBoth(bill, [{ lineId: water }], {
+      code: "bill.all_items_chosen",
+      params: { workingOrderId: bill.tabId },
+    });
+    expect((await specGrouping(spec, elsewhere)).rows).toEqual([
+      { what: "Soup", price: 0, in: "Daily menu 1" },
+      { what: "Hake", price: 0, in: "Daily menu 1" },
       { what: "Daily menu 1", price: 0 },
     ]);
   });
@@ -752,18 +754,23 @@ describe("Pay for items of a bill with advances, in the preview as in the paymen
     expect(await totalOf(bill.tabId)).toBe("2.00");
   });
 
-  it("counts what a comped Daily keeps of its dishes at 0.00", async () => {
+  it("breaks a comped Daily whose Hake is chosen, the Soup at 6.00 and a Water left covering the advances (D50)", async () => {
     const bill = await seatedBill("Soup", "Hake");
     await compSpecLine(spec, bill.tabId, await specLineId(spec, bill.tabId, "Daily menu"));
     const water = await sendWater(bill);
     await sendWater(bill);
     await advance(bill, "3.00");
+    const picks = [{ lineId: await specLineId(spec, bill.tabId, "Hake") }, { lineId: water }];
 
-    await refusesBoth(
-      bill,
-      [{ lineId: await specLineId(spec, bill.tabId, "Hake") }, { lineId: water }],
-      belowAdvances(bill, "3.00"),
-    );
+    expect(await preview(bill, picks)).toBe("16.00");
+    const newBill = await pay(bill, picks, "16.00");
+
+    expect(await totalOf(newBill)).toBe("16.00");
+    expect(await totalOf(bill.tabId)).toBe("8.00");
+    expect((await specGrouping(spec, bill.tabId)).rows).toEqual([
+      { what: "Soup", price: 600, in: null },
+      { what: "Water", price: 200, in: null },
+    ]);
   });
 
   it("refuses one of two Soups when the other, in a Daily, leaves less than the advances", async () => {
