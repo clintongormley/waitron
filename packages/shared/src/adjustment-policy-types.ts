@@ -22,3 +22,32 @@ export interface AdjustmentPolicySnapshot {
   maxBillComp: Decimal | null;
   noteRequired: boolean;
 }
+
+/** Why a comp or discount came off that a bill then answers a notice for (D54). */
+export const DISCOUNT_NOTICE_WHYS = [
+  "extras_changed",
+  "variant_changed",
+  "dish_cancelled",
+  "dish_moved",
+  "dish_paid_alone",
+] as const;
+
+export type DiscountNoticeWhy = (typeof DISCOUNT_NOTICE_WHYS)[number];
+
+/** A comp or discount that came off a bill because of a change, until one given on that bill names
+ * it in `reapplies` or the bill closes. `reapplyOn` is the line to give it again on, null when
+ * staff choose. */
+export interface DiscountNotice {
+  adjustmentId: string;
+  why: DiscountNoticeWhy;
+  /** The dish that left or changed. */
+  dishName: string;
+  /** The dish or set menu it was given on. */
+  on: string;
+  action: Exclude<AdjustmentAction, "cancel">;
+  percentBp: number | null;
+  /** What it took off when given. */
+  amount: string;
+  reasonId: string;
+  reapplyOn: { lineId: string } | null;
+}

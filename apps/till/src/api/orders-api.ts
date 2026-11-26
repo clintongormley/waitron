@@ -4,6 +4,7 @@ import type {
   KitchenSignal,
   Dining,
   BillSetMenuState,
+  DiscountNotice,
   ServedSetMenuCopy,
   OptionSnapshot,
   OptionSelection,
@@ -156,6 +157,8 @@ export interface HeldOrder {
   diningChoice: DiningChoice;
   setMenus?: BillSetMenuState;
   setMenuCopies?: ServedSetMenuCopy[];
+  /** Each comp or discount that came off the order because of a change; absent when none did. */
+  discountNotices?: DiscountNotice[];
   lines: (Omit<SaleLine, "extras" | "options"> & {
     productId?: string;
     /**

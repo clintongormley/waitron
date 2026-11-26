@@ -93,6 +93,7 @@ import {
   type Replaced,
 } from "./set-menu-adjustment.js";
 import { discountsCancelledBy, endDiscountsCancelledBy } from "./set-menu-discount-ending.js";
+import { requireOpenNotice } from "./discount-notices.js";
 import { atReleasedPrices, regroupAdjusted, releaseDishes } from "./set-menu-dish-release.js";
 import {
   assertTabOpen,
@@ -127,6 +128,8 @@ export interface AdjustmentAsk {
   amount?: Decimal;
   note: string | null;
   operatorId: string;
+  /** The ended comp or discount, its notice open on this bill, that this one gives again. */
+  reapplies?: string;
 }
 
 export interface AdjustmentArgs extends AdjustmentAsk {
@@ -924,6 +927,7 @@ export async function previewAdjustment(
   ask: AdjustmentAsk,
   venueLocale: string,
 ): Promise<AdjustmentPreview> {
+  await requireOpenNotice(tx, ask.orderId, ask.reapplies);
   const replacing = await setMenuReplacement(tx, ask);
   const ending =
     replacing?.ending ??
@@ -1124,6 +1128,7 @@ export async function applyAdjustment(
     "adjustment.apply",
     { ...command, expectedEdit, approverId: approver?.personId },
     async () => {
+      await requireOpenNotice(tx, args.orderId, args.reapplies);
       const before = args.action === "cancel" ? null : await totalBeforeEdit(tx, cfg, args.orderId);
       await endReplacedOnSetMenu(tx, args);
       await endDiscountsCancelledBy(tx, args, () => planAdjustment(tx, args, venueLocale));
@@ -1205,6 +1210,7 @@ export async function applyAdjustment(
         approvedBy: approved,
         note: args.note,
         preparationStarted: args.recordedPreparationStarted ?? null,
+        reappliesAdjustmentId: args.reapplies ?? null,
       });
       if (taken.length > 0) {
         await insertInChunks(

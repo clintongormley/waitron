@@ -1,8 +1,10 @@
-import { and, eq, gt, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, notExists, notInArray, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import {
   adjustmentEndingLines,
   adjustmentEndings,
   adjustmentLines,
+  adjustments,
   insertInChunks,
   workingOrderLines,
   type AdjustmentEndingWhy,
@@ -10,6 +12,7 @@ import {
 } from "@waitron/db";
 import {
   AppError,
+  DISCOUNT_NOTICE_WHYS,
   addDecimal,
   centsToDecimal,
   compareDecimal,
@@ -19,7 +22,9 @@ import {
   multiplyDecimal,
   sumDecimals,
   thousandthsToDecimal,
+  type AdjustmentAction,
   type Decimal,
+  type DiscountNoticeWhy,
 } from "@waitron/shared";
 import { nearestWeighedUnitPrice } from "./spread.js";
 
@@ -235,4 +240,70 @@ export async function endAdjustment(
   for (const { lineId, ...price } of restores) {
     await tx.update(workingOrderLines).set(price).where(eq(workingOrderLines.id, lineId));
   }
+}
+
+/** An ending a bill answers a notice for, with the comp or discount that ended. */
+export interface EndedDiscount {
+  workingOrderId: string;
+  adjustmentId: string;
+  why: DiscountNoticeWhy;
+  dishName: string;
+  /** The line the ending offers it again on; null for a set menu's. */
+  lineId: string | null;
+  action: AdjustmentAction;
+  percentBp: number | null;
+  /** What it took off when given, in cents. */
+  reduction: number;
+  reasonId: string;
+  lineName: string | null;
+}
+
+const later = alias(adjustments, "later");
+
+/**
+ * Each ending recorded on one of `billIds` because of a change (D54), that no comp or discount on
+ * the same bill names in `reapplies_adjustment_id`, oldest first.
+ */
+export async function readDiscountNotices(
+  tx: Transaction,
+  billIds: readonly string[],
+): Promise<EndedDiscount[]> {
+  if (billIds.length === 0) return [];
+  const rows = await tx
+    .select({
+      workingOrderId: adjustmentEndings.workingOrderId,
+      adjustmentId: adjustmentEndings.adjustmentId,
+      why: adjustmentEndings.why,
+      dishName: adjustmentEndings.dishName,
+      lineId: adjustmentEndings.lineId,
+      action: adjustments.action,
+      percentBp: adjustments.percentBp,
+      reduction: adjustments.reduction,
+      reasonId: adjustments.reasonId,
+      lineName: adjustments.lineName,
+    })
+    .from(adjustmentEndings)
+    .innerJoin(adjustments, eq(adjustments.id, adjustmentEndings.adjustmentId))
+    .where(
+      and(
+        inArray(
+          adjustmentEndings.workingOrderId,
+          sql`(select value from json_each(${JSON.stringify(billIds)}))`,
+        ),
+        inArray(adjustmentEndings.why, [...DISCOUNT_NOTICE_WHYS]),
+        notExists(
+          tx
+            .select({ id: later.id })
+            .from(later)
+            .where(
+              and(
+                eq(later.workingOrderId, adjustmentEndings.workingOrderId),
+                eq(later.reappliesAdjustmentId, adjustmentEndings.adjustmentId),
+              ),
+            ),
+        ),
+      ),
+    )
+    .orderBy(asc(adjustmentEndings.endedAt), asc(adjustmentEndings.id));
+  return rows.map((row) => ({ ...row, why: row.why as DiscountNoticeWhy }));
 }

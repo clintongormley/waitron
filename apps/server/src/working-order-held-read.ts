@@ -1,4 +1,5 @@
 import "./errors.js";
+import { discountNoticesOf, readBillsDiscountNotices } from "./discount-notices.js";
 import {
   workingOrders,
   workingOrderLines,
@@ -28,6 +29,7 @@ import {
   partyTablesName,
   thousandthsToDecimal,
   centsToDecimal,
+  type DiscountNotice,
 } from "@waitron/shared";
 import { sql, eq, and, isNull, type SQL, exists, or, ne } from "drizzle-orm";
 import { type OrderEditAuthority, readBillEditState } from "./bill-editing.js";
@@ -110,6 +112,8 @@ export interface HeldOrder {
   diningChoice: DiningChoice;
   setMenus?: BillSetMenuState;
   setMenuCopies?: ServedSetMenuCopy[];
+  /** Absent when no discount came off it (D54). */
+  discountNotices?: DiscountNotice[];
   /**
    * PARENT rows only, each dish's child lines nested as `extras`.
    */
@@ -495,6 +499,7 @@ async function readBasketOrder(deps: WorkingOrderDeps, id: string, which: SQL): 
       ...(order.invoiced ? { invoiced: true as const } : {}),
       ...(await readOrderDinings(tx, [order.id])).get(order.id)!,
       ...(order.hasSetMenus ? (await readBillsSetMenus(tx, [id], "published")).get(id)! : {}),
+      ...discountNoticesOf(await readBillsDiscountNotices(tx, [id]), id),
       lines,
     };
   });

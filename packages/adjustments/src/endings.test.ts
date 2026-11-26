@@ -14,7 +14,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { decimal, stringToThousandths } from "@waitron/shared";
-import { endAdjustment, endingRestores } from "./endings.js";
+import { endAdjustment, endingRestores, readDiscountNotices } from "./endings.js";
 import { policySnapshotOf } from "./policy.js";
 import { recordAdjustment } from "./record.js";
 import { seedReason, seedWorkingOrder } from "../test/seed.js";
@@ -353,5 +353,64 @@ describe("ending a comp or discount", () => {
 
     expect(checkFailed(refused.error, "adjustment_endings_why_ck")).toBe(true);
     expect(refused.price).toEqual([{ unit: 1440 }]);
+  });
+});
+
+describe("the notices a bill answers", () => {
+  it("answers an ending a change caused on its own bill, not a replacement, and not once a comp or discount on that bill gives it again", async () => {
+    const order = await seedWorkingOrder(db);
+    const other = await seedWorkingOrder(db);
+    const moved = await tenPercentOff(order, await discountedHakes(order, "1"), "1");
+    const replaced = await amountOff(order, await discountedHakes(order, "1"), 200);
+    const given = await tenPercentOff(order, await discountedHakes(order, "1"), "1");
+    for (const [adjustmentId, why] of [
+      [moved, "dish_moved"],
+      [replaced, "replaced"],
+      [given, "dish_cancelled"],
+    ] as const) {
+      await withTransaction(db, (tx) =>
+        endAdjustment(tx, { adjustmentId, workingOrderId: order, why, dishName: "Hake" }),
+      );
+    }
+    const reason = await seedReason(db);
+    await withTransaction(db, (tx) =>
+      recordAdjustment(tx, {
+        workingOrderId: order,
+        line: null,
+        quantity: null,
+        reason: {
+          id: reason.id,
+          name: reason.name,
+          policy: policySnapshotOf(reason, { maxBillComp: null }),
+        },
+        action: "discount_amount",
+        percentBp: null,
+        beforeAmount: decimal("16.00"),
+        afterAmount: decimal("15.00"),
+        reduction: decimal("1.00"),
+        nominalValue: decimal("16.00"),
+        requestedBy: WAITER,
+        approvedBy: null,
+        note: null,
+        reappliesAdjustmentId: given,
+      }),
+    );
+
+    const notices = await withTransaction(db, (tx) => readDiscountNotices(tx, [order, other]));
+
+    expect(notices).toEqual([
+      expect.objectContaining({
+        workingOrderId: order,
+        adjustmentId: moved,
+        why: "dish_moved",
+        dishName: "Hake",
+        lineId: null,
+        action: "discount_percent",
+        percentBp: 1000,
+        reduction: 160,
+        lineName: "Hake",
+      }),
+    ]);
+    expect(await withTransaction(db, (tx) => readDiscountNotices(tx, []))).toEqual([]);
   });
 });
