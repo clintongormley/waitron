@@ -640,7 +640,8 @@ column and filter were deleted.)
 (2026-11-24: the approved [Products list design](../superpowers/specs/2026-11-24-products-list-redesign-design.md) supersedes the Availability column and the italic style for inherited allergens.)
 
 - **Task 13 (#903, standalone ordering).** A product's `ordering` is Public, Staff only or Not
-  sold separately; Staff only behaves exactly as Public until guest ordering exists.
+  sold separately. Till staff can order a Public or Staff only dish. The Customer menu preview
+  lists Public dishes.
 
 From "Extras and Options — deliberate limits, and what is left open"
 ([integration contract](../developers/modifiers.md)):

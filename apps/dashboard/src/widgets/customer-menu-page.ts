@@ -10,6 +10,7 @@ import {
   type PublicGuestMenu,
 } from "@waitron/shared";
 import { applyTokens, baseStyles, NUTRITION_ICONS, registerIcons } from "@waitron/ui";
+import { liveMediaImage } from "@waitron/ui/src/live-media-image.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 
@@ -191,10 +192,17 @@ export class CustomerMenuPage extends LitElement {
     const words = guestMenuWords(menu.language, this.defaultLanguage);
     const money = (value: string) => formatMoney(value, menu.language);
     const unit = (value: string) => (value === "" ? "" : `/${value}`);
-    const choice = (value: GuestChoice) =>
-      html`<li>
-        ${value.name} ${money(value.price)}${unit(value.unit)} ${declarations(value, words)}
+    const quantity = new Intl.NumberFormat(menu.language, { maximumFractionDigits: 3 });
+    const choice = (value: GuestChoice & { portion?: string }) => {
+      const size =
+        value.portion !== undefined && value.unit
+          ? ` · ${quantity.format(Number(value.portion))} ${value.unit}`
+          : "";
+      const rate = value.portion === undefined ? unit(value.unit) : "";
+      return html`<li>
+        ${value.name}${size} ${money(value.price)}${rate} ${declarations(value, words)}
       </li>`;
+    };
     let firstPhoto = true;
 
     const members = (items: GuestMember[], level: number): TemplateResult =>
@@ -246,7 +254,7 @@ export class CustomerMenuPage extends LitElement {
                   image === null
                     ? nothing
                     : html`<img
-                        src=${`/media/${image}`}
+                        src=${liveMediaImage(image, "display")}
                         alt=""
                         loading=${eager ? nothing : "lazy"}
                         fetchpriority=${eager ? "high" : nothing}

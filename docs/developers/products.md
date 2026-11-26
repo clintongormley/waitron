@@ -711,9 +711,9 @@ menu, the search results also list each other served menu's matching products in
 own, each at that menu's price; [design-system.md](design-system.md), _The till's menu search_. The exception is a product whose
 standalone ordering the menu published as `not_sold_separately` (`LiveOffer.ordering`): it has no
 button anywhere, and a section left with nothing else goes too (`indexMenu`), though a dish's
-extras list still offers it. Staff only gets a button like Anyone, because there is no guest
-ordering yet. A fresh line in a table draft, or a counter basket line not yet saved, that holds a dish
-now sold only as an extra is marked "Only sold as an extra" (`lineBlock`,
+extras list still offers it. The till also gives Staff only dishes a button. Customer menu lists
+the dishes available to anyone. A fresh line in a table draft, or a counter basket line not yet
+saved, that holds a dish now sold only as an extra is marked "Only sold as an extra" (`lineBlock`,
 `apps/till/src/state/menu-refresh.ts`):
 a draft leaves it out of what it sends and offers it for removal, and the counter holds Pay until it
 is removed.

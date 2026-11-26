@@ -18,6 +18,7 @@ afterEach(cleanupWidgets);
 
 const address = "/menus/menu/lunch/view/customer-menu";
 const path = "/management-api/menus/lunch/customer-preview";
+const photoReference = `${"a".repeat(64)}.webp`;
 const languages = { defaultLanguage: "en", languages: ["en", "es"] };
 const status: MenuStatus = {
   state: "changed",
@@ -55,7 +56,7 @@ function published(language = "en", name = "Lunch for guests"): CustomerMenuPrev
     kind: "product",
     name: "Roast pepper",
     description: "Wood-fired with olive oil",
-    image: `${"a".repeat(64)}.webp`,
+    image: photoReference,
     price: { min: "6.50", max: "8.50" },
     unit: "",
     allergens: null,
@@ -77,8 +78,8 @@ function published(language = "en", name = "Lunch for guests"): CustomerMenuPrev
           {
             name: "Almond dressing",
             price: "1.00",
-            portion: "1.000",
-            unit: "",
+            portion: "0.200",
+            unit: "kg",
             allergens: { nuts: { kinds: ["almonds"] } },
             dietary: ["vegetarian"],
           },
@@ -107,12 +108,17 @@ function published(language = "en", name = "Lunch for guests"): CustomerMenuPrev
   };
 }
 
-async function open(preview: (url: URL) => Response | Promise<Response>, theme: Theme = "light") {
+async function open(
+  preview: (url: URL) => Response | Promise<Response>,
+  theme: Theme = "light",
+  readStatus: () => MenuStatus = () => status,
+) {
   const fetcher = new DashboardApi("", async (input) => {
     const url = new URL(input, location.origin);
     if (url.pathname === path) return preview(url);
+    const currentStatus = readStatus();
     const draft = {
-      status,
+      status: currentStatus,
       live: null,
       document: menuDocument([], {}),
       setMenuProblems: [],
@@ -130,11 +136,11 @@ async function open(preview: (url: URL) => Response | Promise<Response>, theme: 
       "/management-api/categories": [],
       "/management-api/menu-settings": { defaultProductVatClass: "general", defaultColor: null },
       "/management-api/menus/lunch/structure": structure,
-      "/management-api/menus/lunch/status": status,
+      "/management-api/menus/lunch/status": currentStatus,
       "/management-api/menus/lunch/preview": draft,
       "/management-api/menus/lunch/read": {
         structure: { status: 200, body: structure },
-        status: { status: 200, body: status },
+        status: { status: 200, body: currentStatus },
         preview: { status: 200, body: draft },
       },
       "/management-api/menus/lunch/publications": {
@@ -149,6 +155,12 @@ async function open(preview: (url: URL) => Response | Promise<Response>, theme: 
   });
   history.replaceState(null, "", address);
   return mountWidget<MenusScreen>("dashboard-menus-screen", { api: fetcher }, theme);
+}
+
+function customerPage(el: MenusScreen) {
+  return el.shadowRoot
+    ?.querySelector("dashboard-menu-online-preview")
+    ?.shadowRoot?.querySelector("dashboard-customer-menu-page");
 }
 
 describe("the customer menu Online preview", () => {
@@ -185,7 +197,10 @@ describe("the customer menu Online preview", () => {
     await expect
       .element(page.getByRole("img", { name: "Cereals containing gluten (Wheat)" }))
       .toBeVisible();
-    await expect.element(page.getByRole("img", { name: "Nuts (Almonds)" })).toBeVisible();
+    const nuts = page.getByRole("img", { name: "Nuts (Almonds)" });
+    await expect.element(nuts).toBeVisible();
+    const extra = nuts.element().closest("li")!;
+    expect(extra.textContent?.replace(/\s+/g, " ")).toContain("Almond dressing · 0.2 kg €1.00");
     await expect.element(page.getByRole("img", { name: "Vegetarian" }).first()).toBeVisible();
     const pepper = page.getByText("Roast pepper", { exact: true }).element();
     const bread = page.getByText("House bread", { exact: true }).element();
@@ -202,24 +217,90 @@ describe("the customer menu Online preview", () => {
     const started = gate<void>();
     await open((url) => {
       const language = url.searchParams.get("language");
-      if (language === "es") {
+      if (language === "en") {
         started.resolve();
         return late.promise;
       }
-      return Response.json(published("en", language === "en" ? "Lunch again" : "First lunch"));
+      return Response.json(
+        language === "es" ? published("es", "Spanish lunch") : published("en", "First lunch"),
+      );
     });
     await expect.element(page.getByRole("heading", { name: "First lunch" })).toBeVisible();
     const language = page.getByRole("combobox", { name: "Language" });
     await language.click();
     await page.getByRole("option", { name: "Spanish" }).click();
-    await started.promise;
+    await expect.element(page.getByRole("heading", { name: "Spanish lunch" })).toBeVisible();
     await language.click();
     await page.getByRole("option", { name: "English" }).click();
-    await expect.element(page.getByRole("heading", { name: "Lunch again" })).toBeVisible();
-    late.resolve(Response.json(published("es", "Late lunch")));
+    await started.promise;
+    await language.click();
+    await page.getByRole("option", { name: "Spanish" }).click();
+    await expect.element(page.getByRole("heading", { name: "Spanish lunch" })).toBeVisible();
+    expect(page.getByText("6,50 €–8,50 €", { exact: true }).first().element()).toBeVisible();
+    late.resolve(Response.json(published("en", "Late lunch")));
     await new Promise(requestAnimationFrame);
-    await expect.element(page.getByRole("heading", { name: "Lunch again" })).toBeVisible();
+    await expect.element(page.getByRole("heading", { name: "Spanish lunch" })).toBeVisible();
     await expect.element(page.getByRole("heading", { name: "Late lunch" })).not.toBeInTheDocument();
+  });
+
+  it("shows the current crop and replacement behind a published photo reference", async () => {
+    const cropped = "/media/current-crop.webp";
+    const network = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json({
+        images: {
+          [photoReference]: {
+            id: "photo",
+            revision: 2,
+            source: "/media/replacement.webp",
+            square: "/media/square-crop.webp",
+            till: "/media/till-crop.webp",
+            display: cropped,
+          },
+        },
+      }),
+    );
+    try {
+      const { el } = await open(() => Response.json(published()));
+      await expect.element(page.getByRole("heading", { name: "Lunch for guests" })).toBeVisible();
+      await vi.waitFor(() =>
+        expect(customerPage(el)?.shadowRoot?.querySelector("img")?.getAttribute("src")).toBe(
+          cropped,
+        ),
+      );
+    } finally {
+      network.mockRestore();
+    }
+  });
+
+  it("updates the open preview when a menu gets its first or next published edition", async () => {
+    let edition: MenuStatus = { state: "unpublished", clashes: 0 };
+    const { el } = await open(
+      () =>
+        Response.json(
+          edition.state === "unpublished"
+            ? { state: "unpublished" }
+            : published("en", `Published lunch ${edition.version}`),
+        ),
+      "light",
+      () => edition,
+    );
+    await expect.element(page.getByText("This menu has never been published.")).toBeVisible();
+    await expect.element(page.getByText("Unpublished", { exact: true })).toBeVisible();
+    for (const version of [1, 2]) {
+      edition = { ...status, state: "current", version };
+      el.api.liveData.invalidate([{ type: "menu_releases" }]);
+      await expect
+        .element(page.getByText(`Live: version ${version}`, { exact: false }))
+        .toBeVisible();
+      await vi.waitFor(() =>
+        expect(
+          page.getByRole("heading", { name: `Published lunch ${version}` }).element(),
+        ).toBeVisible(),
+      );
+      await expect
+        .element(page.getByText("This preview shows the published menu."))
+        .not.toBeInTheDocument();
+    }
   });
 
   it.each(["light", "dark"] as const)(
@@ -244,13 +325,13 @@ describe("the customer menu Online preview", () => {
       await page.getByRole("link", { name: "Go to Preview" }).click();
       await page.getByRole("tab", { name: "Customer menu" }).click();
       await expect.element(page.getByRole("heading", { name: "Lunch for guests" })).toBeVisible();
-      const panel = el.shadowRoot!.querySelector("dashboard-menu-online-preview")!;
-      const customer = panel.shadowRoot!.querySelector("dashboard-customer-menu-page")!;
-      customer.setAttribute("data-theme", theme);
+      const customer = customerPage(el)!;
+      const pageTheme = theme === "light" ? "dark" : "light";
+      customer.setAttribute("data-theme", pageTheme);
       const canvas = customer.shadowRoot!.querySelector<HTMLElement>("article")!;
       await vi.waitFor(() =>
         expect(getComputedStyle(canvas).color).toBe(
-          theme === "dark" ? "rgb(236, 238, 242)" : "rgb(35, 31, 32)",
+          pageTheme === "dark" ? "rgb(236, 238, 242)" : "rgb(35, 31, 32)",
         ),
       );
       await expectNoA11yViolations(host);

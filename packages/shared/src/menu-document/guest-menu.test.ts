@@ -98,6 +98,11 @@ it("uses the published customer title, shows set-menu cards and leaves hidden st
       changedAt: "2026-11-26T17:00:00.000Z",
     },
   };
+  doc.setMenus.plain = {
+    ...doc.setMenus.fixed!,
+    name: "Seasonal menu",
+    terms: { price: "20.00", names: {}, lines: [] },
+  };
   doc.root.members = [
     {
       kind: "section",
@@ -113,6 +118,7 @@ it("uses the published customer title, shows set-menu cards and leaves hidden st
     },
     dish,
     { kind: "set_menu", menuId: "fixed", name: "Staff placement" },
+    { kind: "set_menu", menuId: "plain", name: "Another placement" },
   ];
 
   expect(publicGuestMenu(doc, config, "ja")).toEqual({
@@ -133,6 +139,7 @@ it("uses the published customer title, shows set-menu cards and leaves hidden st
         modifiers: [],
       },
       { kind: "set_menu", name: "Three courses", price: "18.50" },
+      { kind: "set_menu", name: "Seasonal menu", price: "20.00" },
     ],
   });
 });
@@ -180,7 +187,7 @@ it("resolves parent and variant names independently and prices each variant", ()
   });
   expect(JSON.stringify(item)).not.toContain("KITCHEN");
 });
-it("keeps section order and direct includes while skipping set-menu placements", () => {
+it("keeps section order and direct includes when a set-menu placement has no published copy", () => {
   const doc = document();
   const member = doc.root.members[0]!;
   doc.root.members = [

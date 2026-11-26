@@ -1,5 +1,9 @@
 import { installedContentLanguagePresentation } from "@waitron/country-packs";
-import { contentLanguageDisplayName, type CustomerMenuPreview } from "@waitron/shared";
+import {
+  contentLanguageDisplayName,
+  type CustomerMenuPreview,
+  type MenuStatus,
+} from "@waitron/shared";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
@@ -10,6 +14,10 @@ import type { MenuApi } from "../api/menu-api.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import "./customer-menu-page.js";
+
+function editionOf(status: MenuStatus): number | null {
+  return status.state === "unpublished" ? null : status.version;
+}
 
 @customElement("dashboard-menu-online-preview")
 export class MenuOnlinePreview extends LitElement {
@@ -53,7 +61,7 @@ export class MenuOnlinePreview extends LitElement {
 
   @property({ attribute: false }) api?: Pick<MenuApi, "getCustomerPreview">;
   @property({ attribute: false }) menuId = "";
-  @property({ attribute: false }) changed = false;
+  @property({ attribute: false }) status: MenuStatus | null = null;
   @property({ attribute: false }) defaultLanguage = "en";
   @property({ attribute: false }) previewHref = "";
   @property({ attribute: false }) openPreview?: (event: MouseEvent) => void;
@@ -77,7 +85,11 @@ export class MenuOnlinePreview extends LitElement {
       this.language = "";
       this.languages = [];
       void this.#load();
+      return;
     }
+    const previous = changed.get("status");
+    if (previous && this.status && editionOf(previous) !== editionOf(this.status))
+      void this.#load();
   }
 
   async #load(): Promise<void> {
@@ -166,7 +178,7 @@ export class MenuOnlinePreview extends LitElement {
     return html`
       <p>${t("customer_menu.not_public")}</p>
       ${
-        this.changed && this.answer?.state === "published"
+        this.status?.state === "changed" && this.answer?.state === "published"
           ? html`<p>${t("customer_menu.published_only")}</p>`
           : nothing
       }

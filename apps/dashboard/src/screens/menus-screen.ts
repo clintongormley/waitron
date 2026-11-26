@@ -3324,7 +3324,7 @@ export class MenusScreen extends LitElement {
               ? html`<dashboard-menu-online-preview
                   .api=${this.api.background ?? this.api}
                   .menuId=${menuId}
-                  .changed=${this.status?.state === "changed"}
+                  .status=${this.status}
                   .defaultLanguage=${this.contentLanguages?.defaultLanguage ?? "en"}
                   .previewHref=${tabAddress(menuId, "preview")}
                   .openPreview=${(event: MouseEvent) => this.#openTab(event, menuId, "preview")}
