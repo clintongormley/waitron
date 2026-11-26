@@ -4,6 +4,7 @@ import {
   adjustmentEndings,
   adjustmentLines,
   captureError,
+  checkFailed,
   CORE_MIGRATIONS,
   withTransaction,
   workingOrderLines,
@@ -350,7 +351,7 @@ describe("ending a comp or discount", () => {
       };
     });
 
-    expect(refused.error).toBeInstanceOf(Error);
+    expect(checkFailed(refused.error, "adjustment_endings_why_ck")).toBe(true);
     expect(refused.price).toEqual([{ unit: 1440 }]);
   });
 });

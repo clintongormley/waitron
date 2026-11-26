@@ -2042,7 +2042,7 @@ PR, and a failure the rules do not explain is a stop:
 - [ ] **Guide**, in the Set menus section of `apps/server/src/guide/en/table-service.md` and its
   Spanish twin: "A comp or discount on a set menu covers its price and its supplements, not paid
   extras. If some of its dishes are cancelled, moved or paid for on their own, the discount comes
-  off; moving or paying for all of them takes it along." / "Un descuento en un menú cubre su precio
+  off; moving or paying for all of them takes it along." / "Una invitación o un descuento en un menú cubre su precio
   y sus suplementos, no los extras de pago. Si se anulan, se mueven o se pagan aparte algunos de sus
   platos, el descuento se quita; si mueves o pagas todos, se va con ellos." Run
   `src/guide-content.test.ts` and `pnpm exec vitest run scripts/guide-links.test.ts
