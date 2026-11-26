@@ -2,14 +2,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { encodeMasterKeyCode } from "@waitron/shared";
 import type { WtDialog, WtMasterKeyInput } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
-type DashboardApi = RealDashboardApi;
 import type { BackupWriteAnswer, RecoveryPackStatus } from "../api/backup-api.js";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import { MASTER_KEY_FIELD_WORDS } from "@waitron/recovery-pack/src/i18n/master-key-field.js";
 import { createFreshSignInGate } from "../api/fresh-sign-in.js";
-import { DashboardApi as RealDashboardApi } from "../api/client.js";
+import { DashboardApi } from "../api/client.js";
 import { cleanupWidgets, dialogClosed, dialogMessageOf, mountWidget } from "./test-helpers.js";
 import type { BackupKeyDialog } from "./backup-key-dialog.js";
 import "./backup-key-dialog.js";
@@ -262,7 +261,53 @@ it("treats a key change whose settings record failed as done, and says so", asyn
   expect(changed).toHaveBeenCalledTimes(1);
 });
 
-it("never says backups use the new key when the box could not load the new settings", async () => {
+it("after a failed reload, says backups still use the old key only when the box says so", async () => {
+  const rotate = vi
+    .fn()
+    .mockResolvedValue({ ...ANSWER, reloadErrorCode: "backup.destination_key_invalid" });
+  const { el } = await open(stubApi(rotate, { ...status(4), backupsUseOlderKey: true }));
+  await type(el, KEY);
+  button(el, "change-backup-key")!.click();
+  await expect
+    .poll(() => words(el.shadowRoot!.querySelector("[data-test=done]")))
+    .toBe(t("recovery_pack.older_key"));
+  expect(words(el.shadowRoot!.querySelector("[data-test=done-warning]"))).toBe(
+    codeMessage("backup.destination_key_invalid"),
+  );
+  expect(el.shadowRoot!.textContent).not.toContain("Backups now use");
+});
+
+it.each([
+  ["en-GB", "Saved, but the box could not load the new settings."],
+  ["es-ES", es["backup_key_dialog.saved_not_loaded"]],
+] as const)(
+  "after a failed reload with the new key loaded, says only that the settings did not load (%s)",
+  async (locale, sentence) => {
+    setLocale(locale);
+    const rotate = vi
+      .fn()
+      .mockResolvedValue({ ...ANSWER, reloadErrorCode: "backup.destination_key_invalid" });
+    const { el } = await open(stubApi(rotate, status(4)));
+    await type(el, KEY);
+    button(el, "change-backup-key")!.click();
+    await expect.poll(() => words(el.shadowRoot!.querySelector("[data-test=done]"))).toBe(sentence);
+    expect(el.shadowRoot!.textContent).not.toContain(t("recovery_pack.older_key"));
+  },
+);
+
+it("after a failed reload whose status cannot be read, claims nothing about which key backups use", async () => {
+  const rotate = vi
+    .fn()
+    .mockResolvedValue({ ...ANSWER, reloadErrorCode: "backup.destination_key_invalid" });
+  const { el } = await open(stubApi(rotate, new Error("offline")));
+  await type(el, KEY);
+  button(el, "change-backup-key")!.click();
+  await expect
+    .poll(() => words(el.shadowRoot!.querySelector("[data-test=done]")))
+    .toBe(t("backup_key_dialog.saved_not_loaded"));
+});
+
+it("a reload the box was still busy with gives the box's next try, never 'try again'", async () => {
   const rotate = vi
     .fn()
     .mockResolvedValue({ ...ANSWER, reloadErrorCode: "backup.reload_in_progress" });
@@ -270,22 +315,10 @@ it("never says backups use the new key when the box could not load the new setti
   await type(el, KEY);
   button(el, "change-backup-key")!.click();
   await expect
-    .poll(() => words(el.shadowRoot!.querySelector("[data-test=done]")))
-    .toBe(t("recovery_pack.older_key"));
-  expect(words(el.shadowRoot!.querySelector("[data-test=done-warning]"))).toBe(
-    codeMessage("backup.reload_in_progress"),
-  );
-  expect(el.shadowRoot!.textContent).not.toContain("Backups now use");
-});
-
-it("names the box's next try when a reload failure has no words of its own", async () => {
-  const rotate = vi.fn().mockResolvedValue({ ...ANSWER, reloadErrorCode: "backup.something_new" });
-  const { el } = await open(stubApi(rotate));
-  await type(el, KEY);
-  button(el, "change-backup-key")!.click();
-  await expect
     .poll(() => words(el.shadowRoot!.querySelector("[data-test=done-warning]")))
     .toBe(t("backup.reload_failed_retry"));
+  expect(el.shadowRoot!.textContent).not.toContain("try again");
+  expect(button(el, "change-backup-key")).toBeNull();
 });
 
 it("reads the reload failure a failed settings record carries, and then claims nothing about the new key", async () => {
@@ -302,9 +335,9 @@ it("reads the reload failure a failed settings record carries, and then claims n
   button(el, "change-backup-key")!.click();
   await expect
     .poll(() => words(el.shadowRoot!.querySelector("[data-test=done]")))
-    .toBe(t("recovery_pack.older_key"));
+    .toBe(t("backup_key_dialog.saved_not_loaded"));
   expect(words(el.shadowRoot!.querySelector("[data-test=done-warning]"))).toBe(
-    `${codeMessage("backup.rotation_metadata_failed")} ${codeMessage("backup.reload_in_progress")}`,
+    `${codeMessage("backup.rotation_metadata_failed")} ${t("backup.reload_failed_retry")}`,
   );
   expect(changed).toHaveBeenCalledTimes(1);
 });
@@ -329,13 +362,13 @@ describe("a stale sign-in", () => {
       if (call === "GET /api/backup/recovery-pack") return json(status(4));
       throw new Error(`Unexpected request: ${call}`);
     });
-    const api = new RealDashboardApi("", fetchImpl as typeof fetch, undefined, undefined, false, {
+    const api = new DashboardApi("", fetchImpl as typeof fetch, undefined, undefined, false, {
       freshSignIn: createFreshSignInGate({ sessionGeneration: () => 0, prompt }),
     });
     return { api, bodies };
   }
 
-  async function openReal(api: RealDashboardApi) {
+  async function openReal(api: DashboardApi) {
     const { el } = await mountWidget<BackupKeyDialog>("dashboard-backup-key-dialog", { api });
     el.show(status(3));
     await el.updateComplete;

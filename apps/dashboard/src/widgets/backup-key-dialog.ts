@@ -29,8 +29,8 @@ const paramsOf = (error: unknown): Params =>
   ((error as { params?: Params } | null)?.params ?? {}) as Params;
 
 /**
- * The rotate route refuses with a 4xx only before it writes the key; a 5xx can follow the write, and
- * a lost answer (no status) may too.
+ * The rotate route's 4xx refusals come before it writes the key, except a too-short key set in the
+ * box's own process environment; a 5xx can follow the write, and a lost answer (no status) may too.
  */
 const refusedBeforeWriting = (error: unknown): boolean => {
   const status = (error as { status?: unknown } | null)?.status;
@@ -39,8 +39,11 @@ const refusedBeforeWriting = (error: unknown): boolean => {
 
 /** What the dialog says once the key may have been written. */
 type Done = {
-  /** "confirmed": backups use the key; "not_loaded": the box still uses the old one; "unconfirmed": unknown. */
-  outcome: "confirmed" | "not_loaded" | "unconfirmed";
+  /**
+   * "confirmed": backups use the key; "older": the box says backups still use the old one;
+   * "not_loaded": the settings did not load; "unconfirmed": the box could not tell.
+   */
+  outcome: "confirmed" | "older" | "not_loaded" | "unconfirmed";
   number: number;
   warnings: string[];
 };
@@ -168,12 +171,18 @@ export class BackupKeyDialog extends LitElement {
     this.busy = true;
     this.refusal = "";
     this.keyRefusal = "";
-    let outcome: Done["outcome"] = "confirmed";
+    // Widened: `reloadFailed` changes it from inside a closure, which narrowing does not see.
+    let outcome = "confirmed" as Done["outcome"];
     const warnings: string[] = [];
     const reloadFailed = (code: unknown) => {
       if (typeof code !== "string") return;
       outcome = "not_loaded";
-      warnings.push(hasCodeMessage(code) ? codeMessage(code) : t("backup.reload_failed_retry"));
+      // reload_in_progress's own words say "try again", which here would write another key.
+      warnings.push(
+        hasCodeMessage(code) && code !== "backup.reload_in_progress"
+          ? codeMessage(code)
+          : t("backup.reload_failed_retry"),
+      );
     };
     try {
       const answer: BackupWriteAnswer = await api.rotateBackupKey({ masterKey: this.key });
@@ -195,24 +204,25 @@ export class BackupKeyDialog extends LitElement {
         this.refusal = codeMessage(code);
         if (refusedBeforeWriting(error)) return;
         this.#changed(api);
-        const held = await this.#heldNumber(api);
+        const held = (await this.#status(api))?.backupKey?.number;
         if (generation !== this.#generation) return;
-        if (held !== null) this.next = held + 1;
+        if (held !== undefined) this.next = held + 1;
         return;
       }
     }
     this.#changed(api);
-    const number = (await this.#heldNumber(api)) ?? this.next;
+    const status = await this.#status(api);
     if (generation !== this.#generation) return;
+    if (outcome === "not_loaded" && status?.backupsUseOlderKey) outcome = "older";
     this.busy = false;
-    this.done = { outcome, number, warnings };
+    this.done = { outcome, number: status?.backupKey?.number ?? this.next, warnings };
     this.#scope?.commit({ key: "" });
   }
 
-  /** The number of the key the box holds now; null when the read fails or names none. */
-  async #heldNumber(api: this["api"]): Promise<number | null> {
+  /** The box's pack status now; null when the read fails. */
+  async #status(api: this["api"]): Promise<RecoveryPackStatus | null> {
     try {
-      return (await api.getRecoveryPackStatus()).backupKey?.number ?? null;
+      return await api.getRecoveryPackStatus();
     } catch {
       return null;
     }
@@ -247,7 +257,9 @@ export class BackupKeyDialog extends LitElement {
               ? fill("backup_key_dialog.done", { number: String(done.number) })
               : done.outcome === "unconfirmed"
                 ? fill("backup_key_dialog.unconfirmed", { number: String(done.number) })
-                : t("recovery_pack.older_key")
+                : done.outcome === "older"
+                  ? t("recovery_pack.older_key")
+                  : t("backup_key_dialog.saved_not_loaded")
           }
         </p>
         ${
