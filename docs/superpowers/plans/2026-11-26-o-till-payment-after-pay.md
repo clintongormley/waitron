@@ -23,7 +23,8 @@ screen below opens where Pay opens, so its Counter and wide-till versions wait f
 
 | PR | Staff can use | Frames | Waits for | Lands |
 | --- | --- | --- | --- | --- |
-| O1 Machine list | A manager keeps the venue's other card machines on the dashboard's card readers page: a name, and where its payments go (the venue's SumUp account, offered only while SumUp is connected, or another bank). Nothing changes for staff until O13. | none (design-system Forms) | nothing | lane O |
+| O1a Machine list: server | The venue's other card machines are stored with the payment settings, each with a name and where its payments go (the venue's SumUp account or another bank), and reach the till in its start read. [Its plan](2026-11-26-o1-other-card-machines.md). | none | nothing | lane O |
+| O1b Machine list: dashboard | A manager adds, renames and removes them on the dashboard's card readers page. Nothing changes for staff until O13. | none (design-system Forms) | O1a | lane O |
 | O2 Split equally: shares | Set the guests with − and +, see every share at once (the first shares carry the extra cent), and charge "Guest 1 of 3" with the list of who has paid. Until 15c, the charge still goes through today's confirmation step. | `ba` 1, 3 | I 15 | lane O |
 | O3 Split equally: between guests | What the last guest paid, "Next: Guest 3", the slip and "Change the number of guests". The till keeps the split from guest to guest, as the phone already does. | `ba` 4 | O2 | lane O |
 | O4 Device sheet (16) | Pay's top-right button opens a sheet with the camera on; several stickers scan in a row ("Picked up Reader 3"); under it one dropdown per device this payment uses, the cash drawer only where the device's profile may open one. Tapping a device keeps working on any screen. | `r` 1–3 | I 15 | lane O |
@@ -35,12 +36,12 @@ screen below opens where Pay opens, so its Counter and wide-till versions wait f
 | O10 Items: whole dishes | Tick the dishes a guest pays for, part of a row of identical dishes with − and +; a dish sold by weight is paid whole; Paid shows the new bill and what is left. | `bb` 1–3 | O9 | lane O |
 | O11 Items: dishes with options | A dish with options can be paid for one at a time like any other. | `bb` 1 | O10 | owner, unless its plan shows the receipts' lines are unchanged |
 | O12 An amount | Type the amount and watch "Still to pay after this"; "Their own receipt" is a switch on the same screen, off to start with; "Add a tip" is a small link for the waiter; Paid shows the bill and its payments. | `bc` 1–2 | O7, O9 | owner |
-| O13 Other card machine | The amount to type on the machine, three steps, the machine chosen from O1's list (starting on the one this phone used last), the operation number in view, "It went through" and "It was declined" (back to Pay, nothing recorded). | `bd` | O1, I 15c | lane O |
+| O13 Other card machine | The amount to type on the machine, three steps, the machine chosen from the venue's list (starting on the one this phone used last), the operation number in view, "It went through" and "It was declined" (back to Pay, nothing recorded). | `bd` | O1b, I 15c | lane O |
 | O14 Guest's bill (21a) | On a table with tips switched on, Pay first shows the guest the bill in its customer-facing names and the receipt's language, with a language choice and Skip for the waiter. | `ah` 1 | I 15 | lane O |
 | O15 Guest's tip, whole bill (21b) | The guest chooses 5, 10 or 15% or types a total; the tip travels once, apart from the bill, through Cash, Card and a bill already printed and handed over. | `o` 2–3 | O7, O8, O14 | lane O, or owner if a printed bill's tip changes its receipt |
 | O16 Guest's tip on a share | Each split guest, and each Items guest, is asked on their own share; a tip the table agreed is divided into the shares; Remove tip on a share. | `ba` 2 | O3, O10, O15 | lane O |
 
-Why this order: O1 is the one piece that can be built before lane I lands anything. Split equally
+Why this order: O1a and O1b are the pieces that can be built before lane I lands anything. Split equally
 needs least from 15c, so it comes first of the screens that open from Pay. Cash, the reader and Paid
 wait for 15c because it moves the questions off today's confirmation step, which those screens
 replace. Items and An amount reuse Paid's layout and the keypad. The guest's tip comes last because
@@ -56,8 +57,8 @@ and "No tip · hand back to your waiter".
    (`packages/payments/src/manual.ts:45-64`), so renaming or removing a machine never changes a
    past payment and SumUp's matching keeps reading the same field
    (`packages/payments-sumup/src/reconciler.ts:123`). Today the till sends both as free text
-   (`apps/server/src/outside-card.ts:7-28`). O1's plan says whether the list goes with a venue's
-   configuration export, as `tipsEnabled` does (`settings.ts:16`).
+   (`apps/server/src/outside-card.ts:7-28`). The list goes with a venue's configuration export, as
+   `tipsEnabled` does (`settings.ts:16`).
 2. **The cash drawer follows the device's profile on every device, a phone included** (the owner's
    "2 y" to the watcher's question, lane F `questions.md`, 17:20 on 26 November). The server already
    decides it that way (`apps/server/src/receipt-print.ts:217-220`), so O4 and O7 do not change who
