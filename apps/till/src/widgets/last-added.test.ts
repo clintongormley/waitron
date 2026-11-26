@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { OrderLine } from "../state/working-order.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { TillLastAdded } from "./last-added.js";
 import { allergenLabel } from "../i18n/allergen-names.js";
 import { currentLocale } from "../i18n/t.js";

@@ -14,7 +14,7 @@ import {
   toScale,
   type BillSetMenuState,
 } from "@waitron/shared";
-import type { CurrentOrderRow, CurrentOrders, TabLine } from "../api/client.js";
+import type { CurrentOrderRow, CurrentOrders, TabLine } from "../api/kitchen-api.js";
 import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { sentItemCount, sentPanel, type SentPanel, type SentSlice } from "../state/sent-panel.js";

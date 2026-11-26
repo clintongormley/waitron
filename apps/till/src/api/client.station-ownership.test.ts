@@ -1,5 +1,6 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { TillApi, type BillEditExpected } from "./client.js";
+import { TillApi } from "./client.js";
+import type { BillEditExpected } from "./order-types.js";
 
 describe("stored station-choice ownership", () => {
   it("requires the bill observation or explicit counter null", () => {

@@ -6,7 +6,7 @@ import type {
   EquipmentItem,
   EquipmentRole,
   RoleEquipment,
-} from "../api/client.js";
+} from "../api/device-session-api.js";
 
 /** The reader a payment from this device would be charged on. */
 export type PayReader =

@@ -1,4 +1,4 @@
-import type { SaleLine } from "../api/client.js";
+import type { SaleLine } from "../api/order-types.js";
 import type { StoredLines } from "../widgets/basket.js";
 import { portionGroups, tabLinePortionKey } from "./portion-groups.js";
 import type { OrderLine } from "./working-order.js";

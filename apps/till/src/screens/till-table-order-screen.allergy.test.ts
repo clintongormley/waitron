@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { PartyAllergyRead } from "@waitron/module";
-import type { TableParty } from "../api/client.js";
+import type { TableParty } from "../api/floor-api.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";

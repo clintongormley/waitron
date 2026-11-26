@@ -5,7 +5,8 @@ import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { TabLine, TableParty, PartyBill, TableState } from "../api/client.js";
+import type { TableParty, PartyBill, TableState } from "../api/floor-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 
 const money = (amount: string) => formatMoney(decimal(amount), currentLocale());
 

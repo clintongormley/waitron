@@ -1,4 +1,4 @@
-import type { ReleaseReminder } from "../api/client.js";
+import type { ReleaseReminder } from "../api/kitchen-api.js";
 
 /** The longest delay `setTimeout` holds: 2^31 − 1 ms, about 24.8 days. */
 const LONGEST_TIMER_MS = 2 ** 31 - 1;

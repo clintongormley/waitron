@@ -9,8 +9,8 @@ import type {
   InvoiceDeliveryAttempt,
   InvoiceDeliveryStatus,
   OriginalReceiptPrint,
-  TillSaleResult,
-} from "../api/client.js";
+} from "../api/invoice-delivery-api.js";
+import type { TillSaleResult } from "../api/payments-api.js";
 
 const result: TillSaleResult = {
   receiptTrim: {},

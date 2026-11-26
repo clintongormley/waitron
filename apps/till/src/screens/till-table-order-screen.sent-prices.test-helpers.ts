@@ -1,4 +1,4 @@
-import type { CurrentOrderRow, TabLine } from "../api/client.js";
+import type { CurrentOrderRow, TabLine } from "../api/kitchen-api.js";
 import { row } from "./till-table-order-screen.current-orders.test-helpers.js";
 import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 

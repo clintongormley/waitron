@@ -27,7 +27,8 @@ import {
   tokenColour,
 } from "../widgets/test-helpers.js";
 import { TillLockScreen } from "./till-lock-screen.js";
-import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { StaffMember, StaffNotice } from "../api/device-session-api.js";
 import { liveConnectionFixture } from "../../test/live-connection.js";
 
 const ana: StaffMember = { personId: "p1", displayName: "Ana" };

@@ -5,7 +5,7 @@ import type {
   CurrentOrderRow,
   CurrentOrders,
   OrderGroup,
-} from "../api/client.js";
+} from "../api/kitchen-api.js";
 import { rowRequestedAt, withCurrentKitchenStamps } from "../../test/kitchen-stamps.js";
 
 export const fired = "2026-09-28T19:50:00.000Z";

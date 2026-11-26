@@ -2,7 +2,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { mountWidget, cleanupWidgets } from "./test-helpers.js";
 import { TillApi } from "../api/client.js";
 import { TillDepartmentTransfers } from "./department-transfers.js";
-import type { DepartmentTransferDetail, TableState } from "../api/client.js";
+import type { DepartmentTransferDetail } from "../api/department-transfers-api.js";
+import type { TableState } from "../api/floor-api.js";
 
 const request = {
   id: "incoming-1",

@@ -5,8 +5,8 @@ import type {
   Draft,
   DraftLine,
   FreshDraftLine,
-  TillProduct,
-} from "../api/client.js";
+} from "../api/drafts-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { partyDraftSnapshot, draftServer } from "../widgets/test-helpers.js";
 import { DraftSync, DRAFT_SAVE_DELAY_MS } from "./draft-sync.js";
 import { lineGross } from "./order-line.js";

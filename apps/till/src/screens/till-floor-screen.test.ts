@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { TillFloorScreen } from "./till-floor-screen.js";
-import type { FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { FloorZone, TableState, TableToday } from "../api/floor-api.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return {

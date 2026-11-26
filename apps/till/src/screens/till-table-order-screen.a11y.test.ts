@@ -26,16 +26,10 @@ import {
 } from "../widgets/test-helpers.js";
 import "./till-table-order-screen.js";
 import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
-import type {
-  OfferedModifier,
-  OrderGroup,
-  TabLine,
-  TableParty,
-  TableState,
-  TillProduct,
-  TillZoneMenu,
-  PartyBill,
-} from "../api/client.js";
+import type { OfferedModifier } from "../api/client.js";
+import type { TableParty, TableState, PartyBill } from "../api/floor-api.js";
+import type { OrderGroup, TabLine } from "../api/kitchen-api.js";
+import type { TillProduct, TillZoneMenu } from "../api/menu-api.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 import {
   closeTableMenu,

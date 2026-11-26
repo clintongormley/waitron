@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { OverviewFact, PassCard, PassCardItem } from "../api/client.js";
+import type { OverviewFact, PassCard, PassCardItem } from "../api/kitchen-api.js";
 import { es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import {

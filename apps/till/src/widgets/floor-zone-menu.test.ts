@@ -4,7 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./floor-zone-menu.js";
 import type { TillFloorZoneMenu } from "./floor-zone-menu.js";
-import type { FloorZone, TableState, TableToday } from "../api/client.js";
+import type { FloorZone, TableState, TableToday } from "../api/floor-api.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));

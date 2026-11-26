@@ -34,7 +34,7 @@ import {
   resolveBuiltInScreen,
   type BuiltInScreen,
 } from "../built-in-screens.js";
-import type { TillClockState } from "../api/client.js";
+import type { TillClockState } from "../api/attendance-api.js";
 import type { TillClockAction } from "../state/clocking.js";
 import type { BarTable } from "../state/bar-tables.js";
 import "@waitron/ui/src/components/wt-language-chooser.js";

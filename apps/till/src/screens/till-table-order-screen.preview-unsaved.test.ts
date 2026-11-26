@@ -6,7 +6,7 @@ import type { WtTextarea } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";
-import type { PartyBill, TableParty } from "../api/client.js";
+import type { PartyBill, TableParty } from "../api/floor-api.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import {
   beer,

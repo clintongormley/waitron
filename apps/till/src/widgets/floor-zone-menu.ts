@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, inNumberOrder } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import type { FloorZone, TableState } from "../api/client.js";
+import type { FloorZone, TableState } from "../api/floor-api.js";
 import { t } from "../i18n/t.js";
 import { shownName, sparesOf, takenOffOf } from "../state/floor-today.js";
 import { trackDialog } from "./track-dialog.js";

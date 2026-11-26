@@ -5,7 +5,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorZone, TableState } from "../api/client.js";
+import type { FloorZone, TableState } from "../api/floor-api.js";
 import type { FloorView } from "../state/floor-view-memory.js";
 
 function zone(id: string, name: string): FloorZone {

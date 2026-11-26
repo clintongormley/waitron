@@ -11,13 +11,13 @@ import {
   submitOnEnter,
 } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
+import type { TillApi } from "../api/client.js";
 import type {
   DepartmentTransfer,
   DepartmentTransferDetail,
-  ServiceZoneSummary,
-  TableState,
-  TillApi,
-} from "../api/client.js";
+} from "../api/department-transfers-api.js";
+import type { TableState } from "../api/floor-api.js";
+import type { ServiceZoneSummary } from "../api/menu-api.js";
 import type { TransferSnapshot } from "../state/department-transfer-monitor.js";
 import { limited } from "../state/draft-sync.js";
 import { shownName } from "../state/floor-today.js";

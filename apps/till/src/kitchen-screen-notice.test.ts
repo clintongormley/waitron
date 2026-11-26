@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillKitchenScreenNotice, type KitchenScreenNotice } from "./kitchen-screen-notice.js";
-import type { DeviceIdentity, ResolvedKitchenScreen, TillApi } from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { DeviceIdentity, ResolvedKitchenScreen } from "./api/device-session-api.js";
 afterEach(cleanupWidgets);
 
 describe("a kitchen display's notice in place of a queue", () => {

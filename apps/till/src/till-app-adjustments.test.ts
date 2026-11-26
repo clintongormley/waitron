@@ -47,20 +47,17 @@ import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillAdjustmentDialog } from "./widgets/adjustment-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
+import type { TillApi } from "./api/client.js";
+import type { FloorZone, PartyBill, TableParty, TableState } from "./api/floor-api.js";
 import type {
   AdjustmentApproval,
   AdjustmentCommand,
   AdjustmentPreview,
   AdjustmentReason,
-  FloorZone,
-  PartyBill,
-  TabLine,
-  TableParty,
-  TableState,
-  TillApi,
   TillSaleResult,
-  ZoneOffers,
-} from "./api/client.js";
+} from "./api/payments-api.js";
+import type { TabLine } from "./api/kitchen-api.js";
+import type { ZoneOffers } from "./api/menu-api.js";
 import { showView } from "./screens/till-table-order-screen.test-helpers.js";
 
 const zone: FloorZone = {

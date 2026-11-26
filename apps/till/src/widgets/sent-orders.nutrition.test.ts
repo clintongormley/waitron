@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { CurrentOrderRow, CurrentOrders, LineNutrition } from "../api/client.js";
+import type { CurrentOrderRow, CurrentOrders, LineNutrition } from "../api/kitchen-api.js";
 import { setLocale } from "../i18n/t.js";
 import type { TillSentOrders } from "./sent-orders.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";

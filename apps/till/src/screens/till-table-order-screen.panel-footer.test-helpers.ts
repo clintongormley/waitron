@@ -1,4 +1,5 @@
-import type { BillBalance, PartyBill, TableParty } from "../api/client.js";
+import type { PartyBill, TableParty } from "../api/floor-api.js";
+import type { BillBalance } from "../api/payments-api.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { beer, menuOf } from "./till-table-order-screen.test-helpers.js";
 import { mountWidget } from "../widgets/test-helpers.js";

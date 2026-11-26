@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   BillDraftSnapshot,
-  BillEditState,
   DraftSave,
   Draft,
   DraftLine,
   PartyDraftSnapshot,
-  TillProduct,
-} from "../api/client.js";
+} from "../api/drafts-api.js";
+import type { TillProduct } from "../api/menu-api.js";
+import type { BillEditState } from "../api/order-types.js";
 import { DraftSync, DRAFT_SAVE_DELAY_MS, type RetainedDraftCandidate } from "./draft-sync.js";
 import { fromDraftLine } from "./draft-lines.js";
 

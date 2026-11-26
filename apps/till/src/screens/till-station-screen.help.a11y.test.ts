@@ -3,7 +3,8 @@ import { userEvent } from "vitest/browser";
 import { setHelpMode } from "@waitron/ui";
 import type { WtHelpTooltip } from "@waitron/ui";
 import type { StationThresholds } from "@waitron/shared";
-import type { DeviceStationScreen, StationQueueGroup, TillApi } from "../api/client.js";
+import type { StationQueueGroup, TillApi } from "../api/client.js";
+import type { DeviceStationScreen } from "../api/kitchen-api.js";
 import { helpBadgeLabel } from "../i18n/help-strings.js";
 import { t } from "../i18n/t.js";
 import {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { StationThresholds } from "@waitron/shared";
-import type { QueueGroup, StationQueueItem } from "../api/client.js";
+import type { StationQueueItem } from "../api/client.js";
+import type { QueueGroup } from "../api/kitchen-api.js";
 import {
   type KitchenCard,
   type MergedQueueGroup,

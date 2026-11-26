@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TableSignal } from "@waitron/shared";
-import type { TableParty, TableState, TableToday } from "../api/client.js";
+import type { TableParty, TableState, TableToday } from "../api/floor-api.js";
 import { nextReadyBarChange, readyBar, readyTables } from "./table-signals.js";
 
 function party(over: Partial<TableParty> = {}): TableParty {

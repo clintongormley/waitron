@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, ContentLanguageController } from "@waitron/ui";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { allergenLabel } from "../i18n/allergen-names.js";

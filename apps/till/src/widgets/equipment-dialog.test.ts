@@ -13,7 +13,7 @@ import type {
   EquipmentItem,
   EquipmentRole,
   RoleEquipment,
-} from "../api/client.js";
+} from "../api/device-session-api.js";
 
 afterEach(() => {
   cleanupWidgets();

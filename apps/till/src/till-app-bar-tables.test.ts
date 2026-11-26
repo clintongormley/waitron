@@ -20,14 +20,10 @@ import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { TillShell } from "./widgets/till-shell.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
-import type {
-  TableState,
-  TableParty,
-  TillApi,
-  TillMenuOffer,
-  UnsentDraft,
-  ZoneOffers,
-} from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { TableState, TableParty } from "./api/floor-api.js";
+import type { UnsentDraft } from "./api/drafts-api.js";
+import type { TillMenuOffer, ZoneOffers } from "./api/menu-api.js";
 import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 import { ServerRouter } from "./api/server-router.js";
 

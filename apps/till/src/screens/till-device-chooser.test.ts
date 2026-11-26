@@ -4,7 +4,8 @@ import { setLocale, t } from "../i18n/t.js";
 import { DEV_DEVICE_STORAGE_KEY } from "../api/dev-device.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillDeviceChooser } from "./till-device-chooser.js";
-import type { DevDeviceList, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { DevDeviceList } from "../api/device-session-api.js";
 import type { TillEnrolScreen } from "./till-enrol-screen.js";
 
 type ChooserVerbs = "getDevDevices" | "join" | "joinStatus" | "getLocales";

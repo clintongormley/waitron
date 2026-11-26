@@ -4,24 +4,22 @@ import { beforeEach, expect, vi, type Mock } from "vitest";
 import { applyTokens, setContentLanguages } from "@waitron/ui";
 import { normaliseDraftLines, DEFAULT_HOME_ORDER } from "@waitron/shared";
 import { SESSION_PERSON_REFUSAL } from "../api/client.js";
+import type { SessionPerson } from "../api/client.js";
+import type { PartyBill, TableState } from "../api/floor-api.js";
 import type {
-  AdjustmentReason,
   Draft,
   DraftLine,
   DraftSave,
   DraftSubmission,
-  BillEditState,
   BillDraftSnapshot,
   DraftTakeover,
   PartyDraftSnapshot,
-  PartyBill,
-  TableState,
-  GroupLine,
-  GroupRelease,
-  SessionPerson,
   SubmittedDraft,
   SubmittedGroups,
-} from "../api/client.js";
+} from "../api/drafts-api.js";
+import type { AdjustmentReason } from "../api/payments-api.js";
+import type { GroupLine, GroupRelease } from "../api/kitchen-api.js";
+import type { BillEditState } from "../api/order-types.js";
 import type { CancellationRead } from "../api/line-cancel-types.js";
 import type { TillCancelItemDialog } from "./cancel-item-dialog.js";
 import type { DocumentMember, ServedMenu } from "@waitron/shared";

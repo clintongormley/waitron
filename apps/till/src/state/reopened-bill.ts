@@ -1,4 +1,6 @@
-import type { BillBalance, BillEditExpected, BillPaymentResult, PartyBill } from "../api/client.js";
+import type { PartyBill } from "../api/floor-api.js";
+import type { BillBalance, BillPaymentResult } from "../api/payments-api.js";
+import type { BillEditExpected } from "../api/order-types.js";
 import { fill, t } from "../i18n/t.js";
 import { billLabel } from "./bill-state.js";
 

@@ -23,14 +23,10 @@ import { orderLineMergeKey } from "./draft-lines.js";
 import { refreshProductDeclarations, type BlockReason } from "./menu-refresh.js";
 import { setMenuLineOf, type OwnSetMenuOffers } from "./set-menus.js";
 import type { EndedPeriod } from "./late-send.js";
-import {
-  menuOfferToTillProduct,
-  type KitchenNoteSnapshot,
-  type HeldExtra,
-  type TillCourse,
-  type TillProduct,
-  type ZoneDining,
-} from "../api/client.js";
+import type { HeldExtra } from "../api/orders-api.js";
+import type { TillCourse } from "../api/device-session-api.js";
+import { menuOfferToTillProduct, type TillProduct, type ZoneDining } from "../api/menu-api.js";
+import type { KitchenNoteSnapshot } from "../api/order-types.js";
 import { productUnit } from "../widgets/product-name.js";
 import type { Place, placeFor } from "./draft-place.js";
 

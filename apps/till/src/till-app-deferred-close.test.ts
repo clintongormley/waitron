@@ -25,14 +25,11 @@ import {
   text,
   till,
 } from "../test/bill-pay-app.js";
-import type {
-  CounterWaitingOrder,
-  CurrentOrderRow,
-  CurrentOrders,
-  PartyBill,
-  StaffNotice,
-  TillSaleResult,
-} from "./api/client.js";
+import type { CounterWaitingOrder } from "./api/orders-api.js";
+import type { PartyBill } from "./api/floor-api.js";
+import type { TillSaleResult } from "./api/payments-api.js";
+import type { CurrentOrderRow, CurrentOrders } from "./api/kitchen-api.js";
+import type { StaffNotice } from "./api/device-session-api.js";
 import type { CloseDeferredResult } from "./api/deferred-close-types.js";
 import type { CapabilityFlag } from "./layout.js";
 import type { TillDeferredCloseDialog } from "./widgets/deferred-close-dialog.js";

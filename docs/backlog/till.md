@@ -506,7 +506,7 @@ it, see its plan's decision 8
 **A936 (left open by A757 slice 5).** Picture 07 draws a waiting table's cue on the floor map as
 "⏱ 6′", the minutes the order has waited; slice 5 draws the word "Waiting" («Esperando») instead,
 because the floor read sends a table only its timing band (`timingBand`, documented at
-`apps/till/src/api/client.ts`, and the `long_wait` signal's `band`,
+`apps/till/src/api/floor-api.ts`, and the `long_wait` signal's `band`,
 `packages/shared/src/table-signals.ts`), not its dishes' ages. Showing the minutes means the floor
 read also carrying the oldest fired dish's age, and the map's cue counting up from it. Part of A893's review.
 
@@ -1721,7 +1721,7 @@ layout during service, screen plugins and Bizum.
   version's order, or with null (`effectiveDefaultLabelId`,
   `packages/menu/src/option-default.ts`; `withUnavailable`,
   `apps/till/src/state/menu-refresh.ts`), and the till filters unavailable labels out before the
-  picker is given them (`sellableModifiers`, `apps/till/src/api/client.ts`) — traced through the
+  picker is given them (`sellableModifiers`, `apps/till/src/api/menu-api.ts`) — traced through the
   code, not run. An over-cap count is different: stepping cannot produce one, because `#step`
   clamps, but a REOPENED line is seeded straight from `initialSelections` with no clamp, so
   `#allSatisfied`'s `total <= entry.maxPicks` arm is reachable (run in the till's browser harness on

@@ -19,7 +19,7 @@ import type {
   AdjustmentApproval,
   AdjustmentPreview,
   AdjustmentReason,
-} from "../api/client.js";
+} from "../api/payments-api.js";
 
 export type AdjustKind = "cancel" | "comp" | "discount";
 

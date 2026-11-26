@@ -37,13 +37,9 @@ import { billLabel } from "./state/bill-state.js";
 import { codeMessage } from "./i18n/codes.js";
 import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { fill, setLocale, t } from "./i18n/t.js";
-import type {
-  BillBalance,
-  BillPaymentResult,
-  BillPaymentView,
-  TabLine,
-  TillApi,
-} from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { BillBalance, BillPaymentResult, BillPaymentView } from "./api/payments-api.js";
+import type { TabLine } from "./api/kitchen-api.js";
 import type {
   ItemPaymentPreview,
   ItemPaymentRequest,

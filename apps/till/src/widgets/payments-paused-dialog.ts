@@ -4,7 +4,7 @@ import { baseStyles, type WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { StaffNotice } from "../api/client.js";
+import type { StaffNotice } from "../api/device-session-api.js";
 import { checksTime, staffNoticeText } from "../i18n/staff-notices.js";
 import { t } from "../i18n/t.js";
 import { trackDialog } from "./track-dialog.js";

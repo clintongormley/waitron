@@ -1,4 +1,4 @@
-import type { BillUnsent } from "../api/client.js";
+import type { BillUnsent } from "../api/payments-api.js";
 import { t } from "../i18n/t.js";
 
 export function billUnsentOf(error: unknown): BillUnsent | undefined {

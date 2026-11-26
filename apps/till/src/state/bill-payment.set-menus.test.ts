@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import type { BillSetMenuState } from "@waitron/shared";
-import type { TabLine } from "../api/client.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { payLines } from "./bill-payment.js";
 
 const row = (over: Partial<TabLine> & Pick<TabLine, "lineNo">): TabLine => ({

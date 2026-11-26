@@ -1,11 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type {
-  CurrentOrderRow,
-  CurrentOrders,
-  OrderGroup,
-  TillCourse,
-  TillProduct,
-} from "../api/client.js";
+import type { CurrentOrderRow, CurrentOrders, OrderGroup } from "../api/kitchen-api.js";
+import type { TillCourse } from "../api/device-session-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { heldViews, placeFor, type PlaceContext } from "./draft-place.js";
 import { draftLayout, sendAllGroups } from "./draft-layout.js";
 import { DraftStore } from "./draft-sync.js";

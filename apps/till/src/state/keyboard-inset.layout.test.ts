@@ -18,7 +18,8 @@ import {
   json,
   listPage,
 } from "../../test/find-bill-fixtures.js";
-import type { TillApi, TillProduct } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import "../screens/till-find-bill-screen.js";
 import "../screens/till-counter-screen.js";
 import type { TillCounterScreen } from "../screens/till-counter-screen.js";

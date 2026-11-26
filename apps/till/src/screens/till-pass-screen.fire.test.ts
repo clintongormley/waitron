@@ -7,15 +7,15 @@ import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-
 import type { TillPassBoard } from "../widgets/pass-board.js";
 import type { TillShell } from "../widgets/till-shell.js";
 import "../widgets/till-shell.js";
+import type { TillApi } from "../api/client.js";
 import type {
-  DeviceIdentity,
   DevicePassBoard,
   PassBoard,
   PassCard,
   PassReleaseAsk,
   PassReleaseResult,
-  TillApi,
-} from "../api/client.js";
+} from "../api/kitchen-api.js";
+import type { DeviceIdentity } from "../api/device-session-api.js";
 import {
   PASS_NOW,
   minutesAgo,

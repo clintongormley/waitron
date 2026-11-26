@@ -8,7 +8,9 @@ import {
   type ServedSetMenu,
   type ServedSetMenuCopy,
 } from "@waitron/shared";
-import type { FreshDraftLine, PartyBill, TillMenuOffer } from "../api/client.js";
+import type { PartyBill } from "../api/floor-api.js";
+import type { FreshDraftLine } from "../api/drafts-api.js";
+import type { TillMenuOffer } from "../api/menu-api.js";
 import { lineProductName } from "../widgets/product-name.js";
 import type { OrderLine } from "./working-order.js";
 

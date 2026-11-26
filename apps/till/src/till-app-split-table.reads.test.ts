@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import type { BillEditExpected, PartyBill, SplitSources, TillApi } from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { PartyBill } from "./api/floor-api.js";
+import type { SplitSources } from "./api/drafts-api.js";
+import type { BillEditExpected } from "./api/order-types.js";
 import { currentLocale, fill, setLocale, t } from "./i18n/t.js";
 import { partyBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";

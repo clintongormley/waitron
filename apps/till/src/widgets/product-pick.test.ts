@@ -1,5 +1,5 @@
 import { expect, it, vi } from "vitest";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import { pickProduct } from "./product-pick.js";
 

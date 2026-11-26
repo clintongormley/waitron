@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import type { TillCourse, TillProduct } from "../api/client.js";
+import type { TillCourse } from "../api/device-session-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { placeFor } from "./draft-place.js";
 import { DraftStore } from "./draft-sync.js";
 import { WorkingOrderStore } from "./working-order.js";

@@ -4,7 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import type { TillShell } from "./till-shell.js";
 import type { TillFloorScreen } from "../screens/till-floor-screen.js";
-import type { TableState } from "../api/client.js";
+import type { TableState } from "../api/floor-api.js";
 import { PHONE_WIDTH } from "./chooser-styles.js";
 import "../till-app.js";
 import "./till-shell.js";

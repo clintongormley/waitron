@@ -99,16 +99,16 @@ import {
   seatsFor,
   totalSeats,
 } from "../state/floor-map.js";
+import type { TillApi } from "../api/client.js";
 import type {
-  BillEditExpected,
   FloorAnswer,
   FloorZone,
   JoinMerge,
   TableState,
   TableParty,
-  TillApi,
   TodayPlacement,
-} from "../api/client.js";
+} from "../api/floor-api.js";
+import type { BillEditExpected } from "../api/order-types.js";
 import { TABLE_REQUEST_LIMIT_MS, limited } from "../state/draft-sync.js";
 import { delayUntil, nextCountdownChange, reminderDueAt } from "../state/release-reminder.js";
 import {

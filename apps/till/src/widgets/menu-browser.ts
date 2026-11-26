@@ -52,7 +52,7 @@ import type { DocumentMember, DocumentTile } from "@waitron/shared";
 import "./modifier-picker.js";
 import "./tender-pay.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
-import { menuOfferToTillProduct, type TillProduct, type TillZoneMenu } from "../api/client.js";
+import { menuOfferToTillProduct, type TillProduct, type TillZoneMenu } from "../api/menu-api.js";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { countText, currentLocale, fill, t } from "../i18n/t.js";

@@ -10,7 +10,7 @@ import {
 } from "../widgets/test-helpers.js";
 import { TillCounterScreen } from "./till-counter-screen.js";
 import { TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 
 const coffee: TillProduct = {
   id: "coffee",

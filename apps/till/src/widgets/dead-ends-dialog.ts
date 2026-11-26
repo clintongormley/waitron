@@ -2,7 +2,7 @@ import { LitElement, css, html } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
-import type { DeadEndAnswer } from "../api/client.js";
+import type { DeadEndAnswer } from "../api/drafts-api.js";
 import { t } from "../i18n/t.js";
 import { trackDialog } from "./track-dialog.js";
 import "./dead-ends-section.js";

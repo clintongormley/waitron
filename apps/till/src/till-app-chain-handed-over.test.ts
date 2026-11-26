@@ -18,7 +18,7 @@ import {
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
-import type { TillProduct } from "./api/client.js";
+import type { TillProduct } from "./api/menu-api.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 

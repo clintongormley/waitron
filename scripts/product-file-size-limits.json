@@ -42,7 +42,6 @@
   "apps/setup/src/screens/handover-screen.ts": 2250,
   "apps/setup/src/screens/venue-screen.ts": 1500,
   "apps/setup/src/setup-app.ts": 3500,
-  "apps/till/src/api/client.ts": 5750,
   "apps/till/src/screens/till-floor-screen.ts": 3250,
   "apps/till/src/screens/till-station-screen.ts": 1500,
   "apps/till/src/screens/till-table-order-screen.ts": 7500,

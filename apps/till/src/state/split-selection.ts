@@ -7,7 +7,10 @@ import {
   sumDecimals,
   toScale,
 } from "@waitron/shared";
-import type { BillBalance, Draft, PartyBill, SplitSelection, TabLine } from "../api/client.js";
+import type { PartyBill, SplitSelection } from "../api/floor-api.js";
+import type { Draft } from "../api/drafts-api.js";
+import type { BillBalance } from "../api/payments-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { owing, shownBills } from "./bill-state.js";
 import { apartInSetMenus } from "./portion-groups.js";
 import {

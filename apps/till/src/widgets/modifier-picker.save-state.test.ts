@@ -4,7 +4,8 @@ import { setLocale } from "../i18n/t.js";
 import "./modifier-picker.js";
 import type { ModifierConfirmDetail, TillModifierPicker } from "./modifier-picker.js";
 import type { LineSelection } from "../state/working-order.js";
-import type { OfferedModifier, TillProduct } from "../api/client.js";
+import type { OfferedModifier } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));

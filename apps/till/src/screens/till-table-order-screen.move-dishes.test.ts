@@ -4,14 +4,9 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { OtherDraft, TillTableOrderScreen } from "./till-table-order-screen.js";
-import type {
-  BillBalance,
-  OrderGroup,
-  PartyBill,
-  TableParty,
-  TableState,
-  TabLine,
-} from "../api/client.js";
+import type { PartyBill, TableParty, TableState } from "../api/floor-api.js";
+import type { BillBalance } from "../api/payments-api.js";
+import type { OrderGroup, TabLine } from "../api/kitchen-api.js";
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 import type { TillPortionPicker } from "../widgets/portion-picker.js";
 import { DraftStore } from "../state/draft-sync.js";

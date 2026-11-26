@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 import { applyTokens } from "@waitron/ui";
-import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
+import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/menu-api.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import {

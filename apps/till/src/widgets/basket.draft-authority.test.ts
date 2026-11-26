@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { OfferedModifier, TillProduct } from "../api/client.js";
+import type { OfferedModifier } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { TillBasket } from "./basket.js";

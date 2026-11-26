@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { DEFAULT_HOME_ORDER } from "@waitron/shared";
-import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
+import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/menu-api.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";

@@ -6,7 +6,8 @@ import {
   subtractDecimal,
   sumDecimals,
 } from "@waitron/shared";
-import type { BillBalance, TabLine } from "../api/client.js";
+import type { BillBalance } from "../api/payments-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { billGross } from "./adjust-target.js";
 import { moneyPlus } from "./bill-payment.js";
 import { portionGroups } from "./portion-groups.js";

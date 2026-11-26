@@ -19,7 +19,7 @@ import type {
   EquipmentItem,
   EquipmentRole,
   RoleEquipment,
-} from "../api/client.js";
+} from "../api/device-session-api.js";
 
 interface NfcRecord {
   recordType: string;

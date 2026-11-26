@@ -1,7 +1,7 @@
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { needsModifierPicker } from "../state/order-line.js";
 import type { OrderLine, WorkingOrderStore } from "../state/working-order.js";
-import { menuOfferToTillProduct } from "../api/client.js";
+import { menuOfferToTillProduct } from "../api/menu-api.js";
 import type { PickSetMenuDishDetail } from "./set-menu-folder.js";
 import { soldByTheUnit } from "./product-name.js";
 

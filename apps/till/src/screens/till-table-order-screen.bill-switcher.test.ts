@@ -5,7 +5,7 @@ import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-
 import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { PartyBill, TableParty } from "../api/client.js";
+import type { PartyBill, TableParty } from "../api/floor-api.js";
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const one = [partyBill("wo-1", 1, "38.50")];

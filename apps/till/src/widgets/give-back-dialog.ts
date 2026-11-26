@@ -21,7 +21,9 @@ import { giveBackStyles } from "./give-back-styles.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { AdjustmentReason, StaffMember, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { AdjustmentReason } from "../api/payments-api.js";
+import type { StaffMember } from "../api/device-session-api.js";
 import type {
   GiveBackAsk,
   GiveBackLine,
@@ -89,7 +91,6 @@ import {
 } from "./give-back-steps.js";
 
 type Refusal = ReturnType<typeof refusalOf>;
-
 export type GiveBackApi = GiveBackUnderWayApi &
   Pick<TillApi, "readGiveBack" | "previewGiveBack" | "listAdjustmentReasons" | "listApprovers">;
 export type { GiveBackAsk };

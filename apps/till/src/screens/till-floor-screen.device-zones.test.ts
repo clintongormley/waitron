@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import type { FloorZone } from "../api/client.js";
+import type { FloorZone } from "../api/floor-api.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 

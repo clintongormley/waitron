@@ -2,7 +2,7 @@ import { html, nothing, type TemplateResult } from "lit";
 import { live } from "lit/directives/live.js";
 import type { Dining } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-segmented-control.js";
-import type { DiningChoice, ZoneDining } from "../api/client.js";
+import type { DiningChoice, ZoneDining } from "../api/menu-api.js";
 import { t } from "../i18n/t.js";
 
 /** What an order screen shows of the way an order sells: a switch, a label, or nothing. */

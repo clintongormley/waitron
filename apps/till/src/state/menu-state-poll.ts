@@ -1,6 +1,6 @@
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { liveGate } from "./live-gate.js";
-import type { MenuStateAnswer } from "../api/client.js";
+import type { MenuStateAnswer } from "../api/menu-api.js";
 
 /** How often a signed-in till reads its zones' menu state (plan decision D11). */
 const POLL_MS = 15_000;

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { PrintProblem } from "../api/client.js";
+import type { PrintProblem } from "../api/kitchen-api.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
 import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 

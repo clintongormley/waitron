@@ -1,7 +1,8 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { t } from "./i18n/t.js";
-import type { KitchenScreenKind, ResolvedKitchenScreen, TillApi } from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { KitchenScreenKind, ResolvedKitchenScreen } from "./api/device-session-api.js";
 
 /** What a kitchen display shows in place of a queue. */
 export type KitchenScreenNotice =

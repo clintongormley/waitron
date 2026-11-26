@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { LitElement, html } from "lit";
-import type { OrderStateCounts } from "../api/client.js";
+import type { OrderStateCounts } from "../api/orders-api.js";
 import { orderCountStyles, orderCounts } from "./order-counts.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 

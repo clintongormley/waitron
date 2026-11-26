@@ -3,7 +3,7 @@ import { partyTablesName } from "@waitron/shared";
 import { fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { needsMovingToday, shownName, shownUnder } from "../state/floor-today.js";
-import type { TableActionRevisions, TableParty, TableState } from "../api/client.js";
+import type { TableActionRevisions, TableParty, TableState } from "../api/floor-api.js";
 
 /** The styles {@link tableTarget} needs. */
 export const tableTargetStyles = css`

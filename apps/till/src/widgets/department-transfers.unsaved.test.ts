@@ -4,7 +4,7 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import { mountWidget, cleanupWidgets } from "./test-helpers.js";
 import { TillApi } from "../api/client.js";
-import type { DepartmentTransferDetail } from "../api/client.js";
+import type { DepartmentTransferDetail } from "../api/department-transfers-api.js";
 import { TillDepartmentTransfers } from "./department-transfers.js";
 import { t } from "../i18n/t.js";
 const request = {

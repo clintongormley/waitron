@@ -25,17 +25,11 @@ import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import { setMenuProduct } from "./widgets/product-pick.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
-import { menuOfferToTillProduct } from "./api/client.js";
-import type {
-  MenuState,
-  DeviceEquipment,
-  MenuUnavailable,
-  TillApi,
-  TillMenuOffer,
-  TillProduct,
-  TillSaleResult,
-  ZoneOffers,
-} from "./api/client.js";
+import { menuOfferToTillProduct } from "./api/menu-api.js";
+import type { MenuState, MenuUnavailable, TillApi } from "./api/client.js";
+import type { TillSaleResult } from "./api/payments-api.js";
+import type { DeviceEquipment } from "./api/device-session-api.js";
+import type { TillMenuOffer, TillProduct, ZoneOffers } from "./api/menu-api.js";
 import { DEFAULT_HOME_ORDER, setMenuCopyOf, type SetMenuTerms } from "@waitron/shared";
 
 // Lunch is published as v1 and then as v2. Lemonade and Burger are on it; Burger offers an extras list

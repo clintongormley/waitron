@@ -3,12 +3,8 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { currentLocale, setLocale } from "../i18n/t.js";
 import "./modifier-picker.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
-import {
-  sellingValuesOf,
-  type OfferedExtrasList,
-  type OfferedModifier,
-  type TillProduct,
-} from "../api/client.js";
+import type { OfferedExtrasList, OfferedModifier } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/menu-api.js";
 
 /** Three DIFFERENT texts per name, as every fixture in this package gives (CLAUDE.md §3). */
 function offeredItem(productId: string, staff: string, price: string, maxQuantity = 1) {

@@ -4,7 +4,7 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { BillLookupRow } from "../api/client.js";
+import type { BillLookupRow } from "../api/find-bill-api.js";
 import "./find-bill-dialog.js";
 import type { FindBillPayDetail, TillFindBillDialog } from "./find-bill-dialog.js";
 

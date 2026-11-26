@@ -938,7 +938,7 @@ it("closing during an approver read retires that opening and does not block a re
     record: { entries: [], sessions: [], closures: [], closedPeriodImpacts: [] },
     items: [item],
   }));
-  const held = deferred<import("./api/client.js").StaffMember[]>();
+  const held = deferred<import("./api/device-session-api.js").StaffMember[]>();
   f.api.listAttendanceApprovers.mockReturnValueOnce(held.promise);
   await signIn(f.el);
   await working(f.el);

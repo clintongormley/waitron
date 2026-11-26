@@ -7,7 +7,7 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./till-counter-screen.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
-import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
+import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/menu-api.js";
 afterEach(cleanupWidgets);
 
 function dish(key: string, name: string, menuId: string, extra: Partial<TillProduct> = {}) {

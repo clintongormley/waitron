@@ -1,12 +1,6 @@
-import type {
-  MenuState,
-  MenuUnavailable,
-  TillMenuOffer,
-  TillProduct,
-  TillZoneMenu,
-  ZoneOffers,
-} from "../api/client.js";
-import { menuOfferToTillProduct } from "../api/client.js";
+import type { MenuState, MenuUnavailable } from "../api/client.js";
+import type { TillMenuOffer, TillProduct, TillZoneMenu, ZoneOffers } from "../api/menu-api.js";
+import { menuOfferToTillProduct } from "../api/menu-api.js";
 import { endedPeriodOf, type EndedPeriod } from "./late-send.js";
 import { type BlockReason, lineBlock, withUnavailable } from "./menu-refresh.js";
 import {

@@ -4,7 +4,8 @@ import { TillApp } from "./till-app.js";
 import { clockUnusableText, overLimitText, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { TillApi } from "./api/client.js";
-import type { EndedMeal, EndMealRequest, PartyBill, TabLine } from "./api/client.js";
+import type { EndedMeal, EndMealRequest, PartyBill } from "./api/floor-api.js";
+import type { TabLine } from "./api/kitchen-api.js";
 import type { CapabilityFlag } from "./layout.js";
 import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import {

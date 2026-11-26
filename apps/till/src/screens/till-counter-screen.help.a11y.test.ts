@@ -6,7 +6,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/
 import "./till-counter-screen.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import type { CounterWaitingOrder, HeldOrderSummary } from "../api/client.js";
+import type { CounterWaitingOrder, HeldOrderSummary } from "../api/orders-api.js";
 
 const heldOrder: HeldOrderSummary = {
   zoneId: null,

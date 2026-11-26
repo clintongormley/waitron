@@ -2,7 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { WtInput, WtButton } from "@waitron/ui";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import type { TillModifierPicker, ModifierConfirmDetail } from "./modifier-picker.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./modifier-picker.js";

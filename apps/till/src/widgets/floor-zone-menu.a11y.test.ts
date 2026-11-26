@@ -3,7 +3,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { setLocale } from "../i18n/t.js";
 import "./floor-zone-menu.js";
 import type { TillFloorZoneMenu } from "./floor-zone-menu.js";
-import type { TableState, TableToday } from "../api/client.js";
+import type { TableState, TableToday } from "../api/floor-api.js";
 
 afterEach(cleanupWidgets);
 afterEach(() => setLocale("en"));

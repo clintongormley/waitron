@@ -3,7 +3,8 @@ import { customerOptionSnapshotLabels } from "@waitron/menu/src/option-snapshot-
 import { deriveOptionSelections, optionSnapshotOf, sameOptionSelections } from "./held-options.js";
 import { withUnavailable } from "./menu-refresh.js";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import type { OfferedModifier, TillMenuOffer } from "../api/client.js";
+import type { OfferedModifier } from "../api/client.js";
+import type { TillMenuOffer } from "../api/menu-api.js";
 import type { OptionSnapshot } from "@waitron/shared";
 
 /** The list's three names, and each label's three, DIFFER, so a match made on the wrong one of the

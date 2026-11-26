@@ -1,6 +1,6 @@
 import { css, html, type TemplateResult } from "lit";
 import { floorChipStyles } from "@waitron/ui";
-import type { OrderStateCounts } from "../api/client.js";
+import type { OrderStateCounts } from "../api/orders-api.js";
 import type { StringKey } from "../i18n/strings.js";
 import { countText } from "../i18n/t.js";
 

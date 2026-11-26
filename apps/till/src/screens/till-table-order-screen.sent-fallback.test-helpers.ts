@@ -1,4 +1,4 @@
-import type { TabLine } from "../api/client.js";
+import type { TabLine } from "../api/kitchen-api.js";
 
 export const storedDish: TabLine = {
   changesAfterSending: "held-or-waiting",

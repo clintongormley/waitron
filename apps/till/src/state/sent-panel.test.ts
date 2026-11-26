@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders } from "../api/client.js";
+import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders } from "../api/kitchen-api.js";
 import { sentPanel } from "./sent-panel.js";
 import { withRowRequestedAt } from "../../test/kitchen-stamps.js";
 

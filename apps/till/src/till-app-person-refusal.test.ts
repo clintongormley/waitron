@@ -4,14 +4,9 @@ import { billOf, heldTable, offers, till, zone } from "../test/bill-pay-app.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
 import { PERSON_HEADER } from "@waitron/shared";
-import {
-  SESSION_PERSON_REFUSAL,
-  TillApi,
-  type Draft,
-  type DraftSave,
-  type FetchLike,
-  type TableState,
-} from "./api/client.js";
+import { SESSION_PERSON_REFUSAL, TillApi, type FetchLike } from "./api/client.js";
+import type { TableState } from "./api/floor-api.js";
+import type { Draft, DraftSave } from "./api/drafts-api.js";
 import { ServerRouter } from "./api/server-router.js";
 import { DRAFT_SAVE_DELAY_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";

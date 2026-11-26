@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
-import type { TableState } from "../api/client.js";
+import type { TableState } from "../api/floor-api.js";
 import { t } from "../i18n/t.js";
 import { tableTarget, tableTargetStyles } from "./table-targets.js";
 import { trackDialog } from "./track-dialog.js";

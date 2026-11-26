@@ -5,7 +5,7 @@ import {
   outsideCardStyles,
   outsideCardSummary,
 } from "./outside-card.js";
-import type { OutsideCardDetails } from "../api/client.js";
+import type { OutsideCardDetails } from "../api/payments-api.js";
 import { EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -44,13 +44,10 @@ import "./modifier-picker.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
 import { segmentedOptionStyles } from "./segmented-control-styles.js";
 import { StoreChangeController } from "../state/store-controller.js";
-import type {
-  OrderFlow,
-  PayOutcome,
-  Tender,
-  TillActiveReader,
-  TillProduct,
-} from "../api/client.js";
+import type { OrderFlow } from "../api/orders-api.js";
+import type { PayOutcome, Tender } from "../api/payments-api.js";
+import type { TillActiveReader } from "../api/device-session-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { PropertyValues } from "lit";
 import { lineProductName, productUnit, soldByTheUnit, unitName } from "./product-name.js";

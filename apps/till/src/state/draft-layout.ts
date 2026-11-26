@@ -1,6 +1,7 @@
 import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
 import { lineGross } from "./order-line.js";
-import type { GroupRelease, TillCourse } from "../api/client.js";
+import type { GroupRelease } from "../api/kitchen-api.js";
+import type { TillCourse } from "../api/device-session-api.js";
 import { lineProductName } from "../widgets/product-name.js";
 import type { Place } from "./draft-place.js";
 import type { OrderLine } from "./working-order.js";

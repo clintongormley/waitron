@@ -1,4 +1,4 @@
-import type { PassBoard, PassCard, PassCardItem } from "../src/api/client.js";
+import type { PassBoard, PassCard, PassCardItem } from "../src/api/kitchen-api.js";
 
 export const PASS_NOW = Date.parse("2026-11-02T20:00:00.000Z");
 

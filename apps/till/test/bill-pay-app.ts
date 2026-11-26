@@ -15,23 +15,18 @@ import type { TillTableOrderScreen } from "../src/screens/till-table-order-scree
 import type { TillFloorScreen } from "../src/screens/till-floor-screen.js";
 import type { TillBillPayDialog } from "../src/widgets/bill-pay-dialog.js";
 import type { FormFactor, CapabilityFlag } from "../src/layout.js";
+import type { TillApi } from "../src/api/client.js";
+import type { FloorZone, PartyBill, TableParty, TableState } from "../src/api/floor-api.js";
 import type {
   AllocationPreview,
-  DeviceEquipment,
-  EquipmentItem,
   BillBalance,
   BillPaymentResult,
   BillPaymentView,
-  FloorZone,
-  PartyBill,
-  StaffNotice,
-  TabLine,
-  TableParty,
-  TableState,
-  TillApi,
   TillSaleResult,
-  ZoneOffers,
-} from "../src/api/client.js";
+} from "../src/api/payments-api.js";
+import type { TabLine } from "../src/api/kitchen-api.js";
+import type { DeviceEquipment, EquipmentItem, StaffNotice } from "../src/api/device-session-api.js";
+import type { ZoneOffers } from "../src/api/menu-api.js";
 import { deviceZonesFixture } from "./device-zones.js";
 
 export { BAR_PRINTER, SECOND_READER, equipmentItem, roleOf } from "./pay-equipment-fixtures.js";

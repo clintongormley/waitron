@@ -1,7 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { WtButton, WtCombobox, WtInput, WtTextarea } from "@waitron/ui";
-import type { TillCourse, TillProduct } from "../api/client.js";
+import type { TillCourse } from "../api/device-session-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { TillBasket } from "./basket.js";
 import type { TillModifierPicker } from "./modifier-picker.js";

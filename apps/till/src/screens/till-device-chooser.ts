@@ -7,7 +7,8 @@ import { setDevDeviceId } from "../api/dev-device.js";
 import { t } from "../i18n/t.js";
 import { deviceKindLabel } from "../i18n/device-label.js";
 import "./till-enrol-screen.js";
-import type { DevDeviceList, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { DevDeviceList } from "../api/device-session-api.js";
 
 @customElement("till-device-chooser")
 export class TillDeviceChooser extends LitElement {

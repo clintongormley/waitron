@@ -9,16 +9,9 @@ import { cleanupWidgets, mountWidget, pageAt, resetPage } from "../widgets/test-
 import { STATION_COLUMNS } from "../state/kitchen-columns.js";
 import type { TillKitchenColumnsDialog } from "../widgets/kitchen-columns-dialog.js";
 import { TillStationScreen } from "./till-station-screen.js";
-import type {
-  DeviceIdentity,
-  DeviceStationScreen,
-  KitchenNotice,
-  ResolvedKitchenScreen,
-  Station,
-  StationQueue,
-  StationQueueGroup,
-  TillApi,
-} from "../api/client.js";
+import type { KitchenNotice, StationQueue, StationQueueGroup, TillApi } from "../api/client.js";
+import type { DeviceStationScreen, Station } from "../api/kitchen-api.js";
+import type { DeviceIdentity, ResolvedKitchenScreen } from "../api/device-session-api.js";
 import { TillApi as StationTodayApi } from "../api/client.js";
 import type { TillStationToday } from "../widgets/station-today.js";
 import type { TillStationQueue } from "../widgets/station-queue.js";

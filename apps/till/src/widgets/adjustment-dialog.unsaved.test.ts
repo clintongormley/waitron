@@ -7,7 +7,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./adjustment-dialog.js";
 import type { AdjustmentChoice, AdjustTarget, TillAdjustmentDialog } from "./adjustment-dialog.js";
-import type { AdjustmentReason } from "../api/client.js";
+import type { AdjustmentReason } from "../api/payments-api.js";
 
 const regular: AdjustmentReason = {
   id: "regular",

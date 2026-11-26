@@ -5,7 +5,7 @@ import { en } from "../i18n/strings.js";
 import "./table-status.js";
 import type { TillTableStatus } from "./table-status.js";
 import type { TillTableDetailsSheet } from "./table-details-sheet.js";
-import type { TableParty, TableState } from "../api/client.js";
+import type { TableParty, TableState } from "../api/floor-api.js";
 import type { WtToast } from "@waitron/ui";
 
 afterEach(() => {

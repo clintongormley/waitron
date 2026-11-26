@@ -6,7 +6,7 @@ import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import "./menu-browser.js";
 import type { TillMenuBrowser } from "./menu-browser.js";
-import type { TillProduct, TillZoneMenu } from "../api/client.js";
+import type { TillProduct, TillZoneMenu } from "../api/menu-api.js";
 import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
 

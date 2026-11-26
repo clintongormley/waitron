@@ -10,7 +10,7 @@ import {
 } from "../widgets/test-helpers.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
-import type { FloorZone, TableState } from "../api/client.js";
+import type { FloorZone, TableState } from "../api/floor-api.js";
 
 const zone: FloorZone = {
   id: "z1",

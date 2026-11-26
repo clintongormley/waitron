@@ -13,13 +13,8 @@ import { asServedAllergens, asServedDiet } from "./as-served.js";
 import { nutritionDietLabels } from "../diet-labels.js";
 import { WorkingOrderStore, type OrderLine } from "./working-order.js";
 import type { Place } from "./draft-place.js";
-import {
-  menuOfferToTillProduct,
-  type FreshDraftLine,
-  type FreshDraftLineInput,
-  type TillMenuOffer,
-  type TillProduct,
-} from "../api/client.js";
+import type { FreshDraftLine, FreshDraftLineInput } from "../api/drafts-api.js";
+import { menuOfferToTillProduct, type TillMenuOffer, type TillProduct } from "../api/menu-api.js";
 
 function toDraftLineInput(line: OrderLine): FreshDraftLineInput {
   const input = draftInput(line);

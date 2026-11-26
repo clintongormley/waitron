@@ -3,7 +3,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { setLocale } from "../i18n/t.js";
 import "./supervisor-override-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./supervisor-override-dialog.js";
-import type { StaffMember } from "../api/client.js";
+import type { StaffMember } from "../api/device-session-api.js";
 
 const authorizers: StaffMember[] = [
   { personId: "sup-1", displayName: "Responsable" },

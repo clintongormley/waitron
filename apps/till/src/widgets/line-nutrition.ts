@@ -1,5 +1,5 @@
 import { html, nothing } from "lit";
-import type { LineNutrition } from "../api/client.js";
+import type { LineNutrition } from "../api/kitchen-api.js";
 import { allergenLabel } from "../i18n/allergen-names.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { dietLabel } from "./nutrition-icons.js";

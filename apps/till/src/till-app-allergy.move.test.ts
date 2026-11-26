@@ -3,7 +3,8 @@ import { page, userEvent } from "vitest/browser";
 import type { AllergyMoveRead } from "@waitron/module";
 import type { WtInput } from "@waitron/ui";
 import { codeMessage } from "./i18n/codes.js";
-import type { HeldOrderSummary, TillApi } from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { HeldOrderSummary } from "./api/orders-api.js";
 import { cleanupWidgets, expectNoA11yViolations, measured } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import {

@@ -1,10 +1,10 @@
+import type { TillApi } from "../api/client.js";
 import {
   a4HoldCodes,
   type InvoiceDeliveryAttempt,
   type InvoiceDeliveryStatus,
-  type TillApi,
-  type TillSaleResult,
-} from "../api/client.js";
+} from "../api/invoice-delivery-api.js";
+import type { TillSaleResult } from "../api/payments-api.js";
 import type { StringKey } from "../i18n/strings.js";
 import { fill, t } from "../i18n/t.js";
 import { officePrinterHoldText } from "../i18n/staff-notices.js";

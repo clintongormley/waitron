@@ -4,9 +4,9 @@ import {
   type AttendanceCommandResult,
   type AttendanceInbox,
   type AttendanceDayView,
-  type StaffMember,
   type TillApi,
 } from "../api/client.js";
+import type { StaffMember } from "../api/device-session-api.js";
 
 export interface AttendanceError {
   code: string;

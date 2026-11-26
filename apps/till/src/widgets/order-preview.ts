@@ -1,7 +1,7 @@
 import { css, html, nothing, type TemplateResult } from "lit";
 import { formatDecimalInput } from "@waitron/ui";
 import { currentLocale } from "../i18n/t.js";
-import type { OrderPreviewItem } from "../api/client.js";
+import type { OrderPreviewItem } from "../api/orders-api.js";
 
 export const orderPreviewStyles = css`
   button.summary {

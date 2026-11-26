@@ -1,6 +1,6 @@
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { liveGate } from "./live-gate.js";
-import type { DeviceEquipment } from "../api/client.js";
+import type { DeviceEquipment } from "../api/device-session-api.js";
 
 /** How often a till or handheld reads its equipment. */
 const POLL_MS = 15_000;

@@ -3,7 +3,7 @@ import { customElement, property, query } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { baseStyles, type WtDialog } from "@waitron/ui";
 import { BUILT_IN_ROLE_NAMES } from "@waitron/shared";
-import type { TillCloudEmergency } from "../api/client.js";
+import type { TillCloudEmergency } from "../api/device-session-api.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { qrSvg } from "../qr.js";

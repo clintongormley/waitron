@@ -3,7 +3,8 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { PartyBill, TableParty, TabLine, TableState } from "../api/client.js";
+import type { PartyBill, TableParty, TableState } from "../api/floor-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import "./till-table-order-screen.js";
 import type {
   SplitRefusal,

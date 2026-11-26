@@ -1,5 +1,8 @@
 import { expect, vi } from "vitest";
-import type { BillBalance, PartyBill, SplitSources, TabLine } from "./api/client.js";
+import type { PartyBill } from "./api/floor-api.js";
+import type { SplitSources } from "./api/drafts-api.js";
+import type { BillBalance } from "./api/payments-api.js";
+import type { TabLine } from "./api/kitchen-api.js";
 import { partyBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import type { TillSplitPicker } from "./widgets/split-picker.js";

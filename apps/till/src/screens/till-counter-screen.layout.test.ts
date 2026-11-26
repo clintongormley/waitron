@@ -3,7 +3,8 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import { page } from "vitest/browser";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
-import type { Station, TillProduct, TillZoneMenu } from "../api/client.js";
+import type { Station } from "../api/kitchen-api.js";
+import type { TillProduct, TillZoneMenu } from "../api/menu-api.js";
 import {
   cleanupWidgets,
   mountWidget,

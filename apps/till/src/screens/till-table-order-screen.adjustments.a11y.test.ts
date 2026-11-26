@@ -6,7 +6,8 @@ import { addDecimal, grossOf } from "@waitron/shared";
 import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { PartyBill, TabLine, TableParty } from "../api/client.js";
+import type { PartyBill, TableParty } from "../api/floor-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import {
   closeTableMenu,
   openTableMenu,

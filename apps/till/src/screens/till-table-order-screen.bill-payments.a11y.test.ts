@@ -5,7 +5,9 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/
 import { setLocale } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { BillBalance, PartyBill, TabLine, TableParty } from "../api/client.js";
+import type { PartyBill, TableParty } from "../api/floor-api.js";
+import type { BillBalance } from "../api/payments-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 beforeEach(() => setLocale("es-ES"));

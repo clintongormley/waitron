@@ -17,7 +17,7 @@ import type {
   CurrentOrderRow,
   CurrentOrders,
   ReleaseReminder,
-} from "../api/client.js";
+} from "../api/kitchen-api.js";
 
 export interface SentSlice {
   row: CurrentOrderRow;

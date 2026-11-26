@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
-import type { AdjustmentReason } from "../api/client.js";
+import type { AdjustmentReason } from "../api/payments-api.js";
 import type { UnservedDish } from "../api/finish-table-types.js";
 import { es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";

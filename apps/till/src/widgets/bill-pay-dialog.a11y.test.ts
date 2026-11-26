@@ -7,14 +7,8 @@ import { codeMessage } from "../i18n/codes.js";
 import "./bill-pay-dialog.js";
 import { pendingCard } from "../../test/bill-pay-fixtures.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
-import type {
-  AllocationPreview,
-  BillBalance,
-  BillPaymentView,
-  DeviceEquipment,
-  EquipmentItem,
-  RoleEquipment,
-} from "../api/client.js";
+import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/payments-api.js";
+import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/device-session-api.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("es-ES"));

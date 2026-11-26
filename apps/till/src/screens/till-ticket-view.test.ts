@@ -10,8 +10,8 @@ import type {
   InvoiceDeliveryAttempt,
   InvoiceDeliveryStatus,
   OriginalReceiptPrint,
-  TillSaleResult,
-} from "../api/client.js";
+} from "../api/invoice-delivery-api.js";
+import type { TillSaleResult } from "../api/payments-api.js";
 
 // A mixed-rate ticket with a weighed line: café 2 → 3,00 (21 %), jamón 0,320 kg → 6,40 (10 %).
 // Total 9,40; €10 cash tendered → 0,60 change.

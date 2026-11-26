@@ -5,14 +5,14 @@ import type { ComboboxOption, WtCombobox } from "@waitron/ui";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import type { LineSelection } from "../state/working-order.js";
 import type { ModifierConfirmDetail, TillModifierPicker } from "./modifier-picker.js";
 import "./modifier-picker.js";
 import "./menu-browser.js";
 import "./basket.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import type { TillZoneMenu } from "../api/client.js";
+import type { TillZoneMenu } from "../api/menu-api.js";
 
 const product: TillProduct = {
   id: "dish",

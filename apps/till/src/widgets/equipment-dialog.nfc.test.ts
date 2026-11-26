@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { WtCombobox } from "@waitron/ui";
-import { TillApi, type EquipmentChange } from "../api/client.js";
+import { TillApi } from "../api/client.js";
+import type { EquipmentChange } from "../api/device-session-api.js";
 import { setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";

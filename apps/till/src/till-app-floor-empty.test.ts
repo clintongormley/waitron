@@ -9,7 +9,8 @@ import {
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
-import type { FloorZone, PartyBill, TableState, TillApi } from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { FloorZone, PartyBill, TableState } from "./api/floor-api.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillApp } from "./till-app.js";

@@ -1,5 +1,6 @@
 import type { KitchenAllergyBlock } from "@waitron/module";
-import type { KitchenNotice, PassBoard, StationQueueGroup } from "../src/api/client.js";
+import type { KitchenNotice, StationQueueGroup } from "../src/api/client.js";
+import type { PassBoard } from "../src/api/kitchen-api.js";
 import { ALLERGEN_NAMES } from "../src/i18n/allergen-names.js";
 import { passBoard, passCard, passItem } from "./pass-board-fixtures.js";
 

@@ -1,12 +1,8 @@
-import type {
-  AllocationPreview,
-  BillBalance,
-  BillEditExpected,
-  BillPaymentResult,
-  BillRevisions,
-  ReadOptions,
-  TillApi,
-} from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { BillRevisions } from "../api/floor-api.js";
+import type { AllocationPreview, BillBalance, BillPaymentResult } from "../api/payments-api.js";
+import type { BillEditExpected } from "../api/order-types.js";
+import type { ReadOptions } from "../api/till-request.js";
 import type {
   ItemPaymentAsk,
   ItemPaymentPreview,

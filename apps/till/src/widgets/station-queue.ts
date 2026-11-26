@@ -53,8 +53,8 @@ import type {
   KitchenNoticeKind,
   StationQueueGroup,
   StationQueueItem,
-  TicketState,
 } from "../api/client.js";
+import type { TicketState } from "../api/kitchen-api.js";
 
 /** A diagonal cross: a void notice here, and the till app's `close` icon. */
 export const CROSS_ICON_PATH =

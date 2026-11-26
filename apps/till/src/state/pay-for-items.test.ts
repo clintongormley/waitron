@@ -1,12 +1,8 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import type {
-  AllocationPreview,
-  BillBalance,
-  BillEditExpected,
-  BillPaymentResult,
-  ReadOptions,
-  TillApi,
-} from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { AllocationPreview, BillBalance, BillPaymentResult } from "../api/payments-api.js";
+import type { BillEditExpected } from "../api/order-types.js";
+import type { ReadOptions } from "../api/till-request.js";
 import { formatMoney } from "@waitron/shared";
 import { fill, setLocale, t } from "../i18n/t.js";
 import type { PayLine, PayRequest } from "../widgets/bill-pay-dialog.js";

@@ -1,6 +1,6 @@
 import "@waitron/ui/src/components/wt-stop-screen.js";
 import { html, nothing } from "lit";
-import type { StaffNotice } from "../api/client.js";
+import type { StaffNotice } from "../api/device-session-api.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 import { recoveryLink, recoveryRefusalOf, recoveryRefusalText } from "./recovery-refusal.js";

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { billOf } from "../../test/bill-pay-app.js";
-import type { BillBalance, BillEditExpected } from "../api/client.js";
+import type { BillBalance } from "../api/payments-api.js";
+import type { BillEditExpected } from "../api/order-types.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import {
   billAfterDocument,

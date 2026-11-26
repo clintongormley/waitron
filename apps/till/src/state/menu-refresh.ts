@@ -1,12 +1,8 @@
 import { lookupSetMenuLine, type SetMenuOfferLookup } from "./set-menus.js";
 import { effectiveDefaultLabelId } from "@waitron/menu/src/option-default.js";
 import { compareDecimal, decimal } from "@waitron/shared";
-import {
-  menuOfferToTillProduct,
-  type MenuUnavailable,
-  type TillMenuOffer,
-  type TillProduct,
-} from "../api/client.js";
+import type { MenuUnavailable } from "../api/client.js";
+import { menuOfferToTillProduct, type TillMenuOffer, type TillProduct } from "../api/menu-api.js";
 import { lineProductName, productUnit } from "../widgets/product-name.js";
 import { lineGross, productAsVariant, quantityPlaces, takesExtras } from "./order-line.js";
 import type { OrderLine } from "./working-order.js";

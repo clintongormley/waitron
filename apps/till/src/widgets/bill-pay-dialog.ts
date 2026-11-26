@@ -5,7 +5,7 @@ import {
   outsideCardStyles,
   outsideCardSummary,
 } from "./outside-card.js";
-import type { OutsideCardDetails } from "../api/client.js";
+import type { OutsideCardDetails } from "../api/payments-api.js";
 import { choiceRowStyles } from "./choice-styles.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { recoveryLink } from "./recovery-refusal.js";
@@ -61,9 +61,8 @@ import type {
   AllocationPreview,
   BillBalance,
   BillPaymentView,
-  DeviceEquipment,
-  TillActiveReader,
-} from "../api/client.js";
+} from "../api/payments-api.js";
+import type { DeviceEquipment, TillActiveReader } from "../api/device-session-api.js";
 import {
   BILL_PAY_WAYS,
   PAYMENT_STATES,

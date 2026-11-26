@@ -3,7 +3,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { setLocale, t } from "../i18n/t.js";
 import "./adjustment-dialog.js";
 import type { AdjustmentChoice, AdjustTarget, TillAdjustmentDialog } from "./adjustment-dialog.js";
-import type { AdjustmentPreview, AdjustmentReason } from "../api/client.js";
+import type { AdjustmentPreview, AdjustmentReason } from "../api/payments-api.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("es-ES"));

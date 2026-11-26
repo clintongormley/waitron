@@ -3,7 +3,7 @@ import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController, type WtInput } from "@waitron/ui";
 import { WorkingOrderStore } from "../state/working-order.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import {

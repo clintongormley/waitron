@@ -15,14 +15,9 @@ import {
 import { PASS_COLUMNS } from "../state/kitchen-columns.js";
 import type { TillPassBoard } from "../widgets/pass-board.js";
 import type { TillKitchenColumnsDialog } from "../widgets/kitchen-columns-dialog.js";
-import type {
-  DeviceIdentity,
-  DevicePassBoard,
-  PassBoard,
-  PassCardItem,
-  ResolvedKitchenScreen,
-  TillApi,
-} from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { DevicePassBoard, PassBoard, PassCardItem } from "../api/kitchen-api.js";
+import type { DeviceIdentity, ResolvedKitchenScreen } from "../api/device-session-api.js";
 import {
   PASS_NOW,
   minutesAgo,

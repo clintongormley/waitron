@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { TillApi, type Draft } from "./client.js";
+import { TillApi } from "./client.js";
+import type { Draft } from "./drafts-api.js";
 
 const draft: Draft = {
   id: "draft-1",

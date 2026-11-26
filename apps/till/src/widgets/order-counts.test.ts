@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { LitElement, html } from "lit";
 import { es, type StringKey } from "../i18n/strings.js";
 import { countText, setLocale } from "../i18n/t.js";
-import type { OrderStateCounts } from "../api/client.js";
+import type { OrderStateCounts } from "../api/orders-api.js";
 import { orderCountStyles, orderCounts } from "./order-counts.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 

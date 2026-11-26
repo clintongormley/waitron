@@ -6,7 +6,9 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { TillPartyNameDialog } from "../widgets/party-name-dialog.js";
 import type { TillSplitPicker } from "../widgets/split-picker.js";
-import type { SplitSources, TabLine, TableParty, TableState } from "../api/client.js";
+import type { TableParty, TableState } from "../api/floor-api.js";
+import type { SplitSources } from "../api/drafts-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import "./till-table-order-screen.js";
 import type {
   SplitRefusal,

@@ -40,16 +40,11 @@ import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { TillProfileDialog } from "./widgets/profile-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
-import type {
-  FreshDraftLineInput,
-  OrderGroup,
-  PrintProblem,
-  TableState,
-  TableParty,
-  TillApi,
-  TillMenuOffer,
-  ZoneOffers,
-} from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { TableState, TableParty } from "./api/floor-api.js";
+import type { FreshDraftLineInput } from "./api/drafts-api.js";
+import type { OrderGroup, PrintProblem } from "./api/kitchen-api.js";
+import type { TillMenuOffer, ZoneOffers } from "./api/menu-api.js";
 import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 
 const unit = {
@@ -9121,7 +9116,7 @@ describe("native app phone order view with mixed dish families", () => {
             menuItemId: string,
             quantity: string,
             slot: number,
-          ): import("./api/client.js").FreshDraftLine => ({
+          ): import("./api/drafts-api.js").FreshDraftLine => ({
             id,
             menuItemId,
             quantity,
@@ -9140,7 +9135,7 @@ describe("native app phone order view with mixed dish families", () => {
             joinGroupId: null,
             afterGroupId: null,
           });
-          const source: import("./api/client.js").TabLine = {
+          const source: import("./api/kitchen-api.js").TabLine = {
             changesAfterSending: null,
             id: "review-source",
             name: "Recorded dish",
@@ -9162,7 +9157,7 @@ describe("native app phone order view with mixed dish families", () => {
             note: "Recorded note",
             listId: null,
           };
-          const extra: import("./api/client.js").TabLine = {
+          const extra: import("./api/kitchen-api.js").TabLine = {
             ...source,
             id: "review-source-extra",
             lineNo: 2,

@@ -6,7 +6,9 @@ import "./till-schedule-screen.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { TillScheduleScreen } from "./till-schedule-screen.js";
-import type { MyAbsence, MyShift, MySwap, StaffMember, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { MyAbsence, MyShift, MySwap } from "../api/attendance-api.js";
+import type { StaffMember } from "../api/device-session-api.js";
 
 // One row of each list (a shift, an acceptable swap offered to me, an absence), so each list's rows
 // are under axe.

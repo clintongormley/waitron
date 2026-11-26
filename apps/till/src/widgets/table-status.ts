@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { type WtToast, baseStyles, floorMapFillStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-toast.js";
-import type { TableParty, TableState } from "../api/client.js";
+import type { TableParty, TableState } from "../api/floor-api.js";
 import { t } from "../i18n/t.js";
 import { type PinLook, pinLook, readyCount, readyText } from "../state/floor-look.js";
 import { detailsHeading, groupName, mergeMembersOf, savedNameUnder } from "../state/floor-today.js";

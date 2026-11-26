@@ -27,7 +27,8 @@ import {
   serverConnectionNoticeStyles,
 } from "../widgets/server-connection-notice.js";
 import { noticeLine, noticeLineStyles } from "../widgets/notice-strip.js";
-import type { StaffMember, StaffNotice, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { StaffMember, StaffNotice } from "../api/device-session-api.js";
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { queuedLiveRefresh } from "../state/live-gate.js";
 

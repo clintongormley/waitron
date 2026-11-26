@@ -1,5 +1,5 @@
 import { css, html, nothing } from "lit";
-import type { OutsideCardDetails } from "../api/client.js";
+import type { OutsideCardDetails } from "../api/payments-api.js";
 import { t } from "../i18n/t.js";
 
 export const outsideCardStyles = css`

@@ -16,14 +16,9 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import { screenCardStyles } from "../widgets/screen-card-styles.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type {
-  AbsenceKind,
-  MyAbsence,
-  MyShift,
-  MySwap,
-  StaffMember,
-  TillApi,
-} from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { AbsenceKind, MyAbsence, MyShift, MySwap } from "../api/attendance-api.js";
+import type { StaffMember } from "../api/device-session-api.js";
 
 /** Mirrors the server's `absence_kind` enum; the server re-validates. */
 const ABSENCE_KINDS: readonly AbsenceKind[] = ["holiday", "sick_leave", "leave", "unpaid"];

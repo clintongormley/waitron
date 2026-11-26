@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { TableParty, TableState, TableToday, UnsentDraft } from "../api/client.js";
+import type { TableParty, TableState, TableToday } from "../api/floor-api.js";
+import type { UnsentDraft } from "../api/drafts-api.js";
 import { barBillToOpen, barTables, type LocalBill } from "./bar-tables.js";
 
 function draft(billId: string, ownerId: string, lineCount = 2): UnsentDraft {

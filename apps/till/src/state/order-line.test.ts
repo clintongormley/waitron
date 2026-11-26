@@ -13,7 +13,7 @@ import {
   toWireProductIdentity,
 } from "./order-line.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
-import { sellingValuesOf, type TillProduct } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/menu-api.js";
 
 // A gross-1.50 espresso at the general rate.
 const coffee: TillProduct = {

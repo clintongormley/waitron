@@ -34,13 +34,8 @@ import {
   toggleColumnCollapsed,
 } from "../state/kitchen-columns.js";
 import { KitchenColumnLayouts } from "../state/kitchen-column-layouts.js";
-import type {
-  DevicePassBoard,
-  PassBoard,
-  PassCard,
-  PassReleaseAsk,
-  TillApi,
-} from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { DevicePassBoard, PassBoard, PassCard, PassReleaseAsk } from "../api/kitchen-api.js";
 
 type BoardId = "pass" | "monitor";
 

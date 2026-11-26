@@ -3,13 +3,9 @@ import type { PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import type {
-  TillApi,
-  Station,
-  StationDestination,
-  StationTodayWrite,
-  StaffMember,
-} from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { Station, StationDestination, StationTodayWrite } from "../api/kitchen-api.js";
+import type { StaffMember } from "../api/device-session-api.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";

@@ -11,7 +11,7 @@ import {
   visibleProducts,
 } from "./menu-filter.js";
 import { ALLERGEN_CODES, UNDECLARED_DIET } from "@waitron/shared";
-import type { TillProduct } from "./api/client.js";
+import type { TillProduct } from "./api/menu-api.js";
 
 function product(id: string, menuId?: string): TillProduct {
   return {

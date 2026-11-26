@@ -4,14 +4,14 @@ import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, toggleFloorView } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
+import type { TillApi } from "../api/client.js";
 import type {
   FloorAnswer,
   FloorZone,
   TableParty,
   TableState,
   TableToday,
-  TillApi,
-} from "../api/client.js";
+} from "../api/floor-api.js";
 import type { TillTableDetailsSheet } from "../widgets/table-details-sheet.js";
 import { nextFloorMoment } from "../state/floor-today.js";
 

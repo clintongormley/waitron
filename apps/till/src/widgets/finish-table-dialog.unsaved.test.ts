@@ -5,7 +5,7 @@ import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { UnservedDish } from "../api/finish-table-types.js";
-import type { AdjustmentReason } from "../api/client.js";
+import type { AdjustmentReason } from "../api/payments-api.js";
 import "./finish-table-dialog.js";
 import type { TillFinishTableDialog } from "./finish-table-dialog.js";
 

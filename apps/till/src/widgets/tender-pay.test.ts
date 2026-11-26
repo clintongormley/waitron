@@ -4,7 +4,8 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { blurAll, cleanupWidgets, mountWidget, textFieldsIn } from "./test-helpers.js";
 import { TillTenderPay, type CardOutcome } from "./tender-pay.js";
-import { sellingValuesOf, type OrderFlow, type TillProduct } from "../api/client.js";
+import type { OrderFlow } from "../api/orders-api.js";
+import { sellingValuesOf, type TillProduct } from "../api/menu-api.js";
 import { userEvent } from "vitest/browser";
 import { dialogOpenUnder } from "./track-dialog.js";
 

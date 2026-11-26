@@ -5,7 +5,7 @@ import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitr
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
-import type { StationDestination, StationTodayWrite } from "../api/client.js";
+import type { StationDestination, StationTodayWrite } from "../api/kitchen-api.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { trackDialog } from "./track-dialog.js";

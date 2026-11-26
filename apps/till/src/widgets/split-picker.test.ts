@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { decimal, formatMoney } from "@waitron/shared";
-import type { BillBalance, Draft, PartyBill, TabLine } from "../api/client.js";
+import type { PartyBill } from "../api/floor-api.js";
+import type { Draft } from "../api/drafts-api.js";
+import type { BillBalance } from "../api/payments-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { tabLinePortionKey } from "../state/portion-groups.js";
 import { pickGroups } from "../state/portion-selection.js";

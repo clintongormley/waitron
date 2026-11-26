@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtButton } from "@waitron/ui";
-import type { DeadEndAnswer } from "../api/client.js";
+import type { DeadEndAnswer } from "../api/drafts-api.js";
 import type { OrderLine } from "../state/working-order.js";
 import { setLocale } from "../i18n/t.js";
 import { DraftStore } from "../state/draft-sync.js";

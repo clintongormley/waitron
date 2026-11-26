@@ -7,7 +7,7 @@ import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { helpBadgeLabel, helpEn, helpEs, type HelpKey } from "../i18n/help-strings.js";
-import type { FloorZone, TableState, TableToday } from "../api/client.js";
+import type { FloorZone, TableState, TableToday } from "../api/floor-api.js";
 
 function zone(layoutDue: FloorZone["layoutDue"] = null): FloorZone {
   return {

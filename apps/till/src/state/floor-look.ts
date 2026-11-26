@@ -6,7 +6,7 @@ import type {
   FloorMapOutline,
   FloorMapPulse,
 } from "@waitron/ui";
-import type { TableState } from "../api/client.js";
+import type { TableState } from "../api/floor-api.js";
 import { countText, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { heldChip } from "../widgets/signal-chips.js";

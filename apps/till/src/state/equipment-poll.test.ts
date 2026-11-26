@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EquipmentPoll } from "./equipment-poll.js";
-import type { DeviceEquipment } from "../api/client.js";
+import type { DeviceEquipment } from "../api/device-session-api.js";
 import { liveConnectionFixture } from "../../test/live-connection.js";
 
 function equipment(readerId: string | null): DeviceEquipment {

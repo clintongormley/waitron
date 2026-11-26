@@ -5,7 +5,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./pay-equipment.js";
 import type { TillPayEquipment } from "./pay-equipment.js";
-import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/client.js";
+import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/device-session-api.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("es"));

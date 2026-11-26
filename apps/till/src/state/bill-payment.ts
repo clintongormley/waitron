@@ -12,18 +12,18 @@ import {
   type BillSetMenuState,
   type Decimal,
 } from "@waitron/shared";
-import {
-  isNetworkFailure,
-  type OutsideCardDetails,
-  type AllocationPreview,
-  type BillBalance,
-  type BillEditExpected,
-  type BillPaymentAsk,
-  type BillPaymentRequest,
-  type BillPaymentView,
-  type BillRefundRequest,
-  type TabLine,
-} from "../api/client.js";
+import { isNetworkFailure } from "../api/client.js";
+import type {
+  OutsideCardDetails,
+  AllocationPreview,
+  BillBalance,
+  BillPaymentAsk,
+  BillPaymentRequest,
+  BillPaymentView,
+  BillRefundRequest,
+} from "../api/payments-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
+import type { BillEditExpected } from "../api/order-types.js";
 import { NO_BOX_ANSWERING } from "../api/server-router.js";
 import type { StringKey } from "../i18n/strings.js";
 import { moreThanOneWholeUnit, tabLineGross } from "./adjust-target.js";

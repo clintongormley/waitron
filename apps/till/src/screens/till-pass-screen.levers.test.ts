@@ -8,13 +8,9 @@ import { en, es } from "../i18n/strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillPassBoard } from "../widgets/pass-board.js";
-import type {
-  DeviceIdentity,
-  DevicePassBoard,
-  PassBoard,
-  PassCard,
-  TillApi,
-} from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { DevicePassBoard, PassBoard, PassCard } from "../api/kitchen-api.js";
+import type { DeviceIdentity } from "../api/device-session-api.js";
 import {
   PASS_NOW,
   minutesAgo,

@@ -33,7 +33,7 @@ import {
   type,
 } from "../test/bill-pay-app.js";
 import type { TillApp } from "./till-app.js";
-import type { TabLine } from "./api/client.js";
+import type { TabLine } from "./api/kitchen-api.js";
 import { liveReadFixture } from "../test/live-connection.js";
 import { daily, bill, special } from "../test/set-menu-widgets.js";
 import { setMenuProduct } from "./widgets/product-pick.js";

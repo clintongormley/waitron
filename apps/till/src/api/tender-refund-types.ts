@@ -1,4 +1,4 @@
-import type { TillSaleResult } from "./client.js";
+import type { TillSaleResult } from "./payments-api.js";
 import type { TenderMethod } from "./find-bill-types.js";
 
 export interface TenderRefundRequest {

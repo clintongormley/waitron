@@ -1,5 +1,5 @@
 import { formatMoney } from "@waitron/shared";
-import type { BillUnsent } from "../api/client.js";
+import type { BillUnsent } from "../api/payments-api.js";
 import { billUnsentText } from "../state/bill-unsent.js";
 import { clockReadingOf, clockUnusableText, currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";

@@ -1,4 +1,8 @@
-import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../src/api/client.js";
+import type {
+  DeviceEquipment,
+  EquipmentItem,
+  RoleEquipment,
+} from "../src/api/device-session-api.js";
 
 export function equipmentItem(
   id: string,

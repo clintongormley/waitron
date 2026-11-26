@@ -5,7 +5,7 @@ import type {
   DeviceEquipmentRead,
   EquipmentChange,
   StaffNotice,
-} from "./api/client.js";
+} from "./api/device-session-api.js";
 import type { TillApp } from "./till-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtRowActions } from "@waitron/ui";
-import type { BillEditExpected } from "../api/client.js";
+import type { BillEditExpected } from "../api/order-types.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";

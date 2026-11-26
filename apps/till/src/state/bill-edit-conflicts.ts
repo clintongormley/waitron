@@ -1,4 +1,4 @@
-import type { BillEditExpected, BillEditState } from "../api/client.js";
+import type { BillEditExpected, BillEditState } from "../api/order-types.js";
 
 export interface BillEditConflict {
   partyId: string;

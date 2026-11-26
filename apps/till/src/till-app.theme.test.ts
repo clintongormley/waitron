@@ -14,7 +14,8 @@ import { themeLabels } from "./widgets/theme-chooser.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
-import type { TillApi, TillProduct, ZoneOffers } from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { TillProduct, ZoneOffers } from "./api/menu-api.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillShell } from "./widgets/till-shell.js";
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtDialog, WtRowActions } from "@waitron/ui";
-import type { TabLine } from "../api/client.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { setLocale } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";

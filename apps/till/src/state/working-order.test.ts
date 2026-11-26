@@ -4,7 +4,7 @@ import { lineGross, productAsVariant, toWireProductIdentity } from "./order-line
 import { toDraftLineInput } from "./draft-lines.js";
 import { optionSnapshotOf } from "./held-options.js";
 import type { LineSelection, OrderLine, SelectedExtra } from "./working-order.js";
-import { sellingValuesOf, type TillProduct } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/menu-api.js";
 
 const ROW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 

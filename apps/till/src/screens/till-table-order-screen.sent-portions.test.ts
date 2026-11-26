@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { WtRowActions } from "@waitron/ui";
-import type { CurrentOrderRow, PartyBill, TabLine } from "../api/client.js";
+import type { PartyBill } from "../api/floor-api.js";
+import type { CurrentOrderRow, TabLine } from "../api/kitchen-api.js";
 import { setLocale } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";

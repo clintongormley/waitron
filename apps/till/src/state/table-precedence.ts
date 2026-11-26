@@ -1,5 +1,5 @@
 import { worstBand, type TimingBand } from "@waitron/shared";
-import type { TableState } from "../api/client.js";
+import type { TableState } from "../api/floor-api.js";
 import { reminderDueAt } from "./release-reminder.js";
 import { currentStep } from "./service-steps.js";
 

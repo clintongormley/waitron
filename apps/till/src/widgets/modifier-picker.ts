@@ -44,17 +44,13 @@ import { lineNutrition } from "./line-nutrition.js";
 import { extraNutrition } from "./diet-badges.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { allowsAllergenChoice, EMPTY_MENU_FILTERS, type MenuFilters } from "../menu-filter.js";
-import type { LineNutrition } from "../api/client.js";
+import type { LineNutrition } from "../api/kitchen-api.js";
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import { lineExtrasEditorStyles, renderLineExtrasEditor } from "./line-extras-editor.js";
 import type { LineSelection, OrderLine, SelectedExtra } from "../state/working-order.js";
-import type {
-  OfferedExtraItem,
-  OfferedExtrasList,
-  OfferedOptionsList,
-  TillCourse,
-  TillProduct,
-} from "../api/client.js";
+import type { OfferedExtraItem, OfferedExtrasList, OfferedOptionsList } from "../api/client.js";
+import type { TillCourse } from "../api/device-session-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 
 interface ModifierDraft {
   quantity: string;

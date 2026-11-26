@@ -7,7 +7,7 @@ import type {
   TableState,
   TableToday,
   TodayPlacement,
-} from "../api/client.js";
+} from "../api/floor-api.js";
 import {
   carryRevisions,
   dropAction,

@@ -14,15 +14,10 @@ import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
 import type { TillStationChoiceDialog } from "./widgets/station-choice-dialog.js";
 import type { FormFactor } from "./layout.js";
-import type {
-  CounterWaitingOrder,
-  HeldOrder,
-  TabLine,
-  TabLines,
-  Station,
-  TillApi,
-  ZoneOffers,
-} from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { CounterWaitingOrder, HeldOrder } from "./api/orders-api.js";
+import type { TabLine, TabLines, Station } from "./api/kitchen-api.js";
+import type { ZoneOffers } from "./api/menu-api.js";
 
 // Move to station on a paid counter order waiting to be handed over: one request naming, at most 100
 // at a time, the order's movable dishes not already at the chosen station, through the table's move

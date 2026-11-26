@@ -1,5 +1,5 @@
 import { countryNameFor } from "@waitron/country-packs";
-import type { InvoiceIdentity, MergeInvoiceChoice, PartyBill } from "../api/client.js";
+import type { InvoiceIdentity, MergeInvoiceChoice, PartyBill } from "../api/floor-api.js";
 import { currentLocale, t } from "../i18n/t.js";
 
 /** What merging `from` into `into`, or moving every dish of `from` to it, asks before it is sent.

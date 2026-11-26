@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TillMenuOffer, TillProduct } from "../api/client.js";
+import type { TillMenuOffer, TillProduct } from "../api/menu-api.js";
 import {
   endedPeriodOf,
   isLateSendManagerRefusal,

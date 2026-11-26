@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { BillBalance, HeldOrderSummary } from "../api/client.js";
+import type { HeldOrderSummary } from "../api/orders-api.js";
+import type { BillBalance } from "../api/payments-api.js";
 import { CounterOverpaidRead } from "./counter-overpaid.js";
 import { TABLE_REQUEST_LIMIT_MS } from "./draft-sync.js";
 

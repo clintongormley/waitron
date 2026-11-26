@@ -41,19 +41,11 @@ import type { TillSentOrders } from "./widgets/sent-orders.js";
 import { row } from "./screens/till-table-order-screen.current-orders.test-helpers.js";
 import type { WtDialog, WtTextarea } from "@waitron/ui";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
-import type {
-  FloorZone,
-  MadeHereItem,
-  PartyBill,
-  Station,
-  TabLine,
-  TableState,
-  TillApi,
-  TillMenu,
-  TillProduct,
-  TillSaleResult,
-  ZoneOffers,
-} from "./api/client.js";
+import type { MadeHereItem, TillApi } from "./api/client.js";
+import type { FloorZone, PartyBill, TableState } from "./api/floor-api.js";
+import type { TillSaleResult } from "./api/payments-api.js";
+import type { Station, TabLine } from "./api/kitchen-api.js";
+import type { TillMenu, TillProduct, ZoneOffers } from "./api/menu-api.js";
 
 const coffee: TillProduct = {
   id: "cafe",

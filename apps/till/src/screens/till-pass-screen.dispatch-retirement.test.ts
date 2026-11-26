@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillPassBoard } from "../widgets/pass-board.js";
-import type { PassBoard, PassCard, PassCardItem, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { PassBoard, PassCard, PassCardItem } from "../api/kitchen-api.js";
 import {
   PASS_NOW,
   minutesAgo,

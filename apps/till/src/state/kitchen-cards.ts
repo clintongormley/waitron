@@ -1,12 +1,7 @@
 import { BAND_RANK, classifyBand } from "@waitron/shared";
 import { mergeLabel } from "@waitron/ui";
-import type {
-  QueueGroup,
-  StationQueueCourse,
-  StationQueueGroup,
-  StationQueueItem,
-  TicketState,
-} from "../api/client.js";
+import type { StationQueueCourse, StationQueueGroup, StationQueueItem } from "../api/client.js";
+import type { QueueGroup, TicketState } from "../api/kitchen-api.js";
 import { type OverviewDish, dishThousandths } from "./kitchen-overview.js";
 import { kitchenPortionKey, portionGroups } from "./portion-groups.js";
 

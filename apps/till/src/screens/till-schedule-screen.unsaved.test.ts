@@ -5,7 +5,8 @@ import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { MyShift, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { MyShift } from "../api/attendance-api.js";
 import "./till-schedule-screen.js";
 
 class ScheduleLeaveApp extends LitElement {

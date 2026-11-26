@@ -5,7 +5,8 @@ import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { allergenLabel, allergenName } from "../i18n/allergen-names.js";
 import { cleanupWidgets, mountWidget, namedIcons, resetPage } from "./test-helpers.js";
 import { PASS_COLUMNS } from "../state/kitchen-columns.js";
-import type { DietProfile, PassBoard, PassCard, PassCardItem } from "../api/client.js";
+import type { DietProfile } from "../api/client.js";
+import type { PassBoard, PassCard, PassCardItem } from "../api/kitchen-api.js";
 import {
   PASS_NOW,
   minutesAgo,

@@ -1,5 +1,6 @@
 import { compareDecimal, decimal } from "@waitron/shared";
-import type { BillBalance, HeldOrderSummary } from "../api/client.js";
+import type { HeldOrderSummary } from "../api/orders-api.js";
+import type { BillBalance } from "../api/payments-api.js";
 import { TABLE_REQUEST_LIMIT_MS, limited } from "./draft-sync.js";
 
 /**

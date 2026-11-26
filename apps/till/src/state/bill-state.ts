@@ -6,7 +6,8 @@ import {
   subtractDecimal,
   toScale,
 } from "@waitron/shared";
-import type { BillBalance, PartyBill } from "../api/client.js";
+import type { PartyBill } from "../api/floor-api.js";
+import type { BillBalance } from "../api/payments-api.js";
 import { fill, t } from "../i18n/t.js";
 import { moneyPlus, type RefundAsk } from "./bill-payment.js";
 

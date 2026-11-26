@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { setLocale, t } from "../i18n/t.js";
-import type { TabLine } from "../api/client.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";

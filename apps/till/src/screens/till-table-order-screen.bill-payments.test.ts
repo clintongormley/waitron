@@ -6,14 +6,9 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { BillPayDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
 import type { TillTenderPay } from "../widgets/tender-pay.js";
-import type {
-  BillBalance,
-  CurrentOrders,
-  OrderGroup,
-  PartyBill,
-  TabLine,
-  TableParty,
-} from "../api/client.js";
+import type { PartyBill, TableParty } from "../api/floor-api.js";
+import type { BillBalance } from "../api/payments-api.js";
+import type { CurrentOrders, OrderGroup, TabLine } from "../api/kitchen-api.js";
 import { currentGroup, row } from "./till-table-order-screen.current-orders.test-helpers.js";
 
 const money = (amount: string) => formatMoney(decimal(amount), currentLocale());

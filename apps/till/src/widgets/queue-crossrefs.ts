@@ -1,7 +1,7 @@
 import { html, nothing } from "lit";
 import type { TemplateResult } from "lit";
 import { formatDecimalInput } from "@waitron/ui";
-import type { QueueCrossRef } from "../api/client.js";
+import type { QueueCrossRef } from "../api/kitchen-api.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { extraNutrition } from "./diet-badges.js";
 import { snapshotDescriptionFor } from "./dish-format.js";

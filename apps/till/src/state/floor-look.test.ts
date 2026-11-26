@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { TableSignal } from "@waitron/shared";
 import type { FloorMapCue, FloorMapFill, FloorMapOutline, FloorMapPulse } from "@waitron/ui";
-import type { TableParty, TableState, TableToday } from "../api/client.js";
+import type { TableParty, TableState, TableToday } from "../api/floor-api.js";
 import { en, es } from "../i18n/strings.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { PRECEDENCE } from "./table-precedence.js";

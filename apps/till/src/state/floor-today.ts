@@ -13,7 +13,7 @@ import {
   inNumberOrder,
   mergeLabel,
 } from "@waitron/ui";
-import type { FloorZone, TableParty, TableState, TodayPlacement } from "../api/client.js";
+import type { FloorZone, TableParty, TableState, TodayPlacement } from "../api/floor-api.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { t } from "../i18n/t.js";

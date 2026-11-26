@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-combobox.js";
 import { t } from "../i18n/t.js";
-import type { DeadEndAnswer } from "../api/client.js";
+import type { DeadEndAnswer } from "../api/drafts-api.js";
 import { quantityText } from "./dish-format.js";
 
 @customElement("till-dead-ends-section")

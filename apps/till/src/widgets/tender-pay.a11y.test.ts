@@ -3,7 +3,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./tender-pay.js";
 import type { TillTenderPay } from "./tender-pay.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { page } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
 

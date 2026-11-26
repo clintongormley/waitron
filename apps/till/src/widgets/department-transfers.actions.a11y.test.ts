@@ -3,7 +3,8 @@ import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { TillApi } from "../api/client.js";
-import type { DepartmentTransferDetail, TableState } from "../api/client.js";
+import type { DepartmentTransferDetail } from "../api/department-transfers-api.js";
+import type { TableState } from "../api/floor-api.js";
 import { TillDepartmentTransfers } from "./department-transfers.js";
 const request = {
   id: "one",

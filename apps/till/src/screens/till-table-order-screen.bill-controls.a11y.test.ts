@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { WtRowActions } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
-import type { PartyBill, TableParty } from "../api/client.js";
+import type { PartyBill, TableParty } from "../api/floor-api.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";

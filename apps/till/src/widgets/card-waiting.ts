@@ -7,7 +7,7 @@ import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import { payNotice, type PayNotice } from "./pay-equipment.js";
 import { refusalText, type PayRefusal } from "./pay-refusal.js";
-import type { BillReaderStopOutcome } from "../api/client.js";
+import type { BillReaderStopOutcome } from "../api/payments-api.js";
 
 export type BillReaderStopStatus = BillReaderStopOutcome | "ready" | "sending";
 

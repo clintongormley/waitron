@@ -8,7 +8,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorZone, TableParty, TableState, TableToday } from "../api/client.js";
+import type { FloorZone, TableParty, TableState, TableToday } from "../api/floor-api.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {
   return {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DeviceEquipmentRead, StaffNotice } from "./api/client.js";
+import type { DeviceEquipmentRead, StaffNotice } from "./api/device-session-api.js";
 import type { TillApp } from "./till-app.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { emit, mountEquipmentApp, signIn } from "../test/equipment-app.js";

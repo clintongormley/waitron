@@ -4,7 +4,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { TillHeldOrders } from "./held-orders.js";
 import { TillCounterWaiting } from "./counter-waiting.js";
-import type { HeldOrderSummary, CounterWaitingOrder } from "../api/client.js";
+import type { HeldOrderSummary, CounterWaitingOrder } from "../api/orders-api.js";
 
 afterEach(cleanupWidgets);
 const items = [

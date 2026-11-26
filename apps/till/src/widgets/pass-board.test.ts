@@ -12,7 +12,7 @@ import { CARD_COLUMN_TEXT_WIDTHS, OVERVIEW_COLUMN_REMS } from "../state/kitchen-
 import { type ColumnKey, type ColumnState, PASS_COLUMNS } from "../state/kitchen-columns.js";
 import { overviewRows, rowsToMake } from "../state/kitchen-overview.js";
 import { passOverviewDishes } from "../state/pass-view.js";
-import type { OverviewFact, PassBoard } from "../api/client.js";
+import type { OverviewFact, PassBoard } from "../api/kitchen-api.js";
 import {
   PASS_NOW,
   minutesAgo,
