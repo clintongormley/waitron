@@ -34,7 +34,7 @@ const node = (kname, extra = {}) => ({
   fstype: null,
   uuid: null,
   "maj:min": "8:1",
-  mountpoints: [null],
+  mountpoints: [],
   ...extra,
 });
 /** @param {string} kname @param {string} tran @param {Record<string, any>[]} [children] */
@@ -52,6 +52,24 @@ const BOX_DISK = disk("sda", "sata", [
   }),
 ]);
 
+const LSBLK = [
+  "--json",
+  "--list",
+  "--output",
+  "KNAME,PKNAME,TYPE,TRAN,FSTYPE,UUID,MAJ:MIN,MOUNTPOINTS",
+];
+
+/**
+ * Fixtures are written as trees; lsblk's `--list` prints them flat, each row naming its parent and
+ * carrying its disk's transport unless the fixture sets its own.
+ * @param {Record<string, any>[]} entries @returns {Record<string, any>[]}
+ */
+const listRows = (entries, pkname = null, tran = null) =>
+  entries.flatMap(({ children, ...entry }) => {
+    const row = { ...entry, pkname, tran: entry.tran ?? tran };
+    return [row, ...listRows(children ?? [], row.kname, row.tran)];
+  });
+
 /**
  * A stand-in host: lsblk answers `disks`, findmnt answers what is mounted, and mount and umount
  * change that.
@@ -61,11 +79,12 @@ const BOX_DISK = disk("sda", "sata", [
 const fakeHost = (host) => {
   const events = host.events ?? [];
   const mounts = host.mounts ?? [];
-  /** @param {Record<string, any>[]} list @returns {Record<string, any>[]} */
-  const flat = (list) => list.flatMap((entry) => [entry, ...flat(entry.children ?? [])]);
   const run = vi.fn((command, args, limit) => {
     events.push(["run", command, ...args]);
-    if (command === "lsblk") return JSON.stringify({ blockdevices: host.disks });
+    if (command === "lsblk") {
+      expect(args).toEqual(LSBLK);
+      return JSON.stringify({ blockdevices: host.rows ?? listRows(host.disks) });
+    }
     if (command === "findmnt") {
       const filesystems = [
         { target: "/", "maj:min": "254:0" },
@@ -76,7 +95,9 @@ const fakeHost = (host) => {
     if (command === "mount") {
       expect(limit).toBe(5000);
       const source = args.at(-2);
-      const found = flat(host.disks).find((entry) => `/dev/${entry.kname}` === source);
+      const found = (host.rows ?? listRows(host.disks)).find(
+        (entry) => `/dev/${entry.kname}` === source,
+      );
       mounts.push({ target: args.at(-1), device: found["maj:min"] });
       return "";
     }
@@ -101,6 +122,107 @@ const commands = (host, name) =>
 /** @param {string} line @param {ReturnType<typeof fakeHost>} host */
 const ask = async (line, host, log = () => {}) =>
   JSON.parse(await handleStorageRequest(line, { run: host.run, root, stateDir, log }));
+
+/** The spare box's own disk, as `lsblk --list` printed it there (a1603-lsblk-spare.log). */
+const SPARE_ROWS = [
+  {
+    kname: "nvme0n1",
+    pkname: null,
+    type: "disk",
+    tran: "nvme",
+    fstype: null,
+    uuid: null,
+    "maj:min": "259:0",
+    mountpoints: [],
+  },
+  {
+    kname: "nvme0n1p1",
+    pkname: "nvme0n1",
+    type: "part",
+    tran: "nvme",
+    fstype: "vfat",
+    uuid: "D822-B452",
+    "maj:min": "259:1",
+    mountpoints: ["/boot/efi"],
+  },
+  {
+    kname: "nvme0n1p2",
+    pkname: "nvme0n1",
+    type: "part",
+    tran: "nvme",
+    fstype: null,
+    uuid: null,
+    "maj:min": "259:2",
+    mountpoints: [],
+  },
+  {
+    kname: "nvme0n1p3",
+    pkname: "nvme0n1",
+    type: "part",
+    tran: "nvme",
+    fstype: "ntfs",
+    uuid: "B0B435ACB4357646",
+    "maj:min": "259:3",
+    mountpoints: [],
+  },
+];
+/** A stick in the same shape, as `--list` prints a USB disk and its partition. */
+const STICK_ROWS = [
+  { ...SPARE_ROWS[0], kname: "sda", tran: "usb", "maj:min": "8:0" },
+  {
+    ...SPARE_ROWS[3],
+    kname: "sda1",
+    pkname: "sda",
+    tran: "usb",
+    fstype: "exfat",
+    uuid: "1234-ABCD",
+    "maj:min": "8:1",
+  },
+];
+
+describe("lsblk's flat list", () => {
+  it("reads the rows the spare box printed, with a stick plugged in", async () => {
+    const host = fakeHost({ rows: [...SPARE_ROWS, ...STICK_ROWS] });
+    expect(await ask(LIST, host)).toEqual({
+      ok: true,
+      drives: [{ drive: "sda1", fileSystem: "exfat", readable: true }],
+    });
+    expect(commands(host, "mount")).toEqual([
+      ["-t", "exfat", "-o", OPTIONS, "/dev/sda1", join(root, "sda1")],
+    ]);
+  });
+
+  it("never lists or mounts an NTFS partition on a disk that is not USB", async () => {
+    const host = fakeHost({ rows: SPARE_ROWS });
+    expect(await ask(LIST, host)).toEqual({ ok: true, drives: [] });
+    expect(commands(host, "mount")).toEqual([]);
+    const sata = fakeHost({
+      rows: SPARE_ROWS.map((row) => ({
+        ...row,
+        kname: row.kname.replace("nvme0n1p", "sdb").replace("nvme0n1", "sdb"),
+        pkname: row.pkname === null ? null : "sdb",
+        tran: "sata",
+        mountpoints: [],
+      })),
+    });
+    expect(await ask(LIST, sata)).toEqual({ ok: true, drives: [] });
+    expect(commands(sata, "mount")).toEqual([]);
+  });
+
+  it("takes the transport from the disk, whatever its partitions say", async () => {
+    const host = fakeHost({
+      rows: [
+        ...SPARE_ROWS.slice(0, 3),
+        { ...SPARE_ROWS[3], tran: "usb" },
+        { ...STICK_ROWS[0] },
+        { ...STICK_ROWS[1], tran: null },
+      ],
+    });
+    expect((await ask(LIST, host)).drives).toEqual([
+      { drive: "sda1", fileSystem: "exfat", readable: true },
+    ]);
+  });
+});
 
 describe("storage.list", () => {
   it("logs verb, actor and permission before mounting", async () => {

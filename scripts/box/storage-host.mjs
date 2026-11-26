@@ -32,13 +32,20 @@ export function storageCommand({ now = () => performance.now(), exec = execFileS
   };
 }
 
-/** @param {Record<string, any>} entry @returns {Record<string, any>[]} */
-const family = (entry) => [entry, ...(entry.children ?? []).flatMap(family)];
-
-/** The drives USB disks offer, by kernel name, with what identifies each one now. */
-function usbDrives(blockdevices, root) {
+/**
+ * The drives USB disks offer, by kernel name, with what identifies each one now.
+ * @param {Record<string, any>[]} rows lsblk's flat list, each row naming its parent
+ */
+function usbDrives(rows, root) {
+  /** @type {Map<string, Record<string, any>[]>} */
+  const below = new Map();
+  for (const row of rows) {
+    if (row.pkname !== null) below.set(row.pkname, [...(below.get(row.pkname) ?? []), row]);
+  }
+  /** @param {Record<string, any>} row @returns {Record<string, any>[]} */
+  const family = (row) => [row, ...(below.get(row.kname) ?? []).flatMap(family)];
   const drives = [];
-  for (const disk of blockdevices) {
+  for (const disk of rows) {
     if (disk.type !== "disk" || disk.tran !== "usb") continue;
     const all = family(disk);
     const holder = all.some(
@@ -48,7 +55,7 @@ function usbDrives(blockdevices, root) {
       (entry.mountpoints ?? []).some((point) => point !== null && dirname(point) !== root),
     );
     if (holder || mountedElsewhere) continue;
-    const parts = (disk.children ?? []).filter((entry) => entry.type === "part");
+    const parts = (below.get(disk.kname) ?? []).filter((entry) => entry.type === "part");
     for (const entry of parts.length > 0 ? parts : [disk]) {
       if (!entry.fstype || !DRIVE_NAME.test(entry.kname)) continue;
       drives.push({
@@ -106,7 +113,12 @@ function writeRecord(path, record) {
 
 function list(run, root, recordPath) {
   const { blockdevices } = JSON.parse(
-    run("lsblk", ["--json", "--output", "KNAME,TYPE,TRAN,FSTYPE,UUID,MAJ:MIN,MOUNTPOINTS"]),
+    run("lsblk", [
+      "--json",
+      "--list",
+      "--output",
+      "KNAME,PKNAME,TYPE,TRAN,FSTYPE,UUID,MAJ:MIN,MOUNTPOINTS",
+    ]),
   );
   const drives = usbDrives(blockdevices, root);
   const record = readRecord(recordPath);
