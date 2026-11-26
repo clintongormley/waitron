@@ -47,8 +47,8 @@ export function backupKeyFrameInput(record: BackupKeyRecord): BackupKeyFrameInpu
   };
 }
 
-/** The number of the backup key `backup.env` holds; 0 when it holds none with a number, or one under
- * the length floor, so the next key is 1. */
+/** The number of the backup key `backup.env` holds; 0 when it holds none with a number, one whose
+ * text it cannot read as a backup key, or one under the length floor, so the next key is 1. */
 export function heldBackupKeyNumber(env: Env): number {
   try {
     return loadBackupKey(env)?.keyNumber ?? 0;

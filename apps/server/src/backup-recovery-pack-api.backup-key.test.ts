@@ -285,7 +285,9 @@ describe("the backup key is written only once the pack and its master key are sa
       },
     });
     const response = await f.make(true, { signal: aborted.signal });
-    expect(response.status).toBeGreaterThanOrEqual(400);
+    expect(aborted.signal.aborted).toBe(true);
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({ error: { code: "server.internal" } });
     expect(response.headers.has("x-waitron-master-key")).toBe(false);
     expect(await masterKeyRows()).toEqual(rowsBefore);
     expect(await readRecoveryPacks(suite.db, node.nodeId)).toEqual([]);

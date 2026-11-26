@@ -932,8 +932,15 @@ it("words the backup key change's refusals: a wrong master key names the current
   expect(codeMessage("master_key.wrong", "es", { keyName: "26-11-2026 10:15" })).toBe(
     "Clave maestra incorrecta. Usa la del 26-11-2026 10:15.",
   );
-  expect(codeMessage("master_key.wrong", "en")).toBe("Wrong master key.");
-  expect(codeMessage("master_key.wrong", "es")).toBe("Clave maestra incorrecta.");
+  expect(codeMessage("master_key.wrong", "en")).toBe(
+    "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
+  );
+  expect(codeMessage("master_key.wrong", "es")).toBe(
+    "Clave maestra incorrecta. Este local aún no tiene clave maestra: usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación.",
+  );
+  expect(codeMessage("backup.recovery_key_too_short", "es")).toBe(
+    "La clave de las copias que tiene este servidor es demasiado corta. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para sustituirla.",
+  );
   expect(codeMessage("backup.key_change_page_required", "en")).toBe(
     "Changing the backup key needs an encrypted connection from this box's own page. Open the box's HTTPS address, then try again.",
   );

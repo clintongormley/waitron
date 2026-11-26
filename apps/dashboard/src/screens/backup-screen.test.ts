@@ -1667,11 +1667,11 @@ describe("backup-key configuration refusal", () => {
         await vi.waitFor(() =>
           expect(archiveAlertText(el)?.trim()).toBe(codeMessage(refusal.code)),
         );
-        if (locale === "en-GB") {
-          expect(archiveAlertText(el)).toContain(
-            "The box could not confirm which backup key its backups use: the key it loaded is not the one it holds.",
-          );
-        }
+        expect(archiveAlertText(el)?.trim()).toBe(
+          locale === "en-GB"
+            ? "The box could not confirm which backup key its backups use: the key it loaded is not the one it holds. Reload the page and try again. If this message comes back, stop changing backup settings here: this page cannot tell which key is right."
+            : "El servidor no ha podido confirmar qué clave usan sus copias: la clave que ha cargado no es la que tiene guardada. Recarga la página y vuelve a intentarlo. Si este mensaje vuelve a salir, no sigas cambiando los ajustes de las copias aquí: esta página no puede saber qué clave es la correcta.",
+        );
         expect(write).toHaveBeenCalledTimes(1);
         expect(q(el, ".off")?.textContent?.trim()).toBe(t("backup.status.off"));
         expect(action.disabled).toBe(false);

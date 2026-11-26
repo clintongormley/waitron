@@ -39,6 +39,7 @@ import {
   masterKeyId,
   sealingPublicKey,
   backupKey,
+  credentialRevision,
   putCredential,
   venueCredentials,
   tryGetCredential,
@@ -1666,6 +1667,103 @@ describe("backup admin routes", () => {
       expect((await readSealed())?.destinations).toEqual([
         { kind: "local-fs", id: "primary", dir: dest },
       ]);
+    } finally {
+      release();
+      await Promise.allSettled([apply, save]);
+      await withTransaction(suite.db, (tx) =>
+        deleteCredential(tx, { personId: null, purpose: "backup.stream" }),
+      );
+    }
+  }, 60_000);
+
+  it("a stream Save sent while apply holds its turn is refused for overlapping the bucket apply saved", async () => {
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let applyReached!: () => void;
+    const applyReading = new Promise<void>((resolve) => (applyReached = resolve));
+    let firstRead = true;
+    const turns = createTurns();
+    const app = buildApp(
+      makeSupervisor(sc),
+      sc.stateDir,
+      {},
+      undefined,
+      undefined,
+      undefined,
+      turns,
+      {
+        readBoxEnv: async () => {
+          if (firstRead) {
+            firstRead = false;
+            applyReached();
+            await held;
+          }
+          return loadBoxEnv({}, sc.stateDir);
+        },
+      },
+    );
+    mountStreamApi(
+      app,
+      {
+        db: suite.db,
+        node: suite.node,
+        nodeId: "00000000-0000-0000-0000-000000000000",
+        ring: RING,
+        stream: { reload: async () => {}, status: () => ({ state: "off" }) },
+        isPrimary: () => true,
+        readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv({}, sc.stateDir)),
+        sealedState: { refresh: async () => "sealed" },
+        probe: async () => ({ ok: true }),
+        prepareEncryption: async () => ({ ok: true }),
+        turns,
+      },
+      () => {},
+    );
+    const cookie = await login(app);
+    const apply = app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinations: [
+          {
+            kind: "custom-s3",
+            region: "eu-west-1",
+            bucket: "venue-copy",
+            prefix: `venues/${VENUE}`,
+            accessKeyId: "AKIACUSTOM",
+            secretAccessKey: "custom-secret-0123456789abcdef",
+          },
+        ],
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    await applyReading;
+    const save = app.request("/api/backup/stream", {
+      method: "PUT",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        region: "eu-west-1",
+        bucket: "venue-copy",
+        accessKeyId: "AKIAEXAMPLE",
+        secretAccessKey: "not-a-real-secret-0123456789",
+      }),
+    });
+    try {
+      // Long enough for a Save that does not wait its turn to finish.
+      await Promise.race([save, new Promise((resolve) => setTimeout(resolve, 500))]);
+      release();
+      const [applied, saved] = await Promise.all([apply, save]);
+      expect(applied.status).toBe(200);
+      expect(saved.status).toBe(400);
+      expect(await saved.json()).toMatchObject({
+        error: { code: "backup.archive_namespace_overlap" },
+      });
+      const stored = await withTransaction(suite.db, (tx) =>
+        credentialRevision(tx, { purpose: "backup.stream" }),
+      );
+      expect(stored).toBeNull();
     } finally {
       release();
       await Promise.allSettled([apply, save]);

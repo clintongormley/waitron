@@ -21,12 +21,18 @@ describe("part failure words", () => {
     expect(es.todo).not.toBe(en.todo);
   });
 
-  it("names Backups → Change the backup encryption key for a missing or short backup key", () => {
+  it("names Backups → Recovery pack → Change the backup key for a missing or short backup key", () => {
     for (const code of ["backup.recovery_key_missing", "backup.recovery_key_too_short"]) {
-      expect(partFailure("en", code).todo).toContain("Backups → Change the backup encryption key");
-      expect(partFailure("es", code).todo).toContain(
-        "Copias de seguridad → Cambiar la clave de cifrado de copias",
+      expect(partFailure("en", code).todo).toContain(
+        "Backups → Recovery pack → Change the backup key",
       );
+      expect(partFailure("es", code).todo).toContain(
+        "Copias de seguridad → Paquete de recuperación → Cambiar la clave de las copias",
+      );
+      for (const locale of ["en", "es"] as const) {
+        const words = partFailure(locale, code);
+        expect(`${words.what} ${words.todo}`).not.toMatch(/encryption key|clave de cifrado/);
+      }
     }
   });
 

@@ -185,7 +185,7 @@ export class CloudApi extends OrdersApi {
       "POST",
     );
   }
-  // ── Backup admin (recovery-key wizard) ────────────────────────────────────────────────────────
+  // ── Backup admin ──────────────────────────────────────────────────────────────────────────────────
 
   refreshCloudConnection(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/refresh", "POST", {});

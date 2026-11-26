@@ -1317,7 +1317,7 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
   },
   "backup.recovery_key_too_short": {
     en: "The backup key this box holds is too short. Use “Change the backup key” on the Recovery pack card to replace it.",
-    es: "La clave de las copias de este servidor es demasiado corta. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para sustituirla.",
+    es: "La clave de las copias que tiene este servidor es demasiado corta. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para sustituirla.",
   },
   "backup.new_recovery_key_too_short": {
     en: "That backup encryption key is too short",
@@ -1352,8 +1352,8 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     es: "Revisa los ajustes de la copia de seguridad e inténtalo de nuevo",
   },
   "backup.effective_mismatch": {
-    en: "The box could not confirm which backup key its backups use: the key it loaded is not the one it holds. Stop changing backup settings here; this page cannot diagnose the conflicting backup-key settings or confirm which key opens a backup.",
-    es: "El servidor no ha podido confirmar qué clave usan sus copias: la clave que ha cargado no es la que tiene guardada. No sigas cambiando los ajustes de las copias aquí; esta página no puede diagnosticar el conflicto de configuración ni confirmar qué clave abre una copia.",
+    en: "The box could not confirm which backup key its backups use: the key it loaded is not the one it holds. Reload the page and try again. If this message comes back, stop changing backup settings here: this page cannot tell which key is right.",
+    es: "El servidor no ha podido confirmar qué clave usan sus copias: la clave que ha cargado no es la que tiene guardada. Recarga la página y vuelve a intentarlo. Si este mensaje vuelve a salir, no sigas cambiando los ajustes de las copias aquí: esta página no puede saber qué clave es la correcta.",
   },
   "backup.not_enabled": {
     en: "Turn on scheduled backups before starting a backup.",
@@ -2122,7 +2122,13 @@ export function codeMessage(
   if (code === "master_key.wrong")
     return typeof params?.keyName === "string"
       ? registeredCodeMessage(code, locale).replace("{keyName}", params.keyName)
-      : pickLocale({ en: "Wrong master key.", es: "Clave maestra incorrecta." }, locale);
+      : pickLocale(
+          {
+            en: "Wrong master key. This venue has no master key yet: use “Make a new master key” on the Recovery pack card.",
+            es: "Clave maestra incorrecta. Este local aún no tiene clave maestra: usa «Crear una clave maestra nueva» en la tarjeta Paquete de recuperación.",
+          },
+          locale,
+        );
   if (code === "mirror.membership_full" && typeof params?.limit === "number")
     return registeredCodeMessage(code, locale).replace("{limit}", String(params.limit));
   if (

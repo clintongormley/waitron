@@ -10,7 +10,7 @@ import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
 /**
- * Scanned in several shapes, including the advanced paste + pick-weekdays + fixed-time branches so every
+ * Scanned in several shapes, including the pick-weekdays + fixed-time branches so every
  * conditional control is scanned. The screen loads on connect, so the stub must resolve or a stray
  * rejection pollutes the run.
  */

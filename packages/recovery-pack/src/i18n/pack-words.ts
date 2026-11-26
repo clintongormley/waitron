@@ -158,12 +158,12 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         todo: "Use Backups → Change destination or schedule, choose the destinations again and press Save changes. If backups are off, use Turn on backups instead. Then make a new pack.",
       },
       "backup.recovery_key_missing": {
-        what: "The box has no backup encryption key.",
-        todo: "Use Backups → Change the backup encryption key, then make a new pack.",
+        what: "The box has no backup key.",
+        todo: "Use Backups → Recovery pack → Change the backup key, then make a new pack.",
       },
       "backup.recovery_key_too_short": {
-        what: "The backup encryption key is too short to use.",
-        todo: "Use Backups → Change the backup encryption key: the new key replaces the short one. Then make a new pack.",
+        what: "The backup key is too short to use.",
+        todo: "Use Backups → Recovery pack → Change the backup key: the new key replaces the short one. Then make a new pack.",
       },
       "backup.stream_signer_missing": {
         what: "The box could not find the key that signs its bucket copy.",
@@ -238,12 +238,12 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         todo: "Usa Copias de seguridad → Cambiar el destino o la programación, elige de nuevo los destinos y pulsa Guardar cambios. Si las copias están desactivadas, usa Activar las copias. Después haz un paquete nuevo.",
       },
       "backup.recovery_key_missing": {
-        what: "El servidor no tiene clave de cifrado de copias.",
-        todo: "Usa Copias de seguridad → Cambiar la clave de cifrado de copias y después haz un paquete nuevo.",
+        what: "El servidor no tiene clave de las copias.",
+        todo: "Usa Copias de seguridad → Paquete de recuperación → Cambiar la clave de las copias y después haz un paquete nuevo.",
       },
       "backup.recovery_key_too_short": {
-        what: "La clave de cifrado de copias es demasiado corta para usarla.",
-        todo: "Usa Copias de seguridad → Cambiar la clave de cifrado de copias: la clave nueva sustituye a la corta. Después haz un paquete nuevo.",
+        what: "La clave de las copias es demasiado corta para usarla.",
+        todo: "Usa Copias de seguridad → Paquete de recuperación → Cambiar la clave de las copias: la clave nueva sustituye a la corta. Después haz un paquete nuevo.",
       },
       "backup.stream_signer_missing": {
         what: "El servidor no encontró la clave que firma su copia en el bucket.",

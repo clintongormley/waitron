@@ -1,7 +1,7 @@
 import type { DashboardRequest, DownloadedFile } from "@waitron/dashboard-kit";
 import { CloudApi } from "./cloud-api.js";
 
-// ── Backup admin (recovery-key wizard) types ─────────────────────────────────────────────────────
+// ── Backup admin types ───────────────────────────────────────────────────────────────────────
 
 export type BackupSchedule =
   | { kind: "interval"; ms: number }
