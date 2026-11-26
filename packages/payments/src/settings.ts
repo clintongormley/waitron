@@ -40,7 +40,7 @@ export function otherCardMachineFault(value: unknown): string | null {
 }
 
 export function otherCardMachineNameKey(name: string): string {
-  return name.trim().normalize("NFC").toLowerCase();
+  return name.normalize("NFC").toLowerCase();
 }
 
 function parseOtherCardMachines(value: unknown): OtherCardMachine[] | null {

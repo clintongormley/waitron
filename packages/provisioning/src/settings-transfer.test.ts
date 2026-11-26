@@ -285,7 +285,8 @@ it.each([
   ["providers", { stripe: false }],
   ["testProviders", true],
   ["otherCardMachines", [{ id: "m1", name: " ", paysInto: "other" }]],
-])("refuses %s in an imported payment document", (field, value) => {
+  ["otherCardMachines", [{ id: "m1", name: " Bar ", paysInto: "other" }]],
+])("refuses %s %j in an imported payment document", (field, value) => {
   expect(() =>
     checkImportedSettings(
       { payments: { version: 1, doc: { [field]: value, tipsEnabled: true } } },

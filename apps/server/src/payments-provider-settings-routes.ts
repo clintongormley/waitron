@@ -135,7 +135,10 @@ export function mountPaymentsProviderSettingsRoutes(
       const saved = await gated(sessionId, async (tx, personId) => {
         const { doc, revision: current } = await readPaymentsSettings(tx);
         if (current !== revision)
-          throw new AppError("settings.out_of_date", { module: "payments", revision: current });
+          throw new AppError("settings.out_of_date", {
+            module: PAYMENTS_SETTINGS.module,
+            revision: current,
+          });
         const otherCardMachines = otherCardMachinesFrom(
           body.otherCardMachines,
           new Set(doc.otherCardMachines.map((machine) => machine.id)),
