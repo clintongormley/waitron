@@ -2,13 +2,7 @@ import { saleLineRows } from "./sale-line-rows.js";
 // Side-effect only: registers this package's error codes (./errors.ts).
 import "./errors.js";
 import { eq } from "drizzle-orm";
-import {
-  insertInChunks,
-  allocateInvoiceNumber,
-  invoiceSeries,
-  saleLines,
-  taxpayer,
-} from "@waitron/db";
+import { insertInChunks, allocateInvoiceNumber, invoiceSeries, saleLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
   AppError,
@@ -44,6 +38,7 @@ import type { IncidentSeverity } from "./incidents.js";
 import { settleSale } from "./settle-sale.js";
 import { refuseOverSimplifiedLimit } from "./simplified-limit.js";
 import { checkedCounterparty, requireRecipientAddress } from "./counterparty.js";
+import { requireTaxpayerDomicile } from "./correction-eligibility.js";
 
 export type { RecordSaleLine };
 
@@ -269,13 +264,7 @@ export async function recordSale(
 
   if (counterparty !== null) requireRecipientAddress(input.recipientAddress);
 
-  const [taxpayerRow] =
-    counterparty === null
-      ? []
-      : await tx.select({ domicile: taxpayer.taxpayerDomicile }).from(taxpayer);
-  if (counterparty !== null && !taxpayerRow?.domicile?.trim()) {
-    throw new AppError("fiscal.taxpayer_domicile_missing", {});
-  }
+  const taxpayerDomicile = counterparty === null ? null : await requireTaxpayerDomicile(tx);
 
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
@@ -319,7 +308,7 @@ export async function recordSale(
     counterpartyIdentifierType: counterparty?.identifierType ?? null,
     counterpartyIdentifierCountryCode: counterparty?.identifierCountryCode ?? null,
     counterpartyAddress: counterparty === null ? null : (input.recipientAddress ?? null),
-    taxpayerDomicile: taxpayerRow?.domicile ?? null,
+    taxpayerDomicile,
     operatorId: input.operatorId ?? null,
     receiptGuestCount: input.receipt?.guestCount,
     receiptDepartmentId: input.receipt?.departmentId,

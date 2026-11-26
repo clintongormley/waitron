@@ -8,7 +8,6 @@ import {
   saleSubstitutions,
   saleVoids,
   sales,
-  taxpayer,
   newId,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -21,6 +20,7 @@ import { recordIncident } from "./incidents.js";
 import type { IncidentSeverity } from "./incidents.js";
 import { storedCounterparty } from "./counterparty.js";
 import { requireCorrectiveSeries } from "./corrective-series.js";
+import { requireTaxpayerDomicile } from "./correction-eligibility.js";
 
 export interface RecordReplacementInput {
   origin: SaleOrigin;
@@ -148,13 +148,7 @@ export async function recordReplacement(
 
   const counterparty = storedCounterparty(original);
   // The replacement is a new invoice issued today, so it names the business's address as it is now.
-  const [taxpayerRow] =
-    counterparty === null
-      ? []
-      : await tx.select({ domicile: taxpayer.taxpayerDomicile }).from(taxpayer);
-  if (counterparty !== null && !taxpayerRow?.domicile?.trim()) {
-    throw new AppError("fiscal.taxpayer_domicile_missing", {});
-  }
+  const taxpayerDomicile = counterparty === null ? null : await requireTaxpayerDomicile(tx);
 
   const invoiceNumber = await allocateInvoiceNumber(tx, input.seriesId);
 
@@ -181,7 +175,7 @@ export async function recordReplacement(
     counterpartyIdentifierType: original.counterpartyIdentifierType,
     counterpartyIdentifierCountryCode: original.counterpartyIdentifierCountryCode,
     counterpartyAddress: original.counterpartyAddress,
-    taxpayerDomicile: taxpayerRow?.domicile ?? null,
+    taxpayerDomicile,
     authorizedBy: authorization.authorizedBy,
   });
 
