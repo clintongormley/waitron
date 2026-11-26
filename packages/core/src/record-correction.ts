@@ -29,6 +29,7 @@ import type { IncidentSeverity } from "./incidents.js";
 import { assertSumsTo, atCents, deriveVatBreakdown } from "./record-sale.js";
 import {
   requireFullInvoiceCorrection,
+  requireFullInvoiceNotWholeCredit,
   requireFullInvoiceOriginal,
   requireSupportedCorrection,
   requireTaxpayerDomicile,
@@ -146,10 +147,11 @@ export async function recordCorrection(
   backend: FiscalBackend,
   input: RecordCorrectionInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
-  // A full invoice's corrective is never a whole credit, whatever split it is given.
-  if (input.fullInvoice === true && input.wholeInvoice === true) {
-    throw new AppError("sale.correction_unsupported", { saleId: input.correctsSaleId });
-  }
+  requireFullInvoiceNotWholeCredit(
+    input.fullInvoice === true,
+    input.wholeInvoice === true,
+    input.correctsSaleId,
+  );
   const partial =
     input.partialVatBreakdown === undefined
       ? undefined

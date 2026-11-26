@@ -66,7 +66,6 @@ const NOT_RECORDED = new Set([
   "sale.correction_lines_mismatch",
   "sale.correction_not_admitted",
   "sale.correction_not_whole",
-  "sale.correction_unsupported",
   "sale.not_found",
   "sale.rectify",
   "sale.replacement_not_first",

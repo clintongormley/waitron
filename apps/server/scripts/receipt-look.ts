@@ -14,6 +14,9 @@ const { default: sharp } = await import("sharp");
 const out = process.argv[2] ?? "/tmp/a663-look";
 mkdirSync(out, { recursive: true });
 
+const aeatQr = (nif: string, number: string, date: string, amount: string): string =>
+  `https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=${nif}&numserie=${number.replaceAll("/", "%2F")}&fecha=${date}&importe=${amount}`;
+
 const PRINTERS: Record<string, EscSetting> = {
   "58mm-203": { paperWidth: "58mm", resolution: "203dpi" },
   "80mm-180": { paperWidth: "80mm", resolution: "180dpi" },
@@ -90,7 +93,7 @@ const MOCKUP: ReceiptDocumentInput = {
       line("1", "Grape spirit", "8.00"),
     ],
     tender: { method: "cash", change: "13.00" },
-    qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B00000000&numserie=T-2026%2F000112&fecha=13-10-2026&importe=407.00",
+    qr: aeatQr("B00000000", "T-2026/000112", "13-10-2026", "407.00"),
     qrText: FULL_INVOICE_DOCUMENT_FIXTURE.result.qrText,
   },
   issuer: { venueName: "Sample Deli Ltd", nif: "B00000000" },
@@ -614,7 +617,7 @@ const correctiveIn = (locale: string): ReceiptDocumentInput => {
     vatBreakdown: [{ rate: "10", base: "-8.00", tax: "-0.80" }],
     total: "-8.80",
     tender: { method: "unpaid" },
-    qr: "https://prewww2.aeat.es/wlpl/TIKE-CONT/ValidarQR?nif=B12345678&numserie=FR%2F1&fecha=19-08-2026&importe=-8.80",
+    qr: aeatQr("B12345678", "FR/1", "19-08-2026", "-8.80"),
   };
   return input;
 };

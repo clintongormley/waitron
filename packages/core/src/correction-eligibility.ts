@@ -20,6 +20,17 @@ export function requireFullInvoiceCorrection(
   }
 }
 
+/** A full invoice's corrective is never a whole credit, whatever split it is given. */
+export function requireFullInvoiceNotWholeCredit(
+  fullInvoice: boolean,
+  wholeInvoice: boolean,
+  saleId: SaleId,
+): void {
+  if (fullInvoice && wholeInvoice) {
+    throw new AppError("sale.correction_unsupported", { saleId });
+  }
+}
+
 /**
  * A full invoice's corrective is filed against a full invoice or its replacement, never against an
  * earlier correction by differences or a full invoice made from receipts, which the regime refuses

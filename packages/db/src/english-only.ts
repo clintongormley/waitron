@@ -69,7 +69,7 @@ export const KEEPS_NON_ENGLISH: Readonly<Record<string, Keep>> = {
     reason: "AEAT's wire field name `idEmisorFactura`",
     findings: 2,
   },
-  "apps/server/scripts/receipt-look.ts": { reason: "AEAT's QR address parameters", findings: 4 },
+  "apps/server/scripts/receipt-look.ts": { reason: "AEAT's QR address parameters", findings: 2 },
   "apps/server/scripts/bench/grow-fiscal.ts": {
     reason: VERIFACTU_NAMES,
     findings: 65,
