@@ -306,7 +306,7 @@ describe("permanent course deletion", () => {
         inTx(v, (tx) => updateCourse(tx, id, { active, name: "Changed" } as never)),
       ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "active" } });
       expect(await inTx(v, (tx) => listCourses(tx))).toEqual([
-        { id, name: "Live", displayOrder: 0, active: true, fireNowZoneIds: [] },
+        { id, name: "Live", customerNames: {}, displayOrder: 0, active: true, fireNowZoneIds: [] },
         ...initialCourses,
       ]);
     },

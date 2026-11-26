@@ -509,6 +509,7 @@ export class CourseList extends LitElement {
         ${
           this.languages
             ? html`<wt-button
+                icon="menu-translations"
                 data-action="customer-names"
                 @click=${() => {
                   this.editingNames = course;
