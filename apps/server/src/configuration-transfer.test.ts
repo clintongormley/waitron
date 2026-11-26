@@ -1,3 +1,4 @@
+import { addShortcut } from "@waitron/menu/test/menu-home-fixture.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
 import {
   readPrinterHoldsForTest,
@@ -33,7 +34,6 @@ import { deleteStation } from "./station-delete.js";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import {
   addMember,
-  addShortcut,
   deleteSection,
   deleteMenu,
   readMenuHome,

@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import { bodyId, object, refOf, rows, tileRefOf } from "./menu-request-fields.js";
+import { bodyId, object, refOf, rows, homeRefOf } from "./menu-request-fields.js";
 
 it.each([
   ["body", () => object([], "body")],
@@ -11,7 +11,6 @@ it.each([
     "shortcuts.0.ref.productId",
     () => refOf({ kind: "product", productId: "no" }, "shortcuts.0.ref"),
   ],
-  ["shortcuts.0.ref.name", () => tileRefOf({ kind: "missing", name: " " }, "shortcuts.0.ref")],
 ] as const)("reports the malformed request field %s", (field, read) => {
   expect(read).toThrow(
     expect.objectContaining({
@@ -21,9 +20,6 @@ it.each([
   );
 });
 
-it("preserves a missing tile's stored name", () => {
-  expect(tileRefOf({ kind: "missing", name: "Drinks › Beer" }, "shortcuts.0.ref")).toEqual({
-    kind: "missing",
-    name: "Drinks › Beer",
-  });
+it("reads a missing tile reference from its kind alone", () => {
+  expect(homeRefOf({ kind: "missing" }, "shortcuts.0.ref")).toEqual({ kind: "missing" });
 });

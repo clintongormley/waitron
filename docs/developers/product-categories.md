@@ -354,8 +354,9 @@ Both routes require `menu.manage`. Use `home_first` for shortcuts first or `menu
 menu first. Each read shortcut includes `{ memberId, position, ref, name, reachable, missingName }`.
 The draft carries existing member ids and UUIDs for newly chosen tiles. Save replaces the page and
 order in one transaction. For a member id still on the page it uses the stored reference and saved
-missing name. The dashboard echoes `{ kind: "missing", name }` only for tiles it read as missing,
-so a draft can restore a saved tile removed by another Save.
+missing name. The draft represents a saved missing tile as `{ kind: "missing" }`. The member id
+must still be on this page. If another Save removed it, the request answers
+`menu_section.not_found` (400) and the screen names the removed shortcut.
 
 A newly chosen target that was deleted comes back in `dropped`. Other new targets must be
 top-level products or sections reached by the working menu. A member id held by another list or

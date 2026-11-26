@@ -4,11 +4,9 @@ import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
 import type {
   HomeOrder,
-  MemberRef,
   MenuHome,
   MenuHomeSaveInput,
   MenuHomeSaveResult,
-  SectionMember,
   TileRef,
 } from "@waitron/shared";
 import {
@@ -17,17 +15,7 @@ import {
   sectionPathName,
   type SectionGraph,
 } from "./section-graph.js";
-import {
-  checkRef,
-  deleteMember,
-  heldMember,
-  insertMember,
-  membersOf,
-  moveMemberTo,
-  refColumns,
-  refKey,
-  requirePosition,
-} from "./section-members.js";
+import { refColumns, refKey } from "./section-members.js";
 import { menuHome, requireMenuRoot } from "./menu-structure.js";
 import "./errors.js";
 
@@ -146,7 +134,13 @@ export async function saveMenuHome(
       throw new AppError("menu_section.membership_invalid", { field: path + ".memberId" });
     seenIds.add(memberId);
     const stored = held.get(memberId);
-    const ref = stored ?? requested;
+    const ref = stored ?? (requested.kind === "missing" ? undefined : requested);
+    if (ref === undefined)
+      throw new AppError("menu_section.not_found", {
+        sectionId: homeSectionId,
+        memberId,
+        field: path + ".ref",
+      });
     if (ref.kind === "missing") {
       values.push({
         id: memberId,
@@ -183,7 +177,8 @@ export async function saveMenuHome(
         dropped.push({ memberId, reason: "deleted" });
         continue;
       }
-      if (!reaches(ref)) throw new AppError("menu.shortcut_unreachable", { ref });
+      if (!reaches(ref))
+        throw new AppError("menu.shortcut_unreachable", { ref, field: path + ".ref" });
     }
     const key = refKey(ref);
     if (seenTargets.has(key))
@@ -204,76 +199,4 @@ export async function saveMenuHome(
   for (const batch of batches(values)) await tx.insert(sectionMembers).values(batch);
   await tx.update(menus).set({ homeOrder: input.order }).where(eq(menus.id, menuId));
   return { ...(await readMenuHome(tx, menuId)), dropped };
-}
-
-export async function setHomeDisplay(
-  tx: Transaction,
-  menuId: string,
-  order: HomeOrder,
-): Promise<void> {
-  await requireMenuHome(tx, menuId, true);
-  await tx.update(menus).set({ homeOrder: order }).where(eq(menus.id, menuId));
-}
-
-/** Appends a shortcut to a target the menu reaches structurally, or inserts at `position`. */
-export async function addShortcut(
-  tx: Transaction,
-  menuId: string,
-  ref: MemberRef,
-  position?: number,
-): Promise<SectionMember> {
-  const { rootSectionId, homeSectionId } = await requireMenuHome(tx, menuId, true);
-  const graph = await loadSectionGraph(tx);
-  requirePosition(position);
-  const stored = await checkRef(tx, graph, homeSectionId, ref);
-  if (!structuralReach(graph, rootSectionId)(stored))
-    throw new AppError("menu.shortcut_unreachable", { ref });
-  return insertMember(tx, homeSectionId, graph.tiles(homeSectionId), ref, stored, position);
-}
-
-export async function replaceShortcut(
-  tx: Transaction,
-  menuId: string,
-  memberId: string,
-  ref: MemberRef,
-): Promise<SectionMember> {
-  const { rootSectionId, homeSectionId } = await requireMenuHome(tx, menuId, true);
-  const graph = await loadSectionGraph(tx);
-  const current = heldMember(graph.tiles(homeSectionId), homeSectionId, memberId);
-  const stored = await checkRef(tx, graph, homeSectionId, ref, current);
-  if (!structuralReach(graph, rootSectionId)(stored))
-    throw new AppError("menu.shortcut_unreachable", { ref });
-  await tx.update(sectionMembers).set(refColumns(stored)).where(eq(sectionMembers.id, memberId));
-  return { ...current, ref };
-}
-
-export async function removeShortcut(
-  tx: Transaction,
-  menuId: string,
-  memberId: string,
-): Promise<void> {
-  const { homeSectionId } = await requireMenuHome(tx, menuId, true);
-  await deleteMember(
-    tx,
-    homeSectionId,
-    await membersOf(tx, homeSectionId, "home_layout"),
-    memberId,
-  );
-}
-
-/** Moves the shortcut to index `to` (past the end means last) and renumbers the others. */
-export async function moveShortcut(
-  tx: Transaction,
-  menuId: string,
-  memberId: string,
-  to: number,
-): Promise<SectionMember<TileRef>[]> {
-  const { homeSectionId } = await requireMenuHome(tx, menuId, true);
-  return moveMemberTo(
-    tx,
-    homeSectionId,
-    await membersOf(tx, homeSectionId, "home_layout"),
-    memberId,
-    to,
-  );
 }

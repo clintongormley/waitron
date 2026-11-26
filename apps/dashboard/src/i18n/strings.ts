@@ -3954,6 +3954,9 @@ export const en = {
   "home.choose_shortcuts": "Choose shortcuts",
   "home.none_chosen": "Choose at least one shortcut to add.",
   "home.section_option": "{name} (section)",
+  "home.shortcut_removed":
+    "“{name}” was removed from the page. Remove it from your draft and save again.",
+  "home.shortcut_refused": "“{name}” could not be saved. {reason}",
   "home.loading": "Loading the home page…",
   "home.error": "The home page could not be loaded.",
   "home.order": "Shown first",
@@ -8851,6 +8854,9 @@ export const es: Record<StringKey, string> = {
   "home.choose_shortcuts": "Elige accesos directos",
   "home.none_chosen": "Elige al menos un acceso directo.",
   "home.section_option": "{name} (sección)",
+  "home.shortcut_removed":
+    "“{name}” se ha quitado de la página. Quítalo de tus cambios y vuelve a guardar.",
+  "home.shortcut_refused": "No se ha podido guardar “{name}”. {reason}",
   "home.loading": "Cargando la página de inicio…",
   "home.error": "No se ha podido cargar la página de inicio.",
   "home.order": "Se muestra primero",

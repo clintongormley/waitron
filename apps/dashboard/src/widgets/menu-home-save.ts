@@ -16,6 +16,7 @@ import { fill, t } from "../i18n/t.js";
 export interface HomeShortcutOption {
   value: string;
   label: string;
+  name: string;
   ref: ShortcutRef;
 }
 
@@ -140,13 +141,13 @@ export class MenuHomeSave implements ReactiveController {
       shortcuts: home.shortcuts.map((tile, position) => {
         const current = held.get(tile.memberId);
         if (current) return { ...current, position };
-        const label = this.#choices.get(key(tile.ref))?.label;
+        const choice = this.#choices.get(key(tile.ref));
         return {
           ...tile,
           position,
-          name: label ?? tile.name,
-          reachable: label !== undefined,
-          missingName: label === undefined ? (tile.missingName ?? tile.name) : null,
+          name: choice?.name ?? tile.name,
+          reachable: choice !== undefined,
+          missingName: choice === undefined ? (tile.missingName ?? tile.name) : null,
         };
       }),
     };
@@ -178,7 +179,7 @@ export class MenuHomeSave implements ReactiveController {
       shortcuts.push({
         memberId: crypto.randomUUID(),
         position: shortcuts.length,
-        name: choice.label,
+        name: choice.name,
         ref: choice.ref,
         reachable: true,
         missingName: null,
@@ -219,7 +220,10 @@ export class MenuHomeSave implements ReactiveController {
     if (!home || !this.dirty || this.saving) return;
     const input: MenuHomeSaveInput = {
       order: home.order,
-      shortcuts: home.shortcuts.map(({ memberId, ref }) => ({ memberId, ref })),
+      shortcuts: home.shortcuts.map(({ memberId, ref }) => ({
+        memberId,
+        ref: ref.kind === "missing" ? { kind: "missing" } : ref,
+      })),
     };
     const labels = new Map(home.shortcuts.map(({ memberId, name }) => [memberId, name]));
     const generation = this.#generation;
@@ -247,7 +251,19 @@ export class MenuHomeSave implements ReactiveController {
         ...new Set(dropped.map(({ memberId }) => labels.get(memberId) ?? t("members.missing"))),
       ].join(", ");
     } catch (error) {
-      if (generation === this.#generation) this.message = codeMessage(codeOf(error));
+      if (generation === this.#generation) {
+        const code = codeOf(error);
+        const field = (error as { params?: { field?: unknown } })?.params?.field;
+        const shortcut =
+          typeof field === "string" && /^shortcuts\.\d+\.ref$/.test(field)
+            ? home.shortcuts[Number(field.split(".")[1])]
+            : undefined;
+        this.message = !shortcut
+          ? codeMessage(code)
+          : code === "menu_section.not_found"
+            ? fill("home.shortcut_removed", { name: shortcut.name })
+            : fill("home.shortcut_refused", { name: shortcut.name, reason: codeMessage(code) });
+      }
       return;
     } finally {
       if (generation === this.#generation) {

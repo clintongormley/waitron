@@ -1,3 +1,4 @@
+import { addShortcut, editMenuHome } from "@waitron/menu/test/menu-home-fixture.js";
 import {
   seedPerson,
   seedDeviceProfiles,
@@ -30,7 +31,6 @@ import {
   addProductToMenu,
   addMember,
   removeMember,
-  addShortcut,
   addProducts,
   assignMenuToVenue,
   assignProductUnit,
@@ -50,7 +50,6 @@ import {
   optionLabels,
   queueMenuPublication,
   requireMenuRoot,
-  setHomeDisplay,
   updateExtraList,
   updateMenuItem,
   updateProduct,
@@ -1178,7 +1177,11 @@ describe("the Device Home Page each menu serves", () => {
     const v = await setupLunch();
     await app((tx) => updateSection(tx, v.dessertsId, { names: { es: "Para terminar" } }));
     await app((tx) => addShortcut(tx, v.menuId, { kind: "section", sectionId: v.dessertsId }));
-    await app((tx) => setHomeDisplay(tx, v.menuId, "menu_first"));
+    await app((tx) =>
+      editMenuHome(tx, v.menuId, (draft) => {
+        draft.order = "menu_first";
+      }),
+    );
     const versionId = await publish(v.menuId);
     const zonePath = zonePathOf(v);
     const flanOffer = (await served(v, zonePath)).offers.find(
@@ -1227,7 +1230,11 @@ describe("the Device Home Page each menu serves", () => {
     const published = await publish(v.menuId);
     const before = { shortcuts: [], order: "home_first" };
     await app((tx) => addShortcut(tx, v.menuId, { kind: "section", sectionId: v.dessertsId }));
-    await app((tx) => setHomeDisplay(tx, v.menuId, "menu_first"));
+    await app((tx) =>
+      editMenuHome(tx, v.menuId, (draft) => {
+        draft.order = "menu_first";
+      }),
+    );
     for (const path of [zonePathOf(v), "/api/default-service-zone/offers"]) {
       const [menu] = (await served(v, path)).menus;
       expect(menu).toMatchObject({ versionId: published, home: before });

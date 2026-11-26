@@ -563,6 +563,7 @@ describe("adding shortcuts on the Home page tab", () => {
       { kind: "section", sectionId: "s-drinks" },
       { kind: "product", productId: "p-lager" },
     ]);
+    expect(preview(el)!.shortcuts!.map(({ name }) => name)).toEqual(["Burger", "Drinks", "Lager"]);
     expect(writeCalls(client)).toEqual([]);
   });
 

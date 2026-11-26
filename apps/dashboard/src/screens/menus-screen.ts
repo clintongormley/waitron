@@ -799,7 +799,7 @@ export class MenusScreen extends LitElement {
         this.products.filter((product) => product.active).map(({ id, name }) => [id, name]),
       );
       const foundProducts = new Map<string, string>();
-      const foundSections = new Map<string, string>();
+      const foundSections = new Map<string, { label: string; name: string }>();
       const visit = (nodes: MenuStructureNode[], path: string[]) => {
         for (const node of nodes) {
           if (node.ref.kind === "product") {
@@ -807,17 +807,15 @@ export class MenusScreen extends LitElement {
             if (name !== undefined && !foundProducts.has(node.ref.productId))
               foundProducts.set(node.ref.productId, [...path, name].join(PATH_SEPARATOR));
           } else if (node.ref.kind === "section") {
-            const next = [...path, node.internalName ?? ""];
-            if (!foundSections.has(node.ref.sectionId))
-              foundSections.set(
-                node.ref.sectionId,
-                [
-                  ...path,
-                  node.includedMenuId
-                    ? fill("menus.menu_prefix", { name: node.internalName ?? "" })
-                    : (node.internalName ?? ""),
-                ].join(PATH_SEPARATOR),
-              );
+            const name = node.internalName ?? "";
+            const next = [...path, name];
+            if (!foundSections.has(node.ref.sectionId)) {
+              const label = [
+                ...path,
+                node.includedMenuId ? fill("menus.menu_prefix", { name }) : name,
+              ].join(PATH_SEPARATOR);
+              foundSections.set(node.ref.sectionId, { name, label });
+            }
             visit(node.children ?? [], next);
           }
         }
@@ -827,11 +825,13 @@ export class MenusScreen extends LitElement {
         ...[...foundProducts].map(([productId, label]) => ({
           value: `product:${productId}`,
           label,
+          name: products.get(productId)!,
           ref: { kind: "product" as const, productId },
         })),
-        ...[...foundSections].map(([sectionId, name]) => ({
+        ...[...foundSections].map(([sectionId, { label, name }]) => ({
           value: `section:${sectionId}`,
-          label: fill("home.section_option", { name }),
+          label: fill("home.section_option", { name: label }),
+          name,
           ref: { kind: "section" as const, sectionId },
         })),
       ]);

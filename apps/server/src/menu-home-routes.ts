@@ -9,7 +9,7 @@ import { HOME_ORDERS, type MenuHomeSaveInput } from "@waitron/shared";
 import type { Hono, Context } from "hono";
 import type { GatedWork } from "./content-translations-api.js";
 import { run, runBodySection } from "./menu-api-errors.js";
-import { requireUuidParam, bodyId, object, rows, tileRefOf } from "./menu-request-fields.js";
+import { requireUuidParam, bodyId, object, rows, homeRefOf } from "./menu-request-fields.js";
 
 function draftOf(value: unknown): MenuHomeSaveInput {
   const { order, shortcuts } = object(value, "body");
@@ -17,7 +17,7 @@ function draftOf(value: unknown): MenuHomeSaveInput {
     order: requireEnum(order, "order", HOME_ORDERS),
     shortcuts: rows(shortcuts, "shortcuts", (entry, path) => {
       const { memberId, ref } = object(entry, path);
-      return { memberId: bodyId(memberId, path + ".memberId"), ref: tileRefOf(ref, path + ".ref") };
+      return { memberId: bodyId(memberId, path + ".memberId"), ref: homeRefOf(ref, path + ".ref") };
     }),
   };
 }

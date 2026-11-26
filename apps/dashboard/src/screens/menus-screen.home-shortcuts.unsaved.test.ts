@@ -251,7 +251,7 @@ it("commits a successful Save before a failed refresh and names dropped tiles be
 
 it("keeps the draft after a refused Save and asks before Cancel discards it", async () => {
   const api = client(async () => {
-    throw { code: "connection.failed" };
+    throw { code: "menu.shortcut_unreachable", params: { field: "shortcuts.0.ref" } };
   });
   const { app, screen, window, picker } = await mount(api);
   await choose(picker(), ["p-lager"]);
@@ -259,7 +259,9 @@ it("keeps the draft after a refused Save and asks before Cancel discards it", as
   await vi.waitFor(() => expect(window().open).toBe(false));
   const preview = screen.shadowRoot!.querySelector("dashboard-device-home-preview")!;
   savePage(screen);
-  await vi.waitFor(async () => expect(await formMessageOf(actions(screen))).toBeTruthy());
+  await vi.waitFor(async () =>
+    expect((await formMessageOf(actions(screen)))?.textContent).toContain("Lager"),
+  );
   expect(preview.shortcuts?.map(({ name }) => name)).toEqual(["Lager"]);
   expect(app.leave.coordinator.isDirty()).toBe(true);
   screen.shadowRoot!.querySelector<HTMLElement>('[data-test="home-cancel"]')!.click();

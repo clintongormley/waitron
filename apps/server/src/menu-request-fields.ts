@@ -6,9 +6,8 @@ import {
   AppError,
   type SectionInput,
   type MemberRef,
-  type TileRef,
 } from "@waitron/shared";
-import { requireBodyUuid, requireString } from "@waitron/server-kit";
+import { requireBodyUuid } from "@waitron/server-kit";
 
 export function nullOrUuid(value: unknown, field: string): string | null {
   if (value !== null && (typeof value !== "string" || !isUuid(value)))
@@ -126,13 +125,9 @@ export function refOf(value: unknown, path: string): MemberRef {
   }
 }
 
-export function tileRefOf(value: unknown, path: string): TileRef {
+export function homeRefOf(value: unknown, path: string) {
   const ref = object(value, path);
-  if (ref.kind === "missing") {
-    const name = requireString(ref.name, path + ".name");
-    if (name.trim() === "") invalid(path + ".name");
-    return { kind: "missing", name };
-  }
+  if (ref.kind === "missing") return { kind: "missing" } as const;
   const member = refOf(ref, path);
   if (member.kind === "set_menu")
     throw new AppError("set_menu.wrong_place", { menuId: member.menuId, field: path });

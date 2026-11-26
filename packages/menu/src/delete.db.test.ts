@@ -1,3 +1,4 @@
+import { addShortcut } from "../test/menu-home-fixture.js";
 import { seedPerson, seedPhotoMetadata } from "@waitron/db/testing/seed.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
@@ -61,13 +62,7 @@ import {
 } from "./operations.js";
 
 import { createCategory, setMainReportingCategory } from "./categories.js";
-import {
-  addShortcut,
-  moveShortcut,
-  removeShortcut,
-  replaceShortcut,
-  setHomeDisplay,
-} from "./menu-home.js";
+import { saveMenuHome } from "./menu-home.js";
 
 const fx = useMenuDb();
 beforeEach(async () => {
@@ -235,12 +230,12 @@ it("keeps a published include of an inactive menu until the parent is republishe
 it("refuses changes to an inactive menu's draft, device home and publications", async () => {
   const f = await menusFixture(fx.db);
   const live = await publish(f.lunch);
-  const { offer, variantOffer, list, shortcut } = await app(async (tx) => {
+  const { offer, variantOffer, list } = await app(async (tx) => {
     const offer = await offerOf(tx, f.lunch, f.soup);
     const variantOffer = await offerOf(tx, f.lunch, f.lemonade);
     const list = await createSectionIn(tx, f.lunchRoot, { internalName: "Sides" });
-    const shortcut = await addShortcut(tx, f.lunch, product(f.soup));
-    return { offer, variantOffer, list, shortcut };
+    await addShortcut(tx, f.lunch, product(f.soup));
+    return { offer, variantOffer, list };
   });
   const queued = await queue(f.lunch, later);
   await app(async (tx) => {
@@ -251,11 +246,7 @@ it("refuses changes to an inactive menu's draft, device home and publications", 
       () => deleteSections(tx, [list.id]),
       () => updateMenuItem(tx, f.lunch, offer, { grossPrice: "9.00" }),
       () => setMenuVariants(tx, variantOffer, [{ variantId: f.large, price: "8.00" }]),
-      () => setHomeDisplay(tx, f.lunch, "menu_first"),
-      () => addShortcut(tx, f.lunch, product(f.lemonade)),
-      () => replaceShortcut(tx, f.lunch, shortcut.id, product(f.lemonade)),
-      () => moveShortcut(tx, f.lunch, shortcut.id, 1),
-      () => removeShortcut(tx, f.lunch, shortcut.id),
+      () => saveMenuHome(tx, f.lunch, { order: "menu_first", shortcuts: [] }),
       () => cancelMenuPublication(tx, f.lunch, queued.versionId, "person-1", T0),
       () => rescheduleMenuPublication(tx, f.lunch, queued.versionId, later, "person-1", { at: T0 }),
       () =>

@@ -1,3 +1,4 @@
+import { addShortcut } from "../test/menu-home-fixture.js";
 import { createIncludedMenu as createSection } from "../test/included-menu.js";
 import type { SectionInput, MemberRef, SectionMember } from "@waitron/shared";
 import { sql } from "drizzle-orm";
@@ -6,7 +7,7 @@ import { withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
 import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { createMenu, createCategory, createProduct, listMenuOffers } from "./operations.js";
-import { addShortcut, readMenuHome } from "./menu-home.js";
+import { readMenuHome } from "./menu-home.js";
 import { setProductVariants } from "./variants.js";
 import { writeContentLanguages } from "./content-languages.js";
 import * as sectionStructure from "./section-structure.js";
@@ -774,8 +775,8 @@ describe("deleting several sections", () => {
     const beer = await app((tx) => createSectionIn(tx, drinks.id, { internalName: "Beer" }));
     const wine = await owned("Wine");
     await app(async (tx) => {
-      await addShortcut(tx, f.lunchMenu, section(beer.id));
-      await addShortcut(tx, f.lunchMenu, section(wine.id));
+      await addShortcut(tx, f.lunchMenu, { kind: "section", sectionId: beer.id });
+      await addShortcut(tx, f.lunchMenu, { kind: "section", sectionId: wine.id });
     });
     await app((tx) => deleteSections(tx, [drinks.id, wine.id]));
     const shortcuts = (await app((tx) => readMenuHome(tx, f.lunchMenu))).shortcuts;

@@ -1,3 +1,4 @@
+import { addShortcut, editMenuHome } from "../test/menu-home-fixture.js";
 import { columnsFromOverrides } from "./include-folder.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import type {
@@ -82,7 +83,6 @@ import { writeProductModifiers } from "./product-modifiers.js";
 import { createUnit, EACH_UNIT, updateUnit, reassignProductsToUnit } from "./units.js";
 import { deleteOptionList } from "./options.js";
 import { createExtraList, deleteExtraList } from "./extras.js";
-import { addShortcut, setHomeDisplay } from "./menu-home.js";
 import { libraryImageName, seedLibraryImages } from "../test/library-images.js";
 
 const fx = useMenuDb();
@@ -2087,7 +2087,11 @@ describe("diffMenuDocuments", () => {
     const f = await menusFixture(fx.db);
     const live = await build(f.lunch);
     await addTile(await homeSection(f.lunch), { productId: f.soup });
-    await app((tx) => setHomeDisplay(tx, f.lunch, "menu_first"));
+    await app((tx) =>
+      editMenuHome(tx, f.lunch, (draft) => {
+        draft.order = "menu_first";
+      }),
+    );
     await app((tx) => updateMenuDetails(tx, f.lunch, { name: "Midday Menu" }));
     expect(changeBodies(diffMenuDocuments(live, await build(f.lunch)))).toEqual([
       { kind: "menu_renamed", from: "Lunch Menu", to: "Midday Menu", source: "this_menu" },
@@ -2099,7 +2103,11 @@ describe("diffMenuDocuments", () => {
   it("a first publish names its shortcuts and a display that differs from the default, and says nothing of a default display", async () => {
     const f = await menusFixture(fx.db);
     await addTile(await homeSection(f.lunch), { productId: f.soup });
-    await app((tx) => setHomeDisplay(tx, f.lunch, "menu_first"));
+    await app((tx) =>
+      editMenuHome(tx, f.lunch, (draft) => {
+        draft.order = "menu_first";
+      }),
+    );
     const home = diffMenuDocuments(null, await build(f.lunch)).filter(({ kind }) =>
       kind.startsWith("home_"),
     );

@@ -1,10 +1,10 @@
+import { addShortcut } from "@waitron/menu/test/menu-home-fixture.js";
 import { CORE_MIGRATIONS, menuPeriods, withTransaction } from "@waitron/db";
 import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { registerModulePermissions } from "@waitron/identity";
 import {
   addMember,
-  addShortcut,
   createMenu,
   createProduct,
   createSectionIn,

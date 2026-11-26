@@ -1,3 +1,4 @@
+import { addShortcut } from "@waitron/menu/test/menu-home-fixture.js";
 import { stampFixtureLineContexts } from "./testing/zone-menus.js";
 import { taxpayer, menus } from "@waitron/db";
 import { deleteDepartment } from "./service-delete.js";
@@ -6,7 +7,6 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { beforeEach, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_HOME_ORDER,
-  addShortcut,
   buildMenuDocument,
   createMenu,
   createMenuShell,

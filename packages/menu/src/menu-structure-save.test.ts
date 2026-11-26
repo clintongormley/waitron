@@ -1,3 +1,4 @@
+import { addShortcut } from "../test/menu-home-fixture.js";
 import { eq } from "drizzle-orm";
 import { expect, it } from "vitest";
 import { menuItems, withTransaction, type Transaction } from "@waitron/db";
@@ -12,7 +13,7 @@ import { menusFixture, offerOf, product, section } from "../test/menus-fixture.j
 import { writeContentLanguages } from "./content-languages.js";
 import { setIncludeFolder } from "./include-folder.js";
 import { saveMenuStructure } from "./index.js";
-import { addShortcut, readMenuHome } from "./menu-home.js";
+import { readMenuHome } from "./menu-home.js";
 import { readMenuStructure } from "./menu-structure.js";
 import {
   createMenu,

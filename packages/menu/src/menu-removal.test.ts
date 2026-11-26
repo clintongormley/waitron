@@ -1,3 +1,4 @@
+import { addShortcut } from "../test/menu-home-fixture.js";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { menuItems, menuItemVariantOverrides, products, sectionMembers } from "@waitron/db";
 import { and, eq, inArray } from "drizzle-orm";
@@ -7,7 +8,7 @@ import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, offerOf, product, section } from "../test/menus-fixture.js";
 import { createCategory } from "./categories.js";
 import { deleteProductItems } from "./product-items.js";
-import { addShortcut, readMenuHome } from "./menu-home.js";
+import { readMenuHome } from "./menu-home.js";
 import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
 import * as menuRemoval from "./menu-removal.js";
 import { menusHolding, takeOffMenus } from "./menu-removal.js";

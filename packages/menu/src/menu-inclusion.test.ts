@@ -1,3 +1,4 @@
+import { addShortcut } from "../test/menu-home-fixture.js";
 import { describe, expect, it } from "vitest";
 import { products, withTransaction, type Transaction } from "@waitron/db";
 import { seedTaxpayer, seedVenueSettings } from "@waitron/db/testing/seed.js";
@@ -13,7 +14,7 @@ import {
   replaceMember,
   updateSection,
 } from "./sections.js";
-import { addShortcut, readMenuHome } from "./menu-home.js";
+import { readMenuHome } from "./menu-home.js";
 import { listContentTranslationGaps } from "./content-languages.js";
 import { loadSectionGraph } from "./section-graph.js";
 

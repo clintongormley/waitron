@@ -82,7 +82,7 @@ export interface MenuHome {
 
 export interface MenuHomeSaveInput {
   order: HomeOrder;
-  shortcuts: { memberId: string; ref: TileRef }[];
+  shortcuts: { memberId: string; ref: ShortcutRef | { kind: "missing" } }[];
 }
 
 export interface MenuHomeSaveResult extends MenuHome {
