@@ -2468,7 +2468,7 @@ export class PaymentsScreen extends LitElement {
 
   override render(): TemplateResult {
     return html`<h1 tabindex="-1">
-        ${t(this.surface === "checks" ? "payments.checks_title" : "payments.title")}
+        ${t(this.surface === "checks" ? "payments.checks_title" : "nav.payments")}
       </h1>
       ${this.surface === "checks" ? this.#renderChecks() : this.#renderReaders()}`;
   }
@@ -2529,7 +2529,6 @@ export class PaymentsScreen extends LitElement {
           : nothing
       }
       <section data-test="readers-section">
-        <h2 id="card-readers-heading">${t("payments.readers_heading")}</h2>
         <div class="reader-tools">
           ${this.#renderAddReader()}
           <wt-button
@@ -2551,7 +2550,7 @@ export class PaymentsScreen extends LitElement {
                 filteredColumnLabel=${t("table.filtered_column")}
                 filtersClearAllLabel=${t("table.filters_clear_all")}
                 filtersCloseLabel=${t("table.filters_close")}
-                aria-label=${t("payments.readers_heading")}
+                aria-label=${t("nav.payments")}
                 searchable
                 searchLabel=${t("payments.readers_search")}
                 viewKey="waitron.payments.readers.table"

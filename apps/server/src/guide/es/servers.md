@@ -350,7 +350,7 @@ casos.
 
 ## Comprobar los intervalos del traspaso {#reconciliation}
 
-Después de un traspaso de emergencia, abre **Informes** y después **Intervalos del traspaso** para
+Después de un traspaso de emergencia, abre **Intervalos del traspaso** en **Sistema** para
 comprobar el período cuya actividad podría faltar. Necesitas permiso para ver informes. La lista
 muestra los servidores principal anterior y nuevo, la última hora de venta o pedido en la copia, las horas
 de declaración y activación, y el motivo indicado al tomar el relevo. Todas las horas usan la zona

@@ -252,14 +252,84 @@ it("opens the shipped Staffing, Rota for everyone and Routes tab from search", a
     ).toBe("routing"),
   );
 });
+it("opens Rota from Team and restores it on Back from Calendar", async () => {
+  const { el } = await mount({ path: "/products", waitForScreen: "dashboard-products-screen" });
+  const root = el.shadowRoot!;
+  const row = (key: string) => root.querySelector<HTMLElement>(`[data-test=nav-${key}]`)!;
+  await search(el, "rota");
+  expect(root.querySelector("#nav-group-panel-team [data-test=nav-opening-hours-rota]")).toBe(
+    row("opening-hours-rota"),
+  );
+  expect(row("opening-hours-rota")).not.toBeNull();
+  expect(result(el, "calendar:rota")).toBeNull();
+
+  let draft = "saved";
+  const scope = leaveCoordinatorFor(el)!.register({
+    id: el,
+    current: () => draft,
+    snapshot: (value) => value,
+    equal: (left, right) => left === right,
+    restore: (value) => {
+      draft = value;
+    },
+  });
+  draft = "edited";
+  scope.changed();
+  await userEvent.click(row("opening-hours-rota"));
+  const question = root.querySelector("wt-unsaved-changes")!;
+  await vi.waitFor(() => expect(question.open).toBe(true));
+  await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!);
+  await vi.waitFor(() => expect(question.open).toBe(false));
+  expect(location.pathname).toBe("/products");
+  expect(draft).toBe("edited");
+
+  await userEvent.click(row("opening-hours-rota"));
+  await vi.waitFor(() => expect(question.open).toBe(true));
+  await userEvent.click(question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!);
+  await vi.waitFor(() => expect(location.pathname).toBe("/opening-hours/view/rota"));
+  expect(draft).toBe("saved");
+  scope.dispose();
+  const current = () =>
+    [...root.querySelectorAll('.nav-item[aria-current="page"]')].map((item) =>
+      item.getAttribute("data-test"),
+    );
+  expect(current()).toEqual(["nav-opening-hours-rota"]);
+  expect(row("group-team").getAttribute("aria-expanded")).toBe("true");
+
+  row("group-operations").click();
+  await el.updateComplete;
+  await userEvent.click(row("opening-hours"));
+  await vi.waitFor(() => expect(location.pathname).toBe("/opening-hours"));
+  expect(current()).toEqual(["nav-opening-hours"]);
+
+  history.back();
+  await vi.waitFor(() => expect(current()).toEqual(["nav-opening-hours-rota"]));
+  expect(location.pathname).toBe("/opening-hours/view/rota");
+  expect(row("group-team").getAttribute("aria-expanded")).toBe("true");
+});
+
+it("opens Team on a fresh Rota address", async () => {
+  const { el } = await mount({ path: "/opening-hours/view/rota" });
+  const root = el.shadowRoot!;
+  expect(root.querySelector("[data-test=nav-group-team]")!.getAttribute("aria-expanded")).toBe(
+    "true",
+  );
+  expect(root.querySelector('.nav-item[aria-current="page"]')?.getAttribute("data-test")).toBe(
+    "nav-opening-hours-rota",
+  );
+});
+
 it("rebuilds destinations when modules and permissions change at the next session probe", async () => {
   const { el, session, getMe } = await mount();
   await search(el, "everyone");
   expect(result(el, "calendar:rota:everyone")).not.toBeNull();
+  await search(el, "rota");
+  expect(el.shadowRoot!.querySelector("[data-test=nav-opening-hours-rota]")).not.toBeNull();
   session.permissions = ["venue.view"];
   document.dispatchEvent(new Event("visibilitychange"));
   await vi.waitFor(() => expect(getMe.mock.calls.length).toBeGreaterThan(1));
   await vi.waitFor(() => expect(result(el, "calendar:rota:everyone")).toBeNull());
+  expect(el.shadowRoot!.querySelector("[data-test=nav-opening-hours-rota]")).toBeNull();
   await search(el, "staffing");
   expect(result(el, "calendar:staffing")).not.toBeNull();
   session.modules = ["venue-service"];

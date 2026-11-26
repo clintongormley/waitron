@@ -11,6 +11,7 @@ export const ADJUSTMENTS_DASHBOARD: DashboardContribution & DashboardFurtherScre
     id: "adjustment-report",
     navLabelKey: "nav.adjustment_report",
     group: "reports",
+    order: 40,
     requiresPermission: "report.view",
   },
   strings: ADJUSTMENTS_STRINGS,
@@ -26,7 +27,8 @@ export const ADJUSTMENTS_DASHBOARD: DashboardContribution & DashboardFurtherScre
       screen: {
         id: "adjustment-reasons",
         navLabelKey: "nav.adjustment_reasons",
-        group: "service",
+        group: "operations",
+        order: 80,
         requiresPermission: "adjustment.manage",
       },
       create(ctx) {

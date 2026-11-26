@@ -423,12 +423,12 @@ export const ALERT_MESSAGES: Readonly<
     es: "SumUp rechazó la clave de socio de Waitron para el pago {paymentRef}. Waitron volvió a intentarlo sin ella. Comprueba el pago en el panel de SumUp antes de volver a cobrar.",
   },
   "payment.pending_outcome_unactionable": {
-    en: `Check card payment {paymentRef} and any refunds in the provider's own dashboard before charging again. If it is listed on Check card payments in Reporting, review it there.${MORE_EN}`,
-    es: `Comprueba el pago con tarjeta {paymentRef} y sus devoluciones en el panel del proveedor antes de volver a cobrar. Si aparece en Comprobar pagos con tarjeta, en Informes, revísalo allí.${MORE_ES}`,
+    en: `Check card payment {paymentRef} and any refunds in the provider's own dashboard before charging again. If it is listed on Check card payments in Sales and tax, review it there.${MORE_EN}`,
+    es: `Comprueba el pago con tarjeta {paymentRef} y sus devoluciones en el panel del proveedor antes de volver a cobrar. Si aparece en Comprobar pagos con tarjeta, en Ventas e impuestos, revísalo allí.${MORE_ES}`,
   },
   "payment.bill_settle_failed": {
-    en: `A card payment of {amount:money} towards a bill was charged, but Waitron could not record it or issue the bill's invoice. Until it is recorded, the bill cannot be invoiced and what it charges cannot be changed. Waitron tries again by itself; to try now, open Check card payments in Reporting and, under Bill payments and refunds awaiting a card provider, press Check with provider. If recording keeps failing, this is a fault in Waitron or this box. Keep the order and payment details. Do not charge the card again.${MORE_EN}`,
-    es: `Se cobró con tarjeta un pago de {amount:money} a cuenta de una cuenta, pero Waitron no ha podido registrarlo ni emitir la factura de la cuenta. Hasta que se registre, la cuenta no se puede facturar y no se puede cambiar su importe. Waitron lo vuelve a intentar por sí solo; para intentarlo ya, abre Comprobar pagos con tarjeta en Informes y, en Pagos de cuentas y devoluciones pendientes del proveedor de tarjetas, pulsa Consultar al proveedor. Si el registro sigue fallando, es un fallo de Waitron o de este servidor. Conserva los datos del pedido y del cobro. No vuelvas a cobrar la tarjeta.${MORE_ES}`,
+    en: `A card payment of {amount:money} towards a bill was charged, but Waitron could not record it or issue the bill's invoice. Until it is recorded, the bill cannot be invoiced and what it charges cannot be changed. Waitron tries again by itself; to try now, open Check card payments in Sales and tax and, under Bill payments and refunds awaiting a card provider, press Check with provider. If recording keeps failing, this is a fault in Waitron or this box. Keep the order and payment details. Do not charge the card again.${MORE_EN}`,
+    es: `Se cobró con tarjeta un pago de {amount:money} a cuenta de una cuenta, pero Waitron no ha podido registrarlo ni emitir la factura de la cuenta. Hasta que se registre, la cuenta no se puede facturar y no se puede cambiar su importe. Waitron lo vuelve a intentar por sí solo; para intentarlo ya, abre Comprobar pagos con tarjeta en Ventas e impuestos y, en Pagos de cuentas y devoluciones pendientes del proveedor de tarjetas, pulsa Consultar al proveedor. Si el registro sigue fallando, es un fallo de Waitron o de este servidor. Conserva los datos del pedido y del cobro. No vuelvas a cobrar la tarjeta.${MORE_ES}`,
   },
   "payment.tender_refund_unresolved": {
     en: `A card refund of {amount:money} has been waiting for over an hour for the card provider to show what happened. Check the refund in the provider's own dashboard, and record the outcome it confirms. The original invoice is unchanged.${MORE_EN}`,
@@ -469,11 +469,11 @@ export const ALERT_MESSAGES: Readonly<
   "payment.reconcile_held": {
     one: {
       param: "count",
-      en: "1 card payment for a closed order has a different amount in the card provider's records than recorded here. Waitron will not refund it. Record what was done on Check card payments in Reporting.",
-      es: "1 pago con tarjeta de un pedido cerrado tiene un importe distinto en los registros del proveedor y aquí. Waitron no lo devolverá. Registra qué se hizo en Comprobar pagos con tarjeta, en Informes.",
+      en: "1 card payment for a closed order has a different amount in the card provider's records than recorded here. Waitron will not refund it. Record what was done on Check card payments in Sales and tax.",
+      es: "1 pago con tarjeta de un pedido cerrado tiene un importe distinto en los registros del proveedor y aquí. Waitron no lo devolverá. Registra qué se hizo en Comprobar pagos con tarjeta, en Ventas e impuestos.",
     },
-    en: "{count} card payments for closed orders have a different amount in the card provider's records than recorded here. Waitron will not refund them. Record what was done with each on Check card payments in Reporting.",
-    es: "{count} pagos con tarjeta de pedidos cerrados tienen un importe distinto en los registros del proveedor y aquí. Waitron no los devolverá. Registra qué se hizo con cada uno en Comprobar pagos con tarjeta, en Informes.",
+    en: "{count} card payments for closed orders have a different amount in the card provider's records than recorded here. Waitron will not refund them. Record what was done with each on Check card payments in Sales and tax.",
+    es: "{count} pagos con tarjeta de pedidos cerrados tienen un importe distinto en los registros del proveedor y aquí. Waitron no los devolverá. Registra qué se hizo con cada uno en Comprobar pagos con tarjeta, en Ventas e impuestos.",
   },
   "payment.reconcile_remediation_failed": {
     en: `Automatic refunds failed for {count} card payments. Waitron will not try them again; refund them in the card provider's own dashboard.${MORE_EN}`,

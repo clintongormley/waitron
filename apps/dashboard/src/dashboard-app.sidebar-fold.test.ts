@@ -14,12 +14,11 @@ import { setLocale, t } from "./i18n/t.js";
 
 const SECTION_ICONS = {
   reports: "section-reports",
-  service: "section-service",
+  team: "section-team",
   menu: "section-menu",
   operations: "section-operations",
-  team: "section-team",
-  purchasing: "section-purchasing",
   hardware: "section-hardware",
+  purchasing: "section-purchasing",
   configuration: "gear",
 } as const;
 
@@ -229,7 +228,16 @@ it("in a strip that scrolls, a section's panel shows beside the strip, its first
 
 it("in a window too short for it, the System panel stays within the layout beside its icon and scrolls", async () => {
   await atSize(844, 390, async () => {
-    const { el } = await mountApp();
+    const { el } = await mountApp({
+      permissions: [
+        "venue.view",
+        "hardware.manage",
+        "system.manage",
+        "node.manage",
+        "person.manage",
+        "report.view",
+      ],
+    });
     expectFolded(el, true);
     const settings = stripButton(el, "configuration");
     settings.scrollIntoView({ block: "end" });
@@ -367,7 +375,7 @@ it("the strip lists each section with a page the person may open, in order, name
   await atSize(1280, 800, async () => {
     localStorage.setItem(FOLDED_KEY, "true");
     const { el } = await mountApp();
-    const sections = ["overview", ...Object.keys(SECTION_ICONS)];
+    const sections = ["overview", "bookings", ...Object.keys(SECTION_ICONS)];
     expect(strip(el).map((button) => button.dataset.test)).toEqual([
       "strip-search",
       ...sections.map((id) => `strip-${id}`),
@@ -393,7 +401,26 @@ it("the strip leaves out a section with no page the person may open", async () =
     localStorage.setItem(FOLDED_KEY, "true");
     const { el } = await mountApp({ modules: [], permissions: ["venue.view"] });
     expect(stripButton(el, "menu")).not.toBeNull();
-    expect(stripButton(el, "service")).toBeNull();
+    expect(stripButton(el, "bookings")).toBeNull();
+  });
+});
+
+it("opens Bookings directly from the strip when the session may open it", async () => {
+  await atSize(1280, 800, async () => {
+    localStorage.setItem(FOLDED_KEY, "true");
+    const { el } = await mountApp();
+    const bookings = stripButton(el, "bookings");
+    expect(bookings.getAttribute("aria-label")).toBe("Reservas");
+    const icon = bookings.querySelector<WtIcon>("wt-icon")!;
+    expect(icon.getAttribute("name")).toBe("event");
+    await icon.updateComplete;
+    expect(icon.shadowRoot!.querySelector("svg path")?.getAttribute("d")).toBeTruthy();
+    expect(bookings.hasAttribute("aria-expanded")).toBe(false);
+    bookings.click();
+    await expect.poll(() => location.pathname).toBe("/bookings");
+    expect(bookings.getAttribute("aria-current")).toBe("page");
+    expect(panel(el)).toBeNull();
+    expectFolded(el, true);
   });
 });
 
@@ -432,7 +459,7 @@ it("the current section is marked by the highlight alone, its icon staying the t
     host.style.setProperty("--wt-color-text", "rgb(31, 32, 33)");
     const current = stripButton(el, "overview");
     const other = stripButton(el, "reports");
-    expect(current.getAttribute("aria-current")).toBe("true");
+    expect(current.getAttribute("aria-current")).toBe("page");
     const style = getComputedStyle(current);
     expect(style.borderInlineStartColor).toBe("rgb(11, 12, 13)");
     expect(style.borderInlineStartWidth).toBe("3px");

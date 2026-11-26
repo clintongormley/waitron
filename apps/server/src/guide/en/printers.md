@@ -140,7 +140,7 @@ If you deny a request, the agent can appear again under the other requests as **
 
 ## Card readers {#card-readers}
 
-To add a reader, open **Card payments** in Hardware and choose **Add reader** above the table.
+To add a reader, open **Card readers** in **Hardware** and choose **Add reader** above the table.
 Choose the provider if asked, then add a reader from its list or pair a new one.
 If no provider is connected, choose **Configure card providers** to set one up first.
 Keep the ticks for profiles that should use a new reader and choose **Save profiles**, or choose
@@ -151,7 +151,7 @@ Before paying, open **Hardware → Devices**, select your device and choose **Ed
 To let staff pick a reader up by scanning it, choose **QR label…** in its menu and stick the label
 on it. In Chrome on an Android phone, **NFC sticker…** writes a sticker they tap instead.
 
-In **Card payments**, find the reader under **Card readers** and choose **Delete** in its menu. The confirmation names the assignments removed. If a payment is in progress, let it finish first.
+Open **Card readers** in **Hardware**, find the reader and choose **Delete** in its menu. The confirmation names the assignments removed. If a payment is in progress, let it finish first.
 
 When you add a deleted reader again, a recognised registration shows its saved name and print settings: choose **Add**. Tick the profiles that should use it and choose **Save profiles**. Otherwise, pair it using the provider's normal steps.
 

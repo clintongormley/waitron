@@ -15,7 +15,7 @@ function contribution(id: string, order?: number): DashboardContribution {
     screen: {
       id,
       navLabelKey: `nav.${id}`,
-      group: "service",
+      group: "reports",
       requiresPermission: "test.use",
       ...(order === undefined ? {} : { order }),
     },
@@ -27,9 +27,10 @@ function contribution(id: string, order?: number): DashboardContribution {
 vi.mock("@waitron/dashboard-modules", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@waitron/dashboard-modules")>()),
   DASHBOARD_MODULES: [
-    contribution("second", 2),
+    contribution("second", 15),
     contribution("unordered"),
-    contribution("first", 1),
+    contribution("first", 10),
+    contribution("third", 15),
   ],
 }));
 
@@ -38,7 +39,7 @@ afterEach(() => {
   setLocale("es-ES");
 });
 
-function stubApi(modules: string[] = ["second", "unordered", "first"]): DashboardApi {
+function stubApi(modules: string[] = ["second", "unordered", "first", "third"]): DashboardApi {
   const pending = () => vi.fn(() => new Promise(() => undefined));
   return {
     getMe: vi.fn().mockResolvedValue({
@@ -63,16 +64,23 @@ function stubApi(modules: string[] = ["second", "unordered", "first"]): Dashboar
   } as unknown as DashboardApi;
 }
 
-it("orders a group's module items by their stated order, an unstated order counting as zero", async () => {
+it("interleaves core and module pages, with core first and declaration order on ties", async () => {
   const { el } = await mountWidget<DashboardApp>("dashboard-app", {
     api: stubApi(),
     request: async () => [] as never,
   });
   await vi.waitFor(() =>
-    expect(el.shadowRoot!.querySelector("#nav-group-panel-service [data-test]")).not.toBeNull(),
+    expect(el.shadowRoot!.querySelector("#nav-group-panel-reports [data-test]")).not.toBeNull(),
   );
-  const service = [
-    ...el.shadowRoot!.querySelectorAll<HTMLElement>("#nav-group-panel-service [data-test]"),
+  const reports = [
+    ...el.shadowRoot!.querySelectorAll<HTMLElement>("#nav-group-panel-reports [data-test]"),
   ].map((item) => item.dataset.test);
-  expect(service).toEqual(["nav-unordered", "nav-first", "nav-second"]);
+  expect(reports).toEqual([
+    "nav-unordered",
+    "nav-sales",
+    "nav-first",
+    "nav-second",
+    "nav-third",
+    "nav-orders",
+  ]);
 });

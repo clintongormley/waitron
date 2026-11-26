@@ -456,7 +456,7 @@ when those sections appear, then decide whether to delete the station.
 ## Choose the language on station paper {#paper-language}
 
 To change the fixed words on station tickets and collection-number slips, change the default
-under **System**, then **Content languages**. A Spanish default prints Spanish headings; other
+in **Content languages** under **Products and menus**. A Spanish default prints Spanish headings; other
 defaults use English until their station wording is available. With no saved content language,
 station paper uses English. Your dashboard language and receipt language have their own choices.
 

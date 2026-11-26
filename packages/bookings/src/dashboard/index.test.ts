@@ -15,7 +15,9 @@ describe("BOOKINGS_DASHBOARD contribution", () => {
     expect(BOOKINGS_DASHBOARD.screen).toMatchObject({
       id: "bookings",
       navLabelKey: "nav.bookings",
-      group: "service",
+      group: "overview",
+      order: 20,
+      icon: "event",
       requiresPermission: "booking.manage",
     });
   });

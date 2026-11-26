@@ -48,7 +48,7 @@ afterEach(() => {
   setLocale("en");
 });
 
-describe("Card payments reader tools", () => {
+describe("Card readers tools", () => {
   it.each([
     { readers: [], providers: [] },
     {
@@ -66,12 +66,12 @@ describe("Card payments reader tools", () => {
       expect(el.shadowRoot!.querySelector("wt-tabs")).toBeNull();
       const settings = el.shadowRoot!.querySelector("dashboard-payments-settings");
       expect(settings).not.toBeNull();
-      expect(el.shadowRoot!.querySelector("[data-test=readers-section]")!.nextElementSibling).toBe(
-        settings,
+      const section = el.shadowRoot!.querySelector("[data-test=readers-section]")!;
+      expect(section.querySelector("wt-data-table")?.getAttribute("aria-label")).toBe(
+        "Card readers",
       );
-      expect(
-        [...el.shadowRoot!.querySelectorAll("h2")].map((heading) => heading.textContent),
-      ).toEqual(["Card readers"]);
+      expect(section.nextElementSibling).toBe(settings);
+      expect(el.shadowRoot!.querySelector("h2")).toBeNull();
       expect(el.shadowRoot!.querySelector("[data-test=refresh-readers]")).not.toBeNull();
       expect(
         el.shadowRoot!.querySelector("[data-test=configure-providers]")?.getAttribute("href"),
@@ -115,7 +115,7 @@ it.each(["readers", "checks"] as const)(
     await el.updateComplete;
     for (const name of excluded) expect(client[name]).not.toHaveBeenCalled();
     expect(el.shadowRoot!.querySelector("h1")?.textContent?.trim()).toBe(
-      surface === "checks" ? "Check card payments" : "Card payments",
+      surface === "checks" ? "Check card payments" : "Card readers",
     );
     expect(el.shadowRoot!.querySelector("[data-test=readers-section]") !== null).toBe(
       surface === "readers",

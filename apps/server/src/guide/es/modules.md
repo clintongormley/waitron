@@ -6,8 +6,8 @@ Abre **Módulos** en Sistema para configurar un proveedor de tarjetas.
 
 Elige **Configurar** en el menú de la fila del proveedor, introduce sus credenciales y pulsa **Guardar**.
 Usa **Cancelar** para descartar los cambios. Un proveedor configurado puede rechazar un pago;
-consulta el estado de los lectores en **Pagos con tarjeta**. Para revisar pagos pendientes, abre
-**Comprobar pagos con tarjeta** en Informes.
+consulta el estado de los lectores en **Lectores de tarjetas**. Para revisar pagos pendientes, abre
+**Comprobar pagos con tarjeta** en **Ventas e impuestos**.
 
 Los filtros **Habilitado**, **Deshabilitado** y **Todos** muestran el estado de un módulo por separado
 de su configuración. **Añadir un módulo** muestra los módulos deshabilitados en la misma lista.
@@ -15,11 +15,11 @@ Elige **Todas las categorías** para ver todos los módulos opcionales.
 
 ## Activar las propinas o una cuenta de prueba {#payment-settings}
 
-Abre **Pagos con tarjeta** y ve a **Ajustes**, debajo de **Lectores de tarjetas**. Activa
+Abre **Lectores de tarjetas** en **Hardware** y ve a **Ajustes**, debajo de la tabla. Activa
 **Ofrecer propina en la caja** y pulsa **Guardar**.
 
 En un servidor configurado para Preparar, configura primero las credenciales de prueba de tu
-proveedor en **Módulos**. En **Pagos con tarjeta**, dentro de **Ajustes**, activa
+proveedor en **Módulos**. En **Lectores de tarjetas**, dentro de **Ajustes**, activa
 **Usar las cuentas de prueba de los proveedores de tarjetas** y pulsa **Guardar**.
 Desactiva la opción para volver al simulador de tarjetas.
 
@@ -27,12 +27,12 @@ Desactiva la opción para volver al simulador de tarjetas.
 
 Para quitar las credenciales guardadas de un proveedor, elige **Desconectar** en el menú de su
 fila en Módulos y después **¿Desconectar este proveedor?** para confirmar. Si un aviso te pide
-eliminar o desvincular sus lectores, hazlo en **Pagos con tarjeta** y vuelve aquí para desconectarlo.
+eliminar o desvincular sus lectores, hazlo en **Lectores de tarjetas** y vuelve aquí para desconectarlo.
 
 ## Activar o desactivar un proveedor de tarjetas {#provider-state}
 
 Como administrador, elige **Desactivar** en el menú de la fila del proveedor y confirma.
-Antes, elimina o desvincula sus lectores en **Pagos con tarjeta**. Si quedan lectores asociados,
+Antes, elimina o desvincula sus lectores en **Lectores de tarjetas**. Si quedan lectores asociados,
 el aviso los nombra y te ofrece un enlace a esa página. Al desactivarlo, conservas sus credenciales
 para pagos anteriores y reembolsos.
 
@@ -69,7 +69,7 @@ La descarga de tus datos personales conserva tus fichajes en `clock-entries.json
 
 ## Revisar devoluciones de pedidos abandonados {#abandoned-refunds}
 
-Si un cliente se marcha después de un cobro de SumUp, abre **Comprobar pagos con tarjeta** en Informes y revisa **Devoluciones de pedidos abandonados**.
+Si un cliente se marcha después de un cobro de SumUp, abre **Comprobar pagos con tarjeta** en **Ventas e impuestos** y revisa **Devoluciones de pedidos abandonados**.
 Waitron intenta una devolución completa cuando SumUp identifica el pago como tuyo, el importe coincide y no existe ninguna devolución.
 Un pago cobrado en el lector fuera de Waitron queda para que lo revises.
 
@@ -78,7 +78,7 @@ Revisa esta lista aunque siga abierta una advertencia anterior en Alertas.
 
 ## Resolver un pago con tarjeta retenido {#resolve-held-payment}
 
-En Informes, abre **Comprobar pagos con tarjeta** y busca el pago en **Retenidos: liquidados por otro importe**.
+En **Ventas e impuestos**, abre **Comprobar pagos con tarjeta** y busca el pago en **Retenidos: liquidados por otro importe**.
 Usa el número de pedido y el nombre de la cuenta para encontrar el pago. Si el pedido a mesa está pagado y ya se ha entregado o se ha retirado su mesa, busca el lugar registrado.
 Comprueba cuánto se cobró al cliente y qué importe conservas en el panel de tu proveedor de tarjetas.
 

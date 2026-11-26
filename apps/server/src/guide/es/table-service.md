@@ -14,7 +14,7 @@ alguien con **Autorizar invitaciones** y pídele que introduzca su PIN. Puede su
 y aplicar sus propias invitaciones sin el PIN de otra persona. Por defecto, el personal puede aplicar
 invitaciones dentro de los límites; supervisores, encargados y administradores pueden autorizarlas.
 
-En **Cancelaciones y descuentos** del panel, indica **0** cuando cada invitación necesite
+En **Cancelaciones y descuentos**, dentro de **Configuración del local**, indica **0** cuando cada invitación necesite
 autorización. Los motivos nuevos empiezan en 0; cambia el importe o bórralo para permitir invitaciones sin límite.
 **Queja**, **Invitación** y **Descuento** empiezan en 0; **Comida de
 personal** permite hasta un 50% de descuento por artículo antes de pedir autorización.
@@ -77,7 +77,7 @@ muestra el estado actual del pago y los reembolsos completados, aunque hayan cam
 **Descargar para tu gestor (XLSX)** incluye una hoja separada de estos pagos, seleccionados por
 fecha del calendario y no por el cambio de día de negocio.
 
-En **Comprobar pagos con tarjeta**, dentro de Informes, abre **Comparación de SumUp** para consultar un día natural
+En **Comprobar pagos con tarjeta**, en **Ventas e impuestos**, abre **Comparación de SumUp** para consultar un día natural
 en la zona horaria del local. Una coincidencia vincula una anotación de la misma cuenta con un
 cargo de SumUp del mismo importe, incluida la propina, con un margen de 30 minutos. Comprueba
 los cargos ambiguos o sin coincidencia en SumUp antes de corregir nada. La comparación no envía
@@ -268,8 +268,7 @@ Si falla tu solicitud de impresión, puedes pulsar **Imprimir justificante de pa
 Para sustituir un justificante que ya se imprimió, usa
 **Reimprimir** en la [Cola de impresión](printers.md#print-queue).
 
-Si un lector de tarjetas imprime su propio justificante de pago, abre **Pagos con tarjeta** en el
-panel, edita ese lector y activa **Imprime su propio justificante automáticamente**. Después elige
+Si un lector de tarjetas imprime su propio justificante de pago, abre **Lectores de tarjetas** en **Hardware**, edita ese lector y activa **Imprime su propio justificante automáticamente**. Después elige
 **Guardar**. Waitron deja los justificantes de ese lector en manos del propio lector. Este ajuste
 describe el lector; no cambia la configuración de su impresora. Empieza desactivado en un lector nuevo.
 
@@ -799,7 +798,7 @@ registro sigue fallando, conserva los datos del pedido y del cobro y no vuelvas 
 fallo de Waitron o de este servidor.
 
 Si se devolvió parte de un pago antes de registrar su factura, no vuelvas a cobrar.
-En **Comprobar pagos con tarjeta**, dentro de Informes, comprueba los importes cobrados, devueltos y aún retenidos. Elige
+En **Comprobar pagos con tarjeta**, en **Ventas e impuestos**, comprueba los importes cobrados, devueltos y aún retenidos. Elige
 **Conservar en esta cuenta** para aplicar el dinero restante a la cuenta. Antes de confirmar,
 comprueba el importe aplicado, el exceso conservado como propina y lo que aún tienes que cobrar.
 Por ejemplo, de 100 € cobrados y 40 € devueltos, puedes conservar 60 € en la cuenta y cobrar solo

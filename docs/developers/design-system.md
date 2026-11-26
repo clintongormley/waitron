@@ -4280,8 +4280,10 @@ and the selected item's text read `--wt-color-primary-text`, and the selected it
 reads `--wt-color-primary`: `--wt-color-primary` measured 4.32:1 as text on the light
 `--wt-color-bg` the sidebar sits on (A306).
 
-A headed group (the pinned first group — Overview alone — has no header and is never collapsible)
-is also its own disclosure toggle, except while a search term is typed (below): the header is a
+Overview and Bookings sit at the top as direct rows with their own icons and a line underneath.
+Each headed section combines its core and module pages in ascending order of their declared
+`order`. A headed group is its own disclosure toggle except while a search term is typed
+(below). Its header is a
 `<button>` with `aria-expanded` and `aria-controls` pointing at its item list, a `chevron-down`
 `wt-icon` that rotates 180° when expanded (pointing down at rest — "expand this way" — up when open
 — "collapse"). Every headed group starts collapsed (owner decision 2026-09-28, replacing
@@ -4295,9 +4297,11 @@ of what the header shows, and outside a search the header's `aria-expanded` and 
 `hidden` follow the set alone. A collapsed group holding the current page hides that page's row;
 arriving at another page in it opens it again. Opening a headed group, by clicking its header
 or arriving at one of its pages, closes every other headed group (A325, owner 2026-10-07).
-Opening Overview, the page without a group header, closes every headed group. A same-page
-address change or Back step leaves a manually opened group alone. Typing a search term leaves
-those stored choices unchanged.
+Opening a pinned page closes every headed group. Rota under Team opens the Calendar on Rota.
+On that tab, the Rota row is current and Team opens. The Calendar row under Venue setup opens
+Opening hours when you leave Rota through it. An address change or Back step within the same
+sidebar row leaves a manually opened group alone. Typing a search term leaves those choices
+unchanged.
 
 A group draws no header when this session cannot open any of its pages. Search also hides a group
 when it removes all of its pages.
@@ -4393,8 +4397,8 @@ sidebar. The choice is kept in this browser's `localStorage`
 (`waitron-dashboard-sidebar-folded`). With none kept, a window matching `(48rem < width <= 64rem)`
 opens folded and any other opens unfolded, read once when the app starts. The strip holds a
 magnifier first (not for staff), which unfolds the sidebar, keeps that choice and puts the cursor in
-the search box; then one icon button per section this person can open a page in, named by the
-section, with the shared icon tooltip shown beside it rather than below. The section holding the
+the search box; then direct buttons for the pinned pages and one button per headed section the session can
+open. The shared icon tooltip appears beside each button. The section holding the
 current page is marked by the highlight alone: a `--wt-color-primary` leading edge and a
 `--wt-color-surface-lifted` fill, the icon staying uncoloured. A section with one page opens it. A
 section with more opens a panel beside its icon, listing the section's name and its pages, and
@@ -4425,7 +4429,7 @@ a screen exceeded one viewport the sidebar — capped to one screen — visibly 
 the page actually ended. Both panes now share the same bound, so they always end at the same line.
 
 Seasons and Periods have separate module-contributed pages at `/seasons` and
-`/periods`, under Venue operations. Their drafts use the ordinary dashboard navigation
+`/periods`, under Venue setup. Their drafts use the ordinary dashboard navigation
 question. Painted-in links open a painter with `?back=/periods`, and its Close returns
 to Periods; bare painter addresses close back to Calendar.
 
@@ -7183,7 +7187,7 @@ staged input. Cases: the `floor-plans-screen*.test.ts`, `floor-plan-set-dialog*.
 
 ### Periods page
 
-Periods is a module-contributed page under Venue operations, beside Calendar and Seasons,
+Periods is a module-contributed page under Venue setup, beside Calendar and Seasons,
 at `/periods`. It opens from the menu, page search, the Year's Periods link and the
 Departments warning's Set up periods link. It renders `periods-list` directly, without a
 Calendar window or Close action. Painters retain their inline period pencils and + New period.
@@ -7239,7 +7243,7 @@ files.
 
 ### Seasons page
 
-Seasons is a module-contributed page at `/seasons`, under Venue operations beside Calendar
+Seasons is a module-contributed page at `/seasons`, under Venue setup beside Calendar
 and Periods. The menu, page search and the Year's Seasons link open it. `seasons-screen.ts` follows
 passive opening-hours reads and renders a list or the selected `seasons-window.ts` form with an h1.
 

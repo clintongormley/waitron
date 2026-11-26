@@ -6,8 +6,8 @@ Open **Modules** in System to configure a card provider.
 
 Choose **Configure** in the provider's row menu, enter its credentials and choose **Save**.
 Use **Cancel** to discard your changes. A configured provider can still refuse a payment;
-check reader status on **Card payments**. For unfinished payments, open **Check card payments**
-in Reporting.
+check reader status on **Card readers**. For unfinished payments, open **Check card payments**
+in **Sales and tax**.
 
 The **Enabled**, **Disabled** and **All** filters show a module's state separately from its
 configuration. **Add a module** shows disabled modules in the same list. Choose **All categories**
@@ -15,23 +15,22 @@ to see all optional modules.
 
 ## Enable tips or a test account {#payment-settings}
 
-Open **Card payments** and go to **Settings** below **Card readers**. Turn on
+Open **Card readers** under **Hardware** and go to **Settings** below the table. Turn on
 **Offer tips at the till** and choose **Save**.
 
-On a Prepare box, configure your provider's test credentials in **Modules** first. In **Card
-payments** under **Settings**, turn on **Use card providers' test accounts** and choose **Save**.
+On a Prepare box, configure your provider's test credentials in **Modules** first. In **Settings** on **Card readers**, turn on **Use card providers' test accounts** and choose **Save**.
 Turn it off to return to the card simulator.
 
 ## Disconnect a card provider {#disconnect-provider}
 
 To remove a provider's saved credentials, choose **Disconnect** in its Modules row menu,
 then **Disconnect this provider?** to confirm. If a refusal asks you to remove or unpair its
-readers, do that on **Card payments**, then return here to disconnect.
+readers, do that on **Card readers**, then return here to disconnect.
 
 ## Turn a card provider on or off {#provider-state}
 
 As an administrator, choose **Turn off** in the provider's row menu and confirm. Remove or
-unpair its readers on **Card payments** first; a refusal names any readers still attached and
+unpair its readers on **Card readers** first; a refusal names any readers still attached and
 links you there. Turning it off keeps its credentials for earlier payments and refunds.
 
 To add readers again, select **Disabled** or **All**, then choose **Turn on** and confirm. **Configured** tells you whether its
@@ -66,7 +65,7 @@ Your personal-data download keeps your clock records in `clock-entries.json`; it
 
 ## Check abandoned-order refunds {#abandoned-refunds}
 
-If a customer leaves after a SumUp charge, open **Check card payments** in Reporting and check **Abandoned-order refunds**.
+If a customer leaves after a SumUp charge, open **Check card payments** in **Sales and tax** and check **Abandoned-order refunds**.
 Waitron attempts one full refund when SumUp identifies the payment as yours, the amount matches and no refund exists.
 A payment taken outside Waitron on the reader stays for you to check.
 
@@ -75,7 +74,7 @@ Check this list even if an earlier payment warning is still open in Alerts.
 
 ## Resolve a held card payment {#resolve-held-payment}
 
-In Reporting, open **Check card payments** and find the payment under **Held: paid out at a different amount**.
+In **Sales and tax**, open **Check card payments** and find the payment under **Held: paid out at a different amount**.
 Use the order number and bill name to find the payment. For a paid delivery that was handed over or whose table was removed, look for its recorded place.
 Check how much the customer was charged and how much you still hold in your card provider's dashboard.
 

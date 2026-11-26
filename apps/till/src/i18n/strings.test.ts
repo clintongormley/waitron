@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { fill } from "./t.js";
+import { codeMessage } from "./codes.js";
 import { catalogues, en, es, type StringKey } from "./strings.js";
+
+it.each([
+  ["en-GB", "Sales and tax", "Card readers"],
+  ["es-ES", "Ventas e impuestos", "Lectores de tarjetas"],
+])("points staff to the renamed dashboard pages in %s", (locale, reportSection, readers) => {
+  expect(catalogues[locale]?.["bill_pay.card_recovery"]).toContain(reportSection);
+  expect(codeMessage("reader.not_found", locale)).toContain(readers);
+});
 
 /**
  * The permanent-refusal messages, checked as prose in every language the till ships. `sale.refused`

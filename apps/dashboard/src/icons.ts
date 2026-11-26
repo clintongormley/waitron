@@ -39,6 +39,8 @@ export const DASHBOARD_ICONS: Record<string, string> = {
     "M1 1h6v6H1Z M2 2v4h4V2Z M2.8 4.2l.7-.7.9.9 1.6-1.6.7.7-2.3 2.3Z M9 3h6v2H9Z M1 9h6v6H1Z M2 10v4h4v-4Z M9 11h6v2H9Z",
   "section-overview":
     "M4 12.67h2v-4h4v4h2v-6L8 3.67 4 6.67v6Zm-1.33 1.33v-8l5.33-4 5.33 4v8H8.67v-4h-1.33v4H2.67Zm5.33-5.83Z",
+  event:
+    "M3 2h2V1h1.33v1h3.34V1H11v1h2a1.33 1.33 0 0 1 1.33 1.33v10A1.33 1.33 0 0 1 13 14.67H3a1.33 1.33 0 0 1-1.33-1.34v-10A1.33 1.33 0 0 1 3 2Zm0 4v7.33h10V6Zm4.67 2H11v3.33H7.67Z",
   "section-reports":
     "M10.67 13.33v-4.67h2.67v4.67H10.67Zm-4 0v-10.67h2.67v10.67H6.67Zm-4 0v-7.33h2.67v7.33H2.67Z",
   "section-service":

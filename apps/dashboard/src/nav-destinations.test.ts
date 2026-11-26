@@ -123,7 +123,7 @@ describe("collectSearchDestinations", () => {
 it("searches card providers under Modules without offering the removed Card payments tabs", () => {
   const value = input();
   value.pages = [
-    { screen: "payments", label: "Card payments", heading: "Settings" },
+    { screen: "payments", label: "Card readers", heading: "Hardware" },
     { screen: "modules", label: "Modules", heading: "Settings" },
   ];
   expect(collectSearchDestinations(value)).toEqual([
@@ -134,14 +134,6 @@ it("searches card providers under Modules without offering the removed Card paym
       pageLabel: "Modules",
       heading: "Settings",
       href: "/modules/view/card-providers/state/all",
-    },
-    {
-      id: "payments:readers",
-      screen: "payments",
-      label: "payments.readers_heading",
-      pageLabel: "Card payments",
-      heading: "Settings",
-      href: "/payments",
     },
   ]);
 });

@@ -32,12 +32,6 @@ const coreDestinations: readonly DashboardSearchDestination[] = [
     labelKey: "modules.providers",
     path: "/modules/view/card-providers/state/all",
   },
-  {
-    id: "payments:readers",
-    screen: "payments",
-    labelKey: "payments.readers_heading",
-    path: "/payments",
-  },
 ];
 
 export function collectSearchDestinations(input: {
@@ -92,7 +86,8 @@ export function collectSearchDestinations(input: {
     if (pages.has(item.screen)) add(item.id, item.screen, input.label(item.labelKey), item.path);
   for (const { view } of input.calendarViews) {
     const path = `/opening-hours/view/${encodePathSegment(view.id)}`;
-    add(`calendar:${view.id}`, "opening-hours", input.label(view.labelKey), path);
+    if (!view.sidebar)
+      add(`calendar:${view.id}`, "opening-hours", input.label(view.labelKey), path);
     for (const child of view.searchDestinations ?? []) {
       const suffix = Object.entries(child.params)
         .flatMap(([key, value]) => [encodePathSegment(key), encodePathSegment(value)])

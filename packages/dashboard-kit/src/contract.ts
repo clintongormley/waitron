@@ -47,6 +47,7 @@ export interface DashboardScreenPlacement {
   navLabelKey: string;
   group: NavGroupId;
   order?: number;
+  icon?: string;
   requiresPermission: string;
   readPermission?: string;
 }
@@ -123,6 +124,7 @@ export interface DashboardCalendarView {
   id: string;
   labelKey: string;
   order: number;
+  sidebar?: { group: NavGroupId; order: number };
   /** Set false when the tab chooses its own default date. */
   carryMonthOnTab?: boolean;
   requiresPermission: string;

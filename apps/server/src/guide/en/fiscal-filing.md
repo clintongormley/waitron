@@ -6,7 +6,7 @@ administrator can send a correction from a case that offers one.
 
 ## Open the page {#open}
 
-Open **Reporting → Fiscal filing**. Managers and administrators see it.
+Open **Sales and tax → Fiscal filing**. Managers and administrators see it.
 
 The page reads the box when you open it. It does not update by itself: choose **Refresh** to read
 again. **Read at** says when the figures were read.

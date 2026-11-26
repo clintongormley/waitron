@@ -16,7 +16,7 @@ export const VERIFACTU_DASHBOARD: DashboardContribution = {
         id: "fiscal-filing",
         navLabelKey: "nav.fiscal_filing",
         group: "reports",
-        order: -1,
+        order: 70,
         requiresPermission: "report.export",
       },
       create(ctx) {

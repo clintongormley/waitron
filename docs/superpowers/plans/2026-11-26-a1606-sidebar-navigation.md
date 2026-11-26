@@ -15,22 +15,25 @@ sidebar styling and icon refresh. PR 3 owns the banner and account menu.
    with the existing icon treatment. The staff-only Overview strip button still opens its two-row panel.
    In `i18n/strings.ts` and `screens/payments-screen.ts`, apply the new section names and use Card readers
    for the sidebar and page heading. Drop the duplicate subheading and keep the table's accessible name.
+   Follow both renames into the till's card recovery and missing-reader messages, dashboard alerts
+   and the provider's link in Modules. Keep the payment module's own display name.
 2. In `packages/dashboard-kit/src/contract.ts`, add optional pinned-page icons and Calendar sidebar
    placement (`group`, `order`). Staffing declares Team placement on the existing view and reuses its
-   Rota label. Derive the row from readable Calendar views and require access to the parent. Give the
+   Rota label. Validate its section along with module pages. Derive the row from readable Calendar views and require access to the parent. Give the
    row its own key. Open `/opening-hours/view/rota` with the existing draft guard. Calendar from Rota
    opens Opening hours with a fresh path. In `#onHistory`, update the current row and open its group
    when the accepted Calendar view changes between rows, including on Back. Keep manual collapse on
-   same-row changes and a single `aria-current="page"` in the expanded nav and folded panel. In
+   same-row changes and a single `aria-current="page"` in the expanded nav and folded panel. Choose
+   which group to open from both the screen and its view, including on initial load. In
    `nav-destinations.ts`, drop duplicate direct matches for Rota and Card readers, keeping deeper
    Calendar and reader-settings matches.
 3. Write and run the failing checks first. In `dashboard-app.test.ts` assert the shipped order and
    labels in both languages and preserve Handover intervals as the fallback for `report.view` plus
    `system.manage` without `venue.view`. In `dashboard-app.module-order.test.ts` test interleaving and
-   stable ties. In `dashboard-app.search-destinations.test.ts` cover Rota's access, draft prompt, current
+   stable ties. In `dashboard-app.search-modules.test.ts` cover Rota's access, draft prompt, current
    row, Calendar return and Back. In `dashboard-app.sidebar-fold.test.ts` cover the direct Bookings
    button and its visibility. Adjust assertions the spec changes in `dashboard-app.module-screens.test.ts`,
-   `nav-destinations.test.ts`, `screens/payments-screen.tabs.test.ts`, `packages/dashboard-modules/src/registry.test.ts`
+   `dashboard-app.search-destinations.test.ts`, `nav-destinations.test.ts`, `screens/payments-screen.tabs.test.ts`, `packages/dashboard-modules/src/registry.test.ts`
    and the dashboard `index.test.ts` files in adjustments, bookings, staffing, venue-service and workforce.
    Keep the other assertions and run all changed Vitest files again.
 4. Grep both server guide languages for the old headings and moved page names. Follow those matches,

@@ -1,6 +1,6 @@
 # Facturas
 
-Cuando Hacienda pida ver las facturas del local, muéstralas desde **Facturas** en **Informes**.
+Cuando Hacienda pida ver las facturas del local, muéstralas desde **Facturas** en **Ventas e impuestos**.
 
 ## Mostrar las facturas tú mismo {#show-invoices}
 
@@ -43,7 +43,7 @@ Un inspector puede tener su propio acceso cuando el correo del servidor está co
 
 ## Modelo 303 y correcciones {#vat-return}
 
-**Modelo 303 (IVA)** en **Informes** prepara el fichero que subes a la AEAT para un mes o un
+**Modelo 303 (IVA)** en **Ventas e impuestos** prepara el fichero que subes a la AEAT para un mes o un
 trimestre. Elige **Ejercicio**, **Periodo** y **Tipo de declaración** y después
 **Descargar fichero**. Desde aquí no se envía nada a la AEAT.
 

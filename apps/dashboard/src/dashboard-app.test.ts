@@ -485,12 +485,11 @@ const NAV_SCREENS = [
 
 const NAV_GROUP_KEYS = [
   "nav.group.reports",
-  "nav.group.service",
+  "nav.group.team",
   "nav.group.menu",
   "nav.group.operations",
-  "nav.group.team",
-  "nav.group.purchasing",
   "nav.group.hardware",
+  "nav.group.purchasing",
   "nav.group.configuration",
 ] as const;
 const shellChooser = (el: DashboardApp) =>
@@ -2469,7 +2468,7 @@ describe("dashboard-app", () => {
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         modules: ["bookings", "venue-service"],
-        permissions: ["booking.manage", "venue.configure", "venue.view"],
+        permissions: [...meResponse.permissions, "venue.configure"],
       }),
       getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
       listStaff: vi.fn().mockResolvedValue([]),
@@ -2495,7 +2494,7 @@ describe("dashboard-app", () => {
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         modules: ["bookings", "venue-service"],
-        permissions: ["booking.manage", "venue.configure", "venue.view"],
+        permissions: [...meResponse.permissions, "venue.configure"],
       }),
       getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
     });
@@ -2579,7 +2578,7 @@ describe("dashboard-app", () => {
     },
   );
 
-  it("shows Voids and comps as a page under Service to a manager of adjustments", async () => {
+  it("shows Voids and comps as a page under Venue setup to a manager of adjustments", async () => {
     history.replaceState(null, "", "/adjustment-reasons");
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
@@ -2599,13 +2598,12 @@ describe("dashboard-app", () => {
     );
     expect(location.pathname).toBe("/adjustment-reasons");
     expect(navItem(el, "adjustment-report")).not.toBeNull();
-    const service = [
-      ...el.shadowRoot!.querySelectorAll<HTMLElement>("#nav-group-panel-service [data-test]"),
-    ].map((item) => item.dataset.test);
-    expect(service).toContain("nav-bookings");
-    expect(service.indexOf("nav-adjustment-reasons")).toBeGreaterThan(
-      service.indexOf("nav-bookings"),
-    );
+    const root = el.shadowRoot!;
+    expect(
+      root.querySelector("#nav-group-panel-operations [data-test=nav-adjustment-reasons]"),
+    ).not.toBeNull();
+    const pinned = [...root.querySelectorAll<HTMLElement>("#nav-group-panel-overview .nav-item")];
+    expect(pinned.map((item) => item.dataset.test)).toEqual(["nav-overview", "nav-bookings"]);
   });
 
   it("opens the first visible Venue settings tab at the retired adjustment reasons tab's address", async () => {
@@ -3276,9 +3274,9 @@ describe("dashboard-app", () => {
   });
 
   it.each([
-    ["es-ES", "Informes"],
-    ["en-GB", "Reporting"],
-  ])("puts the report screens under a Reporting section (%s)", async (locale, heading) => {
+    ["es-ES", "Ventas e impuestos"],
+    ["en-GB", "Sales and tax"],
+  ])("puts the report screens under Sales and tax (%s)", async (locale, heading) => {
     const me = {
       ...meResponse,
       venueLocale: locale,
@@ -3295,16 +3293,10 @@ describe("dashboard-app", () => {
     const panel = el.shadowRoot!.querySelector("#nav-group-panel-reports")!;
     expect(
       [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test),
-    ).toEqual([
-      "nav-sales",
-      "nav-vat-return",
-      "nav-handover-intervals",
-      "nav-adjustment-report",
-      "nav-orders",
-    ]);
+    ).toEqual(["nav-sales", "nav-orders", "nav-adjustment-report", "nav-vat-return"]);
   });
 
-  it("opens Orders from its URL inside an expanded Reporting section", async () => {
+  it("opens Orders from its URL inside an expanded Sales and tax section", async () => {
     history.replaceState(null, "", "/orders");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
@@ -3318,7 +3310,7 @@ describe("dashboard-app", () => {
     expect(navItem(el, "orders")!.checkVisibility()).toBe(true);
   });
 
-  it("keeps Overview above the Reporting section, under no heading", async () => {
+  it("keeps Overview above the Sales and tax section, under no heading", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
@@ -3422,16 +3414,17 @@ describe("dashboard-app", () => {
     ).toBe("false");
   });
 
-  it("starts with a module page's group expanded when that page is opened", async () => {
+  it("shows Bookings as a current pinned row when its address is opened", async () => {
     history.replaceState(null, "", "/bookings");
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
       request: stubRequest,
     });
     await flush(el);
-    const header = el.shadowRoot!.querySelector<HTMLElement>('[data-test="nav-group-service"]')!;
-    expect(header.getAttribute("aria-expanded")).toBe("true");
-    expect(navItem(el, "bookings")!.checkVisibility()).toBe(true);
+    const bookings = navItem(el, "bookings")!;
+    expect(bookings.getAttribute("aria-current")).toBe("page");
+    expect(bookings.checkVisibility()).toBe(true);
+    expect(bookings.previousElementSibling).toBe(navItem(el, "overview"));
   });
 
   it("keeps the clicked group header at the same on-screen position when collapsing shrinks the list above the fold", async () => {
@@ -3733,7 +3726,7 @@ describe("dashboard-app", () => {
     });
   });
 
-  it("offers a manager Venue settings in Venue operations, opening on its first permitted tab", async () => {
+  it("offers a manager Venue settings in Venue setup, opening on its first permitted tab", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["venue.view"] }),
       getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
@@ -3799,6 +3792,7 @@ describe("dashboard-app", () => {
       "nav-menus",
       "nav-set-menus",
       "nav-modifiers",
+      "nav-content-languages",
       "nav-courses",
       "nav-units",
     ]);
@@ -3930,7 +3924,7 @@ describe("dashboard-app", () => {
     expect(navItem(mgr, "diagnostics")).toBeTruthy();
   });
 
-  it("shows Box status in System, directly before Diagnostics, only to a session that manages the system", async () => {
+  it("shows Box status first in System, only to a session that manages the system", async () => {
     const { el: mgr } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
         getMe: vi
@@ -3944,8 +3938,7 @@ describe("dashboard-app", () => {
     expect(item!.textContent!.trim()).toBe(t("nav.box_status"));
     const panel = mgr.shadowRoot!.querySelector("#nav-group-panel-configuration")!;
     const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
-    expect(order).toContain("nav-box-status");
-    expect(order.indexOf("nav-diagnostics")).toBe(order.indexOf("nav-box-status") + 1);
+    expect(order).toEqual(["nav-box-status", "nav-backup", "nav-cloud", "nav-diagnostics"]);
     mgr.remove();
 
     const { el: sup } = await mountWidget<DashboardApp>("dashboard-app", {
@@ -4065,7 +4058,7 @@ describe("dashboard-app", () => {
     },
   );
 
-  it("offers Content languages first in System to a session holding menu.manage and not venue.view, and opens its page", async () => {
+  it("offers Content languages under Products and menus to a session holding menu.manage and not venue.view, and opens its page", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["menu.manage"] }),
       listStaff: vi.fn().mockResolvedValue([]),
@@ -4074,9 +4067,9 @@ describe("dashboard-app", () => {
     await flush(el);
     const item = navItem(el, "content-languages");
     expect(item!.textContent!.trim()).toBe(t("nav.content_languages"));
-    const panel = el.shadowRoot!.querySelector("#nav-group-panel-configuration")!;
+    const panel = el.shadowRoot!.querySelector("#nav-group-panel-menu")!;
     const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
-    expect(order[0]).toBe("nav-content-languages");
+    expect(order).toEqual(["nav-menus", "nav-set-menus", "nav-modifiers", "nav-content-languages"]);
 
     item!.click();
     await flush(el);
@@ -4128,7 +4121,7 @@ describe("dashboard-app", () => {
 
   const themesStub = () => vi.fn().mockResolvedValue({ themes: [], inUse: null });
 
-  it("offers Appearance first in System to a session holding venue.view, and opens its page", async () => {
+  it("offers Appearance last in Venue setup to a session holding venue.view, and opens its page", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({ ...meResponse, permissions: ["venue.view"] }),
       listStaff: vi.fn().mockResolvedValue([]),
@@ -4138,9 +4131,9 @@ describe("dashboard-app", () => {
     await flush(el);
     const item = navItem(el, "appearance");
     expect(item!.textContent!.trim()).toBe(t("nav.appearance"));
-    const panel = el.shadowRoot!.querySelector("#nav-group-panel-configuration")!;
+    const panel = el.shadowRoot!.querySelector("#nav-group-panel-operations")!;
     const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
-    expect(order[0]).toBe("nav-appearance");
+    expect(order).toEqual(["nav-venue-settings", "nav-appearance"]);
 
     item!.click();
     await flush(el);
@@ -4244,7 +4237,7 @@ describe("dashboard-app", () => {
     expect(location.pathname).toBe("/devices");
   });
 
-  it("offers the VAT return under Sales to a session holding report.export, and opens its page", async () => {
+  it("offers the VAT return under Sales and tax to a session holding report.export, and opens its page", async () => {
     const api = stubApi({
       getMe: vi
         .fn()
@@ -4256,7 +4249,7 @@ describe("dashboard-app", () => {
     expect(item!.textContent!.trim()).toBe(t("nav.vat_return"));
     const panel = el.shadowRoot!.querySelector("#nav-group-panel-reports")!;
     const order = [...panel.querySelectorAll<HTMLElement>(".nav-item")].map((b) => b.dataset.test);
-    expect(order.indexOf("nav-vat-return")).toBe(order.indexOf("nav-sales") + 1);
+    expect(order).toEqual(["nav-sales", "nav-orders", "nav-vat-return"]);
 
     item!.click();
     await flush(el);
@@ -8542,12 +8535,12 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     expect(escaped).not.toHaveBeenCalled();
   });
 
-  it("orders the groups as the spec does, and files Venue operations' pages among its modules' pages", async () => {
+  it("puts the sections and Venue setup pages in the specified order", async () => {
     const api = stubApi({
       getMe: vi.fn().mockResolvedValue({
         ...meResponse,
         modules: ["bookings", "venue-service"],
-        permissions: ["booking.manage", "venue.configure", "venue.view"],
+        permissions: [...meResponse.permissions, "venue.configure"],
       }),
     });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
@@ -8562,23 +8555,23 @@ describe("dashboard-app: remaining faces and shell controls", () => {
       ),
     ).toEqual([
       "nav-group-reports",
-      "nav-group-service",
+      "nav-group-team",
       "nav-group-menu",
       "nav-group-operations",
-      "nav-group-team",
-      "nav-group-purchasing",
       "nav-group-hardware",
+      "nav-group-purchasing",
       "nav-group-configuration",
     ]);
-    expect(items("service")).toEqual(["nav-bookings"]);
+    expect(items("overview")).toEqual(["nav-overview", "nav-bookings"]);
     expect(items("operations")).toEqual([
+      "nav-venue-settings",
       "nav-venue-operations",
-      "nav-prep-stations",
-      "nav-floor-plans",
       "nav-opening-hours",
       "nav-seasons",
       "nav-periods",
-      "nav-venue-settings",
+      "nav-prep-stations",
+      "nav-floor-plans",
+      "nav-appearance",
     ]);
     expect(navItem(el, "venue-operations")!.textContent!.trim()).toBe("Departamentos y zonas");
     expect(items("configuration")).not.toContain("nav-venue-settings");
@@ -8587,13 +8580,28 @@ describe("dashboard-app: remaining faces and shell controls", () => {
   it.each([
     ["Bookings is not enabled", { modules: [], permissions: ["booking.manage", "venue.view"] }],
     ["the session may not open Bookings", { modules: ["bookings"], permissions: ["venue.view"] }],
-  ])("draws no Service header when %s", async (_label, me) => {
+  ])("omits the pinned Bookings row when %s", async (_label, me) => {
     const api = stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, ...me }) });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
     await flush(el);
-    expect(el.shadowRoot!.querySelector('[data-test="nav-group-service"]')).toBeNull();
-    expect(el.shadowRoot!.querySelector("#nav-group-panel-service")).toBeNull();
+    expect(navItem(el, "bookings")).toBeNull();
+    expect(navItem(el, "overview")!.checkVisibility()).toBe(true);
     expect(el.shadowRoot!.querySelector('[data-test="nav-group-operations"]')).not.toBeNull();
+  });
+
+  it("keeps Handover intervals as the default for a report viewer who manages the system", async () => {
+    history.replaceState(null, "", "/");
+    const api = stubApi({
+      getMe: vi.fn().mockResolvedValue({
+        ...meResponse,
+        modules: [],
+        permissions: ["report.view", "system.manage"],
+      }),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, request: stubRequest });
+    await flush(el);
+    expect(location.pathname).toBe("/handover-intervals");
+    expect(navItem(el, "handover-intervals")!.getAttribute("aria-current")).toBe("page");
   });
 
   it("offers the server's languages in the signed-in shell's chooser", async () => {
@@ -8791,7 +8799,7 @@ describe("the nav search", () => {
     const el = await mountSession(sessionIn("en-GB"));
     await search(el, "team");
     expect(shownHeaders(el)).toEqual(["nav-group-team"]);
-    expect(shownItems(el)).toEqual(["nav-staff", "nav-approvals", "nav-planned-actual"]);
+    expect(shownItems(el)).toEqual(["nav-approvals", "nav-planned-actual", "nav-staff"]);
   });
 
   it("finds a page by every word typed, in any order, and by words split between it and its group", async () => {
@@ -8828,16 +8836,17 @@ describe("the nav search", () => {
       "nav-set-menus",
       "nav-products",
       "nav-modifiers",
+      "nav-content-languages",
       "nav-courses",
       "nav-units",
     ]);
   });
 
-  it("finds the moved pages under Venue operations", async () => {
+  it("finds the moved pages under Venue setup", async () => {
     const el = await mountSession(sessionIn("en-GB"));
     await search(el, "venue");
     expect(shownHeaders(el)).toEqual(["nav-group-operations"]);
-    expect(shownItems(el)).toEqual(["nav-venue-settings"]);
+    expect(shownItems(el)).toEqual(["nav-venue-settings", "nav-appearance"]);
   });
 
   it("opens a collapsed group holding a match, and clearing the term leaves the nav as it was", async () => {
@@ -8854,15 +8863,14 @@ describe("the nav search", () => {
     expect(expandedHeaders(el)).toEqual([]);
     expect(shownHeaders(el)).toEqual([
       "nav-group-reports",
-      "nav-group-service",
+      "nav-group-team",
       "nav-group-menu",
       "nav-group-operations",
-      "nav-group-team",
-      "nav-group-purchasing",
       "nav-group-hardware",
+      "nav-group-purchasing",
       "nav-group-configuration",
     ]);
-    expect(shownItems(el)).toEqual(["nav-overview"]);
+    expect(shownItems(el)).toEqual(["nav-overview", "nav-bookings"]);
   });
 
   it("never offers a page the person may not open, typed with its exact label", async () => {
@@ -8943,7 +8951,7 @@ describe("the nav search", () => {
     expect(navItem(el, "products")!.checkVisibility()).toBe(true);
   });
 
-  it("opens Orders, chosen by a search, inside an expanded Reporting section", async () => {
+  it("opens Orders, chosen by a search, inside an expanded Sales and tax section", async () => {
     const el = await mountSession(sessionIn("en-GB"));
     expect(expandedHeaders(el)).toEqual([]);
 
@@ -11063,29 +11071,37 @@ it.each([false, true])(
 );
 
 it.each([
-  ["en-GB", "Hardware", "System"],
-  ["es-ES", "Hardware", "Sistema"],
-])("groups hardware before the system pages in %s", async (locale, hardware, system) => {
-  const { el } = await mountWidget<DashboardApp>("dashboard-app", {
-    api: stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, locale }) }),
-    request: stubRequest,
-  });
-  await flush(el);
-  const headers = [...el.shadowRoot!.querySelectorAll<HTMLElement>("button.nav-group")];
-  expect(headers.slice(-2).map((header) => header.textContent!.trim())).toEqual([hardware, system]);
-  const pages = (group: string) =>
-    [...el.shadowRoot!.querySelectorAll<HTMLElement>(`#nav-group-panel-${group} .nav-item`)].map(
-      (item) => item.dataset.test,
-    );
-  expect(pages("hardware")).toEqual([
-    "nav-device-profiles",
-    "nav-devices",
-    "nav-printers",
-    "nav-payments",
-  ]);
-  expect(pages("configuration")).toContain("nav-email");
-  expect(pages("configuration")).not.toContain("nav-devices");
-});
+  ["en-GB", "Hardware", "Purchasing", "System", "Card readers"],
+  ["es-ES", "Hardware", "Compras", "Sistema", "Lectores de tarjetas"],
+])(
+  "groups Hardware, Purchasing and System in that order in %s",
+  async (locale, hardware, purchasing, system, readers) => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe: vi.fn().mockResolvedValue({ ...meResponse, locale }) }),
+      request: stubRequest,
+    });
+    await flush(el);
+    const headers = [...el.shadowRoot!.querySelectorAll<HTMLElement>("button.nav-group")];
+    expect(headers.slice(-3).map((header) => header.textContent!.trim())).toEqual([
+      hardware,
+      purchasing,
+      system,
+    ]);
+    const pages = (group: string) =>
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>(`#nav-group-panel-${group} .nav-item`)].map(
+        (item) => item.dataset.test,
+      );
+    expect(pages("hardware")).toEqual([
+      "nav-devices",
+      "nav-printers",
+      "nav-payments",
+      "nav-device-profiles",
+    ]);
+    expect(navItem(el, "payments")!.textContent!.trim()).toBe(readers);
+    expect(pages("configuration")).toContain("nav-email");
+    expect(pages("configuration")).not.toContain("nav-devices");
+  },
+);
 
 it("opts into native system text scaling where supported", () => {
   const page = new DOMParser().parseFromString(indexHtml, "text/html");

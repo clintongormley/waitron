@@ -13,12 +13,13 @@ afterEach(() => {
 });
 
 describe("ADJUSTMENTS_DASHBOARD", () => {
-  it("puts Voids and comps under Service for managers of adjustments, beside the report", () => {
+  it("puts Voids and comps under Venue setup for managers of adjustments, beside the report", () => {
     expect(ADJUSTMENTS_DASHBOARD.module).toBe("adjustments");
     expect(ADJUSTMENTS_DASHBOARD.screen).toEqual({
       id: "adjustment-report",
       navLabelKey: "nav.adjustment_report",
       group: "reports",
+      order: 40,
       requiresPermission: "report.view",
     });
     expect(ADJUSTMENTS_DASHBOARD.settingsPanels).toBeUndefined();
@@ -26,7 +27,8 @@ describe("ADJUSTMENTS_DASHBOARD", () => {
       {
         id: "adjustment-reasons",
         navLabelKey: "nav.adjustment_reasons",
-        group: "service",
+        group: "operations",
+        order: 80,
         requiresPermission: "adjustment.manage",
       },
     ]);

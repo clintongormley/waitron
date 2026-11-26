@@ -56,6 +56,7 @@ describe("STAFFING_DASHBOARD", () => {
       id: "staff-roles",
       navLabelKey: "nav.staff_roles",
       group: "team",
+      order: 70,
       requiresPermission: "schedule.manage",
       readPermission: "venue.view",
     });

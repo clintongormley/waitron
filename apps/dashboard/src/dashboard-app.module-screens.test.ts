@@ -23,7 +23,7 @@ function screen(id: string, label: string, group: string, requiresPermission: st
 }
 
 function threeScreenModule(): DashboardContribution {
-  const primary = screen("widgets", "Widgets", "service", "test.use");
+  const primary = screen("widgets", "Widgets", "operations", "test.use");
   const report = screen("widget-report", "Widget report", "reports", "test.use");
   const secret = screen("widget-audit", "Widget audit", "reports", "test.audit");
   const strings = Object.fromEntries(
@@ -100,11 +100,11 @@ it("lists a module's further screen in its own nav group, and leaves out the one
   const reports = [
     ...el.shadowRoot!.querySelectorAll<HTMLElement>("#nav-group-panel-reports [data-test]"),
   ].map((item) => item.dataset.test);
-  expect(reports).toEqual(["nav-sales", "nav-widget-report", "nav-orders"]);
+  expect(reports).toEqual(["nav-widget-report", "nav-sales", "nav-orders"]);
   expect(navItem(el, "widget-report")!.textContent!.trim()).toBe("Widget report");
   expect(navItem(el, "widget-audit")).toBeNull();
   expect(
-    el.shadowRoot!.querySelector("#nav-group-panel-service [data-test=nav-widgets]"),
+    el.shadowRoot!.querySelector("#nav-group-panel-operations [data-test=nav-widgets]"),
   ).not.toBeNull();
 });
 
@@ -268,7 +268,7 @@ it("redirects the old provider setup address to all card providers", async () =>
 });
 
 it.each([true, false])(
-  "gates payment checks under Reporting and leaves for a fresh readers page (hardware.manage=%s)",
+  "gates payment checks under Sales and tax and leaves for a fresh readers page (hardware.manage=%s)",
   async (allowed) => {
     history.replaceState(null, "", "/check-card-payments");
     const api = stubApi();

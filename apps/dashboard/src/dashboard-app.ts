@@ -2,6 +2,7 @@ import "./widgets/fresh-sign-in-dialog.js";
 import "./widgets/about-dialog.js";
 import {
   captureAppLinks,
+  encodePathSegment,
   LeaveController,
   navigationGuardFor,
   type LeaveReason,
@@ -255,123 +256,181 @@ type AccessRule = {
   requiresPermission?: string;
 };
 type ScreenRule = AccessRule & { screen: ScreenId };
-type NavItem = ScreenRule & { labelKey: StringKey };
+type NavItem = ScreenRule & { labelKey: StringKey; order: number; icon?: string };
 type NavGroup = {
   id: NavGroupId;
   headerKey?: StringKey;
   icon: string;
   items: NavItem[];
-  itemsAfterModules?: NavItem[];
 };
-
-const coreItems = (group: NavGroup): NavItem[] => [
-  ...group.items,
-  ...(group.itemsAfterModules ?? []),
-];
-/** A nav row as shown: a core item or a module's screen, labelled in the current language. */
-type NavPage = { screen: ScreenId; label: string };
+type NavPage = { screen: ScreenId; label: string; calendarView?: string; icon?: string };
+const navKey = (screen: ScreenId, calendarView?: string): string =>
+  calendarView === undefined ? screen : `${screen}-${calendarView}`;
 
 const NAV_GROUPS: NavGroup[] = [
   {
     id: "overview",
     icon: "section-overview",
-    items: [{ screen: "overview", labelKey: "nav.overview" }],
+    items: [{ screen: "overview", labelKey: "nav.overview", order: 10, icon: "section-overview" }],
   },
   {
     id: "reports",
     headerKey: "nav.group.reports",
     icon: "section-reports",
     items: [
-      { screen: "sales", labelKey: "nav.sales" },
+      { screen: "sales", labelKey: "nav.sales", order: 10 },
+      { screen: "orders", labelKey: "nav.orders", order: 20 },
+      {
+        screen: "invoices",
+        labelKey: "nav.invoices",
+        order: 30,
+        requiresPermission: "invoice.inspect",
+      },
       {
         screen: "check-card-payments",
         labelKey: "nav.check_card_payments",
+        order: 50,
         requiresPermission: "hardware.manage",
       },
-      { screen: "vat-return", labelKey: "nav.vat_return", requiresPermission: "report.export" },
       {
-        screen: "handover-intervals",
-        labelKey: "nav.handover_intervals",
-        requiresPermission: "report.view",
+        screen: "vat-return",
+        labelKey: "nav.vat_return",
+        order: 60,
+        requiresPermission: "report.export",
       },
-      { screen: "invoices", labelKey: "nav.invoices", requiresPermission: "invoice.inspect" },
     ],
-    itemsAfterModules: [{ screen: "orders", labelKey: "nav.orders" }],
-  },
-  {
-    id: "service",
-    headerKey: "nav.group.service",
-    icon: "section-service",
-    items: [],
-  },
-  {
-    id: "menu",
-    headerKey: "nav.group.menu",
-    icon: "section-menu",
-    items: [
-      { screen: "products", labelKey: "nav.products" },
-      { screen: "menus", labelKey: "nav.menus", requiresPermission: "menu.manage" },
-      { screen: "set-menus", labelKey: "nav.set_menus", requiresPermission: "menu.manage" },
-      { screen: "modifiers", labelKey: "nav.modifiers", requiresPermission: "menu.manage" },
-      { screen: "courses", labelKey: "nav.courses", requiresPermission: "venue.view" },
-      { screen: "units", labelKey: "nav.units" },
-    ],
-  },
-  {
-    id: "operations",
-    headerKey: "nav.group.operations",
-    icon: "section-operations",
-    items: [],
-    itemsAfterModules: [{ screen: "venue-settings", labelKey: "nav.venue_settings" }],
   },
   {
     id: "team",
     headerKey: "nav.group.team",
     icon: "section-team",
     items: [
-      { screen: "staff", labelKey: "nav.staff" },
-      { screen: "access-roles", labelKey: "nav.access_roles", requiresPermission: "person.admin" },
-      { screen: "approvals", labelKey: "nav.approvals" },
-      { screen: "planned-actual", labelKey: "nav.planned_actual" },
+      { screen: "approvals", labelKey: "nav.approvals", order: 10 },
+      { screen: "planned-actual", labelKey: "nav.planned_actual", order: 50 },
+      { screen: "staff", labelKey: "nav.staff", order: 60 },
+      {
+        screen: "access-roles",
+        labelKey: "nav.access_roles",
+        order: 80,
+        requiresPermission: "person.admin",
+      },
     ],
   },
   {
-    id: "purchasing",
-    headerKey: "nav.group.purchasing",
-    icon: "section-purchasing",
-    items: [{ screen: "purchases", labelKey: "nav.purchases" }],
+    id: "menu",
+    headerKey: "nav.group.menu",
+    icon: "section-menu",
+    items: [
+      { screen: "products", labelKey: "nav.products", order: 10 },
+      { screen: "menus", labelKey: "nav.menus", order: 20, requiresPermission: "menu.manage" },
+      {
+        screen: "set-menus",
+        labelKey: "nav.set_menus",
+        order: 30,
+        requiresPermission: "menu.manage",
+      },
+      {
+        screen: "modifiers",
+        labelKey: "nav.modifiers",
+        order: 40,
+        requiresPermission: "menu.manage",
+      },
+      {
+        screen: "content-languages",
+        labelKey: "nav.content_languages",
+        order: 60,
+        requiresPermission: "menu.manage",
+      },
+      { screen: "courses", labelKey: "nav.courses", order: 70, requiresPermission: "venue.view" },
+      { screen: "units", labelKey: "nav.units", order: 80 },
+    ],
+  },
+  {
+    id: "operations",
+    headerKey: "nav.group.operations",
+    icon: "section-operations",
+    items: [
+      { screen: "venue-settings", labelKey: "nav.venue_settings", order: 10 },
+      {
+        screen: "appearance",
+        labelKey: "nav.appearance",
+        order: 90,
+        requiresPermission: "venue.view",
+      },
+    ],
   },
   {
     id: "hardware",
     headerKey: "nav.group.hardware",
     icon: "section-hardware",
     items: [
-      { screen: "device-profiles", labelKey: "nav.device_profiles" },
-      { screen: "devices", labelKey: "nav.devices" },
-      { screen: "printers", labelKey: "nav.printers" },
-      { screen: "payments", labelKey: "nav.payments", requiresPermission: "hardware.manage" },
+      { screen: "devices", labelKey: "nav.devices", order: 10 },
+      { screen: "printers", labelKey: "nav.printers", order: 20 },
+      {
+        screen: "payments",
+        labelKey: "nav.payments",
+        order: 30,
+        requiresPermission: "hardware.manage",
+      },
+      { screen: "device-profiles", labelKey: "nav.device_profiles", order: 40 },
     ],
+  },
+  {
+    id: "purchasing",
+    headerKey: "nav.group.purchasing",
+    icon: "section-purchasing",
+    items: [{ screen: "purchases", labelKey: "nav.purchases", order: 10 }],
   },
   {
     id: "configuration",
     headerKey: "nav.group.configuration",
     icon: "gear",
     items: [
-      { screen: "appearance", labelKey: "nav.appearance", requiresPermission: "venue.view" },
       {
-        screen: "content-languages",
-        labelKey: "nav.content_languages",
-        requiresPermission: "menu.manage",
+        screen: "box-status",
+        labelKey: "nav.box_status",
+        order: 10,
+        requiresPermission: "system.manage",
       },
-      { screen: "modules", labelKey: "nav.modules", requiresPermission: "hardware.manage" },
-      { screen: "email", labelKey: "nav.email", requiresPermission: "person.manage" },
-      { screen: "box-status", labelKey: "nav.box_status", requiresPermission: "system.manage" },
-      { screen: "diagnostics", labelKey: "nav.diagnostics", requiresPermission: "system.manage" },
-      { screen: "backup", labelKey: "nav.backup", requiresPermission: "system.manage" },
-      { screen: "servers", labelKey: "nav.servers", requiresPermission: "node.manage" },
-      { screen: "cloud", labelKey: "nav.cloud", requiresPermission: "system.manage" },
+      { screen: "backup", labelKey: "nav.backup", order: 20, requiresPermission: "system.manage" },
+      { screen: "servers", labelKey: "nav.servers", order: 30, requiresPermission: "node.manage" },
+      { screen: "cloud", labelKey: "nav.cloud", order: 40, requiresPermission: "system.manage" },
+      { screen: "email", labelKey: "nav.email", order: 50, requiresPermission: "person.manage" },
+      {
+        screen: "modules",
+        labelKey: "nav.modules",
+        order: 60,
+        requiresPermission: "hardware.manage",
+      },
+      {
+        screen: "diagnostics",
+        labelKey: "nav.diagnostics",
+        order: 70,
+        requiresPermission: "system.manage",
+      },
+      {
+        screen: "handover-intervals",
+        labelKey: "nav.handover_intervals",
+        order: 80,
+        requiresPermission: "report.view",
+      },
     ],
   },
+];
+const CORE_NAV_ITEMS = NAV_GROUPS.flatMap((group) => group.items);
+
+// Landing without a page in the address depends on permissions, independent of sidebar order.
+const DEFAULT_CORE_SCREENS: readonly ScreenId[] = [
+  "overview",
+  "check-card-payments",
+  "vat-return",
+  "handover-intervals",
+  "invoices",
+  "menus",
+  "access-roles",
+  "email",
+  "box-status",
+  "servers",
 ];
 
 /** Core screens with no sidebar entry whose access rule #permittedScreen reads from here. */
@@ -513,7 +572,7 @@ export class DashboardApp extends LitElement {
         background: var(--wt-color-surface);
       }
 
-      .icon-button.strip-button[aria-current="true"] {
+      .icon-button.strip-button[aria-current] {
         border-inline-start-color: var(--wt-color-primary);
         background: var(--wt-color-surface-lifted);
       }
@@ -561,6 +620,20 @@ export class DashboardApp extends LitElement {
         display: flex;
         flex-direction: column;
         gap: 0;
+      }
+
+      .nav-pinned {
+        border-block-end: 1px solid var(--wt-color-border);
+      }
+
+      .nav-pinned .nav-item {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+      }
+
+      .pinned-icon {
+        color: var(--wt-color-text);
       }
 
       .nav > wt-input {
@@ -982,6 +1055,8 @@ export class DashboardApp extends LitElement {
     { screen: DashboardScreenPlacement; handle: DashboardScreenHandle }
   >();
   #navGroups = new Map<NavGroupId, DashboardScreenPlacement[]>();
+  #calendarNav = new Map<string, { group: NavGroupId; order: number; labelKey: string }>();
+  @state() private calendarNavView?: string;
   #activePanels: {
     panel: DashboardSettingsPanel;
     handle: ReturnType<DashboardSettingsPanel["create"]>;
@@ -1821,7 +1896,7 @@ export class DashboardApp extends LitElement {
   #canOpenScreen = (screen: string): boolean => this.#permittedScreen(screen) === screen;
 
   override willUpdate(changed: PropertyValues): void {
-    if (changed.has("screen")) this.#openGroupOf(this.screen);
+    if (changed.has("screen") || changed.has("calendarNavView")) this.#openGroupOf(this.screen);
     if (changed.has("screen") && this.screen === "login") void this.#readAbout();
     if (this.stripPanel !== null && (changed.has("screen") || !this.#folded()))
       this.stripPanel = null;
@@ -1829,7 +1904,10 @@ export class DashboardApp extends LitElement {
 
   #openGroupOf(screen: ScreenId): void {
     const group =
-      NAV_GROUPS.find((entry) => coreItems(entry).some((item) => item.screen === screen))?.id ??
+      (screen === "opening-hours" && this.calendarNavView !== undefined
+        ? this.#calendarNav.get(this.calendarNavView)?.group
+        : undefined) ??
+      NAV_GROUPS.find((entry) => entry.items.some((item) => item.screen === screen))?.id ??
       this.#activeScreens.get(screen)?.screen.group;
     if (group === undefined) return;
     this.collapsedGroups = new Set(
@@ -1959,6 +2037,7 @@ export class DashboardApp extends LitElement {
     this.#enabledModules = [];
     this.#activeScreens.clear();
     this.#navGroups.clear();
+    this.#calendarNav.clear();
     this.#activePanels = [];
     this.drawerOpen = false;
     this.navSearch = "";
@@ -1985,6 +2064,7 @@ export class DashboardApp extends LitElement {
     const panelIds = new Set<string>(CORE_SETTINGS_PANELS.map((panel) => panel.key));
     this.#activeScreens.clear();
     this.#navGroups.clear();
+    this.#calendarNav.clear();
     this.#activePanels = [];
     const calendarViews = this.#calendarViews(enabled);
     this.#coreSearchContext = {
@@ -2003,11 +2083,15 @@ export class DashboardApp extends LitElement {
     for (const c of DASHBOARD_MODULES) {
       if (!enabled.includes(c.module)) continue;
       const screens: readonly DashboardFurtherScreen[] = contributedScreens(c);
+      const groups = [
+        ...screens.map(({ screen }) => screen.group),
+        ...(c.calendarViews ?? []).flatMap(({ sidebar }) => (sidebar ? [sidebar.group] : [])),
+      ];
+      for (const group of groups) {
+        if (!knownGroups.has(group))
+          throw new Error(`dashboard module "${c.module}" names unknown nav group "${group}"`);
+      }
       for (const { screen } of screens) {
-        if (!knownGroups.has(screen.group))
-          throw new Error(
-            `dashboard module "${c.module}" names unknown nav group "${screen.group}"`,
-          );
         if (ids.has(screen.id))
           throw new Error(`dashboard module "${c.module}" repeats screen id "${screen.id}"`);
         ids.add(screen.id);
@@ -2056,8 +2140,13 @@ export class DashboardApp extends LitElement {
       for (const panel of c.settingsPanels ?? [])
         this.#activePanels.push({ panel, handle: panel.create(ctx) });
     }
-    for (const list of this.#navGroups.values())
-      list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const calendar = this.#activeScreens.get("opening-hours")?.screen;
+    if (calendar && this.#mayRead(calendar)) {
+      for (const { view } of calendarViews) {
+        if (view.sidebar)
+          this.#calendarNav.set(view.id, { ...view.sidebar, labelKey: view.labelKey });
+      }
+    }
     this.#searchDestinations();
   }
 
@@ -2776,10 +2865,18 @@ export class DashboardApp extends LitElement {
     </header>`;
   }
 
-  #selectScreen(screen: ScreenId, proceeded?: () => void): void {
+  #selectScreen(screen: ScreenId, proceeded?: () => void, calendarView?: string): void {
     const destination = this.#permittedScreen(screen);
     const navigate = () => {
       switch (destination) {
+        case "opening-hours":
+          return calendarView !== undefined || this.calendarNavView !== undefined
+            ? this.#writeNavigationPath(
+                calendarView === undefined
+                  ? "/opening-hours"
+                  : `/opening-hours/view/${encodePathSegment(calendarView)}`,
+              )
+            : this.#writeScreenUrl(destination);
         case "venue-operations":
           return this.#url.write({
             dashboard: destination,
@@ -2858,9 +2955,8 @@ export class DashboardApp extends LitElement {
   #ownPagesOnly(): boolean {
     if (this.#confinedToInvoices()) return false;
     return (
-      !NAV_GROUPS.flatMap(coreItems).some(
-        (item) => item.screen !== "orders" && this.#mayOpen(item),
-      ) && ![...this.#activeScreens.values()].some(({ screen }) => this.#mayRead(screen))
+      !CORE_NAV_ITEMS.some((item) => item.screen !== "orders" && this.#mayOpen(item)) &&
+      ![...this.#activeScreens.values()].some(({ screen }) => this.#mayRead(screen))
     );
   }
 
@@ -2891,13 +2987,15 @@ export class DashboardApp extends LitElement {
   #permittedScreen(requested: string | null): ScreenId {
     if (this.#confinedToInvoices()) return "invoices";
     if (requested === "my-schedule" || requested === "orders") return requested;
-    const item = [...NAV_GROUPS.flatMap(coreItems), ...UNLISTED_SCREENS].find(
+    const item = [...CORE_NAV_ITEMS, ...UNLISTED_SCREENS].find(
       (entry) => entry.screen === requested,
     );
     if (this.#ownPagesOnly() && (item === undefined || !this.#mayOpen(item))) return "my-schedule";
     if (requested === "alerts") return "alerts";
     const fallback =
-      NAV_GROUPS.flatMap(coreItems).find((entry) => this.#mayOpen(entry))?.screen ??
+      DEFAULT_CORE_SCREENS.find((screen) =>
+        CORE_NAV_ITEMS.some((entry) => entry.screen === screen && this.#mayOpen(entry)),
+      ) ??
       [...this.#activeScreens.values()].find(({ screen }) => this.#mayRead(screen))?.screen.id ??
       "my-schedule";
     if (
@@ -3005,6 +3103,14 @@ export class DashboardApp extends LitElement {
     this.profileOpen = requested === "profile";
     if (this.profileOpen && this.screen !== "login") return;
     this.screen = this.#permittedScreen(this.profileOpen ? null : requested);
+    const view = this.#url.read("view");
+    this.calendarNavView =
+      this.screen === "opening-hours" &&
+      requested === this.screen &&
+      view !== null &&
+      this.#calendarNav.has(view)
+        ? view
+        : undefined;
   }
 
   #writeCurrentUrl(replace: boolean): void {
@@ -3062,20 +3168,40 @@ export class DashboardApp extends LitElement {
           ],
         },
       ];
-    const shown = (items: NavItem[] = []): NavPage[] =>
+    const shown = (items: NavItem[]): (NavPage & { order: number })[] =>
       items
         .filter((item) => item.screen !== "email" || this.onboardingIntent !== "demo")
         .filter((item) =>
           item.screen === "orders" ? !this.#confinedToInvoices() : this.#mayOpen(item),
         )
-        .map((item) => ({ screen: item.screen, label: t(item.labelKey) }));
+        .map((item) => ({
+          screen: item.screen,
+          label: t(item.labelKey),
+          order: item.order,
+          icon: item.icon,
+        }));
     return NAV_GROUPS.map((group) => {
-      const among = [...(this.#navGroups.get(group.id) ?? [])]
-        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-        .map((screen) => ({ screen: screen.id, label: tKit(screen.navLabelKey) }));
+      const modules = (this.#navGroups.get(group.id) ?? []).map((screen) => ({
+        screen: screen.id,
+        label: tKit(screen.navLabelKey),
+        order: screen.order ?? 0,
+        icon: screen.icon,
+      }));
+      const views = [...this.#calendarNav].flatMap(([calendarView, placement]) =>
+        placement.group === group.id
+          ? [
+              {
+                screen: "opening-hours",
+                calendarView,
+                label: tKit(placement.labelKey),
+                order: placement.order,
+              },
+            ]
+          : [],
+      );
       return {
         group,
-        pages: [...shown(group.items), ...among, ...shown(group.itemsAfterModules)],
+        pages: [...shown(group.items), ...modules, ...views].sort((a, b) => a.order - b.order),
       };
     });
   }
@@ -3093,7 +3219,9 @@ export class DashboardApp extends LitElement {
 
   #searchDestinations(): NavSearchDestination[] {
     const pages = this.#permittedNav().flatMap(({ group, pages }) =>
-      pages.map((page) => ({ ...page, heading: group.headerKey ? t(group.headerKey) : "" })),
+      pages
+        .filter((page) => page.calendarView === undefined)
+        .map((page) => ({ ...page, heading: group.headerKey ? t(group.headerKey) : "" })),
     );
     const tabs = new Set(this.#settingsPanels().map((panel) => panel.tab));
     return collectSearchDestinations({
@@ -3135,11 +3263,15 @@ export class DashboardApp extends LitElement {
     await this.#navigateSearch(current, current.href);
   }
 
-  async #navigateSearch(current: NavSearchDestination, path: string): Promise<void> {
+  #writeNavigationPath(path: string) {
     const guard = navigationGuardFor(window);
     const url = new URL(guard?.href ?? location.href);
     url.pathname = path;
-    const outcome = await guard?.write(url);
+    return guard?.write(url);
+  }
+
+  async #navigateSearch(current: NavSearchDestination, path: string): Promise<void> {
+    const outcome = await this.#writeNavigationPath(path);
     if (outcome === "proceeded" && this.isConnected && this.screen === current.screen) {
       this.#openGroupOf(current.screen);
       this.drawerOpen = false;
@@ -3277,7 +3409,7 @@ export class DashboardApp extends LitElement {
 
   #openSectionFromStrip(group: NavGroup, pages: NavPage[], event: MouseEvent): void {
     if (pages.length === 1) {
-      this.#openFromNav(pages[0]!.screen);
+      this.#openFromNav(pages[0]!);
       return;
     }
     if (this.stripPanel === group.id) {
@@ -3348,7 +3480,7 @@ export class DashboardApp extends LitElement {
     label: string,
     icon: string,
     onClick: (event: MouseEvent) => void,
-    current = false,
+    current?: "page" | "true",
     controls?: { id: string; open: boolean },
   ): TemplateResult {
     return html`<button
@@ -3356,7 +3488,7 @@ export class DashboardApp extends LitElement {
       class="icon-button strip-button"
       data-test="strip-${test}"
       aria-label=${label}
-      aria-current=${current ? "true" : nothing}
+      aria-current=${current ?? nothing}
       aria-expanded=${controls ? String(controls.open) : nothing}
       aria-controls=${controls?.open ? controls.id : nothing}
       @click=${onClick}
@@ -3387,12 +3519,12 @@ export class DashboardApp extends LitElement {
           html`<button
             type="button"
             class="nav-item"
-            aria-current=${this.screen === page.screen ? "page" : nothing}
-            data-test="strip-panel-${page.screen}"
+            aria-current=${this.#isCurrentNavPage(page) ? "page" : nothing}
+            data-test="strip-panel-${navKey(page.screen, page.calendarView)}"
             @click=${() => {
-              const icon = this.screen === page.screen ? this.#stripPanelParts()?.icon : undefined;
+              const icon = this.#isCurrentNavPage(page) ? this.#stripPanelParts()?.icon : undefined;
               this.stripPanel = null;
-              this.#openFromNav(page.screen);
+              this.#openFromNav(page);
               icon?.focus();
             }}
           >
@@ -3418,6 +3550,17 @@ export class DashboardApp extends LitElement {
             )
       }
       ${sections.map(({ group, pages }) => {
+        if (group.headerKey === undefined && pages.every((page) => page.icon !== undefined)) {
+          return pages.map((page) =>
+            this.#stripButton(
+              page.screen,
+              page.label,
+              page.icon!,
+              () => this.#openFromNav(page),
+              this.#isCurrentNavPage(page) ? "page" : undefined,
+            ),
+          );
+        }
         const label = group.headerKey === undefined ? t("nav.overview") : t(group.headerKey);
         const id = `strip-panel-${group.id}`;
         const open = this.stripPanel === group.id;
@@ -3426,15 +3569,22 @@ export class DashboardApp extends LitElement {
           label,
           group.icon,
           (e) => this.#openSectionFromStrip(group, pages, e),
-          pages.some((page) => page.screen === this.screen),
+          pages.some((page) => this.#isCurrentNavPage(page)) ? "true" : undefined,
           pages.length > 1 ? { id, open } : undefined,
         )}${open ? this.#stripPanel(id, label, pages) : nothing}`;
       })}
     </nav>`;
   }
 
-  #openFromNav(screen: ScreenId): void {
-    this.#selectScreen(screen);
+  #isCurrentNavPage(page: NavPage): boolean {
+    return (
+      this.screen === page.screen &&
+      (page.screen !== "opening-hours" || this.calendarNavView === page.calendarView)
+    );
+  }
+
+  #openFromNav(page: NavPage): void {
+    this.#selectScreen(page.screen, undefined, page.calendarView);
   }
 
   /** Escape is stopped only when it cleared a term, so on an empty box it still closes the drawer. */
@@ -3442,7 +3592,7 @@ export class DashboardApp extends LitElement {
     if (belongsToComposition(e)) return;
     if (e.key === "Enter" && this.navSearch.trim() !== "") {
       const first = this.#shownNav().find((section) => section.pages?.length)?.pages?.[0];
-      if (first) this.#openFromNav(first.screen);
+      if (first) this.#openFromNav(first);
       else {
         const inner = destinationMatches(this.navSearch, this.#searchDestinations())[0];
         if (inner) void this.#openSearchDestination(inner);
@@ -3509,18 +3659,23 @@ export class DashboardApp extends LitElement {
                       <wt-icon name="chevron-down" class="chevron"></wt-icon>
                     </button>`
             }
-            <div id=${panelId} ?hidden=${collapsed}>
+            <div
+              id=${panelId}
+              class=${group.headerKey === undefined && pages.some((page) => page.icon) ? "nav-pinned" : nothing}
+              ?hidden=${collapsed}
+            >
               ${repeat(
                 pages,
-                (page) => page.screen,
+                (page) => navKey(page.screen, page.calendarView),
                 (page) =>
                   html`<button
                     type="button"
                     class="nav-item"
-                    aria-current=${this.screen === page.screen ? "page" : nothing}
-                    data-test="nav-${page.screen}"
-                    @click=${() => this.#openFromNav(page.screen)}
+                    aria-current=${this.#isCurrentNavPage(page) ? "page" : nothing}
+                    data-test="nav-${navKey(page.screen, page.calendarView)}"
+                    @click=${() => this.#openFromNav(page)}
                   >
+                    ${page.icon ? html`<wt-icon class="pinned-icon" size="sm" name=${page.icon}></wt-icon>` : nothing}
                     ${page.label}
                   </button>`,
               )}

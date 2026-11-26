@@ -328,7 +328,7 @@ describe("dashboard-alerts-screen", () => {
     expect(goTo.mock.calls[0]![0].detail).toEqual({ screen: "backup" });
   });
 
-  it("offers both Mark handled and Go to Card payments for the held-payments alert", async () => {
+  it("offers both Mark handled and Go to Card readers for the held-payments alert", async () => {
     const held: AlertView = {
       ...open,
       key: "incident:i9",
@@ -337,8 +337,8 @@ describe("dashboard-alerts-screen", () => {
       screen: "payments",
     };
     for (const [locale, label] of [
-      ["en-GB", "Go to Card payments"],
-      ["es-ES", "Ir a Pagos con tarjeta"],
+      ["en-GB", "Go to Card readers"],
+      ["es-ES", "Ir a Lectores de tarjetas"],
     ] as const) {
       setLocale(locale);
       const api = stubApi({
