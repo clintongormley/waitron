@@ -467,7 +467,7 @@ import { resolveTradingTls } from "./trading-tls.js";
 import {
   assertRestoredMembershipReadable,
   deferFirstStart,
-  readBucketPointerTerm,
+  readBucketTerm,
   runFirstStart,
 } from "./rebuild-first-start.js";
 import { buildLandingApp } from "./landing-app.js";
@@ -2380,7 +2380,7 @@ async function bootServer(
         listIpv4: boxAddresses,
         now,
         log,
-        pointerTerm: () => readBucketPointerTerm(db, ring),
+        bucketTerm: () => readBucketTerm(db, ring),
       });
   await disarmRestoreDiscard(config.stateDir);
   const isSingletonPrimary = holders.singletonRole.current === "primary";

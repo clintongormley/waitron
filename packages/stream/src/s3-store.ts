@@ -16,7 +16,7 @@ import type { AnswerRefusal } from "./bucket-error-names.js";
 import "./errors.js";
 import type { BucketOperation } from "./errors.js";
 import { normalisePrefix, strayListedKey } from "./names.js";
-import type { ListedObject, ObjectStore, PutCondition } from "./object-store.js";
+import type { ListedObject, ObjectStore, PutCondition, StoreCall } from "./object-store.js";
 import {
   answerRefused,
   createBucketClient,
@@ -70,15 +70,65 @@ function bodyOf(out: GetObjectCommandOutput) {
   return out.Body as (NonNullable<typeof out.Body> & { destroy(error?: Error): void }) | undefined;
 }
 
+export interface S3ObjectStore extends ObjectStore {
+  /** Child folders relative to the configured root, with their trailing slash removed. */
+  listFolders(prefix: string, call?: StoreCall): Promise<string[]>;
+}
+
 export function createS3ObjectStore(
   config: BucketConfig,
   options: S3ObjectStoreOptions = {},
 ): ObjectStore {
+  return createS3FolderStore(config, options);
+}
+
+export function createS3FolderStore(
+  config: BucketConfig,
+  options: S3ObjectStoreOptions = {},
+): S3ObjectStore {
   const client = createBucketClient(config, options);
   const wait = options.sleep ?? abortableSleep;
   const bucket = config.bucket;
   const root = normalisePrefix(config.prefix);
   const at = (key: string) => root + key;
+
+  async function* listPages(prefix: string, signal?: AbortSignal, delimiter?: "/") {
+    const wanted = at(prefix);
+    const followed = new Set<string>();
+    let token: string | undefined;
+    do {
+      let page: ListObjectsV2CommandOutput;
+      try {
+        page = await sendUnlessCancelled(
+          (abortSignal) =>
+            client.send(
+              new ListObjectsV2Command({
+                Bucket: bucket,
+                Prefix: wanted,
+                Delimiter: delimiter,
+                ContinuationToken: token,
+              }),
+              { abortSignal },
+            ),
+          signal,
+          "list",
+          prefix,
+        );
+      } catch (error) {
+        throw failure(signal, "list", prefix, error);
+      }
+      const refuse = (name: AnswerRefusal) =>
+        answerRefused("list", prefix, page.$metadata.httpStatusCode ?? null, name);
+      yield { page, wanted, refuse };
+      token = undefined;
+      if (page.IsTruncated) {
+        token = page.NextContinuationToken;
+        if (token === undefined) throw refuse("MissingContinuationToken");
+        if (followed.has(token)) throw refuse("RepeatedContinuationToken");
+        followed.add(token);
+      }
+    } while (token !== undefined);
+  }
 
   async function deleteOne(key: string, signal: AbortSignal | undefined): Promise<void> {
     try {
@@ -176,48 +226,35 @@ export function createS3ObjectStore(
     // Pruning deletes what this answers, so an answer that cannot be complete, or names a key outside
     // the prefix asked for, is refused whole rather than trimmed.
     async list(prefix, call) {
-      const signal = call?.signal;
-      const wanted = at(prefix);
       const found: ListedObject[] = [];
-      const followed = new Set<string>();
-      let token: string | undefined;
-      do {
-        let page: ListObjectsV2CommandOutput;
-        try {
-          page = await sendUnlessCancelled(
-            (abortSignal) =>
-              client.send(
-                new ListObjectsV2Command({
-                  Bucket: bucket,
-                  Prefix: wanted,
-                  ContinuationToken: token,
-                }),
-                { abortSignal },
-              ),
-            signal,
-            "list",
-            prefix,
-          );
-        } catch (error) {
-          throw failure(signal, "list", prefix, error);
-        }
-        const refuse = (name: AnswerRefusal) =>
-          answerRefused("list", prefix, page.$metadata.httpStatusCode ?? null, name);
+      for await (const { page, wanted, refuse } of listPages(prefix, call?.signal)) {
         for (const object of page.Contents ?? []) {
           if (object.Key === undefined || object.LastModified === undefined)
             throw refuse("IncompleteListing");
           if (!object.Key.startsWith(wanted)) throw strayListedKey();
           found.push({ key: object.Key.slice(root.length), lastModified: object.LastModified });
         }
-        token = undefined;
-        if (page.IsTruncated) {
-          token = page.NextContinuationToken;
-          if (token === undefined) throw refuse("MissingContinuationToken");
-          if (followed.has(token)) throw refuse("RepeatedContinuationToken");
-          followed.add(token);
-        }
-      } while (token !== undefined);
+      }
       return found;
+    },
+
+    async listFolders(prefix, call) {
+      const folders: string[] = [];
+      for await (const { page, wanted, refuse } of listPages(prefix, call?.signal, "/")) {
+        // A store that ignored the delimiter can return nested files without the folder names.
+        for (const { Key: key } of page.Contents ?? []) {
+          if (key === undefined) throw refuse("IncompleteListing");
+          if (!key.startsWith(wanted)) throw strayListedKey();
+          if (key.slice(wanted.length).includes("/")) throw refuse("IncompleteListing");
+        }
+        for (const { Prefix: folder } of page.CommonPrefixes ?? []) {
+          if (folder === undefined || !folder.endsWith("/")) throw refuse("IncompleteListing");
+          if (!folder.startsWith(wanted)) throw strayListedKey();
+          if (folder.slice(wanted.length, -1).includes("/")) throw refuse("IncompleteListing");
+          folders.push(folder.slice(root.length, -1));
+        }
+      }
+      return folders;
     },
 
     delete: (key, call) => deleteOne(key, call?.signal),

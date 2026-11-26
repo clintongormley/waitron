@@ -30,11 +30,12 @@ import {
 } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
+  claimGeneration,
   generationName,
   pointerKey,
   signPointer,
   writePointer,
-  type ObjectStore,
+  type S3ObjectStore,
 } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
@@ -47,13 +48,28 @@ import {
   assertRestoredMembershipReadable,
   completeRebuild,
   deferFirstStart,
-  readBucketPointerTerm,
+  readBucketTerm,
   runFirstStart,
   type RebuildDeps,
   type RebuildSource,
 } from "./rebuild-first-start.js";
 
 const RESTORE_RECORD = "flows/restore/record.json";
+
+function memoryRestoreBucket(): S3ObjectStore {
+  const store = createMemoryObjectStore();
+  return {
+    ...store,
+    async listFolders(prefix, call) {
+      const folders = new Set<string>();
+      for (const { key } of await store.list(prefix, call)) {
+        const slash = key.indexOf("/");
+        if (slash > 0) folders.add(key.slice(0, slash));
+      }
+      return [...folders];
+    },
+  };
+}
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
@@ -399,14 +415,14 @@ describe("completeRebuild", () => {
       await tamperHeldRow();
       const before = await storedRow();
       const leafBefore = await readFile(join(stateDir, "tls", "server.pem"));
-      const pointerTerm = vi.fn(async () => null);
-      await expect(completeRebuild(deps(stateDir, { pointerTerm }))).rejects.toMatchObject({
+      const bucketTerm = vi.fn(async () => null);
+      await expect(completeRebuild(deps(stateDir, { bucketTerm }))).rejects.toMatchObject({
         code: "restore.membership_invalid",
         params: { reason: "bad_signature" },
       });
       expect(await storedRow()).toEqual(before);
       expect(await readFile(join(stateDir, "tls", "server.pem"))).toEqual(leafBefore);
-      expect(pointerTerm).not.toHaveBeenCalled();
+      expect(bucketTerm).not.toHaveBeenCalled();
       await stat(join(stateDir, RESTORE_RECORD));
     },
   );
@@ -494,23 +510,21 @@ describe("completeRebuild", () => {
 describe("the term after a restore", () => {
   it("signs one term above the bucket's pointer when the restored copy is older than it", async () => {
     const stateDir = await rebuiltStateDir("archive");
-    await completeRebuild(deps(stateDir, { pointerTerm: async () => 2 }));
+    await completeRebuild(deps(stateDir, { bucketTerm: async () => 2 }));
     expect((await readNodeMembership(suite.db))!.body.term).toBe(3);
   });
 
   it("moves one term up from the restored document when no bucket is set up or it holds no pointer", async () => {
     const stateDir = await rebuiltStateDir("stream");
-    await completeRebuild(deps(stateDir, { pointerTerm: async () => null }));
+    await completeRebuild(deps(stateDir, { bucketTerm: async () => null }));
     expect((await readNodeMembership(suite.db))!.body.term).toBe(1);
   });
 
-  // Signing restored + 1 below a pointer the box could not read would leave the supervisor refusing
-  // the copy for good (`pointer_newer_term`), with nothing to raise the term again.
   it("fails when a bucket is set up but its pointer cannot be read: the term stays and the marker stays", async () => {
     const stateDir = await rebuiltStateDir("archive");
     const unreadable = new AppError("restore.pointer_unreadable", {});
     await expect(
-      completeRebuild(deps(stateDir, { pointerTerm: async () => Promise.reject(unreadable) })),
+      completeRebuild(deps(stateDir, { bucketTerm: async () => Promise.reject(unreadable) })),
     ).rejects.toBe(unreadable);
     expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
     await stat(join(stateDir, RESTORE_RECORD));
@@ -519,23 +533,23 @@ describe("the term after a restore", () => {
   it("reports the re-issue's failure without asking the bucket", async () => {
     const stateDir = await rebuiltStateDir("archive");
     await rm(join(stateDir, "tls", "ca.key"));
-    const pointerTerm = vi.fn(async () => null);
-    await expect(completeRebuild(deps(stateDir, { pointerTerm }))).rejects.toMatchObject({
+    const bucketTerm = vi.fn(async () => null);
+    await expect(completeRebuild(deps(stateDir, { bucketTerm }))).rejects.toMatchObject({
       code: "ENOENT",
     });
-    expect(pointerTerm).not.toHaveBeenCalled();
+    expect(bucketTerm).not.toHaveBeenCalled();
   });
 
   it("does not ask the bucket on an ordinary start", async () => {
     const stateDir = await rebuiltStateDir(false);
-    const pointerTerm = vi.fn(async () => 5);
-    await completeRebuild(deps(stateDir, { pointerTerm }));
-    expect(pointerTerm).not.toHaveBeenCalled();
+    const bucketTerm = vi.fn(async () => 5);
+    await completeRebuild(deps(stateDir, { bucketTerm }));
+    expect(bucketTerm).not.toHaveBeenCalled();
     expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
   });
 });
 
-describe("readBucketPointerTerm", () => {
+describe("readBucketTerm", () => {
   const SETTINGS: StreamSettings = {
     streamId: LOCATION,
     bucket: {
@@ -556,14 +570,14 @@ describe("readBucketPointerTerm", () => {
 
   it("answers null when the box has no bucket settings, without opening a bucket", async () => {
     const openStore = vi.fn();
-    expect(await readBucketPointerTerm(suite.db, RING, { openStore })).toBeNull();
+    expect(await readBucketTerm(suite.db, RING, { openStore })).toBeNull();
     expect(openStore).not.toHaveBeenCalled();
   });
 
-  it("answers the pointer's term, and null when the bucket holds no pointer", async () => {
+  it("uses the pointer's term above older generations and returns null when the bucket is empty", async () => {
     await storeSettings(SETTINGS);
-    const store = createMemoryObjectStore();
-    expect(await readBucketPointerTerm(suite.db, RING, { openStore: () => store })).toBeNull();
+    const store = memoryRestoreBucket();
+    expect(await readBucketTerm(suite.db, RING, { openStore: () => store })).toBeNull();
     const signer = generateNodeKeyPair();
     await writePointer(
       store,
@@ -580,30 +594,128 @@ describe("readBucketPointerTerm", () => {
       ),
       null,
     );
-    expect(await readBucketPointerTerm(suite.db, RING, { openStore: () => store })).toBe(2);
+    expect(await readBucketTerm(suite.db, RING, { openStore: () => store })).toBe(2);
+    await claimGeneration(store, LOCATION, generationName(1, NODE, NOW));
+    expect(await readBucketTerm(suite.db, RING, { openStore: () => store })).toBe(2);
   });
+
+  it("restores above a generation opened after the pointer was published", async () => {
+    const stateDir = await rebuiltStateDir("archive");
+    await storeSettings(SETTINGS);
+    const store = memoryRestoreBucket();
+    const signer = generateNodeKeyPair();
+    await writePointer(
+      store,
+      LOCATION,
+      signPointer(
+        {
+          streamId: LOCATION,
+          term: 5,
+          nodeId: NODE,
+          generation: generationName(5, NODE, NOW),
+          writtenAt: NOW.toISOString(),
+        },
+        signer.privateKey,
+      ),
+      null,
+    );
+    await claimGeneration(store, LOCATION, generationName(7, NODE, NOW));
+    await completeRebuild(
+      deps(stateDir, {
+        bucketTerm: () => readBucketTerm(suite.db, RING, { openStore: () => store }),
+      }),
+    );
+    expect((await readNodeMembership(suite.db))!.body.term).toBe(8);
+  });
+
+  it("uses the highest valid generation with no pointer", async () => {
+    await storeSettings(SETTINGS);
+    const store = memoryRestoreBucket();
+    await store.put(`gen-99-${NODE}-20261131T101112Z/opened.json`, new Uint8Array());
+    await claimGeneration(store, LOCATION, generationName(10, NODE, NOW));
+    await claimGeneration(store, LOCATION, generationName(7, NODE, NOW));
+    expect(await readBucketTerm(suite.db, RING, { openStore: () => store })).toBe(10);
+  });
+
+  it("cancels a generation listing that does not answer before the deadline", async () => {
+    await storeSettings(SETTINGS);
+    const store = memoryRestoreBucket();
+    let listingSignal: AbortSignal | undefined;
+    const silent: S3ObjectStore = {
+      ...store,
+      listFolders: (_prefix, call) => {
+        listingSignal = call?.signal;
+        return new Promise<never>((_, reject) => {
+          listingSignal?.addEventListener("abort", () => reject(new Error("cancelled")), {
+            once: true,
+          });
+        });
+      },
+    };
+    await expect(
+      readBucketTerm(suite.db, RING, { openStore: () => silent, timeoutMs: 50 }),
+    ).rejects.toMatchObject({ code: "restore.pointer_unreadable" });
+    expect(listingSignal?.aborted).toBe(true);
+  });
+
+  it.each(["refused listing", "generation at the term cap"] as const)(
+    "keeps the restore pending and streaming off after a %s",
+    async (failure) => {
+      const stateDir = await rebuiltStateDir("stream");
+      await storeSettings(SETTINGS);
+      const store = memoryRestoreBucket();
+      const refused = new AppError("backup.stream_request_failed", {
+        operation: "list",
+        key: "gen-",
+        status: 403,
+        name: "AccessDenied",
+      });
+      const listing: S3ObjectStore =
+        failure === "refused listing"
+          ? { ...store, listFolders: () => Promise.reject(refused) }
+          : store;
+      if (failure === "generation at the term cap")
+        await claimGeneration(
+          store,
+          LOCATION,
+          generationName(Number.MAX_SAFE_INTEGER - 1, NODE, NOW),
+        );
+      const log = vi.fn();
+      const recordPath = join(stateDir, RESTORE_RECORD);
+      const record = await readFile(recordPath, "utf8");
+      await expect(
+        runFirstStart(
+          deps(stateDir, {
+            log,
+            bucketTerm: () => readBucketTerm(suite.db, RING, { openStore: () => listing }),
+          }),
+        ),
+      ).resolves.toEqual({ mayStream: false, failedSince: NOW.toISOString() });
+      expect(log).toHaveBeenCalledWith("error", "restore.first_start_failed", {
+        errorCode: failure === "refused listing" ? refused.code : "restore.bucket_term_invalid",
+      });
+      expect((await readNodeMembership(suite.db))!.body.term).toBe(0);
+      expect(await readFile(recordPath, "utf8")).toBe(record);
+    },
+  );
 
   it("refuses, rather than answering null, when the bucket does not answer in time", async () => {
     await storeSettings(SETTINGS);
-    const store = createMemoryObjectStore();
-    const silent: ObjectStore = {
+    const silent = {
+      ...memoryRestoreBucket(),
       get: () => new Promise<never>(() => {}),
-      put: (key, body, condition) => store.put(key, body, condition),
-      list: (prefix) => store.list(prefix),
-      delete: (key) => store.delete(key),
-      deleteMany: (keys) => store.deleteMany(keys),
     };
     await expect(
-      readBucketPointerTerm(suite.db, RING, { openStore: () => silent, timeoutMs: 50 }),
+      readBucketTerm(suite.db, RING, { openStore: () => silent, timeoutMs: 50 }),
     ).rejects.toMatchObject({ code: "restore.pointer_unreadable" });
   });
 
   it("cancels a pointer read the bucket has not answered in time, and not one answered in time", async () => {
     await storeSettings(SETTINGS);
-    const store = createMemoryObjectStore();
+    const store = memoryRestoreBucket();
     const signals: (AbortSignal | undefined)[] = [];
     let answers = false;
-    const recording: ObjectStore = {
+    const recording: S3ObjectStore = {
       ...store,
       get: (key, call) => {
         signals.push(call?.signal);
@@ -616,11 +728,11 @@ describe("readBucketPointerTerm", () => {
       },
     };
     await expect(
-      readBucketPointerTerm(suite.db, RING, { openStore: () => recording, timeoutMs: 50 }),
+      readBucketTerm(suite.db, RING, { openStore: () => recording, timeoutMs: 50 }),
     ).rejects.toMatchObject({ code: "restore.pointer_unreadable" });
     answers = true;
     expect(
-      await readBucketPointerTerm(suite.db, RING, { openStore: () => recording, timeoutMs: 50 }),
+      await readBucketTerm(suite.db, RING, { openStore: () => recording, timeoutMs: 50 }),
     ).toBeNull();
     await delay(100);
     expect(signals.map((signal) => signal?.aborted)).toEqual([true, false]);
@@ -628,7 +740,7 @@ describe("readBucketPointerTerm", () => {
 
   it("leaves no timer waiting once the bucket has answered in time", async () => {
     await storeSettings(SETTINGS);
-    const store = createMemoryObjectStore();
+    const store = memoryRestoreBucket();
     const bound = 123_457;
     const live = new Set<number>();
     let created = 0;
@@ -645,7 +757,7 @@ describe("readBucketPointerTerm", () => {
     }).enable();
     try {
       expect(
-        await readBucketPointerTerm(suite.db, RING, { openStore: () => store, timeoutMs: bound }),
+        await readBucketTerm(suite.db, RING, { openStore: () => store, timeoutMs: bound }),
       ).toBeNull();
       await new Promise((resolve) => setImmediate(resolve));
       expect(created).toBe(1);
@@ -657,17 +769,17 @@ describe("readBucketPointerTerm", () => {
 
   it("refuses when the pointer in the bucket cannot be read", async () => {
     await storeSettings(SETTINGS);
-    const store = createMemoryObjectStore();
+    const store = memoryRestoreBucket();
     await store.put(pointerKey(), new TextEncoder().encode("not json"), undefined);
-    await expect(
-      readBucketPointerTerm(suite.db, RING, { openStore: () => store }),
-    ).rejects.toMatchObject({ code: "backup.stream_pointer_invalid" });
+    await expect(readBucketTerm(suite.db, RING, { openStore: () => store })).rejects.toMatchObject({
+      code: "backup.stream_pointer_invalid",
+    });
   });
 
   it("refuses when the stored settings cannot be read, without opening a bucket", async () => {
     await storeSettings(SETTINGS);
     const openStore = vi.fn();
-    await expect(readBucketPointerTerm(suite.db, OTHER_RING, { openStore })).rejects.toMatchObject({
+    await expect(readBucketTerm(suite.db, OTHER_RING, { openStore })).rejects.toMatchObject({
       code: "credentials.decrypt_failed",
     });
     expect(openStore).not.toHaveBeenCalled();
@@ -678,7 +790,7 @@ describe("readBucketPointerTerm", () => {
       withWriteLock: () => Promise.reject(new Error("database is closed")),
     } as unknown as Database;
     const openStore = vi.fn();
-    await expect(readBucketPointerTerm(closed, RING, { openStore })).rejects.toMatchObject({
+    await expect(readBucketTerm(closed, RING, { openStore })).rejects.toMatchObject({
       code: "restore.pointer_unreadable",
     });
     expect(openStore).not.toHaveBeenCalled();
@@ -689,7 +801,7 @@ describe("readBucketPointerTerm", () => {
     const openStore = () => {
       throw new Error("no client");
     };
-    await expect(readBucketPointerTerm(suite.db, RING, { openStore })).rejects.toMatchObject({
+    await expect(readBucketTerm(suite.db, RING, { openStore })).rejects.toMatchObject({
       code: "restore.pointer_unreadable",
     });
   });
@@ -700,9 +812,9 @@ describe("readBucketPointerTerm", () => {
       ...SETTINGS,
       bucket: { ...SETTINGS.bucket, endpoint: "http://127.0.0.1:1" },
     });
-    await expect(readBucketPointerTerm(suite.db, RING, { timeoutMs: 5_000 })).rejects.toMatchObject(
-      { code: "backup.stream_request_failed" },
-    );
+    await expect(readBucketTerm(suite.db, RING, { timeoutMs: 5_000 })).rejects.toMatchObject({
+      code: "backup.stream_request_failed",
+    });
   });
 });
 
@@ -725,11 +837,11 @@ describe("runFirstStart", () => {
     );
     try {
       await omitStoredStreamField(suite.db, RING, "endpoint");
-      const openStore = vi.fn(() => createMemoryObjectStore());
+      const openStore = vi.fn(() => memoryRestoreBucket());
       const log = vi.fn();
       const firstStart = deps(stateDir, {
         log,
-        pointerTerm: () => readBucketPointerTerm(suite.db, RING, { openStore }),
+        bucketTerm: () => readBucketTerm(suite.db, RING, { openStore }),
       });
       await expect(runFirstStart(firstStart)).resolves.toEqual({
         mayStream: false,
@@ -804,14 +916,14 @@ describe("runFirstStart", () => {
       ),
     );
     try {
-      const silent = { get: () => new Promise<never>(() => {}) } as unknown as ObjectStore;
+      const silent = { ...memoryRestoreBucket(), get: () => new Promise<never>(() => {}) };
       const log = vi.fn();
       await expect(
         runFirstStart(
           deps(stateDir, {
             log,
-            pointerTerm: () =>
-              readBucketPointerTerm(suite.db, RING, { openStore: () => silent, timeoutMs: 50 }),
+            bucketTerm: () =>
+              readBucketTerm(suite.db, RING, { openStore: () => silent, timeoutMs: 50 }),
           }),
         ),
       ).resolves.toEqual({ mayStream: false, failedSince: NOW.toISOString() });

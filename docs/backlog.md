@@ -1198,6 +1198,8 @@ Not in any track until the standalone primary is done.
   admin action takes a box out of service with a full, checked backup; a shutdown waits for an admin
   at the next start, a power cut waits a minute, a restart does not wait.
   [A1418 design](superpowers/specs/2026-11-07-a1418-box-stop-intent-design.md), approved 2026-11-07.
+  A restored box now takes a term above the pointer and the generations it can read in its backup
+  bucket. The replacement check still needs to use that ordering to stop an older box.
   The startup waits, replacement check and administrator shutdown action are the
   [remaining slices](superpowers/plans/2026-11-26-h-a1418-box-stop-intent.md).
   A1557 (2026-11-20) added [the shared backup operation](../apps/server/src/backup-supervisor.ts)

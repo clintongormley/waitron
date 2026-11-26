@@ -17,10 +17,11 @@ import { isMembershipDocument, verifyMembershipDocument } from "@waitron/members
 import { codeOf } from "@waitron/server-kit";
 import { AppError, isAppError } from "@waitron/shared";
 import {
-  createS3ObjectStore,
+  createS3FolderStore,
+  parseGenerationName,
   readPointer,
   type BucketConfig,
-  type ObjectStore,
+  type S3ObjectStore,
 } from "@waitron/stream";
 import { reissueBoxLeaf } from "./box-secrets.js";
 import type { Logger } from "./logger.js";
@@ -49,10 +50,7 @@ export interface RebuildDeps {
   listIpv4: () => string[];
   now: () => Date;
   log: Logger;
-  /** The term the bucket's pointer names, or null when no bucket is set up or it holds no pointer.
-   * Rejects when a bucket is set up but its pointer cannot be read, which fails the first start.
-   */
-  pointerTerm?: () => Promise<number | null>;
+  bucketTerm?: () => Promise<number | null>;
 }
 
 /**
@@ -94,8 +92,9 @@ export async function assertRestoredMembershipReadable(
 
 /**
  * A restored box's first trading start: a check of the restored membership document, a certificate
- * naming this machine's addresses, then the membership document one term higher naming this
- * machine's contact address. Does nothing, and returns false, when no restore has a pending first start.
+ * naming this machine's addresses, then a membership document naming this machine's contact
+ * address above the restored chart and the observed bucket term. Does nothing, and returns false,
+ * when no restore has a pending first start.
  *
  * The first-start indication is cleared last, so a failure or a crash part-way re-runs every step at the next
  * start. Each re-run issues another leaf and, once the term has been stored, moves the term up
@@ -117,9 +116,11 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
     held === null
       ? [{ nodeId: deps.nodeId, contactUrl, standing: "serving-primary" as const }]
       : held.body.nodes.map((n) => (n.nodeId === deps.nodeId ? { ...n, contactUrl } : n));
-  // Never below the bucket's pointer: the stream supervisor refuses to replace a pointer naming a
-  // higher term.
-  const pointerTerm = (await deps.pointerTerm?.()) ?? null;
+  const bucketTerm = (await deps.bucketTerm?.()) ?? null;
+  // Leave room for the next membership change after this restore advances the term.
+  if (bucketTerm !== null && bucketTerm >= Number.MAX_SAFE_INTEGER - 1) {
+    throw new AppError("restore.bucket_term_invalid", {});
+  }
   const next = await mintNextMembershipDocument(
     { db: deps.db, node: deps.node, ring: deps.ring },
     {
@@ -128,7 +129,7 @@ export async function completeRebuild(deps: RebuildDeps): Promise<boolean> {
       signerNodeId: deps.nodeId,
       // `assertRestoredMembershipValid` above checked it against the keys venue.db names.
       verifyHeld: "none",
-      ...(pointerTerm === null ? {} : { minTerm: pointerTerm + 1 }),
+      ...(bucketTerm === null ? {} : { minTerm: bucketTerm + 1 }),
     },
   );
   await persistNodeMembershipIfNewer(deps.db, next);
@@ -186,47 +187,57 @@ export async function deferFirstStart(stateDir: string, log: Logger): Promise<Fi
   return { mayStream: false, failedSince: null };
 }
 
-/** How long a first start waits for the bucket's pointer. */
-export const POINTER_READ_TIMEOUT_MS = 15_000;
+const BUCKET_READ_TIMEOUT_MS = 15_000;
 
 const TIMED_OUT = Symbol("timed out");
 
+async function highestBucketTerm(
+  store: S3ObjectStore,
+  streamId: string,
+  signal: AbortSignal,
+): Promise<number | null> {
+  const pointer = await readPointer(store, streamId, { signal });
+  let highest = pointer?.pointer.body.term ?? null;
+  for (const name of await store.listFolders("gen-", { signal })) {
+    const generation = parseGenerationName(name);
+    if (generation !== null) highest = Math.max(highest ?? 0, generation.term);
+  }
+  return highest;
+}
+
 /**
- * The term the owner's bucket's pointer names, for {@link RebuildDeps.pointerTerm}. Null when the
- * box has no bucket settings or the bucket holds no pointer. Throws when settings are stored but
- * the term cannot be learnt — the settings cannot be read, the pointer is malformed, or the bucket
- * cannot be opened or read or does not answer within the bound — with the failure's own code, or
- * `restore.pointer_unreadable` for the bound and for a failure that has none. A read still
- * waiting at the bound is cancelled.
+ * An opened generation can be ahead of the published pointer. Both reads must answer within
+ * one deadline before a restore can use the highest observed term.
  */
-export async function readBucketPointerTerm(
+export async function readBucketTerm(
   db: Database,
   ring: KeyRing,
-  options: { openStore?: (bucket: BucketConfig) => ObjectStore; timeoutMs?: number } = {},
+  options: { openStore?: (bucket: BucketConfig) => S3ObjectStore; timeoutMs?: number } = {},
 ): Promise<number | null> {
-  let read: Awaited<ReturnType<typeof readPointer>> | typeof TIMED_OUT;
   try {
     const settings = await readStreamSettings(db, ring);
     if (settings === null) return null;
-    const store = (options.openStore ?? createS3ObjectStore)(settings.bucket);
+    const store = (options.openStore ?? createS3FolderStore)(settings.bucket);
     const reading = new AbortController();
     const bound = new AbortController();
     try {
-      read = await Promise.race([
-        readPointer(store, settings.streamId, { signal: reading.signal }),
-        delay(options.timeoutMs ?? POINTER_READ_TIMEOUT_MS, TIMED_OUT, {
+      const term = await Promise.race([
+        highestBucketTerm(store, settings.streamId, reading.signal),
+        delay(options.timeoutMs ?? BUCKET_READ_TIMEOUT_MS, TIMED_OUT, {
           ref: false,
           signal: bound.signal,
         }),
       ]);
+      if (term === TIMED_OUT) {
+        reading.abort();
+        throw new AppError("restore.pointer_unreadable", {});
+      }
+      return term;
     } finally {
       bound.abort();
     }
-    if (read === TIMED_OUT) reading.abort();
   } catch (error) {
     if (isAppError(error)) throw error;
     throw new AppError("restore.pointer_unreadable", {});
   }
-  if (read === TIMED_OUT) throw new AppError("restore.pointer_unreadable", {});
-  return read === null ? null : read.pointer.body.term;
 }
