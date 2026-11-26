@@ -20,6 +20,8 @@ import { decimal, type ExtraSelection, type OptionSelection } from "@waitron/sha
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { readOrderRevision } from "./working-order-context.js";
+import { getHeldOrder } from "./working-order-held-read.js";
+import { parkOrder } from "./working-order-open.js";
 import { updateHeldOrder, updateOrderLine } from "./working-order-held-write.js";
 import { REASONS } from "./testing/adjustment-venue.js";
 import { inTx, seatWithNoAllergies, type PartyVenue } from "./testing/party-venue.js";
@@ -706,4 +708,59 @@ it("takes only the swapped glass's share of 4.50 off two glasses when a basket s
   expect(prices[kept!.id]).toEqual({ what: "Wine", unit: 225, total: 225, list: 450 });
   expect(prices[large.id]).toEqual({ what: "Wine", unit: 550, total: 550, list: null });
   expect(await total(tabId)).toBe(775);
+});
+
+/** A counter order, held, no party: one Small glass of Wine, 10% off it. */
+async function counterGlassAtTenPercent() {
+  expect(venue.counter.menuId).toBe(venue.tables.menuId);
+  const orderId = randomUUID();
+  await parkOrder({ db: venue.db }, venue.cfg, {
+    id: orderId,
+    zoneId: venue.counter.zoneId,
+    lines: [glassOf(wine.small)],
+    operatorId: venue.operator.personId,
+  });
+  const small = await rowOf(orderId, "Wine");
+  const given = await give(orderId, small.id, percent(1000));
+  expect(await total(orderId)).toBe(405);
+  return { orderId, small, given };
+}
+
+it("takes a counter order's glass's 10% off when a basket save changes its size, answering its notice on the held order", async () => {
+  const { orderId, small, given } = await counterGlassAtTenPercent();
+
+  await saveBasket(orderId, [{ workingOrderLineId: small.id, ...glassOf(wine.large) }]);
+
+  const large = await rowOf(orderId, "Wine");
+  expect(large).toMatchObject({ productId: wine.large, lineTotal: 550, listUnitPriceGross: null });
+  expect(await endingsOn(orderId)).toEqual([
+    { adjustmentId: given, why: "variant_changed", dishName: "Wine", lineId: large.id },
+  ]);
+  expect((await getHeldOrder({ db: venue.db }, orderId)).discountNotices).toEqual([
+    expect.objectContaining({
+      adjustmentId: given,
+      why: "variant_changed",
+      amount: "0.45",
+      reapplyOn: { lineId: large.id },
+    }),
+  ]);
+});
+
+it("offers a counter glass's 10% again on the first of two basket lines that name it at another size", async () => {
+  const { orderId, small, given } = await counterGlassAtTenPercent();
+
+  await saveBasket(orderId, [
+    { workingOrderLineId: small.id, ...glassOf(wine.large) },
+    { workingOrderLineId: small.id, ...glassOf(wine.large), options: serveAs(1) },
+  ]);
+
+  const glasses = (await rows(orderId)).filter(({ name }) => name === "Wine");
+  expect(glasses).toHaveLength(2);
+  const chilled = glasses.find(({ optionSnapshots }) =>
+    JSON.stringify(optionSnapshots).includes('"Chilled"'),
+  )!;
+  expect(await endingsOn(orderId)).toEqual([
+    { adjustmentId: given, why: "variant_changed", dishName: "Wine", lineId: chilled.id },
+  ]);
+  expect(await total(orderId)).toBe(1100);
 });

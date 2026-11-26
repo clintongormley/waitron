@@ -127,6 +127,7 @@ export async function saveHeldOrderIn(
   const edits: { parent: EditableParent; intent: LineIntent }[] = [];
   const fresh: RequestedLine[] = [];
   const swaps: VariantSwap[] = [];
+  const swapped = new Set<string>();
   for (const line of req.lines) {
     const parent =
       line.workingOrderLineId === undefined ? undefined : byId.get(line.workingOrderLineId);
@@ -145,8 +146,11 @@ export async function saveHeldOrderIn(
       (line.variantId ?? parent.parentProductId ?? parent.productId) === parent.productId;
     if (!sameItem) {
       claimed.delete(parent.id);
-      if (parent.menuItemId === line.menuItemId)
+      // Only the first line naming a stored dish at another variant replaces it.
+      if (parent.menuItemId === line.menuItemId && !swapped.has(parent.id)) {
+        swapped.add(parent.id);
         swaps.push({ fromId: parent.id, freshIndex: fresh.length });
+      }
       fresh.push(line);
       continue;
     }
