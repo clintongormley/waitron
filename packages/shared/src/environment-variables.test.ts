@@ -28,6 +28,7 @@ describe("the environment list", () => {
       "backup.env": [
         "WAITRON_BACKUP_KEY_NUMBER",
         "WAITRON_BACKUP_KEY_ROTATED_AT",
+        "WAITRON_BACKUP_MASTER_KEY_DAY",
         "WAITRON_BACKUP_MASTER_KEY_ID",
         "WAITRON_BACKUP_RECOVERY_KEY",
       ],

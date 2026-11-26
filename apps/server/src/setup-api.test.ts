@@ -1510,12 +1510,14 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
         mountSetup(app, deps, noopLog);
         const res = await postProvision(app, body());
         expect(res.status).toBe(200);
-        const bytes = decodeMasterKeyCode((await res.json()).masterKey);
+        const reply = await res.json();
+        const bytes = decodeMasterKeyCode(reply.masterKey);
         expect(parseEnvFile(readFileSync(join(stateDir, "backup.env"), "utf8"))).toEqual({
           WAITRON_BACKUP_TEST_FOLDER: "/srv/backups",
           WAITRON_BACKUP_RECOVERY_KEY: backupKey(bytes, 1).toString("base64url"),
           WAITRON_BACKUP_KEY_NUMBER: "1",
           WAITRON_BACKUP_MASTER_KEY_ID: masterKeyId(sealingPublicKey(bytes)).toString("hex"),
+          WAITRON_BACKUP_MASTER_KEY_DAY: reply.masterKeyName.slice(0, 10),
         });
         await tick();
       } finally {

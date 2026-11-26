@@ -41,7 +41,12 @@ import {
   resolveBackupConfig,
   type BackupSchedule,
 } from "./backup-config.js";
-import { backupKeyRecord, changeBackupKey, heldBackupKeyNumber } from "./backup-key-record.js";
+import {
+  backupKeyRecord,
+  changeBackupKey,
+  heldBackupKeyNumber,
+  masterKeyDayOf,
+} from "./backup-key-record.js";
 import { readSettingsEvidence, recoveryKeyFacts } from "./backup-settings-evidence.js";
 import { UNREADABLE_CREDENTIAL } from "./credentials.js";
 import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
@@ -537,6 +542,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           bytes,
           heldBackupKeyNumber(await deps.readBoxEnv()) + 1,
           current.publicKey,
+          masterKeyDayOf(current.name),
         );
         const recoveryKey = record.key;
         const keyRotatedAt = new Date().toISOString();

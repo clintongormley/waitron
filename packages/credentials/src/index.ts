@@ -78,5 +78,6 @@ export {
   masterKeyId,
   masterKeyMatches,
   masterKeyName,
+  masterKeyNameOf,
   sealingPublicKey,
 } from "./master-key.js";

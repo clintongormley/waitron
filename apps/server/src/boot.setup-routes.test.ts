@@ -1071,7 +1071,11 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           body: JSON.stringify({ mode: "demo", venue: provisionVenueBody("60000010W") }),
         });
         expect(response.status).toBe(200);
-        const reply = (await response.json()) as { masterKey: string; recoveryPackPdf: string };
+        const reply = (await response.json()) as {
+          masterKey: string;
+          masterKeyName: string;
+          recoveryPackPdf: string;
+        };
         expect(reply).toEqual({
           provisioned: true,
           restarting: true,
@@ -1092,6 +1096,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           WAITRON_BACKUP_RECOVERY_KEY: backupKey(shown, 1).toString("base64url"),
           WAITRON_BACKUP_KEY_NUMBER: "1",
           WAITRON_BACKUP_MASTER_KEY_ID: masterKeyId(sealingPublicKey(shown)).toString("hex"),
+          WAITRON_BACKUP_MASTER_KEY_DAY: reply.masterKeyName.slice(0, 10),
         });
         await poll(() => (kills.length > 0 ? kills.length : undefined));
         expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);

@@ -11,6 +11,7 @@ import {
   masterKeyId,
   masterKeyMatches,
   masterKeyName,
+  masterKeyNameOf,
   sealingPublicKey,
 } from "./master-key.js";
 
@@ -129,6 +130,7 @@ describe("making a master key", () => {
       "masterKeyId",
       "masterKeyMatches",
       "masterKeyName",
+      "masterKeyNameOf",
       "sealingPublicKey",
     ]);
   });
@@ -191,6 +193,19 @@ describe("the master key's name", () => {
     const name = masterKeyName(publicKey, "2027-01-31");
     expect(name).toMatch(/^2027-01-31 · [2-9A-HJKMNP-Z]{4}$/);
     expect(masterKeyName(publicKey, "2027-02-01").slice(-4)).toBe(name.slice(-4));
+  });
+
+  it("is the same name when read from the master key id alone", () => {
+    const publicKey = sealingPublicKey(makeMasterKey());
+    expect(masterKeyNameOf(masterKeyId(publicKey), "2027-01-31")).toBe(
+      masterKeyName(publicKey, "2027-01-31"),
+    );
+    expect(masterKeyNameOf(masterKeyId(sealingPublicKey(fixedKey)), "2026-11-23")).toBe(
+      "2026-11-23 · EG6B",
+    );
+    expect(refusal(() => masterKeyNameOf(masterKeyId(publicKey), "2026-02-29")).code).toBe(
+      "master_key.name_day_invalid",
+    );
   });
 
   it("takes a leap day in a leap year", () => {

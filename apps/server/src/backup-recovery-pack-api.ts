@@ -32,6 +32,7 @@ import type { BackupKeyRecord } from "./backup-env-writer.js";
 import {
   backupKeyFacts,
   backupKeyRecord,
+  masterKeyDayOf,
   changeBackupKey,
   heldBackupKeyNumber,
   type BackupKeyChangeDeps,
@@ -129,6 +130,7 @@ function keyEnv(record: BackupKeyRecord, rotatedAt: string): Record<string, stri
     WAITRON_BACKUP_RECOVERY_KEY: record.key,
     WAITRON_BACKUP_KEY_NUMBER: String(record.keyNumber),
     WAITRON_BACKUP_MASTER_KEY_ID: record.masterKeyId,
+    WAITRON_BACKUP_MASTER_KEY_DAY: record.masterKeyDay,
     WAITRON_BACKUP_KEY_ROTATED_AT: rotatedAt,
   };
 }
@@ -354,6 +356,7 @@ export function mountBackupRecoveryPackMakeApi(
                   decodeMasterKeyCode(newMasterKey.made.masterKey),
                   heldBackupKeyNumber(held) + 1,
                   newMasterKey.publicKey,
+                  masterKeyDayOf(newMasterKey.made.masterKeyName),
                 );
           const env = nextKey === undefined ? held : { ...held, ...keyEnv(nextKey, madeAt) };
           const pack = await withTransaction(deps.db, (tx) =>

@@ -10,27 +10,40 @@ import type { StreamHost } from "./stream-host.js";
 
 type Env = Readonly<Record<string, string | undefined>>;
 
-/** `publicKey` is the master key's sealing public key, the one its `master_keys` row keeps. */
+/** `publicKey` is the master key's sealing public key, the one its `master_keys` row keeps;
+ * `masterKeyDay` is the day its name begins with. */
 export function backupKeyRecord(
   masterKey: Uint8Array,
   n: number,
   publicKey: Uint8Array,
+  masterKeyDay: string,
 ): BackupKeyRecord {
   return {
     key: backupKey(masterKey, n).toString("base64url"),
     keyNumber: n,
     masterKeyId: masterKeyId(publicKey).toString("hex"),
+    masterKeyDay,
   };
+}
+
+/** The day a master key's name begins with: `YYYY-MM-DD · XXXX`. */
+export function masterKeyDayOf(name: string): string {
+  return name.slice(0, 10);
 }
 
 /** What every kind of setup writes for the master key it has just made and shows. */
 export function writeBackupKeyOne(
   stateDir: string,
-  masterKey: { made: { masterKey: string }; publicKey: Uint8Array },
+  masterKey: { made: { masterKey: string; masterKeyName: string }; publicKey: Uint8Array },
 ): Promise<void> {
   return writeBackupKey(
     stateDir,
-    backupKeyRecord(decodeMasterKeyCode(masterKey.made.masterKey), 1, masterKey.publicKey),
+    backupKeyRecord(
+      decodeMasterKeyCode(masterKey.made.masterKey),
+      1,
+      masterKey.publicKey,
+      masterKeyDayOf(masterKey.made.masterKeyName),
+    ),
   );
 }
 
@@ -44,6 +57,7 @@ export function backupKeyFrameInput(record: BackupKeyRecord): BackupKeyFrameInpu
     backupKey,
     keyNumber: record.keyNumber,
     masterKeyId: Buffer.from(record.masterKeyId, "hex"),
+    masterKeyDay: record.masterKeyDay,
   };
 }
 

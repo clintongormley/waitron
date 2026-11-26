@@ -187,13 +187,21 @@ describe("artifact frame version 2, under a backup key", () => {
   const backupKey = randomBytes(32);
   const masterKeyId = Buffer.from("0011223344556677", "hex");
   const keyNumber = 7;
+  const masterKeyDay = "2026-11-23";
   const frame = (plaintext: Uint8Array = randomBytes(256)) =>
-    encryptArtifactUnderBackupKey(plaintext, { backupKey, keyNumber, masterKeyId });
+    encryptArtifactUnderBackupKey(plaintext, { backupKey, keyNumber, masterKeyId, masterKeyDay });
 
-  it("names its master key id and N before it is opened", () => {
+  it("names its master key id, N and the master key's day before it is opened", () => {
     const framed = frame();
-    expect(readArtifactHeader(framed)).toEqual({ version: 2, masterKeyId, keyNumber });
-    expect(framed.subarray(0, 17).toString("hex")).toBe("57424b3102001122334455667700000007");
+    expect(readArtifactHeader(framed)).toEqual({
+      version: 2,
+      masterKeyId,
+      keyNumber,
+      masterKeyDay,
+    });
+    expect(framed.subarray(0, 27).toString("hex")).toBe(
+      "57424b3102001122334455667700000007" + Buffer.from(masterKeyDay, "ascii").toString("hex"),
+    );
   });
 
   it("reads a version 1 header as version 1 with nothing more to name", () => {
@@ -204,9 +212,9 @@ describe("artifact frame version 2, under a backup key", () => {
 
   it("measures each version's header", () => {
     expect(artifactHeaderBytes(1)).toBe(49);
-    expect(artifactHeaderBytes(2)).toBe(61);
+    expect(artifactHeaderBytes(2)).toBe(71);
     const plaintext = randomBytes(100);
-    expect(frame(plaintext).length).toBe(100 + 61);
+    expect(frame(plaintext).length).toBe(100 + 71);
     expect(encryptArtifact(plaintext, "pw-000000000000").length).toBe(100 + 49);
   });
 
@@ -215,8 +223,8 @@ describe("artifact frame version 2, under a backup key", () => {
     const first = frame(plaintext);
     const second = frame(plaintext);
     expect(decryptArtifactUnderBackupKey(first, backupKey).equals(plaintext)).toBe(true);
-    expect(first.subarray(17, 33).equals(second.subarray(17, 33))).toBe(false);
-    expect(first.subarray(33, 45).equals(second.subarray(33, 45))).toBe(false);
+    expect(first.subarray(27, 43).equals(second.subarray(27, 43))).toBe(false);
+    expect(first.subarray(43, 55).equals(second.subarray(43, 55))).toBe(false);
     expect(first.includes(plaintext.subarray(0, 64))).toBe(false);
   });
 
@@ -229,10 +237,11 @@ describe("artifact frame version 2, under a backup key", () => {
   it.each([
     ["master key id", 5],
     ["N", 13],
-    ["salt", 17],
-    ["iv", 33],
-    ["tag", 45],
-    ["ciphertext", 61],
+    ["day", 26],
+    ["salt", 27],
+    ["iv", 43],
+    ["tag", 55],
+    ["ciphertext", 71],
   ])("refuses a changed %s byte by authentication", (_field, offset) => {
     const framed = frame();
     framed[offset] ^= 0x01;
@@ -258,7 +267,7 @@ describe("artifact frame version 2, under a backup key", () => {
   });
 
   it("refuses a frame cut short of its header", () => {
-    for (const framed of [frame().subarray(0, 60), Buffer.from("WBK1"), Buffer.alloc(0)]) {
+    for (const framed of [frame().subarray(0, 70), Buffer.from("WBK1"), Buffer.alloc(0)]) {
       for (const read of [
         () => decryptArtifactUnderBackupKey(framed, backupKey),
         () => readArtifactHeader(framed),
@@ -289,10 +298,11 @@ describe("artifact frame version 2, under a backup key", () => {
 
   it("opens a frame built by plain node:crypto (HKDF-SHA256 then AES-256-GCM), the fixed vector", () => {
     // Built outside this module: hkdfSync("sha256", key 00..1f, salt a5×16, "waitron.archive.v2",
-    // 32), then createCipheriv("aes-256-gcm") with iv 5a×12 and the 45 header bytes as AAD.
+    // 32), then createCipheriv("aes-256-gcm") with iv 5a×12 and the 55 header bytes as AAD.
     const vector = Buffer.from(
-      "57424b3102010203040506070801020304a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a55a5a5a5a5a5a5a5a5a5a5a5a" +
-        "786ce0ad45ab732bb0b3f9c07f851b82deb81cc9a83eb4eb42eba8def7d2a1c056a340aea688c54959",
+      "57424b3102010203040506070801020304323032362d31312d3233" +
+        "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a55a5a5a5a5a5a5a5a5a5a5a5a" +
+        "e5c402e682bbb5ab0c325842492699fedeb81cc9a83eb4eb42eba8def7d2a1c056a340aea688c54959",
       "hex",
     );
     const key = Buffer.from(Array.from({ length: 32 }, (_, i) => i));
@@ -301,6 +311,7 @@ describe("artifact frame version 2, under a backup key", () => {
       version: 2,
       masterKeyId: Buffer.from("0102030405060708", "hex"),
       keyNumber: 0x01020304,
+      masterKeyDay: "2026-11-23",
     });
   });
 
@@ -309,6 +320,7 @@ describe("artifact frame version 2, under a backup key", () => {
       backupKey,
       keyNumber: 0xffffffff,
       masterKeyId,
+      masterKeyDay,
     });
     expect(framed.subarray(13, 17).toString("hex")).toBe("ffffffff");
     expect(readArtifactHeader(framed)).toMatchObject({ keyNumber: 0xffffffff });
@@ -324,12 +336,16 @@ describe("artifact frame version 2, under a backup key", () => {
     [{ keyNumber: -1 }, "key_number"],
     [{ keyNumber: 1.5 }, "key_number"],
     [{ keyNumber: 0x100000000 }, "key_number"],
+    [{ masterKeyDay: "2026-02-30" }, "master_key_day"],
+    [{ masterKeyDay: "2026-1-23" }, "master_key_day"],
+    [{ masterKeyDay: "" }, "master_key_day"],
   ])("refuses a writer input %o", (change, input) => {
     expect(() =>
       encryptArtifactUnderBackupKey(randomBytes(8), {
         backupKey,
         keyNumber,
         masterKeyId,
+        masterKeyDay,
         ...change,
       }),
     ).toThrowError(
@@ -337,8 +353,12 @@ describe("artifact frame version 2, under a backup key", () => {
     );
   });
 
-  // Sealed here rather than by the writer, which refuses N = 0.
-  const sealedUnderKeyNumber = (n: number, plaintext: Buffer) => {
+  // Sealed here rather than by the writer, which refuses N = 0 and a day that is not a date.
+  const sealedUnderKeyNumber = (
+    n: number,
+    plaintext: Buffer,
+    day: Buffer = Buffer.from(masterKeyDay),
+  ) => {
     const salt = randomBytes(16);
     const iv = randomBytes(12);
     const number = Buffer.alloc(4);
@@ -348,6 +368,7 @@ describe("artifact frame version 2, under a backup key", () => {
       Buffer.from([2]),
       masterKeyId,
       number,
+      day,
       salt,
       iv,
     ]);
@@ -376,6 +397,25 @@ describe("artifact frame version 2, under a backup key", () => {
       );
     }
   });
+
+  it.each(["2026-02-30", "2026-1-230", "2026/11/23", "２０26-11-2"])(
+    "refuses a header whose day %s is not a calendar date before any key is derived",
+    (day) => {
+      const plaintext = randomBytes(32);
+      const framed = sealedUnderKeyNumber(1, plaintext, Buffer.from(day, "utf8").subarray(0, 10));
+      for (const read of [
+        () => decryptArtifactUnderBackupKey(framed, randomBytes(24)),
+        () => readArtifactHeader(framed),
+      ]) {
+        expect(read).toThrowError(
+          expect.objectContaining({
+            code: "backup.artifact_invalid",
+            params: { reason: "bad_key_day" },
+          }),
+        );
+      }
+    },
+  );
 
   it("refuses an opener key that is not 32 bytes before trying it", () => {
     expect(() => decryptArtifactUnderBackupKey(frame(), randomBytes(24))).toThrowError(

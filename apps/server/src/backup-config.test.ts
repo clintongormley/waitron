@@ -34,13 +34,15 @@ describe("loadBackupKey", () => {
     WAITRON_BACKUP_RECOVERY_KEY: HELD_KEY_TEXT,
     WAITRON_BACKUP_KEY_NUMBER: "2",
     WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
+    WAITRON_BACKUP_MASTER_KEY_DAY: "2026-11-23",
   };
 
-  it("returns the key, its number and its master key id together", () => {
+  it("returns the key, its number and its master key id and day together", () => {
     expect(loadBackupKey(HELD)).toEqual({
       key: HELD_KEY_TEXT,
       keyNumber: 2,
       masterKeyId: "0123456789abcdef",
+      masterKeyDay: "2026-11-23",
     });
   });
 
@@ -55,6 +57,9 @@ describe("loadBackupKey", () => {
     ["no master key id", { WAITRON_BACKUP_MASTER_KEY_ID: undefined }],
     ["an upper-case id", { WAITRON_BACKUP_MASTER_KEY_ID: "0123456789ABCDEF" }],
     ["a short id", { WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcde" }],
+    ["no master key day", { WAITRON_BACKUP_MASTER_KEY_DAY: undefined }],
+    ["a day that is not a calendar date", { WAITRON_BACKUP_MASTER_KEY_DAY: "2026-02-30" }],
+    ["a day with a time", { WAITRON_BACKUP_MASTER_KEY_DAY: "2026-11-23T00:00" }],
     ["a key with a trailing =", { WAITRON_BACKUP_RECOVERY_KEY: `${HELD_KEY_TEXT}=` }],
     [
       "a key of 31 bytes",
@@ -81,17 +86,19 @@ describe("loadBackupKey", () => {
     destinationTimeoutMs: 120_000,
   };
 
-  it("the backup settings carry the number and id they read", () => {
+  it("the backup settings carry the number, id and day they read", () => {
     expect(resolveBackupConfig({ env: HELD, sealed: SEALED })).toMatchObject({
       recoveryKey: HELD_KEY_TEXT,
       keyNumber: 2,
       masterKeyId: "0123456789abcdef",
+      masterKeyDay: "2026-11-23",
     });
   });
 
   it.each([
     ["no number", { WAITRON_BACKUP_KEY_NUMBER: undefined }],
     ["no master key id", { WAITRON_BACKUP_MASTER_KEY_ID: undefined }],
+    ["no master key day", { WAITRON_BACKUP_MASTER_KEY_DAY: undefined }],
     ["a malformed number", { WAITRON_BACKUP_KEY_NUMBER: "01" }],
     ["a key with a trailing =", { WAITRON_BACKUP_RECOVERY_KEY: `${HELD_KEY_TEXT}=` }],
   ])("an enabled record with %s is refused", (_, change) => {
@@ -108,6 +115,7 @@ describe("loadBackupKey", () => {
     expect(cfg).toMatchObject({ enabled: false, recoveryKey: HELD_KEY_TEXT });
     expect(cfg?.keyNumber).toBeUndefined();
     expect(cfg?.masterKeyId).toBeUndefined();
+    expect(cfg?.masterKeyDay).toBeUndefined();
   });
 });
 
@@ -116,6 +124,7 @@ describe("resolveBackupConfig", () => {
   const N_AND_ID = {
     WAITRON_BACKUP_KEY_NUMBER: "1",
     WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
+    WAITRON_BACKUP_MASTER_KEY_DAY: "2026-10-01",
   };
   const sealed: ArchiveSettings = {
     revision: "6f1c2a43-8a49-4d0f-9b51-4d4f4c7c2a10",
@@ -175,6 +184,7 @@ describe("resolveBackupConfig", () => {
       keyRotatedAt: "2026-10-01T00:00:00.000Z",
       keyNumber: 1,
       masterKeyId: "0123456789abcdef",
+      masterKeyDay: "2026-10-01",
     });
   });
 
@@ -257,6 +267,7 @@ describe("loadBackupSettings", () => {
     WAITRON_BACKUP_RECOVERY_KEY: HELD_KEY_TEXT,
     WAITRON_BACKUP_KEY_NUMBER: "1",
     WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
+    WAITRON_BACKUP_MASTER_KEY_DAY: "2026-10-01",
   };
 
   it("keeps a failure's allowlisted detail beside its code", async () => {

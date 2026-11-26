@@ -623,24 +623,25 @@ it("Live setup writes backup key 1 from the master key it shows, with N = 1 and 
       )
     ).json();
   const held = async () => parseEnvFile(await readFile(join(f.stateDir, BACKUP_ENV_FILE), "utf8"));
-  const keyOne = (printed: string) => {
-    const bytes = decodeMasterKeyCode(printed);
+  const keyOne = (shown: { masterKey: string; masterKeyName: string }) => {
+    const bytes = decodeMasterKeyCode(shown.masterKey);
     return {
       WAITRON_BACKUP_RECOVERY_KEY: backupKey(bytes, 1).toString("base64url"),
       WAITRON_BACKUP_KEY_NUMBER: "1",
       WAITRON_BACKUP_MASTER_KEY_ID: masterKeyId(sealingPublicKey(bytes)).toString("hex"),
+      WAITRON_BACKUP_MASTER_KEY_DAY: shown.masterKeyName.slice(0, 10),
     };
   };
   const staged = await (
     await f.post("/setup-api/first-setup/node-key", await token("block-use"), f.headers(state))
   ).json();
-  expect(await held()).toEqual(keyOne(staged.masterKey));
+  expect(await held()).toEqual(keyOne(staged));
   expect((await stat(join(f.stateDir, BACKUP_ENV_FILE))).mode & 0o777).toBe(0o600);
   const again = await (
     await f.post("/setup-api/first-setup/node-key", await token("block-use"), f.headers(state))
   ).json();
   expect(again.masterKey).toBe(staged.masterKey);
-  expect(await held()).toEqual(keyOne(staged.masterKey));
+  expect(await held()).toEqual(keyOne(staged));
   const socket = new TLSSocket(new Socket());
   try {
     const reissued = await f.post(
@@ -650,9 +651,9 @@ it("Live setup writes backup key 1 from the master key it shows, with N = 1 and 
       { incoming: { socket } },
     );
     expect(reissued.status).toBe(200);
-    const { masterKey } = await reissued.json();
-    expect(masterKey).not.toBe(staged.masterKey);
-    expect(await held()).toEqual(keyOne(masterKey));
+    const reissuedKey = await reissued.json();
+    expect(reissuedKey.masterKey).not.toBe(staged.masterKey);
+    expect(await held()).toEqual(keyOne(reissuedKey));
   } finally {
     socket.destroy();
   }

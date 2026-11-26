@@ -15,7 +15,8 @@ import { heldKeyOpens, openingKeyFor } from "./backup-file-key.js";
 import { buildManifest } from "./backup-manifest.js";
 import { ALL_MODULES } from "./modules.js";
 import { validateArtifactFile } from "./restore.js";
-import { heldBackupKey } from "./testing/backup-key.js";
+import { heldBackupKey, heldBackupKeyName } from "./testing/backup-key.js";
+import { mintMasterKey } from "./testing/master-key.js";
 import { writeMasterKeyArchive } from "./testing/master-key-archive.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 
@@ -128,14 +129,24 @@ describe("openingKeyFor", () => {
 
   it("a master key made after the archive is refused, naming the archive's key", async () => {
     const f = await scratch();
-    await writeMasterKeyArchive(f.artifactPath, Buffer.from("payload"), MASTER_KEY, 4);
+    const archiveKey = await mintMasterKey(suite.db, {
+      bytes: MASTER_KEY,
+      madeAt: new Date("2026-10-01T12:00:00Z"),
+    });
+    await writeMasterKeyArchive(
+      f.artifactPath,
+      Buffer.from("payload"),
+      MASTER_KEY,
+      4,
+      archiveKey.name.slice(0, 10),
+    );
     const later = encodeMasterKeyCode(makeMasterKey());
     const refusal = await openingKeyFor({ artifactPath: f.artifactPath }, later).catch(
       (error: unknown) => error,
     );
     expect(refusal).toMatchObject({
       code: "promotion.break_glass_invalid",
-      params: { masterKeyId: ARCHIVE_KEY_ID, keyNumber: 4 },
+      params: { masterKeyId: ARCHIVE_KEY_ID, keyNumber: 4, keyName: archiveKey.name },
     });
     await expect(
       openingKeyFor({ artifactPath: f.artifactPath }, encodeMasterKeyCode(MASTER_KEY)),
@@ -149,7 +160,11 @@ describe("openingKeyFor", () => {
     const notWhole = encodeMasterKeyCode(MASTER_KEY).slice(0, -5);
     await expect(openingKeyFor({ artifactPath: f.artifactPath }, notWhole)).rejects.toMatchObject({
       code: "promotion.break_glass_invalid",
-      params: { masterKeyId: ARCHIVE_KEY_ID, keyNumber: 1 },
+      params: {
+        masterKeyId: ARCHIVE_KEY_ID,
+        keyNumber: 1,
+        keyName: heldBackupKeyName(MASTER_KEY),
+      },
     });
     expect(credentials.backupKey).not.toHaveBeenCalled();
   });
@@ -184,6 +199,7 @@ describe("heldKeyOpens", () => {
     version: 2 as const,
     masterKeyId: Buffer.from(ARCHIVE_KEY_ID, "hex"),
     keyNumber: 2,
+    masterKeyDay: "2026-10-01",
   };
 
   it("is true for the key with the header's master key id and number", () => {

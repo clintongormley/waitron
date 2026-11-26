@@ -39,6 +39,7 @@ import {
   masterKeyId,
   sealingPublicKey,
   backupKey,
+  masterKeyNameOf,
   credentialRevision,
   putCredential,
   venueCredentials,
@@ -1044,6 +1045,7 @@ describe("backup admin routes", () => {
       keyRotatedAt: undefined,
       keyNumber: undefined,
       masterKeyId: undefined,
+      masterKeyDay: undefined,
     };
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
@@ -1093,6 +1095,7 @@ describe("backup admin routes", () => {
       keyRotatedAt: undefined,
       keyNumber: undefined,
       masterKeyId: undefined,
+      masterKeyDay: undefined,
     };
     const sup = new BackupSupervisor({
       nodeId: BACKUP_NODE_ID,
@@ -1820,8 +1823,16 @@ describe("backup admin routes", () => {
         WAITRON_BACKUP_RECOVERY_KEY: derived(4),
         WAITRON_BACKUP_KEY_NUMBER: "4",
         WAITRON_BACKUP_MASTER_KEY_ID: MASTER_KEY_ID,
+        WAITRON_BACKUP_MASTER_KEY_DAY: MASTER.name.slice(0, 10),
         WAITRON_BACKUP_KEY_ROTATED_AT: expect.any(String),
       });
+      const held = await keyFile(stateDir);
+      expect(
+        masterKeyNameOf(
+          Buffer.from(held.WAITRON_BACKUP_MASTER_KEY_ID!, "hex"),
+          held.WAITRON_BACKUP_MASTER_KEY_DAY!,
+        ),
+      ).toBe(MASTER.name);
       expect(reload).toHaveBeenCalledTimes(1);
       expect(refresh).toHaveBeenCalledTimes(1);
     }, 60_000);
@@ -1836,6 +1847,7 @@ describe("backup admin routes", () => {
         WAITRON_BACKUP_RECOVERY_KEY: derived(1),
         WAITRON_BACKUP_KEY_NUMBER: "1",
         WAITRON_BACKUP_MASTER_KEY_ID: MASTER_KEY_ID,
+        WAITRON_BACKUP_MASTER_KEY_DAY: MASTER.name.slice(0, 10),
         WAITRON_BACKUP_KEY_ROTATED_AT: expect.any(String),
       });
     }, 60_000);
@@ -2169,6 +2181,7 @@ describe("backup admin routes", () => {
         "WAITRON_BACKUP_RECOVERY_KEY",
         "WAITRON_BACKUP_KEY_NUMBER",
         "WAITRON_BACKUP_MASTER_KEY_ID",
+        "WAITRON_BACKUP_MASTER_KEY_DAY",
       ]);
     }, 60_000);
 

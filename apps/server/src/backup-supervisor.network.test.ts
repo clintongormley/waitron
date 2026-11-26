@@ -72,9 +72,15 @@ const MASTER = makeMasterKey();
 const KEY_ONE = heldBackupKey(MASTER, 1);
 const KEY_TWO = heldBackupKey(MASTER, 2);
 
-/** The config's key fields for one backup key: its text, number and master key id together. */
+/** The config's key fields for one backup key: its text, number and master key id and day
+ * together. */
 function backupKeyFields(record: typeof KEY_ONE): Partial<BackupConfig> {
-  return { recoveryKey: record.key, keyNumber: record.keyNumber, masterKeyId: record.masterKeyId };
+  return {
+    recoveryKey: record.key,
+    keyNumber: record.keyNumber,
+    masterKeyId: record.masterKeyId,
+    masterKeyDay: record.masterKeyDay,
+  };
 }
 
 function config(
@@ -94,6 +100,7 @@ function config(
     keyRotatedAt: undefined,
     keyNumber: KEY_ONE.keyNumber,
     masterKeyId: KEY_ONE.masterKeyId,
+    masterKeyDay: KEY_ONE.masterKeyDay,
     ...overrides,
   };
 }

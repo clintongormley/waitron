@@ -235,9 +235,13 @@ function boundedPublic(value: unknown, depth = 0): void {
 }
 /** The staged master key exists only in memory until publication, so its backup key is written
  * when it is shown. */
-function writeStagedBackupKey(stateDir: string, masterKey: string, publicKey: string) {
+function writeStagedBackupKey(
+  stateDir: string,
+  made: { masterKey: string; masterKeyName: string },
+  publicKey: string,
+) {
   return writeBackupKeyOne(stateDir, {
-    made: { masterKey },
+    made,
     publicKey: Buffer.from(publicKey, "base64"),
   });
 }
@@ -338,7 +342,11 @@ export function mountSetupFirstFiscalApi(
           reconfirmation,
           hold,
         );
-        await writeStagedBackupKey(host.roots.stateDir, masterKey, stage.masterKeyPublicKey);
+        await writeStagedBackupKey(
+          host.roots.stateDir,
+          { masterKey, masterKeyName },
+          stage.masterKeyPublicKey,
+        );
         host.evidence.invalidate(owner.attemptId);
         return c.json({
           stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.masterKeyName },
@@ -371,7 +379,11 @@ export function mountSetupFirstFiscalApi(
               text(body.reconfirmation),
               hold,
             );
-            await writeStagedBackupKey(host.roots.stateDir, masterKey, stage.masterKeyPublicKey);
+            await writeStagedBackupKey(
+              host.roots.stateDir,
+              { masterKey, masterKeyName },
+              stage.masterKeyPublicKey,
+            );
             return c.json({
               stage: { stageId: stage.stageId, nodeId: stage.nodeId, name: stage.masterKeyName },
               masterKey,

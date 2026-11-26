@@ -1,4 +1,4 @@
-import { backupKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
+import { backupKey, masterKeyId, masterKeyNameOf, sealingPublicKey } from "@waitron/credentials";
 import { readArtifactHeader, type ArtifactHeader } from "@waitron/provisioning";
 import { AppError, decodeMasterKeyCode, isAppError } from "@waitron/shared";
 import { readArtifactFileHeader } from "./artifact-cipher-file.js";
@@ -9,7 +9,7 @@ export type BackupFileSource = { artifactPath: string } | { artifact: Uint8Array
 
 /** The backup key text that opens a version 2 file, derived from a typed master key. A key that
  * does not decode, or is not the master key the header names, is refused with the header's master
- * key id and number. A version 1 file is refused before any key is derived. */
+ * key id, number and name. A version 1 file is refused before any key is derived. */
 export async function openingKeyFor(
   source: BackupFileSource,
   masterKeyText: string,
@@ -24,6 +24,7 @@ export async function openingKeyFor(
   const wrongKey = new AppError("promotion.break_glass_invalid", {
     masterKeyId: header.masterKeyId.toString("hex"),
     keyNumber: header.keyNumber,
+    keyName: masterKeyNameOf(header.masterKeyId, header.masterKeyDay),
   });
   let masterKey: Uint8Array;
   try {

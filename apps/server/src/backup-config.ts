@@ -1,6 +1,6 @@
 import { LARGEST_BACKUP_KEY_NUMBER } from "@waitron/credentials";
 import { codeOf } from "@waitron/server-kit";
-import { AppError, isAppError, readVariable } from "@waitron/shared";
+import { AppError, isAppError, isCalendarDate, readVariable } from "@waitron/shared";
 import { type ArchiveSettings } from "./archive-settings.js";
 import {
   recordMetaOf,
@@ -43,6 +43,8 @@ export interface BackupConfig {
   keyNumber: number | undefined;
   /** The id of the master key `recoveryKey` comes from; `undefined` when the file names none. */
   masterKeyId: string | undefined;
+  /** The day of the master key `recoveryKey` comes from; `undefined` when the file names none. */
+  masterKeyDay: string | undefined;
 }
 
 export const BACKUP_STALE_AFTER_MS = 2 * 24 * 60 * 60 * 1000;
@@ -105,22 +107,34 @@ function loadMasterKeyId(env: Env): string | undefined {
   return raw !== undefined && /^[0-9a-f]{16}$/.test(raw) ? raw : undefined;
 }
 
-/** The backup key with its number and master key id, or `undefined` unless the file holds all
- * three. */
-export function loadBackupKey(
-  env: Env,
-): { key: string; keyNumber: number; masterKeyId: string } | undefined {
+function loadMasterKeyDay(env: Env): string | undefined {
+  const raw = readVariable(env, "WAITRON_BACKUP_MASTER_KEY_DAY");
+  return raw !== undefined && isCalendarDate(raw) ? raw : undefined;
+}
+
+interface HeldBackupKey {
+  key: string;
+  keyNumber: number;
+  masterKeyId: string;
+  masterKeyDay: string;
+}
+
+/** The backup key with its number and master key id and day, or `undefined` unless the file holds
+ * all four. */
+export function loadBackupKey(env: Env): HeldBackupKey | undefined {
   const key = loadRecoveryKey(env);
   const keyNumber = loadKeyNumber(env);
   const masterKeyId = loadMasterKeyId(env);
+  const masterKeyDay = loadMasterKeyDay(env);
   if (
     key === undefined ||
     backupKeyBytes(key) === undefined ||
     keyNumber === undefined ||
-    masterKeyId === undefined
+    masterKeyId === undefined ||
+    masterKeyDay === undefined
   )
     return undefined;
-  return { key, keyNumber, masterKeyId };
+  return { key, keyNumber, masterKeyId, masterKeyDay };
 }
 
 /** When the recovery key was last rotated, as the box env records it. */
@@ -130,7 +144,7 @@ export function loadKeyRotatedAt(env: Env): string | undefined {
     : readVariable(env, "WAITRON_BACKUP_KEY_ROTATED_AT");
 }
 
-function requiredBackupKey(env: Env): { key: string; keyNumber: number; masterKeyId: string } {
+function requiredBackupKey(env: Env): HeldBackupKey {
   const held = loadBackupKey(env);
   if (held === undefined) throw new AppError("backup.recovery_key_missing", {});
   return held;
@@ -145,7 +159,12 @@ export function resolveBackupConfig(input: {
   // A switched-off record runs nothing, so a missing or short key must not stop it being reported.
   const held = sealed.enabled
     ? requiredBackupKey(env)
-    : { key: heldUsableKey(env), keyNumber: loadKeyNumber(env), masterKeyId: loadMasterKeyId(env) };
+    : {
+        key: heldUsableKey(env),
+        keyNumber: loadKeyNumber(env),
+        masterKeyId: loadMasterKeyId(env),
+        masterKeyDay: loadMasterKeyDay(env),
+      };
   return {
     revision: sealed.revision,
     enabled: sealed.enabled,
@@ -160,6 +179,7 @@ export function resolveBackupConfig(input: {
     keyRotatedAt: loadKeyRotatedAt(env),
     keyNumber: held.keyNumber,
     masterKeyId: held.masterKeyId,
+    masterKeyDay: held.masterKeyDay,
   };
 }
 
