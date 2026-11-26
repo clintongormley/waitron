@@ -150,6 +150,27 @@ describe("NFC sticker window", () => {
     expect(footer(el)).toEqual([t("action.close")]);
   });
 
+  it("fits all three written-sticker actions on one row in Spanish at 333 px", async () => {
+    setLocale("es");
+    await page.viewport(333, 720);
+    try {
+      const el = await mountWritten("printer");
+      const bounds = (name: string) =>
+        button(el, name).shadowRoot!.querySelector("button")!.getBoundingClientRect();
+      const close = bounds("close-equipment-nfc");
+      const lock = bounds("lock-equipment-nfc");
+      const write = bounds("write-equipment-nfc");
+      expect(close.top).toBe(lock.top);
+      expect(lock.top).toBe(write.top);
+      expect(close.left).toBeGreaterThanOrEqual(0);
+      expect(close.right).toBeLessThan(lock.left);
+      expect(lock.right).toBeLessThan(write.left);
+      expect(write.right).toBeLessThanOrEqual(333);
+    } finally {
+      await page.viewport(1280, 768);
+    }
+  });
+
   it("without Web NFC writes nothing and offers Try again", async () => {
     vi.stubGlobal("NDEFReader", undefined);
     const el = await mount();

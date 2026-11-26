@@ -547,11 +547,23 @@ describe("the customer menu Online preview", () => {
     const breadDeclarations = bread.closest(".dish")!.querySelector(".declarations")!;
     expect(breadDeclarations.textContent?.trim()).toBe("");
     expect(bread.getBoundingClientRect().left).toBeGreaterThan(pepper.getBoundingClientRect().left);
+    const dish = pepper.closest(".dish")!;
+    const price = document.createRange();
+    price.selectNodeContents(dish.querySelector(".price")!);
+    const photo = dish.querySelector("img")!;
+    const priceBox = price.getBoundingClientRect();
+    const nameBox = pepper.getBoundingClientRect();
+    expect(priceBox.top).toBeLessThan(nameBox.bottom);
+    expect(priceBox.left).toBeGreaterThan(nameBox.right);
+    expect(priceBox.right).toBeCloseTo(photo.getBoundingClientRect().right, 0);
     await page.getByRole("radio", { name: "Phone" }).click();
     await vi.waitFor(() => {
       expect(bread.getBoundingClientRect().left).toBe(pepper.getBoundingClientRect().left);
       expect(bread.getBoundingClientRect().top).toBeGreaterThan(pepper.getBoundingClientRect().top);
     });
+    expect(price.getBoundingClientRect().top).toBeGreaterThan(
+      dish.querySelector(".description")!.getBoundingClientRect().bottom,
+    );
     try {
       await page.viewport(360, 800);
       const priceBox = setPrice.getBoundingClientRect();

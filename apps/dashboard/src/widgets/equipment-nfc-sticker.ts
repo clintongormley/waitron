@@ -70,6 +70,11 @@ export class EquipmentNfcSticker extends LitElement {
       .lock {
         --wt-action-text: var(--wt-color-danger);
       }
+      @media (max-width: 360px) {
+        wt-form-actions {
+          --wt-button-padding-inline: var(--wt-space-2);
+        }
+      }
     `,
   ];
 

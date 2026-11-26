@@ -990,9 +990,10 @@ en el dispositivo con el que vas a cobrar. Si otro dispositivo tiene el lector, 
 verás cuál es.
 
 Cuando aparezca **Escanear** para una impresora de tickets, una impresora de justificantes de pago
-o un lector de tarjetas, usa su etiqueta de Waitron en lugar de la lista. Si eliges de la lista un
-equipo que lleva otro dispositivo, confirma **Quitárselo**; al escanear lo tomas sin confirmación,
-así que comprueba qué equipo estás escaneando.
+o un lector de tarjetas, usa su etiqueta de Waitron en lugar de la lista. Comprueba qué equipo
+estás escaneando porque tu dispositivo empieza a usarlo sin pedirte confirmación. Después de
+escanear, puedes comprobar el nombre en el mensaje. Si eliges de la lista un equipo que lleva
+otro dispositivo, confirma **Quitárselo**.
 
 ## Cambiar el perfil de este dispositivo {#device-profile}
 
