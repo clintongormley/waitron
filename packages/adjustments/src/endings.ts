@@ -1,4 +1,16 @@
-import { and, asc, eq, gt, inArray, isNull, notExists, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  exists,
+  gt,
+  inArray,
+  isNull,
+  notExists,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
   adjustmentEndingLines,
@@ -319,10 +331,15 @@ export interface EndedDiscount {
 }
 
 const later = alias(adjustments, "later");
+const laterLine = alias(adjustmentLines, "later_line");
+const laterRow = alias(workingOrderLines, "later_row");
 
 /**
- * Each ending recorded on one of `billIds` because of a change (D54), that no comp or discount on
- * the same bill names in `reapplies_adjustment_id`, oldest first.
+ * Each ending recorded on one of `billIds` because of a change (D54), oldest first, but for one a
+ * comp or discount on the same bill gives again: one naming its adjustment in
+ * `reapplies_adjustment_id` that, for an ending offered on a line, took something off that dish or
+ * its extras. An ending gives back every row it finds of its dish, so no later ending of the same
+ * adjustment names a dish a reapplication had already covered.
  */
 export async function readDiscountNotices(
   tx: Transaction,
@@ -359,6 +376,24 @@ export async function readDiscountNotices(
               and(
                 eq(later.workingOrderId, adjustmentEndings.workingOrderId),
                 eq(later.reappliesAdjustmentId, adjustmentEndings.adjustmentId),
+                or(
+                  isNull(adjustmentEndings.lineId),
+                  exists(
+                    tx
+                      .select({ id: laterLine.id })
+                      .from(laterLine)
+                      .innerJoin(laterRow, eq(laterRow.id, laterLine.lineId))
+                      .where(
+                        and(
+                          eq(laterLine.adjustmentId, later.id),
+                          eq(
+                            sql`coalesce(${laterRow.parentLineId}, ${laterRow.id})`,
+                            adjustmentEndings.lineId,
+                          ),
+                        ),
+                      ),
+                  ),
+                ),
               ),
             ),
         ),

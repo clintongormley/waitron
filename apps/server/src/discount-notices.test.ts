@@ -591,7 +591,7 @@ it("refuses to give a 50% again on one Soup of a row when it would go on the Sou
   ]);
 });
 
-it("gives a 50% over two Soups again on the second Soup once two edits each took a Soup's share off", async () => {
+it("gives a 50% over two Soups again on the second Soup once two edits each took a Soup's share off, still offering it on the first", async () => {
   const { bill, given, first, second } = await halfOffTwoSoups();
   await editExtras(bill.tabId, first.lineNo, [spec.bread]);
   await editExtras(bill.tabId, second.lineNo, [spec.bread]);
@@ -606,5 +606,36 @@ it("gives a 50% over two Soups again on the second Soup once two edits each took
   expect((await preview(bill.tabId, second.id, 5000, given)).reduction).toBe("3.75");
   await give(bill.tabId, second.id, 5000, given);
 
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({
+      adjustmentId: given,
+      amount: "3.00",
+      reapplyOn: { lineId: first.id },
+    }),
+  ]);
+  await give(bill.tabId, first.id, 5000, given);
+  expect(await noticesOn(bill)).toBeUndefined();
+});
+
+it("offers a 50% over two Soups again on the second Soup when its Bread takes its share off after the first Soup's was given again", async () => {
+  const { bill, given, first, second } = await halfOffTwoSoups();
+  await editExtras(bill.tabId, first.lineNo, [spec.bread]);
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({ adjustmentId: given, reapplyOn: { lineId: first.id } }),
+  ]);
+  await give(bill.tabId, first.id, 5000, given);
+  expect(await noticesOn(bill)).toBeUndefined();
+
+  await editExtras(bill.tabId, second.lineNo, [spec.bread]);
+
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({
+      adjustmentId: given,
+      amount: "3.00",
+      reapplyOn: { lineId: second.id },
+    }),
+  ]);
+  expect((await preview(bill.tabId, second.id, 5000, given)).reduction).toBe("3.75");
+  await give(bill.tabId, second.id, 5000, given);
   expect(await noticesOn(bill)).toBeUndefined();
 });
