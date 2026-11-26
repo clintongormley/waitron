@@ -6153,10 +6153,9 @@ and supplies the wording. With `DeleteDialogCopy`, the dialog shows the impact's
 it loads, lists any refusals, work that ends and settings removed, then shows the
 `irreversible` sentence. With `DeleteDialogSummaryCopy`, the screen puts the name in the heading
 from the start. The body uses one optional summary sentence and the work lines in place of the
-separate name, settings list and final sentence. Both forms show any refusals and drawer guidance.
-Delete is `secondary` and disabled while `impact` is null, while
-`loading`, while `readError` is set or while the impact has any refusal; otherwise it is `danger`
-and enabled. While its own delete is sent (`submitting`) it stays `danger`, disabled and busy, and
+separate name, settings list and final sentence. Both forms show any refusals and guidance supplied by the screen.
+Delete is `secondary` and disabled with a null `impact`, during `loading`, with a set `readError` or
+with any refusal in the impact. Otherwise it is `danger` and enabled. While its own delete is sent (`submitting`) it stays `danger`, disabled and busy, and
 Cancel and Escape do nothing. The screen owns the requests: it sets `submitting` inside its
 `wt-delete-confirm` listener, reads again on `wt-delete-retry`, and closes the dialog itself after a
 delete succeeds. A failed read goes in `readError` and a refused delete in `actionError`, which

@@ -60,14 +60,14 @@ describe("printer delete confirmation", () => {
       [clint, bar, pass, { id: "d-office", name: "Office" }, inactive],
       "It will be removed from 4 devices.",
     ],
-  ] as const)("counts only distinct active devices once they exceed three", (targets, sentence) => {
-    setLocale("en");
-    expect(
-      printerDeleteCopy("Receipt").summary(
-        impact([item("device_receipt", [...targets]), item("device_payment_slip")]),
-      ).sentence,
-    ).toBe(sentence);
-  });
+  ] as const)(
+    "names up to three active A4 device assignments, then counts them",
+    (targets, sentence) => {
+      setLocale("en");
+      const affected = impact([item("device_invoice", [...targets])]);
+      expect(printerDeleteCopy("Office").summary(affected).sentence).toBe(sentence);
+    },
+  );
 
   it.each([
     [false, ""],
