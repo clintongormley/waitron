@@ -1,6 +1,11 @@
 import type { ProductAllergens } from "@waitron/shared";
 import { type Decimal, formatMoney } from "@waitron/shared";
-import { DROPDOWN_ICONS, currentContentLanguages, registerIcons } from "@waitron/ui";
+import {
+  DROPDOWN_ICONS,
+  currentContentLanguages,
+  preventTouchContextMenu,
+  registerIcons,
+} from "@waitron/ui";
 import { type TemplateResult, css, html, nothing } from "lit";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -128,6 +133,7 @@ export function draftRow(view: DraftRowView): TemplateResult {
         data-draft-row=${index}
         ?disabled=${view.disabled}
         @click=${view.open}
+        @contextmenu=${preventTouchContextMenu}
       >
         <span class="draft-row-qty">${quantity}</span>
         <span class="draft-row-text"
@@ -190,6 +196,7 @@ export const draftRowStyles = css`
     font: inherit;
     text-align: start;
     cursor: pointer;
+    touch-action: none;
     -webkit-user-select: none;
     user-select: none;
   }

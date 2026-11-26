@@ -30,7 +30,6 @@ import { optionAnswers } from "../widgets/option-snapshot.js";
 import {
   rowActionTail,
   ContentLanguageController,
-  currentContentLanguages,
   floorChipStyles,
   formatDecimalInput,
   formMessageStyles,
@@ -88,7 +87,7 @@ import {
   memoVisibleProducts,
   shownMenu,
 } from "../menu-filter.js";
-import { lineProductName, productName, soldByTheUnit } from "../widgets/product-name.js";
+import { lineProductName, productName } from "../widgets/product-name.js";
 import {
   quantityText,
   servableDishes,
@@ -100,12 +99,12 @@ import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { lineNutrition } from "../widgets/line-nutrition.js";
 import {
   takesExtras,
-  quantityLabel,
   toWireLineExtras,
   toWireModifiers,
   toWireProductIdentity,
 } from "../state/order-line.js";
 import "../widgets/basket.js";
+import { draftRowSlotStyles, draftSelectBox, draftSplitChevron } from "../widgets/draft-row.js";
 import "../widgets/last-added.js";
 import "../widgets/menu-browser.js";
 import "../widgets/tender-pay.js";
@@ -685,6 +684,7 @@ export class TillTableOrderScreen extends LitElement {
     guestsStepperStyles,
     formMessageStyles,
     floorChipStyles,
+    draftRowSlotStyles,
     css`
       .actions[data-split-pick],
       .split-lines {
@@ -1027,7 +1027,7 @@ export class TillTableOrderScreen extends LitElement {
         font-size: var(--wt-font-size-md);
       }
 
-      .draft-select,
+      .draft-row-select,
       [data-draft-drag-heading] {
         touch-action: none;
         user-select: none;
@@ -1064,7 +1064,6 @@ export class TillTableOrderScreen extends LitElement {
       }
 
       /* Native buttons, not wt-buttons: wt-button does not pass aria-pressed to its inner button. */
-      .draft-select,
       .move-dishes-to {
         min-width: var(--wt-tap-min);
         text-align: start;
@@ -1072,15 +1071,6 @@ export class TillTableOrderScreen extends LitElement {
 
       [data-move-price-preview] p {
         margin: 0 0 var(--wt-space-2);
-      }
-
-      .draft-product-name {
-        hyphens: auto;
-        hyphenate-limit-chars: 8 auto auto;
-      }
-
-      .draft-line-name {
-        overflow-wrap: anywhere;
       }
 
       .draft-family-header {
@@ -1091,24 +1081,6 @@ export class TillTableOrderScreen extends LitElement {
         min-height: var(--wt-tap-min);
         text-align: start;
         overflow-wrap: anywhere;
-      }
-
-      .draft-unit-chevron {
-        min-width: var(--wt-tap-min);
-        min-height: var(--wt-tap-min);
-        align-self: stretch;
-        border: 0;
-        border-inline-start: 1px solid var(--wt-color-border);
-        background: var(--wt-color-surface-raised);
-        color: var(--wt-color-text);
-        font: inherit;
-        font-size: var(--wt-font-size-xl);
-        cursor: pointer;
-      }
-
-      .draft-unit-chevron:disabled {
-        color: var(--wt-color-text-muted);
-        cursor: default;
       }
 
       .draft-bar {
@@ -2116,13 +2088,15 @@ export class TillTableOrderScreen extends LitElement {
     const control = path.find(
       (node): node is HTMLElement =>
         node instanceof HTMLElement &&
-        (node.hasAttribute("data-draft-select") || node.hasAttribute("data-draft-drag-heading")),
+        (node.hasAttribute("data-draft-select") ||
+          node.hasAttribute("data-draft-row") ||
+          node.hasAttribute("data-draft-drag-heading")),
     );
     if (control === undefined) return;
     const group = this.#draftLayout(store).find(
       (group) => group.key === control.dataset.draftDragHeading,
     );
-    const line = store.lines[Number(control.dataset.draftSelect)];
+    const line = store.lines[Number(control.dataset.draftSelect ?? control.dataset.draftRow)];
     const chosen =
       group === undefined
         ? line === undefined
@@ -2181,6 +2155,7 @@ export class TillTableOrderScreen extends LitElement {
           (node) =>
             node instanceof HTMLElement &&
             (node.hasAttribute("data-draft-select") ||
+              node.hasAttribute("data-draft-row") ||
               node.hasAttribute("data-draft-group-select")),
         )
     ) {
@@ -2219,11 +2194,15 @@ export class TillTableOrderScreen extends LitElement {
   #openHeldDraftLine(): void {
     const press = this.#draftPress;
     if (press !== undefined && press.group === undefined && this.#draftPressCurrent()) {
-      const index = Number(press.control.dataset.draftSelect);
+      const index = Number(press.control.dataset.draftSelect ?? press.control.dataset.draftRow);
       const basket = [...this.renderRoot.querySelectorAll<TillBasket>("till-basket")].find(
         (basket) => basket.lineIndexes?.includes(index),
       );
+      // The row is itself the details control, so this click must pass #draftClick; the release's
+      // own click after it must not.
+      this.#suppressDraftClick = false;
       basket?.shadowRoot?.querySelector<HTMLElement>(`[data-line-detail="${index}"]`)?.click();
+      this.#suppressDraftClick = true;
     }
     this.#endDraftDrag();
   }
@@ -4678,6 +4657,7 @@ export class TillTableOrderScreen extends LitElement {
                     <till-basket
                       .hideKitchenNote=${true}
                       .lineDetails=${true}
+                      .compactRows=${true}
                       .draftParent=${this}
                       .courses=${this.courses}
                       .orderInFlight=${this.groupCommandBusy}
@@ -4698,7 +4678,11 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #draftLine(store: WorkingOrderStore, line: OrderLine, index: number): TemplateResult {
+  #draftLine(
+    store: WorkingOrderStore,
+    line: OrderLine,
+    index: number,
+  ): TemplateResult | typeof nothing {
     const scope = this.#draftArrangementScope();
     const api = this.api;
     const current = () =>
@@ -4707,9 +4691,6 @@ export class TillTableOrderScreen extends LitElement {
       scope === this.#draftArrangementScope() &&
       api === this.api;
     const name = lineProductName(line.product);
-    const amount = formatDecimalInput(this.#displayQty(line.quantity), currentLocale());
-    const quantity =
-      line.notOffered || soldByTheUnit(line.product) ? ` ×${amount}` : ` ${quantityLabel(line)}`;
     const selected = this.#selected.has(line);
     const family = store.splitFamily(line);
     const splits =
@@ -4721,12 +4702,9 @@ export class TillTableOrderScreen extends LitElement {
       ...(isFlagged ? [this.#flagChoice(store, line, index)] : []),
       this.#draftRoutingWarning(store, line, index, true),
     ];
-    if (store.editsLocked)
-      return html`<span slot=${`lead-${index}`} class="draft-line-name"
-        ><span class="draft-product-name" lang=${currentContentLanguages().defaultLanguage}
-          >${name}</span
-        >${this.#nutrition(line)}${this.#draftAllergyMark(line)}${quantity}</span
-      >`;
+    const mark = this.#draftAllergyMark(line);
+    const marked = mark === nothing ? nothing : html`<span slot=${`mark-${index}`}>${mark}</span>`;
+    if (store.editsLocked) return marked;
     return html`${
         family?.[0] === line
           ? html`<button
@@ -4751,8 +4729,9 @@ export class TillTableOrderScreen extends LitElement {
       <button
         slot=${`lead-${index}`}
         type="button"
-        class="option draft-select"
+        class="draft-row-select"
         data-draft-select=${index}
+        aria-label=${`${t("table.select_line")} · ${name}`}
         @contextmenu=${preventTouchContextMenu}
         ?data-draft-dragging=${this.draftDragging && this.#draftPress?.group === undefined && this.#draftPress?.chosen.includes(line)}
         aria-pressed=${selected}
@@ -4761,19 +4740,15 @@ export class TillTableOrderScreen extends LitElement {
           if (!store.editsLocked && !store.sending) this.#toggleSelected(line);
         }}
       >
-        <span aria-hidden="true">${selected ? "☑" : "☐"}</span>
-        <span class="draft-line-name"
-          ><span class="draft-product-name" lang=${currentContentLanguages().defaultLanguage}
-            >${name}</span
-          >${this.#nutrition(line)}${this.#draftAllergyMark(line)}${quantity}</span
-        >
+        ${draftSelectBox(selected)}
       </button>
+      ${marked}
       ${
         splits
           ? html`<button
               type="button"
               slot=${`end-${index}`}
-              class="draft-unit-chevron"
+              class="draft-row-split"
               data-split-draft-line=${index}
               aria-label=${`${t("table.split_group_line")} · ${name}`}
               ?disabled=${!current()}
@@ -4781,7 +4756,7 @@ export class TillTableOrderScreen extends LitElement {
                 if (current()) this.#splitDraftLine(store, line);
               }}
             >
-              <span aria-hidden="true">›</span>
+              ${draftSplitChevron()}
             </button>`
           : nothing
       }
