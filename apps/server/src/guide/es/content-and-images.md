@@ -182,8 +182,8 @@ actual.
 
 En la página propia de un producto o de una variante, selecciona el cuadrado junto al nombre y
 después **Elegir imagen** en el panel que se abre, para abrir la misma biblioteca. Sin foto, el
-cuadrado de un producto muestra su color y un lápiz; en la página de una variante sin foto propia,
-muestra la foto del producto principal con un borde discontinuo. En la ventana pequeña de una
+cuadrado de un producto muestra su color y un lápiz. Una variante sin foto propia muestra la
+foto del producto principal. En la ventana pequeña de una
 variante o en el editor de una sección, selecciona **Elegir imagen**. Después selecciona **Usar
 imagen** en la fotografía que quieres y guarda para conservar la asociación. También puedes hacer
 clic en la foto para verla a tamaño completo y elegir ahí **Usar imagen**; **Volver** te devuelve a

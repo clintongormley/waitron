@@ -1842,6 +1842,27 @@ it("opens an uncoloured category's chooser on Inherit and can fix the same colou
   await choose(el, "#b12525");
   expect(vi.mocked(el.api.updateCategory).mock.calls).toStrictEqual([["b", { color: "#b12525" }]]);
 });
+it("shows the parent's colour in Inherit for a category with its own colour", async () => {
+  const el = await mountBrowser({
+    categories: [
+      { ...CATEGORIES[0]!, color: "#b12525" },
+      { ...CATEGORIES[1]!, color: "#256bb1" },
+      CATEGORIES[2]!,
+    ],
+  });
+  await toggleCategory(el, "d");
+  await menuAction(el, "color-b");
+  const form = await colorChooser(el);
+  const inherit = form.shadowRoot!.querySelector('[data-color=""]')!;
+  expect(getComputedStyle(inherit.querySelector(".chip")!).backgroundColor).toBe(
+    "rgb(177, 37, 37)",
+  );
+  expect(inherit.getAttribute("aria-checked")).toBe("false");
+  expect(
+    form.shadowRoot!.querySelector('[data-color="#256bb1"]')!.getAttribute("aria-checked"),
+  ).toBe("true");
+});
+
 it.each([
   ["en-GB", "Colour of All products"],
   ["es", "Color de Todos los productos"],
