@@ -1665,7 +1665,7 @@ describe("refunds without a corrective", () => {
     ).toEqual(["1.00"]);
   });
 
-  it("lists a give-back's refund once the give-back ended with no corrective, on a receipt and a full invoice, but not one that filed its corrective", async () => {
+  it("lists a give-back's refund once the give-back ended with no corrective, on a receipt and a full invoice, but not one still open or one that filed its corrective", async () => {
     const paid = async (invoiceNumber: number, customer: { counterpartyTaxId?: string } = {}) => {
       const saleId = await seedSale(suite.db, venue, {
         invoiceNumber,
@@ -1684,7 +1684,10 @@ describe("refunds without a corrective", () => {
     };
     const tied = async (
       target: Awaited<ReturnType<typeof paid>>,
-      ended: { state: "closed"; endedBy: string } | { state: "filed"; correctiveSaleId: string },
+      ended:
+        | { state: "open"; endedAt: null }
+        | { state: "closed"; endedBy: string }
+        | { state: "filed"; correctiveSaleId: string },
     ) => {
       const refundId = await refund(target, "5.50", "2026-11-05T12:00:00.000Z");
       const [correction] = await suite.db
@@ -1724,6 +1727,7 @@ describe("refunds without a corrective", () => {
       lines: [{ vatRate: "10.00", lineTotal: "-5.00" }],
     });
     await tied(correctedSale, { state: "filed", correctiveSaleId: corrective });
+    await tied(await paid(5), { state: "open", endedAt: null });
 
     expect(
       (await list()).refundsWithoutCorrective.map((row) => [row.id, row.customerTaxId]),

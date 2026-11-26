@@ -499,6 +499,9 @@ it.each(["nodeId", "correctsSaleId", "clock", "authz", "origin", "fullInvoice", 
     await refuses({ ...body, correction: { ...correction, [key]: "claimed" } });
   },
 );
+it("refuses a fullInvoice: true correction field", async () => {
+  await refuses({ ...body, correction: { ...correction, fullInvoice: true } });
+});
 it.each(["caseRegistroId", "registroId", "actionKey", "reason"])(
   "requires nonblank %s",
   async (key) => {
