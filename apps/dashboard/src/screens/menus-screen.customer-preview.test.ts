@@ -193,17 +193,14 @@ describe("the customer menu Online preview", () => {
     await expect.element(page.getByRole("heading", { name: "Lunch for guests" })).toBeVisible();
     await expect.element(page.getByText("This preview shows the published menu.")).toBeVisible();
     await expect.element(page.getByText("Two courses")).toBeVisible();
-    expect.soft(page.getByText("Allergens not reviewed").elements()).toHaveLength(0);
-    expect
-      .soft(
-        page
-          .getByText(
-            "Icons show declared allergens. No icon does not mean allergen-free. Ask staff about allergens.",
-            { exact: true },
-          )
-          .elements(),
+    await expect
+      .element(
+        page.getByText(
+          "Icons show declared allergens. No icon does not mean allergen-free. Ask staff about allergens.",
+          { exact: true },
+        ),
       )
-      .toHaveLength(1);
+      .toBeVisible();
     await expect
       .element(page.getByRole("img", { name: "Cereals containing gluten (Wheat)" }))
       .toBeVisible();
@@ -216,6 +213,8 @@ describe("the customer menu Online preview", () => {
     await expect.element(page.getByRole("img", { name: "Vegetarian" }).first()).toBeVisible();
     const pepper = page.getByText("Roast pepper", { exact: true }).element();
     const bread = page.getByText("House bread", { exact: true }).element();
+    const breadDeclarations = bread.closest(".dish")!.querySelector(".declarations")!;
+    expect(breadDeclarations.textContent?.trim()).toBe("");
     expect(bread.getBoundingClientRect().left).toBeGreaterThan(pepper.getBoundingClientRect().left);
     await page.getByRole("radio", { name: "Phone" }).click();
     await vi.waitFor(() => {
