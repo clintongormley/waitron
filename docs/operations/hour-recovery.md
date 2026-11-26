@@ -12,7 +12,8 @@ old or copied box offline before proceeding; your answers on this page do not st
 
 Open **Open recovery** beside the till refusal, or open `/recovery/fiscal-conflict` on this
 box over HTTPS. Use the venue's current master key: type it in **Master key**, or choose **Choose
-the recovery pack PDF** and pick the pack that holds it. A dashboard sign-in, backup password or
+the recovery pack PDF** and pick the pack that holds it, or scan its master key QR code with **Scan the
+recovery pack**. A dashboard sign-in, backup password or
 older master key does not replace it. Then choose **Check conflict** to inspect the affected invoice
 and identity. Confirm that the old box is offline and no parallel recovery is
 underway, then choose **Compare clocks**. If the box cannot check its time over the internet, the
@@ -59,7 +60,8 @@ not AEAT acceptance or proof of another machine's isolation.
 
 Open Restore in setup and select the copy. Review its taxpayer, environment, source, saved node
 and key name. Keep production and preproduction separate. Choose **Choose the recovery pack PDF** and
-pick the pack that holds this backup's master key, or type the master key in **Master key**. There is no
+pick the pack that holds this backup's master key, scan its master key QR code with **Scan the recovery
+pack**, or type the master key in **Master key**. There is no
 installation code to type: the form has no field for one and sends none (`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "has no
 installation-code field" and "sends no installation code"). A typed key still has to
 authenticate the selected backup; its short typing check is not authentication.

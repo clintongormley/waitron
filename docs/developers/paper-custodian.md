@@ -21,6 +21,9 @@
 > **2026-11-24, A1323 PR 3b-field:** the separate key field named below is now the **Master key**
 > field, which also takes the key from **Choose the recovery pack PDF**.
 
+> **2026-11-26, A1323 PR 3c:** the **Master key** field also takes the key from **Scan the recovery
+> pack**, which reads the pack's master key QR code with the device's camera.
+
 > **2026-11-24, A1323 PR 2c:** the node recovery pack (Backups → Create pack) and the custodian's
 > `sign-register` command, whose output only that pack read, were removed.
 

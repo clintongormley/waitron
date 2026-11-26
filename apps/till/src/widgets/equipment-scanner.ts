@@ -10,7 +10,7 @@ type Message = "scan_not_ours" | "scan_not_printer" | "scan_not_reader";
  * Reads equipment labels until one of `kind` (either, for `"any"`) is seen, then stops the camera
  * and emits `equipment-scanned` with its id and kind. Anything else is said and scanning goes on.
  * A subclass rather than a wrapper, so the video and message stay in this element's own shadow
- * root, where the dialogs and tests reach them.
+ * root, where the dialogs' tests reach them.
  */
 @customElement("till-equipment-scanner")
 export class TillEquipmentScanner extends WtQrScanner {

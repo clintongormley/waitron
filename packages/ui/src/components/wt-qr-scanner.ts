@@ -5,8 +5,6 @@ import { baseStyles } from "../base-styles.js";
 
 /** How often a frame is read from the camera. */
 const FRAME_MS = 250;
-/** Frames wider than this are scaled down before decoding, which a label held up to the camera
- * survives and which keeps each read short on a handheld. */
 const DECODE_WIDTH = 640;
 
 /** `failed`: the camera answered, then gave no picture or stopped by itself. */

@@ -132,7 +132,7 @@ date, node and master key. Check those details before continuing. Keep productio
 preproduction separate. If the manifest is damaged or incomplete, choose another complete backup.
 If the format is unsupported, install a Waitron version that supports it before trying again.
 
-Use the **Backup encryption key** to open an encrypted backup file. For a bucket or Cloud copy, use the bucket kit or Cloud approval. You need the master key that was current when the selected copy was made; type it in **Master key**. Keep the earlier pack too if it holds that key.
+Use the **Backup encryption key** to open an encrypted backup file. For a bucket or Cloud copy, use the bucket kit or Cloud approval. You need the master key that was current when the selected copy was made. Keep the earlier pack too if it holds that key.
 
 On a test box restored from Waitron Cloud, if **Cloud services** says the saved reconnection
 request cannot be read, choose **Get a fresh reconnection request**, then ask the Cloud owner to
