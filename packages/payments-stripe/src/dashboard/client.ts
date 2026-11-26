@@ -1,6 +1,7 @@
 import type { DashboardRequest } from "@waitron/dashboard-kit";
 
-// Keep these management payment route types in the browser so it does not import server code.
+// The browser keeps local copies of the route shapes mounted by `mountPaymentsApi`
+// so the bundle can load without server code.
 
 export interface ConnectResult {
   merchantName: string;
