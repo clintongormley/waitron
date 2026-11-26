@@ -390,6 +390,9 @@ export class CustomerMenuPage extends LitElement {
       h3 {
         font-size: var(--wt-font-size-lg);
       }
+      section section > .section-title {
+        font-size: var(--wt-font-size-md);
+      }
       .members {
         display: grid;
         gap: var(--wt-space-5);

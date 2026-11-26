@@ -647,6 +647,17 @@ describe("the customer menu Online preview", () => {
     },
   );
 
+  it("draws a nested section heading smaller than its parent on the Phone preview", async () => {
+    await open(() => Response.json(publishedSections()));
+    await page.getByRole("radio", { name: "Phone" }).click();
+    const parent = page.getByRole("heading", { name: "From the oven", exact: true }).first();
+    const nested = page.getByRole("heading", { name: "Vegetables", exact: true });
+    await expect.element(nested).toBeVisible();
+    expect(parseFloat(getComputedStyle(nested.element()).fontSize)).toBeLessThan(
+      parseFloat(getComputedStyle(parent.element()).fontSize),
+    );
+  });
+
   it("searches displayed dish and set-menu names without losing focus or the allergen key", async () => {
     await open(() => Response.json(publishedSections()));
     const search = page.getByRole("searchbox", { name: "Search dishes" });
