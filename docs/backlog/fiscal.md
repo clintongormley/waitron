@@ -403,8 +403,8 @@ held (`retenido`) cancellation (`packages/fiscal-verifactu/src/record-remedy.ts:
 refused for a voided sale while `release-held-cancellation` is off or while its cancellation is not
 on this box (`record-remedy.ts:188-190`). The till's **Nothing was served** (core's `recordVoid`, from
 `cancelPlacedOrder` in `apps/server/src/working-order-counter.ts`) writes such a cancellation when
-it cancels a receipt AEAT has not answered and AEAT then refuses that receipt; a receipt AEAT has
-already refused it does not cancel (`fiscal.original_refused`). With `release-held-cancellation`
+it cancels a receipt AEAT has not answered and AEAT then refuses that receipt; a receipt whose
+current version AEAT has already refused, with any code, it does not cancel (`fiscal.original_refused`). With `release-held-cancellation`
 off, the cancellation's case and the refused receipt's stay open. The code is kept, not deleted.
 
 The whole-branch review reproduced a dependency cycle when a correction was appended behind an

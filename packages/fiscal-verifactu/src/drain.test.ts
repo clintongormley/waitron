@@ -28,7 +28,12 @@ import {
   type SeededDrain,
 } from "../test/drain-fixtures.js";
 import { seedTaxpayerWithSif } from "../test/fixtures.js";
-import { saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
+import {
+  fixedVersionOf,
+  saleInput,
+  staticResolver,
+  steadyClock,
+} from "../test/write-path-fixtures.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 
 // The full manifest: `recordVoid` authorizes through identity's persons and sessions.
@@ -1434,6 +1439,32 @@ describe("drain — error 3000 Anulada on a resent anulación", () => {
     expect((await chainRows()).map((row) => row.estado)).toEqual(["rechazado"]);
     expect(await incidentCodes()).toEqual(["fiscal.registro_rechazado"]);
   });
+
+  it.each([
+    ["refused as a duplicate (3000)", "rechazado", "3000", undefined],
+    ["refused with no code", "rechazado", null, undefined],
+    ["accepted and its fixed version refused", "aceptado", null, "1100"],
+  ] as const)(
+    "refuses a cancellation of a receipt %s, so nothing is set aside",
+    async (_, estado, codigo, fixRefusal) => {
+      const sale = await sell();
+      await suite.db
+        .run(sql`update verifactu_submissions set estado = ${estado}, codigo_error = ${codigo}
+        where registro_id in (select id from verifactu_records where sale_id = ${sale.saleId})`);
+      if (fixRefusal !== undefined)
+        await fixedVersionOf(suite.db, venue.nodeId, sale.saleId, "rechazado", fixRefusal);
+      const before = await chainRows();
+
+      await expect(voidSale(sale.saleId)).rejects.toMatchObject({
+        code: "fiscal.original_refused",
+      });
+      const result = await drain(drainDeps(staticResolver(aeat.client())), firstPass);
+
+      expect(result.recordsHalted).toBe(0);
+      expect(await chainRows()).toEqual(before);
+      expect(await incidentCodes()).not.toContain("fiscal.anulacion_retenida");
+    },
+  );
 
   it("makes a cancellation written while its original waited visible once the original is rejected", async () => {
     const sale = await sell();

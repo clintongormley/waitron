@@ -27,7 +27,6 @@ import {
 import { computeHuella, serializeEnvio, validate } from "@waitron/verifactu";
 import type { RegistroAlta } from "@waitron/verifactu";
 import { VerifactuBackend } from "./backend.js";
-import { appendToChain } from "./chain.js";
 import { decodeRegistroRow, fromRegistroRow } from "./registro-row.js";
 import { currentSif } from "./registro-sif.js";
 import { PRODUCER_PENDING, SOFTWARE_IDENTITY } from "./software-identity.js";
@@ -35,7 +34,12 @@ import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { seedTaxpayerWithSif } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
-import { refusedByAeat, saleInput, steadyClock } from "../test/write-path-fixtures.js";
+import {
+  fixedVersionOf,
+  refusedByAeat,
+  saleInput,
+  steadyClock,
+} from "../test/write-path-fixtures.js";
 
 let backend: VerifactuBackend;
 let deviceId: DeviceId;
@@ -70,53 +74,6 @@ async function storedOrigins(saleId: string) {
     where sale_id = ${saleId} order by secuencia
   `);
   return rows;
-}
-
-/** A correction record of the sale's latest alta, as the record-correction remedy files one,
- * left in the delivery state given, or with no submission for `null`. */
-async function correctionRecordOf(
-  saleId: ReturnType<typeof brandSaleId>,
-  estado: string | null,
-  codigoError: string | null,
-) {
-  await withTransaction(suite.db, async (tx) => {
-    const { rows } = await tx.execute<Record<string, unknown>>(sql`
-      select * from verifactu_records r
-      where sale_id = ${saleId} and tipo_registro = 'alta'
-        and not exists (select 1 from verifactu_records n where n.corrects_registro_id = r.id)
-    `);
-    const stored = decodeRegistroRow(rows[0]!);
-    const previous = fromRegistroRow(stored) as RegistroAlta;
-    const appended = await appendToChain(tx, nodeId, {
-      tipo: "alta",
-      saleId,
-      origin: jobOrigin("operator_script"),
-      entorno: "production",
-      correctsRegistroId: stored.id,
-      input: {
-        IDEmisorFactura: previous.IDFactura.IDEmisorFactura,
-        NumSerieFactura: previous.IDFactura.NumSerieFactura,
-        FechaExpedicionFactura: new Date(
-          Date.parse(`${stored.fecha_expedicion_factura}T00:00:00Z`) - 60 * 60_000,
-        ),
-        NombreRazonEmisor: previous.NombreRazonEmisor,
-        TipoFactura: "F2",
-        DescripcionOperacion: previous.DescripcionOperacion,
-        Desglose: previous.Desglose,
-        CuotaTotal: previous.CuotaTotal,
-        ImporteTotal: previous.ImporteTotal,
-        Subsanacion: "S",
-        RechazoPrevio: estado === "rechazado" ? "X" : "N",
-        SistemaInformatico: previous.SistemaInformatico,
-        generadoEn: new Date("2026-03-02T10:00:00+01:00"),
-        offsetMinutes: 60,
-      },
-    });
-    if (estado !== null)
-      await tx
-        .insert(verifactuSubmissions)
-        .values({ registroId: appended.id, estado, codigoError });
-  });
 }
 
 describe("id", () => {
@@ -458,7 +415,7 @@ describe("recordVoid", () => {
     expect(written()).toEqual(before);
   });
 
-  it.each(["aceptado", "aceptado_con_errores", "rechazado"])(
+  it.each(["aceptado", "aceptado_con_errores"])(
     "cancels another box's receipt once AEAT has answered it (%s)",
     async (estado) => {
       const { saleId } = await sell();
@@ -501,7 +458,7 @@ describe("recordVoid", () => {
       where registro_id in (select id from verifactu_records where sale_id = ${saleId})`);
   }
 
-  it.each(["1112", "1100"])(
+  it.each(["1112", "1100", "3000", null])(
     "refuses this box's own receipt AEAT refused (%s), writing nothing",
     async (codigo) => {
       const { saleId } = await sell();
@@ -539,19 +496,6 @@ describe("recordVoid", () => {
     expect(written()).toEqual(before);
   });
 
-  it.each([
-    ["as a duplicate (3000)", "3000"],
-    ["with no code", null],
-  ])("cancels this box's own receipt AEAT refused %s, which it may hold", async (_, codigo) => {
-    const { saleId } = await sell();
-    await refuse(saleId, codigo);
-
-    const ref = await withTransaction(suite.db, (tx) =>
-      backend.recordVoid(tx, saleId, "staff error", nodeId),
-    );
-    expect(ref.state).toBe("pending");
-  });
-
   it.each(["aceptado", "aceptado_con_errores"])(
     "cancels this box's own receipt AEAT answered %s",
     async (estado) => {
@@ -567,14 +511,13 @@ describe("recordVoid", () => {
 
   it.each([
     ["accepted", "aceptado", null],
-    ["refused as a duplicate (3000)", "rechazado", "3000"],
     ["not yet submitted", null, null],
   ])(
     "cancels this box's own receipt AEAT refused while a fixed version of it is %s",
     async (_, estado, codigo) => {
       const { saleId } = await sell();
       await refuse(saleId, "1100");
-      await correctionRecordOf(saleId, estado, codigo);
+      await fixedVersionOf(suite.db, nodeId, saleId, estado, codigo);
 
       const ref = await withTransaction(suite.db, (tx) =>
         backend.recordVoid(tx, saleId, "staff error", nodeId),
@@ -583,15 +526,26 @@ describe("recordVoid", () => {
     },
   );
 
-  it("refuses this box's own receipt AEAT refused, and refused again once fixed", async () => {
-    const { saleId } = await sell();
-    await refuse(saleId, "1100");
-    await correctionRecordOf(saleId, "rechazado", "1100");
+  it.each([
+    ["refused", "rechazado", "1100", "1100"],
+    ["refused", "rechazado", "1100", "3000"],
+    ["accepted", "aceptado", null, "1100"],
+    ["accepted with errors", "aceptado_con_errores", null, "1100"],
+    ["refused as a duplicate", "rechazado", "3000", "1100"],
+  ])(
+    "refuses this box's own receipt %s and then refused once fixed (%s %s, fixed %s)",
+    async (_, estado, codigo, fixedCodigo) => {
+      const { saleId } = await sell();
+      await suite.db
+        .run(sql`update verifactu_submissions set estado = ${estado}, codigo_error = ${codigo}
+        where registro_id in (select id from verifactu_records where sale_id = ${saleId})`);
+      await fixedVersionOf(suite.db, nodeId, saleId, "rechazado", fixedCodigo);
 
-    await expect(
-      withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", nodeId)),
-    ).rejects.toMatchObject({ code: "fiscal.original_refused", params: { saleId } });
-  });
+      await expect(
+        withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", nodeId)),
+      ).rejects.toMatchObject({ code: "fiscal.original_refused", params: { saleId } });
+    },
+  );
 
   it("cancels this box's receipt from an earlier installation once AEAT has answered it", async () => {
     const { saleId } = await sell();
@@ -1000,7 +954,7 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
 
   it("files the replacement when AEAT refused the original and the correction record of it", async () => {
     const original = await originalWithDelivery("rechazado");
-    await correctionRecordOf(original, "rechazado", "1112");
+    await fixedVersionOf(suite.db, nodeId, original, "rechazado", "1112");
 
     await replace(original, laterDay, "2026-03-01");
 
@@ -1009,7 +963,7 @@ describe("recordCorrection — a replacement of a refused simplified invoice", (
 
   it("refuses a replacement while AEAT holds the original it accepted with errors, though a correction record of it was refused, and records nothing", async () => {
     const original = await originalWithDelivery("aceptado_con_errores");
-    await correctionRecordOf(original, "rechazado", "1112");
+    await fixedVersionOf(suite.db, nodeId, original, "rechazado", "1112");
 
     await expect(replace(original, laterDay, "2026-03-01")).rejects.toMatchObject({
       code: "fiscal.correction_unsupported",

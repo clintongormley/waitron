@@ -744,8 +744,7 @@ offered on a printed bill that has taken no payment and names no customer. Get t
 back from the guests, give a reason and confirm. Waitron cancels the receipt, and the kitchen is told
 to stop the bill's dishes. You need **Void sales** for this; if you do not have it, choose someone
 who does and ask them to enter their PIN. If anything on the bill was served, the till lists those
-dishes instead: take payment, or use **Reopen bill** where it is offered. If AEAT refused the
-receipt, it cannot be cancelled: take payment.
+dishes instead: take payment, or use **Reopen bill** where it is offered.
 
 When a guest has already paid part of the bill with
 [a receipt of their own](table-service.md#pay-window), the bill lists the dishes, then that payment

@@ -28,6 +28,7 @@ import {
   type FilingCaseCause,
 } from "./filing-cases.js";
 import { keepAnswerBeforeClearing } from "./history.js";
+import { currentAltaRefused } from "./refused-current-alta.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 
@@ -908,19 +909,11 @@ function originalSettled(record: "r" | "prior", original: "original" | "prior_or
 function cancelsRefusedOriginal(record: "r"): SQL {
   const alias = sql.raw(record);
   return sql`(${alias}.tipo_registro = 'anulacion'
-    and ${alias}.sin_registro_previo is not 'S' and exists (
-    select 1 from verifactu_records original
-    join verifactu_submissions original_envio on original_envio.registro_id = original.id
-    where original.tipo_registro = 'alta'
-      and original.id_emisor_factura = ${alias}.id_emisor_factura
-      and original.num_serie_factura = ${alias}.num_serie_factura
-      and original.fecha_expedicion_factura = ${alias}.fecha_expedicion_factura
-      and not exists (
-        select 1 from verifactu_records replacement
-        where replacement.corrects_registro_id = original.id
-      )
-      and original_envio.estado = 'rechazado'
-  ))`;
+    and ${alias}.sin_registro_previo is not 'S' and ${currentAltaRefused({
+      idEmisorFactura: sql`${alias}.id_emisor_factura`,
+      numSerieFactura: sql`${alias}.num_serie_factura`,
+      fechaExpedicionFactura: sql`${alias}.fecha_expedicion_factura`,
+    })})`;
 }
 
 /** Sets an ordinary cancellation of a refused current alta aside: `retenido`, never sent, with an incident and a

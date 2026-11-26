@@ -55,6 +55,7 @@ import type { SifRegistration } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 import { queueSubmission } from "./queue-submission.js";
+import { currentAltaRefused } from "./refused-current-alta.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { verifyChain } from "./verify.js";
@@ -501,9 +502,14 @@ export class VerifactuBackend implements FiscalBackend {
       limit 1
     `);
     if (unanswered.length > 0) throw new AppError("fiscal.original_unanswered", { saleId });
-    // The filing queue would set such a cancellation aside, on any chain (`cancelsRefusedOriginal`).
-    if (await this.refusedEveryRecordOf(tx, original))
-      throw new AppError("fiscal.original_refused", { saleId });
+    const { rows: refused } = await tx.execute(
+      sql`select 1 where ${currentAltaRefused({
+        idEmisorFactura: original.id_emisor_factura,
+        numSerieFactura: original.num_serie_factura,
+        fechaExpedicionFactura: original.fecha_expedicion_factura,
+      })}`,
+    );
+    if (refused.length > 0) throw new AppError("fiscal.original_refused", { saleId });
     const taxpayer = await this.taxpayer(tx);
     const now = (await prepareIssueClock(tx, { nodeId: issuingNodeId }, this.clock)).now();
 
