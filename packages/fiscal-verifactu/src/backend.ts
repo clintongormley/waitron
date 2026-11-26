@@ -483,6 +483,16 @@ export class VerifactuBackend implements FiscalBackend {
     if (original === undefined) {
       throw new AppError("fiscal.sale_not_recorded", { saleId });
     }
+    // Another chain's receipt still waiting on AEAT can end held, and a cancellation of a held
+    // receipt stops every later record here (docs/superpowers/plans/2026-11-25-cancel-unserved.md §2).
+    const { rows: unanswered } = await tx.execute(sql`
+      select 1 from verifactu_records r indexed by verifactu_records_sale_idx
+      left join verifactu_submissions s on s.registro_id = r.id
+      where r.sale_id = ${saleId} and r.tipo_registro = 'alta' and r.node_id <> ${issuingNodeId}
+        and coalesce(s.estado, '') not in ('aceptado', 'aceptado_con_errores', 'rechazado')
+      limit 1
+    `);
+    if (unanswered.length > 0) throw new AppError("fiscal.original_unanswered", { saleId });
 
     // The anulación extends the ISSUING box's chain, under that box's SIF, and inherits the
     // original's origin and invoice identity.

@@ -387,6 +387,54 @@ describe("recordVoid", () => {
     // The two boxes carry different NIFs here, so the cited issuer is the original's, not M2's.
     expect(alta.idEmisorFactura).not.toBe(m2Sif.nif);
   });
+
+  /** Everything a cancellation would write. */
+  const written = () =>
+    suite.db.all(sql`select (select count(*) from verifactu_records) as records,
+      (select count(*) from verifactu_submissions) as submissions`)[0];
+
+  async function answer(saleId: string, estado: string) {
+    await suite.db.run(sql`update verifactu_submissions set estado = ${estado}
+      where registro_id in (select id from verifactu_records where sale_id = ${saleId})`);
+  }
+
+  it("refuses another box's receipt AEAT has not answered, writing nothing", async () => {
+    const { saleId } = await sell();
+    const m2 = await seedTaxpayerWithSif(suite.db);
+    const before = written();
+
+    await expect(
+      withTransaction(suite.db, (tx) => backend.recordVoid(tx, saleId, "staff error", m2.nodeId)),
+    ).rejects.toMatchObject({ code: "fiscal.original_unanswered", params: { saleId } });
+    expect(written()).toEqual(before);
+  });
+
+  it.each(["aceptado", "aceptado_con_errores", "rechazado"])(
+    "cancels another box's receipt once AEAT has answered it (%s)",
+    async (estado) => {
+      const { saleId } = await sell();
+      const m2 = await seedTaxpayerWithSif(suite.db);
+      await answer(saleId, estado);
+
+      const ref = await withTransaction(suite.db, (tx) =>
+        backend.recordVoid(tx, saleId, "staff error", m2.nodeId),
+      );
+      expect(ref.state).toBe("pending");
+    },
+  );
+
+  it.each(["pendiente", "enviando", "retenido", "detenido"])(
+    "cancels this box's own receipt AEAT has not answered (%s)",
+    async (estado) => {
+      const { saleId } = await sell();
+      await answer(saleId, estado);
+
+      const ref = await withTransaction(suite.db, (tx) =>
+        backend.recordVoid(tx, saleId, "staff error", nodeId),
+      );
+      expect(ref.state).toBe("pending");
+    },
+  );
 });
 
 /**

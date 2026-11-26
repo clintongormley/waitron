@@ -8,12 +8,15 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   kitchenNotices,
   printJobs,
+  saleVoids,
+  sales,
   ticketItems,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import { createPrinter } from "@waitron/printing";
 import { attachPrinterToStation } from "./station-printers.js";
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { parkOrder } from "./working-order-open.js";
@@ -115,4 +118,39 @@ describe("cancelling a counter order the kitchen already has", () => {
       ).toHaveLength(stage === "fired" ? 1 : 0);
     },
   );
+});
+
+describe("cancelling a counter order whose receipt nobody paid and nothing was served on", () => {
+  it("cancels the receipt and tells the station making the dish", async () => {
+    const id = randomUUID();
+    await parkOrder(deps(), venue.cfg, {
+      id,
+      zoneId,
+      lines: [{ menuItemId: venue.offerFor("Steak"), quantity: "1" }],
+      operatorId: venue.operatorId,
+    });
+    const tillDeps = { ...deps(), admission: testTradingAdmission() };
+    await issueOrderInvoice(tillDeps, venue.cfg, id, venue.operatorId);
+    await placeOrder(tillDeps, venue.cfg, id, venue.operatorId);
+
+    const answer = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/cancel`, {
+      reason: "guest left",
+      override: { personId: venue.adminId, pin: "1234" },
+    });
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, id));
+    expect(
+      await venue.db
+        .select({ voidedBy: saleVoids.voidedBy })
+        .from(saleVoids)
+        .where(eq(saleVoids.saleId, sale!.id)),
+    ).toEqual([{ voidedBy: venue.adminId }]);
+    expect(
+      await venue.db
+        .select({ kind: kitchenNotices.kind })
+        .from(kitchenNotices)
+        .where(eq(kitchenNotices.workingOrderId, id)),
+    ).toEqual([{ kind: "void" }]);
+  });
 });

@@ -19,8 +19,10 @@ import { type AttendanceRecorder, captureKitchenActivity } from "./attendance-ca
 import { type OrderEditAuthority, requireOrderBillEditor } from "./bill-editing.js";
 import { refuseBillWithPayments, refuseBillHoldingMoney } from "./bill-payments.js";
 import {
+  cancelPermission,
   creditWholeInvoice,
   readOrderInvoice,
+  voidUnservedInvoice,
   type IssuedInvoice as OrderInvoice,
 } from "./cancel-credit.js";
 import { readFormerNumbers } from "./former-numbers.js";
@@ -171,7 +173,7 @@ export async function markOrderPlaced(
   });
   await captureOrderAmendment(tx, attendance, amendment.id, operatorId, now.instant);
 }
-/** Cancel a placed order, crediting an issued invoice only with `sale.rectify`. */
+/** Cancel a placed order, cancelling or crediting an issued invoice as {@link cancelPermission} says. */
 export async function cancelPlacedOrder(
   deps: TillSaleDeps,
   cfg: DeviceRequestConfig,
@@ -185,15 +187,20 @@ export async function cancelPlacedOrder(
   if (reason.trim() === "") {
     throw new AppError("working_order.reason_required", { workingOrderId: id });
   }
-  await withRectifyPinAhead(deps, id, operator, override, (checkedOverride) =>
+  await withCancelPinAhead(deps, id, operator, override, (checkedOverride) =>
     withIssuanceTransaction(deps.db, async (tx) => {
       const authz = { sessionId: operator.sessionId, override: checkedOverride };
       const { partyId, invoice } = await lockPlacedOrder(tx, deps, cfg, id);
-      if (invoice !== undefined) {
-        await authorize(tx, { ...authz, permission: "sale.rectify" }, operator.attempts);
-      }
+      // Read again here: a payment or corrective may have arrived since the PIN check's read.
+      const permission = invoice && (await cancelPermission(tx, id, invoice));
+      if (permission !== undefined)
+        await authorize(tx, { ...authz, permission }, operator.attempts);
       await refusePlacedOrderMoney(tx, id);
-      if (invoice !== undefined) await creditWholeInvoice(tx, deps, cfg, invoice, authz);
+      if (permission === "sale.void") {
+        await voidUnservedInvoice(tx, deps, cfg, id, invoice!, reason, authz);
+      } else if (invoice !== undefined) {
+        await creditWholeInvoice(tx, deps, cfg, invoice, authz);
+      }
       await abandonPlacedOrder(tx, cfg, id);
       if (partyId !== null && (await ensureFamilyBill(tx, cfg, partyId))) {
         await bumpPartyRevision(tx, partyId);
@@ -204,21 +211,26 @@ export async function cancelPlacedOrder(
 }
 /**
  * Runs `transaction` with the override it should check, its PIN checked ahead when the order has an
- * invoice to credit under `sale.rectify` ({@link withPinCheckAhead}).
+ * invoice to cancel or credit, under the permission {@link cancelPermission} reads now
+ * ({@link withPinCheckAhead}).
  */
-export async function withRectifyPinAhead<T>(
+export async function withCancelPinAhead<T>(
   deps: Pick<TillSaleDeps, "db">,
   id: string,
   operator: { sessionId: string; attempts: PinAttempts },
   override: Override | undefined,
   transaction: (override: Override | undefined) => Promise<T>,
 ): Promise<T> {
+  const invoice = await readOrderInvoice(deps.db, id);
   const toCheck =
-    (await readOrderInvoice(deps.db, id)) === undefined
+    invoice === undefined
       ? undefined
       : await overrideToCheck(
           deps.db,
-          { sessionId: operator.sessionId, permission: "sale.rectify" },
+          {
+            sessionId: operator.sessionId,
+            permission: await cancelPermission(deps.db, id, invoice),
+          },
           override,
         );
   return withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) =>

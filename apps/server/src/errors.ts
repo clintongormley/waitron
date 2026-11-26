@@ -10,6 +10,7 @@ import type { CancellationContext } from "./line-cancel-context.js";
 import type { BillEditState } from "./order-drafts.js";
 import type { UnservedDish } from "./finish-party-service.js";
 import type { UnservedBillDish } from "./meal-end.js";
+import type { ServedBillDish } from "./served-dishes.js";
 
 /**
  * This host's contribution to the shared error registry, by declaration merging. A code names the
@@ -963,6 +964,8 @@ declare module "@waitron/shared" {
       dishes: UnservedBillDish[];
       canStop: boolean;
     };
+    /** Cancel and credit cannot cancel the receipt: these dishes were served or their charge kept. */
+    "bill.served_dishes": { workingOrderId: string; dishes: ServedBillDish[] };
     /**
      * A merge, or a move of every dish, would move `workingOrderId`'s full invoice onto
      * `intoWorkingOrderId` without the till saying which customer the dishes are invoiced to, or

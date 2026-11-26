@@ -60,6 +60,12 @@ const ALLOWED: readonly { file: string; fragment: string; lines: number; reason:
     reason: "finds the replacement itself (joined with replacesOriginal), to name it",
   },
   {
+    file: "apps/server/src/cancel-credit.ts",
+    fragment: ".where(eq(sales.correctsSaleId, invoice.id))",
+    lines: 1,
+    reason: "a receipt with ANY corrective, its replacement included, is credited, never cancelled",
+  },
+  {
     file: "packages/core/src/record-replacement.ts",
     fragment: "select count(*) from sales c where c.corrects_sale_id",
     lines: 1,

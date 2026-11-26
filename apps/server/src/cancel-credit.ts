@@ -4,9 +4,10 @@ import { readSaleOperationDescription } from "./sale-operation-description.js";
 import { eq } from "drizzle-orm";
 import { readLiveSeriesIdTx, saleLines, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
-import { correctionTargetFor, recordCorrection, settleSale } from "@waitron/core";
+import { correctionTargetFor, recordCorrection, recordVoid, settleSale } from "@waitron/core";
 import type { RecordCorrectionInput, RecordSaleLine } from "@waitron/core";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
+import type { AuthzInput } from "@waitron/identity";
 import {
   basisPointsToDecimal,
   centsToDecimal,
@@ -14,7 +15,9 @@ import {
   seriesId as brandSeriesId,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import type { SaleId } from "@waitron/shared";
+import { AppError, type SaleId } from "@waitron/shared";
+import { holdsPayment } from "./bill-payments.js";
+import { servedOrCharged } from "./served-dishes.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 
 /** The invoice a working order issued, as {@link creditWholeInvoice} credits it. */
@@ -33,6 +36,49 @@ export async function readOrderInvoice(
     .from(sales)
     .where(eq(sales.workingOrderId, workingOrderId));
   return row === undefined ? undefined : { ...row, id: brandSaleId(row.id) };
+}
+
+/**
+ * What a cancel files for the bill's invoice, by the permission it needs: a cancellation
+ * (`sale.void`) when the bill never held a payment (one given back counts), the invoice has no
+ * corrective or replacement and names no customer; otherwise a corrective (`sale.rectify`).
+ */
+export async function cancelPermission(
+  tx: Transaction,
+  workingOrderId: string,
+  invoice: IssuedInvoice,
+): Promise<"sale.void" | "sale.rectify"> {
+  if (await holdsPayment(tx, workingOrderId)) return "sale.rectify";
+  const [sale] = await tx
+    .select({ counterpartyTaxId: sales.counterpartyTaxId })
+    .from(sales)
+    .where(eq(sales.id, invoice.id));
+  if (sale!.counterpartyTaxId !== null) return "sale.rectify";
+  const [corrective] = await tx
+    .select({ id: sales.id })
+    .from(sales)
+    .where(eq(sales.correctsSaleId, invoice.id))
+    .limit(1);
+  return corrective === undefined ? "sale.void" : "sale.rectify";
+}
+
+/**
+ * Cancel an issued invoice nothing on its bill was served against, else `bill.served_dishes`.
+ * `recordVoid` checks `authz` and counts nothing, as `recordCorrection` does for
+ * {@link creditWholeInvoice}.
+ */
+export async function voidUnservedInvoice(
+  tx: Transaction,
+  deps: { backend: FiscalBackend },
+  cfg: DeviceRequestConfig,
+  workingOrderId: string,
+  invoice: IssuedInvoice,
+  reason: string,
+  authz: AuthzInput,
+): Promise<void> {
+  const dishes = await servedOrCharged(tx, workingOrderId);
+  if (dishes.length > 0) throw new AppError("bill.served_dishes", { workingOrderId, dishes });
+  await recordVoid(tx, deps.backend, invoice.id, reason, authz, cfg.nodeId);
 }
 
 /**
