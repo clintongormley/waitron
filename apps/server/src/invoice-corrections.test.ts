@@ -1574,7 +1574,7 @@ describe("File now and Close", () => {
     });
   });
 
-  it("closes keeping the refunds when another box has taken over, and refuses while the ticket's filing is only stopped", async () => {
+  it("closes keeping the refunds when another box has taken over, cash making up the rest filing nothing, and refuses while the ticket's filing is only stopped", async () => {
     const saleId = await soldForCash("Set menu", ["40.00"]);
     const { correction } = await open(saleId, { submissionId: randomUUID(), gross: "25.00" });
     const { refunds } = await cash(correction.id, "15.00");
@@ -1601,26 +1601,32 @@ describe("File now and Close", () => {
         value: async () => ({ eligible: false, reason: "wrong_node" }),
       },
     }) as typeof venue.backend;
-    await refusedWithNothingWritten(() => cash(correction.id, "10.00", randomUUID(), takenOver), {
-      code: "sale.correction_not_admitted",
-      params: { reason: "wrong_node" },
-    });
     await refusedWithNothingWritten(
       () => fileNow(correction.id, MENU_FIFTEEN, { backend: takenOver }),
       { code: "sale.correction_not_admitted", params: { reason: "wrong_node" } },
     );
+    const before = counts();
+    const { refunds: rest } = await cash(correction.id, "10.00", randomUUID(), takenOver);
+    const was = counts();
+    expect(was).toMatchObject({
+      invoices: before.invoices,
+      corrections: before.corrections,
+      refunds: before.refunds + 1,
+    });
     expect(
       await inTx(venue, (tx) => readInvoiceCorrection(tx, venue.backend, venue.cfg, correction.id)),
-    ).toMatchObject({ state: "open", moneyBack: "15.00", legs: [{ id: refunds[0]!.id }] });
-    const was = counts();
+    ).toMatchObject({ state: "open", moneyBack: "25.00", correctiveSaleId: null });
 
     const ended = await close(correction.id, { backend: takenOver });
 
     expect(ended).toMatchObject({
       state: "closed",
-      moneyBack: "15.00",
+      moneyBack: "25.00",
       correctiveSaleId: null,
-      legs: [{ id: refunds[0]!.id, state: "completed", appliedAmount: "15.00" }],
+      legs: [
+        { id: refunds[0]!.id, state: "completed", appliedAmount: "15.00" },
+        { id: rest[0]!.id, state: "completed", appliedAmount: "10.00" },
+      ],
     });
     expect(counts()).toEqual(was);
     expect(await correctionRow(correction.id)).toMatchObject({

@@ -456,6 +456,108 @@ describe("a fresh leg on an open give-back once its corrective cannot be filed",
       { applied: 1000, method: "card" },
     ]);
   });
+
+  it("on a full invoice AEAT refused with no fix, takes cash making up the rest, files nothing, and Finish closes it", async () => {
+    const { saleId } = await fullInvoice({ card: "17.00" }, { cash: "20.00" });
+    const correctionId = await opened(saleId, await tenderOf(saleId, "card"));
+    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+    const drawer = drawerCents();
+
+    const part = await cashLeg(correctionId, "3.00");
+    expect(part.status, JSON.stringify(part.json)).toBe(200);
+    const rest = await cashLeg(correctionId, "5.00");
+    expect(rest.status, JSON.stringify(rest.json)).toBe(200);
+    expect(rest.json).toMatchObject({
+      correction: { state: "open", moneyBack: "25.00", left: "0.00" },
+    });
+    expect(correctivesOf(saleId)).toEqual([]);
+    expect(drawerCents()).toBe(drawer - 800);
+
+    const finished = await send(
+      venue.app,
+      adminCookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/close`,
+      {},
+    );
+    expect(finished.status, JSON.stringify(finished.json)).toBe(200);
+    expect(finished.json).toMatchObject({ state: "closed", correctiveSaleId: null });
+    expect(correctivesOf(saleId)).toEqual([]);
+  });
+
+  it.each([
+    ["the card reader", { reader: "17.00" }, false],
+    ["a separate terminal", { card: "17.00" }, true],
+  ] as const)(
+    "on a full invoice AEAT refused with no fix, keeps a leg on %s making up the rest, files nothing, and Finish closes it",
+    async (_, card, manualConfirmed) => {
+      const { saleId } = await fullInvoice({ cash: "20.00" }, card);
+      const correctionId = await opened(saleId);
+      await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+      const leg = await send(
+        venue.app,
+        adminCookie,
+        "POST",
+        `/api/transactions/${saleId}/refunds`,
+        {
+          submissionId: randomUUID(),
+          tenderId: await tenderOf(saleId, "card"),
+          appliedAmount: "5.00",
+          tipAmount: "0.00",
+          reason: "Goodwill",
+          ...(manualConfirmed && { manualConfirmed }),
+          invoiceCorrectionId: correctionId,
+          override: supervisor(),
+        },
+      );
+      expect(leg).toMatchObject({
+        status: 200,
+        json: { state: "completed", appliedAmount: "5.00" },
+      });
+      expect(correctivesOf(saleId)).toEqual([]);
+      const finished = await send(
+        venue.app,
+        adminCookie,
+        "POST",
+        `/api/invoice-corrections/${correctionId}/close`,
+        {},
+      );
+      expect(finished.status, JSON.stringify(finished.json)).toBe(200);
+      expect(finished.json).toMatchObject({
+        state: "closed",
+        moneyBack: "25.00",
+        correctiveSaleId: null,
+      });
+      expect(correctivesOf(saleId)).toEqual([]);
+    },
+  );
+
+  it("on a receipt this box can no longer correct, takes cash making up the rest, files nothing, and Finish closes it", async () => {
+    const billId = await tabWith(venue, "Steak", "House salad");
+    await payPart(billId, { card: "17.00" });
+    await payPart(billId, { cash: "20.00" });
+    const saleId = await fixture.saleOf(venue, billId);
+    const correctionId = await opened(saleId, await tenderOf(saleId, "card"));
+    const otherBox = vi
+      .spyOn(venue.backend, "correctionAdmissionFor")
+      .mockResolvedValue({ eligible: false, reason: "wrong_node" });
+    onTestFinished(() => otherBox.mockRestore());
+
+    const rest = await cashLeg(correctionId, "8.00");
+    expect(rest.status, JSON.stringify(rest.json)).toBe(200);
+    expect(rest.json).toMatchObject({ correction: { state: "open", moneyBack: "25.00" } });
+    expect(correctivesOf(saleId)).toEqual([]);
+    const finished = await send(
+      venue.app,
+      adminCookie,
+      "POST",
+      `/api/invoice-corrections/${correctionId}/close`,
+      {},
+    );
+    expect(finished.status, JSON.stringify(finished.json)).toBe(200);
+    expect(finished.json).toMatchObject({ state: "closed", correctiveSaleId: null });
+    expect(correctivesOf(saleId)).toEqual([]);
+  });
 });
 
 /** A still-charge cancel of the bill's Steak (its first line) with Refund ticked; its id. */
