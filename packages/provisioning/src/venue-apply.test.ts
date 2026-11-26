@@ -174,10 +174,10 @@ it("a new venue's first station starts at the default late flags and keeps a sta
 });
 
 it.each([
-  ["Madrid", {}],
-  ["Barcelona", { ca: "Plats principals" }],
-  ["Valencia", { "ca-ES-valencia": "Plats principals" }],
-  ["A Coruña", { gl: "Pratos principais" }],
+  ["Madrid", undefined],
+  ["Barcelona", "ca"],
+  ["Valencia", "ca-ES-valencia"],
+  ["A Coruña", "gl"],
 ] as const)("seeds course names for the content languages in %s", async (province, regional) => {
   await applyVenue(planVenue({ ...request(), province, staffLanguage: "en" }, ALL_MODULES), {
     db: suite.db,
@@ -189,7 +189,11 @@ it.each([
     .where(eq(kitchenCourses.starterKey, "mains"));
   expect(mains).toEqual({
     name: "Mains",
-    customerNames: { en: "Mains", es: STARTER_COURSE_NAMES.Mains.es, ...regional },
+    customerNames: {
+      en: "Mains",
+      es: STARTER_COURSE_NAMES.Mains.es,
+      ...(regional === undefined ? {} : { [regional]: STARTER_COURSE_NAMES.Mains[regional] }),
+    },
   });
 });
 
