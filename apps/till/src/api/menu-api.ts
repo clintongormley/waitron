@@ -1,16 +1,16 @@
-import {
-  type ProductOrdering,
-  type ProductAllergens,
-  type OfferedModifier,
-  type DietProfile,
-  type DietOverride,
-  type AccessibleMenu,
-  type LiveOffer,
-  type ServedMenu,
-  type DiningStart,
-  type MenuState,
-  type ServedSetMenu,
-  type ContentLanguages,
+import type {
+  ProductOrdering,
+  ProductAllergens,
+  OfferedModifier,
+  DietProfile,
+  DietOverride,
+  AccessibleMenu,
+  LiveOffer,
+  ServedMenu,
+  DiningStart,
+  MenuState,
+  ServedSetMenu,
+  ContentLanguages,
 } from "@waitron/shared";
 import type { TillRequest, ReadOptions } from "./till-request.js";
 
