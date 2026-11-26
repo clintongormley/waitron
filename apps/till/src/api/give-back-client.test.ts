@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { TillApi } from "./client.js";
+import type { GiveBackRequest } from "./give-back-types.js";
 
 const response = (body: unknown) =>
   new Response(JSON.stringify(body), {
@@ -38,7 +39,7 @@ it("previews a give-back on the encoded receipt with the whole request", async (
   });
 });
 
-it("sends a give-back on the encoded receipt with its ids, parts and PIN", async () => {
+it("sends a give-back on the encoded receipt with the request's fields at the top level", async () => {
   const body = {
     request: { purpose: "goodwill" as const, amount: "5.00", extra: "0.00", way: "cash" },
     reasonId: "reason-1",
@@ -54,7 +55,42 @@ it("sends a give-back on the encoded receipt with its ids, parts and PIN", async
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({
+      purpose: "goodwill",
+      amount: "5.00",
+      extra: "0.00",
+      way: "cash",
+      reasonId: "reason-1",
+      note: null,
+      expected: [{ kind: "refund", amount: "5.00", way: "cash" }],
+      submissionIds: { refund: "a", extra: "b", correction: "c", leg: "d" },
+      override: { personId: "boss", pin: "1234" },
+    }),
+  });
+});
+
+it("sends only the request's own fields, never another property found on it", async () => {
+  const request = { purpose: "goodwill" as const, amount: "5.00", extra: "0.00", way: "cash" };
+  const body = {
+    request: { ...request, manualConfirmed: true } as GiveBackRequest,
+    reasonId: "reason-1",
+    note: null,
+    expected: [{ kind: "refund" as const, amount: "5.00", way: "cash" }],
+    submissionIds: { refund: "a", extra: "b", correction: "c", leg: "d" },
+  };
+  const fetcher = vi.fn().mockResolvedValue(response({ parts: [] }));
+  await new TillApi("", fetcher).giveBack("sale/1", body);
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith("/api/transactions/sale%2F1/give-back", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      ...request,
+      reasonId: "reason-1",
+      note: null,
+      expected: [{ kind: "refund", amount: "5.00", way: "cash" }],
+      submissionIds: { refund: "a", extra: "b", correction: "c", leg: "d" },
+    }),
   });
 });
 

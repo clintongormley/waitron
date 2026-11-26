@@ -89,7 +89,7 @@ export interface GiveBackSubmissionIds {
   leg: string;
 }
 
-/** What one press sends, less its ids and any PIN. */
+/** What one press holds, less its ids and any PIN. */
 export interface GiveBackAsk {
   request: GiveBackRequest;
   reasonId: string;
@@ -100,7 +100,7 @@ export interface GiveBackAsk {
   manualConfirmed?: boolean;
 }
 
-/** `POST /api/transactions/:saleId/give-back`. */
+/** `POST /api/transactions/:saleId/give-back`, which takes `request`'s fields at the top level. */
 export interface GiveBackWrite extends GiveBackAsk {
   submissionIds: GiveBackSubmissionIds;
   override?: { personId: string; pin: string };
