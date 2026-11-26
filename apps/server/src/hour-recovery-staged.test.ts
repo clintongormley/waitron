@@ -175,7 +175,7 @@ async function stagedHost(older = false) {
       socket.destroy();
     }
   };
-  const stage = async (eventId = "browser-http", masterKey = key.secret) => {
+  const stage = async (eventId = "browser-http", masterKey = key.secret, bytes = artifact) => {
     const form = new FormData();
     form.set(
       "request",
@@ -184,7 +184,7 @@ async function stagedHost(older = false) {
         source: { kind: "archive", masterKey, environment: "preproduction" },
       }),
     );
-    form.set("artifact", new Blob([Uint8Array.from(artifact)]), "selected.wbk");
+    form.set("artifact", new Blob([Uint8Array.from(bytes)]), "selected.wbk");
     return call("/setup-api/recovery/stage", { method: "POST", body: form });
   };
   const bodies: string[] = [];
@@ -210,7 +210,7 @@ async function stagedHost(older = false) {
     expect(dirs).toHaveLength(1);
     return join(stagingDir, "staged-recovery", dirs[0]!, "venue.db");
   };
-  return { f, recovery, stagingDir, stage, send, ok, bodies, stagedDatabase, backup };
+  return { f, recovery, stagingDir, artifact, stage, send, ok, bodies, stagedDatabase, backup };
 }
 
 const sha = async (path: string) =>
@@ -314,8 +314,16 @@ describe("a staged backup for the restore's clock requests", () => {
   it("lets the newest restore event's checked upload replace the copy, and keeps it when an upload fails its check", async () => {
     const h = await stagedHost();
     const first = await h.ok(h.stage("event-a"));
-    const refused = await h.stage("event-b", WRONG_MASTER_KEY);
-    expect(refused.status).not.toBe(200);
+    const damaged = Buffer.from(h.artifact);
+    damaged[damaged.length - 1]! ^= 0xff;
+    expect(await h.stage("event-b", key.secret, damaged)).toEqual({
+      status: 422,
+      body: { error: { code: "recovery.passphrase_invalid", params: {} } },
+    });
+    expect(await h.stage("event-b", WRONG_MASTER_KEY)).toMatchObject({
+      status: 400,
+      body: { error: { code: "promotion.break_glass_invalid" } },
+    });
     await h.ok(h.send(first.stagedId, { action: "clock-challenge" }, "event-a"));
     const second = await h.ok(h.stage("event-b"));
     expect(second.stagedId).not.toBe(first.stagedId);

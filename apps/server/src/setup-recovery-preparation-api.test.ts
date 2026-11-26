@@ -16,7 +16,7 @@ import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { mountSetup } from "./setup-api.js";
 import { type SetupDeps } from "./setup-api-deps.js";
 import type { PrepareRecovery } from "./setup-recovery-preparation-api.js";
-import { decryptArtifactUnderBackupKey } from "./artifact-cipher.js";
+import { decryptArtifactUnderBackupKey, encryptArtifact } from "./artifact-cipher.js";
 import { heldBackupKey, heldBackupKeyName } from "./testing/backup-key.js";
 import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
 
@@ -155,12 +155,9 @@ it("reads a backup file's bytes from multipart input and opens it with the maste
   expect(JSON.stringify(log.mock.calls)).not.toContain(FILE_MASTER_KEY_TEXT);
 });
 it("a wrong master key at preparation is refused naming the backup's key, before dispatch", async () => {
-  const { app, execute } = fixture();
-  const source = {
-    kind: "archive",
-    masterKey: encodeMasterKeyCode(makeMasterKey()),
-    environment: "production",
-  };
+  const { app, execute, log } = fixture();
+  const typed = encodeMasterKeyCode(makeMasterKey());
+  const source = { kind: "archive", masterKey: typed, environment: "production" };
   const form = new FormData();
   form.set("request", JSON.stringify({ source, preparation }));
   form.set("artifact", new Blob([Uint8Array.from(FILE)]), "selected.wbk");
@@ -168,6 +165,7 @@ it("a wrong master key at preparation is refused naming the backup's key, before
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({ error: wrongMasterKey });
   expect(execute).not.toHaveBeenCalled();
+  expect(JSON.stringify(log.mock.calls)).not.toContain(typed);
 });
 it.each([
   [
@@ -384,18 +382,17 @@ it("staging a backup file for recovery takes the master key", async () => {
   expect(keys).not.toContain(FILE_MASTER_KEY_TEXT);
 });
 it("a wrong master key at staging is refused naming the backup's key", async () => {
-  const { app, stageRecovery } = stageFixture();
+  const { app, stageRecovery, log } = stageFixture();
+  const typed = encodeMasterKeyCode(makeMasterKey());
   const response = await app.request(
     "/setup-api/recovery/stage",
-    stageForm({
-      eventId: "interactive-restore",
-      source: { ...archiveSource, masterKey: encodeMasterKeyCode(makeMasterKey()) },
-    }),
+    stageForm({ eventId: "interactive-restore", source: { ...archiveSource, masterKey: typed } }),
     tls(),
   );
   expect(response.status).toBe(400);
   expect(await response.json()).toEqual({ error: wrongMasterKey });
   expect(stageRecovery).not.toHaveBeenCalled();
+  expect(JSON.stringify(log.mock.calls)).not.toContain(typed);
   const right = await app.request(
     "/setup-api/recovery/stage",
     stageForm({ eventId: "interactive-restore", source: archiveSource }),
@@ -436,6 +433,29 @@ it.each([
   });
   expect(stageRecovery).not.toHaveBeenCalled();
 });
+it.each(["stage", "preparation"] as const)(
+  "refuses a version 1 file at %s as not a backup file, before staging or preparing",
+  async (route) => {
+    const { app, execute, stageRecovery } = stageFixture();
+    const versionOne = Uint8Array.from(encryptArtifact(Buffer.from("payload"), "a passphrase"));
+    const response = await app.request(
+      `/setup-api/recovery/${route}`,
+      stageForm(
+        route === "stage"
+          ? { eventId: "interactive-restore", source: archiveSource }
+          : { source: archiveSource, preparation },
+        versionOne,
+      ),
+      tls(),
+    );
+    expect(response.status).toBe(422);
+    expect(await response.json()).toEqual({
+      error: { code: "backup.artifact_invalid", params: { reason: "bad_version" } },
+    });
+    expect(stageRecovery).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+  },
+);
 it("refuses a stage over plain transport", async () => {
   const { app, stageRecovery } = stageFixture();
   const response = await app.request(

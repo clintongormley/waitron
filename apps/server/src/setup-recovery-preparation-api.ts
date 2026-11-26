@@ -194,13 +194,13 @@ export function mountRecoveryPreparationApi(
         const raw = exact(body.source, ["kind", "masterKey", "environment"]);
         if (raw.kind !== "archive") invalid("body");
         const masterKey = text(raw.masterKey, "masterKey", 4096);
-        const rawEnvironment = environment(raw.environment);
+        const checkedEnvironment = environment(raw.environment);
         return c.json(
           await deps.stageRecovery(eventId, {
             kind: "archive-file",
             artifactPath: upload.artifactPath,
             recoveryKey: await openingKeyFor(upload, masterKey),
-            environment: rawEnvironment,
+            environment: checkedEnvironment,
           }),
         );
       } finally {
@@ -247,12 +247,12 @@ export function mountRecoveryPreparationApi(
         const raw = exact(rawSource, ["kind", "masterKey", "environment"]);
         if (artifact === undefined) invalid("artifact");
         const masterKey = text(raw.masterKey, "masterKey", 4096);
-        const rawEnvironment = environment(raw.environment);
+        const checkedEnvironment = environment(raw.environment);
         source = {
           kind: "archive",
           artifact,
           recoveryKey: await openingKeyFor({ artifact }, masterKey),
-          environment: rawEnvironment,
+          environment: checkedEnvironment,
         };
       } else if (rawSource?.kind === "staged") {
         const raw = exact(rawSource, ["kind", "stagedId"]);
