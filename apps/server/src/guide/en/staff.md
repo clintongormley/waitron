@@ -216,6 +216,7 @@ starting screen, sign out and sign in again to open it.
 
 If **Check your times** appears, look at the recorded times for each day. If a day has missing
 times, choose **Add missing times** to enter them.
+If a manager proposes missing times, check them and choose **Accept** or **Disagree**.
 
 Use **Start break** and **End break** for a pause during your shift. Use **Clock out** when your work ends.
 

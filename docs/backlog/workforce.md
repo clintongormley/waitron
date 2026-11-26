@@ -162,6 +162,10 @@ short recorded times, and one **Add missing times** button for a day with missin
 seeing the other examples, the owner chose plain wording for breaks, corrections, manager entries
 and proposals, with a date in words for an overnight finish. Offsets identify repeated clock
 times and changes of offset within one card (watcher, 25 November 2026 at 20:39 and 21:15 CET).
+The owner chose “My three changes (Recommended)” for the remaining wording (watcher, 26 November
+2026 at 00:05 CET). Declined requests carry the requested time and the reason once, with the
+manager's decision on the same line. A manager's proposal to add missing times names the clock-in
+or clock-out before the worker chooses.
 
 ### A1268 corrections after a backward clock step
 

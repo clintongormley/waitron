@@ -235,6 +235,7 @@ abrirla.
 
 Si aparece **Comprueba tus horas**, revisa los fichajes de cada día. Si falta algún fichaje, pulsa
 **Añadir fichajes que faltan** para introducirlo.
+Si un responsable propone fichajes que faltan, revísalos y pulsa **Aceptar** o **No estoy de acuerdo**.
 
 Usa **Iniciar descanso** y **Terminar descanso** para una pausa durante tu turno. Usa **Fichar salida** cuando termines de trabajar.
 

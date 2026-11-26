@@ -107,7 +107,7 @@ export class TillAttendanceQuestions extends LitElement {
     const lines =
       proposal && item
         ? questionAttendanceProposal(item, prompt.timeZone)
-        : questionAttendanceHistory({ ...prompt, history });
+        : questionAttendanceHistory({ ...prompt, history }, this.inbox?.items ?? []);
     return html`<article data-prompt=${prompt.id}>
       ${prompt.businessDay ? html`<h2>${attendanceDateInWords(prompt.businessDay)}</h2>` : nothing}
       ${prompt.kind === "automatic-out" ? html`<p>${t("attendance.automatic_counted")}</p>` : nothing}

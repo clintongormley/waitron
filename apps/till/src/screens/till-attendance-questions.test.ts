@@ -214,10 +214,150 @@ describe("attendance questions before work", () => {
       "Clocked in 19:10",
       "Break 19:15 to 19:30",
       "Clocked out 19:35 · added by a manager",
-      "You changed it to 19:45: Finished the stock count",
-      "Declined 19:45",
+      "You asked to change it to 19:45: Finished the stock count · declined by a manager",
     ]);
   });
+
+  it.each(["single", "pair", "pair across work days"])(
+    "shows the reason once for a declined missing-time request (%s)",
+    async (scenario) => {
+      const prompt = attendanceMissingTimesPrompts()[1];
+      const acrossDays = scenario === "pair across work days";
+      const clockIn = attendanceEntry({
+        entryId: "request-in",
+        entryKind: "correction",
+        eventAt: "2026-11-24T08:00:00.000Z",
+        offsetMinutes: 60,
+        recordedByPersonId: "worker",
+        correctionStatus: "requested",
+        correctionReason: "The till was offline",
+        extension: {
+          ...attendanceEntry().extension!,
+          authorKind: "worker",
+          direction: "worker_request",
+          missingEntryKind: "in",
+        },
+      });
+      const clockOut = attendanceEntry({
+        ...clockIn,
+        entryId: "request-out",
+        eventAt: acrossDays ? "2026-11-25T04:30:00.000Z" : "2026-11-24T16:00:00.000Z",
+        extension: { ...clockIn.extension!, missingEntryKind: "out" },
+      });
+      const requests = scenario === "single" ? [clockIn] : [clockIn, clockOut];
+      const declines = requests.map((entry) =>
+        attendanceEntry({
+          ...entry,
+          entryId: `decline-${entry.entryId}`,
+          recordedByPersonId: "manager",
+          correctionStatus: "declined",
+          extension: {
+            ...entry.extension!,
+            authorKind: "manager",
+            respondsToEntryId: entry.entryId,
+          },
+        }),
+      );
+      const history = [...requests, ...declines];
+      prompt.history = acrossDays ? [clockIn, declines[0]!] : history;
+      const item = attendanceItem({
+        direction: "worker_request",
+        status: "declined",
+        readyToApply: false,
+        requestEntryIds: requests.map((entry) => entry.entryId),
+        responseEntryIds: declines.map((entry) => entry.entryId),
+        changes: requests.map(({ eventAt: at, offsetMinutes, extension }) => ({
+          target: { missingKind: extension!.missingEntryKind! },
+          at,
+          offsetMinutes,
+        })),
+        reason: "The till was offline",
+        requestedByPersonId: "worker",
+        history,
+      });
+      const locale = currentLocale();
+      try {
+        const { el } = await mount({ inbox: attendanceInbox([prompt], [item]) });
+        const lines = () => Array.from(el.shadowRoot!.querySelectorAll("li"), words);
+        expect(lines()).toEqual(
+          scenario === "pair"
+            ? [
+                "You asked to add a clock-in at 09:00 · declined by a manager",
+                "You asked to add a clock-out at 17:00: The till was offline · declined by a manager",
+              ]
+            : [
+                "You asked to add a clock-in at 09:00: The till was offline · declined by a manager",
+              ],
+        );
+        setLocale("es-ES");
+        await el.updateComplete;
+        expect(lines()).toEqual(
+          scenario === "pair"
+            ? [
+                "Pediste añadir una entrada a las 09:00 · rechazada por un responsable",
+                "Pediste añadir una salida a las 17:00: The till was offline · rechazada por un responsable",
+              ]
+            : [
+                "Pediste añadir una entrada a las 09:00: The till was offline · rechazada por un responsable",
+              ],
+        );
+      } finally {
+        setLocale(locale);
+      }
+    },
+  );
+
+  it.each([
+    [["out"], "2026-11-25T16:00:00.000Z", "clocking out at 17:00", "fichar la salida a las 17:00"],
+    [
+      ["in", "out"],
+      "2026-11-25T16:00:00.000Z",
+      "clocking in at 09:00 and out at 17:00",
+      "fichar la entrada a las 09:00 y la salida a las 17:00",
+    ],
+    [
+      ["in", "out"],
+      "2026-11-26T00:00:00.000Z",
+      "clocking in at 09:00 and out at 01:00, Thursday 26 November",
+      "fichar la entrada a las 09:00 y la salida a la 01:00, jueves, 26 de noviembre",
+    ],
+  ] as const)(
+    "names the missing clock events above the decision (%j, %s)",
+    async (kinds, outAt, english, spanish) => {
+      const item = attendanceItem({
+        changes: kinds.map((missingKind) => ({
+          target: { missingKind },
+          at: missingKind === "in" ? "2026-11-25T08:00:00.000Z" : outAt,
+          offsetMinutes: 60,
+        })),
+        history: [],
+        reason: "The till was offline",
+      });
+      const prompt = attendancePrompt({
+        kind: "proposal",
+        itemId: item.id,
+        questionId: null,
+        businessDay: null,
+        timeZone: "Europe/Madrid",
+        history: item.history,
+      });
+      const locale = currentLocale();
+      try {
+        const { el } = await mount({ inbox: attendanceInbox([prompt], [item]) });
+        const card = el.shadowRoot!.querySelector("article")!;
+        expect(words(card)).toBe(
+          `Wednesday 25 November. A manager proposed ${english}: The till was offline Accept Disagree`,
+        );
+        setLocale("es-ES");
+        await el.updateComplete;
+        expect(words(card)).toBe(
+          `miércoles, 25 de noviembre. Un responsable propuso ${spanish}: The till was offline Aceptar No estoy de acuerdo`,
+        );
+      } finally {
+        setLocale(locale);
+      }
+    },
+  );
 
   it("proposals show the distinct original and proposed times, reason and both worker decisions", async () => {
     const item = attendanceItem();
