@@ -96,7 +96,9 @@ it("serves a non-trading bucket waiting page after an unexpected stop", async ()
       const probe = await fetch(`${base}/api/node`);
       expect(await probe.json()).toMatchObject({ acceptingSales: false });
       const page = await fetch(base, { headers: { "Accept-Language": "en" } });
-      expect(await page.text()).toContain("Waiting for the backup bucket");
+      const html = await page.text();
+      expect(html).toContain("Waiting for the backup bucket");
+      expect(html).toContain("This box is checking its backup");
       expect((await fetch(`${base}/carry-on`, { method: "POST" })).status).toBe(404);
       const sale = await fetch(`${base}/api/working-orders/order-1/payments`, { method: "POST" });
       expect(sale.status).toBe(404);
@@ -185,7 +187,7 @@ it("waits and emails managers when the bucket is silent and the chart's spare ne
         await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 8_000 });
         const message = smtp.messages[0]!.replace(/=\r?\n/g, "");
         expect(message).toContain("To: owner@example.test");
-        expect(message).toContain("no pudo confirmar");
+        expect(message).toContain("Al arrancar, el servidor no pudo confirmar");
         expect(message).toContain("tras esperar un minuto");
       },
     );
@@ -195,51 +197,55 @@ it("waits and emails managers when the bucket is silent and the chart's spare ne
   }
 }, 15_000);
 
-it("starts after a planned restart requested during the bucket wait", async () => {
-  const { cfg } = await configureStartupBucket();
-  const bucket = new SwitchableStore(() => new Date());
-  bucket.down = true;
-  await withTradingBootServer(
-    {
-      db: suite.db,
-      nodeId: cfg.nodeId,
-      scratchPrefix: "waitron-boot-bucket-restart-",
-      start: async (env) => {
-        const seams = {
-          boxHost: synchronisedBoxHost(),
-          stream: { store: bucket },
-        };
-        const waiting = await startServer(env, env, {
-          ...seams,
-          previousStop: { restart: false, heartbeatAt: null },
-        });
-        try {
-          expect(waiting.fullyStarted).toBeDefined();
-          await waiting.markRestart?.();
-        } finally {
-          await waiting.close();
-        }
-        const previousStop = await readPreviousStop(
-          { stateDir: env.WAITRON_STATE_DIR!, venueDir: env.WAITRON_VENUE_DIR! },
-          () => {},
-        );
-        expect(previousStop.restart).toBe(true);
-        return startServer(env, env, { ...seams, previousStop });
+it.each(["waiting", "trading"] as const)(
+  "chooses the next startup check when restarted while %s",
+  async (phase) => {
+    const { cfg } = await configureStartupBucket();
+    const bucket = new SwitchableStore(() => new Date());
+    bucket.down = phase === "waiting";
+    await withTradingBootServer(
+      {
+        db: suite.db,
+        nodeId: cfg.nodeId,
+        scratchPrefix: "waitron-boot-bucket-restart-",
+        start: async (env) => {
+          const seams = {
+            boxHost: synchronisedBoxHost(),
+            stream: { store: bucket },
+          };
+          const first = await startServer(env, env, {
+            ...seams,
+            previousStop: { restart: false, heartbeatAt: null },
+          });
+          try {
+            expect(first.fullyStarted !== undefined).toBe(phase === "waiting");
+            await first.markRestart?.();
+          } finally {
+            await first.close();
+          }
+          const previousStop = await readPreviousStop(
+            { stateDir: env.WAITRON_STATE_DIR!, venueDir: env.WAITRON_VENUE_DIR! },
+            () => {},
+          );
+          expect(previousStop.restart).toBe(phase === "trading");
+          bucket.down = true;
+          return startServer(env, env, { ...seams, previousStop });
+        },
+        httpPort,
       },
-      httpPort,
-    },
-    async (base) => {
-      const probe = await fetch(`${base}/api/node`);
-      expect(await probe.json()).toMatchObject({ acceptingSales: true });
-      expect(
-        await suite.db
-          .select({ id: incidents.id })
-          .from(incidents)
-          .where(eq(incidents.code, "start.selling_unconfirmed")),
-      ).toEqual([]);
-    },
-  );
-});
+      async (base) => {
+        const probe = await fetch(`${base}/api/node`);
+        expect(await probe.json()).toMatchObject({ acceptingSales: phase === "trading" });
+        expect(
+          await suite.db
+            .select({ id: incidents.id })
+            .from(incidents)
+            .where(eq(incidents.code, "start.selling_unconfirmed")),
+        ).toEqual([]);
+      },
+    );
+  },
+);
 
 it.each(["peer answered", "deadline spent in the first ask"] as const)(
   "starts trading without opening a waiting listener when %s",
@@ -284,6 +290,11 @@ it.each(["peer answered", "deadline spent in the first ask"] as const)(
       async (base) => {
         const probe = await fetch(`${base}/api/node`);
         expect(await probe.json()).toMatchObject({ acceptingSales: true });
+        const alerts = await suite.db
+          .select({ id: incidents.id })
+          .from(incidents)
+          .where(eq(incidents.code, "start.selling_unconfirmed"));
+        expect(alerts).toHaveLength(reason === "peer answered" ? 0 : 1);
       },
     );
   },

@@ -397,7 +397,7 @@ normalidad o, si el otro ha pasado a llevar el local, lo indica.
 
 ## Esperando al depósito de copias de seguridad {#waiting-for-bucket}
 
-Tras un corte de luz, el servidor principal puede mostrar **Esperando al depósito de copias de
+Tras un corte de luz o un fallo, el servidor principal puede mostrar **Esperando al depósito de copias de
 seguridad**. Dale hasta un minuto para comprobar si otro servidor ha tomado el relevo. Si el
 depósito no responde o el servidor no puede verificar la copia que encuentra, aunque sea más
 reciente, el servidor arranca al cabo de un minuto y avisa por correo a los responsables. Si ya

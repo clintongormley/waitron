@@ -85,7 +85,7 @@ export interface WaitingStartDeps {
   /** The start check, asked again every `intervalMs` until it answers other than `wait`. */
   recheck: (signal: AbortSignal) => Promise<StartPeerCheckOutcome>;
   intervalMs: number;
-  bucket?: { deadline: AbortSignal; markRestart?: () => Promise<void> };
+  bucketDeadline?: AbortSignal;
   /**
    * Called as a carry-on takes its turn, before it waits for the re-ask in flight (`turn`), and
    * as it claims the wait inside the transaction that records it (`claimed`). Tests only.
@@ -126,7 +126,7 @@ export interface WaitingStart {
  * its own app and listeners, and asks again until a peer answers. Nothing here sells or files.
  */
 export function startWaiting(deps: WaitingStartDeps): WaitingStart {
-  const { log, bucket } = deps;
+  const { log } = deps;
   const app = healthApp(deps.health, deps.now, {
     ...(deps.venueDir === undefined ? {} : { venueDir: deps.venueDir }),
   });
@@ -206,7 +206,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
         ),
     })(app);
   }
-  if (bucket !== undefined)
+  if (deps.bucketDeadline !== undefined)
     section = async (_c, _other, locale, destination) => ({
       page: renderBucketWaitingPage(locale, destination),
     });
@@ -250,7 +250,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     endedWith = end;
     clearTimeout(timer);
     timer = undefined;
-    bucket?.deadline.removeEventListener("abort", timeOut);
+    deps.bucketDeadline?.removeEventListener("abort", timeOut);
     abortAsk.abort();
     let closeFailure: { error: unknown } | null = null;
     try {
@@ -399,9 +399,9 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   deps.health.takesNoSales = true;
   const listeners = deps.listen(app, gate.isClosed);
   const timeOut = () => void leave({ kind: "timed-out" });
-  if (bucket?.deadline.aborted) timeOut();
+  if (deps.bucketDeadline?.aborted) timeOut();
   else {
-    bucket?.deadline.addEventListener("abort", timeOut, { once: true });
+    deps.bucketDeadline?.addEventListener("abort", timeOut, { once: true });
     schedule();
   }
   log("info", "waiting_start.waiting", { waitingOn });
@@ -409,13 +409,6 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   return {
     server: {
       health: deps.health,
-      ...(bucket === undefined
-        ? {}
-        : {
-            markRestart: async () => {
-              if (!leaving && !steppingDown) await bucket.markRestart?.();
-            },
-          }),
       close: async () => {
         await leave({ kind: "stopped" });
         // A failed end is the start's failure, already carried by `ended` to whoever awaits it.

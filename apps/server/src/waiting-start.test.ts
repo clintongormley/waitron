@@ -193,7 +193,7 @@ describe("the waiting start", () => {
         await new Promise<void>((resolve) => (finishRead = resolve));
         return WAIT;
       },
-      { bucket: { deadline: deadline.signal } },
+      { bucketDeadline: deadline.signal },
     );
     try {
       const signal = await asking;

@@ -3930,7 +3930,7 @@ deadline. The S3 client cancels an unfinished read at the deadline.
 A successful read with no pointer or this box's verified pointer at or below its term ends the
 wait. A pointer the box cannot verify counts as silence at any term. After silence the box starts and
 records `start.selling_unconfirmed` for the managers' email. A planned restart and a restore's
-first start skip this wait. A planned restart requested during the wait writes the restart mark.
+first start skip this wait. A restart during the wait leaves the next start to check the bucket.
 `boot.stop-mark.test.ts`, `stream-host.test.ts` and
 `waiting-start.test.ts` cover the boot decision, pointer answers and listener cancellation.
 
