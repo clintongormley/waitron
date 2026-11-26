@@ -1,5 +1,10 @@
 # A1418 part 1: the stop mark, the start-up bucket check and the alerts — Implementation Plan
 
+> **26 November 2026:** The [Lane H slice 2 proposal](2026-11-26-h-a1418-restore-bucket-term.md)
+> uses Task 6's bucket term floor. For this slice it preserves the existing first-start failure
+> path, including for an unusable term. The draft's hard stop and wait for an unreadable bucket
+> require a separate decision. The proposal is awaiting watcher clearance.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Implementers are dispatched as `subagent_type: "implementer"`.
 
 **Goal:** A box records a clean stop, knows at its next start how it last stopped, asks the backup bucket whether it has been replaced, waits at most 60 seconds for that answer after a stop without a mark (showing why, on its page and on the tills), stays stopped once told it was replaced (unless an administrator carries on), and emails the managers about each of these. A restored box always takes a term above everything its bucket holds.

@@ -24,11 +24,10 @@ open each PR within three active hours.
    Test signal versus force kill and direct close in the shutdown suites, wording in
    `box-alert-email.test.ts`, and incident recording with the heartbeat time in
    `boot.stop-mark.test.ts`. The remaining slices each require their own plan and Claude read.
-2. **Start a restored box above its bucket (180–270 / 200–320).** In `rebuild-first-start.ts`, take
-   a membership term above the pointer and all generation names. Reuse `waiting-start.ts` if a
-   configured bucket cannot be read. Hold sales and filing until it answers, or an administrator
-   explicitly confirms the old box is off and carries on. Test a higher generation than the
-   pointer, a silent bucket and resuming once in `rebuild-first-start.test.ts` and `waiting-start.test.ts`.
+2. **Start a restored box above its bucket.** The [26 November slice 2 plan](2026-11-26-h-a1418-restore-bucket-term.md)
+   proposes a term above the pointer and generation names that the configured bucket reveals.
+   The watcher asked at 13:03 for owner words before adding a hold on sales or filing. The
+   slice 2 proposal retains the existing first-start failure path and is awaiting clearance.
 
 3. **Stop a replaced box (250–350 / 280–400).** Preserve A1342’s endorsed-peer rule in
    `stream-host.ts`. Prove a real archive and bucket restore can supply newer signed evidence
