@@ -12902,22 +12902,26 @@ describe("office printers in discovery", () => {
   });
 
   it.each([
-    ["en-GB", "Use this agent", "Added through the main box"],
-    ["es-ES", "Usar este agente", "Añadida a través del servidor principal"],
-    ["en-GB", undefined, "Added through the main box"],
+    ["en-GB", true],
+    ["es-ES", true],
+    ["en-GB", false],
   ] as const)(
-    "confirms the main-box add until reopening (%s, move on reopen: %s)",
-    async (locale, move, confirmation) => {
+    "confirms the main-box add until reopening (%s, spare can print: %s)",
+    async (locale, spareCanPrint) => {
       const before = currentLocale();
       setLocale(locale);
       try {
+        const confirmation =
+          locale === "es-ES"
+            ? es["printers.page_printer_added_here"]
+            : "Added through the main box";
         const listPagePrinters = vi.fn().mockResolvedValue([]);
         const local = { ...agents[0]!, onThisBox: true };
         const spare = { ...agents[1]!, active: true, onThisBox: false };
         const { el } = await mountWith(
           [
             office(),
-            ...(move ? [office({ agentId: spare.id, agentName: spare.name })] : []),
+            ...(spareCanPrint ? [office({ agentId: spare.id, agentName: spare.name })] : []),
             ...discoveredNetwork,
           ],
           {
@@ -12933,17 +12937,22 @@ describe("office printers in discovery", () => {
         await flush(el);
         await clickAndAwaitClose(el, "page-printer-add-modal", "confirm-add-page-printer");
         const hpRow = "[data-test^=discovered-row-][data-test$=':10.0.0.56:9100']";
-        expect(text(el, hpRow)).toContain("HP LaserJet");
-        expect(text(el, hpRow)).toContain(confirmation);
-        expect(text(el, hpRow)).not.toContain(spare.name);
-        expect(q(el, hpRow)!.closest("tr")!.querySelector("wt-button")).toBeNull();
-        const moveButton = "[data-test='repoint-page-printer-a2:10.0.0.56:9100']";
-        expect(q(el, "[data-test='register-a1:10.0.0.77:9100']")).not.toBeNull();
+        const row = q(el, hpRow);
+        expect(row).not.toBeNull();
+        expect(row!.textContent).toContain("HP LaserJet");
+        expect(row!.textContent).toContain(confirmation);
+        expect(row!.textContent).not.toContain(spare.name);
+        expect(row!.closest("tr")!.querySelector("wt-button")).toBeNull();
+        const kitchenAdd = "[data-test='register-a1:10.0.0.77:9100']";
+        expect(q(el, kitchenAdd)).not.toBeNull();
 
         await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
         await openDiscovery(el);
-        if (move) {
-          expect(text(el, moveButton)).toBe(move);
+        expect(q(el, kitchenAdd)).not.toBeNull();
+        if (spareCanPrint) {
+          const move =
+            locale === "es-ES" ? es["printers.page_printer_use_agent"] : "Use this agent";
+          expect(text(el, "[data-test='repoint-page-printer-a2:10.0.0.56:9100']")).toBe(move);
           expect(text(el, hpRow)).not.toContain(confirmation);
         } else {
           expect(q(el, hpRow)).toBeNull();
