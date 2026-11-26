@@ -1,36 +1,28 @@
 # A1418 slice 3 — keep a replaced box stopped
 
-A box that verifies its replacement stops selling and filing, even mid-service. It stays stopped offline until an administrator confirms the replacement is off and saves a higher term, the number that orders changes of main box.
-[Approved design §§3, 6, 8](../specs/2026-11-07-a1418-box-stop-intent-design.md) · [Slice boundaries](2026-11-26-h-a1418-box-stop-intent.md) · [Landed term floor](2026-11-26-h-a1418-restore-bucket-term.md)
+When a box serving a venue on its own verifies that a restored copy has taken over, it stops taking sales and sending new filing batches. It stays stopped across an offline restart, tells staff why, and emails managers. The waiting page directs an administrator to switch off the replacement and recover from its latest backup.
+[Approved design §§3, 6, 8](../specs/2026-11-07-a1418-box-stop-intent-design.md) · [Slice boundaries](2026-11-26-h-a1418-box-stop-intent.md) · [Landed backup ordering](2026-11-26-h-a1418-restore-bucket-term.md)
 
-## Prove the key before trusting it
+## Prove what a restored box publishes
 
-- Run `stream-loop.e2e.test.ts` with pinned Litestream and versitygw. `testing/stream-loop-scenario.ts` checks the restored key and a newer pointer signed by it, with the original stream and node IDs.
-- In `restore-command.archive.test.ts`, restore an encrypted archive with the source's `node.dump` and vault secrets into a fresh folder. Use the real first start and stream publisher. On both paths, verify the pointer with the key captured from the source before backup, with a different-key control. Take a failed proof to the watcher before building the reader.
+- Run `stream-loop.e2e.test.ts` with pinned Litestream and versitygw. `testing/stream-loop-scenario.ts` checks the restored key and verifies the newer pointer against the original key, stream ID and node ID.
+- Extend `restore-command.archive.test.ts` to restore a real encrypted archive containing `node.dump`, stream settings and vault secrets. Use the real first start and stream publisher. A pointer above the original term must verify with the original public key and fail verification with a different key. Take a failed proof to the watcher before enabling this trust.
 
-## Stop and remember
+## Recognize the replacement and stay stopped
 
-- In `stream-host.ts`, give `readNewerBucketMain` a separate same-identity answer. Read the configured stream's pointer, require this node ID and a strictly newer term than the held chart, and verify with the public key derived from `readNodeIdentityKey`.
-- In `boot.ts`, run one `observeNewerMain` poller alongside unfenced primary service. Keep A1342's endorsed-peer check before peer carry-on and its live stop only after `carriedOnWithoutPeer`.
-  Capture `restore-flow.ts`'s `firstStartPending` before `runFirstStart` can clear it. Exempt that whole boot from the same-identity check and keep the exemption while a failed rebuild leaves the marker. Bucket silence adds no wait.
-- Reuse `handover-stepdown.ts`'s gate, `background-duties.ts` and bounded drain. Close admission and signal duties before awaiting disk. `/api/node` reports no sales and venue advertising stops. Already admitted work and claimed filing batches follow existing drain rules.
-- Write `replaced.json` with stream ID, node ID and verified term using `writeFileDurable` before `restartProcess`. On write failure, keep admission closed and retry saving the evidence already held.
-  Schedule close outside the callback that `StreamHost.stop()` joins. A1342 keeps its own restriction row.
-- Add `replaced.json` to `packages/store/src/state-layout.ts`, excluded from backups and deleted on reset. In `restore.ts`, clear it durably under the venue lock only after successful database and secret placement.
+- In `stream-host.ts`, add a same-identity verdict checked with the local public key, the configured stream ID, this node ID and a strictly newer term than the held chart. Keep the enrolled-peer reader and its existing carry-on refusal. Use one observer in `boot.ts` for the applicable check. Ask alongside service on solo, unfenced primaries after successful first-start completion. Defer the same-identity check while a restore is unfinished. A silent bucket adds no startup wait.
+- Share the admission gate, stop signals and bounded drain from `handover-stepdown.ts`. Close admission and stop new filing batches before awaiting disk. `/api/node` reports no sales and venue advertising stops. Already admitted work and claimed batches follow existing drain rules.
+- Save `replaced.json` using `writeFileDurable`, with the stream ID, node ID and verified term. Schedule restart outside the callback that `StreamHost.stop()` joins, and only after the save. The existing A1342 stepdown restarts on write failure. Here, retain the verified evidence in memory, keep admission closed and retry the write even if the bucket goes offline. A forced stop before the save can leave no local evidence.
+- Use `packages/store/src/state-layout.ts` to exclude the file from backups and delete it on reset. In `restore.ts`, clear it durably under the venue lock after database and secret placement succeeds. Refused placements keep the stop.
 
-## Start stopped and let an administrator carry on
+## Serve the stopped box
 
-- In `boot.ts`, honor the local record before sales or duties, even after a clean restart or with the bucket offline. Use `waiting-start.ts` and `waiting-page.ts` with a replacement reason and no automatic release. Run normal signed-peer admission before raising the term. A known A1342 handover still wins.
-- In `carry-on.ts`, reuse HTTPS, own-page checks, fresh `node.manage` sign-in and the serialized turn. Require confirmation that the replacement is shut down. Use `membership-mint.ts` and `persistNodeMembershipIfNewer` to save a signed chart above both the held and replacement terms.
-  Confirm the higher safe-integer term is committed before durably clearing the stop and releasing the wait. If the record survives a crash between save and clear, the next start still waits. The stream publishes after a full copy.
-- Record one `start.replaced` incident per stop, with an area and English/Spanish words. Use `box-alert-email.ts` and `box-alert-mail.ts` while held, following `boot.ts`'s mail-only repair start. Update both `guide/*/backup-recovery.md` copies.
-- **Watcher decision.** May an administrator carry on with the saved term if the bucket is offline? Recommend a bounded `readBucketTerm` for carry-on so it orders above later visible generations, and staying stopped if that read fails. Only signature-checked pointers can trigger a stop.
+- In `boot.ts`, keep the A1342 restriction and verified peer supersession ahead of this hold. A peer that says proceed or stays silent cannot release the saved stop. Read it before mounting commerce, filing or ordinary peer carry-on. Reuse the waiting page and health response, with no carry-on form for this stop. Give the recovery steps in English and Spanish in the page and `guide/*/backup-recovery.md` using the existing backup restore path.
+- Record one `start.replaced` incident per stop with an area and English and Spanish words. Reuse the `boot.ts` mail-only repair path and `box-alert-email.ts`/`box-alert-mail.ts`. The guide explains that detection starts when the replacement publishes a full copy and this box verifies its next answer. The old box may still trade before then. Update `docs/backlog.md` and the data conventions receipt for the stop.
+- **Decision for the watcher.** Direct carry-on could start trading with the replacement's sales and records absent. Build this stop with current-backup recovery, and settle direct carry-on separately. Power-cut waiting, administrator shutdown, signed early claims, equal terms, changed identities and Cloud are later work.
 
 ## Focused checks and size
 
-- Watch the new behavior tests fail before the fix, then pass. `stream-host.test.ts` checks a valid signature, forgery and equal term. `boot.restore.test.ts` checks first-start success and failure. Re-run A1342's refusal and late-peer restriction in `boot.start-check.test.ts`.
-- In `boot.stop-mark.test.ts`, deliver the pointer after trading starts and stall the marker write. Prove new sales and filing batches stop before the write, restart follows the write, and an offline reboot still holds.
-- `waiting-start.test.ts` checks HTTPS, authorization, the confirmation, save-before-clear and save failure. `box-alert-email.test.ts` and the held boot check notification while stopped. Check backup/reset in `scripts/state-layout.test.ts` and restore success/rollback in `restore-durability.test.ts`.
-
-One PR, about 250–350 product lines and 280–400 test lines. Run Lane H's applicable gates unedited.
-Power-cut waiting, administrator shutdown, early claims, equal terms, changed identity, Cloud, and all fiscal chain and invoice paths are outside this slice.
+- Start with failing tests. `stream-host.test.ts` checks a valid local signature, a wrong key and equal term. `boot.restore.test.ts` checks that a finished restore observes later evidence and an unfinished restore defers. Re-run `boot.start-check.test.ts` for the existing enrolled-peer path.
+- `boot.stop-mark.test.ts` supplies a late pointer and stalls or refuses the marker write. Assert that admissions and new filing batches stop before the write, that a failed write keeps the gate closed and schedules no restart, and that a successful retry holds across an offline reboot. Assert that even a peer's proceed reply leaves a saved stop in force.
+- Check waiting-page recovery and no ordinary carry-on on the held boot. Exercise the one email in `box-alert-email.test.ts`, reset and backup exclusion in `scripts/state-layout.test.ts`, and successful and refused placement in `restore-durability.test.ts`. Run Lane H's gates unedited. Include the restore proofs and stop in one PR, around 190–290 product lines and 220–340 test lines.
