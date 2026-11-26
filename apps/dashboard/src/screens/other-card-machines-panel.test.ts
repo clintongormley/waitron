@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import type { DashboardApi } from "../api/client.js";
 import type { OtherCardMachinesView } from "../api/payments-api.js";
+import { es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { OtherCardMachinesPanel } from "./other-card-machines-panel.js";
@@ -402,8 +403,12 @@ it("shows Spanish wording", async () => {
     api: r.api as unknown as DashboardApi,
     sumUpConnected: false,
   });
-  await expect.element(page.getByRole("heading", { name: "Otros datáfonos" })).toBeVisible();
-  await expect.element(page.getByRole("button", { name: "Añadir un datáfono" })).toBeVisible();
+  await expect
+    .element(page.getByRole("heading", { name: es["other_card_machines.heading"] }))
+    .toBeVisible();
+  await expect
+    .element(page.getByRole("button", { name: es["other_card_machines.add"] }))
+    .toBeVisible();
 });
 
 async function atWidth(width: number, check: () => Promise<void>) {
