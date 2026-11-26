@@ -94,10 +94,13 @@ function lineSpan(source, node) {
   return { start: lineStart, length: end - lineStart };
 }
 
-function routeAnchor(statements, anchor, fileName) {
-  const matches = statements.filter((node) => nameOf(node) === `app.${anchor.replace(" ", ":")}`);
+function mountAnchor(statements, anchor, fileName) {
+  const [kind, name] = anchor.startsWith("local ")
+    ? ["local", anchor.slice("local ".length)]
+    : ["route", `app.${anchor.replace(" ", ":")}`];
+  const matches = statements.filter((node) => nameOf(node) === name);
   if (matches.length !== 1) {
-    throw new Error(`${fileName}: expected one route anchor ${anchor}, found ${matches.length}`);
+    throw new Error(`${fileName}: expected one ${kind} anchor ${anchor}, found ${matches.length}`);
   }
   return matches[0];
 }
@@ -111,8 +114,8 @@ function liftRoutes(source, { mount, groups }) {
   const edits = [];
   const functions = [];
   for (const [name, { first, last, parameters, hoist }] of Object.entries(groups)) {
-    const from = routeAnchor(statements, first, source.fileName);
-    const to = routeAnchor(statements, last, source.fileName);
+    const from = mountAnchor(statements, first, source.fileName);
+    const to = mountAnchor(statements, last, source.fileName);
     const { start } = lineSpan(source, from);
     const { end } = span(source, to);
     const previous = edits.at(-1)?.span;
