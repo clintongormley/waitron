@@ -6,6 +6,7 @@ import type {
   EquipmentItem,
   EquipmentRole,
   RoleEquipment,
+  TillActiveReader,
 } from "../api/device-session-api.js";
 
 /** The reader a payment from this device would be charged on. */
@@ -194,4 +195,18 @@ export function readerReasonOf(
   return loss.kind === "taken"
     ? { line: loss.text, hint: t("pay_equipment.choose_in_hand") }
     : { line: t("pay_equipment.reader_gone").replace("{item}", () => loss.name), hint: null };
+}
+
+/** The reader the device pays on now: switched on, and on a provider the till can pay through. */
+export function activeReaderOf(equipment: DeviceEquipment): TillActiveReader | null {
+  const reader = payReaderOf(equipment);
+  return reader.kind === "ready"
+    ? {
+        id: reader.id,
+        name: reader.name,
+        provider: reader.provider,
+        printsOwnSlipAutomatically: equipment.roles.find((role) => role.role === "card_terminal")!
+          .resolved!.printsOwnSlipAutomatically!,
+      }
+    : null;
 }

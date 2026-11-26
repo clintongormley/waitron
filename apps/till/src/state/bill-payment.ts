@@ -417,3 +417,22 @@ export function payLines(
       };
     });
 }
+
+/** Refusals about the money already on a bill: after one, the party's bills and the shown bill's
+ * payments are read again, so the screen shows what the bill now holds. */
+const BILL_MONEY_REFUSALS = new Set([
+  "bill.payments_received",
+  "bill.received_exceeds_total",
+  "bill.refund_in_progress",
+  "order.payment_in_flight",
+  "working_order.not_open",
+]);
+
+export function isBillMoneyRefusal(error: unknown): boolean {
+  const code = (error as { code?: unknown } | undefined)?.code;
+  return typeof code === "string" && BILL_MONEY_REFUSALS.has(code);
+}
+
+export function isPaymentsReceived(error: unknown): boolean {
+  return (error as { code?: string } | undefined)?.code === "bill.payments_received";
+}

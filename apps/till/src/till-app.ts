@@ -61,6 +61,7 @@ import type { DeviceZonesRefusal } from "./widgets/device-zones-dialog.js";
 import { deviceZoneNavigation } from "./state/device-zones.js";
 import { heldViews, placeFor } from "./state/draft-place.js";
 import {
+  activeReaderOf,
   autoPickReader,
   payReaderOf,
   readerLoss,
@@ -315,7 +316,9 @@ import {
 } from "./widgets/cancel-credit-dialog.js";
 import {
   confirmationOf,
+  isBillMoneyRefusal,
   isLatestSend,
+  isPaymentsReceived,
   isPaymentInFlight,
   isTakePaymentRefusal,
   moneyPlus,
@@ -408,6 +411,8 @@ import {
   shownBills,
   stillOwed,
   stillToPay,
+  billsSeen,
+  storedInvoiceOf,
 } from "./state/bill-state.js";
 import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
 import {
@@ -608,31 +613,10 @@ const IDLE_CLOCK: ClockingSnapshot = Object.freeze({
   refusal: null,
 });
 
-const billsSeen = (bills: readonly PartyBill[]): string =>
-  JSON.stringify(
-    bills.map((bill) => [
-      bill.workingOrderId,
-      bill.revision,
-      bill.status,
-      bill.outstanding,
-      bill.hasPayments,
-    ]),
-  );
-
 interface ReleasedBill {
   personId: string;
   bill: LocalBill;
   savedBefore?: number;
-}
-
-function storedInvoiceOf(
-  orderId: string,
-  { invoiceType, recipient, invoiceDelivery, invoiced }: HeldOrder,
-): { orderId: string } & Pick<
-  HeldOrder,
-  "invoiceType" | "recipient" | "invoiceDelivery" | "invoiced"
-> {
-  return { orderId, invoiceType, recipient, invoiceDelivery, invoiced };
 }
 
 /** A bill this device holds or released, for the bar (D4, D10): its store's lines, and whether
@@ -719,20 +703,6 @@ registerIcons({
 
 /** The most dishes one move request may name (`POST /api/working-orders/:id/lines/move-station`). */
 const MOVE_STATION_MAX_LINES = 100;
-
-/** The reader the device pays on now: switched on, and on a provider the till can pay through. */
-function activeReaderOf(equipment: DeviceEquipment): TillActiveReader | null {
-  const reader = payReaderOf(equipment);
-  return reader.kind === "ready"
-    ? {
-        id: reader.id,
-        name: reader.name,
-        provider: reader.provider,
-        printsOwnSlipAutomatically: equipment.roles.find((role) => role.role === "card_terminal")!
-          .resolved!.printsOwnSlipAutomatically!,
-      }
-    : null;
-}
 
 interface TableAllergyRead {
   api: TillApi;
@@ -985,21 +955,6 @@ const STORED_WAY_CHANGED: ReadonlySet<string> = new Set([
  * moved to another table (`bill.other_party`). */
 const BILL_LEFT_REFUSALS: ReadonlySet<string> = new Set(["tab.not_open", "bill.other_party"]);
 
-/** Refusals about the money already on a bill: after one, the party's bills and the shown bill's
- * payments are read again, so the screen shows what the bill now holds. */
-const BILL_MONEY_REFUSALS = new Set([
-  "bill.payments_received",
-  "bill.received_exceeds_total",
-  "bill.refund_in_progress",
-  "order.payment_in_flight",
-  "working_order.not_open",
-]);
-
-function isBillMoneyRefusal(error: unknown): boolean {
-  const code = (error as { code?: unknown } | undefined)?.code;
-  return typeof code === "string" && BILL_MONEY_REFUSALS.has(code);
-}
-
 const DESTINATION_REFUSALS: ReadonlySet<string> = new Set([
   "order.payment_in_flight",
   "bill.refund_in_progress",
@@ -1043,10 +998,6 @@ function billWriteError(error: unknown, cause: ExcessCause = "move"): CounterErr
   return refused?.code === "bill.received_exceeds_total" && typeof refused.excess === "string"
     ? { excess: refused.excess, ...(cause === "move" ? {} : { cause }) }
     : tableWriteError(error);
-}
-
-function isPaymentsReceived(error: unknown): boolean {
-  return (error as { code?: string } | undefined)?.code === "bill.payments_received";
 }
 
 /** After an earlier send of the same sale or refund that got no answer, a refusal given before any
