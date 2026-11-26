@@ -95,9 +95,12 @@ alongside the last reported printing error.
 
 If prints take several seconds to start over Bluetooth, switch the printer off and on again.
 
-Choose **View printout** on an A4 invoice to see its pages redrawn from the sale. If the queue
-shows the invoice printed, choose **Reprint** to send a marked copy to any active receipt or A4
-printer. If printing failed or the queue says **May have printed**, check the printer and use
+Choose **View printout** to see the job and its status. Use the arrows at the bottom or the Left
+and Right keys to move through the printouts on that queue page. On a small screen, scroll sideways
+across a wide printout. Choose **Reprint** from the preview or the queue when it is offered.
+
+If the queue shows an A4 invoice printed, **Reprint** sends a marked copy to any active receipt
+or A4 printer. If printing failed or the queue says **May have printed**, check the printer and use
 **Orders** to send the invoice again.
 
 If an A4 job says **Held** because the printer is out of paper, add paper and let the job finish.

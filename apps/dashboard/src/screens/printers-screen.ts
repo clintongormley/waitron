@@ -34,7 +34,7 @@ import "@waitron/ui/src/components/wt-help-tooltip.js";
 import "@waitron/ui/src/components/wt-spinner.js";
 import "@waitron/ui/src/components/wt-notice.js";
 import "../widgets/row-actions.js";
-import "../widgets/print-job-preview.js";
+import { canViewPrintout, PrintQueuePreview, reprintNotice } from "./print-queue-preview.js";
 import {
   deviceKey,
   foundPrinters,
@@ -73,7 +73,7 @@ import {
   jobReason,
   jobStatus,
   jobWaitMessage,
-} from "./printer-job-status.js";
+} from "../widgets/printer-job-status.js";
 import { formatIsoMinute, formatRecentMinute } from "../date-utils.js";
 import { settingsCardStyles, settingsRows, type SettingsRow } from "../widgets/settings-card.js";
 import {
@@ -102,8 +102,6 @@ import type {
   PagePrinterRow,
   PrintAgentRow,
   PrintJobRow,
-  PrintJobPreview,
-  A4PrintJobPreview,
   PrintPaperWidth,
   PrintResolution,
   PrintTransport,
@@ -1145,29 +1143,30 @@ export class PrintersScreen extends LitElement {
   }
   /** Whether the open agent, printer or printer-name form has been submitted since it opened. */
   @state() private formAttempted = false;
-  @state() private preview: PrintJobPreview | A4PrintJobPreview | null = null;
-  @state() private previewOpen = false;
+  readonly #preview = new PrintQueuePreview(() => this.requestUpdate());
   @state() private jobs: PrintJobRow[] = [];
   @state() private completedJobsPage = 0;
   @state() private readingCompletedJobs = false;
   /** The job the Reprint dialog is open on: its row in `jobs`, or the last one it had there. */
   @state() private reprintJob: PrintJobRow | null = null;
-  /** Jobs whose reprint has been sent and not answered, even after the dialog closed. */
   @state() private reprintsSending: ReadonlySet<string> = new Set();
   readonly #reprintApi: Pick<DashboardApi, "resendPrintJob"> = {
     resendPrintJob: async (id, printerId) => {
+      const queuedAt = this.reprintJob?.createdAt;
       this.reprintsSending = new Set([...this.reprintsSending, id]);
       try {
         return await this.api.resendPrintJob(id, printerId);
       } catch (error) {
-        if (this.reprintJob?.id !== id) this.errorKey = codeOf(error);
+        if (this.reprintJob?.id === id) throw error;
+        if (this.#preview.job && queuedAt !== undefined)
+          this.#preview.reprintError = { queuedAt, code: codeOf(error) };
+        else this.errorKey = codeOf(error);
         throw error;
       } finally {
         this.reprintsSending = new Set([...this.reprintsSending].filter((job) => job !== id));
       }
     },
   };
-  /** The printer a reprint was last sent to, while its notice shows. */
   @state() private reprintSentTo: string | null = null;
   /** The last print the edit or calibration dialog sent. */
   @state() private calibrationJobId: string | null = null;
@@ -1340,6 +1339,7 @@ export class PrintersScreen extends LitElement {
   protected override willUpdate(changed: PropertyValues): void {
     // A new A4 list supersedes a failed test-page read's message, as a fresh read of the rows.
     if (changed.has("pagePrinters")) this.#testPages.readError = null;
+    this.#preview.refresh(this.jobs);
     if (changed.has("jobs") && this.reprintJob !== null) {
       const id = this.reprintJob.id;
       const fresh = this.jobs.find((job) => job.id === id);
@@ -4510,19 +4510,17 @@ export class PrintersScreen extends LitElement {
         key: "preview",
         label: t("printers.actions"),
         cell: (j) =>
-          j.kind === "drawer" || (j.kind === "a4" && j.pageDocument !== "invoice")
+          !canViewPrintout(j)
             ? nothing
             : html`<div part="job-actions">
-                <wt-button data-test=${`view-job-${j.id}`} @click=${() => void this.#viewJob(j.id)}
+                <wt-button data-test=${`view-job-${j.id}`} @click=${() => void this.#viewJob(j)}
                   >${t("printers.view_job")}</wt-button
                 >${
                   j.canResend
                     ? html`<wt-button
                         data-test=${`resend-job-${j.id}`}
                         ?loading=${this.reprintsSending.has(j.id)}
-                        @click=${() => {
-                          if (!this.reprintsSending.has(j.id)) this.reprintJob = j;
-                        }}
+                        @click=${() => this.#reprint(j)}
                         >${t("printers.resend_job")}</wt-button
                       >`
                     : nothing
@@ -4609,32 +4607,31 @@ export class PrintersScreen extends LitElement {
         this.reprintJob = null;
       }}
       @reprinted=${(event: CustomEvent<{ printerName: string }>) => {
-        // Also sent by a dialog already closed, whose request was still being answered.
-        if (this.reprintJob?.id === id) this.reprintJob = null;
+        if (this.reprintJob?.id === id) {
+          this.reprintJob = null;
+          void this.updateComplete.then(() =>
+            this.renderRoot.querySelector("dashboard-print-job-preview")?.focusAfterReprint(id),
+          );
+        }
         this.reprintSentTo = event.detail.printerName;
         if (this.isConnected) void this.#load();
       }}
     ></dashboard-print-job-reprint-dialog>`;
   }
 
-  #renderReprintSent(): TemplateResult | typeof nothing {
-    if (this.reprintSentTo === null) return nothing;
-    return html`<wt-notice
-      class="sent"
-      data-test="reprint-sent"
-      .duration=${NOTICE_MS}
-      @wt-notice-gone=${() => {
-        this.reprintSentTo = null;
-      }}
-      >${fill("printers.reprint_sent", { printer: this.reprintSentTo })}</wt-notice
-    >`;
+  #reprint(job: PrintJobRow): void {
+    if (this.reprintsSending.has(job.id)) return;
+    this.#preview.reprintError = null;
+    this.reprintJob = job;
   }
 
-  async #viewJob(id: string): Promise<void> {
+  async #viewJob(job: PrintJobRow): Promise<void> {
     this.errorKey = null;
+    const table = this.renderRoot.querySelector<HTMLElementTagNameMap["wt-data-table"]>(
+      '[data-test="jobs-table"]',
+    );
     try {
-      this.preview = await this.api.getPrintJobPreview(id);
-      this.previewOpen = true;
+      await this.#preview.show(job, this.api, table?.shownKeys() ?? [job.id]);
     } catch (error) {
       this.errorKey = codeOf(error);
     }
@@ -5690,6 +5687,11 @@ export class PrintersScreen extends LitElement {
 
   override render(): TemplateResult {
     // Every action inside an open dialog shows its own refusal.
+    const reprinted = reprintNotice(
+      this.reprintSentTo,
+      NOTICE_MS,
+      () => (this.reprintSentTo = null),
+    );
     const dialogOpen = this.#dialogShowsRefreshError || this.selectedPrinterId !== null;
     return html`<h1 class="title">${t("printers.title")}</h1>
       ${this.#renderBluetoothDeleteWarnings()}
@@ -5714,10 +5716,10 @@ export class PrintersScreen extends LitElement {
       ${
         dialogOpen
           ? nothing
-          : html`${this.#renderTestPageSent()}${this.#renderEveryStationNotice()}${this.#renderReprintSent()}${this.#renderPairedAgain()}${this.errorKey ? html`<p class="error" role="alert">${this.#bluetoothRefusal(this.errorKey)}</p>` : nothing}
+          : html`${this.#renderTestPageSent()}${this.#renderEveryStationNotice()}${this.#preview.job ? nothing : reprinted}${this.#renderPairedAgain()}${this.errorKey ? html`<p class="error" role="alert">${this.#bluetoothRefusal(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
-      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#deleteDialog.render("delete-printer-dialog", printerDeleteCopy(this.#deleteIsPage, this.#deleteIsBluetooth))}${this.#renderEveryStationDialog()}${this.#renderReprint()}
+      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#deleteDialog.render("delete-printer-dialog", printerDeleteCopy(this.#deleteIsPage, this.#deleteIsBluetooth))}${this.#renderEveryStationDialog()}
       ${
         this.profileAssignment && this.addingPagePrinter === null
           ? html`<dashboard-equipment-profile-picker
@@ -5730,13 +5732,14 @@ export class PrintersScreen extends LitElement {
             ></dashboard-equipment-profile-picker>`
           : nothing
       }
-      <dashboard-print-job-preview
-        .preview=${this.preview}
-        .open=${this.previewOpen}
-        @preview-close=${() => {
-          this.previewOpen = false;
-        }}
-      ></dashboard-print-job-preview>`;
+      ${this.#preview.render(
+        this.jobs,
+        this.api,
+        this.#preview.job ? this.#jobPrinterName(this.#preview.job) : "",
+        (job) => this.#reprint(job),
+        this.reprintsSending,
+        this.#preview.job ? reprinted : nothing,
+      )}${this.#renderReprint()}`;
   }
 }
 

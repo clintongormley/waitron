@@ -89,30 +89,69 @@ describe("print job preview", () => {
       await expectNoA11yViolations(host);
     },
   );
-  it("shows both redrawn invoice pages in order inside the phone preview", async () => {
-    await page.viewport(390, 800);
+  it("shows both invoice pages at the receipt scale and lets a phone keyboard pan", async () => {
+    await page.viewport(1440, 800);
     const canvas = document.createElement("canvas");
+    canvas.width = 900;
+    canvas.height = 1273;
     const data = canvas.toDataURL().split(",")[1]!;
     const { el, host } = await mountWidget<PrintJobPreviewDialog>("dashboard-print-job-preview", {
       open: true,
-      preview: {
-        kind: "a4",
-        pages: [
-          { data, width: 900, height: 1273 },
-          { data, width: 900, height: 1273 },
-        ],
-      },
+      preview,
     });
+    const receiptWidth = el.shadowRoot!.querySelector(".paper")!.getBoundingClientRect().width;
+    el.preview = {
+      kind: "a4",
+      pages: [
+        { data, width: 900, height: 1273 },
+        { data, width: 900, height: 1273 },
+      ],
+    };
+    await el.updateComplete;
     const pages = [...el.shadowRoot!.querySelectorAll("img")];
     expect(pages.map((image) => image.alt)).toEqual([
       fill("printers.preview_invoice_page", { page: "1" }),
       fill("printers.preview_invoice_page", { page: "2" }),
     ]);
+    const width = pages[0]!.getBoundingClientRect().width;
+    expect(Math.abs(width / 210 - receiptWidth / 80)).toBeLessThan(0.015);
+    expect(getComputedStyle(pages[0]!).outlineStyle).toBe("solid");
+    await page.viewport(390, 800);
     for (const image of pages) {
       await image.decode();
-      expect(image.getBoundingClientRect().width).toBeLessThan(390);
+      const drawn = image.getBoundingClientRect();
+      expect(drawn.width).toBeCloseTo(width);
+      expect(drawn.height / drawn.width).toBeCloseTo(1273 / 900);
     }
-    expect(el.shadowRoot!.textContent).toContain(t("printers.preview_invoice_notice"));
+    const paper = el.shadowRoot!.querySelector<HTMLElement>(".paper-viewport")!;
+    paper.focus();
+    await userEvent.keyboard("{ArrowRight}");
+    await vi.waitFor(() => expect(paper.scrollLeft).toBeGreaterThan(0));
+    expect(el.shadowRoot!.textContent).not.toContain("These pages were redrawn");
+    await expectNoA11yViolations(host);
+  });
+
+  it("keeps the labelled arrows and actions reachable on a phone", async () => {
+    await page.viewport(390, 800);
+    const { el, host } = await mountWidget<PrintJobPreviewDialog>("dashboard-print-job-preview", {
+      open: true,
+      preview,
+      previous: true,
+      next: false,
+      canReprint: true,
+    });
+    const modal = el.shadowRoot!.querySelector<WtModal>("wt-modal")!;
+    await modal.updateComplete;
+    for (const key of ["previous", "next", "close", "reprint"]) {
+      const control = el.shadowRoot!.querySelector<HTMLElement>(`[data-test=preview-${key}]`);
+      expect(control, key).not.toBeNull();
+      const bounds = control!.getBoundingClientRect();
+      expect(bounds.left).toBeGreaterThanOrEqual(0);
+      expect(bounds.right).toBeLessThanOrEqual(390);
+      expect(bounds.bottom).toBeLessThanOrEqual(800);
+    }
+    const previous = el.shadowRoot!.querySelector("[data-test=preview-previous]")!;
+    expect(previous.shadowRoot!.querySelector("button")).toHaveAccessibleName();
     await expectNoA11yViolations(host);
   });
 
@@ -124,7 +163,7 @@ describe("print job preview", () => {
     expect(el.shadowRoot!.querySelector("pre")?.textContent).toBe(preview.text);
     expect(el.shadowRoot!.textContent).toContain(preview.qrData[0]);
     expect(el.shadowRoot!.querySelector("a,script")).toBeNull();
-    expect(el.shadowRoot!.textContent).toContain(t("printers.preview_notice"));
+    expect(el.shadowRoot!.textContent).not.toContain("Approximate paper layout");
     const modal = el.shadowRoot!.querySelector<WtModal>("wt-modal")!;
     await modal.updateComplete;
     expect(modal.heading).toBe(t("printers.preview_title"));
