@@ -841,3 +841,22 @@ it("offers a 50% over two Soups again on the second Soup when its Bread takes it
   await give(bill.tabId, second.id, 5000, given);
   expect(await noticesOn(bill)).toBeUndefined();
 });
+
+it("offers a 50% over two Soups again on the second Soup once the first Soup's Bread is removed and added again, putting it below the second", async () => {
+  const { bill, given, first, second } = await halfOffTwoSoups();
+  await editExtras(bill.tabId, first.lineNo, [spec.bread]);
+  await editExtras(bill.tabId, second.lineNo, [spec.bread]);
+  const lineNoOf = async (id: string) =>
+    (await specRows(spec, bill.tabId)).find((row) => row.id === id)!.lineNo;
+  await editExtras(bill.tabId, await lineNoOf(first.id), []);
+  await editExtras(bill.tabId, await lineNoOf(first.id), [spec.bread]);
+  expect(await lineNoOf(second.id)).toBeLessThan(await lineNoOf(first.id));
+
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({
+      adjustmentId: given,
+      amount: "6.00",
+      reapplyOn: { lineId: second.id },
+    }),
+  ]);
+});
