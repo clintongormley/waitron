@@ -1733,6 +1733,11 @@ Still needed from outside, for the next version's declaration: the asesor's answ
 of 18 November leave items d) and f) to be confirmed. The
 owner's address is settled: supplied on 2026-11-04, it travels with the other two.
 
+**Parked until a live release is near** (owner, 2026-11-26 19:39: "nothing is going to happen there until we're ready to release a live version"). No lane holds it. When it is picked up:
+- Everything on Waitron's side is built but one small PR: depend on `@waitron/verifactu` ^0.3.0 and make `pnpm release prepare` refuse a library with no declaration, per [the plan](../superpowers/plans/2026-11-14-a940-6-library-declaration.md). 0.3.0 waits for the asesor's Q53 answer (owner, 2026-11-22 13:12: "that release is public - let's wait on doing that declaration"); the owner or the watcher cuts its tag, and verifactu's four release secrets are set (20 Nov).
+- Before the release, the declaration template (`packages/fiscal-verifactu/declarations/template.md`) still mentions a standby server; make it say what is true at that release.
+- The owner's rules: a declaration only when a version is released, one per version, published before that version is used and kept with the release (2026-10-21); the wording is the owner's to approve.
+
 ## Retire the historical allocation formats from `fiscal-verifactu`
 
 Signed paper, Cloud receipts and emergency names are still read by historical code: the activation
