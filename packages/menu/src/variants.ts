@@ -126,7 +126,22 @@ export async function variantsOfProducts(
   return grouped;
 }
 
-export { parentsWithActiveVariants } from "./active-variant-parents.js";
+/**
+ * Which of `productIds` have at least one Active variant, Available or not, in ONE query. Such a
+ * product is never sold as itself, as a dish or as an extras pick: only a dish line
+ * rung up from a menu offer can name the variant to sell.
+ */
+export async function parentsWithActiveVariants(
+  tx: Transaction,
+  productIds: readonly string[],
+): Promise<Set<string>> {
+  if (productIds.length === 0) return new Set();
+  const rows = await tx
+    .selectDistinct({ parentId: products.parentId })
+    .from(products)
+    .where(and(inArray(products.parentId, [...new Set(productIds)]), eq(products.active, true)));
+  return new Set(rows.map((row) => row.parentId!));
+}
 
 /**
  * Refuses leaving `parentId` with an Active variant while an extras list offers it: the till never

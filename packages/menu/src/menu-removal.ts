@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
 import {
   menuItems,
   menuItemVariantOverrides,
@@ -7,7 +7,6 @@ import {
   sectionMembers,
   type Transaction,
 } from "@waitron/db";
-import { allParentsWithActiveVariants } from "./active-variant-parents.js";
 import { batches } from "./batches.js";
 import { onStructureChanged } from "./section-structure.js";
 import { loadSectionGraph, menusContaining, reachableProducts } from "./section-graph.js";
@@ -24,6 +23,9 @@ export async function dropMenuPrices(
       .where(inArray(menuItemVariantOverrides.variantId, batch));
 }
 
+const ordinaryMenus = (tx: Transaction) =>
+  tx.select({ id: menus.id }).from(menus).where(ne(menus.kind, "set_menu"));
+
 /**
  * Deletes the products' own prices on every ordinary menu, deleted menus included. A set menu's
  * price on a dish is a supplement and stays.
@@ -32,17 +34,42 @@ export async function dropProductMenuPrices(
   tx: Transaction,
   productIds: readonly string[],
 ): Promise<void> {
-  const ordinary = tx.select({ id: menus.id }).from(menus).where(ne(menus.kind, "set_menu"));
   for (const batch of batches(productIds))
     await tx
       .update(menuItems)
       .set({ grossPrice: null })
-      .where(and(inArray(menuItems.productId, batch), inArray(menuItems.menuId, ordinary)));
+      .where(
+        and(
+          inArray(menuItems.productId, batch),
+          inArray(menuItems.menuId, ordinaryMenus(tx)),
+          isNotNull(menuItems.grossPrice),
+        ),
+      );
 }
 
-/** Deletes, on every ordinary menu, the price of every product that has an Active variant. */
-export async function dropMenuPricesOfProductsWithVariants(tx: Transaction): Promise<void> {
-  await dropProductMenuPrices(tx, [...(await allParentsWithActiveVariants(tx))]);
+/**
+ * Deletes, on every ordinary menu or only on `menuId` when it is one, the price of every product
+ * that has an Active variant.
+ */
+export async function dropMenuPricesOfProductsWithVariants(
+  tx: Transaction,
+  menuId?: string,
+): Promise<void> {
+  const withActiveVariants = tx
+    .select({ id: products.parentId })
+    .from(products)
+    .where(and(eq(products.active, true), isNotNull(products.parentId)));
+  await tx
+    .update(menuItems)
+    .set({ grossPrice: null })
+    .where(
+      and(
+        isNotNull(menuItems.grossPrice),
+        inArray(menuItems.productId, withActiveVariants),
+        inArray(menuItems.menuId, ordinaryMenus(tx)),
+        ...(menuId === undefined ? [] : [eq(menuItems.menuId, menuId)]),
+      ),
+    );
 }
 
 /**
