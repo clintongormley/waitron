@@ -1259,6 +1259,12 @@ the reopened bill, except a dish the kitchen had started or finished, which keep
 (watcher, 22:42). On the till, that dish's sent-dish window offers **Comp…**, as for any dish cancelled with its charge kept, which takes the charge off with a reason (A1599). An extra of that dish the kitchen had not started comes off. The stop is not offered on a bill holding a payment, one given back in full included.
 A dish held in an unsent group is stopped without being fired; D4 still applies to **Mark served**._
 
+_2026-11-26: **Reopen bill**, **Pay for items** on a printed bill and a cancel that files a corrective
+refuse a receipt whose current version AEAT refused and that nothing replaced
+(`fiscal.original_refused`, by the filing queue's own test through the seat's `refuseCreditOf`):
+the corrective would correct a receipt AEAT never held, after which Fiscal filing's replacement is
+refused (`sale.replacement_not_first`) (watcher, lane L `questions.md`, 16:37)._
+
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)
 
 The recovery guide's **After a recovery** section (`apps/server/src/guide/en/backup-recovery.md`,

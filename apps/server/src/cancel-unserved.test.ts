@@ -591,6 +591,34 @@ describe("Nothing was served files the corrective, as before, on any other print
     expect(await voidsOf(saleId)).toEqual([]);
   });
 
+  it("refuses one whose payment was given back in full when AEAT refused it, writing no corrective", async () => {
+    const party = await seatedWith(venue, "Tarta");
+    const paymentId = await fixture.payInCash(venue, party.tabId, "5.00");
+    const givenBack = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${party.tabId}/payments/${paymentId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        appliedAmount: "5.00",
+        tipAmount: "0.00",
+        reason: "Overcharged",
+        override: { personId: venue.adminId, pin: "1234" },
+      },
+    );
+    expect(givenBack.status, JSON.stringify(givenBack.json)).toBe(200);
+    await printAnyway(party);
+    const saleId = await saleOf(party.tabId);
+    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+
+    await expectRefused(party.tabId, () => cancel(party.tabId), {
+      status: 409,
+      code: "fiscal.original_refused",
+    });
+    expect(await fixture.creditsOf(venue, saleId)).toEqual([]);
+  });
+
   it("one replaced after AEAT refused it, crediting the replacement", async () => {
     const party = await printedUnserved("Tarta");
     const saleId = await saleOf(party.tabId);

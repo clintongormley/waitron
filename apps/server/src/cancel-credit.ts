@@ -81,6 +81,16 @@ export async function refuseServedDishes(tx: Transaction, workingOrderId: string
   if (dishes.length > 0) throw new AppError("bill.served_dishes", { workingOrderId, dishes });
 }
 
+/** Refuses, as the regime does (`refuseCreditOf`), a credit of the invoice `invoiceId`, filed
+ * against its replacement when it has one, that would correct a record the authority never held. */
+export async function refuseCreditOfRefused(
+  tx: Transaction,
+  backend: FiscalBackend,
+  invoiceId: SaleId,
+): Promise<void> {
+  await backend.refuseCreditOf?.(tx, await correctionTargetFor(tx, invoiceId));
+}
+
 /**
  * Credit the whole of an issued invoice with a corrective invoice in the node's live corrective
  * series, filed under the request's device, its lines the invoice's with their signs reversed and its VAT

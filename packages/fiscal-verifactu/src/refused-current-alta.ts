@@ -10,7 +10,8 @@ export interface InvoiceIdentity {
 /**
  * True when an alta under the invoice's identity that no later version replaced is refused, with
  * any code or none. The filing queue sets an ordinary cancellation of such an invoice aside
- * (`drain.ts`), and `recordVoid` refuses to write one, by this same test.
+ * (`drain.ts`), and `recordVoid` refuses to write one, by this same test; `refuseCreditOf` refuses
+ * a corrective of such an invoice by it too.
  */
 export function currentAltaRefused(invoice: InvoiceIdentity): SQL {
   return sql`exists (

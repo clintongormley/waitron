@@ -228,7 +228,7 @@ async function payFor(partyId: string | null, billId: string, picks: ItemPick[])
 }
 
 async function preview(billId: string, picks: ItemPick[]): Promise<string> {
-  const deps = { db: v.db, admission: testTradingAdmission() };
+  const deps = { db: v.db, admission: testTradingAdmission(), backend: v.backend };
   const { total } = await previewPayForItems(deps, v.cfg, billId, { picks, method: "card" }, null);
   return total;
 }

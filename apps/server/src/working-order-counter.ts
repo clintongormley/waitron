@@ -21,6 +21,7 @@ import { refuseBillWithPayments, refuseBillHoldingMoney } from "./bill-payments.
 import {
   cancelPermission,
   creditWholeInvoice,
+  refuseCreditOfRefused,
   readOrderInvoice,
   refuseServedDishes,
   type IssuedInvoice as OrderInvoice,
@@ -203,6 +204,7 @@ export async function cancelPlacedOrder(
       if (permission === "sale.void") {
         await recordVoid(tx, deps.backend, invoice!.id, reason, authz, cfg.nodeId);
       } else if (invoice !== undefined) {
+        await refuseCreditOfRefused(tx, deps.backend, invoice.id);
         await creditWholeInvoice(tx, deps, cfg, invoice, authz);
       }
       await abandonPlacedOrder(tx, cfg, id);

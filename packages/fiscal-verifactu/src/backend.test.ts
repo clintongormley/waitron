@@ -572,6 +572,57 @@ describe("recordVoid", () => {
   );
 });
 
+describe("refuseCreditOf", () => {
+  const refuseCredit = (saleId: string) =>
+    withTransaction(suite.db, (tx) => backend.refuseCreditOf(tx, brandSaleId(saleId)));
+
+  async function answer(saleId: string, estado: string, codigo: string | null = null) {
+    await suite.db
+      .run(sql`update verifactu_submissions set estado = ${estado}, codigo_error = ${codigo}
+      where registro_id in (select id from verifactu_records where sale_id = ${saleId})`);
+  }
+
+  it.each(["1112", "3000", null])("refuses a receipt AEAT refused (%s)", async (codigo) => {
+    const { saleId } = await sell();
+    await answer(saleId, "rechazado", codigo);
+
+    await expect(refuseCredit(saleId)).rejects.toMatchObject({
+      code: "fiscal.original_refused",
+      params: { saleId },
+    });
+  });
+
+  it("refuses a receipt whose fixed version AEAT refused", async () => {
+    const { saleId } = await sell();
+    await answer(saleId, "aceptado");
+    await fixedVersionOf(suite.db, nodeId, saleId, "rechazado", "1100");
+
+    await expect(refuseCredit(saleId)).rejects.toMatchObject({ code: "fiscal.original_refused" });
+  });
+
+  it.each(["pendiente", "enviando", "aceptado", "aceptado_con_errores"])(
+    "admits a receipt AEAT answered or has yet to answer (%s)",
+    async (estado) => {
+      const { saleId } = await sell();
+      await answer(saleId, estado);
+
+      await expect(refuseCredit(saleId)).resolves.toBeUndefined();
+    },
+  );
+
+  it("admits a receipt AEAT refused once a fixed version of it is accepted", async () => {
+    const { saleId } = await sell();
+    await answer(saleId, "rechazado", "1100");
+    await fixedVersionOf(suite.db, nodeId, saleId, "aceptado", null);
+
+    await expect(refuseCredit(saleId)).resolves.toBeUndefined();
+  });
+
+  it("admits a sale with no record, which the corrective's own refusal answers", async () => {
+    await expect(refuseCredit("00000000-0000-4000-8000-000000000000")).resolves.toBeUndefined();
+  });
+});
+
 /**
  * `FechaExpedicionFacturaAnulada` must come back as the stored calendar day for any offset. +13:00
  * crosses midnight from a noon-UTC anchor. -12:00 only reaches midnight from noon, so it catches a

@@ -47,7 +47,8 @@ The till reaches the second row with a 1112 receipt that was replaced and never 
   run (earlier)); a waiting one can become held. Thrown in Veri\*Factu's `recordVoid`, no seat method: one expected failure
   of 330 fiscal tests, 451 of 451 server ones (run (earlier)). Only after a box switch. On the box's own chain a waiting or
   held receipt needs nothing (run (earlier)). A refused one is refused by the test that sets a cancellation aside
-  (`currentAltaRefused`).
+  (`currentAltaRefused`). Reopen bill, Pay for items on a printed bill and a cancel filing a corrective refuse such a
+  receipt too, by the same test through the seat's `refuseCreditOf`, before anything is written (watcher, 26 Nov 16:37).
 - **After** (run): the bill is abandoned, a seated party gets a fresh one, Orders says **Voided**. If AEAT refuses the
   cancellation: the usual **Refused** case, no resend. Staff's answer decides: Print anyway leaves dishes unmarked, so no
   mark proves nothing, and a wrong answer takes a real sale out of AEAT for good.

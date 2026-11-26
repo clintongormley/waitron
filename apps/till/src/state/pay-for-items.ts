@@ -119,8 +119,11 @@ export function itemsAllocatedFrom(preview: AllocationPreview): AllocationPrevie
   return { ...preview, total: preview.applied };
 }
 
-/** The Pay window's words for a set-menu dish that leaves only with its set menu. */
+/** The Pay window's words for a set-menu dish that leaves only with its set menu, and for a printed
+ * bill Reopen bill refuses for its receipt. */
 export function itemsRefusal(refusal: PayRefusal): PayRefusal {
+  if (refusal.code === "fiscal.original_refused")
+    return { ...refusal, text: t("split.refused_receipt_refused") };
   const { dishNames = [] } = refusal;
   if (refusal.code === "set_menu.move_adjusted" && dishNames.length > 0)
     return {

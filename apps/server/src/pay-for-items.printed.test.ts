@@ -6,6 +6,7 @@ import { createProduct } from "@waitron/menu";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { centsToDecimal, thousandthsToDecimal } from "@waitron/shared";
+import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
   inTx,
@@ -503,6 +504,24 @@ describe("Pay for items on a printed bill", () => {
     expect(await reopenedFrom(party.tabId)).toEqual([]);
   });
 
+  it("a ticket AEAT refused and that nothing replaced reopens nothing", async () => {
+    const party = await printed(await seated("soup", "hake"));
+    const original = await fixture.invoiceOf(venue, party.tabId);
+    await inTx(venue, (tx) => refusedByAeat(tx, original.id));
+    const body = await itemsBody(
+      party,
+      [{ lineId: await lineOf(party.tabId, "hake") }],
+      cashFor("15.00", "20.00"),
+    );
+
+    await fixture.expectRefused(venue, party.tabId, () => payItems(party.tabId, body), {
+      status: 409,
+      code: "fiscal.original_refused",
+    });
+    expect(await fixture.creditsOf(venue, original.id)).toEqual([]);
+    expect(await reopenedFrom(party.tabId)).toEqual([]);
+  });
+
   it("a stale party revision is refused before the reopen", async () => {
     const party = await printed(await seated("soup", "hake"));
     const body = await itemsBody(
@@ -724,6 +743,23 @@ describe("previewing Pay for items on a printed bill", () => {
           method: "card",
         }),
       { status: 409, code: "bill.unserved_dishes" },
+    );
+  });
+
+  it("the preview says a ticket AEAT refused cannot be reopened", async () => {
+    const party = await printed(await seated("soup", "hake"));
+    const original = await fixture.invoiceOf(venue, party.tabId);
+    await inTx(venue, (tx) => refusedByAeat(tx, original.id));
+
+    await fixture.expectRefused(
+      venue,
+      party.tabId,
+      async () =>
+        preview(party.tabId, {
+          picks: [{ lineId: await lineOf(party.tabId, "hake") }],
+          method: "card",
+        }),
+      { status: 409, code: "fiscal.original_refused" },
     );
   });
 });

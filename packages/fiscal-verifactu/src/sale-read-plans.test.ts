@@ -109,6 +109,19 @@ describe("reads of a sale's filed alta", () => {
     ]);
   });
 
+  it("finds the alta a credit's refusal judges through the sale index", async () => {
+    const plan = await planOf((tx) => backend().refuseCreditOf(tx, brandSaleId(newId())));
+    // The refusal itself reads AEAT's refused submissions, as the filing queue's set-aside does.
+    expect(plan).toEqual([
+      "SEARCH receipt USING INDEX verifactu_records_sale_idx (sale_id=?)",
+      "CORRELATED SCALAR SUBQUERY 2",
+      "SEARCH original_envio USING INDEX verifactu_submissions_drenaje_idx (estado=?)",
+      "SEARCH original USING INDEX sqlite_autoindex_verifactu_records_1 (id=?)",
+      "CORRELATED SCALAR SUBQUERY 1",
+      "SEARCH replacement USING COVERING INDEX verifactu_records_corrects_registro_uq (corrects_registro_id=?)",
+    ]);
+  });
+
   it("finds the alta an absent-original cancellation takes its origin from through the sale index", async () => {
     registerModulePermissions(FISCAL_PERMISSIONS);
     const node = await seedNode(suite.db);

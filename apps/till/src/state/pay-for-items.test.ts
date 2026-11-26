@@ -205,6 +205,18 @@ describe("itemsRefusal", () => {
     );
   });
 
+  it("says a receipt AEAT refused cannot be reopened, as Reopen bill does", () => {
+    const refusal = itemsRefusal({ code: "fiscal.original_refused" });
+
+    expect(refusalText(refusal)).toBe(
+      "AEAT refused this receipt, so the bill cannot be reopened. Take payment.",
+    );
+    setLocale("es");
+    expect(refusalText(itemsRefusal({ code: "fiscal.original_refused" }))).toBe(
+      t("split.refused_receipt_refused"),
+    );
+  });
+
   it("keeps the general words for a comped or discounted dish the refusal does not name", () => {
     const refusal = refusalOf({ code: "set_menu.move_adjusted", dishNames: [] });
 

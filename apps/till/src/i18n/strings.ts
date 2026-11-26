@@ -2246,6 +2246,8 @@ export const en = {
     "The person who approved this cannot issue corrective receipts and invoices. Choose someone who can.",
   "split.refused_not_at_table": "Only a table's bill can be reopened.",
   "split.refused_not_issued": "This bill has no receipt yet.",
+  "split.refused_receipt_refused":
+    "AEAT refused this receipt, so the bill cannot be reopened. Take payment.",
   "split.refused_payment_in_flight":
     "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it. If it was not taken, choose Reopen bill again.",
   "split.done":
@@ -4673,6 +4675,8 @@ export const es: Record<StringKey, string> = {
     "La persona que lo ha aprobado no puede emitir tickets y facturas rectificativos. Elige a alguien que pueda.",
   "split.refused_not_at_table": "Solo se puede reabrir la cuenta de una mesa.",
   "split.refused_not_issued": "Esta cuenta aún no tiene ticket.",
+  "split.refused_receipt_refused":
+    "La AEAT rechazó este ticket, así que la cuenta no se puede reabrir. Cóbrala.",
   "split.refused_payment_in_flight":
     "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo. Si no se cobró, vuelve a elegir Reabrir cuenta.",
   "split.done":

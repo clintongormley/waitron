@@ -462,6 +462,21 @@ export class VerifactuBackend implements FiscalBackend {
     return filedFiguresFor(tx, saleIds);
   }
 
+  async refuseCreditOf(tx: Transaction, saleId: SaleId): Promise<void> {
+    const { rows } = await tx.execute(sql`
+      select 1 from verifactu_records receipt indexed by verifactu_records_sale_idx
+      where receipt.sale_id = ${saleId} and receipt.tipo_registro = 'alta'
+        and receipt.corrects_registro_id is null
+        and ${currentAltaRefused({
+          idEmisorFactura: sql`receipt.id_emisor_factura`,
+          numSerieFactura: sql`receipt.num_serie_factura`,
+          fechaExpedicionFactura: sql`receipt.fecha_expedicion_factura`,
+        })}
+      limit 1
+    `);
+    if (rows.length > 0) throw new AppError("fiscal.original_refused", { saleId });
+  }
+
   /** Voids a previously recorded sale by appending an anulación referencing its identity. */
   async recordVoid(
     tx: Transaction,
