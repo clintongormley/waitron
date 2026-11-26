@@ -540,14 +540,6 @@ that follows a Done ("Coffee?"), including a Done copied with a bill that has si
 showing "Coffee?").
 
 
-## A1421. The Downstairs map drawn tiny at phone width
-
-Seen once on `59be31e3b7` during A1386's investigation, in the demo venue (screenshots in
-`~/waitron-campaign-c/a1386-shots/`), and not investigated: at phone width (390 px), the Downstairs
-bar's map draws its tables as three 10-pixel dots in a map 29 pixels tall
-(`e13-next-signin-390-light-en.png`).
-
-
 ## A1033. A full invoice's later copies change their guests line when a bill moves to the counter (left open by A758-7).
 
 A full invoice reads its guests from the bill's party each time

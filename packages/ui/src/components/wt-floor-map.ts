@@ -994,23 +994,72 @@ export class WtFloorMap extends LitElement {
     </div>`;
   }
 
+  // A shallow row of fixed stools can keep its fitted positions and still give each stool
+  // a full tap target. If the targets would overlap, use the plan's own geometry.
+  #compactStoolTargets(view: View): Map<Group, PlanRect> | undefined {
+    const size = this.#size!;
+    const crop = this.#tablesCrop;
+    if (crop === null) return;
+    const styles = getComputedStyle(this);
+    const tap = parseFloat(styles.getPropertyValue("--wt-tap-min"));
+    const edge = parseFloat(styles.getPropertyValue("--wt-space-2"));
+    const minimum = tap + edge * 2;
+    if (!(
+      size.height >= minimum &&
+      size.width >= minimum &&
+      size.width * crop.height < tap * crop.width
+    ))
+      return;
+
+    const stools = this.#groups.toSorted((a, b) => a.box.x - b.box.x);
+    const row = stools[0]!.box.y;
+    const targets = new Map<Group, PlanRect>();
+    let right = -Infinity;
+    for (const stool of stools) {
+      const { box, members } = stool;
+      if (
+        !stool.fixed ||
+        members.length !== 1 ||
+        members[0]!.placement.shape !== "round" ||
+        box.y !== row ||
+        Math.max(box.width, box.height) * view.scale >= tap
+      )
+        return;
+      const centre = centreOf(box, view);
+      const left = centre.x - tap / 2;
+      const x = this.#touched ? left : Math.min(size.width - tap - edge, Math.max(edge, left));
+      if (x < right) return;
+      const y = centre.y - tap / 2;
+      targets.set(stool, { x, y, width: tap, height: tap });
+      right = x + tap;
+    }
+    return targets;
+  }
+
   #renderGroups(view: View, still: boolean): TemplateResult {
+    const targets = this.#compactStoolTargets(view);
     const tabStop =
       (this.#focusedId === null ? undefined : this.#groupOf.get(this.#focusedId)) ??
       this.#readingOrder[0];
     return html`${this.#links.map((linked) => this.#renderLink(linked, view))}${repeat(
       this.#groups,
       (g) => g.key,
-      (g) => this.#renderGroup(g, view, still, g === tabStop),
+      (g) => this.#renderGroup(g, view, still, g === tabStop, targets?.get(g)),
     )}${this.#renderFixedDrag(view)}`;
   }
 
-  #renderGroup(group: Group, view: View, still: boolean, tabStop: boolean): TemplateResult {
+  #renderGroup(
+    group: Group,
+    view: View,
+    still: boolean,
+    tabStop: boolean,
+    target: PlanRect | undefined,
+  ): TemplateResult {
     const { box, members, label } = group;
     const [first] = members as [FloorMapTable, ...FloorMapTable[]];
     const merged = members.length > 1;
     const drawn = merged ? box : first.placement;
-    const named = group.drawsName && showsName(drawn, view.scale);
+    const named = group.drawsName && (target !== undefined || showsName(drawn, view.scale));
     const cue = named && showsCue(drawn, view.scale) ? first.cue : null;
     const drag = this.#drag?.tableId === first.id && !group.fixed ? this.#drag : null;
     const allergy = members.some((member) => member.allergy);
@@ -1030,13 +1079,13 @@ export class WtFloorMap extends LitElement {
         ...(allergy ? [this.copy.allergy ?? DEFAULT_COPY.allergy] : []),
       ].join(", ")}
       style=${styleMap({
-        left: px(view.x + (box.x + (drag?.dx ?? 0)) * view.scale),
-        top: px(view.y + (box.y + (drag?.dy ?? 0)) * view.scale),
-        width: px(box.width * view.scale),
-        height: px(box.height * view.scale),
+        left: px(target?.x ?? view.x + (box.x + (drag?.dx ?? 0)) * view.scale),
+        top: px(target?.y ?? view.y + (box.y + (drag?.dy ?? 0)) * view.scale),
+        width: px(target?.width ?? box.width * view.scale),
+        height: px(target?.height ?? box.height * view.scale),
       })}
     >
-      ${members.map((m) => this.#renderShape(m, box, view.scale, still))}
+      ${members.map((m) => this.#renderShape(m, box, view.scale, still, target?.width))}
       ${allergy ? html`<span part="allergy" aria-hidden="true">!</span>` : nothing}
       ${
         cue !== null
@@ -1109,6 +1158,7 @@ export class WtFloorMap extends LitElement {
     box: PlanRect,
     scale: number,
     still: boolean | null,
+    targetSize?: number,
   ): TemplateResult {
     const p = table.placement;
     const outline = still === null ? null : table.outline;
@@ -1118,10 +1168,10 @@ export class WtFloorMap extends LitElement {
       data-outline=${outline ?? nothing}
       data-shape=${p.shape}
       style=${styleMap({
-        left: px((p.x - box.x) * scale),
-        top: px((p.y - box.y) * scale),
-        width: px(p.width * scale),
-        height: px(p.height * scale),
+        left: px(targetSize === undefined ? (p.x - box.x) * scale : 0),
+        top: px(targetSize === undefined ? (p.y - box.y) * scale : 0),
+        width: px(targetSize ?? p.width * scale),
+        height: px(targetSize ?? p.height * scale),
         transform: `rotate(${p.rotation}deg)`,
       })}
       >${

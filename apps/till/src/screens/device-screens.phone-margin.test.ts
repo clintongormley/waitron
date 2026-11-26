@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { applyTokens } from "@waitron/ui";
 import indexHtml from "../../index.html?raw";
@@ -133,6 +133,62 @@ describe("device screens at phone width", () => {
       expect(contentBox(el, selector)).toEqual(wide);
     });
   }
+
+  it("fits the Downstairs bar stools as named tap targets at 390px", async () => {
+    await onPage(390);
+    const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
+      canChangeToday: true,
+      zones: [
+        {
+          id: "z1",
+          name: "Downstairs bar",
+          displayOrder: 0,
+          active: true,
+          closesAt: null,
+          closed: false,
+          hasPlan: true,
+          layoutSetName: null,
+          layoutDue: null,
+          serviceMode: "table_tab",
+        },
+      ],
+      tables: [17, 53, 89].map((x, i) => ({
+        ...plannedTable,
+        id: `b${i + 1}`,
+        label: `B${i + 1}`,
+        shortName: `B${i + 1}`,
+        today: {
+          ...plannedTable.today!,
+          fixed: true,
+          placement: { x, y: 59, width: 2, height: 2, shape: "round", rotation: 0 },
+        },
+      })),
+    });
+    const map = el.shadowRoot!.querySelector("wt-floor-map")!;
+    await vi.waitFor(() => {
+      const mapBox = map.getBoundingClientRect();
+      const shapes = [...map.shadowRoot!.querySelectorAll('[part="shape"]')];
+      expect(shapes).toHaveLength(3);
+      let previousRight = mapBox.left;
+      for (const shape of shapes) {
+        const rect = shape.getBoundingClientRect();
+        expect(rect.width).toBeGreaterThanOrEqual(44);
+        expect(rect.height).toBeGreaterThanOrEqual(44);
+        expect(rect.left).toBeGreaterThanOrEqual(previousRight);
+        expect(rect.right).toBeLessThanOrEqual(mapBox.right);
+        expect(rect.top).toBeGreaterThanOrEqual(mapBox.top);
+        expect(rect.bottom).toBeLessThanOrEqual(mapBox.bottom);
+        previousRight = rect.right;
+      }
+      expect(
+        [...map.shadowRoot!.querySelectorAll('[part="name"]')].map((name) => name.textContent),
+      ).toEqual(["B1", "B2", "B3"]);
+    });
+    await page.getByRole("button", { name: /^B2,/ }).click({ position: { x: 22, y: 5 } });
+    await vi.waitFor(() => {
+      expect(el.shadowRoot!.querySelector("till-seat-dialog")?.tableLabel).toBe("B2");
+    });
+  });
 
   // The map draws inside .screen, so .screen's padding alone cannot show where the map sits.
   for (const [width, left, right] of [

@@ -939,7 +939,8 @@ Toca **Lista** o **Mapa** para cambiar cómo muestra sus mesas la zona que tiene
 móvil, el cambio está en el menú ⋮ de la zona. El dispositivo guarda tu elección para cada zona, así
 que la zona se abre igual la próxima vez, y cambiar una zona no cambia las demás. Una zona que no
 has cambiado se abre como mapa cuando tiene mesas colocadas en su plano, y como lista cuando no
-tiene ninguna.
+tiene ninguna. Si no puedes tocar una mesa porque están muy juntas en el mapa, cambia esa zona a
+**Lista**.
 
 ## Unir y separar mesas {#join-tables}
 

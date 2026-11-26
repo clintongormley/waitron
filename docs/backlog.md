@@ -602,9 +602,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   Extras keep "made here" (A692), and the extras form lists variants.
   [Detail](backlog/till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet)
 
-- **A1421. The Downstairs map drawn tiny at phone width.** Seen once, not investigated.
-  [Detail](backlog/till.md#a1421-the-downstairs-map-drawn-tiny-at-phone-width)
-
 - **The till's top bar: loose ends (A395, #1435; A425).** Its scrolling strip is kept by the watcher 2026-11-24, not asked. [Detail](backlog/till.md#the-tills-top-bar-is-one-row-at-every-width-a395-1435-left-open)
 
 
