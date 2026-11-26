@@ -48,7 +48,7 @@ Run: `rg -n "recordCorrection|recordReplacement|recordSubstitution|recordVoid"` 
 can file an R5 against a full invoice today:** the admission check (`correction-admission.ts:58-60`), core
 (`record-correction.ts:199`, `correction-history.ts:117`) and the record builder (`backend.ts:583-587`)
 each refuse. The series is the weak point (`invoice-corrections.ts:481` and `cancel-credit.ts` ask for the
-receipts' without looking); Task 2 makes the builder the last word. Printing and resending issue nothing.
+receipts' without looking); The builder picks R1 or R5 from the customer alone and never reads the series, so core is the guard: Task 3 refuses an R1 numbered outside `full_corrective` and an R5 numbered in it, before a number is taken. Printing and resending issue nothing.
 
 | # | Path | After | Held by |
 | --- | --- | --- | --- |
