@@ -1,4 +1,4 @@
-import { and, asc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
 import type { Transaction } from "@waitron/db";
 import {
   centsToDecimal,
@@ -10,7 +10,12 @@ import {
 } from "@waitron/shared";
 import { isFullComp } from "./full-comp.js";
 import type { AdjustmentAction, AdjustmentPolicySnapshot } from "@waitron/shared";
-import { adjustments, type AdjustmentSplit, type AdjustmentStage } from "@waitron/db";
+import {
+  adjustmentEndings,
+  adjustments,
+  type AdjustmentSplit,
+  type AdjustmentStage,
+} from "@waitron/db";
 
 /** An adjustment to record. `line` is null for a discount on the whole bill. */
 export interface NewAdjustment {
@@ -92,8 +97,8 @@ export interface ReasonStandingRow {
   quantityNow: Decimal;
 }
 
-/** What the reason's comps and discounts, recorded on any bill, took off each line now on this
- * bill. Only comps and discounts write rows today; a cancel's would be left out all the same, since
+/** What the reason's comps and discounts, recorded on any bill and not ended on this one, took off
+ * each line now on this bill. Only comps and discounts write rows today; a cancel's would be left out all the same, since
  * a reason changed from Void to Comp keeps its id. */
 export async function readReasonStanding(
   tx: Transaction,
@@ -111,8 +116,10 @@ export async function readReasonStanding(
     from adjustment_lines taken
     join adjustments record on record.id = taken.adjustment_id
     join working_order_lines line on line.id = taken.line_id
+    left join adjustment_endings ended
+      on ended.adjustment_id = taken.adjustment_id and ended.working_order_id = line.working_order_id
     where record.reason_id = ${reasonId} and record.action <> 'cancel'
-      and line.working_order_id = ${workingOrderId}`);
+      and line.working_order_id = ${workingOrderId} and ended.id is null`);
   return rows.rows.map((row) => ({
     reduction: rawCentsToDecimal(row.reduction),
     quantityThen: rawThousandthsToDecimal(row.quantityThen),
@@ -141,7 +148,7 @@ export interface BillAdjustment {
   full: boolean;
 }
 
-/** This bill's comps and discounts, oldest first; its cancellations are not read. */
+/** This bill's comps and discounts not ended on it, oldest first; its cancellations are not read. */
 export async function readBillAdjustments(
   tx: Transaction,
   workingOrderId: string,
@@ -159,7 +166,20 @@ export async function readBillAdjustments(
       afterAmount: adjustments.afterAmount,
     })
     .from(adjustments)
-    .where(and(eq(adjustments.workingOrderId, workingOrderId), ne(adjustments.action, "cancel")))
+    .leftJoin(
+      adjustmentEndings,
+      and(
+        eq(adjustmentEndings.adjustmentId, adjustments.id),
+        eq(adjustmentEndings.workingOrderId, adjustments.workingOrderId),
+      ),
+    )
+    .where(
+      and(
+        eq(adjustments.workingOrderId, workingOrderId),
+        ne(adjustments.action, "cancel"),
+        isNull(adjustmentEndings.id),
+      ),
+    )
     .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
   return rows.map(
     ({ quantity, lineQuantity, reduction, action, beforeAmount, afterAmount, ...row }) => {

@@ -8,6 +8,7 @@ import {
   workingOrders,
   type Transaction,
 } from "@waitron/db";
+import type { Ending } from "@waitron/adjustments";
 import { readInvoiceLocales, readRecordedDocuments } from "@waitron/menu";
 import {
   frozenLinesOf,
@@ -55,8 +56,15 @@ function orderedByMeasure(
   return sold?.unit.measure === true;
 }
 
-/** Every row of the bill, each dish as a set menu lists it (D12: the course is the line's own). */
-export async function readGroupingLines(tx: Transaction, billId: string): Promise<GroupingLine[]> {
+/**
+ * Every row of the bill, each dish as a set menu lists it (D12: the course is the line's own), and
+ * each row `ending` gives back at the price it gives it back at.
+ */
+export async function readGroupingLines(
+  tx: Transaction,
+  billId: string,
+  ending?: Ending,
+): Promise<GroupingLine[]> {
   const rows = await tx
     .select({
       id: workingOrderLines.id,
@@ -89,8 +97,10 @@ export async function readGroupingLines(tx: Transaction, billId: string): Promis
       parentLineId === null && menuVersionId !== null ? [menuVersionId] : [],
     ),
   );
+  const restores = new Map(ending?.restores.map(({ lineId, ...price }) => [lineId, price]));
   return rows.map(({ productId, parentProductId, menuVersionId, ...line }) => ({
     ...line,
+    ...restores.get(line.id),
     soldByMeasure:
       line.parentLineId === null &&
       line.menuItemId !== null &&
@@ -124,10 +134,12 @@ async function planGrouping(
   lines: readonly GroupingLine[],
   copies: readonly GroupingCopy[],
   calculate?: Calculate,
+  ending?: Ending,
 ): Promise<GroupingPlan> {
   const sources = await frozenLineIdSources(
     tx,
     lines.map(({ id }) => id),
+    ending,
   );
   return planBillGrouping(lines, frozenLinesOf(lines, sources), copies, newId, calculate);
 }
@@ -276,23 +288,24 @@ export interface BillRowRemoval {
 }
 
 /**
- * By how much, in cents, {@link regroupBills} would lower the bill's total once `removal`'s writes
- * were made, writing nothing (D24).
+ * By how much, in cents, {@link regroupBills} would lower the bill's total once `ending` had ended
+ * and `removal`'s writes were made, writing nothing (D24, D59).
  */
 export async function regroupDropAfter(
   tx: Transaction,
   billId: string,
   removal: BillRowRemoval,
+  ending?: Ending,
 ): Promise<number> {
   const bill = await readOpenBill(tx, billId);
   if (bill === null) return 0;
   const gone = (line: GroupingLine) =>
     removal.deleted.has(line.id) ||
     (line.parentLineId !== null && removal.deleted.has(line.parentLineId));
-  const lines = (await readGroupingLines(tx, billId)).flatMap((line) =>
+  const lines = (await readGroupingLines(tx, billId, ending)).flatMap((line) =>
     gone(line) ? [] : [{ ...line, ...removal.resized.get(line.id) }],
   );
-  return planDrop(tx, lines, bill.copies);
+  return planDrop(tx, lines, bill.copies, ending);
 }
 
 /** A bill's rows taken to a bill of their own: whole with their extras, or at a new size. */
@@ -335,13 +348,14 @@ export async function totalLeftBehind(
 
 /**
  * What `billId` would come to, in cents, with each row as `rowsAfter` answers it (none, itself
- * changed, or the rows a split would make of it, each with an id of its own) and grouped as
- * {@link regroupBills} groups them, writing nothing.
+ * changed, or the rows a split would make of it, each with an id of its own) once `ending` had ended,
+ * and grouped as {@link regroupBills} groups them, writing nothing.
  */
 export async function totalAfterAdjusting(
   tx: Transaction,
   billId: string,
   rowsAfter: (line: GroupingLine) => readonly GroupingLine[],
+  ending?: Ending,
 ): Promise<number> {
   const [bill] = await tx
     .select({
@@ -351,8 +365,8 @@ export async function totalAfterAdjusting(
     })
     .from(workingOrders)
     .where(eq(workingOrders.id, billId));
-  const lines = (await readGroupingLines(tx, billId)).flatMap((line) => rowsAfter(line));
-  const drop = await planDrop(tx, lines, await copiesOf(tx, billId, bill!));
+  const lines = (await readGroupingLines(tx, billId, ending)).flatMap((line) => rowsAfter(line));
+  const drop = await planDrop(tx, lines, await copiesOf(tx, billId, bill!), ending);
   return sum(lines.map(({ lineTotal }) => lineTotal)) - drop;
 }
 
@@ -365,9 +379,10 @@ async function planDrop(
   tx: Transaction,
   lines: readonly GroupingLine[],
   copies: readonly GroupingCopy[],
+  ending?: Ending,
 ): Promise<number> {
   if (copies.length === 0 && !lines.some(({ setMenuRole }) => setMenuRole !== null)) return 0;
-  const plan = await planGrouping(tx, lines, copies);
+  const plan = await planGrouping(tx, lines, copies, undefined, ending);
   const was = new Map(lines.map(({ id, lineTotal }) => [id, lineTotal]));
   return (
     sum(plan.deletes.map((id) => was.get(id)!)) +

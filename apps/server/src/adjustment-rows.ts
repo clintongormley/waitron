@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import type { AdjustmentStage, Approval } from "@waitron/adjustments";
+import type { AdjustmentStage, Approval, Ending } from "@waitron/adjustments";
 import { orderGroups, ticketItems, workingOrderLines } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import {
@@ -68,8 +68,9 @@ export function listValue(row: Row, quantity: number): Decimal {
   return gross(row, quantity, row.list ?? row.unit);
 }
 
-export async function readRows(tx: Transaction, orderId: string): Promise<Row[]> {
-  return tx
+/** The bill's rows, each `ending` gives back at the price it gives it back at. */
+export async function readRows(tx: Transaction, orderId: string, ending?: Ending): Promise<Row[]> {
+  const rows = await tx
     .select({
       id: workingOrderLines.id,
       setMenuRole: workingOrderLines.setMenuRole,
@@ -106,6 +107,18 @@ export async function readRows(tx: Transaction, orderId: string): Promise<Row[]>
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .where(eq(workingOrderLines.workingOrderId, orderId))
     .orderBy(workingOrderLines.lineNo);
+  const restores = new Map(ending?.restores.map((restore) => [restore.lineId, restore]));
+  return rows.map((row) => {
+    const restore = restores.get(row.id);
+    return restore === undefined
+      ? row
+      : {
+          ...row,
+          unit: restore.unitPriceGross,
+          lineTotal: restore.lineTotal,
+          list: restore.listUnitPriceGross,
+        };
+  });
 }
 
 /** How far the dish had got (ruling R8). */

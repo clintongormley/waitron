@@ -27,6 +27,13 @@ export interface EndingRestore {
   listUnitPriceGross: number | null;
 }
 
+/** Comps or discounts a preview works out as ended on one bill, and what {@link endingRestores}
+ * answers for them there. */
+export interface Ending {
+  adjustmentIds: readonly string[];
+  restores: readonly EndingRestore[];
+}
+
 /**
  * What each row now on `workingOrderId` that `adjustmentIds` took something off would cost once they
  * give it back. Writes nothing.

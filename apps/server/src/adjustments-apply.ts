@@ -22,6 +22,7 @@ import {
   type AdjustmentStage,
   type AdjustmentVerdict,
   type DishPrice,
+  type Ending,
   type Approval,
   type CompAction,
   type PricedRow,
@@ -522,12 +523,14 @@ function zeroed(subjects: readonly Subject[]): Change[] {
  * Everything an adjustment decides before it writes, reading only: the refusals of the bill, the
  * line, the amount and the reason's policy, and the rows it would change. A dish is
  * taken with its extras; part of one splits its extras in proportion, the part covered taking the
- * part of each. An extra is taken on its own, and only whole.
+ * part of each. An extra is taken on its own, and only whole. `ending`'s adjustments are read as
+ * ended (D59).
  */
 export async function planAdjustment(
   tx: Transaction,
   ask: AdjustmentAsk,
   venueLocale: string,
+  ending?: Ending,
 ): Promise<Plan> {
   const { orderId } = ask;
   // An open bill, a table's or a counter order.
@@ -538,7 +541,7 @@ export async function planAdjustment(
   await refusePaymentInFlight(tx, [orderId]);
   await requireOrderBillEditor(tx, orderId, ask);
   const reason = await findAdjustmentReason(tx, ask.reasonId);
-  const read = await readRows(tx, orderId);
+  const read = await readRows(tx, orderId, ending);
   const { rows, released } = await atReleasedPrices(tx, ask, read);
 
   let line: Row | null = null;
