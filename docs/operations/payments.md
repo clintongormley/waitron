@@ -14,7 +14,7 @@ redesigns remain pending until their implementations land.
 ## Check the same payment after a lost answer
 
 Choose **Check again** before taking payment again. If the card outcome remains unknown,
-ask a manager to open **Check card payments** in Reporting on the dashboard. Under **Bill payments**,
+ask a manager to open **Check card payments** under **Sales and tax** on the dashboard. Under **Bill payments**,
 check the listed payment with its provider. If the answer remains unclear, keep the bill unresolved
 and check the provider's transaction or ask its support.
 

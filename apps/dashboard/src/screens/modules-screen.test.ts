@@ -148,6 +148,7 @@ it("confirms provider Off separately from configuration and keeps attached-reade
   );
   const link = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=remove-readers]")!;
   expect(link.getAttribute("href")).toBe("/payments");
+  expect(link.textContent?.trim()).toBe("Open Card readers");
   expect(api.setPaymentProviderState).toHaveBeenCalledWith("sumup", false, 0);
   await el.updateComplete;
   expect(el.shadowRoot!.querySelector("[data-test=provider-state-error]")?.textContent).toContain(

@@ -146,9 +146,9 @@ Retiring the summary once its last consumer moves away remains open.
 
 ## A1606 The sidebar and account menu: clearer sections, real icons, who is signed in
 
-Approved design, queued for lane D:
-[spec](../superpowers/specs/2026-11-26-dashboard-sidebar-and-account-menu-design.md) (owner,
-2026-11-26). It revises the A654 decision below on where a section's icon sits.
+[Approved design](../superpowers/specs/2026-11-26-dashboard-sidebar-and-account-menu-design.md)
+(owner, 2026-11-26). The remaining work is the sidebar styling and Material icons, followed by
+the banner and account menu. The sidebar styling revises A654's icon placement.
 
 ## Decisions and deliberate limits
 

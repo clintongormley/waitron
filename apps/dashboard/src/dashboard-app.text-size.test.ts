@@ -24,16 +24,14 @@ const ANSWER: Record<number, typeof FIXTURE_ANSWER> = {
 /** The legal name's computed size at each scale, read from the drawn shell. */
 const NAME_SIZE: Record<number, string> = { 100: "14px", 130: "18px" };
 
-/** The section with the most pages a manager with no modules sees. */
 const OPEN_GROUP = "configuration";
 const OPEN_GROUP_ITEMS = [
-  "Appearance",
-  "Modules",
-  "Email",
   "Box status",
-  "Diagnostics",
   "Backups",
   "Cloud services",
+  "Email",
+  "Modules",
+  "Diagnostics",
 ];
 
 async function flush(el: DashboardApp): Promise<void> {

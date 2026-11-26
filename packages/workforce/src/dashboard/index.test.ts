@@ -10,6 +10,7 @@ describe("workforce correction contribution", () => {
       id: "hours",
       navLabelKey: "nav.hours",
       group: "team",
+      order: 30,
       requiresPermission: "workforce.correct",
     });
     expect(WORKFORCE_DASHBOARD.strings.en["nav.hours"]).toBe("Hours");
@@ -25,6 +26,7 @@ describe("workforce correction contribution", () => {
       id: "time-corrections",
       navLabelKey: "nav.time_corrections",
       group: "team",
+      order: 40,
       requiresPermission: "workforce.correct",
     });
     expect(value.strings.en["nav.time_corrections"]).toBe("Time corrections");

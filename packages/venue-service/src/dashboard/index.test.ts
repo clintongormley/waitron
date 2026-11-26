@@ -24,13 +24,13 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
     expect(VENUE_SERVICE_DASHBOARD.settingsPanels ?? []).toEqual([]);
   });
 
-  it("places Departments and zones first in the Venue operations group", () => {
+  it("places Departments and zones after Venue settings", () => {
     expect(VENUE_SERVICE_DASHBOARD.module).toBe("venue-service");
     expect(VENUE_SERVICE_DASHBOARD.screen).toEqual({
       id: "venue-operations",
       navLabelKey: "nav.departments_zones",
       group: "operations",
-      order: 10,
+      order: 20,
       requiresPermission: "venue.configure",
     });
     expect(VENUE_SERVICE_DASHBOARD.strings.en["nav.departments_zones"]).toBe(
@@ -176,7 +176,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       id: "prep-stations",
       navLabelKey: "nav.prep_stations",
       group: "operations",
-      order: 12,
+      order: 60,
       requiresPermission: "venue.configure",
     });
     const handle = prep.create({
@@ -256,7 +256,7 @@ describe("VENUE_SERVICE_DASHBOARD", () => {
       id: "opening-hours",
       navLabelKey: "nav.calendar",
       group: "operations",
-      order: 15,
+      order: 30,
       requiresPermission: "venue.configure",
       readPermission: "venue.view",
     });
@@ -304,7 +304,7 @@ it("registers Floor plans in Operations, configured with venue.configure and rea
     id: "floor-plans",
     navLabelKey: "nav.floor_plans",
     group: "operations",
-    order: 13,
+    order: 70,
     requiresPermission: "venue.configure",
     readPermission: "venue.view",
   });
@@ -524,7 +524,7 @@ it("declares the Calendar's Week as a search destination", async () => {
   );
 });
 
-it("A725 puts Prep stations immediately after Departments and zones, before Calendar", () => {
+it("places Calendar and its scheduling pages before Prep stations and Floor plans", () => {
   const screens = [
     VENUE_SERVICE_DASHBOARD.screen!,
     ...VENUE_SERVICE_DASHBOARD.moreScreens!.map(({ screen }) => screen),
@@ -533,11 +533,11 @@ it("A725 puts Prep stations immediately after Departments and zones, before Cale
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   expect(screens.map(({ id }) => id)).toEqual([
     "venue-operations",
-    "prep-stations",
-    "floor-plans",
     "opening-hours",
     "seasons",
     "periods",
+    "prep-stations",
+    "floor-plans",
   ]);
 });
 

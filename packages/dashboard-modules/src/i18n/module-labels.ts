@@ -2,7 +2,7 @@ import { registerCatalogue } from "@waitron/dashboard-kit";
 export const MODULE_LABEL_KEYS: Readonly<Record<string, string>> = {
   workforce: "modules.workforce",
   "workforce-es": "modules.workforce_es",
-  payments: "nav.payments",
+  payments: "modules.payments",
   bookings: "modules.bookings",
   staffing: "modules.staffing",
 };
@@ -14,6 +14,7 @@ registerCatalogue({
     "modules.workforce": "Workforce",
     "modules.workforce_es": "Spanish workforce rules",
     "modules.bookings": "Bookings",
+    "modules.payments": "Card payments",
     "modules.staffing": "Staffing",
     "modules.add": "Add a module",
     "modules.category": "Category",
@@ -37,7 +38,7 @@ registerCatalogue({
     "modules.on_explanation":
       "Allow readers to be added for this provider. Configure its credentials separately if needed.",
     "modules.remove_readers": "Remove or unpair these readers before turning the provider off:",
-    "modules.open_readers": "Open Card payments",
+    "modules.open_readers": "Open Card readers",
     "modules.restart_pending": "Waiting for restart",
     "modules.bookings_explanation":
       "Save this change, then open Box status in System and choose Restart the box when service can pause. Bookings stay saved. The tills reconnect; a station send during restart may need resending.",
@@ -55,6 +56,7 @@ registerCatalogue({
     "modules.workforce": "Control horario",
     "modules.workforce_es": "Normativa laboral española",
     "modules.bookings": "Reservas",
+    "modules.payments": "Pagos con tarjeta",
     "modules.staffing": "Planificación de personal",
     "modules.add": "Añadir un módulo",
     "modules.category": "Categoría",
@@ -79,7 +81,7 @@ registerCatalogue({
       "Permite añadir lectores de este proveedor. Configura sus credenciales por separado si hace falta.",
     "modules.remove_readers":
       "Elimina o desvincula estos lectores antes de desactivar el proveedor:",
-    "modules.open_readers": "Abrir Pagos con tarjeta",
+    "modules.open_readers": "Abrir Lectores de tarjetas",
     "modules.restart_pending": "Pendiente de reinicio",
     "modules.bookings_explanation":
       "Guarda el cambio y abre Estado del servidor en Sistema; elige Reiniciar el servidor cuando puedas pausar el servicio. Las reservas se conservan. Las cajas se reconectan; puede que debas repetir un envío a una estación durante el reinicio.",

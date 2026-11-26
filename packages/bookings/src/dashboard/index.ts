@@ -9,7 +9,9 @@ export const BOOKINGS_DASHBOARD: DashboardContribution & DashboardFurtherScreen 
   screen: {
     id: "bookings",
     navLabelKey: "nav.bookings",
-    group: "service",
+    group: "overview",
+    order: 20,
+    icon: "event",
     requiresPermission: "booking.manage",
   },
   strings: BOOKINGS_STRINGS,

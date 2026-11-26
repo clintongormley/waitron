@@ -15,7 +15,7 @@ limits; supervisors, managers and administrators can approve.
 
 When a comp brings the bill to zero, Waitron closes the bill and issues the invoice straight away. Give the guest that invoice.
 
-In the dashboard's **Voids and comps**, set a limit to **0** when each comp needs approval.
+In **Voids and comps** under **Venue setup**, set a limit to **0** when each comp needs approval.
 New reasons start at 0; change the amount or clear it when you want to allow comps without a limit.
 **Complaint**, **On the house** and **Discount** start at 0; **Staff meal** allows up to 50% off
 an item before approval is needed.
@@ -74,7 +74,7 @@ machines** shows the current payment state and successful refunds, even if they 
 **Download for accountant (XLSX)** includes a separate sheet of these payments, selected by
 calendar date rather than business-day cutover.
 
-In **Check card payments** under Reporting, open **SumUp comparison** to check a calendar day in the venue’s
+In **Check card payments** under **Sales and tax**, open **SumUp comparison** to check a calendar day in the venue’s
 time zone. A match links one same-account entry to one SumUp charge with the same amount,
 including tips, within 30 minutes. Check ambiguous or unmatched charges in SumUp before making
 any correction. The comparison sends no refunds. If the comparison is incomplete, try again after
@@ -252,7 +252,7 @@ If your print request fails, you can press **Print payment slip** again. To repl
 already printed, use **Reprint** in
 [Print Queue](printers.md#print-queue).
 
-If a card reader prints its own payment slip, open **Card payments** in the dashboard, edit that
+If a card reader prints its own payment slip, open **Card readers** under **Hardware**, edit that
 reader and turn on **Prints its own slip automatically**, then choose **Save**. Waitron then leaves
 that reader's payment slips to the reader. This setting describes the reader; it does not change
 its printer's settings. It starts off for a new reader.
@@ -754,7 +754,7 @@ to pay. Waitron also retries these payments automatically. If recording keeps fa
 the order and payment details and do not charge again; this is a fault in Waitron or this box.
 
 If a payment was partly returned before its invoice was recorded, do not charge again.
-In **Check card payments** under Reporting, check the charged, refunded and still-held amounts. Choose **Retain on this
+In **Check card payments** under **Sales and tax**, check the charged, refunded and still-held amounts. Choose **Retain on this
 bill** to apply the remaining money to the bill. Check the bill amount, any excess kept as a tip,
 and what staff still need to collect before confirming. For example, from €100 charged and €40
 returned, you can keep €60 on the bill and collect only its remainder. Excess money can be kept

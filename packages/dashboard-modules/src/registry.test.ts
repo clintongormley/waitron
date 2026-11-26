@@ -18,13 +18,14 @@ describe("DASHBOARD_MODULES honesty", () => {
     expect(DASHBOARD_MODULES.map((c) => c.module)).toContain("bookings");
   });
 
-  it("puts Voids and comps under Service for managers of adjustments", () => {
+  it("puts Voids and comps under Venue setup for managers of adjustments", () => {
     const adjustments = DASHBOARD_MODULES.find((c) => c.module === "adjustments");
     expect(adjustments?.moreScreens?.map(({ screen }) => screen)).toEqual([
       {
         id: "adjustment-reasons",
         navLabelKey: "nav.adjustment_reasons",
-        group: "service",
+        group: "operations",
+        order: 80,
         requiresPermission: "adjustment.manage",
       },
     ]);
@@ -49,11 +50,12 @@ describe("DASHBOARD_MODULES honesty", () => {
       id: "adjustment-report",
       navLabelKey: "nav.adjustment_report",
       group: "reports",
+      order: 40,
       requiresPermission: "report.view",
     });
   });
 
-  it("places Fiscal filing right after VAT return, before the other module reports, for anyone who may export reports", () => {
+  it("places Fiscal filing after VAT return, for anyone who may export reports", () => {
     const fiscal = DASHBOARD_MODULES.find((c) => c.module === "fiscal-verifactu");
     expect(
       fiscal?.moreScreens?.find((entry) => entry.screen.id === "fiscal-filing")?.screen,
@@ -61,7 +63,7 @@ describe("DASHBOARD_MODULES honesty", () => {
       id: "fiscal-filing",
       navLabelKey: "nav.fiscal_filing",
       group: "reports",
-      order: -1,
+      order: 70,
       requiresPermission: "report.export",
     });
   });
@@ -72,6 +74,7 @@ describe("DASHBOARD_MODULES honesty", () => {
       id: "staff-roles",
       navLabelKey: "nav.staff_roles",
       group: "team",
+      order: 70,
       requiresPermission: "schedule.manage",
       readPermission: "venue.view",
     });
@@ -96,6 +99,7 @@ it("registers Time corrections in Team for workforce correction authority", () =
     id: "time-corrections",
     navLabelKey: "nav.time_corrections",
     group: "team",
+    order: 40,
     requiresPermission: "workforce.correct",
   });
 });
@@ -106,6 +110,7 @@ it("registers workforce Hours beside Time corrections with current correction au
     id: "hours",
     navLabelKey: "nav.hours",
     group: "team",
+    order: 30,
     requiresPermission: "workforce.correct",
   });
 });

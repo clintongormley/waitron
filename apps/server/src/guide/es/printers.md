@@ -151,7 +151,7 @@ Si rechazas una solicitud, el agente puede volver a aparecer debajo de las demá
 
 ## Lectores de tarjetas {#card-readers}
 
-Para añadir un lector, abre **Pagos con tarjeta** en Hardware y elige **Añadir lector** encima de la tabla.
+Para añadir un lector, abre **Lectores de tarjetas** en **Hardware** y elige **Añadir lector** encima de la tabla.
 Elige el proveedor si se te pide y añade un lector de su lista o vincula uno nuevo.
 Si no hay ningún proveedor conectado, elige **Configurar proveedores de tarjeta** para configurar uno primero.
 Deja marcados los perfiles que deben usar el lector nuevo y elige **Guardar perfiles**, o elige
@@ -163,7 +163,7 @@ Para que el personal recoja un lector al escanearlo, elige **Etiqueta QR…** en
 etiqueta en él. En Chrome en un teléfono Android, **Pegatina NFC…** escribe una pegatina a la que
 basta acercar el teléfono.
 
-En **Pagos con tarjeta**, busca el lector en **Lectores de tarjetas** y elige **Eliminar** en su menú. La confirmación indica las asignaciones que se eliminan. Si hay un cobro en curso, deja que termine primero.
+Abre **Lectores de tarjetas** en **Hardware**, busca el lector y elige **Eliminar** en su menú. La confirmación indica las asignaciones que se eliminan. Si hay un cobro en curso, deja que termine primero.
 
 Cuando vuelvas a añadir un lector eliminado, si se reconoce el registro, verás el nombre y los ajustes de impresión guardados: elige **Añadir**. Marca los perfiles que deben usarlo y elige **Guardar perfiles**. En caso contrario, vincúlalo siguiendo los pasos del proveedor.
 

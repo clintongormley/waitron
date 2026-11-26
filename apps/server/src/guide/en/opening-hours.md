@@ -2,6 +2,8 @@
 
 ## Check a day's hours {#day-hours}
 
+Open **Calendar** under **Venue setup**.
+
 Open a date to see when each department and zone is open. The Month and the day pop-up combine periods that touch: **09:00–00:00** means continuous opening. Grey times follow the department's hours.
 
 For the period detail, choose **Open this week** in the pop-up. In Week, click a day's heading or any of its bars to open that day's hours. A gap in a zone's bars means it is closed then.
@@ -55,7 +57,7 @@ Review public holidays after changing the venue’s city. Choosing another holid
 
 ## Edit seasons {#seasons}
 
-Open **Seasons** under **Venue operations**. Choose a row to change its name, colour or start date, or **Add season** to create one. Each season runs until the next starts. Use the row’s **⋯** menu to edit or delete a season; check which hours will be lost before confirming a deletion.
+Open **Seasons** under **Venue setup**. Choose a row to change its name, colour or start date, or **Add season** to create one. Each season runs until the next starts. Use the row’s **⋯** menu to edit or delete a season; check which hours will be lost before confirming a deletion.
 
 In **Calendar** → **Staffing**, select a date to see how many people each area needs and the hours for each role. If you can manage the rota, the day box shows whether that week’s rota is **Draft** or **Published**. Select **Rota for this week** to open it.
 
@@ -65,11 +67,11 @@ On a special day, a date that follows its season shows the season’s staffing i
 
 When special dates have different business-day starts, use the clock scale beside each date. **Copy to…** keeps the clock times of your blocks. If a block crosses the start on a selected date, remove that date from the selection and paint it separately.
 
-Open the **Rota** tab to see the week of the last date you selected in **Staffing**. Until you select a date, the tab shows the venue’s current week.
+Enter **Rota** in **Search pages** and open the result to go straight to the rota. In Calendar, open the **Rota** tab to see the week of the last date you selected in **Staffing**. Until you select a date, the tab shows the venue’s current week.
 
 ## Edit periods and check their hours {#periods}
 
-Open **Periods** under **Venue operations**, beside **Calendar**. Choose a row to edit it, or **Add period** to create one. Use the row’s **⋯** menu to edit or delete it.
+Open **Periods** under **Venue setup**, beside **Calendar**. Choose a row to edit it, or **Add period** to create one. Use the row’s **⋯** menu to edit or delete it.
 
 In **Painted in**, choose a season or special day to check its timetable.
 

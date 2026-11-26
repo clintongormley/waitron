@@ -282,7 +282,7 @@ Mantén el servidor antiguo apagado y desconectado de la red. Si vuelve a arranc
 verificar el servidor de sustitución, puede seguir vendiendo y emitiendo facturas con sus series
 antiguas.
 
-Abre **Informes → Remisión a la AEAT** y mira
+Abre **Ventas e impuestos → Remisión a la AEAT** y mira
 [Historial que puede faltar](fiscal-filing.md#missing-history). En **Cambios de identidad sin
 traspaso** aparece la restauración con la última factura que tiene la copia, si tiene alguna. El
 servidor antiguo puede haber emitido facturas posteriores que la copia no tiene.

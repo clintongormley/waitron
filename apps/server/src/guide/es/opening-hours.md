@@ -2,6 +2,8 @@
 
 ## Consulta el horario de un día {#day-hours}
 
+Abre **Calendario** en **Configuración del local**.
+
 Abre una fecha para ver cuándo abre cada departamento y zona. Mes y la ventana del día unen los periodos contiguos: **09:00–00:00** indica una apertura continua. Las horas en gris siguen el horario del departamento.
 
 Para consultar el detalle por periodo, elige **Abrir esta semana** en la ventana del día. En Semana, pulsa el encabezado de un día o cualquiera de sus barras para abrir su horario. Un hueco en las barras de una zona indica que está cerrada durante ese tramo.
@@ -55,7 +57,7 @@ Revisa los festivos después de cambiar la ciudad del local. Si eliges otra zona
 
 ## Edita las temporadas {#seasons}
 
-Abre **Temporadas** en **Operaciones del local**. Elige una fila para cambiar su nombre, color o fecha de inicio, o **Añadir temporada** para crear una. Cada temporada dura hasta que empieza la siguiente. Usa el menú **⋯** de la fila para editar o eliminar una temporada; revisa qué horarios se perderán antes de confirmar la eliminación.
+Abre **Temporadas** en **Configuración del local**. Elige una fila para cambiar su nombre, color o fecha de inicio, o **Añadir temporada** para crear una. Cada temporada dura hasta que empieza la siguiente. Usa el menú **⋯** de la fila para editar o eliminar una temporada; revisa qué horarios se perderán antes de confirmar la eliminación.
 
 En **Calendario** → **Personal**, elige una fecha para ver cuántas personas necesita cada área y el horario de cada puesto. Si puedes gestionar los turnos, el recuadro del día muestra **Borrador** o **Publicado** para los turnos de esa semana. Selecciona **Turnos de esta semana** para abrir esa semana en **Turnos**.
 
@@ -65,11 +67,11 @@ En un día especial, las fechas que siguen su temporada muestran los bloques de 
 
 Si las fechas especiales tienen distintos inicios de jornada, usa la escala horaria junto a cada fecha. **Copiar a…** conserva las horas de los bloques. Si un bloque cruza el inicio de la jornada en una fecha seleccionada, quita esa fecha de la selección y píntala por separado.
 
-Abre la pestaña **Turnos** para ver la semana de la última fecha que elegiste en **Personal**. Si aún no has elegido una fecha, la pestaña muestra la semana actual del local.
+Escribe **Turnos** en **Buscar páginas** y abre el resultado para ir directamente a los turnos. En Calendario, abre la pestaña **Turnos** para ver la semana de la última fecha que elegiste en **Personal**. Si aún no has elegido una fecha, la pestaña muestra la semana actual del local.
 
 ## Edita los periodos y consulta sus horarios {#periods}
 
-Abre **Periodos** en **Operaciones del local**, junto a **Calendario**. Elige una fila para editarla, o **Añadir periodo** para crear uno. Usa el menú **⋯** de la fila para editarlo o eliminarlo.
+Abre **Periodos** en **Configuración del local**, junto a **Calendario**. Elige una fila para editarla, o **Añadir periodo** para crear uno. Usa el menú **⋯** de la fila para editarlo o eliminarlo.
 
 En **Pintado en**, elige una temporada o un día especial para consultar su horario.
 

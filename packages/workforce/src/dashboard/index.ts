@@ -10,6 +10,7 @@ export const WORKFORCE_DASHBOARD: DashboardContribution & DashboardFurtherScreen
     id: "time-corrections",
     navLabelKey: "nav.time_corrections",
     group: "team",
+    order: 40,
     requiresPermission: "workforce.correct",
   },
   moreScreens: [
@@ -18,6 +19,7 @@ export const WORKFORCE_DASHBOARD: DashboardContribution & DashboardFurtherScreen
         id: "hours",
         navLabelKey: "nav.hours",
         group: "team",
+        order: 30,
         requiresPermission: "workforce.correct",
       },
       create(ctx) {

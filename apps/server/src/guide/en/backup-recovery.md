@@ -257,7 +257,7 @@ runs it; if it stops while writing the backup into place, every later start runs
 Keep the old box switched off and disconnected from the network. If it starts again before it can
 verify the replacement, it can still sell and issue invoices under its old series.
 
-Open **Reporting → Fiscal filing** and look at
+Open **Sales and tax → Fiscal filing** and look at
 [Possibly missing history](fiscal-filing.md#missing-history). Under **Identity changes without a
 handover**, the restore is listed with the last invoice the backup holds, if it holds any. The old
 box may have issued later invoices that the backup does not have.

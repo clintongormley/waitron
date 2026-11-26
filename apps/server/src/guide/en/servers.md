@@ -313,7 +313,7 @@ The page is in Spanish when your browser prefers Spanish, and in English otherwi
 
 ## Check handover intervals {#reconciliation}
 
-After an emergency handover, open **Reporting**, then **Handover intervals**, to check the period
+After an emergency handover, open **Handover intervals** under **System**, to check the period
 whose activity may be missing. You need permission to view reports. The list shows the previous
 and new main boxes, the latest sale or order time in the copy, the declaration and activation times, and
 the reason entered at takeover. All times use the venue's time zone. **Unknown** means the copy

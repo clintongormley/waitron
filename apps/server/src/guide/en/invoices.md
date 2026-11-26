@@ -1,7 +1,7 @@
 # Invoices
 
 When the tax office asks to see the venue's invoices, show them from **Invoices** in
-**Reporting**.
+**Sales and tax**.
 
 ## Show invoices yourself {#show-invoices}
 
@@ -44,7 +44,7 @@ An inspector can have their own sign-in when the box's email is set up
 
 ## VAT return and corrections {#vat-return}
 
-**VAT return (modelo 303)** in **Reporting** prepares the file you upload to AEAT for a month or a
+**VAT return (modelo 303)** in **Sales and tax** prepares the file you upload to AEAT for a month or a
 quarter. Choose **Year**, **Period** and **Declaration type**, then **Download file**. Nothing is
 sent to AEAT from here.
 

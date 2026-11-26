@@ -6,7 +6,7 @@ envía nada por sí sola; un administrador puede enviar una subsanación desde u
 
 ## Abre la página {#open}
 
-Abre **Informes → Remisión a la AEAT**. La ven los encargados y los administradores.
+Abre **Ventas e impuestos → Remisión a la AEAT**. La ven los encargados y los administradores.
 
 La página lee el servidor al abrirla. No se actualiza sola: elige **Actualizar** para leer de nuevo.
 **Leído** indica cuándo se leyeron las cifras.

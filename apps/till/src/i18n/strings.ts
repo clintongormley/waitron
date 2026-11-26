@@ -2110,7 +2110,7 @@ export const en = {
   "bill_pay.ticket_unread":
     "Payment recorded. The receipt could not be loaded. You can continue serving.",
   "bill_pay.card_recovery":
-    "Open Check card payments in Reporting and sign in to finish recording this payment. Do not take it again.",
+    "Open Check card payments in Sales and tax and sign in to finish recording this payment. Do not take it again.",
   "bill_pay.card_recovery_open": "Check card payments / sign in",
   "bill_pay.payment_failed": "This payment is recorded as not taken. You can take it again.",
   "bill_pay.cancel_reader": "Cancel payment",
@@ -4537,7 +4537,7 @@ export const es: Record<StringKey, string> = {
   "bill_pay.ticket_unread":
     "Pago registrado. No se ha podido cargar el recibo. Puedes seguir atendiendo.",
   "bill_pay.card_recovery":
-    "Abre Comprobar pagos con tarjeta en Informes e inicia sesión para terminar de registrar este pago. No vuelvas a cobrarlo.",
+    "Abre Comprobar pagos con tarjeta en Ventas e impuestos e inicia sesión para terminar de registrar este pago. No vuelvas a cobrarlo.",
   "bill_pay.card_recovery_open": "Comprobar pagos con tarjeta / acceder",
   "bill_pay.payment_failed": "Este cobro consta como no cobrado. Puedes volver a cobrarlo.",
   "bill_pay.cancel_reader": "Cancelar cobro",

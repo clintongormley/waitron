@@ -19,6 +19,7 @@ function panelModule(module: string, panels: DashboardContribution["settingsPane
       id: `${module}-home`,
       navLabelKey: `nav.${module}`,
       group: "reports",
+      order: 0,
       requiresPermission: "test.use",
     },
     strings: { en: { [`nav.${module}`]: module }, es: { [`nav.${module}`]: module } },

@@ -365,7 +365,7 @@ preproduction box without that switch, the dashboard leaves out the records-wait
 (`fiscal.submission_delayed`); the stopped, filing-case and repeated-refusal alerts still show.
 
 Demo and Prepare use the local card simulator by default. To exercise a card provider's test
-account on a Prepare box, configure its test credentials in **Modules**. On **Card payments**,
+account on a Prepare box, configure its test credentials in **Modules**. On **Card readers** under **Hardware**,
 open **Settings**, turn on **Use card providers' test accounts** and save. Demo uses the simulator.
 
 ### The four `WAITRON_CREDENTIALS_KEY*` variables, in full

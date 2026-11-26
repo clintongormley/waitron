@@ -42,7 +42,8 @@ function searchModule(): DashboardContribution {
     screen: {
       id: "search-library",
       navLabelKey: "search.library",
-      group: "service",
+      group: "operations",
+      order: 0,
       requiresPermission: "library.edit",
       readPermission: "library.read",
     },
@@ -52,6 +53,7 @@ function searchModule(): DashboardContribution {
           id: "search-reports",
           navLabelKey: "search.stock",
           group: "reports",
+          order: 0,
           requiresPermission: "library.read",
         },
         create: () => ({ render: () => html`<p>Stock report</p>` }),
@@ -292,13 +294,13 @@ it("finds the four hardware pages under Hardware", async () => {
     results(el)
       .filter((item) => item.matches(".nav-item"))
       .map((item) => item.dataset.test),
-  ).toEqual(["nav-device-profiles", "nav-devices", "nav-printers", "nav-payments"]);
+  ).toEqual(["nav-devices", "nav-printers", "nav-payments", "nav-device-profiles"]);
   expect(el.shadowRoot!.querySelector("[data-test=nav-group-hardware]")!.textContent!.trim()).toBe(
     "Hardware",
   );
 });
 
-it("finds payment checks under Reporting while Card readers still opens Hardware", async () => {
+it("finds payment checks under Sales and tax and opens Card readers once under Hardware", async () => {
   const el = await mount({ permissions: ["hardware.manage"], modules: [] });
   await search(el, "Check card payments");
   const checks = el.shadowRoot!.querySelector<HTMLElement>(
@@ -308,7 +310,10 @@ it("finds payment checks under Reporting while Card readers still opens Hardware
   await userEvent.click(checks);
   await vi.waitFor(() => expect(location.pathname).toBe("/check-card-payments"));
   await search(el, "Card readers");
-  const readers = destination(el, "payments:readers")!;
+  const readers = el.shadowRoot!.querySelector<HTMLElement>(
+    "#nav-group-panel-hardware [data-test=nav-payments]",
+  )!;
+  expect(destination(el, "payments:readers")).toBeNull();
   expect(readers.checkVisibility()).toBe(true);
   await userEvent.click(readers);
   await vi.waitFor(() => expect(location.pathname).toBe("/payments"));
