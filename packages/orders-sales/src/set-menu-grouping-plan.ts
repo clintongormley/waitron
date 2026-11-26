@@ -71,7 +71,7 @@ export interface GroupingPlan {
 const ONE_PORTION = 1000;
 
 /** What freezes a line by name (D30): a comp or discount took something off it, or something else
- *  (a kept charge, a service cancellation, an item payment) holds it as it is. */
+ *  (a kept charge or a service cancellation) holds it as it is. */
 export interface FrozenLineSources {
   reduced: ReadonlySet<string>;
   held: ReadonlySet<string>;
