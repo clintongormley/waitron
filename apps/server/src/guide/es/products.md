@@ -355,10 +355,17 @@ secciones de una carta se crean en **Productos y cartas → Cartas**.
 
 En **Estructura**, abre las acciones de un producto y elige **Editar producto**. Si ves su foto, púlsala para ir directamente al control de imagen. **Guardar** actualiza el producto y te devuelve a su fila en la carta.
 
-En **Estructura**, pulsa la imagen o el recuadro de color de una sección propia de la carta
-para editarla. Selecciona una fila y copia la dirección de la página para volver a abrir
-esa misma sección. Si se rechaza quitar una fila o moverla con su control de arrastre, encima
-del árbol verás la lista afectada y el motivo.
+En **Estructura**, abre las acciones de la carta o de una sección para añadir platos o secciones.
+Arrastra una fila por su control para moverla. Para mover o quitar varias filas a la vez, elige
+**Seleccionar** y márcalas. Selecciona una sección y copia la dirección para volver a abrirla.
+
+Escribe un precio junto a un plato para fijarlo en esta carta. Despliega un plato con variantes
+para fijar el precio de cada una. Borra el precio que has escrito para usar el habitual. Si cambias
+un precio, se aplica en todos los sitios de esta carta donde aparezca el plato o la variante.
+También puedes usar la pestaña **Precios propios**.
+
+Elige **Guardar** al pie de Estructura para guardar la organización y los precios juntos. Elige
+**Cancelar** y confirma para volver a la carta guardada.
 
 ## Menús {#set-menus}
 
@@ -420,8 +427,9 @@ las cartas incluidas siguen apuntando a las mismas cartas compartidas.
 
 ## Revisa los cambios de la carta antes de publicar {#preview-undo}
 
-Elige **Revisar y publicar** en el encabezado de la carta. En **Corrige antes de publicar**,
-elige un precio o abre el menú que debas corregir. Después, abre los avisos que quieras revisar.
+Elige **Revisar y publicar** en el encabezado de la carta. Si tienes cambios sin guardar en
+Estructura, elige **Guardar y revisar**. En **Corrige antes de publicar**, elige un precio o abre
+el menú que debas corregir. Después, abre los avisos que quieras revisar.
 Pulsa el nombre de un elemento en la lista de cambios para encontrarlo en la carta propuesta.
 En el móvil, cambia entre **Cambios** y **Carta**. Usa el selector de idioma sobre la carta para revisar las
 traducciones o ver los **Nombres internos**.

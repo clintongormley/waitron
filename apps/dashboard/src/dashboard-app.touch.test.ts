@@ -198,6 +198,7 @@ it.each<[number, number, "capped" | "page", number]>([
       getMenuStatuses: async () => ({ "menu-lunch": status }),
       getMenuRead: async () => ({
         structure: { status: 200, body: structure },
+        prices: { status: 200, body: [] },
         status: { status: 200, body: status },
       }),
       getMenuPublications: async () => ({ timeZone: "Europe/Madrid", live: null, editions: [] }),

@@ -25,6 +25,7 @@ import {
   mountWidget,
   attachScheduleAction,
   menuDocument,
+  menuReadFixture,
   closeReportsDelivered,
 } from "./widgets/test-helpers.js";
 
@@ -958,6 +959,10 @@ it.each([
           includable: [],
           includedBy: [{ id: "menu-two", name: "Dinner" }],
         }),
+        getMenuPrices: async () => [],
+        getMenuRead(id, parts) {
+          return menuReadFixture(this as DashboardApi, id, parts);
+        },
         getProductEditor: async () => {
           throw { code: "product.not_found" };
         },
@@ -1336,6 +1341,85 @@ describe("a price override row's Edit product link under the app's link router",
     await expect.poll(() => location.pathname).toBe(`/products/product/${id}`);
     expect(m.app.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
   });
+});
+
+it("waits for a sent Structure Save before asking to discard or leaving the menu", async () => {
+  type Result = Awaited<ReturnType<DashboardApi["saveMenuStructure"]>>;
+  type Read = Awaited<ReturnType<DashboardApi["getMenuRead"]>>;
+  let answer!: (result: Result) => void;
+  let refuse!: (error: unknown) => void;
+  let finishRefresh!: (result: Read) => void;
+  const refused = new Promise<Result>((_resolve, reject) => {
+    refuse = reject;
+  });
+  const accepted = new Promise<Result>((resolve) => {
+    answer = resolve;
+  });
+  const refresh = new Promise<Read>((resolve) => {
+    finishRefresh = resolve;
+  });
+  const saveMenuStructure = vi
+    .fn<DashboardApi["saveMenuStructure"]>()
+    .mockReturnValueOnce(refused)
+    .mockReturnValueOnce(accepted);
+  const fixture = menuProductApi();
+  const getMenuRead = vi.fn(fixture.getMenuRead!);
+  const m = await mount({
+    ...fixture,
+    getMenuRead,
+    getMe: async () => ({
+      personId: "p1",
+      email: "ada@example.com",
+      roleIds: ["manager"],
+      locale: "en-GB",
+      venueLocale: "en-GB",
+      sessionDefault: "en-GB",
+      venueName: "Venue",
+      permissions: ["menu.manage", "venue.view"],
+      modules: [],
+    }),
+    saveMenuStructure,
+  });
+  const guard = navigationGuardFor(window)!;
+  const address = "/menus/menu/menu-one/view/structure";
+  await guard.write(address);
+  await userEvent.click(page.getByRole("button", { name: "Actions: Burger" }));
+  await userEvent.click(page.getByRole("button", { name: "Remove", exact: true }));
+  const screen = m.app.shadowRoot!.querySelector("dashboard-menus-screen")!;
+  const save = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="structure-save"]',
+  )!;
+
+  try {
+    await userEvent.click(save);
+    expect(saveMenuStructure).toHaveBeenCalledTimes(1);
+    const first = guard.write("/menus");
+    await m.question.updateComplete;
+    expect(m.question.open).toBe(false);
+    expect(location.pathname).toBe(address);
+    refuse({ code: "connection.failed" });
+    await expect.poll(() => m.question.open).toBe(true);
+    await choose(m, "keep");
+    expect(await first).toBe("kept");
+    expect(location.pathname).toBe(address);
+
+    await userEvent.click(save);
+    expect(saveMenuStructure).toHaveBeenCalledTimes(2);
+    const second = guard.write("/menus");
+    await m.question.updateComplete;
+    expect(m.question.open).toBe(false);
+    expect(location.pathname).toBe(address);
+    getMenuRead.mockReturnValueOnce(refresh);
+    answer({ dropped: [] });
+    await expect.poll(() => location.pathname).toBe("/menus");
+    expect(await second).toBe("proceeded");
+    expect(getMenuRead.mock.results.at(-1)?.value).toBe(refresh);
+    expect(m.question.open).toBe(false);
+  } finally {
+    refuse({ code: "connection.failed" });
+    answer({ dropped: [] });
+    finishRefresh({});
+  }
 });
 
 describe("a Structure tab product row's Edit product link under the app's link router", () => {

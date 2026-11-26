@@ -21,7 +21,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
-import { memberKindLabel, memberName } from "./member-names.js";
+import { memberName } from "./member-names.js";
 import {
   blockClickAfterDrag,
   TreePointerDrag,
@@ -40,13 +40,21 @@ import {
 import { productMedia, productMediaFrame, productMediaStyles } from "./product-media.js";
 import { countOf } from "./count-text.js";
 import { PATH_SEPARATOR } from "./category-form.js";
-import { swatchChip, swatchPartStyles } from "./swatch-styles.js";
+import { swatchPartStyles } from "./swatch-styles.js";
 import { folderFrame, menuTreeCell, menuTreeStyles } from "./menu-tree-presentation.js";
 import {
   FOLLOWING_FOLDER,
   folderPresentation,
 } from "@waitron/menu/src/include-folder-presentation.js";
 import type { MemberRef, Presentation } from "@waitron/shared";
+import { structureRowStyles, sectionCountNote } from "./menu-structure-row-presentation.js";
+import {
+  structurePriceCell,
+  narrowUsualPriceNote,
+  type StructurePricing,
+} from "./menu-structure-price-cell.js";
+import { structurePriceKey } from "./menu-structure-draft.js";
+import { structureFilters, structurePriceFilter } from "./menu-structure-filters.js";
 import type { Product } from "../api/client.js";
 import type { CategorySummary } from "../api/catalog-api.js";
 import type { MenuStructureNode, MenuSummary } from "../api/menu-api.js";
@@ -107,6 +115,7 @@ interface Row {
   list: string;
   /** Inside an included menu, which is edited only from its own page. */
   readOnly: boolean;
+  variant?: Product["variants"][number];
 }
 
 /** The menu itself, above its members. It holds the top level's adds and is never a member. */
@@ -116,6 +125,7 @@ type RootRow = {
   parentKey: null;
   name: string;
   counts: string;
+  image: string | null;
   color: string | null;
 };
 
@@ -127,10 +137,14 @@ const rowParent = (row: TableRow) => row.parentKey;
 export type StructureAddAction = "new-section" | "include-menu" | "add-products" | "add-set-menu";
 
 const ADDS: { action: StructureAddAction; test: string; label: () => string }[] = [
-  { action: "new-section", test: "new-section", label: () => t("menus.new_section") },
-  { action: "include-menu", test: "include-menu", label: () => t("menus.include_menu") },
+  { action: "new-section", test: "new-section", label: () => `${t("menus.new_section")}…` },
+  { action: "include-menu", test: "include-menu", label: () => `${t("menus.include_menu")}…` },
   { action: "add-set-menu", test: "add-set-menu", label: () => t("menus.place_set_menu") },
-  { action: "add-products", test: "open-add-products", label: () => t("sections.add_products") },
+  {
+    action: "add-products",
+    test: "open-add-products",
+    label: () => `${t("sections.add_products")}…`,
+  },
 ];
 
 const samePath = (next: string[], previous: string[] | undefined): boolean =>
@@ -144,7 +158,6 @@ const samePath = (next: string[], previous: string[] | undefined): boolean =>
 export class MenuStructureTable extends LitElement {
   static override styles = [
     baseStyles,
-    treeDragStyles,
     swatchPartStyles,
     menuTreeStyles,
     css`
@@ -156,7 +169,7 @@ export class MenuStructureTable extends LitElement {
         align-items: center;
         justify-content: center;
         vertical-align: middle;
-        width: var(--wt-tap-min);
+        width: var(--structure-grip-width);
         min-height: var(--wt-tap-min);
         padding: 0;
         border: 0;
@@ -179,18 +192,9 @@ export class MenuStructureTable extends LitElement {
         align-items: center;
         justify-content: center;
         vertical-align: middle;
-        width: var(--wt-tap-min);
+        width: var(--structure-grip-width);
         min-height: var(--wt-tap-min);
         visibility: hidden;
-      }
-      wt-data-table::part(current) {
-        font-weight: var(--wt-font-weight-bold);
-        text-decoration: underline;
-      }
-      wt-data-table::part(read-only),
-      wt-data-table::part(kind),
-      wt-data-table::part(available) {
-        color: var(--wt-color-text-muted);
       }
       wt-data-table::part(search-name-line) {
         display: inline-flex;
@@ -237,6 +241,7 @@ export class MenuStructureTable extends LitElement {
         grid-template-columns: var(--tree-arrow-width) minmax(0, 1fr);
       }
       wt-data-table[wrap-to-fit]::part(folder-cell),
+      wt-data-table[wrap-to-fit]::part(product-cell),
       wt-data-table[wrap-to-fit]::part(name-stack) {
         min-inline-size: 0;
         overflow-wrap: anywhere;
@@ -252,6 +257,8 @@ export class MenuStructureTable extends LitElement {
       }
     `,
     productMediaStyles,
+    structureRowStyles,
+    treeDragStyles,
   ];
 
   @property({ attribute: false }) nodes: MenuStructureNode[] = [];
@@ -262,6 +269,9 @@ export class MenuStructureTable extends LitElement {
   @property({ attribute: false }) placeableSetMenus: readonly { id: string }[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) defaultColor: string | null = null;
+  @property({ attribute: false }) pricing?: StructurePricing;
+  @property({ attribute: false }) rowErrors: ReadonlyMap<string, string> = new Map();
+  @property({ attribute: false }) menuImage: string | null = null;
   @property({ attribute: false }) menuColor: string | null = null;
   @property() menuName = "";
   /** The path of the current section; empty for the menu's own top level. */
@@ -459,7 +469,7 @@ export class MenuStructureTable extends LitElement {
   }
 
   #checkCurrentShown(): void {
-    if (this.search.trim() !== "") return;
+    if (this.isUpdatePending || this.search.trim() !== "") return;
     const table = this.#table()!;
     const keys = this.#currentKeys();
     if (this.#revealing > 0 || this.#lostReported || keys.length === 0) return;
@@ -938,6 +948,45 @@ export class MenuStructureTable extends LitElement {
     else this.focusRowMenu(key);
   }
 
+  async focusPrice(key: string): Promise<boolean> {
+    await this.updateComplete;
+    const table = this.#table();
+    if (!table) return false;
+    await table.updateComplete;
+    const shown = new Set(table.shownKeys({ includeCollapsedSearchMatches: true }));
+    const row = [...this.#rowByKey.values()].find(
+      ({ node, variant, key: rowKey }) =>
+        node.ref.kind === "product" &&
+        structurePriceKey(node.ref.productId, variant?.id) === key &&
+        shown.has(rowKey),
+    );
+    if (row) await table.revealRow(row.key);
+    const field = table.shadowRoot?.querySelector<HTMLElement>(
+      `[data-price-key="${CSS.escape(key)}"]`,
+    );
+    field?.focus();
+    return field !== null && field !== undefined;
+  }
+
+  async focusRefusedRow(id: string): Promise<boolean> {
+    await this.updateComplete;
+    const table = this.#table();
+    if (!table) return false;
+    await table.updateComplete;
+    const row = [...this.#rowByKey.values()].find(
+      (candidate) =>
+        !candidate.readOnly &&
+        this.#rowRefusal(candidate) !== undefined &&
+        (candidate.node.memberId === id ||
+          (candidate.node.ref.kind === "section" && candidate.node.ref.sectionId === id)),
+    );
+    if (!row || !table.shownKeys({ includeCollapsedSearchMatches: true }).includes(row.key))
+      return false;
+    await table.revealRow(row.key);
+    this.focusRowMenu(row.key);
+    return true;
+  }
+
   /** Focuses the row's ⋮, or the nearest drawn ancestor's; for the top level (`""`), or when no
    * ancestor is drawn, the root row's ⋮; in an empty menu, which draws no rows, the empty box's
    * first add. */
@@ -995,6 +1044,8 @@ export class MenuStructureTable extends LitElement {
       this.nodes,
       this.menuName,
       this.menuColor,
+      this.menuImage,
+      this.#productById,
       this.#order,
       this.#productNames,
       this.#sectionNames,
@@ -1010,6 +1061,7 @@ export class MenuStructureTable extends LitElement {
       name: this.menuName,
       counts: this.#counts(),
       color: this.menuColor,
+      image: this.menuImage,
     };
     const rows = members.length === 0 ? [] : [root, ...members];
     this.#rowsMemo = { inputs, rows };
@@ -1088,6 +1140,21 @@ export class MenuStructureTable extends LitElement {
           list,
           readOnly,
         });
+        if (ref.kind === "product") {
+          for (const variant of this.#activeVariants(ref.productId))
+            rows.push({
+              kind: "member",
+              key: key + "/" + variant.id,
+              parentKey: key,
+              path,
+              node: { ...node, ref },
+              name: variant.name,
+              holder: staffName,
+              list,
+              readOnly: true,
+              variant,
+            });
+        }
         walk(
           node.children ?? [],
           path,
@@ -1102,6 +1169,12 @@ export class MenuStructureTable extends LitElement {
     return rows;
   }
 
+  #activeVariants(productId: string) {
+    return (this.#productById.get(productId)?.variants ?? []).filter(
+      ({ active }) => active !== false,
+    );
+  }
+
   #ordered<T extends { memberId: string }>(items: T[], list: string): T[] {
     const order = this.#order.get(list);
     if (!order) return items;
@@ -1114,7 +1187,7 @@ export class MenuStructureTable extends LitElement {
 
   #nameSpan(row: Row) {
     const parts = ["name"];
-    if (this.#isCurrent(row)) parts.push("current");
+    if (row.node.ref.kind === "section") parts.push("section-name");
     if (row.readOnly) parts.push("read-only");
     return html`<span
       part=${parts.join(" ")}
@@ -1159,13 +1232,17 @@ export class MenuStructureTable extends LitElement {
   }
 
   #nameCell(row: Row, searchRoot: boolean) {
+    const error = this.#rowRefusal(row);
+    const refusal = error
+      ? html`<span part="structure-clash" role="alert">${error}</span>`
+      : nothing;
     const { node, key } = row;
     if (node.ref.kind === "set_menu") {
       const { menuId } = node.ref;
-      const price = this.#setMenuById.get(menuId)?.setPrice;
+
       return menuTreeCell(
         "section",
-        nothing,
+        productMediaFrame(null, null, false, false, "prep-station"),
         html`<span part="name-stack folder-stack">
           ${
             this.selecting
@@ -1181,7 +1258,8 @@ export class MenuStructureTable extends LitElement {
                   >${row.name}</a
                 >`
           }
-          ${price == null ? nothing : html`<span part="note">${formatMoney(price, currentLocale())}</span>`}
+          <span part="note">${t("menus.set_menu_kind")}</span>
+          ${refusal}
         </span>`,
       );
     }
@@ -1204,9 +1282,70 @@ export class MenuStructureTable extends LitElement {
               )}</span
             >`
           : nothing
-      }</span
+      }${this.#nameNotes(row)}${refusal}</span
     >`;
     return menuTreeCell(node.ref.kind, this.#swatch(row), stack);
+  }
+
+  #nameNotes(row: Row) {
+    const { node, variant } = row;
+    if (node.ref.kind === "product") {
+      const product = this.#productById.get(node.ref.productId);
+      const variants = variant ? [] : this.#activeVariants(node.ref.productId);
+      const productId = node.ref.productId;
+      const variantId = variant?.id;
+      const pricing = this.pricing;
+      const more = pricing?.draft.priceChanged(productId, variantId)
+        ? [
+            ...new Set(
+              [...this.#rowByKey.values()].flatMap((other) =>
+                other.key !== row.key &&
+                other.node.ref.kind === "product" &&
+                other.node.ref.productId === productId &&
+                other.variant?.id === variantId
+                  ? [this.#sectionPath(other) || this.menuName]
+                  : [],
+              ),
+            ),
+          ]
+        : [];
+      return html`${pricing ? narrowUsualPriceNote(pricing, productId, variantId) : nothing}${
+        (variant ?? product)?.available === false
+          ? html`<span part="structure-unavailable">${t("product.unavailable_badge")}</span>`
+          : nothing
+      }${
+        variants.length
+          ? sectionCountNote(
+              "product.variant_count",
+              variants.length,
+              variants.filter(({ available }) => !available).length,
+            )
+          : nothing
+      }
+      ${more.length ? html`<span part="note">${fill("menus.price_also_in", { places: more.join(", ") })}</span>` : nothing}`;
+    }
+    if (node.ref.kind !== "section") return nothing;
+    const products = new Set<string>();
+    const visit = (children: MenuStructureNode[]) => {
+      for (const child of children) {
+        if (child.ref.kind === "product") products.add(child.ref.productId);
+        if (child.children) visit(child.children);
+      }
+    };
+    visit(node.children ?? []);
+    return sectionCountNote(
+      "folders.product_count",
+      products.size,
+      [...products].filter((id) => this.#productById.get(id)?.available === false).length,
+    );
+  }
+
+  #rowRefusal(row: Row): string | undefined {
+    const { memberId, ref } = row.node;
+    return (
+      this.rowErrors.get(memberId) ??
+      (ref.kind === "section" ? this.rowErrors.get(ref.sectionId) : undefined)
+    );
   }
 
   #swatch(row: Row) {
@@ -1218,7 +1357,8 @@ export class MenuStructureTable extends LitElement {
         key,
         productId,
         name,
-        image: product?.image ?? null,
+        image: row.variant?.image ?? product?.image ?? null,
+        fallbackIcon: "cutlery",
         color:
           product === undefined
             ? null
@@ -1237,7 +1377,13 @@ export class MenuStructureTable extends LitElement {
       ownPresentation(node),
       node.folder ?? FOLLOWING_FOLDER,
     );
-    const media = image ? productMediaFrame(image, color) : swatchChip(color);
+    const media = productMediaFrame(
+      image,
+      color,
+      false,
+      false,
+      node.includedMenuId ? "section-menu" : "folder",
+    );
     if (!this.#ownedSection(row))
       return html`<span part="swatch-box" data-test=${`color-${key}`} aria-hidden="true"
         >${media}</span
@@ -1294,10 +1440,10 @@ export class MenuStructureTable extends LitElement {
     );
   }
 
-  #remove(row: Row, label: string) {
+  #remove(row: Row) {
     return this.#button(
       `remove-${row.key}`,
-      label,
+      t("menus.remove_selected_confirm"),
       "secondary",
       () =>
         this.#send("wt-member-remove", {
@@ -1317,7 +1463,7 @@ export class MenuStructureTable extends LitElement {
         "secondary",
         () => this.#send("wt-set-menu-move", { key }),
         "menu-move",
-      )}${rowActionTail(true, [this.#remove(row, t("menus.remove_included"))])}`;
+      )}${rowActionTail(true, [this.#remove(row)])}`;
     if (node.includedMenuId)
       return html`<a
           data-test=${`source-${key}`}
@@ -1328,7 +1474,7 @@ export class MenuStructureTable extends LitElement {
           })}</a
         >${this.#button(
           `edit-${key}`,
-          t("action.edit"),
+          t("action.edit_dialog"),
           "secondary",
           () =>
             this.#send("wt-include-edit", {
@@ -1336,20 +1482,20 @@ export class MenuStructureTable extends LitElement {
               memberId: node.memberId,
             }),
           "menu-edit",
-        )}${rowActionTail(true, [this.#remove(row, t("menus.remove_included"))])}`;
+        )}${rowActionTail(true, [this.#remove(row)])}`;
     if (node.ref.kind === "section") {
       const detail = { sectionId: node.ref.sectionId, path: row.path };
       return html`${this.#adds(row.path, row.key)}
       ${this.#button(
         `edit-${key}`,
-        t("action.edit"),
+        t("action.edit_dialog"),
         "secondary",
         () => this.#send("wt-member-edit", detail),
         "menu-edit",
       )}${rowActionTail(true, [
         this.#button(
           `delete-${key}`,
-          t("action.delete"),
+          t("menus.remove_selected_confirm"),
           "danger",
           () => this.#send("wt-member-delete", detail),
           "menu-delete",
@@ -1358,39 +1504,31 @@ export class MenuStructureTable extends LitElement {
     }
     const productId = node.ref.productId;
     const editDisabled = this.editProductsInPlace && this.busy;
-    return html`${
-      this.#productById.has(productId)
-        ? html`<a
-            data-test=${`edit-product-${key}`}
-            href=${`/products/product/${encodeURIComponent(productId)}`}
-            ?data-own-click=${this.editProductsInPlace}
-            aria-disabled=${editDisabled ? "true" : nothing}
-            @click=${(event: MouseEvent) => {
-              if (editDisabled) {
-                event.preventDefault();
-                return;
-              }
-              if (leftToBrowser(event)) return;
+    const editable = this.#productById.has(productId);
+    const edit = editable
+      ? html`<a
+          data-test=${`edit-product-${key}`}
+          href=${`/products/product/${encodeURIComponent(productId)}`}
+          ?data-own-click=${this.editProductsInPlace}
+          aria-disabled=${editDisabled ? "true" : nothing}
+          @click=${(event: MouseEvent) => {
+            if (editDisabled) {
               event.preventDefault();
-              this.#send(
-                "wt-edit-product",
-                this.editProductsInPlace ? { productId, path: row.path } : { productId },
-              );
-            }}
-            ><wt-icon name="menu-edit" size="lg"></wt-icon>${t("product.edit")}</a
-          >`
-        : nothing
-    }${rowActionTail(this.#productById.has(productId), [this.#remove(row, fill("members.remove_from", { list: row.holder }))])}`;
+              return;
+            }
+            if (leftToBrowser(event)) return;
+            event.preventDefault();
+            this.#send("wt-edit-product", { productId, path: row.path });
+          }}
+          ><wt-icon name="menu-edit" size="lg"></wt-icon>${t("product.edit")}</a
+        >`
+      : nothing;
+    return row.readOnly ? edit : html`${edit}${rowActionTail(editable, [this.#remove(row)])}`;
   }
 
   /** Never marked current: the top level is the current place when no row is marked. */
   #rootNameCell(row: RootRow) {
-    const swatch =
-      row.color === null
-        ? nothing
-        : html`<span part="swatch-box" data-test="color-root" aria-hidden="true"
-            >${swatchChip(row.color)}</span
-          >`;
+    const swatch = productMediaFrame(row.image, row.color, false, false, "section-menu");
     return html`<span part="folder-cell"
       >${folderFrame(swatch)}<span part="name-stack folder-stack"
         ><span part="root-label"
@@ -1409,7 +1547,7 @@ export class MenuStructureTable extends LitElement {
         label=${`${t("members.actions")}: ${row.name}`}
         >${this.#adds([], "top")}</wt-row-actions
       >`;
-    if (row.readOnly) return nothing;
+    if (row.readOnly && row.node.ref.kind !== "product") return nothing;
     return html`<wt-row-actions
       align="end"
       data-test=${`actions-${row.key}`}
@@ -1435,6 +1573,9 @@ export class MenuStructureTable extends LitElement {
       this.#sectionNames,
       this.#setMenuById,
       this.placeableSetMenus,
+      this.categories,
+      this.pricing,
+      this.rowErrors,
       this.selecting,
       this.nodes,
     ];
@@ -1457,47 +1598,14 @@ export class MenuStructureTable extends LitElement {
         searchValue: (row) => (row.kind === "root" ? "" : row.name),
       },
       {
-        key: "kind",
-        choosable: "shown",
-        label: t("members.kind"),
-        cell: (row) =>
-          row.kind === "root"
-            ? nothing
-            : html`<span part=${row.readOnly ? "kind read-only" : "kind"} data-test="kind"
-                >${row.node.ref.kind === "set_menu" ? t("menus.set_menu_kind") : memberKindLabel(row.node.ref)}</span
-              >`,
+        key: "price",
+        label: t("set_menus.price"),
+        align: "end",
+        cell: (row) => this.#priceCell(row),
+        activatesRow: false,
+        filter: structurePriceFilter<TableRow>(this.pricing),
       },
-      {
-        key: "available",
-        choosable: "shown",
-        label: t("editor.available"),
-        cell: (row) => {
-          if (row.kind === "root" || row.node.ref.kind !== "product") return nothing;
-          const product = this.#productById.get(row.node.ref.productId);
-          if (product === undefined) return nothing;
-          return html`<span
-            part=${row.readOnly ? "available read-only" : "available"}
-            data-test="available"
-            >${t(product.available ? "menus.available_yes" : "menus.available_no")}</span
-          >`;
-        },
-        filter: {
-          label: t("editor.available"),
-          allLabel: t("menus.filter_available_all"),
-          // The menu, a section or an included menu answers no option: the table keeps it only on
-          // the way to a product that matches.
-          value: (row) => {
-            if (row.kind === "root" || row.node.ref.kind !== "product") return [];
-            const product = this.#productById.get(row.node.ref.productId);
-            if (product === undefined) return [];
-            return product.available ? "yes" : "no";
-          },
-          options: [
-            { value: "yes", label: t("menus.available_yes") },
-            { value: "no", label: t("menus.available_no") },
-          ],
-        },
-      },
+      ...structureFilters<TableRow>(this.#productById, this.categories),
       {
         key: "actions",
         label: t("members.actions"),
@@ -1506,6 +1614,21 @@ export class MenuStructureTable extends LitElement {
         cell: (row) => this.#actionsCell(row),
       },
     ];
+  }
+
+  #priceCell(row: TableRow) {
+    if (row.kind === "root") return nothing;
+    const { ref } = row.node;
+    if (ref.kind === "set_menu") {
+      const price = this.#setMenuById.get(ref.menuId)?.setPrice;
+      return price == null ? nothing : formatMoney(price, currentLocale());
+    }
+    if (ref.kind !== "product" || !this.pricing) return nothing;
+    const { productId } = ref;
+    const variantId = row.variant?.id;
+    return structurePriceCell(this.pricing, productId, variantId, row.name, this.busy, (value) =>
+      this.#send("wt-structure-price", { productId, variantId, value }),
+    );
   }
 
   override render() {
@@ -1546,7 +1669,13 @@ export class MenuStructureTable extends LitElement {
         rowControlsAlign="center"
         .rowActivation=${(row: TableRow) => {
           if (row.kind === "root") return "none";
-          if (row.node.ref.kind === "section") return "toggle";
+          if (
+            row.node.ref.kind === "section" ||
+            (row.node.ref.kind === "product" &&
+              !row.variant &&
+              this.#activeVariants(row.node.ref.productId).length)
+          )
+            return "toggle";
           return row.node.ref.kind === "set_menu" && !this.selecting ? "click" : "none";
         }}
         .rowClick=${(row: TableRow) => {
@@ -1558,8 +1687,12 @@ export class MenuStructureTable extends LitElement {
           fill(expanded ? "menus.collapse" : "menus.expand", { name: row.name })}
         .rows=${rows}
         .columns=${this.#columns()}
+        .layoutHiddenColumns=${["available", "category", "modifiers", "variants"]}
+        ?data-selecting=${this.selecting}
         .rowKey=${rowKey}
         .rowParent=${rowParent}
+        .rowCellParts=${() => "structure-cell"}
+        .rowSpansUnpinnedColumns=${(row: TableRow) => row.kind === "root" || row.node.ref.kind === "section"}
         .selectable=${this.selecting}
         selectAllLabel=${t("menus.select_all")}
         .selected=${this.selected}

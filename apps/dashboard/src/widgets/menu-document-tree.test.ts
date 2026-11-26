@@ -269,7 +269,7 @@ it("shows Structure's empty-menu explanation and clears the old snapshot when no
   expect(el.shadowRoot!.querySelector("wt-data-table")).toBeNull();
 });
 
-it("uses the Structure row's indentation, row height and swatch slot for photos and colour fallbacks", async () => {
+it("keeps Preview and Structure indents aligned, with their own row and photo sizes", async () => {
   const el = await mount();
   await toggle(el, "drinks");
   await toggle(el, "drinks/beer");
@@ -322,11 +322,12 @@ it("uses the Structure row's indentation, row height and swatch slot for photos 
   expect(getComputedStyle(a.querySelector(".tree-cell")!).paddingInlineStart).toBe(
     getComputedStyle(b.querySelector(".tree-cell")!).paddingInlineStart,
   );
-  expect(a.getBoundingClientRect().height).toBe(b.getBoundingClientRect().height);
+  expect(Math.abs(a.getBoundingClientRect().height - 69)).toBeLessThanOrEqual(3);
+  expect(Math.abs(b.getBoundingClientRect().height - 49)).toBeLessThanOrEqual(3);
   const photo = a.querySelector<HTMLElement>("[part~='product-media']")!;
   const otherPhoto = b.querySelector<HTMLElement>("[part~='product-media']")!;
-  expect(photo.getBoundingClientRect().width).toBe(otherPhoto.getBoundingClientRect().width);
-  expect(photo.getBoundingClientRect().height).toBe(otherPhoto.getBoundingClientRect().height);
+  expect(photo.getBoundingClientRect()).toMatchObject({ width: 44, height: 44 });
+  expect(otherPhoto.getBoundingClientRect()).toMatchObject({ width: 36, height: 36 });
   await vi.waitFor(() =>
     expect(photo.querySelector("img")!.getAttribute("src")).toBe(
       `/media/renditions/v1/${mediaTestReference("lager.webp")}/square/7500-2500-200.webp`,
@@ -340,7 +341,7 @@ it("uses the Structure row's indentation, row height and swatch slot for photos 
   expect(row(el, "juice")!.querySelector('[data-test="available"]')).toBeNull();
 });
 
-it("puts a section's photo at the same size and position as Structure's section swatch", async () => {
+it("aligns the Preview section photo and Structure section swatch within their media slots", async () => {
   const document = fixture();
   const section = document.root.members[0]!;
   if (section.kind !== "section") throw new Error("Fixture needs its section");
@@ -372,8 +373,8 @@ it("puts a section's photo at the same size and position as Structure's section 
   const swatch = b.querySelector<HTMLElement>('[part~="color-swatch"]')!;
   const frame = a.querySelector<HTMLElement>('[part~="folder-frame"]')!;
   const otherFrame = b.querySelector<HTMLElement>('[part~="folder-frame"]')!;
-  expect(photo.getBoundingClientRect().width).toBe(swatch.getBoundingClientRect().width);
-  expect(photo.getBoundingClientRect().height).toBe(swatch.getBoundingClientRect().height);
+  expect(photo.getBoundingClientRect()).toMatchObject({ width: 44, height: 44 });
+  expect(swatch.getBoundingClientRect()).toMatchObject({ width: 36, height: 36 });
   expect(photo.getBoundingClientRect().left - frame.getBoundingClientRect().left).toBe(
     swatch.getBoundingClientRect().left - otherFrame.getBoundingClientRect().left,
   );

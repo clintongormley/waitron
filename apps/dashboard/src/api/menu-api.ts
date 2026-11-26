@@ -26,6 +26,8 @@ import type {
   MenuPublicationsAnswer,
   QueuedEdition,
   IncludeFolderInput,
+  MenuStructureSaveInput,
+  MenuStructureSaveResult,
 } from "@waitron/shared";
 
 /** The menu-settings read: the menu's defaults, whether the venue's region charges takeaway VAT, and
@@ -45,6 +47,7 @@ export interface ActivationTime {
 
 export interface MenuReadModels {
   structure: MenuStructure;
+  prices: MenuPriceRow[];
   home: MenuHome;
   status: MenuStatus;
   preview: MenuPreview;
@@ -209,6 +212,9 @@ export class MenuApi {
   }
   getMenuStructure(id: string): Promise<MenuStructure> {
     return this.#request<MenuStructure>(`/management-api/menus/${id}/structure`, "GET");
+  }
+  saveMenuStructure(id: string, input: MenuStructureSaveInput): Promise<MenuStructureSaveResult> {
+    return this.#request(`/management-api/menus/${encodeURIComponent(id)}/structure`, "PUT", input);
   }
   getMenuPrices(id: string): Promise<MenuPriceRow[]> {
     return this.#request<MenuPriceRow[]>(`/management-api/menus/${id}/prices`, "GET");

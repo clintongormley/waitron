@@ -1,5 +1,6 @@
 import { vi, type Mock } from "vitest";
 import type { DashboardApi, Product, ProductEditorValue } from "../api/client.js";
+import { menuReadFixture } from "../widgets/test-helpers.js";
 
 export const menuProductUnit = {
   id: "each",
@@ -51,6 +52,14 @@ type MenuProductApi = Partial<DashboardApi> & {
 };
 
 export function menuProductApi(product: Product = menuProduct): MenuProductApi {
+  const structure: Awaited<ReturnType<DashboardApi["getMenuStructure"]>> = {
+    rootSectionId: "root",
+    root: { id: "root", internalName: "Lunch", names: {}, image: null, color: null, members: [] },
+    nodes: [{ memberId: "m-burger", ref: { kind: "product", productId: product.id } }],
+    placeableSetMenus: [],
+    includable: [],
+    includedBy: [],
+  };
   return {
     listMenus: async () => [
       { id: "menu-one", name: "Lunch", active: true, kind: "menu", setPrice: null },
@@ -72,14 +81,11 @@ export function menuProductApi(product: Product = menuProduct): MenuProductApi {
     }),
     getMenuStatus: async () => ({ state: "unpublished", clashes: 0 }),
     getMenuStatuses: async () => ({}),
-    getMenuStructure: async () => ({
-      rootSectionId: "root",
-      root: { id: "root", internalName: "Lunch", names: {}, image: null, color: null, members: [] },
-      nodes: [{ memberId: "m-burger", ref: { kind: "product", productId: product.id } }],
-      placeableSetMenus: [],
-      includable: [],
-      includedBy: [],
-    }),
+    getMenuStructure: async () => structure,
+    getMenuPrices: async () => [],
+    getMenuRead(id, parts) {
+      return menuReadFixture(this as DashboardApi, id, parts);
+    },
     getProductEditor: vi
       .fn<DashboardApi["getProductEditor"]>()
       .mockResolvedValue({ ...menuProductEditorValue, image: product.image }),

@@ -6810,6 +6810,25 @@ it("refuses format-2 menus through management status, preview and publish routes
 });
 
 describe("shared menu reads", () => {
+  it("returns this menu's explicit prices together with its structure", async () => {
+    const app = mountApp();
+    const menuId = await createMenuVia(app, "Priced structure");
+    const productId = await createNamedProductVia(app, `Offered ${crypto.randomUUID()}`);
+    await offerVia(app, menuId, productId, "3.40");
+
+    const read = await send(
+      app,
+      "GET",
+      `/management-api/menus/${menuId}/read?part=structure&part=prices`,
+    );
+
+    expect(read.status).toBe(200);
+    expect(await read.json()).toMatchObject({
+      structure: { status: 200, body: { nodes: [{ ref: { kind: "product", productId } }] } },
+      prices: { status: 200, body: [{ productId, override: "3.40" }] },
+    });
+  });
+
   it("refuses staff before reading any part", async () => {
     const app = mountApp();
     const id = await createMenuVia(app, "Manager only");
@@ -6944,7 +6963,7 @@ describe("shared menu reads", () => {
     expect(body.revision).toEqual({ epoch: expect.any(String), sequence: expect.any(Number) });
   });
 
-  it.each(["", "?part=prices", "?part=home&part=home"])(
+  it.each(["", "?part=unknown", "?part=home&part=home"])(
     "refuses an invalid shared read selection %s",
     async (query) => {
       const app = mountApp();

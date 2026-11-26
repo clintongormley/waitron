@@ -12,6 +12,7 @@ import {
   saveMenuDefaultColor,
   type MenuDefaults,
   readMenuHome,
+  menuPrices,
   previewMenu,
   readMenuStructure,
   listOptionLists,
@@ -192,7 +193,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
       if (
         parts.length === 0 ||
         new Set(parts).size !== parts.length ||
-        parts.some((part) => !["structure", "home", "status", "preview"].includes(part))
+        parts.some((part) => !["structure", "prices", "home", "status", "preview"].includes(part))
       )
         throw new AppError("management.request_invalid", { field: "part" });
       const result = await gated(c, sessionId, async (tx) => {
@@ -200,6 +201,7 @@ export function mountMenuApi(app: Hono, deps: MenuApiDeps, log: Logger): void {
         for (const part of parts) {
           const response = await run(c, log, async () => {
             if (part === "structure") return c.json(await readMenuStructure(tx, menuId));
+            if (part === "prices") return c.json(await menuPrices(tx, menuId));
             if (part === "home") return c.json(await readMenuHome(tx, menuId));
             if (part === "preview") return c.json(await previewMenu(tx, menuId));
             return c.json(await readMenuStatus(tx, menuId));

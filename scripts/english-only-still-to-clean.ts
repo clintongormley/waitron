@@ -50,7 +50,6 @@ export const STILL_TO_CLEAN: readonly string[] = [
   "apps/dashboard/src/screens/floor-plan-table-panel.test.ts",
   "apps/dashboard/src/screens/floor-plan-tables-panel.test.ts",
   "apps/dashboard/src/screens/look-card.test.ts",
-  "apps/dashboard/src/screens/menus-screen.a11y.test.ts",
   "apps/dashboard/src/screens/menus-screen.heading.test.ts",
   "apps/dashboard/src/screens/menus-screen.home-tab.test.ts",
   "apps/dashboard/src/screens/menus-screen.test.ts",

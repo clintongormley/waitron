@@ -332,10 +332,16 @@ Menus**.
 
 In **Structure**, open a product’s row menu and choose **Edit product**. Choose its photo where shown to go straight to the image control. **Save** updates the product and returns you to its row in the menu.
 
-In **Structure**, choose the photo or colour square of one of the menu’s own sections to edit it.
-Select a section row and copy the page address to open that same section later.
-If removing a row or moving it with its drag handle is refused, look above the tree for the
-list and the reason.
+In **Structure**, open the menu or section’s row actions to add dishes or sections. Drag a row
+by its handle to move it. To move or remove several at once, choose **Select** and tick their
+rows. Choose a section row and copy the address if you need to link back to that section.
+
+Enter a price beside a dish to set its price on this menu. Expand a dish with variants to price
+each one. Clear an entered price to use the usual price. A price you change applies everywhere
+the dish or variant appears on this menu. **Price overrides** is still available as a separate tab.
+
+Choose **Save** at the bottom of Structure to keep the arrangement and prices together. Choose
+**Cancel** and confirm to go back to the saved menu.
 
 ## Set menus {#set-menus}
 
@@ -392,8 +398,9 @@ own sections leaves the source as it was; included menus still point to the same
 
 ## Review unpublished menu changes {#preview-undo}
 
-Choose **Review and publish** in the menu heading. In **Fix before publishing**, choose a price or
-open the set menu you need to fix. Then open any warning you need to check. Select an item's name in
+Choose **Review and publish** in the menu heading. If you have unsaved changes in Structure,
+choose **Save and review**. In **Fix before publishing**, choose a price or open the set menu
+you need to fix. Then open any warning you need to check. Select an item's name in
 the change list to find it in the proposed menu. On a phone, switch between **Changes** and **Menu**.
 Use the language picker above the menu to check translations or see **Internal names**.
 

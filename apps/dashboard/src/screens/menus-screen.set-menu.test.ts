@@ -81,6 +81,9 @@ function api() {
     addSectionMember: vi.fn().mockResolvedValue({ id: "placed" }),
     removeSectionMember: vi.fn().mockResolvedValue(undefined),
     moveSectionMembersInto: vi.fn().mockResolvedValue(undefined),
+    saveMenuStructure: vi
+      .fn<DashboardApi["saveMenuStructure"]>()
+      .mockResolvedValue({ dropped: [] }),
     getMenuStructure: vi.fn<DashboardApi["getMenuStructure"]>().mockResolvedValue({
       rootSectionId: "root",
       root: { id: "root", internalName: "Lunch", names: {}, image: null, color: null, members: [] },
@@ -92,6 +95,7 @@ function api() {
     async getMenuRead(menuId: string) {
       return {
         structure: { status: 200, body: await this.getMenuStructure(menuId) },
+        prices: { status: 200, body: [] },
         status: { status: 200, body: status },
       };
     },
@@ -605,7 +609,7 @@ it("offers a set menu in another list even when the root already holds it", asyn
   const rootActions = page.getByRole("button", { name: "Actions: Lunch" });
   await rootActions.click();
   await expect
-    .element(page.getByRole("button", { name: "Include a menu", exact: true }))
+    .element(page.getByRole("button", { name: "Include a menu…", exact: true }))
     .toBeVisible();
   expect(page.getByRole("button", { name: "Set menu…", exact: true }).elements()).toHaveLength(0);
   await rootActions.click();
@@ -613,7 +617,20 @@ it("offers a set menu in another list even when the root already holds it", asyn
   await page.getByRole("button", { name: "Set menu…", exact: true }).click();
   await page.getByRole("combobox", { name: /Set menu/ }).click();
   await page.getByRole("option", { name: "Daily menu" }).click();
-  expect(client.addSectionMember).toHaveBeenCalledExactlyOnceWith("starters", placement.ref);
+  expect(client.addSectionMember).not.toHaveBeenCalled();
+  expect(client.saveMenuStructure).not.toHaveBeenCalled();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  expect(client.saveMenuStructure).toHaveBeenCalledExactlyOnceWith(
+    "lunch",
+    expect.objectContaining({
+      sections: [
+        expect.objectContaining({
+          id: "starters",
+          members: [expect.objectContaining({ ref: placement.ref })],
+        }),
+      ],
+    }),
+  );
 });
 
 it("offers only unplaced set menus when the selected list already holds one", async () => {
@@ -655,12 +672,13 @@ it("moves a set-menu placement into a section without editing the set menu", asy
   const before = withSectionAndPlacement(structure);
   const section = before.nodes[1]!;
   client.getMenuStructure.mockResolvedValue(before);
-  client.moveSectionMembersInto.mockImplementationOnce(async () => {
+  client.saveMenuStructure.mockImplementationOnce(async () => {
     client.getMenuStructure.mockResolvedValue({
       ...before,
       root: { ...before.root, members: before.root.members.filter(({ id }) => id !== "placed") },
       nodes: [{ ...section, children: [placement] }],
     });
+    return { dropped: [] };
   });
   await mount("/menus/menu/lunch/view/structure", client);
   const actions = page.getByRole("button", { name: "Actions: Daily menu" });
@@ -669,10 +687,22 @@ it("moves a set-menu placement into a section without editing the set menu", asy
   await page.getByRole("combobox", { name: /Destination/ }).click();
   await page.getByRole("option", { name: "Starters" }).click();
   await page.getByRole("button", { name: "Move", exact: true }).click();
-  expect(client.moveSectionMembersInto).toHaveBeenCalledExactlyOnceWith("starters", [
-    { listId: "root", memberId: "placed" },
-  ]);
+  expect(client.moveSectionMembersInto).not.toHaveBeenCalled();
+  expect(client.saveMenuStructure).not.toHaveBeenCalled();
   await vi.waitFor(() => expect(actions.element().matches(":focus")).toBe(true));
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  expect(client.saveMenuStructure).toHaveBeenCalledExactlyOnceWith(
+    "lunch",
+    expect.objectContaining({
+      rootMembers: [{ id: "first", ref: section.ref }],
+      sections: [
+        expect.objectContaining({
+          id: "starters",
+          members: [{ id: "placed", ref: placement.ref }],
+        }),
+      ],
+    }),
+  );
 });
 
 it("keeps the current selection when clicking a set menu in Select mode", async () => {
@@ -694,15 +724,27 @@ it("removes the placement while leaving the set menu available to add", async ()
   const client = api();
   const structure = await client.getMenuStructure("lunch");
   client.getMenuStructure.mockResolvedValue(withSectionAndPlacement(structure));
-  client.removeSectionMember.mockImplementationOnce(async () => {
+  client.saveMenuStructure.mockImplementationOnce(async () => {
     client.getMenuStructure.mockResolvedValue(structure);
+    return { dropped: [] };
   });
   await mount("/menus/menu/lunch/view/structure", client);
   await page.getByRole("button", { name: "Actions: Daily menu" }).click();
-  await page.getByRole("button", { name: "Remove from this menu" }).click();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  const rootActions = page.getByRole("button", { name: "Actions: Lunch" });
+  await rootActions.click();
   await expect.element(page.getByRole("button", { name: "Set menu…", exact: true })).toBeVisible();
-  expect(client.removeSectionMember).toHaveBeenCalledExactlyOnceWith("root", "placed");
+  expect(client.removeSectionMember).not.toHaveBeenCalled();
+  expect(client.saveMenuStructure).not.toHaveBeenCalled();
   expect(page.getByRole("link", { name: "Daily menu", exact: true }).elements()).toHaveLength(0);
+  await rootActions.click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  expect(client.saveMenuStructure).toHaveBeenCalledExactlyOnceWith(
+    "lunch",
+    expect.objectContaining({
+      rootMembers: [{ id: "first", ref: { kind: "section", sectionId: "starters" } }],
+    }),
+  );
 });
 
 it("uses the ordinary-menu choices for Include a menu", async () => {
@@ -711,7 +753,7 @@ it("uses the ordinary-menu choices for Include a menu", async () => {
   client.getMenuStructure.mockResolvedValue(withSectionAndPlacement(structure));
   await mount("/menus/menu/lunch/view/structure", client);
   await page.getByRole("button", { name: "Actions: Lunch" }).click();
-  await page.getByRole("button", { name: "Include a menu", exact: true }).click();
+  await page.getByRole("button", { name: "Include a menu…", exact: true }).click();
   await page.getByRole("combobox", { name: /Include a menu/ }).click();
   await expect.element(page.getByRole("option", { name: "Dinner" })).toBeVisible();
   expect(page.getByRole("option", { name: "Daily menu" }).elements()).toHaveLength(0);

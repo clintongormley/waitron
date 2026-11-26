@@ -5,11 +5,12 @@ import {
   cleanupWidgets,
   expectNoA11yViolations,
   menuDocument,
+  menuReadFixture,
   mountWidget,
 } from "../widgets/test-helpers.js";
 import { MenusScreen } from "./menus-screen.js";
 import type { DashboardApi, MenuPreview, MenuStatus, Product } from "../api/client.js";
-import type { MenuSummary, MenuStructureNode } from "../api/menu-api.js";
+import type { MenuReadPart, MenuSummary, MenuStructureNode } from "../api/menu-api.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 
 afterEach(cleanupWidgets);
@@ -115,6 +116,9 @@ function api(
     }),
     getMenuStatuses: vi.fn().mockResolvedValue({ "menu-lunch": CHANGED }),
     getMenuStatus: vi.fn(status),
+    getMenuRead(id: string, parts: readonly MenuReadPart[]) {
+      return menuReadFixture(this as DashboardApi, id, parts);
+    },
     getMenuPreview: vi.fn(async () => ({ ...preview, status: await status() })),
     getMenuPrices: vi.fn().mockResolvedValue([]),
     getMenuPublications: vi
@@ -123,14 +127,24 @@ function api(
   } as unknown as DashboardApi;
 }
 
-async function mount(client: DashboardApi = api(), path = LUNCH_PATH): Promise<MenusScreen> {
+async function mount(
+  client: DashboardApi = api(),
+  path = LUNCH_PATH,
+  waitForStructure = true,
+): Promise<MenusScreen> {
   history.replaceState(null, "", path);
   const { el } = await mountWidget<MenusScreen>("dashboard-menus-screen", {
     api: client,
     now: () => new Date(NOW),
   });
   await vi.waitFor(() => {
-    if (el.shadowRoot!.querySelector('[data-test="loading"], [data-test="structure-loading"]'))
+    if (
+      el.shadowRoot!.querySelector(
+        waitForStructure
+          ? '[data-test="loading"], [data-test="structure-loading"]'
+          : '[data-test="loading"]',
+      )
+    )
       throw new Error("loading");
   });
   await el.updateComplete;
@@ -380,7 +394,7 @@ describe("the menu editor's heading", () => {
   ])(
     "offers no review or unpublished-change cue while the menu is %s",
     async (_state, status, words) => {
-      const el = await mount(api(status));
+      const el = await mount(api(status), LUNCH_PATH, status !== never);
       await vi.waitFor(() => expect(text(q(el, '[data-test="menu-status"]'))).toBe(words));
       expect(q(el, '[data-test="menu-status"] a')).toBeNull();
       expect(q(el, '[data-test="review-publish"]')).toBeNull();

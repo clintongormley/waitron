@@ -285,6 +285,7 @@ function api(overrides: Partial<Record<keyof DashboardApi, unknown>> = {}) {
       const readClient = client as unknown as DashboardApi;
       const reads = {
         structure: () => readClient.getMenuStructure(id),
+        prices: () => readClient.getMenuPrices(id),
         home: () => readClient.getMenuHome(id),
         status: () => readClient.getMenuStatus(id),
         preview: () => readClient.getMenuPreview(id),

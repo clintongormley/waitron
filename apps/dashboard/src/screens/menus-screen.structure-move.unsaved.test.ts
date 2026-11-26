@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { LitElement, html } from "lit";
 import { userEvent } from "vitest/browser";
-import { LeaveController, registerIcons } from "@waitron/ui";
+import { LeaveController, NavigationGuard, registerIcons } from "@waitron/ui";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import type { DashboardApi } from "../api/client.js";
 import type { MenuReadPart, MenuStructureNode } from "../api/menu-api.js";
@@ -11,7 +11,6 @@ import { codeMessage } from "../i18n/codes.js";
 import {
   cleanupWidgets,
   documentProduct,
-  expectMessageAboveButtons,
   menuDocument,
   mountWidget,
   reattachAfterDetachedUpdate,
@@ -33,7 +32,7 @@ class StructureMoveLeaveApp extends LitElement {
 customElements.define("structure-move-leave-test-app", StructureMoveLeaveApp);
 
 /** A menu holding Burger at its top level and an empty Drinks section. */
-function client(moveSectionMembersInto: () => Promise<unknown>) {
+function client(save: () => Promise<unknown> = async () => ({ dropped: [] }), current = false) {
   const nodes: MenuStructureNode[] = [
     { memberId: "m-burger", ref: { kind: "product", productId: "p-burger" } },
     {
@@ -60,7 +59,11 @@ function client(moveSectionMembersInto: () => Promise<unknown>) {
       shortcuts: [],
       order: "home_first",
     }),
-    status: async () => ({ state: "unpublished", clashes: 0 }),
+    prices: async () => [],
+    status: async () =>
+      current
+        ? { state: "current", clashes: 0, version: 1, publishedAt: "2026-11-26T10:00:00Z" }
+        : { state: "unpublished", clashes: 0 },
     preview: async () => ({
       setMenuProblems: [],
       live: null,
@@ -75,14 +78,23 @@ function client(moveSectionMembersInto: () => Promise<unknown>) {
   const api = {
     listMenus: async () => [{ id: "menu", name: "Menu", active: true }],
     listLibraryProducts: async () => [
-      { id: "p-burger", name: "Burger", active: true, modifiers: [], variants: [] },
+      {
+        id: "p-burger",
+        name: "Burger",
+        active: true,
+        available: true,
+        unitPrice: "8.00",
+        modifiers: [],
+        variants: [],
+      },
     ],
     listCategories: async () => [],
     getMenuSettings: async () => ({ defaultProductVatClass: "general", defaultColor: null }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
     getMenuStatuses: async () => ({ menu: { state: "unpublished", clashes: 0 } }),
     getMenuPrices: async () => [],
-    moveSectionMembersInto: vi.fn(moveSectionMembersInto),
+    moveSectionMembersInto: vi.fn(async () => []),
+    saveMenuStructure: vi.fn(save),
     getMenuStructure: () => reads.structure(),
     getMenuHome: () => reads.home(),
     getMenuStatus: () => reads.status(),
@@ -93,7 +105,10 @@ function client(moveSectionMembersInto: () => Promise<unknown>) {
           parts.map(async (part) => [part, { status: 200, body: await reads[part]() }]),
         ),
       ),
-  } as unknown as DashboardApi & { moveSectionMembersInto: ReturnType<typeof vi.fn> };
+  } as unknown as DashboardApi & {
+    moveSectionMembersInto: ReturnType<typeof vi.fn>;
+    saveMenuStructure: ReturnType<typeof vi.fn>;
+  };
   Object.defineProperty(api, "background", { get: () => api });
   return api;
 }
@@ -148,7 +163,7 @@ function cancel(window: HTMLElementTagNameMap["wt-modal"]): void {
 }
 
 it("closes on Cancel without asking when no destination is chosen", async () => {
-  const { app, window } = await mount(client(async () => []));
+  const { app, window } = await mount(client());
   expect(app.leave.coordinator.isDirty()).toBe(false);
   cancel(window());
   await vi.waitFor(() => expect(window().open).toBe(false));
@@ -156,20 +171,20 @@ it("closes on Cancel without asking when no destination is chosen", async () => 
 });
 
 it("asks before Escape discards a chosen destination, and Keep leaves the window open", async () => {
-  const { app, window, destination } = await mount(client(async () => []));
+  const { app, window, destination } = await mount(client());
   await chooseOption(destination(), "s-drinks");
   expect(app.leave.coordinator.isDirty()).toBe(true);
   await userEvent.keyboard("{Escape}");
   const q = await question(app);
   await vi.waitFor(() => expect(q.open).toBe(true));
-  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await userEvent.click(q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!);
   await vi.waitFor(() => expect(q.open).toBe(false));
   expect(window().open).toBe(true);
   expect(destination().value).toBe("s-drinks");
 });
 
 it("asks before Escape discards a chosen destination, and Discard closes it", async () => {
-  const { app, window, destination } = await mount(client(async () => []));
+  const { app, window, destination } = await mount(client());
   await chooseOption(destination(), "s-drinks");
   destination().focus();
   await userEvent.keyboard("{Escape}");
@@ -180,45 +195,197 @@ it("asks before Escape discards a chosen destination, and Discard closes it", as
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
-it("commits the move before closing, so nothing is left to ask about", async () => {
-  const api = client(async () => []);
-  const { app, window, destination } = await mount(api);
+it("stages the move and keeps its member id in the one Structure save", async () => {
+  const api = client();
+  const { app, screen, window, destination } = await mount(api);
   await chooseOption(destination(), "s-drinks");
   window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
   await vi.waitFor(() => expect(window().open).toBe(false));
-  expect(api.moveSectionMembersInto).toHaveBeenCalledOnce();
-  expect(app.leave.coordinator.isDirty()).toBe(false);
+  expect(api.moveSectionMembersInto).not.toHaveBeenCalled();
+  expect(api.saveMenuStructure).not.toHaveBeenCalled();
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  screen.shadowRoot!.querySelector<HTMLElement>('[data-test="structure-save"]')!.click();
+  await vi.waitFor(() =>
+    expect(api.saveMenuStructure).toHaveBeenCalledExactlyOnceWith("menu", {
+      rootMembers: [{ id: "m-drinks", ref: { kind: "section", sectionId: "s-drinks" } }],
+      sections: [
+        {
+          id: "s-drinks",
+          internalName: "Drinks",
+          names: {},
+          image: null,
+          color: null,
+          members: [{ id: "m-burger", ref: { kind: "product", productId: "p-burger" } }],
+        },
+      ],
+      prices: [],
+    }),
+  );
+  await vi.waitFor(() => expect(app.leave.coordinator.isDirty()).toBe(false));
   expect((await question(app)).open).toBe(false);
 });
 
-it("keeps a refused choice with its message in the footer above the buttons, and Escape then asks", async () => {
+it("keeps the arrangement and allows retry when Structure Save is refused", async () => {
   const api = client(async () => {
     throw { code: "menu_section.member_duplicate" };
   });
-  const { app, window, destination } = await mount(api);
+  const { app, screen, window, destination } = await mount(api);
   await chooseOption(destination(), "s-drinks");
   window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
-  await vi.waitFor(() => expect(api.moveSectionMembersInto).toHaveBeenCalled());
+  await vi.waitFor(() => expect(window().open).toBe(false));
+  const save = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="structure-save"]',
+  )!;
+  save.click();
+  await vi.waitFor(() =>
+    expect(save.closest("wt-form-actions")!.error).toContain(
+      codeMessage("menu_section.member_duplicate"),
+    ),
+  );
+  expect(save.disabled).toBe(false);
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  save.click();
+  await vi.waitFor(() => expect(api.saveMenuStructure).toHaveBeenCalledTimes(2));
+  expect(api.saveMenuStructure.mock.calls[1]).toEqual(api.saveMenuStructure.mock.calls[0]);
+});
+
+it("asks before cancelling, and restores the saved placement only after Discard", async () => {
+  const api = client();
+  const { app, screen, window, destination } = await mount(api);
+  await chooseOption(destination(), "s-drinks");
+  window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
+  await vi.waitFor(() => expect(window().open).toBe(false));
+  const cancel = screen.shadowRoot!.querySelector<HTMLElement>('[data-test="structure-cancel"]');
+  expect(cancel).not.toBeNull();
+  cancel!.click();
+  const q = await question(app);
+  await vi.waitFor(() => expect(q.open).toBe(true));
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await vi.waitFor(() => expect(q.open).toBe(false));
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await userEvent.click(cancel!);
+  await vi.waitFor(() => expect(q.open).toBe(true));
+  await userEvent.click(q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!);
+  await vi.waitFor(() => expect(app.leave.coordinator.isDirty()).toBe(false));
+  const table = screen.shadowRoot!.querySelector("dashboard-menu-structure-table")!;
+  expect(table.nodes.map((node) => node.memberId)).toEqual(["m-burger", "m-drinks"]);
+  expect(api.saveMenuStructure).not.toHaveBeenCalled();
+});
+
+it("stages an explicit price and the movement in the same Save", async () => {
+  const api = client();
+  const { screen, window, destination } = await mount(api);
+  await chooseOption(destination(), "s-drinks");
+  window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
+  await vi.waitFor(() => expect(window().open).toBe(false));
+  const table = screen.shadowRoot!.querySelector("dashboard-menu-structure-table")!;
+  const field = () =>
+    table
+      .shadowRoot!.querySelector("wt-data-table")!
+      .shadowRoot!.querySelector("wt-price-input")
+      ?.shadowRoot!.querySelector("input");
+  await vi.waitFor(() => expect(field()).toBeInstanceOf(HTMLInputElement));
+  await userEvent.fill(field()!, "9.25");
+  expect(api.saveMenuStructure).not.toHaveBeenCalled();
+  screen.shadowRoot!.querySelector<HTMLElement>('[data-test="structure-save"]')!.click();
+  await vi.waitFor(() =>
+    expect(api.saveMenuStructure).toHaveBeenCalledExactlyOnceWith(
+      "menu",
+      expect.objectContaining({ prices: [{ productId: "p-burger", price: "9.25" }] }),
+    ),
+  );
+});
+
+it("marks and focuses the price identified by a refused Save", async () => {
+  const api = client(async () => {
+    throw { code: "product.invalid", params: { field: "prices.0.price" } };
+  });
+  const { screen, window, destination } = await mount(api);
+  await chooseOption(destination(), "s-drinks");
+  window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
+  await vi.waitFor(() => expect(window().open).toBe(false));
+  const body = screen
+    .shadowRoot!.querySelector("dashboard-menu-structure-table")!
+    .shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+  const price = () => body.querySelector("wt-price-input")!;
+  await vi.waitFor(() => expect(price()).not.toBeNull());
+  await userEvent.fill(price().shadowRoot!.querySelector("input")!, "9.25");
+  const save = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+    '[data-test="structure-save"]',
+  )!;
+  await userEvent.click(save);
+  await vi.waitFor(() => expect(price().error).toBe(codeMessage("product.invalid")));
+  await vi.waitFor(() => expect(body.activeElement).toBe(price()));
+  expect(save.disabled).toBe(false);
+});
+
+it("holds the tab until the manager accepts discarding the move", async () => {
+  const { app, screen, window, destination } = await mount(client());
+  const guard = new NavigationGuard(globalThis.window, {
+    isDirty: () => app.leave.coordinator.isDirty(),
+    request: (proceed, signal) =>
+      app.leave.coordinator.request({ scopes: "all", reason: "navigation", proceed, signal }),
+  });
+  try {
+    await chooseOption(destination(), "s-drinks");
+    window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
+    await vi.waitFor(() => expect(window().open).toBe(false));
+    const tab = screen
+      .shadowRoot!.querySelector("wt-tabs")!
+      .shadowRoot!.querySelector<HTMLElement>('[data-key="home"]')!;
+    await userEvent.click(tab);
+    const q = await question(app);
+    await vi.waitFor(() => expect(q.open).toBe(true));
+    expect(location.pathname).toContain("/view/structure");
+    await userEvent.click(q.shadowRoot!.querySelector<HTMLElement>('[data-choice="discard"]')!);
+    await vi.waitFor(() => expect(location.pathname).toContain("/view/home"));
+    expect(app.leave.coordinator.isDirty()).toBe(false);
+  } finally {
+    guard.dispose();
+  }
+});
+
+it("names the member that Save dropped from the submitted arrangement", async () => {
+  const api = client(async () => ({ dropped: [{ memberId: "m-burger", reason: "deleted" }] }));
+  const { screen, window, destination } = await mount(api);
+  await chooseOption(destination(), "s-drinks");
+  window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
+  await vi.waitFor(() => expect(window().open).toBe(false));
+  await userEvent.click(
+    screen.shadowRoot!.querySelector<HTMLElement>('[data-test="structure-save"]')!,
+  );
   await vi.waitFor(() =>
     expect(
-      window().querySelector<HTMLElement & { disabled: boolean }>(
-        '[data-test="move-selected-cancel"]',
-      )!.disabled,
-    ).toBe(false),
+      screen.shadowRoot!.querySelector('[data-test="structure-dropped"]')?.textContent,
+    ).toContain("Burger"),
   );
-  expect(destination().value).toBe("s-drinks");
-  await expectMessageAboveButtons(
-    window(),
-    window().querySelector('[data-test="move-selected-save"]')!,
-    codeMessage("menu_section.member_duplicate"),
-  );
-  await userEvent.keyboard("{Escape}");
-  await vi.waitFor(async () => expect((await question(app)).open).toBe(true));
-  expect(window().open).toBe(true);
+});
+
+it("offers Save and review on a current menu and opens Preview only after the write", async () => {
+  let finish!: (result: unknown) => void;
+  const pending = new Promise((resolve) => (finish = resolve));
+  const api = client(() => pending, true);
+  const { screen, window, destination } = await mount(api);
+  expect(screen.shadowRoot!.querySelector('[data-test="review-publish"]')).toBeNull();
+  await chooseOption(destination(), "s-drinks");
+  window().querySelector<HTMLElement>('[data-test="move-selected-save"]')!.click();
+  await vi.waitFor(() => expect(window().open).toBe(false));
+  const review = screen.shadowRoot!.querySelector<HTMLElement>('[data-test="review-publish"]');
+  expect(review?.getAttribute("variant")).toBe("secondary");
+  review!.click();
+  const dialog = screen.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-modal"]>(
+    '[data-test="structure-review"]',
+  )!;
+  await vi.waitFor(() => expect(dialog.open).toBe(true));
+  dialog.querySelector<HTMLElement>('[data-test="structure-save-review"]')!.click();
+  await vi.waitFor(() => expect(api.saveMenuStructure).toHaveBeenCalledOnce());
+  expect(location.pathname).toContain("/view/structure");
+  finish({ dropped: [] });
+  await vi.waitFor(() => expect(location.pathname).toContain("/view/preview"));
 });
 
 it("still asks after the screen was taken out of the page and put back", async () => {
-  const { app, screen, window, destination } = await mount(client(async () => []));
+  const { app, screen, window, destination } = await mount(client());
   await chooseOption(destination(), "s-drinks");
   await reattachAfterDetachedUpdate(screen);
   await vi.waitFor(() => expect(window()?.open).toBe(true));

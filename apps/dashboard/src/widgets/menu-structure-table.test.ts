@@ -1,11 +1,11 @@
-import { TABLE_CUSTOMISATION_STRINGS } from "@waitron/dashboard-kit/src/strings.js";
 import { page, userEvent } from "vitest/browser";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { registerIcons } from "@waitron/ui";
 import { chooseOption, expectRowMenusOnScreen } from "@waitron/ui/src/test-helpers.js";
 import { tableNoMatches } from "@waitron/dashboard-kit";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { cleanupWidgets, combinedFixture, mountWidget } from "./test-helpers.js";
 import { MenuStructureTable } from "./menu-structure-table.js";
+import { MenuStructureDraft } from "./menu-structure-draft.js";
 import type { MenuHome, Product } from "../api/client.js";
 import type { CategorySummary } from "../api/catalog-api.js";
 import type { MenuStructureNode } from "../api/menu-api.js";
@@ -154,6 +154,134 @@ async function mount(props: Partial<MenuStructureTable> = {}) {
   await settle(el);
   return el;
 }
+
+function burgerWithVariants(): Product {
+  const base: Product["variants"][number] = {
+    id: "v-regular",
+    name: "Regular portion",
+    active: true,
+    available: true,
+    unitPrice: "2.00",
+    customerName: null,
+    kitchenName: "STANDARD",
+    image: null,
+    allergensInherited: true,
+    courseId: null,
+    effective: {
+      unitPrice: "2.00",
+      allergens: null,
+      vatClass: "general",
+      takeawayVatRate: "21.00",
+      primaryCategoryId: null,
+      courseId: null,
+    },
+  };
+  return {
+    ...product("p-burger", "Burger"),
+    variants: [
+      base,
+      {
+        ...base,
+        id: "v-large",
+        name: "Double portion",
+        available: false,
+        unitPrice: "3.00",
+        kitchenName: "LARGE",
+        effective: { ...base.effective, unitPrice: "3.00" },
+      },
+    ],
+  };
+}
+
+it("finds a product's variant by its own name", async () => {
+  const el = await mount({ products: [burgerWithVariants()], search: "Double portion" });
+  expect(shown(el)).toEqual(["m-burger/v-large"]);
+  expect(nameOf(el, "m-burger/v-large")).toBe("Double portion");
+});
+
+it("filters unavailable variants by their own availability and keeps their product visible", async () => {
+  const el = await mount({ products: [burgerWithVariants()] });
+  expect(notesOf(el, "m-burger")).toEqual(["2 variants · 1 unavailable"]);
+  const availability = inTable(el, 'wt-combobox[data-filter="available"]')!;
+  await chooseOption(availability, "no");
+  await settle(el);
+  expect(shown(el)).toEqual(["m-burger", "m-burger/v-large"]);
+  expect(row(el, "m-burger")!.querySelector('[part~="structure-unavailable"]')).toBeNull();
+  const key = "m-burger/v-large";
+  expect(row(el, key)!.querySelector('[part~="structure-unavailable"]')?.textContent).toBe(
+    t("product.unavailable_badge"),
+  );
+  expect(menuItems(el, key)).toEqual([`edit-product-${key}`]);
+});
+
+it("leaves a phone row's checkbox in place of its grip when Select is on", async () => {
+  await page.viewport(390, 844);
+  const el = await mount();
+  const body = el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+  const grip = () => body.querySelector<HTMLElement>('[data-test="drag-m-burger"]')!;
+  expect(grip().getBoundingClientRect().width).toBeGreaterThan(0);
+  el.selecting = true;
+  await settle(el);
+  expect(body.querySelector('[data-test="select-m-burger"]')).not.toBeNull();
+  await vi.waitFor(() => expect(grip()?.getBoundingClientRect().width ?? 0).toBe(0));
+});
+
+it("shows the same staged price at an included dish and the other place it appears", async () => {
+  const lager = products[0]!;
+  const nodes = [productNode("lager", lager.id), wines()];
+  const draft = new MenuStructureDraft();
+  const structure = (rootSectionId: string, nodes: MenuStructureNode[]) => ({
+    rootSectionId,
+    nodes,
+    includable: [],
+    placeableSetMenus: [],
+    includedBy: [],
+    root: {
+      id: rootSectionId,
+      internalName: "Wines",
+      names: {},
+      color: null,
+      image: null,
+      members: [],
+    },
+  });
+  draft.accept(structure("lunch-root", nodes), []);
+  draft.include("wine", structure("wine-root", nodes[1]!.children!), [
+    {
+      productId: lager.id,
+      menuItemId: "lager-price",
+      name: lager.name,
+      categoryId: null,
+      override: null,
+      effectivePrice: "2.00",
+      available: true,
+      variants: [],
+      placements: [[]],
+      combined: combinedFixture(lager.id, "2.00", [], null, "2.00", {}),
+    },
+  ]);
+  draft.setPrice(lager.id, undefined, "2.25");
+  const el = await mount({
+    nodes,
+    products: [lager],
+    selecting: true,
+    pricing: {
+      draft,
+      offers: draft.offers([lager], new Map([["wine", "Wines"]])),
+      errors: new Map(),
+    },
+  });
+  await el.setExpanded("included-wine", true);
+  const body = el.shadowRoot!.querySelector("wt-data-table")!.shadowRoot!;
+  const fields = () => [...body.querySelectorAll("wt-price-input")];
+  await vi.waitFor(() => expect(fields().map(({ value }) => value)).toEqual(["2.25", "2.25"]));
+  const included = body.querySelector('tr[data-row-key="included-wine/wine-lager"]')!;
+  expect(included.querySelector('[part~="drag-grip"]')).toBeNull();
+  expect(included.querySelector("wt-row-actions")?.textContent).toContain(t("product.edit"));
+  expect(included.textContent).toContain(
+    t("menus.price_also_in").replace("{places}", "Lunch Menu"),
+  );
+});
 
 function table(el: MenuStructureTable) {
   return el.shadowRoot!.querySelector("wt-data-table")!;
@@ -326,16 +454,16 @@ function own<T extends Element = HTMLElement>(el: MenuStructureTable, test: stri
   return el.shadowRoot!.querySelector<T>(`[data-test="${CSS.escape(test)}"]`);
 }
 
-it("names a new section's add Add section, in English and Spanish", async () => {
+it("names a new section's add Add section…, in English and Spanish", async () => {
   const before = currentLocale();
   onTestFinished(() => setLocale(before));
   setLocale("en");
   const el = await mount();
-  expect(item(el, "new-section-top").textContent!.trim()).toBe("Add section");
+  expect(item(el, "new-section-top").textContent!.trim()).toBe("Add section…");
   setLocale("es");
   el.requestUpdate();
   await settle(el);
-  expect(item(el, "new-section-top").textContent!.trim()).toBe("Añadir sección");
+  expect(item(el, "new-section-top").textContent!.trim()).toBe("Añadir sección…");
 });
 
 it("offers the top-level adds in the root row's ⋮ and on each place an owned section is shown, naming that list", async () => {
@@ -350,7 +478,11 @@ it("offers the top-level adds in the root row's ⋮ and on each place an owned s
     ["new-section-top", "include-menu-top", "open-add-products-top"].map((test) =>
       item(el, test).textContent!.trim(),
     ),
-  ).toEqual([t("menus.new_section"), t("menus.include_menu"), t("sections.add_products")]);
+  ).toEqual([
+    `${t("menus.new_section")}…`,
+    `${t("menus.include_menu")}…`,
+    `${t("sections.add_products")}…`,
+  ]);
   item(el, "new-section-top").click();
   item(el, "include-menu-top").click();
   item(el, "open-add-products-top").click();
@@ -381,7 +513,7 @@ it("draws no plus in the toolbar; the host's toolbar-end content is all that is 
   expect(el.shadowRoot!.querySelector("wt-row-actions")).toBeNull();
 });
 
-it("offers Edit and Delete on an owned section and Remove on a product, naming the holding list", async () => {
+it("offers Edit and Remove on an owned section and sends product removal for the holding list", async () => {
   const el = await mount();
   const edits = listen(el, "wt-member-edit");
   const deletes = listen(el, "wt-member-delete");
@@ -394,34 +526,34 @@ it("offers Edit and Delete on an owned section and Remove on a product, naming t
     "delete-m-drinks",
   ]);
   expect(inTable(el, '[data-test="actions-m-drinks"] hr[part~="menu-divider"]')).not.toBeNull();
+  expect(item(el, "edit-m-drinks").textContent!.trim()).toBe(t("action.edit_dialog"));
   item(el, "edit-m-drinks").click();
+  expect(item(el, "delete-m-drinks").textContent!.trim()).toBe(t("menus.remove_selected_confirm"));
   item(el, "delete-m-drinks").click();
   expect(edits).toEqual([{ sectionId: "s-drinks", path: ["m-drinks"] }]);
   expect(deletes).toEqual([{ sectionId: "s-drinks", path: ["m-drinks"] }]);
 
   expect(menuItems(el, "m-burger")).toEqual(["edit-product-m-burger", "remove-m-burger"]);
-  expect(item(el, "remove-m-burger").textContent!.trim()).toBe(
-    t("members.remove_from").replace("{list}", "Lunch Menu"),
-  );
+  expect(item(el, "remove-m-burger").textContent!.trim()).toBe(t("menus.remove_selected_confirm"));
   await toggle(el, "m-drinks");
   expect(menuItems(el, "m-drinks/m-lemonade")).toEqual([
     "edit-product-m-drinks/m-lemonade",
     "remove-m-drinks/m-lemonade",
   ]);
   expect(item(el, "remove-m-drinks/m-lemonade").textContent!.trim()).toBe(
-    t("members.remove_from").replace("{list}", "Drinks"),
+    t("menus.remove_selected_confirm"),
   );
   item(el, "remove-m-drinks/m-lemonade").click();
   expect(removes).toEqual([{ path: ["m-drinks"], memberId: "m-lemonade" }]);
 });
 
-it("draws an included menu read-only, its menu offering Open, Edit and Remove", async () => {
+it("keeps an included menu's contents in place and offers Open, Edit and Remove for the include", async () => {
   const el = await mount({ nodes: [...lunchNodes(), wines()] });
   const removes = listen(el, "wt-member-remove");
   const edits = listen(el, "wt-structure-edit");
   expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
   expect(item(el, "read-only-included-wine")).toBeNull();
-  expect(notesOf(el, "included-wine")).toEqual([t("menus.include_as_folder")]);
+  expect(notesOf(el, "included-wine")).toEqual([t("menus.include_as_folder"), "2 products"]);
   expect(menuItems(el, "included-wine")).toEqual([
     "source-included-wine",
     "edit-included-wine",
@@ -431,8 +563,10 @@ it("draws an included menu read-only, its menu offering Open, Edit and Remove", 
   expect(link.tagName).toBe("A");
   expect(link.getAttribute("href")).toBe("/menus/menu/wine/view/structure");
   expect(link.textContent!.trim()).toBe(t("menus.open_included").replace("{name}", "Wines"));
-  expect(item(el, "edit-included-wine").textContent!.trim()).toBe(t("action.edit"));
-  expect(item(el, "remove-included-wine").textContent!.trim()).toBe(t("menus.remove_included"));
+  expect(item(el, "edit-included-wine").textContent!.trim()).toBe(t("action.edit_dialog"));
+  expect(item(el, "remove-included-wine").textContent!.trim()).toBe(
+    t("menus.remove_selected_confirm"),
+  );
   item(el, "remove-included-wine").click();
   expect(removes).toEqual([{ path: [], memberId: "included-wine" }]);
   // The included menu's own row is one of Lunch's members, so it can be moved like any other.
@@ -450,11 +584,9 @@ it("draws an included menu read-only, its menu offering Open, Edit and Remove", 
     const tr = row(el, key)!;
     expect(tr.querySelector('[part~="drag-grip"]'), key).toBeNull();
     expect(tr.querySelector('[part~="grip-space"]'), key).not.toBeNull();
-    expect(tr.querySelector("wt-row-actions"), key).toBeNull();
+    if (key === "included-wine/wine-red") expect(tr.querySelector("wt-row-actions")).toBeNull();
+    else expect(menuItems(el, key)).toEqual([`edit-product-${key}`]);
     expect(tr.querySelector('[data-test="name"]')!.getAttribute("part")!.split(" "), key).toContain(
-      "read-only",
-    );
-    expect(tr.querySelector('[data-test="kind"]')!.getAttribute("part")!.split(" "), key).toContain(
       "read-only",
     );
   }
@@ -462,6 +594,18 @@ it("draws an included menu read-only, its menu offering Open, Edit and Remove", 
   expect(shown(el)).not.toContain("included-wine/wine-red/wine-rioja");
   // Nothing inside another menu can be the list being edited here.
   expect(edits).toEqual([]);
+});
+
+it("offers Remove for a set menu and removes that placement", async () => {
+  const el = await mount({
+    menus: [{ id: "daily", name: "Daily menu", active: true, kind: "set_menu", setPrice: "14.00" }],
+    nodes: [{ memberId: "m-daily", ref: { kind: "set_menu", menuId: "daily" } }],
+  });
+  const removes = listen(el, "wt-member-remove");
+  const remove = item(el, "remove-m-daily");
+  expect(remove.textContent!.trim()).toBe(t("menus.remove_selected_confirm"));
+  remove.click();
+  expect(removes).toEqual([{ path: [], memberId: "m-daily" }]);
 });
 
 it("draws an included menu's Open link as the same entry as its Edit and Remove", async () => {
@@ -546,14 +690,14 @@ it("the row says whether the include is a folder or shown directly", async () =>
   );
   expect(nameOf(el, "included-wine")).toBe(menuLabel("Wines"));
   expect(item(el, "read-only-included-wine")).toBeNull();
-  expect(notesOf(el, "included-wine")).toEqual([t("menus.include_direct")]);
+  expect(notesOf(el, "included-wine")).toEqual([t("menus.include_direct"), "2 products"]);
   // An include inside an included menu belongs to that menu's page, so it says nothing here.
   await toggle(el, "included-wine");
   expect(nameOf(el, "included-wine/wine-cava")).toBe(menuLabel("Cava"));
-  expect(row(el, "included-wine/wine-cava")!.querySelector('[part~="note"]')).toBeNull();
+  expect(notesOf(el, "included-wine/wine-cava")).toEqual(["0 products"]);
 });
 
-it("opens the way to the current section and marks only its name current", async () => {
+it("opens the way to the current section and marks only its name for assistive technology", async () => {
   const el = await mount({ current: ["m-drinks", "m-beer"] });
   expect(row(el, "m-drinks")!.getAttribute("aria-expanded")).toBe("true");
   expect(row(el, "m-drinks/m-beer")!.getAttribute("aria-expanded")).toBe("true");
@@ -561,9 +705,8 @@ it("opens the way to the current section and marks only its name current", async
   const marked = all(el, '[aria-current="true"]');
   expect(marked).toHaveLength(1);
   expect(marked[0]!.textContent!.trim()).toBe("Beer");
-  expect(marked[0]!.getAttribute("part")!.split(" ")).toContain("current");
-  expect(getComputedStyle(marked[0]!).textDecorationLine).toContain("underline");
-  expect(Number(getComputedStyle(marked[0]!).fontWeight)).toBeGreaterThan(
+  expect(getComputedStyle(marked[0]!).textDecorationLine).toBe("none");
+  expect(Number(getComputedStyle(marked[0]!).fontWeight)).toBe(
     Number(getComputedStyle(row(el, "m-drinks")!.querySelector('[data-test="name"]')!).fontWeight),
   );
 
@@ -696,9 +839,9 @@ it("shows an empty menu as the table's empty box, saying so, with the three adds
     expect(button.getBoundingClientRect().width).toBeGreaterThan(0);
   }
   expect(buttons.map((button) => button.textContent!.trim())).toEqual([
-    t("menus.new_section"),
-    t("menus.include_menu"),
-    t("sections.add_products"),
+    `${t("menus.new_section")}…`,
+    `${t("menus.include_menu")}…`,
+    `${t("sections.add_products")}…`,
   ]);
   for (const button of buttons) button.click();
   expect(adds).toEqual([
@@ -898,8 +1041,6 @@ it.each(
         else expect(current.grip, current.key).toBeUndefined();
         expect(current.media?.left, current.key).toBeCloseTo(twin.media!.left, 0);
       }
-      // The menu's colour chip sits in the frame an uncoloured root keeps empty.
-      expect(inTable(el, '[data-test="color-root"]') !== null).toBe(menuColor !== null);
       el.menuColor = menuColor === null ? "#aabbcc" : null;
       await settle(el);
       expect(rootNameLeft(el)).toBeCloseTo(root, 0);
@@ -911,24 +1052,21 @@ it.each(
 
 it("puts a real grip on every top-level row, the included menu's too, and starts each name after the arrow and media slots", async () => {
   const el = await mountDeep();
-  const offsets = ["m-burger", "m-drinks", "m-fav", "included-wine"].map((key) => {
+  for (const key of ["m-burger", "m-drinks", "m-fav", "included-wine"]) {
     const tr = row(el, key)!;
-    expect(tr.querySelector('[part~="drag-grip"]'), key).not.toBeNull();
+    const handle = tr.querySelector('[part~="drag-grip"]')!;
+    expect(handle.getBoundingClientRect().width, key).toBeGreaterThan(0);
     expect(tr.querySelector('[part~="grip-space"]'), key).toBeNull();
-    return pieces(el, key).name.left - tr.querySelector(".tree-cell")!.getBoundingClientRect().left;
-  });
-  const tokens = getComputedStyle(el);
-  const tap = parseFloat(tokens.getPropertyValue("--wt-tap-min"));
-  const gap = parseFloat(tokens.getPropertyValue("--wt-space-3"));
-  const indent = parseFloat(tokens.getPropertyValue("--wt-space-4"));
-  expect(tap).toBeGreaterThan(0);
-  expect(indent).toBeGreaterThan(0);
-  // The control column precedes the name cell; the arrow and media slot stay inside it, one
-  // indent step in from the menu's own row.
-  for (const offset of offsets) expect(offset).toBeCloseTo(2 * tap + gap + indent, 0);
+    const arrow = tr
+      .querySelector(".tree-arrow, .tree-toggle, .tree-spacer")!
+      .getBoundingClientRect();
+    const { media, name } = pieces(el, key);
+    expect(handle.getBoundingClientRect().right, key).toBeLessThanOrEqual(arrow.left);
+    expect(arrow.right, key).toBeLessThanOrEqual(media!.left);
+    expect(media!.left, key).toBeLessThan(name.left);
+  }
 });
 
-// The name and any note under it (an included menu's "read only here") are centred as one.
 it.each([true, false])(
   "lines each row's grip, leading slot and name up on one middle (reordering: %s)",
   async (reordering) => {
@@ -943,35 +1081,19 @@ it.each([true, false])(
 );
 
 it.each([1280, 390].flatMap((width) => [true, false].map((reordering) => ({ width, reordering }))))(
-  "lines a section's swatch and name up with its arrow and its Type on one middle ($width px, reordering: $reordering)",
+  "lines a section's picture and name stack up with its arrow ($width px, reordering: $reordering)",
   async ({ width, reordering }) => {
     const before = { width: window.innerWidth, height: window.innerHeight };
     try {
       await page.viewport(width, 844);
       const el = await mountDeep({ reordering });
-      const middle = (rect: DOMRect) => rect.top + rect.height / 2;
-      const textMiddle = (node: Element) => {
-        const text = document.createRange();
-        text.selectNodeContents(node);
-        return middle(text.getBoundingClientRect());
-      };
       for (const key of ["m-drinks", "m-drinks/m-beer", "m-fav", "included-wine/wine-red"]) {
-        const tr = row(el, key)!;
-        const arrow = middle(
-          tr.querySelector(".tree-arrow, .tree-toggle")!.getBoundingClientRect(),
-        );
-        const kind = textMiddle(tr.querySelector('[data-test="kind"]')!);
-        const swatch = middle(tr.querySelector('[part~="color-swatch"]')!.getBoundingClientRect());
-        const name = textMiddle(tr.querySelector('[data-test="name"]')!);
-        for (const [what, at] of [
-          ["swatch", swatch],
-          ["name", name],
-        ] as const) {
-          // The table lines its larger arrow glyph up by baseline, which put the arrow's middle
-          // 2.5 px above the Type text's in every row measured.
-          expect(Math.abs(at - arrow), `${key} ${what} to arrow`).toBeLessThanOrEqual(3);
-          expect(Math.abs(at - kind), `${key} ${what} to Type`).toBeLessThanOrEqual(2);
-        }
+        const arrow = row(el, key)!
+          .querySelector(".tree-arrow, .tree-toggle")!
+          .getBoundingClientRect();
+        const { media, stack } = pieces(el, key);
+        expect(Math.abs(media!.middle - arrow.top - arrow.height / 2), key).toBeLessThanOrEqual(3);
+        expect(Math.abs(media!.middle - stack.middle), key).toBeLessThanOrEqual(3);
       }
     } finally {
       await page.viewport(before.width, before.height);
@@ -2397,7 +2519,7 @@ describe("colour swatches", () => {
   it.each(
     [1280, 390].flatMap((width) => [true, false].map((reordering) => ({ width, reordering }))),
   )(
-    "draws no folder icon and puts each section's swatch in its leading slot, before its name ($width px, reordering: $reordering)",
+    "shows a folder or menu placeholder before each section or included menu name ($width px, reordering: $reordering)",
     async ({ width, reordering }) => {
       const before = { width: window.innerWidth, height: window.innerHeight };
       try {
@@ -2408,16 +2530,17 @@ describe("colour swatches", () => {
         );
         const el = await mountColoured({ reordering, nodes: [...paintedLunch(), red] });
         await toggle(el, "included-wine");
-        expect(
-          table(el).shadowRoot!.querySelectorAll('tbody tr wt-icon[name="folder"]'),
-        ).toHaveLength(0);
-        for (const [key, part] of [
-          ["m-drinks", "swatch-button"],
-          ["included-wine", "swatch-box"],
-          ["included-wine/wine-red", "swatch-box"],
+        for (const [key, part, icon] of [
+          ["m-drinks", "swatch-button", "folder"],
+          ["included-wine", "swatch-box", "section-menu"],
+          ["included-wine/wine-red", "swatch-box", "folder"],
         ] as const) {
           const swatch = swatchOf(el, key);
           expect(swatch.getAttribute("part"), key).toBe(part);
+          expect(
+            swatch.querySelector('[part~="media-placeholder-icon"]')?.getAttribute("name"),
+            key,
+          ).toBe(icon);
           expect(swatch.closest('[part~="folder-frame"]'), key).not.toBeNull();
           const name = row(el, key)!.querySelector('[part~="name-stack"]')!.getBoundingClientRect();
           expect(swatch.getBoundingClientRect().right, key).toBeLessThanOrEqual(name.left);
@@ -2480,7 +2603,8 @@ describe("colour swatches", () => {
     const el = await mountColoured();
     const sent = sentEvents(el);
     expect(getComputedStyle(chipOf(el, "m-drinks")).backgroundColor).toBe("rgb(170, 51, 0)");
-    expect(chipOf(el, "m-fav").getAttribute("part")).toBe("color-swatch empty");
+    expect(chipOf(el, "m-fav").part.contains("empty")).toBe(true);
+    expect(chipOf(el, "m-fav").querySelector('wt-icon[name="folder"]')).not.toBeNull();
     const swatch = swatchOf(el, "m-drinks");
     expect(swatch.tagName).toBe("BUTTON");
     expect(swatch.getAttribute("aria-label")).toBe(
@@ -2618,44 +2742,29 @@ describe("without the Device Home Page", () => {
   });
 });
 
-describe("A303 tree media slots", () => {
-  it.each([1280, 440, 390])(
-    "uses equal section and product boxes, hiding both at %i px only when narrow",
-    async (width) => {
-      const before = { width: window.innerWidth, height: window.innerHeight };
-      try {
-        await page.viewport(width, 844);
-        const el = await mount({ reordering: false });
-        el.style.width = `${width}px`;
-        const table = el.shadowRoot!.querySelector("wt-data-table")!;
-        await vi.waitFor(() => expect(table.hasAttribute("narrow")).toBe(width <= 440));
-        const chip = row(el, "m-drinks")!.querySelector<HTMLElement>('[part~="color-swatch"]')!;
-        const photo = row(el, "m-burger")!.querySelector<HTMLElement>('[part~="thumb-frame"]')!;
-        const slot = chip.closest<HTMLElement>('[part~="folder-frame"]')!;
-        if (width <= 440) {
-          expect(slot.getBoundingClientRect().width).toBe(0);
-          expect(photo.getBoundingClientRect().width).toBe(0);
-          const media = table.shadowRoot!.querySelectorAll('[part~="product-media"]');
-          expect(media.length).toBeGreaterThan(0);
-          for (const button of media) expect(button.getBoundingClientRect().width).toBe(0);
-          for (const swatch of table.shadowRoot!.querySelectorAll(
-            '[part~="swatch-button"], [part~="swatch-box"]',
-          )) {
-            expect(swatch.getBoundingClientRect().width).toBe(0);
-          }
-        } else {
-          const a = chip.getBoundingClientRect(),
-            b = photo.getBoundingClientRect();
-          expect(a.width).toBeGreaterThan(0);
-          expect(a.width).toBe(b.width);
-          expect(a.height).toBe(b.height);
-        }
-      } finally {
-        await page.viewport(before.width, before.height);
-      }
-    },
-  );
-});
+it.each([1280, 440, 390])(
+  "shows equal, visible section placeholders and product photos at %i px",
+  async (width) => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    try {
+      await page.viewport(width, 844);
+      const el = await mount({ reordering: false });
+      el.style.width = `${width}px`;
+      await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(width <= 440));
+      const section = row(el, "m-drinks")!.querySelector('[part~="thumb-placeholder"]')!;
+      const photo = row(el, "m-burger")!.querySelector('[part~="thumb-frame"]')!;
+      const placeholderBox = section.getBoundingClientRect();
+      const photoBox = photo.getBoundingClientRect();
+      const expected = width <= 440 ? 30 : 36;
+      expect(Math.abs(placeholderBox.width - expected)).toBeLessThanOrEqual(4);
+      expect(placeholderBox.height).toBe(placeholderBox.width);
+      expect(photoBox.width).toBe(placeholderBox.width);
+      expect(photoBox.height).toBe(placeholderBox.height);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);
 
 it.each([390, 1280])(
   "aligns Structure grips in the first column at every depth at %s px",
@@ -2674,10 +2783,11 @@ it.each([390, 1280])(
   },
 );
 
-it("shows section photos in Structure and follows the included folder's image setting", async () => {
+it("shows menu and section photos in Structure and follows the included folder's image setting", async () => {
   const sectionImage = "a".repeat(64) + ".webp";
   const menuImage = "b".repeat(64) + ".webp";
   const folderImage = "c".repeat(64) + ".webp";
+  const rootImage = "d".repeat(64) + ".webp";
   const nativeFetch = window.fetch.bind(window);
   const fetch = vi.spyOn(window, "fetch").mockImplementation(async (input, options) => {
     const url = new URL(String(input), location.origin);
@@ -2704,8 +2814,17 @@ it("shows section photos in Structure and follows the included folder's image se
   });
   const section = { ...drinksNode("m-drinks"), image: sectionImage, color: "#aa3300" };
   const included = { ...wines(), image: menuImage, color: "#7a1f3d" };
-  const el = await mount({ nodes: [section, included] });
+  const el = await mount({
+    nodes: [section, included],
+    menuImage: rootImage,
+    menuColor: "#aabbcc",
+  });
   const photoOf = (key: string) => row(el, key)!.querySelector<HTMLImageElement>("img");
+
+  await expect.poll(() => photoOf("root")?.getAttribute("src")).toBe(`/media/square/${rootImage}`);
+  const rootFrame = photoOf("root")!.closest('[part~="thumb-frame"]')!;
+  expect(getComputedStyle(rootFrame).borderTopColor).toBe("rgb(170, 187, 204)");
+  expect(photoOf("root")!.closest("button, a")).toBeNull();
 
   await expect
     .poll(() => photoOf("m-drinks")?.getAttribute("src"))
@@ -2741,6 +2860,24 @@ it("shows section photos in Structure and follows the included folder's image se
 });
 
 describe("Structure product media", () => {
+  it("distinguishes product and set menu placeholders from one another", async () => {
+    const el = await mount({
+      menus: [
+        { id: "daily", name: "Daily menu", active: true, kind: "set_menu", setPrice: "14.00" },
+      ],
+      nodes: [
+        productNode("m-lager", "p-lager"),
+        { memberId: "m-daily", ref: { kind: "set_menu", menuId: "daily" } },
+      ],
+    });
+    const icon = (key: string) =>
+      row(el, key)!.querySelector('[part~="media-placeholder-icon"]')?.getAttribute("name");
+
+    expect(icon("m-daily")).toBe("prep-station");
+    expect(icon("m-lager")).toBe("cutlery");
+    expect(notesOf(el, "m-daily")).toEqual([t("menus.set_menu_kind")]);
+  });
+
   it("uses a leading inherited photo ring and links to the product editor's photo field", async () => {
     const el = await mount({
       products: [{ ...products[2]!, categoryId: "c1" }],
@@ -2760,59 +2897,55 @@ describe("Structure product media", () => {
   });
 });
 
-describe("a product row's Available and Edit product", () => {
-  /** Burger is available and Lemonade is sold out, so a row reading the wrong product fails. */
-  const flagged: Product[] = [
-    product("p-lager", "Lager"),
-    { ...product("p-lemonade", "Lemonade"), available: false },
-    product("p-burger", "Burger", "burger.webp"),
-    product("p-rioja", "Rioja"),
-  ];
-  /** The text of a row's cell under the Available heading. */
-  function availableOf(el: MenuStructureTable, key: string): string {
-    const heads = all(el, "thead th").map((th) => th.textContent!.trim());
-    const index = heads.indexOf(t("editor.available"));
-    expect(index, heads.join("|")).toBeGreaterThanOrEqual(0);
-    const cells = [...row(el, key)!.children];
-    expect(cells.length, key).toBe(heads.length);
-    return cells[index]!.textContent!.trim();
-  }
+describe("a product row's availability and Edit product", () => {
+  const flagged: Product[] = products.map((item) =>
+    item.id === "p-lemonade" ? { ...item, available: false } : item,
+  );
+  const badge = (el: MenuStructureTable, key: string) =>
+    row(el, key)!.querySelector('[part~="structure-unavailable"]');
 
-  it("shows Available on product rows only, each by its own product's flag", async () => {
+  it("shows the Unavailable badge by the product's own flag and counts unavailable dishes in closed sections", async () => {
     const el = await mount({ products: flagged });
+    expect(notesOf(el, "m-drinks")).toEqual(["2 products · 1 unavailable"]);
     await toggle(el, "m-drinks");
-    const columns = (table(el) as unknown as { columns: { key: string }[] }).columns;
-    expect(columns.map((column) => column.key)).toEqual(["name", "kind", "available", "actions"]);
-    expect(availableOf(el, "m-burger")).toBe(t("menus.available_yes"));
-    expect(availableOf(el, "m-drinks/m-lemonade")).toBe(t("menus.available_no"));
-    expect(availableOf(el, "m-drinks/m-lager")).toBe(t("menus.available_yes"));
-    for (const key of ["m-drinks", "m-drinks/m-beer"]) expect(availableOf(el, key), key).toBe("");
+    expect(badge(el, "m-drinks/m-lemonade")?.textContent).toBe(t("product.unavailable_badge"));
+    for (const key of ["m-burger", "m-drinks/m-lager", "m-drinks", "m-drinks/m-beer"])
+      expect(badge(el, key), key).toBeNull();
   });
 
-  it("draws Available in the muted colour of the Type word beside it", async () => {
-    const el = await mount();
-    el.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
-    const burger = row(el, "m-burger")!;
-    const kind = burger.querySelector('[data-test="kind"]')!;
-    const available = burger.querySelector('[data-test="available"]')!;
-    expect(getComputedStyle(kind).color).toBe("rgb(1, 2, 3)");
-    expect(getComputedStyle(available).color).toBe(getComputedStyle(kind).color);
+  it("draws the Unavailable badge with a danger-coloured outline", async () => {
+    const el = await mount({ products: flagged });
+    el.style.setProperty("--wt-color-danger", "rgb(91, 30, 30)");
+    await toggle(el, "m-drinks");
+    const style = getComputedStyle(badge(el, "m-drinks/m-lemonade")!);
+    expect(style.color).toBe("rgb(91, 30, 30)");
+    expect(style.borderTopColor).toBe("rgb(91, 30, 30)");
+    expect(style.borderTopWidth).toBe("1px");
   });
 
-  it("shows Available on an included menu's product rows, which keep having no menu", async () => {
-    const el = await mount({ nodes: [...lunchNodes(), wines()] });
+  it("shows Unavailable and only Edit product for an included menu's unavailable dish", async () => {
+    const el = await mount({
+      nodes: [...lunchNodes(), wines()],
+      products: products.map((item) =>
+        item.id === "p-lager" ? { ...item, available: false } : item,
+      ),
+    });
+    expect(notesOf(el, "included-wine")).toEqual([
+      "Shown as a folder",
+      "2 products · 1 unavailable",
+    ]);
     await toggle(el, "included-wine");
-    expect(availableOf(el, "included-wine/wine-lager")).toBe(t("menus.available_yes"));
-    expect(inTable(el, '[data-test="actions-included-wine/wine-lager"]')).toBeNull();
-    const parts = (key: string) =>
-      row(el, key)!.querySelector('[data-test="available"]')!.getAttribute("part")!.split(" ");
-    expect(parts("included-wine/wine-lager")).toEqual(["available", "read-only"]);
-    expect(parts("m-burger")).toEqual(["available"]);
+    const key = "included-wine/wine-lager";
+    expect(badge(el, key)?.textContent).toBe(t("product.unavailable_badge"));
+    expect(menuItems(el, key)).toEqual([`edit-product-${key}`]);
+    const edits = listen(el, "wt-edit-product");
+    item(el, `edit-product-${key}`).click();
+    expect(edits).toEqual([{ productId: "p-lager", path: ["included-wine", "wine-lager"] }]);
   });
 
-  it("shows no Available for a product the list does not hold", async () => {
+  it("shows no availability badge for a product the list does not hold", async () => {
     const el = await mount({ nodes: [productNode("m-ghost", "p-ghost")] });
-    expect(availableOf(el, "m-ghost")).toBe("");
+    expect(badge(el, "m-ghost")).toBeNull();
   });
 
   it("offers Edit product first in a product row's ⋮, and opens that product by click", async () => {
@@ -2841,7 +2974,7 @@ describe("a product row's Available and Edit product", () => {
     });
     link.dispatchEvent(plain);
     expect(plain.defaultPrevented).toBe(true);
-    expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "p-burger" });
+    expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "p-burger", path: ["m-burger"] });
     // Stop the browser following it inside the test page.
     link.addEventListener("click", (event) => event.preventDefault(), { once: true });
     link.dispatchEvent(
@@ -2867,7 +3000,7 @@ describe("a product row's Available and Edit product", () => {
     await userEvent.keyboard("{Tab}");
     expect(item(el, "edit-product-m-burger").matches(":focus")).toBe(true);
     await userEvent.keyboard("{Enter}");
-    expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "p-burger" });
+    expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "p-burger", path: ["m-burger"] });
   });
 
   it("offers no Edit product for a product the list does not hold, and keeps it while busy", async () => {
@@ -2880,7 +3013,7 @@ describe("a product row's Available and Edit product", () => {
     el.addEventListener("wt-edit-product", (event) => heard((event as CustomEvent).detail));
     const plain = new MouseEvent("click", { bubbles: true, composed: true, cancelable: true });
     item(el, "edit-product-m-burger").dispatchEvent(plain);
-    expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "p-burger" });
+    expect(heard).toHaveBeenCalledExactlyOnceWith({ productId: "p-burger", path: ["m-burger"] });
   });
 });
 
@@ -3136,7 +3269,9 @@ describe("A461 Structure search", () => {
     );
     expect(found.querySelector('[part~="read-only"]')).not.toBeNull();
     expect(found.querySelector('td.select input[type="checkbox"]')).toBeNull();
-    expect(found.querySelector("wt-row-actions")).toBeNull();
+    expect(menuItems(el, "included-wine/wine-red/wine-rioja")).toEqual([
+      "edit-product-included-wine/wine-red/wine-rioja",
+    ]);
   });
 
   it("A461 Structure search expansion does not replace current path", async () => {
@@ -3352,7 +3487,7 @@ describe("search and the Available filter", () => {
     });
     const filter = table(el).columns.find((column) => column.key === "available")!.filter!;
     expect(filter.label).toBe(t("editor.available"));
-    expect(filter.allLabel).toBe(t("menus.filter_available_all"));
+    expect(filter.allLabel).toBe(t("product.filter_any"));
     expect(filter.options).toEqual([
       { value: "yes", label: t("menus.available_yes") },
       { value: "no", label: t("menus.available_no") },
@@ -3751,9 +3886,9 @@ describe("the menu's own row", () => {
       menu.querySelector<HTMLElement>(`[data-test="${test}"]`)!,
     );
     expect(buttons.map((button) => button.textContent!.trim())).toEqual([
-      t("menus.new_section"),
-      t("menus.include_menu"),
-      t("sections.add_products"),
+      `${t("menus.new_section")}…`,
+      `${t("menus.include_menu")}…`,
+      `${t("sections.add_products")}…`,
     ]);
     for (const button of buttons) button.click();
     expect(adds).toEqual([
@@ -4027,21 +4162,22 @@ describe("the menu's own row", () => {
     },
   );
 
-  it("paints the menu's own colour in its leading frame, as no button, and starts the name in the same place without one", async () => {
+  it("paints the menu's book placeholder with its own colour and keeps the same name alignment without a colour", async () => {
     const el = await mount({ menuColor: "#aabbcc" });
-    const box = inTable(el, '[data-test="color-root"]')!;
-    expect(box.tagName).toBe("SPAN");
-    expect(box.part.contains("swatch-box")).toBe(true);
-    expect(box.getAttribute("aria-hidden")).toBe("true");
-    expect(box.parentElement!.part.contains("folder-frame")).toBe(true);
-    expect(box.closest('[part~="folder-frame"]')!.querySelector("button")).toBeNull();
-    const chip = box.querySelector<HTMLElement>('[part~="color-swatch"]')!;
+    const frame = row(el, "root")!.querySelector('[part~="folder-frame"]')!;
+    expect(frame.querySelector("button, a")).toBeNull();
+    const chip = frame.querySelector<HTMLElement>('[part~="thumb-placeholder"]')!;
+    expect(chip.getAttribute("aria-hidden")).toBe("true");
+    expect(chip.querySelector('wt-icon[name="section-menu"]')).not.toBeNull();
     expect(getComputedStyle(chip).backgroundColor).toBe("rgb(170, 187, 204)");
     const coloured = rootNameLeft(el);
     el.menuColor = null;
     await settle(el);
-    expect(inTable(el, '[data-test="color-root"]')).toBeNull();
-    expect(row(el, "root")!.querySelector('[part~="folder-frame"]')).not.toBeNull();
+    const uncoloured = row(el, "root")!.querySelector(
+      '[part~="folder-frame"] [part~="thumb-placeholder"]',
+    )!;
+    expect(uncoloured.querySelector('wt-icon[name="section-menu"]')).not.toBeNull();
+    expect(uncoloured.hasAttribute("style")).toBe(false);
     expect(rootNameLeft(el)).toBeCloseTo(coloured, 0);
   });
 });
@@ -4656,12 +4792,11 @@ describe("names holding replacement patterns or another placeholder", () => {
     expect(announced(el)).toBe(`${lemon} moved out to ${lunch}`);
   });
 
-  it("labels a row's toggle, Remove, colour, included menu and row box with the names as written", async () => {
+  it("labels a row's toggle, colour, included menu and row box with the names as written", async () => {
     const el = await mountTrap();
     expect(row(el, "m-drinks")!.querySelector(".row-activate")!.getAttribute("aria-label")).toBe(
       `Show what is in ${drinks}`,
     );
-    expect(item(el, "remove-m-burger").textContent!.trim()).toBe(`Remove from ${lunch}`);
     expect(
       row(el, "m-drinks")!
         .querySelector('[data-test="color-m-drinks"]')!
@@ -4678,27 +4813,18 @@ describe("names holding replacement patterns or another placeholder", () => {
   });
 });
 
-it("offers localized remembered column choices for waitron.menu-structure.table", async () => {
-  const previous = currentLocale();
-  setLocale("es-ES");
-  localStorage.setItem("waitron.menu-structure.table:columns", '{"kind":false}');
-  try {
-    const el = await mount();
-    const root = table(el).shadowRoot!;
-    const chooser = root.querySelector<HTMLElement>(".columns-trigger");
-    expect(chooser?.getAttribute("aria-label")).toBe(
-      TABLE_CUSTOMISATION_STRINGS.es["table.customise_columns"],
-    );
-    await userEvent.click(chooser!);
-    expect(root.querySelector('input[data-column="kind"]')).toHaveProperty("checked", false);
-    expect(root.querySelector("wt-dialog")).toHaveProperty(
-      "heading",
-      TABLE_CUSTOMISATION_STRINGS.es["table.customise"],
-    );
-  } finally {
-    localStorage.removeItem("waitron.menu-structure.table:columns");
-    setLocale(previous);
-  }
+it("shows only Name, Price and pinned Actions even with an old column preference", async () => {
+  localStorage.setItem("waitron.menu-structure.table:columns", '{"price":false,"available":true}');
+  const el = await mount({ reordering: false });
+  expect(all(el, "thead th").map((heading) => heading.textContent!.trim())).toEqual([
+    t("members.name"),
+    t("set_menus.price"),
+    t("members.actions"),
+  ]);
+  expect(inTable(el, 'thead th[data-pinned="end"]')?.textContent?.trim()).toBe(
+    t("members.actions"),
+  );
+  expect(inTable(el, ".columns-trigger")).toBeNull();
 });
 
 it.each(
@@ -4718,6 +4844,7 @@ it.each(
       products: products.map((p) => ({
         ...p,
         name: "UnbrokenProductNameThatAManagerMustReadWithoutScrolling",
+        available: false,
       })),
       current: ["m-drinks"],
     });
@@ -4735,12 +4862,11 @@ it.each(
       expect(getComputedStyle(toggle.closest("td")!).paddingInlineStart).toBe(
         width === 390 ? "4px" : "12px",
       );
-      expect(getComputedStyle(toggle).marginInlineStart).toBe(width === 390 ? "-4px" : "0px");
       const treeCell = root.querySelector('[part~="tree-cell"]')!;
       expect(
         treeCell.children[1]!.getBoundingClientRect().left -
           treeCell.closest("td")!.getBoundingClientRect().left,
-      ).toBe(width === 390 ? 44 : 56);
+      ).toBe(width === 390 ? 28 : 56);
       const names = [...root.querySelectorAll('[data-test="name"], [data-test="root-name"]')];
       expect(names.length).toBeGreaterThan(2);
       if (width < 800) {
@@ -4752,17 +4878,18 @@ it.each(
             expect(line.width).toBeGreaterThan(0);
           }
         }
-        const heading = [...root.querySelectorAll("thead th")].find(
-          (th) => th.textContent!.trim() === t("editor.available"),
-        )!;
-        expect(heading).toBeDefined();
-        const range = document.createRange();
-        range.selectNodeContents(heading);
-        expect(range.getBoundingClientRect().right, "availability heading").toBeLessThanOrEqual(
-          pinned + 1,
-        );
-        const lines = [...range.getClientRects()].filter((rect) => rect.width > 0);
-        expect(new Set(lines.map((rect) => rect.top)).size, heading.textContent!).toBe(1);
+        const badges = [...root.querySelectorAll('[part~="structure-unavailable"]')];
+        expect(badges.length).toBeGreaterThan(0);
+        for (const badge of badges) {
+          const bounds = badge.getBoundingClientRect();
+          expect(bounds.right, badge.textContent!).toBeLessThanOrEqual(pinned + 1);
+          expect(bounds.width).toBeGreaterThan(0);
+          const range = document.createRange();
+          range.selectNodeContents(badge);
+          const lines = [...range.getClientRects()].filter((rect) => rect.width > 0);
+          expect(new Set(lines.map((rect) => rect.top)).size, badge.textContent!).toBe(1);
+          expect(lines[0]!.right).toBeLessThanOrEqual(bounds.right);
+        }
         expect(scroll.scrollWidth).toBeLessThanOrEqual(scroll.clientWidth);
       } else {
         expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
