@@ -965,8 +965,8 @@ current product draft. See [Product categories](product-categories.md).
 ## One save, one transaction
 
 **The course is saved with an active product.** `applyRouting` runs for an active editor result
-inside the same transaction the product write already opened (`apps/server/src/menu-api.ts`), so a course id the venue does not have
-rolls the whole product back, and you can choose a course as you create the product.
+inside the same transaction the product write already opened (`apps/server/src/menu-products-routes.ts`),
+so a course id the venue does not have rolls the whole product back, and you can choose a course as you create the product.
 
 The product write body carries `name` (required, plain text), `customerName` (a language map or
 `null`), `description`, `kitchenName`, `image`, `unitPrice` and `takeawayVatRate` (a body carrying the retired `vatClass` or `takeawayVatClass` is refused), `primaryCategoryId` (the

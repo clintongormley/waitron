@@ -30,7 +30,6 @@
   "apps/server/src/device-api.ts": 1250,
   "apps/server/src/errors.ts": 2250,
   "apps/server/src/floor-today-store.ts": 1500,
-  "apps/server/src/menu-api.ts": 2000,
   "apps/server/src/node-entry.ts": 1250,
   "apps/server/src/order-drafts.ts": 1750,
   "apps/server/src/orders-list.ts": 1250,
