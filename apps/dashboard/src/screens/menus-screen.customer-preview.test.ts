@@ -300,9 +300,11 @@ describe("the customer menu Online preview", () => {
         if (scrollsInsidePreview) expect(host.scrollTop).toBe(outerTop);
         else expect(canvas.scrollTop).toBe(0);
         expect(location.pathname + location.hash).toBe(address);
-        expect(heading.element().getBoundingClientRect().top).toBeGreaterThanOrEqual(
-          strip.getBoundingClientRect().bottom - 1,
-        );
+        expect
+          .soft(
+            heading.element().getBoundingClientRect().top - strip.getBoundingClientRect().bottom,
+          )
+          .toBeGreaterThanOrEqual(15);
         await expect.element(second, { timeout: 1000 }).toHaveAttribute("aria-current", "location");
 
         scroller.scrollTop = scroller.scrollHeight;
@@ -313,6 +315,14 @@ describe("the customer menu Online preview", () => {
         const active = last.element().getBoundingClientRect();
         expect(active.left).toBeGreaterThanOrEqual(rail.left - 1);
         expect(active.right).toBeLessThanOrEqual(rail.left + strip.clientWidth + 1);
+        scroller.scrollTop = 0;
+        await expect.element(first).toHaveAttribute("aria-current", "location");
+        const garden = page.getByRole("link", { name: "From the garden" }).element();
+        garden.focus({ preventScroll: true });
+        await userEvent.keyboard("{Enter}");
+        await new Promise(requestAnimationFrame);
+        await new Promise(requestAnimationFrame);
+        expect.soft(garden).toHaveAttribute("aria-current", "location");
         scroller.scrollTop = 0;
         await expect.element(first).toHaveAttribute("aria-current", "location");
       } finally {

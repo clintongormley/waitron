@@ -42,6 +42,10 @@ function scrollSource(element: HTMLElement): Element | Document {
   return element.ownerDocument;
 }
 
+function stripDepth(strip: HTMLElement): number {
+  return strip.getBoundingClientRect().height + parseFloat(getComputedStyle(strip).marginBlockEnd);
+}
+
 function icon(name: string, label: string) {
   return html`<wt-icon name=${name} role="img" aria-label=${label} title=${label}></wt-icon>`;
 }
@@ -255,6 +259,7 @@ export class CustomerMenuPage extends LitElement {
 
   @state() private query = "";
   #source?: Element | Document;
+  #jumpedAt?: number;
   #resize = new ResizeObserver(() => this.#watchScroll());
 
   override connectedCallback(): void {
@@ -274,6 +279,7 @@ export class CustomerMenuPage extends LitElement {
     if (source !== this.#source) {
       this.#source?.removeEventListener("scroll", this.#markSection);
       this.#source = source;
+      this.#jumpedAt = undefined;
       source.addEventListener("scroll", this.#markSection, { passive: true });
     }
     this.#markSection();
@@ -287,8 +293,10 @@ export class CustomerMenuPage extends LitElement {
     const strip = this.renderRoot.querySelector("nav");
     if (!strip) return;
     const links = Array.from(strip.querySelectorAll("a"));
-    const edge = strip.getBoundingClientRect().bottom + 1;
     const scroller = this.#scroller();
+    if (this.#jumpedAt !== undefined && this.#jumpedAt === scroller?.scrollTop) return;
+    this.#jumpedAt = undefined;
+    const edge = strip.getBoundingClientRect().top + stripDepth(strip) + 1;
     const end = scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
     let current = links[0]!;
     if (scroller && end > 1 && scroller.scrollTop >= end - 1) current = links.at(-1)!;
@@ -298,6 +306,10 @@ export class CustomerMenuPage extends LitElement {
         current = link;
       }
     }
+    this.#selectLink(strip, current);
+  };
+
+  #selectLink(strip: HTMLElement, current: HTMLAnchorElement): void {
     const previous = strip.querySelector("[aria-current]");
     if (previous === current) return;
     previous?.removeAttribute("aria-current");
@@ -306,7 +318,7 @@ export class CustomerMenuPage extends LitElement {
     const { left, right } = current.getBoundingClientRect();
     const stripRight = stripLeft + strip.clientWidth;
     strip.scrollLeft += left < stripLeft ? left - stripLeft : Math.max(0, right - stripRight);
-  };
+  }
 
   #scroller() {
     return this.#source instanceof Document ? this.#source.scrollingElement : this.#source;
@@ -316,19 +328,22 @@ export class CustomerMenuPage extends LitElement {
     event.preventDefault();
     const link = event.currentTarget as HTMLAnchorElement;
     const heading = this.#heading(link);
+    const strip = link.parentElement!;
     const scroller = this.#scroller();
     if (scroller) {
       const top = this.#source instanceof Document ? 0 : scroller.getBoundingClientRect().top;
-      const stripHeight = link.parentElement!.getBoundingClientRect().height;
-      scroller.scrollTop += heading.getBoundingClientRect().top - top - stripHeight;
+      scroller.scrollTop += heading.getBoundingClientRect().top - top - stripDepth(strip);
+      // Two short sections can share the last scroll position. Hold the chosen link until it moves.
+      this.#jumpedAt = scroller.scrollTop;
     }
     heading.focus({ preventScroll: true });
-    this.#markSection();
+    this.#selectLink(strip, link);
   }
 
   protected override updated(): void {
     const root = this.renderRoot.querySelector<HTMLElement>("article");
     if (root && !root.hasAttribute("data-wt-theme-root")) applyTokens(root);
+    this.#jumpedAt = undefined;
     this.#watchScroll();
   }
 
