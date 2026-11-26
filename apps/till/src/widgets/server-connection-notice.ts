@@ -1,5 +1,5 @@
 import { css, html, nothing, type TemplateResult } from "lit";
-import type { ServerRouter } from "../api/server-router.js";
+import type { ServerRouter, ServerWaitingFor } from "../api/server-router.js";
 import { codeMessage } from "../i18n/codes.js";
 import { t } from "../i18n/t.js";
 
@@ -23,13 +23,21 @@ export const serverConnectionNoticeStyles = css`
   }
 `;
 
-export function serverConnectionNotice(noBoxAnswering: boolean, action?: TemplateResult) {
+export function serverWaitingText(waitingFor: ServerWaitingFor | undefined): string {
+  return t(waitingFor === "bucket" ? "server.checking_backup" : "server.waiting_sales");
+}
+
+export function serverConnectionNotice(
+  noBoxAnswering: boolean,
+  waitingFor?: ServerWaitingFor,
+  action?: TemplateResult,
+) {
   return html`<div
     class=${action ? "banner banner-with-action" : "banner"}
     role="status"
     data-server-status=${action ? "" : nothing}
   >
-    <span>${t(noBoxAnswering ? "server.none_answering" : "server.waiting_sales")}</span>
+    <span>${noBoxAnswering ? t("server.none_answering") : serverWaitingText(waitingFor)}</span>
     ${action}
   </div>`;
 }

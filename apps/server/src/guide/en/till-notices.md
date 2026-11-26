@@ -20,6 +20,10 @@ venue's WiFi. Keep the screen open while the till checks again. On the PIN scree
 notice above the keypad if needed, then press **Check again** to check now. In **Check your times**,
 press **Retry read** if the read failed.
 
+If the till says **The box is checking its backup before taking sales**, leave the till open.
+It carries on when the box is ready. On the sign-in screen, press **Check again** to see if the
+box is ready now.
+
 ## Read the notice line {#notice-line}
 
 The line shows the most serious notice first, in its main words and then its hint after " · ".

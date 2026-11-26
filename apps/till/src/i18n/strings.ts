@@ -2342,6 +2342,7 @@ export const en = {
   // Server status
   "server.waiting_sales":
     "No box is taking sales right now. The till carries on as soon as one does.",
+  "server.checking_backup": "The box is checking its backup before taking sales.",
   "server.check_again": "Check again",
   "server.switched": "Moved to another box. Enter your PIN.",
   "server.main_silent": "The main box is not answering.",
@@ -4774,6 +4775,8 @@ export const es: Record<StringKey, string> = {
   "basket.blocked.server": "No disponible ahora",
   "server.waiting_sales":
     "Ningún servidor acepta ventas ahora mismo. La caja continúa en cuanto uno las acepte.",
+  "server.checking_backup":
+    "El servidor está comprobando su copia de seguridad antes de aceptar ventas.",
   "server.check_again": "Comprobar de nuevo",
   "server.switched": "Cambiado a otro servidor. Introduce tu PIN.",
   "server.main_silent": "El servidor principal no responde.",

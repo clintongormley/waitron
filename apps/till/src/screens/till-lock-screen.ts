@@ -25,9 +25,11 @@ import "../widgets/main-server-strip.js";
 import {
   serverConnectionNotice,
   serverConnectionNoticeStyles,
+  serverWaitingText,
 } from "../widgets/server-connection-notice.js";
 import { noticeLine, noticeLineStyles } from "../widgets/notice-strip.js";
 import type { TillApi } from "../api/client.js";
+import type { ServerWaitingFor } from "../api/server-router.js";
 import type { StaffMember, StaffNotice } from "../api/device-session-api.js";
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { queuedLiveRefresh } from "../state/live-gate.js";
@@ -301,6 +303,7 @@ export class TillLockScreen extends LitElement {
   @property({ type: Boolean }) canChooseDevice = false;
 
   @property({ type: Boolean }) serverWaiting = false;
+  @property({ attribute: false }) serverWaitingFor?: ServerWaitingFor;
   @property({ type: Boolean }) noBoxAnswering = false;
 
   @property({ type: Boolean }) mainServerSilent = false;
@@ -669,9 +672,9 @@ export class TillLockScreen extends LitElement {
       >${t("server.check_again")}</wt-button
     >`;
     if (this.noBoxAnswering && !this.mainServerSilent)
-      return serverConnectionNotice(true, checkAgain);
+      return serverConnectionNotice(true, undefined, checkAgain);
     return html`<p class="servers status" role="status" data-server-status>
-      ${this.mainServerSilent ? nothing : t("server.waiting_sales")} ${checkAgain}
+      ${this.mainServerSilent ? nothing : serverWaitingText(this.serverWaitingFor)} ${checkAgain}
     </p>`;
   }
 

@@ -22,6 +22,10 @@ vuelve a comprobar la conexión. En la pantalla del PIN, desplaza el aviso que e
 teclado si hace falta y pulsa **Comprobar de nuevo** para comprobarla al momento.
 En **Comprueba tus horas**, pulsa **Volver a consultar** si no se pudieron cargar.
 
+Si la caja dice **El servidor está comprobando su copia de seguridad antes de aceptar
+ventas**, déjala abierta. La caja continúa cuando el servidor está listo. En la pantalla de
+inicio de sesión, pulsa **Comprobar de nuevo** para ver si el servidor ya está listo.
+
 ## Lee la línea de avisos {#notice-line}
 
 La línea muestra primero el aviso más grave, con su texto principal y, tras " · ", su indicación.

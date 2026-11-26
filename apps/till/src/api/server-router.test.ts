@@ -11,7 +11,15 @@ import { TillApi } from "./client.js";
 const BOX = "https://box.deli.test";
 const CLOUD = "https://cloud.deli.test";
 
-type Answer = { acceptingSales: boolean; term: number | null; nodeId?: string } | "down";
+type Answer =
+  | {
+      acceptingSales: boolean;
+      term: number | null;
+      nodeId?: string;
+      standing?: string;
+      waitingFor?: string;
+    }
+  | "down";
 
 /** A fetch that answers /api/node per origin from a mutable table; "down" rejects like a dead host. */
 function probeFetch(table: Record<string, Answer>): typeof fetch {
@@ -21,7 +29,7 @@ function probeFetch(table: Record<string, Answer>): typeof fetch {
     );
     const a = table[url.origin];
     if (a === undefined || a === "down") throw new TypeError("Failed to fetch");
-    return new Response(JSON.stringify({ ...a, standing: null, environment: "preproduction" }), {
+    return new Response(JSON.stringify({ standing: null, environment: "preproduction", ...a }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
@@ -59,6 +67,36 @@ describe("ServerRouter", () => {
       { url: BOX, label: "box.deli.test", state: "unreachable", term: null },
       { url: CLOUD, label: "cloud.deli.test", state: "standby", term: 1 },
     ]);
+  });
+
+  it("emits a change when only the main box's waiting reason comes and goes", async () => {
+    const origin = "https://venue.deli.test";
+    const standby = { acceptingSales: false, term: 2, nodeId: "b", standing: "serving-primary" };
+    const table: Record<string, Answer> = {
+      [origin]: standby,
+      [CLOUD]: { acceptingSales: false, term: 2, nodeId: "c", standing: "serving-secondary" },
+    };
+    const router = new ServerRouter({
+      origin,
+      fetchImpl: probeFetch(table),
+      storage: memoryStorage(),
+    });
+    router.setServers([
+      { url: BOX, nodeId: "b", standing: "serving-primary" },
+      { url: CLOUD, nodeId: "c", standing: "serving-secondary" },
+    ]);
+    await router.probeNow();
+    const changes: (string | undefined)[] = [];
+    router.addEventListener("state-changed", () => changes.push(router.waitingFor));
+    expect(router.waiting).toBe(true);
+
+    table[origin] = { ...standby, waitingFor: "bucket" };
+    await router.probeNow();
+    await router.probeNow();
+    table[origin] = standby;
+    await router.probeNow();
+    expect(changes).toEqual(["bucket", undefined]);
+    expect(router.waiting).toBe(true);
   });
 
   it("moves to the first server that says yes, in the round it says it", async () => {

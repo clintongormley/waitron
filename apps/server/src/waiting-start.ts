@@ -140,6 +140,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     {
       nodeId: deps.nodeId,
       acceptingSales: false,
+      waitingFor: deps.bucketDeadline === undefined ? undefined : "bucket",
       environment: deps.environment,
       readMembership: deps.readMembership,
     },

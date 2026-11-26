@@ -1,3 +1,4 @@
+export type ServerWaitingFor = "bucket";
 export type ServerState = "unknown" | "unreachable" | "standby" | "primary";
 export type ServerStanding = "serving-primary" | "serving-secondary" | "sell-only";
 export interface ServerEntry {
@@ -51,6 +52,7 @@ interface Tracked {
   term: number | null;
   /** Whether the latest probe got any HTTP answer; `null` before the first. */
   answered: boolean | null;
+  waitingFor?: ServerWaitingFor;
   /** The first unanswered probe since the latest answered one. */
   silentSince: number | null;
   /** When a probe last got an HTTP answer from this box, or from the page origin answering as the
@@ -108,6 +110,14 @@ export class ServerRouter extends EventTarget {
   get waiting(): boolean {
     return this.#waiting;
   }
+  get waitingFor(): ServerWaitingFor | undefined {
+    if (!this.#waiting) return undefined;
+    const main = this.#withStanding("serving-primary");
+    let url = this.#current;
+    if (main !== undefined) url = this.#hidden(main) ? this.#origin : main.url;
+    return this.#servers.find((s) => s.url === url)?.waitingFor;
+  }
+
   get noBoxAnswering(): boolean {
     return this.#noBoxAnswering;
   }
@@ -289,6 +299,7 @@ export class ServerRouter extends EventTarget {
         s.state = "unknown";
         s.term = null;
         s.answered = null;
+        s.waitingFor = undefined;
         s.silentSince = null;
       }
     }
@@ -324,6 +335,7 @@ export class ServerRouter extends EventTarget {
     const signature = JSON.stringify({
       statuses: this.statuses(),
       waiting: this.#waiting,
+      waitingFor: this.waitingFor,
       noBoxAnswering: this.#noBoxAnswering,
       current: this.#current,
       standings: this.#servers.map((s) => s.standing ?? null),
@@ -367,12 +379,15 @@ export class ServerRouter extends EventTarget {
         this.#forgetOriginNode(s);
         s.state = "unreachable";
         s.term = null;
+        s.waitingFor = undefined;
         return;
       }
       const body = (await res.json()) as {
         acceptingSales?: unknown;
         term?: unknown;
         nodeId?: unknown;
+        standing?: unknown;
+        waitingFor?: unknown;
       };
       if (s.url === this.#origin) {
         this.#originNodeId = typeof body.nodeId === "string" ? body.nodeId : undefined;
@@ -380,6 +395,10 @@ export class ServerRouter extends EventTarget {
       }
       s.state = body.acceptingSales === true ? "primary" : "standby";
       s.term = typeof body.term === "number" ? body.term : null;
+      s.waitingFor =
+        s.state === "standby" && body.standing === "serving-primary" && body.waitingFor === "bucket"
+          ? "bucket"
+          : undefined;
       this.#handChart(s.url, s.term);
     } catch {
       if (!answered) {
@@ -391,6 +410,7 @@ export class ServerRouter extends EventTarget {
       this.#forgetOriginNode(s);
       s.state = "unreachable";
       s.term = null;
+      s.waitingFor = undefined;
     } finally {
       clearTimeout(timer);
     }
