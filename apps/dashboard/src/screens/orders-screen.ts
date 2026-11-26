@@ -16,6 +16,7 @@ import "@waitron/ui/src/components/wt-data-table.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-row-actions.js";
 import "@waitron/ui/src/components/wt-switch.js";
+import "@waitron/ui/src/components/wt-toast.js";
 import { DashboardQueries } from "../api/query-controller.js";
 import { type DashboardApi } from "../api/client.js";
 import {
@@ -100,6 +101,14 @@ export class OrdersScreen extends LitElement {
         display: block;
         color: var(--wt-color-text-muted);
       }
+      wt-toast {
+        position: fixed;
+        inset-block-end: calc(var(--wt-space-3) + env(safe-area-inset-bottom));
+        inset-inline-end: var(--wt-space-3);
+        max-inline-size: min(calc(100% - 2 * var(--wt-space-3)), calc(var(--wt-tap-min) * 11));
+        z-index: 40;
+        overflow-wrap: anywhere;
+      }
     `,
   ];
 
@@ -117,6 +126,7 @@ export class OrdersScreen extends LitElement {
   @state() private openId: string | null = null;
   @state() private reprintRow: OrderRowDto | null = null;
   @state() private reprintMode: "receipt" | "choose" = "receipt";
+  @state() private printNotice: string | null = null;
   @state() private findingCustomer = false;
   #textTimer?: ReturnType<typeof setTimeout>;
   #sort?: Pick<OrdersPageQuery, "sortKey" | "sortDirection">;
@@ -165,7 +175,9 @@ export class OrdersScreen extends LitElement {
     this,
     () => {
       if (this.#url.read("dashboard") !== "orders") return;
-      this.linkedOrder = this.#url.read("order");
+      const linkedOrder = this.#url.read("order");
+      if (linkedOrder !== null && linkedOrder !== this.linkedOrder) this.printNotice = null;
+      this.linkedOrder = linkedOrder;
       clearTimeout(this.#textTimer);
       const address = readOrdersFilter((key) => this.#url.read(key));
       // The address this screen just wrote leaves the Table field's own spelling, such as a space
@@ -266,6 +278,23 @@ export class OrdersScreen extends LitElement {
     this.reprintRow = row;
   }
 
+  #openDetails(id: string): void {
+    this.printNotice = null;
+    this.openId = id;
+  }
+
+  #printConfirmation() {
+    return html`<wt-toast
+      .open=${this.printNotice !== null}
+      .message=${this.printNotice ?? ""}
+      close-label=${t("action.close")}
+      @wt-close=${(event: Event) => {
+        event.stopPropagation();
+        this.printNotice = null;
+      }}
+    ></wt-toast>`;
+  }
+
   #columns(): DataTableColumn<OrderRowDto>[] {
     return [
       {
@@ -340,7 +369,7 @@ export class OrdersScreen extends LitElement {
               icon="menu-open"
               @click=${(event: Event) => {
                 event.stopPropagation();
-                this.openId = row.id;
+                this.#openDetails(row.id);
               }}
               >${t("orders.view")}</wt-button
             >${
@@ -362,6 +391,7 @@ export class OrdersScreen extends LitElement {
 
   override render() {
     const rows = this.page?.rows ?? [];
+    const detailOrderId = this.linkedOrder ?? this.openId;
     const errorFor = (field: string) => (this.refusal?.field === field ? this.refusal.message : "");
     return html`<div class="heading">
         <h1>${t("orders.title")}</h1>
@@ -479,7 +509,7 @@ export class OrdersScreen extends LitElement {
         .columns=${this.#columns()}
         .rowKey=${(row: OrderRowDto) => row.id}
         .rowClick=${(row: OrderRowDto) => {
-          this.openId = row.id;
+          this.#openDetails(row.id);
         }}
         .rowClickLabel=${() => t("orders.view")}
         .loading=${this.loading}
@@ -489,7 +519,7 @@ export class OrdersScreen extends LitElement {
       ></wt-data-table>
       <dashboard-order-detail-dialog
         .api=${this.api}
-        .orderId=${this.linkedOrder ?? this.openId}
+        .orderId=${detailOrderId}
         .mayReprint=${(row: OrderRowDto) => this.#mayReprint(row)}
         .mayExport=${this.canExport}
         @order-reprint=${(event: CustomEvent<{ row: OrderRowDto }>) => {
@@ -502,13 +532,18 @@ export class OrdersScreen extends LitElement {
           this.openId = null;
           if (this.linkedOrder !== null) this.#url.write({ order: null }, true);
         }}
-      ></dashboard-order-detail-dialog>
+        >${detailOrderId === null ? nothing : this.#printConfirmation()}</dashboard-order-detail-dialog
+      >
       <dashboard-order-reprint-dialog
         .api=${this.api}
         .row=${this.reprintRow}
         .mode=${this.reprintMode}
         @wt-close=${() => {
           this.reprintRow = null;
+        }}
+        @order-print-queued=${(event: CustomEvent<string>) => {
+          this.reprintRow = null;
+          this.printNotice = event.detail;
         }}
       ></dashboard-order-reprint-dialog>
       <dashboard-invoice-customer-dialog
@@ -517,7 +552,8 @@ export class OrdersScreen extends LitElement {
         @wt-close=${() => {
           this.findingCustomer = false;
         }}
-      ></dashboard-invoice-customer-dialog>`;
+      ></dashboard-invoice-customer-dialog>
+      ${detailOrderId === null ? this.#printConfirmation() : nothing}`;
   }
 }
 
