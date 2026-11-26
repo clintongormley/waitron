@@ -26,6 +26,7 @@ import { unservedDishes, type UnservedBillDish } from "./meal-end.js";
 import { carryLineReductions } from "./order-portions.js";
 import { bumpPartyRevision } from "./parties.js";
 import { carryBillSetMenuCopies } from "./set-menu-bill.js";
+import { endDiscountsCancelledWith } from "./set-menu-discount-ending.js";
 import { carryOrderedPeriods } from "./ordered-periods.js";
 import { carryReceivedPayments, refuseSplitMoney } from "./split-after-print-money.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
@@ -270,6 +271,24 @@ async function takeOffCopies(
       operatorId,
     );
   };
+  const stopped = unserved.filter(({ lineId }) => !started.has(lineId));
+  const copies = await tx
+    .select({ id: workingOrderLines.id, quantity: workingOrderLines.quantity })
+    .from(workingOrderLines)
+    .where(
+      inArray(
+        workingOrderLines.id,
+        stopped.map(({ lineId }) => opened.lineCopies.get(lineId)!),
+      ),
+    );
+  await endDiscountsCancelledWith(
+    tx,
+    opened.billId,
+    stopped.flatMap(({ lineId, quantity }) => {
+      const copy = copies.find(({ id }) => id === opened.lineCopies.get(lineId));
+      return copy?.quantity === stringToThousandths(quantity) ? [copy.id] : [];
+    }),
+  );
   for (const extraId of [...started.values()].flat()) await takeOff(extraId, null);
   if (started.size > 0) {
     const rows = await tx
@@ -299,8 +318,7 @@ async function takeOffCopies(
       true,
     );
   }
-  for (const { lineId, quantity } of unserved)
-    if (!started.has(lineId)) await takeOff(lineId, stringToThousandths(quantity));
+  for (const { lineId, quantity } of stopped) await takeOff(lineId, stringToThousandths(quantity));
 }
 
 /** A new open bill of the party, made as Move dishes makes one, holding copies of the bill's dishes. */

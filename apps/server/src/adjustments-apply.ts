@@ -92,6 +92,7 @@ import {
   setMenuReplacement,
   type Replaced,
 } from "./set-menu-adjustment.js";
+import { discountsCancelledBy, endDiscountsCancelledBy } from "./set-menu-discount-ending.js";
 import { atReleasedPrices, regroupAdjusted, releaseDishes } from "./set-menu-dish-release.js";
 import {
   assertTabOpen,
@@ -924,7 +925,10 @@ export async function previewAdjustment(
   venueLocale: string,
 ): Promise<AdjustmentPreview> {
   const replacing = await setMenuReplacement(tx, ask);
-  const plan = await planAdjustment(tx, ask, venueLocale, replacing?.ending);
+  const ending =
+    replacing?.ending ??
+    (await discountsCancelledBy(tx, ask, () => planAdjustment(tx, ask, venueLocale)));
+  const plan = await planAdjustment(tx, ask, venueLocale, ending);
   const regrouped =
     ask.action === "cancel"
       ? await regroupDropOfRemoval(
@@ -932,6 +936,7 @@ export async function previewAdjustment(
           ask.orderId,
           (plan.removedPortions ?? [plan.line!]).map(voidTargetOf),
           plan.removed,
+          ending,
         )
       : 0;
   const lines =
@@ -959,7 +964,7 @@ export async function previewAdjustment(
     ask.orderId,
     plan,
     ask.action === "cancel" ? reduction : null,
-    replacing?.ending,
+    ending,
   );
   await assertBillInvariantAt(tx, ask.orderId, billTotal.after);
   if (ask.action !== "cancel") {
@@ -1121,6 +1126,7 @@ export async function applyAdjustment(
     async () => {
       const before = args.action === "cancel" ? null : await totalBeforeEdit(tx, cfg, args.orderId);
       await endReplacedOnSetMenu(tx, args);
+      await endDiscountsCancelledBy(tx, args, () => planAdjustment(tx, args, venueLocale));
       const plan = await planAdjustment(tx, args, venueLocale);
       const approved = await approvedBy(tx, plan.approval, approver);
       const activity =
