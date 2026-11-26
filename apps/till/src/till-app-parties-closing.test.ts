@@ -684,7 +684,14 @@ describe("till-app: reopening a printed bill", () => {
     outstanding: "0.00",
     correctives: ["R/3"],
   };
-  const reopened: PartyBill = { ...checkBill, workingOrderId: "wo-split", billNumber: 3 };
+  const reopened: PartyBill = {
+    ...checkBill,
+    workingOrderId: "wo-split",
+    billNumber: 3,
+    reopenedFrom: "wo-check",
+  };
+  /** A bill that opened at the table some other way than by reopening the printed one. */
+  const unrelated: PartyBill = { ...checkBill, workingOrderId: "wo-new", billNumber: 3 };
   const unserved = [
     { lineId: "l-1", dishName: "Steak", quantity: "1", released: true },
     { lineId: "l-2", dishName: "Tarta", quantity: "1", released: false },
@@ -701,9 +708,8 @@ describe("till-app: reopening a printed bill", () => {
       .trim() ?? null;
 
   const SPLIT_DONE =
-    "Receipt cancelled. Move each guest's dishes to their own bill, then print each one.";
-  const ALREADY_CANCELLED =
-    "This bill's receipt was already cancelled, perhaps on another device, and no new bill was opened.";
+    "Receipt cancelled and the bill reopened. Move each guest's dishes to their own bill, then print each one.";
+  const ALREADY_CANCELLED = "This bill's receipt was already cancelled on another device.";
 
   /** The server's side: `splitAfterPrint` cancels the bill and opens `wo-split`, unless it rejects. */
   function billServer(
@@ -721,6 +727,18 @@ describe("till-app: reopening a printed bill", () => {
       splitBehindTheScenes: () => {
         bills = [tabBill, cancelled, reopened];
       },
+      /** A reopen that stopped dishes landed: its new bill holds less than the printed one. */
+      stoppedBehindTheScenes: () => {
+        bills = [tabBill, cancelled, { ...reopened, total: "18.00", outstanding: "18.00" }];
+      },
+      /** A reopen that stopped every charged dish landed: its new bill holds nothing to pay. */
+      stoppedToNothingBehindTheScenes: () => {
+        bills = [tabBill, cancelled, { ...reopened, total: "0.00", outstanding: "0.00" }];
+      },
+      /** Cancel and credit made on another till, and another bill opened at the table since. */
+      cancelledElsewhereThenNewBill: (total = "18.00") => {
+        bills = [tabBill, cancelled, { ...unrelated, total, outstanding: total }];
+      },
       /** Cancel and credit made on another till: the bill is credited and no new bill opens. */
       cancelledElsewhere: () => {
         bills = [tabBill, cancelled];
@@ -728,7 +746,7 @@ describe("till-app: reopening a printed bill", () => {
       /** Cancel and credit on another till of the party's only bill in use: the server opens it a
        * fresh empty bill (`ensureFamilyBill`). */
       cancelledElsewhereLeavingEmptyBill: () => {
-        bills = [cancelled, { ...reopened, total: "0.00", outstanding: "0.00" }];
+        bills = [cancelled, { ...unrelated, total: "0.00", outstanding: "0.00" }];
       },
     };
   }
@@ -1011,6 +1029,135 @@ describe("till-app: reopening a printed bill", () => {
 
     expect(server.splitAfterPrint).toHaveBeenCalledOnce();
     expect(bottom(el)).toBe(codeMessage("group.line_held"));
+  });
+
+  /** The first reopen refused for `unserved`, saying whether they can be stopped; later ones
+   * answer as `then` does. */
+  function unservedServer(canStop: boolean, then: () => Promise<void> = async () => {}) {
+    let refused = false;
+    return billServer(async () => {
+      if (refused) return then();
+      refused = true;
+      throw {
+        code: "bill.unserved_dishes",
+        status: 409,
+        workingOrderId: "wo-check",
+        dishes: unserved,
+        canStop,
+      };
+    });
+  }
+  const stopButton = (el: TillApp) =>
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-split-stop-unserved]");
+
+  it("Stop these dishes and reopen sends the reopen once more with the dishes stopped, and reopens", async () => {
+    const server = unservedServer(true);
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+
+    expect(dialog(el)!.refusal).toMatchObject({ dishes: unserved, canStop: true });
+    expect(dialog(el)!.shadowRoot!.querySelector("[data-split-mark-served]")).not.toBeNull();
+    stopButton(el)!.click();
+    await flush(el, 8);
+
+    expect(server.splitAfterPrint.mock.calls).toEqual([
+      ["wo-check", { signal: expect.any(AbortSignal) }],
+      ["wo-check", { signal: expect.any(AbortSignal), stopUnserved: true }],
+    ]);
+    expect(api.markServed).not.toHaveBeenCalled();
+    expect(doneText(el)).toBe(SPLIT_DONE);
+    await expect.poll(() => tableOrder(el)!.orderId).toBe("wo-split");
+  });
+
+  it("when Stop these dishes and reopen got no answer and a smaller new bill appeared, says it reopened", async () => {
+    const server = unservedServer(true, async () => {
+      server.stoppedBehindTheScenes();
+      throw new TypeError("Failed to fetch");
+    });
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+    stopButton(el)!.click();
+    await flush(el, 8);
+
+    expect(server.splitAfterPrint).toHaveBeenCalledTimes(2);
+    expect(doneText(el)).toBe(SPLIT_DONE);
+  });
+
+  it("a Stop these dishes and reopen that got no answer does not take an empty new bill for its own", async () => {
+    const server = unservedServer(true, async () => {
+      server.cancelledElsewhereLeavingEmptyBill();
+      throw new TypeError("Failed to fetch");
+    });
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+    stopButton(el)!.click();
+    await flush(el, 8);
+
+    expect(doneText(el)).toBe(ALREADY_CANCELLED);
+  });
+
+  it("a reopen without the stop that got no answer does not take an unrelated new bill at the printed total for its own", async () => {
+    const server = billServer();
+    server.splitAfterPrint.mockImplementationOnce(async () => {
+      server.cancelledElsewhereThenNewBill(checkBill.total);
+      throw new TypeError("Failed to fetch");
+    });
+    const { el } = await openSplit(server);
+
+    await confirmSplit(el);
+
+    expect(doneText(el)).toBe(ALREADY_CANCELLED);
+  });
+
+  it("a Stop these dishes and reopen that got no answer does not take an unrelated new bill for its own", async () => {
+    const server = unservedServer(true, async () => {
+      server.cancelledElsewhereThenNewBill();
+      throw new TypeError("Failed to fetch");
+    });
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+    stopButton(el)!.click();
+    await flush(el, 8);
+
+    expect(doneText(el)).toBe(ALREADY_CANCELLED);
+  });
+
+  it("when Stop these dishes and reopen got no answer and its new bill holds nothing to pay, says it reopened", async () => {
+    const server = unservedServer(true, async () => {
+      server.stoppedToNothingBehindTheScenes();
+      throw new TypeError("Failed to fetch");
+    });
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+    stopButton(el)!.click();
+    await flush(el, 8);
+
+    expect(doneText(el)).toBe(SPLIT_DONE);
+  });
+
+  it("a refusal of Stop these dishes and reopen is said as a reopen's is", async () => {
+    const server = unservedServer(true, async () => {
+      throw { code: "bill.left_unpaid", status: 409, workingOrderId: "wo-check" };
+    });
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+    stopButton(el)!.click();
+    await flush(el, 8);
+
+    expect(server.splitAfterPrint).toHaveBeenCalledTimes(2);
+    expect(bottom(el)).toBe(t("split.refused_left_unpaid"));
+    expect(doneText(el)).toBeNull();
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+  });
+
+  it("when nothing was served, offers no Stop these dishes and reopen", async () => {
+    const server = unservedServer(false);
+    const { el } = await openSplit(server);
+    await confirmSplit(el);
+
+    expect(dialog(el)!.refusal).toMatchObject({ dishes: unserved, canStop: false });
+    expect(dialog(el)!.shadowRoot!.querySelector("[data-split-unserved]")).not.toBeNull();
+    expect(stopButton(el)).toBeNull();
   });
 
   it.each([

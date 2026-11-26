@@ -143,6 +143,8 @@ export interface PartyBill {
   amountDue?: string;
   /** The bill was closed as a deferred payment: the customer pays outside Waitron. */
   deferred?: true;
+  /** The printed bill this one was reopened from, by Reopen bill or by Pay for items on a printed bill; absent on any other bill. */
+  reopenedFrom?: string;
   /** The bill's own way of selling, whatever its department now says. */
   dining: Dining;
   diningChoice: DiningChoice;
@@ -606,6 +608,7 @@ export async function readPartyBills(
             address: workingOrders.recipientAddress,
             countryCode: workingOrders.recipientCountryCode,
             receiptLocale: workingOrders.receiptLocale,
+            reopenedFrom: workingOrders.reopenedFrom,
           })
           .from(workingOrders)
           .where(
@@ -683,6 +686,7 @@ export async function readPartyBills(
             amountDue: issued.get(bill.workingOrderId)!.amountDue,
           }),
       ...(bill.deferred === undefined ? {} : { deferred: bill.deferred }),
+      ...(choice.reopenedFrom === null ? {} : { reopenedFrom: choice.reopenedFrom }),
       ...dinings.get(bill.workingOrderId)!,
     };
   });
@@ -715,6 +719,7 @@ export type FamilyBill = Omit<
   | "diningChoice"
   | "setMenus"
   | "setMenuCopies"
+  | "reopenedFrom"
 > & {
   lines: number;
 };

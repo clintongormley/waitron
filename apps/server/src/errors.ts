@@ -954,9 +954,15 @@ declare module "@waitron/shared" {
     "bill.not_issued": { workingOrderId: string };
     /**
      * Reopen bill found dishes neither served in full nor taken off service, printed with Print
-     * anyway; Mark served on `released` ones lets it carry on.
+     * anyway; Mark served on `released` ones lets it carry on. `canStop`: something on the bill was
+     * served or its charge kept and the bill holds no payment, so `stopUnserved` would stop the
+     * dishes and reopen.
      */
-    "bill.unserved_dishes": { workingOrderId: string; dishes: UnservedBillDish[] };
+    "bill.unserved_dishes": {
+      workingOrderId: string;
+      dishes: UnservedBillDish[];
+      canStop: boolean;
+    };
     /**
      * A merge, or a move of every dish, would move `workingOrderId`'s full invoice onto
      * `intoWorkingOrderId` without the till saying which customer the dishes are invoiced to, or

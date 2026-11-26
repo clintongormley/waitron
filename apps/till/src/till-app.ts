@@ -298,11 +298,14 @@ import "./widgets/bill-edit-conflicts-dialog.js";
 import type { BillEditConflictsPrompt } from "./widgets/bill-edit-conflicts-dialog.js";
 import { trackDialog } from "./widgets/track-dialog.js";
 import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
-import type {
-  CancelCreditDone,
-  CancelCreditMode,
-  CancelCreditRefusal,
-  TillCancelCreditDialog,
+import {
+  cancelCreditRefusalOf,
+  creditedElsewhere,
+  type CancelCreditContinue,
+  type CancelCreditDone,
+  type CancelCreditMode,
+  type CancelCreditRefusal,
+  type TillCancelCreditDialog,
 } from "./widgets/cancel-credit-dialog.js";
 import {
   confirmationOf,
@@ -1766,9 +1769,6 @@ interface CancelCrediting {
   amount: string;
   /** The reason last pressed, which an approver's PIN is sent with. */
   reason: string;
-  /** The party's bills when the dialog opened. A split whose answer was lost shows itself as an
-   * open bill not among them; without one, the bill was credited some other way. */
-  billsBefore: readonly string[];
   refusal: CancelCreditRefusal | null;
   busy: boolean;
   done: CancelCreditDone | null;
@@ -21176,7 +21176,6 @@ export class TillApp extends LitElement {
       invoiceNumber: bill.invoiceNumber ?? null,
       amount: bill.total,
       reason: "",
-      billsBefore: this.partyBills.map((row) => row.workingOrderId),
       refusal: null,
       busy: false,
       done: null,
@@ -21199,11 +21198,11 @@ export class TillApp extends LitElement {
 
   /** The reason confirmed: sent in the operator's own name first, as a departure is. */
   async #onCancelCreditContinue(event: Event): Promise<void> {
-    const { reason } = (event as CustomEvent<{ reason: string }>).detail;
+    const { reason, stopUnserved } = (event as CustomEvent<CancelCreditContinue>).detail;
     // The dialog's events come only while it is open. A press while a request is out is dropped.
     const open = this.cancelCrediting!;
     if (open.busy) return;
-    await this.#sendCancelCredit({ ...open, reason });
+    await this.#sendCancelCredit({ ...open, reason }, undefined, stopUnserved);
   }
 
   /** The approver's PIN leaves in the request and is never kept. */
@@ -21220,6 +21219,7 @@ export class TillApp extends LitElement {
   async #sendCancelCredit(
     open: CancelCrediting,
     override?: { personId: string; pin: string },
+    stopUnserved?: true,
   ): Promise<void> {
     if (this.orderParty?.id !== open.partyId) {
       this.#closeCancelCrediting();
@@ -21232,7 +21232,10 @@ export class TillApp extends LitElement {
     let split: { billId: string } | undefined;
     try {
       if (open.mode === "split")
-        split = await this.api.splitAfterPrint(open.workingOrderId, { signal: limit.signal });
+        split = await this.api.splitAfterPrint(open.workingOrderId, {
+          signal: limit.signal,
+          stopUnserved,
+        });
       else
         await this.api.cancelOrder(open.workingOrderId, open.reason, override, {
           signal: limit.signal,
@@ -21355,33 +21358,16 @@ export class TillApp extends LitElement {
       return;
     }
     this.#closeCancelCreditApprovers();
-    const dishes = (error as { dishes?: unknown } | null)?.dishes;
-    this.cancelCrediting = {
-      ...open,
-      refusal:
-        refusal.code === "bill.unserved_dishes" && Array.isArray(dishes)
-          ? { ...refusal, dishes: dishes as MealEndUnservedDish[] }
-          : refusal,
-      busy: false,
-    };
+    this.cancelCrediting = { ...open, refusal: cancelCreditRefusalOf(error, refusal), busy: false };
     const shown = this.cancelCrediting;
     if (this.#hasLeftParty(open.partyId, sent)) return;
     const { bills } = await this.#loadPartyBills();
     if (this.cancelCrediting !== shown || this.#hasLeftParty(open.partyId, sent)) return;
     const bill = bills?.find((row) => row.workingOrderId === open.workingOrderId);
     if (!CANCEL_MAY_HAVE_LANDED.has(refusal.code) || bill?.status !== "abandoned") return;
-    // Only the split's own bill holds copies of the dishes; a credit elsewhere may open an empty one.
-    const creditedElsewhere =
-      open.mode === "split" &&
-      !bills!.some(
-        (row) =>
-          row.status === "open" &&
-          !open.billsBefore.includes(row.workingOrderId) &&
-          compareDecimal(decimal(row.total), decimal(bill.total)) === 0,
-      );
     this.#showCancelCredited(open.id, {
       corrective: latestCorrectiveOf(bills, open.workingOrderId),
-      creditedElsewhere,
+      creditedElsewhere: creditedElsewhere(open, bills!),
     });
   }
 

@@ -1714,7 +1714,7 @@ export const en = {
   "table.take_over_gone": "This order is no longer on this table. Here is the table as it is now.",
   "table.bill_gone": "{gone} is no longer at this table. Now showing {shown}.",
   "table.bill_gone_unnumbered": "That bill is no longer at this table. Now showing {shown}.",
-  "table.bill_credited": "Receipt cancelled. The dishes are on {shown}.",
+  "table.bill_credited": "Receipt cancelled and the bill reopened. The dishes are on {shown}.",
   "table.bill_count": "{bill} · {count} bills",
   "table.unsent_bill": "{bill} unsent",
   "table.unsent_bills": "{n} bills unsent",
@@ -2205,6 +2205,9 @@ export const en = {
     "Some dishes on this bill are not marked served, so it cannot be reopened yet. Choose Fire on each held group first, then mark its dishes served and choose Reopen bill again.",
   "split.unserved_no_mark":
     "Some dishes on this bill are not marked served, so it cannot be reopened yet. This device cannot mark dishes served: mark them served on a device that can, then choose Reopen bill again.",
+  "split.unserved_stop":
+    "If they never came, choose Stop these dishes and reopen. A dish the kitchen started or finished stays on the bill, charged.",
+  "split.stop_unserved": "Stop these dishes and reopen",
   "split.unserved_dish_held": "{dish} — held: choose Fire on its group first",
   "split.unconfirmed":
     "Reopen bill got no answer, so it may have been done. Check the table's bills before trying again.",
@@ -2216,9 +2219,8 @@ export const en = {
   "split.refused_payment_in_flight":
     "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it. If it was not taken, choose Reopen bill again.",
   "split.done":
-    "Receipt cancelled. Move each guest's dishes to their own bill, then print each one.",
-  "split.credited_elsewhere":
-    "This bill's receipt was already cancelled, perhaps on another device, and no new bill was opened.",
+    "Receipt cancelled and the bill reopened. Move each guest's dishes to their own bill, then print each one.",
+  "split.credited_elsewhere": "This bill's receipt was already cancelled on another device.",
   "bill_refund.done_cash": "Refunded: {amount}. Hand it over in cash.",
   "bill_refund.done_card": "Refunded: {amount} to the card.",
   "bill_refund.done_terminal": "The refund of {amount} on the card terminal is recorded.",
@@ -4119,7 +4121,7 @@ export const es: Record<StringKey, string> = {
   "table.take_over_gone": "Este pedido ya no está en esta mesa. Así está ahora la mesa.",
   "table.bill_gone": "{gone} ya no está en esta mesa. Ahora se muestra {shown}.",
   "table.bill_gone_unnumbered": "Esa cuenta ya no está en esta mesa. Ahora se muestra {shown}.",
-  "table.bill_credited": "Ticket anulado. Los platos están en {shown}.",
+  "table.bill_credited": "Ticket anulado y cuenta reabierta. Los platos están en {shown}.",
   "table.bill_count": "{bill} · {count} cuentas",
   "table.unsent_bill": "{bill} sin enviar",
   "table.unsent_bills": "{n} cuentas sin enviar",
@@ -4602,6 +4604,9 @@ export const es: Record<StringKey, string> = {
     "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Pulsa antes Marchar en cada grupo en espera, marca sus platos como servidos y vuelve a elegir Reabrir cuenta.",
   "split.unserved_no_mark":
     "Algunos platos de esta cuenta no están marcados como servidos, así que aún no se puede reabrir. Este dispositivo no puede marcar platos como servidos: márcalos en un dispositivo que pueda y vuelve a elegir Reabrir cuenta.",
+  "split.unserved_stop":
+    "Si no llegaron, pulsa Parar estos platos y reabrir. Un plato que la cocina empezó o terminó se queda en la cuenta y se cobra.",
+  "split.stop_unserved": "Parar estos platos y reabrir",
   "split.unserved_dish_held": "{dish} — en espera: pulsa antes Marchar en su grupo",
   "split.unconfirmed":
     "Reabrir cuenta no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",
@@ -4613,9 +4618,8 @@ export const es: Record<StringKey, string> = {
   "split.refused_payment_in_flight":
     "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo. Si no se cobró, vuelve a elegir Reabrir cuenta.",
   "split.done":
-    "Ticket anulado. Pasa los platos de cada cliente a su propia cuenta y después imprime cada una.",
-  "split.credited_elsewhere":
-    "El ticket de esta cuenta ya estaba anulado, quizá en otro dispositivo, y no se abrió ninguna cuenta nueva.",
+    "Ticket anulado y cuenta reabierta. Pasa los platos de cada cliente a su propia cuenta y después imprime cada una.",
+  "split.credited_elsewhere": "El ticket de esta cuenta ya se anuló en otro dispositivo.",
   "bill_refund.done_cash": "Devuelto: {amount}. Entrégalo en efectivo.",
   "bill_refund.done_card": "Devuelto: {amount} a la tarjeta.",
   "bill_refund.done_terminal": "La devolución de {amount} en el datáfono queda registrada.",

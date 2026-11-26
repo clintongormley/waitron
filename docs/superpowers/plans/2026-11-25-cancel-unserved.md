@@ -1,7 +1,7 @@
 # CANCEL-UNSERVED: a receipt for a bill nobody was served and nobody paid is cancelled at AEAT
 
 Status: cleared 2026-11-25 by the watcher (16:41, five changes) and, for PR 2, by the owner (16:43, relayed).
-PR 1 is built (branch `feat/cancel-unserved-readers`); PRs 2 and 3 are not started.
+PR 1 landed as #4356; PR 2 is built (branch `feat/cancel-unserved-reopen`); PR 3 is not started.
 FISCAL: the owner lands every pull request (PR). Base: `main` at `bb1389b737`. "Run": a throwaway change in a detached
 worktree for this revision (server halves only; not the till, not the other-box refusal); "run (earlier)": a previous one.
 **Words.** *Receipt*: the simplified invoice (F2). *Cancellation*: the record telling AEAT the receipt should never have
@@ -113,6 +113,13 @@ box (it then takes no payment, where today €1.00 is taken; Finish and unpaid d
   cada cliente a su propia cuenta y después imprime cada una.»; `split.credited_elsewhere` "already taken back" / «ya se
   había retirado». (Owner, 25 Nov 18:19: Reopen keeps "This cancels the existing receipt and reopens the bill."; its
   other lines follow those words.)
+
+*As built (PR 2):* the press takes off the dishes the kitchen had not started (watcher 17:48, point 1); a started or
+ready dish is stopped and keeps its charge on the reopened bill (watcher 22:42), and an extra of it the kitchen had
+not started comes off; on the till, that dish's sent-dish window offers only Close, as for any dish cancelled with
+its charge kept, so it cannot be comped there (the server's Comp with a reason does take it off); the stop is not offered on a bill
+holding a payment; the words follow the owner's 18:19 answer: `split.done` "Receipt cancelled and the bill reopened.
+Move each guest's dishes to their own bill, then print each one."
 
 ## 5. PR 3. Nothing was served
 

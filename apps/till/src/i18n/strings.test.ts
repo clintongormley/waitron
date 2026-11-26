@@ -41,8 +41,8 @@ describe("the permanent-refusal messages", () => {
 
 describe("the notice that Pay for items cancelled a printed bill's receipt", () => {
   it.each([
-    ["en-GB", "Receipt cancelled. The dishes are on {shown}."],
-    ["es-ES", "Ticket anulado. Los platos están en {shown}."],
+    ["en-GB", "Receipt cancelled and the bill reopened. The dishes are on {shown}."],
+    ["es-ES", "Ticket anulado y cuenta reabierta. Los platos están en {shown}."],
   ])("says only that and where the dishes are, in %s", (locale, sentence) => {
     expect(catalogues[locale]?.["table.bill_credited"]).toBe(sentence);
   });

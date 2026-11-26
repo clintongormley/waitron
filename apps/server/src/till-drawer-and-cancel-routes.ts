@@ -147,6 +147,12 @@ export function mountTillDrawerAndCancelRoutes(
       const cfg = requestCfg(deps.cfg, session);
       const id = requireUuidId(c.req.param("id"), "working_order.not_placed");
       await gateZones(deps, session, [{ orderId: id }]);
+      const body = await readJsonBody<unknown>(c);
+      if (typeof body !== "object" || body === null || Array.isArray(body))
+        throw new AppError("management.request_invalid", { field: "body" });
+      const { stopUnserved } = body as { stopUnserved?: unknown };
+      if (stopUnserved !== undefined && typeof stopUnserved !== "boolean")
+        throw new AppError("management.request_invalid", { field: "stopUnserved" });
       return c.json(
         await splitAfterPrint(
           {
@@ -160,6 +166,7 @@ export function mountTillDrawerAndCancelRoutes(
           cfg,
           id,
           { personId, sessionId },
+          stopUnserved === true,
         ),
       );
     }),
