@@ -110,9 +110,7 @@ What changes:
   unit, `packages/db/src/schema/orders.ts:270-293`), come from the full menu holding the set menu:
   its own ordinary offer of the dish if it has one, otherwise the product's own price (and the
   variant's, where variants carry prices), whichever folder the dish was tapped in (**my call**).
-  A set menu listing a dish that ends up with no price that way (`products.unit_price` is
-  nullable, `packages/db/src/schema/menus.ts:132`) stops that full menu being published (**my
-  call**).
+  _26 November 2026_: The watcher dropped the proposed missing-price publish check in piece 5.
 - **VAT.** Set menus have no VAT settings of their own, as the [VAT rates
   design](2026-11-21-vat-rates-design.md) already says (lane L's piece B removes the fields).
 
@@ -359,8 +357,13 @@ receipt and invoice layout, the kitchen behaviour, reports, and VAT as the VAT r
 4. **The till:** removing the counts and the no-place question, the summary and tags, the preview,
    the pay-for-items list of dishes with its price on its own bill, menu discounts, the warning
    before a dish discount. Needs 1 and 3.
-5. **The dashboard:** removing the course column, the publish check for a listed dish with no price.
-   Can go with 3.
+5. **The dashboard:** remove the Course column once the server work in piece 3 lands.
+   _26 November 2026, watcher decision_: The database already requires every top-level product
+   to have a price (`products_top_level_owns_ck` in `packages/db/src/schema/menus.ts`). A variant
+   without its own price takes its product's price when the full menu has no ordinary offer for
+   the dish. The tests in `packages/menu/src/variant-fallback.test.ts` and
+   `apps/server/src/a-la-carte-price.test.ts` cover the database refusal and the price charged on
+   the bill.
 6. **Counter eat-in, guides and demo.** Lift the counter refusal; rewrite the products and
    table-service guides in English and Spanish; check the demo's two lunch set menus still make
    sense. Last.
