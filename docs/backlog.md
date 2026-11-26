@@ -558,9 +558,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
-- **Till and handheld redesign, pass 1: the map, the order, the menu and payment (TILL-REDESIGN-1).**
-  Design decided with the owner on 26 November 2026, one picture at a time, and the write-up approved
-  the same day; the build is queued with lane F. Phone first, layout by screen width, one order screen
+- **Till and handheld redesign, passes 1 and 2: the floor, the order, the menu and payment
+  (TILL-REDESIGN-1).** Design decided with the owner on 26 November 2026, one picture at a time; pass
+  1's write-up approved the same day and built by lanes F, D and I. Pass 2 (the evening of 26
+  November) designs the floor (no tabs: a bar at the bottom with a zone dropdown for table and counter
+  zones, the map showing each table's job, a list of jobs, seating with bookings, joining and moving
+  tables on the floor, ☰, the kitchen screens) and changes parts of pass 1 (§3, §4, §6, §7, §8 say
+  "(pass 2)"). Phone first, layout by screen width, one order screen
   for counter and tables, full-screen panels instead of dialogs, a guest-facing bill with a tip
   question. The bill picker opens at the bottom on narrow screens and shows where the current
   bill sits in the list. The navigation, order, menu and payment slices remain.

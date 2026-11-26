@@ -738,11 +738,24 @@ the owner's redesign.
   only, not queued to a lane.
   [Detail](till.md#a1013-online-booking-for-customers-owner-2026-10-22)
 
+## Counter delivery to a table (dropped from the till redesign, kept for later)
+
+**Owner, 2026-11-26** (TILL-REDESIGN pass 2): "drop it for now, keep this solution in the backlog in
+case we need it in the future". Today a counter order reaches a table only through a department
+transfer that the other department accepts, choosing the table; the redesign's screens do not carry
+it ([spec §9.8](../superpowers/specs/2026-11-26-till-handheld-redesign-design.md)). The solution kept:
+one line on a counter order, "Deliver to a table · Choose", picks the table from the map with no
+accept step, and delivering always means the guests are at that table, so a free table is seated
+with the counter order as its party's first, paid bill, and a seated table's party gets it as one
+more paid bill; when ready, the floor shows "Deliver to T3 · No. 44" under its station. Pictures
+`ae` and `al` in `~/waitron-campaign-shared/mockups/2026-11-26-till-handheld-redesign/`.
+
 ## Bundle: For the owner's redesign of the table screens and review of the device screens
 
-18 entries. The owner is redesigning the table screens (owner, 2026-11-11: "we have to redesign the
-table management screens, which i will do shortly") and will review the device screens, so nothing
-here is asked or built before that. They were separate entries, many of them questions, until
+18 entries. **Designed on 2026-11-26 in the till redesign's pass 2**: where each one went (answered
+by the design, decided, wording fixed in the build, or out of scope) is in
+[the spec's §9.12](../superpowers/specs/2026-11-26-till-handheld-redesign-design.md). The entries below
+are built with TILL-REDESIGN-1 and deleted as each lands. They were separate entries, many of them questions, until
 2026-11-24.
 
 - **A1211. The Served toast covers the Order screen's Fire / Send all buttons.** On hold for the
