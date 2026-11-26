@@ -14,17 +14,21 @@ its pointer, the existing stream supervisor refuses to replace it from a lower t
 - [x] Start with failing tests in `apps/server/src/rebuild-first-start.test.ts`, using its venue DB
   and memory object store. With restored term 0, pointer 5 and a generation at 7 holding only
   its opened marker, run `completeRebuild` with the real bucket reader and assert saved term 8.
-  Check a generation with no pointer still supplies the floor. Malformed folders and a
-  root-level key with no slash do not count. Keep the pointer-only, no-bucket and restored-term
-  cases. A stalled list must time out and receive cancellation. A refused list through the
+  Check that the highest valid generation with no pointer still supplies the floor. Keep the
+  pointer-only, no-bucket and restored-term cases. A stalled list must time out and receive
+  cancellation. A refused list through the
   real reader and `runFirstStart` leaves the term and restore record in place, with `mayStream: false`.
 - [x] Change `readBucketPointerTerm` in `apps/server/src/rebuild-first-start.ts` to `readBucketTerm`
   with the same arguments. Rename the injected dependency and its `boot.ts` caller to
-  `bucketTerm`. Read the pointer then list `gen-` within the existing 15-second deadline, using
-  one abort signal. The configured S3 store returns prefix-relative keys across all pages.
-  Use `parseGenerationName` on the first folder of each key containing a slash, as the existing
-  prune does for its full listing. Use the highest shaped term from either source and the
-  existing `minTerm: bucketTerm + 1` path. Return null if neither source names a term.
+  `bucketTerm`. Read the pointer then list generation folders under `gen-` within the existing
+  15-second deadline, using one abort signal. The S3 store uses a slash delimiter and returns
+  child folder names relative to the configured root, across all pages. Run `parseGenerationName`
+  over those names and use the highest term through `minTerm: bucketTerm + 1`. Return null when
+  neither source names a term.
+  The watcher cleared the folder-only read on 26 November at 15:01 after the full file listing
+  hit the deadline in an 80,000-file simulation. Test prefix, pagination, stray objects and
+  incomplete answers in `packages/stream/src/s3-store.test.ts`. Re-run the simulation with
+  the real S3 client and the folder listing.
 - [x] Reject floors at or above `Number.MAX_SAFE_INTEGER - 1` with `restore.bucket_term_invalid`
   in `apps/server/src/errors.ts`. Check that a generation at MAX−1 is refused. Apply the existing
   first-start failure path to this error in place of the November 7 draft's hard refusal to start.

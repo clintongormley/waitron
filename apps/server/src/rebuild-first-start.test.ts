@@ -35,7 +35,7 @@ import {
   pointerKey,
   signPointer,
   writePointer,
-  type ObjectStore,
+  type S3ObjectStore,
 } from "@waitron/stream";
 import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
@@ -55,6 +55,21 @@ import {
 } from "./rebuild-first-start.js";
 
 const RESTORE_RECORD = "flows/restore/record.json";
+
+function memoryRestoreBucket(): S3ObjectStore {
+  const store = createMemoryObjectStore();
+  return {
+    ...store,
+    async listFolders(prefix, call) {
+      const folders = new Set<string>();
+      for (const { key } of await store.list(prefix, call)) {
+        const slash = key.indexOf("/");
+        if (slash > 0) folders.add(key.slice(0, slash));
+      }
+      return [...folders];
+    },
+  };
+}
 
 const RING: KeyRing = loadKeyRing({
   WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
@@ -561,7 +576,7 @@ describe("readBucketTerm", () => {
 
   it("uses the pointer's term above older generations and returns null when the bucket is empty", async () => {
     await storeSettings(SETTINGS);
-    const store = createMemoryObjectStore();
+    const store = memoryRestoreBucket();
     expect(await readBucketTerm(suite.db, RING, { openStore: () => store })).toBeNull();
     const signer = generateNodeKeyPair();
     await writePointer(
@@ -587,7 +602,7 @@ describe("readBucketTerm", () => {
   it("restores above a generation opened after the pointer was published", async () => {
     const stateDir = await rebuiltStateDir("archive");
     await storeSettings(SETTINGS);
-    const store = createMemoryObjectStore();
+    const store = memoryRestoreBucket();
     const signer = generateNodeKeyPair();
     await writePointer(
       store,
@@ -613,10 +628,9 @@ describe("readBucketTerm", () => {
     expect((await readNodeMembership(suite.db))!.body.term).toBe(8);
   });
 
-  it("uses the highest generation with no pointer and ignores keys outside generation folders", async () => {
+  it("uses the highest valid generation with no pointer", async () => {
     await storeSettings(SETTINGS);
-    const store = createMemoryObjectStore();
-    await store.put(`${generationName(90, NODE, NOW)}Z`, new Uint8Array());
+    const store = memoryRestoreBucket();
     await store.put(`gen-99-${NODE}-20261131T101112Z/opened.json`, new Uint8Array());
     await claimGeneration(store, LOCATION, generationName(10, NODE, NOW));
     await claimGeneration(store, LOCATION, generationName(7, NODE, NOW));
@@ -625,11 +639,11 @@ describe("readBucketTerm", () => {
 
   it("cancels a generation listing that does not answer before the deadline", async () => {
     await storeSettings(SETTINGS);
-    const store = createMemoryObjectStore();
+    const store = memoryRestoreBucket();
     let listingSignal: AbortSignal | undefined;
-    const silent: ObjectStore = {
+    const silent: S3ObjectStore = {
       ...store,
-      list: (_prefix, call) => {
+      listFolders: (_prefix, call) => {
         listingSignal = call?.signal;
         return new Promise<never>((_, reject) => {
           listingSignal?.addEventListener("abort", () => reject(new Error("cancelled")), {
@@ -649,15 +663,17 @@ describe("readBucketTerm", () => {
     async (failure) => {
       const stateDir = await rebuiltStateDir("stream");
       await storeSettings(SETTINGS);
-      const store = createMemoryObjectStore();
+      const store = memoryRestoreBucket();
       const refused = new AppError("backup.stream_request_failed", {
         operation: "list",
         key: "gen-",
         status: 403,
         errorName: "AccessDenied",
       });
-      const listing: ObjectStore =
-        failure === "refused listing" ? { ...store, list: () => Promise.reject(refused) } : store;
+      const listing: S3ObjectStore =
+        failure === "refused listing"
+          ? { ...store, listFolders: () => Promise.reject(refused) }
+          : store;
       if (failure === "generation at the term cap")
         await claimGeneration(
           store,
@@ -685,13 +701,9 @@ describe("readBucketTerm", () => {
 
   it("refuses, rather than answering null, when the bucket does not answer in time", async () => {
     await storeSettings(SETTINGS);
-    const store = createMemoryObjectStore();
-    const silent: ObjectStore = {
+    const silent = {
+      ...memoryRestoreBucket(),
       get: () => new Promise<never>(() => {}),
-      put: (key, body, condition) => store.put(key, body, condition),
-      list: (prefix) => store.list(prefix),
-      delete: (key) => store.delete(key),
-      deleteMany: (keys) => store.deleteMany(keys),
     };
     await expect(
       readBucketTerm(suite.db, RING, { openStore: () => silent, timeoutMs: 50 }),
@@ -700,10 +712,10 @@ describe("readBucketTerm", () => {
 
   it("cancels a pointer read the bucket has not answered in time, and not one answered in time", async () => {
     await storeSettings(SETTINGS);
-    const store = createMemoryObjectStore();
+    const store = memoryRestoreBucket();
     const signals: (AbortSignal | undefined)[] = [];
     let answers = false;
-    const recording: ObjectStore = {
+    const recording: S3ObjectStore = {
       ...store,
       get: (key, call) => {
         signals.push(call?.signal);
@@ -728,7 +740,7 @@ describe("readBucketTerm", () => {
 
   it("leaves no timer waiting once the bucket has answered in time", async () => {
     await storeSettings(SETTINGS);
-    const store = createMemoryObjectStore();
+    const store = memoryRestoreBucket();
     const bound = 123_457;
     const live = new Set<number>();
     let created = 0;
@@ -757,7 +769,7 @@ describe("readBucketTerm", () => {
 
   it("refuses when the pointer in the bucket cannot be read", async () => {
     await storeSettings(SETTINGS);
-    const store = createMemoryObjectStore();
+    const store = memoryRestoreBucket();
     await store.put(pointerKey(), new TextEncoder().encode("not json"), undefined);
     await expect(readBucketTerm(suite.db, RING, { openStore: () => store })).rejects.toMatchObject({
       code: "backup.stream_pointer_invalid",
@@ -825,7 +837,7 @@ describe("runFirstStart", () => {
     );
     try {
       await omitStoredStreamField(suite.db, RING, "endpoint");
-      const openStore = vi.fn(() => createMemoryObjectStore());
+      const openStore = vi.fn(() => memoryRestoreBucket());
       const log = vi.fn();
       const firstStart = deps(stateDir, {
         log,
@@ -904,7 +916,7 @@ describe("runFirstStart", () => {
       ),
     );
     try {
-      const silent = { get: () => new Promise<never>(() => {}) } as unknown as ObjectStore;
+      const silent = { ...memoryRestoreBucket(), get: () => new Promise<never>(() => {}) };
       const log = vi.fn();
       await expect(
         runFirstStart(

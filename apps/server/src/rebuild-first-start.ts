@@ -21,7 +21,7 @@ import {
   parseGenerationName,
   readPointer,
   type BucketConfig,
-  type ObjectStore,
+  type S3ObjectStore,
 } from "@waitron/stream";
 import { reissueBoxLeaf } from "./box-secrets.js";
 import type { Logger } from "./logger.js";
@@ -192,16 +192,14 @@ const BUCKET_READ_TIMEOUT_MS = 15_000;
 const TIMED_OUT = Symbol("timed out");
 
 async function highestBucketTerm(
-  store: ObjectStore,
+  store: S3ObjectStore,
   streamId: string,
   signal: AbortSignal,
 ): Promise<number | null> {
   const pointer = await readPointer(store, streamId, { signal });
   let highest = pointer?.pointer.body.term ?? null;
-  for (const { key } of await store.list("gen-", { signal })) {
-    const slash = key.indexOf("/");
-    if (slash <= 0) continue;
-    const generation = parseGenerationName(key.slice(0, slash));
+  for (const name of await store.listFolders("gen-", { signal })) {
+    const generation = parseGenerationName(name);
     if (generation !== null) highest = Math.max(highest ?? 0, generation.term);
   }
   return highest;
@@ -214,7 +212,7 @@ async function highestBucketTerm(
 export async function readBucketTerm(
   db: Database,
   ring: KeyRing,
-  options: { openStore?: (bucket: BucketConfig) => ObjectStore; timeoutMs?: number } = {},
+  options: { openStore?: (bucket: BucketConfig) => S3ObjectStore; timeoutMs?: number } = {},
 ): Promise<number | null> {
   try {
     const settings = await readStreamSettings(db, ring);

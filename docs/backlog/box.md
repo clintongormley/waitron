@@ -1563,7 +1563,7 @@ From SQLite slice 2 Task 9b (#642, `waitron-restore restore --from-bucket`):
   restore an operator starts. Neither number was measured (`BUCKET_READ_TIMEOUT_MS`,
   `apps/server/src/rebuild-first-start.ts`; `BUCKET_CALL_TIMEOUT_MS`,
   `apps/server/src/bounded-store.ts`).
-  A1418 slice 2 keeps the 15-second limit for the pointer and generation listing together.
+  A1418 slice 2 keeps the 15-second limit for the pointer and generation folder listing together.
 - **A restore that fails at the migration or module step, after the database is placed, keeps the
   restored database with the old identity set aside; there is no second undo path. Default taken
   pending the owner (A1390 question 3, 2026-11-07), checked by running it the same day.** Only a

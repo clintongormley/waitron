@@ -332,6 +332,48 @@ describe("list", () => {
     params: { operation: "list", key: "venues/v1/", status: 200, name },
   });
 
+  const folder = (key: string) => `<CommonPrefixes><Prefix>${key}</Prefix></CommonPrefixes>`;
+
+  it("lists only folder names across pages under the configured prefix", async () => {
+    const { store, sent } = storeOver([
+      {
+        status: 200,
+        headers: xml,
+        body: listing(
+          folder("waitron/gen-7-node/") + entry("waitron/gen-90-root-object"),
+          "<IsTruncated>true</IsTruncated><NextContinuationToken>t2</NextContinuationToken>",
+        ),
+      },
+      { status: 200, headers: xml, body: listing(folder("waitron/gen-10-node/")) },
+    ]);
+    await expect(store.listFolders("gen-")).resolves.toEqual(["gen-7-node", "gen-10-node"]);
+    expect(sent.map((request) => request.query)).toEqual([
+      { "list-type": "2", prefix: "waitron/gen-", delimiter: "/" },
+      { "list-type": "2", prefix: "waitron/gen-", delimiter: "/", "continuation-token": "t2" },
+    ]);
+  });
+
+  it("refuses a folder listed outside the requested prefix without exposing its name", async () => {
+    const { store } = storeOver([
+      { status: 200, headers: xml, body: listing(folder("elsewhere/gen-10-node/")) },
+    ]);
+    expect(await rejection(store.listFolders("gen-"))).toEqual({
+      code: "backup.stream_name_invalid",
+      params: { field: "listedKey", value: "other" },
+    });
+  });
+
+  it.each([folder("waitron/gen-10-node"), entry("waitron/gen-10-node/opened.json")])(
+    "refuses an incomplete folder listing (%s)",
+    async (body) => {
+      const { store } = storeOver([{ status: 200, headers: xml, body: listing(body) }]);
+      expect(await rejection(store.listFolders("gen-"))).toEqual({
+        code: "backup.stream_request_failed",
+        params: { operation: "list", key: "gen-", status: 200, name: "IncompleteListing" },
+      });
+    },
+  );
+
   it.each([
     ["another folder under the configured root", "waitron/venues/v2/a"],
     ["a key outside the configured root", "elsewhere/venues/v1/a"],
