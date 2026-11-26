@@ -569,7 +569,8 @@ On a phone or tablet, to move a dish in **New order**, press its name until the 
 Keep your finger down, drag to the heading of the group you want, then lift your finger.
 
 Use the **Menu** field beside **Search** to switch between the menus available now. Scroll past
-the first block to find the other one, **Shortcuts** or **Full menu**.
+the first block to find **Shortcuts** or **Full menu**, whichever follows. The same menu starts in
+the same order on the counter till and handheld.
 Tap a tile with a folder to open that section. A price range shows what the different variants
 cost. Tap the product to choose one and see its price.
 

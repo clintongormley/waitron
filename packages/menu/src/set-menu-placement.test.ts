@@ -8,7 +8,7 @@ import { readTranslationRows, resolveTranslationRow } from "./content-translatio
 import { validateMenuConfiguration } from "./configuration-transfer.js";
 import { buildMenuDocument, documentOffers } from "./menu-document.js";
 import { setIncludeFolder } from "./include-folder.js";
-import { addShortcut } from "./menu-home.js";
+import { saveMenuHome } from "./menu-home.js";
 import { includableMenus } from "./menu-inclusion.js";
 import { indexMenuOccurrences } from "./menu-navigation.js";
 import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
@@ -129,13 +129,18 @@ it("refuses to place a set menu as an ordinary section", async () => {
   ).rejects.toMatchObject({ code: "set_menu.wrong_place", params: { menuId: set.id } });
 });
 
-it.each(["section", "set_menu"] as const)("refuses a %s shortcut to a set menu", async (kind) => {
-  const { full, set, setRoot, setRef } = await app(menusFixture);
-  const ref = kind === "section" ? { kind, sectionId: setRoot } : setRef;
-  await expect(app((tx) => addShortcut(tx, full.id, ref))).rejects.toMatchObject({
-    code: "set_menu.wrong_place",
-    params: { menuId: set.id },
-  });
+it("refuses a section shortcut to a set menu", async () => {
+  const { full, set, setRoot } = await app(menusFixture);
+  await expect(
+    app((tx) =>
+      saveMenuHome(tx, full.id, {
+        order: "home_first",
+        shortcuts: [
+          { memberId: crypto.randomUUID(), ref: { kind: "section", sectionId: setRoot } },
+        ],
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "set_menu.wrong_place", params: { menuId: set.id } });
 });
 
 it("refuses folder settings for a placed set menu", async () => {

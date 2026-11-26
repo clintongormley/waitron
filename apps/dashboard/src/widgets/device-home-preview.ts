@@ -79,13 +79,6 @@ function placedIn(
   return into;
 }
 
-type ShortcutKind = "product" | "section";
-
-const ADD_TILES: { kind: ShortcutKind; label: () => string }[] = [
-  { kind: "product", label: () => t("home.add_products_tile") },
-  { kind: "section", label: () => t("home.add_sections_tile") },
-];
-
 const KEY_STEPS: Record<string, number> = {
   ArrowLeft: -1,
   ArrowUp: -1,
@@ -111,7 +104,7 @@ function tilePaint(color: string): string {
  * Search finds this document's products only, where a device may also find other menus' products.
  *
  * Given `shortcuts`, the home view's shortcut block is drawn from that list instead, each tile with
- * a grip and a button to remove it, followed by two tiles to add more; it then sends
+ * a grip and a button to remove it, followed by one tile to add more; it then sends
  * `wt-shortcut-move`, `wt-shortcut-remove` and `wt-shortcut-add` and saves nothing itself; a move
  * shows at once until the host hands it a new list.
  */
@@ -388,8 +381,6 @@ export class DeviceHomePreview extends LitElement {
   /** While set, nothing can be moved, removed or added. */
   @property({ type: Boolean }) busy = false;
 
-  @property({ type: Boolean }) removeDisabled = false;
-
   @state() private announcement = "";
 
   /** The shortcuts' member ids after moves the host has not answered with a new list yet. */
@@ -485,12 +476,11 @@ export class DeviceHomePreview extends LitElement {
     return remove !== null;
   }
 
-  /** Focuses the tile that adds shortcuts of `kind` once drawn; false when it is not drawn. */
-  async focusAdd(kind: ShortcutKind): Promise<boolean> {
+  async focusAdd(): Promise<boolean> {
     await this.updateComplete;
-    const tile = this.#control("add", kind);
+    const tile = this.shadowRoot?.querySelector<HTMLElement>('[data-test="add-shortcuts"]');
     tile?.focus();
-    return tile !== null;
+    return tile != null;
   }
 
   #send(name: string, detail: unknown): void {
@@ -702,9 +692,9 @@ export class DeviceHomePreview extends LitElement {
           variant="ghost"
           data-test=${`remove-${memberId}`}
           aria-label=${`${t("home.remove")}: ${name}`}
-          .disabled=${this.busy || this.removeDisabled}
+          .disabled=${this.busy}
           @click=${() => {
-            if (!this.busy && !this.removeDisabled) this.#send("wt-shortcut-remove", { memberId });
+            if (!this.busy) this.#send("wt-shortcut-remove", { memberId });
           }}
           ><wt-icon name="bin"></wt-icon
         ></wt-button>
@@ -714,23 +704,23 @@ export class DeviceHomePreview extends LitElement {
 
   #editCells(list: HomeTile[], index: PreviewIndex, placed: Placed): TemplateResult {
     return html`${repeat(
-      this.#editable(list),
-      (tile) => tile.memberId,
-      (tile) => this.#editCell(tile, index, placed),
-    )}${ADD_TILES.map(
-      ({ kind, label }) =>
-        html`<wt-button
-          class="add"
-          variant="secondary"
-          data-test=${`add-${kind}`}
-          .disabled=${this.busy}
-          @click=${() => {
-            if (!this.busy) this.#send("wt-shortcut-add", { kind });
-          }}
+        this.#editable(list),
+        (tile) => tile.memberId,
+        (tile) => this.#editCell(tile, index, placed),
+      )}<wt-button
+        class="add"
+        variant="secondary"
+        data-test="add-shortcuts"
+        .disabled=${this.busy}
+        @click=${(event: Event) => {
+          event.stopPropagation();
+          if (!this.busy) this.#send("wt-shortcut-add", {});
+        }}
+      >
+        <span class="label"
+          ><wt-icon name="plus"></wt-icon><span>${t("home.add_shortcuts")}</span></span
         >
-          <span class="label"><wt-icon name="plus"></wt-icon><span>${label()}</span></span>
-        </wt-button>`,
-    )}`;
+      </wt-button>`;
   }
 
   #sectionName(section: SectionNode): string {

@@ -139,7 +139,7 @@ declare module "@waitron/shared" {
     /** The patch would leave the live version, and every queued version it names, as they were. */
     "menu_patch.unchanged": { menuId: string };
     /** A Device Home Page shortcut names a product or section the menu's working structure does not reach. */
-    "menu.shortcut_unreachable": { ref: MemberRef };
+    "menu.shortcut_unreachable": { ref: MemberRef; field?: string };
     /** A menu offer operation names no item the menu's structure reaches; menuId is present when
      * the route supplies it. */
     "menu_item.not_found": { menuId?: string; menuItemId: string };

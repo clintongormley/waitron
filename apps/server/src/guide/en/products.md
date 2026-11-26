@@ -373,15 +373,14 @@ menu or section where it belongs, choose **Set menu…** and pick it. Use **Prev
 placement, later edits and anything you need to fix. Publish the full menu to send the current
 set menu to the tills. Each later edit reaches the tills when you publish the full menu again.
 
-## Check the menu's home page {#menu-home}
+## Set up the device home page {#menu-home}
 
-Open a menu's **Home page** tab to arrange its shortcuts. Under **Shown first**, choose
-**Shortcuts** or **Full menu**. Publish the menu to send the new order to all devices.
-The columns fit each device's screen. In the preview, look for the folder icon to open a section.
-A range on a product tile shows the prices of its variants.
+Open **Device home page** on the menu you want to change. Choose **Add shortcuts** and pick the
+products and sections staff need close at hand. Drag a shortcut by its grip to move it, or choose
+its bin to remove it. Under **Shown first**, choose **Shortcuts** or **Full menu**.
 
-To replace a shortcut marked **Not shown**, remove it with its bin button, then add a product or section
-that this menu shows.
+Choose **Save** to keep all your changes. Then publish the menu to send them to every till and
+handheld that uses it.
 
 ## Copy a menu {#copy-menu}
 
@@ -395,7 +394,7 @@ The same rule applies when you create or rename a menu. Names ignore surrounding
 active menu already holds the name, the message appears under Name.
 Menus that already share a name keep it until you rename one.
 
-The copy starts unpublished, with the source menu's working sections, prices and Home page
+The copy starts unpublished, with the source menu's working sections, prices and device home page
 settings. Published versions and scheduled publications stay with the source. Editing the copy's
 own sections leaves the source as it was; included menus still point to the same shared menus.
 

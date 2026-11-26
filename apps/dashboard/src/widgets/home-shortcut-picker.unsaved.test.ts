@@ -83,24 +83,12 @@ it("a choice taken back to none is no change", async () => {
   expect(app.leave.coordinator.isDirty()).toBe(false);
 });
 
-it("after commitSaved it does not ask", async () => {
+it("after commitAdded it does not ask", async () => {
   const { app, picker } = await mount();
   await choose(picker, ["p-lager"]);
-  picker.commitSaved();
+  picker.commitAdded();
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect(await leave(app, picker)).toBe("proceeded");
-});
-
-it("after keepChosen it still asks", async () => {
-  const { app, picker } = await mount();
-  await choose(picker, ["p-lager", "p-burger"]);
-  picker.keepChosen(["p-burger"]);
-  await picker.updateComplete;
-  expect(app.leave.coordinator.isDirty()).toBe(true);
-  const pending = leave(app, picker);
-  expect((await question(app)).open).toBe(true);
-  (await question(app)).shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
-  expect(await pending).not.toBe("proceeded");
 });
 
 it("a picker taken out of the page and put back asks before discarding a choice made afterwards", async () => {
@@ -132,34 +120,9 @@ it("a choice made before the picker was taken out and put back still counts, and
 it("a picker put back after a save compares a later choice with the saved one", async () => {
   const { app, picker } = await mount();
   await choose(picker, ["p-lager"]);
-  picker.commitSaved();
+  picker.commitAdded();
   await reattachAfterDetachedUpdate(picker);
   expect(app.leave.coordinator.isDirty()).toBe(false);
   await choose(picker, ["p-lager", "p-burger"]);
   expect(app.leave.coordinator.isDirty()).toBe(true);
-});
-
-it("after keepChosen, clearing the kept choices is no change", async () => {
-  const { app, picker } = await mount();
-  await choose(picker, ["p-lager", "p-burger"]);
-  picker.options = options.filter(({ value }) => value !== "p-lager");
-  picker.keepChosen(["p-burger"]);
-  await picker.updateComplete;
-  await choose(picker, []);
-  expect(app.leave.coordinator.isDirty()).toBe(false);
-  expect(await leave(app, picker)).toBe("proceeded");
-});
-
-it("after keepChosen, Discard empties the choice rather than bringing back the added ones", async () => {
-  const { app, picker } = await mount();
-  await choose(picker, ["p-lager", "p-burger"]);
-  picker.keepChosen(["p-burger"]);
-  await picker.updateComplete;
-  const pending = leave(app, picker);
-  const q = await question(app);
-  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-  expect(await pending).toBe("proceeded");
-  await picker.updateComplete;
-  expect(picker.shadowRoot!.querySelector("wt-combobox")!.values).toEqual([]);
-  expect(app.leave.coordinator.isDirty()).toBe(false);
 });

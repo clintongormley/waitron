@@ -12,16 +12,13 @@ const options = [
 ];
 
 describe.each(["light", "dark"] as const)("home shortcut picker (%s)", (theme) => {
-  it.each(["nothing chosen", "several chosen", "field error", "busy"] as const)(
+  it.each(["nothing chosen", "several chosen", "field error"] as const)(
     "renders %s accessibly",
     async (state) => {
       const { el, host } = await mountWidget<HomeShortcutPicker>(
         "dashboard-home-shortcut-picker",
         {
-          kind: "product",
           options,
-          busy: state === "busy",
-          error: state === "field error" ? "Lager is not on this menu any more." : "",
         },
         theme,
       );
@@ -29,8 +26,13 @@ describe.each(["light", "dark"] as const)("home shortcut picker (%s)", (theme) =
         await chooseOptions(el.shadowRoot!.querySelector("wt-combobox")!, ["p-lager", "p-burger"]);
         await el.updateComplete;
       }
-      if (state === "field error")
+      if (state === "field error") {
+        el.options = [];
+        await el.updateComplete;
+        el.shadowRoot!.querySelector<HTMLElement>('[data-test="add"]')!.click();
+        await el.updateComplete;
         expect(el.shadowRoot!.querySelector("wt-combobox")!.error).not.toBe("");
+      }
       await expectNoA11yViolations(host);
     },
   );

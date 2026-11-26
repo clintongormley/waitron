@@ -152,18 +152,15 @@ describe.each(["light", "dark"] as const)("device home preview (%s)", (theme) =>
           (tile) => tile.dataset.state,
         ),
       ).toEqual(["missing", "hidden"]);
-      expect(el.shadowRoot!.querySelectorAll("wt-button.add")).toHaveLength(2);
+      expect(el.shadowRoot!.querySelectorAll("wt-button.add")).toHaveLength(1);
       await expectNoA11yViolations(host);
-      el.removeDisabled = true;
+      el.busy = true;
       await el.updateComplete;
       expect(
         el
           .shadowRoot!.querySelector('wt-button[data-test="remove-sc-lemonade"]')!
           .shadowRoot!.querySelector("button")!.disabled,
       ).toBe(true);
-      await expectNoA11yViolations(host);
-      el.busy = true;
-      await el.updateComplete;
       await expectNoA11yViolations(host);
     },
   );

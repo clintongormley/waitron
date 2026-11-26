@@ -433,7 +433,7 @@ it.each([
     const initial = controller.watch("lunch", ["home"], (value) => values.push(value));
     await vi.advanceTimersByTimeAsync(0);
     await initial;
-    const write = api.setHomeDisplay("lunch", "menu_first");
+    const write = api.saveMenuHome("lunch", { order: "menu_first", shortcuts: [] });
     sequence = snapshotSequence;
     epoch = snapshotEpoch;
     api.liveData.invalidate([{ type: "menus" }]);
@@ -496,7 +496,7 @@ it("forces a manual refresh even when its snapshot includes the latest successfu
   const initial = controller.watch("lunch", ["home"], (value) => values.push(value));
   await vi.advanceTimersByTimeAsync(0);
   await initial;
-  await api.setHomeDisplay("lunch", "home_first");
+  await api.saveMenuHome("lunch", { order: "home_first", shortcuts: [] });
   await controller.refresh(true);
   expect(reads).toHaveLength(1);
   order = "menu_first";
@@ -534,8 +534,8 @@ it("reads the newer save back when an older save response arrives last", async (
   const initial = controller.watch("lunch", ["home"], (value) => values.push(value));
   await vi.advanceTimersByTimeAsync(0);
   await initial;
-  const older = api.setHomeDisplay("lunch", "home_first");
-  const newer = api.setHomeDisplay("lunch", "menu_first");
+  const older = api.saveMenuHome("lunch", { order: "home_first", shortcuts: [] });
+  const newer = api.saveMenuHome("lunch", { order: "menu_first", shortcuts: [] });
   expect(answers).toHaveLength(2);
   answers[1]!(
     new Response(null, {

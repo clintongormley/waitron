@@ -1,24 +1,21 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import { menus, products, sectionMembers, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { batches } from "./batches.js";
-import type { HomeOrder, MemberRef, MenuHome, SectionMember, TileRef } from "@waitron/shared";
+import type {
+  HomeOrder,
+  MenuHome,
+  MenuHomeSaveInput,
+  MenuHomeSaveResult,
+  TileRef,
+} from "@waitron/shared";
 import {
   loadSectionGraph,
   reachableFrom,
   sectionPathName,
   type SectionGraph,
 } from "./section-graph.js";
-import {
-  checkRef,
-  deleteMember,
-  heldMember,
-  insertMember,
-  membersOf,
-  moveMemberTo,
-  refColumns,
-  requirePosition,
-} from "./section-members.js";
+import { refColumns, refKey } from "./section-members.js";
 import { menuHome, requireMenuRoot } from "./menu-structure.js";
 import "./errors.js";
 
@@ -95,74 +92,111 @@ export async function readMenuHome(tx: Transaction, menuId: string): Promise<Men
   };
 }
 
-export async function setHomeDisplay(
+export async function saveMenuHome(
   tx: Transaction,
   menuId: string,
-  order: HomeOrder,
-): Promise<void> {
-  await requireMenuHome(tx, menuId, true);
-  await tx.update(menus).set({ homeOrder: order }).where(eq(menus.id, menuId));
-}
-
-/** Appends a shortcut to a target the menu reaches structurally, or inserts at `position`. */
-export async function addShortcut(
-  tx: Transaction,
-  menuId: string,
-  ref: MemberRef,
-  position?: number,
-): Promise<SectionMember> {
-  const { rootSectionId, homeSectionId } = await requireMenuHome(tx, menuId, true);
+  input: MenuHomeSaveInput,
+): Promise<MenuHomeSaveResult> {
+  const { homeSectionId, rootSectionId } = await requireMenuHome(tx, menuId, true);
   const graph = await loadSectionGraph(tx);
-  requirePosition(position);
-  const stored = await checkRef(tx, graph, homeSectionId, ref);
-  if (!structuralReach(graph, rootSectionId)(stored))
-    throw new AppError("menu.shortcut_unreachable", { ref });
-  return insertMember(tx, homeSectionId, graph.tiles(homeSectionId), ref, stored, position);
-}
-
-export async function replaceShortcut(
-  tx: Transaction,
-  menuId: string,
-  memberId: string,
-  ref: MemberRef,
-): Promise<SectionMember> {
-  const { rootSectionId, homeSectionId } = await requireMenuHome(tx, menuId, true);
-  const graph = await loadSectionGraph(tx);
-  const current = heldMember(graph.tiles(homeSectionId), homeSectionId, memberId);
-  const stored = await checkRef(tx, graph, homeSectionId, ref, current);
-  if (!structuralReach(graph, rootSectionId)(stored))
-    throw new AppError("menu.shortcut_unreachable", { ref });
-  await tx.update(sectionMembers).set(refColumns(stored)).where(eq(sectionMembers.id, memberId));
-  return { ...current, ref };
-}
-
-export async function removeShortcut(
-  tx: Transaction,
-  menuId: string,
-  memberId: string,
-): Promise<void> {
-  const { homeSectionId } = await requireMenuHome(tx, menuId, true);
-  await deleteMember(
-    tx,
-    homeSectionId,
-    await membersOf(tx, homeSectionId, "home_layout"),
-    memberId,
+  if (graph.menu(menuId)?.kind === "set_menu")
+    throw new AppError("set_menu.wrong_place", { menuId });
+  const reaches = structuralReach(graph, rootSectionId);
+  const held = new Map(graph.tiles(homeSectionId).map(({ id, ref }) => [id, ref]));
+  const newIds = input.shortcuts
+    .filter(({ memberId }) => !held.has(memberId))
+    .map(({ memberId }) => memberId);
+  const foreign = new Set<string>();
+  for (const ids of batches(newIds))
+    for (const row of await tx
+      .select({ id: sectionMembers.id })
+      .from(sectionMembers)
+      .where(and(inArray(sectionMembers.id, ids), ne(sectionMembers.sectionId, homeSectionId))))
+      foreign.add(row.id);
+  const productIds = input.shortcuts.flatMap(({ memberId, ref }) =>
+    !held.has(memberId) && ref.kind === "product" ? [ref.productId] : [],
   );
-}
+  const catalogue = new Map<string, { parentId: string | null; active: boolean }>();
+  for (const ids of batches([...new Set(productIds)]))
+    for (const row of await tx
+      .select({ id: products.id, parentId: products.parentId, active: products.active })
+      .from(products)
+      .where(inArray(products.id, ids)))
+      catalogue.set(row.id, row);
 
-/** Moves the shortcut to index `to` (past the end means last) and renumbers the others. */
-export async function moveShortcut(
-  tx: Transaction,
-  menuId: string,
-  memberId: string,
-  to: number,
-): Promise<SectionMember<TileRef>[]> {
-  const { homeSectionId } = await requireMenuHome(tx, menuId, true);
-  return moveMemberTo(
-    tx,
-    homeSectionId,
-    await membersOf(tx, homeSectionId, "home_layout"),
-    memberId,
-    to,
-  );
+  const seenIds = new Set<string>();
+  const seenTargets = new Set<string>();
+  const values: (typeof sectionMembers.$inferInsert)[] = [];
+  const dropped: MenuHomeSaveResult["dropped"] = [];
+  for (const [index, { memberId, ref: requested }] of input.shortcuts.entries()) {
+    const path = "shortcuts." + index;
+    if (seenIds.has(memberId) || foreign.has(memberId))
+      throw new AppError("menu_section.membership_invalid", { field: path + ".memberId" });
+    seenIds.add(memberId);
+    const stored = held.get(memberId);
+    const ref = stored ?? (requested.kind === "missing" ? undefined : requested);
+    if (ref === undefined)
+      throw new AppError("menu_section.not_found", {
+        sectionId: homeSectionId,
+        memberId,
+        field: path + ".ref",
+      });
+    if (ref.kind === "missing") {
+      values.push({
+        id: memberId,
+        sectionId: homeSectionId,
+        position: values.length,
+        missingName: ref.name,
+      });
+      continue;
+    }
+    if (stored === undefined) {
+      let deleted: boolean;
+      if (ref.kind === "product") {
+        const product = catalogue.get(ref.productId);
+        if (product?.parentId !== null)
+          throw new AppError("menu_section.membership_invalid", { field: path + ".ref" });
+        deleted = !product.active;
+      } else {
+        const target = graph.section(ref.sectionId);
+        if (target?.role === "home_layout")
+          throw new AppError("menu_section.wrong_role", {
+            sectionId: ref.sectionId,
+            role: target.role,
+            field: path + ".ref",
+          });
+        const owner = target && graph.menu(target.ownerMenuId);
+        if (target?.role === "menu_root" && owner?.kind === "set_menu")
+          throw new AppError("set_menu.wrong_place", {
+            menuId: target.ownerMenuId,
+            field: path + ".ref",
+          });
+        deleted = target === undefined || owner?.active === false;
+      }
+      if (deleted) {
+        dropped.push({ memberId, reason: "deleted" });
+        continue;
+      }
+      if (!reaches(ref))
+        throw new AppError("menu.shortcut_unreachable", { ref, field: path + ".ref" });
+    }
+    const key = refKey(ref);
+    if (seenTargets.has(key))
+      throw new AppError("menu_section.member_duplicate", {
+        sectionId: homeSectionId,
+        field: path + ".ref",
+      });
+    seenTargets.add(key);
+    values.push({
+      id: memberId,
+      sectionId: homeSectionId,
+      position: values.length,
+      ...refColumns(ref),
+    });
+  }
+
+  await tx.delete(sectionMembers).where(eq(sectionMembers.sectionId, homeSectionId));
+  for (const batch of batches(values)) await tx.insert(sectionMembers).values(batch);
+  await tx.update(menus).set({ homeOrder: input.order }).where(eq(menus.id, menuId));
+  return { ...(await readMenuHome(tx, menuId)), dropped };
 }

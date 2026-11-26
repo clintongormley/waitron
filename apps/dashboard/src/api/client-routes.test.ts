@@ -1325,7 +1325,7 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
-  it("reads a menu's Device Home Page and writes its shortcuts and order", async () => {
+  it("reads a menu's Device Home Page", async () => {
     const home = {
       homeSectionId: "s-home",
       shortcuts: [
@@ -1340,30 +1340,30 @@ describe("DashboardApi routes", () => {
       ],
       order: "home_first",
     };
-    const ref = { kind: "section" as const, sectionId: "s1" };
-    const shortcut = { id: "t2", position: 1, ref };
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(home))
-      .mockResolvedValueOnce(jsonResponse(shortcut, true, 201))
-      .mockResolvedValueOnce(emptyResponse())
-      .mockResolvedValueOnce(jsonResponse([shortcut]))
-      .mockResolvedValueOnce(emptyResponse());
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(home));
     const api = new DashboardApi("", fetchImpl);
-
     await expect(api.getMenuHome("c1")).resolves.toEqual(home);
-    await expect(api.addHomeShortcut("c1", ref)).resolves.toEqual(shortcut);
-    await expect(api.removeHomeShortcut("c1", "t1")).resolves.toBeUndefined();
-    await expect(api.moveHomeShortcut("c1", "t2", 0)).resolves.toEqual([shortcut]);
-    await expect(api.setHomeDisplay("c1", "menu_first")).resolves.toBeUndefined();
+    expect(callsOf(fetchImpl)).toEqual([["/management-api/menus/c1/home", "GET", undefined]]);
+  });
 
-    expect(callsOf(fetchImpl)).toEqual([
-      ["/management-api/menus/c1/home", "GET", undefined],
-      ["/management-api/menus/c1/home/shortcuts", "POST", { ref }],
-      ["/management-api/menus/c1/home/shortcuts/t1", "DELETE", undefined],
-      ["/management-api/menus/c1/home/shortcuts/t2/position", "PUT", { to: 0 }],
-      ["/management-api/menus/c1/home-display", "PATCH", { order: "menu_first" }],
-    ]);
+  it("sends one ordered draft when saving the Device Home Page", async () => {
+    const draft = {
+      order: "menu_first" as const,
+      shortcuts: [
+        { memberId: "tile-1", ref: { kind: "section" as const, sectionId: "section-1" } },
+      ],
+    };
+    const saved = {
+      homeSectionId: "home",
+      order: draft.order,
+      shortcuts: [],
+      dropped: [{ memberId: "tile-1", reason: "deleted" }],
+    };
+    const request = vi.fn().mockResolvedValue(jsonResponse(saved));
+    const api = new DashboardApi("", request);
+
+    await expect(api.saveMenuHome("c1", draft)).resolves.toEqual(saved);
+    expect(callsOf(request)).toEqual([["/management-api/menus/c1/home", "PUT", draft]]);
   });
 
   it("reads menus' publication status and preview, and publishes the previewed hash", async () => {

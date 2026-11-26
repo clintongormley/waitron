@@ -9,6 +9,8 @@ import type {
 } from "@waitron/menu";
 import type {
   MenuHome,
+  MenuHomeSaveInput,
+  MenuHomeSaveResult,
   MenuStatus,
   MenuPreview,
   MemberRef,
@@ -20,8 +22,6 @@ import type {
   SectionMember,
   MenuDeleteImpact,
   MenuPriceRow,
-  TileRef,
-  HomeOrder,
   PublishedMenuVersion,
   MenuPublicationsAnswer,
   QueuedEdition,
@@ -231,30 +231,8 @@ export class MenuApi {
   getMenuHome(menuId: string): Promise<MenuHome> {
     return this.#request<MenuHome>(`/management-api/menus/${menuId}/home`, "GET");
   }
-  /** A target the menu's structure does not reach is refused `menu.shortcut_unreachable`. */
-  addHomeShortcut(menuId: string, ref: MemberRef): Promise<SectionMember> {
-    return this.#request(`/management-api/menus/${menuId}/home/shortcuts`, "POST", { ref });
-  }
-  removeHomeShortcut(menuId: string, memberId: string): Promise<void> {
-    return this.#request<void>(
-      `/management-api/menus/${menuId}/home/shortcuts/${memberId}`,
-      "DELETE",
-    );
-  }
-  /** Answers every shortcut in its new order. */
-  moveHomeShortcut(
-    menuId: string,
-    memberId: string,
-    to: number,
-  ): Promise<SectionMember<TileRef>[]> {
-    return this.#request(
-      `/management-api/menus/${menuId}/home/shortcuts/${memberId}/position`,
-      "PUT",
-      { to },
-    );
-  }
-  setHomeDisplay(menuId: string, order: HomeOrder): Promise<void> {
-    return this.#request<void>(`/management-api/menus/${menuId}/home-display`, "PATCH", { order });
+  saveMenuHome(menuId: string, input: MenuHomeSaveInput): Promise<MenuHomeSaveResult> {
+    return this.#request(`/management-api/menus/${encodeURIComponent(menuId)}/home`, "PUT", input);
   }
   /** `expectedHash` is the preview's; a menu edited since is refused `menu.changed_since_preview`. */
   publishMenu(id: string, expectedHash: string): Promise<PublishedMenuVersion> {

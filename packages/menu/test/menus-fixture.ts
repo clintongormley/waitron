@@ -16,7 +16,7 @@ import { writeProductModifiers } from "../src/product-modifiers.js";
 import { readMenuStructure } from "../src/menu-structure.js";
 import { addMember, createSectionIn } from "../src/sections.js";
 import { setProductVariants } from "../src/variants.js";
-import type { MemberRef } from "@waitron/shared";
+import type { MemberRef, ShortcutRef } from "@waitron/shared";
 
 export const NO_ICE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 export const WITH_ICE = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -49,7 +49,7 @@ export const product = (productId: string): Extract<MemberRef, { kind: "product"
   kind: "product",
   productId,
 });
-export const section = (sectionId: string): MemberRef => ({ kind: "section", sectionId });
+export const section = (sectionId: string): ShortcutRef => ({ kind: "section", sectionId });
 
 /**
  * Review Focus 3's venue. Lunch: Drinks, Soup. Dinner: Drinks, Mains. Drinks holds Lemonade and

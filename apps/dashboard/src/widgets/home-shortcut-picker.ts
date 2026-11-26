@@ -6,8 +6,6 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { t } from "../i18n/t.js";
 
-export type ShortcutKind = "product" | "section";
-
 export interface ShortcutOption {
   value: string;
   label: string;
@@ -16,7 +14,7 @@ export interface ShortcutOption {
 const sorted = (ids: readonly string[]) => [...ids].sort();
 
 /**
- * Picks several products, or several sections, to add as Device Home Page shortcuts. A host may put
+ * Picks products and sections to add as Device Home Page shortcuts. A host may put
  * its own Cancel in the `cancel` slot, which lands beside Add.
  */
 @customElement("dashboard-home-shortcut-picker")
@@ -34,14 +32,8 @@ export class HomeShortcutPicker extends LitElement {
     `,
   ];
 
-  @property() kind: ShortcutKind = "product";
   /** What can still be added: reached by the menu and not already a shortcut. */
   @property({ attribute: false }) options: ShortcutOption[] = [];
-  @property({ type: Boolean }) busy = false;
-  /** A refusal that names the field, shown under it. */
-  @property() error = "";
-  /** A refusal that names no field, shown at the bottom. */
-  @property() formError = "";
   /** In the order chosen. */
   @state() private chosen: readonly string[] = [];
   @state() private noneLeft = false;
@@ -63,17 +55,8 @@ export class HomeShortcutPicker extends LitElement {
   }
 
   /** The chosen shortcuts were all added: the form is unchanged again. */
-  commitSaved(): void {
+  commitAdded(): void {
     this.#saved = sorted(this.chosen);
-    this.#scope?.commit(this.#saved);
-  }
-
-  /** After a partial failure: only `ids`, the ones not yet added, stay chosen, and still count.
-   * The added ones are no longer offered, so the form is unchanged once nothing is chosen. */
-  keepChosen(ids: readonly string[]): void {
-    this.#saved = [];
-    this.chosen = [...ids];
-    this.noneLeft = false;
     this.#scope?.commit(this.#saved);
   }
 
@@ -99,16 +82,15 @@ export class HomeShortcutPicker extends LitElement {
 
   #confirm(event: Event): void {
     event.stopPropagation();
-    if (this.busy) return;
     if (saveActionState(this.#scope).unchanged) return;
-    const ids = this.#offered();
-    if (ids.length === 0) {
+    const values = this.#offered();
+    if (values.length === 0) {
       this.noneLeft = true;
       return;
     }
     this.dispatchEvent(
       new CustomEvent("wt-shortcuts-add", {
-        detail: { kind: this.kind, ids },
+        detail: { values },
         bubbles: true,
         composed: true,
       }),
@@ -116,26 +98,20 @@ export class HomeShortcutPicker extends LitElement {
   }
 
   override render() {
-    const sections = this.kind === "section";
     const addAction = saveActionState(this.#scope);
-    const fieldError =
-      this.error ||
-      (this.noneLeft
-        ? t(sections ? "home.none_chosen_sections" : "home.none_chosen_products")
-        : "");
+    const fieldError = this.noneLeft ? t("home.none_chosen") : "";
     return html`<wt-combobox
         multiple
         required
-        name=${sections ? "shortcut-sections" : "shortcut-products"}
-        label=${t(sections ? "home.picker_sections" : "home.picker_products")}
+        name="shortcuts"
+        label=${t("home.picker_shortcuts")}
         search="auto"
         searchPlaceholder=${t("categories.combobox_search")}
         noResultsLabel=${t("categories.combobox_no_results")}
-        placeholder=${t(sections ? "home.choose_sections" : "home.choose_products")}
+        placeholder=${t("home.choose_shortcuts")}
         .countLabel=${this.#countLabel}
         .options=${this.options}
         .values=${this.#offered()}
-        .disabled=${this.busy}
         error=${fieldError}
         @wt-change=${(event: CustomEvent<{ values: string[] }>) => {
           event.stopPropagation();
@@ -144,14 +120,12 @@ export class HomeShortcutPicker extends LitElement {
           this.#scope?.changed();
         }}
       ></wt-combobox>
-      <wt-form-actions
-        error=${[this.formError, fieldError ? t("form.fix_fields") : ""].filter(Boolean).join(" ")}
-      >
+      <wt-form-actions error=${fieldError ? t("form.fix_fields") : ""}>
         <slot name="cancel" slot="cancel"></slot>
         <wt-button
           variant=${addAction.variant}
           data-test="add"
-          .disabled=${addAction.unchanged || this.busy}
+          .disabled=${addAction.unchanged}
           @click=${(event: Event) => this.#confirm(event)}
           >${t("action.add")}</wt-button
         >

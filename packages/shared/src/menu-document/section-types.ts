@@ -79,3 +79,12 @@ export interface MenuHome {
   shortcuts: HomeTile[];
   order: HomeOrder;
 }
+
+export interface MenuHomeSaveInput {
+  order: HomeOrder;
+  shortcuts: { memberId: string; ref: ShortcutRef | { kind: "missing" } }[];
+}
+
+export interface MenuHomeSaveResult extends MenuHome {
+  dropped: { memberId: string; reason: "deleted" }[];
+}

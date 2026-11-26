@@ -1,3 +1,4 @@
+import { addShortcut, editMenuHome } from "../test/menu-home-fixture.js";
 import { storedMenuParts } from "../test/menu-parts.js";
 import { and, asc, eq, inArray, getTableColumns } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -17,7 +18,7 @@ import { seedLegacySellingUnits, useMenuDb } from "../test/fixtures.js";
 import { SECTION_NAME } from "./sections.js";
 import { duplicateMenu } from "./menu-copy.js";
 import { createMenu, createProduct, deactivateMenu, updateMenuItem } from "./operations.js";
-import { addShortcut, readMenuHome, setHomeDisplay } from "./menu-home.js";
+import { readMenuHome } from "./menu-home.js";
 import { readMenuStructure, requireMenuRoot } from "./menu-structure.js";
 import { menuStatus, previewMenu, publishMenu } from "./menu-publication.js";
 import { setIncludeFolder } from "./include-folder.js";
@@ -121,7 +122,9 @@ async function fixture(): Promise<Fixture> {
     await addShortcut(tx, lunch, { kind: "section", sectionId: temporary });
     await deleteSection(tx, temporary);
 
-    await setHomeDisplay(tx, lunch, "menu_first");
+    await editMenuHome(tx, lunch, (draft) => {
+      draft.order = "menu_first";
+    });
 
     const burgerItem = await itemOf(tx, lunch, burger);
     await updateMenuItem(tx, lunch, burgerItem, { grossPrice: "11.50" });

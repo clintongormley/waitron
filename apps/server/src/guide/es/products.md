@@ -401,16 +401,15 @@ En **Vista previa**, revisa dónde lo has puesto, los cambios y cualquier proble
 corregir. Publica la carta completa para enviar la versión actual a las cajas. Cada cambio
 posterior llega a las cajas cuando vuelves a publicar la carta completa.
 
-## Revisa la página de inicio de la carta {#menu-home}
+## Configura el inicio del dispositivo {#menu-home}
 
-Abre la pestaña **Página de inicio** de una carta para ordenar sus accesos directos. En
-**Se muestra primero**, elige **Accesos directos** o **Carta completa**. Publica la carta para
-enviar el nuevo orden a todos los dispositivos. Las columnas se ajustan al ancho de cada pantalla.
-En la vista previa, pulsa una carpeta para abrir la sección. Si un producto muestra un intervalo,
-son los precios de sus variantes.
+Abre **Inicio del dispositivo** en la carta que quieres cambiar. Elige **Añadir accesos directos**
+y selecciona los productos y las secciones que el personal necesita tener a mano. Arrastra un acceso
+por su tirador para moverlo o pulsa su papelera para quitarlo. En **Se muestra primero**, elige
+**Accesos directos** o **Carta completa**.
 
-Para sustituir un acceso directo marcado **No se muestra**, quítalo con su papelera y añade un producto o una
-sección que esta carta muestre.
+Pulsa **Guardar** para conservar todos los cambios. Después publica la carta para enviarlos a todas
+las cajas y dispositivos de mano que la usan.
 
 ## Copia una carta {#copy-menu}
 
@@ -426,7 +425,7 @@ Nombre.
 Las cartas que ya comparten nombre lo conservan hasta que renombres una.
 
 La copia empieza sin publicar, con las secciones de trabajo, los precios y los ajustes de la
-página de inicio de la carta original. Las versiones publicadas y las publicaciones programadas
+inicio del dispositivo de la carta original. Las versiones publicadas y las publicaciones programadas
 se quedan en la original. Editar las secciones propias de la copia deja la original como estaba;
 las cartas incluidas siguen apuntando a las mismas cartas compartidas.
 

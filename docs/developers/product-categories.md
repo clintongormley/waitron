@@ -122,10 +122,10 @@ below.
 Malformed ids answer `shared.invalid_id` (400); a malformed body answers
 `management.request_invalid` (400), naming its field. `menu_section.not_found` names an unknown
 section (`sectionId`) or a member not held by that list (`sectionId`, `memberId`): 400 on
-`sections/delete`, `section-members/remove` and the Device Home Page shortcut add, where only the
+`sections/delete`, `section-members/remove` where only the
 body names the section or member, and 404 elsewhere.
 `menu_section.wrong_role` (`sectionId`, `role`; 400 on `sections/delete`, `section-members/remove`
-and the Device Home Page shortcut add and replace, where only the body can name a section or member
+and the Device Home Page Save, where only the body can name a section or member
 of the wrong kind, and 409 elsewhere, including when a member's `ref` or a move-in's `listId` names
 it) refuses presentation edits or deletes of roots
 and Device Home Page sections, structure writes into a Device Home Page section, and a member ref to
@@ -341,46 +341,30 @@ there are no per-menu extras publications or overrides.
 
 ### Device Home Page routes
 
-A menu has one Device Home Page: the shortcuts a handheld or a till shows under its search, beside
-the full menu, and which one appears first on every device. A menu never
-inherits another menu's. A shortcut points at a product or a section and adds no product, price or
-placement to the menu. The shortcut writer checks that the menu's working structure reaches the
-target, including targets in included menus. Use the shortcut routes to write it: the generic
-section writes refuse its section with `menu_section.wrong_role`.
+A menu has one Device Home Page. Under search, the till and handheld show its shortcuts and the
+full menu in the same order. A shortcut points at a product or a section. Menu placement and
+pricing come from Structure.
 
-`GET /management-api/menus/:id/home` gives `{ homeSectionId, shortcuts, order }`. A
-shortcut is `{ memberId, position, ref, name, reachable, missingName }`. Its `ref` names a product, a
-section, or a deleted target as `{ kind: "missing", name }`. `reachable` checks working membership;
-`missingName` is null for a reachable target and otherwise records its name or section path.
-Publishing keeps an empty slot for a target the document leaves out, so later shortcuts keep their
-positions.
+| Route | Body and success |
+| --- | --- |
+| `GET /management-api/menus/:id/home` | 200, `{ homeSectionId, shortcuts, order }` |
+| `PUT /management-api/menus/:id/home` | `{ order, shortcuts: [{ memberId, ref }] }` in display order. 200, the saved page with `dropped: [{ memberId, reason: "deleted" }]`. |
 
-The same `order` applies to every device. A new menu uses `home_first` and shows its shortcuts
-first. Choose `menu_first` to show the full menu first.
+Both routes require `menu.manage`. Use `home_first` for shortcuts first or `menu_first` for the full
+menu first. Each read shortcut includes `{ memberId, position, ref, name, reachable, missingName }`.
+The draft carries existing member ids and UUIDs for newly chosen tiles. Save replaces the page and
+order in one transaction. For a member id still on the page it uses the stored reference and saved
+missing name. The draft represents a saved missing tile as `{ kind: "missing" }`. The member id
+must still be on this page. If another Save removed it, the request answers
+`menu_section.not_found` (400) and the screen names the removed shortcut.
 
-| Route | Body and success | Refusals |
-| --- | --- | --- |
-| `GET /management-api/menus/:id/home` | 200, the Device Home Page, shortcuts in order, missing ones included | `menu.not_found` |
-| `PATCH /management-api/menus/:id/home-display` | `{ order }`, 204 | `menu.not_found`, `menu.deleted`, `management.request_invalid` |
-| `POST /management-api/menus/:id/home/shortcuts` | `{ ref, position? }`; 201, `{ id, position, ref }` | `menu.not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu_section.invalid`, `menu.shortcut_unreachable` |
-| `POST /management-api/menus/:id/home/shortcuts/:memberId/replace` | `{ ref }`; 200, the member, keeping its id and position | `menu.not_found`, `menu_section.not_found`, `menu_section.wrong_role`, `menu_section.membership_invalid`, `menu_section.member_duplicate`, `menu.shortcut_unreachable` |
-| `DELETE /management-api/menus/:id/home/shortcuts/:memberId` | 204 | `menu.not_found`, `menu_section.not_found` |
-| `PUT /management-api/menus/:id/home/shortcuts/:memberId/position` | `{ to }`; 200, the shortcuts as members `{ id, position, ref }` in their new order, missing slots included | `menu.not_found`, `menu_section.not_found`, `menu_section.invalid` |
-
-Malformed ids answer `shared.invalid_id` (400) and malformed bodies answer
-`management.request_invalid` (400). A missing or unrecognised display order names `field: "order"`.
-An unknown menu answers `menu.not_found` (404).
-`menu.shortcut_unreachable` (400, `ref`) refuses a target outside the working structure,
-including the menu's own root, and a deleted product, which no list holds. A shortcut to a product
-deleted later becomes a missing tile in its place, which publishes as an empty slot with a
-`shortcut_missing` warning. `menu_section.wrong_role` (400, `sectionId`, `role`) refuses a Device Home Page section,
-this menu's or another's, as a target. `menu_section.not_found` names a missing section, or a
-member the menu's Device Home Page does not hold: 400 when the shortcut add's `ref` names the
-section, 404 otherwise; a product target must be a stored top-level
-product or it answers `menu_section.membership_invalid` (400). A repeated target answers
-`menu_section.member_duplicate` (409), and a negative or fractional position answers
-`menu_section.invalid` (400, `field`). The dashboard adds, removes and moves shortcuts, and edits
-the order, on a menu's Home page tab; it does not call the replace route.
+A newly chosen target that was deleted comes back in `dropped`. Other new targets must be
+top-level products or sections reached by the working menu. A member id held by another list or
+repeated in the draft answers `menu_section.membership_invalid` (400). A repeated live target
+answers `menu_section.member_duplicate` (409). An unreachable new live target answers
+`menu.shortcut_unreachable` (400). A set menu has no editable Device Home Page and answers
+`set_menu.wrong_place` (409). A retained shortcut the published menu cannot show keeps an empty
+slot so later shortcuts stay in place.
 
 **Storage.** Find the menu's Home section through `sections.owner_menu_id` and
 `role = 'home_layout'`. Its root has `role = 'menu_root'`. A partial unique index permits one of

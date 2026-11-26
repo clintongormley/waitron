@@ -1,16 +1,13 @@
 import type { Hono } from "hono";
 import { saveMenuStructure } from "@waitron/menu";
 import {
-  AppError,
   normaliseUuid,
   type IncludeFolder,
-  type MemberRef,
   type MenuStructureMemberInput,
   type MenuStructureSaveInput,
 } from "@waitron/shared";
 import {
   readJsonBody,
-  requireBodyUuid,
   requireManagementSession,
   requireNullableString,
   requireString,
@@ -18,39 +15,8 @@ import {
 } from "@waitron/server-kit";
 import type { GatedWork } from "./content-translations-api.js";
 import type { Logger } from "./logger.js";
+import { invalid, object, rows, bodyId, refOf } from "./menu-request-fields.js";
 import "./errors.js";
-
-function invalid(field: string): never {
-  throw new AppError("management.request_invalid", { field });
-}
-
-function object(value: unknown, field: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) invalid(field);
-  return value as Record<string, unknown>;
-}
-
-function rows<T>(value: unknown, field: string, read: (row: unknown, path: string) => T): T[] {
-  if (!Array.isArray(value)) invalid(field);
-  return value.map((row, index) => read(row, field + "." + index));
-}
-
-function bodyId(value: unknown, field: string): string {
-  return normaliseUuid(requireBodyUuid(value, field), field);
-}
-
-function refOf(value: unknown, path: string): MemberRef {
-  const ref = object(value, path);
-  switch (ref.kind) {
-    case "product":
-      return { kind: ref.kind, productId: bodyId(ref.productId, path + ".productId") };
-    case "section":
-      return { kind: ref.kind, sectionId: bodyId(ref.sectionId, path + ".sectionId") };
-    case "set_menu":
-      return { kind: ref.kind, menuId: bodyId(ref.menuId, path + ".menuId") };
-    default:
-      return invalid(path + ".kind");
-  }
-}
 
 function folderOf(value: unknown, path: string): IncludeFolder {
   const { showAsFolder, overrides } = object(value, path);

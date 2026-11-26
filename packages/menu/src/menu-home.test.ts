@@ -13,14 +13,8 @@ import {
 import { useMenuDb } from "../test/fixtures.js";
 import { menusFixture, product, section, type MenusFixture } from "../test/menus-fixture.js";
 import { DEFAULT_HOME_ORDER } from "@waitron/shared";
-import {
-  addShortcut,
-  moveShortcut,
-  readMenuHome,
-  removeShortcut,
-  replaceShortcut,
-  setHomeDisplay,
-} from "./menu-home.js";
+import { readMenuHome, saveMenuHome } from "./menu-home.js";
+import { addShortcut, editMenuHome } from "../test/menu-home-fixture.js";
 import { buildMenuDocument } from "./menu-document.js";
 import { membersOf } from "./section-members.js";
 import { readSection } from "./sections.js";
@@ -114,41 +108,29 @@ describe("the Device Home Page", () => {
     const leftover = await otherHome(f.lemonade);
     const home = await homeOf(f.lunch);
     expect(home).not.toBe(leftover);
-    const soup = await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
-    await app((tx) => addShortcut(tx, f.lunch, section(f.beer), 0));
-    await app((tx) => moveShortcut(tx, f.lunch, soup.id, 0));
-    await app((tx) => replaceShortcut(tx, f.lunch, soup.id, product(f.lager)));
+    await app((tx) => addShortcut(tx, f.lunch, product(f.lager)));
+    await app((tx) => addShortcut(tx, f.lunch, section(f.beer)));
     expect((await app((tx) => readMenuHome(tx, f.lunch))).shortcuts.map((t) => t.ref)).toEqual([
       product(f.lager),
       section(f.beer),
     ]);
     const { document } = await app((tx) => buildMenuDocument(tx, f.lunch));
     expect(document.home.shortcuts).toEqual([product(f.lager), section(f.beer)]);
-    const [held] = await fx.db
-      .select({ id: sectionMembers.id })
-      .from(sectionMembers)
-      .where(eq(sectionMembers.sectionId, leftover));
-    for (const write of [
-      () => app((tx) => removeShortcut(tx, f.lunch, held!.id)),
-      () => app((tx) => moveShortcut(tx, f.lunch, held!.id, 0)),
-      () => app((tx) => replaceShortcut(tx, f.lunch, held!.id, product(f.soup))),
-    ])
-      expect(await codeOf(write)).toBe("menu_section.not_found");
-    await app((tx) => removeShortcut(tx, f.lunch, soup.id));
+    await app((tx) =>
+      editMenuHome(tx, f.lunch, ({ shortcuts }) => {
+        shortcuts.shift();
+      }),
+    );
     expect(await tileRefs(leftover)).toEqual([{ position: 0, ref: product(f.lemonade) }]);
     expect(await tileRefs(home)).toEqual([{ position: 0, ref: section(f.beer) }]);
   });
 
   it("refuses a menu that does not exist", async () => {
     const f = await menusFixture(fx.db);
-    const member = (await app((tx) => addShortcut(tx, f.lunch, product(f.soup)))).id;
+    await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
     const calls: (() => Promise<unknown>)[] = [
       () => app((tx) => readMenuHome(tx, MISSING)),
-      () => app((tx) => setHomeDisplay(tx, MISSING, "menu_first")),
-      () => app((tx) => addShortcut(tx, MISSING, product(f.soup))),
-      () => app((tx) => replaceShortcut(tx, MISSING, member, product(f.lager))),
-      () => app((tx) => removeShortcut(tx, MISSING, member)),
-      () => app((tx) => moveShortcut(tx, MISSING, member, 0)),
+      () => app((tx) => saveMenuHome(tx, MISSING, { order: "menu_first", shortcuts: [] })),
     ];
     for (const call of calls)
       expect(await captureError(call)).toMatchObject({
@@ -159,12 +141,194 @@ describe("the Device Home Page", () => {
   });
 });
 
-describe("setHomeDisplay", () => {
-  it("stores one home order for the chosen menu", async () => {
+describe("saveMenuHome", () => {
+  it("replaces the page with the ordered draft and changes Shown first", async () => {
     const f = await menusFixture(fx.db);
-    await app((tx) => setHomeDisplay(tx, f.lunch, "menu_first"));
-    expect(await app((tx) => readMenuHome(tx, f.lunch))).toMatchObject({ order: "menu_first" });
-    expect(await app((tx) => readMenuHome(tx, f.dinner))).toMatchObject({ order: "home_first" });
+    const home = await homeOf(f.lunch);
+    const soup = await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
+    await app((tx) => addShortcut(tx, f.lunch, product(f.lemonade)));
+    const lager = await app((tx) => addShortcut(tx, f.lunch, product(f.lager)));
+    const drinksId = crypto.randomUUID();
+
+    const saved = await app((tx) =>
+      saveMenuHome(tx, f.lunch, {
+        order: "menu_first",
+        shortcuts: [
+          { memberId: lager.id, ref: product(f.lager) },
+          { memberId: drinksId, ref: { kind: "section", sectionId: f.drinks } },
+          { memberId: soup.id, ref: product(f.soup) },
+        ],
+      }),
+    );
+    expect(saved).toEqual({
+      homeSectionId: home,
+      order: "menu_first",
+      shortcuts: [
+        {
+          memberId: lager.id,
+          position: 0,
+          ref: product(f.lager),
+          name: "Lager",
+          reachable: true,
+          missingName: null,
+        },
+        {
+          memberId: drinksId,
+          position: 1,
+          ref: section(f.drinks),
+          name: "Drinks",
+          reachable: true,
+          missingName: null,
+        },
+        {
+          memberId: soup.id,
+          position: 2,
+          ref: product(f.soup),
+          name: "Soup",
+          reachable: true,
+          missingName: null,
+        },
+      ],
+      dropped: [],
+    });
+    expect(await app((tx) => readMenuHome(tx, f.lunch))).toEqual({
+      homeSectionId: saved.homeSectionId,
+      order: saved.order,
+      shortcuts: saved.shortcuts,
+    });
+    expect(await tileRefs(await homeOf(f.dinner))).toEqual([]);
+  });
+
+  it("keeps the stored missing name when a previously saved target is deleted", async () => {
+    const f = await menusFixture(fx.db);
+    const beer = await app((tx) => addShortcut(tx, f.lunch, section(f.beer)));
+    await app((tx) => deleteSection(tx, f.beer));
+    const saved = await app((tx) =>
+      saveMenuHome(tx, f.lunch, {
+        order: "menu_first",
+        shortcuts: [{ memberId: beer.id, ref: { kind: "section", sectionId: f.beer } }],
+      }),
+    );
+    expect(saved.shortcuts).toEqual([
+      {
+        memberId: beer.id,
+        position: 0,
+        ref: { kind: "missing", name: "Drinks › Beer" },
+        name: "Drinks › Beer",
+        missingName: "Drinks › Beer",
+        reachable: false,
+      },
+    ]);
+    expect(saved.dropped).toEqual([]);
+  });
+
+  it("refuses a missing tile when another Save removed its row", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => addShortcut(tx, f.lunch, section(f.beer)));
+    await app((tx) => deleteSection(tx, f.beer));
+    const draft = await app((tx) => readMenuHome(tx, f.lunch));
+    await app((tx) => saveMenuHome(tx, f.lunch, { order: "home_first", shortcuts: [] }));
+    expect((await app((tx) => readMenuHome(tx, f.lunch))).shortcuts).toEqual([]);
+    await expect(app((tx) => saveMenuHome(tx, f.lunch, draft))).rejects.toMatchObject({
+      code: "menu_section.not_found",
+      params: { memberId: draft.shortcuts[0]!.memberId, field: "shortcuts.0.ref" },
+    });
+    expect((await app((tx) => readMenuHome(tx, f.lunch))).shortcuts).toEqual([]);
+  });
+
+  it("drops newly chosen targets deleted before Save and closes the gaps", async () => {
+    const f = await menusFixture(fx.db);
+    const soupId = crypto.randomUUID();
+    const beerId = crypto.randomUUID();
+    const drinksId = crypto.randomUUID();
+    const lemonadeId = crypto.randomUUID();
+    await app((tx) => deactivateProduct(tx, f.soup));
+    await app((tx) => deleteSection(tx, f.beer));
+    await app((tx) => deactivateMenu(tx, f.drinksMenu));
+    const saved = await app((tx) =>
+      saveMenuHome(tx, f.lunch, {
+        order: "menu_first",
+        shortcuts: [
+          { memberId: soupId, ref: product(f.soup) },
+          { memberId: beerId, ref: { kind: "section", sectionId: f.beer } },
+          { memberId: drinksId, ref: { kind: "section", sectionId: f.drinks } },
+          { memberId: lemonadeId, ref: product(f.lemonade) },
+        ],
+      }),
+    );
+    expect(saved.dropped).toEqual([
+      { memberId: soupId, reason: "deleted" },
+      { memberId: beerId, reason: "deleted" },
+      { memberId: drinksId, reason: "deleted" },
+    ]);
+    expect(saved.shortcuts.map(({ memberId, position }) => [memberId, position])).toEqual([
+      [lemonadeId, 0],
+    ]);
+    expect(saved.order).toBe("menu_first");
+  });
+
+  it("refuses duplicate ids, duplicate targets, foreign ids and new unreachable targets without changing saved settings", async () => {
+    const f = await menusFixture(fx.db);
+    const soup = await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
+    const foreign = await app((tx) => addShortcut(tx, f.dinner, product(f.lager)));
+    const before = await app((tx) => readMenuHome(tx, f.lunch));
+    const another = crypto.randomUUID();
+    const lager = { memberId: another, ref: product(f.lager) };
+    for (const [shortcut, code] of [
+      [{ ...lager, memberId: soup.id }, "menu_section.membership_invalid"],
+      [{ ...lager, ref: product(f.soup) }, "menu_section.member_duplicate"],
+      [{ ...lager, memberId: foreign.id }, "menu_section.membership_invalid"],
+      [{ ...lager, ref: product(f.burger) }, "menu.shortcut_unreachable"],
+      [{ ...lager, ref: product(f.large) }, "menu_section.membership_invalid"],
+    ] as const) {
+      expect(
+        await codeOf(() =>
+          app((tx) =>
+            saveMenuHome(tx, f.lunch, {
+              order: "menu_first",
+              shortcuts: [{ memberId: soup.id, ref: product(f.soup) }, shortcut],
+            }),
+          ),
+        ),
+      ).toBe(code);
+      expect(await app((tx) => readMenuHome(tx, f.lunch))).toEqual(before);
+    }
+    expect((await app((tx) => readMenuHome(tx, f.dinner))).shortcuts[0]?.memberId).toBe(foreign.id);
+  });
+
+  it("identifies the draft shortcut whose target was taken off the menu", async () => {
+    const f = await menusFixture(fx.db);
+    const root = await app((tx) => readSection(tx, f.lunchRoot));
+    const member = root.members.find(
+      ({ ref }) => ref.kind === "product" && ref.productId === f.soup,
+    )!;
+    await app((tx) => removeMember(tx, f.lunchRoot, member.id));
+    await expect(
+      app((tx) =>
+        saveMenuHome(tx, f.lunch, {
+          order: "menu_first",
+          shortcuts: [{ memberId: crypto.randomUUID(), ref: product(f.soup) }],
+        }),
+      ),
+    ).rejects.toMatchObject({
+      code: "menu.shortcut_unreachable",
+      params: { ref: product(f.soup), field: "shortcuts.0.ref" },
+    });
+  });
+
+  it("refuses to save a deleted menu", async () => {
+    const f = await menusFixture(fx.db);
+    await app((tx) => deactivateMenu(tx, f.lunch));
+    expect(
+      await codeOf(() =>
+        app((tx) =>
+          saveMenuHome(tx, f.lunch, {
+            order: "menu_first",
+            shortcuts: [],
+          }),
+        ),
+      ),
+    ).toBe("menu.deleted");
   });
 });
 
@@ -224,7 +388,7 @@ describe("home tiles", () => {
     ]);
   });
 
-  it("moves, replaces and removes missing tiles without losing their positions", async () => {
+  it("moves and removes missing tiles without losing their positions", async () => {
     const f = await menusFixture(fx.db);
     const home = await homeOf(f.lunch);
     await app((tx) => addShortcut(tx, f.lunch, product(f.lemonade)));
@@ -239,26 +403,23 @@ describe("home tiles", () => {
       product(f.soup),
     ]);
     const read = async () => (await app((tx) => readMenuHome(tx, f.lunch))).shortcuts;
-    const moved = await app((tx) => moveShortcut(tx, f.lunch, beer.id, 2));
-    expect(moved.map((t) => [t.position, t.ref])).toEqual([
+    const moved = await app((tx) =>
+      editMenuHome(tx, f.lunch, ({ shortcuts }) => {
+        const index = shortcuts.findIndex(({ memberId }) => memberId === beer.id);
+        shortcuts.push(shortcuts.splice(index, 1)[0]!);
+      }),
+    );
+    expect(moved.shortcuts.map((t) => [t.position, t.ref])).toEqual([
       [0, product(f.lemonade)],
       [1, product(f.soup)],
       [2, { kind: "missing", name: "Drinks › Beer" }],
     ]);
-    const replaced = await app((tx) => replaceShortcut(tx, f.lunch, beer.id, section(f.drinks)));
-    expect(replaced).toEqual({ id: beer.id, position: 2, ref: section(f.drinks) });
-    expect((await read())[2]!.missingName).toBeNull();
-    const wine = await app((tx) => createSectionIn(tx, f.drinks, { internalName: "Wine" }));
-    await app((tx) => addShortcut(tx, f.lunch, section(wine.id)));
-    await app((tx) => deleteSection(tx, wine.id));
-    const missing = (await read())[3]!;
-    expect(missing.ref).toEqual({ kind: "missing", name: "Drinks › Wine" });
-    await app((tx) => removeShortcut(tx, f.lunch, missing.memberId));
-    expect((await read()).map((t) => [t.position, t.ref])).toEqual([
-      [0, product(f.lemonade)],
-      [1, product(f.soup)],
-      [2, section(f.drinks)],
-    ]);
+    await app((tx) =>
+      editMenuHome(tx, f.lunch, ({ shortcuts }) => {
+        shortcuts.pop();
+      }),
+    );
+    expect((await read()).map((tile) => tile.ref)).toEqual([product(f.lemonade), product(f.soup)]);
   });
 
   it("retains existing section targets with the owning menu path when an inclusion is removed", async () => {
@@ -312,31 +473,6 @@ describe("home tiles", () => {
     ]);
   });
 
-  it("refuses unreachable, duplicate, missing and variant replacements without changing the tile", async () => {
-    const f = await menusFixture(fx.db);
-    const home = await homeOf(f.lunch);
-    const tile = await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
-    await app((tx) => addShortcut(tx, f.lunch, product(f.lemonade)));
-    for (const [ref, code] of [
-      [product(f.burger), "menu.shortcut_unreachable"],
-      [product(f.lemonade), "menu_section.member_duplicate"],
-      [section(MISSING), "menu_section.not_found"],
-      [product(f.large), "menu_section.membership_invalid"],
-    ] as const) {
-      expect(await codeOf(() => app((tx) => replaceShortcut(tx, f.lunch, tile.id, ref)))).toBe(
-        code,
-      );
-    }
-    expect(
-      await codeOf(() => app((tx) => replaceShortcut(tx, f.lunch, MISSING, product(f.soup)))),
-    ).toBe("menu_section.not_found");
-    expect(await tileRefs(home)).toEqual([
-      { position: 0, ref: product(f.soup) },
-      { position: 1, ref: product(f.lemonade) },
-    ]);
-    expect(await app((tx) => replaceShortcut(tx, f.lunch, tile.id, product(f.soup)))).toEqual(tile);
-  });
-
   it("accepts a product or included menu section the menu reaches, however deep", async () => {
     const f = await menusFixture(fx.db);
     const home = await homeOf(f.lunch);
@@ -363,7 +499,7 @@ describe("home tiles", () => {
     expect(await tileRefs(home)).toEqual([]);
   });
 
-  it("refuses an Inactive product the menu placed, and a shortcut to one later disabled publishes as an empty slot with a warning", async () => {
+  it("publishes an empty slot and warning when a saved shortcut is later disabled", async () => {
     const f = await menusFixture(fx.db);
     const home = await homeOf(f.lunch);
     await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
@@ -376,9 +512,6 @@ describe("home tiles", () => {
     expect(preview.warnings).toEqual([{ kind: "shortcut_missing", name: "Soup" }]);
     expect(preview.document.home.shortcuts).toEqual([{ kind: "empty" }]);
 
-    expect(await codeOf(() => app((tx) => addShortcut(tx, f.lunch, product(f.soup))))).toBe(
-      "menu.shortcut_unreachable",
-    );
     const rows = await fx.db
       .select()
       .from(sectionMembers)
@@ -404,15 +537,6 @@ describe("home tiles", () => {
     ]);
   });
 
-  it("refuses an Inactive product an included menu placed", async () => {
-    const f = await menusFixture(fx.db);
-    await app((tx) => deactivateProduct(tx, f.lager));
-    expect(await codeOf(() => app((tx) => addShortcut(tx, f.lunch, product(f.lager))))).toBe(
-      "menu.shortcut_unreachable",
-    );
-    expect(await tileRefs(await homeOf(f.lunch))).toEqual([]);
-  });
-
   it("refuses unreachable menu roots and home sections as tiles", async () => {
     const f = await menusFixture(fx.db);
     const leftover = await otherHome();
@@ -430,26 +554,6 @@ describe("home tiles", () => {
     }
   });
 
-  it("refuses a repeated tile, a section that does not exist, and a variant", async () => {
-    const f = await menusFixture(fx.db);
-    await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
-    expect(await codeOf(() => app((tx) => addShortcut(tx, f.lunch, product(f.soup))))).toBe(
-      "menu_section.member_duplicate",
-    );
-    expect(await codeOf(() => app((tx) => addShortcut(tx, f.lunch, section(MISSING))))).toBe(
-      "menu_section.not_found",
-    );
-    expect(await codeOf(() => app((tx) => addShortcut(tx, f.lunch, product(f.large))))).toBe(
-      "menu_section.membership_invalid",
-    );
-    expect(await codeOf(() => app((tx) => addShortcut(tx, f.lunch, product(f.soup), -1)))).toBe(
-      "menu_section.invalid",
-    );
-    expect(await codeOf(() => app((tx) => addShortcut(tx, f.lunch, product(f.lager), 0.5)))).toBe(
-      "menu_section.invalid",
-    );
-  });
-
   it("adds no menu item or offer, and removing a tile removes only the tile (spec §5)", async () => {
     const f = await menusFixture(fx.db);
     const home = await homeOf(f.lunch);
@@ -460,52 +564,15 @@ describe("home tiles", () => {
     expect(await fx.db.select().from(menuItems).orderBy(asc(menuItems.id))).toEqual(itemsBefore);
     expect(await app((tx) => listMenuOffers(tx, [f.lunch]))).toEqual(offersBefore);
     const rootBefore = await tileRefs(f.lunchRoot);
-    await app((tx) => removeShortcut(tx, f.lunch, soup.id));
+    await app((tx) =>
+      editMenuHome(tx, f.lunch, (draft) => {
+        draft.shortcuts = draft.shortcuts.filter(({ memberId }) => memberId !== soup.id);
+      }),
+    );
     expect(await tileRefs(home)).toEqual([{ position: 0, ref: section(f.drinks) }]);
     expect(await tileRefs(f.lunchRoot)).toEqual(rootBefore);
     expect(await fx.db.select().from(menuItems).orderBy(asc(menuItems.id))).toEqual(itemsBefore);
     expect(await app((tx) => listMenuOffers(tx, [f.lunch]))).toEqual(offersBefore);
-  });
-
-  it("removes a tile and closes the gap, and refuses a member the Device Home Page does not hold", async () => {
-    const f = await menusFixture(fx.db);
-    const home = await homeOf(f.lunch);
-    const soup = await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
-    await app((tx) => addShortcut(tx, f.lunch, product(f.lager)));
-    await app((tx) => removeShortcut(tx, f.lunch, soup.id));
-    expect(await tileRefs(home)).toEqual([{ position: 0, ref: product(f.lager) }]);
-    const refused = await captureError(() => app((tx) => removeShortcut(tx, f.lunch, soup.id)));
-    expect(refused).toMatchObject({
-      code: "menu_section.not_found",
-      params: { sectionId: home, memberId: soup.id },
-    });
-  });
-
-  it("moves a tile to an index, past the end meaning last, and refuses a bad index", async () => {
-    const f = await menusFixture(fx.db);
-    const home = await homeOf(f.lunch);
-    const soup = await app((tx) => addShortcut(tx, f.lunch, product(f.soup)));
-    await app((tx) => addShortcut(tx, f.lunch, product(f.lager)));
-    await app((tx) => addShortcut(tx, f.lunch, section(f.beer)));
-    const moved = await app((tx) => moveShortcut(tx, f.lunch, soup.id, 1));
-    expect(moved.map((member) => [member.position, member.ref])).toEqual([
-      [0, product(f.lager)],
-      [1, product(f.soup)],
-      [2, section(f.beer)],
-    ]);
-    await app((tx) => moveShortcut(tx, f.lunch, soup.id, 99));
-    expect((await tileRefs(home)).map((tile) => tile.ref)).toEqual([
-      product(f.lager),
-      section(f.beer),
-      product(f.soup),
-    ]);
-    for (const to of [-1, 1.5])
-      expect(await codeOf(() => app((tx) => moveShortcut(tx, f.lunch, soup.id, to)))).toBe(
-        "menu_section.invalid",
-      );
-    expect(await codeOf(() => app((tx) => moveShortcut(tx, f.lunch, MISSING, 0)))).toBe(
-      "menu_section.not_found",
-    );
   });
 });
 
@@ -520,7 +587,9 @@ describe("publishing the Device Home Page", () => {
     await app(async (tx) => {
       await addShortcut(tx, f.lunch, section(f.beer));
       await addShortcut(tx, f.lunch, product(f.soup));
-      await setHomeDisplay(tx, f.lunch, "menu_first");
+      await editMenuHome(tx, f.lunch, (draft) => {
+        draft.order = "menu_first";
+      });
     });
     const { document } = await app((tx) => previewMenu(tx, f.lunch));
     expect(document.home).toEqual({
@@ -538,10 +607,17 @@ describe("publishing the Device Home Page", () => {
     expect(await state()).toBe("current");
     const lager = await app((tx) => addShortcut(tx, f.lunch, product(f.lager)));
     expect(await state()).toBe("changed");
-    await app((tx) => removeShortcut(tx, f.lunch, lager.id));
+    await app((tx) =>
+      editMenuHome(tx, f.lunch, (draft) => {
+        draft.shortcuts = draft.shortcuts.filter(({ memberId }) => memberId !== lager.id);
+      }),
+    );
     expect(await state()).toBe("current");
-    const [soup] = (await app((tx) => readMenuHome(tx, f.lunch))).shortcuts;
-    await app((tx) => moveShortcut(tx, f.lunch, soup!.memberId, 1));
+    await app((tx) =>
+      editMenuHome(tx, f.lunch, ({ shortcuts }) => {
+        shortcuts.reverse();
+      }),
+    );
     expect(await state()).toBe("changed");
     expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
       {
@@ -567,9 +643,17 @@ describe("publishing the Device Home Page", () => {
         },
       },
     ]);
-    await app((tx) => moveShortcut(tx, f.lunch, soup!.memberId, 0));
+    await app((tx) =>
+      editMenuHome(tx, f.lunch, ({ shortcuts }) => {
+        shortcuts.reverse();
+      }),
+    );
     expect(await state()).toBe("current");
-    await app((tx) => setHomeDisplay(tx, f.lunch, "menu_first"));
+    await app((tx) =>
+      editMenuHome(tx, f.lunch, (draft) => {
+        draft.order = "menu_first";
+      }),
+    );
     expect(await state()).toBe("changed");
     expect((await app((tx) => previewMenu(tx, f.lunch))).changes).toEqual([
       {
@@ -595,19 +679,35 @@ describe("publishing the Device Home Page", () => {
         },
       },
     ]);
-    await app((tx) => setHomeDisplay(tx, f.lunch, "home_first"));
+    await app((tx) =>
+      editMenuHome(tx, f.lunch, (draft) => {
+        draft.order = "home_first";
+      }),
+    );
     expect(await state()).toBe("current");
     // Dinner's status is untouched by Lunch's Device Home Page.
     await publish(f.dinner);
-    await app((tx) => moveShortcut(tx, f.lunch, soup!.memberId, 1));
-    await app((tx) => setHomeDisplay(tx, f.lunch, "menu_first"));
+    await app((tx) =>
+      editMenuHome(tx, f.lunch, ({ shortcuts }) => {
+        shortcuts.reverse();
+      }),
+    );
+    await app((tx) =>
+      editMenuHome(tx, f.lunch, (draft) => {
+        draft.order = "menu_first";
+      }),
+    );
     expect((await app((tx) => menuStatus(tx, [f.dinner]))).get(f.dinner)!.state).toBe("current");
   });
 
   it("a draft display change leaves the live version as it was", async () => {
     const f = await menusFixture(fx.db);
     await publish(f.lunch);
-    await app((tx) => setHomeDisplay(tx, f.lunch, "menu_first"));
+    await app((tx) =>
+      editMenuHome(tx, f.lunch, (draft) => {
+        draft.order = "menu_first";
+      }),
+    );
     const liveOrder = async () =>
       (await app((tx) => readLiveDocuments(tx, [f.lunch]))).get(f.lunch)!.document.home.order;
     expect(await liveOrder()).toBe("home_first");

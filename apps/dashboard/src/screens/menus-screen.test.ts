@@ -170,11 +170,6 @@ const menus: MenuSummary[] = [
   },
 ];
 
-const productMember = (id: string, position: number, productId: string): SectionMember => ({
-  id,
-  position,
-  ref: { kind: "product", productId },
-});
 const sectionMember = (id: string, position: number, sectionId: string): SectionMember => ({
   id,
   position,
@@ -346,10 +341,7 @@ const WRITES = [
   "updateMenuItem",
   "setMenuVariantPrice",
   "publishMenu",
-  "addHomeShortcut",
-  "removeHomeShortcut",
-  "moveHomeShortcut",
-  "setHomeDisplay",
+  "saveMenuHome",
   "scheduleMenuPublication",
   "rescheduleMenuPublication",
   "cancelMenuPublication",
@@ -649,19 +641,7 @@ function api(
     rescheduleMenuPublication: vi.fn(),
     cancelMenuPublication: vi.fn(),
     getMenuHome: vi.fn(async (id: string) => (id === "menu-lunch" ? menuHome() : emptyHome())),
-    addHomeShortcut: vi.fn().mockResolvedValue(productMember("t-new", 3, "p-lager")),
-    removeHomeShortcut: vi.fn().mockResolvedValue(undefined),
-    moveHomeShortcut: vi.fn(async (_menu: string, memberId: string, to: number) => {
-      const ids = menuHome().shortcuts.map((tile) => tile.memberId);
-      ids.splice(ids.indexOf(memberId), 1);
-      ids.splice(to, 0, memberId);
-      return ids.map((id, position) => ({
-        id,
-        position,
-        ref: menuHome().shortcuts.find((tile) => tile.memberId === id)!.ref,
-      }));
-    }),
-    setHomeDisplay: vi.fn().mockResolvedValue(undefined),
+    saveMenuHome: vi.fn(),
     getLiveMenu: vi.fn().mockResolvedValue(null),
     patchLiveMenu: vi.fn(),
     ...overrides,
@@ -8893,7 +8873,7 @@ describe("the Home page tab", () => {
   it.each(["save", "refusal"])(
     "keeps a late %s off a different menu's controls",
     async (outcome) => {
-      const pending = deferred<void>();
+      const pending = deferred<Awaited<ReturnType<DashboardApi["saveMenuHome"]>>>();
       const client = api({
         getMenuHome: vi.fn(async () => ({
           ...menuHome(),
@@ -8901,20 +8881,67 @@ describe("the Home page tab", () => {
         })),
       });
       const el = await mountHome(client);
-      client.setHomeDisplay.mockImplementationOnce(() => pending.promise);
+      client.saveMenuHome.mockImplementationOnce(() => pending.promise);
       emit(control(el), "wt-change", { value: "home_first" });
-      emit(control(el), "wt-change", { value: "menu_first" });
-      expect(client.setHomeDisplay).toHaveBeenCalledExactlyOnceWith("menu-lunch", "home_first");
+      await el.updateComplete;
+      q(el, '[data-test="home-save"]')!.click();
+      expect(client.saveMenuHome).toHaveBeenCalledExactlyOnceWith("menu-lunch", {
+        order: "home_first",
+        shortcuts: menuHome().shortcuts.map(({ memberId, ref }) => ({ memberId, ref })),
+      });
       await goToDinnerHome(el, client);
       const reads = client.getMenuHome.mock.calls.length;
-      if (outcome === "save") pending.resolve();
+      if (outcome === "save") pending.resolve({ ...menuHome(), dropped: [] });
       else pending.reject({ code: "server.internal" });
-      await vi.waitFor(() => expect(control(el).disabled).toBe(false));
+      await pending.promise.catch(() => undefined);
+      await el.updateComplete;
+      expect(control(el).disabled).toBe(false);
       expect(control(el).value).toBe("menu_first");
-      expect(q(el, '[data-test="home-error"]')).toBeNull();
+      expect(q(el, '[data-test="home-save"]')!.closest("wt-form-actions")!.error).toBeFalsy();
       expect(client.getMenuHome.mock.calls.length).toBe(reads);
     },
   );
+
+  it("keeps the latest saved Home page when a Save and two reads answer out of order", async () => {
+    const liveData = new LiveData();
+    const menuWriteRevision = { epoch: "server", sequence: 1 };
+    const client = api({ liveData, menuWriteRevision });
+    const pending = deferred<Awaited<ReturnType<DashboardApi["saveMenuHome"]>>>();
+    client.saveMenuHome.mockReturnValueOnce(pending.promise);
+    const el = await mountHome(client);
+    emit(control(el), "wt-change", { value: "menu_first" });
+    await el.updateComplete;
+    q(el, '[data-test="home-save"]')!.click();
+    await vi.waitFor(() => expect(preview(el)?.busy).toBe(true));
+
+    let sequence = 2;
+    const newest = menuHome();
+    newest.shortcuts[0]!.name = "New burger";
+    client.getMenuRead.mockImplementation(async (id: string, parts: readonly MenuReadPart[]) => ({
+      ...(await menuReadFixture(client, id, parts)),
+      revision: { epoch: "server", sequence },
+    }));
+    client.getMenuHome.mockResolvedValue(newest);
+    liveData.invalidate([{ type: "menus" }]);
+    await vi.waitFor(() => expect(preview(el)!.shortcuts![0]!.name).toBe("New burger"));
+    expect(control(el).value).toBe("menu_first");
+
+    expect(preview(el)!.busy).toBe(true);
+
+    const older = { ...menuHome(), order: "menu_first" as const };
+    pending.resolve({ ...older, dropped: [] });
+    await vi.waitFor(() => expect(preview(el)!.busy).toBe(false));
+    expect(control(el).value).toBe("home_first");
+    expect(preview(el)!.shortcuts![0]!.name).toBe("New burger");
+
+    sequence = 1;
+    client.getMenuHome.mockResolvedValue(older);
+    client.getMenuPreview.mockResolvedValue(dinnerPreview());
+    liveData.invalidate([{ type: "menus" }]);
+    await vi.waitFor(() => expect(preview(el)!.document).toEqual(dinnerPreview().document));
+    expect(control(el).value).toBe("home_first");
+    expect(preview(el)!.shortcuts![0]!.name).toBe("New burger");
+  });
 
   it("reads the preview no second time when the person goes from the Preview tab to the Home page tab", async () => {
     const client = api();
@@ -9934,7 +9961,7 @@ describe("one menu read after an edit", () => {
           };
           return view === "structure"
             ? Response.json({ dropped: [] }, { headers })
-            : new Response(null, { status: 204, headers });
+            : Response.json({ ...home, dropped: [] }, { headers });
         }
         reads.push(path);
         const bodies: Record<string, () => unknown | Promise<unknown>> = {
@@ -9995,6 +10022,11 @@ describe("one menu read after an edit", () => {
           value: "menu_first",
         });
       }
+      if (view !== "structure") {
+        expect(writes).toEqual([]);
+        await el.updateComplete;
+        q(el, '[data-test="home-save"]')!.click();
+      }
       await vi.waitFor(() => expect(writes).toHaveLength(1));
       // The stream notifies the screen of the accepted write's changed table.
       if (notification === "after")
@@ -10035,15 +10067,13 @@ describe("one menu read after an edit", () => {
                 ],
               }),
             }
-          : view === "shortcut"
-            ? {
-                path: "/management-api/menus/menu-lunch/home/shortcuts/t-burger",
-                body: undefined,
-              }
-            : {
-                path: "/management-api/menus/menu-lunch/home-display",
-                body: { order: "menu_first" },
+          : {
+              path: "/management-api/menus/menu-lunch/home",
+              body: {
+                order: home.order,
+                shortcuts: home.shortcuts.map(({ memberId, ref }) => ({ memberId, ref })),
               },
+            },
       );
       expect(menuReads, JSON.stringify(menuReads)).toHaveLength(1);
     },

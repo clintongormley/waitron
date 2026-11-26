@@ -609,8 +609,8 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
   it.each([
     ["ready", 390],
     ["ready", 1280],
-    ["disabled while a remove is sent", 390],
-    ["disabled while a remove is sent", 1280],
+    ["disabled while Save is sent", 390],
+    ["disabled while Save is sent", 1280],
   ] as const)(
     "accessible Home page tab editing its shortcuts with each one's remove button %s, %ipx wide",
     async (state, width) => {
@@ -626,8 +626,12 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
       await vi.waitFor(() => expect(remove()).not.toBeNull());
       expect(remove()!.disabled).toBe(false);
       if (state !== "ready") {
-        el.api.removeHomeShortcut = vi.fn(() => new Promise<never>(() => undefined));
-        remove()!.click();
+        el.api.saveMenuHome = vi.fn(() => new Promise<never>(() => undefined));
+        q(el, 'wt-segmented-control[name="home-order"]').dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value: "menu_first" } }),
+        );
+        await el.updateComplete;
+        q(el, '[data-test="home-save"]').click();
         await vi.waitFor(() => {
           expect(remove()!.disabled).toBe(true);
           expect(
@@ -648,9 +652,10 @@ describe.each(["light", "dark"] as const)("menus screen (%s)", (theme) => {
       "dashboard-device-home-preview",
     ) as HTMLElementTagNameMap["dashboard-device-home-preview"];
     await vi.waitFor(() => {
-      if (!preview.shadowRoot!.querySelector('[data-test="add-product"]')) throw new Error("edit");
+      if (!preview.shadowRoot!.querySelector('[data-test="add-shortcuts"]'))
+        throw new Error("edit");
     });
-    preview.shadowRoot!.querySelector<HTMLElement>('[data-test="add-product"]')!.click();
+    preview.shadowRoot!.querySelector<HTMLElement>('[data-test="add-shortcuts"]')!.click();
     await vi.waitFor(() =>
       expect(
         (q(el, 'wt-modal[data-test="add-shortcut"]') as HTMLElement & { open: boolean }).open,
