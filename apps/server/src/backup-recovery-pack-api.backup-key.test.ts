@@ -14,7 +14,8 @@ import { decodeMasterKeyCode } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { decryptBackupFile, readArtifactFileHeader } from "./artifact-cipher-file.js";
-import { loadBackupSettings } from "./backup-config.js";
+import { mountBackupApi } from "./backup-api.js";
+import { loadBackupSettings, loadRecoveryKey } from "./backup-config.js";
 import { writeBackupKey } from "./backup-env-writer.js";
 import { keyFingerprint } from "./backup-key-fingerprint.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
@@ -249,7 +250,87 @@ describe("Make a new master key moves the backup key to N+1 of the new master ke
       fromCurrentMasterKey: false,
     });
   });
+
+  it("after a failed backup.env write, Change the backup key with the new master key writes the key the pack prints", async () => {
+    const stateDir = await stateFolder(3);
+    const f = fixture(stateDir);
+    await chmod(stateDir, 0o500);
+    const response = await f.make(true);
+    await chmod(stateDir, 0o700);
+    expect(response.status).toBe(200);
+    const typed = response.headers.get("x-waitron-master-key")!;
+    const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
+    const printed = decodeArchiveRecoveryPack(file.archiveCode!).recoveryKey;
+    expect(parseRecoveryKit(file.bucketCode!).recoveryKey).toBe(printed);
+    expect((await keyFile(stateDir)).WAITRON_BACKUP_RECOVERY_KEY).toBe(
+      heldBackupKey(OLD_MASTER, 3).key,
+    );
+
+    const changed = await (
+      await rotateApp(stateDir)
+    ).post("/api/backup/rotate", { masterKey: typed });
+    expect(changed.status).toBe(200);
+    await changed.arrayBuffer();
+    expect(await keyFile(stateDir)).toMatchObject({
+      WAITRON_BACKUP_RECOVERY_KEY: printed,
+      WAITRON_BACKUP_KEY_NUMBER: "4",
+      WAITRON_BACKUP_MASTER_KEY_ID: masterKeyId(
+        sealingPublicKey(decodeMasterKeyCode(typed)),
+      ).toString("hex"),
+    });
+    expect((await f.status()).backupKey).toMatchObject({
+      number: 4,
+      fingerprint: keyFingerprint(printed),
+      fromCurrentMasterKey: true,
+    });
+  }, 60_000);
 });
+
+/** The backup routes, whose "Change the backup key" writes to `stateDir`'s `backup.env`. */
+async function rotateApp(stateDir: string) {
+  const dest = await folder("pack-backup-key-dest-");
+  const venueDir = await folder("pack-backup-key-venue-");
+  const sup = supervisorWithJob({
+    nodeId: BACKUP_NODE_ID,
+    buildConfig: async () =>
+      loadBackupSettings({
+        env: await loadBoxEnv({}, stateDir),
+        readSealed: async () => ({
+          ...ARCHIVES,
+          revision: "1",
+          destinations: [{ kind: "local-fs", id: "local", dir: dest }],
+        }),
+      }),
+    readSingletonRole: () => "primary",
+    venueDir,
+    modules: ALL_MODULES,
+    environment: "production",
+    stateDir,
+    jitterSeed: "seed",
+    readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+    log: () => {},
+  });
+  stops.push(() => sup.stop());
+  await sup.reload();
+  const app = new Hono();
+  mountBackupApi(
+    app,
+    {
+      supervisor: sup,
+      db: suite.db,
+      ring: PACK_RING,
+      stateDir,
+      readRecoveryKey: async () => loadRecoveryKey(await loadBoxEnv({}, stateDir)),
+      readBoxEnv: () => loadBoxEnv({}, stateDir),
+      sealedState: { refresh: async () => "sealed" },
+      readStream: () => ({ state: "off" }),
+      stream: { reload: async (write) => void (await write?.()) },
+      turns: createTurns(),
+    },
+    () => {},
+  );
+  return packRequests(app, { token: () => admin.token, sockets });
+}
 
 describe("the backup key is written only once the pack and its master key are saved", () => {
   const masterKeyRows = () => suite.db.select().from(masterKeys);
