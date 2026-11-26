@@ -927,7 +927,7 @@ export async function previewAdjustment(
   ask: AdjustmentAsk,
   venueLocale: string,
 ): Promise<AdjustmentPreview> {
-  await requireOpenNotice(tx, ask.orderId, ask.reapplies);
+  await requireOpenNotice(tx, ask);
   const replacing = await setMenuReplacement(tx, ask);
   const ending =
     replacing?.ending ??
@@ -1128,7 +1128,7 @@ export async function applyAdjustment(
     "adjustment.apply",
     { ...command, expectedEdit, approverId: approver?.personId },
     async () => {
-      await requireOpenNotice(tx, args.orderId, args.reapplies);
+      await requireOpenNotice(tx, args);
       const before = args.action === "cancel" ? null : await totalBeforeEdit(tx, cfg, args.orderId);
       await endReplacedOnSetMenu(tx, args);
       await endDiscountsCancelledBy(tx, args, () => planAdjustment(tx, args, venueLocale));

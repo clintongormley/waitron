@@ -492,3 +492,58 @@ it("answers what came off the one Soup given Bread, 3.00 of a 6.00 off two Soups
     }),
   ]);
 });
+
+it("refuses to give a Soup's 50% again on the Wine, keeping the Soup's notice", async () => {
+  const bill = await billOf([dish("Soup"), glassOf(wine.small)]);
+  const soup = await rowOf(bill.tabId, "Soup");
+  const given = await give(bill.tabId, soup.id, 5000);
+  await editExtras(bill.tabId, soup.lineNo, [spec.bread]);
+  const glass = (await rowOf(bill.tabId, "Wine")).id;
+
+  await expect(preview(bill.tabId, glass, 5000, given)).rejects.toMatchObject(REFUSED);
+  await expect(give(bill.tabId, glass, 5000, given)).rejects.toMatchObject(REFUSED);
+
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({ adjustmentId: given, reapplyOn: { lineId: soup.id } }),
+  ]);
+});
+
+it("gives a 50% again over both Soups of a row when the line its notice names is among them", async () => {
+  const { bill, given, first, second } = await halfOffTwoSoups();
+  await inTx(venue, async (tx) =>
+    updateOrderLine(
+      tx,
+      venue.cfg,
+      bill.tabId,
+      first.lineNo,
+      { portionLineNos: [second.lineNo], extras: [spec.bread] },
+      await readOrderRevision(tx, bill.tabId),
+      {
+        admission: testTradingAdmission(),
+        operatorId: venue.operator.personId,
+        expectedEdit: await readBillEditState(tx, bill.tabId),
+      },
+    ),
+  );
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({ adjustmentId: given, reapplyOn: { lineId: first.id } }),
+  ]);
+  const ask = {
+    ...(await askOf(bill.tabId, second.id, 5000, given)),
+    lineIds: [second.id, first.id],
+  };
+
+  expect(
+    (await inTx(venue, (tx) => previewAdjustment(tx, venue.cfg, ask, venue.cfg.locale))).reduction,
+  ).toBe("7.50");
+  await inTx(venue, (tx) =>
+    applyAdjustment(
+      tx,
+      venue.cfg,
+      { ...ask, admission: testTradingAdmission(), submissionId: randomUUID() },
+      venue.cfg.locale,
+    ),
+  );
+
+  expect(await noticesOn(bill)).toBeUndefined();
+});

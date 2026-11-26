@@ -65,15 +65,20 @@ export function discountNoticesOf(
   return found === undefined ? {} : { discountNotices: found };
 }
 
-/** Refuses `reapplies` unless it names a notice open on `orderId`. */
+/** Refuses `reapplies` unless it names a notice open on `orderId` and, when the notice names a
+ * line, the ask gives it on that line or on a row holding it. */
 export async function requireOpenNotice(
   tx: Transaction,
-  orderId: string,
-  reapplies: string | undefined,
+  ask: { orderId: string; reapplies?: string; lineId: string | null; lineIds?: string[] },
 ): Promise<void> {
-  if (reapplies === undefined) return;
-  const open = (await readBillsDiscountNotices(tx, [orderId])).get(orderId) ?? [];
-  if (!open.some(({ adjustmentId }) => adjustmentId === reapplies)) {
+  if (ask.reapplies === undefined) return;
+  const open = (await readBillsDiscountNotices(tx, [ask.orderId])).get(ask.orderId) ?? [];
+  const notice = open.find(({ adjustmentId }) => adjustmentId === ask.reapplies);
+  const on = notice?.reapplyOn?.lineId;
+  if (
+    notice === undefined ||
+    (on !== undefined && ask.lineId !== on && !(ask.lineIds ?? []).includes(on))
+  ) {
     throw new AppError("management.request_invalid", { field: "reapplies" });
   }
 }
