@@ -434,6 +434,7 @@ describe("two-party correction decisions", () => {
       ).toMatchObject({
         respondsToEntryId: request,
         correctionStatus: kind === "disagree" ? "disputed" : "declined",
+        correctionReason: kind === "disagree" ? "I left at five" : "Finished later",
         correctsEntryId: target,
       });
       await unchangedRefusal(

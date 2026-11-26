@@ -218,10 +218,11 @@ describe("attendance questions before work", () => {
     ]);
   });
 
-  it.each([false, true])(
-    "shows the reason once for a declined missing-time request (paired: %s)",
-    async (paired) => {
+  it.each(["single", "pair", "pair across work days"])(
+    "shows the reason once for a declined missing-time request (%s)",
+    async (scenario) => {
       const prompt = attendanceMissingTimesPrompts()[1];
+      const acrossDays = scenario === "pair across work days";
       const clockIn = attendanceEntry({
         entryId: "request-in",
         entryKind: "correction",
@@ -240,10 +241,10 @@ describe("attendance questions before work", () => {
       const clockOut = attendanceEntry({
         ...clockIn,
         entryId: "request-out",
-        eventAt: "2026-11-24T16:00:00.000Z",
+        eventAt: acrossDays ? "2026-11-25T04:30:00.000Z" : "2026-11-24T16:00:00.000Z",
         extension: { ...clockIn.extension!, missingEntryKind: "out" },
       });
-      const requests = paired ? [clockIn, clockOut] : [clockIn];
+      const requests = scenario === "single" ? [clockIn] : [clockIn, clockOut];
       const declines = requests.map((entry) =>
         attendanceEntry({
           ...entry,
@@ -257,7 +258,8 @@ describe("attendance questions before work", () => {
           },
         }),
       );
-      prompt.history = [...requests, ...declines];
+      const history = [...requests, ...declines];
+      prompt.history = acrossDays ? [clockIn, declines[0]!] : history;
       const item = attendanceItem({
         direction: "worker_request",
         status: "declined",
@@ -271,14 +273,14 @@ describe("attendance questions before work", () => {
         })),
         reason: "The till was offline",
         requestedByPersonId: "worker",
-        history: prompt.history,
+        history,
       });
       const locale = currentLocale();
       try {
         const { el } = await mount({ inbox: attendanceInbox([prompt], [item]) });
         const lines = () => Array.from(el.shadowRoot!.querySelectorAll("li"), words);
         expect(lines()).toEqual(
-          paired
+          scenario === "pair"
             ? [
                 "You asked to add a clock-in at 09:00 · declined by a manager",
                 "You asked to add a clock-out at 17:00: The till was offline · declined by a manager",
@@ -290,7 +292,7 @@ describe("attendance questions before work", () => {
         setLocale("es-ES");
         await el.updateComplete;
         expect(lines()).toEqual(
-          paired
+          scenario === "pair"
             ? [
                 "Pediste añadir una entrada a las 09:00 · rechazada por un responsable",
                 "Pediste añadir una salida a las 17:00: The till was offline · rechazada por un responsable",
