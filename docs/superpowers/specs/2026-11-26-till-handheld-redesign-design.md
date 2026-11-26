@@ -398,7 +398,7 @@ in 24px bold, a muted line with the table, "Guest 1 of 3" and the bill; the shar
 "Leave a tip?" (muted) above the tip choices drawn as §7.11's step 2 (one under another, full
 width, 64px, the percentage at the left and its amount on the share at the right end), then "Custom
 amount"; one plain button at the foot, "No tip · hand back to your waiter". `ba` 2 draws the three
-percentages side by side; they follow step 2 so the two tip screens match (a call made in the write-up).
+percentages side by side; they follow step 2 so the two tip screens match (owner, 2026-11-26: "A", the column on both).
 
 **The dish rows** (`bb` 1): rows the full width, plain, with a line under each, at least 52px high.
 Left to right: a 24px square tick box with rounded corners, the quantity (bold), the name with any
@@ -847,8 +847,8 @@ The build applies the same rule to every other error.
 3. **(pass 2) A tip paid in cash** stays in the amount on the Cash screen (§7.5). How a cash tip is
    recorded and shared out stays with the tips design.
 4. **The guest's tip choices are drawn two ways** (`o` frame 2 a column, `ba` frame 2 a row of
-   three). Settled in the write-up of §7.10 and §7.11: one look, the column, on both screens, so
-   the guest's two tip screens match.
+   three). Settled by the owner, 2026-11-26, shown both frames side by side and asked "column,
+   row, or each its own?": "A" (the column), on both screens, so the guest's two tip screens match.
 
 ## 12. Pictures
 
