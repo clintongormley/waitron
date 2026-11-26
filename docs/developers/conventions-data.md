@@ -5845,7 +5845,7 @@ setup server. Use a bundle carrying its build identity and migrations. Version 2
 a request saved by the same build. The post-start report and replacement retry use the saved
 protocol version. Each version 2 report computes the running build's target once and checks it
 before sending proofs. Recognised version 1 keeps its existing proof.
-The [local setup trial](../operations/backup-verifier-release.md#local-setup-trial-26-november-2026)
+The [local setup trial](https://github.com/clintongormley/waitron/pull/4417)
 records the tested source, image, target and Cloud acknowledgment.
 
 An ordinary archive restore ignores a recognised v1 Cloud cache: its key or file permissions

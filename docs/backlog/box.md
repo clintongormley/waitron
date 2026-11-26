@@ -1824,7 +1824,7 @@ container or menu admission.
 Keep Cloud snapshots unavailable until its integration uses the implementing pinned release,
 validates the complete private result, confirms its own child and scratch cleanup, and admits
 only a current claim. Preproduction setup uses version 2 and checks the running build's
-verification target. The [pinned local trial](../operations/backup-verifier-release.md#local-setup-trial-26-november-2026)
+verification target. The [pinned local trial](https://github.com/clintongormley/waitron/pull/4417)
 recovered a checked snapshot with the continuous source absent and Cloud acknowledged it after
 restart. Qualify the published build separately before enabling its snapshots.
 

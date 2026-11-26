@@ -60,29 +60,7 @@ from an unprovisioned box with an empty state folder. If a restore is already st
 state and finish it on the build that staged it. A completed version 2 restore reports from the
 build that performed it. A completed version 1 restore reports using its saved proof.
 
-### Local setup trial, 26 November 2026
-
-The trial used Waitron source `b2ecd05f84920f826500b2bb3a455aeba456c9d4` and the arm64 box image
-`sha256:50ebf121e69a2d000d7e4bc6c3603b75b18d464acf55b6abb51f3662078f6e17`.
-The local Cloud ran `0502b1c6b1ba40f58de2d2df987f4600104a3000`, including Cloud #1382,
-in image `sha256:a43cb4cb4502cfc3b1e93c34033087d91c607fa5a3622b71b9a4e9b3a17a2468`.
-Its checker used the candidate's compiled verifier and migrations in
-`sha256:c6dae13785db0e029870653bc21688490cc3a23d8739958743411387226d3ca4`.
-Setup and Cloud both recorded target
-`d413e05ff2c1d06d1d1d16d37d85948ecd24136490a13888160756d45003bd9d`
-with runtime fingerprint `c6b02bc604568a1c9e925ee72901288e49021f9a0c2d1c2af11a75fbf2b7e7a2`.
-
-The isolated venue had no continuous copy. Cloud counted zero stream objects and pointer rows
-before and after recovery. It admitted the 105,770-byte archive with SHA-256
-`dd20f4c9c1216a01cd4ea12dea06d1b65e3b41ce4591c83844bb3e6ad65d9959`. The checker passed
-all eight module checks, recorded `activation: "not_attempted"` and removed its child container.
-
-The disposable venue's owner signed in, confirmed their identity and approved the named copy.
-Setup reviewed it, used the venue's master key and confirmed the time and isolation before
-staging. After the restart, SQLite reported integrity `ok`. The six sales included
-`A-0CNNY/123` and `A-0CNNY/124`, and four new series used installation `0EFF3`.
-The box recorded `reported` and Cloud recorded `restored` for the same request and copy at
-13:55:06 UTC, before approval expired at 14:53:10 UTC.
+The [local setup trial](https://github.com/clintongormley/waitron/pull/4417) records the tested build and recovery outcome.
 
 ## Complete the joint qualification
 
