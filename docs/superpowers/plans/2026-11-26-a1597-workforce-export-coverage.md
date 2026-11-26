@@ -7,15 +7,19 @@ how the monthly close reads working-time rules. The queue asks for a test of
 - Extend `packages/workforce-es/src/record-export.test.ts` using its existing `useVenueDb` fixture
   and transaction helper. Call `WORKFORCE_ES_RECORD_EXPORT.workSummaryRules` through the package
   export, as the attendance loop calls the exporter through its interface.
-- Check that a venue without an agreement gets `null`. Insert a real agreement with six working
-  days and `period_net`, then check for six working days and `period-net` in the result. In a
-  separate case, make the transaction's first select throw and check that the seat rejects with
-  the same error. The existing convenio tests cover the full mapping of agreement fields.
-- Capture the failing package coverage before editing. Run the changed test file, then
-  `pnpm --filter @waitron/workforce-es test:coverage` to confirm the floors and the formerly
-  uncovered lines. Keep production and coverage settings as they are. Expect about 25 added test
-  lines and zero production lines. Remove an A1597 backlog entry if one was added before landing.
-- After the required PR checks pass and the change lands, dispatch `ci.yml` on main and record the
-  run's head and result, including the workforce-es coverage result in `test-light-b`.
+- Check that a venue without an agreement gets `null`. Use `seedConvenioConfig` to set six working
+  days, `period_net`, and 420 daily target minutes. Assert those three fields, with the model
+  returned as `period-net`. The existing convenio tests cover the full field mapping.
+- In a separate case, use `vi.spyOn(tx, "select").mockImplementationOnce` inside the transaction
+  callback to throw a registered `AppError("setup.request_invalid", { field: "agreement" })`.
+  Check that the exporter rejects with the same error object. In a disposable checkout, remove
+  the code comparison once and confirm this case fails because the exporter returns `null`.
+- The baseline `pnpm --filter @waitron/workforce-es test:coverage` failed at 97.9% statements
+  with 139 tests passing. Run the changed test file and the same coverage command to confirm the
+  floors and the formerly uncovered lines. Expect about 25 added test lines and zero production
+  or coverage configuration changes.
+- After required PR checks pass and the change lands, run `gh workflow run ci.yml --ref main`
+  with the probe option at its default of false. Record the run's head, confirm it contains the
+  merge, and record its result and the workforce-es coverage from `test-light-b` in progress.log.
 
-Queue source: Lane I, A1597, queued by the watcher on 26 November 2026 at 03:31.
+Queue source in Lane I, A1597, queued by the watcher on 26 November 2026 at 03:31.
