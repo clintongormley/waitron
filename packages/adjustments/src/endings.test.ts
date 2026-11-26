@@ -599,6 +599,10 @@ describe("the notices a bill answers", () => {
       spy.mockRestore();
     }
     expect(plans.some((d) => d.startsWith("SCAN adjustment_endings"))).toBe(false);
+    // `json_each` is the list of bill ids the call passes in, not a stored table.
+    expect(plans.filter((d) => d.startsWith("SCAN") && !d.startsWith("SCAN json_each"))).toEqual(
+      [],
+    );
     expect(
       plans.some((d) =>
         d.startsWith("SEARCH adjustment_endings USING INDEX adjustment_endings_working_order_idx"),
