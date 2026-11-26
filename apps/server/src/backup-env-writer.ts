@@ -60,7 +60,7 @@ export interface BackupKeyRecord {
   keyNumber: number;
   /** 16 lower-case hex characters. */
   masterKeyId: string;
-  /** `YYYY-MM-DD`: the day the master key was made, as its name begins. */
+  /** `YYYY-MM-DD`: the day the master key's name begins with. */
   masterKeyDay: string;
 }
 

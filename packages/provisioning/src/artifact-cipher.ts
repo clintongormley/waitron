@@ -53,7 +53,7 @@ export interface BackupKeyFrameInput {
   backupKey: Uint8Array;
   keyNumber: number;
   masterKeyId: Uint8Array;
-  /** `YYYY-MM-DD`: the day the master key was made, as its name begins. */
+  /** `YYYY-MM-DD`: the day the master key's name begins with. */
   masterKeyDay: string;
 }
 

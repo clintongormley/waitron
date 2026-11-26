@@ -1,6 +1,6 @@
 import { backupKey, makeMasterKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
 import { describe, expect, it } from "vitest";
-import { backupKeyFrameInput, backupKeyRecord } from "./backup-key-record.js";
+import { backupKeyFrameInput, backupKeyRecord, masterKeyDayOf } from "./backup-key-record.js";
 
 describe("backupKeyRecord", () => {
   it("names backup key N of the master key by its number and the master key's id and day", () => {
@@ -17,6 +17,21 @@ describe("backupKeyRecord", () => {
     expect(record.masterKeyId).toMatch(/^[0-9a-f]{16}$/);
     expect(backupKeyRecord(masterKey, 1, publicKey, "2026-11-23").key).not.toBe(record.key);
   });
+});
+
+describe("masterKeyDayOf", () => {
+  it("takes the day a master key's name begins with", () => {
+    expect(masterKeyDayOf("2026-11-23 · ABCD")).toBe("2026-11-23");
+  });
+
+  it.each(["ABCD · 2026-11-23", "2026-02-30 · ABCD", ""])(
+    "refuses %j, whose first ten characters are not a calendar date",
+    (name) => {
+      expect(() => masterKeyDayOf(name)).toThrow(
+        expect.objectContaining({ code: "master_key.name_day_invalid" }),
+      );
+    },
+  );
 });
 
 describe("backupKeyFrameInput", () => {

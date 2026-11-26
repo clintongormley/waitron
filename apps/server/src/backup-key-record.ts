@@ -1,6 +1,6 @@
 import { backupKey, masterKeyId } from "@waitron/credentials";
 import type { BackupKeyFrameInput } from "@waitron/provisioning";
-import { AppError, decodeMasterKeyCode, isAppError } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode, isAppError, isCalendarDate } from "@waitron/shared";
 import { backupKeyBytes } from "./artifact-cipher-file.js";
 import { loadBackupKey, loadKeyRotatedAt } from "./backup-config.js";
 import { writeBackupKey, type BackupKeyRecord } from "./backup-env-writer.js";
@@ -28,7 +28,11 @@ export function backupKeyRecord(
 
 /** The day a master key's name begins with: `YYYY-MM-DD · XXXX`. */
 export function masterKeyDayOf(name: string): string {
-  return name.slice(0, 10);
+  const day = name.slice(0, 10);
+  if (!isCalendarDate(day)) {
+    throw new AppError("master_key.name_day_invalid", {});
+  }
+  return day;
 }
 
 /** What every kind of setup writes for the master key it has just made and shows. */

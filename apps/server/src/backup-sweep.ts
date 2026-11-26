@@ -84,7 +84,7 @@ export interface BackupSweepDeps {
   resolvers: Record<string, string>;
   stateDir: string;
   venueDir?: string;
-  /** Backup key N and what the file's header names: N and its master key id. */
+  /** Backup key N and what the file's header names. */
   backupKey: BackupKeyFrameInput;
   /** Shared working directory for local backups. Cloud-enabled runs keep the database copy in private scratch. */
   stagingDir: string;
