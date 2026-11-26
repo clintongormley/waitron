@@ -37,7 +37,8 @@ import {
   type ProvisionRequest,
 } from "./provision.js";
 import type { Logger, LogLevel } from "./logger.js";
-import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { mountSetup } from "./setup-api.js";
+import { type SetupDeps } from "./setup-api-deps.js";
 import { createSetupOperationStore, type SetupOperationStore } from "./setup-operation.js";
 import { STUB_NODE } from "./testing/node-copy.js";
 

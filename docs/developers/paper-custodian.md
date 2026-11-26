@@ -519,7 +519,7 @@ confirming the old box is off; `0` leaves that confirmation unset. The archive e
 still `recoveryKey`. The browser API client and candidate restore screens forward the recovery pair.
 A setup restore request without the pair is refused (`setup.request_invalid`, field
 `recoveryOperation`) unless the box names `WAITRON_RECOVERY_OPERATION_FILE`; a raw archive upload
-cannot carry the pair (`recoveryCredentials` in `apps/server/src/setup-api.ts`).
+cannot carry the pair (`recoveryCredentials` in `apps/server/src/setup-operation-routes.ts`).
 
 The setup request's saved hash includes the operation and node key, so a completed request cannot
 be replayed with different inputs. Its saved progress contains neither key. Forwarding the operation

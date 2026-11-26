@@ -12,7 +12,7 @@ import {
   type FirstSetupState,
   type VenueResult,
 } from "@waitron/provisioning";
-import type { SetupDeps } from "./setup-api.js";
+import type { SetupDeps } from "./setup-api-deps.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";

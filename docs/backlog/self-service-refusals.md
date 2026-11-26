@@ -527,6 +527,8 @@ _2026-11-16, SETUP-OTHER-ENVIRONMENT (chosen by the watcher; not owner-reviewed)
 
 _2026-11-16, LIVE-SETUP-STAMP-ORDER: the [stamp-order fix](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-live-setup-stamp-order.md) prevents a new attempt refused before activation starts from leaving a production stamp; existing stranded attempts are outside that change._
 
+_On 26 November 2026 the half-finished adopt check moved with `/setup-api/reset-incomplete-adopt` to `apps/server/src/setup-operation-routes.ts`._
+
 ### `shell.reset.resetting`
 
 Screen: Setup wizard. Fix: [setup-reset](#setup-reset).
@@ -543,6 +545,8 @@ State: Reset was requested. The warning explicitly covers the case where the sup
 Route: Existing: reload after restart. Missing if the half-join remains: a retry/restart procedure and a clear outcome; do not assert success merely because the reset endpoint answered.
 
 _2026-11-11, A1089 slice 1: the words no longer say to contact support. When joining again reports the join stopped partway, the page offers the reset again (`#offerReset` in `apps/setup/src/setup-app.ts`), and the words now say to press Reset this server again. Still open: nothing tells the person what to do if a repeated reset never takes effect. The rest of this entry records the earlier tree._
+
+_On 26 November 2026 `/setup-api/reset-incomplete-adopt` moved to `apps/server/src/setup-operation-routes.ts`. It hands the restart to `restartAfterReply` in `apps/server/src/setup-api.ts`._
 
 ### `aeat_certificate.refused.check_failed`
 
@@ -576,7 +580,7 @@ Message: `shell.not_ready`. Fix: [setup-readiness](#setup-readiness).
 
 Wording: `apps/setup/src/i18n/strings/shell.ts:23`, `apps/setup/src/i18n/strings/shell.ts:164`.
 
-State: The setup shell maps setup.not_ready to this message (setup-app.ts:214, :220, :353 and :1528). The code also means a required reset callback is absent (setup-api.ts:1053), or a recovery artifact/directory fails a size/type/count check (first-setup-resolution-inspection.ts:161 and :196). None of those conditions changes merely by waiting. Bug-only: no, persistent dependency/file conditions are explicit.
+State: The setup shell maps setup.not_ready to this message (setup-app.ts:214, :220, :353 and :1528). The code also means a required reset callback is absent (`/setup-api/reset-incomplete-adopt` in `apps/server/src/setup-operation-routes.ts`), or a recovery artifact/directory fails a size/type/count check (first-setup-resolution-inspection.ts:161 and :196). None of those conditions changes merely by waiting. Bug-only: no, persistent dependency/file conditions are explicit.
 
 Route: Missing: distinguish temporary preparation from unsupported/unavailable recovery and retained-file refusal. Offer a supported source or administrator recovery route. A1042 (#2101, landed 2026-10-26) changed some of these paths; recheck them against main.
 

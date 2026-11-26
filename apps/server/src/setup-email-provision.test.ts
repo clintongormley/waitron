@@ -12,7 +12,8 @@ import { seedVenue } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { loadKeyRing, tryGetCredential, venueCredentials } from "@waitron/credentials";
-import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { mountSetup } from "./setup-api.js";
+import { type SetupDeps } from "./setup-api-deps.js";
 import { resolveEmailDelivery } from "./email-delivery.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 

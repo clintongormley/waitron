@@ -326,7 +326,7 @@ page in that language, so `/help/es`, `/help/es/x/y` and `/help/es/products/` an
 every other address gets it in English.
 Without that catch-all those addresses would fall through to whatever is mounted later: a setup box
 with no built setup app answers every other GET with its 200 placeholder
-(`apps/server/src/setup-api.ts:1412`).
+(`mountSetup` in `apps/server/src/setup-api.ts`).
 
 ### The page's look, its token copies and its theme
 

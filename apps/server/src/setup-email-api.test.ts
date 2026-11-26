@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { describe, expect, it } from "vitest";
-import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { mountSetup } from "./setup-api.js";
+import { type SetupDeps } from "./setup-api-deps.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import { smtpRig, smtpTestTls } from "./testing/smtp-settings-fixture.js";
 

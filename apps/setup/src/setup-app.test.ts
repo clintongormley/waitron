@@ -2460,7 +2460,8 @@ describe("setup-app", () => {
         needs: ["venue"],
         ...(operation === undefined ? {} : { operation }),
       } satisfies SetupStatus);
-    // 409: setup-api.ts's ADOPT_STATUS; 500: packages/server-kit/src/error-boundary.ts.
+    // ADOPT_STATUS in apps/server/src/setup-api-errors.ts sets the 409. The 500 comes from
+    // packages/server-kit/src/error-boundary.ts.
     const answered = [
       ["setup.operation_conflict", 409],
       ["server.internal", 500],

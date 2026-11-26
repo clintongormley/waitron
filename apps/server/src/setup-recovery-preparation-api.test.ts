@@ -9,7 +9,8 @@ import { generateNodeKeyPair } from "@waitron/membership";
 import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
 import { prepareStreamRestore } from "./restore-stream.js";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
-import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { mountSetup } from "./setup-api.js";
+import { type SetupDeps } from "./setup-api-deps.js";
 import type { PrepareRecovery } from "./setup-recovery-preparation-api.js";
 
 vi.mock("./restore-stream.js", { spy: true });

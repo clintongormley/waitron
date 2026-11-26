@@ -11,7 +11,7 @@ import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./pr
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { activateFirstFiscal } from "./first-fiscal-activation.js";
-import type { SetupDeps } from "./setup-api.js";
+import type { SetupDeps } from "./setup-api-deps.js";
 import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
   observeTimeServiceHourClock: async () => ({

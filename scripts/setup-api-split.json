@@ -1,0 +1,90 @@
+{
+  "tsconfig": "apps/server/tsconfig.json",
+  "moves": [
+    {
+      "source": "apps/server/src/setup-api.ts",
+      "keep": ["SETUP_PLACEHOLDER_HTML", "REVALIDATE_CACHE_CONTROL", "mountSetup"],
+      "lift": {
+        "mount": "mountSetup",
+        "groups": [
+          {
+            "mountSetupJoinRoutes": {
+              "first": "local joinHolder",
+              "last": "post /setup-api/join/confirm",
+              "parameters": { "app": "Hono", "deps": "SetupDeps", "log": "Logger" },
+              "returns": ["holderOf", "refuseJoinElsewhere"]
+            },
+            "mountSetupCloudRecoverySessionRoutes": {
+              "first": "post /setup-api/cloud-recovery/start",
+              "last": "post /setup-api/cloud-recovery/start-again",
+              "parameters": { "app": "Hono", "deps": "SetupDeps", "log": "Logger" }
+            }
+          },
+          {
+            "mountSetupOperationRoutes": {
+              "first": "local provisioning",
+              "last": "post /setup-api/configuration",
+              "parameters": {
+                "app": "Hono",
+                "deps": "SetupDeps",
+                "log": "Logger",
+                "holds": "WeakMap<Request, FirstSetupHold>",
+                "runOperation": "<T>(request: Request, kind: Parameters<SetupOperationStore[\"run\"]>[0], hash: string, body: (operation: ActiveSetupOperation) => Promise<T>) => Promise<T>",
+                "restartAfterReply": "(c: Context, requestRestart: () => void, handle: (mustRestart: () => void) => Promise<Response>) => Promise<Response>",
+                "cloudSignIn": "SetupCloudSignIn | undefined"
+              },
+              "returns": ["setupBusy"]
+            }
+          }
+        ]
+      },
+      "targets": {
+        "apps/server/src/setup-api-deps.ts": ["BucketRestoreInput", "SetupDeps"],
+        "apps/server/src/setup-api-errors.ts": [
+          "CLOCK_STEP_STATUS",
+          "PROVISION_STATUS",
+          "runProvision",
+          "ADOPT_STATUS",
+          "runAdopt",
+          "runJoin",
+          "RESET_STATUS",
+          "runReset",
+          "ARCHIVE_RESTORE_STATUS",
+          "BUCKET_RESTORE_STATUS",
+          "runRestore",
+          "runBucketRestore",
+          "runConfiguration",
+          "directError"
+        ],
+        "apps/server/src/setup-request-fields.ts": [
+          "MAX_RESTORE_UPLOAD_BYTES",
+          "invalidRequest",
+          "asObject",
+          "asString",
+          "asNullableString"
+        ],
+        "apps/server/src/setup-provision-input.ts": [
+          "asOptionalName",
+          "asStringArray",
+          "parseSetupAdmin",
+          "parseVenue",
+          "parseProvisionPayload",
+          "throwawayMarker"
+        ],
+        "apps/server/src/setup-join-routes.ts": ["JOIN_TAB_LIVE_MS", "mountSetupJoinRoutes"],
+        "apps/server/src/setup-cloud-recovery-session-routes.ts": [
+          "mountSetupCloudRecoverySessionRoutes"
+        ],
+        "apps/server/src/setup-operation-routes.ts": [
+          "recoveryCredentials",
+          "SETUP_PHASES",
+          "setupPhaseReached",
+          "MAX_CONFIGURATION_UPLOAD_BYTES",
+          "JOIN_ADOPT_REQUEST_HASH",
+          "MAX_KIT_BYTES",
+          "mountSetupOperationRoutes"
+        ]
+      }
+    }
+  ]
+}

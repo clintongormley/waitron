@@ -90,7 +90,7 @@ import {
   SELECTED_COPY_SOURCES,
 } from "./handover-copy-selection.js";
 import { readUpload } from "./setup-recovery-preparation-api.js";
-import { MAX_RESTORE_UPLOAD_BYTES } from "./setup-api.js";
+import { MAX_RESTORE_UPLOAD_BYTES } from "./setup-request-fields.js";
 import { venueTimeZoneIn } from "./venue-time-zone.js";
 
 export interface Declaration {
