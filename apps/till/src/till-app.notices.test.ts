@@ -6,6 +6,7 @@ import type {
   EquipmentChange,
   StaffNotice,
 } from "./api/device-session-api.js";
+import type { CounterWaitingOrder } from "./api/orders-api.js";
 import type { TillApp } from "./till-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import {
@@ -878,6 +879,22 @@ const lunch = {
   allergens: null,
 };
 
+const waitingRow: CounterWaitingOrder = {
+  id: "",
+  items: [],
+  orderNumber: 7,
+  label: null,
+  status: "placed",
+  total: "12.50",
+  openedAt: "2026-11-10T10:00:00Z",
+  settledAt: null,
+  collectedAt: null,
+  serviceMode: "ticket_then_pay",
+  counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 },
+  canHandOver: false,
+  movableDishes: [],
+};
+
 describe("a payment started while a notice pauses payments", () => {
   beforeEach(resetBillPayDrafts);
   afterEach(() => {
@@ -904,7 +921,13 @@ describe("a payment started while a notice pauses payments", () => {
     await flushApp(el);
     const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
     counter.store.addProduct(lunch, "1");
-    if (stage === "collect") Object.assign(el, { stage, collectFlow: "ticket_then_pay" });
+    // Direct Cash and Card collect a sent order only once its receipt is issued.
+    if (stage === "collect")
+      Object.assign(el, {
+        stage,
+        collectFlow: "ticket_then_pay",
+        counterWaiting: [{ ...waitingRow, id: counter.store.id, invoiceNumber: "A/1" }],
+      });
     await flushApp(el);
     const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
     const pay = async () => {

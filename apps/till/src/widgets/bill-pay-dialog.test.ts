@@ -3741,6 +3741,23 @@ describe("till-bill-pay-dialog: items paid on a bill of their own", () => {
     }
   });
 
+  it("on a bill sent with no receipt says the items move to a bill of their own, not that a receipt is cancelled", async () => {
+    for (const locale of ["en", "es"] as const) {
+      setLocale(locale);
+      onTestFinished(() => setLocale("en"));
+      const el = await mount({
+        balance: balanceOf({ status: "placed", outstanding: "120.00" }),
+        sentWithoutReceipt: true,
+        asked: itemsAsked,
+        preview: ownBill("35.00"),
+      });
+      expect(text(root(el).querySelector("[data-pay-own-bill]"))).toBe(
+        t("bill_pay.items_own_bill"),
+      );
+      cleanupWidgets();
+    }
+  });
+
   it("says in Spanish what paying a printed bill's items does", async () => {
     setLocale("es");
     onTestFinished(() => setLocale("en"));

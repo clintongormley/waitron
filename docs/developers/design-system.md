@@ -7097,7 +7097,9 @@ them to a bill of their own; on a printed bill the server first reopens it, cred
 and a window still open after the answer moves to the bill the screen moves to (see **A vanished
 bill**). Items is shown disabled, with its reason in a line below
 the choices (`data-pay-items-reason`, joined to the radio by `aria-describedby`), on a Counter
-order sent to the kitchen, also once moved to a table, and on a printed table bill opened from Find
+order whose receipt is issued, on a Counter order sent to the kitchen in a zone paid before
+preparation, on a Counter
+order sent to the kitchen and then moved to a table, and on a printed table bill opened from Find
 a bill. Once Pay > Items has credited a printed bill's receipt, a `role="status"` line
 (`data-pay-credited`) above every step of the window repeats the screen's line. Successful table-bill reads refresh idle
 item choices, retaining valid selections and tender input. A selected member that leaves is dropped,

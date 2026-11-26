@@ -371,7 +371,8 @@ export interface BillBalance {
   /** The net tips of the received payments. */
   tips: string;
   payments: BillPaymentView[];
-  /** On an open bill: the bill its chosen items moved to while a card payment of theirs is pending. */
+  /** On an open bill, or a sent Counter order with no receipt: the bill its chosen items moved to
+   * while a card payment of theirs is pending. */
   beingPaidOn?: { billId: string; billNumber: number | null };
 }
 

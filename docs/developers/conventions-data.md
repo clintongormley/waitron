@@ -7485,3 +7485,19 @@ These excerpts are from `CLAUDE.md` at `ce8d3f6f1474733a701ab982996caa898d00b243
 ### Environment variable inventory
 
 > Guard: `scripts/environment-variables.test.ts`, weaker than its name. It scans tracked text.
+
+## Only one file sets a placed order back to open
+
+Pay > Items on a Counter order already sent to the kitchen moves the chosen dishes inside the
+payment's transaction. `withSentOrderOpen` (`apps/server/src/sent-order-open.ts`) switches the
+order to `open` for the move and back to `placed` after it. The database allows that switch only as
+a status-only update of an order with no party, a pay-after-sending mode (`ticket_then_pay`) and no
+`sales` row (`working_orders_enforce_transition`, `packages/db/triggers/core.sql`). Once the order
+is open, the database lets it change anything an open order may, so only the code keeps the window
+short. The trigger's mode list and `paysAfterSending`'s (`apps/server/src/working-order-context.ts`)
+change together; nothing guards that.
+
+`scripts/sent-order-open.test.ts` reads literals. It finds a `status` property set to the literal
+`"open"` inside a `.set(…)` call or a `set: {…}` object, and `status = 'open'` in one string or
+template naming `update working_orders … set`. It does not see a status held in a variable, built
+by a call, spread from another object, or interpolated into `sql`.

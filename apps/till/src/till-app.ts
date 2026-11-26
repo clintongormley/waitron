@@ -379,7 +379,7 @@ import {
 } from "./widgets/held-orders.js";
 import { waitingScope, type PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import { moveRefusalKey } from "./widgets/station-choice-dialog.js";
-import { otherPartyRead, shownTableNames, type SeatedRead } from "./widgets/table-targets.js";
+import { otherPartyRead, type SeatedRead } from "./widgets/table-targets.js";
 import type {
   BillPayDetail,
   MealEndShown,
@@ -408,7 +408,13 @@ import {
   stillToPay,
 } from "./state/bill-state.js";
 import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
-import { billRequestOf } from "./state/table-signals.js";
+import {
+  describePartyChange,
+  partyChangeMessage,
+  partyOf,
+  tableLabels,
+  type PartyChange,
+} from "./state/party-change.js";
 import {
   barBillToOpen,
   barTables,
@@ -1202,87 +1208,6 @@ function takeOverRefusalError(code: string): CounterError {
   if (code === "draft.not_found") return "table.take_over_gone";
   if (code === "draft.already_submitted") return "table.take_over_sent";
   return tableWriteError({ code });
-}
-
-/** The tables' shown names, and whether those differ from their saved names. */
-interface TableNames {
-  names: string;
-  named: boolean;
-}
-
-/** What another device changed about a party, worked out by comparing the floor before and after.
- * `tables` names the party's tables as they were. */
-type PartyChange = { tables: TableNames } & (
-  | { kind: "gone" }
-  | { kind: "tables"; now: TableNames }
-  | { kind: "bills"; outstanding: string }
-  | { kind: "bill_request"; requested: boolean }
-  | { kind: "other" }
-);
-
-function tableLabels(tables: TableState[], ids: readonly string[]): TableNames {
-  const names = shownTableNames(ids, tables).join(", ");
-  const saved = ids.flatMap((id) => tables.find((table) => table.id === id)?.label ?? []);
-  return { names, named: names !== saved.join(", ") };
-}
-
-function partyOf(tables: TableState[], partyId: string): TableParty | undefined {
-  return tables.find((table) => table.party?.id === partyId)?.party ?? undefined;
-}
-
-function describePartyChange(
-  was: TableParty,
-  before: TableState[],
-  after: TableState[],
-): PartyChange {
-  const is = partyOf(after, was.id);
-  const tables = tableLabels(before, was.tableIds);
-  if (is === undefined || is.state !== "open") return { tables, kind: "gone" };
-  if (was.tableIds.join() !== is.tableIds.join()) {
-    return { tables, kind: "tables", now: tableLabels(after, is.tableIds) };
-  }
-  if (was.billCount !== is.billCount || was.outstanding !== is.outstanding) {
-    return { tables, kind: "bills", outstanding: is.outstanding };
-  }
-  const requested = billRequestOf(after, was.id) !== undefined;
-  if (requested !== (billRequestOf(before, was.id) !== undefined)) {
-    return { tables, kind: "bill_request", requested };
-  }
-  return { tables, kind: "other" };
-}
-
-function partyChangeDetail(change: PartyChange): string {
-  switch (change.kind) {
-    case "gone":
-      return t("party.changed_gone");
-    case "tables":
-      return t(change.now.named ? "party.changed_tables_named" : "party.changed_tables").replace(
-        "{tables}",
-        () => change.now.names,
-      );
-    case "bills":
-      return t("party.changed_bills").replace("{amount}", () =>
-        formatMoney(change.outstanding, currentLocale()),
-      );
-    case "bill_request":
-      return t(
-        change.requested ? "party.changed_bill_requested" : "party.changed_bill_request_cancelled",
-      );
-    case "other":
-      return t("party.changed_other");
-  }
-}
-
-function partyChangeMessage(change: PartyChange): string {
-  const detail = partyChangeDetail(change);
-  return [
-    t(change.tables.named ? "party.changed_named" : "party.changed").replace(
-      "{table}",
-      () => change.tables.names,
-    ),
-    detail,
-    t("party.try_again"),
-  ].join(" ");
 }
 
 /** Refusals of a tab-line or group command, shown in their code's own words: each says what the
@@ -4494,6 +4419,9 @@ export class TillApp extends LitElement {
   /** The invoice type, customer and delivery stored on the Counter order last read into the basket,
    * which {@link invoiceChoice} does not hold for an order this till did not set it on. */
   #counterStoredInvoice?: ReturnType<typeof storedInvoiceOf>;
+  /** The service mode stored on the Counter order last saved or read: Pay for items takes a sent
+   * one only in a mode that takes payment after sending. */
+  #counterOrderMode?: { orderId: string; mode: HeldOrder["serviceMode"] };
   /** Whether the server still let the Counter order last read into the basket switch its way. */
   @state() private counterDiningChoice?: { orderId: string; choice: DiningChoice };
   /** Re-entry guard for {@link TillApp.#onParkOrder}, set before its first await. */
@@ -9965,6 +9893,7 @@ export class TillApp extends LitElement {
   }
 
   #setSavedCounterFlow(mode: HeldOrder["serviceMode"]): void {
+    this.#counterOrderMode = { orderId: this.#store.id, mode };
     this.collectFlow = mode === "prepay" || mode === "ticket_then_pay" ? mode : undefined;
   }
 
@@ -12237,7 +12166,8 @@ export class TillApp extends LitElement {
         .tipsEnabled=${this.tipsEnabled}
         .deferredOffered=${this.#deferredOfferFor(open)}
         .ownReceiptOffered=${this.#ownReceiptOffered(open)}
-        .itemsBarred=${itemsBarredReason({ found: open.found !== undefined, counter: open.surface === "counter", counterCollect: open.surface === "counter" && this.stage === "collect", printed: open.printed === true, status: open.balance?.status ?? this.partyBills.find((bill) => bill.workingOrderId === open.billId)?.status })}
+        .itemsBarred=${this.#itemsBarredFor(open)}
+        .sentWithoutReceipt=${open.surface === "counter" && open.printed !== true}
         .credited=${billNoticeText(open.credited)}
         .cardReader=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
@@ -12308,6 +12238,24 @@ export class TillApp extends LitElement {
         }
       </till-bill-pay-dialog>
       ${this.#renderBillRefunding()}`;
+  }
+
+  /** Before its balance is read, a Counter bill in the collect stage is taken as placed. */
+  #itemsBarredFor(open: BillPaying): StringKey | null {
+    const counter = open.surface === "counter";
+    const mode = this.#counterOrderMode;
+    const placed = this.stage === "collect" ? "placed" : undefined;
+    return itemsBarredReason({
+      found: open.found !== undefined,
+      counter,
+      printed: open.printed === true,
+      paysAfterSending: mode?.orderId === open.billId && mode.mode === "ticket_then_pay",
+      status:
+        open.balance?.status ??
+        (counter
+          ? placed
+          : this.partyBills.find((bill) => bill.workingOrderId === open.billId)?.status),
+    });
   }
 
   /** A part payment may have its own receipt only on a bill with no invoice yet, set for a
@@ -22447,11 +22395,27 @@ export class TillApp extends LitElement {
       )
         return;
       if (this.#hasLeftCounterOrder(id, session)) return;
+      // Items chooses from the dishes last read. Unread ones are read only once sent: an unsent
+      // order whose dishes could not be read is still paid, with nothing to choose.
+      const listed = this.counterLines;
+      const dishesStale =
+        listed === null
+          ? this.stage === "collect"
+          : listed.orderId !== id || listed.revision !== this.#store.revision;
       const choiceRevision = await this.#saveInvoiceChoice(id, this.#counterExpectedEdit(id));
       if (choiceRevision !== undefined) {
         if (this.#hasLeftCounterOrder(id, session)) return;
         this.#store.markSaved(choiceRevision);
+        // Saved at the revision the dishes were read at, so they are still those dishes.
+        if (!dishesStale && listed !== null && this.counterLines === listed)
+          this.counterLines = { ...listed, revision: choiceRevision };
       }
+      if (
+        dishesStale &&
+        !(await this.#rereadCounterDishes(id, listed)) &&
+        (await this.#reloadCounterOrder(id, session)) !== "read"
+      )
+        return;
     } catch (error) {
       refused = true;
       if (!this.#hasLeftCounterOrder(id, session)) {
@@ -22487,6 +22451,22 @@ export class TillApp extends LitElement {
       billId: id,
       visit: session,
     });
+  }
+
+  /** Items' dishes alone, read again after the basket's own saves: true once at its revision. */
+  async #rereadCounterDishes(id: string, listed: StoredLines | null): Promise<boolean> {
+    if (listed?.orderId !== id) return false;
+    const visit = this.#store.loadGeneration;
+    const limit = limited(TABLE_REQUEST_LIMIT_MS);
+    try {
+      const read = await this.#readStoredLines(id, limit.signal);
+      if (read?.revision !== this.#store.revision || visit !== this.#store.loadGeneration)
+        return false;
+      this.counterLines = read;
+      return true;
+    } finally {
+      limit.done();
+    }
   }
 
   /** After an answer to a payment or a refund, the order the dialog pays is read again: the table's
@@ -23281,6 +23261,14 @@ export class TillApp extends LitElement {
     if (result.payment.state === "pending")
       this.#startPendingReread(open.id, result.payment.id, taken, result.paidOn);
     await reread();
+    this.#rereadWaitingFor(open);
+  }
+
+  /** Waiting lists Counter orders sent or paid: one it lists is read again after a payment. A
+   * counter order's `visit` is the operator session. */
+  #rereadWaitingFor(open: PayingOrder): void {
+    if (open.surface === "counter" && this.counterWaiting.some((row) => row.id === open.billId))
+      void this.#refreshListsAfterWrite(open.visit, [["waiting", "refresh.waiting_after_sale"]]);
   }
 
   /** The order read again after an answer, on `balance` when it is the bill's own; else on `answered`,
@@ -23343,6 +23331,7 @@ export class TillApp extends LitElement {
     // The paid order drops off the held list.
     if (open.surface === "counter")
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
+    this.#rereadWaitingFor(open);
   }
 
   async #onBillPayRefused(
@@ -24151,6 +24140,15 @@ export class TillApp extends LitElement {
     return this.submitting || this.placing || this.parking || this.counterSetMenuSaving;
   }
 
+  /** A sent order with no receipt pays in the Pay window; Waiting's row, when it has one, says. */
+  #counterPaymentWindow(): boolean {
+    const id = this.#store.id;
+    const row = this.counterWaiting.find((waiting) => waiting.id === id);
+    if (row !== undefined) return row.invoiceNumber === undefined;
+    const stored = this.#counterStoredInvoice;
+    return this.stage === "collect" && !(stored?.orderId === id && stored.invoiced === true);
+  }
+
   /** A placed order is not open, so it offers no adjustment. */
   #basketStoredLines(): StoredLines | null {
     return this.stage === "order" ? this.counterLines : null;
@@ -24214,7 +24212,7 @@ export class TillApp extends LitElement {
         .invoiceLocale=${this.invoiceLocale}
         .orderFlow=${this.#basketFlow()}
         .stage=${this.stage}
-        .paymentWindow=${this.counterWaiting.some((row) => row.id === this.#store.id && row.invoiceNumber === undefined)}
+        .paymentWindow=${this.#counterPaymentWindow()}
         .busy=${this.submitting || this.placing || this.invoiceRecipientReading || this.counterSetMenuSaving}
         .sendingTender=${this.sendingTender}
         .payHeld=${this.basketHeld}

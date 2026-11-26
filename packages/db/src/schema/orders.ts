@@ -38,7 +38,9 @@ export const workingOrderStatus = enumType([
   "open",
   // placed: finalized — composition FROZEN (what a line may still change once the order leaves
   // open: `OPEN_PARENT_REFUSAL`'s comment, packages/db/src/trigger-refusals.ts)
-  // and the fiscal issuance basis fixed. Not terminal: it still ends settled or abandoned.
+  // and the fiscal issuance basis fixed. Not terminal: it still ends settled or abandoned. A
+  // Counter order in a pay-after-sending zone with no sale may go back to open by a status-only
+  // update (`working_orders_enforce_transition`), for Pay for items' move.
   "placed",
   "settled",
   "abandoned",

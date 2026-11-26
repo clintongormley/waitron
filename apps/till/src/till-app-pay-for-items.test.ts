@@ -515,7 +515,7 @@ describe("till-app: Pay for items on a bill of their own", () => {
       true,
     );
     expect(text(root.querySelector("[data-pay-items-reason]"))).toBe(
-      t("bill_pay.items_barred_counter"),
+      "A Counter order sent to the kitchen and then moved to a table is paid with An amount, Split equally or Whole bill.",
     );
   });
 

@@ -10,6 +10,11 @@ import { assertBillHasNoUnsent, readBillUnsent } from "./bill-unsent.js";
 import { ORDER_INVOICE_CHOICE, selectOrderInvoice } from "./invoice-selection.js";
 import { linkSaleDishes } from "./order-portions.js";
 import { reopenedChainIds } from "./reopened-bills.js";
+import {
+  hasInvoice,
+  sentCounterOrderWithoutReceipt,
+  withSentOrderOpen,
+} from "./sent-order-open.js";
 import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import {
   billAdvances,
@@ -19,7 +24,6 @@ import {
   invoiceCorrectionRefunds,
   invoiceCorrections,
   isUniqueViolation,
-  sales,
   tenders,
   withTransaction,
   workingOrders,
@@ -285,8 +289,8 @@ export interface BillBalance {
   /** The net tips of the received payments. */
   tips: Decimal;
   payments: BillPaymentView[];
-  /** On an open bill: the open bill its chosen items moved to (Pay for items) while a card
-   * payment of theirs is pending. */
+  /** On an open bill, or a sent Counter order with no receipt: the open bill its chosen items moved
+   * to (Pay for items) while a card payment of theirs is pending. */
   beingPaidOn?: { billId: string; billNumber: number | null };
 }
 
@@ -870,7 +874,7 @@ export async function readBillBalance(
   total?: Decimal,
 ): Promise<BillBalance> {
   const [order] = await tx
-    .select({ status: workingOrders.status })
+    .select({ status: workingOrders.status, partyId: workingOrders.partyId })
     .from(workingOrders)
     .where(eq(workingOrders.id, workingOrderId));
   if (order === undefined) {
@@ -903,8 +907,7 @@ export async function readBillBalance(
         };
   };
   const captureWarning = await findCaptureWarning(tx, { orderIds: [workingOrderId] });
-  const beingPaidOn =
-    order.status === "open" ? await itemsBeingPaidOn(tx, workingOrderId) : undefined;
+  const beingPaidOn = await itemsBeingPaidOn(tx, workingOrderId, order);
   return {
     ...(captureWarning === undefined ? {} : { captureWarning }),
     ...(beingPaidOn === undefined ? {} : { beingPaidOn }),
@@ -932,7 +935,10 @@ export async function readBillBalance(
 async function itemsBeingPaidOn(
   tx: Transaction,
   sourceId: string,
+  source: { status: string; partyId: string | null },
 ): Promise<BillBalance["beingPaidOn"]> {
+  if (source.status !== "open" && (source.status !== "placed" || source.partyId !== null))
+    return undefined;
   const [row] = await tx
     .select({ billId: workingOrders.id, billNumber: workingOrders.billNumber })
     .from(workingOrders)
@@ -945,7 +951,8 @@ async function itemsBeingPaidOn(
       ),
     )
     .limit(1);
-  return row;
+  if (row === undefined || source.status === "open") return row;
+  return (await sentCounterOrderWithoutReceipt(tx, sourceId, source)) ? row : undefined;
 }
 
 /** The latest moment among `received` that dates a payment: a card's {@link cardSaleMoment}, and
@@ -1347,15 +1354,6 @@ export async function requireOpenBill(tx: Transaction, workingOrderId: string): 
   if (order.status !== "open") {
     throw new AppError("working_order.not_open", { workingOrderId });
   }
-}
-
-async function hasInvoice(tx: Transaction, workingOrderId: string): Promise<boolean> {
-  const [invoice] = await tx
-    .select({ id: sales.id })
-    .from(sales)
-    .where(eq(sales.workingOrderId, workingOrderId))
-    .limit(1);
-  return invoice !== undefined;
 }
 
 /** A bill whose payments can still be refunded before its invoice: open, or sent or presented with
@@ -2336,7 +2334,9 @@ export async function failBillPayment(
  * Every line of a Pay for items bill goes back to the bill it came from when the payment Pay for
  * items took there fails ({@link itemsPaymentSource}) and no other money sits on the bill, and the
  * emptied bill is abandoned. Its own savepoint: a refusal leaves the items on their own open bill,
- * to be paid there, and the payment's failure stands. A source no longer open is the same case.
+ * to be paid there, and the payment's failure stands. A source no longer open is the same case,
+ * except a sent Counter order with no receipt, which {@link withSentOrderOpen} opens for the move
+ * back.
  * Pay for items held the source's invoice back for this payment, so where the items stay, the
  * source is issued if its own payments now cover it ({@link issueHeldSource}).
  */
@@ -2392,19 +2392,21 @@ async function movedItemsBack(
   try {
     await tx.transaction(async () => {
       try {
-        await moveOrderLines(tx, cfg, billId, sourceId, undefined, {
-          actorId: failed.requestedBy,
+        await withSentOrderOpen(tx, sourceId, async () => {
+          await moveOrderLines(tx, cfg, billId, sourceId, undefined, {
+            actorId: failed.requestedBy,
+          });
+          await bumpRevision(tx, [sourceId, billId]);
+          await tx
+            .update(workingOrders)
+            .set({ status: "abandoned" })
+            .where(eq(workingOrders.id, billId));
+          const [source] = await tx
+            .select({ partyId: workingOrders.partyId })
+            .from(workingOrders)
+            .where(eq(workingOrders.id, sourceId));
+          if (source!.partyId !== null) await bumpPartyRevision(tx, source!.partyId);
         });
-        await bumpRevision(tx, [sourceId, billId]);
-        await tx
-          .update(workingOrders)
-          .set({ status: "abandoned" })
-          .where(eq(workingOrders.id, billId));
-        const [source] = await tx
-          .select({ partyId: workingOrders.partyId })
-          .from(workingOrders)
-          .where(eq(workingOrders.id, sourceId));
-        if (source!.partyId !== null) await bumpPartyRevision(tx, source!.partyId);
       } catch (error) {
         bodyError = error;
         throw error;

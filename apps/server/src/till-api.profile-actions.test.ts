@@ -1246,6 +1246,48 @@ describe("the person's permission and the profile's action are both needed", () 
     expect(await statusOfBill(billId)).toBe("open");
   });
 
+  /** A Counter order of a Caña and a Flan sent with no receipt, in the counter zone made to take
+   * payment after sending while the order opens; the zone's own setting is put back after. */
+  async function sentCounterOrder(): Promise<string> {
+    const zone = eq(floorZones.id, v.counter.zoneId);
+    const [prior] = await suite.db
+      .select({ paidWhen: floorZones.paidWhen })
+      .from(floorZones)
+      .where(zone);
+    await withTransaction(suite.db, (tx) =>
+      tx.update(floorZones).set({ paidWhen: "ticket_then_pay" }).where(zone),
+    );
+    try {
+      const billId = await counterOrder(v, "Caña", "Flan");
+      await placeByHand(v, billId);
+      return billId;
+    } finally {
+      await withTransaction(suite.db, (tx) =>
+        tx.update(floorZones).set({ paidWhen: prior!.paidWhen }).where(zone),
+      );
+    }
+  }
+
+  it("pays for items on a sent Counter order on a till without take-orders", async () => {
+    const billId = await sentCounterOrder();
+    const before = filed() as { bills: number; sales: number };
+
+    const paid = await payFirstDishWithoutTakeOrders(billId);
+
+    expect(paid.status, JSON.stringify(paid.body)).toBe(200);
+    expect(await statusOfBill(billId)).toBe("placed");
+    expect(filed()).toEqual({ bills: before.bills + 1, sales: before.sales + 1 });
+  });
+
+  it("previews items of a sent Counter order on a till without take-orders", async () => {
+    const billId = await sentCounterOrder();
+
+    const previewed = await payFirstDishWithoutTakeOrders(billId, "item-payments/preview");
+
+    expect(previewed.status, JSON.stringify(previewed.body)).toBe(200);
+    expect(previewed.body).toMatchObject({ total: "3.00" });
+  });
+
   it("refuses the drawer when the person lacks its grant, even on a profile that opens it", async () => {
     const personId = await person("staff");
     const { cookie } = await signIn(CAPABILITY_FLAGS, "staff");

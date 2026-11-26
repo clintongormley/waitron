@@ -27621,7 +27621,8 @@ describe("A767 card outcome belongs to its order", () => {
     const cancel = vi.fn().mockResolvedValue({ outcome: "requested" });
     const saved = await stubApi().retrieveWorkingOrder("wo-1");
     const { el } = await mountApp({
-      retrievePlacedOrder: vi.fn().mockResolvedValue(saved),
+      // Direct Card collects a sent order only once its receipt is issued.
+      retrievePlacedOrder: vi.fn().mockResolvedValue({ ...saved, invoiced: true }),
       getTill: vi.fn().mockResolvedValue({
         ...till,
         cardProvider: "sumup_cloud",

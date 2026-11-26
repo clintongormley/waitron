@@ -377,6 +377,103 @@ describe("working_orders state machine (enforce_transition)", () => {
     expect(engineErrorMessage(e2)).toBe(TRANSITION_REFUSAL);
   });
 
+  let counterZone: { id: string; departmentId: string } | undefined;
+
+  /** A placed order with no sale, recorded in a zone with `serviceMode` (or none) and in
+   * `partyId` (or none). */
+  async function sentOrder(
+    serviceMode: "ticket_then_pay" | "prepay" | "table_tab" | null = "ticket_then_pay",
+    partyId: string | null = null,
+  ): Promise<string> {
+    const id = await open();
+    if (serviceMode !== null) {
+      counterZone ??= await seedZone(suite.db, { name: "Counter zone" });
+      await suite.db.execute(sql`update working_orders
+        set zone_id = ${counterZone.id}, department_id = ${counterZone.departmentId},
+          service_mode = ${serviceMode}
+        where id = ${id}`);
+    }
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "placed", partyId }).where(eq(workingOrders.id, id)),
+    );
+    return id;
+  }
+
+  it("lets a sent Counter order (no party, pay-after-sending mode, no sale) go back to open by status alone", async () => {
+    const id = await sentOrder();
+    const eWithLabel = await captureError(() =>
+      inTx((tx) =>
+        tx
+          .update(workingOrders)
+          .set({ status: "open", label: "x" })
+          .where(eq(workingOrders.id, id)),
+      ),
+    );
+    expect(engineErrorMessage(eWithLabel)).toBe(TRANSITION_REFUSAL);
+    expect(await statusOf(id)).toBe("placed");
+
+    const before = await rowOf(id);
+    await inTx((tx) =>
+      tx.update(workingOrders).set({ status: "open" }).where(eq(workingOrders.id, id)),
+    );
+    expect(await rowOf(id)).toEqual({ ...before, status: "open" });
+  });
+
+  it("a sent Counter order with no sale refuses going back to open with any other column", async () => {
+    const id = await sentOrder();
+    const columns = suite.db.all<{ name: string }>(
+      sql`select name from pragma_table_info('working_orders')`,
+    );
+    for (const { name } of columns.filter(({ name }) => !["id", "status"].includes(name))) {
+      const error = await captureError(() =>
+        inTx(async (tx) =>
+          tx.execute(
+            sql`update working_orders set status = 'open', ${sql.identifier(name)} = ${"changed"} where id = ${id}`,
+          ),
+        ),
+      );
+      expect(engineErrorMessage(error), name).toBe(TRANSITION_REFUSAL);
+      expect(await statusOf(id), name).toBe("placed");
+    }
+  });
+
+  it("refuses a sent Counter order going back to open once a sale names it", async () => {
+    const id = await sentOrder();
+    await issueSale(id);
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx.update(workingOrders).set({ status: "open" }).where(eq(workingOrders.id, id)),
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
+    expect(await statusOf(id)).toBe("placed");
+  });
+
+  it("refuses a placed order with no sale going back to open while it belongs to a party", async () => {
+    const id = await sentOrder("ticket_then_pay", await party());
+    const error = await captureError(() =>
+      inTx((tx) =>
+        tx.update(workingOrders).set({ status: "open" }).where(eq(workingOrders.id, id)),
+      ),
+    );
+    expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
+    expect(await statusOf(id)).toBe("placed");
+  });
+
+  it.each(["prepay", "table_tab", null] as const)(
+    "refuses a placed order with no sale going back to open when its recorded mode is %s",
+    async (serviceMode) => {
+      const id = await sentOrder(serviceMode);
+      const error = await captureError(() =>
+        inTx((tx) =>
+          tx.update(workingOrders).set({ status: "open" }).where(eq(workingOrders.id, id)),
+        ),
+      );
+      expect(engineErrorMessage(error)).toBe(TRANSITION_REFUSAL);
+      expect(await statusOf(id)).toBe("placed");
+    },
+  );
+
   it("lets an unissued placed bill save its full-invoice recipient with a revision change", async () => {
     const id = await open();
     await inTx((tx) =>
