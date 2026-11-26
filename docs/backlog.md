@@ -1204,10 +1204,9 @@ Not in any track until the standalone primary is done.
   A restored box now takes a term above the pointer and the generations it can read in its backup
   bucket. A solo box that verifies the replacement’s newer copy stops selling and filing.
   After an unexpected stop, a main box without a peer to wait for checks its configured bucket for
-  up to a minute and emails managers if it starts without confirmation. The till still needs to
-  show the reason for this wait.
-  The startup waits, other replacement evidence and administrator shutdown action are the
-  [remaining slices](superpowers/plans/2026-11-26-h-a1418-box-stop-intent.md).
+  up to a minute and emails managers if it starts without confirmation. The
+  [remaining slices](superpowers/plans/2026-11-26-h-a1418-box-stop-intent.md) cover the till's
+  waiting message, other replacement evidence and the administrator shutdown action.
   A1557 (2026-11-20) added [the shared backup operation](../apps/server/src/backup-supervisor.ts)
   for scheduled and manual backups. A1418 still needs to identify and verify its final copy.
 
