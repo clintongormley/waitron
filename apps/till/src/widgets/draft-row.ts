@@ -164,7 +164,7 @@ export const draftRowStyles = css`
   :host .order-lines > .entry.draft-row {
     display: grid;
     grid-column: 1 / -1;
-    grid-template-columns: ${LEAD_WIDTH} minmax(0, 1fr) auto;
+    grid-template-columns: ${LEAD_WIDTH} minmax(0, 1fr) var(--wt-tap-min);
     grid-template-rows: 1fr auto;
     align-items: center;
     min-height: calc(var(--wt-tap-min) + var(--wt-space-2));

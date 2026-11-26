@@ -270,4 +270,28 @@ describe("a new dish's compact row", () => {
       );
     }
   });
+
+  it("ends every row's price at the same place, with or without the split control", async () => {
+    document.adoptedStyleSheets = [...document.adoptedStyleSheets, draftRowSlotStyles.styleSheet!];
+    try {
+      const { el } = await rows([
+        { product: steak, quantity: "2" },
+        { product: hake, quantity: "1" },
+      ]);
+      const end = document.createElement("button");
+      end.slot = "end-0";
+      end.className = "draft-row-split";
+      render(draftSplitChevron(), end);
+      el.append(end);
+      await el.updateComplete;
+      const prices = [...el.shadowRoot!.querySelectorAll<HTMLElement>(".draft-row-price")];
+      expect(prices).toHaveLength(2);
+      const [withSplit, withoutSplit] = prices.map((price) => price.getBoundingClientRect().right);
+      expect(Math.abs(withSplit! - withoutSplit!)).toBeLessThan(0.5);
+    } finally {
+      document.adoptedStyleSheets = document.adoptedStyleSheets.filter(
+        (sheet) => sheet !== draftRowSlotStyles.styleSheet,
+      );
+    }
+  });
 });
