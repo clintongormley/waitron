@@ -3567,6 +3567,16 @@ hit the deadline once, fetched that package from Azure and passed eight WebKit c
 The [clean job](https://github.com/clintongormley/waitron/actions/runs/45271153603/job/138030991966)
 installed on the first attempt and passed the same cases.
 
+The retry lists the selected mirror first and reserves the Canonical archive for package files.
+If one package file is missing, APT can fetch it over HTTPS from Canonical within the same retry.
+The [single-mirror control](https://github.com/clintongormley/waitron/actions/runs/45796618926/job/139828793670)
+hit the first deadline and then failed on a 404 for the same Speex package. The
+[fallback run](https://github.com/clintongormley/waitron/actions/runs/45797267603/job/139831030077)
+repeated the deadline and 404, fetched that package from Canonical, and finished its retry in
+44 seconds. Eight theme cases per app and 43 dashboard colour-field cases passed in WebKit.
+The workflow guard reads the `install-deps webkit` command for a `sudo -n` KILL timeout
+expressed in whole seconds. Mirror fallback has only one-off verification.
+
 Image smoke restores the newest `image-apt-<Ubuntu release>-<architecture>-<UTC date>`
 package set before contacting Ubuntu. It installs BlueZ, python3-dbus and python3-gi
 through `scripts/image-apt-cache.sh`, using saved signed indexes and debs, the runner's
