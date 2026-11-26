@@ -9,7 +9,10 @@ export type BackupFileSource = { artifactPath: string } | { artifact: Uint8Array
 
 /** The backup key text that opens a version 2 file, derived from a typed master key. A key that
  * does not decode, or is not the master key the header names, is refused with the header's master
- * key id, number and name. A version 1 file is refused before any key is derived. */
+ * key id, number and name. A version 1 file is refused before any key is derived. The header is
+ * authenticated only when the file opens, so a damaged id byte is refused here as a wrong key; a
+ * damaged day byte is refused as `backup.artifact_invalid` (`bad_key_day`) when it no longer reads
+ * as a date, and otherwise, like a damaged key number, only when the file opens. */
 export async function openingKeyFor(
   source: BackupFileSource,
   masterKeyText: string,

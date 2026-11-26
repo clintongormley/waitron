@@ -87,9 +87,8 @@ const VALUED_FLAGS: ReadonlySet<string> = new Set([
 const clock = (): Date => new Date();
 
 /**
- * The codes `decryptArtifact`/`unpackArchive` throw. Each restore form collapses them into one
- * message of its own: telling "wrong recovery key" from "corrupt
- * artifact" would hand someone holding a stolen artifact an oracle to guess the recovery key against.
+ * Each restore form collapses these into one message of its own: telling "wrong recovery key" from
+ * "corrupt artifact" would hand someone holding a stolen artifact an oracle to guess the recovery key against.
  */
 const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
   "recovery.passphrase_invalid",

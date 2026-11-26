@@ -127,7 +127,7 @@ describe("openingKeyFor", () => {
     ).resolves.toBe(heldBackupKey(MASTER_KEY, 2).key);
   });
 
-  it("a master key made after the archive is refused, naming the archive's key", async () => {
+  it("another master key is refused, naming the archive's key", async () => {
     const f = await scratch();
     const archiveKey = await mintMasterKey(suite.db, {
       bytes: MASTER_KEY,
@@ -140,8 +140,8 @@ describe("openingKeyFor", () => {
       4,
       archiveKey.name.slice(0, 10),
     );
-    const later = encodeMasterKeyCode(makeMasterKey());
-    const refusal = await openingKeyFor({ artifactPath: f.artifactPath }, later).catch(
+    const another = encodeMasterKeyCode(makeMasterKey());
+    const refusal = await openingKeyFor({ artifactPath: f.artifactPath }, another).catch(
       (error: unknown) => error,
     );
     expect(refusal).toMatchObject({
@@ -178,7 +178,23 @@ describe("openingKeyFor", () => {
     expect(credentials.backupKey).not.toHaveBeenCalled();
   });
 
-  it("a damaged file under the right key is refused as recovery.passphrase_invalid, not as a wrong key", async () => {
+  it("a backup whose header's key number is damaged, under the right key, is refused as recovery.passphrase_invalid when it opens", async () => {
+    const f = await scratch();
+    await writeMasterKeyArchive(f.artifactPath, await archivePlaintext(f.root), MASTER_KEY, 1);
+    const bytes = await readFile(f.artifactPath);
+    const keyNumberHighByte = "WBK1".length + 1 + 8;
+    bytes[keyNumberHighByte] ^= 1;
+    await writeFile(f.artifactPath, bytes);
+    const key = await openingKeyFor(
+      { artifactPath: f.artifactPath },
+      encodeMasterKeyCode(MASTER_KEY),
+    );
+    await expect(validateArtifactFile(validation(f, key))).rejects.toMatchObject({
+      code: "recovery.passphrase_invalid",
+    });
+  });
+
+  it("a backup damaged after its header, under the right key, is refused as recovery.passphrase_invalid, not as a wrong key", async () => {
     const f = await scratch();
     await writeMasterKeyArchive(f.artifactPath, await archivePlaintext(f.root), MASTER_KEY, 1);
     const bytes = await readFile(f.artifactPath);
