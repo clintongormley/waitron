@@ -730,10 +730,8 @@ export class MenusScreen extends LitElement {
     },
     () => this.api,
   );
-  #pendingStructureSave?: Promise<boolean>;
-
-  get pendingStructureSave(): Promise<boolean> | undefined {
-    return this.#pendingStructureSave;
+  get pendingStructureSave(): Promise<void> | undefined {
+    return this.#structureSave.pendingWrite;
   }
   /** What a home page tile may point at: the active products and the sections the structure
    * reaches. The server checks reach by membership alone; an inactive product is not offered. */
@@ -3160,20 +3158,11 @@ export class MenusScreen extends LitElement {
 
   async #saveStructure(review = false): Promise<void> {
     const menuId = this.menuId;
-    if (menuId === null || this.busy || this.#pendingStructureSave || this.view !== "structure")
-      return;
+    if (menuId === null || this.busy || this.view !== "structure") return;
     this.structureReview = false;
     const nameDrop = this.#structureDropNames();
-    const saving = this.#structureSave.save(menuId, () => this.#refresh(), nameDrop);
-    if (this.#structureSave.saving) this.#pendingStructureSave = saving;
-    let saved: boolean;
-    try {
-      saved = await saving;
-    } finally {
-      if (this.#pendingStructureSave === saving) this.#pendingStructureSave = undefined;
-    }
-    if (saved && review && this.menuId === menuId && this.view === "structure")
-      await this.#reviewSaved();
+    if (await this.#structureSave.save(menuId, () => this.#refresh(), nameDrop))
+      if (review && this.menuId === menuId && this.view === "structure") await this.#reviewSaved();
   }
 
   #structureDropNames(): (drop: MenuStructureSaveResult["dropped"][number]) => string {

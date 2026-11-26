@@ -51,6 +51,7 @@ export class MenuStructureSave implements ReactiveController {
   #watchedIncludes = new Set<string>();
   #feedback: FormFeedback;
   #refusedPrices = new Map<string, string>();
+  #pendingWrite?: Promise<void>;
   rowErrors = new Map<string, string>();
   dropped = "";
   saving = false;
@@ -91,6 +92,10 @@ export class MenuStructureSave implements ReactiveController {
     this.#watchedIncludes.clear();
   }
 
+  get pendingWrite(): Promise<void> | undefined {
+    return this.#pendingWrite;
+  }
+
   watchIncludes(active: boolean): void {
     const wanted = new Set(active ? this.draft.directIncludes : []);
     for (const id of this.#watchedIncludes)
@@ -127,6 +132,7 @@ export class MenuStructureSave implements ReactiveController {
 
   reset(): void {
     this.#generation++;
+    this.#pendingWrite = undefined;
     this.watchIncludes(false);
     this.draft.reset();
     this.saving = false;
@@ -203,8 +209,15 @@ export class MenuStructureSave implements ReactiveController {
     this.dropped = "";
     this.host.requestUpdate();
     let result: MenuStructureSaveResult;
+    let pending: Promise<void> | undefined;
     try {
-      result = await this.api().saveMenuStructure(id, input);
+      const write = this.api().saveMenuStructure(id, input);
+      pending = write.then(
+        () => undefined,
+        () => undefined,
+      );
+      this.#pendingWrite = pending;
+      result = await write;
     } catch (error) {
       if (generation === this.#generation) {
         const field = addressedField(error, input);
@@ -228,6 +241,8 @@ export class MenuStructureSave implements ReactiveController {
         }
       }
       return false;
+    } finally {
+      if (this.#pendingWrite === pending) this.#pendingWrite = undefined;
     }
     if (generation !== this.#generation) return false;
     this.dropped = [...new Set(result.dropped.map(label))].join(", ");

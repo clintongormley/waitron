@@ -1345,20 +1345,28 @@ describe("a price override row's Edit product link under the app's link router",
 
 it("waits for a sent Structure Save before asking to discard or leaving the menu", async () => {
   type Result = Awaited<ReturnType<DashboardApi["saveMenuStructure"]>>;
+  type Read = Awaited<ReturnType<DashboardApi["getMenuRead"]>>;
   let answer!: (result: Result) => void;
   let refuse!: (error: unknown) => void;
+  let finishRefresh!: (result: Read) => void;
   const refused = new Promise<Result>((_resolve, reject) => {
     refuse = reject;
   });
   const accepted = new Promise<Result>((resolve) => {
     answer = resolve;
   });
+  const refresh = new Promise<Read>((resolve) => {
+    finishRefresh = resolve;
+  });
   const saveMenuStructure = vi
     .fn<DashboardApi["saveMenuStructure"]>()
     .mockReturnValueOnce(refused)
     .mockReturnValueOnce(accepted);
+  const fixture = menuProductApi();
+  const getMenuRead = vi.fn(fixture.getMenuRead!);
   const m = await mount({
-    ...menuProductApi(),
+    ...fixture,
+    getMenuRead,
     getMe: async () => ({
       personId: "p1",
       email: "ada@example.com",
@@ -1401,13 +1409,16 @@ it("waits for a sent Structure Save before asking to discard or leaving the menu
     await m.question.updateComplete;
     expect(m.question.open).toBe(false);
     expect(location.pathname).toBe(address);
+    getMenuRead.mockReturnValueOnce(refresh);
     answer({ dropped: [] });
+    await expect.poll(() => location.pathname).toBe("/menus");
     expect(await second).toBe("proceeded");
-    expect(location.pathname).toBe("/menus");
+    expect(getMenuRead.mock.results.at(-1)?.value).toBe(refresh);
     expect(m.question.open).toBe(false);
   } finally {
     refuse({ code: "connection.failed" });
     answer({ dropped: [] });
+    finishRefresh({});
   }
 });
 
