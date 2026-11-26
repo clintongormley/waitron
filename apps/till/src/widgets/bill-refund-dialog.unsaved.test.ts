@@ -4,7 +4,7 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { AdjustmentReason, BillPaymentView } from "../api/client.js";
+import type { AdjustmentReason, BillPaymentView } from "../api/payments-api.js";
 import type { RefundAsk } from "../state/bill-payment.js";
 import "./bill-refund-dialog.js";
 import type { TillBillRefundDialog } from "./bill-refund-dialog.js";

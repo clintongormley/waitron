@@ -39,17 +39,14 @@ import {
 } from "../state/kitchen-columns.js";
 import { KitchenColumnLayouts } from "../state/kitchen-column-layouts.js";
 import type {
-  BillEditExpected,
-  DeviceStationScreen,
   KitchenNotice,
-  ResolvedKitchenScreen,
-  ScreenSlot,
-  Station,
   StationQueueGroup,
   StationPrinterDown,
-  TicketState,
   TillApi,
 } from "../api/client.js";
+import type { DeviceStationScreen, Station, TicketState } from "../api/kitchen-api.js";
+import type { ResolvedKitchenScreen, ScreenSlot } from "../api/device-session-api.js";
+import type { BillEditExpected } from "../api/order-types.js";
 
 /** How often the screen re-reads its queue and notices (plan decision D11). */
 const REFRESH_MS = 15_000;

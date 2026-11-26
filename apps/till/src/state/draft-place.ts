@@ -1,4 +1,5 @@
-import type { CurrentOrders, OrderGroup, TillCourse } from "../api/client.js";
+import type { CurrentOrders, OrderGroup } from "../api/kitchen-api.js";
+import type { TillCourse } from "../api/device-session-api.js";
 
 export type Place =
   | { kind: "fire" }

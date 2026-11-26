@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { TillApi, type BillBalance } from "./client.js";
+import { TillApi } from "./client.js";
+import type { BillBalance } from "./payments-api.js";
 import type {
   ItemPaymentAsk,
   ItemPaymentPreview,

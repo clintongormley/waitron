@@ -4,7 +4,8 @@ import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorZone, TableParty, TableState, TableToday, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { FloorZone, TableParty, TableState, TableToday } from "../api/floor-api.js";
 import { nextFloorMoment } from "../state/floor-today.js";
 
 const zone: FloorZone = {

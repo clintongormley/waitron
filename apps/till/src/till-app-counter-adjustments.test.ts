@@ -21,16 +21,11 @@ import type { TillBasket } from "./widgets/basket.js";
 import type { TillAdjustmentDialog } from "./widgets/adjustment-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
-import type {
-  AdjustmentPreview,
-  AdjustmentReason,
-  HeldOrder,
-  TabLine,
-  TabLines,
-  TillApi,
-  TillProduct,
-  ZoneOffers,
-} from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { HeldOrder } from "./api/orders-api.js";
+import type { AdjustmentPreview, AdjustmentReason } from "./api/payments-api.js";
+import type { TabLine, TabLines } from "./api/kitchen-api.js";
+import type { TillProduct, ZoneOffers } from "./api/menu-api.js";
 
 // Comp…, Comp the bill and Cancel on a stored counter order, through the app: the dialog is the
 // table's, and after an answer the basket is loaded again from the server (B11c).

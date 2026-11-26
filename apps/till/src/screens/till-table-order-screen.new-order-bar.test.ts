@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { countText, fill, setLocale, t } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
-import { sellingValuesOf, type TillProduct } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/menu-api.js";
 import { productAsVariant } from "../state/order-line.js";
 import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
 import {

@@ -7,7 +7,7 @@ import {
   soldByTheUnit,
   unitName,
 } from "./product-name.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { setContentLanguages } from "@waitron/ui";
 
 /**

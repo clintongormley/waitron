@@ -1,5 +1,6 @@
 import { css, html, nothing } from "lit";
-import type { MenuState, TillApi, RoleEquipment } from "../api/client.js";
+import type { MenuState, TillApi } from "../api/client.js";
+import type { RoleEquipment } from "../api/device-session-api.js";
 import { t } from "../i18n/t.js";
 import "./keep-open.js";
 

@@ -1,6 +1,7 @@
 import type { ChangeAvailability, ChangeOptionAvailability } from "../widgets/product-info.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
-import type { BillBalance, MenuState } from "../api/client.js";
+import type { MenuState } from "../api/client.js";
+import type { BillBalance } from "../api/payments-api.js";
 import { billMoneyNoticeStyles, overpaidNotice } from "./bill-money-notice.js";
 import { amountToPay, overpaidOf } from "../state/bill-state.js";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
@@ -45,20 +46,17 @@ import "../widgets/counter-waiting.js";
 import "../widgets/menu-switcher.js";
 import "../widgets/diet-filter.js";
 import { diningControl, diningShown } from "../widgets/dining-choice.js";
+import type { TillApi } from "../api/client.js";
+import type { CounterWaitingOrder, HeldOrderSummary, OrderFlow } from "../api/orders-api.js";
+import type { FloorZone, TableState } from "../api/floor-api.js";
+import type { Station } from "../api/kitchen-api.js";
+import type { TillActiveReader } from "../api/device-session-api.js";
 import type {
-  CounterWaitingOrder,
   DiningChoice,
-  FloorZone,
-  HeldOrderSummary,
-  OrderFlow,
   ServiceZoneSummary,
-  Station,
-  TableState,
-  TillActiveReader,
-  TillApi,
   TillProduct,
   TillZoneMenu,
-} from "../api/client.js";
+} from "../api/menu-api.js";
 import type { WorkingOrderStore } from "../state/working-order.js";
 import type { StoredLines } from "../widgets/basket.js";
 import type { ReaderStopControl } from "../widgets/card-waiting.js";
@@ -225,7 +223,7 @@ export class TillCounterScreen extends LitElement {
   };
   @property() departmentName = "";
   @property({ attribute: false })
-  receiptEquipment?: import("../api/client.js").RoleEquipment["resolved"];
+  receiptEquipment?: import("../api/device-session-api.js").RoleEquipment["resolved"];
   @property() zoneName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected` for it to update. */
   @property() selectedMenuId = "";

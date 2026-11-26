@@ -3,7 +3,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./total.js";
 import type { TillTotal } from "./total.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 
 const coffee: TillProduct = {
   id: "cafe",

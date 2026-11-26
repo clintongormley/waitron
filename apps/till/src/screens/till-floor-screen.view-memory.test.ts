@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, toggleFloorView } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorZone, TableState } from "../api/client.js";
+import type { FloorZone, TableState } from "../api/floor-api.js";
 import type { FloorView, FloorViewChoices } from "../state/floor-view-memory.js";
 
 function zone(id: string, name: string): FloorZone {

@@ -15,7 +15,8 @@ import { cleanupWidgets } from "./widgets/test-helpers.js";
 import { es } from "./i18n/strings.js";
 import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
-import type { BillPaymentRequest, BillPaymentResult, DeviceEquipment } from "./api/client.js";
+import type { BillPaymentRequest, BillPaymentResult } from "./api/payments-api.js";
+import type { DeviceEquipment } from "./api/device-session-api.js";
 import type { TillPayEquipment } from "./widgets/pay-equipment.js";
 import { mountWidget } from "./widgets/test-helpers.js";
 import {

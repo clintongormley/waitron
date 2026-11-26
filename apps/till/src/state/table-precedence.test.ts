@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TableSignal } from "@waitron/shared";
-import type { TableParty, TableState } from "../api/client.js";
+import type { TableParty, TableState } from "../api/floor-api.js";
 import { dueStepSignal } from "../../test/service-steps.js";
 import {
   PRECEDENCE,

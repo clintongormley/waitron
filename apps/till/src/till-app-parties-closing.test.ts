@@ -12,7 +12,7 @@ import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override
 import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { completedFor, previewFor } from "./widgets/give-back-dialog.test-helpers.js";
 import type { GiveBackRequest, GiveBackView, GiveBackWrite } from "./api/give-back-types.js";
-import type { PartyBill, TableState } from "./api/client.js";
+import type { PartyBill, TableState } from "./api/floor-api.js";
 import {
   seated,
   table4,

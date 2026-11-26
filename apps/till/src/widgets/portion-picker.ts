@@ -4,7 +4,7 @@ import { live } from "lit/directives/live.js";
 import { baseStyles, formatDecimalInput } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import { MONEY_SCALE, decimal, multiplyDecimal, toScale } from "@waitron/shared";
-import type { TabLine } from "../api/client.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import {

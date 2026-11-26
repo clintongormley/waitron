@@ -38,19 +38,10 @@ import { openDraftLine, resized, showView } from "./till-table-order-screen.test
 import { TillTableOrderScreen, type TableRelocationOpenDetail } from "./till-table-order-screen.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type {
-  CurrentOrderRow,
-  FloorZone,
-  OfferedModifier,
-  OrderGroup,
-  PartyBill,
-  PrintProblem,
-  TabLine,
-  TableParty,
-  TableState,
-  TillProduct,
-  TillZoneMenu,
-} from "../api/client.js";
+import type { OfferedModifier } from "../api/client.js";
+import type { FloorZone, PartyBill, TableParty, TableState } from "../api/floor-api.js";
+import type { CurrentOrderRow, OrderGroup, PrintProblem, TabLine } from "../api/kitchen-api.js";
+import type { TillProduct, TillZoneMenu } from "../api/menu-api.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 import type { TillBasket } from "../widgets/basket.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";

@@ -2,7 +2,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import { TillApi, type DepartmentTransfer } from "../api/client.js";
+import { TillApi } from "../api/client.js";
+import type { DepartmentTransfer } from "../api/department-transfers-api.js";
 import { TillDepartmentTransfers } from "./department-transfers.js";
 afterEach(cleanupWidgets);
 for (const locale of ["en-GB", "es-ES"])

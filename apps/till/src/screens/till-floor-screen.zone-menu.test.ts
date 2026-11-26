@@ -3,7 +3,8 @@ import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { FloorZone, TableState, TableToday } from "../api/floor-api.js";
 import type { TillFloorZoneMenu } from "../widgets/floor-zone-menu.js";
 import { spareSpot } from "../state/floor-today.js";
 

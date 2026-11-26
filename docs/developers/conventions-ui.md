@@ -860,6 +860,12 @@ Most area response types mirror the server's JSON in a separate declaration. Typ
 compare those declarations with the server's answers. Product and modifier-list types come from
 the shared declarations. See [the Dashboard browser import guard](../../scripts/dashboard-browser-purity.test.ts).
 
+## Where to put a Till API call
+
+Put the call and its local types in the matching area under `apps/till/src/api/`. Screens still
+receive a `TillApi`, and each area uses its request function. Keep calls that read the client’s
+person, service-zone, whole-bill, live-event or locale state beside that state in `client.ts`.
+
 ## A background API client does not make POST requests passive
 
 The request primitive marks only GETs as passive. Automatic renewal of a pairing hold uses an

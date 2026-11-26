@@ -7,7 +7,7 @@ import {
   withUnavailable,
   refreshProductDeclarations,
 } from "./menu-refresh.js";
-import { menuOfferToTillProduct, type TillMenuOffer, type TillProduct } from "../api/client.js";
+import { menuOfferToTillProduct, type TillMenuOffer, type TillProduct } from "../api/menu-api.js";
 import { WorkingOrderStore, type OrderLine } from "./working-order.js";
 
 type LiveModifier = TillMenuOffer["offeredModifiers"][number];

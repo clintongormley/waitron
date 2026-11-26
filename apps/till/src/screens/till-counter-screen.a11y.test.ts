@@ -3,7 +3,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/
 import "./till-counter-screen.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import type { ServiceZoneSummary, TillProduct } from "../api/client.js";
+import type { ServiceZoneSummary, TillProduct } from "../api/menu-api.js";
 import { bill } from "../../test/set-menu-widgets.js";
 
 const products: TillProduct[] = [

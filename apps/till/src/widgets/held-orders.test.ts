@@ -6,7 +6,8 @@ import { codeMessage } from "../i18n/codes.js";
 import { es } from "../i18n/strings.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillHeldOrders } from "./held-orders.js";
-import type { FloorZone, HeldOrderSummary, TableParty, TableState } from "../api/client.js";
+import type { HeldOrderSummary } from "../api/orders-api.js";
+import type { FloorZone, TableParty, TableState } from "../api/floor-api.js";
 
 const labeledOrder: HeldOrderSummary = {
   zoneId: null,

@@ -4,7 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import "./table-details-sheet.js";
 import type { TillTableDetailsSheet } from "./table-details-sheet.js";
-import type { TableParty, TableState, TableToday } from "../api/client.js";
+import type { TableParty, TableState, TableToday } from "../api/floor-api.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));

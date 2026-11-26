@@ -6,15 +6,10 @@ import { currentLocale, setLocale } from "./i18n/t.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
-import { menuOfferToTillProduct } from "./api/client.js";
-import type {
-  MenuState,
-  ServiceZoneSummary,
-  TillApi,
-  TillMenuOffer,
-  TillSaleResult,
-  ZoneOffers,
-} from "./api/client.js";
+import { menuOfferToTillProduct } from "./api/menu-api.js";
+import type { MenuState, TillApi } from "./api/client.js";
+import type { TillSaleResult } from "./api/payments-api.js";
+import type { ServiceZoneSummary, TillMenuOffer, ZoneOffers } from "./api/menu-api.js";
 import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 
 interface Menu {

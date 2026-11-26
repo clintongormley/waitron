@@ -1,5 +1,6 @@
 import { type BillSetMenuState, optionSnapshotNames } from "@waitron/shared";
-import type { ExpoItem, LineNutrition, StationQueueItem, TabLine } from "../api/client.js";
+import type { StationQueueItem } from "../api/client.js";
+import type { ExpoItem, LineNutrition, TabLine } from "../api/kitchen-api.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import type { SentSlice } from "./sent-panel.js";
 

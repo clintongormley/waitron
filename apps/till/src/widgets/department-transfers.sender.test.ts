@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { TillApi, type DepartmentTransfer } from "../api/client.js";
+import { TillApi } from "../api/client.js";
+import type { DepartmentTransfer } from "../api/department-transfers-api.js";
 import { TillDepartmentTransfers } from "./department-transfers.js";
 
 const sent: DepartmentTransfer = {

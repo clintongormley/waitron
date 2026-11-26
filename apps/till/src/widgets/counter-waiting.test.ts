@@ -4,7 +4,7 @@ import { formatMoney } from "@waitron/shared";
 import { countText, currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillCounterWaiting } from "./counter-waiting.js";
-import type { CounterWaitingOrder } from "../api/client.js";
+import type { CounterWaitingOrder } from "../api/orders-api.js";
 
 const paid: CounterWaitingOrder = {
   items: [],

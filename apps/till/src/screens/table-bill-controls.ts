@@ -5,7 +5,7 @@ import {
   actionDividerStyles,
 } from "@waitron/ui/src/components/wt-row-actions.js";
 import { decimal, formatMoney } from "@waitron/shared";
-import type { PartyBill, TableParty } from "../api/client.js";
+import type { PartyBill, TableParty } from "../api/floor-api.js";
 import { countText, currentLocale, fill, named, t } from "../i18n/t.js";
 import { billLabel, billNumberLabel, shownBills } from "../state/bill-state.js";
 

@@ -3,7 +3,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { setLocale } from "../i18n/t.js";
 import "./bill-refund-dialog.js";
 import type { TillBillRefundDialog } from "./bill-refund-dialog.js";
-import type { AdjustmentReason, BillPaymentView } from "../api/client.js";
+import type { AdjustmentReason, BillPaymentView } from "../api/payments-api.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("es-ES"));

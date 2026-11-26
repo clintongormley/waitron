@@ -43,7 +43,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-address-lookup.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
-import type { InvoiceDeliveryChoice, InvoiceDeliveryOptions } from "../api/client.js";
+import type { InvoiceDeliveryChoice, InvoiceDeliveryOptions } from "../api/invoice-delivery-api.js";
 
 export interface InvoiceRecipientDetail {
   invoiceType: "F1";

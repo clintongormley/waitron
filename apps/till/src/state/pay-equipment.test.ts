@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/client.js";
+import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/device-session-api.js";
 import { t } from "../i18n/t.js";
 import {
   autoPickReader,

@@ -1,6 +1,6 @@
 import { outsideCardFields, outsideCardValues, outsideCardStyles } from "./outside-card.js";
-import type { OutsideCardDetails } from "../api/client.js";
-import type { BillUnsent } from "../api/client.js";
+import type { OutsideCardDetails } from "../api/payments-api.js";
+import type { BillUnsent } from "../api/payments-api.js";
 import { billUnsentText } from "../state/bill-unsent.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
@@ -17,7 +17,8 @@ import {
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { BillLookupRow, Tender } from "../api/client.js";
+import type { BillLookupRow } from "../api/find-bill-api.js";
+import type { Tender } from "../api/payments-api.js";
 import { typedAmount } from "../state/bill-payment.js";
 import { clockUnusableText, currentLocale, overLimitText, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";

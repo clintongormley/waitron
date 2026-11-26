@@ -3,7 +3,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { setLocale } from "../i18n/t.js";
 import "./join-with-dialog.js";
 import type { TillJoinWithDialog } from "./join-with-dialog.js";
-import type { TableState } from "../api/client.js";
+import type { TableState } from "../api/floor-api.js";
 
 afterEach(cleanupWidgets);
 afterEach(() => setLocale("en"));

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { OrderGroup } from "../api/client.js";
+import type { OrderGroup } from "../api/kitchen-api.js";
 import { currentContentLanguages, setContentLanguages } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";

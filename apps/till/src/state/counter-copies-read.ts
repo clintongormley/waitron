@@ -1,4 +1,4 @@
-import type { HeldOrder } from "../api/client.js";
+import type { HeldOrder } from "../api/orders-api.js";
 import { limited, TABLE_REQUEST_LIMIT_MS } from "./draft-sync.js";
 
 export function isOrderGone(error: unknown): boolean {

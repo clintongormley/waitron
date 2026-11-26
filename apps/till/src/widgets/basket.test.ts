@@ -9,12 +9,8 @@ import { allergenName } from "../i18n/allergen-names.js";
 import { TillBasket } from "./basket.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
 import { productAsVariant } from "../state/order-line.js";
-import {
-  sellingValuesOf,
-  type OfferedExtraItem,
-  type OfferedModifier,
-  type TillProduct,
-} from "../api/client.js";
+import type { OfferedExtraItem, OfferedModifier } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/menu-api.js";
 import type { SelectedExtra } from "../state/working-order.js";
 
 /**

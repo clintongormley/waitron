@@ -1,4 +1,4 @@
-import type { BillPaymentView } from "../src/api/client.js";
+import type { BillPaymentView } from "../src/api/payments-api.js";
 
 /** A card payment on a bill still waiting at the reader. */
 export const pendingCard: BillPaymentView = {

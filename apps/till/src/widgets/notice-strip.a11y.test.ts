@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import type { StaffNotice } from "../api/client.js";
+import type { StaffNotice } from "../api/device-session-api.js";
 import "./notice-strip.js";
 import type { TillNoticeStrip } from "./notice-strip.js";
 

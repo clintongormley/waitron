@@ -17,7 +17,7 @@ import {
   approverRefusal,
   type OverrideConfirmDetail,
 } from "./supervisor-override-dialog.js";
-import type { StaffMember } from "../api/client.js";
+import type { StaffMember } from "../api/device-session-api.js";
 
 afterEach(() => {
   cleanupWidgets();

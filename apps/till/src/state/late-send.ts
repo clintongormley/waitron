@@ -1,4 +1,4 @@
-import type { TillMenuOffer } from "../api/client.js";
+import type { TillMenuOffer } from "../api/menu-api.js";
 import type { OrderLine } from "./working-order.js";
 
 export interface EndedPeriod {

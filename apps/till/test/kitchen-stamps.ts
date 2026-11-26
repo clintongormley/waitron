@@ -1,4 +1,5 @@
-import type { CurrentOrderKitchen, CurrentOrderRow, StationQueueItem } from "../src/api/client.js";
+import type { StationQueueItem } from "../src/api/client.js";
+import type { CurrentOrderKitchen, CurrentOrderRow } from "../src/api/kitchen-api.js";
 
 type KitchenStamps = Pick<StationQueueItem, "phase" | "requestedAt" | "readyAt" | "passControlled">;
 

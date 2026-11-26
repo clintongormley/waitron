@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import { TillApi, type DepartmentTransferDetail } from "../api/client.js";
+import { TillApi } from "../api/client.js";
+import type { DepartmentTransferDetail } from "../api/department-transfers-api.js";
 import type { TransferSnapshot } from "../state/department-transfer-monitor.js";
 import { TillDepartmentTransfers } from "./department-transfers.js";
 

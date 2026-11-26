@@ -10,23 +10,25 @@ import { codeMessage } from "./i18n/codes.js";
 import { TillApi as RealTillApi } from "./api/client.js";
 import { ServerRouter, withServerTarget } from "./api/server-router.js";
 import type { CapabilityFlag } from "./layout.js";
+import type { TillApi } from "./api/client.js";
+import type { PartyBill } from "./api/floor-api.js";
 import type {
   AllocationPreview,
   BillBalance,
   BillPaymentRequest,
   BillPaymentResult,
   BillPaymentView,
+  PayOutcome,
+  TillSaleResult,
+} from "./api/payments-api.js";
+import type {
   DeviceEquipment,
   EquipmentChange,
   EquipmentItem,
-  PartyBill,
-  PayOutcome,
   RoleEquipment,
   StaffNotice,
-  TillApi,
-  TillProduct,
-  TillSaleResult,
-} from "./api/client.js";
+} from "./api/device-session-api.js";
+import type { TillProduct } from "./api/menu-api.js";
 import type { TillPayEquipment } from "./widgets/pay-equipment.js";
 import type { PresentedPayDetail, TillPresentedPayDialog } from "./widgets/presented-pay-dialog.js";
 import type { TillTenderPay } from "./widgets/tender-pay.js";

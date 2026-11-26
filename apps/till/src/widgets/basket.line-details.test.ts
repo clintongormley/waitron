@@ -2,7 +2,7 @@ import { afterEach, expect, it, onTestFinished } from "vitest";
 import { userEvent } from "vitest/browser";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import { sellingValuesOf, type TillProduct } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/menu-api.js";
 import { productAsVariant } from "../state/order-line.js";
 import { formatMoney } from "@waitron/shared";
 import type { WtInput, WtTextarea } from "@waitron/ui";

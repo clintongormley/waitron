@@ -6,7 +6,8 @@ import { mountWidget, servedMenus } from "../widgets/test-helpers.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { DraftStore } from "../state/draft-sync.js";
-import type { OfferedModifier, TillProduct } from "../api/client.js";
+import type { OfferedModifier } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import type { TillMenuBrowser } from "../widgets/menu-browser.js";
 
 export const beer: TillProduct = {

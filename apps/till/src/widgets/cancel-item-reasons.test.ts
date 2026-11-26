@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { AdjustmentReason } from "../api/client.js";
+import type { AdjustmentReason } from "../api/payments-api.js";
 import type { CancellationRead } from "../api/line-cancel-types.js";
 import { setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";

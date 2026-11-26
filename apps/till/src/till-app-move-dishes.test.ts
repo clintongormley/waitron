@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { formatMoney, type BillSetMenuState } from "@waitron/shared";
-import type { BillBalance, PartyBill, TabLine, TabLines } from "./api/client.js";
+import type { PartyBill } from "./api/floor-api.js";
+import type { BillBalance } from "./api/payments-api.js";
+import type { TabLine, TabLines } from "./api/kitchen-api.js";
 import { codeMessage } from "./i18n/codes.js";
 import { currentLocale, differentPeopleText, setLocale, t } from "./i18n/t.js";
 import { bill as setMenuBill } from "../test/set-menu-widgets.js";

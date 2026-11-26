@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CurrentOrderGroup, TillCourse } from "../api/client.js";
+import type { CurrentOrderGroup } from "../api/kitchen-api.js";
+import type { TillCourse } from "../api/device-session-api.js";
 import type { OrderLine } from "./working-order.js";
 import { draftLayout, fireGroups, sendAllGroups, panelTotal } from "./draft-layout.js";
 

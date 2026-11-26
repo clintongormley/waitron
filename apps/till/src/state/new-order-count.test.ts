@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { newOrderByProduct, newOrderDishes, newOrderItems } from "./new-order-count.js";
 import type { OrderLine } from "./working-order.js";
 

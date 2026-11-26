@@ -5,7 +5,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { setLocale } from "../i18n/t.js";
 import "./equipment-dialog.js";
 import type { TillEquipmentDialog } from "./equipment-dialog.js";
-import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/client.js";
+import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/device-session-api.js";
 
 afterEach(() => {
   cleanupWidgets();

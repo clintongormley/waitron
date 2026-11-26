@@ -13,7 +13,8 @@ import {
 } from "./widgets/test-helpers.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
-import type { TillApi, TillProduct } from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { TillProduct } from "./api/menu-api.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";

@@ -1,6 +1,6 @@
 import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
-import type { BillLookupRow } from "../api/client.js";
+import type { BillLookupRow } from "../api/find-bill-api.js";
 import "./find-bill-dialog.js";
 import type { TillFindBillDialog } from "./find-bill-dialog.js";
 

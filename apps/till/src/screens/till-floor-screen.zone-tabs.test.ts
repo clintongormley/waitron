@@ -7,7 +7,7 @@ import { currentLocale, setLocale } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorZone, TableParty, TableState, TableToday } from "../api/client.js";
+import type { FloorZone, TableParty, TableState, TableToday } from "../api/floor-api.js";
 import { dueStepSignal } from "../../test/service-steps.js";
 
 const now = Date.parse("2026-10-20T20:00:00.000Z");

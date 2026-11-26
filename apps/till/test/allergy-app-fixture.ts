@@ -18,13 +18,9 @@ import type { TillTableOrderScreen } from "../src/screens/till-table-order-scree
 import type { TillMenuBrowser } from "../src/widgets/menu-browser.js";
 import type { TillPartyAllergyDialog } from "../src/widgets/party-allergy-dialog.js";
 import type { FormFactor, CapabilityFlag } from "../src/layout.js";
-import type {
-  TableParty,
-  TableState,
-  TillApi,
-  TillMenuOffer,
-  ZoneOffers,
-} from "../src/api/client.js";
+import type { TillApi } from "../src/api/client.js";
+import type { TableParty, TableState } from "../src/api/floor-api.js";
+import type { TillMenuOffer, ZoneOffers } from "../src/api/menu-api.js";
 import { showView } from "../src/screens/till-table-order-screen.test-helpers.js";
 export const unit = {
   id: "unit-each",

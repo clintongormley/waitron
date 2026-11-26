@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { PartyAllergyRead } from "@waitron/module";
-import type { PassBoard, StationQueueGroup, TillApi } from "../api/client.js";
+import type { StationQueueGroup, TillApi } from "../api/client.js";
+import type { PassBoard } from "../api/kitchen-api.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { TillPartyAllergyDialog } from "../widgets/party-allergy-dialog.js";

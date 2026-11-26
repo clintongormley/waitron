@@ -9,7 +9,7 @@ import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-number-stepper.js";
-import type { TableState } from "../api/client.js";
+import type { TableState } from "../api/floor-api.js";
 import { countText, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import { totalSeats } from "../state/floor-map.js";

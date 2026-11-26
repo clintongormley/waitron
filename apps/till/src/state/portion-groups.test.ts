@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CurrentOrderRow, LineNutrition, TabLine } from "../api/client.js";
+import type { CurrentOrderRow, LineNutrition, TabLine } from "../api/kitchen-api.js";
 import type { SentSlice } from "./sent-panel.js";
 import { portionGroups, sentSlicePortionKey, tabLinePortionKey } from "./portion-groups.js";
 import { withRowRequestedAt } from "../../test/kitchen-stamps.js";

@@ -14,7 +14,8 @@ import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 import "../till-app.js";
 import type { TillApp } from "../till-app.js";
-import type { TillApi, ZoneOffers } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { ZoneOffers } from "../api/menu-api.js";
 import { SessionActivity } from "../session-activity.js";
 
 const originalLocale = currentLocale();

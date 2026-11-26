@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { Station, TillApi, TillProduct } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { Station } from "../api/kitchen-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { TillStationScreen } from "../screens/till-station-screen.js";

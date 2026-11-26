@@ -5,7 +5,8 @@ import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import "./till-lock-screen.js";
 import type { TillLockScreen } from "./till-lock-screen.js";
-import type { StaffMember, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { StaffMember } from "../api/device-session-api.js";
 
 const roster: StaffMember[] = [
   { personId: "p1", displayName: "Ana" },

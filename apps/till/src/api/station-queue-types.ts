@@ -1,8 +1,8 @@
 import type { BumpMode, Dining, OptionSnapshot, StationThresholds } from "@waitron/shared";
 import type { KitchenAllergyBlock, KitchenNoteChange } from "@waitron/module";
+import type { DietProfile } from "./client.js";
 import type {
   AsServedAllergens,
-  DietProfile,
   KitchenPhase,
   QueueCrossRef,
   QueueGroup,
@@ -10,7 +10,7 @@ import type {
   QueueParty,
   TicketState,
   WorkingOrderStatus,
-} from "./client.js";
+} from "./kitchen-api.js";
 
 /** One ticket item on a station's queue; `id` is the per-line bump target. */
 export interface StationQueueItem {

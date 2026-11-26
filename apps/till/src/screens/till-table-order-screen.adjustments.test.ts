@@ -7,7 +7,8 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { AdjustDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { PartyBill, TabLine, TableParty } from "../api/client.js";
+import type { PartyBill, TableParty } from "../api/floor-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { openTableMenu } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const money = (amount: string) => formatMoney(decimal(amount), currentLocale());

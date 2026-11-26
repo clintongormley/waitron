@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MONEY_SCALE, addDecimal, toScale } from "@waitron/shared";
-import type { BillBalance, TabLine } from "../api/client.js";
+import type { BillBalance } from "../api/payments-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { tabLineGross } from "./adjust-target.js";
 import { tabLinePortionKey } from "./portion-groups.js";
 import {

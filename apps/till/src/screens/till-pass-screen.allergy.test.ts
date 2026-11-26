@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PassBoard, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { PassBoard } from "../api/kitchen-api.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "../widgets/test-helpers.js";
 import type { TillPassBoard } from "../widgets/pass-board.js";

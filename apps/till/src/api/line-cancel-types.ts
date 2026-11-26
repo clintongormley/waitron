@@ -1,4 +1,4 @@
-import type { BillEditExpected } from "./client.js";
+import type { BillEditExpected } from "./order-types.js";
 
 export interface CancellationContext {
   billStatus: "open" | "placed" | "settled" | "abandoned";

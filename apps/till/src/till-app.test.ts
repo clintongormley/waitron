@@ -80,31 +80,22 @@ import type { TillProfileDialog } from "./widgets/profile-dialog.js";
 import type { TillStationQueue } from "./widgets/station-queue.js";
 import type { TillCounterWaiting } from "./widgets/counter-waiting.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
+import type { TillApi } from "./api/client.js";
+import type { CounterWaitingOrder, HeldOrder, HeldOrderSummary } from "./api/orders-api.js";
+import type { FloorZone, PartyBill, TableState } from "./api/floor-api.js";
+import type { InvoiceDeliveryAttempt, InvoiceDeliveryStatus } from "./api/invoice-delivery-api.js";
+import type { DeadEndAnswer } from "./api/drafts-api.js";
+import type { PayOutcome, TillSaleResult } from "./api/payments-api.js";
+import type { TabLine } from "./api/kitchen-api.js";
 import type {
-  CounterWaitingOrder,
-  DeadEndAnswer,
   DevDeviceList,
   DeviceEquipment,
   EquipmentChange,
   EquipmentItem,
-  FloorZone,
-  HeldOrder,
-  HeldOrderSummary,
-  InvoiceDeliveryAttempt,
-  InvoiceDeliveryStatus,
-  PayOutcome,
-  PartyBill,
   ResolvedKitchenScreen,
   RoleEquipment,
-  ServiceZoneSummary,
-  TabLine,
-  TableState,
-  TillApi,
-  TillMenu,
-  TillProduct,
-  TillSaleResult,
-  ZoneOffers,
-} from "./api/client.js";
+} from "./api/device-session-api.js";
+import type { ServiceZoneSummary, TillMenu, TillProduct, ZoneOffers } from "./api/menu-api.js";
 import { DEV_DEVICE_STORAGE_KEY } from "./api/dev-device.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
 import type { RefundableTender } from "./api/tender-refund-types.js";

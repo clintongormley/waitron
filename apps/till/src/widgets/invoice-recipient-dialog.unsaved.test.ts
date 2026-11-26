@@ -9,7 +9,7 @@ import type {
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./invoice-recipient-dialog.js";
-import type { InvoiceDeliveryOptions } from "../api/client.js";
+import type { InvoiceDeliveryOptions } from "../api/invoice-delivery-api.js";
 import type {
   InvoiceRecipientDetail,
   TillInvoiceRecipientDialog,

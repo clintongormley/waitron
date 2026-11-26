@@ -10,15 +10,11 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
-import { menuOfferToTillProduct } from "./api/client.js";
-import type {
-  DraftSubmission,
-  MenuState,
-  TillApi,
-  TillMenuOffer,
-  TillSaleResult,
-  ZoneOffers,
-} from "./api/client.js";
+import { menuOfferToTillProduct } from "./api/menu-api.js";
+import type { MenuState, TillApi } from "./api/client.js";
+import type { DraftSubmission } from "./api/drafts-api.js";
+import type { TillSaleResult } from "./api/payments-api.js";
+import type { TillMenuOffer, ZoneOffers } from "./api/menu-api.js";
 import type { WorkingOrderStore } from "./state/working-order.js";
 import { DRAFT_SAVE_DELAY_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { DEFAULT_HOME_ORDER } from "@waitron/shared";

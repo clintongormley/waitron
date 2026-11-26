@@ -1,5 +1,5 @@
 import type { TableSignal } from "@waitron/shared";
-import type { TableState } from "../api/client.js";
+import type { TableState } from "../api/floor-api.js";
 import { joinMembersById, tightName } from "./floor-today.js";
 
 export function signalOf<K extends TableSignal["kind"]>(

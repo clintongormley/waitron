@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { TillApi, type KitchenNoteSnapshot } from "./client.js";
+import { TillApi } from "./client.js";
+import type { KitchenNoteSnapshot } from "./order-types.js";
 
 const snapshot: KitchenNoteSnapshot = {
   scope: { partyId: "party-1" },

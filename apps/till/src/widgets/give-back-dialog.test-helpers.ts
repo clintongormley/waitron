@@ -1,5 +1,7 @@
 import { vi } from "vitest";
-import type { AdjustmentReason, StaffMember, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { AdjustmentReason } from "../api/payments-api.js";
+import type { StaffMember } from "../api/device-session-api.js";
 import type {
   GiveBackLine,
   GiveBackOutcome,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TabLine } from "../api/client.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { lineAdjustTarget, rowAdjustTarget } from "./adjust-target.js";
 
 function line(over: Partial<TabLine>): TabLine {

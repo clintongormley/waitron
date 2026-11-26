@@ -11,7 +11,7 @@ import "./numeric-pad.js";
 import { pressIfEnabled } from "../state/pad-keys.js";
 import { CountdownController } from "../state/countdown-controller.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { StaffMember } from "../api/client.js";
+import type { StaffMember } from "../api/device-session-api.js";
 
 export interface OverrideConfirmDetail {
   personId: string;

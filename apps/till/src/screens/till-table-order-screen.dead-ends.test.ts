@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import type { DeadEndAnswer } from "../api/client.js";
+import type { DeadEndAnswer } from "../api/drafts-api.js";
 import type { OrderLine } from "../state/working-order.js";
 import type { SubmitDraftDetail, TillTableOrderScreen } from "./till-table-order-screen.js";
 import {

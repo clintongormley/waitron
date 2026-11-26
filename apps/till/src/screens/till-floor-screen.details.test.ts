@@ -5,7 +5,7 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { TillTableDetailsSheet } from "../widgets/table-details-sheet.js";
-import type { FloorZone, TableParty, TableState, TableToday } from "../api/client.js";
+import type { FloorZone, TableParty, TableState, TableToday } from "../api/floor-api.js";
 
 function zone(): FloorZone {
   return {

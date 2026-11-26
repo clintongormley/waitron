@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import type { Station } from "../api/client.js";
+import type { Station } from "../api/kitchen-api.js";
 import type { WtCombobox } from "@waitron/ui/src/components/wt-combobox.js";
 import "./station-choice-dialog.js";
 import type { TillStationChoiceDialog } from "./station-choice-dialog.js";

@@ -8,7 +8,7 @@ import { currentContentLanguages } from "@waitron/ui";
 import { currentLocale } from "../i18n/t.js";
 import { unitPresentation } from "@waitron/menu/src/unit-presentation.js";
 import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 
 /**
  * The product's STAFF name, plain text. The operator reads the name the venue uses internally, never a

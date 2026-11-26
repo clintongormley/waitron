@@ -7,12 +7,8 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
-import type {
-  DrawerCloseRead,
-  FinishedDrawerClose,
-  SavedDrawerCount,
-  TillApi,
-} from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { DrawerCloseRead, FinishedDrawerClose, SavedDrawerCount } from "../api/drawer-api.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 

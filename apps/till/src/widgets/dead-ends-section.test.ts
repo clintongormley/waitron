@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import type { DeadEndAnswer } from "../api/client.js";
+import type { DeadEndAnswer } from "../api/drafts-api.js";
 import type { WtCombobox } from "@waitron/ui";
 import "./dead-ends-section.js";
 import type { TillDeadEndsSection } from "./dead-ends-section.js";

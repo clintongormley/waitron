@@ -68,6 +68,11 @@ import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js"
 import type { TillBillRefundDialog } from "./widgets/bill-refund-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
+import type { TillApi } from "./api/client.js";
+import type { HeldOrderSummary } from "./api/orders-api.js";
+import type { PartyBill, TableState } from "./api/floor-api.js";
+import type { InvoiceDeliveryOptions } from "./api/invoice-delivery-api.js";
+import type { Draft } from "./api/drafts-api.js";
 import type {
   AllocationPreview,
   BillBalance,
@@ -77,15 +82,9 @@ import type {
   BillRefundRequest,
   BillRefundResult,
   BillRefundView,
-  Draft,
-  HeldOrderSummary,
-  InvoiceDeliveryOptions,
-  PartyBill,
-  TableState,
-  TillApi,
-  TillProduct,
   TillSaleResult,
-} from "./api/client.js";
+} from "./api/payments-api.js";
+import type { TillProduct } from "./api/menu-api.js";
 import type { ItemPaymentRequest } from "./api/item-payment-types.js";
 
 // A table's bill paid in parts through the bill payment dialog (service, ordering and billing plan

@@ -1,4 +1,4 @@
-import type { BillEditExpected, BillEditState } from "../api/client.js";
+import type { BillEditExpected, BillEditState } from "../api/order-types.js";
 
 /** The edit state a bill was read with, as a write on that bill expects it. */
 export function expectedEditOf({

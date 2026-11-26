@@ -1,7 +1,8 @@
 import { type TemplateResult, css, html, nothing } from "lit";
 import "@waitron/ui/src/components/wt-button.js";
 import { decimal, formatMoney, isZeroDecimal } from "@waitron/shared";
-import type { BillBalance, PartyBill } from "../api/client.js";
+import type { PartyBill } from "../api/floor-api.js";
+import type { BillBalance } from "../api/payments-api.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { billNumberLabel, overpaidOf } from "../state/bill-state.js";
 

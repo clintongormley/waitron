@@ -13,7 +13,8 @@ import { signalChipStyles, signalChips } from "./signal-chips.js";
 import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { orderCountStyles, orderCounts } from "./order-counts.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
-import type { FloorZone, HeldOrderSummary, TableState } from "../api/client.js";
+import type { HeldOrderSummary } from "../api/orders-api.js";
+import type { FloorZone, TableState } from "../api/floor-api.js";
 
 export interface MoveHeldOrderDetail {
   orderId: string;

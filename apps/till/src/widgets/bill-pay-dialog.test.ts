@@ -14,7 +14,7 @@ import {
   twoReaderEquipment as equipmentWith,
 } from "../../test/pay-equipment-fixtures.js";
 import type { PayLine, PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";
-import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/client.js";
+import type { AllocationPreview, BillBalance, BillPaymentView } from "../api/payments-api.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));

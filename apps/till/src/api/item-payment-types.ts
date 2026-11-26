@@ -1,10 +1,10 @@
 import type {
   BillBalance,
-  BillEditExpected,
   BillPaymentRequest,
   BillPaymentResult,
   OutsideCardDetails,
-} from "./client.js";
+} from "./payments-api.js";
+import type { BillEditExpected } from "./order-types.js";
 
 /** A dish chosen to pay for, by line id; with no `quantity` the whole line. */
 export interface ItemPick {

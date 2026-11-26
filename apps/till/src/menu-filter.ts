@@ -1,6 +1,6 @@
 import type { AllergenCode, DietaryLabel, Kind, ProductAllergens } from "@waitron/shared";
 import { nutritionDietLabels } from "./diet-labels.js";
-import type { TillProduct } from "./api/client.js";
+import type { TillProduct } from "./api/menu-api.js";
 import { offeredListsOf } from "./state/order-line.js";
 
 /**

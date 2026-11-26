@@ -9,7 +9,8 @@ import {
 } from "../widgets/test-helpers.js";
 import "./till-station-screen.js";
 import type { TillStationScreen } from "./till-station-screen.js";
-import type { KitchenNotice, Station, StationQueueGroup, TillApi } from "../api/client.js";
+import type { KitchenNotice, StationQueueGroup, TillApi } from "../api/client.js";
+import type { Station } from "../api/kitchen-api.js";
 
 const stations: Station[] = [
   {

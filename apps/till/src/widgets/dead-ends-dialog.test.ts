@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import type { DeadEndAnswer } from "../api/client.js";
+import type { DeadEndAnswer } from "../api/drafts-api.js";
 import "./dead-ends-dialog.js";
 import type { TillDeadEndsDialog } from "./dead-ends-dialog.js";
 

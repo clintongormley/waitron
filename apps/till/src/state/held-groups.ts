@@ -1,4 +1,4 @@
-import type { OrderGroup, TabLine } from "../api/client.js";
+import type { OrderGroup, TabLine } from "../api/kitchen-api.js";
 
 /** The ids of the party's HELD groups. */
 export function heldGroupIds(groups: readonly Pick<OrderGroup, "id" | "state">[]): Set<string> {

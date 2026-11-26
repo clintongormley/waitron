@@ -12,15 +12,10 @@ import type {
   SplitTableDetail,
   TillTableOrderScreen,
 } from "./till-table-order-screen.js";
-import type {
-  BillBalance,
-  BillRefundView,
-  Draft,
-  SplitSources,
-  TabLine,
-  TableParty,
-  TableState,
-} from "../api/client.js";
+import type { TableParty, TableState } from "../api/floor-api.js";
+import type { Draft, SplitSources } from "../api/drafts-api.js";
+import type { BillBalance, BillRefundView } from "../api/payments-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { billLabel } from "../state/bill-state.js";
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 

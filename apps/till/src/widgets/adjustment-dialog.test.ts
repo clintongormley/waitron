@@ -10,7 +10,7 @@ import {
   type AdjustTarget,
   type TillAdjustmentDialog,
 } from "./adjustment-dialog.js";
-import type { AdjustmentPreview, AdjustmentReason } from "../api/client.js";
+import type { AdjustmentPreview, AdjustmentReason } from "../api/payments-api.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));

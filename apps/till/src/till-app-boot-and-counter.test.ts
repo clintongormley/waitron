@@ -47,18 +47,11 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillStationScreen } from "./screens/till-station-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
 import type { CapabilityFlag } from "./layout.js";
-import type {
-  KitchenScreenKind,
-  MadeHereItem,
-  ResolvedKitchenScreen,
-  ServiceZoneSummary,
-  TillApi,
-  TillMenu,
-  TillProduct,
-  TableParty,
-  TillSaleResult,
-  ZoneOffers,
-} from "./api/client.js";
+import type { MadeHereItem, TillApi } from "./api/client.js";
+import type { TableParty } from "./api/floor-api.js";
+import type { TillSaleResult } from "./api/payments-api.js";
+import type { KitchenScreenKind, ResolvedKitchenScreen } from "./api/device-session-api.js";
+import type { ServiceZoneSummary, TillMenu, TillProduct, ZoneOffers } from "./api/menu-api.js";
 
 const coffee: TillProduct = {
   id: "cafe",
@@ -3645,7 +3638,7 @@ describe("till-app logout while a request is waiting for the server", () => {
       orderNumber: number;
       label: null;
       lines: [];
-      kitchenNote: import("./api/client.js").KitchenNoteSnapshot;
+      kitchenNote: import("./api/order-types.js").KitchenNoteSnapshot;
       zoneId: null;
     }) => void;
     const { el } = await mountApp({

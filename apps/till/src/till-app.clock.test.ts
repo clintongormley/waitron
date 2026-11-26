@@ -6,7 +6,7 @@ import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { en } from "./i18n/strings.js";
 import { ServerRouter } from "./api/server-router.js";
-import type { TillClockState } from "./api/client.js";
+import type { TillClockState } from "./api/attendance-api.js";
 import {
   clockApp,
   clockPage,
@@ -157,7 +157,7 @@ describe("till clocking integration", () => {
     });
     const f = await clockApp({ timeoutSeconds: 60, props: { sessionActivity: activity } });
     const original = await f.api.listDefaultZoneOffers();
-    const held = deferred<import("./api/client.js").ZoneOffers>();
+    const held = deferred<import("./api/menu-api.js").ZoneOffers>();
     f.api.listDefaultZoneOffers.mockReturnValueOnce(held.promise);
     await signIn(f.el);
     await vi.waitFor(() => expect(clockPage(f.el)).not.toBeNull());
@@ -500,7 +500,7 @@ describe("till clocking integration", () => {
   it("a profile change invalidates Clock out before the replacement profile finishes loading", async () => {
     const f = await clockApp({ state: clockState("working", "in") });
     const old = deferred<TillClockState>();
-    const profile = deferred<import("./api/client.js").TillInfo>();
+    const profile = deferred<import("./api/device-session-api.js").TillInfo>();
     f.api.clockOut.mockReturnValueOnce(old.promise);
     await signIn(f.el);
     await working(f.el);

@@ -1,6 +1,7 @@
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { liveGate } from "./live-gate.js";
-import type { DepartmentTransfer, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { DepartmentTransfer } from "../api/department-transfers-api.js";
 import { limited } from "./draft-sync.js";
 
 export interface TransferSnapshot {

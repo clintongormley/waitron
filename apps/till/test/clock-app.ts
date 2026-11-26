@@ -1,7 +1,9 @@
 import { deviceZonesFixture } from "./device-zones.js";
 import { expect, vi, type Mock } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { TillApi, TillClockState, TillInfo } from "../src/api/client.js";
+import type { TillApi } from "../src/api/client.js";
+import type { TillClockState } from "../src/api/attendance-api.js";
+import type { TillInfo } from "../src/api/device-session-api.js";
 import type { TillApp } from "../src/till-app.js";
 import "../src/till-app.js";
 import { hoursView } from "./hours-fixtures.js";

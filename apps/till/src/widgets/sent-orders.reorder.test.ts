@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { WtRowActions } from "@waitron/ui";
-import type { CurrentOrders } from "../api/client.js";
+import type { CurrentOrders } from "../api/kitchen-api.js";
 import { setLocale } from "../i18n/t.js";
 import {
   current,

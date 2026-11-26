@@ -10,7 +10,7 @@ import { recoveryLink } from "./recovery-refusal.js";
 import { trackDialog } from "./track-dialog.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { ProfileChoice } from "../api/client.js";
+import type { ProfileChoice } from "../api/device-session-api.js";
 
 /** Refusals about the profile chosen, shown under it rather than at the bottom. */
 const ABOUT_CHOICE = new Set(["device_profile.not_approved", "device_profile.not_admitted"]);

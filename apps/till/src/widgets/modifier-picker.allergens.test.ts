@@ -3,7 +3,8 @@ import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget, expectNoA11yViolations } from "./test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { EMPTY_MENU_FILTERS } from "../menu-filter.js";
-import type { OfferedExtraItem, TillProduct } from "../api/client.js";
+import type { OfferedExtraItem } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { TillModifierPicker } from "./modifier-picker.js";
 
 const noNuts = { diets: [], exclude: { nuts: "all" as const } };

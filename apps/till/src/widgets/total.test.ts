@@ -4,7 +4,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillTotal } from "./total.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 
 const coffee: TillProduct = {
   id: "cafe",

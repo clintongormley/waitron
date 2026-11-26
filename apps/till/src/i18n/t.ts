@@ -1,6 +1,6 @@
 import { FALLBACK_LOCALE, formatMoney } from "@waitron/shared";
 import { formatDecimalInput } from "@waitron/ui";
-import type { VatBreakdownEntry } from "../api/client.js";
+import type { VatBreakdownEntry } from "../api/payments-api.js";
 import { catalogues, en, type StringKey } from "./strings.js";
 
 // Module-level on purpose: the till shows one locale at a time. till-app switches it at boot, so this

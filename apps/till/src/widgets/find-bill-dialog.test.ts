@@ -5,7 +5,7 @@ import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./find-bill-dialog.js";
 import type { TillFindBillDialog } from "./find-bill-dialog.js";
-import type { BillLookupRow } from "../api/client.js";
+import type { BillLookupRow } from "../api/find-bill-api.js";
 
 const debt: BillLookupRow = {
   workingOrderId: "wo-1",

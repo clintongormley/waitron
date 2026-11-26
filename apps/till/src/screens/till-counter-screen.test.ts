@@ -13,7 +13,7 @@ import {
 import { TillCounterScreen } from "./till-counter-screen.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import type { ServiceZoneSummary, TillProduct, TillZoneMenu } from "../api/client.js";
+import type { ServiceZoneSummary, TillProduct, TillZoneMenu } from "../api/menu-api.js";
 
 const coffee: TillProduct = {
   id: "p1",

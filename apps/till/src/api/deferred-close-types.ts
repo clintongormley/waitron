@@ -1,4 +1,6 @@
-import type { BillEditExpected, InvoiceDeliveryChoice, PartyBill } from "./client.js";
+import type { PartyBill } from "./floor-api.js";
+import type { InvoiceDeliveryChoice } from "./invoice-delivery-api.js";
+import type { BillEditExpected } from "./order-types.js";
 
 /** Close one bill, final in Waitron, as a deferred payment. */
 export interface CloseDeferredRequest {

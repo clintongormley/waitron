@@ -1,4 +1,5 @@
-import { a4HoldCodes, type A4HoldCode, type StaffNotice } from "../api/client.js";
+import { a4HoldCodes, type A4HoldCode } from "../api/invoice-delivery-api.js";
+import type { StaffNotice } from "../api/device-session-api.js";
 import { clockTime, countText, t } from "./t.js";
 
 const TELL_MANAGER = "staff_notice.tell_manager";

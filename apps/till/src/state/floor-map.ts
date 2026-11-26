@@ -1,5 +1,5 @@
 import type { FloorMapTable } from "@waitron/ui";
-import type { TableState } from "../api/client.js";
+import type { TableState } from "../api/floor-api.js";
 import { mapLook } from "./floor-look.js";
 import { onTodaysPlan } from "./floor-today.js";
 

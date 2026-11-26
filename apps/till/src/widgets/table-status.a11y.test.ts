@@ -4,7 +4,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { setLocale } from "../i18n/t.js";
 import "./table-status.js";
 import type { TillTableStatus } from "./table-status.js";
-import type { TableParty, TableState } from "../api/client.js";
+import type { TableParty, TableState } from "../api/floor-api.js";
 import { dueStepSignal } from "../../test/service-steps.js";
 
 afterEach(cleanupWidgets);

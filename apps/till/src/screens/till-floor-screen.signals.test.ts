@@ -4,7 +4,7 @@ import { setLocale } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
-import type { TableParty, TableState, TableToday } from "../api/client.js";
+import type { TableParty, TableState, TableToday } from "../api/floor-api.js";
 import type { TableSignal } from "@waitron/shared";
 import { dueStepSignal } from "../../test/service-steps.js";
 

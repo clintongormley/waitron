@@ -5,7 +5,7 @@ import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import {
   beer,
   browser,

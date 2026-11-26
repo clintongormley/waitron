@@ -19,16 +19,11 @@ import type { TillLockScreen } from "../src/screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "../src/screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "../src/screens/till-floor-screen.js";
 import type { FormFactor, CapabilityFlag } from "../src/layout.js";
-import type {
-  FloorZone,
-  TabLine,
-  TableState,
-  TableParty,
-  TillApi,
-  TillSaleResult,
-  PartyBill,
-  ZoneOffers,
-} from "../src/api/client.js";
+import type { TillApi } from "../src/api/client.js";
+import type { FloorZone, TableState, TableParty, PartyBill } from "../src/api/floor-api.js";
+import type { TillSaleResult } from "../src/api/payments-api.js";
+import type { TabLine } from "../src/api/kitchen-api.js";
+import type { ZoneOffers } from "../src/api/menu-api.js";
 
 export const zone: FloorZone = {
   id: "z1",

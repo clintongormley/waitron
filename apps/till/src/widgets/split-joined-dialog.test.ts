@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { TableParty, TableState, TableToday } from "../api/client.js";
+import type { TableParty, TableState, TableToday } from "../api/floor-api.js";
 import { groupSplitOf } from "../state/floor-today.js";
 import "./split-joined-dialog.js";
 import type { SplitJoinedDetail, TillSplitJoinedDialog } from "./split-joined-dialog.js";

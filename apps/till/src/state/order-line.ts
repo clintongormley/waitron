@@ -9,7 +9,8 @@ import {
   sumDecimals,
   toScale,
 } from "@waitron/shared";
-import { sellingValuesOf, type SaleLine, type TillProduct } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/menu-api.js";
+import type { SaleLine } from "../api/order-types.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { productUnit, soldByTheUnit, unitName } from "../widgets/product-name.js";

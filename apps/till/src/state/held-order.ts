@@ -1,4 +1,5 @@
-import type { HeldOrder, TillProduct } from "../api/client.js";
+import type { HeldOrder } from "../api/orders-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { StoredLines } from "../widgets/basket.js";
 import { deriveExtraSelections } from "./held-extras.js";

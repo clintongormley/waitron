@@ -4,7 +4,7 @@ import { userEvent } from "vitest/browser";
 import { setLocale, t } from "../i18n/t.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
-import type { TabLine } from "../api/client.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { beer, flan, mount, resized } from "./till-table-order-screen.test-helpers.js";
 import {
   current,

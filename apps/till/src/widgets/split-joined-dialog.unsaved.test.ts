@@ -4,7 +4,7 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { TableState, TableToday } from "../api/client.js";
+import type { TableState, TableToday } from "../api/floor-api.js";
 import "./split-joined-dialog.js";
 import type { SplitJoinedDetail, TillSplitJoinedDialog } from "./split-joined-dialog.js";
 

@@ -1,4 +1,4 @@
-import type { DeviceEquipmentRead, StaffNotice } from "../api/client.js";
+import type { DeviceEquipmentRead, StaffNotice } from "../api/device-session-api.js";
 
 const RANK: Record<StaffNotice["severity"], number> = { error: 0, warning: 1, notice: 2 };
 

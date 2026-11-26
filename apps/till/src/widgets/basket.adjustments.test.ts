@@ -7,7 +7,8 @@ import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./basket.js";
 import type { StoredLines, TillBasket } from "./basket.js";
-import type { TabLine, TillProduct } from "../api/client.js";
+import type { TabLine } from "../api/kitchen-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 import type { AdjustDetail } from "../screens/till-table-order-screen.js";
 
 // A stored counter order in the basket offers Cancel and Comp… on its dishes and extras, and Comp the

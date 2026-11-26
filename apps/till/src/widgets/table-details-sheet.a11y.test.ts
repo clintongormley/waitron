@@ -3,7 +3,7 @@ import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-help
 import { setLocale } from "../i18n/t.js";
 import "./table-details-sheet.js";
 import type { TillTableDetailsSheet } from "./table-details-sheet.js";
-import type { TableState } from "../api/client.js";
+import type { TableState } from "../api/floor-api.js";
 import { dueStepSignal } from "../../test/service-steps.js";
 
 afterEach(cleanupWidgets);

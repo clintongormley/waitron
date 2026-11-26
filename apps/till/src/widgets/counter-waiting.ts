@@ -9,7 +9,7 @@ import { orderNumber, orderNumberStyles } from "./order-number.js";
 import { orderCountStyles, orderCounts } from "./order-counts.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import type { StringKey } from "../i18n/strings.js";
-import type { CounterWaitingOrder } from "../api/client.js";
+import type { CounterWaitingOrder } from "../api/orders-api.js";
 
 /** A `pay-waiting-order` event's detail: the order, and the mode its payment is taken in. */
 export interface PayWaitingOrderDetail {

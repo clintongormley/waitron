@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import type { BillEditExpected, DeadEndAnswer, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { DeadEndAnswer } from "../api/drafts-api.js";
+import type { BillEditExpected } from "../api/order-types.js";
 import type { OrderLine } from "../state/working-order.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale } from "../i18n/t.js";

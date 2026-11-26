@@ -6,7 +6,7 @@ import { es } from "../i18n/strings.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./bill-refund-dialog.js";
 import type { TillBillRefundDialog } from "./bill-refund-dialog.js";
-import type { AdjustmentReason, BillPaymentView } from "../api/client.js";
+import type { AdjustmentReason, BillPaymentView } from "../api/payments-api.js";
 import type { RefundAsk } from "../state/bill-payment.js";
 
 afterEach(cleanupWidgets);

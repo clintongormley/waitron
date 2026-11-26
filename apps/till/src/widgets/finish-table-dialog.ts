@@ -15,7 +15,7 @@ import {
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import type { AdjustmentReason } from "../api/client.js";
+import type { AdjustmentReason } from "../api/payments-api.js";
 import type { FinishCancellation, UnservedDish } from "../api/finish-table-types.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";

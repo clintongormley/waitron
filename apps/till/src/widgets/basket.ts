@@ -45,7 +45,9 @@ import {
 } from "../state/adjust-target.js";
 import type { AdjustKind, AdjustTarget } from "./adjustment-dialog.js";
 import type { AdjustDetail } from "../screens/till-table-order-screen.js";
-import type { Station, TabLine, TillCourse, TillProduct } from "../api/client.js";
+import type { Station, TabLine } from "../api/kitchen-api.js";
+import type { TillCourse } from "../api/device-session-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 
 const QTY_BADGE = "×";
 /** How long an edit lock lasts before the basket says so, so a quick lock does not flicker. */

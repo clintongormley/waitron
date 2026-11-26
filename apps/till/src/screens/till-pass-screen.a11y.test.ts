@@ -2,7 +2,8 @@ import { userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setHelpMode } from "@waitron/ui";
 import type { WtHelpTooltip } from "@waitron/ui";
-import type { DevicePassBoard, PassBoard, PassCard, PassCardItem, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { DevicePassBoard, PassBoard, PassCard, PassCardItem } from "../api/kitchen-api.js";
 import {
   cleanupWidgets,
   expectNoA11yViolations,

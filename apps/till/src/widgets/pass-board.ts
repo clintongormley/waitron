@@ -1,7 +1,7 @@
 import { ContentLanguageController, HelpModeController, baseStyles } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
-import type { PassBoard } from "../api/client.js";
+import type { PassBoard } from "../api/kitchen-api.js";
 import { helpText } from "../i18n/help-strings.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, t } from "../i18n/t.js";

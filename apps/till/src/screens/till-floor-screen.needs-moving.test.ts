@@ -6,7 +6,8 @@ import { codeMessage } from "../i18n/codes.js";
 import { cleanupWidgets, mountWidget, toggleFloorView } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { FloorZone, TableState, TableToday } from "../api/floor-api.js";
 
 const zone: FloorZone = {
   id: "z1",

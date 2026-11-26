@@ -19,7 +19,9 @@ import { setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
-import type { HeldOrder, TabLine, TabLines, TillProduct, ZoneOffers } from "./api/client.js";
+import type { HeldOrder } from "./api/orders-api.js";
+import type { TabLine, TabLines } from "./api/kitchen-api.js";
+import type { TillProduct, ZoneOffers } from "./api/menu-api.js";
 beforeEach(() => {
   setLocale("en");
   resetBillPayDrafts();

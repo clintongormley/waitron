@@ -9,7 +9,8 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { helpBadgeLabel } from "../i18n/help-strings.js";
 import type { StringKey } from "../i18n/strings.js";
-import type { CounterWaitingOrder, HeldOrderSummary, TillProduct } from "../api/client.js";
+import type { CounterWaitingOrder, HeldOrderSummary } from "../api/orders-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 
 const coffee: TillProduct = {
   id: "p1",

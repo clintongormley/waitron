@@ -13,7 +13,8 @@ import {
 import { DraftStore } from "../state/draft-sync.js";
 import { storedDish } from "./till-table-order-screen.sent-fallback.test-helpers.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
-import type { TabLine, PartyBill } from "../api/client.js";
+import type { PartyBill } from "../api/floor-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { mount, resized } from "./till-table-order-screen.test-helpers.js";
 import {
   croquettes,

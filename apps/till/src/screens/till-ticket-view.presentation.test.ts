@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { setMediaServer } from "@waitron/ui";
 import { setLocale } from "../i18n/t.js";
 import type { ReceiptPresentation } from "@waitron/shared";
-import type { TillSaleResult } from "../api/client.js";
+import type { TillSaleResult } from "../api/payments-api.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTicketView } from "./till-ticket-view.js";
 

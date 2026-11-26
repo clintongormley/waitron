@@ -1,7 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import type { WtTextarea } from "@waitron/ui";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { watchKeyboardInsets, type VisibleArea } from "../state/keyboard-inset.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";

@@ -15,7 +15,8 @@ import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-price-input.js";
 import "@waitron/ui/src/components/wt-segmented-control.js";
-import type { DrawerEntryRequest, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { DrawerEntryRequest } from "../api/drawer-api.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { trackDialog } from "../widgets/track-dialog.js";
 

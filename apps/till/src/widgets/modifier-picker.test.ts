@@ -12,13 +12,8 @@ import {
   type ModifierChangeDetail,
   type ModifierConfirmDetail,
 } from "./modifier-picker.js";
-import {
-  sellingValuesOf,
-  type OfferedExtrasList,
-  type OfferedModifier,
-  type TillProduct,
-  type TillZoneMenu,
-} from "../api/client.js";
+import type { OfferedExtrasList, OfferedModifier } from "../api/client.js";
+import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/menu-api.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import {
   currentContentLanguages,

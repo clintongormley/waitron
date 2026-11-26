@@ -4,7 +4,7 @@ import {
   outsideCardStyles,
   outsideCardSummary,
 } from "./outside-card.js";
-import type { OutsideCardDetails } from "../api/client.js";
+import type { OutsideCardDetails } from "../api/payments-api.js";
 import { choiceRowStyles } from "./choice-styles.js";
 import { recoveryLink } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
@@ -43,7 +43,7 @@ import { guestsStepper, guestsStepperStyles, guestsText, parseGuestCount } from 
 import { trackDialog } from "./track-dialog.js";
 import { refusalText, type PayRefusal } from "./pay-refusal.js";
 import { currentLocale, t } from "../i18n/t.js";
-import type { DeviceEquipment } from "../api/client.js";
+import type { DeviceEquipment } from "../api/device-session-api.js";
 import { typedAmount, typedMoney } from "../state/bill-payment.js";
 import type { DeferredOffer } from "../state/deferred-close.js";
 import {

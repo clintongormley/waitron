@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { partyScope } from "./table-targets.js";
-import type { TableParty, TableState } from "../api/client.js";
+import type { TableParty, TableState } from "../api/floor-api.js";
 
 const tableRow = (id: string, label: string, over: Partial<TableState> = {}): TableState => ({
   id,

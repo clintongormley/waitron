@@ -3,7 +3,7 @@ import { live } from "lit/directives/live.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-input.js";
-import type { AdjustmentReason } from "../api/client.js";
+import type { AdjustmentReason } from "../api/payments-api.js";
 import { t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 

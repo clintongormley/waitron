@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { commands, page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import type { TillCounterScreen } from "./till-counter-screen.js";
 import type { LitElement } from "lit";
 import { cleanupWidgets, mountWidget, servedMenus } from "../widgets/test-helpers.js";

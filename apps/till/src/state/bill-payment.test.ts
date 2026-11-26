@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { BillPaymentView, TabLine } from "../api/client.js";
+import type { BillPaymentView } from "../api/payments-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { NO_BOX_ANSWERING } from "../api/server-router.js";
 import {
   confirmationOf,

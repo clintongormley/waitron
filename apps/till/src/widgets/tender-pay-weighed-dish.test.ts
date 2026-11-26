@@ -4,7 +4,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { TillTenderPay } from "./tender-pay.js";
 import type { TillModifierPicker } from "./modifier-picker.js";
-import { sellingValuesOf, type TillProduct } from "../api/client.js";
+import { sellingValuesOf, type TillProduct } from "../api/menu-api.js";
 
 const ham: TillProduct = {
   id: "jamon",

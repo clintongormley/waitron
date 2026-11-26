@@ -4,7 +4,7 @@ import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import type { TableState } from "../api/client.js";
+import type { TableState } from "../api/floor-api.js";
 import "./till-floor-screen.js";
 
 const freeTable: TableState = {

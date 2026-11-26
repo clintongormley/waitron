@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as client from "../api/client.js";
 import { DepartmentTransferMonitor } from "./department-transfer-monitor.js";
-import type { DepartmentTransfer } from "../api/client.js";
+import type { DepartmentTransfer } from "../api/department-transfers-api.js";
 import { TillLiveConnection, TILL_LIVE_TYPES } from "../api/live-connection.js";
 import { liveConnectionFixture } from "../../test/live-connection.js";
 

@@ -1,10 +1,8 @@
 import { compareDecimal, decimal, addDecimal, subtractDecimal, sumDecimals } from "@waitron/shared";
-import type {
-  BillEditExpected,
-  BillPaymentView,
-  CurrentOrderRow,
-  PartyBill,
-} from "../api/client.js";
+import type { PartyBill } from "../api/floor-api.js";
+import type { BillPaymentView } from "../api/payments-api.js";
+import type { CurrentOrderRow } from "../api/kitchen-api.js";
+import type { BillEditExpected } from "../api/order-types.js";
 import type { CloseDeferredRequest } from "../api/deferred-close-types.js";
 import type { StringKey } from "../i18n/strings.js";
 import type { CapabilityFlag } from "../layout.js";

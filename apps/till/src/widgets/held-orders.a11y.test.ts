@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./held-orders.js";
 import type { TillHeldOrders } from "./held-orders.js";
-import type { HeldOrderSummary, TableState } from "../api/client.js";
+import type { HeldOrderSummary } from "../api/orders-api.js";
+import type { TableState } from "../api/floor-api.js";
 
 const orders: HeldOrderSummary[] = [
   {

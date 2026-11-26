@@ -1,4 +1,4 @@
-import type { TableParty, TableState } from "../api/client.js";
+import type { TableParty, TableState } from "../api/floor-api.js";
 import { groupTables } from "./table-signals.js";
 
 export interface BarTable {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { billOf, paymentOf } from "../../test/bill-pay-app.js";
-import type { BillRefundView } from "../api/client.js";
+import type { BillRefundView } from "../api/payments-api.js";
 import {
   type DeferredDishRow,
   type DeferredOfferInput,

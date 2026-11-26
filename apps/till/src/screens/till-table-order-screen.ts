@@ -18,11 +18,14 @@ import { groupNumberText } from "../widgets/group-name.js";
 import { asServedAllergens, asServedDiet } from "../state/as-served.js";
 import { nutritionIcons, nutritionIconStyles } from "../widgets/nutrition-icons.js";
 import { nutritionDietLabels } from "../diet-labels.js";
-import type { BillEditExpected, DiningChoice, LineNutrition, ZoneDining } from "../api/client.js";
+import type { LineNutrition } from "../api/kitchen-api.js";
+import type { DiningChoice, ZoneDining } from "../api/menu-api.js";
+import type { BillEditExpected } from "../api/order-types.js";
 import "../widgets/order-kitchen-note.js";
 import type { SaveKitchenNoteDetail } from "../widgets/order-kitchen-note.js";
 import { servicePeriod, servicePeriodStyles } from "../widgets/service-period.js";
-import type { MealEndUnservedDish, MenuState, TillApi } from "../api/client.js";
+import type { MenuState, TillApi } from "../api/client.js";
+import type { MealEndUnservedDish } from "../api/floor-api.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import {
   rowActionTail,
@@ -160,29 +163,23 @@ import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
 import "../widgets/bill-name-dialog.js";
 import type { BillNameDetail } from "../widgets/bill-name-dialog.js";
 import type { PartyGuestsDetail } from "../widgets/party-guests-dialog.js";
+import type { OrderLinePatch } from "../api/orders-api.js";
+import type { FloorZone, TableState, TableParty, PartyBill } from "../api/floor-api.js";
+import type { DeadEndAnswer, Draft as PartyDraft, SplitSources } from "../api/drafts-api.js";
+import type { BillBalance } from "../api/payments-api.js";
 import type {
-  BillBalance,
   CurrentOrderGroup,
   CurrentOrderRow,
   CurrentOrders,
-  FloorZone,
   GroupLine,
   OrderGroup,
-  OrderLinePatch,
-  SaleLine,
   Station,
-  DeadEndAnswer,
   PrintProblem,
   TabLine,
-  TableState,
-  TableParty,
-  TillCourse,
-  TillProduct,
-  TillZoneMenu,
-  PartyBill,
-  Draft as PartyDraft,
-  SplitSources,
-} from "../api/client.js";
+} from "../api/kitchen-api.js";
+import type { TillCourse } from "../api/device-session-api.js";
+import type { TillProduct, TillZoneMenu } from "../api/menu-api.js";
+import type { SaleLine } from "../api/order-types.js";
 import type { ConfirmPaymentDetail, RetainedTender } from "../widgets/tender-pay.js";
 import { heldGroupIds } from "../state/held-groups.js";
 import type { DraftGroup } from "../state/draft-groups.js";
@@ -1420,7 +1417,7 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) productSelectable?: (product: TillProduct) => boolean;
   @property() departmentName = "";
   @property({ attribute: false })
-  receiptEquipment?: import("../api/client.js").RoleEquipment["resolved"];
+  receiptEquipment?: import("../api/device-session-api.js").RoleEquipment["resolved"];
   @property() zoneName = "";
   /** Owned by the app; a switcher pick bubbles up as `menu-selected`. */
   @property() selectedMenuId = "";

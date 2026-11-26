@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { DeadEndAnswer, OrderGroup } from "../api/client.js";
+import type { DeadEndAnswer } from "../api/drafts-api.js";
+import type { OrderGroup } from "../api/kitchen-api.js";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";

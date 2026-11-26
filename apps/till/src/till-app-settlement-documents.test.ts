@@ -21,12 +21,10 @@ import {
 
 import { deferred } from "../test/clock-app.js";
 import { transactionRow } from "../test/find-bill-fixtures.js";
-import type {
-  DeviceEquipmentRead,
-  InvoiceDeliveryStatus,
-  TillApi,
-  TillProduct,
-} from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { InvoiceDeliveryStatus } from "./api/invoice-delivery-api.js";
+import type { DeviceEquipmentRead } from "./api/device-session-api.js";
+import type { TillProduct } from "./api/menu-api.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import { SessionActivity } from "./session-activity.js";
 import { diag } from "./diagnostics.js";

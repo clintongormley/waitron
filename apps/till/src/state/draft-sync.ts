@@ -1,17 +1,9 @@
 import { compareDecimal, decimal } from "@waitron/shared";
-import {
-  SESSION_PERSON_REFUSAL,
-  isNetworkFailure,
-  type Draft,
-  type DraftLine,
-  type DraftLineInput,
-  type BillEditExpected,
-  type BillEditState,
-  type BillDraftSnapshot,
-  type TillApi,
-  type TillProduct,
-  type WorkingOrderStatus,
-} from "../api/client.js";
+import { SESSION_PERSON_REFUSAL, isNetworkFailure, type TillApi } from "../api/client.js";
+import type { Draft, DraftLine, DraftLineInput, BillDraftSnapshot } from "../api/drafts-api.js";
+import type { WorkingOrderStatus } from "../api/kitchen-api.js";
+import type { TillProduct } from "../api/menu-api.js";
+import type { BillEditExpected, BillEditState } from "../api/order-types.js";
 import { toDraftLineInput } from "./draft-lines.js";
 import { WorkingOrderStore, type LineSelection, type OrderLine } from "./working-order.js";
 import type { placeFor } from "./draft-place.js";

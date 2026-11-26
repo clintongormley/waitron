@@ -7,7 +7,7 @@ import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { helpBadgeLabel } from "../i18n/help-strings.js";
-import type { FloorZone, TableState } from "../api/client.js";
+import type { FloorZone, TableState } from "../api/floor-api.js";
 
 const zone: FloorZone = {
   id: "z1",

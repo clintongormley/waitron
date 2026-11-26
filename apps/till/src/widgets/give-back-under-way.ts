@@ -23,7 +23,8 @@ import {
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, giveBackFilingMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
-import type { StaffMember, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { StaffMember } from "../api/device-session-api.js";
 import type { GiveBackRight } from "../api/give-back-types.js";
 import type {
   CorrectionSplitLine,

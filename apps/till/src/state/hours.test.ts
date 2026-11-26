@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { HoursSelection, PersonHours } from "@waitron/workforce/attendance-contract";
-import type { ReadOptions } from "../api/client.js";
+import type { ReadOptions } from "../api/till-request.js";
 import type { HoursController, HoursSnapshot } from "./hours.js";
 const modules = import.meta.glob<typeof import("./hours.js")>("./hours.ts");
 const selection: HoursSelection = { kind: "week", date: "2026-01-05" };

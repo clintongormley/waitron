@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { OrderGroup } from "../api/client.js";
+import type { OrderGroup } from "../api/kitchen-api.js";
 import type { WtButton, WtDialog } from "@waitron/ui";
 import { DraftStore } from "../state/draft-sync.js";
 import { setLocale } from "../i18n/t.js";

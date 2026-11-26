@@ -5,7 +5,8 @@ import { invoiceOf } from "../../test/bill-pay-app.js";
 import "./settlement-document-dialog.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
-import type { OriginalReceiptPrint, RoleEquipment } from "../api/client.js";
+import type { OriginalReceiptPrint } from "../api/invoice-delivery-api.js";
+import type { RoleEquipment } from "../api/device-session-api.js";
 import { codeMessage } from "../i18n/codes.js";
 import { equipmentItem, roleOf } from "../../test/pay-equipment-fixtures.js";
 

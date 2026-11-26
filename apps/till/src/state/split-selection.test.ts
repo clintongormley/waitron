@@ -1,13 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
-import type {
-  BillBalance,
-  BillRefundView,
-  Draft,
-  DraftLine,
-  PartyBill,
-  TabLine,
-} from "../api/client.js";
+import type { PartyBill } from "../api/floor-api.js";
+import type { Draft, DraftLine } from "../api/drafts-api.js";
+import type { BillBalance, BillRefundView } from "../api/payments-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { billGross } from "./adjust-target.js";
 import { tabLinePortionKey } from "./portion-groups.js";
 import {

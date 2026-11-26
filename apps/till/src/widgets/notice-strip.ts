@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, registerIcons, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-icon.js";
-import type { StaffNotice } from "../api/client.js";
+import type { StaffNotice } from "../api/device-session-api.js";
 import "@waitron/ui/src/components/wt-button.js";
 import { checksTime, staffNoticeText } from "../i18n/staff-notices.js";
 import { countText, t } from "../i18n/t.js";

@@ -1,4 +1,4 @@
-import type { TillZoneMenu } from "../api/client.js";
+import type { TillZoneMenu } from "../api/menu-api.js";
 
 export interface ZoneMenuIdentity {
   origin: string;

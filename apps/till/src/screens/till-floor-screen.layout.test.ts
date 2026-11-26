@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanupWidgets, mountWidget, toggleFloorView } from "../widgets/test-helpers.js";
 import type { FloorRefreshDetail, TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
-import type { FloorZone, TableState, TableToday, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { FloorZone, TableState, TableToday } from "../api/floor-api.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 

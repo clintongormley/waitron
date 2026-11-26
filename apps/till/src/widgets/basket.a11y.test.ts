@@ -3,7 +3,7 @@ import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./basket.js";
 import type { StoredLines, TillBasket } from "./basket.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 
 const coffee: TillProduct = {
   id: "cafe",

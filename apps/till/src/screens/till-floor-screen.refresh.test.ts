@@ -3,7 +3,7 @@ import { cleanupWidgets, mountWidget, toggleFloorView } from "../widgets/test-he
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import type { TillSeatDialog } from "../widgets/seat-dialog.js";
-import type { FloorZone, TableParty, TableState, TableToday } from "../api/client.js";
+import type { FloorZone, TableParty, TableState, TableToday } from "../api/floor-api.js";
 import { liveConnectionFixture } from "../../test/live-connection.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {

@@ -13,7 +13,7 @@ import { TillMenuBrowser } from "./menu-browser.js";
 import { setMenuProduct } from "./product-pick.js";
 import type { OwnSetMenuOffers } from "../state/set-menus.js";
 import type { ModifierConfirmDetail } from "./modifier-picker.js";
-import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/client.js";
+import { sellingValuesOf, type TillProduct, type TillZoneMenu } from "../api/menu-api.js";
 
 const EACH = {
   staffName: "Staff unit",

@@ -9,7 +9,7 @@ import {
   resetPage,
 } from "./test-helpers.js";
 import { type ColumnState, PASS_COLUMNS } from "../state/kitchen-columns.js";
-import type { OverviewFact } from "../api/client.js";
+import type { OverviewFact } from "../api/kitchen-api.js";
 import {
   PASS_NOW,
   minutesAgo,

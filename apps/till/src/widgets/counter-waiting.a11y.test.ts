@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./counter-waiting.js";
 import type { TillCounterWaiting } from "./counter-waiting.js";
-import type { CounterWaitingOrder } from "../api/client.js";
+import type { CounterWaitingOrder } from "../api/orders-api.js";
 
 const sent: CounterWaitingOrder = {
   items: [],

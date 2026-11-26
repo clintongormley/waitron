@@ -12,7 +12,8 @@ import {
 import { TillCounterScreen } from "./till-counter-screen.js";
 import { TillShell } from "../widgets/till-shell.js";
 import { mount as mountTable, resized, beer } from "./till-table-order-screen.test-helpers.js";
-import type { TillProduct, HeldOrderSummary, CounterWaitingOrder } from "../api/client.js";
+import type { HeldOrderSummary, CounterWaitingOrder } from "../api/orders-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 import "../till-app.js";
 
 function within(root: Element | ShadowRoot, selector: string): HTMLElement | null {

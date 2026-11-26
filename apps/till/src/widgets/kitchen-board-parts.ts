@@ -9,7 +9,7 @@ import {
   unsafeCSS,
 } from "lit";
 import { thousandthsToDecimal, type TimingBand } from "@waitron/shared";
-import type { ExpoItem } from "../api/client.js";
+import type { ExpoItem } from "../api/kitchen-api.js";
 import { t } from "../i18n/t.js";
 import {
   type BoardMeasure,

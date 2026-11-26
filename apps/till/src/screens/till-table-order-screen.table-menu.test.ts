@@ -4,7 +4,8 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
-import type { PartyBill, TableParty, TableState, TabLine } from "../api/client.js";
+import type { PartyBill, TableParty, TableState } from "../api/floor-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";
 
 const line: TabLine = {

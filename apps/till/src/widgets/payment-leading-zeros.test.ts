@@ -3,13 +3,9 @@ import { userEvent } from "vitest/browser";
 import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import type {
-  AdjustmentReason,
-  BillBalance,
-  BillPaymentView,
-  BillLookupRow,
-  TillProduct,
-} from "../api/client.js";
+import type { BillLookupRow } from "../api/find-bill-api.js";
+import type { AdjustmentReason, BillBalance, BillPaymentView } from "../api/payments-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import type { RefundAsk } from "../state/bill-payment.js";
 import type { PayRequest, TillBillPayDialog } from "./bill-pay-dialog.js";

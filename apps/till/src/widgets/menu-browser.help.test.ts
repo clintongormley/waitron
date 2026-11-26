@@ -4,7 +4,7 @@ import { render } from "lit";
 import { setHelpMode } from "@waitron/ui";
 import type { WtHelpTooltip } from "@waitron/ui";
 import { DEFAULT_HOME_ORDER } from "@waitron/shared";
-import type { TillProduct, TillZoneMenu } from "../api/client.js";
+import type { TillProduct, TillZoneMenu } from "../api/menu-api.js";
 import { helpEn, helpEs } from "../i18n/help-strings.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { WorkingOrderStore } from "../state/working-order.js";

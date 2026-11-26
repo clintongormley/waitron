@@ -12,7 +12,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, type DialogRefusal } from "../state/bill-payment.js";
-import type { MealEndUnservedDish, PartyBill } from "../api/client.js";
+import type { MealEndUnservedDish, PartyBill } from "../api/floor-api.js";
 import { servableDishes, serveListed, unservedDishText } from "./dish-format.js";
 
 /** `cancel` credits the receipt and cancels the bill; `split` also puts its dishes on a new bill. */

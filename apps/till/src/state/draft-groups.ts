@@ -1,4 +1,4 @@
-import type { GroupRelease } from "../api/client.js";
+import type { GroupRelease } from "../api/kitchen-api.js";
 
 export interface DraftEntry {
   quantity: string;

@@ -4,7 +4,7 @@ import { userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import type { PartyBill } from "../api/client.js";
+import type { PartyBill } from "../api/floor-api.js";
 import "./till-table-order-screen.js";
 
 const bill = (workingOrderId: string, billNumber: number, billName: string | null): PartyBill => ({

@@ -5,7 +5,7 @@ import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./join-with-dialog.js";
 import type { TillJoinWithDialog } from "./join-with-dialog.js";
-import type { TableParty, TableState } from "../api/client.js";
+import type { TableParty, TableState } from "../api/floor-api.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("en"));

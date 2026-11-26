@@ -1,6 +1,6 @@
 import { BAND_RANK, classifyBand, type TimingBand } from "@waitron/shared";
 import { mergeLabel } from "@waitron/ui";
-import type { PassBoard, PassCard, PassCardItem, TicketState } from "../api/client.js";
+import type { PassBoard, PassCard, PassCardItem, TicketState } from "../api/kitchen-api.js";
 import { t } from "../i18n/t.js";
 import type { ColumnKey } from "./kitchen-columns.js";
 import { dishThousandths, type OverviewDish } from "./kitchen-overview.js";

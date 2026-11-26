@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { decimal, formatMoney } from "@waitron/shared";
-import type { BillBalance, PartyBill, TabLine } from "../api/client.js";
+import type { PartyBill } from "../api/floor-api.js";
+import type { BillBalance } from "../api/payments-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { currentLocale } from "../i18n/t.js";
 import { billGross } from "../state/adjust-target.js";
 import { tabLinePortionKey } from "../state/portion-groups.js";

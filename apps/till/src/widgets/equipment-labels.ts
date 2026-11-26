@@ -6,7 +6,7 @@ import type {
   EquipmentChange,
   EquipmentItem,
   RoleEquipment,
-} from "../api/client.js";
+} from "../api/device-session-api.js";
 
 export function optionLabel(item: EquipmentItem): string {
   if (item.busy) return fill(t("equipment.option_busy"), { item: item.name });

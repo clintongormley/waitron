@@ -5,7 +5,7 @@ import { baseStyles } from "@waitron/ui";
 import { formatMoney } from "@waitron/shared";
 import { currentLocale, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
-import type { TillProduct } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 import type { BlockReason, BlockedLine, ChangedLine } from "../state/menu-refresh.js";
 import { soldByTheUnit, unitName } from "./product-name.js";
 

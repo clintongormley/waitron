@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import { bill, daily, seaBass, special } from "../../test/set-menu-widgets.js";
-import type { TabLine } from "../api/client.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { WorkingOrderStore } from "../state/working-order.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { partyBill, switcherParty } from "./till-table-order-screen.bill-switcher.test-helpers.js";

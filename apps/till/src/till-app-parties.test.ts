@@ -34,17 +34,10 @@ import type { FormFactor } from "./layout.js";
 import { billLabel } from "./state/bill-state.js";
 import { WorkingOrderStore } from "./state/working-order.js";
 import { DRAFT_SAVE_DELAY_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
-import type {
-  CurrentOrders,
-  FloorZone,
-  OrderGroup,
-  PrintProblem,
-  TabLine,
-  TableState,
-  TillApi,
-  TillProduct,
-  PartyBill,
-} from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { FloorZone, TableState, PartyBill } from "./api/floor-api.js";
+import type { CurrentOrders, OrderGroup, PrintProblem, TabLine } from "./api/kitchen-api.js";
+import type { TillProduct } from "./api/menu-api.js";
 import {
   zone,
   table,
@@ -11825,7 +11818,7 @@ describe("till-app: table relocation editing observations", () => {
 });
 
 describe("till-app: closing editing observations", () => {
-  const edits: import("./api/client.js").BillEditExpected[] = [
+  const edits: import("./api/order-types.js").BillEditExpected[] = [
     { billId: "wo-4", editorVersion: 7, draftId: null, draftRevision: null },
     { billId: "wo-check", editorVersion: 3, draftId: null, draftRevision: null },
   ];

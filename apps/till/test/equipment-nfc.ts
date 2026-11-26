@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { DeviceEquipment } from "../src/api/client.js";
+import type { DeviceEquipment } from "../src/api/device-session-api.js";
 
 export const PRINTER_ID = "a45f83b1-1111-4111-8111-111111111111";
 export const READER_ID = "b45f83b1-2222-4222-8222-222222222222";

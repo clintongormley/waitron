@@ -13,7 +13,8 @@ import "./till-floor-screen.js";
 import "../widgets/station-queue.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { TillStationQueue } from "../widgets/station-queue.js";
-import type { FloorZone, StationQueueGroup, TableState } from "../api/client.js";
+import type { StationQueueGroup } from "../api/client.js";
+import type { FloorZone, TableState } from "../api/floor-api.js";
 import { kitchenStamps } from "../../test/kitchen-stamps.js";
 
 afterEach(async () => {

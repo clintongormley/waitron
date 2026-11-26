@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TillClockState } from "../api/client.js";
+import type { TillClockState } from "../api/attendance-api.js";
 import { liveConnectionFixture } from "../../test/live-connection.js";
 import type { TillLiveConnection } from "../api/live-connection.js";
 import { SessionActivity } from "../session-activity.js";

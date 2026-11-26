@@ -20,15 +20,13 @@ import { qrSvg } from "../qr.js";
 import "../widgets/invoice-email-dialog.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import type { InvoiceEmailRefusal } from "../widgets/invoice-email-dialog.js";
-import {
-  type EquipmentItem,
-  type InvoiceDeliveryAttempt,
-  type InvoiceDeliveryStatus,
-  type OriginalReceiptPrint,
-  type RoleEquipment,
-  type TillSaleResult,
-  type TransactionReceipt,
-} from "../api/client.js";
+import type {
+  InvoiceDeliveryAttempt,
+  InvoiceDeliveryStatus,
+  OriginalReceiptPrint,
+} from "../api/invoice-delivery-api.js";
+import type { TillSaleResult, TransactionReceipt } from "../api/payments-api.js";
+import type { EquipmentItem, RoleEquipment } from "../api/device-session-api.js";
 
 export interface TicketIssuer {
   venueName: string;

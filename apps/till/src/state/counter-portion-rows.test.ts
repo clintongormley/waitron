@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { SaleLine, TabLine, TillProduct } from "../api/client.js";
+import type { TabLine } from "../api/kitchen-api.js";
+import type { TillProduct } from "../api/menu-api.js";
+import type { SaleLine } from "../api/order-types.js";
 import type { StoredLines } from "../widgets/basket.js";
 import { foldRetrievedPortions, portionWireLines } from "./counter-portion-rows.js";
 import type { OrderLine } from "./working-order.js";

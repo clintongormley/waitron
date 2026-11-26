@@ -1,13 +1,7 @@
 import { draftLineMergeKey, QUANTITY_SCALE } from "@waitron/shared";
 import type { OptionSelection, OptionSnapshot } from "@waitron/shared";
-import {
-  menuOfferToTillProduct,
-  type DraftLineInput,
-  type FreshDraftLine,
-  type FreshDraftLineInput,
-  type TillMenuOffer,
-  type TillProduct,
-} from "../api/client.js";
+import type { DraftLineInput, FreshDraftLine, FreshDraftLineInput } from "../api/drafts-api.js";
+import { menuOfferToTillProduct, type TillMenuOffer, type TillProduct } from "../api/menu-api.js";
 import type { SetMenuOfferLookup } from "./set-menus.js";
 import { notReviewed, setMenuDish } from "./menu-refresh.js";
 import { optionSnapshotOf } from "./held-options.js";

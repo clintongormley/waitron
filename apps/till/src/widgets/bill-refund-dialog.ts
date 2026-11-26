@@ -19,7 +19,7 @@ import { choiceStackStyles } from "./choice-styles.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
-import type { AdjustmentReason, BillPaymentView } from "../api/client.js";
+import type { AdjustmentReason, BillPaymentView } from "../api/payments-api.js";
 import { reasonPicker, voidReasons } from "./reason-picker.js";
 import { givesBackOverpaid } from "../state/bill-state.js";
 import {

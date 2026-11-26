@@ -1,14 +1,13 @@
 import { afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
 import { userEvent } from "vitest/browser";
+import type { TillApi } from "./api/client.js";
 import type {
-  DeviceEquipment,
-  EquipmentItem,
   InvoiceDeliveryAttempt,
   InvoiceDeliveryStatus,
   OriginalReceiptPrint,
-  TillApi,
-  TillProduct,
-} from "./api/client.js";
+} from "./api/invoice-delivery-api.js";
+import type { DeviceEquipment, EquipmentItem } from "./api/device-session-api.js";
+import type { TillProduct } from "./api/menu-api.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillTicketView } from "./screens/till-ticket-view.js";
 import { TillApp } from "./till-app.js";

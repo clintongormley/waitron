@@ -5,7 +5,7 @@ import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./presented-pay-dialog.js";
 import type { TillPresentedPayDialog } from "./presented-pay-dialog.js";
-import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/client.js";
+import type { DeviceEquipment, EquipmentItem, RoleEquipment } from "../api/device-session-api.js";
 
 afterEach(cleanupWidgets);
 beforeEach(() => setLocale("es-ES"));

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render } from "lit";
 import { decimal, formatMoney } from "@waitron/shared";
-import type { BillBalance } from "../api/client.js";
+import type { BillBalance } from "../api/payments-api.js";
 import { currentLocale, fill, setLocale, t } from "../i18n/t.js";
 import { beingPaidNotice, overpaidNotice, type OverpaidNotice } from "./bill-money-notice.js";
 

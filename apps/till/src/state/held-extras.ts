@@ -1,4 +1,5 @@
-import type { HeldExtra, OfferedModifier } from "../api/client.js";
+import type { OfferedModifier } from "../api/client.js";
+import type { HeldExtra } from "../api/orders-api.js";
 import type { NotOfferedExtra, SelectedExtra } from "./working-order.js";
 
 /**

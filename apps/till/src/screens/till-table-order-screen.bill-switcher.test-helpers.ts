@@ -1,6 +1,6 @@
 import { expect } from "vitest";
 import { userEvent } from "vitest/browser";
-import type { PartyBill, TableParty } from "../api/client.js";
+import type { PartyBill, TableParty } from "../api/floor-api.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 
 export const switcherParty: TableParty = {

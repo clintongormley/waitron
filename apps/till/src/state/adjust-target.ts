@@ -10,7 +10,7 @@ import {
 } from "@waitron/shared";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { portionLineFacts } from "./portion-groups.js";
-import type { TabLine } from "../api/client.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import type { AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { StoredLines } from "../widgets/basket.js";
 import type { WorkingOrderStore } from "./working-order.js";

@@ -17,16 +17,10 @@ import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
-import type {
-  MenuStateAnswer,
-  PartyBill,
-  TableState,
-  TableParty,
-  TabLine,
-  TillApi,
-  TillMenuOffer,
-  ZoneOffers,
-} from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { PartyBill, TableState, TableParty } from "./api/floor-api.js";
+import type { TabLine } from "./api/kitchen-api.js";
+import type { MenuStateAnswer, TillMenuOffer, ZoneOffers } from "./api/menu-api.js";
 import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 import { ServerRouter } from "./api/server-router.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";

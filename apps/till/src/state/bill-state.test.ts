@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { PartyBill } from "../api/client.js";
+import type { PartyBill } from "../api/floor-api.js";
 import { setLocale, t } from "../i18n/t.js";
 import {
   billLabel,

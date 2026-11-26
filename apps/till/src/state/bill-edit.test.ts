@@ -1,5 +1,5 @@
 import { expect, it } from "vitest";
-import type { BillEditState } from "../api/client.js";
+import type { BillEditState } from "../api/order-types.js";
 import { counterBillEdit, expectedEditOf, foundBillEdit } from "./bill-edit.js";
 
 const edit: BillEditState = {

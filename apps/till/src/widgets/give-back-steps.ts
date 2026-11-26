@@ -22,7 +22,8 @@ import {
   type RestCheck,
 } from "../state/give-back.js";
 import { recoveryLink, recoveryRefusalText, type RecoveryRefusal } from "./recovery-refusal.js";
-import type { StaffMember, TillApi } from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { StaffMember } from "../api/device-session-api.js";
 import type { HoldReloadDetail } from "../screens/till-station-screen.js";
 import { limited, TABLE_REQUEST_LIMIT_MS } from "../state/draft-sync.js";
 import { refusalOf } from "../state/bill-payment.js";

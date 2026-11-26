@@ -8,7 +8,7 @@ import { mapLook } from "../state/floor-look.js";
 import { dueStepSignal } from "../../test/service-steps.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
-import type { FloorZone, TableParty, TableState, TableToday } from "../api/client.js";
+import type { FloorZone, TableParty, TableState, TableToday } from "../api/floor-api.js";
 
 const now = Date.parse("2026-10-22T20:00:00.000Z");
 const inMinutes = (m: number) => new Date(now + m * 60_000).toISOString();

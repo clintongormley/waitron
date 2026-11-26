@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ZoneMenuMemory, type ZoneMenuIdentity } from "./zone-menu-memory.js";
-import type { TillZoneMenu } from "../api/client.js";
+import type { TillZoneMenu } from "../api/menu-api.js";
 import { DEFAULT_HOME_ORDER } from "@waitron/shared";
 
 const identity: ZoneMenuIdentity = {

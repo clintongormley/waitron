@@ -7,7 +7,8 @@ import { deviceZonesFixture } from "../test/device-zones.js";
 import { ServerRouter } from "./api/server-router.js";
 import "./till-app.js";
 import type { TillApp } from "./till-app.js";
-import type { TillApi, ZoneOffers } from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { ZoneOffers } from "./api/menu-api.js";
 import type { TillShell } from "./widgets/till-shell.js";
 
 const originalLocale = currentLocale();

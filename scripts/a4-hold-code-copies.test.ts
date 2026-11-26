@@ -51,7 +51,7 @@ const COPIES = [
   },
   {
     name: "the till's a4HoldCodes list",
-    codes: () => constArrayCodes("apps/till/src/api/client.ts", "a4HoldCodes"),
+    codes: () => constArrayCodes("apps/till/src/api/invoice-delivery-api.ts", "a4HoldCodes"),
   },
   { name: "the till's English hold words", codes: () => tillHoldWords(tillEn) },
   { name: "the till's Spanish hold words", codes: () => tillHoldWords(tillEs) },

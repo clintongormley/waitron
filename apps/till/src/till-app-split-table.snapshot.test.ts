@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
-import type { PartyBill, SplitSources, TabLine } from "./api/client.js";
+import type { PartyBill } from "./api/floor-api.js";
+import type { SplitSources } from "./api/drafts-api.js";
+import type { TabLine } from "./api/kitchen-api.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { partyBill } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
 import {

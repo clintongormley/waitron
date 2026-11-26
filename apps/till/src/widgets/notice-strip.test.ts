@@ -11,7 +11,7 @@ import {
 } from "./test-helpers.js";
 import { en, es } from "../i18n/strings.js";
 import { setLocale } from "../i18n/t.js";
-import type { StaffNotice } from "../api/client.js";
+import type { StaffNotice } from "../api/device-session-api.js";
 import "./notice-strip.js";
 import type { TillNoticeStrip } from "./notice-strip.js";
 

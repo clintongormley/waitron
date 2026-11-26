@@ -3,7 +3,7 @@ import { cleanupWidgets, mountWidget, pageAt, resetPage } from "./test-helpers.j
 import { setLocale } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { WtCombobox } from "@waitron/ui/src/components/wt-combobox.js";
-import type { Station } from "../api/client.js";
+import type { Station } from "../api/kitchen-api.js";
 import "./station-choice-dialog.js";
 import { moveRefusalKey, type TillStationChoiceDialog } from "./station-choice-dialog.js";
 

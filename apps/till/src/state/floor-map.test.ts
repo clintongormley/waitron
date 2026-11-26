@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TableParty, TableState, TableToday } from "../api/client.js";
+import type { TableParty, TableState, TableToday } from "../api/floor-api.js";
 import { listedTables, mapTables, seatsFor } from "./floor-map.js";
 import "@waitron/ui/src/components/wt-floor-map.js";
 

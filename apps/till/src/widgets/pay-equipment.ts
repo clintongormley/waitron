@@ -10,7 +10,7 @@ import "@waitron/ui/src/components/wt-notice.js";
 import "./equipment-scanner.js";
 import { optionLabel } from "./equipment-labels.js";
 import { carriedText, t } from "../i18n/t.js";
-import type { DeviceEquipment, EquipmentItem } from "../api/client.js";
+import type { DeviceEquipment, EquipmentItem } from "../api/device-session-api.js";
 import type { EquipmentCode } from "../state/equipment-nfc.js";
 import {
   type PayPrinter,

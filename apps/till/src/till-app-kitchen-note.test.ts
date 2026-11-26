@@ -17,16 +17,11 @@ import type { TillCounterScreen } from "./screens/till-counter-screen.js";
 import type { TillBasket } from "./widgets/basket.js";
 import type { TillOrderKitchenNote } from "./widgets/order-kitchen-note.js";
 import type { CapabilityFlag, FormFactor } from "./layout.js";
-import type {
-  TableState,
-  TableParty,
-  HeldOrder,
-  TabLine,
-  TabLines,
-  TillApi,
-  TillProduct,
-  ZoneOffers,
-} from "./api/client.js";
+import type { TillApi } from "./api/client.js";
+import type { HeldOrder } from "./api/orders-api.js";
+import type { TableState, TableParty } from "./api/floor-api.js";
+import type { TabLine, TabLines } from "./api/kitchen-api.js";
+import type { TillProduct, ZoneOffers } from "./api/menu-api.js";
 
 const till = {
   locale: "en",

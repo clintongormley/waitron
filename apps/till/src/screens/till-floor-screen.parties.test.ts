@@ -5,7 +5,7 @@ import { setLocale, t } from "../i18n/t.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import type { TillSeatDialog } from "../widgets/seat-dialog.js";
-import type { TableState, TableParty, TableToday } from "../api/client.js";
+import type { TableState, TableParty, TableToday } from "../api/floor-api.js";
 
 function today(): TableToday {
   return {

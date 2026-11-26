@@ -756,7 +756,7 @@ not yet stored on an order, which starts on its own variant even when that is no
 saves only once an available one is chosen; an unavailable one stays listed, drawn disabled; each is
 labelled with its difference from the parent's price on that menu ("+€1.50") where it has one
 (`till-modifier-picker`, `apps/till/src/widgets/modifier-picker.ts`; the difference is worked out in
-`apps/till/src/api/client.ts`). A line of a held order, read back from the server, carries no list of
+`apps/till/src/api/menu-api.ts`). A line of a held order, read back from the server, carries no list of
 variants, so its window offers no variant choice and saves a note or answer change on its own
 variant, even one sold out since ("reopens with no variant choice and saves a changed note, keeping
 the variant" in `apps/till/src/till-app.test.ts`). A product none of whose variants is

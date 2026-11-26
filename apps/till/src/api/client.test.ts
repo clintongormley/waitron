@@ -1,37 +1,26 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { PERSON_HEADER, type Dining } from "@waitron/shared";
 import clientSource from "./client.ts?raw";
-import {
-  SESSION_PERSON_REFUSAL,
-  TillApi,
-  isNetworkFailure,
-  menuOfferToTillProduct,
-  type AllocationPreview,
-  type BillBalance,
-  type BillEditExpected,
-  type BillPaymentAsk,
-  type BillPaymentRequest,
-  type BillPaymentResult,
-  type BillPaymentView,
-  type BillRefundRequest,
-  type BillRefundResult,
-  type DeviceIdentity,
-  type DeviceStationScreen,
-  type FloorZone,
-  type MyAbsence,
-  type MyShift,
-  type MySwap,
-  type KitchenNotice,
-  type LateSend,
-  type TabLine,
-  type TableState,
-  type TillMenuOffer,
-  type ZoneOffers,
-  type EndMealRequest,
-  type EndedMeal,
-  type UnpaidDepartureRequest,
-  type UnpaidDepartureResult,
-} from "./client.js";
+import { SESSION_PERSON_REFUSAL, TillApi, isNetworkFailure, type KitchenNotice } from "./client.js";
+import type { MyAbsence, MyShift, MySwap } from "./attendance-api.js";
+import type { FloorZone, TableState, EndMealRequest, EndedMeal } from "./floor-api.js";
+import type { LateSend } from "./drafts-api.js";
+import type {
+  AllocationPreview,
+  BillBalance,
+  BillPaymentAsk,
+  BillPaymentRequest,
+  BillPaymentResult,
+  BillPaymentView,
+  BillRefundRequest,
+  BillRefundResult,
+  UnpaidDepartureRequest,
+  UnpaidDepartureResult,
+} from "./payments-api.js";
+import type { DeviceStationScreen, TabLine } from "./kitchen-api.js";
+import type { DeviceIdentity } from "./device-session-api.js";
+import { menuOfferToTillProduct, type TillMenuOffer, type ZoneOffers } from "./menu-api.js";
+import type { BillEditExpected } from "./order-types.js";
 import type { CloseDeferredRequest, CloseDeferredResult } from "./deferred-close-types.js";
 
 /** A stub `fetch` reply: JSON body at the given status, content-type set like the server's. */

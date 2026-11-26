@@ -4,14 +4,9 @@ import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
 import "./till-floor-screen.js";
 import { codeMessage } from "../i18n/codes.js";
-import type {
-  PartyDraftSnapshot,
-  FloorZone,
-  TableParty,
-  TableState,
-  TableToday,
-  TillApi,
-} from "../api/client.js";
+import type { TillApi } from "../api/client.js";
+import type { FloorZone, TableParty, TableState, TableToday } from "../api/floor-api.js";
+import type { PartyDraftSnapshot } from "../api/drafts-api.js";
 import { nextFloorMoment } from "../state/floor-today.js";
 
 function zone(over: Partial<FloorZone> = {}): FloorZone {

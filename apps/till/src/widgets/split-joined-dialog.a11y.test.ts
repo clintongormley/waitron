@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
-import type { TableState, TableToday } from "../api/client.js";
+import type { TableState, TableToday } from "../api/floor-api.js";
 import "./split-joined-dialog.js";
 import type { TillSplitJoinedDialog } from "./split-joined-dialog.js";
 

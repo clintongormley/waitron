@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TableParty } from "../api/client.js";
+import type { TableParty } from "../api/floor-api.js";
 import { defaultReceiptGuestCount } from "./receipt-guests.js";
 
 function party(over: Partial<TableParty> = {}): TableParty {

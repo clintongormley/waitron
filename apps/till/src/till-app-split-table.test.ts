@@ -1,7 +1,10 @@
 import { openOrderAddress } from "../test/order-address.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { BillBalance, Draft, PartyBill, SplitSources, TabLine } from "./api/client.js";
+import type { PartyBill } from "./api/floor-api.js";
+import type { Draft, SplitSources } from "./api/drafts-api.js";
+import type { BillBalance } from "./api/payments-api.js";
+import type { TabLine } from "./api/kitchen-api.js";
 import { codeMessage } from "./i18n/codes.js";
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { formatMoney } from "@waitron/shared";

@@ -10,13 +10,8 @@ import {
   resendUnanswered,
 } from "./draft-sync.js";
 import type { OrderLine } from "./working-order.js";
-import type {
-  BillDraftSnapshot,
-  Draft,
-  DraftLine,
-  FreshDraftLine,
-  TillProduct,
-} from "../api/client.js";
+import type { BillDraftSnapshot, Draft, DraftLine, FreshDraftLine } from "../api/drafts-api.js";
+import type { TillProduct } from "../api/menu-api.js";
 import type { Place } from "./draft-place.js";
 import { fromDraftLine } from "./draft-lines.js";
 

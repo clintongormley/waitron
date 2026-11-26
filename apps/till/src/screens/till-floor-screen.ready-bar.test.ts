@@ -17,7 +17,7 @@ import {
 import { setLocale } from "../i18n/t.js";
 import "./till-floor-screen.js";
 import type { TillFloorScreen } from "./till-floor-screen.js";
-import type { FloorZone, TableParty, TableState } from "../api/client.js";
+import type { FloorZone, TableParty, TableState } from "../api/floor-api.js";
 import type { TableSignal } from "@waitron/shared";
 
 const now = Date.parse("2026-09-30T20:00:00.000Z");

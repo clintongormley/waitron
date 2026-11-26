@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { TillTicketView } from "./till-ticket-view.js";
-import type { TillSaleResult } from "../api/client.js";
+import type { TillSaleResult } from "../api/payments-api.js";
 
 afterEach(cleanupWidgets);
 describe("customer ticket metadata boundary", () => {

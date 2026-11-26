@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { decimal, formatMoney } from "@waitron/shared";
-import type { BillBalance, TabLine } from "../api/client.js";
+import type { BillBalance } from "../api/payments-api.js";
+import type { TabLine } from "../api/kitchen-api.js";
 import { currentLocale } from "../i18n/t.js";
 import { tabLinePortionKey } from "../state/portion-groups.js";
 import { pickGroups, pickRows, type PickRow, type Picks } from "../state/portion-selection.js";

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import type { DeviceStationScreen, StationQueue, TillApi } from "../api/client.js";
+import type { StationQueue, TillApi } from "../api/client.js";
+import type { DeviceStationScreen } from "../api/kitchen-api.js";
 import { codeMessage } from "../i18n/codes.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget, resetPage } from "../widgets/test-helpers.js";

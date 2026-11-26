@@ -1,6 +1,7 @@
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { liveGate } from "./live-gate.js";
-import { isNetworkFailure, type TillApi, type TillClockState } from "../api/client.js";
+import { isNetworkFailure, type TillApi } from "../api/client.js";
+import type { TillClockState } from "../api/attendance-api.js";
 
 export type TillClockAction = "in" | "out" | "break-start" | "break-end";
 export interface ClockingSnapshot {

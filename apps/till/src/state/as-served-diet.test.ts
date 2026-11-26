@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { asServedDiet, asServedAllergens } from "./as-served.js";
 import type { OrderLine } from "./working-order.js";
-import type { DietOverride, OfferedExtraItem, TillProduct } from "../api/client.js";
+import type { DietOverride, OfferedExtraItem } from "../api/client.js";
+import type { TillProduct } from "../api/menu-api.js";
 
 function item(productId: string): OfferedExtraItem {
   return {

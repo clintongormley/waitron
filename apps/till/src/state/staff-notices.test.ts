@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DeviceEquipmentRead, StaffNotice } from "../api/client.js";
+import type { DeviceEquipmentRead, StaffNotice } from "../api/device-session-api.js";
 import {
   checkTimeOffered,
   nextNotices,

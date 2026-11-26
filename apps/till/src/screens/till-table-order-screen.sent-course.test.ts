@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { TabLine, TillCourse } from "../api/client.js";
+import type { TabLine } from "../api/kitchen-api.js";
+import type { TillCourse } from "../api/device-session-api.js";
 import type { TillModifierPicker } from "../widgets/modifier-picker.js";
 import { setLocale } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";

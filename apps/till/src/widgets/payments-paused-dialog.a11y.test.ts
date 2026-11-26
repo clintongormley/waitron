@@ -3,7 +3,7 @@ import { page } from "vitest/browser";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import { staffNoticeText } from "../i18n/staff-notices.js";
-import type { StaffNotice } from "../api/client.js";
+import type { StaffNotice } from "../api/device-session-api.js";
 import type { TillPaymentsPausedDialog } from "./payments-paused-dialog.js";
 import "./payments-paused-dialog.js";
 

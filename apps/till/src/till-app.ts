@@ -30,16 +30,10 @@ import {
   type AllergyConfirmDetail,
   type AllergyFieldRefusal,
 } from "./widgets/party-allergy-dialog.js";
-import type {
-  BillEditExpected,
-  BillEditState,
-  BillUnsent,
-  Draft as PartyDraft,
-  LateSend,
-  SplitSelection,
-  SplitSources,
-  Tender,
-} from "./api/client.js";
+import type { SplitSelection } from "./api/floor-api.js";
+import type { Draft as PartyDraft, LateSend, SplitSources } from "./api/drafts-api.js";
+import type { BillUnsent, Tender } from "./api/payments-api.js";
+import type { BillEditExpected, BillEditState } from "./api/order-types.js";
 import { billHasUnsent, billUnsentOf, billUnsentText } from "./state/bill-unsent.js";
 import {
   isLateSendManagerRefusal,
@@ -96,6 +90,7 @@ import {
   applyThemePick,
   THEME_SELECTED_EVENT,
   followVenueTheme,
+  setContentLanguages,
   setHelpMode,
 } from "@waitron/ui";
 import {
@@ -141,7 +136,8 @@ import {
 } from "./state/department-transfer-monitor.js";
 import { LocaleChangeController } from "./state/locale-controller.js";
 import { MakeNowController } from "./state/make-now-controller.js";
-import { TillApi, isNetworkFailure, type KitchenNoteSnapshot } from "./api/client.js";
+import { TillApi, isNetworkFailure, type SessionPerson } from "./api/client.js";
+import type { KitchenNoteSnapshot } from "./api/order-types.js";
 import { MAIN_SILENT_MS, NO_BOX_ANSWERING, type ServerRouter } from "./api/server-router.js";
 import { startBatteryReport, type BatteryLike } from "./api/battery-report.js";
 import { quantityText, trimQuantity } from "./widgets/dish-format.js";
@@ -168,7 +164,6 @@ import "./screens/till-clock-in-screen.js";
 import "./screens/till-attendance-questions.js";
 import "./screens/till-hours-screen.js";
 import { HoursController, type HoursSnapshot } from "./state/hours.js";
-import type { HoursSelection } from "./api/client.js";
 import { AttendanceController, type AttendanceSnapshot } from "./state/attendance.js";
 import type { AttendanceCommandPayload } from "@waitron/workforce/attendance-contract";
 import {
@@ -176,7 +171,8 @@ import {
   type ClockingSnapshot,
   type TillClockAction,
 } from "./state/clocking.js";
-import type { TillClockState, AttendanceChange, AttendanceCommand } from "./api/client.js";
+import type { AttendanceChange, AttendanceCommand, HoursSelection } from "./api/client.js";
+import type { TillClockState } from "./api/attendance-api.js";
 import "./widgets/attendance-correction-dialog.js";
 import "./widgets/attendance-day-dialog.js";
 import type { FixEntryDetail } from "./widgets/attendance-day-dialog.js";
@@ -374,7 +370,6 @@ import { pickedUpMessage } from "./widgets/equipment-labels.js";
 import "./widgets/profile-dialog.js";
 import type { ProfileNotice } from "./widgets/profile-dialog.js";
 import type { FindBillPayDetail } from "./widgets/find-bill-dialog.js";
-
 import type { StringKey } from "./i18n/strings.js";
 import {
   TillHeldOrders,
@@ -428,6 +423,33 @@ import {
   tableSentence,
   type CarriedRevision,
 } from "./state/floor-today.js";
+import type { BillLookupRow } from "./api/find-bill-api.js";
+import type {
+  CounterWaitingOrder,
+  HeldOrder,
+  HeldOrderSummary,
+  OrderFlow,
+  OrderLinePatch,
+} from "./api/orders-api.js";
+import type {
+  EndMealRequest,
+  MealEndUnservedDish,
+  FloorZone,
+  TableState,
+  TableParty,
+  PartyBill,
+  MergeInvoiceChoice,
+  TableActionResult,
+  BillRevisions,
+  MoveBillResult,
+} from "./api/floor-api.js";
+import type {
+  InvoiceDeliveryStatus,
+  InvoiceDeliveryOptions,
+  InvoiceDeliveryChoice,
+  OriginalReceiptPrint,
+} from "./api/invoice-delivery-api.js";
+import type { DeadEndAnswer, DraftSubmission, SubmittedDraft } from "./api/drafts-api.js";
 import type {
   AdjustmentAsk,
   AdjustmentCommand,
@@ -440,55 +462,37 @@ import type {
   BillPaymentResult,
   BillPaymentView,
   BillRefundResult,
-  CounterWaitingOrder,
   UnpaidDepartureRequest,
-  EndMealRequest,
-  MealEndUnservedDish,
+  PayOutcome,
+  TillSaleResult,
+} from "./api/payments-api.js";
+import type {
   DeviceStationScreen,
   DevicePassBoard,
-  DeadEndAnswer,
-  DraftSubmission,
-  FloorZone,
-  HeldOrder,
-  HeldOrderSummary,
-  OrderFlow,
-  ServiceZoneSummary,
-  PayOutcome,
-  GroupCommand,
   CurrentOrders,
   OrderGroup,
   PrintProblem,
-  SaleLine,
   Station,
-  StaffMember,
-  SubmittedDraft,
-  OrderLinePatch,
   TabLine,
-  TableState,
-  TableParty,
+} from "./api/kitchen-api.js";
+import type {
+  StaffMember,
   TillActiveReader,
   TillCourse,
   TillInfo,
+} from "./api/device-session-api.js";
+import type {
+  ServiceZoneSummary,
   MenuStateAnswer,
   TillMenuOffer,
   TillProduct,
-  TillSaleResult,
-  BillLookupRow,
-  InvoiceDeliveryStatus,
-  InvoiceDeliveryOptions,
-  InvoiceDeliveryChoice,
-  OriginalReceiptPrint,
-  PartyBill,
-  MergeInvoiceChoice,
-  TableActionResult,
-  BillRevisions,
-  MoveBillResult,
   TillZoneMenu,
   DiningChoice,
   ZoneDining,
   ZoneOffers,
-} from "./api/client.js";
-import { menuOfferToTillProduct } from "./api/client.js";
+} from "./api/menu-api.js";
+import type { GroupCommand, SaleLine } from "./api/order-types.js";
+import { menuOfferToTillProduct } from "./api/menu-api.js";
 import {
   mergeInvoiceChoice,
   mergeInvoiceNames,
@@ -542,8 +546,8 @@ import type { BasketRefusal, OrderLine, SelectedExtra } from "./state/working-or
 import type { StoredLines } from "./widgets/basket.js";
 import { adjustableListing } from "./state/adjust-target.js";
 import type { LoggedInDetail } from "./screens/till-lock-screen.js";
+import type { CaptureWarning } from "./api/payments-api.js";
 import type {
-  CaptureWarning,
   DevDeviceList,
   DeviceEquipment,
   RoleEquipment,
@@ -552,11 +556,10 @@ import type {
   DeviceIdentity,
   EquipmentChange,
   ProfileChoice,
-  ReadOptions,
   KitchenScreenKind,
   ResolvedKitchenScreen,
-  SessionPerson,
-} from "./api/client.js";
+} from "./api/device-session-api.js";
+import type { ReadOptions } from "./api/till-request.js";
 import { readDevDeviceId, clearDevDeviceId } from "./api/dev-device.js";
 import type { TicketIssuer } from "./screens/till-ticket-view.js";
 import type {
@@ -566,9 +569,6 @@ import type {
   ParkOrderDetail,
 } from "./widgets/tender-pay.js";
 import { defaultReceiptGuestCount } from "./state/receipt-guests.js";
-
-import { setContentLanguages } from "@waitron/ui";
-
 export { SUBMIT_RETRY_PAUSE_MS } from "./state/draft-sync.js";
 
 type Screen = "lock" | "counter" | "floor" | "station";
