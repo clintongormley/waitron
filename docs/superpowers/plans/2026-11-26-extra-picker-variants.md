@@ -1,6 +1,6 @@
 # Let the extras picker list variants
 
-In Modifiers or from the Products editor, a manager can choose Wine (Glass) as an extra, set its portion and price, and recognise it when reopening the list. The [backlog entry](../../backlog/till.md#settled-small-small-answers-the-owner-gave-that-are-not-built-yet) records the watcher’s instruction to show variants that can already be saved as extras.
+In Modifiers or from the Products editor, a manager can choose Wine (Glass) as an extra, set its portion and price, and recognise it when reopening the list. The [decision](../../backlog/till.md#decisions-and-deliberate-limits) records the watcher’s instruction to show variants that can already be saved as extras.
 
 ## Prove the picker and saved row
 

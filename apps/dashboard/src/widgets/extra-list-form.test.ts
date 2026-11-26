@@ -2482,7 +2482,7 @@ it("adds and reopens a measured variant under its staff name", async () => {
 
   await type(el, "item-0-portion", "0.250");
   const price = field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price");
-  expect([price.placeholder, price.unit]).toEqual(["1.00", "kg"]);
+  expect([price.inherited?.value, price.unit]).toEqual(["1.00", "kg"]);
   await click(el, "save");
   expect(submitted[0]!.items[0]).toMatchObject({
     productId: sliced.id,

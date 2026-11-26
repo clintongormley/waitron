@@ -709,15 +709,6 @@ the owner's redesign.
   the header scrolls inside itself by design (kept by the watcher 2026-11-24, not asked).
   [Detail](till.md#screen-faults-seen-during-menus-task-9s-look-on-2026-09-27)
 
-## SETTLED-SMALL. Small answers the owner gave that are not built yet
-
-Queued as SETTLED-SMALL (lane F), in two or three pull requests by screen. Some are the owner's own
-answers; where an entry says a rule is read across, the owner was not asked that point.
-
-- **The extras form's picker lists variants**: the owner's decision that a variant can be an extra
-  (2026-09-24), read across to the picker by the watcher, not an answer. Today it lists top-level products
-  only (`listProducts`).
-
 ## Bundle: Small till and floor wording fixes
 
 1 entry, size S.
@@ -906,6 +897,12 @@ here is asked or built before that. They were separate entries, many of them que
 - **An extra already sent to a station stays kitchen work when the editing till makes that
   station’s work here (A692, watcher decision, 2026-11-26).** The watcher extended the owner's
   A1416 options decision to the work a station already received.
+
+<a id="settled-small-small-answers-the-owner-gave-that-are-not-built-yet"></a>
+
+- **The extras picker lists active variants (SETTLED-SMALL, watcher decision, 2026-11-26).** The
+  watcher applied the [rule that a variant may be an extra](../developers/products.md#on-the-till)
+  to the Dashboard form.
 
 - **A parked dish not yet sent keeps a recorded options answer the menu no longer matches (lane B,
   2026-11-18; kept by the watcher 2026-11-24, not asked).** The till asks staff to choose for each new
