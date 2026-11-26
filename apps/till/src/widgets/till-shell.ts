@@ -1096,7 +1096,7 @@ export class TillShell extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  #chooser(layout: "menu" | "group" = "menu"): TemplateResult | typeof nothing {
+  #chooser(layout: "menu" | "group" | "segmented" = "menu"): TemplateResult | typeof nothing {
     return this.loadLocales !== undefined
       ? html`<wt-language-chooser
           layout=${layout}
@@ -1433,7 +1433,10 @@ export class TillShell extends LitElement {
       ${floorMenuSection(
         "floor.menu_device",
         html`
-          ${this.#chooser("group")}${this.#helpSwitch()}
+          ${this.#chooser("segmented")}
+          <div class="floor-help">
+            <span aria-hidden="true">${helpText("help.label")}</span>${this.#helpSwitch()}
+          </div>
           <details class="settings-group">
             <summary class="settings-heading">${t("device_zones.settings")}</summary>
             ${items.equipment}${items.profile}${this.#themeChoices()}

@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import {
   cleanupWidgets,
   declareTouchScreen,
@@ -387,6 +388,38 @@ it("puts the narrow Floor controls in one bottom bar and returns focus on wideni
     await vi.waitFor(() =>
       expect(more().shadowRoot!.activeElement).toBe(more().shadowRoot!.querySelector("button")),
     );
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+it("shows the active language in the joined floor menu choice and gives Log out no arrow", async () => {
+  setLocale("en-GB");
+  await page.viewport(390, 844);
+  try {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "phone-portrait",
+      operatorName: "Ana",
+      activeScreen: "floor",
+      loadLocales: async () => [...SUPPORTED_LOCALES],
+    });
+    el.append(document.createElement("till-floor-screen"));
+    const more = () => el.shadowRoot!.querySelector<HTMLElement>(".floor-menu")!;
+    await vi.waitFor(() => expect(more()).not.toBeNull());
+    await userEvent.click(more().shadowRoot!.querySelector("button")!);
+    const chooser = more().querySelector("wt-language-chooser")!;
+    const choices = () => [...chooser.shadowRoot!.querySelectorAll(".choice")];
+    await vi.waitFor(() => expect(choices()).toHaveLength(2));
+    const [spanish, english] = choices();
+    expect(spanish!.getAttribute("aria-pressed")).toBe("false");
+    expect(english!.getAttribute("aria-pressed")).toBe("true");
+    expect(spanish!.getBoundingClientRect().right).toBe(english!.getBoundingClientRect().left);
+    expect(getComputedStyle(chooser.shadowRoot!.querySelector(".group-label")!).fontSize).toBe(
+      "16px",
+    );
+    const logout = more().querySelector(".logout")!.shadowRoot!.querySelector("button")!;
+    expect(getComputedStyle(logout, "::after").content).toBe("none");
+    expect(getComputedStyle(logout).fontWeight).toBe("600");
   } finally {
     await page.viewport(1280, 900);
   }

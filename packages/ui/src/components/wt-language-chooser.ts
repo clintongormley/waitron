@@ -58,6 +58,10 @@ export class WtLanguageChooser extends LitElement {
         display: block;
       }
 
+      :host([layout="segmented"]) {
+        display: block;
+      }
+
       .group {
         display: flex;
         flex-wrap: wrap;
@@ -100,14 +104,54 @@ export class WtLanguageChooser extends LitElement {
         outline: var(--wt-focus-ring);
         outline-offset: var(--wt-focus-offset);
       }
+
+      .choices {
+        display: contents;
+      }
+
+      :host([layout="segmented"]) .group {
+        min-block-size: calc(var(--wt-tap-min) + var(--wt-space-2));
+        padding-inline: var(--wt-space-4);
+        border-block-end: 1px solid var(--wt-color-border);
+      }
+
+      :host([layout="segmented"]) .group-label {
+        color: var(--wt-color-text);
+        font-size: calc((var(--wt-font-size-md) + var(--wt-font-size-lg)) / 2);
+      }
+
+      :host([layout="segmented"]) .choices {
+        display: flex;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-md);
+      }
+
+      :host([layout="segmented"]) .choice {
+        border-radius: 0;
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      :host([layout="segmented"]) .choice:first-child {
+        border-start-start-radius: var(--wt-radius-md);
+        border-end-start-radius: var(--wt-radius-md);
+      }
+
+      :host([layout="segmented"]) .choice:last-child {
+        border-start-end-radius: var(--wt-radius-md);
+        border-end-end-radius: var(--wt-radius-md);
+      }
+
+      :host([layout="segmented"]) .choice:focus-visible {
+        position: relative;
+      }
     `,
   ];
 
   /** The code of the language the page is shown in. */
   @property() active = "";
 
-  /** `menu`: a trigger and a pop-up. `group`: the choices in a row, for inside another menu. */
-  @property({ reflect: true }) layout: "menu" | "group" = "menu";
+  /** Menu opens a pop-up. Group and segmented show the choices in a row. */
+  @property({ reflect: true }) layout: "menu" | "group" | "segmented" = "menu";
 
   @property({ type: Boolean, attribute: "below-only" }) belowOnly = false;
 
@@ -148,7 +192,7 @@ export class WtLanguageChooser extends LitElement {
   }
 
   #loadGroup(): void {
-    if (this.layout !== "group") return;
+    if (this.layout === "menu") return;
     if (this.locales !== undefined || this.#groupLoading) return;
     this.#groupLoading = true;
     void this.#load().then(() => {
@@ -251,24 +295,26 @@ export class WtLanguageChooser extends LitElement {
     const choices = this.locales ?? [{ code: this.active, label: this.#label(this.active) }];
     return html`<div class="group" role="group" aria-labelledby="group-label">
       <span id="group-label" class="group-label">${this.label}</span>
-      ${choices.map(
-        // The click is left to bubble: an enclosing wt-row-actions closes its menu on it.
-        (l) =>
-          html`<button
-            type="button"
-            class="choice"
-            aria-pressed=${String(l.code === this.active)}
-            data-test=${`lang-${l.code}`}
-            @click=${() => this.#choose(l.code)}
-          >
-            ${l.label}
-          </button>`,
-      )}
+      <div class="choices">
+        ${choices.map(
+          // The click is left to bubble: an enclosing wt-row-actions closes its menu on it.
+          (l) =>
+            html`<button
+              type="button"
+              class="choice"
+              aria-pressed=${String(l.code === this.active)}
+              data-test=${`lang-${l.code}`}
+              @click=${() => this.#choose(l.code)}
+            >
+              ${l.label}
+            </button>`,
+        )}
+      </div>
     </div>`;
   }
 
   override render() {
-    if (this.layout === "group") return this.#renderGroup();
+    if (this.layout !== "menu") return this.#renderGroup();
     const label = this.#label(this.active);
     // The full name sits inside the code part as visually hidden text, so it is read only while the
     // code is drawn and the drawn code stays in the name (WCAG 2.5.3).

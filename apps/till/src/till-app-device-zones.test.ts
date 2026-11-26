@@ -3077,6 +3077,61 @@ describe("a handheld's zones", () => {
         expect(sheet.bottom).toBeCloseTo(bar.top, 0);
         expect(sheet.left).toBeCloseTo(bar.left, 0);
         expect(sheet.right).toBeCloseTo(bar.right, 0);
+        const zone = chooser.querySelector<HTMLElement>('[aria-checked="true"]')!;
+        expect(zone.getBoundingClientRect().height).toBeGreaterThanOrEqual(60);
+        expect(getComputedStyle(zone).fontSize).toBe("17px");
+      });
+    });
+
+    it("keeps landscape map tables tappable and reveals the last table from the keyboard", async () => {
+      await pageAt(700, 390);
+      applyTokens(document.documentElement);
+      const tables = Array.from({ length: 8 }, (_, index) => ({
+        ...tableIn(`t-${index}`, "room"),
+        today: {
+          placement: {
+            x: (index % 2) * 4,
+            y: Math.floor(index / 2) * 3,
+            width: 2,
+            height: 2,
+            shape: "rect",
+            rotation: 0,
+          },
+          seats: 4,
+          fixed: false,
+          takenOff: false,
+          joinId: null,
+          joinSeats: null,
+          zoneRevision: 0,
+        },
+      }));
+      const { el } = await mountHandheld(selection(["room"], "room"), "phone-portrait", {
+        listZones: vi
+          .fn()
+          .mockResolvedValue(orderedFloorZones.map((zone) => ({ ...zone, hasPlan: true }))),
+        getTablesState: vi.fn().mockResolvedValue(tables),
+      });
+      el.parentElement!.id = "app";
+      await vi.waitFor(() => expect(floor(el)?.tables).toHaveLength(8));
+      const map = floor(el).shadowRoot!.querySelector("wt-floor-map")!;
+      const button = (id: number) =>
+        map.shadowRoot!.querySelector<HTMLButtonElement>(`[data-table-id="t-${id}"]`)!;
+      const shape = () => button(0).querySelector('[part="shape"]')!.getBoundingClientRect();
+      await vi.waitFor(() => {
+        expect(shape().width).toBeGreaterThanOrEqual(44);
+        expect(shape().height).toBeGreaterThanOrEqual(44);
+        expect(map.shadowRoot!.textContent).toContain(t("floor.map_pan"));
+      });
+      expect(button(7).getBoundingClientRect().top).toBeGreaterThan(
+        map.getBoundingClientRect().bottom,
+      );
+      button(0).focus();
+      await userEvent.keyboard("{End}");
+      expect(map.shadowRoot!.activeElement).toBe(button(7));
+      await vi.waitFor(() => {
+        expect(button(7).getBoundingClientRect().bottom).toBeLessThanOrEqual(
+          map.getBoundingClientRect().bottom + 1,
+        );
       });
     });
 

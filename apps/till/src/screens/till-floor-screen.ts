@@ -1016,7 +1016,7 @@ export class TillFloorScreen extends LitElement {
   #drops = new Set<PendingDrop>();
   /** Each room's revision as this screen's last change there answered it, and that answer's `nextFloorMoment`. */
   #carried = new Map<string | null, CarriedRevision>();
-  #mapCopy = { locale: "", copy: { label: "", allergy: "" } };
+  #mapCopy = { locale: "", copy: { label: "", allergy: "", pan: "" } };
 
   /** The clock the last render was drawn by. */
   #drawnAt = 0;
@@ -2346,13 +2346,12 @@ export class TillFloorScreen extends LitElement {
     };
   }
 
-  /** Rebuilt only when the language changes, so a redraw hands the map the same copy. */
-  #floorMapCopy(): { label: string; allergy: string } {
+  #floorMapCopy(): { label: string; allergy: string; pan: string } {
     const locale = currentLocale();
     if (this.#mapCopy.locale !== locale)
       this.#mapCopy = {
         locale,
-        copy: { label: t("floor.map_label"), allergy: t("floor.allergy") },
+        copy: { label: t("floor.map_label"), allergy: t("floor.allergy"), pan: t("floor.map_pan") },
       };
     return this.#mapCopy.copy;
   }
@@ -2511,6 +2510,7 @@ export class TillFloorScreen extends LitElement {
           data-floor-map
           .tables=${onMap}
           .fitKey=${activeKey ?? ""}
+          .compact=${this.useFloorFooter}
           .copy=${this.#floorMapCopy()}
           .reducedMotion=${this.reducedMotion}
           .canDrag=${this.canChangeToday}

@@ -952,7 +952,7 @@ Toca **Lista** o **Mapa** para cambiar la vista. En una pantalla estrecha, el bo
 que la zona se abre igual la próxima vez, y cambiar una zona no cambia las demás. Una zona que no
 has cambiado se abre como mapa cuando tiene mesas colocadas en su plano, y como lista cuando no
 tiene ninguna. Si las mesas están demasiado juntas para tocarlas en el mapa, cambia esa zona a
-**Lista**.
+**Lista**. Cuando el mapa muestre **Arrastra para ver más mesas**, arrástralo para ver las demás.
 
 ## Unir y separar mesas {#join-tables}
 

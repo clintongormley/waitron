@@ -61,6 +61,8 @@ export const floorBarStyles = css`
     flex: none;
   }
   .floor-bar {
+    --wt-floor-menu-font-size: calc((var(--wt-font-size-md) + var(--wt-font-size-lg)) / 2);
+    --wt-floor-name-font-size: calc((var(--wt-floor-menu-font-size) + var(--wt-font-size-lg)) / 2);
     --wt-floor-bar-height: 0px;
     --wt-row-actions-sheet-inline-inset: var(--wt-page-padding, 0px);
     --wt-row-actions-bottom-offset: calc(
@@ -114,13 +116,19 @@ export const floorBarStyles = css`
     background: var(--wt-color-border);
   }
   .floor-bar [data-floor-zone] {
+    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-4));
     border-block-end: 1px solid var(--wt-color-border);
     border-radius: 0;
+    font-size: var(--wt-floor-name-font-size);
     font-weight: var(--wt-font-weight-bold);
+  }
+  .floor-bar [data-floor-zone][aria-checked="true"] [data-row-check] {
+    color: var(--wt-color-primary);
   }
   .floor-bar [data-open-device-zones] {
     justify-content: center;
     color: var(--wt-color-primary-text);
+    font-size: calc((var(--wt-font-size-md) + var(--wt-floor-menu-font-size)) / 2);
     font-weight: var(--wt-font-weight-bold);
     text-align: center;
   }
@@ -134,16 +142,21 @@ export const floorBarStyles = css`
     font-weight: var(--wt-font-weight-bold);
     text-transform: uppercase;
   }
-  .floor-bar summary.settings-heading {
+  .floor-bar summary.settings-heading,
+  .floor-help {
     display: flex;
     align-items: center;
     justify-content: space-between;
     box-sizing: border-box;
-    min-block-size: var(--wt-tap-min);
+    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
+    padding-inline: var(--wt-space-4);
+    border-block-end: 1px solid var(--wt-color-border);
     color: var(--wt-color-text);
-    font-size: var(--wt-font-size-md);
+    font-size: var(--wt-floor-menu-font-size);
     font-weight: var(--wt-font-weight-normal);
     text-transform: none;
+  }
+  .floor-bar summary.settings-heading {
     cursor: pointer;
   }
   .floor-bar summary.settings-heading::after {
@@ -156,20 +169,23 @@ export const floorBarStyles = css`
     min-block-size: var(--wt-tap-min);
     padding-inline: var(--wt-space-4);
   }
-  .floor-bar [data-floor-zone] {
-    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
-  }
   .floor-bar .floor-menu wt-button:not([data-clock-action="out"]) {
     inline-size: 100%;
   }
   .floor-bar .floor-menu wt-button:not([data-clock-action="out"])::part(button) {
+    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
     border-block-end: 1px solid var(--wt-color-border);
     border-radius: 0;
+    font-size: var(--wt-floor-menu-font-size);
   }
-  .floor-bar .floor-menu wt-button:not([data-clock-action="out"])::part(button)::after {
+  .floor-bar .floor-menu wt-button:not([data-clock-action="out"], .logout)::part(button)::after {
     content: "›" / "";
     margin-inline-start: auto;
     color: var(--wt-color-text-muted);
+  }
+  .floor-bar .floor-menu .logout::part(button) {
+    color: var(--wt-color-primary-text);
+    font-weight: var(--wt-font-weight-bold);
   }
   .floor-bar [data-floor-count] {
     margin-inline-start: auto;
@@ -196,6 +212,8 @@ export const floorBarStyles = css`
   }
   .floor-operator .operator {
     flex: 1;
+    font-size: var(--wt-floor-name-font-size);
+    font-weight: bold;
     overflow-wrap: anywhere;
   }
   .floor-operator [data-clock-action] {
