@@ -608,4 +608,16 @@ describe("readFilingOverview — an invoice cancelled in Waitron", () => {
     expect(caseOf(corrected).cancelledNeverHeld).toBe(false);
     expect(caseOf(duplicate).cancelledNeverHeld).toBe(false);
   });
+
+  it("does not say AEAT never held a cancelled invoice when its refusal carried no code", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 1 });
+    const [uncoded] = seeded.registroIds as [string];
+    await setEnvio(uncoded, { estado: "rechazado", codigoError: null, mensajeError: null });
+    await openCase(uncoded, "fiscal.registro_rechazado", "2026-07-21T09:00:00.000Z");
+    await cancelInWaitron(uncoded);
+
+    const caseOf = await read();
+
+    expect(caseOf(uncoded).cancelledNeverHeld).toBe(false);
+  });
 });

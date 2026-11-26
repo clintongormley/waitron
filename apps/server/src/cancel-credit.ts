@@ -2,7 +2,7 @@ import "./errors.js";
 import { prepareIssueClock } from "@waitron/fiscal";
 import { requireEconomicWrite, type TradingAdmission } from "./trading-admission.js";
 import { readSaleOperationDescription } from "./sale-operation-description.js";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { readLiveSeriesIdTx, saleLines, saleSubstitutions, sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { correctionTargetFor, recordCorrection, settleSale } from "@waitron/core";
@@ -60,17 +60,18 @@ export async function cancelPermission(
     .from(sales)
     .where(eq(sales.correctsSaleId, invoice.id))
     .limit(1);
-  return corrective === undefined && !(await substituted(tx, invoice.id))
+  return corrective === undefined && !(await substituted(tx, [invoice.id]))
     ? "sale.void"
     : "sale.rectify";
 }
 
-/** Whether a full invoice took the receipt's place. */
-async function substituted(tx: Transaction, saleId: SaleId): Promise<boolean> {
+/** Whether a full invoice took the place of any of `saleIds`. */
+async function substituted(tx: Transaction, saleIds: SaleId[]): Promise<boolean> {
   const [row] = await tx
     .select({ id: saleSubstitutions.id })
     .from(saleSubstitutions)
-    .where(eq(saleSubstitutions.substitutedSaleId, saleId));
+    .where(inArray(saleSubstitutions.substitutedSaleId, saleIds))
+    .limit(1);
   return row !== undefined;
 }
 
@@ -95,14 +96,15 @@ export async function creditWholeInvoice(
   authz: RecordCorrectionInput["authz"],
 ): Promise<SaleId> {
   await requireEconomicWrite(tx, cfg, deps.admission);
-  // `recordCorrection` does not look for a full invoice in the receipt's place, as a replacement does.
-  if (await substituted(tx, invoice.id))
+  // A replaced invoice is credited through its replacement, whose lines repeat the invoice's.
+  const target = await correctionTargetFor(tx, invoice.id);
+  // `recordCorrection` does not look for a full invoice in the place of the receipt or of its
+  // replacement, as core's correction history does.
+  if (await substituted(tx, [invoice.id, target]))
     throw new AppError("sale.correction_not_admitted", { reason: "replaced" });
   const clock = await prepareIssueClock(tx, cfg, deps.clock);
   const seriesId = brandSeriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "corrective"));
   const total = centsToDecimal(-invoice.total);
-  // A replaced invoice is credited through its replacement, whose lines repeat the invoice's.
-  const target = await correctionTargetFor(tx, invoice.id);
   const lines = reversedLines(
     await tx.select().from(saleLines).where(eq(saleLines.saleId, target)).orderBy(saleLines.lineNo),
   );

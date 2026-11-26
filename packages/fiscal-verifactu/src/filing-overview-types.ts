@@ -95,7 +95,9 @@ export interface FilingCaseView {
   /** How many held records name this case as the one holding them. */
   heldBehind: number;
   /** The record's sale was cancelled in Waitron, and AEAT refused every version of its invoice
-   * this box holds, none as a duplicate (3000): AEAT never held that invoice. */
+   * this box holds, each with a code and none as a duplicate (3000): AEAT never held that invoice.
+   * The page's "nothing to fix" for it holds only while the `release-held-cancellation` remedy is
+   * off (`record-remedy.ts`). */
   cancelledNeverHeld: boolean;
 }
 

@@ -190,7 +190,7 @@ export async function cancelPlacedOrder(
   if (reason.trim() === "") {
     throw new AppError("working_order.reason_required", { workingOrderId: id });
   }
-  return withCancelPinAhead(deps, id, operator, override, (checkedOverride) =>
+  return withCancelPinAhead(deps, operator, override, (checkedOverride) =>
     withIssuanceTransaction(deps.db, async (tx) => {
       const authz = { sessionId: operator.sessionId, override: checkedOverride };
       const { partyId, invoice } = await lockPlacedOrder(tx, deps, cfg, id);
@@ -216,20 +216,17 @@ export async function cancelPlacedOrder(
   );
 }
 /**
- * Runs `transaction` with the override it should check, its PIN checked ahead when the order has an
- * invoice to cancel or credit ({@link withPinCheckAhead}), whatever the operator holds: the
- * permission the cancel needs is read in the transaction, which a payment or corrective arriving
- * first can change.
+ * Runs `transaction` with the override, its PIN checked ahead ({@link withPinCheckAhead}) whatever
+ * the order and the operator hold: whether the cancel needs a permission, and which, is read in the
+ * transaction, which a receipt, payment or corrective arriving first can change.
  */
 export async function withCancelPinAhead<T>(
   deps: Pick<TillSaleDeps, "db">,
-  id: string,
   operator: { attempts: PinAttempts },
   override: Override | undefined,
   transaction: (override: Override | undefined) => Promise<T>,
 ): Promise<T> {
-  const toCheck = (await readOrderInvoice(deps.db, id)) === undefined ? undefined : override;
-  return withPinCheckAhead(deps.db, toCheck, operator.attempts, (checked) =>
+  return withPinCheckAhead(deps.db, override, operator.attempts, (checked) =>
     transaction(withCheck(override, checked)),
   );
 }

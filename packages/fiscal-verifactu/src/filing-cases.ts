@@ -336,7 +336,8 @@ export async function openFilingCases(tx: Transaction, limit: number | null) {
           select 1 from verifactu_records version indexed by verifactu_records_sale_idx
           left join verifactu_submissions version_envio on version_envio.registro_id = version.id
           where version.sale_id = ${verifactuRecords.saleId} and version.tipo_registro = 'alta'
-            and (version_envio.estado is not 'rechazado' or version_envio.codigo_error is '3000')
+            and (version_envio.estado is not 'rechazado' or version_envio.codigo_error is null
+              or version_envio.codigo_error is '3000')
         ))`.mapWith(Boolean),
     })
     .from(cases)

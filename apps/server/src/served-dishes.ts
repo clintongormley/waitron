@@ -17,7 +17,7 @@ export interface ServedBillDish {
 }
 
 /**
- * Whether the bill was handed over at the counter. Record unpaid departure also stamps
+ * Whether the bill was handed over. Record unpaid departure also stamps
  * `collected_at`, at or after its `recorded_at`, to stop kitchen work: that stamp is no handover.
  */
 export async function handedOver(tx: Transaction, billId: string): Promise<boolean> {

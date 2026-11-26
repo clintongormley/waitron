@@ -24,7 +24,12 @@ import { verifactuRecords } from "@waitron/fiscal-verifactu";
 import { createPinThrottle, hashPin, PIN_THROTTLE_IDLE_MS } from "@waitron/identity";
 import { captureAttempting } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
-import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
+import {
+  deviceId as brandDeviceId,
+  saleId as brandSaleId,
+  seriesId as brandSeriesId,
+} from "@waitron/shared";
+import { issueOrderInvoice } from "./testing/issue-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   inTx,
@@ -847,7 +852,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     });
   }
 
-  it("never checks an override sent with an order that has no invoice, so a wrong PIN there does not count", async () => {
+  it("does not count a wrong PIN in an override sent with an order that has no invoice", async () => {
     const ticketFirst = await noInvoiceZone("Barra sin factura");
     const { app } = throttledApp();
     const wrong = cancelWith({ personId: supervisorId, pin: "0000" }, venue.cookie, app);
@@ -985,7 +990,7 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
     expect(await voidsOf(original.id)).toEqual([{ reason: REASON, voidedBy: supervisorId }]);
   });
 
-  it("derives no key for an override sent with an order that has no invoice", async () => {
+  it("checks the PIN ahead when the receipt is printed after the order was first read", async () => {
     const ticketFirst = await inTx(venue, async (tx) => {
       const [zone] = [await seedZone(tx, { name: "Barra sin factura, sin clave" })];
       return offerProducts(tx, {
@@ -994,12 +999,29 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
       });
     });
     const id = await placed([{ name: "Small beer", quantity: "1" }], ticketFirst.zoneId, false);
+    beforeTransaction.run = async () => {
+      beforeTransaction.run = undefined;
+      await issueOrderInvoice(
+        {
+          admission: testTradingAdmission(),
+          db: venue.db,
+          backend: venue.backend,
+          clock: venue.clock,
+        },
+        { ...venue.cfg, origin: { source: "device", deviceId: brandDeviceId(venue.deviceId) } },
+        id,
+        venue.operatorId,
+      );
+    };
     watchDerivations(SUPERVISOR_PIN, anotherWriter);
 
     const answer = await cancelWithSupervisor(id);
 
-    expect(answer.status).toBe(200);
-    expect(await watchedOrder()).toEqual([]);
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await watchedOrder()).toEqual(["writer", "derived"]);
+    expect(await voidsOf((await invoiceOf(id)).id)).toEqual([
+      { reason: REASON, voidedBy: supervisorId },
+    ]);
   });
 });
 
