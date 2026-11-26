@@ -3,15 +3,17 @@
 Lane N, item TILL-REDESIGN-ORDER, PR 6 of the [split](2026-11-26-till-handheld-redesign-pass-1.md)
 (“Read compact rows, see matching repeat picks group and the last dish light up”). Design:
 [§4 The order screen](../specs/2026-11-26-till-handheld-redesign-design.md#4-the-order-screen).
-Status: PLAN FOR APPROVAL.
+Status: cleared by the watcher on 2026-11-26 with six changes, folded in below (receipt: lane N's
+`receipts/till-order-6/watcher-plan-read.md`). Spec §14.4 (`af` 1) wins over frame `d` 1 where they differ.
 
 ## What staff can do when it lands
 
 On a table's order, each dish not yet sent reads as one short row, as on a printed ticket: the
 quantity, the name, its options and extras on a quiet second line, and the row's price on the right.
 Tapping the same dish again adds to its row. The dish added last is tinted, so the waiter sees what
-the last tap did. Tapping a row opens today's dish details, where quantity, options, note and now
-**Remove** live until PR 7 opens rows in place.
+the last tap did. Tapping a row opens today's dish details, where quantity, options and note live
+until PR 7 opens rows in place. **Remove** joins today's draft bar, beside **Move to…** and **Fire**,
+acting on the selected rows, until PR 9d's selection foot.
 
 ## The frames it builds to
 
@@ -19,8 +21,9 @@ the last tap did. Tapping a row opens today's dish details, where quantity, opti
   (“Medium”), price at the right edge, no buttons on the row, the last-added row (Croquettes) tinted.
 - Picture `af` frame 1: the same rows under fire-group headings (“Starters”, “Mains”). Its grips
   arrive in PR 9c. Its headings stay as they are today until 9c and 9d restyle them.
-- Picture `g` frame 1: a row of several of one dish keeps a control at its right edge. Until PR 7
-  makes it the unfold arrow, it is today's split control (`›`, `data-split-draft-line`), unchanged.
+- Picture `g` frame 1: a row of several of one dish keeps a control at its right edge, drawn as
+  `wt-icon` `chevron-down`, muted (§14.4). Until PR 7 makes it the unfold arrow it keeps today's split
+  action and its marker (`data-split-draft-line`); only its drawing changes from `›`.
   The header that folds a split dish back together (`data-fold-draft-family`) also stays.
 
 ## The change
@@ -38,7 +41,9 @@ the last tap did. Tapping a row opens today's dish details, where quantity, opti
    (the ⓘ's marker today) and a new `data-draft-row`. With those, three things keep finding the row:
    the scroll to the last-added dish (`basket.ts:841`), the long-press opening of details
    (`#openHeldDraftLine`, screen `:2209`), and the test helper `openDraftLine`.
-3. **Row content.** Quantity: today's `quantityLabel` (a weighed dish reads “250 ml”). Second line:
+3. **Row content.** Sizes are §14.4's (frame `af` 1): the quantity `--wt-font-size-lg` with
+   `--wt-font-weight-bold`, the name `--wt-font-size-lg` with `--wt-font-weight-medium`, the second
+   line `--wt-font-size-sm` muted, the price `--wt-font-size-md`. Quantity: today's `quantityLabel` (a weighed dish reads “250 ml”). Second line:
    the extras (with a pick count above one), the option answers, and the note, joined with “ · ”.
    An extra keeps its own allergen and diet icons beside its name (today's `extraNutrition`, drawn
    on a sub-row). An extra the menu no longer offers keeps its marker. The dish's nutrition icons,
@@ -62,10 +67,14 @@ the last tap did. Tapping a row opens today's dish details, where quantity, opti
    from the row button: `#pressDraft` and `#draftClick` treat `data-draft-row` as they treat
    `data-draft-select`, so a drag never also opens the panel. A long press that does not move still
    opens the details, as it does today, until PR 9d makes holding select.
-8. **Remove moves into the panel.** In `compactRows` mode only, the panel shows **Remove** at its
-   foot in danger styling, as in picture `g` frame 3. It sits in a new slot of the picker, because
-   the existing `line-details` slot is at the top. It has the same guards as today's × (`#lineReadOnly`,
-   in flight): it removes the line at once and closes the panel.
+8. **Remove moves into the draft bar.** §14.1 says frame `g` 3 is out of date: an opened new row
+   holds only quantity, Options and Note, and §4 puts Remove in the selection foot. Until PR 9d, the
+   draft bar gains **Remove** beside **Move to…** and **Fire**. It removes the selected rows, with the
+   same guards as today's × (`#lineReadOnly`, in flight), and is disabled while no row is selected.
+   The details panel gains nothing.
+9. **The selection box** is §14.4's selecting checkbox, in the 36-wide left slot where PR 9c's grip
+   will go: 24 square, radius 6, a 2px `--wt-color-border` border; ticked, `--wt-color-primary` with
+   a white (`--wt-color-on-primary`) `wt-icon` `check`. It replaces today's ☐ and ☑ characters.
 
 ## What the frame drops that stays for now, and why
 
@@ -78,21 +87,24 @@ Each stays only until its replacement lands, so no existing action is lost in be
 
 ## Tests, failing first
 
+- The shared per-line price function is tested once, in `state/draft-layout`'s own test: a
+  set-menu share, a weighed dish, an extra, and an extra no longer offered.
 - New `apps/till/src/widgets/draft-row.test.ts` (browser), covering four things.
   1. Row text for a plain dish, a dish with an option, an extra and a note, a weighed dish, and a
      set-menu dish.
   2. A burger whose cheese extra adds milk shows milk beside the cheese. An extra no longer offered
      shows its marker.
-  3. The rows' prices plus the sent total equal the order total, with one each of: an extra, an
-     extra no longer offered, a set-menu dish and a weighed dish.
+  3. One set-menu dish's row prints the shared function's figure (the other kinds are the function's
+     own test's, by the owner's test-layer rule of 2026-11-09).
   4. The tint moves to the newly added row, and leaves a row once it is no longer the last added.
 - New `draft-row.a11y.test.ts`: axe on a plain row, a last-added row, a row with warnings and a
   disabled row, in light and dark. Each row has one button, named by its quantity, name and price.
 - In `till-table-order-screen.new-order.test.ts`:
   - two taps on one dish give one row reading 2 (a pinning check; it passes today);
   - a tap on a row opens the details panel;
-  - **Remove** there removes the line and closes the panel;
+  - **Remove** in the draft bar removes the selected rows, and is disabled with none selected;
   - the row and Remove do nothing while sending;
+  - the selection box ticks and unticks, drawn as §14.4's checkbox;
   - a press-and-drag on a row moves it without opening the panel;
   - a long press still opens the details;
   - the last-added row is scrolled into view.
@@ -103,7 +115,7 @@ Each stays only until its replacement lands, so no existing action is lost in be
 ## Docs
 
 The English and Spanish `table-service.md` guides change in two sections. `{#portions}` says a
-tap opens a dish's details, where Remove is. `{#phone-order}` says pressing a row starts the drag
+tap opens a dish's details, and that Remove, in the bar under the order, removes the ticked dishes. `{#phone-order}` says pressing a row starts the drag
 (“press its name” becomes “press its row”). `docs/developers/design-system.md` describes the order
 row.
 
@@ -115,7 +127,8 @@ calls the total's own per-line rule), no fiscal path, permission or database. So
 reviewer. `finish-branch`'s wave runs the Codex run-it seat twice, as the split asks for named
 risks. The two named risks are allergen display on the compact row, and touch gestures (tap, drag,
 long press) on one row. Pictures go
-to the watcher beside frames `d` 1 and `af` 1, with the differences listed:
+to the watcher beside frames `d` 1 and `af` 1, with the differences listed against `af` 1 and
+§14.4's sizes as well as against `d` 1:
 
 - phone 390 px and till 1280 px;
 - portrait and landscape;
