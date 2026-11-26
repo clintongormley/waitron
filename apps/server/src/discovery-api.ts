@@ -7,6 +7,7 @@ import type { VenueNameState } from "./mdns.js";
 import { trustDeviceForRequest } from "./detect-device.js";
 import { readBoxPublicCa } from "./box-tls-repair.js";
 import { mountConnectionBootstrap } from "./connection-bootstrap.js";
+import { connectionLocale } from "./connection-bootstrap-page.js";
 import { CA_CONTENT_TYPE, CA_FILENAME, ownAddressFor, renderTrustPage } from "./trust-page.js";
 
 /** Public certificate files use a fixed state path; requests never choose a filesystem location. */
@@ -142,6 +143,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       caExists(),
     ]);
     const html = renderTrustPage({
+      locale: connectionLocale(c.req.header("accept-language")),
       reachUrls: [reach.hostnameUrl, ...reach.ipUrls],
       caAvailable,
       caDownloadPath: CA_DOWNLOAD_PATH,
@@ -151,7 +153,7 @@ export function mountDiscovery(app: Hono, deps: DiscoveryDeps, log: Logger): voi
       ownAddress: ownAddressFor(deps.venueNameState?.(), reach.ipUrls, new URL(c.req.url).hostname),
       notSetUp: deps.notSetUp,
     });
-    return c.html(html, 200, { "Cache-Control": "no-cache" });
+    return c.html(html, 200, { "Cache-Control": "no-cache", Vary: "Accept-Language" });
   });
 
   log("info", "discovery.mounted", { hostname: deps.hostname });

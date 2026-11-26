@@ -5,6 +5,7 @@ import type { VenueNameState } from "./mdns.js";
 import { trustDeviceForRequest } from "./detect-device.js";
 import { CA_CONTENT_TYPE, CA_FILENAME, ownAddressFor, renderTrustPage } from "./trust-page.js";
 import { mountConnectionBootstrap, type ConnectionBootstrapDeps } from "./connection-bootstrap.js";
+import { connectionLocale } from "./connection-bootstrap-page.js";
 import { type DeclarationPagesDeps, mountDeclarationPages } from "./declaration-pages.js";
 
 /** HTTP exposes public connection setup; application and recovery inputs stay on HTTPS. */
@@ -78,6 +79,7 @@ export function buildLandingApp(deps: LandingDeps): Hono {
     const reachUrls = reachUrlsNow();
     const ipUrls = reachUrls.filter((url) => /^\d+\.\d+\.\d+\.\d+$/.test(new URL(url).hostname));
     const html = renderTrustPage({
+      locale: connectionLocale(c.req.header("accept-language")),
       reachUrls,
       caAvailable: await caExists(),
       caDownloadPath: CA_DOWNLOAD_PATH,
@@ -88,7 +90,7 @@ export function buildLandingApp(deps: LandingDeps): Hono {
       notSetUp: deps.notSetUp,
     });
     // A re-image must not leave a cached guide. HTTPS navigation remains an explicit link here.
-    return c.html(html, 200, { "Cache-Control": "no-cache" });
+    return c.html(html, 200, { "Cache-Control": "no-cache", Vary: "Accept-Language" });
   });
 
   app.on("GET", [CA_DOWNLOAD_PATH, "/setup-api/ca.crt"], async (c) => {

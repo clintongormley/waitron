@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { Hono } from "hono";
 import { it, expect, afterEach, beforeAll } from "vitest";
 import { mountDiscovery } from "./discovery-api.js";
-import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
+import { NOT_SET_UP_WORDS, TRUST_PAGE_WORDS } from "./i18n/trust-page.js";
 
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 let material: SelfSignedMaterial;
@@ -104,9 +104,24 @@ it("renders a trust page with the CA link and the inline QR", async () => {
   expect(res.status).toBe(200);
   expect(res.headers.get("content-type")).toContain("text/html");
   const html = await res.text();
+  expect(html).toContain('<html lang="en">');
   expect(html).toContain("/setup-api/ca.crt");
   expect(html).toContain('data-qr="https://192.168.1.5:8080"'); // the injected QR svg
   expect(html).toMatch(/iOS/); // per-OS steps present
+});
+
+it("serves the HTTPS trust guide in the browser's language", async () => {
+  const res = await appFor(await stateDirWithCa()).request(
+    "https://waitron.local:8080/setup/trust",
+    {
+      headers: { "Accept-Language": "es-ES" },
+    },
+  );
+  const html = await res.text();
+  expect(html).toContain('<html lang="es">');
+  expect(html).toContain(`<h1>${TRUST_PAGE_WORDS.es.heading}</h1>`);
+  expect(res.headers.get("vary")).toBe("Accept-Language");
+  expect(res.headers.get("cache-control")).toBe("no-cache");
 });
 
 it("trust page leads a spare to this box's own address only while another box answers", async () => {

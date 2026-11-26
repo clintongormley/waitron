@@ -2,6 +2,8 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import { chromium, type Browser, type BrowserContextOptions, type Page } from "playwright";
 import { renderTrustPage, type TrustPageInput } from "./trust-page.js";
 import { DEVICE_HELP, type DeviceId } from "./trust-page-devices.js";
+import { CONNECTION_DEVICE_ES } from "./connection-bootstrap-strings.js";
+import { TRUST_PAGE_WORDS } from "./i18n/trust-page.js";
 
 let browser: Browser | undefined;
 beforeAll(async () => {
@@ -67,6 +69,18 @@ async function expectStepsFor(page: Page, device: DeviceId, other: DeviceId): Pr
 
 it("shows a touch device guessed as Linux the Android steps as its own", () =>
   withPage(TOUCH, base, (page) => expectStepsFor(page, "android", "linux")));
+
+it("replaces the Spanish Linux guide with Spanish Android steps on a touch device", () =>
+  withPage(TOUCH, { ...base, locale: "es" }, async (page) => {
+    const android = CONNECTION_DEVICE_ES.android;
+    expect(await page.locator("#steps h2").allTextContents()).toContain(`3. ${android.heading}`);
+    expect(await page.locator("#steps section").first().textContent()).toContain(
+      android.removal[0],
+    );
+    expect(await page.getByRole("link", { name: TRUST_PAGE_WORDS.es.download }).isVisible()).toBe(
+      true,
+    );
+  }));
 
 it("leaves a Linux PC its own steps", () =>
   withPage(DESKTOP, base, (page) => expectStepsFor(page, "linux", "android")));

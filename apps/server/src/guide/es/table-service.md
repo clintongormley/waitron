@@ -275,9 +275,10 @@ de pagos, pero no los lectores ni este ajuste.
 
 ## Confía en el servidor antes de abrir la caja {#certificate-trust}
 
-La página de la caja **Conecta este dispositivo de forma segura** usa el idioma compatible
-preferido de tu navegador; si no encuentra ninguno, usa el inglés. Elige **Ver cómo hacerlo** para
-instalar el certificado del servidor en este dispositivo y vuelve a abrir la caja.
+La página de la caja **Conecta este dispositivo de forma segura** y la guía del certificado del
+servidor usan el idioma que prefiera tu navegador entre español e inglés. Si no reconoce ninguno,
+Waitron usa el inglés. Elige **Ver cómo hacerlo** para abrir la guía, sigue sus pasos para instalar
+el certificado y vuelve a abrir la caja.
 
 Si ya has abierto la caja y cambia el certificado del servidor, puede aparecer **No se puede
 conectar con el servidor** en lugar del aviso del navegador o de la página del certificado de la

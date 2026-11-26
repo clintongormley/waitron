@@ -2,7 +2,7 @@
 
 People opening the box’s certificate guide from the till or by address can read the
 download and installation instructions in the language their browser prefers. The
-[A1575 backlog entry](../../backlog/setup.md#a1575-the-boxs-certificate-page-in-spanish)
+[A1575 backlog entry](https://github.com/clintongormley/waitron/blob/b5425d2ba9f3306ea51957d46bd9ae5a3cb8fbc4/docs/backlog/setup.md#a1575-the-boxs-certificate-page-in-spanish)
 asks for the dashboard login’s language matching and the repair page’s device wording.
 
 ## One change

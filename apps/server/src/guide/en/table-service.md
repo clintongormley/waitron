@@ -259,9 +259,9 @@ or this setting.
 
 ## Trust the box before opening the till {#certificate-trust}
 
-The till's **Connect this device securely** page follows your browser's preferred supported
-language, with English as the fallback. Choose **Show me how** to install the box's certificate on
-this device, then open the till again.
+The till's **Connect this device securely** page and the box's certificate guide use the language
+your browser prefers among English and Spanish, with English as the fallback. Choose **Show me how**
+to open the guide, follow its steps to install the certificate and open the till again.
 
 If you have opened the till before and the box's certificate changes, you may see **Can't reach
 the box** in place of the browser warning or the till's certificate screen. On the venue's WiFi,
