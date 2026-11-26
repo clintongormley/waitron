@@ -278,9 +278,10 @@ export class WtRowActions extends LitElement {
     (options.find((row) => row.getAttribute("aria-checked") === "true") ?? options[0])?.focus();
   }
 
-  hide(): void {
+  hide({ restoreFocus = false } = {}): void {
     const popup = this.popup as HTMLElement | null;
     if (popup?.matches(":popover-open")) popup.hidePopover();
+    if (restoreFocus) this.trigger?.focus();
   }
 
   /** Places an open popup again against the trigger's current position, for a host that moves the
@@ -465,8 +466,7 @@ export class WtRowActions extends LitElement {
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
-      this.hide();
-      this.trigger.focus();
+      this.hide({ restoreFocus: true });
       return;
     }
     if (this.menuContent() === undefined) return;

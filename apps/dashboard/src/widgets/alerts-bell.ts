@@ -44,6 +44,17 @@ export class AlertsBell extends LitElement {
       :host {
         display: inline-flex;
       }
+      wt-row-actions::part(trigger) {
+        display: grid;
+        place-items: center;
+      }
+      wt-count-badge {
+        margin-block-start: calc(-1 * var(--wt-space-1));
+      }
+      wt-count-badge::part(badge) {
+        min-inline-size: var(--wt-space-4);
+        line-height: var(--wt-space-3);
+      }
       wt-row-actions::part(popup) {
         width: 44ch;
         max-width: calc(100vw - 2 * var(--wt-space-2));

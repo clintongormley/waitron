@@ -1244,6 +1244,7 @@ export class TillShell extends LitElement {
     return html`${themeChoices({
       active: currentThemeChoice(),
       labels: themeLabels(),
+      shortDeviceLabel: t("theme.device_short"),
       onPick: (choice) => this.#emit(THEME_SELECTED_EVENT, { choice }),
     })}${this.#pressBuzzSwitch()}`;
   }

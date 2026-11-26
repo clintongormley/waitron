@@ -7,9 +7,9 @@ an alert says to. To read the box's log, use **Diagnostics** instead.
 
 ## Open the page {#open}
 
-To keep a file about a problem in the dashboard, choose **Report a problem** in the top banner.
-You can use it before signing in too. Open the dashboard over HTTPS if the button is missing.
-On a phone, use the speech-bubble button with an exclamation mark.
+To keep a file about a problem in the dashboard, choose the speech-bubble button with an exclamation mark
+in the top banner (**Report a problem**). You can use it before signing in too. Open the dashboard
+over HTTPS if the button is missing.
 During setup, choose **Report a problem** in the page header. You can keep a report even if
 the box cannot answer or this already-open page loses its connection.
 If you see **Send to Waitron Cloud**, review the Cloud attachment before sending it. It contains

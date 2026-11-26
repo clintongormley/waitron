@@ -78,6 +78,7 @@ function held<T>() {
 function identity(permissions = ["fiscal.view"], personId = "reader") {
   return {
     personId,
+    displayName: "Reader",
     roleIds: ["manager" as const],
     email: `${personId}@example.test`,
     locale: "en-GB",

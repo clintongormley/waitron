@@ -17,12 +17,10 @@ import { repeat } from "lit/directives/repeat.js";
 import {
   baseStyles,
   belongsToComposition,
-  chooseTheme,
   iconButtonStyles,
   ThemeChoiceController,
   applyThemePick,
   THEME_SELECTED_EVENT,
-  themeChoices,
   themeChoicesStyles,
   themeLabelsPerLocale,
   trackIconTooltip,
@@ -41,6 +39,7 @@ import {
   type LegalAbout,
 } from "@waitron/shared";
 import { navMatches, destinationMatches, type NavSearchDestination } from "./nav-search.js";
+import { accountMenu, accountMenuStyles } from "./account-menu.js";
 import { sidebarHeadingStyles } from "./sidebar-heading-styles.js";
 import { collectSearchDestinations, validSearchDestinationPath } from "./nav-destinations.js";
 import { departmentReceiptSearchDestinations } from "./department-receipt-setting-search.js";
@@ -49,8 +48,6 @@ import "@waitron/ui/src/components/wt-icon.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-modal.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import "@waitron/ui/src/components/wt-row-actions.js";
-import "@waitron/ui/src/components/wt-menu-row.js";
 import "@waitron/ui/src/components/wt-toast.js";
 import "@waitron/ui/src/components/wt-banner.js";
 import "@waitron/ui/src/components/wt-stop-screen.js";
@@ -498,6 +495,7 @@ export class DashboardApp extends LitElement {
     baseStyles,
     iconButtonStyles,
     themeChoicesStyles,
+    accountMenuStyles,
     sidebarHeadingStyles,
     css`
       /* Fills the page's content box (index.html sizes it to the window), so the page's own padding
@@ -972,10 +970,10 @@ export class DashboardApp extends LitElement {
       }
 
       @media (max-width: 40rem) {
-        wt-language-chooser::part(name) {
+        .banner-actions > wt-language-chooser::part(name) {
           display: none;
         }
-        wt-language-chooser::part(code) {
+        .banner-actions > wt-language-chooser::part(code) {
           display: inline;
         }
       }
@@ -1095,6 +1093,8 @@ export class DashboardApp extends LitElement {
   };
 
   @state() private sessionPersonId?: string;
+  #sessionDisplayName?: string;
+  #sessionEmail?: string | null;
 
   @state() private myPersonId = "";
 
@@ -1115,9 +1115,6 @@ export class DashboardApp extends LitElement {
   );
   /** A stable field, so the chooser's `loadLocales` property does not change on every render. */
   readonly #loadLocales = () => this.api.getLocales().then((r) => r.locales);
-  /** The account menu's choices load with no press, so the read must not count as activity. */
-  readonly #loadLocalesPassively = () =>
-    (this.api.background ?? this.api).getLocales().then((r) => r.locales);
   @state() private alerts: AlertView[] = [];
   @state() private alertsVisible = false;
   @state() private alertError: string | null = null;
@@ -1531,6 +1528,7 @@ export class DashboardApp extends LitElement {
   #applyMe(
     me: {
       personId: string;
+      displayName: string;
       roleIds: string[];
       email: string | null;
       locale: string | null;
@@ -1577,6 +1575,8 @@ export class DashboardApp extends LitElement {
       );
     }
     this.sessionPersonId = me.personId;
+    this.#sessionDisplayName = me.displayName;
+    this.#sessionEmail = me.email;
     this.#sessionPermissions = me.permissions;
     this.#sessionRoleIds = me.roleIds;
     this.#permissionContinuation.notify();
@@ -1977,6 +1977,9 @@ export class DashboardApp extends LitElement {
     clearTimeout(this.sessionExpiryTimer);
     this.sessionExpiryTimer = undefined;
     this.sessionPersonId = undefined;
+    this.#sessionDisplayName = undefined;
+    this.#sessionEmail = undefined;
+    this.accountMenuOpen = false;
     this.#venueCountry = undefined;
     this.screen = "login";
     this.myPersonId = "";
@@ -2713,7 +2716,6 @@ export class DashboardApp extends LitElement {
             ? nothing
             : html`<dashboard-problem-report
                 data-test="problem-report"
-                .compact=${this.narrow}
                 .navigationScreens=${REPORT_SCREENS}
               ></dashboard-problem-report>`
         }
@@ -2758,54 +2760,25 @@ export class DashboardApp extends LitElement {
                 <wt-help-switch data-test="help-switch" label=${t("help.label")}></wt-help-switch>
                 <dashboard-problem-report
                   data-test="problem-report"
-                  .compact=${this.narrow}
                   .api=${this.api}
                   .navigationScreens=${REPORT_SCREENS}
                 ></dashboard-problem-report>
-                <wt-row-actions
-                  icon="person"
-                  align="end"
-                  .iconSize=${"lg"}
-                  label=${t("nav.account_menu")}
-                  data-test="account-menu"
-                  @wt-row-actions-toggle=${(event: CustomEvent<{ open: boolean }>) => {
-                    if (event.target === event.currentTarget)
-                      this.accountMenuOpen = event.detail.open;
-                  }}
-                >
-                  <wt-menu-row
-                    data-test="profile-row"
-                    help=${t("help.account.settings")}
-                    help-label=${fill("help.badge_label", { part: t("action.account_settings") })}
-                    ><wt-button
-                      icon="menu-account"
-                      data-test="profile"
-                      @click=${() => this.#openProfile()}
-                      >${t("action.account_settings_dialog")}</wt-button
-                    ></wt-menu-row
-                  >
-                  ${themeChoices({
-                    active: this.#theme.choice,
-                    labels: this.#themeLabelsFor(currentLocale()),
-                    onPick: chooseTheme,
-                  })}
-                  <wt-language-chooser
-                    layout="group"
-                    data-test="language-chooser"
-                    label=${t("profile.language")}
-                    .active=${currentLocale()}
-                    .loadLocales=${this.#loadLocalesPassively}
-                  ></wt-language-chooser>
-                  <wt-button icon="menu-details" data-test="about" @click=${() => this.#openAbout()}
-                    >${t("about.title")}</wt-button
-                  >
-                  <wt-button
-                    icon="menu-logout"
-                    data-test="logout"
-                    @click=${() => void this.#onLogout()}
-                    >${t("action.logout")}</wt-button
-                  >
-                </wt-row-actions>`
+                ${keyed(
+                  this.sessionPersonId,
+                  accountMenu({
+                    displayName: this.#sessionDisplayName,
+                    email: this.#sessionEmail,
+                    theme: this.#theme.choice,
+                    themeLabels: this.#themeLabelsFor(currentLocale()),
+                    loadLocales: this.#loadLocales,
+                    onOpen: (open) => {
+                      this.accountMenuOpen = open;
+                    },
+                    onProfile: () => this.#openProfile(),
+                    onAbout: () => this.#openAbout(),
+                    onLogout: () => void this.#onLogout(),
+                  }),
+                )}`
             : nothing
         }
       </div>

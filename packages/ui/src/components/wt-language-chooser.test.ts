@@ -76,6 +76,7 @@ describe("wt-language-chooser", () => {
     expect(menuOf(el)).toBeNull();
     // Before the list loads, the name comes from the languages every app supports.
     expect(nameOf(el)).toBe("Español");
+    expect(triggerOf(el).querySelector("wt-icon")?.getAttribute("name")).toBe("chevron-down");
 
     await open(el);
     expect(loadLocales).toHaveBeenCalledTimes(1);
@@ -84,6 +85,36 @@ describe("wt-language-chooser", () => {
     expect(optionOf(el, "en-GB")!.textContent!.trim()).toBe("English (server)");
     // Once loaded, the trigger reads the loaded name.
     expect(nameOf(el)).toBe("Español (servidor)");
+  });
+
+  it("moves a long list above a low trigger and keeps it scrollable within the viewport", async () => {
+    await page.viewport(390, 500);
+    const el = await mountChooser({
+      active: "en-GB",
+      loadLocales: async () =>
+        [
+          "English",
+          "Español",
+          "Català",
+          "Galego",
+          "Euskara",
+          "Français",
+          "Deutsch",
+          "Italiano",
+          "Português",
+        ].map((label, index) => ({ code: index === 0 ? "en-GB" : `language-${index}`, label })),
+    });
+    el.style.position = "fixed";
+    el.style.bottom = "30px";
+    await open(el);
+    const menu = menuOf(el)!;
+    expect(menu.getBoundingClientRect().bottom).toBeLessThan(
+      triggerOf(el).getBoundingClientRect().top,
+    );
+    expect(menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(8);
+    expect(menu.scrollHeight).toBeGreaterThan(menu.clientHeight);
+    menu.scrollTop = menu.scrollHeight;
+    expect(menu.scrollTop).toBeGreaterThan(0);
   });
 
   it("tells a screen reader the trigger opens a menu, and whether it is open, on the inner button", async () => {

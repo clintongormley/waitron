@@ -4,6 +4,10 @@ import { SUPPORTED_LOCALES } from "@waitron/shared";
 import { baseStyles, visuallyHiddenStyles } from "../base-styles.js";
 import { MenuPopover, menuPopoverStyles } from "../menu-popover.js";
 import "./wt-button.js";
+import { DROPDOWN_ICONS } from "./wt-combobox.js";
+import { registerIcons } from "./wt-icon.js";
+
+registerIcons({ "chevron-down": DROPDOWN_ICONS["chevron-down"]! });
 
 export interface WtLocaleOption {
   code: string;
@@ -42,6 +46,11 @@ export class WtLanguageChooser extends LitElement {
 
       .code {
         display: none;
+      }
+
+      .menu {
+        overflow-y: auto;
+        overscroll-behavior: contain;
       }
 
       .visually-hidden {
@@ -127,6 +136,7 @@ export class WtLanguageChooser extends LitElement {
   readonly #menuPopover = new MenuPopover(this, {
     trigger: () => this.#trigger(),
     close: () => this.#close(),
+    fitVertically: true,
   });
 
   override connectedCallback(): void {
@@ -270,6 +280,7 @@ export class WtLanguageChooser extends LitElement {
             ><span class="code-text">${this.#shortCode(this.active)}</span
             ><span class="visually-hidden"> ${label}</span></span
           >
+          <wt-icon name="chevron-down" size="sm"></wt-icon>
         </wt-button>
         ${
           this.open && this.locales

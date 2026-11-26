@@ -1,9 +1,10 @@
 import { css, type LitElement, type ReactiveController } from "lit";
-import { popupIndex } from "./popup-helpers.js";
+import { popupIndex, popupPlacement } from "./popup-helpers.js";
 
 export interface MenuPopoverParts {
   trigger: () => HTMLElement;
   close: () => void;
+  fitVertically?: boolean;
 }
 
 export const menuOptionStyles = css`
@@ -100,15 +101,15 @@ export class MenuPopover implements ReactiveController {
     this.#listening = true;
     document.addEventListener("pointerdown", this.#onOutside, true);
     document.addEventListener("focusin", this.#onOutside);
-    // A scroll event does not leave its shadow root, so each root between here and the document
-    // is listened on as well as the window.
+    // Scroll events stop at a shadow root, including the root of a slot the host is drawn in.
     this.#scrollTargets = [window];
-    for (
-      let root = this.#host.getRootNode();
-      root instanceof ShadowRoot;
-      root = root.host.getRootNode()
-    ) {
-      this.#scrollTargets.push(root);
+    for (let node: Node | null = this.#host; node !== null;) {
+      if (node instanceof ShadowRoot) {
+        this.#scrollTargets.push(node);
+        node = node.host;
+      } else {
+        node = (node instanceof Element ? node.assignedSlot : null) ?? node.parentNode;
+      }
     }
     for (const target of this.#scrollTargets) target.addEventListener("scroll", this.place, true);
     window.addEventListener("resize", this.place);
@@ -125,7 +126,7 @@ export class MenuPopover implements ReactiveController {
     window.removeEventListener("resize", this.place);
   }
 
-  /** Below the trigger, trailing edges aligned, and 8px clear of both sides of the viewport. */
+  /** Aligns the trailing edges and keeps the popup 8px clear of the viewport sides. */
   place = (): void => {
     const menu = this.#menu();
     if (menu === null) return;
@@ -137,7 +138,18 @@ export class MenuPopover implements ReactiveController {
     // From clientWidth rather than 100vw, which counts a scrollbar the clamp below must not.
     const room = document.documentElement.clientWidth;
     menu.style.maxWidth = `${room - 16}px`;
-    menu.style.top = `${trigger.bottom}px`;
+    if (this.#parts.fitVertically) {
+      const style = getComputedStyle(menu);
+      const gap = parseFloat(style.marginBlockStart);
+      const border = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+      const height = menu.scrollHeight + border;
+      const anchor = { top: trigger.top - gap, bottom: trigger.bottom + gap };
+      const placement = popupPlacement(anchor, height, innerHeight, "above");
+      menu.style.maxHeight = `${placement.maxHeight}px`;
+      menu.style.top = `${placement.top - gap}px`;
+    } else {
+      menu.style.top = `${trigger.bottom}px`;
+    }
     const width = menu.getBoundingClientRect().width;
     const wanted =
       getComputedStyle(this.#host).direction === "rtl" ? trigger.left : trigger.right - width;

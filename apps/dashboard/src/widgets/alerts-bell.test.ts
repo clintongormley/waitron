@@ -146,6 +146,12 @@ describe("dashboard-alerts-bell", () => {
     expect(badge.getAttribute("tone")).toBe("warning");
     expect((badge as unknown as { count: number }).count).toBe(2);
     expect(menu(el).getAttribute("label")).toBe("Alerts, 2 open");
+    const trigger = menu(el).shadowRoot!.querySelector("button")!;
+    const icon = trigger.querySelector("wt-icon")!.getBoundingClientRect();
+    const count = badge.getBoundingClientRect();
+    expect(trigger.getBoundingClientRect().width).toBe(44);
+    expect(icon.width).toBe(18);
+    expect(count.bottom <= icon.top || count.left >= icon.right).toBe(true);
     el.alerts = [event("1", "warning"), event("2", "error")];
     await el.updateComplete;
     expect(badge.getAttribute("tone")).toBe("error");

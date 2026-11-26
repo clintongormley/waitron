@@ -110,6 +110,7 @@ async function mount(
         getVenueDepartments: async () => [],
         getMe: async () => ({
           personId: "p1",
+          displayName: "Ada",
           email: "ada@example.com",
           roleIds: ["manager"],
           locale,
@@ -620,6 +621,7 @@ it("a legal-name change on Venue details re-reads the banner's name", async () =
   let legalName = "Issuer SL";
   const getMe = vi.fn(async () => ({
     personId: "p1",
+    displayName: "Ada",
     email: "ada@example.com",
     roleIds: ["manager"],
     locale: "en-GB",
@@ -661,6 +663,7 @@ it("a legal-name change refused because the name changed elsewhere re-reads the 
   let venueName = "Issuer SL";
   const getMe = vi.fn(async () => ({
     personId: "p1",
+    displayName: "Ada",
     email: "ada@example.com",
     roleIds: ["manager"],
     locale: "en-GB",
@@ -734,6 +737,7 @@ it("a rename answered after Back and Discard closed its dialog still updates the
   let legalName = "Venue";
   const getMe = vi.fn(async () => ({
     personId: "p1",
+    displayName: "Ada",
     email: "ada@example.com",
     roleIds: ["manager"],
     locale: "en-GB",
@@ -926,6 +930,7 @@ it("leaving Venue details by Back closes an unchanged legal-name dialog", async 
 it("the newest banner read wins when two reads finish in the opposite order", async () => {
   const response = (venueName: string) => ({
     personId: "p1",
+    displayName: "Ada",
     email: "ada@example.com",
     roleIds: ["manager"],
     locale: "en-GB",
@@ -965,6 +970,7 @@ it("a failed banner read keeps the name the banner shows", async () => {
     .fn()
     .mockResolvedValueOnce({
       personId: "p1",
+      displayName: "Ada",
       email: "ada@example.com",
       roleIds: ["manager"],
       locale: "en-GB",

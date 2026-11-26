@@ -361,16 +361,15 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const changePosition = deps.changePosition?.();
-      const { personId, authority, email, locale, venue, expiresAt } = await deps.db.withWriteLock(
-        async () => {
+      const { personId, authority, email, displayName, locale, venue, expiresAt } =
+        await deps.db.withWriteLock(async () => {
           const tx = deps.db;
           const session = await resolveManagementSession(tx, sessionId, { touch: false });
           return {
             ...session,
             venue: await readVenue(tx),
           };
-        },
-      );
+        });
       // This body describes ONE person in ONE browser: it turns on the session cookie AND on
       // Accept-Language, so no cache may keep a copy, and any cache that ignores `no-store` must at
       // least key on the language it varies by.
@@ -383,6 +382,7 @@ export function mountMeApi(app: Hono, deps: MeApiDeps, log: Logger): void {
           ? {}
           : { tradingAdmission: deps.readTradingAdmission() }),
         personId,
+        displayName,
         roleIds: authority.roleIds,
         email,
         locale,

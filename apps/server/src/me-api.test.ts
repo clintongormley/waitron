@@ -257,6 +257,7 @@ describe("mountMeApi — whoami", () => {
     expect(
       (await res.json()) as {
         personId: string;
+        displayName: string;
         roleIds: string[];
         email: string | null;
         locale: string | null;
@@ -272,6 +273,7 @@ describe("mountMeApi — whoami", () => {
       },
     ).toEqual({
       personId: me,
+      displayName: "Me",
       roleIds: [staffRoleId],
       email: null,
       locale: null,
@@ -347,6 +349,7 @@ describe("mountMeApi — whoami", () => {
     expect(
       (await res.json()) as {
         personId: string;
+        displayName: string;
         roleIds: string[];
         email: string | null;
         locale: string | null;
@@ -362,6 +365,7 @@ describe("mountMeApi — whoami", () => {
       },
     ).toEqual({
       personId: localed,
+      displayName: "Localed",
       roleIds: [staffRoleId],
       email: null,
       locale: "es-ES",

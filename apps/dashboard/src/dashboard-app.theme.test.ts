@@ -157,11 +157,15 @@ it("a choice saved before the page started is what the logo shows", async () => 
 });
 
 /** A signed-in member of staff, whose shell opens on their own schedule. */
-function signedInApi(locale: Locale = "en-GB"): DashboardApi {
+function signedInApi(
+  locale: Locale = "en-GB",
+  identity = { displayName: "Maya Ellen Patel", email: "maya@example.com" as string | null },
+): DashboardApi {
   return {
     ...stubApi(locale),
     getMe: vi.fn().mockResolvedValue({
       personId: "p2",
+      ...identity,
       roleIds: ["staff"],
       locale,
       venueLocale: locale,
@@ -202,6 +206,8 @@ const bannerChooser = (el: DashboardApp) => q<WtThemeChooser>(el, "[data-test=th
 const inChooser = (el: DashboardApp, test: string) =>
   bannerChooser(el)!.shadowRoot!.querySelector<HTMLElement>(`[data-test=${test}]`)!;
 const accountMenu = (el: DashboardApp) => q<WtRowActions>(el, "[data-test=account-menu]")!;
+const accountInitials = (el: DashboardApp) =>
+  getComputedStyle(q(el, "[slot=trigger]")!, "::before").content;
 const menuPopup = (el: DashboardApp) =>
   accountMenu(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
 const choiceButtons = (el: DashboardApp) => [
@@ -229,14 +235,25 @@ it("signed in, the banner has no theme chooser and the account menu holds the Th
   const { el } = await mountApp(signedInApi("en-GB"));
   expect(q(el, "[data-test=account-menu]")).not.toBeNull();
   expect(bannerChooser(el)).toBeNull();
+  await expect
+    .element(accountMenu(el).shadowRoot!.querySelector("button")!)
+    .toHaveAccessibleName("Account menu: Maya Ellen Patel");
+  expect(accountInitials(el)).toBe('"MP"');
   expect([...accountMenu(el).children].map((child) => child.getAttribute("data-test"))).toEqual([
+    null,
+    "account-identity",
+    null,
     "profile-row",
+    null,
     "theme-choices",
-    "language-chooser",
+    "language-row",
+    null,
     "about",
     "logout",
   ]);
   await openAccountMenu(el);
+  expect(q(el, "[data-test=account-name]")?.textContent).toBe("Maya Ellen Patel");
+  expect(q(el, "[data-test=account-email]")?.textContent?.trim()).toBe("maya@example.com");
   const group = q(el, '[data-test=theme-choices][role="group"]')!;
   await expect.element(group).toHaveAccessibleName("Theme");
   const buttons = choiceButtons(el);
@@ -244,6 +261,14 @@ it("signed in, the banner has no theme chooser and the account menu holds the Th
     await expect.element(buttons[i]!).toHaveAccessibleName(name);
   expect(buttons).toHaveLength(3);
   expect(buttons.map((b) => b.getAttribute("aria-pressed"))).toEqual(["false", "false", "true"]);
+});
+
+it("shows one initial and no email row for a one-word name without an email", async () => {
+  const { el } = await mountApp(signedInApi("en-GB", { displayName: "Maya", email: null }));
+  await openAccountMenu(el);
+  expect(accountInitials(el)).toBe('"M"');
+  expect(q(el, "[data-test=account-name]")?.textContent).toBe("Maya");
+  expect(q(el, "[data-test=account-email]")).toBeNull();
 });
 
 it("signed out, a pick in the banner turns the dashboard dark and is kept", async () => {

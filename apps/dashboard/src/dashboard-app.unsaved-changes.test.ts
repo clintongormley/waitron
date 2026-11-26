@@ -60,6 +60,7 @@ async function mount(overrides: Partial<DashboardApi> = {}, request?: DashboardA
     api: {
       getMe: async () => ({
         personId: "p1",
+        displayName: "Ada",
         email: "ada@example.com",
         roleIds: ["staff"],
         locale: "en-GB",
@@ -622,6 +623,7 @@ it("a guarded product deep link accepts the product and screen in one history st
   const m = await mount({
     getMe: async () => ({
       personId: "p1",
+      displayName: "Ada",
       email: "ada@example.com",
       roleIds: ["manager"],
       locale: "en-GB",
@@ -790,6 +792,7 @@ it.each(["same-app", "device"] as const)(
     const m = await mount({
       getMe: async () => ({
         personId: "p1",
+        displayName: "Ada",
         email: "ada@example.com",
         roleIds: ["manager"],
         locale: "en-GB",
@@ -890,6 +893,7 @@ it.each([
       {
         getMe: async () => ({
           personId: "p1",
+          displayName: "Ada",
           email: "ada@example.com",
           roleIds: ["manager"],
           locale: "en-GB",
@@ -1175,6 +1179,7 @@ describe("a product swatch link under the app's link router", () => {
     const m = await mount({
       getMe: async () => ({
         personId: "p1",
+        displayName: "Ada",
         email: "ada@example.com",
         roleIds: ["manager"],
         locale: "en-GB",
@@ -1270,6 +1275,7 @@ it.each(["structure", "home"] as const)(
       getMenuRead,
       getMe: async () => ({
         personId: "p1",
+        displayName: "Ada",
         email: "ada@example.com",
         roleIds: ["manager"],
         locale: "en-GB",
@@ -1345,6 +1351,7 @@ describe("a Structure tab product row's Edit product link under the app's link r
         },
         getMe: async () => ({
           personId: "p1",
+          displayName: "Ada",
           email: "ada@example.com",
           roleIds: ["manager"],
           locale: "en-GB",
@@ -1403,6 +1410,7 @@ describe("a Structure tab product row's Edit product link under the app's link r
     const m = await mount({
       getMe: async () => ({
         personId: "p1",
+        displayName: "Ada",
         email: "ada@example.com",
         roleIds: ["manager"],
         locale: "en-GB",
@@ -1458,6 +1466,7 @@ describe("Products browser history", () => {
       },
       getMe: async () => ({
         personId: "p1",
+        displayName: "Ada",
         email: "ada@example.com",
         roleIds: ["manager"],
         locale: "en-GB",
@@ -1610,6 +1619,7 @@ describe("allergen warning product links with a dirty schedule", () => {
     const m = await mount({
       getMe: async () => ({
         personId: "p1",
+        displayName: "Ada",
         email: "ada@example.com",
         roleIds: ["manager"],
         locale: "en-GB",
