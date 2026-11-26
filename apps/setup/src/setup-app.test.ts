@@ -1279,8 +1279,10 @@ describe("setup-app", () => {
     const [pickNewer, pickEarlier] = root.querySelectorAll<HTMLInputElement>('input[type="radio"]');
     pickEarlier!.click();
     await flush(el);
+    pickNewer!.focus();
     pickNewer!.click();
     await flush(el);
+    expect(root.activeElement).toBe(root.querySelector("[data-test=open-cloud]"));
     expect(root.querySelector("fieldset")?.disabled).toBe(true);
     expect(pickEarlier?.checked).toBe(true);
     expect(await bottomOf(await screenHost(el, "cloud-restore"))).toContain(

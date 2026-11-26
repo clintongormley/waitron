@@ -306,11 +306,13 @@ describe("choosing the approved venue's snapshot", () => {
     const client = createCloudRecoveryClient(f.options);
     await client.start();
     await client.select(point.id, point.venueId);
+    const confirmed = await f.saved();
     await expect(client.select(olderId, point.venueId)).rejects.toMatchObject(cloudUnavailable);
     const status = await client.status();
     expect(status).toMatchObject({ state: "approved", selectionNotice: "stale" });
     expect(status.point).toBeUndefined();
-    expect((await f.saved()).pointId).toBe(point.id);
+    await expect(client.preview(async () => {}, point.id)).rejects.toMatchObject(cloudUnavailable);
+    expect(await f.saved()).toEqual(confirmed);
     proxyLosesReply = false;
     expect((await client.select(olderId, point.venueId)).point?.id).toBe(olderId);
     expect(await f.saved()).toMatchObject({

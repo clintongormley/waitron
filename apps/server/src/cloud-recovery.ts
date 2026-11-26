@@ -525,6 +525,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     const state = await readForSetup();
     if (!state || state.phase) refuseLocally();
     const current = await statusOf(state, "status");
+    if (current.selectionNotice === "stale") unavailable();
     if (current.state !== "approved" || !current.point || expectedPointId !== current.point.id)
       conflict();
     const info = await approvedInfo(state);

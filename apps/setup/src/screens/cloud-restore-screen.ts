@@ -125,10 +125,12 @@ export class SetupCloudRestoreScreen extends LitElement {
     if (changed.has("busy") && !this.busy && this.#returnChoiceFocus) {
       this.#returnChoiceFocus = false;
       if (document.activeElement === document.body) {
-        const radios = [
-          ...this.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="backup-copy"]'),
-        ];
-        (radios.find((radio) => radio.checked) ?? radios[0])?.focus();
+        const root = this.shadowRoot!;
+        (
+          root.querySelector<HTMLElement>("[name=backup-copy]:enabled:checked") ??
+          root.querySelector<HTMLElement>("[name=backup-copy]:enabled") ??
+          root.querySelector<HTMLElement>("[data-test=open-cloud]")
+        )?.focus();
       }
     }
     if (changed.has("invalidField") && this.#refusalUnder(this.#shownRefusal) !== undefined) {
