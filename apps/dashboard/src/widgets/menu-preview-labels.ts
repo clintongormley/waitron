@@ -6,6 +6,7 @@ export const CHANGE_GROUP_ORDER = ["added", "removed", "prices", "order", "detai
 export type ChangeGroup = (typeof CHANGE_GROUP_ORDER)[number];
 export const CHANGE_GROUPS: Record<MenuChange["kind"], ChangeGroup> = {
   menu_renamed: "details",
+  menu_customer_names_changed: "details",
   section_added: "added",
   section_removed: "removed",
   section_changed: "details",
@@ -59,6 +60,7 @@ export const SET_MENU_FIELDS: Record<SetMenuChangeField, StringKey> = {
   price: "menu_preview.field_price",
   names: "menu_preview.field_names",
   lines: "menu_preview.field_included",
+  course_names: "menu_preview.field_course_names",
   allergens: "menu_preview.field_allergens",
   diet: "menu_preview.field_diet",
   dishes: "menu_preview.field_dishes",

@@ -133,7 +133,8 @@ function section(
 function document(): MenuDocument {
   const drinks = section("drinks", [{ kind: "product", menuItemId: "mi-soup", productId: "soup" }]);
   return {
-    format: 6,
+    format: 7,
+    menuNames: {},
     menuId: "lunch",
     menuName: "Lunch",
     root: { members: [drinks, section("favourites", [drinks])] },
@@ -1079,6 +1080,7 @@ describe("declaration changes", () => {
     doc.setMenus = {
       daily: {
         name: "Daily menu",
+        courses: {},
         terms: {
           price: "15.00",
           names: { en: "Daily menu" },

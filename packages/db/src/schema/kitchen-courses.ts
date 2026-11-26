@@ -1,12 +1,13 @@
 import { sql } from "drizzle-orm";
 import { uniqueIndex } from "drizzle-orm/sqlite-core";
-import { count, flag, id, label, newId, nowIso, table, tsString } from "./columns.js";
+import { count, flag, id, json, label, newId, nowIso, table, tsString } from "./columns.js";
 
 export const kitchenCourses = table(
   "kitchen_courses",
   {
     id: id("id").primaryKey().$defaultFn(newId),
     name: label("name").notNull(),
+    customerNames: json<Record<string, string>>("customer_names").notNull().default({}),
     starterKey: label("starter_key"),
     displayOrder: count("display_order").notNull().default(0),
     active: flag("active").notNull().default(true),

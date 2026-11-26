@@ -182,6 +182,8 @@ la mesa. Elige **Dejar para después** para agrupar el primer pedido por orden d
 posteriores, comprueba el grupo propuesto antes de enviar. Puedes mover los platos entre grupos. En
 **Orden de platos**, pulsa **Añadir orden de plato** y guarda el nombre con Intro o al salir del
 campo. Abre el menú ⋮ de la fila para cambiar el nombre o eliminar ese orden de plato.
+Elige **Nombres para el cliente** en el mismo menú para poner un nombre en cada idioma.
+Para publicar cambios en esos nombres, revisa y publica la carta que ofrece el menú.
 
 **Editar orden de platos…**, al final de la lista **Orden de plato**, abre una ventana que guarda
 cada cambio al hacerlo. Al cerrarla, el último orden de plato que añadiste se aplica al producto.
@@ -436,6 +438,8 @@ el menú que debas corregir. Después, abre los avisos que quieras revisar.
 Pulsa el nombre de un elemento en la lista de cambios para encontrarlo en la carta propuesta.
 En el móvil, cambia entre **Cambios** y **Carta**. Usa el selector de idioma sobre la carta para revisar las
 traducciones o ver los **Nombres internos**.
+Consulta **Detalles** para ver los cambios en los nombres de la carta para clientes y en los
+nombres de los órdenes de plato de los menús.
 
 Cuando tengas todo listo, elige **Publicar ahora** o **Publicar más tarde** en el encabezado. Para
 consultar o cambiar una publicación pendiente, búscala en **Versiones programadas**, debajo de

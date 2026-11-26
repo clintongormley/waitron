@@ -17,7 +17,8 @@ function section(id: string, members: DocumentMember[] = []): DocumentMember {
 
 function document(members: DocumentMember[]): MenuDocument {
   return {
-    format: 6,
+    format: 7,
+    menuNames: {},
     menuId: "lunch",
     menuName: "Lunch",
     root: { members },

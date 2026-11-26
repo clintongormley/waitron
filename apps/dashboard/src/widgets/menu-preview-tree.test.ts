@@ -223,6 +223,41 @@ it("routes Home View as a normal link to this menu's Home tab", async () => {
   expect(link(el, "home").getAttribute("href")).toBe("/menus/menu/menu-lunch/view/home");
 });
 
+it.each([
+  ["en", "Menu customer names changed", "Daily menu: course names"],
+  [
+    "es-ES",
+    "Han cambiado los nombres de la carta para clientes",
+    "Daily menu: nombres de los órdenes de plato",
+  ],
+])("shows customer title and course name changes in %s", async (locale, title, courses) => {
+  setLocale(locale);
+  const el = await mount(
+    fixture([
+      {
+        id: "menu-names",
+        kind: "menu_customer_names_changed",
+        source: "this_menu",
+        targets: {
+          before: [],
+          after: [{ kind: "title", menuId: "menu-lunch" }],
+        },
+      },
+      {
+        id: "course-names",
+        kind: "set_menu_changed",
+        setMenu: { id: "daily", name: "Daily menu" },
+        fields: ["course_names"],
+        source: "set_menu",
+        targets: { before: [], after: [] },
+      },
+    ]),
+  );
+  const row = (id: string) => el.shadowRoot!.querySelector(`[data-change-row="${id}"]`);
+  expect(row("menu-names")?.textContent ?? "").toContain(title);
+  expect(row("course-names")?.textContent ?? "").toContain(courses);
+});
+
 it("places every change kind in its named group and keeps the groups in working order", async () => {
   const shared = { source: "this_menu" as const, targets: { before: [], after: [] } };
   const product = { productId: "dish", name: "Lemonade" };
@@ -243,6 +278,11 @@ it("places every change kind in its named group and keeps the groups in working 
   const setMenu = { id: "daily", name: "Daily menu" };
   const kinds: Record<MenuChange["kind"], MenuChange> = {
     menu_renamed: { ...shared, id: "rename", kind: "menu_renamed", from: "Old", to: "New" },
+    menu_customer_names_changed: {
+      ...shared,
+      id: "menu-names",
+      kind: "menu_customer_names_changed",
+    },
     section_added: { ...shared, ...section, id: "section-add", kind: "section_added" },
     section_removed: { ...shared, ...section, id: "section-remove", kind: "section_removed" },
     section_changed: {
@@ -372,6 +412,7 @@ it("places every change kind in its named group and keeps the groups in working 
         "details",
         "set-change",
         "section-change",
+        "menu-names",
         "rename",
       ],
     ],

@@ -264,7 +264,8 @@ describe("media backup evidence", () => {
     "judges only retained photos for a %s release",
     async (state) => {
       const document: MenuDocument = {
-        format: 6,
+        format: 7,
+        menuNames: {},
         menuId: menu,
         menuName: "Old menu",
         root: {

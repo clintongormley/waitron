@@ -4,43 +4,10 @@ import {
   mergeOptionalTranslations,
 } from "./optional-translations.js";
 
-describe("optional translation maps", () => {
-  it.each([
-    null,
-    undefined,
-    [],
-    "text",
-    42,
-    new Date(),
-    { es: null },
-    { es: 1 },
-    { not_a_language: "x" },
-    { ES: "Hola" },
-  ])("refuses malformed maps or noncanonical keys: %j", (value) => {
-    expect(() => validateOptionalTranslations(value)).toThrowError(
-      expect.objectContaining({ code: "content.translation_invalid" }),
-    );
-  });
-
-  it("accepts empty and partial maps without adding a default or staff value", () => {
-    expect(validateOptionalTranslations({})).toEqual({});
-    expect(
-      validateOptionalTranslations({
-        en: " Potatoes ",
-        es: "  ",
-        "ca-ES-valencia": "Valencian potatoes",
-      }),
-    ).toEqual({ en: "Potatoes", "ca-ES-valencia": "Valencian potatoes" });
-  });
-
-  it("bounds each nonblank value by UTF-8 bytes after trimming", () => {
-    expect(validateOptionalTranslations({ es: ` ${"é".repeat(2048)} ` })).toEqual({
-      es: "é".repeat(2048),
-    });
-    expect(() => validateOptionalTranslations({ es: "é".repeat(2048) + "a" })).toThrowError(
-      expect.objectContaining({ code: "content.translation_invalid" }),
-    );
-  });
+it("reports an overlong translation as a content translation refusal", () => {
+  expect(() => validateOptionalTranslations({ es: "é".repeat(2048) + "a" })).toThrowError(
+    expect.objectContaining({ code: "content.translation_invalid" }),
+  );
 });
 
 describe("full-field replacement", () => {

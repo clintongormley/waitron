@@ -247,6 +247,7 @@ describe("the products a published set menu can hold", () => {
     return {
       name,
       terms,
+      courses: {},
       changedAt,
       root: { members: [] },
       offers: Object.fromEntries(offers.map((each, index) => [`item-${index}`, each])),

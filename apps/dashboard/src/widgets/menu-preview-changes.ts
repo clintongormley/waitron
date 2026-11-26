@@ -128,6 +128,8 @@ export function changeWords(change: MenuChange, subject: (name: string) => unkno
       return subject(t("menu_preview.home_shortcuts_changed"));
     case "home_display_changed":
       return subject(t("menu_preview.home_display_changed"));
+    case "menu_customer_names_changed":
+      return subject(t("menu_preview.menu_customer_names_changed"));
     case "menu_renamed":
       return words("menu_preview.menu_renamed", { from: change.from, to: change.to }, "to");
   }

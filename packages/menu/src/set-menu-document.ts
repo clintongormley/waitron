@@ -45,6 +45,7 @@ export function freezeSetMenu(
   return {
     name: draft.name,
     changedAt: draft.changedAt,
+    courses: draft.courses,
     terms: {
       price: draft.price,
       names: draft.names,

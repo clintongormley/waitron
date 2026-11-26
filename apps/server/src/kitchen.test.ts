@@ -713,6 +713,7 @@ describe("kitchen-course config", () => {
     expect(list[3]).toEqual({
       id: a,
       name: "Mains",
+      customerNames: {},
       displayOrder: 1,
       active: true,
       fireNowZoneIds: [],
@@ -739,6 +740,7 @@ describe("kitchen-course config", () => {
     expect(only).toEqual({
       id,
       name: "Desserts",
+      customerNames: {},
       displayOrder: 0,
       active: true,
       fireNowZoneIds: [],
@@ -821,10 +823,10 @@ describe("moveCourse", () => {
     const [a, b, c, d] = await fourCourses();
     const moved = await asApp((tx) => moveCourse(tx, a!, 2));
     expect(moved).toEqual([
-      { id: b, name: "B", displayOrder: 0, active: true, fireNowZoneIds: [] },
-      { id: c, name: "C", displayOrder: 1, active: true, fireNowZoneIds: [] },
-      { id: a, name: "A", displayOrder: 2, active: true, fireNowZoneIds: [] },
-      { id: d, name: "D", displayOrder: 3, active: true, fireNowZoneIds: [] },
+      { id: b, name: "B", customerNames: {}, displayOrder: 0, active: true, fireNowZoneIds: [] },
+      { id: c, name: "C", customerNames: {}, displayOrder: 1, active: true, fireNowZoneIds: [] },
+      { id: a, name: "A", customerNames: {}, displayOrder: 2, active: true, fireNowZoneIds: [] },
+      { id: d, name: "D", customerNames: {}, displayOrder: 3, active: true, fireNowZoneIds: [] },
     ]);
     expect(await storedOrders([b!, c!, a!, d!])).toEqual([0, 1, 2, 3]);
     expect(await asApp((tx) => listCourses(tx))).toEqual(moved);

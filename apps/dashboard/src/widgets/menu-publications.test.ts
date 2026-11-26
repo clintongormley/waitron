@@ -906,6 +906,7 @@ describe("scheduling a publication", () => {
           setMenus: {
             daily: {
               name: "Daily menu",
+              courses: {},
               terms: { names: {}, price: "24.00", lines: [] },
               root: { members: [] },
               offers: {},

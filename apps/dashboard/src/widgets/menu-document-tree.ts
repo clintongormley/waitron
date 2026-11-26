@@ -252,6 +252,7 @@ export class MenuDocumentTree extends LitElement {
     const tab = marked ? -1 : nothing;
     if (member === null) {
       const media = this.rootMedia;
+      const text = this.#text(row);
       return html`<span part="folder-cell"
         >${folderFrame(
           productMediaFrame(
@@ -266,7 +267,7 @@ export class MenuDocumentTree extends LitElement {
           aria-current=${current}
           tabindex=${tab}
         >
-          <span data-test="root-name" lang="">${this.#snapshot!.menuName}</span>
+          <span data-test="root-name" lang=${text.language ?? ""}>${text.text}</span>
           ${this.#snapshot!.root.members.length === 0 ? html`<span part="note">${t("menus.structure_empty")}</span>` : nothing}
         </span></span
       >`;
@@ -327,9 +328,13 @@ export class MenuDocumentTree extends LitElement {
 
   #text(row: Row) {
     const { member, variant } = row;
-    if (member?.kind === "section")
+    if (member === null) {
+      const { menuNames, menuName } = this.#snapshot!;
+      return resolveMenuText(menuNames, menuName, this.view, this.languages);
+    }
+    if (member.kind === "section")
       return resolveMenuText(member.names, member.internalName, this.view, this.languages);
-    if (member?.kind === "set_menu") {
+    if (member.kind === "set_menu") {
       const set = this.#snapshot!.setMenus?.[member.menuId];
       return resolveMenuText(
         set?.terms.names ?? null,
@@ -374,7 +379,7 @@ export class MenuDocumentTree extends LitElement {
         .rowParent=${(row: Row) => row.parentKey}
         .rowCollapsible=${(row: Row) => this.#canExpand(row)}
         .rowActivation=${(row: Row) => (this.#canExpand(row) ? "toggle" : "none")}
-        .rowToggleLabel=${(row: Row, expanded: boolean) => fill(expanded ? "menus.collapse" : "menus.expand", { name: row.member === null ? this.#snapshot!.menuName : this.#text(row).text })}
+        .rowToggleLabel=${(row: Row, expanded: boolean) => fill(expanded ? "menus.collapse" : "menus.expand", { name: this.#text(row).text })}
         ><div slot="toolbar-start"><slot name="view"></slot></div
       ></wt-data-table>`,
     );

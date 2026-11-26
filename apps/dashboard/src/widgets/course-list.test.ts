@@ -1827,6 +1827,50 @@ it("leaves department firing choices to Tables and keeps the shared names", asyn
   expect(q(el, '[data-course="c2"]')!.textContent!.trim()).toBe("Mains");
 });
 
+it("saves and clears a customer translation without sending a staff name change", async () => {
+  const api = stubApi();
+  const { el } = await mount(api);
+  el.languages = { defaultLanguage: "en", languages: ["en", "es"] };
+  await el.updateComplete;
+  const actions = q(el, '[data-course="c1"] wt-row-actions')!;
+  const open = async () => {
+    await userEvent.click(actions.shadowRoot!.querySelector<HTMLButtonElement>("button")!);
+    const action = actions.querySelector<HTMLElement>('[data-action="customer-names"]');
+    expect(action).not.toBeNull();
+    await userEvent.click(action!);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("dashboard-course-names-dialog")).not.toBeNull(),
+    );
+    return el.shadowRoot!.querySelector("dashboard-course-names-dialog")!.shadowRoot!;
+  };
+  const saveSpanish = async (root: ShadowRoot, before: string, value: string) => {
+    const control = root.querySelector<WtInput>('wt-input[name="customerNames-es"]')!;
+    const save = root.querySelector<HTMLElement & { disabled: boolean }>('[data-test="save"]')!;
+    expect(save.disabled).toBe(true);
+    const input = control.shadowRoot!.querySelector("input")!;
+    expect(input.value).toBe(before);
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await vi.waitFor(() => expect(save.disabled).toBe(false));
+    await userEvent.click(save);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("dashboard-course-names-dialog")).toBeNull(),
+    );
+  };
+  vi.mocked(api.listCourses).mockResolvedValueOnce(
+    COURSES.map((course) =>
+      course.id === "c1" ? { ...course, customerNames: { es: "Entrantes" } } : course,
+    ),
+  );
+  await saveSpanish(await open(), "", "  Entrantes  ");
+  expect(api.updateCourse).toHaveBeenNthCalledWith(1, "c1", {
+    customerNames: { es: "Entrantes" },
+  });
+  await saveSpanish(await open(), "Entrantes", "");
+  expect(api.updateCourse).toHaveBeenNthCalledWith(2, "c1", { customerNames: {} });
+  expect(nameButton(el, "c1")?.textContent).toContain("Starters");
+});
+
 it("opens the course's confirmation from Delete in its row menu and returns focus on cancel", async () => {
   const { el } = await mount(stubApi());
   const actions = q(el, '[data-course="c1"] wt-row-actions')!;

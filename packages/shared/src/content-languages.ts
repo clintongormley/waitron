@@ -235,3 +235,27 @@ export function resolveSnapshotText(
     ""
   );
 }
+
+export function normalizeOptionalTranslations(value: unknown): Record<string, string> | null {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(value))
+  ) {
+    return null;
+  }
+  const entries: [string, string][] = [];
+  for (const [language, text] of Object.entries(value)) {
+    let canonical: string;
+    try {
+      canonical = contentLanguageTag(language);
+    } catch {
+      return null;
+    }
+    if (canonical !== language || typeof text !== "string") return null;
+    const trimmed = text.trim();
+    if (new TextEncoder().encode(trimmed).byteLength > 4096) return null;
+    if (trimmed !== "") entries.push([language, trimmed]);
+  }
+  return Object.fromEntries(entries);
+}

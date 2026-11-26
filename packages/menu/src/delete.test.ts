@@ -8,7 +8,8 @@ const home: MenuDocument["home"] = {
 };
 const doc = (partial: Partial<MenuDocument>): MenuDocument =>
   ({
-    format: 6,
+    format: 7,
+    menuNames: {},
     menuId: "m",
     menuName: "M",
     root: { members: [] },

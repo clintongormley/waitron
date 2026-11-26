@@ -24,7 +24,7 @@ import {
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPassword, hashPin, registerModulePermissions } from "@waitron/identity";
-import { createCategory, createProduct } from "@waitron/menu";
+import { createCategory, createProduct, readContentLanguages } from "@waitron/menu";
 import { stationStates } from "@waitron/venue-service";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
@@ -2624,6 +2624,37 @@ describe("/management-api/courses + product course + fire-control (KDS-2 config)
     const id = await createCourse(name, { displayOrder: 3 });
     const found = (await listCourses()).find((c) => c.id === id);
     expect(found).toMatchObject({ name, displayOrder: 3, active: true });
+  });
+
+  it.each([null, [], { en: 3 }, { "not-a-language": "Name" }].map((value) => ({ value })))(
+    "rejects malformed customer names $value on a course",
+    async ({ value: customerNames }) => {
+      const id = await createCourse(unique("Customer course"));
+      const answer = await req(
+        `/courses/${id}`,
+        { method: "PATCH", body: JSON.stringify({ customerNames }) },
+        managerCookie,
+      );
+      expect(answer.status).toBe(400);
+      expect(await answer.json()).toMatchObject({
+        error: { code: "management.request_invalid", params: { field: "customerNames" } },
+      });
+    },
+  );
+
+  it("refuses a new customer name in a disabled content language", async () => {
+    const config = await withTransaction(suite.db, (tx) => readContentLanguages(tx, LOCALE));
+    expect(config.languages).not.toContain("fr");
+    const id = await createCourse(unique("Customer course"));
+    const answer = await req(
+      `/courses/${id}`,
+      { method: "PATCH", body: JSON.stringify({ customerNames: { fr: "New name" } }) },
+      managerCookie,
+    );
+    expect(answer.status).toBe(400);
+    expect(await answer.json()).toMatchObject({
+      error: { code: "content.translation_invalid" },
+    });
   });
 
   it("POST with a duplicate name → 409 course.name_taken", async () => {

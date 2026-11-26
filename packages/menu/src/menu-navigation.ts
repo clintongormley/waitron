@@ -497,6 +497,7 @@ export function navigateMenuChanges(
         }
         break;
       case "menu_renamed":
+      case "menu_customer_names_changed":
         if (live !== null) targets.before.push({ kind: "title", menuId: live.menuId });
         targets.after.push({ kind: "title", menuId: proposed.menuId });
         break;

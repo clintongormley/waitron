@@ -10,6 +10,7 @@ import {
   isShortNameShaped,
   isStationColour,
   isTicketGrouping,
+  normalizeOptionalTranslations,
   refusesShortNamePlus,
   shortNameKey,
 } from "@waitron/shared";
@@ -123,6 +124,23 @@ export function validateCoreConfiguration(
     for (const row of tables[table] ?? [])
       if (row.active === 0 || row.active === false)
         throw new AppError("setup.request_invalid", { field: `${table}.active` });
+  for (const { customer_names: names } of tables.kitchen_courses ?? []) {
+    if (names === undefined) continue;
+    try {
+      if (typeof names === "string") {
+        const stored = JSON.parse(names) as Record<string, unknown>;
+        const normalized = normalizeOptionalTranslations(stored);
+        if (
+          normalized !== null &&
+          Object.entries(stored).every(([language, text]) => normalized[language] === text)
+        )
+          continue;
+      }
+    } catch {
+      // Refuse malformed JSON and invalid maps under the same field.
+    }
+    throw new AppError("setup.request_invalid", { field: "kitchen_courses.customer_names" });
+  }
   for (const row of tables.printers ?? []) {
     if (row.deleted_at !== undefined && row.deleted_at !== null)
       throw new AppError("setup.request_invalid", { field: "printers.deleted_at" });
