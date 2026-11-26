@@ -145,6 +145,58 @@ it("places 18px icons 12px before the full sidebar labels", async () => {
   });
 });
 
+it("gives top-level labels the weight of section names and keeps the current page teal", async () => {
+  await atSize(1280, 800, async () => {
+    const { el, host } = await mountApp();
+    host.style.setProperty("--wt-color-text", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
+    const overview = el.shadowRoot!.querySelector("[data-test=nav-overview]")!;
+    const bookings = el.shadowRoot!.querySelector("[data-test=nav-bookings]")!;
+    expect(overview.getAttribute("aria-current")).toBe("page");
+    expect.soft(getComputedStyle(overview).color).toBe("rgb(4, 5, 6)");
+    expect.soft(getComputedStyle(overview).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    expect.soft(getComputedStyle(bookings).color).toBe("rgb(1, 2, 3)");
+    expect(getComputedStyle(bookings).fontWeight).toBe("600");
+  });
+});
+
+it("leaves 12px between Bookings and the visible divider", async () => {
+  await atSize(1280, 800, async () => {
+    const { el } = await mountApp();
+    const pinned = el.shadowRoot!.querySelector("#nav-group-panel-overview")!;
+    const bookings = pinned.querySelector("[data-test=nav-bookings]")!;
+    const divider = getComputedStyle(pinned);
+    expect(divider.borderBlockEndWidth).toBe("1px");
+    expect(pinned.getBoundingClientRect().bottom - bookings.getBoundingClientRect().bottom).toBe(
+      13,
+    );
+  });
+});
+
+it("keeps the section name close to its first page and leaves a larger gap before the next section", async () => {
+  await atSize(1280, 800, async () => {
+    const { el } = await mountApp();
+    const root = el.shadowRoot!;
+    const hardware = root.querySelector<HTMLButtonElement>("[data-test=nav-group-hardware]")!;
+    hardware.click();
+    await el.updateComplete;
+    const pages = root.querySelector("#nav-group-panel-hardware")!;
+    const nextHeading = root.querySelector("[data-test=nav-group-purchasing] .nav-group-label")!;
+    const textTop = (element: Element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      return range.getBoundingClientRect().top;
+    };
+    const first = textTop(pages.firstElementChild!);
+    const last = textTop(pages.lastElementChild!);
+    const heading = textTop(hardware.querySelector(".nav-group-label")!);
+    const withinSection = first - heading;
+    const betweenSections = textTop(nextHeading) - last;
+    expect.soft(Math.abs(withinSection - 32)).toBeLessThan(2);
+    expect(Math.abs(betweenSections - 44)).toBeLessThan(2);
+  });
+});
+
 it("brightens icons on hover or for the current section, even when it is closed", async () => {
   await atSize(1280, 800, async () => {
     await commands.parkPointer();
@@ -558,6 +610,27 @@ async function mountFoldedReading(group: string, me: Record<string, unknown> = {
 }
 
 describe("a section with several pages opens a panel beside its icon", () => {
+  it("keeps the open section's tile visible after the pointer leaves its icon", async () => {
+    await atSize(1280, 800, async () => {
+      const { el, host } = await mountFoldedReading("menu");
+      host.style.setProperty("--wt-color-surface", "rgb(21, 22, 23)");
+      const menu = stripButton(el, "menu");
+      expect(menu.hasAttribute("aria-current")).toBe(false);
+      await userEvent.click(menu);
+      await el.updateComplete;
+      await commands.parkPointer();
+      expect(menu.matches(":hover")).toBe(false);
+      expect(menu.getAttribute("aria-expanded")).toBe("true");
+      expect.soft(getComputedStyle(menu).backgroundColor).toBe("rgb(21, 22, 23)");
+
+      await userEvent.click(menu);
+      await el.updateComplete;
+      await commands.parkPointer();
+      expect(menu.getAttribute("aria-expanded")).toBe("false");
+      expect(getComputedStyle(menu).backgroundColor).toBe("rgba(0, 0, 0, 0)");
+    });
+  });
+
   it("listing the section's name and its pages in order, the strip staying folded and nothing stored", async () => {
     await atSize(1280, 800, async () => {
       const { el, pages } = await mountFoldedReading("team");

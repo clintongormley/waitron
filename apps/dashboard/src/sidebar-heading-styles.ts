@@ -7,7 +7,7 @@ export const sidebarHeadingStyles = css`
     width: 100%;
     min-height: var(--wt-tap-min);
     margin: var(--wt-space-2) 0 0;
-    padding: var(--wt-space-3);
+    padding: var(--wt-space-4) var(--wt-space-3) var(--wt-space-2);
     border: none;
     border-inline-start: 3px solid transparent;
     background: transparent;
@@ -15,6 +15,17 @@ export const sidebarHeadingStyles = css`
     line-height: var(--wt-font-size-lg);
     text-align: start;
     cursor: pointer;
+  }
+
+  @media (pointer: fine) {
+    .nav-group {
+      min-height: var(--wt-space-6);
+      padding-block: var(--wt-space-2) 0;
+    }
+  }
+
+  .nav-group-pages {
+    padding-block-end: var(--wt-space-1);
   }
 
   /* After .nav-group's own rule, whose font shorthand would reset the size and weight. */

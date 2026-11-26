@@ -573,7 +573,7 @@ export class DashboardApp extends LitElement {
         block-size: calc(var(--wt-space-4) + var(--wt-space-1));
       }
 
-      .icon-button.strip-button:hover {
+      .icon-button.strip-button:is(:hover, [aria-expanded="true"]) {
         background: var(--wt-color-surface);
       }
 
@@ -632,6 +632,7 @@ export class DashboardApp extends LitElement {
       }
 
       .nav-pinned {
+        padding-block-end: var(--wt-space-3);
         border-block-end: 1px solid var(--wt-color-border);
       }
 
@@ -683,8 +684,7 @@ export class DashboardApp extends LitElement {
 
       @media (pointer: fine) {
         .nav-item,
-        .nav-destination,
-        .nav-group {
+        .nav-destination {
           min-height: var(--wt-space-6);
           padding-block: var(--wt-space-1);
         }
@@ -699,6 +699,11 @@ export class DashboardApp extends LitElement {
       .nav-item[aria-current="page"] {
         border-inline-start-color: var(--wt-color-primary);
         color: var(--wt-color-primary-text);
+        font-weight: var(--wt-font-weight-bold);
+      }
+
+      .nav-pinned > .nav-item:not([aria-current="page"]) {
+        color: var(--wt-color-text);
         font-weight: var(--wt-font-weight-bold);
       }
 
