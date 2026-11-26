@@ -14,6 +14,7 @@ import {
   type,
   press,
   inDialog,
+  choosePayMethod,
 } from "../test/bill-pay-app.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
@@ -255,7 +256,7 @@ it.each(["en-GB", "es-ES"])(
     await openTable(el);
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "card");
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
     await flush(el);
@@ -277,8 +278,7 @@ it.each(["en-GB", "es-ES"])(
     await openTable(el);
     await openDialog(el, "contribution");
     await type(el, "amount", "40");
-    inDialog(el, 'input[name="method"][value="card"]')!.click();
-    await flush(el);
+    await choosePayMethod(el, "manual");
     await type(el, "externalRef", "123");
     await press(el, "[data-pay-continue]");
     emit(dialog(el)!, "bill-pay-confirm", { guestCount: 4 });

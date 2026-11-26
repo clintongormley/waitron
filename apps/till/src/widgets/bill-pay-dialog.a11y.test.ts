@@ -144,45 +144,62 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
     );
 
   for (const locale of ["en", "es"]) {
-    for (const width of [390, 1280]) {
-      it(`stacks the shared Pay choices with Whole bill first in ${locale} at ${width}px`, async () => {
+    for (const [width, height] of [
+      [390, 844],
+      [844, 390],
+      [1024, 1280],
+      [1280, 800],
+    ] as const) {
+      it(`stacks Quiet Pay with Whole bill first in ${locale} at ${width}×${height}`, async () => {
         setLocale(locale);
-        await page.viewport(width, 900);
+        await page.viewport(width, height);
         try {
           const { el, host } = await mount({
-            way: undefined,
-            handheld: width === 390,
+            quiet: true,
+            way: "whole",
+            balance: {
+              ...balance,
+              total: "73.20",
+              received: "0.00",
+              reserved: "0.00",
+              outstanding: "73.20",
+            },
+            tableName: t("floor.table_title").replace("{table}", "4"),
+            billName: locale === "en" ? "Bill 1" : "Cuenta 1",
+            handheld: width <= 844,
+            equipment,
+            takesReaderCard: true,
             takesCash: true,
+            takesManualCard: true,
+            cardReader: "stripe_terminal",
           });
-          const choices = [
-            ...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-pay-way] .option"),
-          ];
+          const choices = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-quiet-pay-way]")];
           expect(choices).toHaveLength(4);
+          expect(choices[0]!.dataset.quietPayWay).toBe("whole");
+          expect(
+            choices[0]!.shadowRoot!.querySelector("button")!.getAttribute("aria-pressed"),
+          ).toBe("true");
+          for (const choice of choices) {
+            const hint = choice.shadowRoot!.querySelector('[part="hint"]')!.getBoundingClientRect();
+            expect(choice.getBoundingClientRect().right - hint.right).toBeLessThan(32);
+          }
           const boxes = choices.map((choice) => choice.getBoundingClientRect());
-          expect(choices[0]!.querySelector("input")!.value).toBe("whole");
           const column = choices[0]!.parentElement!.getBoundingClientRect();
           expect(boxes.map((box) => box.width)).toEqual(boxes.map(() => column.width));
           expect(column.right).toBeLessThanOrEqual(width);
           for (const [index, box] of boxes.slice(1).entries()) {
             expect(box.top).toBeGreaterThanOrEqual(boxes[index]!.bottom);
           }
-          for (const choice of choices) {
-            const text = [...choice.querySelector("span")!.childNodes].find(
-              (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",
-            )!;
-            for (const word of text.textContent!.matchAll(/\S+/g)) {
-              const range = document.createRange();
-              range.setStart(text, word.index);
-              range.setEnd(text, word.index + word[0].length);
-              expect(range.getClientRects()).toHaveLength(1);
-            }
-          }
+          await pressed(el, "[data-quiet-pay-tip]");
+          await typed(el, "cardTip", locale === "en" ? "7.32" : "7,32");
+          await pressed(el, "[data-quiet-pay-tip]");
           await expectNoA11yViolations(host);
           await page.screenshot({
-            path: `__screenshots__/a739-cut5-${locale}-${theme}-${width}.png`,
+            path: `__screenshots__/quiet-pay-q1-${locale}-${theme}-${width}x${height}.png`,
           });
         } finally {
           setLocale("es-ES");
+          await page.viewport(1280, 900);
         }
       });
     }

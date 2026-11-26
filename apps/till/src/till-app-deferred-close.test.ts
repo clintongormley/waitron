@@ -17,6 +17,7 @@ import {
   openDialog,
   openTable,
   paymentOf,
+  choosePayMethod,
   press,
   resetBillPayDrafts,
   shell,
@@ -554,6 +555,11 @@ it("Cancel after a lost answer reads the bill again instead of returning to Pay"
 
 it("switches the button off while a card payment's outcome is unknown, saying what to do", async () => {
   const api = deferredApi({
+    getTill: vi.fn().mockResolvedValue({
+      ...till,
+      cardProvider: "simulator",
+      capabilities: [...till.capabilities, "close-deferred", "integrated-card-payment"],
+    }),
     previewBillPayment: vi.fn().mockResolvedValue({
       kind: "allocated",
       applied: "120.00",
@@ -570,7 +576,7 @@ it("switches the button off while a card payment's outcome is unknown, saying wh
   await openTable(el);
   await openDialog(el, "rest");
   expect(deferredReason(el)).toBe("");
-  await press(el, 'input[name="method"][value="card"]');
+  await choosePayMethod(el, "card");
   await press(el, "[data-pay-continue]");
   await press(el, "[data-pay-confirm]");
   await press(el, "[data-pay-confirm]");

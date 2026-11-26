@@ -1002,8 +1002,8 @@ manager can recover the payment after the fault is fixed.
 ## Take a whole or part payment {#pay-window}
 
 To collect a bill, open **Pay** at the Counter or on the table's bill. On a table, send or remove
-any unsent items first. **Still to pay** is the large amount at the top. Below it you can check
-**Total**, **Paid so far** and **Card payment in progress**.
+any unsent items first. **To pay** shows the amount at the top of the table’s Pay screen.
+For a full invoice, [set up the bill before paying](table-service.md#full-invoice).
 
 **Choose what this guest pays.** Choose **Whole bill** to pay everything still due.
 Choose **Split equally** for one equal share, **Items** for particular dishes, or **An amount** for
@@ -1022,8 +1022,9 @@ own, which **Waiting orders** shows with the order's number in brackets. Once su
 paid with **An amount**, **Split equally** or **Whole bill**, not by item; when its bill is
 presented for collection, choose **Pay in parts** to see those choices.
 
-Choose the payment method, then press **Continue** to check it before taking any money. If the
-bill changes before you confirm, check the revised figures before confirming again.
+At a table, choose **Charge** to check the card payment. Choose **Cash** or **Other card machine**
+to enter the payment details. At the Counter, choose the method and press **Continue**. Check the
+amounts on the confirmation, including any changes since you opened Pay.
 
 **A bill paid more than it comes to.** A bill can take more than it comes to, for example a
 contribution followed by dishes paid on a bill of their own. It then says how much more and
@@ -1043,21 +1044,21 @@ shows how much pays off the bill and the **Change to give**. If the venue takes 
 whether to return all the change, leave all of it as a tip, or leave an amount. Check the change
 again after choosing a tip, then press **Take payment** and give that change to the guest.
 
-**Card and reader.** Choose **Card**. On a phone, check the named reader in **Reader and printer**;
+**Card and reader.** At a table, open **Reader and printer** to check the reader;
 use **Change** or scan its Waitron label if you are holding another one. At the Counter, choose
 from the card readers when a list is offered. Check the reader and the total before confirming.
 To use a separate machine, follow [Use another card machine](table-service.md#outside-card).
 
-If the venue takes tips, enter **Tip on the card (optional)** before continuing. The confirmation
-shows **Charged on the card** first, with the bill amount and any tip below. An amount above what is
-still due becomes a tip, so check the full card charge with the guest before sending it.
-For example, a €50 card contribution towards €40 still due pays €40 off the bill and adds a €10
-tip. For a reader payment, choose **Remove tip** if the guest changes their mind, then check the
-revised charge. If the venue does not take tips, use the amount the refusal says can be charged.
+If the venue takes tips, use **Enter tip** on the table’s Pay screen. To take it off before starting
+a reader payment, choose **Remove tip**. At the Counter, enter **Tip on the card (optional)**
+before continuing. The confirmation separates **Paid off the bill**, **Tip** and **Charged on the card**.
+An amount above what is still due becomes a tip, so check the full card charge with the guest before
+sending it. For example, a €50 card contribution towards €40 still due pays €40 off the bill and adds a €10
+tip. If the venue does not take tips, use the amount the refusal says can be charged.
 
-Press **Charge €50.00**, or the amount shown for this payment. On a phone, the waiting panel shows
-the reader, amount and elapsed time. Complete the card step on that reader and wait for the result.
-Wait for a decline before using **Try again · Charge €50.00**.
+On a phone, the confirmation button names the amount and reader. Once you press it, the waiting
+panel shows that same amount and reader, with elapsed waiting time. Complete the card step on
+that reader and wait for the result. A spinning phone is not proof that the card failed.
 
 If the guest changes their mind while the SumUp reader waits for their card, choose
 **Cancel payment** in this window, at Counter or in Pay for a presented table bill. Wait for

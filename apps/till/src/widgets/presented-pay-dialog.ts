@@ -6,7 +6,6 @@ import {
 } from "./outside-card.js";
 import type { OutsideCardDetails } from "../api/payments-api.js";
 import { choiceRowStyles } from "./choice-styles.js";
-import { quietPayStyles } from "./quiet-pay.js";
 import { recoveryLink } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
@@ -89,7 +88,6 @@ export class TillPresentedPayDialog extends LitElement {
   static override styles = [
     baseStyles,
     choiceRowStyles,
-    quietPayStyles,
     outsideCardStyles,
     guestsStepperStyles,
     payNoticeStyles,
@@ -444,7 +442,7 @@ export class TillPresentedPayDialog extends LitElement {
     const own = this.attempted ? this.#ownErrors() : new Map<Field, string>();
     const errors = this.#fieldErrors(own);
     const reader = this.method === "card" ? readyPayReader(this.equipment, this.fixedReader) : null;
-    const body = html`<dl class="balance quiet-pay-amount" data-presented-pay-balance>
+    const body = html`<dl class="balance" data-presented-pay-balance>
         <dt>${t("presented_pay.balance")}</dt>
         <dd>${this.#money(this.amount)}</dd>
       </dl>
@@ -487,7 +485,11 @@ export class TillPresentedPayDialog extends LitElement {
         ${
           reader === null
             ? t("bill_pay.take")
-            : readerButtonLabel(this.#money(this.amount), this.shownRefusal?.code === "declined")
+            : readerButtonLabel(
+                reader.name,
+                this.#money(this.amount),
+                this.shownRefusal?.code === "declined",
+              )
         }
       </wt-button>
     </wt-form-actions>`;

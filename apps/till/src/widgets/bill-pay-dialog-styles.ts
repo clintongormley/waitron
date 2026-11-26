@@ -27,10 +27,6 @@ export const billPayDialogStyles = css`
     min-width: 0;
   }
 
-  .balance .quiet-pay-amount {
-    grid-column: 1 / -1;
-  }
-
   .balance dt {
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
@@ -71,6 +67,20 @@ export const billPayDialogStyles = css`
   .taken {
     font-weight: var(--wt-font-weight-bold);
     overflow-wrap: anywhere;
+  }
+
+  [data-pay-way] .options {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--wt-space-2);
+  }
+
+  [data-pay-way] .option {
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--wt-space-1);
+    text-align: center;
+    overflow-wrap: normal;
   }
 
   .lines {

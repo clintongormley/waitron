@@ -918,6 +918,11 @@ describe("the pay sheet's NFC button", () => {
     )!;
   async function nfcButton(el: TillApp): Promise<HTMLElement | null> {
     await sheet(el).updateComplete;
+    const root = sheet(el).shadowRoot!;
+    if (root.querySelector("till-pay-equipment") === null) {
+      root.querySelector<HTMLElement>("[data-quiet-pay-equipment]")?.click();
+      await flush(el);
+    }
     const row = sheet(el).shadowRoot!.querySelector<TillPayEquipment>("till-pay-equipment")!;
     await row.updateComplete;
     return row.shadowRoot!.querySelector<HTMLElement>("[data-pay-nfc]");
@@ -979,8 +984,7 @@ describe("the pay sheet's NFC button", () => {
       takeBillPayment,
       setDeviceEquipment: vi.fn().mockResolvedValue(withThirdReader),
     });
-    await press(el, 'input[name="method"][value="card"]');
-    await press(el, "[data-pay-continue]");
+    await press(el, "[data-quiet-pay-card]");
     await press(el, "[data-pay-confirm]");
     const waiting = () =>
       inDialog(el, "till-card-waiting") as
@@ -1010,7 +1014,9 @@ describe("the pay sheet's NFC button", () => {
     });
     await flush(el);
     expect(waiting()).toBeNull();
-    expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(`Try again · Charge ${money("120.00")}`);
+    expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(
+      t("bill_pay.retry_on_reader").replace("{reader}", () => "Lector 3"),
+    );
     await press(el, "[data-pay-confirm]");
     const sent = takeBillPayment.mock.calls.map(([, request]) => request as BillPaymentRequest);
     expect(sent).toHaveLength(2);

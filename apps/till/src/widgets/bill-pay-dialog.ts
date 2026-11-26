@@ -8,7 +8,14 @@ import {
 } from "./outside-card.js";
 import type { OutsideCardDetails } from "../api/payments-api.js";
 import { choiceRowStyles } from "./choice-styles.js";
-import { quietPayStyles } from "./quiet-pay.js";
+import {
+  quietEquipmentButton,
+  quietPay,
+  quietPayStyles,
+  quietTenderActions,
+  quietTipBreakdown,
+  quietWays,
+} from "./quiet-pay.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { recoveryLink } from "./recovery-refusal.js";
 import { LitElement, html, nothing, type PropertyValues, type TemplateResult } from "lit";
@@ -17,6 +24,7 @@ import {
   MONEY_SCALE,
   compareDecimal,
   decimal,
+  divideDecimal,
   formatMoney,
   multiplyDecimal,
   sumDecimals,
@@ -292,6 +300,8 @@ export class TillBillPayDialog extends LitElement {
   @property({ type: Boolean }) takesManualCard = false;
   /** On a handheld, the table the title names. */
   @property() tableName = "";
+  @property({ type: Boolean }) quiet = false;
+  @property() billName = "";
   /** On a handheld, the reader and printer row's inputs, passed straight to it. */
   @property({ attribute: false }) equipment: DeviceEquipment | null = null;
   @property({ attribute: false }) equipmentSaving: { role: PayEquipmentRole; id: string } | null =
@@ -333,6 +343,8 @@ export class TillBillPayDialog extends LitElement {
   @state() private guestsAttempted = false;
   @state() private askingSecondCard = false;
   @state() private rowOpen = false;
+  @state() private quietEntry = false;
+  @state() private quietTip = false;
   /** The row's QR has put the camera in place of the body. */
   @state() private scanning = false;
   /** On a handheld, after a payment that leaves money owing: the sheet offers the next guest in
@@ -913,7 +925,9 @@ export class TillBillPayDialog extends LitElement {
 
   async #backFromSecondCard(): Promise<void> {
     this.askingSecondCard = false;
-    await this.#focusButton("[data-pay-continue]");
+    await this.#focusButton(
+      this.quiet && !this.quietEntry ? "[data-quiet-pay-card]" : "[data-pay-continue]",
+    );
   }
 
   #cardInProgress(): boolean {
@@ -958,25 +972,173 @@ export class TillBillPayDialog extends LitElement {
   }
 
   override render() {
-    const view = this.showsRefundAcknowledgment
-      ? { body: html`<slot name="refund-acknowledgment"></slot>`, actions: nothing }
-      : this.scanning
-        ? payScanView(this, () => (this.scanning = false), this.handheld ? this.notice : null)
-        : (this.#cardWaiting() ?? this.#body());
+    const opening =
+      this.quiet &&
+      !this.showsRefundAcknowledgment &&
+      !this.scanning &&
+      !this.nextOffered &&
+      !this.confirmationLocked &&
+      this.taken === null &&
+      this.preview === null &&
+      !this.askingSecondCard;
+    const view = opening
+      ? undefined
+      : this.showsRefundAcknowledgment
+        ? { body: html`<slot name="refund-acknowledgment"></slot>`, actions: nothing }
+        : this.scanning
+          ? payScanView(this, () => (this.scanning = false), this.handheld ? this.notice : null)
+          : (this.#cardWaiting() ?? this.#body());
     return html`<wt-dialog
       ${trackDialog()}
       .open=${this.#active}
-      .heading=${this.#heading()}
+      .fullScreen=${opening}
+      .heading=${opening ? "" : this.#heading()}
+      .ariaLabel=${opening ? t("action.pay") : ""}
       .dismissible=${!this.busy}
       .beforeClose=${this.#entry ? this.#beforeClose : undefined}
       @wt-close=${(event: Event) => this.#close(event)}
     >
-      <div class="body">
-        ${this.credited === null ? nothing : html`<p class="credited" role="status" data-pay-credited>${this.credited}</p>`}
-        ${view.body} ${this.#readerStopControl()}
-      </div>
-      ${view.actions}
+      ${
+        view === undefined
+          ? this.#quietPay()
+          : html` <div class="body">
+                ${this.credited === null ? nothing : html`<p class="credited" role="status" data-pay-credited>${this.credited}</p>`}
+                ${view.body} ${this.#readerStopControl()}
+              </div>
+              ${view.actions}`
+      }
     </wt-dialog>`;
+  }
+
+  #quietPay(): TemplateResult {
+    const base = this.#quietAmount();
+    const tip = this.tipsEnabled ? typedMoney(this.cardTip) : null;
+    const includingTip = (value: string) =>
+      this.#money(tip === null ? value : moneyPlus(value, tip));
+    const amount = base === null ? "" : includingTip(base);
+    const reserved = this.balance?.reserved;
+    const own = this.#feedback.attempted ? this.#ownErrors() : new Map<Field, string>();
+    const errors = this.#fieldErrors(own);
+    const card = this.handheld ? this.takesReaderCard : this.cardReader !== "none";
+    const manual = this.takesManualCard || (!this.handheld && this.cardReader === "none");
+    return quietPay({
+      title: t("action.pay"),
+      subtitle: this.billName,
+      back: this.tableName || t("action.back"),
+      close: () => this.#requestClose(),
+      equipment: quietEquipmentButton(
+        this.rowOpen,
+        this.busy,
+        () => (this.rowOpen = !this.rowOpen),
+      ),
+      amount,
+      breakdown:
+        !this.tipsEnabled || !card || base === null
+          ? undefined
+          : quietTipBreakdown({
+              bill: this.#money(base),
+              tip: tip === null ? undefined : this.#money(tip),
+              busy: this.busy,
+              edit: () => (this.quietTip = !this.quietTip),
+              remove: () => {
+                this.cardTip = "";
+                this.quietTip = false;
+                this.#changedDraft();
+              },
+            }),
+      body: html` ${this.credited === null ? nothing : html`<p class="credited" role="status" data-pay-credited>${this.credited}</p>`}
+      ${this.#captureWarning()} ${this.#refundNotice()}
+      ${
+        reserved === undefined || compareDecimal(decimal(reserved), decimal("0")) === 0
+          ? nothing
+          : html`<p class="muted" data-pay-reserved>
+              ${t("bill_pay.reserved")} · ${this.#money(reserved)}
+            </p>`
+      }
+      ${
+        !this.handheld && this.cardReader === "simulator"
+          ? this.#simulationFields()
+          : this.rowOpen
+            ? this.handheld
+              ? this.#equipmentRow(card)
+              : this.#readerFields()
+            : this.#notice()
+      }
+      ${
+        this.quietEntry
+          ? html`${this.#wayFields(errors)} ${this.#entryFields(errors)}`
+          : html` ${this.quietTip ? this.#cardTipField(errors) : nothing}
+            ${this.balance === null ? html`<p role="status" data-pay-balance>${t("bill_pay.reading")}</p>` : nothing}
+            ${quietWays(
+              this.chosenWay,
+              this.itemsBarred,
+              this.busy,
+              this.balance === null ? undefined : includingTip(this.balance.outstanding),
+              (way) => {
+                this.chosenWay = way;
+                this.#shareRun = null;
+                this.#changedDraft();
+              },
+            )}
+            ${this.#wayFields(errors)} ${this.#deferred()} ${this.#payments()}
+            ${card || manual || this.takesCash ? nothing : html`<p role="status">${t("bill_pay.no_method")}</p>`}`
+      }`,
+      actions: this.quietEntry
+        ? html`<wt-form-actions .error=${this.#bottomMessage(errors)}>
+            ${recoveryLink(this.#shownRefusal)}
+            <wt-button
+              slot="cancel"
+              variant="secondary"
+              .disabled=${this.busy}
+              @click=${() => (this.quietEntry = false)}
+              >${t("action.back")}</wt-button
+            >
+            <wt-button
+              variant="primary"
+              data-pay-continue
+              .loading=${this.busy}
+              .disabled=${this.busy || own.size > 0 || !this.#canAsk()}
+              @click=${() => void this.#continue()}
+              >${t("bill_pay.continue")}</wt-button
+            >
+          </wt-form-actions>`
+        : html`<wt-form-actions .error=${this.#bottomMessage(errors)}
+              >${recoveryLink(this.#shownRefusal)}</wt-form-actions
+            >
+            ${quietTenderActions(amount, this.busy, {
+              card: !card
+                ? undefined
+                : {
+                    disabled: !this.#owing() || this.#heldForEquipment("card"),
+                    run: () => {
+                      this.method = "card";
+                      void this.#continue();
+                    },
+                  },
+              cash: !this.takesCash
+                ? undefined
+                : { disabled: !this.#canAsk(), run: () => this.#quietMethod("cash") },
+              manual: !manual
+                ? undefined
+                : { disabled: !this.#canAsk(), run: () => this.#quietMethod("manual") },
+            })}`,
+    });
+  }
+
+  #quietAmount(): Decimal | null {
+    const outstanding = this.balance?.outstanding;
+    if (this.chosenWay === "contribution") return typedMoney(this.typedAmountValue);
+    if (this.chosenWay === "items") return this.#pickedAmount();
+    if (outstanding === undefined) return null;
+    if (this.chosenWay === "share" && PEOPLE.test(this.people.trim()))
+      return divideDecimal(decimal(outstanding), decimal(this.people.trim()), MONEY_SCALE);
+    return decimal(outstanding);
+  }
+
+  #quietMethod(method: "cash" | "manual"): void {
+    this.method = method;
+    this.quietEntry = true;
+    this.#changedDraft();
   }
 
   #readerStopControl(): TemplateResult | typeof nothing {
@@ -1009,32 +1171,28 @@ export class TillBillPayDialog extends LitElement {
 
   #body(): SheetView {
     const step = this.nextOffered ? this.#nextActions() : this.#step();
-    const chargeFirst =
-      !this.nextOffered &&
-      !this.confirmationLocked &&
-      this.preview !== null &&
-      this.asked?.pay.method === "card";
-    const warning = this.balance?.captureWarning;
-    const body = html`${chargeFirst ? step.body : nothing} ${this.#balance()}
-    ${
-      warning === undefined
-        ? nothing
-        : html`<p role="alert" data-capture-warning>
-            ${t("card.capture_warning")
-              .replace("{requested}", () => this.#money(warning.requestedAmount))
-              .replace("{actual}", () => this.#money(warning.reportedAmount))}
-          </p>`
-    }
-    ${this.#taken()}
-    ${
-      this.refunded === null
-        ? nothing
-        : html`<p class="taken" role="status" data-pay-refunded>
-            ${this.#refundedText(this.refunded)}
-          </p>`
-    }
-    ${this.#payments()} ${chargeFirst ? nothing : step.body}`;
+    const body = html`${this.#balance()} ${this.#captureWarning()} ${this.#taken()}
+    ${this.#refundNotice()} ${this.#payments()} ${step.body}`;
     return { body, actions: step.actions };
+  }
+
+  #captureWarning(): TemplateResult | typeof nothing {
+    const warning = this.balance?.captureWarning;
+    return warning === undefined
+      ? nothing
+      : html`<p role="alert" data-capture-warning>
+          ${t("card.capture_warning")
+            .replace("{requested}", () => this.#money(warning.requestedAmount))
+            .replace("{actual}", () => this.#money(warning.reportedAmount))}
+        </p>`;
+  }
+
+  #refundNotice(): TemplateResult | typeof nothing {
+    return this.refunded === null
+      ? nothing
+      : html`<p class="taken" role="status" data-pay-refunded>
+          ${this.#refundedText(this.refunded)}
+        </p>`;
   }
 
   /** On a handheld, a payment taken shows as a block, naming the reader a card was charged on. */
@@ -1299,17 +1457,6 @@ export class TillBillPayDialog extends LitElement {
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
     const over = overpaidOf(balance);
     return html`<dl class="balance" data-pay-balance aria-label=${t("bill_pay.balance")}>
-      ${
-        over === null
-          ? html`<div class="quiet-pay-amount" data-pay-outstanding>
-              <dt>${t("bill_pay.outstanding")}</dt>
-              ${amount(balance.outstanding)}
-            </div>`
-          : html`<div class="quiet-pay-amount" data-pay-overpaid>
-              <dt>${t("bill_pay.overpaid")}</dt>
-              ${amount(over)}
-            </div>`
-      }
       <div data-pay-total>
         <dt>${t("bill_pay.total")}</dt>
         ${amount(balance.total)}
@@ -1322,6 +1469,17 @@ export class TillBillPayDialog extends LitElement {
         <dt>${t("bill_pay.reserved")}</dt>
         ${amount(balance.reserved)}
       </div>
+      ${
+        over === null
+          ? html`<div data-pay-outstanding>
+              <dt>${t("bill_pay.outstanding")}</dt>
+              ${amount(balance.outstanding)}
+            </div>`
+          : html`<div data-pay-overpaid>
+              <dt>${t("bill_pay.overpaid")}</dt>
+              ${amount(over)}
+            </div>`
+      }
     </dl>`;
   }
 
@@ -1406,7 +1564,6 @@ export class TillBillPayDialog extends LitElement {
     pick: () => void,
     disabled = false,
     describedBy?: string,
-    hint?: string,
   ): TemplateResult {
     return html`<label class="option">
       <input
@@ -1423,9 +1580,7 @@ export class TillBillPayDialog extends LitElement {
           this.#changedDraft();
         }}
       />
-      <span>
-        ${label} ${hint === undefined ? nothing : html`<small class="pay-way-hint">${hint}</small>`}
-      </span>
+      <span>${label}</span>
     </label>`;
   }
 
@@ -1482,7 +1637,6 @@ export class TillBillPayDialog extends LitElement {
               (way === "whole" && this.balance === null) ||
                 (way === "items" && this.itemsBarred !== null),
               way === "items" && this.itemsBarred !== null ? "items-reason" : undefined,
-              t(`${label}_hint`),
             ),
           )}
         </div>
@@ -1722,31 +1876,38 @@ export class TillBillPayDialog extends LitElement {
         <legend>${t("bill_pay.method")}</legend>
         ${this.#methodChoices()}
       </fieldset>
-      ${
-        !offered
-          ? nothing
-          : this.method === "cash"
-            ? this.#input(
-                "tendered",
-                t("bill_pay.tendered"),
-                this.tendered,
-                (value) => (this.tendered = value),
-                { required: true, error: errors.get("tendered"), submit: "[data-pay-continue]" },
-              )
-            : html`${
-                this.tipsEnabled
-                  ? this.#input(
-                      "cardTip",
-                      t("bill_pay.card_tip"),
-                      this.cardTip,
-                      (value) => (this.cardTip = value),
-                      { error: errors.get("cardTip"), submit: "[data-pay-continue]" },
-                    )
-                  : nothing
-              }
-              ${this.#keyed(this.method) ? this.#manualCardFields() : this.#readerFields()}`
-      }
+      ${offered ? this.#entryFields(errors) : nothing}
       ${offered ? this.#equipmentRow(this.method === "card") : nothing}`;
+  }
+
+  #entryFields(errors: ReadonlyMap<Field, string>): TemplateResult {
+    return this.method === "cash"
+      ? this.#input(
+          "tendered",
+          t("bill_pay.tendered"),
+          this.tendered,
+          (value) => (this.tendered = value),
+          {
+            required: true,
+            error: errors.get("tendered"),
+            submit: "[data-pay-continue]",
+          },
+        )
+      : html`${this.tipsEnabled ? this.#cardTipField(errors) : nothing}
+        ${this.#keyed(this.method) ? this.#manualCardFields() : this.#readerFields()}`;
+  }
+
+  #cardTipField(errors: ReadonlyMap<Field, string>): TemplateResult {
+    return this.#input(
+      "cardTip",
+      t("bill_pay.card_tip"),
+      this.cardTip,
+      (value) => (this.cardTip = value),
+      {
+        error: errors.get("cardTip"),
+        submit: "[data-pay-continue]",
+      },
+    );
   }
 
   /** A handheld's reader and printer row; its events bubble out to the app unchanged. */
@@ -1982,26 +2143,6 @@ export class TillBillPayDialog extends LitElement {
     });
   }
 
-  #removeReaderTip(asked: PayRequest, preview: AllocationPreview): void {
-    if (!this.isConnected || !this.#active || this.busy || this.confirmationLocked) return;
-    let choice = asked.choice;
-    if (
-      choice.kind === "contribution" &&
-      compareDecimal(decimal(choice.amount), decimal(preview.applied)) > 0
-    ) {
-      choice = { kind: "contribution", amount: preview.applied };
-      this.typedAmountValue = preview.applied;
-    }
-    this.cardTip = "";
-    this.#changedDraft();
-    this.#feedback.dismiss("refusal");
-    this.#emit("bill-pay-preview", {
-      ...asked,
-      choice,
-      pay: { method: "card" },
-    } satisfies PayRequest);
-  }
-
   #confirmStep(asked: PayRequest, preview: AllocationPreview): SheetView {
     // A cash preview always carries its change, and a card's its charge.
     const cash: Cash | null =
@@ -2020,11 +2161,10 @@ export class TillBillPayDialog extends LitElement {
     const errors = this.#fieldErrors(stepErrors);
     const bottom = this.#bottomMessage(errors);
     const onReader = asked.card?.entry === "reader";
-    const canCharge = onReader && (!this.handheld || this.#readyReader() !== null);
-    const hasTip = compareDecimal(decimal(preview.tip), decimal("0")) > 0;
+    const reader = this.handheld && onReader ? this.#readyReader() : null;
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
-    const scope = html`<p class="scope" data-pay-scope>${this.#scope()}</p>`;
-    const body = html`${cash === null ? nothing : scope}
+    const body = html`${outsideCardSummary(asked.card?.entry === "manual" ? asked.card : {})}
+      <p class="scope" data-pay-scope>${this.#scope()}</p>
       ${
         this.#ownBill()
           ? html`<p class="own-bill" data-pay-own-bill>
@@ -2037,15 +2177,7 @@ export class TillBillPayDialog extends LitElement {
           : nothing
       }
       <dl class="allocation">
-        ${
-          cash === null
-            ? html`<div class="quiet-pay-amount" data-pay-charged>
-                <dt>${t("bill_pay.charged")}</dt>
-                ${amount(preview.charged!)}
-              </div>`
-            : nothing
-        }
-        <div data-pay-applied>
+        <div class=${cash === null ? "headline" : ""} data-pay-applied>
           <dt>${t("bill_pay.applied")}</dt>
           ${amount(preview.applied)}
         </div>
@@ -2062,30 +2194,22 @@ export class TillBillPayDialog extends LitElement {
                 </div>`
         }
         ${
-          this.tipsEnabled && (cash !== null || hasTip)
+          this.tipsEnabled
             ? html`<div data-pay-tip>
-                <dt>
-                  ${t("bill_pay.tip")}
-                  ${
-                    onReader && !this.confirmationLocked
-                      ? html`<wt-button
-                          variant="ghost"
-                          size="sm"
-                          data-pay-remove-tip
-                          .disabled=${this.busy}
-                          @click=${() => this.#removeReaderTip(asked, preview)}
-                          >${t("bill_pay.remove_tip")}</wt-button
-                        >`
-                      : nothing
-                  }
-                </dt>
+                <dt>${t("bill_pay.tip")}</dt>
                 ${amount(preview.tip)}
               </div>`
             : nothing
         }
+        ${
+          cash === null
+            ? html`<div class="headline" data-pay-charged>
+                <dt>${t("bill_pay.charged")}</dt>
+                ${amount(preview.charged!)}
+              </div>`
+            : nothing
+        }
       </dl>
-      ${cash === null ? scope : nothing}
-      ${outsideCardSummary(asked.card?.entry === "manual" ? asked.card : {})}
       ${this.#equipmentRow(onReader)}
       ${
         this.tipsEnabled &&
@@ -2118,9 +2242,10 @@ export class TillBillPayDialog extends LitElement {
         ${
           this.confirmationLocked
             ? t("bill_pay.recheck")
-            : !canCharge
+            : reader === null
               ? t("bill_pay.take")
               : readerButtonLabel(
+                  reader.name,
                   this.#money(preview.charged!),
                   this.#shownRefusal?.code === "declined",
                 )

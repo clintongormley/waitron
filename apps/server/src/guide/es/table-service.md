@@ -1059,8 +1059,8 @@ para que el responsable pueda recuperar el pago una vez reparado el fallo.
 ## Cobra toda la cuenta o una parte {#pay-window}
 
 Para cobrar una cuenta, abre **Cobrar** en Mostrador o en la cuenta de la mesa. En una mesa, envía o quita
-primero los artículos sin enviar. **Queda por pagar** aparece en grande arriba. Debajo puedes
-consultar **Total**, **Pagado hasta ahora** y **Pago con tarjeta en curso**.
+primero los artículos sin enviar. **A pagar** muestra el importe en la parte superior de Cobrar.
+Para una factura completa, [prepara la cuenta antes de cobrar](table-service.md#full-invoice).
 
 **Elige qué paga este comensal.** Elige **Toda la cuenta** para cobrar todo lo que
 queda. Elige **Dividir a partes iguales** para cobrar una parte igual, **Artículos** para platos
@@ -1080,8 +1080,9 @@ muestra con el número del pedido entre paréntesis. Si ese pedido se pasa despu
 **Dividir a partes iguales** o **Toda la cuenta**, no por artículos; cuando su cuenta está
 presentada para su cobro, elige **Cobrar por partes** para ver esas opciones.
 
-Elige la forma de pago y pulsa **Continuar** para comprobarla antes de cobrar. Si la cuenta
-cambia antes de confirmar, comprueba los importes actualizados antes de volver a confirmar.
+En una mesa, pulsa **Cobrar** para revisar el pago con tarjeta. Pulsa **Efectivo** u
+**Otro datáfono** para introducir los detalles. En Mostrador, elige la forma de pago y pulsa
+**Continuar**. Revisa los importes en la confirmación, incluidos los cambios desde que abriste Cobrar.
 
 **Una cuenta pagada de más.** Una cuenta puede recibir más de lo que suma, por ejemplo una
 aportación seguida de platos cobrados en una cuenta propia. Entonces indica cuánto de más y no
@@ -1102,23 +1103,24 @@ confirmación muestra cuánto se descuenta de la cuenta y el **Cambio a devolver
 acepta propinas, elige entre devolver todo el cambio, dejarlo todo como propina o dejar una
 cantidad. Revisa el cambio después de elegir la propina, pulsa **Cobrar** y devuelve ese cambio.
 
-**Tarjeta y lector.** Elige **Tarjeta**. En un teléfono, comprueba el lector en **Lector e
-impresora**; usa **Cambiar** o escanea su etiqueta de Waitron si tienes otro en la mano. En
-Mostrador, elige el lector cuando se ofrezca una lista. Comprueba el lector y el total antes de
+**Tarjeta y lector.** En una mesa, abre **Lector e impresora** para comprobar el lector. Usa
+**Cambiar** o escanea su etiqueta de Waitron si tienes otro en la mano. En Mostrador, elige el lector
+cuando se ofrezca una lista. Comprueba el lector y el total antes de
 confirmar. Para usar otra máquina, sigue [Usar otro datáfono](table-service.md#outside-card).
 
-Si el local acepta propinas, introduce **Propina con tarjeta (opcional)** antes de continuar.
-La confirmación muestra primero **Se cobra en la tarjeta**, con el importe de la cuenta y la
-propina debajo.
+Si el local acepta propinas, pulsa **Introducir propina** en Cobrar. Para retirarla antes de
+iniciar el pago con el lector, pulsa **Quitar propina**. En Mostrador, rellena
+**Propina con tarjeta (opcional)** antes de continuar. La confirmación separa **Se descuenta de la cuenta**,
+**Propina** y **Se cobra en la tarjeta**.
 Una cantidad superior a lo que queda se convierte en propina: confirma con el cliente el cargo
 completo antes de enviarlo. Por ejemplo, aportar 50 € con tarjeta cuando quedan 40 € descuenta
-40 € de la cuenta y añade 10 € de propina. Si cobras con el lector y el cliente cambia de idea,
-pulsa **Quitar propina** y comprueba el nuevo importe. Si el local no acepta propinas, usa el
-importe que el mensaje indica que se puede cobrar.
+40 € de la cuenta y añade 10 € de propina. Si el local no acepta propinas, usa el importe que el
+mensaje indica que se puede cobrar.
 
-Pulsa **Cobrar 50,00 €** o el importe que se muestre para este pago. En un teléfono, el panel de
-espera muestra el lector, el importe y el tiempo transcurrido. Completa el pago en ese lector y
-espera el resultado. Usa **Reintentar · Cobrar 50,00 €** cuando se rechace la tarjeta.
+En un teléfono, el botón de confirmación nombra el importe y el lector. Al pulsarlo, el panel de
+espera muestra ese mismo importe y lector, con el tiempo transcurrido. Completa el paso de la
+tarjeta en ese lector y espera el resultado. Que el teléfono siga esperando no demuestra que el
+cobro haya fallado.
 
 Si el cliente cambia de idea mientras el lector SumUp espera la tarjeta, pulsa **Cancelar cobro**
 en esta ventana, en Mostrador o al cobrar una cuenta presentada. Espera a que el terminal confirme

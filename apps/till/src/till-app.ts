@@ -12083,11 +12083,17 @@ export class TillApp extends LitElement {
   #renderBillPaying(): TemplateResult | typeof nothing {
     const open = this.billPaying;
     if (open === null) return nothing;
+    const quiet = open.surface === "table" && open.found === undefined;
+    const bill = quiet
+      ? this.partyBills.find((row) => row.workingOrderId === open.billId)
+      : undefined;
     const pending = this.#unansweredPayments.get(open.billId);
     const send = this.#paymentsOut.get(open.billId);
     const stop = send?.dialogId === open.id ? send.readerStop : undefined;
     const reason = this.#payReaderReason();
     return html`<till-bill-pay-dialog
+        .quiet=${quiet}
+        .billName=${bill === undefined ? "" : billLabel(bill)}
         .sumUpConnected=${this.sumUpConnected}
         .checkTimeOffered=${this.checkTimeOffered}
         .balance=${open.balance}

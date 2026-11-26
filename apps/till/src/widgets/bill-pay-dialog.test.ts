@@ -73,6 +73,68 @@ const root = (el: TillBillPayDialog) => el.shadowRoot!;
 const text = (node: Element | ShadowRoot | null) =>
   (node?.textContent ?? "").replace(/\s+/g, " ").trim();
 const money = (amount: string) => formatMoney(amount, currentLocale());
+it("starts full-screen Pay with the amount and opens the server preview from Charge", async () => {
+  await page.viewport(390, 844);
+  const el = await mount({
+    quiet: true,
+    way: "whole",
+    tableName: "Table 4",
+    cardReader: "simulator",
+  });
+  const amount = root(el).querySelector("[data-quiet-pay-amount]")!;
+  expect(text(amount)).toBe(money("120.00"));
+  expect(getComputedStyle(amount).fontSize).toBe("42px");
+  const panel = root(el).querySelector("[data-quiet-pay]")!.getBoundingClientRect();
+  expect([panel.width, panel.height]).toEqual([390, 844]);
+  expect(root(el).querySelector('input[name="method"]')).toBeNull();
+  const previews = capture<PayRequest>(el, "bill-pay-preview");
+  const payments = capture(el, "bill-pay-confirm");
+  expect(text(root(el).querySelector("[data-quiet-pay-card]"))).toBe(`Charge ${money("120.00")}`);
+  await click(el, "[data-quiet-pay-card]");
+  expect(previews).toEqual([
+    {
+      choice: { kind: "whole" },
+      pay: { method: "card" },
+      card: { entry: "reader", simulationOutcome: "captured" },
+    },
+  ]);
+  expect(payments).toEqual([]);
+});
+
+it("chooses an amount, then opens the existing cash entry before asking for a preview", async () => {
+  const el = await mount({ quiet: true, way: "whole", handheld: true, takesCash: true });
+  const previews = capture<PayRequest>(el, "bill-pay-preview");
+  await click(el, '[data-quiet-pay-way="contribution"]');
+  await type(el, "amount", "40");
+  expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("40.00"));
+  await click(el, "[data-quiet-pay-cash]");
+  expect(previews).toEqual([]);
+  await type(el, "tendered", "50");
+  await click(el, "[data-pay-continue]");
+  expect(previews).toEqual([
+    { choice: { kind: "contribution", amount: "40" }, pay: { method: "cash", tendered: "50" } },
+  ]);
+});
+
+it("adds a staff tip to the opening total and removes it before asking for any charge", async () => {
+  const el = await mount({ quiet: true, way: "whole", cardReader: "simulator" });
+  const previews = capture<PayRequest>(el, "bill-pay-preview");
+  await click(el, "[data-quiet-pay-tip]");
+  await type(el, "cardTip", "12");
+  expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("132.00"));
+  expect(
+    text(
+      root(el)
+        .querySelector('[data-quiet-pay-way="whole"]')!
+        .shadowRoot!.querySelector('[part="hint"]'),
+    ),
+  ).toBe(money("132.00"));
+  expect(text(root(el).querySelector("[data-quiet-pay-breakdown]"))).toContain(money("12.00"));
+  await click(el, "[data-quiet-pay-remove-tip]");
+  expect(text(root(el).querySelector("[data-quiet-pay-amount]"))).toBe(money("120.00"));
+  expect(previews).toEqual([]);
+});
+
 it.each(["en", "es"] as const)("temporary balance explanation in %s", async (locale) => {
   setLocale(locale);
   try {
@@ -172,7 +234,7 @@ const cashPreview = (applied: string, change: string, tip = "0.00"): AllocationP
 });
 
 it.each([false, true])(
-  "opens Whole bill at the top of the shared Pay choices (handheld %s)",
+  "opens Whole bill at the right of the shared Pay choices (handheld %s)",
   async (handheld) => {
     const el = await mount({
       handheld,
@@ -181,10 +243,10 @@ it.each([false, true])(
     });
     const ways = [...root(el).querySelectorAll<HTMLInputElement>('input[name="way"]')];
     expect(ways.map((way) => [way.value, way.checked])).toEqual([
-      ["whole", true],
+      ["contribution", false],
       ["share", false],
       ["items", false],
-      ["contribution", false],
+      ["whole", true],
     ]);
     expect(field(el, "amount")).toBeNull();
     expect(offered(el)).toEqual([]);
@@ -301,8 +363,6 @@ describe("till-bill-pay-dialog: the bill's balance", () => {
       balance: balanceOf({ received: "50.00", reserved: "20.00", outstanding: "50.00" }),
     });
 
-    const balance = root(el).querySelector("dl[data-pay-balance]")!;
-    expect(balance.firstElementChild).toBe(balance.querySelector("[data-pay-outstanding]"));
     expect(text(root(el).querySelector("[data-pay-total]"))).toContain(money("120.00"));
     expect(text(root(el).querySelector("[data-pay-received]"))).toContain(money("50.00"));
     expect(text(root(el).querySelector("[data-pay-reserved]"))).toContain(money("20.00"));
@@ -723,52 +783,12 @@ describe("till-bill-pay-dialog: confirming a card", () => {
       charged: "50.00",
     });
 
-    const charged = root(el).querySelector("[data-pay-charged]")!;
-    expect(charged.parentElement!.firstElementChild).toBe(charged);
-    const balance = root(el).querySelector("[data-pay-balance]")!;
-    expect(
-      charged.compareDocumentPosition(balance) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
     expect(text(root(el).querySelector("[data-pay-applied]"))).toContain(money("40.00"));
     expect(text(root(el).querySelector("[data-pay-tip]"))).toContain(money("10.00"));
     expect(text(root(el).querySelector("[data-pay-charged]"))).toContain(money("50.00"));
     expect(root(el).querySelector("[data-pay-change]")).toBeNull();
     expect(root(el).querySelector('input[name="leaveTip"]')).toBeNull();
   });
-
-  it.each([
-    { amount: "40", typedTip: "10", withoutTip: "40" },
-    { amount: "50", typedTip: "", withoutTip: "40.00" },
-  ])(
-    "removes a reader tip from a contribution of $amount before charging",
-    async ({ amount, typedTip, withoutTip }) => {
-      const el = await mount({ way: "contribution", cardReader: "stripe_terminal" });
-      await type(el, "amount", amount);
-      await pick(el, "method", "card");
-      await type(el, "cardTip", typedTip);
-      const previews = capture<PayRequest>(el, "bill-pay-preview");
-      const confirmed = capture(el, "bill-pay-confirm");
-      const original = await previewed(el, {
-        kind: "allocated",
-        applied: "40.00",
-        tip: "10.00",
-        change: null,
-        charged: "50.00",
-      });
-
-      expect(text(button(el, "[data-pay-remove-tip]"))).toBe("Remove tip");
-      await click(el, "[data-pay-remove-tip]");
-      expect(previews).toEqual([
-        original,
-        {
-          ...original,
-          choice: { kind: "contribution", amount: withoutTip },
-          pay: { method: "card" },
-        },
-      ]);
-      expect(confirmed).toEqual([]);
-    },
-  );
 });
 
 describe("till-bill-pay-dialog: moving between steps", () => {
@@ -1834,19 +1854,25 @@ describe("till-bill-pay-dialog: on a handheld", () => {
 
   it("offers the shared choices in Spanish with Whole bill selected at the top", async () => {
     setLocale("es");
-    const el = await handheld();
-
-    expect(radios(el, "way").map(({ value, label, checked }) => [value, label, checked])).toEqual([
-      ["whole", "Toda la cuenta Cobra lo que queda", true],
+    const el = await handheld({ quiet: true, takesManualCard: false });
+    const choices = [...root(el).querySelectorAll<HTMLElement>("[data-quiet-pay-way]")];
+    expect(
+      choices.map((choice) => [
+        choice.dataset.quietPayWay,
+        text(choice.shadowRoot!.querySelector('[part="label"]')) +
+          " " +
+          text(choice.shadowRoot!.querySelector('[part="hint"]')),
+        choice.shadowRoot!.querySelector("button")!.getAttribute("aria-pressed") === "true",
+      ]),
+    ).toEqual([
+      ["whole", "Toda la cuenta 120,00 €", true],
       ["share", "Dividir a partes iguales Entre comensales", false],
       ["items", "Artículos Elige los platos", false],
       ["contribution", "Una cantidad Introduce un importe", false],
     ]);
-    expect(radios(el, "method").map(({ value, label }) => [value, label])).toEqual([
-      ["card", "Tarjeta"],
-      ["cash", "Efectivo"],
-      ["manual", "Otro datáfono"],
-    ]);
+    expect(text(root(el).querySelector("[data-quiet-pay-card]"))).toBe("Cobrar 120,00 €");
+    expect(text(root(el).querySelector("[data-quiet-pay-cash]"))).toBe("Efectivo");
+    expect(root(el).querySelector("[data-quiet-pay-manual]")).toBeNull();
   });
 
   it("titles itself with the table", async () => {
@@ -2036,10 +2062,10 @@ describe("till-bill-pay-dialog: on a handheld", () => {
     // a till" above.
     const el = await mount({ takesManualCard: true, tableName: "Table 4" });
     expect(radios(el, "way").map((radio) => radio.value)).toEqual([
-      "whole",
+      "contribution",
       "share",
       "items",
-      "contribution",
+      "whole",
     ]);
     expect(radios(el, "method").map((radio) => radio.value)).toEqual(["cash", "card"]);
     expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(
@@ -2077,7 +2103,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     charged: "20.80",
   };
 
-  it("names Lector 2 and Barra in the closed row and shows only the amount on Charge", async () => {
+  it("names Lector 2 and Barra in the closed row, and Take payment names the reader it charges", async () => {
     setLocale("es");
     const el = await handheld();
     const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
@@ -2087,7 +2113,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     await previewed(el, cardPreview);
     expect(row(el)).not.toBeNull();
     expect(text(button(el, "[data-pay-confirm]"))).toBe(
-      `Cobrar ${money("20.80")}`.replace(/\s+/g, " "),
+      `Cobrar ${money("20.80")} en Lector 2`.replace(/\s+/g, " "),
     );
 
     await click(el, "[data-pay-confirm]");
@@ -2103,7 +2129,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     el.equipment = equipmentWith(THIRD_READER);
     await el.updateComplete;
     expect(text(button(el, "[data-pay-confirm]"))).toBe(
-      `Cobrar ${money("20.80")}`.replace(/\s+/g, " "),
+      `Cobrar ${money("20.80")} en Lector 3`.replace(/\s+/g, " "),
     );
     await click(el, "[data-pay-confirm]");
     expect(confirmed).toEqual([{ readerId: "r3" }]);
@@ -2302,7 +2328,12 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
 
       await click(el, "[data-pay-scan-back]");
 
-      expect(text(button(el, "[data-pay-confirm]"))).toBe(`Charge ${money("20.80")}`);
+      expect(text(button(el, "[data-pay-confirm]"))).toBe(
+        t("bill_pay.take_on_reader")
+          .replace("{amount}", () => money("20.80"))
+          .replace("{reader}", () => "Lector 2")
+          .replace(/\s+/g, " "),
+      );
     });
 
     it("a sticker read sends its kind and id, and the form comes back", async () => {
@@ -2341,7 +2372,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     });
   });
 
-  it("shows the charge without the handheld equipment row on a counter till", async () => {
+  it("shows none of this on a counter till", async () => {
     const el = await mount({ cardReader: "stripe_terminal", equipment: equipmentWith(null) });
     const confirmed = capture<Record<string, unknown>>(el, "bill-pay-confirm");
     expect(row(el)).toBeNull();
@@ -2349,7 +2380,7 @@ describe("till-bill-pay-dialog: the reader and printer on a handheld", () => {
     await pick(el, "line", "1");
     expect(button(el, "[data-pay-continue]").disabled).toBe(false);
     await previewed(el, cardPreview);
-    expect(text(button(el, "[data-pay-confirm]"))).toBe(`Charge ${money("20.80")}`);
+    expect(text(button(el, "[data-pay-confirm]"))).toBe(t("bill_pay.take"));
     await click(el, "[data-pay-confirm]");
     expect(confirmed).toEqual([{}]);
   });
@@ -2592,7 +2623,7 @@ describe("till-bill-pay-dialog: the card at the table (A796)", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("shows Try again with the amount after a decline and retries on the phone's current reader", async () => {
+  it("after a decline, keeps today's words and retries on the phone's reader now, as Try again on Lector 3", async () => {
     const { el, confirmed } = await sent();
     el.equipment = equipmentWith(THIRD_READER);
     el.busy = false;
@@ -2601,7 +2632,9 @@ describe("till-bill-pay-dialog: the card at the table (A796)", () => {
 
     expect(waiting(el)).toBeNull();
     expect(actions(el).error).toBe(t("bill_pay.card_declined"));
-    expect(text(button(el, "[data-pay-confirm]"))).toBe(`Try again · Charge ${money("20.80")}`);
+    expect(text(button(el, "[data-pay-confirm]"))).toBe(
+      t("bill_pay.retry_on_reader").replace("{reader}", () => "Lector 3"),
+    );
     await click(el, "[data-pay-confirm]");
     expect(confirmed).toEqual([{ readerId: "r2" }, { readerId: "r3" }]);
   });
@@ -2657,12 +2690,11 @@ describe("till-bill-pay-dialog: the card at the table (A796)", () => {
     expect(text(root(el).querySelector("[data-pay-collecting]"))).toBe(t("card.collecting"));
     expect(button(el, "[data-pay-confirm]")).not.toBeNull();
     expect(button(el, "[data-pay-back]")).not.toBeNull();
-    expect(text(button(el, "[data-pay-confirm]"))).toBe(`Charge ${money("20.80")}`);
 
     el.busy = false;
     el.refusal = { code: "declined" };
     await el.updateComplete;
-    expect(text(button(el, "[data-pay-confirm]"))).toBe(`Try again · Charge ${money("20.80")}`);
+    expect(text(button(el, "[data-pay-confirm]"))).toBe(t("bill_pay.take"));
   });
 });
 

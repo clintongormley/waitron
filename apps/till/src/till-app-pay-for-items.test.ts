@@ -11,6 +11,9 @@ import {
   BAR_PRINTER,
   heldTable,
   inDialog,
+  paymentStart,
+  choosePayMethod,
+  choosePayWay,
   invoiceOf,
   lock,
   money,
@@ -129,7 +132,7 @@ async function choosePrintedItems(el: TillApp, lineNos: number[]): Promise<void>
   }
   order.shadowRoot!.querySelector<HTMLElement>("[data-pay-sheet]")!.click();
   await flush(el);
-  await press(el, 'input[name="way"][value="items"]');
+  await choosePayWay(el, "items");
   for (const lineNo of lineNos) await press(el, `input[name="line"][value="${lineNo}"]`);
 }
 
@@ -317,7 +320,7 @@ describe("till-app: Pay for items on a bill of their own", () => {
       payForItems,
     });
     await chooseItems(el, [4, 5]);
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "manual");
     await type(el, "externalRef", "OP-73");
     await type(el, "externalMachine", "Bank");
     await press(el, "[data-pay-continue]");
@@ -516,10 +519,13 @@ describe("till-app: Pay for items on a bill of their own", () => {
     await flush(el);
 
     const root = dialog(el)!.shadowRoot!;
-    expect(root.querySelector<HTMLInputElement>('[name="way"][value="items"]')!.disabled).toBe(
-      true,
+    const items = root.querySelector('[data-quiet-pay-way="items"]')!;
+    expect(items.shadowRoot!.querySelector("button")!.disabled).toBe(true);
+    const reason = root.getElementById(
+      items.closest("fieldset")!.getAttribute("aria-describedby")!,
     );
-    expect(text(root.querySelector("[data-pay-items-reason]"))).toBe(
+    expect(reason?.hasAttribute("data-pay-items-reason")).toBe(true);
+    expect(text(reason)).toBe(
       "A Counter order sent to the kitchen and then moved to a table is paid with An amount, Split equally or Whole bill.",
     );
   });
@@ -668,7 +674,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
 
   async function confirmOnReader(el: TillApp): Promise<void> {
     await chooseItems(el, [4, 5]);
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "card");
     await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
@@ -691,7 +697,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
     const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
     const balanceReads = vi.mocked(api.getBillBalance).mock.calls.length;
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "card");
     await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
@@ -700,7 +706,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(api.payForItems).toHaveBeenCalledOnce();
     expect(formError(el)).toBe(t("bill_pay.card_declined"));
     expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
-    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+    expect(paymentStart(el)).not.toBeNull();
     expect(vi.mocked(api.getTabLines).mock.calls.slice(lineReads)).toContainEqual(["wo-4"]);
     expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(billReads);
     expect(tableOrder(el).billBalance).toEqual(table);
@@ -751,7 +757,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       }),
     });
     await choosePrintedItems(el, [4, 5]);
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "card");
     await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
@@ -759,7 +765,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
 
     expect(api.payForItems).toHaveBeenCalledWith("wo-4", expect.anything(), expect.anything());
     expect(formError(el)).toBe(t("bill_pay.card_declined"));
-    expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
+    expect(paymentStart(el)).not.toBeNull();
     expect(tableOrder(el).orderId).toBe("wo-5");
     expect(text(tableOrder(el).shadowRoot!.querySelector("[data-bill-gone]"))).toBe(
       creditedNotice("Bill 2"),
@@ -808,7 +814,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       }),
     });
     await choosePrintedItems(el, [4, 5]);
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "card");
     await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
@@ -857,7 +863,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       }),
     });
     await choosePrintedItems(el, chosen);
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "card");
     await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
@@ -950,7 +956,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     await choosePrintedItems(el, [4, 5]);
     expect(dialog(el)!.deferredOffered).toEqual({ state: "offered" });
     const balanceReads = vi.mocked(api.getBillBalance).mock.calls.length;
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "card");
     await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
@@ -1043,7 +1049,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       }),
     });
     await choosePrintedItems(el, [4, 5]);
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "card");
     await press(el, "[data-pay-continue]");
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     await press(el, "[data-pay-confirm]");
@@ -1114,7 +1120,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       ),
     });
     await choosePrintedItems(el, [4, 5]);
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "card");
     await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
@@ -1211,7 +1217,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     await chooseItems(el, [4, 5]);
     const lineReads = vi.mocked(api.getTabLines).mock.calls.length;
     const balanceReads = vi.mocked(api.getBillBalance).mock.calls.length;
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "card");
     await press(el, `input[name="reader"][value="${readers[1]!.id}"]`);
     await press(el, "[data-pay-continue]");
     await press(el, "[data-pay-confirm]");
@@ -1276,7 +1282,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     await flush(el);
     await press(el, 'input[name="line"][value="4"]');
     await press(el, 'input[name="line"][value="5"]');
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "card");
     await press(el, "[data-pay-continue]");
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     await press(el, "[data-pay-confirm]");
@@ -1346,7 +1352,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     await flush(el);
     await press(el, 'input[name="line"][value="4"]');
     await press(el, 'input[name="line"][value="5"]');
-    await press(el, 'input[name="method"][value="card"]');
+    await choosePayMethod(el, "card");
     await press(el, "[data-pay-continue]");
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     await press(el, "[data-pay-confirm]");
@@ -1497,7 +1503,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     async function chooseFirst(el: TillApp): Promise<string> {
       emit(counter(el), "counter-bill-pay", {});
       await flush(el);
-      await press(el, 'input[name="way"][value="items"]');
+      await choosePayWay(el, "items");
       const first = dialog(el)!.lines[0]!;
       await press(el, `input[name="line"][value="${first.lineNo}"]`);
       await type(el, "tendered", "50");
@@ -2207,7 +2213,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
 
         emit(counter(el), "counter-bill-pay", {});
         await flush(el);
-        await press(el, 'input[name="way"][value="contribution"]');
+        await choosePayWay(el, "contribution");
         await type(el, "amount", "30");
         await type(el, "tendered", "30");
         await press(el, "[data-pay-continue]");
@@ -2275,7 +2281,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
 
         emit(counter(el), "counter-bill-pay", {});
         await flush(el);
-        await press(el, 'input[name="way"][value="contribution"]');
+        await choosePayWay(el, "contribution");
         await type(el, "amount", "30");
         await type(el, "tendered", "30");
         await press(el, "[data-pay-continue]");
@@ -2306,7 +2312,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
 
         emit(counter(el), "counter-bill-pay", {});
         await flush(el);
-        await press(el, 'input[name="way"][value="contribution"]');
+        await choosePayWay(el, "contribution");
         await type(el, "amount", "30");
         await type(el, "tendered", "30");
         await press(el, "[data-pay-continue]");

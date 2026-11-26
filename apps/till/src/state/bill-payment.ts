@@ -41,10 +41,10 @@ export type PayChoice =
   | { kind: "share"; shareOf: number };
 
 export const BILL_PAY_WAYS = [
-  { way: "whole", label: "bill_pay.way_whole" },
+  { way: "contribution", label: "bill_pay.way_contribution" },
   { way: "share", label: "bill_pay.way_share" },
   { way: "items", label: "bill_pay.way_items" },
-  { way: "contribution", label: "bill_pay.way_contribution" },
+  { way: "whole", label: "bill_pay.way_whole" },
 ] as const satisfies readonly { way: PayChoice["kind"]; label: StringKey }[];
 
 /** A payment's state, as its row names it. */
