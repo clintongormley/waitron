@@ -1,6 +1,13 @@
 import { readDiscountNotices, type EndedDiscount } from "@waitron/adjustments";
 import { workingOrderLines, type Transaction } from "@waitron/db";
-import { AppError, addDecimal, decimal, type DiscountNotice } from "@waitron/shared";
+import {
+  AppError,
+  addDecimal,
+  compareDecimal,
+  decimal,
+  type Decimal,
+  type DiscountNotice,
+} from "@waitron/shared";
 import { inIds } from "./in-ids.js";
 import "./errors.js";
 
@@ -70,21 +77,40 @@ export function discountNoticesOf(
   return found === undefined ? {} : { discountNotices: found };
 }
 
+const ZERO = decimal("0.00");
+
+const refused = () => new AppError("management.request_invalid", { field: "reapplies" });
+
 /** Refuses `reapplies` unless it names a notice open on `orderId` and, when the notice names a
- * line, the ask gives it on, or on a row holding, a line one of its shown endings names. */
+ * line, the ask gives it on, or on a row holding, a line one of its shown endings names. Answers
+ * those lines, for {@link requireNoticedLineTaken}; null when nothing needs checking. */
 export async function requireOpenNotice(
   tx: Transaction,
   ask: { orderId: string; reapplies?: string; lineId: string | null; lineIds?: string[] },
-): Promise<void> {
-  if (ask.reapplies === undefined) return;
+): Promise<ReadonlySet<string> | null> {
+  if (ask.reapplies === undefined) return null;
   const shown = (await shownEndings(tx, [ask.orderId])).filter(
     ({ adjustmentId }) => adjustmentId === ask.reapplies,
   );
-  const asked = new Set([ask.lineId, ...(ask.lineIds ?? [])]);
-  if (
-    shown.length === 0 ||
-    (shown[0]!.lineId !== null && !shown.some(({ lineId }) => lineId !== null && asked.has(lineId)))
-  ) {
-    throw new AppError("management.request_invalid", { field: "reapplies" });
+  if (shown.length === 0) throw refused();
+  if (shown[0]!.lineId === null) return null;
+  const noticed = new Set(shown.flatMap(({ lineId }) => (lineId === null ? [] : [lineId])));
+  if (![ask.lineId, ...(ask.lineIds ?? [])].some((id) => id !== null && noticed.has(id))) {
+    throw refused();
   }
+  return noticed;
+}
+
+/** Refuses a reapplication whose priced rows take nothing off a `noticed` dish or its extras:
+ * part of a till row is taken from its last portions, which need not be the one the notice names. */
+export function requireNoticedLineTaken(
+  noticed: ReadonlySet<string> | null,
+  writes: readonly { row: { id: string; parentLineId: string | null }; reduction: Decimal }[],
+): void {
+  if (noticed === null) return;
+  const taken = writes.some(
+    ({ row, reduction }) =>
+      noticed.has(row.parentLineId ?? row.id) && compareDecimal(reduction, ZERO) !== 0,
+  );
+  if (!taken) throw refused();
 }

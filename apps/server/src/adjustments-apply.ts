@@ -93,7 +93,7 @@ import {
   type Replaced,
 } from "./set-menu-adjustment.js";
 import { discountsCancelledBy, endDiscountsCancelledBy } from "./set-menu-discount-ending.js";
-import { requireOpenNotice } from "./discount-notices.js";
+import { requireNoticedLineTaken, requireOpenNotice } from "./discount-notices.js";
 import { atReleasedPrices, regroupAdjusted, releaseDishes } from "./set-menu-dish-release.js";
 import {
   assertTabOpen,
@@ -927,12 +927,13 @@ export async function previewAdjustment(
   ask: AdjustmentAsk,
   venueLocale: string,
 ): Promise<AdjustmentPreview> {
-  await requireOpenNotice(tx, ask);
+  const noticed = await requireOpenNotice(tx, ask);
   const replacing = await setMenuReplacement(tx, ask);
   const ending =
     replacing?.ending ??
     (await discountsCancelledBy(tx, ask, () => planAdjustment(tx, ask, venueLocale)));
   const plan = await planAdjustment(tx, ask, venueLocale, ending);
+  requireNoticedLineTaken(noticed, plan.writes);
   const regrouped =
     ask.action === "cancel"
       ? await regroupDropOfRemoval(
@@ -1128,11 +1129,12 @@ export async function applyAdjustment(
     "adjustment.apply",
     { ...command, expectedEdit, approverId: approver?.personId },
     async () => {
-      await requireOpenNotice(tx, args);
+      const noticed = await requireOpenNotice(tx, args);
       const before = args.action === "cancel" ? null : await totalBeforeEdit(tx, cfg, args.orderId);
       await endReplacedOnSetMenu(tx, args);
       await endDiscountsCancelledBy(tx, args, () => planAdjustment(tx, args, venueLocale));
       const plan = await planAdjustment(tx, args, venueLocale);
+      requireNoticedLineTaken(noticed, plan.writes);
       const approved = await approvedBy(tx, plan.approval, approver);
       const activity =
         attendance === undefined

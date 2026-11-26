@@ -508,8 +508,11 @@ it("refuses to give a Soup's 50% again on the Wine, keeping the Soup's notice", 
   ]);
 });
 
-it("gives a 50% again over both Soups of a row when the line its notice names is among them", async () => {
-  const { bill, given, first, second } = await halfOffTwoSoups();
+/** {@link halfOffTwoSoups}, then one edit gives both Bread, so one ending takes both Soups'
+ * shares off and its notice names the first. */
+async function breadOnBothSoups() {
+  const soups = await halfOffTwoSoups();
+  const { bill, first, second } = soups;
   await inTx(venue, async (tx) =>
     updateOrderLine(
       tx,
@@ -526,8 +529,13 @@ it("gives a 50% again over both Soups of a row when the line its notice names is
     ),
   );
   expect(await noticesOn(bill)).toEqual([
-    expect.objectContaining({ adjustmentId: given, reapplyOn: { lineId: first.id } }),
+    expect.objectContaining({ adjustmentId: soups.given, reapplyOn: { lineId: first.id } }),
   ]);
+  return soups;
+}
+
+it("gives a 50% again over both Soups of a row when the line its notice names is among them", async () => {
+  const { bill, given, first, second } = await breadOnBothSoups();
   const ask = {
     ...(await askOf(bill.tabId, second.id, 5000, given)),
     lineIds: [second.id, first.id],
@@ -546,6 +554,41 @@ it("gives a 50% again over both Soups of a row when the line its notice names is
   );
 
   expect(await noticesOn(bill)).toBeUndefined();
+});
+
+it("refuses to give a 50% again on one Soup of a row when it would go on the Soup its notice does not name, keeping the notice", async () => {
+  const { bill, given, first, second } = await breadOnBothSoups();
+  const ask = {
+    ...(await askOf(bill.tabId, second.id, 5000, given)),
+    lineIds: [second.id, first.id],
+    quantity: "1",
+  };
+
+  await expect(
+    inTx(venue, (tx) => previewAdjustment(tx, venue.cfg, ask, venue.cfg.locale)),
+  ).rejects.toMatchObject(REFUSED);
+  await expect(
+    inTx(venue, (tx) =>
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        { ...ask, admission: testTradingAdmission(), submissionId: randomUUID() },
+        venue.cfg.locale,
+      ),
+    ),
+  ).rejects.toMatchObject(REFUSED);
+
+  const soups = (await specRows(spec, bill.tabId)).filter(
+    (row) => specDishOf(spec, row) === "Soup",
+  );
+  expect(soups.map(({ lineTotal }) => lineTotal)).toEqual([600, 600]);
+  expect(await noticesOn(bill)).toEqual([
+    expect.objectContaining({
+      adjustmentId: given,
+      amount: "6.00",
+      reapplyOn: { lineId: first.id },
+    }),
+  ]);
 });
 
 it("gives a 50% over two Soups again on the second Soup once two edits each took a Soup's share off", async () => {
