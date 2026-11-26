@@ -55,14 +55,11 @@ export function payNotice(notice: PayNotice | null): TemplateResult | typeof not
       >`;
 }
 
-/** A pay sheet's charge button on a reader: `bill_pay.take_on_reader`, or after a decline
- * `bill_pay.retry_on_reader`, naming the reader it would charge now. */
-export function readerButtonLabel(reader: string, amount: string, declined: boolean): string {
-  return declined
-    ? t("bill_pay.retry_on_reader").replace("{reader}", () => reader)
-    : t("bill_pay.take_on_reader")
-        .replace("{amount}", () => amount)
-        .replace("{reader}", () => reader);
+export function readerButtonLabel(amount: string, declined: boolean): string {
+  return t(declined ? "bill_pay.retry_reader_charge" : "bill_pay.charge_on_reader").replace(
+    "{amount}",
+    () => amount,
+  );
 }
 
 export const payNoticeStyles = css`

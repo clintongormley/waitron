@@ -122,6 +122,18 @@ describe("till-presented-pay-dialog: what it shows", () => {
     },
   );
 
+  it("puts the smaller Other card machine choice below Card and Cash", async () => {
+    const el = await mount();
+    const label = (value: string) =>
+      root(el).querySelector(`input[value="${value}"]`)!.closest("label")!;
+    const card = label("card").getBoundingClientRect();
+    const cash = label("cash").getBoundingClientRect();
+    const other = label("manual").getBoundingClientRect();
+    expect(card.top).toBe(cash.top);
+    expect(other.top).toBeGreaterThanOrEqual(card.bottom);
+    expect(other.width).toBeLessThan(card.width);
+  });
+
   it("with no method offered, says so and Take payment stays disabled", async () => {
     const el = await mount({ takesReaderCard: false, takesCash: false, takesManualCard: false });
     const paid = capture(el, "presented-pay");
@@ -142,7 +154,7 @@ describe("till-presented-pay-dialog: what it shows", () => {
 });
 
 describe("till-presented-pay-dialog: by card on the reader", () => {
-  it("names Lector 2 and Barra in the closed row, and Take payment charges the reader it names", async () => {
+  it("names Lector 2 and Barra in the closed row and shows only the amount on Charge", async () => {
     const el = await mount();
     const paid = capture<PresentedPayDetail>(el, "presented-pay");
 
@@ -151,18 +163,18 @@ describe("till-presented-pay-dialog: by card on the reader", () => {
     expect(text(row(el)!.shadowRoot!.querySelector("[data-pay-equipment-summary]"))).toBe(
       "Lector 2 · ticket en Barra",
     );
-    expect(text(charge(el))).toBe(`Cobrar ${money("62.40")} en Lector 2`);
+    expect(text(charge(el))).toBe(`Cobrar ${money("62.40")}`);
     await take(el);
     expect(paid).toEqual([{ method: "card", readerId: "r2" }]);
   });
 
-  it("charges the reader picked since, and its name follows", async () => {
+  it("charges the reader picked since with the same amount on Charge", async () => {
     const el = await mount();
     const paid = capture<PresentedPayDetail>(el, "presented-pay");
     el.equipment = equipmentWith(THIRD_READER);
     await el.updateComplete;
 
-    expect(text(charge(el))).toBe(`Cobrar ${money("62.40")} en Lector 3`);
+    expect(text(charge(el))).toBe(`Cobrar ${money("62.40")}`);
     await take(el);
     expect(paid).toEqual([{ method: "card", readerId: "r3" }]);
   });
@@ -249,7 +261,7 @@ describe("till-presented-pay-dialog: by card on the reader", () => {
     const paid = capture<PresentedPayDetail>(el, "presented-pay");
 
     expect(charge(el).disabled).toBe(false);
-    expect(text(charge(el))).toBe(`Cobrar ${money("62.40")} en Instant simulator`);
+    expect(text(charge(el))).toBe(`Cobrar ${money("62.40")}`);
     await take(el);
     expect(paid).toStrictEqual([{ method: "card" }]);
   });
@@ -901,7 +913,7 @@ describe("till-presented-pay-dialog: the card at the table (A796)", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("after a decline, retries on the phone's reader now, as Try again on Lector 3", async () => {
+  it("shows Reintentar with the amount after a decline and retries on the phone's current reader", async () => {
     const { el, paid } = await sent();
     el.equipment = equipmentWith(THIRD_READER);
     el.busy = false;
@@ -909,9 +921,7 @@ describe("till-presented-pay-dialog: the card at the table (A796)", () => {
     await el.updateComplete;
 
     expect(actions(el).error).toBe(t("bill_pay.card_declined"));
-    expect(text(charge(el))).toBe(
-      t("bill_pay.retry_on_reader").replace("{reader}", () => "Lector 3"),
-    );
+    expect(text(charge(el))).toBe(`Reintentar · Cobrar ${money("62.40")}`);
     await take(el);
     expect(paid).toEqual([
       { method: "card", readerId: "r2" },

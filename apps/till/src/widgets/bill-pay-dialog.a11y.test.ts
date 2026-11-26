@@ -145,7 +145,7 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
 
   for (const locale of ["en", "es"]) {
     for (const width of [390, 1280]) {
-      it(`keeps Whole bill at the right of the shared choices in ${locale} at ${width}px`, async () => {
+      it(`stacks the shared Pay choices with Whole bill first in ${locale} at ${width}px`, async () => {
         setLocale(locale);
         await page.viewport(width, 900);
         try {
@@ -159,11 +159,13 @@ describe.each(["light", "dark"] as const)("till-bill-pay-dialog a11y (%s theme)"
           ];
           expect(choices).toHaveLength(4);
           const boxes = choices.map((choice) => choice.getBoundingClientRect());
-          expect(boxes.map((box) => Math.round(box.top))).toEqual(
-            Array(4).fill(Math.round(boxes[0]!.top)),
-          );
-          expect(boxes[3]!.left).toBeGreaterThan(boxes[2]!.left);
-          expect(boxes[3]!.right).toBeLessThanOrEqual(width);
+          expect(choices[0]!.querySelector("input")!.value).toBe("whole");
+          const column = choices[0]!.parentElement!.getBoundingClientRect();
+          expect(boxes.map((box) => box.width)).toEqual(boxes.map(() => column.width));
+          expect(column.right).toBeLessThanOrEqual(width);
+          for (const [index, box] of boxes.slice(1).entries()) {
+            expect(box.top).toBeGreaterThanOrEqual(boxes[index]!.bottom);
+          }
           for (const choice of choices) {
             const text = [...choice.querySelector("span")!.childNodes].find(
               (node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== "",

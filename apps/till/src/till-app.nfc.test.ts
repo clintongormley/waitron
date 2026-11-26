@@ -1010,9 +1010,7 @@ describe("the pay sheet's NFC button", () => {
     });
     await flush(el);
     expect(waiting()).toBeNull();
-    expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(
-      t("bill_pay.retry_on_reader").replace("{reader}", () => "Lector 3"),
-    );
+    expect(text(inDialog(el, "[data-pay-confirm]"))).toBe(`Try again · Charge ${money("120.00")}`);
     await press(el, "[data-pay-confirm]");
     const sent = takeBillPayment.mock.calls.map(([, request]) => request as BillPaymentRequest);
     expect(sent).toHaveLength(2);

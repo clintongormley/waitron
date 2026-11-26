@@ -1002,12 +1002,12 @@ manager can recover the payment after the fault is fixed.
 ## Take a whole or part payment {#pay-window}
 
 To collect a bill, open **Pay** at the Counter or on the table's bill. On a table, send or remove
-any unsent items first. The top of the window shows **Total**, **Paid so far**, **Card payment in progress**
-and **Still to pay**. Start with what is still to pay, rather than the bill's original total.
+any unsent items first. **Still to pay** is the large amount at the top. Below it you can check
+**Total**, **Paid so far** and **Card payment in progress**.
 
 **Choose what this guest pays.** Choose **Whole bill** to pay everything still due.
-Choose **An amount** for a contribution, **Split equally** for one equal share, or **Items** for
-particular dishes. For an equal share, enter how many people are still to pay, including this
+Choose **Split equally** for one equal share, **Items** for particular dishes, or **An amount** for
+a contribution. For an equal share, enter how many people are still to pay, including this
 guest. For items, choose the dishes and adjust the quantity when only some are being paid for.
 The chosen dishes move to a bill of their own, paid at once, with its own receipt; the rest stays
 on this bill. Choosing every dish pays the whole bill. If the card is declined or you choose
@@ -1049,14 +1049,15 @@ from the card readers when a list is offered. Check the reader and the total bef
 To use a separate machine, follow [Use another card machine](table-service.md#outside-card).
 
 If the venue takes tips, enter **Tip on the card (optional)** before continuing. The confirmation
-separates **Paid off the bill**, **Tip** and **Charged on the card**. An amount above what is
+shows **Charged on the card** first, with the bill amount and any tip below. An amount above what is
 still due becomes a tip, so check the full card charge with the guest before sending it.
 For example, a €50 card contribution towards €40 still due pays €40 off the bill and adds a €10
-tip. If the venue does not take tips, use the amount the refusal says can be charged.
+tip. For a reader payment, choose **Remove tip** if the guest changes their mind, then check the
+revised charge. If the venue does not take tips, use the amount the refusal says can be charged.
 
-On a phone, the confirmation button names the amount and reader. Once you press it, the waiting
-panel shows that same amount and reader, with elapsed waiting time. Complete the card step on
-that reader and wait for the result. A spinning phone is not proof that the card failed.
+Press **Charge €50.00**, or the amount shown for this payment. On a phone, the waiting panel shows
+the reader, amount and elapsed time. Complete the card step on that reader and wait for the result.
+Wait for a decline before using **Try again · Charge €50.00**.
 
 If the guest changes their mind while the SumUp reader waits for their card, choose
 **Cancel payment** in this window, at Counter or in Pay for a presented table bill. Wait for

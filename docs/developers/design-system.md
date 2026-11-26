@@ -7085,15 +7085,18 @@ printer. An earlier payer uses the Pay confirmation and the last payer uses Cust
 Readers configured to print their own slips handle their own card payments. The till disables the
 action while sending. The server queues one original for the payment. Use Print Queue for copies.
 
-Table bills open one Pay window from the foot. Its amount choices are An amount, Split equally,
-Items and Whole bill, in that order; Whole bill starts selected at the right. Keep all four choices
-in one row at phone width, allowing their labels to wrap within equal columns. The amount choices
-carry one help-mode badge linked to the payment guide. Existing cash, card, equipment, recovery and
-unsaved-input handling stays in the payment window. A printed bill opens these payment choices
-directly. For a presented bill that still has a balance and no issued invoice, **Pay in parts**
+Table bills open Pay from the foot. The window leads with the amount still to pay. Whole bill,
+Split equally, Items and An amount are stacked full-width choices with a short hint each. Whole
+bill is selected when Pay opens. The choices carry one help-mode badge linked to the payment guide. Card and Cash have
+large tap targets. Other card machine uses smaller, underlined text. A printed bill opens these
+payment choices directly. For a presented bill that still has a balance and no issued invoice, **Pay in parts**
 opens the same choices. Retained whole-payment confirmations and zero-total completion keep their
 existing paths.
 Counter bills use the same window for their first and remaining payments.
+
+The card confirmation puts the charge above the breakdown of what pays off the bill and the tip.
+Remove tip asks the server for a new reader charge. Charge and Try again show the amount. The
+equipment controls and the reader's waiting view show the reader's name.
 
 Whole bill asks the server for one share of the current balance. Its confirmation heading and
 receipt guest-count prompt use that preview, even while the opening balance is still shown.

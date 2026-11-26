@@ -1059,13 +1059,12 @@ para que el responsable pueda recuperar el pago una vez reparado el fallo.
 ## Cobra toda la cuenta o una parte {#pay-window}
 
 Para cobrar una cuenta, abre **Cobrar** en Mostrador o en la cuenta de la mesa. En una mesa, envía o quita
-primero los artículos sin enviar. Arriba se muestran **Total**, **Pagado hasta ahora**,
-**Pago con tarjeta en curso** y **Queda por pagar**. Parte de lo que queda por pagar, no del
-total original de la cuenta.
+primero los artículos sin enviar. **Queda por pagar** aparece en grande arriba. Debajo puedes
+consultar **Total**, **Pagado hasta ahora** y **Pago con tarjeta en curso**.
 
 **Elige qué paga este comensal.** Elige **Toda la cuenta** para cobrar todo lo que
-queda. Elige **Una cantidad** para aportar un importe, **Dividir a partes iguales** para cobrar
-una parte igual o **Artículos** para platos concretos. Para una parte igual, indica cuántas
+queda. Elige **Dividir a partes iguales** para cobrar una parte igual, **Artículos** para platos
+concretos o **Una cantidad** para aportar un importe. Para una parte igual, indica cuántas
 personas quedan por pagar, incluida esta. Para artículos, elige los platos y ajusta la cantidad
 si solo se pagan algunos. Los platos elegidos pasan a una cuenta propia, que se cobra en el acto y
 tiene su propio ticket; el resto se queda en esta cuenta. Si eliges todos los platos, se cobra
@@ -1109,16 +1108,17 @@ Mostrador, elige el lector cuando se ofrezca una lista. Comprueba el lector y el
 confirmar. Para usar otra máquina, sigue [Usar otro datáfono](table-service.md#outside-card).
 
 Si el local acepta propinas, introduce **Propina con tarjeta (opcional)** antes de continuar.
-La confirmación separa **Se descuenta de la cuenta**, **Propina** y **Se cobra en la tarjeta**.
+La confirmación muestra primero **Se cobra en la tarjeta**, con el importe de la cuenta y la
+propina debajo.
 Una cantidad superior a lo que queda se convierte en propina: confirma con el cliente el cargo
 completo antes de enviarlo. Por ejemplo, aportar 50 € con tarjeta cuando quedan 40 € descuenta
-40 € de la cuenta y añade 10 € de propina. Si el local no acepta propinas, usa el importe que el
-mensaje indica que se puede cobrar.
+40 € de la cuenta y añade 10 € de propina. Si cobras con el lector y el cliente cambia de idea,
+pulsa **Quitar propina** y comprueba el nuevo importe. Si el local no acepta propinas, usa el
+importe que el mensaje indica que se puede cobrar.
 
-En un teléfono, el botón de confirmación nombra el importe y el lector. Al pulsarlo, el panel de
-espera muestra ese mismo importe y lector, con el tiempo transcurrido. Completa el paso de la
-tarjeta en ese lector y espera el resultado. Que el teléfono siga esperando no demuestra que el
-cobro haya fallado.
+Pulsa **Cobrar 50,00 €** o el importe que se muestre para este pago. En un teléfono, el panel de
+espera muestra el lector, el importe y el tiempo transcurrido. Completa el pago en ese lector y
+espera el resultado. Usa **Reintentar · Cobrar 50,00 €** cuando se rechace la tarjeta.
 
 Si el cliente cambia de idea mientras el lector SumUp espera la tarjeta, pulsa **Cancelar cobro**
 en esta ventana, en Mostrador o al cobrar una cuenta presentada. Espera a que el terminal confirme

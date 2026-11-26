@@ -7,6 +7,7 @@ import {
 } from "./outside-card.js";
 import type { OutsideCardDetails } from "../api/payments-api.js";
 import { choiceRowStyles } from "./choice-styles.js";
+import { quietPayStyles } from "./quiet-pay.js";
 import { helpAnchorStyles, helpBadge } from "./help-badge.js";
 import { recoveryLink } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
@@ -220,6 +221,7 @@ export class TillBillPayDialog extends LitElement {
   static override styles = [
     baseStyles,
     choiceRowStyles,
+    quietPayStyles,
     outsideCardStyles,
     helpAnchorStyles,
     guestsStepperStyles,
@@ -249,6 +251,10 @@ export class TillBillPayDialog extends LitElement {
         display: flex;
         flex-direction: column;
         min-width: 0;
+      }
+
+      .balance .quiet-pay-amount {
+        grid-column: 1 / -1;
       }
 
       .balance dt {
@@ -291,20 +297,6 @@ export class TillBillPayDialog extends LitElement {
       .taken {
         font-weight: var(--wt-font-weight-bold);
         overflow-wrap: anywhere;
-      }
-
-      [data-pay-way] .options {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-        gap: var(--wt-space-2);
-      }
-
-      [data-pay-way] .option {
-        min-width: 0;
-        flex-direction: column;
-        gap: var(--wt-space-1);
-        text-align: center;
-        overflow-wrap: normal;
       }
 
       .lines {
@@ -370,6 +362,13 @@ export class TillBillPayDialog extends LitElement {
 
       .allocation .headline {
         font-size: var(--wt-font-size-lg);
+      }
+
+      [data-pay-tip] dt {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--wt-space-2);
       }
 
       .payments {
@@ -1249,8 +1248,13 @@ export class TillBillPayDialog extends LitElement {
 
   #body(): SheetView {
     const step = this.nextOffered ? this.#nextActions() : this.#step();
+    const chargeFirst =
+      !this.nextOffered &&
+      !this.confirmationLocked &&
+      this.preview !== null &&
+      this.asked?.pay.method === "card";
     const warning = this.balance?.captureWarning;
-    const body = html`${this.#balance()}
+    const body = html`${chargeFirst ? step.body : nothing} ${this.#balance()}
     ${
       warning === undefined
         ? nothing
@@ -1268,7 +1272,7 @@ export class TillBillPayDialog extends LitElement {
             ${this.#refundedText(this.refunded)}
           </p>`
     }
-    ${this.#payments()} ${step.body}`;
+    ${this.#payments()} ${chargeFirst ? nothing : step.body}`;
     return { body, actions: step.actions };
   }
 
@@ -1534,6 +1538,17 @@ export class TillBillPayDialog extends LitElement {
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
     const over = overpaidOf(balance);
     return html`<dl class="balance" data-pay-balance aria-label=${t("bill_pay.balance")}>
+      ${
+        over === null
+          ? html`<div class="quiet-pay-amount" data-pay-outstanding>
+              <dt>${t("bill_pay.outstanding")}</dt>
+              ${amount(balance.outstanding)}
+            </div>`
+          : html`<div class="quiet-pay-amount" data-pay-overpaid>
+              <dt>${t("bill_pay.overpaid")}</dt>
+              ${amount(over)}
+            </div>`
+      }
       <div data-pay-total>
         <dt>${t("bill_pay.total")}</dt>
         ${amount(balance.total)}
@@ -1546,17 +1561,6 @@ export class TillBillPayDialog extends LitElement {
         <dt>${t("bill_pay.reserved")}</dt>
         ${amount(balance.reserved)}
       </div>
-      ${
-        over === null
-          ? html`<div data-pay-outstanding>
-              <dt>${t("bill_pay.outstanding")}</dt>
-              ${amount(balance.outstanding)}
-            </div>`
-          : html`<div data-pay-overpaid>
-              <dt>${t("bill_pay.overpaid")}</dt>
-              ${amount(over)}
-            </div>`
-      }
     </dl>`;
   }
 
@@ -1641,6 +1645,7 @@ export class TillBillPayDialog extends LitElement {
     pick: () => void,
     disabled = false,
     describedBy?: string,
+    hint?: string,
   ): TemplateResult {
     return html`<label class="option">
       <input
@@ -1657,7 +1662,9 @@ export class TillBillPayDialog extends LitElement {
           this.#changedDraft();
         }}
       />
-      <span>${label}</span>
+      <span>
+        ${label} ${hint === undefined ? nothing : html`<small class="pay-way-hint">${hint}</small>`}
+      </span>
     </label>`;
   }
 
@@ -1714,6 +1721,7 @@ export class TillBillPayDialog extends LitElement {
               (way === "whole" && this.balance === null) ||
                 (way === "items" && this.itemsBarred !== null),
               way === "items" && this.itemsBarred !== null ? "items-reason" : undefined,
+              t(`${label}_hint`),
             ),
           )}
         </div>
@@ -2213,6 +2221,26 @@ export class TillBillPayDialog extends LitElement {
     });
   }
 
+  #removeReaderTip(asked: PayRequest, preview: AllocationPreview): void {
+    if (!this.isConnected || !this.#active || this.busy || this.confirmationLocked) return;
+    let choice = asked.choice;
+    if (
+      choice.kind === "contribution" &&
+      compareDecimal(decimal(choice.amount), decimal(preview.applied)) > 0
+    ) {
+      choice = { kind: "contribution", amount: preview.applied };
+      this.typedAmountValue = preview.applied;
+    }
+    this.cardTip = "";
+    this.#changedDraft();
+    this.#feedback.dismiss("refusal");
+    this.#emit("bill-pay-preview", {
+      ...asked,
+      choice,
+      pay: { method: "card" },
+    } satisfies PayRequest);
+  }
+
   #confirmStep(asked: PayRequest, preview: AllocationPreview): SheetView {
     // A cash preview always carries its change, and a card's its charge.
     const cash: Cash | null =
@@ -2231,10 +2259,11 @@ export class TillBillPayDialog extends LitElement {
     const errors = this.#fieldErrors(stepErrors);
     const bottom = this.#bottomMessage(errors);
     const onReader = asked.card?.entry === "reader";
-    const reader = this.handheld && onReader ? this.#readyReader() : null;
+    const canCharge = onReader && (!this.handheld || this.#readyReader() !== null);
+    const hasTip = compareDecimal(decimal(preview.tip), decimal("0")) > 0;
     const amount = (value: string) => html`<dd>${this.#money(value)}</dd>`;
-    const body = html`${outsideCardSummary(asked.card?.entry === "manual" ? asked.card : {})}
-      <p class="scope" data-pay-scope>${this.#scope()}</p>
+    const scope = html`<p class="scope" data-pay-scope>${this.#scope()}</p>`;
+    const body = html`${cash === null ? nothing : scope}
       ${
         this.#ownBill()
           ? html`<p class="own-bill" data-pay-own-bill>
@@ -2247,7 +2276,15 @@ export class TillBillPayDialog extends LitElement {
           : nothing
       }
       <dl class="allocation">
-        <div class=${cash === null ? "headline" : ""} data-pay-applied>
+        ${
+          cash === null
+            ? html`<div class="quiet-pay-amount" data-pay-charged>
+                <dt>${t("bill_pay.charged")}</dt>
+                ${amount(preview.charged!)}
+              </div>`
+            : nothing
+        }
+        <div data-pay-applied>
           <dt>${t("bill_pay.applied")}</dt>
           ${amount(preview.applied)}
         </div>
@@ -2264,22 +2301,30 @@ export class TillBillPayDialog extends LitElement {
                 </div>`
         }
         ${
-          this.tipsEnabled
+          this.tipsEnabled && (cash !== null || hasTip)
             ? html`<div data-pay-tip>
-                <dt>${t("bill_pay.tip")}</dt>
+                <dt>
+                  ${t("bill_pay.tip")}
+                  ${
+                    onReader && !this.confirmationLocked
+                      ? html`<wt-button
+                          variant="ghost"
+                          size="sm"
+                          data-pay-remove-tip
+                          .disabled=${this.busy}
+                          @click=${() => this.#removeReaderTip(asked, preview)}
+                          >${t("bill_pay.remove_tip")}</wt-button
+                        >`
+                      : nothing
+                  }
+                </dt>
                 ${amount(preview.tip)}
               </div>`
             : nothing
         }
-        ${
-          cash === null
-            ? html`<div class="headline" data-pay-charged>
-                <dt>${t("bill_pay.charged")}</dt>
-                ${amount(preview.charged!)}
-              </div>`
-            : nothing
-        }
       </dl>
+      ${cash === null ? scope : nothing}
+      ${outsideCardSummary(asked.card?.entry === "manual" ? asked.card : {})}
       ${this.#equipmentRow(onReader)}
       ${
         this.tipsEnabled &&
@@ -2312,10 +2357,9 @@ export class TillBillPayDialog extends LitElement {
         ${
           this.confirmationLocked
             ? t("bill_pay.recheck")
-            : reader === null
+            : !canCharge
               ? t("bill_pay.take")
               : readerButtonLabel(
-                  reader.name,
                   this.#money(preview.charged!),
                   this.#shownRefusal?.code === "declined",
                 )

@@ -278,14 +278,14 @@ it("a sent Counter order whose own mode takes payment first shows Items barred i
 
   const ways = [...dialog(el)!.shadowRoot!.querySelectorAll<HTMLInputElement>('[name="way"]')];
   expect(ways.map((input) => [input.value, input.disabled])).toEqual([
-    ["contribution", false],
+    ["whole", false],
     ["share", false],
     ["items", true],
-    ["whole", false],
+    ["contribution", false],
   ]);
   ways[2]!.click();
   await flush(el);
-  expect(ways.map((input) => input.checked)).toEqual([false, false, false, true]);
+  expect(ways.map((input) => input.checked)).toEqual([true, false, false, false]);
   expect(dialog(el)!.shadowRoot!.querySelector("[data-pay-lines]")).toBeNull();
   expect(
     dialog(el)!.shadowRoot!.querySelector("[data-pay-items-reason]")?.textContent?.trim(),
@@ -300,10 +300,10 @@ function expectReasonDescribesItems(el: TillApp): void {
   const root = dialog(el)!.shadowRoot!;
   const ways = [...root.querySelectorAll<HTMLInputElement>('[name="way"]')];
   expect(ways.map((input) => [input.value, input.getAttribute("aria-describedby")])).toEqual([
-    ["contribution", null],
+    ["whole", null],
     ["share", null],
     ["items", "items-reason"],
-    ["whole", null],
+    ["contribution", null],
   ]);
   expect(root.getElementById("items-reason")).toBe(root.querySelector("[data-pay-items-reason]"));
 }
