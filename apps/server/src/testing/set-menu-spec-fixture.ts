@@ -36,7 +36,13 @@ import { readGroupingCopies, saveBillGrouping } from "../set-menu-regroup.js";
 import { readOrderRevision } from "../working-order-context.js";
 import { advanceTicketItem } from "../working-order-kitchen-service.js";
 import { markServed } from "../working-order-serving.js";
-import { cancelReasonId, GIVE_AWAY_REASON, observedCancelItem, reasonIdOf } from "./cancel-line.js";
+import {
+  cancelReasonId,
+  COMP_BILL_REASON,
+  GIVE_AWAY_REASON,
+  observedCancelItem,
+  reasonIdOf,
+} from "./cancel-line.js";
 import { expectedDraftEditForTest } from "./draft-command-fixture.js";
 import {
   commandFor,
@@ -569,6 +575,36 @@ export async function compSpecLine(spec: SpecVenue, billId: string, lineId: stri
         lineId,
         reasonId: await reasonIdOf(tx, GIVE_AWAY_REASON),
         action: "comp",
+        note: null,
+        operatorId: venue.operator.personId,
+      },
+      venue.cfg.locale,
+    ),
+  );
+}
+
+/** Discounts the bill's line, or the whole bill when `lineId` is null, by `percentBp`. */
+export async function discountSpecLine(
+  spec: SpecVenue,
+  billId: string,
+  lineId: string | null,
+  percentBp: number,
+) {
+  const { venue } = spec;
+  await inTx(venue, async (tx) =>
+    applyAdjustment(
+      tx,
+      venue.cfg,
+      {
+        admission: testTradingAdmission(),
+        orderId: billId,
+        expectedEdit: await readBillEditState(tx, billId),
+        submissionId: randomUUID(),
+        expectedRevision: await readOrderRevision(tx, billId),
+        lineId,
+        reasonId: await reasonIdOf(tx, COMP_BILL_REASON),
+        action: "discount_percent",
+        percentBp,
         note: null,
         operatorId: venue.operator.personId,
       },

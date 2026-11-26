@@ -1,4 +1,5 @@
 import { and, eq, inArray, or, sql } from "drizzle-orm";
+import { endingRestores, type Ending } from "@waitron/adjustments";
 import { withIssuanceTransaction } from "@waitron/core";
 import {
   billPayments,
@@ -53,6 +54,7 @@ import { grossLineTotal } from "./order-line-quantities.js";
 import { fingerprint } from "./parties.js";
 import { lastReopenedBill } from "./reopened-bills.js";
 import { sentCounterOrderWithoutReceipt, withSentOrderOpen } from "./sent-order-open.js";
+import { setMenuDiscountsLeftBy } from "./set-menu-discount-ending.js";
 import { refuseMovingFrozenDishes } from "./set-menu-moves.js";
 import { totalLeftBehind, totalOnOwnBill, type TakenRows } from "./set-menu-regroup.js";
 import { refuseReopen, reopenToSplitIn } from "./split-after-print.js";
@@ -87,7 +89,7 @@ async function readPicks(
   tx: Transaction,
   billId: string,
   picks: readonly ItemPick[],
-): Promise<{ picked: PickedLine[]; taken: TakenRows }> {
+): Promise<{ picked: PickedLine[]; taken: TakenRows; ending: Ending | undefined }> {
   const rows = await tx
     .select({
       id: workingOrderLines.id,
@@ -153,6 +155,21 @@ async function readPicks(
     return { id: row.id, lineNo: row.lineNo, part: quantity };
   });
   const ids = new Set(picked.map((line) => line.id));
+  // As the move works them out (`resolveMoveLines`, `moveOrderLines`), writing nothing (D50, D51).
+  const left = await setMenuDiscountsLeftBy(
+    tx,
+    billId,
+    picked.flatMap((line) => (line.part === undefined ? [line.id] : [])),
+  );
+  for (const { setMenuLineId } of left.whole) ids.add(setMenuLineId);
+  const adjustmentIds = left.broken.map(({ adjustmentId }) => adjustmentId);
+  const ending: Ending | undefined =
+    adjustmentIds.length === 0
+      ? undefined
+      : {
+          adjustmentIds,
+          restores: await endingRestores(tx, { workingOrderId: billId, adjustmentIds }),
+        };
   // Refused here as the move would refuse it, so a preview does not price a set-menu dish that
   // leaves only with its set menu.
   await refuseMovingFrozenDishes(
@@ -162,6 +179,7 @@ async function readPicks(
         ? [row.id]
         : [],
     ),
+    ending,
   );
   const taken = new Set<string>();
   for (const id of ids) {
@@ -172,8 +190,8 @@ async function readPicks(
     }
   }
   // A dish leaves whole when chosen whole or brought along by a set menu chosen whole; a part
-  // always leaves the rest behind. A set menu counts as leaving when its every dish does, a comped
-  // one included: the move would leave that behind and charge its dishes again.
+  // always leaves the rest behind. A set menu counts as leaving when its every dish does: the move
+  // takes one a comp or discount reduced along (D51), and the regrouping deletes any other.
   const whole = new Set(picked.filter((line) => line.part === undefined).map((line) => line.id));
   const everyDish = rows.every(
     (row) =>
@@ -185,7 +203,7 @@ async function readPicks(
   // D7, before the move: `moveDishes` would ask its merge-invoice question of a move that empties
   // the bill.
   if (everyDish) throw new AppError("bill.all_items_chosen", { workingOrderId: billId });
-  return { picked, taken: { ids: taken, resized } };
+  return { picked, taken: { ids: taken, resized }, ending };
 }
 
 function pickedThousandths(quantity: string): number | null {
@@ -202,12 +220,12 @@ export async function priceItemPicks(
   fromBillId: string,
   picks: readonly ItemPick[],
 ): Promise<Decimal> {
-  const { taken } = await readPicks(tx, fromBillId, picks);
+  const { taken, ending } = await readPicks(tx, fromBillId, picks);
   // Refused here as the move would refuse it, before a hand-keyed card is charged on its machine.
   await refuseBelowAdvances(tx, fromBillId, async () =>
-    centsToDecimal(await totalLeftBehind(tx, fromBillId, taken)),
+    centsToDecimal(await totalLeftBehind(tx, fromBillId, taken, ending)),
   );
-  return centsToDecimal(await totalOnOwnBill(tx, fromBillId, taken));
+  return centsToDecimal(await totalOnOwnBill(tx, fromBillId, taken, ending));
 }
 
 /**
@@ -254,6 +272,7 @@ export async function moveItemsToNewBill(
       return moveDishes(tx, cfg, fromBillId, null, lineIds, command, {
         sourceMayBeOverpaid: true,
         tellKitchen: false,
+        paidAlone: true,
       });
     },
     options.sentOrder,

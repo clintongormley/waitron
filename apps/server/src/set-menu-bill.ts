@@ -21,6 +21,7 @@ import {
   type ServedSetMenuCopy,
 } from "@waitron/shared";
 import { serveRecordedSetMenus } from "@waitron/venue-service";
+import { ownSetMenuDiscountIds } from "./set-menu-discount-ending.js";
 import { reducedLineIds } from "./set-menu-freeze.js";
 import "./errors.js";
 
@@ -353,10 +354,14 @@ async function placedSetMenuDishes(
     .select({ lineId: adjustments.lineId, chargeKept: adjustments.chargeKept })
     .from(adjustments)
     .where(and(inArray(adjustments.workingOrderId, billValues), eq(adjustments.action, "cancel")));
+  // A set menu's own comp or discount comes off when one of its dishes moves alone (D50).
   const fixed = new Set(
     await reducedLineIds(
       tx,
       placed.map(({ id }) => id),
+      await ownSetMenuDiscountIds(tx, [
+        ...new Set(placed.map(({ setMenuLineId }) => setMenuLineId!)),
+      ]),
     ),
   );
   const cancelled = new Set<string>();

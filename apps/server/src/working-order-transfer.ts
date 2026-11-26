@@ -39,6 +39,7 @@ import {
   recordBillSetMenuVersions,
 } from "./set-menu-bill.js";
 import { recordedSetMenusListing } from "./set-menu-links.js";
+import { endSetMenuDiscounts, setMenuDiscountsLeftBy } from "./set-menu-discount-ending.js";
 import { refuseMovingFrozenDishes } from "./set-menu-moves.js";
 import { regroupBills } from "./set-menu-regroup.js";
 import { totalBeforeEdit, refuseOrderOverSimplifiedLimit } from "./stored-order-lines.js";
@@ -79,7 +80,9 @@ function modesMatch(
  * source's context onto the destination. The destination's regrouping may not raise what it holds
  * over its total (`bill.received_exceeds_total`); the source's balance is its caller's to check.
  * With `deferTarget`, the caller works out the destination's set menus and checks its
- * simplified-invoice limit itself, after its last move into it.
+ * simplified-invoice limit itself, after its last move into it. A set menu's own comp or discount
+ * that a dish moved without it breaks comes off first, `dish_moved`, or with `paidAlone`
+ * `dish_paid_alone` (D50).
  */
 export async function moveOrderLines(
   tx: Transaction,
@@ -87,7 +90,7 @@ export async function moveOrderLines(
   fromTabId: string,
   toTabId: string,
   lineNos: number[] | undefined,
-  opts: { actorId?: string; deferTarget?: boolean } = {},
+  opts: { actorId?: string; deferTarget?: boolean; paidAlone?: boolean } = {},
 ): Promise<string[]> {
   const deferTarget = opts.deferTarget === true;
   // A self-transfer would allocate line numbers that collide with the rows being moved.
@@ -149,10 +152,15 @@ export async function moveOrderLines(
   );
   const toTakesSetMenus = movedMenus.length > 0 || looseDishes.length > 0;
   if (toTakesSetMenus) await refuseUnlessSetMenuBill(tx, toTabId);
-  await refuseMovingFrozenDishes(
+  const looseIds = looseDishes.map(({ id }) => id);
+  const { broken } = await setMenuDiscountsLeftBy(tx, fromTabId, looseIds);
+  await endSetMenuDiscounts(
     tx,
-    looseDishes.map(({ id }) => id),
+    fromTabId,
+    broken,
+    opts.paidAlone === true ? "dish_paid_alone" : "dish_moved",
   );
+  await refuseMovingFrozenDishes(tx, looseIds);
   if (lineNos === undefined) {
     await carryBillSetMenuCopies(tx, fromTabId, toTabId);
   } else {
@@ -364,7 +372,7 @@ export async function carveOffLines(
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
-  opts: { splitExtras?: boolean; actorId?: string; deferTarget?: boolean },
+  opts: { splitExtras?: boolean; actorId?: string; deferTarget?: boolean; paidAlone?: boolean },
 ): Promise<{ splitLines: Map<string, SplitRow> }> {
   return carveLines(tx, cfg, fromTabId, toTabId, transfers, opts);
 }
@@ -380,6 +388,7 @@ async function carveLines(
     splitIntoUnits?: boolean;
     actorId?: string;
     deferTarget?: boolean;
+    paidAlone?: boolean;
   },
 ): Promise<{ splitLines: Map<string, SplitRow> }> {
   // Every line, not only the named ones: which dishes carry modifiers needs the whole tab.
@@ -509,6 +518,7 @@ async function carveLines(
       ? await moveOrderLines(tx, cfg, fromTabId, toTabId, wholeLineNos, {
           actorId: opts.actorId,
           deferTarget: opts.deferTarget,
+          paidAlone: opts.paidAlone,
         })
       : [];
 

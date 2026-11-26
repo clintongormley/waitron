@@ -315,35 +315,47 @@ export interface TakenRows {
 }
 
 /**
- * What a new bill holding only `taken` would come to, in cents, once {@link regroupBills} had
- * grouped it over the set menus `billId` records, writing nothing. The payment refuses
+ * What a new bill holding only `taken` would come to, in cents, once `ending` had ended and
+ * {@link regroupBills} had grouped it over the set menus `billId` records, writing nothing. The payment refuses
  * `bill.allocation_changed` where the bill turns out otherwise.
  */
 export async function totalOnOwnBill(
   tx: Transaction,
   billId: string,
   taken: TakenRows,
+  ending?: Ending,
 ): Promise<number> {
-  return totalAfterAdjusting(tx, billId, (line) =>
-    taken.ids.has(line.id) ? [{ ...line, ...taken.resized.get(line.id) }] : [],
+  return totalAfterAdjusting(
+    tx,
+    billId,
+    (line) => (taken.ids.has(line.id) ? [{ ...line, ...taken.resized.get(line.id) }] : []),
+    ending,
   );
 }
 
 /**
- * What `billId` would come to, in cents, once `taken` had left it and {@link regroupBills} had
- * grouped what stays, writing nothing.
+ * What `billId` would come to, in cents, once `ending` had ended, `taken` had left it and
+ * {@link regroupBills} had grouped what stays, writing nothing.
  */
 export async function totalLeftBehind(
   tx: Transaction,
   billId: string,
   taken: TakenRows,
+  ending?: Ending,
 ): Promise<number> {
-  return totalAfterAdjusting(tx, billId, (line) => {
-    const part = taken.resized.get(line.id);
-    if (part === undefined) return taken.ids.has(line.id) ? [] : [line];
-    const { quantity, lineTotal } = line;
-    return [{ ...line, quantity: quantity - part.quantity, lineTotal: lineTotal - part.lineTotal }];
-  });
+  return totalAfterAdjusting(
+    tx,
+    billId,
+    (line) => {
+      const part = taken.resized.get(line.id);
+      if (part === undefined) return taken.ids.has(line.id) ? [] : [line];
+      const { quantity, lineTotal } = line;
+      return [
+        { ...line, quantity: quantity - part.quantity, lineTotal: lineTotal - part.lineTotal },
+      ];
+    },
+    ending,
+  );
 }
 
 /**

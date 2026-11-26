@@ -57,6 +57,16 @@ async function ownStanding(
     .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
 }
 
+/** The ids of the comps or discounts given on `setMenuLineIds` that still take something off them. */
+export async function ownSetMenuDiscountIds(
+  tx: Transaction,
+  setMenuLineIds: readonly string[],
+): Promise<string[]> {
+  return [
+    ...new Set((await ownStanding(tx, setMenuLineIds)).map(({ adjustmentId }) => adjustmentId)),
+  ];
+}
+
 /**
  * What `dishIds` leaving `billId` does to its discounted set menus, writing nothing (D48, D50,
  * D51): which set menus they break, and which they take whole.
