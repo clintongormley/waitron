@@ -570,8 +570,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Esta factura ya se ha rectificado, así que no se puede abonar por completo",
   },
   "sale.correction_unsupported": {
-    en: "The till cannot credit or correct this invoice this way. On a full invoice naming a customer, use Give money back.",
-    es: "La caja no puede abonar ni rectificar esta factura de esta forma. En una factura completa a nombre de un cliente, usa Devolver dinero.",
+    en: "The till cannot cancel or credit this invoice this way. If it has been paid, use Give money back.",
+    es: "La caja no puede anular ni abonar esta factura de esta forma. Si ya se ha pagado, usa Devolver dinero.",
   },
   "bill.presented": {
     en: "This bill is ready for payment, so it cannot be changed.",
@@ -1104,6 +1104,11 @@ const DEFERRED_INELIGIBLE: Record<string, { en: string; es: string }> = {
   },
 };
 
+const REFUSED_NO_FIX = {
+  en: "The tax agency refused this full invoice and Waitron cannot fix that, so money given back on it goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
+  es: "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo, así que el dinero que se devuelva de ella va a Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
+};
+
 const FIGURES_UNCHECKED = {
   en: "This invoice's filed figures cannot be checked, so it cannot be corrected.",
   es: "No se pueden comprobar las cifras presentadas de esta factura, así que no se puede rectificar.",
@@ -1135,10 +1140,7 @@ const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
     en: "A full invoice made from receipts cannot be corrected here.",
     es: "Aquí no se puede rectificar una factura completa que sustituye tickets.",
   },
-  refused_no_fix: {
-    en: "The tax agency refused this full invoice and Waitron cannot fix that, so money given back on it goes on your accountant's list.",
-    es: "La Agencia Tributaria rechazó esta factura completa y Waitron no puede corregirlo, así que el dinero devuelto por ella va a la lista para tu gestor.",
-  },
+  refused_no_fix: REFUSED_NO_FIX,
   filing_refused: {
     en: "The tax agency refused this receipt. Fix it in Fiscal filing, on the dashboard, then try again.",
     es: "La Agencia Tributaria rechazó este ticket. Corrígelo en Remisión a la AEAT, en el panel, y vuelve a intentarlo.",
@@ -1496,10 +1498,7 @@ const GIVE_BACK_NEVER_RECORDED: Record<string, { en: string; es: string }> = {
     en: "This is a full invoice made from receipts, so the money given back cannot be recorded on it here.",
     es: "Es una factura completa que sustituye tickets, así que aquí no se puede registrar en ella el dinero devuelto.",
   },
-  refused_no_fix: {
-    en: "The tax agency refused this full invoice and Waitron cannot fix that, so once you finish, the money given back is on your accountant's list.",
-    es: "La Agencia Tributaria rechazó esta factura completa y Waitron no puede corregirlo, así que al terminar, el dinero devuelto queda en la lista para tu gestor.",
-  },
+  refused_no_fix: REFUSED_NO_FIX,
   filing_refused: {
     en: "The tax agency refused this receipt, so the money given back cannot be recorded on it until the receipt is fixed in Fiscal filing, on the dashboard. Then press Check again.",
     es: "La Agencia Tributaria rechazó este ticket, así que el dinero devuelto no se puede registrar en él hasta que se corrija en Remisión a la AEAT, en el panel. Después pulsa Comprobar de nuevo.",

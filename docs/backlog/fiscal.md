@@ -276,10 +276,11 @@ basis is recorded in [verifactu-findings.md §10.1](../compliance/verifactu-find
 _2026-11-23: every box has a fourth series, `full_corrective` (default code `FR`), for correctives of
 full invoices. A replacement takes it when the invoice it replaces names a customer and `corrective`
 otherwise, and core refuses the wrong series before a number is taken
-(`packages/core/src/record-replacement.ts`). A correction by differences takes `full_corrective` when Give money
-back files an R1 against a full invoice (CORRECT-FULL-INVOICE PR 2a); any other refuses an invoice naming a customer
+(`packages/core/src/record-replacement.ts`); a correction by differences refuses any invoice naming a customer
 (`packages/core/src/correction-eligibility.ts`) and stays on `corrective`. The basis is the second half of adviser answer 1.14 (15 November; B8 in
 [the answers](../compliance/2026-11-15-adviser-answers.md))._
+_2026-11-26: Give money back files a correction by differences against a full invoice (an R1) on
+`full_corrective` (CORRECT-FULL-INVOICE PR 2a)._
 
 <a id="a231-full-invoices-at-the-till--gated-implementation-landed-2026-10-06"></a>
 
@@ -1199,7 +1200,8 @@ A tip given back on its own stays open, up to what is left of it: the owner's "Y
 Where Correct invoice refuses for good (another box's ticket, one replaced by a full invoice, no
 filing record, a full invoice naming a customer, records that need
 checking; since 2026-11-26 a full invoice naming a customer is corrected with an R1 unless the tax
-agency refused it with no fix, CORRECT-FULL-INVOICE PR 2a), Refund a payment stays open; where it only waits (a filing refused, stopped or held,
+agency refused it with no fix, CORRECT-FULL-INVOICE PR 2a; on one whose business has no registered
+address, Refund a payment waits until it is added), Refund a payment stays open; where it only waits (a filing refused, stopped or held,
 another refund pending, the clock), Refund a payment waits too for that money: the watcher's call (O7, "WATCHER
 2026-11-23 14:55"). The owner landed #4192 on 2026-11-24 with O7 to O9 listed as the watcher's calls, and
 the same day approved one Give money back that picks the right way by itself

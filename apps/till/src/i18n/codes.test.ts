@@ -1126,10 +1126,10 @@ it.each([
 
 it("words sale.correction_unsupported for every flow that meets it, the whole-order cancel included", () => {
   expect(codeMessage("sale.correction_unsupported", "en")).toBe(
-    "The till cannot credit or correct this invoice this way. On a full invoice naming a customer, use Give money back.",
+    "The till cannot cancel or credit this invoice this way. If it has been paid, use Give money back.",
   );
   expect(codeMessage("sale.correction_unsupported", "es")).toBe(
-    "La caja no puede abonar ni rectificar esta factura de esta forma. En una factura completa a nombre de un cliente, usa Devolver dinero.",
+    "La caja no puede anular ni abonar esta factura de esta forma. Si ya se ha pagado, usa Devolver dinero.",
   );
 });
 
@@ -1152,14 +1152,14 @@ it("words a full invoice made from receipts, and one the tax agency refused with
     [
       "codeMessage",
       noFix,
-      "The tax agency refused this full invoice and Waitron cannot fix that, so money given back on it goes on your accountant's list.",
-      "La Agencia Tributaria rechazó esta factura completa y Waitron no puede corregirlo, así que el dinero devuelto por ella va a la lista para tu gestor.",
+      "The tax agency refused this full invoice and Waitron cannot fix that, so money given back on it goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
+      "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo, así que el dinero que se devuelva de ella va a Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
     ],
     [
       "giveBackFilingMessage",
       noFix,
-      "The tax agency refused this full invoice and Waitron cannot fix that, so once you finish, the money given back is on your accountant's list.",
-      "La Agencia Tributaria rechazó esta factura completa y Waitron no puede corregirlo, así que al terminar, el dinero devuelto queda en la lista para tu gestor.",
+      "The tax agency refused this full invoice and Waitron cannot fix that, so money given back on it goes in Download for accountant (XLSX), on the dashboard's Sales & takings page.",
+      "La Agencia Tributaria rechazó esta factura completa y Waitron no puede solucionarlo, así que el dinero que se devuelva de ella va a Descargar para tu gestor (XLSX), en la página Ventas y recaudación del panel.",
     ],
   ];
   const words = { codeMessage, giveBackFilingMessage };
