@@ -7,6 +7,10 @@ without copying its prep station name, dietary declarations or choices.
 You can add products before creating a menu. Open **Products** in the management dashboard and choose **Add product**. Give the product a name
 and enter its price.
 
+Use your browser’s **Back** button to close the editor and stay on Products. If you’ve made
+changes, choose **Keep editing** or **Discard changes**. If you opened a variant from its product,
+**Back**, **Save** and **Cancel** all return to that product.
+
 The editor holds three cards. The first holds Name with its photo, **Category**, and **Available**.
 The third holds the price, the variants and the modifiers. Between them, **Details** holds the rest:
 the prep station, how the product appears on the menu, allergens and diet, VAT, and ordering.

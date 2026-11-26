@@ -93,15 +93,17 @@ export class MenuStructureProductEditor {
   open(target: StructureProductEdit): void {
     this.#target = target;
     this.#returning = false;
-    void this.#dialog.openExisting(target.productId, target.field, async (current) => {
-      const api = this.#background();
-      const [units, courses, extraLists, optionLists] = await Promise.all([
-        api.listUnits(),
-        api.listCourses(),
-        api.listExtraLists(),
-        api.listOptionLists(),
-      ]);
-      if (current()) this.#lookup = { units, courses, extraLists, optionLists };
+    void this.#dialog.openExisting(target.productId, target.field, {
+      prepare: async (current) => {
+        const api = this.#background();
+        const [units, courses, extraLists, optionLists] = await Promise.all([
+          api.listUnits(),
+          api.listCourses(),
+          api.listExtraLists(),
+          api.listOptionLists(),
+        ]);
+        if (current()) this.#lookup = { units, courses, extraLists, optionLists };
+      },
     });
   }
 

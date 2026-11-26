@@ -3,14 +3,7 @@ import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import type { ContentLanguages } from "@waitron/shared";
 import type { RoutingModel } from "@waitron/venue-service/routing";
-import {
-  baseStyles,
-  pageTitleStyles,
-  encodePathSegment,
-  navigationGuardFor,
-  setContentLanguages,
-  UrlStateController,
-} from "@waitron/ui";
+import { baseStyles, pageTitleStyles, setContentLanguages, UrlStateController } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-modal.js";
@@ -34,6 +27,7 @@ import {
 } from "../widgets/add-to-menus.js";
 import "../widgets/product-browser.js";
 import { productsAddAction, productsAddActionStyles } from "./products-add-action.js";
+import { ProductsEditorHistory, type ProductsEditorAddress } from "./products-editor-history.js";
 import { offMenusSentence } from "../widgets/off-menus.js";
 import { deleteExtraListWarning } from "../widgets/delete-extra-lists.js";
 import { refusalText } from "../widgets/delete-refusal.js";
@@ -100,29 +94,7 @@ export class ProductsScreen extends LitElement {
   @state() private placementFailures: PlacementFailure[] = [];
   @state() private placementBusy = false;
   #restoreAddFocus: (() => void) | null = null;
-  #linkedProduct: string | null = null;
-  /** The `product` word as this screen last read or wrote it. A new product's editor is named by
-   * none, so only the word going away closes an editor. */
-  #addressProduct: string | null = null;
-
-  #writeProductWord(product: string | null, removeQuery: readonly string[] = []): void {
-    void this.#url.write({ product }, true, removeQuery);
-    if (this.#url.read("dashboard") === "products")
-      this.#addressProduct = this.#url.read("product");
-  }
-
-  /** A guarded write would ask the leave question whenever unsaved input is held. */
-  #nameOpenProduct(id: string): void {
-    const guard = navigationGuardFor(window);
-    if (guard === undefined) return this.#writeProductWord(id);
-    const category = this.#url.read("category");
-    const url = new URL(guard.href);
-    url.pathname = [
-      `${dashboardPath.basePath}/products/product/${encodePathSegment(id)}`,
-      ...(category === null ? [] : [`category/${encodePathSegment(category)}`]),
-    ].join("/");
-    guard.rewrite(url);
-  }
+  #linkedEditor: ProductsEditorAddress | null = null;
   #loading = false;
   readonly #resumeInitialLoad = (): void => {
     if (!this.productsLoaded && this.initialLoadError !== null) void this.#load();
@@ -151,7 +123,7 @@ export class ProductsScreen extends LitElement {
       this.productsReadError = codeOf(error);
     },
     () => {
-      if (this.productsLoaded) void this.#openLinkedProduct();
+      if (this.productsLoaded) void this.#openLinkedEditor();
       else this.#resumeInitialLoad();
     },
   );
@@ -177,15 +149,15 @@ export class ProductsScreen extends LitElement {
     () => {
       if (this.#url.read("dashboard") !== "products") return;
       this.categoryId = this.#url.read("category");
-      const before = this.#addressProduct;
-      this.#linkedProduct = this.#addressProduct = this.#url.read("product");
-      if (this.#linkedProduct === null) {
-        if (before !== null) this.#editor.close();
-        else if (this.#editor.value !== null) this.#nameOpenProduct(this.#editor.value.id);
-      } else void this.#openLinkedProduct();
+      const address = this.#history.accept();
+      if (address === undefined) return;
+      if (this.#editor.open || this.#editor.reading) this.#editor.close();
+      this.#linkedEditor = address;
+      void this.#openLinkedEditor();
     },
     dashboardPath,
   );
+  readonly #history = new ProductsEditorHistory(this.#url);
   readonly #editor = new ProductEditorDialog(this, {
     api: () => this.api,
     choices: () => this.#editorChoices(),
@@ -193,10 +165,10 @@ export class ProductsScreen extends LitElement {
     readError: (error) => this.#showReadError(error),
     refused: (error) => this.#showSaveRefusal(error),
     lateRefused: (_product, error) => this.#showSaveRefusal(error),
-    opened: (id) => this.#writeProductWord(id),
+    opened: (productId, field) => this.#history.push({ productId, field }),
     closed: () => {
-      this.#linkedProduct = null;
-      this.#writeProductWord(null, ["field"]);
+      this.#linkedEditor = null;
+      this.#history.close();
     },
     afterClose: () => {
       if (this.placing === null) this.#refocusAdd();
@@ -285,7 +257,7 @@ export class ProductsScreen extends LitElement {
       ]);
       this.productsLoaded = true;
       this.initialLoadError = null;
-      await this.#openLinkedProduct();
+      await this.#openLinkedEditor();
     } catch (error) {
       if (!this.productsLoaded) this.initialLoadError = codeOf(error);
     } finally {
@@ -347,16 +319,29 @@ export class ProductsScreen extends LitElement {
     } catch {
       return false;
     }
-    await this.#openLinkedProduct();
+    await this.#openLinkedEditor();
     return true;
   }
 
-  async #openLinkedProduct(): Promise<void> {
-    const id = this.#linkedProduct;
-    if (!this.productsLoaded || id === null || !knowsEditorProduct(this.products, id)) return;
-    this.#linkedProduct = null;
-    if (this.#editor.value?.id === id) return;
-    await this.#editor.openExisting(id, new URL(location.href).searchParams.get("field") ?? "");
+  async #openLinkedEditor(): Promise<void> {
+    const address = this.#linkedEditor;
+    if (!this.productsLoaded || address === null) return;
+    const { productId, field } = address;
+    if (productId === null) {
+      if (this.menuSettings === null) return;
+      this.#linkedEditor = null;
+      if (this.units.length && this.contentLanguages?.languages.length) this.#editor.openNew(null);
+      else this.#history.close();
+    } else if (knowsEditorProduct(this.products, productId)) {
+      this.#linkedEditor = null;
+      await this.#editor.openExisting(productId, field, { fromAddress: true });
+    }
+  }
+
+  #addProduct(categoryId: string | null): void {
+    this.#linkedEditor = null;
+    this.#editor.openNew(categoryId);
+    this.#history.push({ productId: null });
   }
 
   #openDelete(productId: string): void {
@@ -470,7 +455,7 @@ export class ProductsScreen extends LitElement {
   readonly #addFromHeading = (): void => {
     this.#restoreAddFocus = () =>
       this.renderRoot.querySelector<HTMLElement>('.header [data-test="add-product"]')?.focus();
-    this.#editor.openNew(null);
+    this.#addProduct(null);
   };
 
   #closePlacement(): void {
@@ -535,10 +520,11 @@ export class ProductsScreen extends LitElement {
           event.stopPropagation();
           const { categoryId } = event.detail;
           this.#restoreAddFocus = () => this.#browser()?.focusRowMenu(categoryId);
-          this.#editor.openNew(categoryId);
+          this.#addProduct(categoryId);
         }}
         @edit-product=${(event: CustomEvent<{ productId: string; field?: string }>) => {
           event.stopPropagation();
+          this.#linkedEditor = null;
           void this.#editor.openExisting(event.detail.productId, event.detail.field);
         }}
         @delete-product=${(event: CustomEvent<{ productId: string }>) => {

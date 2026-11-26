@@ -55,7 +55,7 @@ interface Effects {
   clearError(): void;
   readError(error: unknown): void;
   refused?(error: unknown): void;
-  opened?(id: string): void;
+  opened?(id: string, field: string): void;
   closed?(alreadyClosed: boolean): void;
   afterClose?(): void;
   saved(product: ProductEditorValue, created: boolean, current: () => boolean): Promise<void>;
@@ -139,7 +139,7 @@ export class ProductEditorDialog implements ReactiveController {
   async openExisting(
     productId: string,
     initialField = "",
-    prepare?: (current: () => boolean) => Promise<void>,
+    options: { prepare?: (current: () => boolean) => Promise<void>; fromAddress?: boolean } = {},
   ): Promise<void> {
     if (!knowsEditorProduct(this.effects.choices().products, productId)) return;
     this.close();
@@ -152,12 +152,12 @@ export class ProductEditorDialog implements ReactiveController {
       const api = this.#api;
       const [value] = await Promise.all([
         (api.background ?? api).getProductEditor(productId),
-        prepare?.(current),
+        options.prepare?.(current),
       ]);
       if (!current() || !value.active) return;
       this.value = value;
       this.open = true;
-      this.effects.opened?.(productId);
+      if (!options.fromAddress) this.effects.opened?.(productId, this.#initialField);
     } catch (error) {
       if (current()) this.effects.readError(error);
     } finally {

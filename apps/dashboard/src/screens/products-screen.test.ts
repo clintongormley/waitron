@@ -3401,37 +3401,53 @@ describe("menu-screen", () => {
     expect(editor(el).open).toBe(false);
   });
 
-  it("keeps a new product's editor when the address comes back from another page naming no product", async () => {
-    history.replaceState(null, "", "/products");
+  it.each([null, "c1"])("returns from Add product to the list (%s)", async (category) => {
+    const address = category === null ? "/products" : "/products/category/c1";
+    history.replaceState(null, "", address);
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
     await flush(el);
-    emit(list(el), "add-product", { categoryId: null });
-    await el.updateComplete;
-    expect(editor(el).open).toBe(true);
-    history.replaceState(null, "", "/profile");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    history.replaceState(null, "", "/products");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    await flush(el);
-    expect(editor(el).open).toBe(true);
+    if (category === null) {
+      el.shadowRoot!.querySelector<HTMLElement>(".header [data-test=add-product]")!.click();
+    } else {
+      emit(list(el), "add-product", { categoryId: category });
+    }
+    await expect.poll(() => editor(el).open).toBe(true);
+    expect(editor(el).newCategoryId).toBe(category);
+    const addAddress =
+      category === null ? "/products/editor/new" : "/products/editor/new/category/c1";
+    expect(location.pathname).toBe(addAddress);
+    history.back();
+    await expect.poll(() => location.pathname).toBe(address);
+    await expect.poll(() => editor(el).open).toBe(false);
+    history.forward();
+    await expect.poll(() => location.pathname).toBe(addAddress);
+    await expect.poll(() => editor(el).open).toBe(true);
+    expect(editor(el).newCategoryId).toBeNull();
   });
 
-  it("closes a product opened from the list when Back takes its name out of the address", async () => {
-    history.replaceState(null, "", "/products");
+  it("closes a product opened from the list when the browser goes Back", async () => {
+    const before = { href: location.href, state: history.state };
+    onTestFinished(() => history.replaceState(before.state, "", before.href));
+    history.replaceState(null, "", "/profile");
+    history.pushState(null, "", "/products");
+    const push = vi.spyOn(history, "pushState");
+    onTestFinished(() => push.mockRestore());
     const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
       api: stubApi(),
     });
     await flush(el);
     emit(list(el), "edit-product", { productId: "p1" });
-    await flush(el);
-    expect(editor(el).open).toBe(true);
+    await expect.poll(() => editor(el).open).toBe(true);
     expect(location.pathname).toBe("/products/product/p1");
-    history.replaceState(null, "", "/products");
-    window.dispatchEvent(new PopStateEvent("popstate"));
-    await flush(el);
-    expect(editor(el).open).toBe(false);
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/products");
+    await expect.poll(() => editor(el).open).toBe(false);
+    history.forward();
+    await expect.poll(() => editor(el).value?.id).toBe("p1");
+    expect(location.pathname).toBe("/products/product/p1");
+    expect(push).toHaveBeenCalledOnce();
   });
   describe("a variant's own page", () => {
     // Listed under its parent only: the list read nests variants, and nothing lists one at the top.
@@ -3576,6 +3592,39 @@ describe("menu-screen", () => {
           .fn()
           .mockImplementation((id: string) => Promise.resolve(id === "v1" ? variantValue : value)),
       });
+
+    it("returns from a nested variant to its product, then to the Products list", async () => {
+      history.replaceState(null, "", "/products");
+      const guard = new NavigationGuard(window, {
+        isDirty: () => false,
+        request: async (proceed) => {
+          await proceed();
+          return "proceeded";
+        },
+      });
+      onTestFinished(() => guard.dispose());
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
+        api: variantApi(),
+      });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1", field: "image" });
+      await expect.poll(() => editor(el).value?.id).toBe("p1");
+      expect(location.search).toBe("?field=image");
+      emit(editor(el), "wt-open-product", { productId: "v1" });
+      await expect.poll(() => editor(el).value?.id).toBe("v1");
+      expect(location.pathname).toBe("/products/product/v1");
+      expect(location.search).toBe("");
+      history.back();
+      await expect.poll(() => editor(el).value?.id).toBe("p1");
+      expect(location.search).toBe("?field=image");
+      history.forward();
+      await expect.poll(() => editor(el).value?.id).toBe("v1");
+      emit(editor(el), "wt-cancel", {});
+      await expect.poll(() => editor(el).value?.id).toBe("p1");
+      emit(editor(el), "wt-cancel", {});
+      await expect.poll(() => location.pathname).toBe("/products");
+      await expect.poll(() => editor(el).open).toBe(false);
+    });
 
     it.each([
       ["en", "Edit variant of: Croquettes", "Edit variant of: Croquettes renamed"],
@@ -4267,6 +4316,8 @@ describe("menu-screen", () => {
 
 it("reads and writes the opened category in the address", async () => {
   history.replaceState(null, "", "/products/category/c1");
+  const push = vi.spyOn(history, "pushState");
+  onTestFinished(() => push.mockRestore());
   const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", {
     api: stubApi(),
   });
@@ -4279,6 +4330,7 @@ it("reads and writes the opened category in the address", async () => {
   emit(browser, "open-category", { categoryId: null });
   await el.updateComplete;
   expect(location.pathname).toBe("/products");
+  expect(push).not.toHaveBeenCalled();
 });
 
 describe("menu-screen sticky headings", () => {
