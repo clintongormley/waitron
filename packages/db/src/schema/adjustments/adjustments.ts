@@ -77,6 +77,8 @@ export const adjustments = table(
     preparationStarted: flag("preparation_started"),
     refundHandoff: flag("refund_handoff").notNull().default(false),
     refundValue: money("refund_value"),
+    /** The ended comp or discount this one gives again. */
+    reappliesAdjustmentId: id("reapplies_adjustment_id"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
@@ -99,6 +101,11 @@ export const adjustments = table(
       columns: [t.creditedTo],
       foreignColumns: [persons.id],
       name: "adjustments_credited_to_fk",
+    }).onDelete("restrict"),
+    foreignKey({
+      columns: [t.reappliesAdjustmentId],
+      foreignColumns: [t.id],
+      name: "adjustments_reapplies_fk",
     }).onDelete("restrict"),
     index("adjustments_order_reason_idx").on(t.workingOrderId, t.reasonId),
     index("adjustments_requested_by_idx").on(t.requestedBy),

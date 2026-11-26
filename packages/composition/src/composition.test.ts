@@ -398,6 +398,7 @@ describe("ALL_MODULES provisioning and fiscal seats", () => {
       "adjustments",
       "adjustment_refunds",
       "adjustment_lines",
+      "adjustment_endings",
     ];
     expect([...ADJUSTMENTS_TABLES]).toEqual(adjustmentTables);
     expect(

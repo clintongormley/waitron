@@ -27,7 +27,8 @@
       "menu_version_images",
       "adjustments",
       "adjustment_refunds",
-      "adjustment_lines"
+      "adjustment_lines",
+      "adjustment_endings"
     ]
   },
   {

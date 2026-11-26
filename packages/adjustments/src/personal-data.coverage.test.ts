@@ -53,6 +53,7 @@ const ADJUSTMENTS_COLUMNS = {
     "after_amount",
     "refund_handoff",
     "refund_value",
+    "reapplies_adjustment_id",
   ],
 };
 

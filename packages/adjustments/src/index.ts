@@ -1,13 +1,15 @@
 import "./errors.js";
 
 export {
+  adjustmentEndings,
+  adjustmentEndingWhy,
   adjustmentLines,
   adjustmentReasons,
   adjustmentRefunds,
   adjustments,
   adjustmentStage,
 } from "@waitron/db";
-export type { AdjustmentSplit, AdjustmentStage } from "@waitron/db";
+export type { AdjustmentEndingWhy, AdjustmentSplit, AdjustmentStage } from "@waitron/db";
 export * from "./policy.js";
 export {
   REASON_KINDS,
@@ -19,6 +21,7 @@ export {
 export * from "./operations.js";
 export * from "./settings.js";
 export * from "./record.js";
+export * from "./endings.js";
 export * from "./refund-links.js";
 export * from "./spread.js";
 export * from "./reports.js";

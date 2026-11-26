@@ -9,6 +9,7 @@ describe("adjustments declarations", () => {
     expect(config.foreignKeys.map((key) => [key.getName(), key.onDelete]).sort()).toEqual([
       ["adjustments_approved_by_fk", "restrict"],
       ["adjustments_credited_to_fk", "restrict"],
+      ["adjustments_reapplies_fk", "restrict"],
       ["adjustments_requested_by_fk", "restrict"],
       ["adjustments_working_order_fk", "restrict"],
     ]);

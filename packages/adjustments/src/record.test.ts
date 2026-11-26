@@ -217,6 +217,7 @@ describe("recordAdjustment", () => {
       preparationStarted: null,
       refundHandoff: false,
       refundValue: null,
+      reappliesAdjustmentId: null,
       createdAt: row!.createdAt,
     });
     expect(Number.isNaN(Date.parse(row!.createdAt))).toBe(false);

@@ -144,7 +144,12 @@ describe("adjustment backup evidence", () => {
     expect(owner.data).toEqual({
       kind: "custom",
       tables: ADJUSTMENTS_CLASSIFICATION.map((c) => c.table),
-      immutableTables: ["adjustments", "adjustment_refunds", "adjustment_lines"],
+      immutableTables: [
+        "adjustments",
+        "adjustment_refunds",
+        "adjustment_lines",
+        "adjustment_endings",
+      ],
       checks: ["data"],
     });
     expect([
