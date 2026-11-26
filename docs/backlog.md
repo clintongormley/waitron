@@ -432,8 +432,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   Linux tmpfs; the box's ext4 is measured only for what it allocates. Left open by A1127.
   [Detail](backlog/setup.md#a-start-on-a-full-ext4-disk-is-not-tried)
 
-- **A237. Nothing guards the hint-or-"?" rule across screens (owner 2026-10-03)** — OPEN.
-
 - **Starter courses for Italy.** When its country pack is built, add the four courses and settle
   their firing defaults. [Detail](backlog/setup.md#starter-courses-for-italy)
 
