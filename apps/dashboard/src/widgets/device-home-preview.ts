@@ -281,16 +281,36 @@ export class DeviceHomePreview extends LitElement {
 
       .shortcut {
         display: grid;
-        grid-template-rows: 1fr auto;
         min-width: 0;
+      }
+
+      .shortcut > .tile,
+      .controls {
+        grid-area: 1 / 1;
+      }
+
+      .shortcut > div.tile,
+      .shortcut > wt-button.tile::part(button) {
+        padding-block-start: var(--wt-tap-min);
       }
 
       .controls {
         display: flex;
         align-items: center;
-        justify-content: flex-end;
-        gap: var(--wt-space-1);
-        height: var(--wt-tap-min);
+        position: relative;
+        align-self: start;
+        justify-content: space-between;
+        min-height: var(--wt-tap-min);
+        pointer-events: none;
+      }
+
+      .controls > * {
+        pointer-events: auto;
+      }
+
+      .shortcut:has(> .tile[data-painted]) .grip,
+      .shortcut:has(> .tile[data-painted]) .controls wt-button::part(button) {
+        color: var(--tile-ink);
       }
 
       .grip {
@@ -337,10 +357,7 @@ export class DeviceHomePreview extends LitElement {
       }
 
       wt-button.add {
-        align-self: start;
         width: 100%;
-        /* Match the faces in a shared row without reserving a grip strip in an Add-only row. */
-        block-size: calc(100% - var(--wt-tap-min));
         min-height: calc(var(--wt-tap-min) * 1.5);
       }
 
@@ -634,7 +651,7 @@ export class DeviceHomePreview extends LitElement {
     tile: HomeTile,
     index: PreviewIndex,
     placed: Placed,
-  ): { face: TemplateResult; name: string } {
+  ): { face: TemplateResult; name: string; paint?: string } {
     const { ref } = tile;
     if (!tile.reachable || ref.kind === "missing") {
       const name = fill("home.missing", { name: tile.missingName ?? tile.name });
@@ -659,18 +676,22 @@ export class DeviceHomePreview extends LitElement {
           </span>
         </div>`,
       };
-    const name =
-      ref.kind === "section"
-        ? this.#sectionName(openedSection(ref.sectionId, index)!)
-        : index.products.get(ref.productId)!.name;
-    return { name, face };
+    const section = ref.kind === "section" ? openedSection(ref.sectionId, index) : undefined;
+    const product = ref.kind === "product" ? index.products.get(ref.productId) : undefined;
+    const tileColour = tileFill(section?.color ?? product?.color ?? null);
+    return {
+      name: section ? this.#sectionName(section) : product!.name,
+      face,
+      ...(tileColour.kind === "color" ? { paint: tilePaint(tileColour.color) } : {}),
+    };
   }
 
   #editCell(tile: HomeTile, index: PreviewIndex, placed: Placed): TemplateResult {
     const { memberId } = tile;
-    const { face, name } = this.#shortcutFace(tile, index, placed);
+    const { face, name, paint } = this.#shortcutFace(tile, index, placed);
     return html`<div
       class="shortcut"
+      style=${paint ?? nothing}
       data-member-id=${memberId}
       data-drop=${this.#dropSide(memberId)}
       ?data-dragging=${this.#press?.dragging === true && this.#press.memberId === memberId}

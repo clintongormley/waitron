@@ -4125,7 +4125,7 @@ describe("the Structure tree", () => {
         expect(client.saveMenuStructure).toHaveBeenCalledOnce();
         expect(move.disabled).toBe(true);
         expect(removeButton(el).disabled).toBe(true);
-        expect(removeButton(el).variant).toBe("danger");
+        expect(removeButton(el).variant).toBe("secondary");
         expect(done.disabled).toBe(true);
         expect(selectToggle(el).disabled).toBe(true);
       } finally {
@@ -4196,7 +4196,7 @@ describe("the Structure tree", () => {
       await tick(el, "m-burger");
       expect(text(q(el, '[data-test="selected-count"]'))).toBe("1 selected");
       expect(removeButton(el).disabled).toBe(false);
-      expect(removeButton(el).variant).toBe("danger");
+      expect(removeButton(el).variant).toBe("secondary");
       expect(allInStructure(el, '[data-test^="drag-"]').map((grip) => grip.dataset.test)).toEqual([
         "drag-m-burger",
         "drag-m-drinks",

@@ -127,7 +127,7 @@ it("places both kinds of publishing blocker before any folded warning", async ()
   expect(warning.open).toBe(false);
   expect(warning.card).toBe(false);
   const headingColor = getComputedStyle(root.querySelector("#document-heading")!).color;
-  expect(getComputedStyle(warning.closest("wt-card")!.querySelector("h2")!).color).toBe(
+  expect(getComputedStyle(warning.closest("section")!.querySelector("h2")!).color).toBe(
     headingColor,
   );
   expect(getComputedStyle(root.querySelector("#changes-heading")!).color).toBe(headingColor);

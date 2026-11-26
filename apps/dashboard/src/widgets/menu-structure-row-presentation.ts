@@ -3,12 +3,14 @@ import { countOf } from "./count-text.js";
 
 export const structureRowStyles = css`
   wt-data-table {
+    --tree-arrow-width: var(--wt-space-5);
+    --wt-table-cell-padding-inline: var(--wt-space-1);
     --structure-media-size: calc(var(--wt-space-6) + var(--wt-space-1));
     --structure-grip-width: calc(var(--wt-space-6) - var(--wt-field-line-width-active));
     --structure-media-gap: var(--wt-space-3);
   }
   wt-data-table[narrow] {
-    --tree-arrow-width: var(--wt-space-5);
+    --tree-arrow-width: var(--wt-space-4);
     --structure-media-size: calc(var(--wt-space-6) - var(--wt-field-line-width-active));
     --structure-grip-width: calc(var(--wt-space-5) + var(--wt-field-line-width-active));
     --structure-media-gap: var(--wt-space-1);
@@ -19,6 +21,7 @@ export const structureRowStyles = css`
   }
   wt-data-table::part(tree-cell) {
     align-items: center;
+    padding-inline-start: calc(var(--tree-depth, 0) * var(--wt-space-1));
   }
   wt-data-table::part(structure-cell) {
     padding-block: calc(var(--wt-space-1) / 2);
@@ -28,12 +31,20 @@ export const structureRowStyles = css`
     padding-block: var(--wt-space-1);
   }
   wt-data-table::part(tree-toggle) {
-    font-family: inherit;
-  }
-  wt-data-table[narrow]::part(tree-toggle) {
     inline-size: var(--tree-arrow-width);
     margin-inline-start: 0;
     padding-inline-start: 0;
+    font-family: inherit;
+  }
+  wt-data-table::part(tree-indent) {
+    justify-content: start;
+  }
+  :host([reordering]) wt-data-table::part(structure-root-toggle),
+  wt-data-table[data-selecting]::part(structure-root-toggle) {
+    position: relative;
+    inline-size: var(--wt-tap-min);
+    margin-inline-end: calc(var(--tree-arrow-width) - var(--wt-tap-min));
+    inset-inline-start: calc(-1 * (var(--wt-tap-min) + var(--wt-space-1)));
   }
   wt-data-table::part(tree-heading),
   wt-data-table[narrow]::part(tree-heading) {
@@ -83,6 +94,15 @@ export const structureRowStyles = css`
   wt-data-table[narrow]::part(narrow-usual-price) {
     display: inline;
   }
+  wt-data-table::part(structure-section-label) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: var(--wt-space-2);
+  }
+  wt-data-table[narrow]::part(structure-section-label) {
+    flex-direction: column;
+  }
   wt-data-table::part(section-name) {
     font-weight: var(--wt-font-weight-bold);
   }
@@ -101,12 +121,14 @@ export const structureRowStyles = css`
     border-radius: var(--wt-radius-sm);
     max-inline-size: 100%;
     box-sizing: border-box;
+    white-space: nowrap;
   }
   wt-data-table::part(structure-price) {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     justify-items: end;
+    white-space: nowrap;
     gap: var(--wt-space-1);
   }
   wt-data-table[narrow]::part(structure-price) {

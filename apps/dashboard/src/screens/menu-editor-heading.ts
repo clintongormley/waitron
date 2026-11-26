@@ -70,6 +70,11 @@ export const menuEditorHeadingStyles = css`
     .heading-status {
       flex-basis: 100%;
     }
+    .heading-actions:has(> [data-test="schedule-open"] + [data-test="publish"]) {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      flex-basis: 100%;
+    }
   }
 `;
 

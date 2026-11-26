@@ -360,7 +360,8 @@ En **Estructura**, abre las acciones de un producto y elige **Editar producto**.
 
 En **Estructura**, abre las acciones de la carta o de una sección para añadir platos o secciones.
 Arrastra una fila por su control para moverla. Para mover o quitar varias filas a la vez, elige
-**Seleccionar** y márcalas. Selecciona una sección y copia la dirección para volver a abrirla.
+**Seleccionar** y márcalas. Las filas marcadas se sombrean. Selecciona una sección y copia la
+dirección para volver a abrirla.
 
 Escribe un precio junto a un plato para fijarlo en esta carta. Despliega un plato con variantes
 para fijar el precio de cada una. Borra el precio que has escrito para usar el habitual. Si cambias
@@ -402,9 +403,10 @@ posterior llega a las cajas cuando vuelves a publicar la carta completa.
 
 ## Configura el inicio del dispositivo {#menu-home}
 
-Abre **Inicio del dispositivo** en la carta que quieres cambiar. Elige **Añadir accesos directos**
-y selecciona los productos y las secciones que el personal necesita tener a mano. Arrastra un acceso
-por su tirador para moverlo o pulsa su papelera para quitarlo. En **Se muestra primero**, elige
+Abre **Pantalla inicial** en la carta que quieres cambiar. Elige **Añadir accesos directos**
+y selecciona los productos y las secciones que el personal necesita tener a mano. Para mover un
+acceso, arrastra el tirador de su esquina superior izquierda. Para quitarlo, pulsa la papelera
+de su esquina superior derecha. En **Se muestra primero**, elige
 **Accesos directos** o **Carta completa**.
 
 Pulsa **Guardar** para conservar todos los cambios. Después publica la carta para enviarlos a todas

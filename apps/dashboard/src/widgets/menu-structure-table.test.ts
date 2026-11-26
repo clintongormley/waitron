@@ -1132,6 +1132,39 @@ it.each(
   },
 );
 
+it("puts the menu arrow over the grip column and the section arrow immediately after its grip", async () => {
+  const el = await mountDeep();
+  const middle = (element: Element | Range) => {
+    const rect = element.getBoundingClientRect();
+    return rect.left + rect.width / 2;
+  };
+  const arrow = (key: string) => {
+    const range = document.createRange();
+    range.selectNodeContents(row(el, key)!.querySelector(".tree-arrow, .tree-toggle")!);
+    return middle(range);
+  };
+  const handle = middle(grip(el, "m-drinks"));
+  expect(arrow("root")).toBeCloseTo(handle, -1);
+  expect(arrow("m-drinks") - handle).toBeGreaterThan(15);
+  expect(arrow("m-drinks") - handle).toBeLessThanOrEqual(35);
+});
+
+it.each([390, 1280])("shows an owned section count with its name at %i px", async (width) => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  onTestFinished(() => page.viewport(before.width, before.height));
+  await page.viewport(width, 844);
+  const el = await mountDeep();
+  await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(width === 390));
+  const tr = row(el, "m-drinks")!;
+  const name = tr.querySelector('[part~="section-name"]')!.getBoundingClientRect();
+  const count = tr.querySelector('[part~="note"]')!.getBoundingClientRect();
+  if (width === 390) expect(count.top).toBeGreaterThanOrEqual(name.bottom - 1);
+  else {
+    expect(count.left).toBeGreaterThan(name.right);
+    expect(count.top).toBeLessThan(name.bottom);
+  }
+});
+
 it("puts a real grip on every top-level row, the included menu's too, and starts each name after the arrow and media slots", async () => {
   const el = await mountDeep();
   for (const key of ["m-burger", "m-drinks", "m-fav", "included-wine"]) {
@@ -1190,7 +1223,7 @@ it.each(
     ),
   ),
 )(
-  "draws the menu's own row no taller than a section's, its name level with its ⋮ ($width px, $mode, menu colour: $menuColor)",
+  "draws the menu's own row no taller than a section's, its name and count level with its ⋮ ($width px, $mode, menu colour: $menuColor)",
   async ({ width, mode, menuColor }) => {
     const before = { width: window.innerWidth, height: window.innerHeight };
     try {
@@ -1204,12 +1237,12 @@ it.each(
       expect(table(el).hasAttribute("narrow")).toBe(width === 390);
       const middle = (rect: DOMRect) => rect.top + rect.height / 2;
       const height = (key: string) => row(el, key)!.getBoundingClientRect().height;
-      const text = document.createRange();
-      text.selectNodeContents(inTable(el, '[data-test="root-name"]')!);
-      const name = middle(text.getBoundingClientRect());
+      const name = inTable(el, '[data-test="root-name"]')!.getBoundingClientRect();
+      const count = inTable(el, '[data-test="count-root"]')!.getBoundingClientRect();
+      const centre = (Math.min(name.top, count.top) + Math.max(name.bottom, count.bottom)) / 2;
       const menu = middle(inTable(el, '[data-test="actions-root"]')!.getBoundingClientRect());
       expect(height("root")).toBeLessThanOrEqual(height("m-drinks") + 1);
-      expect(Math.abs(name - menu)).toBeLessThanOrEqual(2);
+      expect(Math.abs(centre - menu)).toBeLessThanOrEqual(2);
     } finally {
       await page.viewport(before.width, before.height);
     }
@@ -4127,9 +4160,7 @@ describe("the menu's own row", () => {
     }
   });
 
-  // On a narrow table the counts are taken out of the flow, after a name that runs past the
-  // screen; held outside the table's scroll box, they would make the whole page scroll sideways.
-  it("keeps a long menu name's hidden counts inside the table's scroll box on a phone", async () => {
+  it("keeps a forced unwrapped menu name and its counts inside the table's scroll box on a phone", async () => {
     const before = { width: window.innerWidth, height: window.innerHeight };
     try {
       await page.viewport(390, 844);
@@ -4137,9 +4168,12 @@ describe("the menu's own row", () => {
       inTable(el, '[data-test="root-name"]')!.parentElement!.style.cssText =
         "white-space: nowrap; display: inline-block";
       await vi.waitFor(() => expect(table(el).hasAttribute("narrow")).toBe(true));
+      const name = document.createRange();
+      name.selectNodeContents(inTable(el, '[data-test="root-name"]')!);
+      expect(name.getBoundingClientRect().right).toBeGreaterThan(window.innerWidth);
       const count = inTable(el, '[data-test="count-root"]')!;
-      expect(count.getBoundingClientRect().right).toBeGreaterThan(window.innerWidth);
       const scroll = table(el).shadowRoot!.querySelector(".scroll")!;
+      expect(scroll.contains(count)).toBe(true);
       expect(scroll.scrollWidth).toBeGreaterThan(scroll.clientWidth);
       expect(document.scrollingElement!.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     } finally {
@@ -4220,7 +4254,7 @@ describe("the menu's own row", () => {
   );
 
   it.each([390, 1280])(
-    "keeps the counts in the root row's text, visually hidden only on a narrow table (%i px)",
+    "shows the menu counts below its name on a phone and beside it on desktop (%i px)",
     async (width) => {
       const before = { width: window.innerWidth, height: window.innerHeight };
       try {
@@ -4230,13 +4264,14 @@ describe("the menu's own row", () => {
         const count = inTable(el, '[data-test="count-root"]')!;
         expect(row(el, "root")!.textContent).toContain(count.textContent!.trim());
         expect(count.textContent!.trim()).not.toBe("");
+        const name = inTable(el, '[data-test="root-name"]')!.getBoundingClientRect();
+        const bounds = count.getBoundingClientRect();
+        expect(bounds.width).toBeGreaterThan(1);
         if (width === 390) {
-          expect(getComputedStyle(count).display).not.toBe("none");
-          expect(getComputedStyle(count).clipPath).toBe("inset(50%)");
-          expect(count.getBoundingClientRect().width).toBe(1);
+          expect(bounds.top).toBeGreaterThanOrEqual(name.bottom - 1);
         } else {
-          expect(getComputedStyle(count).clipPath).toBe("none");
-          expect(count.getBoundingClientRect().width).toBeGreaterThan(1);
+          expect(bounds.left).toBeGreaterThan(name.right);
+          expect(bounds.top).toBeLessThan(name.bottom);
         }
       } finally {
         await page.viewport(before.width, before.height);
@@ -4937,18 +4972,11 @@ it.each(
         .querySelector('thead th[data-pinned="end"]')!
         .getBoundingClientRect().left;
       const toggle = root.querySelector('tr[data-row-key="root"] .tree-toggle')!;
-      expect(
-        toggle.getBoundingClientRect().left,
-        "root toggle stays inside its cell",
-      ).toBeGreaterThanOrEqual(toggle.closest("td")!.getBoundingClientRect().left);
-      expect(getComputedStyle(toggle.closest("td")!).paddingInlineStart).toBe(
-        width === 390 ? "4px" : "12px",
-      );
-      const treeCell = root.querySelector('[part~="tree-cell"]')!;
-      expect(
-        treeCell.children[1]!.getBoundingClientRect().left -
-          treeCell.closest("td")!.getBoundingClientRect().left,
-      ).toBe(width === 390 ? 28 : 56);
+      const rect = toggle.getBoundingClientRect();
+      expect(rect.width).toBeGreaterThanOrEqual(44);
+      expect(rect.left).toBeGreaterThanOrEqual(scroll.getBoundingClientRect().left);
+      const hit = root.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+      expect(toggle.contains(hit)).toBe(true);
       const names = [...root.querySelectorAll('[data-test="name"], [data-test="root-name"]')];
       expect(names.length).toBeGreaterThan(2);
       if (width < 800) {

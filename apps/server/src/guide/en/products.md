@@ -335,7 +335,7 @@ In **Structure**, open a product’s row menu and choose **Edit product**. Choos
 
 In **Structure**, open the menu or section’s row actions to add dishes or sections. Drag a row
 by its handle to move it. To move or remove several at once, choose **Select** and tick their
-rows. Choose a section row and copy the address if you need to link back to that section.
+rows. The ticked rows are shaded. Choose a section row and copy the address if you need to link back to that section.
 
 Enter a price beside a dish to set its price on this menu. Expand a dish with variants to price
 each one. Clear an entered price to use the usual price. A price you change applies everywhere
@@ -375,8 +375,8 @@ set menu to the tills. Each later edit reaches the tills when you publish the fu
 ## Set up the device home page {#menu-home}
 
 Open **Device home page** on the menu you want to change. Choose **Add shortcuts** and pick the
-products and sections staff need close at hand. Drag a shortcut by its grip to move it, or choose
-its bin to remove it. Under **Shown first**, choose **Shortcuts** or **Full menu**.
+products and sections staff need close at hand. Move a shortcut by dragging the grip in its
+top left corner, or remove it using the bin in its top right corner. Under **Shown first**, choose **Shortcuts** or **Full menu**.
 
 Choose **Save** to keep all your changes. Then publish the menu to send them to every till and
 handheld that uses it.

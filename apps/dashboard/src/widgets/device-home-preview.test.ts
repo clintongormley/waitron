@@ -1017,12 +1017,28 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(divider(dividing.el)).toBe("Full menu");
   });
 
-  it("keeps each grip strip flush under its tile, and its rows further apart than its columns", async () => {
+  it("puts each grip and Remove at the top corners of its tile", async () => {
     const { el } = await mount({ shortcuts: LIST });
     for (const cell of cells(el).filter((each) => each.classList.contains("shortcut"))) {
       const face = cell.firstElementChild!.getBoundingClientRect();
-      const strip = cell.querySelector(".controls")!.getBoundingClientRect();
-      expect(Math.abs(strip.top - face.bottom)).toBeLessThan(0.5);
+      const grip = cell.querySelector(".grip")!.getBoundingClientRect();
+      const remove = cell.querySelector(".controls wt-button")!.getBoundingClientRect();
+      const name = cell.querySelector(".name")!.getBoundingClientRect();
+      expect(grip.top).toBeCloseTo(face.top);
+      expect(remove.top).toBeCloseTo(face.top);
+      expect(grip.left).toBeCloseTo(face.left);
+      expect(remove.right).toBeCloseTo(face.right);
+      expect(name.top).toBeGreaterThanOrEqual(grip.bottom - 1);
+      if (cell.firstElementChild!.hasAttribute("data-painted")) {
+        const tile = cell.firstElementChild!;
+        const ink = getComputedStyle(tile.shadowRoot?.querySelector("button") ?? tile).color;
+        const gripStyle = getComputedStyle(cell.querySelector(".grip")!);
+        const removeStyle = getComputedStyle(
+          cell.querySelector("wt-button[variant=ghost]")!.shadowRoot!.querySelector("button")!,
+        );
+        expect(gripStyle.color).toBe(ink);
+        expect(removeStyle.color).toBe(ink);
+      }
     }
     const editing = getComputedStyle(root(el).querySelector('[data-region="shortcuts"] .grid')!);
     expect(parseFloat(editing.rowGap)).toBeGreaterThan(parseFloat(editing.columnGap));
@@ -1044,7 +1060,7 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     expect(heading.top - lastAdd.bottom).toBeCloseTo(sectionGap);
   });
 
-  it("matches taller shortcut tiles in a shared row and places Full menu beneath its controls", async () => {
+  it("matches taller shortcut tiles in a shared row and puts Full menu after that row", async () => {
     const missing = shortcut("sc-gone", { kind: "missing", name: "Soup" }, "Soup", {
       missingName: "Soup with roasted carrots and winter vegetables from the market",
     });
@@ -1057,9 +1073,8 @@ describe("dashboard-device-home-preview editing the shortcuts", () => {
     const heading = root(el).querySelector(".divider")!.getBoundingClientRect();
     expect(face.height).toBeGreaterThan(66);
     expect(addFace.bottom).toBeCloseTo(face.bottom);
-    expect(heading.top - controls.bottom).toBeCloseTo(
-      parseFloat(getComputedStyle(frame(el)).rowGap),
-    );
+    expect(controls.bottom).toBeLessThan(face.bottom);
+    expect(heading.top - face.bottom).toBeCloseTo(parseFloat(getComputedStyle(frame(el)).rowGap));
   });
 
   it("draws the Add shortcuts tile in the primary colour, dashed and unfilled, as tall as a shortcut tile", async () => {

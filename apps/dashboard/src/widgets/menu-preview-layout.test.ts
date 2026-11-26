@@ -86,3 +86,36 @@ it.each([
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
   },
 );
+
+it("fits a 36 px picture into a compact menu row", async () => {
+  await page.viewport(1280, 900);
+  const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", { preview });
+  const tree = el.shadowRoot!.querySelector("dashboard-menu-document-tree")!;
+  await tree.updateComplete;
+  const table = tree.shadowRoot!.querySelector("wt-data-table")!;
+  await table.updateComplete;
+  const row = table.shadowRoot!.querySelector('[data-row-key="beer"]')!;
+  expect(row.querySelector('[part~="thumb-placeholder"]')!.getBoundingClientRect().width).toBe(36);
+  expect(row.getBoundingClientRect().height).toBeLessThanOrEqual(50);
+});
+
+it("uses one compact warning line with a marker", async () => {
+  const { el } = await mountWidget<MenuPreviewPanel>("dashboard-menu-preview", {
+    preview: {
+      ...preview,
+      warnings: [
+        {
+          kind: "allergens_unreviewed",
+          products: [{ id: "lager", name: "Lager", parentName: null }],
+        },
+      ],
+    },
+  });
+  const warning = el.shadowRoot!.querySelector("wt-disclosure")!;
+  await warning.updateComplete;
+  const summary = warning.shadowRoot!.querySelector("button")!;
+  expect(warning.getBoundingClientRect().height).toBeLessThanOrEqual(48);
+  expect(getComputedStyle(warning.closest("section")!).borderTopStyle).toBe("solid");
+  expect(getComputedStyle(summary, "::before").content).not.toBe("none");
+  expect(summary.getAttribute("aria-expanded")).toBe("false");
+});

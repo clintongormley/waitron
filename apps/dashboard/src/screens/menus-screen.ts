@@ -292,12 +292,8 @@ export class MenusScreen extends LitElement {
         flex-direction: column;
         min-block-size: var(--wt-table-max, auto);
       }
-      @media (width <= 440px) {
-        wt-tabs::part(tab) {
-          flex-shrink: 1;
-          min-inline-size: min-content;
-          padding-inline: var(--wt-space-2);
-        }
+      .heading .title nav {
+        font-size: var(--wt-font-size-xl);
       }
       @media (360px <= width <= 640px) {
         .heading:has(.review-publish) {
@@ -2425,7 +2421,7 @@ export class MenusScreen extends LitElement {
       >
       <wt-button
         data-test="selection-remove"
-        variant=${removable ? "danger" : "secondary"}
+        variant="secondary"
         .disabled=${!removable || busy}
         @click=${() => {
           if (!removable || this.busy || this.#structureSave.saving) return;

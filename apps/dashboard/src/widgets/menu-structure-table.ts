@@ -222,16 +222,8 @@ export class MenuStructureTable extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
       wt-data-table[narrow]::part(count) {
-        ${visuallyHiddenStyles}
-        clip-path: inset(50%);
-      }
-      /* The narrow table's hidden count is placed against this, inside the table's scroll box, not
-         against the page, which a long name would then widen. */
-      wt-data-table::part(root-label) {
-        position: relative;
-      }
-      wt-data-table[wrap-to-fit][narrow] {
-        --wt-table-cell-padding-inline: var(--wt-space-1);
+        display: block;
+        margin-inline-start: 0;
       }
       wt-data-table[wrap-to-fit]::part(root-label) {
         min-inline-size: var(--wt-tap-min);
@@ -1188,7 +1180,7 @@ export class MenuStructureTable extends LitElement {
   #nameSpan(row: Row) {
     const parts = ["name"];
     if (row.node.ref.kind === "section") parts.push("section-name");
-    if (row.readOnly) parts.push("read-only");
+    if (row.readOnly && !row.variant) parts.push("read-only");
     return html`<span
       part=${parts.join(" ")}
       data-test="name"
@@ -1264,6 +1256,7 @@ export class MenuStructureTable extends LitElement {
       );
     }
     const path = searchRoot ? this.#sectionPath(row) : "";
+    const inlineCount = node.ref.kind === "section" && !node.includedMenuId && !searchRoot;
     const stack = html`<span
       part=${node.ref.kind === "section" ? "name-stack folder-stack" : "name-stack"}
       >${
@@ -1271,7 +1264,11 @@ export class MenuStructureTable extends LitElement {
           ? html`<span part="search-name-line"
               >${this.#nameSpan(row)}${path === "" ? nothing : html`<span part="search-path">${path}</span>`}</span
             >`
-          : this.#nameSpan(row)
+          : inlineCount
+            ? html`<span part="structure-section-label"
+                >${this.#nameSpan(row)}${this.#nameNotes(row)}</span
+              >`
+            : this.#nameSpan(row)
       }${
         node.includedMenuId && !row.readOnly
           ? html`<span part="note" data-test=${`folder-setting-${key}`}
@@ -1282,7 +1279,7 @@ export class MenuStructureTable extends LitElement {
               )}</span
             >`
           : nothing
-      }${this.#nameNotes(row)}${refusal}</span
+      }${inlineCount ? nothing : this.#nameNotes(row)}${refusal}</span
     >`;
     return menuTreeCell(node.ref.kind, this.#swatch(row), stack);
   }
@@ -1689,6 +1686,7 @@ export class MenuStructureTable extends LitElement {
             this.#send("wt-set-menu-open", { menuId: row.node.ref.menuId });
         }}
         .rowClickLabel=${(row: TableRow) => `${t("menus.open")}: ${row.name}`}
+        .rowToggleParts=${(row: TableRow) => (row.kind === "root" ? "structure-root-toggle" : "")}
         .rowToggleLabel=${(row: TableRow, expanded: boolean) =>
           fill(expanded ? "menus.collapse" : "menus.expand", { name: row.name })}
         .rows=${rows}

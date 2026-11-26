@@ -52,6 +52,12 @@ export class MenuDocumentTree extends LitElement {
         min-width: 0;
         container-type: inline-size;
       }
+      wt-data-table {
+        --preview-media-size: calc(var(--wt-space-6) + var(--wt-space-1));
+      }
+      wt-data-table::part(preview-cell) {
+        padding-block: calc(var(--wt-space-1) / 2);
+      }
       wt-data-table::part(table-head) {
         display: none;
       }
@@ -95,27 +101,29 @@ export class MenuDocumentTree extends LitElement {
         display: inline-flex;
         margin-inline-end: var(--wt-space-2);
       }
+      wt-data-table::part(thumb-frame),
+      wt-data-table::part(thumb-placeholder),
+      wt-data-table::part(folder-frame),
+      wt-data-table::part(product-media),
       wt-data-table[narrow]::part(thumb-frame),
-      wt-data-table[narrow]::part(thumb-placeholder) {
-        display: inline-grid;
-        inline-size: var(--wt-space-6);
-        block-size: var(--wt-space-6);
-      }
+      wt-data-table[narrow]::part(thumb-placeholder),
       wt-data-table[narrow]::part(folder-frame),
       wt-data-table[narrow]::part(product-media) {
-        inline-size: var(--wt-space-6);
-        block-size: var(--wt-space-6);
-      }
-      wt-data-table::part(thumb-placeholder) {
         display: inline-grid;
         place-items: center;
+        inline-size: var(--preview-media-size);
+        block-size: var(--preview-media-size);
+        min-block-size: 0;
       }
       wt-data-table::part(media-placeholder-icon) {
         color: var(--wt-color-text);
       }
-      wt-data-table::part(target) {
+      wt-data-table::part(preview-current) {
         background: var(--wt-color-surface-lifted);
+      }
+      wt-data-table::part(target):focus-visible {
         outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
       }
       wt-data-table::part(note) {
         color: var(--wt-color-text-muted);
@@ -376,6 +384,7 @@ export class MenuDocumentTree extends LitElement {
         .rows=${this.#rows()}
         .columns=${this.#columns()}
         .rowKey=${(row: Row) => row.key}
+        .rowCellParts=${(row: Row) => (row.key === this.highlightedKey ? "preview-cell preview-current" : "preview-cell")}
         .rowParent=${(row: Row) => row.parentKey}
         .rowCollapsible=${(row: Row) => this.#canExpand(row)}
         .rowActivation=${(row: Row) => (this.#canExpand(row) ? "toggle" : "none")}

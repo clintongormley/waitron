@@ -8785,7 +8785,7 @@ export const es: Record<StringKey, string> = {
   "menus.review_publish": "Revisar y publicar",
   "menus.save_and_review": "Guardar y revisar",
   "menus.save_before_review": "Guarda los cambios antes de revisarlos para su publicación.",
-  "menus.tab_home": "Inicio del dispositivo",
+  "menus.tab_home": "Pantalla inicial",
   "home.add_shortcuts": "Añadir accesos directos",
   "home.picker_shortcuts": "Productos y secciones",
   "home.choose_shortcuts": "Elige accesos directos",

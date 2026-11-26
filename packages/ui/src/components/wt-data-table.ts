@@ -782,6 +782,10 @@ export class WtDataTable<Row = unknown> extends LitElement {
         cursor: pointer;
       }
 
+      tbody tr:has(> td[data-selection-cell] > .row-controls > input:checked) td {
+        background: color-mix(in srgb, var(--wt-color-primary) 12%, var(--wt-color-surface));
+      }
+
       .tree-cell {
         display: inline-flex;
         align-items: baseline;
