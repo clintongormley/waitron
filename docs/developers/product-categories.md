@@ -164,7 +164,8 @@ changing that name must pass the check.
 `POST /management-api/menus/:id/duplicate`, with `{ name }`, makes a new menu holding a copy
 of this menu's working copy and answers 201 with the new menu (`{ id, name, active }`). It
 copies the menu's own sections and their members, its Home shortcuts, its home order, its
-products' menu prices and its variant prices (`duplicateMenu`,
+products' menu prices (an ordinary menu's copy keeps none for a product with an Active variant)
+and its variant prices (`duplicateMenu`,
 `packages/menu/src/menu-copy.ts`). An include, and a Home shortcut into an included menu,
 still name the other menu's sections. Published versions, scheduled publications and menu periods
 are not copied, so the copy starts unpublished. A blank name answers `management.request_invalid`

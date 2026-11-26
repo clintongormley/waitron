@@ -1177,6 +1177,10 @@ describe("a product that gains its first variant while a price is typed for it",
     await table(el).updateComplete;
     expect(actions(el).error).toBe("");
     expect(button(el).disabled).toBe(true);
+    el.rows = [burger, plainLemonade, lager];
+    await el.updateComplete;
+    await table(el).updateComplete;
+    expect(override(el, "mi-lemonade").error).toBe("");
   });
 });
 

@@ -777,7 +777,6 @@ export class MenuPricesTable extends LitElement {
       const price = blankToNull(text);
       if (
         line !== undefined &&
-        hasField(line) &&
         ((price !== null && !isProductPrice(price)) || !samePrice(price, this.#stored(line)))
       )
         saves.push({
