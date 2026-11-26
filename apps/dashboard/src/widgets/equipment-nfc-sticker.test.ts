@@ -150,26 +150,44 @@ describe("NFC sticker window", () => {
     expect(footer(el)).toEqual([t("action.close")]);
   });
 
-  it("fits all three written-sticker actions on one row in Spanish at 333 px", async () => {
-    setLocale("es");
-    await page.viewport(333, 720);
-    try {
-      const el = await mountWritten("printer");
-      const bounds = (name: string) =>
-        button(el, name).shadowRoot!.querySelector("button")!.getBoundingClientRect();
-      const close = bounds("close-equipment-nfc");
-      const lock = bounds("lock-equipment-nfc");
-      const write = bounds("write-equipment-nfc");
-      expect(close.top).toBe(lock.top);
-      expect(lock.top).toBe(write.top);
-      expect(close.left).toBeGreaterThanOrEqual(0);
-      expect(close.right).toBeLessThan(lock.left);
-      expect(lock.right).toBeLessThan(write.left);
-      expect(write.right).toBeLessThanOrEqual(333);
-    } finally {
-      await page.viewport(1280, 768);
-    }
-  });
+  it.each(["system font", "phone font"])(
+    "fits all three written-sticker actions on one row in Spanish at 333 px with the %s",
+    async (font) => {
+      setLocale("es");
+      const viewport = [innerWidth, innerHeight] as const;
+      await page.viewport(333, 720);
+      let face: FontFace | undefined;
+      try {
+        const el = await mountWritten("printer");
+        if (font === "phone font") {
+          const file = new URL("../../../server/src/assets/invoice-noto-sans.ttf", import.meta.url);
+          face = new FontFace("Sticker test phone font", `url(${file.href})`, {
+            weight: "100 900",
+          });
+          document.fonts.add(await face.load());
+          el.style.setProperty("--wt-font-family", '"Sticker test phone font"');
+        }
+        const bounds = (name: string) =>
+          button(el, name).shadowRoot!.querySelector("button")!.getBoundingClientRect();
+        const close = bounds("close-equipment-nfc");
+        const lock = bounds("lock-equipment-nfc");
+        const write = bounds("write-equipment-nfc");
+        expect(close.top).toBe(lock.top);
+        expect(lock.top).toBe(write.top);
+        expect(close.left).toBeGreaterThanOrEqual(0);
+        expect(close.right).toBeLessThan(lock.left);
+        expect(lock.right).toBeLessThan(write.left);
+        expect(write.right).toBeLessThanOrEqual(333);
+        for (const action of [close, lock, write]) {
+          expect(action.width).toBeGreaterThanOrEqual(44);
+          expect(action.height).toBeGreaterThanOrEqual(44);
+        }
+      } finally {
+        if (face) document.fonts.delete(face);
+        await page.viewport(...viewport);
+      }
+    },
+  );
 
   it("without Web NFC writes nothing and offers Try again", async () => {
     vi.stubGlobal("NDEFReader", undefined);

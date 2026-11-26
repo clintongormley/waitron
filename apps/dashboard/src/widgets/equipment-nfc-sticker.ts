@@ -72,7 +72,7 @@ export class EquipmentNfcSticker extends LitElement {
       }
       @media (max-width: 360px) {
         wt-form-actions {
-          --wt-button-padding-inline: var(--wt-space-2);
+          --wt-button-padding-inline: var(--wt-space-1);
         }
       }
     `,

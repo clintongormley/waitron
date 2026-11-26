@@ -715,7 +715,8 @@ describe("the customer menu Online preview", () => {
     async (width, size, surface) => {
       const viewport = [innerWidth, innerHeight] as const;
       try {
-        await page.viewport(width, 800);
+        // Keep the measured document jump clear of the end, even with compact price rows.
+        await page.viewport(width, surface === "document" ? 650 : 800);
         const { el, host } = await open(() => Response.json(publishedSections()));
         if (surface !== "document") {
           host.style.cssText += "height: 700px; container-type: size; overflow-y: auto;";
