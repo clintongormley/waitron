@@ -34,6 +34,7 @@ import { hashPin, loginWithPin } from "@waitron/identity";
 import { recordCorrection } from "./record-correction.js";
 import type { RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
+import { recordSubstitution } from "./record-substitution.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
 import { seedBareSale, seedCorrectiveSeries, seedTaxpayer } from "../test/fixtures.js";
@@ -1843,6 +1844,29 @@ describe("recordCorrection — a full invoice's corrective, asked for with fullI
     await expectRefused(backend, originalId, full(), {
       code: "sale.correction_unsupported",
       params: { saleId: originalId },
+    });
+  });
+
+  it("refuses an invoice naming a customer without their address", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: ticketId } = await sell(backend);
+    const { saleId: originalId } = await sellFull(backend);
+    const [{ seriesId: fullSeriesId }] = await suite.db
+      .select({ seriesId: sales.seriesId })
+      .from(sales)
+      .where(eq(sales.id, originalId));
+    const { saleId: substitutionId } = await withTransaction(suite.db, (tx) =>
+      recordSubstitution(tx, backend, {
+        ...saleInput(),
+        seriesId: brandSeriesId(fullSeriesId),
+        substitutedSaleIds: [ticketId],
+        counterparty: SPANISH,
+      }),
+    );
+
+    await expectRefused(backend, substitutionId, full(), {
+      code: "sale.correction_unsupported",
+      params: { saleId: substitutionId },
     });
   });
 

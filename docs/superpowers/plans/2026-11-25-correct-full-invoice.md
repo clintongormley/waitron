@@ -230,6 +230,9 @@ is printed from Find a bill: a receipt's rule today. A refused **R1** has no fix
 none (`put-right.test.ts`), and an F1 holding an R1 can never get its R4 (`sale.replacement_not_first`); the PR
 says so. Sale-path read changed: no.
 
+The till's `sale.correction_unsupported` words (`codes.ts`, "This is a full invoice naming a customer…") must also
+cover a full-invoice correction refused because the invoice names nobody or is not a full invoice.
+
 ## PR 2b — a cancelled dish's money goes on it too
 
 **Task 6, routing and limits.** `give-back-plan.ts`, `give-back-read.ts` (`lineAvailability`),

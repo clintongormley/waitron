@@ -29,6 +29,7 @@ import type { IncidentSeverity } from "./incidents.js";
 import { assertSumsTo, atCents, deriveVatBreakdown } from "./record-sale.js";
 import {
   requireFullInvoiceCorrection,
+  requireStoredCustomerAddress,
   requireSupportedCorrection,
   requireTaxpayerDomicile,
 } from "./correction-eligibility.js";
@@ -93,9 +94,12 @@ export interface RecordCorrectionInput {
   /**
    * Files a full invoice's corrective: it names the customer the invoice names, as stored, and the
    * business's registered address as it is now. Refused with `sale.correction_unsupported` when
-   * the invoice names nobody or beside `wholeInvoice`, and with `fiscal.taxpayer_domicile_missing`
-   * when the business has no registered address. Without it, an invoice naming a customer is
-   * refused with `sale.correction_unsupported`.
+   * the invoice names nobody, stores no customer address, or beside `wholeInvoice`, and with
+   * `fiscal.taxpayer_domicile_missing` when the business has no registered address. Without it, an
+   * invoice naming a customer is refused with `sale.correction_unsupported`. The write does not
+   * itself ask the regime whether the invoice is a full invoice: the caller first runs the preview
+   * or the lines read, which ask admission, in the same transaction, as the server does for
+   * receipts.
    */
   fullInvoice?: true;
   /** Checked by `recordCorrection` itself; the authorizer is recorded on `sales.authorized_by`.
@@ -224,6 +228,7 @@ export async function recordCorrection(
   let taxpayerDomicile: string | null = null;
   if (fullInvoice) {
     requireFullInvoiceCorrection(original.counterpartyTaxId, correctsSaleId, input.wholeInvoice);
+    requireStoredCustomerAddress(original.counterpartyAddress, correctsSaleId);
     taxpayerDomicile = await requireTaxpayerDomicile(tx);
   } else {
     requireSupportedCorrection(original.counterpartyTaxId, correctsSaleId);

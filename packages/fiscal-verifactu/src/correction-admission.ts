@@ -20,10 +20,11 @@ const FILING: Record<string, Filing | undefined> = {
  * Judges the sale's newest alta version, the one a correction is filed against
  * (`VerifactuBackend.recordCorrection`), and that version's submission: an F2, or an R5 by
  * replacement, or a full invoice (an F1, or an R4 by replacement), whose answer says `fullInvoice`
- * unless it is `voided`, `filing_versions_unusable` or about a sale with no records. Any other submission state, including one this code does not know, refuses.
- * A full invoice AEAT refused waits (`filing_refused`) only while its open case has a fix the
- * Fiscal filing page offers (`putRightFor`); otherwise it is `refused_no_fix`. `issuingNodeId` is
- * the box that would issue the correction.
+ * unless it is `voided`, `filing_versions_unusable` or about a sale with no records. Any other
+ * submission state, including one this code does not know, refuses. A full invoice AEAT refused
+ * waits (`filing_refused`) only while its open case has a fix the Fiscal filing page offers
+ * (`putRightFor`); otherwise it is `refused_no_fix`. `issuingNodeId` is the box that would issue
+ * the correction.
  */
 export async function correctionAdmissionFor(
   tx: Transaction,
