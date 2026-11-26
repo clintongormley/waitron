@@ -37,7 +37,7 @@ The till reaches the second row with a 1112 receipt that was replaced and never 
 | --- | --- |
 | a dish, extra or drink served, or a dish cancelled with its charge kept | `bill.served_dishes`, naming them |
 | a payment on its way; time not confirmed; box handed over | today's codes |
-| a receipt **another box's chain** issued and AEAT has not answered | `fiscal.original_unanswered` |
+| a receipt **another chain** issued (another box's, or an earlier installation's on this box) and AEAT has not answered | `fiscal.original_unanswered` |
 
 - **Served:** any line's `served_quantity`, or a `line_service_cancellations` row (keeping a served dish's charge puts its
   mark back to 0, run), except rows Record unpaid departure wrote for dishes it stopped: those with `cancelled_at` at or
@@ -164,7 +164,7 @@ went red with Task 6 in place (run). Void mechanics stay in `record-void.test.ts
 | Served | These dishes were served or charged, so the receipt can't be cancelled. Take payment, or use Reopen bill where it is offered. | Estos platos se sirvieron o se cobran, así que el ticket no se puede anular. Cobra la cuenta o, si se ofrece, usa Reabrir cuenta. |
 | Payment held | This bill holds a payment, so its receipt cannot be cancelled. | Esta cuenta tiene un pago, así que no se puede anular su ticket. |
 | Approver can't | The person who approved this cannot do it. Choose someone who can. | La persona que lo ha aprobado no puede hacerlo. Elige a alguien que pueda. |
-| Other box | The other box has not finished sending its receipts. Try again later. | El otro servidor aún no ha terminado de enviar sus tickets. Inténtalo más tarde. |
+| Not answered | AEAT has not answered for this receipt yet. Try again later. | La AEAT aún no ha respondido sobre este ticket. Inténtalo más tarde. |
 | Done (no number) | Receipt {number} cancelled. (The receipt is cancelled.) | Ticket {number} anulado. (El ticket queda anulado.) |
 
 **Task 9, words:** both `table-service.md` guides; the dashboard help of both permissions; `conventions-ui.md:630`,

@@ -288,6 +288,10 @@ const en = {
     "Waitron cannot put this one right yet. The case stays open.",
   "fiscal_filing.put_right.none.full-invoice":
     "Waitron cannot put this one right yet: a full invoice needs a corrective invoice Waitron cannot issue yet.",
+  "fiscal_filing.put_right.none.voided":
+    "This invoice was cancelled in Waitron, and AEAT never held it, so there is nothing to send or correct. The case stays open.",
+  "fiscal_filing.put_right.none.set-aside":
+    "AEAT never held the invoice this cancels, so there is nothing to send or correct. The case stays open.",
   "fiscal_filing.refused.signed_out": "You are signed out. Sign in again, then send again.",
   "fiscal_filing.refused.admin":
     "Only an administrator can put this right. Sign in as one with the button below.",
@@ -680,6 +684,10 @@ const es: Record<AeatCertificateKey, string> = {
     "Waitron todavía no puede corregir este caso. El caso sigue abierto.",
   "fiscal_filing.put_right.none.full-invoice":
     "Waitron todavía no puede corregir este caso: una factura completa necesita una factura rectificativa que Waitron todavía no puede emitir.",
+  "fiscal_filing.put_right.none.voided":
+    "Esta factura se anuló en Waitron y la AEAT nunca la tuvo, así que no hay nada que enviar ni corregir. El caso sigue abierto.",
+  "fiscal_filing.put_right.none.set-aside":
+    "La AEAT nunca tuvo la factura que esta anula, así que no hay nada que enviar ni corregir. El caso sigue abierto.",
   "fiscal_filing.refused.signed_out":
     "Se ha cerrado tu sesión. Vuelve a iniciarla y envía de nuevo.",
   "fiscal_filing.refused.admin":

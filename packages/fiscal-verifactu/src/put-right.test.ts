@@ -39,6 +39,7 @@ function refused(
     conflicts: [],
     lookups: [],
     heldBehind: 0,
+    cancelledNeverHeld: false,
   };
 }
 
@@ -176,6 +177,49 @@ describe("putRightFor, cases no fix applies to", () => {
   it("offers nothing for a full invoice whose cause is not a refusal", () => {
     expect(
       putRightFor({ ...refused(1112, { tipoFactura: "F1" }), cause: "fiscal.huella_divergente" }),
+    ).toEqual({ kind: "none", why: "not-yet" });
+  });
+});
+
+describe("putRightFor, an invoice cancelled in Waitron that AEAT never held", () => {
+  const description = refused(1100, { mensajeError: DESCRIPTION_MESSAGE });
+  it.each([
+    ["a wrong description", description],
+    ["a future date", refused(1112)],
+  ])("offers nothing for its refused original, refused for %s", (_name, found) => {
+    expect(putRightFor({ ...found, cancelledNeverHeld: true })).toEqual({
+      kind: "none",
+      why: "voided",
+    });
+  });
+  const setAside: FilingCaseView = {
+    ...description,
+    cause: "fiscal.anulacion_retenida",
+    evidence: { codigo: null, mensaje: null, csv: null },
+    record: { ...description.record, tipoRegistro: "anulacion", tipoFactura: null },
+    submission: { estado: "retenido", codigoError: null, mensajeError: null, enviadoEn: null },
+  };
+  it("says its set-aside cancellation needs nothing sent", () => {
+    expect(putRightFor({ ...setAside, cancelledNeverHeld: true })).toEqual({
+      kind: "none",
+      why: "set-aside",
+    });
+  });
+  it("keeps the general answer for a set-aside cancellation of an invoice AEAT may hold", () => {
+    expect(putRightFor(setAside)).toEqual({ kind: "none", why: "not-yet" });
+  });
+  it("keeps the general answer for a refused cancellation of such an invoice", () => {
+    expect(
+      putRightFor({
+        ...description,
+        record: { ...description.record, tipoRegistro: "anulacion" },
+        cancelledNeverHeld: true,
+      }),
+    ).toEqual({ kind: "none", why: "not-yet" });
+  });
+  it("keeps the general answer for a conflict on such an invoice", () => {
+    expect(
+      putRightFor({ ...description, cause: "fiscal.huella_divergente", cancelledNeverHeld: true }),
     ).toEqual({ kind: "none", why: "not-yet" });
   });
 });

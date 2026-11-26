@@ -327,7 +327,7 @@ describe("till-table-order-screen: Nothing was served", () => {
     correctives: [],
   };
 
-  it("offers to cancel and credit a bill whose invoice was issued and nothing is paid", async () => {
+  it("offers Nothing was served on a bill whose invoice was issued and nothing is paid", async () => {
     const el = await mountScreen({ orderId: "wo-invoiced", bills: [paidTab, invoiced] });
     const asked = capture(el, "cancel-credit-bill");
 

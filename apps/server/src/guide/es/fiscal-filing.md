@@ -48,6 +48,9 @@ pestaña **Transacciones**, y elige **Reimprimir**. Esa primera impresión es el
 siguientes son copias. Solo un administrador puede enviar cualquiera de los dos; cualquier otra
 persona puede iniciar sesión como administrador desde el caso.
 
+Si un ticket que la AEAT rechazó se anula después en Waitron, su caso sigue abierto junto a un caso
+**Anulación apartada**: la AEAT nunca tuvo ese ticket, así que no hay nada que enviar ni corregir.
+
 La tabla muestra los 200 casos más recientes. Si hay más, indica cuántos; expórtalos para verlos
 todos.
 

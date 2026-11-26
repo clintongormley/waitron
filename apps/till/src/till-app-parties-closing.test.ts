@@ -39,7 +39,7 @@ import {
   held,
 } from "../test/party-app-fixture.js";
 
-describe("till-app: cancelling and crediting an invoiced bill", () => {
+describe("till-app: cancelling an invoiced bill", () => {
   const invoiced: PartyBill = {
     ...checkBill,
     status: "placed",
@@ -842,15 +842,15 @@ describe("till-app: reopening a printed bill", () => {
       stoppedToNothingBehindTheScenes: () => {
         bills = [tabBill, cancelled, { ...reopened, total: "0.00", outstanding: "0.00" }];
       },
-      /** Cancel and credit made on another till, and another bill opened at the table since. */
+      /** Nothing was served on another till, and another bill opened at the table since. */
       cancelledElsewhereThenNewBill: (total = "18.00") => {
         bills = [tabBill, cancelled, { ...unrelated, total, outstanding: total }];
       },
-      /** Cancel and credit made on another till: the bill is credited and no new bill opens. */
+      /** Nothing was served on another till: the bill is cancelled and no new bill opens. */
       cancelledElsewhere: () => {
         bills = [tabBill, cancelled];
       },
-      /** Cancel and credit on another till of the party's only bill in use: the server opens it a
+      /** Nothing was served on another till for the party's only bill in use: the server opens it a
        * fresh empty bill (`ensureFamilyBill`). */
       cancelledElsewhereLeavingEmptyBill: () => {
         bills = [cancelled, { ...unrelated, total: "0.00", outstanding: "0.00" }];

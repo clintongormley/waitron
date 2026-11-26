@@ -655,8 +655,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "bill.served_dishes": { en: en["cancel_credit.served"], es: es["cancel_credit.served"] },
   "fiscal.original_unanswered": {
-    en: "The other box has not finished sending its receipts. Try again later.",
-    es: "El otro servidor aún no ha terminado de enviar sus tickets. Inténtalo más tarde.",
+    en: "AEAT has not answered for this receipt yet. Try again later.",
+    es: "La AEAT aún no ha respondido sobre este ticket. Inténtalo más tarde.",
   },
   "meal_end.unserved_dishes": {
     en: "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment with Give money back.",

@@ -1,11 +1,12 @@
 import { and, eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { invoiceSeries, withTransaction, type Transaction } from "@waitron/db";
+import { invoiceSeries, saleVoids, withTransaction, type Transaction } from "@waitron/db";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import {
   appendCancellation,
+  appendCorrection,
   appendPendingAlta,
   seedPendingEnvios,
   seedSecondChain,
@@ -13,6 +14,8 @@ import {
 import { recordConflictEvidence } from "./conflict-evidence.js";
 import { openFilingCase, recordCaseEvent } from "./filing-cases.js";
 import { readFilingOverview } from "./filing-overview.js";
+import { putRightFor } from "./put-right.js";
+import { verifactuRecords } from "./schema/verifactu-records.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { appendHistory } from "./history.js";
 import { verifactuSeriesConflicts } from "./schema/verifactu-series-conflicts.js";
@@ -435,6 +438,7 @@ describe("readFilingOverview", () => {
         "conflicts",
         "lookups",
         "heldBehind",
+        "cancelledNeverHeld",
       ],
       ".cases[].evidence": ["codigo", "mensaje", "csv"],
       ".cases[].record": [
@@ -524,5 +528,84 @@ describe("readFilingOverview", () => {
     expect(unbounded.cases.map((each) => each.registroId)).toEqual(
       [...seeded.registroIds].reverse(),
     );
+  });
+});
+
+describe("readFilingOverview — an invoice cancelled in Waitron", () => {
+  const DESCRIPTION_REFUSAL = "Valor o tipo incorrecto del campo: DescripcionOperacion";
+
+  async function refuse(registroId: string, code = "1100") {
+    await setEnvio(registroId, {
+      estado: "rechazado",
+      codigoError: code,
+      mensajeError: DESCRIPTION_REFUSAL,
+    });
+    await inTx((tx) =>
+      openFilingCase(tx, {
+        registroId,
+        cause: "fiscal.registro_rechazado",
+        evidence: { codigo: Number(code), mensaje: DESCRIPTION_REFUSAL, csv: null },
+        now: new Date("2026-07-21T09:00:00.000Z"),
+      }),
+    );
+  }
+
+  async function cancelInWaitron(registroId: string) {
+    const [record] = await suite.db
+      .select({ saleId: verifactuRecords.saleId })
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, registroId));
+    await suite.db
+      .insert(saleVoids)
+      .values({ saleId: record!.saleId, reason: "Nothing was served", voidedAt: "2026-07-21" });
+  }
+
+  async function read() {
+    const overview = await inTx((tx) => readFilingOverview(tx, { nodeId: null, limit: null }));
+    return (registroId: string) => overview.cases.find((each) => each.registroId === registroId)!;
+  }
+
+  it("offers nothing for a refused original or its set-aside cancellation, and still offers the fix for a refused invoice that was not cancelled", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 3 });
+    const [original, kept, accepted] = seeded.registroIds as [string, string, string];
+    const cancellation = await appendCancellation(suite.db, original, 4);
+    await refuse(original);
+    await refuse(kept);
+    await setEnvio(accepted, { estado: "aceptado" });
+    await cancelInWaitron(original);
+    await setEnvio(cancellation, { estado: "retenido" });
+    await inTx((tx) =>
+      openFilingCase(tx, {
+        registroId: cancellation,
+        cause: "fiscal.anulacion_retenida",
+        evidence: { codigo: null, mensaje: null, csv: null },
+        now: new Date("2026-07-21T10:00:00.000Z"),
+      }),
+    );
+
+    const caseOf = await read();
+
+    expect(caseOf(original).cancelledNeverHeld).toBe(true);
+    expect(caseOf(cancellation).cancelledNeverHeld).toBe(true);
+    expect(caseOf(kept).cancelledNeverHeld).toBe(false);
+    expect(putRightFor(caseOf(original))).toEqual({ kind: "none", why: "voided" });
+    expect(putRightFor(caseOf(cancellation))).toEqual({ kind: "none", why: "set-aside" });
+    expect(putRightFor(caseOf(kept))).toEqual({ kind: "record-correction" });
+  });
+
+  it("does not say AEAT never held a cancelled invoice when AEAT accepted a version of it or answered it as a duplicate", async () => {
+    const seeded = await seedPendingEnvios(suite.db, { count: 2 });
+    const [corrected, duplicate] = seeded.registroIds as [string, string];
+    const correction = await appendCorrection(suite.db, corrected, 3);
+    await refuse(corrected);
+    await setEnvio(correction, { estado: "aceptado" });
+    await refuse(duplicate, "3000");
+    await cancelInWaitron(corrected);
+    await cancelInWaitron(duplicate);
+
+    const caseOf = await read();
+
+    expect(caseOf(corrected).cancelledNeverHeld).toBe(false);
+    expect(caseOf(duplicate).cancelledNeverHeld).toBe(false);
   });
 });

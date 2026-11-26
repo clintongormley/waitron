@@ -94,6 +94,9 @@ export interface FilingCaseView {
   lookups: LookupObservationView[];
   /** How many held records name this case as the one holding them. */
   heldBehind: number;
+  /** The record's sale was cancelled in Waitron, and AEAT refused every version of its invoice
+   * this box holds, none as a duplicate (3000): AEAT never held that invoice. */
+  cancelledNeverHeld: boolean;
 }
 
 export interface ActiveConflictView {

@@ -992,6 +992,47 @@ describe("putting a case right", () => {
     );
   });
 
+  it("offers nothing for a refused invoice cancelled in Waitron that AEAT never held, in English and Spanish", async () => {
+    const request = server({ ...refusedCase(1100, NAMES_DESCRIPTION), cancelledNeverHeld: true });
+    const { screen } = await mount(request, continuation(["fiscal.remedy"]).value);
+    const details = await openDetails(screen);
+    expect(flat(details.querySelector("[data-test=put-right-none]"))).toBe(
+      "This invoice was cancelled in Waitron, and AEAT never held it, so there is nothing to send or correct. The case stays open.",
+    );
+    expect(details.querySelector("wt-textarea")).toBeNull();
+    expect(action(details)).toBeNull();
+
+    setLocale("es");
+    const spanish = await openDetails((await mount(request)).screen);
+    expect(flat(spanish.querySelector("[data-test=put-right-none]"))).toBe(
+      "Esta factura se anuló en Waitron y la AEAT nunca la tuvo, así que no hay nada que enviar ni corregir. El caso sigue abierto.",
+    );
+  });
+
+  it("says a cancellation set aside for an invoice AEAT never held needs nothing sent, in English and Spanish", async () => {
+    const base = refusedCase(1100, NAMES_DESCRIPTION);
+    const setAside: FilingCaseView = {
+      ...base,
+      cause: "fiscal.anulacion_retenida",
+      evidence: { codigo: null, mensaje: null, csv: null },
+      record: { ...base.record, tipoRegistro: "anulacion", tipoFactura: null },
+      submission: { estado: "retenido", codigoError: null, mensajeError: null, enviadoEn: null },
+      cancelledNeverHeld: true,
+    };
+    const request = server(setAside);
+    const details = await openDetails((await mount(request)).screen);
+    expect(flat(details.querySelector("[data-test=put-right-none]"))).toBe(
+      "AEAT never held the invoice this cancels, so there is nothing to send or correct. The case stays open.",
+    );
+    expect(action(details)).toBeNull();
+
+    setLocale("es");
+    const spanish = await openDetails((await mount(request)).screen);
+    expect(flat(spanish.querySelector("[data-test=put-right-none]"))).toBe(
+      "La AEAT nunca tuvo la factura que esta anula, así que no hay nada que enviar ni corregir. El caso sigue abierto.",
+    );
+  });
+
   it("offers an administrator's sign-in to someone without the permission", async () => {
     const { value, signIn } = continuation(["report.export"]);
     const request = server(refusedCase(1100, NAMES_DESCRIPTION));

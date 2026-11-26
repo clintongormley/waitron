@@ -87,7 +87,8 @@ declare module "@waitron/shared" {
      * `refuseNewIssuance`, when a membership chart is held and does not name `nodeId` the serving
      * primary. */
     "fiscal.chain_handed_over": { nodeId: string };
-    /** `recordVoid` found the sale's receipt on another box's chain with no answer from AEAT yet. */
+    /** `recordVoid` found the sale's receipt on another chain (another box's, or an earlier
+     * installation's on this box) with no answer from AEAT yet. */
     "fiscal.original_unanswered": { saleId: string };
 
     /**
