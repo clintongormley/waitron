@@ -9,12 +9,18 @@ const FRAME_MS = 250;
  * survives and which keeps each read short on a handheld. */
 const DECODE_WIDTH = 640;
 
-export type QrScannerUnavailableReason = "unsupported" | "refused";
+/** `failed`: the camera answered, then gave no picture or stopped by itself. */
+export type QrScannerUnavailableReason = "unsupported" | "refused" | "failed";
+
+/** Whether this browser offers a camera at all; it says nothing about permission. */
+export function canFilm(): boolean {
+  return (navigator.mediaDevices as MediaDevices | undefined)?.getUserMedia !== undefined;
+}
 
 /**
- * Films with the rear camera and emits `wt-qr-read` for every QR code it reads, until `stop()`
- * or until it leaves the page. The caller judges each code: it calls `stop()` on one it keeps,
- * or sets `message` and lets scanning go on.
+ * Films with the rear camera and emits `wt-qr-read` for every QR code it reads, until `stop()`,
+ * until it leaves the page, or until the camera fails and it emits `wt-qr-unavailable`. The caller
+ * judges each code: it calls `stop()` on one it keeps, or sets `message` and lets scanning go on.
  */
 @customElement("wt-qr-scanner")
 export class WtQrScanner extends LitElement {
@@ -48,15 +54,15 @@ export class WtQrScanner extends LitElement {
   @property() hint = "";
   /** The caller's line about the latest code; empty shows `hint`. */
   @property() message = "";
-  /** Shown in place of everything else once the camera cannot start. */
+  /** Shown in place of everything else once the camera cannot start or stops by itself. */
   @property() unavailable = "";
-  @state() private filming = false;
-  @state() private cameraFailed = false;
+  @state() private phase: "starting" | "filming" | "failed" = "starting";
   @query("video") private video?: HTMLVideoElement;
 
   #stream?: MediaStream;
   #timer?: ReturnType<typeof setInterval>;
   #frame?: CanvasRenderingContext2D;
+  #watch?: AbortController;
   /** Moved on whenever the camera stops, so a camera that answers afterwards is stopped at once. */
   #session = 0;
 
@@ -75,20 +81,21 @@ export class WtQrScanner extends LitElement {
     this.#session++;
     clearInterval(this.#timer);
     this.#timer = undefined;
+    this.#watch?.abort();
+    this.#watch = undefined;
     for (const track of this.#stream?.getTracks() ?? []) track.stop();
     this.#stream = undefined;
   }
 
   async #start(): Promise<void> {
     const session = ++this.#session;
-    const media = navigator.mediaDevices as MediaDevices | undefined;
-    if (media?.getUserMedia === undefined) {
+    if (!canFilm()) {
       this.#fail("unsupported");
       return;
     }
     let stream: MediaStream;
     try {
-      stream = await media.getUserMedia({ video: { facingMode: "environment" } });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
     } catch {
       if (session === this.#session) this.#fail("refused");
       return;
@@ -98,21 +105,26 @@ export class WtQrScanner extends LitElement {
       return;
     }
     this.#stream = stream;
-    this.filming = true;
+    // `ended` fires only when the camera stops by itself, never for this element's own `stop()`.
+    this.#watch = new AbortController();
+    for (const track of stream.getTracks())
+      track.addEventListener("ended", () => this.#fail("failed"), { signal: this.#watch.signal });
+    this.phase = "filming";
     // Loaded only once a camera answers, so a page that never films never downloads it.
     const decoding = import("jsqr").then(
       (module) => module.default,
       () => undefined,
     );
     await this.updateComplete;
+    if (session !== this.#session) return;
     const video = this.video!;
     video.srcObject = stream;
-    void video.play().catch(() => undefined);
+    void video.play().catch(() => {
+      if (session === this.#session) this.#fail("failed");
+    });
     const decode = await decoding;
     if (session !== this.#session) return;
     if (decode === undefined) {
-      this.stop();
-      this.filming = false;
       this.#fail("unsupported");
       return;
     }
@@ -120,7 +132,8 @@ export class WtQrScanner extends LitElement {
   }
 
   #fail(reason: QrScannerUnavailableReason): void {
-    this.cameraFailed = true;
+    this.stop();
+    this.phase = "failed";
     this.dispatchEvent(
       new CustomEvent<{ reason: QrScannerUnavailableReason }>("wt-qr-unavailable", {
         detail: { reason },
@@ -164,10 +177,12 @@ export class WtQrScanner extends LitElement {
 
   override render() {
     return html`${
-        this.filming ? html`<video muted playsinline aria-label=${this.label}></video>` : nothing
+        this.phase === "filming"
+          ? html`<video muted playsinline aria-label=${this.label}></video>`
+          : nothing
       }
       <p class="message" data-scanner-message role="status">
-        ${this.cameraFailed ? this.unavailable : this.message || this.hint}
+        ${this.phase === "failed" ? this.unavailable : this.message || this.hint}
       </p>`;
   }
 }

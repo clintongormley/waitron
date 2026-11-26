@@ -183,6 +183,77 @@ describe("wt-qr-scanner", () => {
     expect(event.composed).toBe(true);
   });
 
+  test("a camera whose picture will not play is released and said to be unavailable", async () => {
+    const stream = film("hello");
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(
+      new DOMException("The picture would not play", "NotAllowedError"),
+    );
+    const unavailable = vi.fn();
+    document.addEventListener("wt-qr-unavailable", unavailable, { once: true });
+    const el = (await mountInShadowRoot(SCANNER)) as WtQrScanner;
+
+    await expect.poll(() => message(el)).toBe("The camera did not start");
+    expect(ended(stream)).toBe(true);
+    expect(el.shadowRoot!.querySelector("video")).toBeNull();
+    expect(unavailable).toHaveBeenCalledTimes(1);
+    expect((unavailable.mock.calls[0]![0] as CustomEvent).detail).toEqual({ reason: "failed" });
+  });
+
+  test("a picture that fails to play after stop() says nothing", async () => {
+    film("hello");
+    let refuse!: (error: DOMException) => void;
+    vi.spyOn(HTMLMediaElement.prototype, "play").mockReturnValue(
+      new Promise((_resolve, reject) => (refuse = reject)),
+    );
+    const unavailable = vi.fn();
+    const el = (await mount(SCANNER)) as WtQrScanner;
+    el.addEventListener("wt-qr-unavailable", unavailable);
+    await expect.poll(() => HTMLMediaElement.prototype.play).toHaveBeenCalled();
+
+    el.stop();
+    refuse(new DOMException("Interrupted", "AbortError"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(unavailable).not.toHaveBeenCalled();
+    expect(message(el)).toBe("Hold the code up to the camera");
+  });
+
+  test("a camera that stops by itself while filming is released and said to be unavailable", async () => {
+    const stream = film("hello");
+    const unavailable = vi.fn();
+    const el = (await mount(SCANNER)) as WtQrScanner;
+    el.addEventListener("wt-qr-unavailable", unavailable);
+    const drawn = vi.spyOn(CanvasRenderingContext2D.prototype, "drawImage");
+    await expect.poll(() => drawn.mock.calls.length, { timeout: 10_000 }).toBeGreaterThan(0);
+
+    // What the browser fires when the camera is unplugged or another program takes it.
+    stream.getVideoTracks()[0]!.dispatchEvent(new Event("ended"));
+
+    await expect.poll(() => message(el)).toBe("The camera did not start");
+    expect(ended(stream)).toBe(true);
+    expect(el.shadowRoot!.querySelector("video")).toBeNull();
+    expect(unavailable).toHaveBeenCalledTimes(1);
+    expect((unavailable.mock.calls[0]![0] as CustomEvent).detail).toEqual({ reason: "failed" });
+    drawn.mockClear();
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(drawn).not.toHaveBeenCalled();
+  });
+
+  test("a track that ends after stop() says nothing", async () => {
+    const stream = film("hello");
+    const unavailable = vi.fn();
+    const el = (await mount(SCANNER)) as WtQrScanner;
+    el.addEventListener("wt-qr-unavailable", unavailable);
+    await expect.poll(() => el.shadowRoot!.querySelector("video")).not.toBeNull();
+
+    el.stop();
+    stream.getVideoTracks()[0]!.dispatchEvent(new Event("ended"));
+    await el.updateComplete;
+
+    expect(unavailable).not.toHaveBeenCalled();
+    expect(message(el)).toBe("Hold the code up to the camera");
+  });
+
   test("a browser with no camera access shows the unavailable text", async () => {
     // An own property hides the prototype's getter until it is deleted again.
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: undefined });

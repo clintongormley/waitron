@@ -93,6 +93,7 @@ import {
   followVenueTheme,
   setContentLanguages,
   setHelpMode,
+  canFilm,
 } from "@waitron/ui";
 import {
   MONEY_SCALE,
@@ -366,7 +367,6 @@ import "./widgets/till-shell.js";
 import "./screens/till-drawer-close.js";
 import "./screens/till-drawer-cash.js";
 import "./widgets/find-bill-dialog.js";
-import { canScan } from "./widgets/equipment-dialog.js";
 import { pickedUpMessage } from "./widgets/equipment-labels.js";
 import "./widgets/profile-dialog.js";
 import type { ProfileNotice } from "./widgets/profile-dialog.js";
@@ -12182,7 +12182,7 @@ export class TillApp extends LitElement {
         .takesManualCard=${this.capabilities.includes("hand-keyed-card-payment")}
         .tableName=${this.#payingTableName(open)}
         .equipment=${this.deviceEquipment}
-        .canScan=${canScan()}
+        .canScan=${canFilm()}
         .fixedReader=${this.#fixedPayReader()}
         .autoPicking=${this.payAutoPicking}
         .readerReason=${reason?.line ?? null}
@@ -12803,7 +12803,7 @@ export class TillApp extends LitElement {
       .asksGuests=${bill.invoiceType !== "F1"}
       .receiptGuests=${defaultReceiptGuestCount(this.orderParty)}
       .equipment=${this.deviceEquipment}
-      .canScan=${canScan()}
+      .canScan=${canFilm()}
       .notice=${this.nfcNotice}
       .askNfc=${this.nfcPermission === "prompt"}
       .fixedReader=${this.#fixedPayReader()}
