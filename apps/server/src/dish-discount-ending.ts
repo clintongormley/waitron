@@ -25,8 +25,8 @@ const dish = alias(workingOrderLines, "dish");
 
 /**
  * The comps and discounts that still take something off one of `dishIds` or an extra of one, given
- * on a dish rather than on a set-menu row or the whole bill (D56), each with the first of
- * `dishIds` it takes something off.
+ * on a dish row rather than on an extra, a set-menu row or the whole bill (D56), each with the
+ * first of `dishIds` it takes something off.
  */
 async function ownDishDiscounts(
   tx: Transaction,
@@ -50,6 +50,8 @@ async function ownDishDiscounts(
         isNull(adjustmentEndingLines.id),
         ne(adjustments.action, "cancel"),
         isNotNull(adjustments.lineId),
+        // A comp on an extra stands while the extra does, and goes when it is removed.
+        isNull(given.parentLineId),
         sql`coalesce(${given.setMenuRole}, '') <> 'set_menu'`,
       ),
     )

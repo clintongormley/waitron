@@ -7,6 +7,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   addProducts,
   addSetMenuDishes,
+  createExtraList,
   createOptionList,
   createProduct,
   menuItems,
@@ -46,8 +47,11 @@ let wine: {
   large: string;
   serve: { listId: string; labelIds: string[] };
 };
-/** A Paella in two sizes, each a Main of the Daily at no supplement. */
-let paella: { offer: string; half: string; full: string };
+/** A Rice pot in two sizes, each a Main of the Daily at no supplement. */
+/** Soup's second paid extra, Croutons at 1.00, and Sirloin's, a Sauce at 2.00. */
+let croutons: ExtraSelection;
+let sauce: ExtraSelection;
+let ricePot: { offer: string; half: string; full: string };
 
 async function variantDish(
   tx: Transaction,
@@ -131,6 +135,33 @@ useVenueDb({
       await addSetMenuDishes(tx, spec.daily.menuId, [
         { productId: rice.id, excludedVariantIds: [] },
       ]);
+      const extraOf = async (name: string, price: string, dishId: string, kept: string[]) => {
+        const product = await createProduct(tx, {
+          categoryId: null,
+          name,
+          pricingUnit: "each",
+          unitPrice: price,
+          vatClass: "reduced",
+        });
+        const list = await createExtraList(
+          tx,
+          {
+            name,
+            minPicks: 0,
+            maxPicks: 1,
+            items: [{ productId: product.id, maxQuantity: 1, price }],
+          },
+          venue.cfg.locale,
+        );
+        await writeProductModifiers(
+          tx,
+          dishId,
+          [...kept, list.id].map((id) => ({ kind: "extras" as const, id })),
+        );
+        return { listId: list.id, picks: [{ productId: product.id, quantity: 1 }] };
+      };
+      croutons = await extraOf("Croutons", "1.00", spec.productIds.Soup, [spec.bread.listId]);
+      sauce = await extraOf("Sauce", "2.00", spec.productIds.Sirloin, []);
       const root = await requireMenuRoot(tx, venue.tables.menuId);
       await addProducts(tx, root, [glass.id, rice.id]);
       spec.daily.versionId = spec.special.versionId = await publishWorkingMenu(
@@ -152,7 +183,7 @@ useVenueDb({
         large: glass.variants[1]!,
         serve: { listId: serve.id, labelIds: serve.labels.map(({ id }) => id) },
       };
-      paella = { offer: await offerOf(rice.id), half: rice.variants[0]!, full: rice.variants[1]! };
+      ricePot = { offer: await offerOf(rice.id), half: rice.variants[0]!, full: rice.variants[1]! };
     });
   },
 });
@@ -180,8 +211,8 @@ const glassOf = (variantId: string): Line => ({
   quantity: "1",
   options: serveAs(0),
 });
-const paellaOf = (variantId: string): Line => ({
-  menuItemId: paella.offer,
+const ricePotOf = (variantId: string): Line => ({
+  menuItemId: ricePot.offer,
   variantId,
   quantity: "1",
 });
@@ -339,6 +370,45 @@ it("takes a comped Soup's Free off when its comped Bread is removed", async () =
   expect(await priced(tabId)).toEqual([{ what: "Soup", price: 600 }]);
 });
 
+it("keeps a Free given on the Bread alone when the Soup is given Croutons", async () => {
+  const { tabId } = await billOf([dish("Soup", [spec.bread])]);
+  const bread = (await rows(tabId)).find(({ name }) => name === "Bread")!;
+  await give(tabId, bread.id, FREE);
+  expect(await total(tabId)).toBe(600);
+
+  await editLine(tabId, (await rowOf(tabId, "Soup")).lineNo, {
+    extras: [spec.bread, croutons],
+  });
+
+  expect(await endingsOn(tabId)).toEqual([]);
+  expect(await priced(tabId)).toEqual([
+    { what: "Soup", price: 600 },
+    { what: "Bread", price: 0 },
+    { what: "Croutons", price: 100 },
+  ]);
+});
+
+it("keeps a Daily's 50% when its Sirloin is given a Sauce (D49)", async () => {
+  const { tabId } = await billOf([dish("Soup"), dish("Sirloin")]);
+  const given = await give(tabId, (await rowOf(tabId, "Daily menu")).id, percent(5000));
+  expect(await total(tabId)).toBe(950);
+
+  await editLine(tabId, (await rowOf(tabId, "Sirloin")).lineNo, { extras: [sauce] });
+
+  expect(await endingsOn(tabId)).toEqual([]);
+  const [standing] = await venue.db
+    .select({ reduction: adjustmentLines.reduction })
+    .from(adjustmentLines)
+    .where(
+      and(
+        eq(adjustmentLines.adjustmentId, given),
+        eq(adjustmentLines.lineId, (await rowOf(tabId, "Sirloin")).id),
+      ),
+    );
+  expect(standing!.reduction).toBeGreaterThan(0);
+  expect(await total(tabId)).toBe(1150);
+});
+
 it("puts a Soup taken out of its Daily by 50% back in the Hake's Daily when it is given Bread", async () => {
   const { tabId } = await billOf([dish("Soup"), dish("Hake")]);
   const soup = await rowOf(tabId, "Soup");
@@ -423,6 +493,23 @@ it("takes a dish's 10% off when a basket save names it at another variant, offer
   expect(await total(tabId)).toBe(550);
 });
 
+it("ends nothing when a second basket line keeps the stored dish another line named at another variant", async () => {
+  const { tabId } = await billOf([glassOf(wine.small)]);
+  const small = await rowOf(tabId, "Wine");
+  await give(tabId, small.id, percent(1000));
+
+  await saveBasket(tabId, [
+    { workingOrderLineId: small.id, ...glassOf(wine.large) },
+    { workingOrderLineId: small.id, ...glassOf(wine.small) },
+  ]);
+
+  expect(await endingsOn(tabId)).toEqual([]);
+  expect((await rows(tabId)).map(({ id, lineTotal }) => ({ id, lineTotal }))).toEqual([
+    { id: small.id, lineTotal: 405 },
+    { id: expect.not.stringMatching(small.id), lineTotal: 550 },
+  ]);
+});
+
 it("ends nothing when a basket save names another menu item in a discounted dish's place", async () => {
   const { tabId } = await billOf([glassOf(wine.small)]);
   const small = await rowOf(tabId, "Wine");
@@ -435,7 +522,7 @@ it("ends nothing when a basket save names another menu item in a discounted dish
 });
 
 it("takes a Daily's 50% off when a basket save names its Rice pot at another variant", async () => {
-  const { tabId } = await billOf([dish("Soup"), paellaOf(paella.half)]);
+  const { tabId } = await billOf([dish("Soup"), ricePotOf(ricePot.half)]);
   const daily = await rowOf(tabId, "Daily menu");
   const given = await give(tabId, daily.id, percent(5000));
   expect(await total(tabId)).toBe(700);
@@ -444,13 +531,13 @@ it("takes a Daily's 50% off when a basket save names its Rice pot at another var
 
   await saveBasket(tabId, [
     { workingOrderLineId: soup.id, ...dish("Soup") },
-    { workingOrderLineId: half.id, ...paellaOf(paella.full) },
+    { workingOrderLineId: half.id, ...ricePotOf(ricePot.full) },
   ]);
 
   expect(await endingsOn(tabId)).toEqual([
     { adjustmentId: given, why: "variant_changed", dishName: "Rice pot", lineId: null },
   ]);
-  expect(await rowOf(tabId, "Rice pot")).toMatchObject({ productId: paella.full });
+  expect(await rowOf(tabId, "Rice pot")).toMatchObject({ productId: ricePot.full });
   expect(await total(tabId)).toBe(1400);
 });
 
