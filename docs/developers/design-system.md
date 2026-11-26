@@ -4417,8 +4417,9 @@ magnifier first (not for staff), which unfolds the sidebar, keeps that choice an
 the search box; then direct buttons for the pinned pages and one button per headed section the session can
 open. The shared icon tooltip appears beside each button. The section holding the current page
 has a `--wt-color-primary` leading edge and a `--wt-color-surface-lifted` fill. A section with one page opens it. A
-section with more opens a panel beside its icon, listing the section's name and its pages. Its button
-keeps the hover fill while the panel is open. Place the panel before its first paint and lift it to
+section with more opens a panel beside its icon, listing the section's name and its pages. The current
+page in the panel uses the same band, leading edge and bold text as in the full sidebar. The section's
+icon button keeps the hover fill while the panel is open. Place the panel before its first paint and lift it to
 stay inside the layout when the icon is low. Picking a page
 opens it and closes the panel, and the strip stays folded. Escape closes the panel and returns focus
 to its icon. A click outside it, focus leaving it, another section's icon, unfolding the sidebar, a
