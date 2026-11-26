@@ -7065,9 +7065,9 @@ describe("scoped selection commands", () => {
   );
 
   it.each([false, true])("typechecks the whole workspace with hosted deadline=%s", (hosted) => {
-    const steps = workflowSteps(job("typecheck").body.join("\n")).filter(({ command }) =>
-      /\bpnpm typecheck\b/.test(command),
-    );
+    const jobSteps = workflowSteps(job("typecheck").body.join("\n"));
+    const steps = jobSteps.filter(({ command }) => /\btypecheck\b/.test(command));
+    expect(jobSteps[0].if).toBe("runner.environment == 'github-hosted'");
     expect(steps).toHaveLength(1);
     expect(steps[0].if).toBeUndefined();
     const result = spawnSync("bash", ["-eo", "pipefail"], {
@@ -7075,8 +7075,11 @@ describe("scoped selection commands", () => {
       timeout: 3000,
       input: [
         `pnpm() { printf 'pnpm <%s>\\n' "$*"; return 42; }`,
-        `node() { printf 'wrapper <%s> <%s>\\n' "$1" "$3"; shift 3; "$@"; }`,
-        hosted ? "TYPECHECK_DEADLINE_AT=$(( $(date +%s) + 60 ))" : "unset TYPECHECK_DEADLINE_AT",
+        `node() { printf 'wrapper <%s> <%s> <%s>\\n' "$1" "$2" "$3"; shift 3; "$@"; }`,
+        "date() { echo 1000; }",
+        hosted
+          ? `export "$(GITHUB_ENV=/dev/stdout; ${jobSteps[0].command})"`
+          : "unset TYPECHECK_DEADLINE_AT",
         steps[0].command,
       ].join("\n"),
     });
@@ -7084,7 +7087,7 @@ describe("scoped selection commands", () => {
     expect(result.status, result.stderr).toBe(42);
     expect(result.stdout.match(/^pnpm <.*>$/gm)).toEqual(["pnpm <typecheck>"]);
     expect(result.stdout.match(/^wrapper .*$/gm) ?? []).toEqual(
-      hosted ? ["wrapper <scripts/run-with-deadline.mjs> <-->"] : [],
+      hosted ? ["wrapper <scripts/run-with-deadline.mjs> <280> <-->"] : [],
     );
   });
 

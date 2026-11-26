@@ -1030,9 +1030,9 @@ jobs:
               echo 'Typecheck deadline elapsed during runner setup (exit 124)'
               exit 124
             fi
-            # The sampler and its sleep share a process group so neither can hold the log open.
+            # Stop the sampler as a group and keep its timer off the log pipes.
             set -m
-            (while sleep 10; do sample; done) &
+            (while sleep 10 >/dev/null 2>&1; do sample; done) &
             sampler=$!
             set +m
             trap 'kill -- "-$sampler" 2>/dev/null || true; wait "$sampler" 2>/dev/null || true; sample' EXIT
