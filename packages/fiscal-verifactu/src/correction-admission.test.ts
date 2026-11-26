@@ -242,6 +242,11 @@ describe("a full invoice, an F1 or an R4 by replacement, says so in every answer
     const { saleId } = await file({ tipo: "F1", on: other });
     expect(await admission(saleId)).toStrictEqual(full(refused("wrong_node")));
   });
+
+  it("with no submission", async () => {
+    const { saleId } = await file({ tipo: "F1", estado: null });
+    expect(await admission(saleId)).toStrictEqual(full(refused("missing")));
+  });
 });
 
 function figuresFor(...saleIds: SaleId[]): Promise<ReadonlyMap<SaleId, FiledFigures>> {
@@ -291,7 +296,7 @@ describe("refusals", () => {
     expect(await admission(saleId)).toEqual(refused("voided"));
   });
 
-  it.each(["F3", "R5"] as const)("an %s", async (tipo) => {
+  it.each(["F3", "R4", "R5"] as const)("an %s", async (tipo) => {
     expect(await admission((await file({ tipo })).saleId)).toStrictEqual(refused("not_simplified"));
   });
 

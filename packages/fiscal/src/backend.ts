@@ -43,8 +43,10 @@ export interface FiledReceipt {
 
 /**
  * Whether a regime's filing of an invoice allows a correction of it; read-only. `fullInvoice`
- * marks an answer about a full invoice (one naming its customer), whose corrective is itself a
- * full invoice; a caller that cannot issue one refuses such an answer. `filing_refused` waits for
+ * marks an answer about the newest filed version of a full invoice (one naming its customer),
+ * whose corrective is itself a full invoice; a `voided` or `filing_versions_unusable` answer, or
+ * one about a sale with no records, carries no mark. A caller that cannot issue a full invoice's
+ * corrective refuses a marked answer. `filing_refused` waits for
  * the filing to be fixed; `refused_no_fix` is a refusal nothing on this box offers to fix.
  */
 export type CorrectionAdmission =
