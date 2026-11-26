@@ -976,8 +976,10 @@ Use `bottom-sheet sheet-variant="menu"` on `wt-row-actions` for the till's menu 
 Set `sheet-heading` to show a title and name the dialog. A sheet without a heading takes
 its name from the trigger's `label`. Use `data-sheet-heading` on a direct child to label a
 section. If the sheet needs to stop above a bottom bar, set `--wt-menu-sheet-bottom-offset`
-to the bar's height. The dimming stops there too. Opening a sheet of plain actions focuses the
-first enabled control. Escape and Tab past either end close it and return focus to its trigger.
+to the bar's height. The dimming stops there too. Pressing a visible bar button closes the sheet
+and runs that button's action. Pressing the sheet's trigger again closes it. Opening a sheet of
+plain actions focuses the first enabled control. Escape and Tab past either end close it and
+return focus to its trigger.
 A sheet with a slotted `role="menu"` follows the menu's selection and keyboard rules above.
 
 Use `<wt-menu-row action label="Guests" value="3" chevron divider></wt-menu-row>` for a

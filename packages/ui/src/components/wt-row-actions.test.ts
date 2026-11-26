@@ -79,6 +79,29 @@ test("the menu sheet and its scrim stop above the bottom bar and read their pain
   }
 });
 
+test("the visible bar stays active and its sheet trigger closes on the second tap", async () => {
+  const { trigger, popup } = await menuSheet(
+    "<button>Find a bill</button>",
+    'style="position: fixed; bottom: 0; right: 0; --wt-menu-sheet-bottom-offset: 80px"',
+  );
+  const map = document.createElement("button");
+  map.textContent = "Map";
+  map.style.cssText = "position: fixed; bottom: 0; left: 0;";
+  const showMap = vi.fn();
+  map.addEventListener("click", showMap);
+  host.append(map);
+
+  expect(popup.matches(":popover-open")).toBe(true);
+  await userEvent.click(trigger);
+  expect(popup.matches(":popover-open")).toBe(false);
+  await userEvent.click(trigger);
+  expect(popup.matches(":popover-open")).toBe(true);
+  await userEvent.click(map);
+  expect(popup.matches(":popover-open")).toBe(false);
+  expect(showMap).toHaveBeenCalledOnce();
+  expect(document.activeElement).toBe(map);
+});
+
 test.each(["forward", "backward", "Escape"])(
   "the menu sheet dismisses from the keyboard (%s)",
   async (direction) => {
