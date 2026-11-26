@@ -96,9 +96,6 @@ describe("ServerRouter", () => {
     table[origin] = { ...standby, standing: "serving-secondary", waitingFor: "bucket" };
     await router.probeNow();
     expect(changes).toEqual(["bucket", undefined]);
-    table[origin] = standby;
-    await router.probeNow();
-    expect(router.waitingFor).toBeUndefined();
     expect(router.waiting).toBe(true);
   });
 

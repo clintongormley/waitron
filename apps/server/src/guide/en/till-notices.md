@@ -147,8 +147,9 @@ When the till says **This box is no longer the main box**, wait for the till to 
 main box, then try again. If you already charged a card on the terminal, refund it there first.
 
 If the till says **The box is checking its backup before taking sales** or **No box is taking
-sales right now**, keep it open. The till carries on when the box is ready. On the sign-in screen,
-press **Check again** to see if the box is ready now.
+sales right now**, keep it open. The till carries on as soon as a box takes sales. On the sign-in
+screen, press **Check again** to check now. In **Check your times**, use **Retry read** once the
+box is ready.
 
 ## Keep a report about a problem {#problem-report}
 

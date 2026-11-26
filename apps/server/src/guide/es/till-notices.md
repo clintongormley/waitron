@@ -161,9 +161,10 @@ servidor principal y vuelve a intentarlo. Si ya has cobrado con tarjeta en el da
 antes el importe ahí.
 
 Si la caja dice **El servidor está comprobando su copia de seguridad antes de aceptar ventas**
-o **Ningún servidor acepta ventas ahora mismo**, déjala abierta. La caja continúa cuando el servidor
-está listo. En la pantalla de inicio de sesión, pulsa **Comprobar de nuevo** para ver si el servidor
-ya está listo.
+o **Ningún servidor acepta ventas ahora mismo**, déjala abierta. La caja continúa en cuanto un
+servidor vuelve a aceptar ventas. En la pantalla de inicio de sesión, pulsa **Comprobar de nuevo**
+para comprobarlo al momento. En **Comprueba tus horas**, pulsa **Volver a consultar** cuando el
+servidor esté listo.
 
 ## Guarda un informe sobre un problema {#problem-report}
 
