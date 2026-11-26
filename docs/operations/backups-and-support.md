@@ -9,11 +9,10 @@ bucket copy do not move those archives.
 The **Recovery pack** card at the top of **Backups** makes one PDF holding the restore codes for
 the bucket copy and bucket archives, and the recovery key for archives in a folder: see [Make a new recovery pack](recovery-document.md). Keep the pack secret and off
 the box, outside the bucket. Keep earlier packs and keys for archives made before a replacement:
-changing the recovery key does not re-encrypt older files. After changing the recovery key, or
+changing the backup key does not re-encrypt older files. After **Change the backup key**, or
 the bucket copy or archive settings on **Backups**, the card says the pack is out of date; make a new one.
 
-If Change the backup key reports that the box could not record the change, the new key is already in use: make a new recovery pack. Do not assume that the failed metadata step kept
-the former key active. See the [archive settings reference](../../apps/server/README.md)
+If **Change the backup key** reports that the box could not record the change, the new key is already in use: make a new recovery pack. See the [archive settings reference](../../apps/server/README.md)
 and [restore procedures](../developers/offline-fiscal-restore.md) for the separate archive
 recovery keys.
 

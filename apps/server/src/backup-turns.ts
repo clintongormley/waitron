@@ -1,8 +1,7 @@
 /**
  * Runs each body once every body handed over before it has settled, whatever its outcome. The backup
  * key changes each read the held backup key and then write one; side by side, one could write back
- * a key another just replaced. The stream settings' Save takes a turn too, so it reports the key a
- * change just wrote. The stream host also refuses a reload while another runs.
+ * a key another just replaced. The stream host also refuses a reload while another runs.
  */
 export type Turns = <T>(body: () => Promise<T>) => Promise<T>;
 

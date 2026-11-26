@@ -37,15 +37,15 @@ new pack. The dialog then shows the master key with its name: use **Download** o
 **Continue**. **Copy** copies the master key alone and does not count: the pack holds more than the key, so use
 **Download** or **Print** before **Continue**. It is shown only this once, so **Stop** and Escape do nothing while the box is making
 it. The button is offered once the card has read the box's status.
-New backups then use a backup key from the new master key.
-
-## Change the backup key
-
-Choose **Change the backup key** on the card and type the master key, or choose the recovery pack PDF. New backups then use the next backup key, which a box you removed can't read. A wrong master key changes nothing.
+New backups then use a backup key from the new master key. If the card says backups still use a backup key from the old master key, choose **Change the backup key**.
 
 During an unfinished first setup, carry on in the tab that was doing it (reloading that tab
 carries on until activation starts) and use that flow's recovery-pack step. Follow [first Live setup](first-live-fiscal-setup.md); do not start a
 fresh identity just to obtain another pack.
+
+## Change the backup key
+
+Choose **Change the backup key** on the card and type the master key, or choose the recovery pack PDF. New backups then use the next backup key, which a box you removed can't read. A wrong master key changes nothing. Then choose **Make recovery pack** and keep the new pack: restoring a backup made after the change needs it.
 
 ## Implementation references
 
