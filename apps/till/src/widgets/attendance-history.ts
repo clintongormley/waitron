@@ -71,11 +71,54 @@ function withHourArticle(key: StringKey, at: string, offset: number) {
   return t(key).replace("{plural}", one ? "" : "s");
 }
 
-export function questionAttendanceHistory({ history, businessDay, timeZone }: AttendancePrompt) {
+function workerDeclineLabel(entry: AttendanceEntry): StringKey | undefined {
+  const extension = entry.extension;
+  if (
+    entry.correctionStatus !== "declined" ||
+    extension?.direction !== "worker_request" ||
+    !extension.respondsToEntryId
+  )
+    return undefined;
+  if (entry.correctsEntryId) return "attendance.asked_to_change";
+  if (extension.missingEntryKind === "in" || extension.missingEntryKind === "out")
+    return `attendance.asked_to_add_${extension.missingEntryKind}`;
+  return undefined;
+}
+
+export function questionAttendanceHistory(
+  { history, businessDay, timeZone }: AttendancePrompt,
+  items: readonly CorrectionItem[],
+) {
   const mixed = new Set(history.map((entry) => entry.offsetMinutes)).size > 1;
   const show = (entry: AttendanceEntry) =>
     questionTime(entry.eventAt, entry.offsetMinutes, businessDay, timeZone, mixed);
+  const declineLabels = new Map<string, StringKey>();
+  const declinedRequests = new Set<string>();
+  for (const entry of history) {
+    const label = workerDeclineLabel(entry);
+    if (label) {
+      declineLabels.set(entry.entryId, label);
+      declinedRequests.add(entry.extension!.respondsToEntryId!);
+    }
+  }
+  const earlierDeclines = new Set(
+    items.flatMap((item) =>
+      item.responseEntryIds.filter((id) => declineLabels.has(id)).slice(0, -1),
+    ),
+  );
   return history.map((entry, index) => {
+    if (declinedRequests.has(entry.entryId)) return nothing;
+    const declineLabel = declineLabels.get(entry.entryId);
+    if (declineLabel) {
+      const reason =
+        entry.correctionReason && !earlierDeclines.has(entry.entryId)
+          ? `: ${entry.correctionReason}`
+          : "";
+      return html`<li>
+        ${withHourArticle(declineLabel, entry.eventAt, entry.offsetMinutes)}
+        ${show(entry)}${reason}<span class="muted"> · ${t("attendance.declined_by_manager")}</span>
+      </li>`;
+    }
     const author = entry.extension?.authorKind ?? "worker";
     const next = history[index + 1];
     if (entry.entryKind === "break_start" && next?.entryKind === "break_end") {
@@ -122,6 +165,27 @@ export function questionAttendanceHistory({ history, businessDay, timeZone }: At
 
 export function questionAttendanceProposal(item: CorrectionItem, timeZone: string) {
   const mixed = new Set(item.history.map((entry) => entry.offsetMinutes)).size > 1;
+  const [first, second] = item.changes;
+  if (
+    first &&
+    "missingKind" in first.target &&
+    (first.target.missingKind === "in" || first.target.missingKind === "out")
+  ) {
+    const day = storedAttendanceTime(first.at, first.offsetMinutes).slice(0, 10);
+    const label = `attendance.manager_proposed_${first.target.missingKind}` as const;
+    const reason = item.reason ? `: ${item.reason}` : "";
+    return [
+      html`<li>
+        ${attendanceDateInWords(day)}. ${withHourArticle(label, first.at, first.offsetMinutes)}
+        ${questionTime(first.at, first.offsetMinutes, day, timeZone, mixed)}${
+          second
+            ? html` ${withHourArticle("attendance.proposed_and_out", second.at, second.offsetMinutes)}
+              ${questionTime(second.at, second.offsetMinutes, day, timeZone, mixed)}`
+            : nothing
+        }${reason}
+      </li>`,
+    ];
+  }
   return item.changes.map(({ target, at, offsetMinutes }, index) => {
     const original =
       "entryId" in target && item.history.find((entry) => entry.entryId === target.entryId);
