@@ -34,6 +34,7 @@ import { hashPin, loginWithPin } from "@waitron/identity";
 import { recordCorrection } from "./record-correction.js";
 import type { RecordCorrectionInput } from "./record-correction.js";
 import { recordSale } from "./record-sale.js";
+import { recordReplacement } from "./record-replacement.js";
 import { recordSubstitution } from "./record-substitution.js";
 import type { RecordSaleInput } from "./record-sale.js";
 import { recordVoid } from "./record-void.js";
@@ -1878,6 +1879,98 @@ describe("recordCorrection — a full invoice's corrective, asked for with fullI
       code: "sale.correction_unsupported",
       params: { saleId: originalId },
     });
+  });
+
+  it("refuses a full invoice made from receipts, even one storing the customer's address", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: ticketId } = await sell(backend);
+    const { saleId: originalId } = await sellFull(backend);
+    const [{ seriesId: fullSeriesId }] = await suite.db
+      .select({ seriesId: sales.seriesId })
+      .from(sales)
+      .where(eq(sales.id, originalId));
+    const { saleId: substitutionId } = await withTransaction(suite.db, (tx) =>
+      recordSubstitution(tx, backend, {
+        ...saleInput(),
+        seriesId: brandSeriesId(fullSeriesId),
+        substitutedSaleIds: [ticketId],
+        counterparty: SPANISH,
+        recipientAddress: "2 Main Street, 28013 Madrid, Spain",
+      }),
+    );
+
+    await expectRefused(backend, substitutionId, full(), {
+      code: "sale.correction_unsupported",
+      params: { saleId: substitutionId },
+    });
+  });
+
+  it("corrects a full invoice through its replacement", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellFull(backend);
+    const { saleId: replacementId } = await withTransaction(suite.db, (tx) =>
+      recordReplacement(tx, backend, {
+        origin: deviceOrigin(deviceId),
+        operationDescription: "Venta en establecimiento",
+        nodeId,
+        seriesId: fullRectSeriesId,
+        correctsSaleId: originalId,
+        authz: { sessionId: supervisorSessionId },
+        clock: steadyClock,
+      }),
+    );
+
+    const { saleId } = await correct(backend, originalId, full());
+
+    const [row] = await suite.db
+      .select({ correctsSaleId: sales.correctsSaleId })
+      .from(sales)
+      .where(eq(sales.id, saleId));
+    expect(row).toEqual({ correctsSaleId: replacementId });
+  });
+
+  it("refuses a full invoice's corrective as the invoice to correct", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellFull(backend);
+    const { saleId: correctiveId } = await correct(backend, originalId, full());
+    const back = correctionInput(correctiveId, full());
+
+    await withTransaction(suite.db, async (tx) => {
+      await expect(
+        recordCorrection(tx, backend, {
+          ...back,
+          total: "14.41",
+          lines: back.lines.map((line) => ({
+            ...line,
+            quantity: line.quantity.replace("-", ""),
+            lineTotal: line.lineTotal.replace("-", ""),
+          })),
+        }),
+      ).rejects.toMatchObject({
+        code: "sale.correction_unsupported",
+        params: { saleId: correctiveId },
+      });
+    });
+    expect(await countCorrectives(correctiveId)).toBe(0);
+    expect(await seriesNext(fullRectSeriesId)).toBe(2);
+  });
+
+  it("refuses a whole-invoice credit beside it before checking a split it is given", async () => {
+    const backend = new FakeFiscalBackend(suite.db);
+    const { saleId: originalId } = await sellFull(backend);
+
+    await expectRefused(
+      backend,
+      originalId,
+      full({
+        wholeInvoice: true,
+        partialVatBreakdown: [
+          { rate: decimal("21.00"), base: decimal("-10.00"), tax: decimal("-2.10") },
+          { rate: decimal("10.00"), base: decimal("-2.10"), tax: decimal("-0.21") },
+        ],
+      }),
+      { code: "sale.correction_unsupported", params: { saleId: originalId } },
+    );
   });
 
   it("refuses a receipt's correction numbered from the full-invoice corrective series", async () => {

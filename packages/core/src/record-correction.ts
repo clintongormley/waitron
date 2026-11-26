@@ -29,6 +29,7 @@ import type { IncidentSeverity } from "./incidents.js";
 import { assertSumsTo, atCents, deriveVatBreakdown } from "./record-sale.js";
 import {
   requireFullInvoiceCorrection,
+  requireFullInvoiceOriginal,
   requireStoredCustomerAddress,
   requireSupportedCorrection,
   requireTaxpayerDomicile,
@@ -94,7 +95,8 @@ export interface RecordCorrectionInput {
   /**
    * Files a full invoice's corrective: it names the customer the invoice names, as stored, and the
    * business's registered address as it is now. Refused with `sale.correction_unsupported` when
-   * the invoice names nobody, stores no customer address, or beside `wholeInvoice`, and with
+   * the invoice names nobody, is itself a correction other than a replacement, is a full invoice
+   * made from receipts, stores no customer address, or beside `wholeInvoice`, and with
    * `fiscal.taxpayer_domicile_missing` when the business has no registered address. Without it, an
    * invoice naming a customer is refused with `sale.correction_unsupported`. The write does not
    * itself ask the regime whether the invoice is a full invoice: the caller first runs the preview
@@ -121,7 +123,8 @@ export interface RecordCorrectionInput {
  * that points at the invoice it corrects. It settles nothing; a refund is a separate payments
  * action.
  *
- * The authorization gate runs after the sale and series checks, so those still report their own
+ * `fullInvoice` beside `wholeInvoice` is refused before every other check. The authorization gate
+ * runs after the sale and series checks, so those still report their own
  * codes, and before the number is allocated, so a correction it refuses burns no number. A
  * derived breakdown's `sale.total_mismatch` refusal comes before all three; a whole-invoice
  * credit's refusals come after the gate and `sale.correction_exceeds_total`, because they read
@@ -144,6 +147,10 @@ export async function recordCorrection(
   backend: FiscalBackend,
   input: RecordCorrectionInput,
 ): Promise<{ saleId: SaleId; fiscal: FiscalRecordRef }> {
+  // A full invoice's corrective is never a whole credit, whatever split it is given.
+  if (input.fullInvoice === true && input.wholeInvoice === true) {
+    throw new AppError("sale.correction_unsupported", { saleId: input.correctsSaleId });
+  }
   const partial =
     input.partialVatBreakdown === undefined
       ? undefined
@@ -172,6 +179,8 @@ export async function recordCorrection(
       counterpartyIdentifierType: sales.counterpartyIdentifierType,
       counterpartyIdentifierCountryCode: sales.counterpartyIdentifierCountryCode,
       counterpartyAddress: sales.counterpartyAddress,
+      correctsSaleId: sales.correctsSaleId,
+      replacesOriginal: sales.replacesOriginal,
       vatBreakdown: sales.vatBreakdown,
       corrections: sql<string>`cast(coalesce((select sum(c.total) from sales c where c.corrects_sale_id = ${sales}.id), 0) as text)`,
       correctionCount: sql<number>`(select count(*) from sales c where c.corrects_sale_id = ${sales}.id)`,
@@ -227,7 +236,8 @@ export async function recordCorrection(
 
   let taxpayerDomicile: string | null = null;
   if (fullInvoice) {
-    requireFullInvoiceCorrection(original.counterpartyTaxId, correctsSaleId, input.wholeInvoice);
+    requireFullInvoiceCorrection(original.counterpartyTaxId, correctsSaleId);
+    await requireFullInvoiceOriginal(tx, original, correctsSaleId);
     requireStoredCustomerAddress(original.counterpartyAddress, correctsSaleId);
     taxpayerDomicile = await requireTaxpayerDomicile(tx);
   } else {

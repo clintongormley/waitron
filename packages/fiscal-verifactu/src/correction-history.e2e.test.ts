@@ -1,12 +1,18 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
-import { beforeEach, expect, it, onTestFinished, vi } from "vitest";
-import { previewCorrectionAmounts, recordCorrection, recordSale } from "@waitron/core";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import {
+  previewCorrectionAmounts,
+  recordCorrection,
+  recordSale,
+  recordSubstitution,
+} from "@waitron/core";
 import {
   captureError,
   invoiceSeries,
   newId,
+  nextInvoiceNumberOf,
   nowIso,
   saleLines,
   sales,
@@ -274,4 +280,155 @@ it("refuses an invoice the agency refused, and refuses a fix that would move it 
     params: { reason: "filing_refused" },
   });
   expect(await snapshot(saleId)).toEqual(before);
+});
+
+describe("a full invoice's corrective of an invoice the regime will refuse", () => {
+  const CUSTOMER = { taxId: "B12345674", legalName: "Cliente SL", countryCode: "ES" };
+  const ADDRESS = "2 Main Street, 28013 Madrid, Spain";
+  let fullSeriesId: SeriesId;
+  let fullRectSeriesId: SeriesId;
+
+  beforeEach(async () => {
+    await suite.db.execute(
+      sql`update taxpayer set taxpayer_domicile = '8 Tax Street, 28001 Madrid' where id = 1`,
+    );
+    const [full, fullRect] = await suite.db
+      .insert(invoiceSeries)
+      .values([
+        { nodeId, code: "F", purpose: "full" },
+        { nodeId, code: "FR", purpose: "full_corrective" },
+      ])
+      .returning({ id: invoiceSeries.id });
+    fullSeriesId = brandSeriesId(full!.id);
+    fullRectSeriesId = brandSeriesId(fullRect!.id);
+  });
+
+  const LINE = {
+    lineNo: 1,
+    name: "Café solo",
+    descriptions: { "es-ES": "Café solo" },
+    quantity: "1",
+    unitPrice: "10.00",
+    vatRate: "21.00",
+    lineTotal: "10.00",
+    lineGross: "12.10",
+  };
+
+  /** A full-invoice corrective of €1.21 off `saleId`'s one line, or back onto it with `back`. */
+  async function correctionOf(saleId: SaleId, back = false) {
+    const sign = back ? "" : "-";
+    const [line] = await suite.db
+      .select({ id: saleLines.id })
+      .from(saleLines)
+      .where(eq(saleLines.saleId, saleId));
+    return {
+      operationDescription: "Venta en establecimiento",
+      origin: deviceOrigin(deviceId),
+      nodeId,
+      seriesId: fullRectSeriesId,
+      correctsSaleId: saleId,
+      total: `${sign}1.21`,
+      lines: [
+        {
+          ...LINE,
+          quantity: `${sign}0.1`,
+          lineTotal: `${sign}1.00`,
+          lineGross: `${sign}1.21`,
+          correctsLineId: line!.id,
+        },
+      ],
+      authz: { sessionId },
+      clock: steadyClock,
+      fullInvoice: true as const,
+    };
+  }
+
+  async function exchangeReceipt(): Promise<SaleId> {
+    const { saleId: receiptId } = await sell("12.10");
+    const { saleId } = await withTransaction(suite.db, (tx) =>
+      recordSubstitution(tx, backend, {
+        origin: deviceOrigin(deviceId),
+        operationDescription: "Canje de tiques simplificados",
+        nodeId,
+        seriesId: fullSeriesId,
+        substitutedSaleIds: [receiptId],
+        counterparty: CUSTOMER,
+        recipientAddress: ADDRESS,
+        total: "12.10",
+        lines: [LINE],
+        locale: "es-ES",
+        invoiceLocales: ["es-ES"],
+        clock: steadyClock,
+      }),
+    );
+    return saleId;
+  }
+
+  async function correctFullInvoice(): Promise<SaleId> {
+    const { saleId: invoiceId } = await withTransaction(suite.db, (tx) =>
+      recordSale(
+        tx,
+        backend,
+        saleInput({
+          nodeId,
+          seriesId: fullSeriesId,
+          counterparty: CUSTOMER,
+          recipientAddress: ADDRESS,
+          total: "12.10",
+          lines: [LINE],
+          settlement: {
+            kind: "immediate",
+            tenders: [
+              {
+                method: "cash",
+                amount: "12.10",
+                tipAmount: "0",
+                settledAt: steadyClock.now().instant,
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    const input = await correctionOf(invoiceId);
+    const { saleId } = await withTransaction(suite.db, (tx) =>
+      recordCorrection(tx, backend, input),
+    );
+    return saleId;
+  }
+
+  it.each([
+    ["a full invoice made from receipts (an F3)", exchangeReceipt, false],
+    ["a full invoice's corrective (an R1)", correctFullInvoice, true],
+  ] as const)(
+    "refuses %s before taking a number, even when the caller carries on",
+    async (_name, make, back) => {
+      const originalId = await make();
+      const input = await correctionOf(originalId, back);
+      const [{ next }] = await suite.db
+        .select({ next: nextInvoiceNumberOf(invoiceSeries.id) })
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.id, fullRectSeriesId));
+
+      const refusal = await withTransaction(suite.db, (tx) =>
+        captureError(() => recordCorrection(tx, backend, input)),
+      );
+
+      expect(refusal).toMatchObject({
+        code: "sale.correction_unsupported",
+        params: { saleId: originalId },
+      });
+      expect(
+        await suite.db
+          .select({ id: sales.id })
+          .from(sales)
+          .where(eq(sales.correctsSaleId, originalId)),
+      ).toEqual([]);
+      const [after] = await suite.db
+        .select({ next: nextInvoiceNumberOf(invoiceSeries.id) })
+        .from(invoiceSeries)
+        .where(eq(invoiceSeries.id, fullRectSeriesId));
+      expect(after!.next).toBe(next);
+    },
+  );
 });
