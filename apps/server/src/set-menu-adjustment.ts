@@ -1,8 +1,5 @@
-import { and, asc, eq, gt, isNull, ne } from "drizzle-orm";
-import { alias } from "drizzle-orm/sqlite-core";
+import { and, eq, inArray } from "drizzle-orm";
 import {
-  adjustmentEndingLines,
-  adjustmentLines,
   adjustments,
   endAdjustment,
   endingRestores,
@@ -14,6 +11,7 @@ import { centsToDecimal } from "@waitron/shared";
 import type { Row } from "./adjustment-rows.js";
 import type { AdjustmentAsk } from "./adjustments-apply.js";
 import { money } from "./bill-allocation.js";
+import { ownSetMenuDiscountIds } from "./set-menu-discount-ending.js";
 
 /**
  * The dishes a set-menu row's comp or discount covers with it (spec section 6, D49): those placed
@@ -31,54 +29,50 @@ export interface Replaced {
   amount: string;
 }
 
-/** A row a held comp or discount took something off. */
-const covered = alias(workingOrderLines, "covered");
-
 interface Held {
   id: string;
   setMenuName: string;
   replaced: Replaced;
 }
 
-/** The comps or discounts given on the set-menu row `ask` names that still take something off a row
- * on its bill. */
+/** The comps or discounts given on the set-menu row `ask` names that still take something off it,
+ * found as {@link ownSetMenuDiscountIds} finds them. */
 async function heldBySetMenu(tx: Transaction, ask: AdjustmentAsk): Promise<Held[]> {
   if (ask.action === "cancel" || ask.lineId === null) return [];
+  const [setMenu] = await tx
+    .select({ name: workingOrderLines.name })
+    .from(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.id, ask.lineId),
+        eq(workingOrderLines.workingOrderId, ask.orderId),
+        eq(workingOrderLines.setMenuRole, "set_menu"),
+      ),
+    );
+  if (setMenu === undefined) return [];
+  const ids = await ownSetMenuDiscountIds(tx, [ask.lineId]);
+  if (ids.length === 0) return [];
   const held = await tx
-    .selectDistinct({
+    .select({
       id: adjustments.id,
-      setMenuName: workingOrderLines.name,
       action: adjustments.action,
       percentBp: adjustments.percentBp,
       reduction: adjustments.reduction,
-      createdAt: adjustments.createdAt,
     })
     .from(adjustments)
-    .innerJoin(workingOrderLines, eq(workingOrderLines.id, adjustments.lineId))
-    .innerJoin(adjustmentLines, eq(adjustmentLines.adjustmentId, adjustments.id))
-    .innerJoin(covered, eq(covered.id, adjustmentLines.lineId))
-    .leftJoin(adjustmentEndingLines, eq(adjustmentEndingLines.adjustmentLineId, adjustmentLines.id))
-    .where(
-      and(
-        eq(adjustments.lineId, ask.lineId),
-        ne(adjustments.action, "cancel"),
-        eq(workingOrderLines.workingOrderId, ask.orderId),
-        eq(workingOrderLines.setMenuRole, "set_menu"),
-        eq(covered.workingOrderId, ask.orderId),
-        gt(adjustmentLines.reduction, 0),
-        isNull(adjustmentEndingLines.id),
-      ),
-    )
-    .orderBy(asc(adjustments.createdAt));
-  return held.map(({ id, setMenuName, action, percentBp, reduction }) => ({
-    id,
-    setMenuName,
-    replaced: {
-      action: action as Replaced["action"],
-      percentBp,
-      amount: money(centsToDecimal(reduction)),
-    },
-  }));
+    .where(inArray(adjustments.id, ids));
+  return ids.map((id) => {
+    const { action, percentBp, reduction } = held.find((row) => row.id === id)!;
+    return {
+      id,
+      setMenuName: setMenu.name,
+      replaced: {
+        action: action as Replaced["action"],
+        percentBp,
+        amount: money(centsToDecimal(reduction)),
+      },
+    };
+  });
 }
 
 /**

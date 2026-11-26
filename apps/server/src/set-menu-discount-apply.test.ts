@@ -391,3 +391,38 @@ it("copies only a Daily's standing 20%, not the 10% it replaced, when its printe
   ).rejects.toMatchObject({ code: "adjustment.not_standing" });
   expect(await total(billId)).toBe(1120);
 });
+
+it("replaces the 10% a Daily's copy holds on its bill reopened to split, and then the 20%, as on the bill it was given on", async () => {
+  const bill = await billOf(["Soup", "Hake"], "fire");
+  const first = await previewThenApply(bill.tabId, await dailyOf(bill.tabId), percent(1000));
+  await serveSpecBill(spec, bill.partyId, bill.tabId);
+  await printSpecBill(spec, bill.partyId, bill.tabId);
+  const { billId } = await splitAfterPrint(specDeps(spec), venue.cfg, bill.tabId, venue.operator);
+  const copy = await dailyOf(billId);
+  const endedOn = async () =>
+    (await endings())
+      .filter(({ workingOrderId }) => workingOrderId === billId)
+      .map(({ adjustmentId, why }) => ({ adjustmentId, why }));
+
+  const second = await previewThenApply(billId, copy, percent(2000));
+
+  expect(second.preview).toMatchObject({
+    replaces: { action: "discount_percent", percentBp: 1000, amount: "1.40" },
+    billTotal: { before: "12.60", after: "11.20" },
+  });
+  expect(await total(billId)).toBe(1120);
+  expect(second.record).toEqual({ before: 1400, after: 1120, reduction: 280 });
+  expect(await endedOn()).toEqual([{ adjustmentId: first.id, why: "replaced" }]);
+
+  const free = await previewThenApply(billId, copy, FREE);
+
+  expect(free.preview).toMatchObject({
+    replaces: { action: "discount_percent", percentBp: 2000, amount: "2.80" },
+  });
+  expect(free.record).toEqual({ before: 1400, after: 0, reduction: 1400 });
+  expect(await total(billId)).toBe(0);
+  expect(await endedOn()).toEqual([
+    { adjustmentId: first.id, why: "replaced" },
+    { adjustmentId: second.id, why: "replaced" },
+  ]);
+});
