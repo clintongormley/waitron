@@ -1,5 +1,6 @@
+import { DatabaseSync } from "node:sqlite";
 import { eq } from "drizzle-orm";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   adjustmentEndings,
   adjustmentLines,
@@ -504,5 +505,37 @@ describe("the notices a bill answers", () => {
     ]);
     const untouched = await seedWorkingOrder(db);
     expect(await withTransaction(db, (tx) => readDiscountNotices(tx, [untouched]))).toEqual([]);
+  });
+
+  it("finds a bill's endings through the bill index, not by reading every ending", async () => {
+    const order = await seedWorkingOrder(db);
+    const plans: string[] = [];
+    const prepare = DatabaseSync.prototype.prepare;
+    const spy = vi.spyOn(DatabaseSync.prototype, "prepare").mockImplementation(function (
+      this: DatabaseSync,
+      text,
+    ) {
+      const statement = prepare.call(this, text);
+      if (!text.includes('from "adjustment_endings"')) return statement;
+      const all = statement.all;
+      statement.all = (...parameters: unknown[]) => {
+        const explain = prepare.call(this, `explain query plan ${text}`);
+        const plan = Reflect.apply(all, explain, parameters) as { detail: string }[];
+        plans.push(...plan.map((row) => String(row.detail)));
+        return Reflect.apply(all, statement, parameters);
+      };
+      return statement;
+    });
+    try {
+      await withTransaction(db, (tx) => readDiscountNotices(tx, [order]));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(plans.some((d) => d.startsWith("SCAN adjustment_endings"))).toBe(false);
+    expect(
+      plans.some((d) =>
+        d.startsWith("SEARCH adjustment_endings USING INDEX adjustment_endings_working_order_idx"),
+      ),
+    ).toBe(true);
   });
 });

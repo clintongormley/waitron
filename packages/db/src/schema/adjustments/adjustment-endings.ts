@@ -46,6 +46,7 @@ export const adjustmentEndings = table(
       name: "adjustment_endings_working_order_fk",
     }).onDelete("restrict"),
     index("adjustment_endings_adjustment_idx").on(t.adjustmentId, t.workingOrderId),
+    index("adjustment_endings_working_order_idx").on(t.workingOrderId),
     check("adjustment_endings_why_ck", enumCheck(t.why)),
     check(
       "adjustment_endings_line_ck",
