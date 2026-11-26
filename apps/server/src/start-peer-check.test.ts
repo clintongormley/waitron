@@ -208,7 +208,7 @@ describe("the repairs before the start check", () => {
       b,
       peerFetch(() => ({ heldMembership: b.held })),
     );
-    expect(outcome.result).toBe("proceed");
+    expect(outcome).toMatchObject({ result: "proceed", hasCountedPeer: true });
   });
 
   it("records the refusal a repeat of the start request answers", async () => {

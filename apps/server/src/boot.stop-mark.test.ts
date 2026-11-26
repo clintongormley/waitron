@@ -18,11 +18,13 @@ import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
 import * as atomic from "./fs-atomic.js";
+import { startServer as bootServer } from "./boot.js";
 import { boxHostnameFor } from "./box-name.js";
 import * as boxEmail from "./box-alert-email.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
 import * as stopAlert from "./stop-alert.js";
+import { readPreviousStop } from "./stop-mark.js";
 import { readStreamSettings, writeStreamSettings } from "./stream-host.js";
 import { startFakeSmtp } from "./testing/boot-harness.js";
 import { TRADING_BOOT_KEY_ENV } from "./testing/boot-trading-fixture.js";
@@ -181,9 +183,10 @@ it("waits and emails managers when the bucket is silent and the chart's spare ne
         );
         expect(rows).toHaveLength(2);
         await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 8_000 });
-        expect(smtp.messages[0]).toContain("To: owner@example.test");
-        expect(smtp.messages[0]).toContain("Tras detenerse sin aviso");
-        expect(smtp.messages[0]).toContain("tras esperar un minuto");
+        const message = smtp.messages[0]!.replace(/=\r?\n/g, "");
+        expect(message).toContain("To: owner@example.test");
+        expect(message).toContain("no pudo confirmar");
+        expect(message).toContain("tras esperar un minuto");
       },
     );
   } finally {
@@ -192,7 +195,7 @@ it("waits and emails managers when the bucket is silent and the chart's spare ne
   }
 }, 15_000);
 
-it("starts a planned restart while the configured bucket stays silent", async () => {
+it("starts after a planned restart requested during the bucket wait", async () => {
   const { cfg } = await configureStartupBucket();
   const bucket = new SwitchableStore(() => new Date());
   bucket.down = true;
@@ -201,12 +204,28 @@ it("starts a planned restart while the configured bucket stays silent", async ()
       db: suite.db,
       nodeId: cfg.nodeId,
       scratchPrefix: "waitron-boot-bucket-restart-",
-      start: (env) =>
-        startServer(env, env, {
-          previousStop: { restart: true, heartbeatAt },
+      start: async (env) => {
+        const seams = {
           boxHost: synchronisedBoxHost(),
           stream: { store: bucket },
-        }),
+        };
+        const waiting = await startServer(env, env, {
+          ...seams,
+          previousStop: { restart: false, heartbeatAt: null },
+        });
+        try {
+          expect(waiting.fullyStarted).toBeDefined();
+          await waiting.markRestart?.();
+        } finally {
+          await waiting.close();
+        }
+        const previousStop = await readPreviousStop(
+          { stateDir: env.WAITRON_STATE_DIR!, venueDir: env.WAITRON_VENUE_DIR! },
+          () => {},
+        );
+        expect(previousStop.restart).toBe(true);
+        return startServer(env, env, { ...seams, previousStop });
+      },
       httpPort,
     },
     async (base) => {
@@ -221,6 +240,54 @@ it("starts a planned restart while the configured bucket stays silent", async ()
     },
   );
 });
+
+it.each(["peer answered", "deadline spent in the first ask"] as const)(
+  "starts trading without opening a waiting listener when %s",
+  async (reason) => {
+    const { cfg } = await configureStartupBucket();
+    const bucket = new SwitchableStore(() => new Date());
+    bucket.hang = reason === "deadline spent in the first ask";
+    bucket.down = reason === "peer answered";
+    await withTradingBootServer(
+      {
+        db: suite.db,
+        nodeId: cfg.nodeId,
+        scratchPrefix: "waitron-boot-bucket-direct-",
+        start: async (env) => {
+          const server = await bootServer(env, env, {
+            previousStop: { restart: false, heartbeatAt: null },
+            boxHost: synchronisedBoxHost(),
+            stream: { store: bucket },
+            ...(reason === "peer answered"
+              ? {
+                  peerCheck: async () => ({
+                    result: "proceed" as const,
+                    successorNodeId: null,
+                    hasCountedPeer: true as const,
+                  }),
+                }
+              : { waitingStart: { bucketWaitMs: 50 } }),
+          });
+          try {
+            expect(server.fullyStarted).toBeUndefined();
+            await vi.waitFor(async () => {
+              expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
+            });
+          } catch (error) {
+            await server.close();
+            throw error;
+          }
+          return server;
+        },
+        httpPort,
+      },
+      async (base) => {
+        const probe = await fetch(`${base}/api/node`);
+        expect(await probe.json()).toMatchObject({ acceptingSales: true });
+      },
+    );
+  },
+);
 
 it("keeps a verified replacement stopped while retrying its local marker", async () => {
   const { cfg, key, streamId } = await configureStartupBucket();

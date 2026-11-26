@@ -972,7 +972,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   the primary and never chooses; only the primary sells. Fiscal submission is an outbox, never
   inline. Since 2026-11-26, a solo primary also stops new sales and filing after it verifies a newer
   backup in its bucket signed with its own node key. The saved stop survives an offline start.
-  After an unplanned stop, a main box with a configured bucket and no counted peer waits up to
+  On a start without a restart mark, a main box with a configured bucket and no counted peer waits up to
   60 seconds for that bucket before trading and emails managers if it starts without an answer.
   [Replacement check](docs/developers/conventions-data.md#a-solo-box-stays-stopped-when-it-verifies-a-replacement).
   Detail:

@@ -13,6 +13,7 @@ import { mountNodeMembershipApi } from "./node-membership-api.js";
 import { mountPeerStatusApi } from "./peer-status-api.js";
 import { readBoxAddresses } from "./restricted-page.js";
 import type { StartPeerCheckOutcome } from "./start-peer-check.js";
+import { writeRestartMark } from "./stop-mark.js";
 import {
   readNewerBucketMain,
   type BucketReplacement,
@@ -77,7 +78,12 @@ export function openStartupWait(deps: WaitingDeps, wait: Wait) {
     waitingOn: wait.kind === "peer" ? wait.waitingOn : [],
     addressesOf: (ids) => readBoxAddresses(db, ids),
     ...(wait.kind === "bucket"
-      ? { bucketDeadline: wait.deadline }
+      ? {
+          bucket: {
+            deadline: wait.deadline,
+            markRestart: () => writeRestartMark(config.stateDir),
+          },
+        }
       : {
           carryOn: {
             db,
@@ -142,7 +148,7 @@ export async function waitForStartupBucket(
 ) {
   const deadline = AbortSignal.timeout(waitMs);
   const first = await read(AbortSignal.any([deadline, AbortSignal.timeout(INITIAL_BUCKET_ASK_MS)]));
-  if (first !== "silent") return { answer: first };
+  if (first !== "silent" || deadline.aborted) return { answer: first };
 
   let replacement: BucketReplacement | undefined;
   const waiting = openStartupWait(deps, {

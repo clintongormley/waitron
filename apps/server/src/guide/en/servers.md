@@ -355,9 +355,9 @@ other box has taken over, says so.
 ## Waiting for the backup bucket {#waiting-for-bucket}
 
 After a power cut, a main box can show **Waiting for the backup bucket**. Give it up to a minute
-to check whether a replacement has taken over. If the bucket stays silent or the box sees a newer
-backup it cannot verify, the box starts and emails managers. If you already moved service to a
-replacement, use that box and leave this one switched off.
+to check whether a replacement has taken over. The box starts after a minute and emails managers
+if the bucket stays silent or the box cannot verify the backup it finds, even if that backup is
+newer. If you already moved service to a replacement, use that box and leave this one switched off.
 
 ## Carry on as the main box {#carry-on}
 

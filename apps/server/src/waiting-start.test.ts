@@ -193,7 +193,7 @@ describe("the waiting start", () => {
         await new Promise<void>((resolve) => (finishRead = resolve));
         return WAIT;
       },
-      { bucketDeadline: deadline.signal },
+      { bucket: { deadline: deadline.signal } },
     );
     try {
       const signal = await asking;
@@ -203,6 +203,7 @@ describe("the waiting start", () => {
       else void h.waiting.server.close();
       expect(signal.aborted).toBe(true);
       await vi.waitFor(() => expect(h.closeListeners).toHaveBeenCalledOnce());
+      await new Promise<void>((resolve) => setImmediate(resolve));
       expect(ended).not.toHaveBeenCalled();
       finishRead();
       await expect(h.waiting.ended).resolves.toEqual({

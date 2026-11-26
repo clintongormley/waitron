@@ -399,9 +399,9 @@ normalidad o, si el otro ha pasado a llevar el local, lo indica.
 
 Tras un corte de luz, el servidor principal puede mostrar **Esperando al depósito de copias de
 seguridad**. Dale hasta un minuto para comprobar si otro servidor ha tomado el relevo. Si el
-depósito no responde o el servidor encuentra una copia más reciente que no puede verificar, el
-servidor arranca y avisa por correo a los responsables. Si ya trasladaste el servicio a otro
-servidor, usa ese servidor y deja este apagado.
+depósito no responde o el servidor no puede verificar la copia que encuentra, aunque sea más
+reciente, el servidor arranca al cabo de un minuto y avisa por correo a los responsables. Si ya
+trasladaste el servicio a otro servidor, usa ese servidor y deja este apagado.
 
 ## Seguir como servidor principal {#carry-on}
 
