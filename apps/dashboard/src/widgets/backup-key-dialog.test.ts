@@ -244,6 +244,27 @@ describe("a recovery pack PDF chosen in the field", () => {
       field(el).shadowRoot!.querySelector("wt-input")!.shadowRoot!.querySelector("[data-error]"),
     );
 
+  it("after the box names a newer master key, that key's pack fills the field", async () => {
+    const newer = "2026-11-25 · WXYZ";
+    const rotate = vi
+      .fn()
+      .mockRejectedValueOnce({ code: "master_key.wrong", params: { keyName: newer }, status: 403 })
+      .mockResolvedValueOnce(ANSWER);
+    const { el } = await open(stubApi(rotate));
+    await type(el, KEY);
+    button(el, "change-backup-key")!.click();
+    await expect.poll(() => field(el).keyName).toBe(newer);
+    await field(el).updateComplete;
+    await el.updateComplete;
+    expect(fieldLine(el)).toBe(MASTER_KEY_FIELD_WORDS.en.wrongKey(newer));
+    await choosePack(el, newer);
+    expect(fieldLine(el)).toBe("");
+    expect(button(el, "change-backup-key")!.disabled).toBe(false);
+    button(el, "change-backup-key")!.click();
+    await expect.poll(() => rotate.mock.calls.length).toBe(2);
+    expect(rotate).toHaveBeenLastCalledWith({ masterKey: KEY });
+  });
+
   it("an older pack's key is refused by the field itself, naming the current key, with no request", async () => {
     const rotate = vi.fn();
     const { el } = await open(stubApi(rotate));

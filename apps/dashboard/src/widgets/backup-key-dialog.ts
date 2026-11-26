@@ -92,6 +92,8 @@ export class BackupKeyDialog extends LitElement {
   @state() private done: Done | null = null;
 
   #generation = 0;
+  /** Set while the field empties itself for a new key name, so its emptying keeps the refusal. */
+  #renaming = false;
   #scope?: DraftScope<{ key: string }>;
   #leave?: LeaveCoordinator;
 
@@ -202,7 +204,16 @@ export class BackupKeyDialog extends LitElement {
         this.busy = false;
         if (code === "master_key.wrong") {
           const { keyName } = paramsOf(error);
-          this.keyRefusal = { keyName: typeof keyName === "string" ? keyName : null };
+          const named = typeof keyName === "string" ? keyName : null;
+          this.keyRefusal = { keyName: named };
+          if (named !== null && named !== this.keyName) {
+            // A master key made while the dialog was open: the field checks packs against it now.
+            this.keyName = named;
+            this.#renaming = true;
+            await this.updateComplete;
+            await this.renderRoot.querySelector("wt-master-key-input")?.updateComplete;
+            this.#renaming = false;
+          }
           return;
         }
         this.refusal = codeMessage(code);
@@ -296,7 +307,7 @@ export class BackupKeyDialog extends LitElement {
           // The field empties itself as it leaves, after a change or on closing.
           if (this.done !== null || !this.opened) return;
           this.key = event.detail.masterKey ?? "";
-          this.keyRefusal = null;
+          if (!this.#renaming) this.keyRefusal = null;
           this.#scope?.changed();
         }}
       ></wt-master-key-input>`;
