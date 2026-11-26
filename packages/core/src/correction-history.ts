@@ -51,7 +51,8 @@ export interface FullInvoiceCorrection {
  * regime's newest filed figures of it or of an earlier correction cannot be read or differ from the
  * stored ones; refused with
  * `sale.correction_unsupported`, as `recordCorrection` is, when the invoice names a customer.
- * With `fullInvoice`, it is a full invoice's correction instead: refused with
+ * With `fullInvoice: true`, or `"as_admitted"` where the admission marks a full invoice, it is a
+ * full invoice's correction instead: refused with
  * `sale.correction_unsupported` unless the invoice names a customer and the regime's admission
  * says it is a full invoice, and with `fiscal.taxpayer_domicile_missing` when the business has no
  * registered address. The answer carries `fullInvoice` when it is a full invoice's correction.

@@ -112,8 +112,6 @@ export type InvoiceCorrectionEndDeps = InvoiceCorrectionDeps &
 
 const ZERO = decimal("0.00");
 
-/** Asks core for whichever corrective the regime's admission says the invoice takes: a full
- * invoice's or a receipt's. */
 export const AS_ADMITTED = { fullInvoice: "as_admitted" } as const;
 
 /**
