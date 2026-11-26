@@ -75,6 +75,35 @@ describe("wt-qr-scanner", () => {
     expect(live(stream)).toBe(true);
   });
 
+  test("a message is a refusal drawn right under the video, in the danger colour, larger than the hint, and announced", async () => {
+    film("hello");
+    const el = (await mount(SCANNER)) as WtQrScanner;
+    await expect.poll(() => el.shadowRoot!.querySelector("video")).not.toBeNull();
+    host.style.setProperty("--wt-color-danger", "rgb(16, 17, 18)");
+    host.style.setProperty("--wt-font-size-lg", "23px");
+    host.style.setProperty("--wt-font-weight-bold", "800");
+    const line = () => el.shadowRoot!.querySelector<HTMLElement>("[data-scanner-message]")!;
+    const hintSize = parseFloat(getComputedStyle(line()).fontSize);
+    expect(line().getAttribute("role")).toBe("status");
+
+    el.message = "That is not the code";
+    await el.updateComplete;
+
+    expect(line().getAttribute("role")).toBe("alert");
+    expect(el.shadowRoot!.querySelector("video")!.nextElementSibling).toBe(line());
+    const style = getComputedStyle(line());
+    expect(style.color).toBe("rgb(16, 17, 18)");
+    expect(style.fontSize).toBe("23px");
+    expect(parseFloat(style.fontSize)).toBeGreaterThan(hintSize);
+    expect(style.fontWeight).toBe("800");
+    expect(style.fontStyle).toBe("normal");
+
+    el.message = "";
+    await el.updateComplete;
+    expect(line().getAttribute("role")).toBe("status");
+    expect(parseFloat(getComputedStyle(line()).fontSize)).toBe(hintSize);
+  });
+
   test("a cleared message brings the hint back", async () => {
     film("hello");
     const el = (await mount(SCANNER)) as WtQrScanner;

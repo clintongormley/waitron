@@ -1153,6 +1153,11 @@ test("a Cloud QR code is passed over and the camera keeps running", async () => 
   await vi.waitFor(() => expect(scannerLine(el)).toBe(EN.notKeyCode), { timeout: 10_000 });
   expect(live(stream)).toBe(true);
   expect(scanner(el)).not.toBeNull();
+  host.style.setProperty("--wt-color-danger", "rgb(16, 17, 18)");
+  const line = scanner(el)!.shadowRoot!.querySelector("[data-scanner-message]")!;
+  expect(line.getAttribute("role")).toBe("alert");
+  expect(scanner(el)!.shadowRoot!.querySelector("video")!.nextElementSibling).toBe(line);
+  expect(getComputedStyle(line).color).toBe("rgb(16, 17, 18)");
   expect(native(el).value).toBe("");
   expect(seen).toEqual([]);
 });

@@ -43,6 +43,12 @@ export class WtQrScanner extends LitElement {
         margin: 0;
         color: var(--wt-color-text);
       }
+
+      .refusal {
+        color: var(--wt-color-danger);
+        font-size: var(--wt-font-size-lg);
+        font-weight: var(--wt-font-weight-bold);
+      }
     `,
   ];
 
@@ -50,7 +56,7 @@ export class WtQrScanner extends LitElement {
   @property() label = "";
   /** Shown while no `message` is set. */
   @property() hint = "";
-  /** The caller's line about the latest code; empty shows `hint`. */
+  /** The caller's refusal of the latest code, drawn as a refusal; empty shows `hint`. */
   @property() message = "";
   /** Shown in place of everything else once the scanner fires `wt-qr-unavailable`. */
   @property() unavailable = "";
@@ -174,13 +180,17 @@ export class WtQrScanner extends LitElement {
 
   override render() {
     return html`${
-        this.phase === "filming"
-          ? html`<video muted playsinline aria-label=${this.label}></video>`
-          : nothing
-      }
-      <p class="message" data-scanner-message role="status">
-        ${this.phase === "failed" ? this.unavailable : this.message || this.hint}
-      </p>`;
+      this.phase === "filming"
+        ? html`<video muted playsinline aria-label=${this.label}></video>`
+        : nothing
+    }
+    ${
+      this.phase !== "failed" && this.message
+        ? html`<p class="message refusal" data-scanner-message role="alert">${this.message}</p>`
+        : html`<p class="message" data-scanner-message role="status">
+            ${this.phase === "failed" ? this.unavailable : this.hint}
+          </p>`
+    }`;
   }
 }
 
