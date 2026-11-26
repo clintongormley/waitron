@@ -39,6 +39,7 @@ import {
 } from "@waitron/shared";
 import { invalid, MONEY } from "./bill-allocation.js";
 import {
+  AS_ADMITTED,
   readCorrectionLegs,
   readCorrectionLegsOf,
   readCorrectionMoney,
@@ -111,8 +112,6 @@ export type InvoiceCorrectionEndDeps = InvoiceCorrectionDeps &
   Pick<TenderRefundDeps, "db" | "admission" | "log">;
 
 const ZERO = decimal("0.00");
-
-export const AS_ADMITTED = { fullInvoice: "as_admitted" } as const;
 
 /**
  * The checks both the preview and Open run, in order, so the preview refuses what Open refuses

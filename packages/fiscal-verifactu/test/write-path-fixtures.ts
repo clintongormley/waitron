@@ -111,6 +111,15 @@ export async function refusedByAeat(db: Database | Transaction, saleId: string):
   `);
 }
 
+/** Leaves every record of `saleId` held from sending (`detenido`), as a drain pass holds a chain
+ * behind a record AEAT refused. */
+export async function heldFromSending(db: Database | Transaction, saleId: string): Promise<void> {
+  await db.execute(sql`
+    update verifactu_submissions set estado = 'detenido'
+    where registro_id in (select id from verifactu_records where sale_id = ${saleId})
+  `);
+}
+
 /** Leaves every record of `saleId` accepted by AEAT. */
 export async function acceptedByAeat(db: Database | Transaction, saleId: string): Promise<void> {
   await db.execute(sql`

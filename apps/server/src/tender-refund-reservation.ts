@@ -452,6 +452,7 @@ export async function reserveTenderRefund(
       ? undefined
       : await checkCorrectionLeg(
           tx,
+          { backend: fiscal.backend, nodeId: cfg.nodeId },
           saleId,
           correctionLink,
           {

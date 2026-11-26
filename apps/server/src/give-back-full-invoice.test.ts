@@ -5,7 +5,10 @@ import { createAdjustmentReason, listAdjustmentReasons } from "@waitron/adjustme
 import { adjustments, billAdvances, parties, taxpayer, workingOrders } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { correctiveRecordsOf } from "@waitron/fiscal-verifactu/test/invoice-records.js";
-import { refusedByAeat } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
+import {
+  heldFromSending,
+  refusedByAeat,
+} from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { readBillEditState } from "./bill-editing.js";
 import type { GiveBackRequest } from "./give-back-plan.js";
@@ -299,6 +302,118 @@ describe("Give money back on a full invoice", () => {
       { applied: 2500, method: "cash", state: "completed", leg: 0, cancel: cancelId },
       { applied: 500, method: "cash", state: "completed", leg: 1, cancel: null },
     ]);
+  });
+});
+
+describe("a fresh leg on an open give-back once its corrective cannot be filed", () => {
+  /** A €25.00 goodwill give-back on the sale, pressed on `way`; the correction's id. */
+  async function opened(saleId: string, way = "cash") {
+    const body = await giveBody(saleId, ask("goodwill", "25.00", { way }));
+    const answer = await give(saleId, {
+      ...body,
+      ...(way === "cash" ? {} : { manualConfirmed: true, override: supervisor() }),
+    });
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    return correctionIdOf(answer);
+  }
+
+  const cardLeg = (saleId: string, correctionId: string, tenderId: string) =>
+    send(venue.app, adminCookie, "POST", `/api/transactions/${saleId}/refunds`, {
+      submissionId: randomUUID(),
+      tenderId,
+      appliedAmount: "5.00",
+      tipAmount: "0.00",
+      reason: "Goodwill",
+      invoiceCorrectionId: correctionId,
+      override: supervisor(),
+    });
+
+  const cashLeg = (correctionId: string, amount: string) =>
+    send(venue.app, adminCookie, "POST", `/api/invoice-corrections/${correctionId}/cash`, {
+      submissionId: randomUUID(),
+      amount,
+      override: supervisor(),
+    });
+
+  it("while the corrective can be filed, takes a reader leg, counts it and files one R1", async () => {
+    const { saleId } = await fullInvoice({ cash: "20.00" }, { reader: "17.00" });
+    const correctionId = await opened(saleId);
+    const leg = await cardLeg(saleId, correctionId, await tenderOf(saleId, "card"));
+    expect(leg).toMatchObject({ status: 200, json: { state: "completed", appliedAmount: "5.00" } });
+    expect(moneyOf(saleId)).toEqual([
+      { applied: 500, method: "card", state: "completed", leg: 1, cancel: null },
+      { applied: 2000, method: "cash", state: "completed", leg: 1, cancel: null },
+    ]);
+    expect(correctivesOf(saleId)).toEqual([r1(-2500)]);
+  });
+
+  it("refuses a reader leg on a full invoice held from sending, as a fresh preview does, sending nothing", async () => {
+    const { saleId } = await fullInvoice({ cash: "20.00" }, { reader: "17.00" });
+    const correctionId = await opened(saleId);
+    await inTx(venue, (tx) => heldFromSending(tx, saleId));
+    const refused = {
+      status: 409,
+      json: { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } },
+    };
+    const before = { money: moneyOf(saleId), calls: venue.card.refundCalls.length };
+    expect(await cardLeg(saleId, correctionId, await tenderOf(saleId, "card"))).toEqual(refused);
+    expect({ money: moneyOf(saleId), calls: venue.card.refundCalls.length }).toEqual(before);
+    expect(correctivesOf(saleId)).toEqual([]);
+  });
+
+  it("refuses a reader leg while the business has no registered address, sending nothing", async () => {
+    const { saleId } = await fullInvoice({ cash: "20.00" }, { reader: "17.00" });
+    const correctionId = await opened(saleId);
+    await inTx(venue, (tx) => tx.update(taxpayer).set({ taxpayerDomicile: null }));
+    onTestFinished(async () => {
+      await inTx(venue, (tx) => tx.update(taxpayer).set({ taxpayerDomicile: DOMICILE }));
+    });
+    const before = { money: moneyOf(saleId), calls: venue.card.refundCalls.length };
+    expect(await cardLeg(saleId, correctionId, await tenderOf(saleId, "card"))).toEqual({
+      status: 409,
+      json: { code: "fiscal.taxpayer_domicile_missing", params: {} },
+    });
+    expect({ money: moneyOf(saleId), calls: venue.card.refundCalls.length }).toEqual(before);
+  });
+
+  it("refuses cash making up the rest, and cash short of it, with no money moved", async () => {
+    const { saleId } = await fullInvoice({ card: "17.00" }, { cash: "20.00" });
+    const correctionId = await opened(saleId, await tenderOf(saleId, "card"));
+    await inTx(venue, (tx) => heldFromSending(tx, saleId));
+    const refused = {
+      status: 409,
+      json: { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } },
+    };
+    const before = { money: moneyOf(saleId), drawer: drawerCents() };
+    expect(await cashLeg(correctionId, "8.00")).toEqual(refused);
+    expect({ money: moneyOf(saleId), drawer: drawerCents() }).toEqual(before);
+    expect(await cashLeg(correctionId, "3.00")).toEqual(refused);
+    expect({ money: moneyOf(saleId), drawer: drawerCents() }).toEqual(before);
+  });
+
+  it("refuses a separate terminal's leg on a receipt AEAT refused", async () => {
+    const billId = await tabWith(venue, "Steak", "House salad");
+    await payPart(billId, { cash: "20.00" });
+    await payPart(billId, { card: "17.00" });
+    const saleId = await fixture.saleOf(venue, billId);
+    const correctionId = await opened(saleId);
+    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+    const before = moneyOf(saleId);
+    const leg = await send(venue.app, adminCookie, "POST", `/api/transactions/${saleId}/refunds`, {
+      submissionId: randomUUID(),
+      tenderId: await tenderOf(saleId, "card"),
+      appliedAmount: "5.00",
+      tipAmount: "0.00",
+      reason: "Goodwill",
+      manualConfirmed: true,
+      invoiceCorrectionId: correctionId,
+      override: supervisor(),
+    });
+    expect(leg).toEqual({
+      status: 409,
+      json: { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } },
+    });
+    expect(moneyOf(saleId)).toEqual(before);
   });
 });
 

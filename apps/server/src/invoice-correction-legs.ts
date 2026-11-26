@@ -6,12 +6,17 @@ import {
   tenders,
   type Transaction,
 } from "@waitron/db";
+import { previewCorrectionAmounts } from "@waitron/core";
+import type { FiscalBackend } from "@waitron/fiscal";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
-import { AppError, centsToDecimal } from "@waitron/shared";
+import { AppError, centsToDecimal, type NodeId, type SaleId } from "@waitron/shared";
 import { invalid } from "./bill-allocation.js";
 import "./errors.js";
 
 export type InvoiceCorrectionRow = typeof invoiceCorrections.$inferSelect;
+
+/** Asks core for whichever corrective the regime's admission says the invoice takes. */
+export const AS_ADMITTED = { fullInvoice: "as_admitted" } as const;
 
 /** The correction `correctionId`; refused `invoice_correction.not_found` when there is none. */
 export async function readCorrectionRow(
@@ -121,11 +126,15 @@ export async function readCorrectionMoney(
  * { correctionId, state }), a cash leg comes through the correction's cash request
  * (`invoice_correction.cash_route_only` { correctionId }), the tip is zero (`invalid("tipAmount")`),
  * no cancellation ids are named (`invalid("cancellationIds")`), and the leg fits what is left
- * (`invoice_correction.leg_too_large` { correctionId, left }). Answers the correction. Reads the
- * correction and its money unless `read` hands them in; every check runs either way.
+ * (`invoice_correction.leg_too_large` { correctionId, left }), then refuses as filing the
+ * correction's corrective with this leg's money back would be refused now
+ * (`previewCorrectionAmounts`: its admission, a full invoice's customer and registered address), so
+ * no money moves that no corrective could record. Answers the correction. Reads the correction and
+ * its money unless `read` hands them in; every check runs either way.
  */
 export async function checkCorrectionLeg(
   tx: Transaction,
+  fiscal: { backend: FiscalBackend; nodeId: NodeId },
   saleId: string,
   link: { id: string; cashRoute?: true },
   leg: {
@@ -153,6 +162,17 @@ export async function checkCorrectionLeg(
       correctionId: correction.id,
       left: centsToDecimal(left),
     });
+  await previewCorrectionAmounts(
+    tx,
+    fiscal.backend,
+    saleId as SaleId,
+    fiscal.nodeId,
+    {
+      gross: centsToDecimal(correction.gross - left + leg.appliedCents),
+      ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
+    },
+    AS_ADMITTED,
+  );
   return correction;
 }
 
