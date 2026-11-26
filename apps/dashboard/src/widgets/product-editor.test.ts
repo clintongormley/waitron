@@ -216,7 +216,7 @@ it("A647 shows attached modifiers with no click", async () => {
   const el = await mountPricing(
     { ...saved, modifiers: [{ kind: "extras", id: "sauces" }] },
     {
-      extraLists: [{ id: "sauces", name: "Sauces" }],
+      extraLists: [{ id: "sauces", name: "Sauces", items: [] }],
     },
   );
   const modifiers = group(el, "modifiers");

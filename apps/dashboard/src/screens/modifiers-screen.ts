@@ -38,6 +38,7 @@ import { dashboardPath } from "../navigation.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import { countOf } from "../widgets/count-text.js";
+import { extraProductChoices, type ExtraProductChoice } from "../widgets/extra-product-choices.js";
 
 type Kind = "extras" | "options";
 
@@ -154,8 +155,7 @@ export class ModifiersScreen extends LitElement {
     void this.#load();
   }
   protected override willUpdate(changed: PropertyValues): void {
-    if (changed.has("products"))
-      this.#productById = new Map(this.products.map((product) => [product.id, product]));
+    if (changed.has("products")) this.#productById = extraProductChoices(this.products);
     if (changed.has("products") || changed.has("extraLists"))
       this.#itemNamesByList = new Map(
         this.extraLists.map((list) => [list.id, this.#joinItemNames(list)]),
@@ -342,7 +342,7 @@ export class ModifiersScreen extends LitElement {
   }
   /** Built in `willUpdate`, not per read: the joined names feed the items column's cell, search and
    * sort, which run per row on every keystroke. */
-  #productById = new Map<string, Product>();
+  #productById = new Map<string, ExtraProductChoice>();
   #itemNamesByList = new Map<string, string>();
   /** A product the screen no longer holds is skipped: the editor's picker reports a missing one. */
   #joinItemNames(list: ExtraList): string {

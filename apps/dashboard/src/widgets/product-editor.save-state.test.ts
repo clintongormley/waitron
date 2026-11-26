@@ -106,7 +106,7 @@ async function mount(value: ProductEditorDraft | null) {
       },
     ],
     categories: [{ id: "drinks", name: "Drinks", parentId: null, color: null }],
-    extraLists: [{ id: "sauces", name: "Sauces" }],
+    extraLists: [{ id: "sauces", name: "Sauces", items: [] }],
     optionLists: [{ id: "cooked", name: "Cooked" }],
     courses: [{ id: "starters", name: "Starters" }],
   });

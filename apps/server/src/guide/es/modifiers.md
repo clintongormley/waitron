@@ -12,8 +12,8 @@ estás decide el tipo.
 
 Usa **Extras** para lo que un comensal añade a un plato. Cada elemento de una lista de extras nombra
 un producto que ya has creado y toma de él sus nombres, su IVA, sus alérgenos, sus etiquetas
-dietéticas y su foto, así que nunca los vuelves a escribir aquí. Un producto con variantes activas
-no puede ser un elemento, porque solo se vende como una de sus variantes. En el elemento fijas las
+dietéticas y su foto. Si un producto tiene variantes activas, elige en el selector la variante
+concreta, por ejemplo **Vino (Copa)**. En el elemento fijas las
 condiciones de la oferta: **Cantidad máxima**, cuántas veces puede elegirse para un plato (1
 significa "una o ninguna"); **Preseleccionado**, si empieza elegido; y **Precio**, lo
 que cuesta cada selección. Pulsa − de 2 a 1 y después hasta dejar la casilla vacía para quitar el

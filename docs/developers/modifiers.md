@@ -143,7 +143,9 @@ the API call and closes the editor after a successful write.
 
 The extras list form's product picker offers a product with an Active variant, Available or not,
 greyed and unpickable, with "Has variants, so it can't be an extra" as its second line, because the
-save would be refused `extras.product_has_variants`. A row already on the list whose product has an
+save would be refused `extras.product_has_variants`. Its active variants follow it in their saved
+order. Each uses its paired staff name, the parent's unit and the variant's effective unit price.
+A row already on the list whose product has an
 Active variant says the same under its name, with "Remove it from this list.", as soon as the form
 opens; a save is then refused beside that row and in the bottom message, and Save stays disabled
 until the row is removed. The menu's own saves refuse to build that state (below), so the

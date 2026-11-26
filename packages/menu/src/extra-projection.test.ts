@@ -9,7 +9,8 @@ import { createOptionList } from "./options.js";
 import { readProductModifiers, writeProductModifiers } from "./product-modifiers.js";
 import * as productModifiers from "./product-modifiers.js";
 import { readProductExtras } from "./extra-projection.js";
-import { createUnit } from "./units.js";
+import { assignProductUnit, createUnit } from "./units.js";
+import { setProductVariants } from "./variants.js";
 
 const UNKNOWN_ID = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 
@@ -153,6 +154,62 @@ describe("what a product's own extras lists offer", () => {
         portion: "1.000",
         price: "1.50",
         unit: expect.objectContaining({ precision: 0 }),
+      }),
+    ]);
+  });
+
+  it("uses a measured variant's price and its parent's portion unit", async () => {
+    const { unit, variant } = await run(async (tx) => {
+      const unit = await createUnit(
+        tx,
+        {
+          staffName: "Kilogram",
+          staffAbbreviation: "kg",
+          name: { en: "Kilogram" },
+          abbreviation: { en: "kg" },
+          precision: 2,
+        },
+        "en",
+      );
+      await assignProductUnit(tx, ids.ham, unit.id);
+      const [variant] = await setProductVariants(
+        tx,
+        ids.ham,
+        [
+          {
+            name: "Sliced",
+            customerName: null,
+            kitchenName: null,
+            image: null,
+            unitPrice: "8.00",
+            available: true,
+            active: true,
+          },
+        ],
+        "en",
+      );
+      return { unit, variant: variant! };
+    });
+    const list = (portion: string) => ({
+      name: "Portioned ham",
+      items: [{ productId: variant.id, portion }],
+    });
+
+    await expect(run((tx) => createExtraList(tx, list("0.251"), "en"))).rejects.toMatchObject({
+      code: "extras.invalid",
+      params: { field: "items.0.portion" },
+    });
+    const offered = await run(async (tx) => {
+      const created = await createExtraList(tx, list("0.25"), "en");
+      await carries(tx, "burger", created.id);
+      return readProductExtras(tx, [ids.burger]);
+    });
+    expect(offered.get(ids.burger)![0]!.items).toEqual([
+      expect.objectContaining({
+        productId: variant.id,
+        portion: "0.250",
+        price: "2.00",
+        unit: expect.objectContaining({ id: unit.id, precision: 2 }),
       }),
     ]);
   });

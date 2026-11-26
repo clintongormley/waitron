@@ -591,6 +591,39 @@ it("lists an options list's labels and an extras list's products by their staff 
   expect(items.sortValue!(extraList as never)).toBe("White bread, Rye bread");
 });
 
+it("shows a saved variant in the extras list's Items column", async () => {
+  const slice: Product["variants"][number] = {
+    id: "slice",
+    name: "Sliced",
+    customerName: { en: "Hand-cut bread" },
+    kitchenName: "SLICE",
+    image: null,
+    unitPrice: null,
+    courseId: null,
+    active: true,
+    available: true,
+    allergensInherited: true,
+    effective: {
+      allergens: null,
+      unitPrice: "1.50",
+      vatClass: "reduced",
+      takeawayVatRate: "10.00",
+      primaryCategoryId: null,
+      courseId: null,
+    },
+  };
+  const saved = { ...extraList, items: [{ ...extraList.items[0]!, productId: slice.id }] };
+  const el = await mount(
+    api({
+      listProducts: vi.fn().mockResolvedValue([product({ variants: [slice] })]),
+      listExtraLists: vi.fn().mockResolvedValue([saved]),
+    }),
+  );
+  const extras = table(el, "extra-lists");
+  await extras.updateComplete;
+  expect(extras.shadowRoot.textContent).toContain("White bread (Sliced)");
+});
+
 it.each([
   ["en-GB", "Options"],
   ["es-ES", "Opciones"],

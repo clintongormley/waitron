@@ -3866,6 +3866,58 @@ describe("menu-screen", () => {
       expect(warning.textContent).not.toContain("Archive parent sauces");
     });
 
+    it("names the affected extras lists while a variant deletion is staged", async () => {
+      const api = variantApi();
+      vi.mocked(api.getProductEditor).mockResolvedValue({
+        ...value,
+        variants: withVariant[0]!.variants,
+      });
+      vi.mocked(api.listExtraLists).mockResolvedValue(
+        [
+          { productId: "v1", name: "Variant extras" },
+          { productId: "p1", name: "Unrelated extras" },
+        ].map(({ productId, name }) => ({
+          ...extraLists[0]!,
+          id: productId,
+          name,
+          usage: { products: 1 },
+          items: [
+            {
+              id: `${productId}-item`,
+              productId,
+              maxQuantity: null,
+              preselected: false,
+              price: null,
+            },
+          ],
+        })),
+      );
+      const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+      await flush(el);
+      emit(list(el), "edit-product", { productId: "p1" });
+      await flush(el);
+      const form = editor(el).shadowRoot!;
+      const table = form.querySelector("dashboard-variant-table")!;
+      const warning = () =>
+        [...form.querySelectorAll("[data-test=delete-extra-lists] li")].map(
+          (row) => row.textContent,
+        );
+      expect(warning()).toEqual([]);
+
+      const actions = table.shadowRoot!.querySelector<HTMLElement & { show(): void }>(
+        '[data-test="actions-0"]',
+      )!;
+      actions.show();
+      table.shadowRoot!.querySelector<HTMLElement>('[data-test="remove-0"]')!.click();
+      await editor(el).updateComplete;
+      expect(warning()).toEqual(["Variant extras"]);
+
+      actions.show();
+      table.shadowRoot!.querySelector<HTMLElement>('[data-test="restore-0"]')!.click();
+      await editor(el).updateComplete;
+      expect(warning()).toEqual([]);
+    });
+
     it("confirms a variant's Archive and switches the variant off through its own write", async () => {
       history.replaceState(null, "", "/products");
       const api = variantApi();

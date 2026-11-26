@@ -41,7 +41,7 @@ const withModifiers: ProductEditorDraft = {
     { kind: "options", id: "cooked" },
   ],
 };
-const extraLists = [{ id: "sauces", name: "Sauces" }];
+const extraLists = [{ id: "sauces", name: "Sauces", items: [] }];
 const optionLists = [{ id: "cooked", name: "Cooked" }];
 const variants: ProductEditorDraft = {
   ...coffee,

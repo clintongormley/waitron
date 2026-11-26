@@ -67,7 +67,8 @@ import {
   withLanguageText,
   type FieldContext,
 } from "./form-fields.js";
-import type { DashboardApi } from "../api/client.js";
+import type { DashboardApi, ExtraList } from "../api/client.js";
+import { stagedVariantDeleteWarning } from "./delete-extra-lists.js";
 import type { CategorySummary } from "../api/catalog-api.js";
 import type { ProductModifierRef } from "@waitron/shared";
 import type { ExtraOfferUsage } from "@waitron/menu/src/extra-usage.js";
@@ -312,6 +313,12 @@ export class ProductEditor extends LitElement {
         align-items: center;
         gap: var(--wt-space-2);
       }
+      .variant-delete-status {
+        overflow-wrap: anywhere;
+      }
+      .variant-delete-status:empty {
+        position: absolute;
+      }
       .error {
         color: var(--wt-color-danger);
         font-size: var(--wt-font-size-sm);
@@ -412,7 +419,7 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) units: UnitChoice[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) defaultColor: string | null = null;
-  @property({ attribute: false }) extraLists: ModifierListChoice[] = [];
+  @property({ attribute: false }) extraLists: Pick<ExtraList, "id" | "name" | "items">[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property({ attribute: false }) courses: ProductRoutingChoice[] = [];
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};
@@ -1684,6 +1691,7 @@ export class ProductEditor extends LitElement {
             >${t("editor.add_variant")}</wt-button
           >
         </div>
+        ${stagedVariantDeleteWarning(this.value?.variants ?? [], variants, this.extraLists)}
       </fieldset>`,
     );
   }

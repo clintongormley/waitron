@@ -2363,6 +2363,8 @@ function variant(name: string, flags: { active: boolean; available: boolean }) {
   };
 }
 
+const wineGlass = variant("Glass", { active: true, available: false });
+
 /** Wine's only Active variant is Unavailable, which the server still refuses
  * (`assertNoParentsWithVariants`, packages/menu/src/extras.ts); cider's only variant is
  * Inactive, which it accepts. */
@@ -2373,7 +2375,7 @@ const withVariants: Product[] = [
     name: "Wine",
     customerName: { es: "Vino de la casa" },
     kitchenName: "WINE",
-    variants: [variant("Glass", { active: true, available: false })],
+    variants: [wineGlass],
   }),
   product({
     id: CIDER,
@@ -2395,9 +2397,10 @@ it("offers a product with an Active variant greyed, saying why on its second lin
       const { el } = await mount({ products: withVariants });
       expect(picker(el).options, locale).toEqual([
         { value: BACON, label: "Bacon" },
+        { value: CIDER, label: "Cider" },
         { value: EGG, label: "Fried egg" },
         { value: WINE, label: "Wine", disabled: true, description: expected[locale] },
-        { value: CIDER, label: "Cider" },
+        { value: wineGlass.id, label: "Wine (Glass)" },
       ]);
     } finally {
       setLocale("en");
@@ -2432,11 +2435,70 @@ it("finds a greyed product by a search, with its reason, rather than coming up e
   expect(
     rows.map((row) => [
       row.querySelector(".option-label")!.textContent,
-      row.querySelector(".option-description")!.textContent,
+      row.querySelector(".option-description")?.textContent,
       row.getAttribute("aria-disabled"),
     ]),
-  ).toEqual([["Wine", "Has variants, so it can't be an extra", "true"]]);
+  ).toEqual([
+    ["Wine", "Has variants, so it can't be an extra", "true"],
+    ["Wine (Glass)", undefined, null],
+  ]);
   expect(combobox.shadowRoot!.querySelector(".empty")).toBeNull();
+});
+
+it("keeps the saved variant order under its alphabetically sorted parent", async () => {
+  const bottle = variant("Bottle", { active: true, available: true });
+  const catalogue = withVariants.map((entry) =>
+    entry.id === WINE ? { ...entry, variants: [wineGlass, bottle] } : entry,
+  );
+  const { el } = await mount({ products: catalogue });
+  const combobox = await openPicker(el);
+  expect(
+    [...combobox.shadowRoot!.querySelectorAll(".option-label")].map((row) => row.textContent),
+  ).toEqual(["Bacon", "Cider", "Fried egg", "Wine", "Wine (Glass)", "Wine (Bottle)"]);
+});
+
+it("adds and reopens a measured variant under its staff name", async () => {
+  const sliced = {
+    ...wineGlass,
+    name: "Sliced",
+    customerName: { en: "Hand-cut" },
+    kitchenName: "SLICE",
+  };
+  const { el, host } = await mount({
+    products: [
+      ...products,
+      product({ id: WINE, name: "Ham", unitId: KG.id, unit: KG, variants: [sliced] }),
+    ],
+  });
+  const submitted = record(host);
+  await type(el, "name", "Extras");
+  const combobox = await openPicker(el);
+  await userEvent.type(combobox.shadowRoot!.querySelector<HTMLInputElement>(".search")!, "sliced");
+  expect(combobox.shadowRoot!.querySelector(".option-label")?.textContent).toBe("Ham (Sliced)");
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+  await el.updateComplete;
+  expect(text(el, "item-0-product")).toBe("Ham (Sliced)");
+  expect(picker(el).options.some(({ value }) => value === sliced.id)).toBe(false);
+
+  await type(el, "item-0-portion", "0.250");
+  const price = field<HTMLElementTagNameMap["wt-price-input"]>(el, "item-0-price");
+  expect([price.inherited?.value, price.unit]).toEqual(["1.00", "kg"]);
+  await click(el, "save");
+  expect(submitted[0]!.items[0]).toMatchObject({
+    productId: sliced.id,
+    portion: "0.250",
+    price: null,
+  });
+
+  el.open = false;
+  await el.updateComplete;
+  el.value = {
+    ...addons,
+    items: [{ ...addons.items[0]!, productId: sliced.id, portion: "0.250" }],
+  };
+  el.open = true;
+  await el.updateComplete;
+  expect(text(el, "item-0-product")).toBe("Ham (Sliced)");
 });
 
 const wineOnList: ExtraList = {
