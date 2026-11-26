@@ -25612,7 +25612,10 @@ export class TillApp extends LitElement {
                           .formFactor=${shellFormFactor}
                           .activeScreen=${this.activeTabKey}
                           @floor-controls-resized=${(event: CustomEvent<number>) => {
-                            this.style.setProperty("--wt-floor-controls-height", `${event.detail}px`);
+                            this.style.setProperty(
+                              "--wt-floor-controls-height",
+                              `${event.detail}px`,
+                            );
                           }}
                           .counterZones=${this.deviceZoneSelection?.zones.filter((zone) => this.#deviceNavigation()?.counterZoneIds.includes(zone.id)) ?? []}
                           .selectedCounterZoneId=${this.counterServiceZoneId}
