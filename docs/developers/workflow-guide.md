@@ -476,7 +476,7 @@ Demo, Preparation and isolated readiness use the fiscal module's disposable prep
 preparation (`packages/fiscal-verifactu/src/hour-throwaway-allocation.ts`), which names from the
 box's clock with no second clock and no history check. Where a fiscal module is offered for the
 venue's tax territory, the setup page's plain provision refuses Live with `setup.owner_required`,
-development box or not (`apps/server/src/setup-api.ts`; `apps/server/src/first-fiscal-hour-modes.test.ts`, "development
+development box or not (`apps/server/src/setup-operation-routes.ts`; `apps/server/src/first-fiscal-hour-modes.test.ts`, "development
 Live requires owned hour selection"), and `apps/server/src/boot.ts` always hands those routes the
 first-setup host. Every other Live setup, and the terminal's, uses the owned flow: five symbols for the UTC minute, after the box's internet
 time service says it is synchronised (the terminal's only way;
@@ -527,7 +527,7 @@ anywhere (`packages/fiscal-verifactu/src/throwaway-allocation.ts`).
 
 **When the box makes one.** On a non-production box, the setup route asks for a throwaway allocation
 when the request carries no `initialOperations` (no supplied allocation) and the mode is Demo or
-Preparation, or Live on a development box (`throwawayMarker`, `apps/server/src/setup-api.ts`). All three
+Preparation, or Live on a development box (`throwawayMarker`, `apps/server/src/setup-provision-input.ts`). All three
 are stamped preproduction: the database records which environment it belongs to, and Waitron
 refuses to change it afterwards (`stampDeployment`, `packages/db/src/deployment.ts`);
 `parseProvisionPayload` in the same file picks it. A request that supplies an

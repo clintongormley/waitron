@@ -8,7 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import type { BoxJoinAttempt, JoinAttemptState, JoinedBox } from "./box-join-attempt.js";
-import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { mountSetup } from "./setup-api.js";
+import { type SetupDeps } from "./setup-api-deps.js";
 import { createSetupOperationStore, type SetupOperationStore } from "./setup-operation.js";
 
 const PRIMARY_URL = "https://main.deli.test:8443";

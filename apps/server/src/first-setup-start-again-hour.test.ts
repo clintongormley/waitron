@@ -28,7 +28,7 @@ import { activateFirstFiscal } from "./first-fiscal-activation.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./provision.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
-import type { SetupDeps } from "./setup-api.js";
+import type { SetupDeps } from "./setup-api-deps.js";
 import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
 import { expectStartAgainDeleted, startAgainUnchanged } from "../test/start-again-deleted.js";
 import {

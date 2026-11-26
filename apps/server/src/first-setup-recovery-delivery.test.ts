@@ -18,7 +18,7 @@ import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./pr
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { request, MODULE, PASSWORD } from "../test/first-fiscal.js";
-import type { SetupDeps } from "./setup-api.js";
+import type { SetupDeps } from "./setup-api-deps.js";
 import { mountSetup } from "./setup-api.js";
 import { Hono } from "hono";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";

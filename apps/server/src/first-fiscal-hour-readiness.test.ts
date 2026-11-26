@@ -15,7 +15,7 @@ import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "./pr
 import { establishNodeIdentity } from "./node-identity.js";
 import { seedTermZeroMembership } from "./membership-seed.js";
 import { activateFirstFiscal } from "./first-fiscal-activation.js";
-import type { SetupDeps } from "./setup-api.js";
+import type { SetupDeps } from "./setup-api-deps.js";
 import { PASSWORD } from "../test/first-fiscal.js";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { venueFiscalSelection } from "@waitron/provisioning";

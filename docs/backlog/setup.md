@@ -119,7 +119,7 @@ Facts found while designing: going Live never happens on the same database — P
 fresh database plus the configuration copy (`apps/server/src/configuration-export-api.ts`,
 `apps/server/src/configuration-import.ts`) and Demo to Prepare is a wipe — so progress stored in the
 venue database ends at Live unless the configuration copy is made to carry it. The sample restaurant
-is seeded in Demo only (`seedDemo`, called for `mode === "demo"` in `apps/server/src/setup-api.ts`);
+is seeded in Demo only (`seedDemo`, called for `mode === "demo"` in `apps/server/src/setup-operation-routes.ts`);
 both modes get the three default device profiles (`DEFAULT_DEVICE_PROFILES`,
 `packages/layouts/src/device-profile.ts`).
 

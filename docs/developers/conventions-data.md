@@ -2120,7 +2120,7 @@ Implementation pointer, 2026-10-17: the configuration staging and transfer servi
 entry points forward to those implementations. The setup command imports no configuration: its
 claim never asks for one (`packages/provisioning/src/cli.ts` passes no import to
 `claimFirstSetup`). The setup page stages a configuration with `POST /setup-api/configuration` in
-`apps/server/src/setup-api.ts`; it is imported when the setup runs with `configurationImport`
+`apps/server/src/setup-operation-routes.ts`; it is imported when the setup runs with `configurationImport`
 (`apps/server/src/boot.ts`).
 
 A182 part 2 removes `canvases` from the transfer declarations. Every earlier format-2 export
@@ -4672,7 +4672,7 @@ holds none").
 
 The one allocation outside the clock rule is the preproduction throwaway
 (`packages/fiscal-verifactu/src/hour-throwaway-allocation.ts`). Demo and Preparation setups take
-it (`throwawayMarker`, `apps/server/src/setup-api.ts`), and so does the readiness sample
+it (`throwawayMarker`, `apps/server/src/setup-provision-input.ts`), and so does the readiness sample
 (`packages/provisioning/src/fiscal-readiness-runner.ts`). It names from the box's clock with no
 second clock and no history check, and is refused outside preproduction
 (`packages/fiscal-verifactu/src/hour-throwaway-allocation.test.ts`). On a development box
@@ -5591,7 +5591,7 @@ An extras item's `maxQuantity` keeps an explicit null as no cap on that item, wh
 defaults to one (`parseExtraListInput`, `packages/menu/src/extra-contract.ts`); the case
 `defaults an absent item maximum to one and preserves an explicit null` pins both. The setup
 request's `taxpayerDomicile` reads an explicit null the same as an absent field, as no registered
-business address, which a demo sends (`parseVenue`, `apps/server/src/setup-api.ts`); the case
+business address, which a demo sends (`parseVenue`, `apps/server/src/setup-provision-input.ts`); the case
 `provisions a demo whose taxpayer domicile is %s, as no address`, run for absent and for null, pins
 both. Prepare and Live refuse it absent, null, empty or blank, pinned by
 `refuses %s with a taxpayer domicile that is %s before provisioning`. Measured 2026-10-12: widening

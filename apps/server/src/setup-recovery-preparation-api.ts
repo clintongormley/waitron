@@ -4,7 +4,7 @@ import type { OperationBinding, OperationClient } from "@waitron/module";
 import type { FirstSetupHold } from "@waitron/provisioning";
 import { AppError, isUuid } from "@waitron/shared";
 import type { Logger } from "./logger.js";
-import type { SetupDeps } from "./setup-api.js";
+import type { SetupDeps } from "./setup-api-deps.js";
 import { readFirstFiscalBody } from "./setup-first-fiscal-api.js";
 import { parseRecoveryEntryContext, type RecoveryEntryContext } from "./recovery-entry.js";
 import { requestFromBox } from "./request-from-box.js";

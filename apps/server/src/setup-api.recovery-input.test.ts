@@ -5,7 +5,8 @@ import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
-import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { mountSetup } from "./setup-api.js";
+import { type SetupDeps } from "./setup-api-deps.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import type { CloudRecoveryView } from "./cloud-recovery.js";
 

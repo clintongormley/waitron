@@ -48,7 +48,7 @@ export interface SetupStatus {
   };
 }
 
-/** Sent in plain text: the server hashes `pin` and `password` (`apps/server/src/setup-api.ts`). */
+/** Sent in plain text: the server hashes `pin` and `password` (`apps/server/src/setup-provision-input.ts`). */
 export interface AdminDraft {
   firstNames: string;
   lastNames: string;

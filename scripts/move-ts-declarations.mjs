@@ -113,7 +113,7 @@ function liftRoutes(source, { mount, groups }) {
   const { statements } = declaration.body;
   const edits = [];
   const functions = [];
-  for (const [name, { first, last, parameters, hoist }] of Object.entries(groups)) {
+  for (const [name, { first, last, parameters, hoist, returns }] of Object.entries(groups)) {
     const from = mountAnchor(statements, first, source.fileName);
     const to = mountAnchor(statements, last, source.fileName);
     const { start } = lineSpan(source, from);
@@ -140,10 +140,14 @@ function liftRoutes(source, { mount, groups }) {
     const signature = Object.entries(parameters)
       .map(([param, type]) => `${param}: ${type}`)
       .join(", ");
-    functions.push(`export function ${name}(${signature}): void {\n${body}\n}`);
+    const bindings = returns ? `{ ${returns.join(", ")} }` : undefined;
+    const result = bindings ? `\n  return ${bindings};` : "";
+    const returnType = bindings ? "" : ": void";
+    const assignment = bindings ? `const ${bindings} = ` : "";
+    functions.push(`export function ${name}(${signature})${returnType} {\n${body}${result}\n}`);
     edits.push({
       span: { start, length: end - start },
-      newText: `${lifted}  ${name}(${Object.keys(parameters).join(", ")});`,
+      newText: `${lifted}  ${assignment}${name}(${Object.keys(parameters).join(", ")});`,
     });
   }
   return parse(source.fileName, [replace(source.text, edits).trimEnd(), ...functions].join("\n\n"));
@@ -695,7 +699,8 @@ export async function main([mapFile], root) {
       const file = resolve(root, source);
       let original = parse(file, project.readFile(file));
       if (lift) {
-        original = liftRoutes(original, lift);
+        const stages = Array.isArray(lift.groups) ? lift.groups : [lift.groups];
+        for (const groups of stages) original = liftRoutes(original, { mount: lift.mount, groups });
         const node = original.statements.find((statement) => nameOf(statement) === lift.mount);
         const { start, end } = span(original, node);
         const formattedMount = parse(file, await formatFile(file, original.text.slice(start, end)));

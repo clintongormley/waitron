@@ -5,7 +5,7 @@ import {
   firstFiscalPayload,
   firstFiscalProvisionRequest,
 } from "./first-fiscal-activation.js";
-import type { SetupDeps } from "./setup-api.js";
+import type { SetupDeps } from "./setup-api-deps.js";
 import { labelContactUrl } from "./box-name.js";
 import { recordSetupCloudPublication, setupCloudBinding } from "./setup-cloud-sign-in.js";
 import type { PreparedSetupAdmin } from "./cloud-sign-in.js";

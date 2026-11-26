@@ -11,7 +11,8 @@ import type { Database } from "@waitron/db";
 import type { KeyRing } from "@waitron/credentials";
 import type { VenueResult } from "@waitron/provisioning";
 import type { ProvisionRequest } from "./provision.js";
-import { mountSetup, type SetupDeps } from "./setup-api.js";
+import { mountSetup } from "./setup-api.js";
+import { type SetupDeps } from "./setup-api-deps.js";
 
 // Spain is the only pack installed for venue setup, and it has provinces, postcode and tax-id rules
 // and a certificate-sealing regime. These cases make two other shapes available to setup: the

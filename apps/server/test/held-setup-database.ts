@@ -25,7 +25,8 @@ import { establishNodeIdentity } from "../src/node-identity.js";
 import { seedTermZeroMembership } from "../src/membership-seed.js";
 import { publicFirstSetupState } from "../src/first-setup-owner.js";
 import { provisionVenue, recoverProvisionedVenue, venueModuleConfig } from "../src/provision.js";
-import { mountSetup, type SetupDeps } from "../src/setup-api.js";
+import { mountSetup } from "../src/setup-api.js";
+import { type SetupDeps } from "../src/setup-api-deps.js";
 import { writeTradingEnv } from "../src/trading-config.js";
 
 export interface HeldSetupOptions {

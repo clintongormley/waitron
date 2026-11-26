@@ -221,7 +221,7 @@ finished joining could leave its later charts refused as `signer_removed`, logge
 alert. That removal/promotion sequence on started boxes remains unmeasured.
 
 Incomplete-adoption reset takes no proof: it is refused only for a box that joined elsewhere or
-holds no unfinished join (`/setup-api/reset-incomplete-adopt`, `apps/server/src/setup-api.ts`).
+holds no unfinished join (`/setup-api/reset-incomplete-adopt`, `apps/server/src/setup-operation-routes.ts`).
 Whether a failure after `trading.env` was written leaves this reset reachable remains
 unmeasured. Also unmeasured: `operation.complete()` failing after the restart was scheduled can
 release the setup latch while that restart is pending.

@@ -533,6 +533,63 @@ describe("move-ts-declarations", () => {
     expect(read("start.ts")).toContain('import { table } from "./table.js";');
   });
 
+  it("carries a route group's live binding through an enclosing move", async () => {
+    write(
+      "original.ts",
+      [
+        "export interface Router {",
+        "  get(path: string, handler: () => string): void;",
+        "  post(path: string, handler: () => string): void;",
+        "}",
+        "",
+        "export function mount(app: Router) {",
+        '  app.get("/status", () => read());',
+        "",
+        '  let value = "waiting";',
+        "  const read = () => value;",
+        '  app.post("/start", () => (value = "started"));',
+        '  app.get("/started", () => read());',
+        "}",
+      ].join("\n"),
+    );
+    await move(
+      "original.ts",
+      { "start.ts": ["mountStart"], "setup.ts": ["mountSetup"] },
+      ["mount", "Router"],
+      {
+        mount: "mount",
+        groups: [
+          {
+            mountStart: {
+              first: "local value",
+              last: "post /start",
+              parameters: { app: "Router" },
+              returns: ["read"],
+            },
+          },
+          {
+            mountSetup: {
+              first: "local { read }",
+              last: "get /started",
+              parameters: { app: "Router" },
+              returns: ["read"],
+            },
+          },
+        ],
+      },
+    );
+
+    expect(read("start.ts")).toContain(
+      'app.post("/start", () => (value = "started"));\n  return { read };',
+    );
+    expect(read("setup.ts")).toContain(
+      'const { read } = mountStart(app);\n  app.get("/started", () => read());\n  return { read };',
+    );
+    expect(read("original.ts")).toContain(
+      'app.get("/status", () => read());\n\n  const { read } = mountSetup(app);',
+    );
+  });
+
   it("refuses a range whose end route comes before its start", async () => {
     write("original.ts", mount);
     const reversed = {
