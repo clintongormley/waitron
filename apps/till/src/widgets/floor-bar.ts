@@ -31,7 +31,8 @@ export const floorToastStyles = css`
 export const floorScreenFooterStyles = css`
   .screen[data-floor-footer] {
     position: relative;
-    padding-block: 0;
+    padding: 0 max(var(--wt-space-3), env(safe-area-inset-right)) var(--wt-space-1)
+      max(var(--wt-space-3), env(safe-area-inset-left));
   }
   .screen[data-floor-footer] .zone-toolbar,
   .screen[data-floor-footer] .actions {
@@ -50,7 +51,14 @@ export const floorScreenFooterStyles = css`
     inline-size: 100%;
     aspect-ratio: auto;
     min-block-size: calc(var(--wt-tap-min) * 3);
-    border-radius: var(--wt-radius-md);
+    border-radius: calc((var(--wt-radius-md) + var(--wt-radius-lg)) / 2);
+    outline: 1px solid var(--wt-color-border);
+    outline-offset: -1px;
+  }
+  .screen[data-floor-footer] wt-floor-map::part(name) {
+    --wt-floor-table-weight: 700;
+    font-size: calc((var(--wt-font-size-md) + 3 * var(--wt-font-size-lg)) / 4);
+    font-weight: var(--wt-floor-table-weight);
   }
 `;
 
@@ -80,6 +88,15 @@ export const floorBarStyles = css`
       max(var(--wt-space-3), env(safe-area-inset-left));
     background: var(--wt-color-surface);
     border-block-start: 1px solid var(--wt-color-border);
+  }
+  @media (orientation: portrait) {
+    .shell:has(> .floor-controls) > .region,
+    .floor-controls {
+      margin-inline: calc(-1 * var(--wt-page-padding, 0px));
+    }
+    .floor-bar {
+      --wt-row-actions-sheet-inline-inset: 0px;
+    }
   }
   .floor-bar > [data-view-toggle]::part(button) {
     min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
@@ -124,6 +141,7 @@ export const floorBarStyles = css`
   }
   .floor-bar [data-floor-zone][aria-checked="true"] [data-row-check] {
     --wt-action-native-icon-color: var(--wt-color-primary);
+    color: var(--wt-action-native-icon-color);
   }
   .floor-bar [data-open-device-zones] {
     justify-content: center;

@@ -6378,7 +6378,9 @@ opens on that table's zone instead when this device shows that zone, as "Navigat
 sign-in says so, holds no choice and shows every permitted zone until a later read applies one.
 Below 800 CSS px of shell width, the floor has a bottom bar with a zone chooser, one button
 naming the other view (Map or List), and ☰. The zone chooser marks the selected zone with a check.
-Both menus open above the bar. An urgent cue from another zone appears above the bar.
+Both menus open above the bar and reach the screen edges in portrait. An urgent cue from another
+zone appears above the bar. The outlined map shares its side edges with the cue and controls.
+In landscape, the drag hint sits beside the map area when part of the plan is off-screen.
 The wide floor keeps the top toolbar and shows pills only when there's more than one zone.
 When a zone has nothing to draw, a sentence stands in for the tables: "This zone has no tables", "No table in this zone is in today's plan", or,
 after a failed tables or zones read, "The tables could not be read. Try again." with Retry; while a

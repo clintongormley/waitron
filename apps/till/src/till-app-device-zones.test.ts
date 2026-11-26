@@ -3028,7 +3028,7 @@ describe("a handheld's zones", () => {
       expect(cue()?.querySelector("span")?.textContent?.trim()).toBe("Room · 2 ready");
     });
 
-    it("the map fills the available narrow floor at phone width", async () => {
+    it("the portrait floor aligns its outlined map with the controls and draws bold table names", async () => {
       await pageAt(390, 844);
       applyTokens(document.documentElement);
       const room = {
@@ -3043,7 +3043,7 @@ describe("a handheld's zones", () => {
           zoneRevision: 0,
         },
       };
-      const { el } = await mountHandheld(selection(["room"], "room"), "phone-portrait", {
+      const { el } = await mountHandheld(selection(["room", "garden"], "room"), "phone-portrait", {
         listZones: vi
           .fn()
           .mockResolvedValue(
@@ -3051,17 +3051,57 @@ describe("a handheld's zones", () => {
               zone.id === "room" ? { ...zone, hasPlan: true } : zone,
             ),
           ),
-        getTablesState: vi.fn().mockResolvedValue([room]),
+        getTablesState: vi.fn().mockResolvedValue([room, readyIn("t-garden", "garden")]),
       });
       el.parentElement!.id = "app";
       await vi.waitFor(() => {
-        const map = floor(el).shadowRoot!.querySelector("wt-floor-map")!.getBoundingClientRect();
-        const bar = floorBar(el)!.getBoundingClientRect();
+        const map = floor(el).shadowRoot!.querySelector("wt-floor-map")!;
+        const card = map.getBoundingClientRect();
         const body = shell(el).shadowRoot!.querySelector("main.body")!.getBoundingClientRect();
-        expect(map.height).toBeGreaterThan(600);
-        expect(map.top).toBeCloseTo(body.top, 0);
-        expect(bar.top - map.bottom).toBeLessThanOrEqual(16);
+        const cue = shell(el).shadowRoot!.querySelector("[data-floor-other-zone]")!;
+        const cueBox = cue.getBoundingClientRect();
+        const actions = floorBar(el)!.children;
+        expect(card.height).toBeGreaterThan(600);
+        expect(card.top).toBeCloseTo(body.top, 0);
+        expect(cueBox.top - card.bottom).toBeLessThanOrEqual(16);
+        expect(card.left).toBeCloseTo(12, 0);
+        expect(card.right).toBeCloseTo(window.innerWidth - 12, 0);
+        expect(card.left).toBeCloseTo(cueBox.left, 0);
+        expect(card.right).toBeCloseTo(cueBox.right, 0);
+        expect(card.left).toBeCloseTo(actions[0]!.getBoundingClientRect().left, 0);
+        expect(card.right).toBeCloseTo(
+          actions[actions.length - 1]!.getBoundingClientRect().right,
+          0,
+        );
+        expect(getComputedStyle(map).outlineWidth).toBe("1px");
+        expect(getComputedStyle(map).outlineStyle).toBe("solid");
+        expect(getComputedStyle(map).borderTopLeftRadius).toBe("12px");
+        const name = getComputedStyle(map.shadowRoot!.querySelector('[part="name"]')!);
+        expect(name.fontSize).toBe("17px");
+        expect(name.fontWeight).toBe("700");
       });
+    });
+
+    it("both portrait floor sheets and the bar reach the screen edges", async () => {
+      await pageAt(390, 844);
+      applyTokens(document.documentElement);
+      const { el } = await mountHandheld(selection(["room", "garden"], "room"));
+      el.parentElement!.id = "app";
+      const chooser = await openZoneChooser(el);
+      const bar = floorBar(el)!;
+      const more = bar.querySelector('[data-test="more-menu"]')!;
+      function expectFullWidth(menu: Element) {
+        const sheet = menu.shadowRoot!.querySelector(".actions")!.getBoundingClientRect();
+        expect(sheet.left).toBeCloseTo(0, 0);
+        expect(sheet.right).toBeCloseTo(window.innerWidth, 0);
+        expect(sheet.bottom).toBeCloseTo(bar.getBoundingClientRect().top, 0);
+      }
+      await vi.waitFor(() => expectFullWidth(chooser));
+      await userEvent.keyboard("{Escape}");
+      await userEvent.click(more.shadowRoot!.querySelector("button")!);
+      await vi.waitFor(() => expectFullWidth(more));
+      expect(bar.getBoundingClientRect().left).toBeCloseTo(0, 0);
+      expect(bar.getBoundingClientRect().right).toBeCloseTo(window.innerWidth, 0);
     });
 
     it("the zone sheet leaves the narrow floor bar visible in the real page", async () => {
@@ -3080,10 +3120,13 @@ describe("a handheld's zones", () => {
         const zone = chooser.querySelector<HTMLElement>('[aria-checked="true"]')!;
         expect(zone.getBoundingClientRect().height).toBeGreaterThanOrEqual(60);
         expect(getComputedStyle(zone).fontSize).toBe("17px");
+        expect(getComputedStyle(zone.querySelector("[data-row-check]")!).color).toBe(
+          "rgb(0, 115, 146)",
+        );
       });
     });
 
-    it("keeps landscape map tables tappable and reveals the last table from the keyboard", async () => {
+    it("shows more landscape tables without covering them and reveals the last one by keyboard", async () => {
       await pageAt(700, 390);
       applyTokens(document.documentElement);
       const tables = Array.from({ length: 8 }, (_, index) => ({
@@ -3105,33 +3148,33 @@ describe("a handheld's zones", () => {
           zoneRevision: 0,
         },
       }));
-      const { el } = await mountHandheld(selection(["room"], "room"), "phone-portrait", {
+      const { el } = await mountHandheld(selection(["room", "garden"], "room"), "phone-portrait", {
         listZones: vi
           .fn()
           .mockResolvedValue(orderedFloorZones.map((zone) => ({ ...zone, hasPlan: true }))),
-        getTablesState: vi.fn().mockResolvedValue(tables),
+        getTablesState: vi.fn().mockResolvedValue([...tables, readyIn("t-garden", "garden")]),
       });
       el.parentElement!.id = "app";
-      await vi.waitFor(() => expect(floor(el)?.tables).toHaveLength(8));
+      await vi.waitFor(() => expect(floor(el)?.tables).toHaveLength(9));
       const map = floor(el).shadowRoot!.querySelector("wt-floor-map")!;
       const button = (id: number) =>
         map.shadowRoot!.querySelector<HTMLButtonElement>(`[data-table-id="t-${id}"]`)!;
       const shape = () => button(0).querySelector('[part="shape"]')!.getBoundingClientRect();
+      const hint = () => map.shadowRoot!.querySelector(".pan-hint")!.getBoundingClientRect();
+      const plan = () => map.shadowRoot!.querySelector(".plan")!.getBoundingClientRect();
       await vi.waitFor(() => {
         expect(shape().width).toBeGreaterThanOrEqual(44);
         expect(shape().height).toBeGreaterThanOrEqual(44);
         expect(map.shadowRoot!.textContent).toContain(t("floor.map_pan"));
+        expect(button(5).getBoundingClientRect().bottom).toBeLessThanOrEqual(plan().bottom);
+        expect(plan().right).toBeLessThanOrEqual(hint().left);
       });
-      expect(button(7).getBoundingClientRect().top).toBeGreaterThan(
-        map.getBoundingClientRect().bottom,
-      );
+      expect(button(7).getBoundingClientRect().bottom).toBeGreaterThan(plan().bottom);
       button(0).focus();
       await userEvent.keyboard("{End}");
       expect(map.shadowRoot!.activeElement).toBe(button(7));
       await vi.waitFor(() => {
-        expect(button(7).getBoundingClientRect().bottom).toBeLessThanOrEqual(
-          map.getBoundingClientRect().bottom + 1,
-        );
+        expect(button(7).getBoundingClientRect().bottom).toBeLessThanOrEqual(plan().bottom + 1);
       });
     });
 

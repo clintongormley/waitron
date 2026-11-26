@@ -12,7 +12,7 @@ import {
   type FloorMapPulse,
   floorMapFillStyles,
 } from "../floor-map-fills.js";
-import { fitCompactFloorMap, floorMapPanHintStyles, keepPlanInView } from "../floor-map-compact.js";
+import * as compactFloor from "../floor-map-compact.js";
 import { floorRingStyles, renderFloorPulse, renderFloorRing } from "../floor-ring.js";
 import "../floor-chips.js";
 import "./wt-icon.js";
@@ -83,6 +83,7 @@ interface View {
 interface Fit {
   scale: number;
   minimum: number;
+  inset: number;
   x: number;
   y: number;
 }
@@ -251,7 +252,7 @@ export class WtFloorMap extends LitElement {
     baseStyles,
     floorMapFillStyles,
     floorRingStyles,
-    floorMapPanHintStyles,
+    compactFloor.viewportStyles,
     css`
       :host {
         display: block;
@@ -817,7 +818,7 @@ export class WtFloorMap extends LitElement {
     const fit = this.#fit!;
     const scale = Math.min(fit.scale * MAX_ZOOM, Math.max(fit.minimum, view.scale * ratio));
     const change = scale / view.scale;
-    const size = this.#size!;
+    const size = this.compact ? compactFloor.viewport(this) : this.#size!;
     const x = mx + dx - (mx - view.x) * change;
     const y = my + dy - (my - view.y) * change;
     const crop = this.#crop();
@@ -825,11 +826,7 @@ export class WtFloorMap extends LitElement {
     const reachY = fit.y * scale;
     this.#view =
       this.compact && crop
-        ? {
-            scale,
-            x: keepPlanInView(x, crop.x * scale, (crop.x + crop.width) * scale, size.width),
-            y: keepPlanInView(y, crop.y * scale, (crop.y + crop.height) * scale, size.height),
-          }
+        ? compactFloor.clampView({ x, y, scale }, crop, size)
         : {
             scale,
             x: Math.min(size.width, Math.max(0, x + reachX)) - reachX,
@@ -920,9 +917,8 @@ export class WtFloorMap extends LitElement {
 
   #panTo(box: PlanRect): void {
     // A key can arrive before ResizeObserver delivers the new floor height.
-    if (this.compact) this.#size = { width: this.clientWidth, height: this.clientHeight };
     const view = this.#view!;
-    const size = this.#size!;
+    const size = this.compact ? compactFloor.viewport(this) : this.#size!;
     const left = view.x + box.x * view.scale;
     const top = view.y + box.y * view.scale;
     const dx = intoView(left, left + box.width * view.scale, size.width);
@@ -1012,10 +1008,10 @@ export class WtFloorMap extends LitElement {
     const fitted = fitScale(crop, this.#size);
     const { scale, minimum, inset } =
       this.compact && width > 0 && height > 0
-        ? fitCompactFloorMap(crop, this.#size, this.#smallestTableEdge, getComputedStyle(this))
+        ? compactFloor.fit(crop, this.#size, this.#smallestTableEdge, getComputedStyle(this))
         : { scale: fitted, minimum: fitted * MIN_ZOOM, inset: 0 };
     this.#fittedToDrag = this.#dragCrop !== null;
-    this.#fit = { scale, minimum, x: crop.x + crop.width / 2, y: crop.y + crop.height / 2 };
+    this.#fit = { scale, minimum, inset, x: crop.x + crop.width / 2, y: crop.y + crop.height / 2 };
     this.#touched = false;
     this.#view = {
       scale,
@@ -1034,10 +1030,13 @@ export class WtFloorMap extends LitElement {
       crop !== null &&
       view !== null &&
       size !== null &&
-      (crop.width * view.scale > size.width || crop.height * view.scale > size.height);
+      (crop.width * view.scale > size.width ||
+        crop.height * view.scale + 2 * this.#fit!.inset > size.height);
     const still = this.reducedMotion ?? matchMedia("(prefers-reduced-motion: reduce)").matches;
-    return html`<div role="group" aria-label=${{ ...DEFAULT_COPY, ...this.copy }.label}>
-      ${view === null ? nothing : this.#renderGroups(view, still)}
+    return html`<div class="map-content">
+      <div class="plan" role="group" aria-label=${{ ...DEFAULT_COPY, ...this.copy }.label}>
+        ${view === null ? nothing : this.#renderGroups(view, still)}
+      </div>
       ${overflows && this.copy.pan ? html`<span class="pan-hint" aria-hidden="true">${this.copy.pan}</span>` : nothing}
     </div>`;
   }
