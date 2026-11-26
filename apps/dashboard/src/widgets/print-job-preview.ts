@@ -122,7 +122,7 @@ export class PrintJobPreviewDialog extends LitElement {
   @property() printerName = "";
   @property({ type: Boolean }) loading = false;
   @property() error: string | null = null;
-  @property() reprintError: string | null = null;
+  @property({ attribute: false }) reprintError: { queuedAt: string; code: string } | null = null;
   @property({ type: Boolean }) previous = false;
   @property({ type: Boolean }) next = false;
   @property({ type: Boolean }) canReprint = false;
@@ -219,7 +219,16 @@ export class PrintJobPreviewDialog extends LitElement {
       >
         ${this.job ? this.#summary(this.job) : nothing}
         <slot></slot>
-        ${this.reprintError ? html`<p class="error" role="alert">${codeMessage(this.reprintError)}</p>` : nothing}
+        ${
+          this.reprintError
+            ? html`<p class="error" role="alert">
+                ${fill("printers.preview_reprint_refused", {
+                  time: formatIsoMinute(this.reprintError.queuedAt),
+                  reason: codeMessage(this.reprintError.code),
+                })}
+              </p>`
+            : nothing
+        }
         ${this.loading ? html`<p role="status">${t("printers.preview_loading")}</p>` : nothing}
         ${this.error ? html`<p class="error" role="alert" data-test="preview-error">${codeMessage(this.error)}</p>` : nothing}
         ${

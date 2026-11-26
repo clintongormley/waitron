@@ -4442,9 +4442,14 @@ it("shows a late reprint refusal inside the preview after stepping to another jo
   fail({ code: "print_job.not_resendable" });
   await flush(el);
   const preview = q(el, "dashboard-print-job-preview")!;
-  expect(preview.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
-    codeMessage("print_job.not_resendable"),
-  );
+  const alert = () => preview.shadowRoot!.querySelector("[role=alert]");
+  expect.soft(alert()?.textContent).toContain(codeMessage("print_job.not_resendable"));
+  expect.soft(alert()?.textContent).toContain("2026-08-25 13:00");
+  q(el, "[data-test=preview-close]")!.click();
+  await flush(el);
+  q(el, "[data-test=view-job-j1]")!.click();
+  await flush(el);
+  expect(alert()).toBeNull();
 });
 
 it("reports a failed job preview request", async () => {

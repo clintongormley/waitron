@@ -18,7 +18,7 @@ export class PrintQueuePreview {
   paper: Paper | null = null;
   loading = false;
   error: string | null = null;
-  reprintError: string | null = null;
+  reprintError: HTMLElementTagNameMap["dashboard-print-job-preview"]["reprintError"] = null;
 
   constructor(private readonly changed: () => void) {}
 
@@ -28,7 +28,7 @@ export class PrintQueuePreview {
 
   close(): void {
     ++this.#read;
-    this.job = this.paper = this.error = null;
+    this.job = this.paper = this.error = this.reprintError = null;
     this.loading = false;
     this.changed();
   }
@@ -47,7 +47,7 @@ export class PrintQueuePreview {
     const read = ++this.#read;
     if (openingOrder === undefined) {
       this.job = job;
-      this.paper = this.error = null;
+      this.paper = this.error = this.reprintError = null;
       this.loading = true;
       this.changed();
     }

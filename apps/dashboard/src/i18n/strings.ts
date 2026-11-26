@@ -1176,6 +1176,8 @@ export const en = {
   "printers.preview_previous": "Previous print job",
   "printers.preview_next": "Next print job",
   "printers.preview_loading": "Loading printout…",
+  "printers.preview_reprint_refused":
+    "The reprint for the job queued at {time} could not be sent. {reason}",
   "printers.preview_invoice_paper": "Invoice paper",
   "printers.preview_invoice_page": "Invoice page {page}",
   "printers.reprint_destination_unavailable":
@@ -6020,6 +6022,8 @@ export const es: Record<StringKey, string> = {
   "printers.preview_previous": "Trabajo anterior",
   "printers.preview_next": "Trabajo siguiente",
   "printers.preview_loading": "Cargando impresión…",
+  "printers.preview_reprint_refused":
+    "No se pudo enviar la reimpresión del trabajo en cola desde {time}. {reason}",
   "printers.preview_invoice_paper": "Papel de la factura",
   "printers.preview_invoice_page": "Página {page} de la factura",
   "printers.reprint_destination_unavailable":

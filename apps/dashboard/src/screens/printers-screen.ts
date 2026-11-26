@@ -1152,14 +1152,15 @@ export class PrintersScreen extends LitElement {
   @state() private reprintsSending: ReadonlySet<string> = new Set();
   readonly #reprintApi: Pick<DashboardApi, "resendPrintJob"> = {
     resendPrintJob: async (id, printerId) => {
+      const queuedAt = this.reprintJob?.createdAt;
       this.reprintsSending = new Set([...this.reprintsSending, id]);
       try {
         return await this.api.resendPrintJob(id, printerId);
       } catch (error) {
-        if (this.reprintJob?.id !== id) {
-          if (this.#preview.job) this.#preview.reprintError = codeOf(error);
-          else this.errorKey = codeOf(error);
-        }
+        if (this.reprintJob?.id === id) throw error;
+        if (this.#preview.job && queuedAt !== undefined)
+          this.#preview.reprintError = { queuedAt, code: codeOf(error) };
+        else this.errorKey = codeOf(error);
         throw error;
       } finally {
         this.reprintsSending = new Set([...this.reprintsSending].filter((job) => job !== id));
