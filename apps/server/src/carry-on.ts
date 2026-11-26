@@ -23,7 +23,7 @@ import {
   withInspectorAdmitted,
 } from "@waitron/identity";
 import { appendHandoverEventTx } from "@waitron/node-db";
-import { WAITING_PAGE_WORDS, type CarryOnWords } from "./i18n/waiting-page.js";
+import { SHUTDOWN_WAIT_WORDS, WAITING_PAGE_WORDS, type CarryOnWords } from "./i18n/waiting-page.js";
 import { resolveLoginLocale } from "./login-locale.js";
 import type { NewerBucketMain } from "./stream-host.js";
 import type { Logger } from "./logger.js";
@@ -37,6 +37,7 @@ import { knownHandoverSuccessor, type StartPeerCheckOutcome } from "./start-peer
 import {
   failureFields,
   otherBoxPhrase,
+  renderShutdownWaitingPage,
   renderWaitingPage,
   pageReturnPath,
   type WaitingPageSection,
@@ -86,6 +87,7 @@ export interface CarryOnDeps {
   /** Takes the one carry-on turn, after any re-ask in flight has settled. */
   beginCarryOn: () => Promise<CarryOnTurn>;
   readNewerMain?: () => Promise<NewerBucketMain | null>;
+  shutdown?: () => Promise<void>;
   /** Shared with any other password form on the page, so one email gets one set of attempts. */
   throttle?: PasswordThrottle;
   log: Logger;
@@ -143,6 +145,7 @@ function formSection(
   other: string,
   words: CarryOnWords,
   destination: string,
+  shutdown?: (typeof SHUTDOWN_WAIT_WORDS)[SupportedLocale],
 ): string {
   const error = (field: Field) =>
     view.errors[field] === undefined
@@ -164,18 +167,26 @@ ${error("totp")}`
     view.message === undefined
       ? ""
       : `<p id="carry-on-message" role="alert">${escapeHtml(view.message)}</p>\n`;
-  // The password is never drawn back, so every drawn form starts with a required field empty.
-  return `<h2>${escapeHtml(words.heading)}</h2>
-<p>${escapeHtml(words.intro[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(words.intro[1])}</p>
+  const intro = shutdown
+    ? ""
+    : `<h2>${escapeHtml(words.heading)}</h2>
+<p>${escapeHtml(words.intro[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(words.intro[1])}</p>`;
+  const choices = shutdown
+    ? ""
+    : `<p><label><input type="checkbox" id="carry-on-switched-off" name="switchedOff" value="yes" required${checked(view.switchedOff)}${invalid("switchedOff")}> ${escapeHtml(words.switchedOff[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(words.switchedOff[1])} <span class="required">*</span></label></p>
+${error("switchedOff")}<p><label><input type="checkbox" id="carry-on-no-other-recovery" name="noOtherRecovery" value="yes" required${checked(view.noOtherRecovery)}${invalid("noOtherRecovery")}> ${escapeHtml(words.noOtherRecovery)} <span class="required">*</span></label></p>
+${error("noOtherRecovery")}`;
+  const actions = shutdown
+    ? `<button type="submit" name="decision" value="keep" disabled>${escapeHtml(shutdown.keep)}</button> <button type="submit" name="decision" value="carry" disabled>${escapeHtml(shutdown.carry)}</button>`
+    : `<button type="submit" disabled>${escapeHtml(words.action)}</button>`;
+  return `${intro}
 <form method="post" action="/carry-on" id="carry-on" class="box-form">
 <input type="hidden" name="returnTo" value="${escapeHtml(destination)}">
 <p><label for="carry-on-email">${escapeHtml(words.email)} <span class="required">*</span></label></p>
 <p>${emailInput("carry-on-email", view.email, invalid("email"))}</p>
 ${error("email")}<p><label for="carry-on-password">${escapeHtml(words.password)} <span class="required">*</span></label></p>
 <p><input type="password" id="carry-on-password" name="password" autocomplete="current-password" required${invalid("password")}></p>
-${error("password")}${code}<p><label><input type="checkbox" id="carry-on-switched-off" name="switchedOff" value="yes" required${checked(view.switchedOff)}${invalid("switchedOff")}> ${escapeHtml(words.switchedOff[0])}<strong>${escapeHtml(other)}</strong>${escapeHtml(words.switchedOff[1])} <span class="required">*</span></label></p>
-${error("switchedOff")}<p><label><input type="checkbox" id="carry-on-no-other-recovery" name="noOtherRecovery" value="yes" required${checked(view.noOtherRecovery)}${invalid("noOtherRecovery")}> ${escapeHtml(words.noOtherRecovery)} <span class="required">*</span></label></p>
-${error("noOtherRecovery")}${bottom}<p><button type="submit" disabled>${escapeHtml(words.action)}</button></p>
+${error("password")}${code}${choices}${bottom}<p>${actions}</p>
 </form>
 <script>
 (() => {
@@ -183,11 +194,10 @@ ${error("noOtherRecovery")}${bottom}<p><button type="submit" disabled>${escapeHt
   const required = [...form.querySelectorAll("[required]")];
   const codes = [form.elements.totp, form.elements.recoveryCode].filter(Boolean);
   const filled = (field) => (field.type === "checkbox" ? field.checked : field.value.trim() !== "");
-  const update = () =>
-    (form.querySelector("button").disabled = !(
-      required.every(filled) &&
-      (codes.length === 0 || codes.some(filled))
-    ));
+  const update = () => {
+    const ready = required.every(filled) && (codes.length === 0 || codes.some(filled));
+    for (const button of form.querySelectorAll("button")) button.disabled = !ready;
+  };
   form.addEventListener("input", update);
   form.addEventListener("change", update);
   update();
@@ -218,6 +228,15 @@ const flowPage = (locale: SupportedLocale, title: string, body: string, head = "
  */
 export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
   const passwordThrottle = deps.throttle ?? createPasswordThrottle();
+  const renderPage = (
+    other: string,
+    locale: SupportedLocale,
+    section: string,
+    destination: string,
+  ) =>
+    deps.shutdown === undefined
+      ? renderWaitingPage(other, locale, section, destination)
+      : renderShutdownWaitingPage(locale, section, destination);
   const successorName = async (id: string | null, locale: SupportedLocale) =>
     id === null
       ? `<strong>${escapeHtml(otherBoxPhrase([null], locale))}</strong>`
@@ -229,6 +248,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
   app.post("/carry-on", async (c) => {
     const locale = resolveLoginLocale(c.req.header("Accept-Language"), FALLBACK_LOCALE);
     const words = WAITING_PAGE_WORDS[locale].carryOn;
+    const shutdown = deps.shutdown === undefined ? undefined : SHUTDOWN_WAIT_WORDS[locale];
     c.header("Cache-Control", "no-store");
     c.header("Vary", "Accept-Language");
     const other = otherBoxPhrase(
@@ -237,7 +257,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
     );
     let destination = "/";
     const page = (section: string, status: 200 | 400 | 401 | 403 | 409 | 429 | 500) =>
-      c.html(renderWaitingPage(other, locale, section, destination), status);
+      c.html(renderPage(other, locale, section, destination), status);
     const known = async (successor: string | null) =>
       c.html(
         flowPage(
@@ -267,7 +287,10 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
 
     const failed = (error: unknown, shown: FormView = BLANK) => {
       deps.log("warn", "waiting_start.carry_on_failed", failureFields(error));
-      return page(formSection({ ...shown, message: words.failed }, other, words, destination), 500);
+      return page(
+        formSection({ ...shown, message: words.failed }, other, words, destination, shutdown),
+        500,
+      );
     };
 
     let form: Awaited<ReturnType<typeof c.req.parseBody>>;
@@ -303,16 +326,16 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
     if (view.email === "") view.errors.email = words.emailMissing;
     if (password === "") view.errors.password = words.passwordMissing;
     if (view.askCode && totp === "" && recoveryCode === "") view.errors.totp = words.totpMissing;
-    if (!view.switchedOff) view.errors.switchedOff = words.statementMissing;
-    if (!view.noOtherRecovery) view.errors.noOtherRecovery = words.statementMissing;
+    if (!shutdown && !view.switchedOff) view.errors.switchedOff = words.statementMissing;
+    if (!shutdown && !view.noOtherRecovery) view.errors.noOtherRecovery = words.statementMissing;
     if (Object.keys(view.errors).length > 0)
       return page(
-        formSection({ ...view, message: words.fixFields }, other, words, destination),
+        formSection({ ...view, message: words.fixFields }, other, words, destination, shutdown),
         400,
       );
 
     const refused = (message: string, status: 401 | 403 | 429, askCode = view.askCode) =>
-      page(formSection({ ...view, askCode, message }, other, words, destination), status);
+      page(formSection({ ...view, askCode, message }, other, words, destination, shutdown), status);
 
     let personId: string;
     try {
@@ -349,6 +372,9 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
       return failed(error, view);
     }
 
+    if (shutdown && text("decision") !== "carry")
+      return page(formSection(BLANK, other, words, destination, shutdown), 200);
+
     const turn = await deps.beginCarryOn();
     switch (turn.kind) {
       case "stopped":
@@ -382,16 +408,18 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
         if (since !== null)
           throw new AppError("handover.known_handover", { successorNodeId: since });
         if (!(await turn.claim())) throw new NoLongerWaiting();
-        await appendHandoverEventTx(tx, {
-          nodeId: deps.nodeId,
-          operationId: null,
-          kind: "carried_on_without_peer",
-          detail: {
-            personId,
-            peerNodeIds: [...deps.peerNodeIds()],
-            chartTerm: await deps.chartTerm(),
-          },
-        });
+        if (deps.shutdown !== undefined) await deps.shutdown();
+        else
+          await appendHandoverEventTx(tx, {
+            nodeId: deps.nodeId,
+            operationId: null,
+            kind: "carried_on_without_peer",
+            detail: {
+              personId,
+              peerNodeIds: [...deps.peerNodeIds()],
+              chartTerm: await deps.chartTerm(),
+            },
+          });
       });
     } catch (error) {
       turn.abandon();
@@ -415,6 +443,7 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
 
   return async (c, other, locale, destination) => {
     const words = WAITING_PAGE_WORDS[locale].carryOn;
+    const shutdown = deps.shutdown === undefined ? undefined : SHUTDOWN_WAIT_WORDS[locale];
     const successor = await knownHandoverSuccessor(deps.node, deps.nodeId);
     if (successor !== null)
       return {
@@ -424,7 +453,9 @@ export function mountCarryOn(app: Hono, deps: CarryOnDeps): WaitingPageSection {
           knownBody(await successorName(successor, locale), words, false),
         ),
       };
-    if (!(deps.secure ?? isSecure)(c)) return `<p>${escapeHtml(words.insecure)}</p>\n`;
-    return formSection(BLANK, other, words, destination);
+    const section = (deps.secure ?? isSecure)(c)
+      ? formSection(BLANK, other, words, destination, shutdown)
+      : `<p>${escapeHtml(words.insecure)}</p>\n`;
+    return shutdown ? { page: renderPage(other, locale, section, destination) } : section;
   };
 }

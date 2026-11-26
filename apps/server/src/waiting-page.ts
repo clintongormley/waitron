@@ -6,7 +6,12 @@ import {
   isDashboardPath,
   type SupportedLocale,
 } from "@waitron/shared";
-import { BUCKET_WAIT_WORDS, REPLACED_PAGE_WORDS, WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
+import {
+  BUCKET_WAIT_WORDS,
+  REPLACED_PAGE_WORDS,
+  SHUTDOWN_WAIT_WORDS,
+  WAITING_PAGE_WORDS,
+} from "./i18n/waiting-page.js";
 import { codeOf } from "@waitron/server-kit";
 import { errnoOf } from "./errno.js";
 import { resolveLoginLocale } from "./login-locale.js";
@@ -72,6 +77,22 @@ export function renderBucketWaitingPage(locale: SupportedLocale, destination: st
     locale,
     title,
     `<h1>${escapeHtml(title)}</h1>\n<p>${escapeHtml(body)}</p>\n${leaveWhenDone(destination)}`,
+  );
+}
+
+export function renderShutdownWaitingPage(
+  locale: SupportedLocale,
+  form: string,
+  destination: string,
+): string {
+  const { title, body } = SHUTDOWN_WAIT_WORDS[locale];
+  return renderLogoBoxPage(
+    locale,
+    title,
+    `<h1>${escapeHtml(title)}</h1>
+<p>${escapeHtml(body)}</p>
+${form}${leaveWhenDone(pageReturnPath(destination))}`,
+    BOX_FORM_STYLE,
   );
 }
 

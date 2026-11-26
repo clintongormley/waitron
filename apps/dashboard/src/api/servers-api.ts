@@ -197,6 +197,9 @@ export interface BoxUpgradeSettingsEdit {
 export interface BoxUpgradeSettings extends BoxUpgradeSettingsEdit {
   version: 1;
 }
+export type ShutdownStatus =
+  { phase: "idle" | "checking" | "ready" } | { phase: "paused"; errorCode: string };
+
 /** LOCAL copy of the server's `BoxHealth` (`apps/server/src/box-health.ts`). */
 export interface BoxHealth {
   at: string;
@@ -212,6 +215,7 @@ export interface BoxHealth {
   filing: boolean;
   outbox: { lastAcceptedAt: string | null; waiting: number; awaitingCertificate: boolean } | null;
   stream: StreamStatusView;
+  shutdown?: ShutdownStatus & { available: boolean };
   spare?: SpareFollowView | null;
   lastOfferedUpgrade?: {
     attemptId: string;
@@ -462,6 +466,12 @@ export class ServersApi extends PrintingApi {
   /** Confirms a waiting start's time as the box shows it. */
   clockConfirm(input: { challengeId: string; asShown: true }): Promise<ClockSetView> {
     return this.#request<ClockSetView>("/api/box/clock-confirm", "POST", input);
+  }
+  startBoxShutdown(): Promise<ShutdownStatus> {
+    return this.#request("/api/box/shutdown", "POST", {});
+  }
+  cancelBoxShutdown(): Promise<ShutdownStatus> {
+    return this.#request("/api/box/shutdown", "DELETE", {});
   }
   async restartBox(): Promise<void> {
     await this.#request<Record<string, never>>("/api/box/restart", "POST", {});

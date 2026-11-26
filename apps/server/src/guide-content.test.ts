@@ -110,6 +110,7 @@ describe("the user guides", () => {
       "clock-witnesses",
       "emails",
       "card-amount-mismatch",
+      "shutdown",
     ]);
   });
 

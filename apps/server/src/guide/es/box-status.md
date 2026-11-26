@@ -492,3 +492,9 @@ su correo: con una fecha tan temprana no puede comprobar el certificado del serv
 Si no coincide un importe de tarjeta, lee las dos cifras de la alerta antes de volver a cobrar:
 lo que solicitó Waitron y lo que indicó el proveedor de pagos. Comprueba el cobro en el panel del
 proveedor.
+
+## Apagar este servidor {#shutdown}
+
+En un servidor principal sin servidor de reserva, con un destino de copia guardado y sin transmisión continua, abre **Estado del servidor** y elige **Apagar este servidor**. Vuelve a iniciar sesión como administrador si se te pide. Waitron pausa el trabajo y comprueba la copia que acaba de guardar. Deja el servidor encendido hasta que veas **Ya puedes apagar el servidor**. Puedes cancelar mientras se comprueba la copia o si la comprobación se detiene.
+
+Al volver a arrancar, inicia sesión y elige **Seguir vendiendo en este servidor** para reabrirlo. Elige **Mantenerlo detenido** si otro servidor tomó el relevo.

@@ -3,25 +3,29 @@ import { BACKUP_NODE_ID } from "./testing/backup-node.js";
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { mkdtempSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { Socket } from "node:net";
+import { TLSSocket } from "node:tls";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { IDLE_TIMEOUT_MS } from "@waitron/identity";
 
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { StreamView } from "@waitron/stream";
 import { createHealthState } from "./health.js";
 import { readDestinationStatus, type BackupStatus } from "./backup-status.js";
-import { mountBoxStatusApi } from "./box-status.js";
+import { mountBoxStatusApi, type BoxStatusDeps } from "./box-status.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import { backupArchiveKey } from "./backup-keys.js";
 import { mountManagementApi } from "./management-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+import { createAdminShutdown } from "./admin-shutdown.js";
 
 // Exercise box-status authorization and the composed status read over a manager login. The full
 // manifest is migrated because the route composes cells several modules own.
@@ -100,9 +104,12 @@ function buildApp(
     tlsCertPath: string | undefined;
     readBackup?: () => Promise<BackupStatus>;
     readStream?: () => StreamView;
+    shutdown?: BoxStatusDeps["shutdown"] &
+      Partial<Pick<ReturnType<typeof createAdminShutdown>, "middleware">>;
   },
 ): Hono {
   const app = new Hono();
+  if (opts.shutdown?.middleware) app.use("*", opts.shutdown.middleware);
   mountManagementApi(
     app,
     {
@@ -125,6 +132,7 @@ function buildApp(
       now: () => opts.now,
       tlsCertPath: opts.tlsCertPath,
       readBackup: opts.readBackup,
+      shutdown: opts.shutdown,
       readStream: opts.readStream ?? (() => ({ state: "off" })),
       readMode: () => "primary",
       readSingletonRole: () => "primary",
@@ -138,15 +146,93 @@ function buildApp(
 }
 
 /** Log in over HTTP by `email`, returning just the `waitron_management_session=…` cookie pair. */
-async function login(app: Hono, email: string): Promise<string> {
+async function login(app: Hono, email: string, password = PASSWORD): Promise<string> {
   const res = await app.request("/management-api/session", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password: PASSWORD }),
+    body: JSON.stringify({ email, password }),
   });
   expect(res.status).toBe(200);
   return res.headers.get("set-cookie")!.split(";")[0];
 }
+
+it("requires the same HTTPS page and an administrator before admitting shutdown", async () => {
+  const { nodeId } = await setupVenue();
+  const start = vi.fn();
+  const app = buildApp(nodeId, {
+    now: new Date(),
+    tlsCertPath: undefined,
+    shutdown: {
+      start,
+      cancel: async () => {},
+      status: () => ({ phase: "idle" }),
+      available: async () => true,
+    },
+  });
+  const cookie = await login(app, MANAGER_EMAIL);
+  const request = { method: "POST", headers: { cookie } };
+  const socket = new TLSSocket(new Socket());
+  try {
+    const path = "https://box.example/api/box/shutdown";
+    const plain = await app.request(path, request);
+    expect(plain.status).toBe(403);
+    expect(await plain.json()).toMatchObject({ error: { code: "node.operation_page_required" } });
+    const secure = await app.request(path, request, { incoming: { socket } });
+    expect(secure.status).toBe(403);
+    expect(await secure.json()).toMatchObject({ error: { code: "authorization.not_permitted" } });
+    expect(start).not.toHaveBeenCalled();
+  } finally {
+    socket.destroy();
+  }
+});
+
+it("lets an administrator sign in again and cancel while payments are paused", async () => {
+  const { nodeId } = await setupVenue();
+  const shutdown = createAdminShutdown({
+    check: (signal) =>
+      new Promise<void>((resolve) => {
+        signal.addEventListener("abort", () => resolve(), { once: true });
+      }),
+    save: async () => {},
+    clear: async () => {},
+  });
+  const app = buildApp(nodeId, {
+    now: new Date(),
+    tlsCertPath: undefined,
+    shutdown: { ...shutdown, available: async () => true },
+  });
+  const paymentPath = "/api/working-orders/order/payments";
+  app.post(paymentPath, (c) => c.body(null, 204));
+  const socket = new TLSSocket(new Socket());
+  const cancel = (cookie: string) =>
+    app.request(
+      "https://box.example/api/box/shutdown",
+      { method: "DELETE", headers: { cookie } },
+      {
+        incoming: { socket },
+      },
+    );
+  try {
+    const cookie = await login(app, "owner@example.test", "dashPass123");
+    shutdown.start();
+    vi.setSystemTime(Date.now() + IDLE_TIMEOUT_MS + 1_000);
+    const expired = await cancel(cookie);
+    expect(expired.status).toBe(401);
+    expect(await expired.json()).toMatchObject({ error: { code: "management_session.expired" } });
+    const refused = await app.request(paymentPath, { method: "POST" });
+    expect(refused.status).toBe(503);
+    expect(await refused.json()).toMatchObject({ error: { code: "box.shutdown_in_progress" } });
+    const fresh = await login(app, "owner@example.test", "dashPass123");
+    const cancelled = await cancel(fresh);
+    expect(cancelled.status).toBe(200);
+    expect(await cancelled.json()).toEqual({ phase: "idle" });
+    expect((await app.request(paymentPath, { method: "POST" })).status).toBe(204);
+  } finally {
+    vi.useRealTimers();
+    await shutdown.close();
+    socket.destroy();
+  }
+});
 
 describe("GET /api/box/status", () => {
   let app: Hono;

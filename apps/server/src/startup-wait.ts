@@ -50,6 +50,7 @@ interface WaitingDeps {
 }
 
 type Wait =
+  | { kind: "shutdown"; clear: () => Promise<void> }
   | {
       kind: "peer";
       waitingOn: readonly string[];
@@ -81,6 +82,7 @@ export function openStartupWait(deps: WaitingDeps, wait: Wait) {
       : {
           carryOn: {
             db,
+            ...(wait.kind === "shutdown" ? { shutdown: wait.clear } : {}),
             credentialKeyRing: ring,
             modules: deps.modules,
             readNewerMain: () => readNewerBucketMain({ db, node, ring, nodeId, store: deps.store }),
@@ -107,7 +109,7 @@ export function openStartupWait(deps: WaitingDeps, wait: Wait) {
         ),
     ],
     node,
-    recheck: wait.check,
+    recheck: wait.kind === "shutdown" ? undefined : wait.check,
     intervalMs: deps.intervalMs ?? WAIT_RECHECK_MS,
     listen: (app, steppingDown) => {
       const server = deps.listenTrading(app);

@@ -60,7 +60,10 @@ export function createFreshSignInGate(options: {
           try {
             if (
               (proofAtStart === proofVersion &&
-                !(await ask(generation, !NO_RECOVERY_CODE.test(path)))) ||
+                !(await ask(
+                  generation,
+                  path !== "/api/box/shutdown" && !NO_RECOVERY_CODE.test(path),
+                ))) ||
               init?.signal?.aborted ||
               generation !== options.sessionGeneration()
             )

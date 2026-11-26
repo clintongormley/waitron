@@ -36,6 +36,7 @@ import {
   dumpFileName,
   ownArchiveStamp,
 } from "./backup-keys.js";
+import { digestFile } from "./handover-capture.js";
 import { withDestinationCall } from "./backup-destination-call.js";
 import {
   foldersOnDisk,
@@ -193,7 +194,19 @@ async function localFoldersOnDisk(
   }
 }
 
-type BackupRunDeps = Omit<BackupSweepDeps, "schedule" | "sleep" | "jitterSeed" | "readClock">;
+export interface SavedArchive {
+  backend: StorageBackend;
+  key: string;
+  sha256: string;
+  bytes: number;
+  plaintextBytes: number;
+}
+
+type CheckSavedArchive = (archive: SavedArchive, signal: AbortSignal) => Promise<void>;
+
+type BackupRunDeps = Omit<BackupSweepDeps, "schedule" | "sleep" | "jitterSeed" | "readClock"> & {
+  checkSavedArchive?: CheckSavedArchive;
+};
 
 export async function runOnce(deps: BackupRunDeps): Promise<void> {
   const stage = () => stageBackup(deps);
@@ -270,7 +283,7 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
           aimBytes: deps.spaceAimBytes ?? SPACE_LOW_BYTES,
           dir: deps.stagingDir,
           statfs: deps.statfs,
-          folders: onDisk.folders,
+          folders: deps.checkSavedArchive ? [] : onDisk.folders,
           reason: "backup_room",
           outOfReach: "floor",
           installationStartedAt,
@@ -294,7 +307,10 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
     await deps.archive(staged, deps.signal);
     dumped = true;
     await chmod(staged, 0o600);
-    const stagedSize = deps.stagingEstimateBytes || deps.cloud ? (await stat(staged)).size : 0;
+    const stagedSize =
+      deps.stagingEstimateBytes || deps.cloud || deps.checkSavedArchive
+        ? (await stat(staged)).size
+        : 0;
     if (deps.stagingEstimateBytes) await checkStagingSpace(deps, stagedSize);
     const metadata = assembleArchiveEntries(manifest, null, parts);
     const entries: ArchiveInputEntry[] = [
@@ -321,11 +337,24 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
       delete deps.outcomes.runStopped;
       deps.onRunStoppedChanged?.();
     }
+    // WBA1 has a 9-byte header and 12 bytes of length fields per entry.
+    const plaintextBytes = entries.reduce(
+      (size, entry) =>
+        size +
+        12 +
+        (entry.kind === "file"
+          ? Buffer.byteLength(entry.name) + stagedSize
+          : Buffer.byteLength(entry.entry.name) + entry.entry.bytes.length),
+      9,
+    );
+    const check = deps.checkSavedArchive;
+    const savedDigest = check && (await digestFile(ciphertext!, deps.signal));
     // Every destination call has settled before `finally` removes the ciphertext they read.
-    await Promise.allSettled(
+    const uploads = await Promise.allSettled(
       deps.backends.map(async (backend) => {
         let stored = false;
         let errorCode: string | null = null;
+        let failure: unknown;
         try {
           await withDestinationCall(deps.signal, deps.destinationTimeoutMs, async (call) => {
             await backend.putFile(key, ciphertext!, call);
@@ -333,20 +362,25 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
             deps.onUploaded?.(backend.id);
             if (deps.outcomes)
               recordBackupOutcome(deps.outcomes, backend.id, true, stamp.toISOString());
-            await pruneBackend(
-              backend,
-              deps.retain,
-              deps.retainDays,
-              nowMs,
-              call,
-              deps.nodeId,
-              key,
-              held,
-            );
+            if (!check)
+              await pruneBackend(
+                backend,
+                deps.retain,
+                deps.retainDays,
+                nowMs,
+                call,
+                deps.nodeId,
+                key,
+                held,
+              );
           });
           deps.log("info", "backup.destination_completed", { destination: backend.id, key });
         } catch (err) {
-          if (deps.signal.aborted) return;
+          if (deps.signal.aborted) {
+            if (check) throw err;
+            return;
+          }
+          failure = err;
           // `codeOf` maps only AppErrors.
           errorCode = codeOf(err);
           const fields = { destination: backend.id, errorCode, errno: errnoOf(err) };
@@ -364,8 +398,19 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
           uploadErrorCode: stored ? null : errorCode,
           pruneErrorCode: stored ? errorCode : null,
         });
+        if (check && !stored) throw failure;
       }),
     );
+    if (check && savedDigest) {
+      const [upload] = uploads;
+      return () => {
+        if (upload.status === "rejected") throw upload.reason;
+        return check(
+          { backend: deps.backends[0], key, ...savedDigest, plaintextBytes },
+          deps.signal,
+        );
+      };
+    }
     if (!deps.cloud || deps.signal.aborted) return;
     const { target, readClock } = deps.cloud;
     const report = (result: Awaited<ReturnType<CloudArchiveTarget["store"]>>) => {
@@ -384,16 +429,6 @@ async function stageBackup(deps: BackupRunDeps): Promise<(() => Promise<void>) |
         pruneErrorCode: null,
       });
     };
-    // WBA1 has a 9-byte header and 12 bytes of length fields per entry.
-    const plaintextBytes = entries.reduce(
-      (size, entry) =>
-        size +
-        12 +
-        (entry.kind === "file"
-          ? Buffer.byteLength(entry.name) + stagedSize
-          : Buffer.byteLength(entry.entry.name) + entry.entry.bytes.length),
-      9,
-    );
     if (encryptedDir) {
       await rm(encryptedDir, { recursive: true, force: true });
       encryptedDir = undefined;
@@ -607,11 +642,19 @@ export function createBackupSchedule(
     return at;
   }
 
-  function start(kind: ActiveBackupRun["kind"], signal: AbortSignal): Promise<void> | undefined {
+  function start(
+    kind: ActiveBackupRun["kind"],
+    signal: AbortSignal,
+    checkSavedArchive?: CheckSavedArchive,
+  ): Promise<void> | undefined {
     if (active !== undefined) return;
     const startedAt = clockNow().toISOString();
     const settled = Promise.resolve()
       .then(() => {
+        if (checkSavedArchive) {
+          signal.throwIfAborted();
+          return runOnce({ ...deps, signal, checkSavedArchive });
+        }
         if (!signal.aborted) return tick({ ...deps, signal });
       })
       .finally(() => {

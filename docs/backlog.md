@@ -1216,7 +1216,9 @@ Not in any track until the standalone primary is done.
   shutdown and its next start, other backup destinations, paired boxes and checking for
   replacement through Cloud. Other evidence that a box was replaced still needs a decision.
   A1557 (2026-11-20) added [the shared backup operation](../apps/server/src/backup-supervisor.ts)
-  for scheduled and manual backups. A1418 still needs to identify and verify its final copy.
+  for scheduled and manual backups. A standalone main box with one saved destination and no
+  streaming can now take a checked final copy and wait for an administrator at its next start.
+  The remaining shutdown work adds more destinations, pause recovery choices and appliance power-off.
 
 - **A1425. Every restore takes its own identity (owner, 2026-11-07).** A restored box still
   keeps the old box's identity. Part 3, cut to Cloud's emergency copy (Cloud agreed on 15 November),

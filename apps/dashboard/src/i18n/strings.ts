@@ -4762,6 +4762,16 @@ export const en = {
   "box_status.free_help":
     "Deletes old crash reports and logs, and files left by an interrupted backup. Your sales, settings and backups are kept.",
   "box_status.free_help_guide": "More about freeing space",
+  "box_status.shutdown.title": "Shut down this box",
+  "box_status.shutdown.question": "Shut down this box?",
+  "box_status.shutdown.what":
+    "Waitron pauses selling and staff clocking while it saves and checks a full backup. You need the backup and its recovery key to restore. An administrator must choose whether to sell here again when this box starts.",
+  "box_status.shutdown.checking":
+    "Waiting for work to finish and checking the saved backup. Leave the box on.",
+  "box_status.shutdown.paused":
+    "Waitron could not finish checking the backup. Leave the box on. You can cancel to resume work.",
+  "box_status.shutdown.ready": "Safe to switch off",
+  "box_status.shutdown.cancel": "Cancel and resume work",
   "box_status.restart.title": "Restart the box",
   "box_status.restart.question": "Restart the box?",
   "box_status.restart.what":
@@ -9644,6 +9654,16 @@ export const es: Record<StringKey, string> = {
   "box_status.free_help":
     "Borra informes de fallos y registros de actividad antiguos, y archivos que dejó una copia interrumpida. Conserva tus ventas, ajustes y copias de seguridad.",
   "box_status.free_help_guide": "Más sobre liberar espacio",
+  "box_status.shutdown.title": "Apagar este servidor",
+  "box_status.shutdown.question": "¿Apagar este servidor?",
+  "box_status.shutdown.what":
+    "Waitron pausa las ventas y los fichajes mientras guarda y comprueba una copia de seguridad completa. Necesitas la copia y su clave de recuperación para restaurarla. Al arrancar, un administrador deberá decidir si se vuelve a vender aquí.",
+  "box_status.shutdown.checking":
+    "Esperando a que termine el trabajo y comprobando la copia guardada. Deja el servidor encendido.",
+  "box_status.shutdown.paused":
+    "Waitron no pudo terminar de comprobar la copia. Deja el servidor encendido. Puedes cancelar para reanudar el trabajo.",
+  "box_status.shutdown.ready": "Ya puedes apagar el servidor",
+  "box_status.shutdown.cancel": "Cancelar y reanudar el trabajo",
   "box_status.restart.title": "Reiniciar el servidor",
   "box_status.restart.question": "¿Reiniciar el servidor?",
   "box_status.restart.what":

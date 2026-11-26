@@ -24,7 +24,9 @@ import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   openVenueDatabase,
+  nodes,
   runMigrations,
+  withTransaction,
   type SingletonRole,
   type VenueDatabase,
 } from "@waitron/db";
@@ -36,6 +38,7 @@ import { gunzipSync } from "node:zlib";
 import { decryptArtifactUnderBackupKey } from "./artifact-cipher.js";
 import { decryptBackupFile, readArtifactFileHeader } from "./artifact-cipher-file.js";
 import { makeMasterKey } from "@waitron/credentials";
+import { holdRecoveryKey } from "./testing/recovery-key.js";
 import { heldBackupKey } from "./testing/backup-key.js";
 import { unpackArchive } from "./backup-archive.js";
 import { buildBackupBackend } from "./backup-backends.js";
@@ -212,6 +215,107 @@ async function waitForEvent(refs: Refs, event: string): Promise<void> {
 
 afterAll(async () => {
   for (const dir of scratch.splice(0)) await rm(dir, { recursive: true, force: true });
+});
+
+it.each(["failed upload", "damaged copy"] as const)(
+  "retains the earlier archive after a shutdown backup has a %s",
+  async (failure) => {
+    const folder = await makeDestDir();
+    const stateDir = await makeStateDir();
+    const config = { ...localFsConfig([folder], STRONG_KEY_1), retain: 1 };
+    const outcomes: BackupOutcomeHolder = { failed: new Map() };
+    const backend = new (class extends LocalFsBackend {
+      override async getFile(
+        key: string,
+        output: string,
+        call: Parameters<StorageBackend["getFile"]>[2],
+      ) {
+        await super.getFile(key, output, call);
+        await truncate(output, 1);
+      }
+    })("primary", folder);
+    const sup = new BackupSupervisor({
+      buildConfig: async () => config,
+      readSingletonRole: () => "primary",
+      venueDir: await makeVenueDir(),
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir,
+      nodeId: BACKUP_NODE_ID,
+      jitterSeed: "shutdown",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+      buildBackend: () => backend,
+      outcomes,
+      log: () => {},
+    });
+    try {
+      await sup.reload();
+      await sup.runNow();
+      const [previous] = await listArchives(folder);
+      expect(previous).toBeDefined();
+      if (failure === "failed upload") {
+        const refused = new AppError("backup.destination_timed_out", { timeoutMs: 10 });
+        vi.spyOn(backend, "putFile").mockRejectedValueOnce(refused);
+        await expect(sup.runForShutdown(new AbortController().signal, null)).rejects.toBe(refused);
+        expect(outcomes.failed.has("primary")).toBe(true);
+        expect(await listArchives(folder)).toEqual([previous]);
+        return;
+      }
+      await expect(sup.runForShutdown(new AbortController().signal, null)).rejects.toMatchObject({
+        code: "backup.archive_invalid",
+        params: { reason: "read_back_mismatch" },
+      });
+      expect(await listArchives(folder)).toEqual(expect.arrayContaining([previous]));
+      expect(await listArchives(folder)).toHaveLength(2);
+    } finally {
+      await sup.stop();
+    }
+  },
+);
+
+it("rehearses placement of its saved shutdown archive and clears the private copy", async () => {
+  const folder = await makeDestDir();
+  const stateDir = await makeStateDir();
+  const venueDir = await makeVenueDir();
+  const venue = await openVenueDatabase(venueDir);
+  try {
+    await withTransaction(venue.venue, (tx) =>
+      tx.insert(nodes).values({ id: BACKUP_NODE_ID, name: "Shutdown box" }),
+    );
+  } finally {
+    await venue.close();
+  }
+  await writeFile(join(stateDir, "trading.env"), `WAITRON_NODE_ID=${BACKUP_NODE_ID}\n`);
+  await writeFile(
+    join(stateDir, "secrets.env"),
+    `WAITRON_CREDENTIALS_KEY=${Buffer.alloc(32, 5).toString("base64")}\n`,
+  );
+  await holdRecoveryKey(stateDir, STRONG_KEY_1);
+  const outcomes: BackupOutcomeHolder = {
+    failed: new Map([["primary", { at: new Date().toISOString() }]]),
+  };
+  const sup = new BackupSupervisor({
+    buildConfig: async () => localFsConfig([folder], STRONG_KEY_1),
+    readSingletonRole: () => "primary",
+    venueDir,
+    modules: ALL_MODULES,
+    environment: "production",
+    stateDir,
+    nodeId: BACKUP_NODE_ID,
+    jitterSeed: "shutdown",
+    outcomes,
+    readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+    log: () => {},
+  });
+  try {
+    await sup.reload();
+    await sup.runForShutdown(new AbortController().signal, null);
+    expect(await listArchives(folder)).toHaveLength(1);
+    expect(outcomes.failed.has("primary")).toBe(false);
+    expect(await readdir(join(stateDir, "scratch", "restore"))).toEqual([]);
+  } finally {
+    await sup.stop();
+  }
 });
 
 describe("BackupSupervisor lifecycle (a real migrated venue directory)", () => {

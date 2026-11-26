@@ -103,6 +103,7 @@ import {
 } from "./restore-staging-dirs.js";
 import { unpackStateFiles } from "./state-secrets.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
+import { clearShutdownMark } from "./admin-shutdown-hold.js";
 import { clearReplacementMark, clearRestartMark } from "./stop-mark.js";
 import { removeReplacedResetMarker } from "./replaced-reset.js";
 import { clearSelectedCopy } from "./handover-copy-selection.js";
@@ -733,6 +734,7 @@ export async function restoreDatabase(args: {
     }
     await fs.rm(litestreamMetaDir(target), { recursive: true, force: true });
     await clearRestartMark(args.stateDir);
+    await clearShutdownMark(args.stateDir);
     aside = await mkdtemp(join(args.venueDir, REPLACED_DATABASE_PREFIX));
   } catch (error) {
     await removeIncomings();

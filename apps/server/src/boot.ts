@@ -479,6 +479,8 @@ import {
 } from "./rebuild-first-start.js";
 import { buildLandingApp } from "./landing-app.js";
 import { closeListener } from "./close-listener.js";
+import { adminShutdownDuties } from "./admin-shutdown-duties.js";
+import { clearShutdownMark, hasShutdownMark } from "./admin-shutdown-hold.js";
 import { mountBoxStatusApi } from "./box-status.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { mountBoxHostApi } from "./box-host-api.js";
@@ -1386,6 +1388,8 @@ async function bootServer(
   const ownPageCheck = requireManagementChangeFromOwnPage(isOwnPageOrigin, log);
   // Must stay ahead of every route, so a route added later is covered without being named.
   app.use("*", ownPageCheck);
+  let adminShutdown: ReturnType<typeof adminShutdownDuties> | undefined;
+  app.use("*", (c, next) => adminShutdown?.middleware(c, next) ?? next());
   app.use("*", venueDiskFullMiddleware(config.venueDir, seams.freeSpaceWatch?.statfs));
   app.use("*", async (c, next) => {
     if (c.req.method === "GET" && c.req.header("x-waitron-live") === "1") {
@@ -2310,7 +2314,9 @@ async function bootServer(
   // so a promotion lifts it without a restart.
   const fencedOrMirror = isMirror || fenced;
   const restoreFirstStart = (await readRestoreFlowPhase(config.stateDir)) === "first-start";
-  const heartbeatAt = seams.previousStop?.restart ? null : seams.previousStop?.heartbeatAt;
+  const adminHold = await hasShutdownMark(config.stateDir);
+  const heartbeatAt =
+    adminHold || seams.previousStop?.restart ? null : seams.previousStop?.heartbeatAt;
   const unexpectedStop = !fencedOrMirror && !restoreFirstStart ? (heartbeatAt ?? null) : null;
   // A restored box finishes its restore here (rebuild-first-start.ts), before the trading listener
   // reads the certificate and before the sealed-state refresh below seals it. After the peer
@@ -2358,6 +2364,15 @@ async function bootServer(
     if (result.stopped !== undefined) return result.stopped;
     if (typeof result.answer === "object") return replacementHold(result.answer);
     sellingUnconfirmed = result.answer === "silent";
+  }
+
+  if (adminHold && acceptingSales) {
+    const held = openStartupWait(startupWait, {
+      kind: "shutdown",
+      clear: () => clearShutdownMark(config.stateDir),
+    });
+    announceWaiting(held.server);
+    if ((await held.ended).kind === "stopped") return held.server;
   }
 
   // Before the tills' notice sources, which read it. Closed on a node that is not primary at its
@@ -2957,7 +2972,7 @@ async function bootServer(
     {
       nodeId: tradingContext.nodeId,
       acceptingSales,
-      admissionsClosed: () => health.takesNoSales === true,
+      admissionsClosed: () => health.takesNoSales === true || health.adminPaused?.() === true,
       readTradingAdmission: () => tradingAdmission.snapshot(),
       environment: config.environment,
       readMembership: () => readNodeMembership(db),
@@ -4086,6 +4101,19 @@ async function bootServer(
   mountAlertsApi(app, { db, registry: alertRegistry, now }, log);
   mountDiskStopApi(app, { db, disk: diskFull }, log);
 
+  adminShutdown = adminShutdownDuties({
+    db,
+    node: store.node,
+    nodeId: node.nodeId,
+    ring,
+    config,
+    runner: jobRunner,
+    backup: backupSupervisor,
+    isMain: () => !handoverGate.isClosed() && cloudPrimary(),
+  });
+  const shutdown = adminShutdown;
+  health.adminPaused = () => shutdown.status().phase !== "idle";
+  undoOnFailure.push(shutdown.close);
   mountBoxStatusApi(
     app,
     {
@@ -4097,6 +4125,7 @@ async function bootServer(
       tlsCertPath: config.tls?.certFile,
       // Read through the supervisor, so box-status and the duty share one view.
       readBackup: () => backupSupervisor.status().then((s) => s.backupStatus),
+      shutdown,
       readStream: () => streamHost.status(),
       readSpare: () => spareFollow?.status() ?? Promise.resolve(null),
       // The same holders the read-only gate and the duty loop read, so the status matches what the
@@ -4155,6 +4184,7 @@ async function bootServer(
           startClock: startClockWaits,
           timeHealth: readTimeHealth,
           lastOfferedUpgrade: readLastOfferedUpgrade,
+          shutdown: shutdown.view,
           disk: diskFull,
           space: freeSpace,
           usage: () =>
@@ -4809,7 +4839,8 @@ async function bootServer(
   const mdns = startMdnsResponder({
     // A stepdown closes the gate while admitted requests drain; tills must stop finding it then.
     names: () =>
-      (acceptingSales && !handoverGate.isClosed()) || mainSilence?.state().silent === true
+      (acceptingSales && !handoverGate.isClosed() && !health.adminPaused?.()) ||
+      mainSilence?.state().silent === true
         ? ownAndVenueNames
         : ownNameOnly,
     makeSocket: seams.mdnsSocket,
@@ -4882,6 +4913,7 @@ async function bootServer(
     {
       stopWork: () => {
         printStop.abort();
+        const closingShutdown = shutdown.close();
         return closeAll([
           async () => {
             try {
@@ -4892,6 +4924,7 @@ async function bootServer(
               await staffListener?.close();
             }
           },
+          () => closingShutdown,
           () =>
             stopBackgroundDuties(duties, (name) => {
               shutdownStep = name;
@@ -4948,6 +4981,7 @@ async function bootServer(
     started.markRestart = async () => {
       if (
         !handoverGate.isClosed() &&
+        shutdown.status().phase !== "ready" &&
         holders.mode.current === "primary" &&
         holders.singletonRole.current === "primary"
       )

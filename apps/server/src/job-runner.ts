@@ -66,6 +66,7 @@ export interface JobRunner {
   wake(name: JobName): void;
   roleChanged(): void;
   signalStepdown(): void;
+  pauseJobs(): { settled: Promise<void>; resume(): void };
   stopJobs(): Promise<void>;
   views(): Readonly<Record<string, JobView>>;
 }
@@ -80,6 +81,7 @@ export function createJobRunner(deps: {
   subscribe?: (fn: (change: ResourceChange) => void) => () => void;
 }): JobRunner {
   const delay = deps.delay ?? realSleep;
+  let paused = false;
   const jobs = new Map<
     JobName,
     {
@@ -88,6 +90,7 @@ export function createJobRunner(deps: {
       role: AbortController;
       waker: ReturnType<typeof createLoopWaker>;
       view: JobView;
+      pass?: Promise<JobPassResult>;
       loop: Promise<void>;
     }
   >();
@@ -209,6 +212,10 @@ export function createJobRunner(deps: {
     try {
       if (def.firstPassAfterMs) await sleep(def.firstPassAfterMs, true);
       while (!controller.signal.aborted) {
+        if (paused) {
+          await sleep(def.maxSleepMs, true);
+          continue;
+        }
         const now = deps.now();
         const at = now.toISOString();
         view.lastTurnAt = at;
@@ -218,7 +225,8 @@ export function createJobRunner(deps: {
           if (!def.applies()) view.state = "not_applicable";
           else {
             view.state = "running";
-            const result = await def.pass({ now, signal: controller.signal });
+            job.pass = def.pass({ now, signal: controller.signal });
+            const result = await job.pass;
             view.lastRunAt = at;
             throws = 0;
             view.nextDueAt = result.nextDueAt?.toISOString() ?? null;
@@ -255,6 +263,8 @@ export function createJobRunner(deps: {
           throws++;
           wait = Math.min(def.backoff.maxMs, def.backoff.firstMs * 2 ** (throws - 1));
           wakeable = false;
+        } finally {
+          job.pass = undefined;
         }
         if (!controller.signal.aborted) await sleep(wait, wakeable);
       }
@@ -341,6 +351,16 @@ export function createJobRunner(deps: {
       steppedDown = true;
       for (const [name, job] of jobs)
         if ("stop" in JOB_CATALOGUE[name].stepdown) job.controller.abort();
+    },
+    pauseJobs() {
+      paused = true;
+      return {
+        settled: Promise.allSettled([...jobs.values()].map((job) => job.pass)).then(() => {}),
+        resume() {
+          paused = false;
+          for (const job of jobs.values()) job.role.abort();
+        },
+      };
     },
     stopJobs() {
       if (!stopping) {
