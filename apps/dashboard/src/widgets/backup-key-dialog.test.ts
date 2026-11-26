@@ -135,6 +135,22 @@ it("Change the backup key sends the typed master key and shows 'Backups now use 
   expect(words(button(el, "close-backup-key"))).toBe(t("action.close"));
 });
 
+it("Change the backup key is drawn secondary and off until a whole key is in, then primary, and stays primary while sending", async () => {
+  const rotate = vi.fn(() => new Promise(() => undefined));
+  const { el } = await open(stubApi(rotate));
+  const change = () =>
+    button(el, "change-backup-key") as HTMLElement & { disabled: boolean; variant: string };
+  expect([change().variant, change().disabled]).toEqual(["secondary", true]);
+  await type(el, KEY.slice(0, 10));
+  expect([change().variant, change().disabled]).toEqual(["secondary", true]);
+  await type(el, KEY);
+  expect([change().variant, change().disabled]).toEqual(["primary", false]);
+  change().click();
+  await expect.poll(() => rotate.mock.calls.length).toBe(1);
+  await el.updateComplete;
+  expect([change().variant, change().disabled]).toEqual(["primary", true]);
+});
+
 it("names the number the box reports once the key has changed", async () => {
   const rotate = vi.fn().mockResolvedValue(ANSWER);
   const { el } = await open(stubApi(rotate, status(7)));

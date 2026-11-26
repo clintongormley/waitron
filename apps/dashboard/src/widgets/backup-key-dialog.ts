@@ -326,7 +326,7 @@ export class BackupKeyDialog extends LitElement {
       >
       <wt-button
         data-test="change-backup-key"
-        variant="primary"
+        .variant=${this.busy || this.key !== "" ? "primary" : "secondary"}
         ?disabled=${this.busy || this.key === ""}
         @click=${() => void this.#change()}
         >${t("recovery_pack.change_backup_key")}</wt-button

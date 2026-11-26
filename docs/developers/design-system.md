@@ -3259,8 +3259,8 @@ and the staffing grid's block editor in the A761 entry):
   once it can act, keeping its own variant while its own action is being sent. A416 brought these
   under it: the Products browser's toolbar Delete; on the
   Modifiers screen, the Delete confirmation, Add extras list, Add options list and the Used by
-  window's Edit; Print on a QR label; Print a copy on Reprint the receipt; and the profile
-  window's Edit. The owner extended it (2026-10-08, A427) to a
+  window's Edit; Print on a QR label; Print a copy on Reprint the receipt; the profile
+  window's Edit; and Change the backup key in the backup key dialog. The owner extended it (2026-10-08, A427) to a
   button disabled because its row's own state rules the action out: it is drawn `secondary` while
   ruled out and its own variant otherwise; which conditions disable it is unchanged. A427 brought
   these under it: Publish on a menu's Preview while the menu has blockers, which
