@@ -47,8 +47,9 @@ unrecognised or invalid saved state for diagnosis. Do not erase it to force a ve
 ## Recover through setup
 
 Start a fresh recovery in setup on the qualified build. Setup lists the copies checked for this
-build's verification target and selects the newest. Choose the copy you want before you review
-it. If the list is empty, [check which build the verifier is pinned to](#pin-the-build-you-will-run)
+build's verification target. It selects the copy named in Cloud approval, or the newest checked
+copy when approval named none. Check the selected copy’s date and time before you review it.
+If the list is empty, [check which build the verifier is pinned to](#pin-the-build-you-will-run)
 and choose **Check approval** when a checked copy is available.
 
 Review the copy, use your venue's master key to prepare recovery, and confirm that the old box is

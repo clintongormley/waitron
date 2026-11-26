@@ -40,6 +40,7 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const validDate = (value: unknown): value is string =>
   typeof value === "string" && Number.isFinite(Date.parse(value));
 class ExpiredRequest extends Error {}
+class SelectionRequired extends Error {}
 type SelectionNotice = "stale" | "fixed" | "approve_again";
 class SelectionRefusal extends Error {
   constructor(readonly notice: SelectionNotice | "awaiting_owner") {
@@ -353,6 +354,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       return refuseLocally();
     }
     const choosing = action === "points" || action === "select";
+    const checkingInitialChoice = state.version === 2 && action === "info" && !state.pointId;
     const send = () =>
       fetchImpl(`${options.origin}/api/recovery/${action}`, {
         method: "POST",
@@ -365,7 +367,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       const response = await (action === "select" ? send().catch(send) : send());
       if (response.status === 410 && (choosing || action === "status" || action === "info"))
         throw new ExpiredRequest();
-      if (!response.ok && !choosing) unavailable();
+      if (!response.ok && !choosing && !checkingInitialChoice) unavailable();
       const replyBytes = await readCloudResponseBytes(
         response,
         state.version === 2 ? 65536 : 16384,
@@ -374,7 +376,9 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       result = state.version === 2 ? parseBackupVerificationJson(raw, 65536) : JSON.parse(raw);
       if (!response.ok) {
         const code = record(result) ? result.error : undefined;
-        if (response.status === 409 && code === "approval_required")
+        if (checkingInitialChoice && response.status === 409 && code === "selection_required")
+          throw new SelectionRequired();
+        if (choosing && response.status === 409 && code === "approval_required")
           throw new SelectionRefusal("awaiting_owner");
         if (action === "select") {
           if (response.status === 400 && code === "invalid_input")
@@ -387,7 +391,12 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       }
       if (state.version === 2 && (!record(result) || result.version !== 2)) unavailable();
     } catch (error) {
-      if (error instanceof ExpiredRequest || error instanceof SelectionRefusal) throw error;
+      if (
+        error instanceof ExpiredRequest ||
+        error instanceof SelectionRequired ||
+        error instanceof SelectionRefusal
+      )
+        throw error;
       return unavailable();
     }
     assertCurrent(state);
@@ -489,11 +498,11 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     state.expiresAt = result.expiresAt;
     await save(state);
     if (result.state === "awaiting_owner") return view(state, "awaiting_owner");
-    if (state.version === 2 && !state.pointId) return view(state, "approved");
     let info: unknown;
     try {
       info = await post(state, "info");
     } catch (error) {
+      if (error instanceof SelectionRequired) return view(state, "approved");
       if (error instanceof ExpiredRequest)
         return view(state, "expired", undefined, new Date().toISOString());
       throw error;

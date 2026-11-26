@@ -193,12 +193,42 @@ async function fixture() {
 }
 
 describe("choosing the approved venue's snapshot", () => {
-  it("leaves a named Cloud approval unselected until the box lists and selects", async () => {
+  it("keeps the earlier checked snapshot named in Cloud approval", async () => {
     const f = await fixture();
     const client = createCloudRecoveryClient(f.options);
     await client.start();
-    expect(await client.status()).toMatchObject({ state: "approved" });
-    expect(f.calls.map(({ action }) => action)).toEqual(["start", "status"]);
+    f.rewrite = (action, result) =>
+      action === "info" ? { ...result, point: older, verification: verification(older) } : result;
+    const approved = await client.status();
+    expect(approved.point).toEqual({
+      id: olderId,
+      venueId: older.venueId,
+      capturedAt: older.capturedAt,
+      modules: { core: 1 },
+    });
+    expect(f.calls.map(({ action }) => action)).toEqual(["start", "status", "info"]);
+    expect(f.calls.at(-1)?.payload.slice(3, 5)).toEqual(["info", ""]);
+    expect(await f.saved()).toMatchObject({
+      pointId: olderId,
+      snapshotVerification: verification(older),
+    });
+  });
+
+  it("offers the newest checked snapshot first when Cloud approval names no copy", async () => {
+    const f = await fixture();
+    const fetchCloud = f.options.fetch!;
+    f.options.fetch = async (url, init) => {
+      const response = await fetchCloud(url, init);
+      return f.calls.at(-1)?.action === "info"
+        ? Response.json({ error: "selection_required" }, { status: 409 })
+        : response;
+    };
+    const client = createCloudRecoveryClient(f.options);
+    await client.start();
+    const approved = await client.status();
+    expect(approved.state).toBe("approved");
+    expect(approved.point).toBeUndefined();
+    expect(f.calls.map(({ action }) => action)).toEqual(["start", "status", "info"]);
     const list = await client.points();
     expect(list.points?.map(({ id }) => id)).toEqual([point.id, olderId]);
     expect(list.points?.[0]).toEqual({

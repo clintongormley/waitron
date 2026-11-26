@@ -112,9 +112,11 @@ el paquete se hizo antes de que el servidor tuviera copia en el bucket, no es un
 recuperación de Waitron o está dañado o se modificó después de hacerse, la página lo dice bajo el
 campo. Para Waitron Cloud, elige **Iniciar la recuperación desde Cloud**, introduce el código que
 muestra la página en tu cuenta de Waitron Cloud (**Abrir Waitron Cloud**) y aprueba allí la
-solicitud. En el servidor, elige **Comprobar la aprobación**. La copia comprobada más reciente ya
-está seleccionada. Puedes elegir una anterior antes de pulsar **Revisar copia**, que fija tu
-elección. Para cambiarla después, usa **Cerrar acceso de recuperación** en Waitron Cloud e
+solicitud. En el servidor, elige **Comprobar la aprobación**. El servidor selecciona la copia
+indicada en la aprobación de Cloud o la copia comprobada más reciente si no se indicó ninguna.
+Comprueba la fecha y la hora de la copia seleccionada. Puedes elegir otra antes de pulsar
+**Revisar copia**, que fija tu elección. Para cambiarla después, usa **Cerrar acceso de
+recuperación** en Waitron Cloud e
 inicia una nueva solicitud. Si todavía no hay copias comprobadas, vuelve a pulsar **Comprobar la
 aprobación** cuando haya una disponible.
 

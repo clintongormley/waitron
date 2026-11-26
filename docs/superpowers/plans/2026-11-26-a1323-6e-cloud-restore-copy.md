@@ -1,8 +1,9 @@
 # A1323-6E — Choose a Waitron Cloud backup on the box
 
 After approving Cloud recovery, choose a checked backup on the box. Show each copy’s time, newest
-first with the newest chosen. Review and restore the chosen copy through the existing steps. With
-no checked copies, show the empty message and offer **Check approval** again.
+first. Select the copy named in Cloud approval, or the newest checked copy when approval named
+none (watcher, 26 November 16:23). Review and restore the chosen copy through the existing steps.
+With no checked copies, show the empty message and offer **Check approval** again.
 
 **Sources.** A1323 draft PR 6e and §6, drawing `03-restore.html`, and Cloud’s [version 2 recovery
 contract](https://github.com/waitron-io/waitron-cloud/blob/46e77bf820c2a10121dcb9c0a2d0a32d234bd6b8/docs/waitron-integration-contract.md#choosing-a-checked-snapshot-on-the-box).
@@ -31,10 +32,11 @@ page are separate work. Allow about 200 product and 250 test lines.
   and the browser-safe response.
 - [ ] **Show the choice.** Extend `apps/setup/src/api/client.ts`, `events.ts`, `setup-app.ts` and
   `screens/cloud-restore-screen.ts`. Reuse setup’s labelled radios and the shell’s busy and
-  navigation checks. On the first list, explicitly select the first copy even with a named Cloud
-  approval, and show Cloud’s confirmed choice before enabling **Review backup**. Keep the saved
-  choice on reload. Review sends the first archive read, which fixes the choice in Cloud. Tell the
-  person before Review, lock the choices during Review and after success, and explain how to close
+  navigation checks. Read the named Cloud approval through `info`. If Cloud requires a choice,
+  explicitly select the first checked copy. Show the confirmed copy’s date and time before enabling
+  **Review backup**. Keep the saved choice on reload. Review sends the first archive read, which
+  fixes the choice in Cloud. Tell the person before Review, lock the choices during Review and
+  after success, and explain how to close
   the Cloud request and start over if Cloud reports the choice is fixed. A successful change resets
   earlier confirmations. Use §6’s English and Spanish wording in `i18n/strings/restore.ts`. Update
   both `guide/*/backup-recovery.md` files and the A1323 backlog. From the release guide’s
