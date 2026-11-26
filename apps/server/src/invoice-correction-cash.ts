@@ -58,7 +58,7 @@ async function readCashLeft(tx: Transaction, saleId: string) {
 /**
  * Gives `request.amount` of the open correction `correctionId` back in cash, spread over the
  * invoice's cash payments oldest first with one drawer opening, and, once the money back reaches the
- * correction's gross, files its R5 in the same transaction: a refused filing undoes the cash and the
+ * correction's gross, files its corrective in the same transaction: a refused filing undoes the cash and the
  * drawer job. A repeat of the same submission answers its first legs.
  */
 export async function giveCorrectionCash(

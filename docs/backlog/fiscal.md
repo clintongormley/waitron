@@ -1198,10 +1198,8 @@ and built on the owner's word of 21 November 18:17; shown to the owner as replac
 approval's "goodwill refunds stay money-only" with no objection (O5, "WATCHER 2026-11-23 14:18").
 A tip given back on its own stays open, up to what is left of it: the owner's "Yes" (O2, 14:17).
 Where Correct invoice refuses for good (another box's ticket, one replaced by a full invoice, no
-filing record, a full invoice naming a customer, records that need
-checking; since 2026-11-26 a full invoice naming a customer is corrected with an R1 unless the tax
-agency refused it with no fix, CORRECT-FULL-INVOICE PR 2a; on one whose business has no registered
-address, Refund a payment waits until it is added), Refund a payment stays open; where it only waits (a filing refused, stopped or held,
+filing record, records that need checking, and, until 2026-11-26, a full invoice naming a
+customer), Refund a payment stays open; where it only waits (a filing refused, stopped or held,
 another refund pending, the clock), Refund a payment waits too for that money: the watcher's call (O7, "WATCHER
 2026-11-23 14:55"). The owner landed #4192 on 2026-11-24 with O7 to O9 listed as the watcher's calls, and
 the same day approved one Give money back that picks the right way by itself
@@ -1209,6 +1207,9 @@ the same day approved one Give money back that picks the right way by itself
 owed and is capped by them, the PIN rule unchanged: the watcher's call (O8, 14:55). A hand-keyed card
 refund of money Correct invoice could give back is refused before the terminal step: the watcher's clearance of the lane's change (2026-11-23 22:51).
 [Plan](../superpowers/plans/2026-11-19-adviser-goodwill-corrective.md).
+(2026-11-26: a full invoice naming a customer is corrected with an R1 unless the tax agency refused it
+with no fix, which Refund a payment keeps open; while the business has no registered address, Refund a
+payment waits until it is added. CORRECT-FULL-INVOICE PR 2a.)
 
 ### Money given back is shared by menu price (owner and watcher, 2026-11-23)
 

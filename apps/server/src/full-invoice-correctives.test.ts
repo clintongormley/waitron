@@ -155,7 +155,7 @@ function dashboard(): Hono {
 }
 
 describe("a corrective full invoice is filed by whatever finishes the money", () => {
-  it("files one R1 when a late card answer completes the leg (row 3)", async () => {
+  it("files one R1 when a late card answer completes the leg", async () => {
     const { saleId, correctionId, refundId } = await readerLegUnanswered();
     providerMadeIt(refundId);
     await recoverTenderRefunds(refundDeps());
@@ -164,7 +164,7 @@ describe("a corrective full invoice is filed by whatever finishes the money", ()
     expect(await correctionOf(correctionId)).toMatchObject({ state: "filed" });
   });
 
-  it("files one R1 on the sweep at start for a leg whose own filing failed (row 3)", async () => {
+  it("files one R1 on the sweep at start for a leg whose own filing failed", async () => {
     const saleId = await fullInvoice({ cash: "20.00" }, { card: "17.00" });
     const { correctionId } = await giveBack(saleId, goodwill("25.00"));
     const broken = Object.create(venue.backend, {
@@ -201,7 +201,7 @@ describe("a corrective full invoice is filed by whatever finishes the money", ()
     expect(await correctionOf(correctionId)).toMatchObject({ state: "filed" });
   });
 
-  it("settles the leg on the till's Check again, filing nothing; the sweep files one R1 (row 4)", async () => {
+  it("settles the leg on the till's Check again, filing nothing; the sweep files one R1", async () => {
     const { saleId, refundId } = await readerLegUnanswered();
     providerMadeIt(refundId);
     const retried = await send(
@@ -217,7 +217,7 @@ describe("a corrective full invoice is filed by whatever finishes the money", ()
     expect(correctivesOf(saleId)).toEqual([r1(-1000)]);
   });
 
-  it("settles the leg on the dashboard's resolve, filing nothing; the sweep files one R1 (row 5)", async () => {
+  it("settles the leg on the dashboard's resolve, filing nothing; the sweep files one R1", async () => {
     const { saleId, refundId } = await readerLegUnanswered();
     providerMadeIt(refundId);
     const resolved = await send(
@@ -233,7 +233,7 @@ describe("a corrective full invoice is filed by whatever finishes the money", ()
     expect(correctivesOf(saleId)).toEqual([r1(-1000)]);
   });
 
-  it("files an R1 against a full invoice's replacement (an R4 by replacement) (row 1)", async () => {
+  it("files an R1 against a full invoice's replacement (an R4 by replacement)", async () => {
     const saleId = await fullInvoice({ cash: "37.00" });
     const replacementId = await inTx(venue, async (tx) => {
       await refusedByAeat(tx, saleId);
@@ -262,7 +262,7 @@ describe("a corrective full invoice is filed by whatever finishes the money", ()
 });
 
 describe("a correction that can no longer be filed ends unrecorded", () => {
-  it("on an invoice another box issued, Finish ends it with its refunds kept and no corrective (row 6)", async () => {
+  it("on an invoice another box issued, Finish ends it with its refunds kept and no corrective", async () => {
     const saleId = await fullInvoice({ cash: "20.00" }, { card: "17.00" });
     const { correctionId } = await giveBack(saleId, goodwill("25.00"));
     expect(refundStates(saleId)).toEqual([{ applied: 2000, state: "completed" }]);
