@@ -1173,14 +1173,15 @@ export const en = {
   "printers.poll_required": "Enter the cloud polling ID",
   "printers.poll_hint": "Identifies a cloud-connected printer that fetches its own jobs.",
   "printers.preview_title": "Print job preview",
-  "printers.preview_invoice_notice": "These pages were redrawn from the sale.",
+  "printers.preview_previous": "Previous print job",
+  "printers.preview_next": "Next print job",
+  "printers.preview_loading": "Loading printout…",
+  "printers.preview_invoice_paper": "Invoice paper",
   "printers.preview_invoice_page": "Invoice page {page}",
   "printers.reprint_destination_unavailable":
     "That printer is unavailable. Choose another printer.",
   "printers.preview_paper": "Receipt paper",
   "printers.preview_cut": "Paper cut",
-  "printers.preview_notice":
-    "Approximate paper layout of the stored job. The printer’s own settings can change the printed result.",
   "printers.preview_qr_data": "QR code content",
   "printers.preview_image": "Printed image",
   "printers.preview_graphics_omitted": "Some images could not be shown.",
@@ -6016,14 +6017,15 @@ export const es: Record<StringKey, string> = {
   "printers.poll_hint":
     "Identifica una impresora conectada a la nube que recoge sus propios trabajos.",
   "printers.preview_title": "Vista previa de impresión",
-  "printers.preview_invoice_notice": "Estas páginas se han vuelto a generar a partir de la venta.",
+  "printers.preview_previous": "Trabajo anterior",
+  "printers.preview_next": "Trabajo siguiente",
+  "printers.preview_loading": "Cargando impresión…",
+  "printers.preview_invoice_paper": "Papel de la factura",
   "printers.preview_invoice_page": "Página {page} de la factura",
   "printers.reprint_destination_unavailable":
     "Esa impresora no está disponible. Elige otra impresora.",
   "printers.preview_paper": "Papel del recibo",
   "printers.preview_cut": "Corte de papel",
-  "printers.preview_notice":
-    "Diseño aproximado del trabajo guardado. Los ajustes de la propia impresora pueden cambiar el resultado impreso.",
   "printers.preview_qr_data": "Contenido del código QR",
   "printers.preview_image": "Imagen impresa",
   "printers.preview_graphics_omitted": "No se han podido mostrar algunas imágenes.",

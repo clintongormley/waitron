@@ -6,7 +6,10 @@ queued time otherwise. **Reprint** offers the same picker as the queue row, incl
 (#4375).
 
 **Before building:** Show the owner a printed receipt, a failed receipt and an A4 invoice at desktop
-and phone widths. The watcher confirms the pictures were shown and clears the reviewed plan.
+and phone widths. Claude reviewed the plan. The watcher cleared it at 09:11 on 26 November 2026
+and relayed the owner's 09:39 answer in Lane D's questions: "if you fix those two things the a1588
+can land". Remove the two general preview notices in both languages and draw rolls and A4 at a
+common scale, with an edge around each A4 page. Send the implementation pictures to the watcher.
 
 ## Build
 

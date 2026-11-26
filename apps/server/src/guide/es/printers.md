@@ -104,8 +104,12 @@ conexión puede aparecer junto al último error de impresión comunicado.
 
 Si la impresora tarda varios segundos en empezar a imprimir por Bluetooth, apágala y vuelve a encenderla.
 
-Elige **Ver impresión** en una factura en A4 para ver las páginas generadas a partir de la venta.
-Si la cola indica que la factura se imprimió, elige **Reimprimir** para enviar un duplicado a
+Elige **Ver impresión** para consultar el trabajo y su estado. Usa las flechas de abajo o las
+teclas de flecha izquierda y derecha para recorrer los trabajos que muestra la cola. En una
+pantalla pequeña, desplázate de lado para ver una página ancha. Elige **Reimprimir** desde la
+vista previa o la cola cuando esté disponible.
+
+Si la cola indica que se imprimió una factura en A4, **Reimprimir** envía un duplicado a
 cualquier impresora de tickets o A4 activa. Si la impresión falló o la cola indica **Puede haberse
 impreso**, revisa la impresora y usa **Pedidos** para volver a enviar la factura.
 

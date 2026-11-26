@@ -4290,6 +4290,136 @@ it("opens the selected job preview and closes it", async () => {
   expect(preview.open).toBe(false);
 });
 
+it("steps through the sorted and filtered queue, skipping jobs without a printout", async () => {
+  const first = jobs[1]!;
+  const failed = jobs[0]!;
+  const drawer = { ...first, id: "drawer", kind: "drawer", createdAt: "2026-08-25T13:30:00Z" };
+  const hidden = { ...first, id: "hidden", printerId: "p2", createdAt: "2026-08-25T13:45:00Z" };
+  const invoice = {
+    ...first,
+    id: "invoice",
+    kind: "a4",
+    pageDocument: "invoice",
+    createdAt: "2026-08-25T15:00:00Z",
+  };
+  const api = stubApi({
+    listRecentJobs: vi.fn().mockResolvedValue([invoice, failed, hidden, drawer, first]),
+  });
+  vi.mocked(api.getPrintJobPreview).mockImplementation(async (id) =>
+    id === "invoice"
+      ? { kind: "a4", pages: [] }
+      : {
+          widthDots: 512,
+          columns: 42,
+          text: id,
+          blocks: [{ kind: "text", text: id }],
+          qrData: [],
+          omittedGraphics: false,
+          truncated: false,
+          unsupported: false,
+        },
+  );
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  const table = q(el, "[data-test=jobs-table]") as import("@waitron/ui").WtDataTable;
+  table.chooseFilter("printer", ["p1"]);
+  table.shadowRoot!.querySelector<HTMLButtonElement>("button[data-sort=queued]")!.click();
+  await flush(el);
+  expect(table.shownKeys()).toEqual(["j2", "drawer", "j1", "invoice"]);
+  q(el, "[data-test=view-job-j2]")!.click();
+  await flush(el);
+
+  const previous = q(el, "[data-test=preview-previous]") as HTMLElementTagNameMap["wt-icon-button"];
+  const next = q(el, "[data-test=preview-next]") as HTMLElementTagNameMap["wt-icon-button"];
+  expect(previous?.disabled).toBe(true);
+  expect(q(el, "[data-test=preview-time]")?.getAttribute("datetime")).toBe(first.deliveredAt);
+  await userEvent.click(next.shadowRoot!.querySelector("button")!);
+  await flush(el);
+  expect(text(el, "[data-test=preview-status]")).toBe(jobStatusName("failed"));
+  expect(text(el, "[data-test=preview-reason]")).toBe("printer offline");
+  expect(q(el, "[data-test=preview-time]")?.getAttribute("datetime")).toBe(failed.createdAt);
+  expect(q(el, "[data-test=preview-reprint]")).toBeNull();
+
+  await userEvent.keyboard("{ArrowRight}");
+  await flush(el);
+  expect(next.disabled).toBe(true);
+  expect(text(el, "[data-test=preview-printer]")).toContain(t("printers.job_a4_invoice"));
+  await userEvent.keyboard("{ArrowRight}{ArrowLeft}");
+  await flush(el);
+  expect(vi.mocked(api.getPrintJobPreview).mock.calls).toEqual([
+    ["j2"],
+    ["j1"],
+    ["invoice"],
+    ["j1"],
+  ]);
+});
+
+it("ignores a late printout after stepping and retries the failed read", async () => {
+  const api = stubApi();
+  const getPreview = vi.mocked(api.getPrintJobPreview);
+  const sample = await api.getPrintJobPreview("sample");
+  getPreview.mockClear();
+  let finish!: (preview: Awaited<typeof sample>) => void;
+  getPreview
+    .mockResolvedValueOnce(sample)
+    .mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)))
+    .mockRejectedValueOnce({ code: "server.internal" });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=view-job-j1]")!.click();
+  await flush(el);
+  const next = q(el, "[data-test=preview-next]");
+  expect(next).not.toBeNull();
+  next!.click();
+  await flush(el);
+  expect(q(el, "dashboard-print-job-preview")!.shadowRoot!.querySelector(".paper")).toBeNull();
+  q(el, "[data-test=preview-previous]")!.click();
+  await flush(el);
+  finish(sample);
+  await flush(el);
+  expect(text(el, "[data-test=preview-error]")).toBe(codeMessage("server.internal"));
+  expect(q(el, "dashboard-print-job-preview")!.shadowRoot!.querySelector(".paper")).toBeNull();
+  next!.click();
+  await flush(el);
+  expect(q(el, "[data-test=preview-error]")).toBeNull();
+  expect(
+    (q(el, "dashboard-print-job-preview") as HTMLElementTagNameMap["dashboard-print-job-preview"])
+      .preview,
+  ).toEqual(sample);
+});
+
+it("reprints the selected preview and returns the keyboard to the printout", async () => {
+  const api = stubApi();
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=view-job-j1]")!.click();
+  await flush(el);
+  const next = q(el, "[data-test=preview-next]");
+  expect(next).not.toBeNull();
+  next!.click();
+  await flush(el);
+  await userEvent.click(q(el, "[data-test=preview-reprint]")!.shadowRoot!.querySelector("button")!);
+  await flush(el);
+  await userEvent.keyboard("{Escape}");
+  await vi.waitFor(() => expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull());
+  expect(q(el, "[data-test=preview-reprint]")!.shadowRoot!.activeElement?.tagName).toBe("BUTTON");
+
+  await userEvent.click(q(el, "[data-test=preview-reprint]")!.shadowRoot!.querySelector("button")!);
+  await flush(el);
+  await userEvent.click(q(el, "[data-test=reprint-send]")!.shadowRoot!.querySelector("button")!);
+  await flush(el);
+  expect(api.resendPrintJob).toHaveBeenCalledExactlyOnceWith("j2", "p1");
+  const dialog = q(el, "dashboard-print-job-preview")!;
+  const notice = dialog.querySelector("[data-test=reprint-sent]");
+  expect(notice?.textContent?.trim()).toBe(
+    fill("printers.reprint_sent", { printer: printers[0]!.name }),
+  );
+  expect(notice?.checkVisibility()).toBe(true);
+  await userEvent.keyboard("{ArrowLeft}");
+  await flush(el);
+  expect(api.getPrintJobPreview).toHaveBeenLastCalledWith("j1");
+});
+
 it("reports a failed job preview request", async () => {
   const api = stubApi({
     getPrintJobPreview: vi.fn().mockRejectedValue({ code: "server.internal" }),
