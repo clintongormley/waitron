@@ -4957,9 +4957,13 @@ async function bootServer(
     }),
   );
 
-  if (acceptingSales)
+  if (!fenced)
     started.markRestart = async () => {
-      if (!handoverGate.isClosed() && holders.singletonRole.current === "primary")
+      if (
+        !handoverGate.isClosed() &&
+        holders.mode.current === "primary" &&
+        holders.singletonRole.current === "primary"
+      )
         await writeRestartMark(config.stateDir);
     };
   return started;

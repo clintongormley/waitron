@@ -38,7 +38,7 @@ export const UNPLANNED_STOP_EMAIL_WORDS = {
   },
   es: {
     subject: "{venue}: el servidor se detuvo sin aviso",
-    text: "El servidor funcionaba por última vez a las {lastRunningAt}. Un corte de luz, un fallo o una parada forzada pueden causar esto.",
+    text: "El servidor funcionaba por última vez el {lastRunningAt}. Un corte de luz, un fallo o una parada forzada pueden causar esto.",
   },
 } as const;
 
