@@ -21,7 +21,6 @@ import {
   appliedRemainingOf,
   fileCorrectionIn,
   moneyOf,
-  previewOrRefusal,
   readInvoiceCorrection,
   uuidOf,
   type InvoiceCorrectionDeps,
@@ -60,9 +59,8 @@ async function readCashLeft(tx: Transaction, saleId: string) {
 /**
  * Gives `request.amount` of the open correction `correctionId` back in cash, spread over the
  * invoice's cash payments oldest first with one drawer opening, and, once the money back reaches the
- * correction's gross, files its corrective in the same transaction: a refused filing undoes the cash
- * and the drawer job, except a refusal Finish closes over (`closableRefusal`), which files nothing
- * and leaves the correction open for Finish. A repeat of the same submission answers its first legs.
+ * correction's gross, files its corrective in the same transaction: a refused filing undoes the cash and the
+ * drawer job. A repeat of the same submission answers its first legs.
  */
 export async function giveCorrectionCash(
   tx: Transaction,
@@ -157,17 +155,10 @@ export async function giveCorrectionCash(
     refunds.push(toTenderRefundView(refund));
   }
 
-  const { completed } = await readCorrectionMoney(tx, correctionId);
-  if (completed === correction.gross) {
-    const filing = await previewOrRefusal(tx, deps.backend, cfg, correction.originalSaleId, {
-      gross: centsToDecimal(completed),
-      ...(correction.lineIds === null ? {} : { lineIds: correction.lineIds }),
+  if ((await readCorrectionMoney(tx, correctionId)).completed === correction.gross)
+    await fileCorrectionIn(tx, deps, cfg, correctionId, actor.authz, actor.personId, {
+      print: true,
     });
-    if (!("refusal" in filing && filing.closable))
-      await fileCorrectionIn(tx, deps, cfg, correctionId, actor.authz, actor.personId, {
-        print: true,
-      });
-  }
   return {
     correction: await readInvoiceCorrection(tx, deps.backend, cfg, correctionId),
     refunds,
