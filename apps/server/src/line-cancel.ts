@@ -621,7 +621,9 @@ async function freeItemsComingBack(
     if (free.some(({ line }) => off.has(line.id))) throw freeItemRefusal("free_item");
     if (isLastPaidDish(paid, off)) {
       expected = freeItemsLeft(free);
-      if (expected.some(({ line }) => line.servedQuantity > 0)) throw freeItemRefusal("served");
+      // A set-menu row is stored served; its dishes' own service counts.
+      if (expected.some(({ line }) => line.setMenuRole !== "set_menu" && line.servedQuantity > 0))
+        throw freeItemRefusal("served");
     }
   }
   if (

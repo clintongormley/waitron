@@ -16,9 +16,11 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { kitchenNotices } from "@waitron/venue-service";
 import { cancelRefundShare, decimalToCents, rowCancelRefund } from "@waitron/shared";
+import { setTakeawayVatRate } from "@waitron/menu";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
+import { readOrderRevision } from "./working-order-context.js";
 import { advanceTicketItem } from "./working-order-kitchen-service.js";
 import { markServed } from "./working-order-serving.js";
 import {
@@ -30,7 +32,24 @@ import {
   type RoundLine,
 } from "./testing/adjustment-venue.js";
 import { cashPayment, send } from "./testing/bill-venue.js";
-import { cancelItemHttp } from "./testing/cancel-line.js";
+import {
+  cancelItemForTest,
+  cancelItemHttp,
+  GIVE_AWAY_REASON,
+  reasonIdOf,
+} from "./testing/cancel-line.js";
+import { inTx as partyInTx, pay, seatWithNoAllergies } from "./testing/party-venue.js";
+import { saveSetMenuDraft } from "./testing/set-menu-bill-fixture.js";
+import {
+  addSpecDishesToFullMenu,
+  sendSpecDraft,
+  setupSetMenuSpecVenue,
+  specDishOf,
+  specRows,
+  specSaleLines,
+  type SpecDish,
+  type SpecVenue,
+} from "./testing/set-menu-spec-fixture.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import "./errors.js";
 
@@ -713,5 +732,123 @@ describe("a free item holding a share comes back with the last paid dish", () =>
     const answer = await cancel(t, salad);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect((await written(t)).cancels).toEqual([{ lineId: salad.id, refundValue: 1000 }]);
+  });
+});
+
+describe("a free set menu on a takeaway ticket", () => {
+  let spec: SpecVenue;
+  let ordinary: Record<SpecDish, string>;
+
+  useVenueDb({
+    resetPerTest: false,
+    migrations: migrationOptionsFor(manifestSets(), null),
+    timeoutMs: 60_000,
+    setup: async (db) => {
+      spec = await setupSetMenuSpecVenue(db);
+      ordinary = await addSpecDishesToFullMenu(spec);
+      await partyInTx(spec.venue, (tx) =>
+        setTakeawayVatRate(tx, spec.venue.productId("Water"), "21.00"),
+      );
+    },
+  });
+
+  /** A settled takeaway ticket: a Daily of Soup and Sirloin given free, and a Water at 21%. */
+  async function freeDailyTicket() {
+    const { venue } = spec;
+    const bill = await seatWithNoAllergies(venue, await venue.table(randomUUID()));
+    await partyInTx(venue, (tx) =>
+      tx.update(workingOrders).set({ dining: "takeaway" }).where(eq(workingOrders.id, bill.tabId)),
+    );
+    const draft = await saveSetMenuDraft(
+      venue,
+      bill,
+      { menuItemId: ordinary.Soup, quantity: "1" },
+      { menuItemId: ordinary.Sirloin, quantity: "1" },
+      { menuItemId: venue.item("Water"), quantity: "1" },
+    );
+    await sendSpecDraft(spec, draft.partyId, draft.id, "fire");
+    const daily = (await specRows(spec, bill.tabId)).find(
+      ({ setMenuRole }) => setMenuRole === "set_menu",
+    )!;
+    await partyInTx(venue, async (tx) =>
+      applyAdjustment(
+        tx,
+        venue.cfg,
+        {
+          admission: testTradingAdmission(),
+          orderId: bill.tabId,
+          expectedEdit: await readBillEditState(tx, bill.tabId),
+          submissionId: randomUUID(),
+          expectedRevision: await readOrderRevision(tx, bill.tabId),
+          lineId: daily.id,
+          reasonId: await reasonIdOf(tx, GIVE_AWAY_REASON),
+          action: "comp",
+          note: null,
+          operatorId: venue.operator.personId,
+        },
+        venue.cfg.locale,
+      ),
+    );
+    await pay(venue, bill.tabId, "100.00");
+    const rows = await specRows(spec, bill.tabId);
+    const dish = (name: string) =>
+      rows.find(
+        (row) => row.parentLineId === null && (specDishOf(spec, row) ?? row.name) === name,
+      )!;
+    return { billId: bill.tabId, daily, dish };
+  }
+
+  function refundCancel(billId: string, lineNo: number, withFree?: string[]) {
+    return partyInTx(spec.venue, (tx) =>
+      cancelItemForTest(tx, spec.venue.cfg, billId, lineNo, undefined, undefined, undefined, {
+        outcome: "keep_charge",
+        refundHandoff: true,
+        ...(withFree === undefined ? {} : { withFree }),
+      }),
+    );
+  }
+
+  /** The bill's cancel records, as the line each cancels and the cents it gives back. */
+  async function cancelsOn(billId: string) {
+    return (
+      await spec.venue.db.select().from(adjustments).where(eq(adjustments.workingOrderId, billId))
+    )
+      .filter((row) => row.action === "cancel")
+      .map((row) => ({ lineId: row.lineId, refundValue: row.refundValue }));
+  }
+
+  it("brings the free Daily back with the Water's Cancel and refund, for what its lines filed", async () => {
+    const t = await freeDailyTicket();
+    const water = t.dish("Water");
+    const sirloin = t.dish("Sirloin");
+    const filed = await specSaleLines(spec, t.billId);
+    const filedOf = (name: string) => filed.find((line) => line.name === name)!.lineGross;
+    expect(filed.map(({ name, lineGross }) => [name, lineGross])).toEqual([
+      ["Soup", 0],
+      ["Sirloin", 48],
+      ["Water", 19],
+      ["Daily menu", 133],
+    ]);
+
+    const answer = await refundCancel(t.billId, water.lineNo, [t.daily.id, sirloin.id]);
+    expect((answer.refundLinks ?? []).map(({ lineId }) => lineId).sort()).toEqual(
+      [water.id, t.daily.id, sirloin.id].sort(),
+    );
+    expect((await cancelsOn(t.billId)).sort((a, b) => a.lineId!.localeCompare(b.lineId!))).toEqual(
+      [
+        { lineId: water.id, refundValue: filedOf("Water") },
+        { lineId: t.daily.id, refundValue: filedOf("Daily menu") },
+        { lineId: sirloin.id, refundValue: filedOf("Sirloin") },
+      ].sort((a, b) => a.lineId.localeCompare(b.lineId)),
+    );
+  });
+
+  it("still refuses the Sirloin's own Cancel and refund", async () => {
+    const t = await freeDailyTicket();
+    await expect(refundCancel(t.billId, t.dish("Sirloin").lineNo)).rejects.toMatchObject({
+      code: "tab.free_item_with_dish",
+      params: { reason: "free_item" },
+    });
+    expect(await cancelsOn(t.billId)).toEqual([]);
   });
 });
