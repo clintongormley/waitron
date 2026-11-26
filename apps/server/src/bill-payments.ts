@@ -10,6 +10,7 @@ import { assertBillHasNoUnsent, readBillUnsent } from "./bill-unsent.js";
 import { ORDER_INVOICE_CHOICE, selectOrderInvoice } from "./invoice-selection.js";
 import { linkSaleDishes } from "./order-portions.js";
 import { reopenedChainIds } from "./reopened-bills.js";
+import { withSentOrderOpen } from "./sent-order-open.js";
 import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import {
   billAdvances,
@@ -2392,19 +2393,21 @@ async function movedItemsBack(
   try {
     await tx.transaction(async () => {
       try {
-        await moveOrderLines(tx, cfg, billId, sourceId, undefined, {
-          actorId: failed.requestedBy,
+        await withSentOrderOpen(tx, sourceId, async () => {
+          await moveOrderLines(tx, cfg, billId, sourceId, undefined, {
+            actorId: failed.requestedBy,
+          });
+          await bumpRevision(tx, [sourceId, billId]);
+          await tx
+            .update(workingOrders)
+            .set({ status: "abandoned" })
+            .where(eq(workingOrders.id, billId));
+          const [source] = await tx
+            .select({ partyId: workingOrders.partyId })
+            .from(workingOrders)
+            .where(eq(workingOrders.id, sourceId));
+          if (source!.partyId !== null) await bumpPartyRevision(tx, source!.partyId);
         });
-        await bumpRevision(tx, [sourceId, billId]);
-        await tx
-          .update(workingOrders)
-          .set({ status: "abandoned" })
-          .where(eq(workingOrders.id, billId));
-        const [source] = await tx
-          .select({ partyId: workingOrders.partyId })
-          .from(workingOrders)
-          .where(eq(workingOrders.id, sourceId));
-        if (source!.partyId !== null) await bumpPartyRevision(tx, source!.partyId);
       } catch (error) {
         bodyError = error;
         throw error;

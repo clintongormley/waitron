@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   billPayments,
   printJobs,
@@ -13,6 +13,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createProduct } from "@waitron/menu";
+import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
 import { createPrinter } from "@waitron/printing";
 import { centsToDecimal } from "@waitron/shared";
 import { setRoutingCell, setZoneSalePolicyOverride } from "@waitron/venue-service";
@@ -37,6 +38,7 @@ import { attachedPrinter } from "./testing/working-order.test-support.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { handOverOrder, listCounterWaiting } from "./working-order-counter.js";
 import { parkOrder } from "./working-order-open.js";
+import { listHeldOrders } from "./working-order-held-read.js";
 import { listStationQueues } from "./working-order-station-queue.js";
 import { payForItems, previewPayForItems, type ItemPick } from "./pay-for-items.js";
 import "./errors.js";
@@ -48,6 +50,7 @@ let kitchenPrinterId: string;
 let receiptPrinterId: string;
 /** The counter zone's offer of Ham, sold by weight: a line the till never splits into portions. */
 let hamOffer: string;
+let card: FakePaymentProvider;
 
 useVenueDb({
   resetPerTest: false,
@@ -90,6 +93,7 @@ useVenueDb({
     db.run(
       sql`update devices set receipt_printer_id = ${receiptPrinterId} where id = ${v.cfg.origin.deviceId}`,
     );
+    card = new FakePaymentProvider(db);
   },
 });
 
@@ -158,6 +162,52 @@ async function payInCash(billId: string, picks: ItemPick[], applied: string) {
     v.operator,
     null,
   );
+}
+
+/** Pays for the dishes on the card reader; `onReaderCheckout` hears the reader's stop. */
+async function payByReader(
+  billId: string,
+  picks: ItemPick[],
+  applied: string,
+  onReaderCheckout?: Parameters<typeof card.collect>[0]["onReaderCheckout"],
+) {
+  return payForItems(
+    { ...deps(), provider: card, ...(onReaderCheckout === undefined ? {} : { onReaderCheckout }) },
+    v.cfg,
+    billId,
+    {
+      submissionId: randomUUID(),
+      picks,
+      expectedEdits: [await inTx(v, (tx) => readBillEditState(tx, billId))],
+      method: "card",
+      entry: "reader",
+      applied,
+      tip: "0.00",
+    },
+    v.operator,
+    null,
+  );
+}
+
+/** Holds the next card at the reader: `atReader` resolves once it is offered, and `answer` lets
+ * the reader answer, declining when `decline` or when its checkout was stopped. */
+function holdAtReader() {
+  let offered!: () => void;
+  let answer!: (decline: boolean) => void;
+  let stopped = false;
+  const atReader = new Promise<void>((resolve) => (offered = resolve));
+  const answered = new Promise<boolean>((resolve) => (answer = resolve));
+  const collect = card.collect.bind(card);
+  vi.spyOn(card, "collect").mockImplementationOnce(async (params) => {
+    params.onReaderCheckout?.(async () => {
+      stopped = true;
+      return "requested";
+    });
+    offered();
+    if ((await answered) || stopped) card.failNextCollect();
+    return collect(params);
+  });
+  return { atReader, answer };
 }
 
 /** An amount paid in cash on the bill, as Pay > An amount takes it. */
@@ -526,5 +576,99 @@ describe("Pay for items on a sent Counter order", () => {
     ).toEqual({ total: "12.00", applied: "12.00", tip: "0.00", change: "8.00" });
     expect(await rowsOf(orderId)).toEqual(before);
     expect(await billsNaming(orderId)).toEqual([]);
+  });
+
+  it("a declined card puts every dish back on the sent order, placed again", async () => {
+    const orderId = await sentOrder("Burger", "Paella");
+    const reader = holdAtReader();
+
+    const paying = payByReader(orderId, [{ lineId: await lineOf(orderId, "Burger") }], "12.00");
+    await reader.atReader;
+    const atReader = await billOf(orderId);
+    const before = [kitchenJobs(), kitchenNotices()];
+    reader.answer(true);
+    const paid = await paying;
+
+    expect(paid.payment.outcome).toBe("declined");
+    expect(await billOf(paid.billId)).toMatchObject({ status: "abandoned" });
+    expect(await dishesOf(paid.billId)).toEqual([]);
+    // The put-back adds the dishes after those left on the order.
+    expect(await dishesOf(orderId)).toEqual([
+      ["Paella", "1.000"],
+      ["Burger", "1.000"],
+    ]);
+    const after = await billOf(orderId);
+    expect(after.status).toBe("placed");
+    expect(after.revision).toBeGreaterThan(atReader.revision);
+    expect(await salesOf(orderId)).toEqual([]);
+    expect([kitchenJobs(), kitchenNotices()]).toEqual(before);
+  });
+
+  it("Cancel payment at the reader does the same", async () => {
+    const orderId = await sentOrder("Burger", "Paella");
+    const reader = holdAtReader();
+    let stop: (() => Promise<unknown>) | undefined;
+
+    const paying = payByReader(
+      orderId,
+      [{ lineId: await lineOf(orderId, "Burger") }],
+      "12.00",
+      (readerStop) => (stop = readerStop),
+    );
+    await reader.atReader;
+    // Cancel payment calls the reader's stop, as the cancel route does; the reader charges nothing.
+    expect(await stop!()).toBe("requested");
+    reader.answer(false);
+    const paid = await paying;
+
+    expect(paid.payment.outcome).toBe("declined");
+    expect((await billOf(paid.billId)).status).toBe("abandoned");
+    expect(await dishesOf(orderId)).toEqual([
+      ["Paella", "1.000"],
+      ["Burger", "1.000"],
+    ]);
+    expect((await billOf(orderId)).status).toBe("placed");
+    expect(paid.sourceBalance).toMatchObject({ workingOrderId: orderId, outstanding: "32.00" });
+  });
+
+  it("a captured card settles the paid part and leaves the original placed", async () => {
+    const orderId = await sentOrder("Burger", "Paella");
+    const before = [kitchenJobs(), kitchenNotices()];
+
+    const paid = await payByReader(orderId, [{ lineId: await lineOf(orderId, "Burger") }], "12.00");
+
+    expect(paid.payment.outcome).toBe("received");
+    expect((await billOf(paid.billId)).status).toBe("settled");
+    expect((await salesOf(paid.billId)).map(({ total }) => centsToDecimal(total))).toEqual([
+      "12.00",
+    ]);
+    expect(await dishesOf(paid.billId)).toEqual([["Burger", "1.000"]]);
+    expect((await billOf(orderId)).status).toBe("placed");
+    expect(await dishesOf(orderId)).toEqual([["Paella", "1.000"]]);
+    expect(await salesOf(orderId)).toEqual([]);
+    expect([kitchenJobs(), kitchenNotices()]).toEqual(before);
+  });
+
+  it("a declined card after the original was paid meanwhile leaves the dishes on an open bill listed under Held orders", async () => {
+    const orderId = await sentOrder("Burger", "Paella");
+    const { orderNumber } = await billOf(orderId);
+    const reader = holdAtReader();
+
+    const paying = payByReader(orderId, [{ lineId: await lineOf(orderId, "Burger") }], "12.00");
+    await reader.atReader;
+    await receive(orderId, "20.00");
+    reader.answer(true);
+    const paid = await paying;
+
+    expect(paid.payment.outcome).toBe("declined");
+    expect((await billOf(orderId)).status).toBe("settled");
+    expect((await salesOf(orderId)).map(({ total }) => centsToDecimal(total))).toEqual(["20.00"]);
+    expect((await billOf(paid.billId)).status).toBe("open");
+    expect(await dishesOf(paid.billId)).toEqual([["Burger", "1.000"]]);
+    const held = await listHeldOrders({ db: v.db });
+    expect(held.find((order) => order.id === paid.billId)).toMatchObject({
+      formerNumbers: [orderNumber],
+      total: "12.00",
+    });
   });
 });
