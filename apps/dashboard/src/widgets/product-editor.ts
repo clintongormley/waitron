@@ -416,8 +416,7 @@ export class ProductEditor extends LitElement {
   @property({ attribute: false }) units: UnitChoice[] = [];
   @property({ attribute: false }) categories: CategorySummary[] = [];
   @property({ attribute: false }) defaultColor: string | null = null;
-  @property({ attribute: false }) extraLists: (ModifierListChoice &
-    Partial<Pick<ExtraList, "items">>)[] = [];
+  @property({ attribute: false }) extraLists: Pick<ExtraList, "id" | "name" | "items">[] = [];
   @property({ attribute: false }) optionLists: ModifierListChoice[] = [];
   @property({ attribute: false }) courses: ProductRoutingChoice[] = [];
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};

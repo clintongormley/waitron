@@ -21,13 +21,13 @@ export function deleteExtraListWarning(
 
 export function deleteExtraListWarningForIds(
   removed: ReadonlySet<string>,
-  lists: readonly (Pick<ExtraList, "name"> & Partial<Pick<ExtraList, "items">>)[],
+  lists: readonly Pick<ExtraList, "name" | "items">[],
 ) {
   if (removed.size === 0) return nothing;
   const names = [
     ...new Set(
       lists
-        .filter((list) => list.items?.some((item) => removed.has(item.productId)))
+        .filter((list) => list.items.some((item) => removed.has(item.productId)))
         .map((list) => list.name),
     ),
   ];
