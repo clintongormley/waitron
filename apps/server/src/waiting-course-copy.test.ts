@@ -2698,7 +2698,10 @@ describe("A803 waiting copy: kitchen paper", () => {
           lines: [{ workingOrderLineId: burger.id, menuItemId: v.item("Burger"), quantity: "1" }],
           operatorId: OPERATOR,
         }),
-      ).rejects.toMatchObject({ code: "ticket.already_fired" });
+      ).rejects.toMatchObject({
+        code: "ticket.already_fired",
+        params: { stationName: t.grill.name },
+      });
 
       expect((await linesOf(t.bill2)).map(({ id }) => id)).toContain(t.cake.id);
       expect((await printed(t.grill.printer)).slice(mark)).toEqual([]);

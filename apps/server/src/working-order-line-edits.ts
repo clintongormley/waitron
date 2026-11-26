@@ -238,7 +238,13 @@ export async function applyLineEdits(
         if (!drops) continue;
         refuseServed(parent);
         refuseSent(parent, firedWork(parent, false));
-        throw new AppError("ticket.already_fired", { workingOrderId: orderId });
+        // refuseSent already refused sends without a ticket.
+        const held = (parent.ticket ??
+          parent.children.find((part) => part.ticket !== null)?.ticket)!;
+        throw new AppError("ticket.already_fired", {
+          workingOrderId: orderId,
+          stationName: stationChanges.get(held.stationId)!.name,
+        });
       } catch (error) {
         keepFirstFired(error);
       }
