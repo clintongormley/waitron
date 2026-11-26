@@ -7,6 +7,7 @@ import {
   markRecoveryPackReceived,
   nextRecoveryPackNumber,
   readRecoveryPack,
+  readCurrentMasterKey,
   readRecoveryPacks,
   readVenue,
   withTransaction,
@@ -22,10 +23,18 @@ import {
   readRawJsonBody,
   requireManagementSession,
 } from "@waitron/server-kit";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode, isAppError } from "@waitron/shared";
 import { readHeldArchiveSettingsIn } from "./archive-settings.js";
 import { inTurn } from "./attempt-turns.js";
 import { loadKeyRotatedAt, loadRecoveryKey, readHeldKey } from "./backup-config.js";
+import type { BackupKeyRecord } from "./backup-env-writer.js";
+import {
+  backupKeyFacts,
+  backupKeyRecord,
+  changeBackupKey,
+  heldBackupKeyNumber,
+  type BackupKeyChangeDeps,
+} from "./backup-key-record.js";
 import {
   buildEmergencyPart,
   type EmergencyPartInput,
@@ -51,7 +60,7 @@ import type { CloudConnection } from "./cloud-client.js";
 import { readEmergencyPeople } from "./cloud-emergency-people.js";
 import "./errors.js";
 
-export interface BackupRecoveryPackMakeDeps {
+export interface BackupRecoveryPackMakeDeps extends BackupKeyChangeDeps {
   cloud?: {
     connection: Pick<CloudConnection, "status" | "emergencyCode" | "emergency">;
     managementOrigin: string;
@@ -67,6 +76,7 @@ export interface BackupRecoveryPackMakeDeps {
   backups: () => Pick<BackupRuntimeStatus, "schedule" | "retention" | "recoveryKey">;
   loadFonts: () => Promise<{ regular: Uint8Array; mono: Uint8Array }>;
   now: () => Date;
+  reloadBackups: () => Promise<void>;
 }
 
 const makeRun = createErrorBoundary(
@@ -104,6 +114,16 @@ function requireSecurePackRequest(c: Context): void {
   if (c.req.header("Content-Type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
     invalid("shape");
   }
+}
+
+/** `backup.env`'s settings once `record` is written at `rotatedAt`, for a pack made before it is. */
+function keyEnv(record: BackupKeyRecord, rotatedAt: string): Record<string, string> {
+  return {
+    WAITRON_BACKUP_RECOVERY_KEY: record.key,
+    WAITRON_BACKUP_KEY_NUMBER: String(record.keyNumber),
+    WAITRON_BACKUP_MASTER_KEY_ID: record.masterKeyId,
+    WAITRON_BACKUP_KEY_ROTATED_AT: rotatedAt,
+  };
 }
 
 type MakeRequest = { locale: PackLocale; newMasterKey: boolean };
@@ -310,19 +330,41 @@ export function mountBackupRecoveryPackMakeApi(
       const request = makeRequest(await readRawJsonBody<unknown>(c));
       const emergency = await readPackEmergency(deps, token, c.req.raw.signal);
       c.req.raw.signal.throwIfAborted();
-      const made = await deps.turns(() =>
-        inTurn(deps.db, `recovery-document:${nodeId}`, async () => {
-          const env = await deps.readBoxEnv();
+      const made = await deps.turns(async () => {
+        const result = await inTurn(deps.db, `recovery-document:${nodeId}`, async () => {
+          const held = await deps.readBoxEnv();
           const madeAt = deps.now().toISOString();
           const newMasterKey = request.newMasterKey
             ? makeNewMasterKey(madeAt.slice(0, 10))
             : undefined;
+          const nextKey =
+            newMasterKey === undefined
+              ? undefined
+              : backupKeyRecord(
+                  decodeMasterKeyCode(newMasterKey.made.masterKey),
+                  heldBackupKeyNumber(held) + 1,
+                  newMasterKey.publicKey,
+                );
+          const env = nextKey === undefined ? held : { ...held, ...keyEnv(nextKey, madeAt) };
           const pack = await withTransaction(deps.db, (tx) =>
             makePack(tx, deps, { emergency, token, personId, request, env, madeAt, newMasterKey }),
           );
-          return { ...pack, masterKey: newMasterKey?.made };
-        }),
-      );
+          return { ...pack, masterKey: newMasterKey?.made, nextKey };
+        });
+        // After the commit: a failure here still answers the pack, the only time its master key is
+        // shown, and the status then says the backup key is not from the current master key.
+        if (result.nextKey !== undefined) {
+          try {
+            await changeBackupKey(deps, result.nextKey, result.madeAt);
+            await deps.reloadBackups();
+          } catch (error) {
+            log("warn", "backup.key_change_after_master_key_failed", {
+              errorCode: isAppError(error) ? error.code : "unexpected",
+            });
+          }
+        }
+        return result;
+      });
       log("info", "recovery.pack_made", {
         personId,
         number: made.number,
@@ -380,6 +422,7 @@ export function mountBackupRecoveryPackMakeApi(
         const loaded = deps.backups();
         const now = deps.now();
         const master = await currentMasterKeyElsewhere(tx, records);
+        const currentMasterKey = await readCurrentMasterKey(tx);
         const status = packStatus({
           records: records.map((r) => ({
             ...r,
@@ -410,6 +453,7 @@ export function mountBackupRecoveryPackMakeApi(
             now,
           }),
           timeZone: knownZone((await readVenue(tx)).timeZone),
+          backupKey: backupKeyFacts(env, currentMasterKey?.publicKey ?? null),
         };
       });
       return c.json(status);

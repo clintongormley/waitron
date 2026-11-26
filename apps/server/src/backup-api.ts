@@ -35,15 +35,13 @@ import {
   DEFAULT_DESTINATION_TIMEOUT_MS,
   MAX_DESTINATION_TIMEOUT_MS,
   MIN_DESTINATION_TIMEOUT_MS,
-  loadBackupKey,
   loadKeyRotatedAt,
   loadRecoveryKey,
   readHeldKey,
   resolveBackupConfig,
   type BackupSchedule,
 } from "./backup-config.js";
-import { writeBackupKey, type BackupKeyRecord } from "./backup-env-writer.js";
-import { backupKeyRecord } from "./backup-key-record.js";
+import { backupKeyRecord, changeBackupKey, heldBackupKeyNumber } from "./backup-key-record.js";
 import { readSettingsEvidence, recoveryKeyFacts } from "./backup-settings-evidence.js";
 import { UNREADABLE_CREDENTIAL } from "./credentials.js";
 import { MIN_RECOVERY_KEY_LENGTH } from "./backup-config.js";
@@ -312,13 +310,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     await deps.sealedState.refresh();
   };
 
-  // Stopping the stream before the write leaves the old generation the secrets its pack opens.
-  const changeBackupKey = async (record: BackupKeyRecord, rotatedAt: string): Promise<void> => {
-    await deps.stream.reload(() =>
-      persist(() => writeBackupKey(deps.stateDir, { ...record, rotatedAt })),
-    );
-  };
-
   const storeSettings = (
     settings: Omit<ArchiveSettings, "revision">,
     personId: string,
@@ -342,16 +333,6 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   };
 
   const readHeldSettings = () => readHeldArchiveSettings(deps.db, deps.ring);
-
-  // 0 when no key with a number is held; a key under the length floor is replaced by key 1.
-  const heldKeyNumber = async (): Promise<number> => {
-    try {
-      return loadBackupKey(await deps.readBoxEnv())?.keyNumber ?? 0;
-    } catch (error) {
-      if (isAppError(error) && error.code === "backup.recovery_key_too_short") return 0;
-      throw error;
-    }
-  };
 
   // One read of the box env gives the held key, its fingerprint and its rotation time. With no
   // usable key there, the fingerprint and rotation time are the supervisor's; with none at all, so
@@ -553,7 +534,11 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
         const { bytes, current } = await checkedMasterKey(deps.db, masterKey);
-        const record = backupKeyRecord(bytes, (await heldKeyNumber()) + 1, current.publicKey);
+        const record = backupKeyRecord(
+          bytes,
+          heldBackupKeyNumber(await deps.readBoxEnv()) + 1,
+          current.publicKey,
+        );
         const recoveryKey = record.key;
         const keyRotatedAt = new Date().toISOString();
         const read = await readHeldSettings();
@@ -561,7 +546,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         const unreadableCode = "unreadable" in read ? read.unreadable : undefined;
         // An unreadable record is never rewritten, so its key changes the key-only way.
         if (held === null && deps.supervisor.current().destinations.length === 0) {
-          await changeBackupKey(record, keyRotatedAt);
+          await changeBackupKey(deps, record, keyRotatedAt);
           if ((await deps.readRecoveryKey()) !== recoveryKey) {
             throw new AppError("backup.effective_mismatch", {});
           }
@@ -570,7 +555,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
             ...(unreadableCode === undefined ? {} : { loadErrorCode: unreadableCode }),
           });
         }
-        await changeBackupKey(record, keyRotatedAt);
+        await changeBackupKey(deps, record, keyRotatedAt);
         // The key file is authoritative from here: a failure below never puts the old key back.
         if (held !== null) {
           try {

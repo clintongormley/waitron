@@ -4365,6 +4365,10 @@ async function bootServer(
       backups: () => backupSupervisor.current(),
       loadFonts: loadRecoveryPackFonts,
       now,
+      stateDir: config.stateDir,
+      stream: streamHost,
+      sealedState,
+      reloadBackups: () => backupSupervisor.reload(),
     },
     log,
   );

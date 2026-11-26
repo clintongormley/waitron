@@ -4,7 +4,10 @@ import { ensureStreamId, withFoldedPersonChanges } from "@waitron/db";
 import { setBuiltInRoleForTest } from "@waitron/identity/test/person-rows.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 import { mountMeApi } from "./me-api.js";
+import { mkdtemp, rm } from "node:fs/promises";
 import { Socket } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -92,15 +95,19 @@ let node: ProvisionedNode;
 let admin: { personId: string; token: string };
 let boxEnv: Record<string, string>;
 let loadedKey: string | undefined;
+/** Where a new master key's backup key is written; the fixture's `readBoxEnv` does not read it. */
+let stateDir: string;
 const sockets: TLSSocket[] = [];
 const logs: unknown[][] = [];
 
-afterEach(() => {
+afterEach(async () => {
   for (const socket of sockets.splice(0)) socket.destroy();
+  await rm(stateDir, { recursive: true, force: true });
 });
 
 beforeEach(async () => {
   logs.length = 0;
+  stateDir = await mkdtemp(join(tmpdir(), "pack-make-state-"));
   boxEnv = {
     WAITRON_BACKUP_RECOVERY_KEY: KEY,
     WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-20T08:00:00.000Z",
@@ -169,6 +176,10 @@ function fixture(
       }),
       loadFonts: options.loadFonts ?? loadRecoveryPackFonts,
       now: options.now ?? (() => new Date("2026-10-30T09:00:00.000Z")),
+      stateDir,
+      stream: { reload: async (write) => void (await write?.()) },
+      sealedState: { refresh: async () => "sealed" },
+      reloadBackups: async () => {},
     },
     (...values) => logs.push(values),
   );
