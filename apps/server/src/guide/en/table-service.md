@@ -1022,7 +1022,7 @@ own, which **Waiting orders** shows with the order's number in brackets. Once su
 paid with **An amount**, **Split equally** or **Whole bill**, not by item; when its bill is
 presented for collection, choose **Pay in parts** to see those choices.
 
-At a table, choose **Charge** to check the card payment. Choose **Cash** or **Other card machine**
+At a table, choose **Charge** to check a payment on a connected reader. Choose **Cash** or **Other card machine**
 to enter the payment details. At the Counter, choose the method and press **Continue**. Check the
 amounts on the confirmation, including any changes since you opened Pay.
 
@@ -1044,7 +1044,7 @@ shows how much pays off the bill and the **Change to give**. If the venue takes 
 whether to return all the change, leave all of it as a tip, or leave an amount. Check the change
 again after choosing a tip, then press **Take payment** and give that change to the guest.
 
-**Card and reader.** At a table, open **Reader and printer** to check the reader;
+**Card and reader.** At a table, use the contactless icon to open **Reader and printer**;
 use **Change** or scan its Waitron label if you are holding another one. At the Counter, choose
 from the card readers when a list is offered. Check the reader and the total before confirming.
 To use a separate machine, follow [Use another card machine](table-service.md#outside-card).

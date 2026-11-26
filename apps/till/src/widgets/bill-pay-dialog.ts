@@ -1081,6 +1081,7 @@ export class TillBillPayDialog extends LitElement {
               },
             )}
             ${this.#wayFields(errors)} ${this.#deferred()} ${this.#payments()}
+            ${!this.takesCash && (card || manual) ? html`<p class="muted cash-at-till">${t("tender.cash_at_till")}</p>` : nothing}
             ${card || manual || this.takesCash ? nothing : html`<p role="status">${t("bill_pay.no_method")}</p>`}`
       }`,
       actions: this.quietEntry

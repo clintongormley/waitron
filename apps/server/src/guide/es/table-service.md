@@ -1080,7 +1080,7 @@ muestra con el número del pedido entre paréntesis. Si ese pedido se pasa despu
 **Dividir a partes iguales** o **Toda la cuenta**, no por artículos; cuando su cuenta está
 presentada para su cobro, elige **Cobrar por partes** para ver esas opciones.
 
-En una mesa, pulsa **Cobrar** para revisar el pago con tarjeta. Pulsa **Efectivo** u
+En una mesa, pulsa **Cobrar** para revisar el pago con un lector conectado. Pulsa **Efectivo** u
 **Otro datáfono** para introducir los detalles. En Mostrador, elige la forma de pago y pulsa
 **Continuar**. Revisa los importes en la confirmación, incluidos los cambios desde que abriste Cobrar.
 
@@ -1103,7 +1103,7 @@ confirmación muestra cuánto se descuenta de la cuenta y el **Cambio a devolver
 acepta propinas, elige entre devolver todo el cambio, dejarlo todo como propina o dejar una
 cantidad. Revisa el cambio después de elegir la propina, pulsa **Cobrar** y devuelve ese cambio.
 
-**Tarjeta y lector.** En una mesa, abre **Lector e impresora** para comprobar el lector. Usa
+**Tarjeta y lector.** En una mesa, usa el icono sin contacto para abrir **Lector e impresora**. Usa
 **Cambiar** o escanea su etiqueta de Waitron si tienes otro en la mano. En Mostrador, elige el lector
 cuando se ofrezca una lista. Comprueba el lector y el total antes de
 confirmar. Para usar otra máquina, sigue [Usar otro datáfono](table-service.md#outside-card).

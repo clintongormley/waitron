@@ -1737,6 +1737,9 @@ describe("till-app: a device that does not take cash", () => {
         (method) => inDialog(el, `[data-quiet-pay-${method}]`) !== null,
       );
       expect(offered).toEqual(methods);
+      expect(text(inDialog(el, ".cash-at-till"))).toBe(
+        methods.includes("cash") ? "" : t("tender.cash_at_till"),
+      );
     },
   );
 });

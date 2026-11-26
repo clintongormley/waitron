@@ -12083,7 +12083,7 @@ export class TillApp extends LitElement {
   #renderBillPaying(): TemplateResult | typeof nothing {
     const open = this.billPaying;
     if (open === null) return nothing;
-    const quiet = open.surface === "table" && open.found === undefined;
+    const quiet = open.surface === "table";
     const bill = quiet
       ? this.partyBills.find((row) => row.workingOrderId === open.billId)
       : undefined;
