@@ -263,7 +263,9 @@ screen stays in the amount when the guest pays cash: €90 handed over for €73
 ### 7.6 At the reader
 
 The amount and the reader in large type, how long it has waited, and **nothing to press — no Back
-either** — until the reader answers (A796's rule kept). On a split: "Pay the next guest (2 of 3)"
+either** — until the reader answers (A796's rule kept), with one exception: while a SumUp payment
+is still waiting, a small "Cancel payment" link stays, as built in #3959 after the owner's report of
+20 November (owner, 2026-11-26 21:48: "Keep it as a small link"). On a split: "Pay the next guest (2 of 3)"
 afterwards.
 
 ### 7.7 Paid
@@ -278,7 +280,8 @@ payments"). Paying never frees the table; Finish table does, from the table's me
 
 Everything in [A796](2026-10-19-a796-handheld-payments-design.md) not changed above stays: Whole
 bill as a way to pay, a presented bill paid whole, "Other card machine" as a deliberate choice, no
-Cancel while the card is at the reader, "Pay the next guest" carrying a split on, a declined card's
+Back while the card is at the reader (a SumUp payment still waiting keeps its small Cancel payment
+link, §7.6), "Pay the next guest" carrying a split on, a declined card's
 retry, paying never freeing the table, and the drawer opening only on a device whose profile allows it, a phone included (owner, 2026-11-26 17:20).
 
 ### 7.9 (pass 3) The ways to pay
@@ -530,7 +533,11 @@ middle of the screen: a 96px ring with a 4px edge in `--wt-color-surface-sunken`
 the primary colour, with the card icon inside; "Tap or insert the card" (22px bold); the amount in
 44px bold with tabular figures; the reader's name in 22px bold, as §7.6 asks (`k` 3 draws it at 15px; the spec wins); a muted 15px
 line "waiting 0:14"; and a muted 13px note, "The reader is in charge now: this screen moves
-on by itself when the card is accepted or declined." There is no foot bar and nothing to press. The ring's primary quarter turns while it waits, and
+on by itself when the card is accepted or declined." There is no foot bar. The one thing to press is "Cancel payment", shown only while a SumUp payment
+is still waiting: a centred text link, 14px bold in the primary text colour with no border, 44px tall
+to tap, 24px under the note. Once tapped it becomes muted 14px text, "Stop requested. Checking the
+payment…", and cannot be tapped again; if the reader is not ready or refuses, today's message takes
+its place (`bill_pay.stop_unavailable`, `bill_pay.stop_refused`). The ring's primary quarter turns while it waits, and
 stands still when the device asks for reduced motion. "Pay the next guest (2 of 3)" afterwards is §7.10's between-guests screen.
 
 **Paid** (`k` 4, brought into line with §7.10's Paid screens). One layout for every Paid screen,
@@ -839,10 +846,9 @@ The build applies the same rule to every other error.
    tips design.
 3. **(pass 2) A tip paid in cash** stays in the amount on the Cash screen (§7.5). How a cash tip is
    recorded and shared out stays with the tips design.
-4. **The guest's tip choices are drawn two ways.** On the whole bill (`o` frame 2) the percentages are
-   a column of tiles with Custom amount as one more tile; on a split share (`ba` frame 2) they are a
-   row of three tiles with Custom amount as a link. Not decided whether one look is meant for both;
-   until it is, each screen is built as its own picture shows (§14.5).
+4. **The guest's tip choices are drawn two ways** (`o` frame 2 a column, `ba` frame 2 a row of
+   three). Settled in the write-up of §7.10 and §7.11: one look, the column, on both screens, so
+   the guest's two tip screens match.
 
 ## 12. Pictures
 
@@ -919,6 +925,8 @@ were drawn with; pass 3's (`ba` to `bd`) were read off the pictures by eye.
 
 How to read it:
 
+- **The paying screens are given in more detail in §7.10 and §7.11**, read from the stylesheets;
+  §14.5 agrees with them, and where it does not, they win.
 - **The text wins over a picture.** Where a frame and §3 to §9 differ, the text is the decision. The
   known cases are in §14.1.
 - **Sizes** are as drawn, in pixels. Build them with the declared values: drawn 12 or 13 is
@@ -1105,9 +1113,8 @@ How to read it:
   venue's name muted 18, "Here is your bill" 24 bold, one muted line, the dishes, and "Total" 20
   bold. The foot: teal "Leave a tip?" over an outlined "No tip · hand back to your waiter".
 - **The tip** (`o` 2): the percentages as a column of tiles, the percent 20 bold at the left and the
-  amount muted at the right, with "Custom amount" as one more tile. On a split share (`ba` 2) they
-  are a row of three tiles (the percent bold, the amount muted under it) with "Custom amount" as a
-  teal link. Which is meant for both is open (§11, 4).
+  amount muted at the right, with "Custom amount" as one more tile. A split share (`ba` 2) uses the
+  same column, though `ba` 2 draws a row of three (§7.10; settled, §11, 4).
 - **Pay** (`ah` 2): "To pay" 13 muted, the amount 42 bold, and under it a muted line with "Remove
   tip" as a teal link. The ways to pay as a column of choice tiles 56 tall, each with its hint.
   "Full invoice instead" as a teal link. At the top right, the reader and printer button (new: a
@@ -1121,11 +1128,14 @@ How to read it:
   right). A device just scanned: its dropdown light blue with a teal border, and above it a pale
   green line with a `check`, "Picked up Reader 3". Teal Done.
 - **At the reader** (`k` 3): no back. A ring 96 across (4px, grey with a teal arc) turning around a
-  card, "Tap or insert the card" 22 semibold, the amount 44 semibold, "on Reader 2 · waiting 0:14"
-  muted, a muted note. Nothing to press.
-- **Paid** (`k` 4): a pale green circle with a green `check`, "Bill 1 paid" bold, then rows with a
-  muted label at the left and the value at the right; "Print payment slip" outlined with a muted
-  note under it. The foot: the next payment in teal, then an outlined "Back to Table 4".
+  card, "Tap or insert the card" 22 semibold, the amount 44 semibold, the reader's name 22 bold (§7.6
+  asks for it large; `k` 3 draws it small), "waiting 0:14" muted, a muted note. Nothing to press
+  but a small "Cancel payment" link while a SumUp payment is waiting (§7.6; its look in §7.11).
+- **Paid**: one layout for every Paid screen, whole bill or part, given in full in §7.11: a
+  `check` in a success-coloured circle, what was taken as a 30 bold sentence ("€80.52 by card"),
+  where the receipt went, `k` 4's rows of facts (muted label at the left, value at the right); the
+  foot: the next step in teal, an outlined "Back to Table 4", and "Print payment slip" as a teal
+  link that becomes muted "Slip printed".
 - **The full invoice** (`q` 4): today's labelled fields; under "Send the invoice", two joined
   buttons, Print it and Email it, the chosen one dark; teal "Use full invoice".
 - **Split equally** (`ba`): the guests' stepper (§14.2); the guests in a white card, each row with a
