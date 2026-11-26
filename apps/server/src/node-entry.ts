@@ -76,7 +76,7 @@ import { runStagedReset, stagedResetEmptiesTls, type StagedResetDeps } from "./r
 import { clearReplacedDatabases } from "./restore.js";
 import { clearRestoreSecretFiles } from "./restore-secrets.js";
 import { loadCloudOrigin } from "./cloud-client.js";
-import { createCloudRecoveryClient } from "./cloud-recovery.js";
+import { createCloudRecoveryClient, reportSavedCloudRestore } from "./cloud-recovery.js";
 import { FULL_DISK_BYTES, fullDiskFailure, startFailureCode } from "./boot-failure.js";
 import { SPARE_SPACE_BYTES, releaseSpare, topUpSpare } from "./spare-space.js";
 import { errnoOf } from "./errno.js";
@@ -957,13 +957,11 @@ async function runAdmittedEntry(
       hold.release();
     }
     if (recoveryOrigin) {
-      void createCloudRecoveryClient({
+      void reportSavedCloudRestore({
         stateDir: deps.stateDir,
         origin: recoveryOrigin,
         environment: "preproduction",
-      })
-        .reportRestored()
-        .catch(() => {});
+      }).catch(() => {});
     }
   } catch (error) {
     await failStart(error);

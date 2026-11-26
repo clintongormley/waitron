@@ -12,6 +12,7 @@ import {
   parseBackupVerificationJson,
   type BackupVerificationTarget,
 } from "./backup-verification-protocol.js";
+import { currentBackupVerificationTarget } from "./backup-verification-target.js";
 import {
   assertSnapshotRecoveryTarget,
   cloudRecoveryUnavailable as refuseLocally,
@@ -84,6 +85,17 @@ export interface CloudRecoveryOptions {
   snapshotProtocol?: 2;
   target?: () => BackupVerificationTarget;
   download?: (grant: Grant, artifactPath: string) => Promise<void>;
+}
+
+export async function reportSavedCloudRestore(
+  options: Pick<CloudRecoveryOptions, "stateDir" | "origin" | "environment" | "fetch">,
+): Promise<void> {
+  const state = await readCloudRecoveryState(options.stateDir);
+  const protocol =
+    state?.version === 2
+      ? { snapshotProtocol: 2 as const, target: currentBackupVerificationTarget }
+      : {};
+  await createCloudRecoveryClient({ ...options, ...protocol }).reportRestored();
 }
 
 function point(value: unknown): CloudRecoveryPoint {

@@ -64,6 +64,7 @@ import {
 } from "./cloud-client.js";
 import { createCloudReplacement } from "./cloud-replacement.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
+import { currentBackupVerificationTarget } from "./backup-verification-target.js";
 import { mountCloudApi } from "./cloud-api.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
 import { liveResourceTypes } from "./live-resources.js";
@@ -1451,12 +1452,15 @@ async function bootServer(
     const ownerDatabaseName = config.venueDir;
     const openBoundedBucket = (bucket: BucketConfig) =>
       boundObjectStore(createS3ObjectStore(bucket));
+    let cloudRecoveryTarget: ReturnType<typeof currentBackupVerificationTarget> | undefined;
     const cloudRecovery =
       cloudOrigin && config.environment === "preproduction"
         ? createCloudRecoveryClient({
             stateDir: config.stateDir,
             origin: cloudOrigin,
             environment: config.environment,
+            snapshotProtocol: 2,
+            target: () => (cloudRecoveryTarget ??= currentBackupVerificationTarget()),
           })
         : undefined;
     const cloudSignIn =

@@ -10,12 +10,19 @@ import { createHash, createPublicKey, verify } from "node:crypto";
 import { chmod, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createCloudRecoveryClient, type CloudRecoveryOptions } from "./cloud-recovery.js";
+import {
+  createCloudRecoveryClient,
+  reportSavedCloudRestore,
+  type CloudRecoveryOptions,
+} from "./cloud-recovery.js";
 import {
   backupVerificationTargetDigests,
   type BackupVerificationTarget,
 } from "./backup-verification-protocol.js";
+import * as verificationRuntime from "./backup-verification-target.js";
 import * as v2 from "./cloud-recovery-v2.js";
+
+vi.mock("./backup-verification-target.js", { spy: true });
 
 const origin = "https://cloud.example.test";
 const unavailable = "Cloud recovery is unavailable. Try again.";
@@ -242,7 +249,13 @@ describe("target-bound snapshot recovery v2", () => {
       snapshotVerification: verification(),
     });
     await client.markRestored({ requestId: String(saved.requestId), pointId: point.id });
-    await client.reportRestored();
+    vi.spyOn(verificationRuntime, "currentBackupVerificationTarget").mockReturnValue(target());
+    await reportSavedCloudRestore({
+      stateDir: f.stateDir,
+      origin,
+      environment: "preproduction",
+      fetch: f.options.fetch,
+    });
     for (const call of f.calls.slice(1)) {
       const early = call.action === "status";
       expect(call.body).toEqual({
@@ -590,6 +603,16 @@ describe("target-bound snapshot recovery v2", () => {
       cloudUnavailable,
     );
   });
+  it("keeps unreadable restore state and sends no completion", async () => {
+    const f = await fixture();
+    await createCloudRecoveryClient(f.options).start();
+    const recoveryFile = join(f.stateDir, "cloud/recovery.json");
+    await writeFile(recoveryFile, "{");
+    f.calls.length = 0;
+    await refusedLocally(reportSavedCloudRestore(f.options));
+    expect(f.calls).toEqual([]);
+    expect(await readFile(recoveryFile, "utf8")).toBe("{");
+  });
   it("preserves v1 request and completion proof bytes without target fields", async () => {
     const f = await fixture();
     const options = { ...f.options, snapshotProtocol: undefined, target: undefined };
@@ -598,7 +621,9 @@ describe("target-bound snapshot recovery v2", () => {
     await client.restore(async () => {}, point.id);
     const saved = await f.saved();
     await client.markRestored({ requestId: String(saved.requestId), pointId: point.id });
-    await client.reportRestored();
+    const readTarget = vi.spyOn(verificationRuntime, "currentBackupVerificationTarget").mockClear();
+    await reportSavedCloudRestore(options);
+    expect(readTarget).not.toHaveBeenCalled();
     for (const call of f.calls) {
       const early = call.action === "start" || call.action === "status";
       expect(call.body).toEqual({
