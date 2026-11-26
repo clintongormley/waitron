@@ -21,7 +21,7 @@ import { awaitListening, copyMigrationsRoot, httpsVia } from "./testing/boot-har
 import { freePorts } from "./testing/free-ports.js";
 
 const PAPER_KEY = encodeMasterKeyCode(makeMasterKey());
-/** The master key that sealed the file; the copy's current one, `PAPER_KEY`, authorises. */
+/** The master key that sealed the file; `PAPER_KEY` is sent separately as the authorisation. */
 const ARCHIVE_MASTER_KEY = makeMasterKey();
 const ARCHIVE_KEY_TEXT = encodeMasterKeyCode(ARCHIVE_MASTER_KEY);
 

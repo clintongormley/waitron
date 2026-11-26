@@ -83,26 +83,26 @@ it("control: the same bucket restore beside a missing setup database that was no
 }, 180_000);
 
 it("a held setup database, wiped, then the Waitron Cloud restore writes into the usual folders", async () => {
-  const f = await heldSetup();
+  const f = await heldSetup({ sealing: "password" });
   await withResolutionRecord(f);
   await wipeHeld(f);
   await expectPlaced(f, await stageCloud(f, { ...f.archive, outcome: await hourAfterWipe(f) }));
 }, 180_000);
 
 it("a missing setup database, wiped, then the Waitron Cloud restore writes into the usual folders", async () => {
-  const f = await missingHeldDatabase();
+  const f = await missingHeldDatabase({ sealing: "password" });
   await withResolutionRecord(f);
   await startAgainMissing(f);
   await expectPlaced(f, await stageCloud(f, { ...f.archive, outcome: await hourAfterWipe(f) }));
 }, 180_000);
 
 it("control: the same Waitron Cloud restore beside a held setup database that was not wiped is refused, and places nothing", async () => {
-  const f = await heldSetup();
+  const f = await heldSetup({ sealing: "password" });
   await expectRefusedPlacingNothing(f, await stageCloud(f));
 }, 180_000);
 
 it("control: the same Waitron Cloud restore beside a missing setup database that was not wiped is refused, and places nothing", async () => {
-  const f = await missingHeldDatabase();
+  const f = await missingHeldDatabase({ sealing: "password" });
   await expectRefusedPlacingNothing(f, await stageCloud(f));
 }, 180_000);
 

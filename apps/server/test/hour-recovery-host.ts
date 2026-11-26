@@ -778,7 +778,7 @@ export async function managedHttp(f: Awaited<ReturnType<typeof archiveHost>>) {
             secretAccessKey: "unused",
             sessionToken: "unused",
           },
-          recoveryKey: f.restore.recoveryKey,
+          recoveryKey: "archive password",
           expiresAt,
           operationExpiresAt: expiresAt,
         });

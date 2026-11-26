@@ -1,5 +1,5 @@
 import { updateSetupFlowSection } from "@waitron/provisioning";
-import { heldSetup } from "./held-setup-database.js";
+import { heldSetup, type HeldSetupOptions } from "./held-setup-database.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
@@ -182,8 +182,8 @@ async function loseVenueDatabase(f: Held) {
   expect((await f.host.resolution.inspectFirstSetupResolution()).database).toBe("missing");
 }
 
-async function missingHeldDatabase(): Promise<Held> {
-  const f = await heldSetup();
+async function missingHeldDatabase(options: HeldSetupOptions = {}): Promise<Held> {
+  const f = await heldSetup(options);
   await loseVenueDatabase(f);
   return f;
 }
