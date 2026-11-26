@@ -1366,12 +1366,8 @@ async function bootServer(
   // /health is mounted above the request log. Wrap the gate so its refusals also carry a request ID.
   const requestMetadata = requestIdMiddleware(log, now);
   app.use("*", requestMetadata);
-  // Ahead of the routes, so once a stepdown closes it nothing behind it runs; its refusals
-  // under /api/ carry the venue's CORS headers, which the /api/* layer behind it would otherwise
-  // have added.
+  // The gate supplies CORS for /api refusals ahead of the normal route layer.
   app.use("*", handoverGate.middleware);
-  // Filled in only when the full start finishes; a fault in Waitron if called before then or on a
-  // start that never fills it.
   let stepDownHere: (request: StepDownRequest) => Promise<StepDownResult> = () =>
     Promise.reject(new Error("stepdown called on a start that has not provided one"));
   seams.stepdown?.mount(app, (request) => stepDownHere(request));
@@ -2172,8 +2168,7 @@ async function bootServer(
     return listenBox(app, stop, []);
   }
   let carriedOnWithoutPeer = false;
-  // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
-  // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
+  // One read keeps a concurrent promotion from producing a torn `(mirror, primary)` pair.
   const initialAxes = await readNodeMode(store.node, config.node.nodeId);
   // A mirror files nothing, so it has nothing to ask its peers before it starts.
   if (initialAxes.mode !== "mirror") {
@@ -2345,7 +2340,6 @@ async function bootServer(
       });
     }
   }
-  // Re-read AFTER the reconciliation above, so a persisted superseding chart is reflected here.
   // Read without re-verifying: boot trusts its own held row as it trusts the deployment axes.
   const heldMembership = await readNodeMembership(db);
   const fenced = isFenced(heldMembership, config.node.nodeId);
@@ -3003,7 +2997,6 @@ async function bootServer(
     },
     log,
   );
-  // The till uses this probe to steer away from a mirror or fenced box.
   mountNodeApi(
     app,
     {
