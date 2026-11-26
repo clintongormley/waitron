@@ -142,8 +142,10 @@ With a throwaway authority made by the box's own code, the same phone opened the
 right address, refused a wrong name (`NET::ERR_CERT_COMMON_NAME_INVALID`), and opened a name OUTSIDE
 the authority's permitted names with no warning, as one Android phone did on 2026-09-08. With the
 limit on a second certificate under an installed one, it refused the outside name; the same name
-under an unlimited second certificate opened. That is A1573. The preboot recovery leaf (B3 design
-§7.5) does not exist yet, so the check used a stand-in.
+under an unlimited second certificate opened. Before A1573 lands, repeat those allowed, refused
+and control requests on a second Android phone and an iPhone with the new chain. The owner can then
+decide whether staff may use their own Android phones. The preboot recovery leaf (B3 design §7.5)
+does not exist yet, so the Oppo check used a stand-in.
 
 ## Loose ends left by A496 (moving to a new tax ID).
 

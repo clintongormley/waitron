@@ -22,6 +22,7 @@ import {
   boxCertCurrent,
   boxLeafChain,
   boxRoot,
+  firstCertificatePem,
   issueClientCert,
   leafIpv4s,
   mintSelfSignedServerCert,
@@ -32,8 +33,7 @@ import { formatEnvFile } from "./env-file.js";
 import type { TlsFiles } from "./tls.js";
 
 /**
- * `certFile`/`keyFile` are the leaf; `caCertFile` is the CA a setup client trusts. The CA private
- * key is on disk too, for {@link reissueBoxLeaf}, but is not a server input, so it is not returned.
+ * The listener serves `certFile` with `keyFile`. A setup client trusts the root in `caCertFile`.
  */
 export interface BoxTlsFiles {
   certFile: string;
@@ -46,7 +46,7 @@ export function caCertPath(stateDir: string): string {
   return join(stateDir, TLS_DIR, "ca.crt");
 }
 
-/** The box CA private key's path, beside {@link caCertPath}. */
+/** The retained intermediate certificate and its private key. */
 export function caKeyPath(stateDir: string): string {
   return join(stateDir, TLS_DIR, "ca.key");
 }
@@ -190,7 +190,7 @@ async function reissueBoxLeafLocked(deps: {
   await assertNoPendingTlsRepair(deps.stateDir);
   const files = boxTlsPaths(deps.stateDir);
   const leaf = reissueServerLeaf({
-    caCertPem: await readFile(files.caCertFile, "utf8"),
+    caCertPem: firstCertificatePem(await readFile(files.caCertFile, "utf8")),
     caKeyPem: await readFile(files.caKeyFile, "utf8"),
     hostnames: deps.hostnames,
     ipAddresses: leafIpv4s(deps.listIpv4),
@@ -216,7 +216,7 @@ export async function ensureLeaf(deps: {
   const files = boxTlsPaths(deps.stateDir);
   if (mintedBoxLeaf(deps.stateDir) === undefined) return "kept";
   const pem = await readFile(files.certFile, "utf8");
-  const authority = boxRoot(await readFile(files.caCertFile, "utf8"));
+  const authority = boxRoot(firstCertificatePem(await readFile(files.caCertFile, "utf8")));
   if (authority === null) throw new AppError("setup.not_ready", {});
   const chain = boxLeafChain(pem, authority, "server");
   const now = deps.now();
@@ -280,7 +280,7 @@ async function ensureClientCert(
   await withRecoveryLock(stateDir, async () => {
     await assertNoPendingTlsRepair(stateDir);
     const issued = issueClientCert({
-      caCertPem: await readFile(files.caCertFile, "utf8"),
+      caCertPem: firstCertificatePem(await readFile(files.caCertFile, "utf8")),
       caKeyPem: await readFile(files.caKeyFile, "utf8"),
       hostname: name,
       now: now(),

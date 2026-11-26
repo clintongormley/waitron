@@ -4,11 +4,7 @@ import { tmpdir } from "node:os";
 import { request as httpsRequest, get as httpsGet } from "node:https";
 import { Hono } from "hono";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
-import {
-  mintSelfSignedServerCert,
-  reissueServerLeaf,
-  type SelfSignedMaterial,
-} from "./self-signed-cert.js";
+import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
 import {
   needsConnectionBootstrap,
   serveRecovery,
@@ -18,7 +14,7 @@ import { installVenueAuthority } from "./box-tls-install.js";
 import { closeListener } from "./close-listener.js";
 import { retainHttpListener, type RetainedHttpListener } from "./testing/retained-http-listener.js";
 import { adoptRetainedListeners } from "./testing/retained-http-adoption.mjs";
-import { tlsFile, tlsSetMatches } from "./testing/box-tls.js";
+import { leafExpiresAt, tlsFile, tlsSetMatches } from "./testing/box-tls.js";
 import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { runEntry, type EntryDeps } from "./node-entry.js";
 import { FRESH } from "./recovery-state.js";
@@ -92,13 +88,8 @@ async function fixture(
   if (damage === "expired")
     await writeFile(
       join(stateDir, "tls/server.pem"),
-      reissueServerLeaf({
-        caCertPem: material.caCertPem,
-        caKeyPem: material.caKeyPem,
-        hostnames: ["waitron.local", "localhost"],
-        ipAddresses: ["127.0.0.1"],
-        now: new Date("2020-01-01T00:00:00Z"),
-      }).serverCertPem,
+      leafExpiresAt(material.serverCertPem, material.caKeyPem, new Date(Date.now() - 1000)) +
+        material.serverKeyPem,
     );
   if (damage === "missing-ca") await rm(join(stateDir, "tls/ca.crt"));
   await writeFile(join(stateDir, "secrets.env"), "retained evidence");

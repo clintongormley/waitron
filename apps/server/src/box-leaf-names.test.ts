@@ -2,7 +2,6 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { X509Certificate, createPrivateKey } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import forge from "node-forge";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { ensureLeaf } from "./box-secrets.js";
 import {
@@ -11,7 +10,7 @@ import {
   reissueServerLeaf,
   type SelfSignedMaterial,
 } from "./self-signed-cert.js";
-import { certChain, handshake, tlsFile, writeTlsSet } from "./testing/box-tls.js";
+import { certChain, handshake, leafExpiresAt, tlsFile, writeTlsSet } from "./testing/box-tls.js";
 
 const OWN_NAME = "box-7f3a.waitron.local";
 const HOSTNAMES = [OWN_NAME, "waitron.local", "localhost"];
@@ -226,11 +225,11 @@ describe("ensureLeaf", () => {
 
     it("has expired", async () => {
       const current = issuedAt(new Date());
-      const expired = forge.pki.certificateFromPem(current.clientCertPem);
-      expired.validity.notAfter = new Date(Date.now() - 3600000);
-      const [signer, key] = forge.pem.decode(own.caKeyPem);
-      expired.sign(forge.pki.privateKeyFromPem(forge.pem.encode(key!)), forge.md.sha256.create());
-      const expiredPem = forge.pki.certificateToPem(expired) + forge.pem.encode(signer!);
+      const expiredPem = leafExpiresAt(
+        current.clientCertPem,
+        own.caKeyPem,
+        new Date(Date.now() - 3600000),
+      );
       expect(verifiedClient(expiredPem).validToDate.getTime()).toBeLessThan(Date.now());
       const stateDir = await ensuredWith(expiredPem, current.clientKeyPem);
       await expectCurrentClientPair(stateDir, expiredPem);

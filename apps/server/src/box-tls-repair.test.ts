@@ -6,7 +6,7 @@ import { createSecureContext } from "node:tls";
 import forge from "node-forge";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 import { mintSelfSignedServerCert, type SelfSignedMaterial } from "./self-signed-cert.js";
-import { certChain, tlsSetMatches } from "./testing/box-tls.js";
+import { certChain, leafExpiresAt, tlsSetMatches } from "./testing/box-tls.js";
 import { syncsAndRenames } from "./testing/durable-writes.js";
 import * as tlsRepair from "./box-tls-repair.js";
 import { inspectBoxTls, repairBoxTls } from "./box-tls-repair.js";
@@ -143,11 +143,11 @@ it.each(["missing-cert", "malformed", "expired", "mismatched", "wrong-host", "wr
         keypair: () => leafKeys,
       });
       if (damage === "expired") {
-        const expired = forge.pki.certificateFromPem(leaf.serverCertPem);
-        expired.validity.notAfter = new Date(now.getTime() - 1000);
-        expired.sign(otherKeys.privateKey, forge.md.sha256.create());
-        leaf.serverCertPem =
-          forge.pki.certificateToPem(expired) + certChain(leaf.serverCertPem)[1]!;
+        leaf.serverCertPem = leafExpiresAt(
+          leaf.serverCertPem,
+          material.caKeyPem,
+          new Date(now.getTime() - 1000),
+        );
       }
       await writeFile(
         join(f.stateDir, "tls", "server.pem"),
@@ -391,32 +391,30 @@ it("refuses linked TLS material without reading or changing its target", async (
   expect(await readFile(target, "utf8")).toBe(material.serverKeyPem);
 });
 
-it.each(["nameConstraints", "keyUsage"])(
-  "requires new trust when the authority lacks %s",
-  async (extension) => {
-    const f = await fixture();
-    await rm(join(f.stateDir, "tls", "server.pem"));
-    const ca = forge.pki.certificateFromPem(material.caKeyPem);
-    ca.setExtensions(
-      ca.extensions.filter(
-        (entry) =>
-          entry.name !== extension &&
-          entry.id !== (extension === "nameConstraints" ? "2.5.29.30" : "2.5.29.15"),
-      ),
-    );
-    ca.sign(keys.privateKey, forge.md.sha256.create());
+it.each([
+  ["signer", "nameConstraints", "2.5.29.30"],
+  ["signer", "keyUsage", "2.5.29.15"],
+  ["root", "keyUsage", "2.5.29.15"],
+])("requires new trust when the %s lacks %s", async (role, extension, oid) => {
+  const f = await fixture();
+  await rm(join(f.stateDir, "tls", "server.pem"));
+  const ca = forge.pki.certificateFromPem(role === "root" ? material.caCertPem : material.caKeyPem);
+  ca.setExtensions(ca.extensions.filter((entry) => entry.name !== extension && entry.id !== oid));
+  ca.sign(keys.privateKey, forge.md.sha256.create());
+  const pem = forge.pki.certificateToPem(ca);
+  if (role === "root") await writeFile(join(f.stateDir, "tls", "ca.crt"), pem);
+  else
     await writeFile(
       join(f.stateDir, "tls", "ca.key"),
-      forge.pki.certificateToPem(ca) + forge.pki.privateKeyToPem(otherKeys.privateKey),
+      pem + forge.pki.privateKeyToPem(otherKeys.privateKey),
     );
-    expect(await inspectBoxTls(f)).toMatchObject({
-      state: "repair-required",
-      trust: "new-required",
-      caAvailable: false,
-    });
-    expect(await repairBoxTls(f)).toMatchObject({ state: "healthy", trust: "new-required" });
-  },
-);
+  expect(await inspectBoxTls(f)).toMatchObject({
+    state: "repair-required",
+    trust: "new-required",
+    caAvailable: false,
+  });
+  expect(await repairBoxTls(f)).toMatchObject({ state: "healthy", trust: "new-required" });
+});
 
 it("requires new trust when the retained CA cannot be the issuer used by the box signer", async () => {
   const f = await fixture();
@@ -569,11 +567,11 @@ it.each(["address", "leaf-expiry"])(
       await readFile(join(f.stateDir, "flows/tls-repair/candidate.json"), "utf8"),
     );
     if (change === "leaf-expiry") {
-      const leaf = forge.pki.certificateFromPem(saved.serverCertPem);
-      leaf.validity.notAfter = new Date(now.getTime() + 86400000);
-      const [signer, key] = forge.pem.decode(saved.caKeyPem);
-      leaf.sign(forge.pki.privateKeyFromPem(forge.pem.encode(key!)), forge.md.sha256.create());
-      saved.serverCertPem = forge.pki.certificateToPem(leaf) + forge.pem.encode(signer!);
+      saved.serverCertPem = leafExpiresAt(
+        saved.serverCertPem,
+        saved.caKeyPem,
+        new Date(now.getTime() + 86400000),
+      );
       await writeFile(join(f.stateDir, "flows/tls-repair/candidate.json"), JSON.stringify(saved));
     }
     const resumed = {

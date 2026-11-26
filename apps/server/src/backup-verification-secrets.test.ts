@@ -204,6 +204,30 @@ describe("private host recovery material", () => {
       await verifyBackupStateSecrets(set(entries(), "tls/ca.crt", pem(wrong)), source, now),
     ).toEqual(invalid);
   });
+  it("reports a self-signed root using an unsupported key algorithm as invalid", async () => {
+    const ecRoot = `-----BEGIN CERTIFICATE-----
+MIIBfTCCASOgAwIBAgIUQpbXa26WB3/3g2FB12HLn2nRmlkwCgYIKoZIzj0EAwIw
+GzEZMBcGA1UEAwwQd2FpdHJvbi1zZXR1cC1jYTAeFw0yNjExMjYxMDI5MjBaFw0z
+NjExMjMxMDI5MjBaMBsxGTAXBgNVBAMMEHdhaXRyb24tc2V0dXAtY2EwWTATBgcq
+hkjOPQIBBggqhkjOPQMBBwNCAAR5y/3nUrAY6cJIM5F+fE7qBogVvcW/qakoHj+I
+aucE4IG+fD1FPUKUR38nn7lBUHiGOl3kpoFiHWk7dLrS1VQ8o0UwQzAdBgNVHQ4E
+FgQUZVrs7c3swpA9Ho3n35Vm0xZEOlYwEgYDVR0TAQH/BAgwBgEB/wIBATAOBgNV
+HQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwIDSAAwRQIgXqTyCA1iw58dta4PYdtedJJC
+b1YaBIhopZ0LIDXrxKYCIQCuPZWAIRmOhl5lML4OTrvojcISBlszAvEXOD2kZaxb
+Jg==
+-----END CERTIFICATE-----
+`;
+    const cert = new X509Certificate(ecRoot);
+    expect(cert.verify(cert.publicKey)).toBe(true);
+    expect(cert.publicKey.asymmetricKeyType).toBe("ec");
+    expect(
+      await verifyBackupStateSecrets(
+        set(entries(), "tls/ca.crt", ecRoot),
+        source,
+        cert.validFromDate,
+      ),
+    ).toEqual(invalid);
+  });
   it("refuses a CA whose own signature is damaged", async () => {
     const cert = forge.pki.certificateFromPem(material.caCertPem);
     cert.sign(serverKeys.privateKey, forge.md.sha256.create());

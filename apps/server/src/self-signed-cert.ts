@@ -114,17 +114,22 @@ function nameConstraintsExtension(): CertExtension {
   };
 }
 
-function caRole(pem: string, name: string, pathLength: number): boolean {
-  const cert = forge.pki.certificateFromPem(pem);
+function caWithRole(pem: string, name: string, pathLength: number): forge.pki.Certificate | null {
+  let cert: forge.pki.Certificate;
+  try {
+    cert = forge.pki.certificateFromPem(pem);
+  } catch {
+    return null;
+  }
   const basic = cert.getExtension("basicConstraints") as CertExtension | null;
   const usage = cert.getExtension("keyUsage") as CertExtension | null;
-  return (
-    cert.subject.getField("CN")?.value === name &&
+  return cert.subject.getField("CN")?.value === name &&
     basic?.cA === true &&
     basic.pathLenConstraint === pathLength &&
     usage?.keyCertSign === true &&
     cert.getExtension("extKeyUsage") === null
-  );
+    ? cert
+    : null;
 }
 
 function pemBlocks(pem: string) {
@@ -139,11 +144,17 @@ export function boxCertCurrent(cert: X509Certificate, now: Date): boolean {
   return cert.validFromDate <= now && now < cert.validToDate;
 }
 
+export function firstCertificatePem(pem: string): string {
+  return pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/)?.[0] ?? "";
+}
+
 export function boxRoot(pem: string): X509Certificate | null {
   const blocks = pemBlocks(pem);
   if (blocks.length !== 1 || blocks[0]?.type !== "CERTIFICATE") return null;
   const root = new X509Certificate(pem);
-  return root.checkIssued(root) && root.verify(root.publicKey) && caRole(pem, CA_COMMON_NAME, 1)
+  return root.checkIssued(root) &&
+    root.verify(root.publicKey) &&
+    caWithRole(pem, CA_COMMON_NAME, 1) !== null
     ? root
     : null;
 }
@@ -152,14 +163,12 @@ function signerCertificate(block: forge.pem.ObjectPEM, root: X509Certificate) {
   if (block.type !== "CERTIFICATE") return null;
   const pem = forge.pem.encode(block);
   const cert = new X509Certificate(pem);
-  const constraints = forge.pki
-    .certificateFromPem(pem)
-    .getExtension("nameConstraints") as CertExtension | null;
+  const signer = caWithRole(pem, SIGNER_COMMON_NAME, 0);
+  const constraints = signer?.getExtension("nameConstraints") as CertExtension | null;
   if (
     !cert.checkIssued(root) ||
     !cert.verify(root.publicKey) ||
     cert.publicKey.equals(root.publicKey) ||
-    !caRole(pem, SIGNER_COMMON_NAME, 0) ||
     constraints?.critical !== true ||
     constraints.value !== nameConstraintsExtension().value
   )
@@ -195,7 +204,7 @@ function signerFor(rootPem: string, signerPem: string, now: Date) {
   const root = boxRoot(rootPem);
   const signer = root && boxSigner(signerPem, root);
   if (!root || !signer || !boxCertCurrent(root, now) || !boxCertCurrent(signer.cert, now)) {
-    throw new Error("Invalid box TLS signer");
+    throw new AppError("setup.not_ready", {});
   }
   return {
     pem: signer.pem,

@@ -26,6 +26,14 @@ export function certChain(pem: string): string[] {
   );
 }
 
+export function leafExpiresAt(leafPem: string, signingPem: string, expiresAt: Date): string {
+  const leaf = forge.pki.certificateFromPem(leafPem);
+  const [signer, key] = forge.pem.decode(signingPem);
+  leaf.validity.notAfter = expiresAt;
+  leaf.sign(forge.pki.privateKeyFromPem(forge.pem.encode(key!)), forge.md.sha256.create());
+  return forge.pki.certificateToPem(leaf) + forge.pem.encode(signer!);
+}
+
 let fixtureKeys: forge.pki.rsa.KeyPair[] | undefined;
 export function fixtureBoxKeys(): () => forge.pki.rsa.KeyPair {
   fixtureKeys ??= Array.from({ length: 3 }, () => forge.pki.rsa.generateKeyPair(2048));

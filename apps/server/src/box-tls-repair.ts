@@ -12,6 +12,7 @@ import {
   boxLeafChain,
   boxRoot,
   boxSigner,
+  firstCertificatePem,
   leafIpv4s,
   mintSelfSignedServerCert,
   reissueServerLeaf,
@@ -101,7 +102,7 @@ async function pending(deps: BoxTlsRepairDeps): Promise<Pending | null> {
 }
 function caPublic(bytes: Buffer | null, now: Date): X509Certificate | null {
   try {
-    const ca = bytes && boxRoot(bytes.toString("utf8"));
+    const ca = bytes && boxRoot(firstCertificatePem(bytes.toString("utf8")));
     return ca && boxCertCurrent(ca, now) ? ca : null;
   } catch {
     return null;
@@ -110,10 +111,10 @@ function caPublic(bytes: Buffer | null, now: Date): X509Certificate | null {
 
 export async function readBoxPublicCa(stateDir: string, now = new Date()): Promise<string | null> {
   const pem = await fs.readFile(join(stateDir, TLS_DIR, "ca.crt"), "utf8");
-  const publicPem = pem.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/)?.[0];
+  const publicPem = firstCertificatePem(pem);
   if (!publicPem) return null;
   const ca = caPublic(Buffer.from(publicPem), now);
-  return ca?.toString().replaceAll("\n", pem.includes("\r\n") ? "\r\n" : "\n") ?? null;
+  return ca?.toString().replaceAll("\n", publicPem.includes("\r\n") ? "\r\n" : "\n") ?? null;
 }
 
 function signingAuthority(s: Snapshot, now: Date): boolean {
@@ -245,7 +246,7 @@ function readCandidate(value: unknown, deps: BoxTlsRepairDeps): SelfSignedMateri
     : {
         ...m,
         ...reissueServerLeaf({
-          caCertPem: m.caCertPem,
+          caCertPem: firstCertificatePem(m.caCertPem),
           caKeyPem: m.caKeyPem,
           hostnames: deps.hostnames,
           ipAddresses: leafIpv4s(deps.listIpv4),
@@ -311,7 +312,7 @@ export async function repairBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspec
               caCertPem: s["ca.crt"]!.toString("utf8"),
               caKeyPem: s["ca.key"]!.toString("utf8"),
               ...reissueServerLeaf({
-                caCertPem: s["ca.crt"]!.toString("utf8"),
+                caCertPem: firstCertificatePem(s["ca.crt"]!.toString("utf8")),
                 caKeyPem: s["ca.key"]!.toString("utf8"),
                 hostnames: deps.hostnames,
                 ipAddresses: leafIpv4s(deps.listIpv4),

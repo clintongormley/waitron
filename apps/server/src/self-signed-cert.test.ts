@@ -151,6 +151,28 @@ describe("reissueServerLeaf", () => {
     expect(cert.checkPrivateKey(createPrivateKey(leaf.serverKeyPem))).toBe(true);
   });
 
+  it.each(["same key", "wrong path length"])("refuses a signer with the %s", (damage) => {
+    const original = mint(damage === "same key" ? { keypair: () => sharedKeys[0]! } : {});
+    const [signerData, keyData] = forge.pem.decode(original.caKeyPem);
+    const signer = forge.pki.certificateFromPem(forge.pem.encode(signerData!));
+    if (damage === "wrong path length") {
+      signer.setExtensions([
+        ...signer.extensions.filter((entry) => entry.name !== "basicConstraints"),
+        { name: "basicConstraints", cA: true, pathLenConstraint: 1 },
+      ]);
+      signer.sign(sharedKeys[0]!.privateKey, forge.md.sha256.create());
+    }
+    expect(() =>
+      reissueServerLeaf({
+        ...original,
+        caKeyPem: forge.pki.certificateToPem(signer) + forge.pem.encode(keyData!),
+        hostnames: ["waitron.local"],
+        ipAddresses: [],
+        now: new Date("2026-08-26T00:00:00Z"),
+      }),
+    ).toThrow(expect.objectContaining({ code: "setup.not_ready" }));
+  });
+
   it("never outlives its authority", () => {
     const original = mint({ now: new Date("2026-09-23T10:00:00Z") });
     const leaf = reissueServerLeaf({
