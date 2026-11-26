@@ -18,8 +18,8 @@ open each PR within three active hours.
    Clear it when placing a restore. On the primary, record an incident only when there is no
    valid mark and the previous server holder is still there. Use its last heartbeat in the email.
    First setup, restore, a clean stop whose mark write failed and was logged, and a spare crash
-   raise no alert. An intervening failed start can also remove the previous holder before boot
-   records it. A later unexpected stop replaces an open warning so it gets its own email
+   raise no alert. If an intervening failed start removes the previous holder before recording
+   the stop, the later start has no heartbeat to report. A later unexpected stop replaces an open warning so it gets its own email
    (watcher, 13:26 on 26 November). Add the incident to `INCIDENT_EMAIL_CODES` and word it in English and Spanish.
    Test signal versus force kill and direct close in the shutdown suites, wording in
    `box-alert-email.test.ts`, and incident recording with the heartbeat time in
