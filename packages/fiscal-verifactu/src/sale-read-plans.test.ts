@@ -10,6 +10,7 @@ import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
 import { readDeviceReceiptEvidence } from "./device-receipt-evidence.js";
+import { originalSettled } from "./drain.js";
 import { openFilingCase } from "./filing-cases.js";
 import { currentAltaRefused } from "./refused-current-alta.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
@@ -110,11 +111,12 @@ describe("reads of a sale's filed alta", () => {
     ]);
   });
 
-  it("finds the alta a credit's refusal judges through the sale index", async () => {
+  it("finds the alta a credit's refusal judges through the sale index, and its versions through the first alta's sale", async () => {
     const plan = await planOf((tx) => backend().refuseCreditOf(tx, brandSaleId(newId())));
     expect(plan).toEqual([
       "SEARCH receipt USING INDEX verifactu_records_sale_idx (sale_id=?)",
       "CORRELATED SCALAR SUBQUERY 2",
+      "SEARCH original_first USING INDEX verifactu_records_identidad_uq (id_emisor_factura=? AND num_serie_factura=? AND fecha_expedicion_factura=? AND tipo_registro=?)",
       "SEARCH original USING INDEX verifactu_records_sale_idx (sale_id=?)",
       "CORRELATED SCALAR SUBQUERY 1",
       "SEARCH replacement USING COVERING INDEX verifactu_records_corrects_registro_uq (corrects_registro_id=?)",
@@ -127,7 +129,6 @@ describe("reads of a sale's filed alta", () => {
     [
       "bound values",
       sql`select 1 where ${currentAltaRefused({
-        saleId: newId(),
         idEmisorFactura: "B12345678",
         numSerieFactura: "A-1",
         fechaExpedicionFactura: "2026-11-26",
@@ -137,7 +138,6 @@ describe("reads of a sale's filed alta", () => {
     [
       "a cancellation's columns",
       sql`select r.id from verifactu_records r where r.id in ${[newId()]} and ${currentAltaRefused({
-        saleId: sql`r.sale_id`,
         idEmisorFactura: sql`r.id_emisor_factura`,
         numSerieFactura: sql`r.num_serie_factura`,
         fechaExpedicionFactura: sql`r.fecha_expedicion_factura`,
@@ -148,17 +148,45 @@ describe("reads of a sale's filed alta", () => {
       ],
     ],
   ] as const)(
-    "finds the refused current alta through the sale index, given %s",
+    "finds the refused current alta through its first alta's sale, given %s",
     async (_, query, outer) => {
       const plan = await withTransaction(suite.db, async (tx) =>
         tx.all<{ detail: string }>(sql`explain query plan ${query}`).map((row) => row.detail),
       );
       expect(plan).toEqual([
         ...outer,
+        "SEARCH original_first USING INDEX verifactu_records_identidad_uq (id_emisor_factura=? AND num_serie_factura=? AND fecha_expedicion_factura=? AND tipo_registro=?)",
         "SEARCH original USING INDEX verifactu_records_sale_idx (sale_id=?)",
         "CORRELATED SCALAR SUBQUERY 1",
         "SEARCH replacement USING COVERING INDEX verifactu_records_corrects_registro_uq (corrects_registro_id=?)",
         "SEARCH original_envio USING INDEX sqlite_autoindex_verifactu_submissions_1 (registro_id=?)",
+      ]);
+    },
+  );
+
+  // The filing queue's claim asks this of every waiting cancellation, and of each earlier one.
+  it.each([
+    ["r", "original"],
+    ["prior", "prior_original"],
+  ] as const)(
+    "finds whether a cancellation's original is settled through its first alta's sale (%s)",
+    async (record, original) => {
+      const plan = await withTransaction(suite.db, async (tx) =>
+        tx
+          .all<{ detail: string }>(
+            sql`explain query plan select ${sql.raw(record)}.id from verifactu_records ${sql.raw(record)}
+              where ${sql.raw(record)}.id in ${[newId()]} and ${originalSettled(record, original)}`,
+          )
+          .map((row) => row.detail),
+      );
+      expect(plan).toEqual([
+        `SEARCH ${record} USING INDEX sqlite_autoindex_verifactu_records_1 (id=?)`,
+        "CORRELATED SCALAR SUBQUERY 2",
+        `SEARCH ${original}_first USING INDEX verifactu_records_identidad_uq (id_emisor_factura=? AND num_serie_factura=? AND fecha_expedicion_factura=? AND tipo_registro=?)`,
+        `SEARCH ${original} USING INDEX verifactu_records_sale_idx (sale_id=?)`,
+        "CORRELATED SCALAR SUBQUERY 1",
+        "SEARCH replacement USING COVERING INDEX verifactu_records_corrects_registro_uq (corrects_registro_id=?)",
+        `SEARCH ${original}_envio USING INDEX sqlite_autoindex_verifactu_submissions_1 (registro_id=?)`,
       ]);
     },
   );

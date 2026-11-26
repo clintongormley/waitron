@@ -28,7 +28,7 @@ import {
   type FilingCaseCause,
 } from "./filing-cases.js";
 import { keepAnswerBeforeClearing } from "./history.js";
-import { currentAltaRefused } from "./refused-current-alta.js";
+import { altasOfIdentity, currentAltaRefused } from "./refused-current-alta.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 
@@ -885,18 +885,21 @@ async function haltOpenChainClaims(
  * cancellation's own chain: a held original holds a cancellation on its own chain anyway; on another
  * chain nothing would. `original` is the subquery's own alias.
  */
-function originalSettled(record: "r" | "prior", original: "original" | "prior_original"): SQL {
+export function originalSettled(
+  record: "r" | "prior",
+  original: "original" | "prior_original",
+): SQL {
   const cancellation = sql.raw(record);
   const alta = sql.raw(original);
   const envio = sql.raw(`${original}_envio`);
   return sql`exists (
-    select 1 from verifactu_records ${alta}
+    select 1 from ${altasOfIdentity(original, {
+      idEmisorFactura: sql`${cancellation}.id_emisor_factura`,
+      numSerieFactura: sql`${cancellation}.num_serie_factura`,
+      fechaExpedicionFactura: sql`${cancellation}.fecha_expedicion_factura`,
+    })}
     join verifactu_submissions ${envio} on ${envio}.registro_id = ${alta}.id
-    where ${alta}.tipo_registro = 'alta'
-      and ${alta}.id_emisor_factura = ${cancellation}.id_emisor_factura
-      and ${alta}.num_serie_factura = ${cancellation}.num_serie_factura
-      and ${alta}.fecha_expedicion_factura = ${cancellation}.fecha_expedicion_factura
-      and not exists (
+    where not exists (
         select 1 from verifactu_records replacement
         where replacement.corrects_registro_id = ${alta}.id
       )
@@ -910,7 +913,6 @@ function cancelsRefusedOriginal(record: "r"): SQL {
   const alias = sql.raw(record);
   return sql`(${alias}.tipo_registro = 'anulacion'
     and ${alias}.sin_registro_previo is not 'S' and ${currentAltaRefused({
-      saleId: sql`${alias}.sale_id`,
       idEmisorFactura: sql`${alias}.id_emisor_factura`,
       numSerieFactura: sql`${alias}.num_serie_factura`,
       fechaExpedicionFactura: sql`${alias}.fecha_expedicion_factura`,

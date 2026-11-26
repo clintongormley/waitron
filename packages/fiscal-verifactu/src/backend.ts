@@ -468,7 +468,6 @@ export class VerifactuBackend implements FiscalBackend {
       where receipt.sale_id = ${saleId} and receipt.tipo_registro = 'alta'
         and receipt.corrects_registro_id is null
         and ${currentAltaRefused({
-          saleId: sql`receipt.sale_id`,
           idEmisorFactura: sql`receipt.id_emisor_factura`,
           numSerieFactura: sql`receipt.num_serie_factura`,
           fechaExpedicionFactura: sql`receipt.fecha_expedicion_factura`,
@@ -520,7 +519,6 @@ export class VerifactuBackend implements FiscalBackend {
     if (unanswered.length > 0) throw new AppError("fiscal.original_unanswered", { saleId });
     const { rows: refused } = await tx.execute(
       sql`select 1 where ${currentAltaRefused({
-        saleId,
         idEmisorFactura: original.id_emisor_factura,
         numSerieFactura: original.num_serie_factura,
         fechaExpedicionFactura: original.fecha_expedicion_factura,

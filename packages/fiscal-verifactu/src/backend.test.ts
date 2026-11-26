@@ -621,18 +621,6 @@ describe("refuseCreditOf", () => {
   it("admits a sale with no record, which the corrective's own refusal answers", async () => {
     await expect(refuseCredit("00000000-0000-4000-8000-000000000000")).resolves.toBeUndefined();
   });
-
-  // The refusal finds a receipt's versions through its sale, so no version may carry another.
-  it("never records a fixed version under another sale", async () => {
-    const { saleId } = await sell();
-    const other = await sell();
-    await answer(saleId, "aceptado");
-
-    await expect(
-      fixedVersionOf(suite.db, nodeId, saleId, "rechazado", "1100", other.saleId),
-    ).rejects.toMatchObject({ code: "fiscal.remedy_invalid" });
-    await expect(refuseCredit(saleId)).resolves.toBeUndefined();
-  });
 });
 
 /**
