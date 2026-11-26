@@ -154,6 +154,7 @@ describe("the user guides", () => {
       "handed-over",
       "reconciliation",
       "waiting",
+      "waiting-for-bucket",
       "carry-on",
       "setup-cloud-sign-in",
       "remote-access",

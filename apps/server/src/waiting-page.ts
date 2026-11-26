@@ -6,7 +6,7 @@ import {
   isDashboardPath,
   type SupportedLocale,
 } from "@waitron/shared";
-import { REPLACED_PAGE_WORDS, WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
+import { BUCKET_WAIT_WORDS, REPLACED_PAGE_WORDS, WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
 import { codeOf } from "@waitron/server-kit";
 import { errnoOf } from "./errno.js";
 import { resolveLoginLocale } from "./login-locale.js";
@@ -64,6 +64,15 @@ function leaveWhenDone(destination: string): string {
 })();
 </script>
 `;
+}
+
+export function renderBucketWaitingPage(locale: SupportedLocale, destination: string): string {
+  const { title, body } = BUCKET_WAIT_WORDS[locale];
+  return renderLogoBoxPage(
+    locale,
+    title,
+    `<h1>${escapeHtml(title)}</h1>\n<p>${escapeHtml(body)}</p>\n${leaveWhenDone(destination)}`,
+  );
 }
 
 /** The waiting page, with `section` (escaped HTML, such as the carry-on form) below its body. */

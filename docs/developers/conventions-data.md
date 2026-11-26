@@ -3924,6 +3924,14 @@ when it verifies with the box’s own signing key. The bucket and archive recove
 evidence. The archive case runs the first start and pointer publisher with a simulated full-copy
 upload.
 
+After an unplanned stop, `boot.ts` also asks the configured bucket before starting sales or filing
+when the peer check has no peer it counts. The first ask and the rechecks together get 60 seconds.
+A successful read with no pointer or this box's verified pointer at or below its term ends the
+wait. A newer pointer the box cannot verify counts as silence. After silence the box starts and
+records `start.selling_unconfirmed` for the managers' email. A planned restart and a restore's
+first start skip this wait. `boot.stop-mark.test.ts`, `stream-host.test.ts` and
+`waiting-start.test.ts` cover the boot decision, pointer answers and listener cancellation.
+
 The check closes the request gate and signals the filing drain before the local marker write. The
 box retries a failed write with the evidence it already verified. Until the marker reaches disk, a
 forced process stop can lose it. `replaced.json` belongs to one box. Reset deletes it. A restore

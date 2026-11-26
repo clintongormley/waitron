@@ -41,8 +41,10 @@ import { ManualClock } from "@waitron/stream/testing/manual-clock.js";
 import { FakeLitestream, type FakeChild } from "@waitron/stream/testing/fake-litestream.js";
 import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import {
+  deleteStreamSettings,
   readStreamSettings,
   readNewerBucketMain,
+  readStartupBucket,
   STREAM_PURPOSE,
   StreamHost,
   streamService,
@@ -226,6 +228,49 @@ describe("the live copy's wiring", () => {
       });
       await configure({ endorsement: "forged" });
       expect(await readNewerBucketMain(deps(bucket))).toBeNull();
+    });
+    it("distinguishes an unconfigured bucket from a reachable one with no pointer", async () => {
+      const bucket = store();
+      await configure({ solo: true });
+      const read = () => readStartupBucket(deps(bucket), new AbortController().signal);
+      expect(await read()).toBe("clear");
+      bucket.down = true;
+      expect(await read()).toBe("silent");
+      await withTransaction(db, (tx) => tx.run(sql`delete from venue_credentials`));
+      expect(await read()).toBe("silent");
+      await withTransaction(db, (tx) => deleteStreamSettings(tx, null));
+      expect(await read()).toBe("unconfigured");
+    });
+    it("only treats its own signed pointer as an answer at startup", async () => {
+      const bucket = store();
+      await configure({ solo: true, term: 2 });
+      const read = () => readStartupBucket(deps(bucket), new AbortController().signal);
+      await publish(bucket, 1);
+      expect(await read()).toBe("silent");
+      await publish(bucket, 3, NODE_ID, spareKeys.privateKey);
+      expect(await read()).toBe("silent");
+      await publish(bucket, 2, NODE_ID, keys.privateKey);
+      expect(await read()).toBe("clear");
+      await publish(bucket, 3, NODE_ID, keys.privateKey);
+      expect(await read()).toEqual({
+        streamId: "c0000000-0000-4000-8000-000000000002",
+        term: 3,
+        nodeId: NODE_ID,
+      });
+      await configure({ term: 2 });
+      expect(await readStartupBucket(deps(bucket), new AbortController().signal)).toBe("silent");
+    });
+    it("checks the chart after the bucket answers during startup", async () => {
+      const bucket = store();
+      await configure({ solo: true, term: 2 });
+      await publish(bucket, 3, NODE_ID, keys.privateKey);
+      const get = bucket.get.bind(bucket);
+      vi.spyOn(bucket, "get").mockImplementationOnce(async (...args) => {
+        const pointer = await get(...args);
+        await configure({ term: 3 });
+        return pointer;
+      });
+      expect(await readStartupBucket(deps(bucket), new AbortController().signal)).toBe("clear");
     });
     it.each(["equal term", "wrong key", "joined peer", "an old primary"])(
       "ignores a replacement pointer with %s",

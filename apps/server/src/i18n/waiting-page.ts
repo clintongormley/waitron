@@ -1,5 +1,16 @@
 import type { SupportedLocale } from "@waitron/shared";
 
+export const BUCKET_WAIT_WORDS = {
+  "en-GB": {
+    title: "Waiting for the backup bucket",
+    body: "This box stopped unexpectedly. It is checking its backup before taking sales or sending records to the tax agency. The check can take up to a minute.",
+  },
+  "es-ES": {
+    title: "Esperando al depósito de copias de seguridad",
+    body: "Este servidor se detuvo sin aviso. Está comprobando su copia de seguridad antes de hacer ventas o enviar registros a Hacienda. La comprobación puede tardar hasta un minuto.",
+  },
+} satisfies Record<SupportedLocale, { title: string; body: string }>;
+
 /** The words of the page's "Carry on as the main box" form and its answers. */
 export interface CarryOnWords {
   heading: string;

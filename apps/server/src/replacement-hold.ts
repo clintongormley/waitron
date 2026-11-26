@@ -32,6 +32,7 @@ export async function mountReplacementHold(deps: {
   ring: KeyRing;
   health: HealthState;
   runner: JobRunner;
+  save?: () => Promise<void>;
   disk: DiskFullState;
   space: FreeSpaceState;
   now: () => Date;
@@ -53,6 +54,16 @@ export async function mountReplacementHold(deps: {
 
   const venueLanguage = (await readVenueLocale(db)) === "es-ES" ? "es" : "en";
   const owners = [boxAlertMail({ previousEpisodeMailIds: new Set(), venueLanguage, log })];
+  let save = deps.save;
+  const persist = async () => {
+    try {
+      await save?.();
+      save = undefined;
+    } catch (error) {
+      log("warn", "server.replacement_mark_failed", { errorCode: codeOf(error) });
+    }
+  };
+  await persist();
   let recorded = false;
   const record = async () => {
     if (recorded) return;
@@ -70,6 +81,7 @@ export async function mountReplacementHold(deps: {
     log,
     moduleNotices: async () => ({ notices: [], unavailable: [] }),
     emailedIncidents: async () => {
+      await persist();
       await record();
       return (await readOpenEmailedIncidents(db)).filter(({ code }) => code === "start.replaced");
     },

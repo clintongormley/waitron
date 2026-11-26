@@ -395,6 +395,14 @@ esperando a** y la dirección del otro servidor, lo indica. Mientras espera no h
 a Hacienda. Vuelve a preguntar cada 15 segundos; cuando el otro servidor responde, este se inicia con
 normalidad o, si el otro ha pasado a llevar el local, lo indica.
 
+## Esperando al depósito de copias de seguridad {#waiting-for-bucket}
+
+Tras un corte de luz, el servidor principal puede mostrar **Esperando al depósito de copias de
+seguridad**. Dale hasta un minuto para comprobar si otro servidor ha tomado el relevo. Si el
+depósito no responde o el servidor encuentra una copia más reciente que no puede verificar, el
+servidor arranca y avisa por correo a los responsables. Si ya trasladaste el servicio a otro
+servidor, usa ese servidor y deja este apagado.
+
 ## Seguir como servidor principal {#carry-on}
 
 Si sabes que el otro servidor está apagado, puedes dejar que este servidor siga sin él. Abre el servidor

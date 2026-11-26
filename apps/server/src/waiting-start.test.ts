@@ -90,10 +90,7 @@ const fiscal: WaitronModule = {
   handover: VERIFACTU_HANDOVER,
 };
 
-function harness(
-  recheck: () => Promise<StartPeerCheckOutcome>,
-  extra: Partial<WaitingStartDeps> = {},
-) {
+function harness(recheck: WaitingStartDeps["recheck"], extra: Partial<WaitingStartDeps> = {}) {
   let app: Hono | undefined;
   const closeListeners = vi.fn(() => Promise.resolve());
   const closeStore = vi.fn(() => Promise.resolve());
@@ -185,6 +182,38 @@ const stepRoute: WaitingStartDeps["routes"][number] = (app, hooks) =>
   });
 
 describe("the waiting start", () => {
+  it.each(["deadline", "shutdown"] as const)("cancels a bucket recheck at %s", async (reason) => {
+    const deadline = new AbortController();
+    let entered: (signal: AbortSignal) => void = () => {};
+    const asking = new Promise<AbortSignal>((resolve) => (entered = resolve));
+    let finishRead: () => void = () => {};
+    const h = harness(
+      async (signal) => {
+        entered(signal);
+        await new Promise<void>((resolve) => (finishRead = resolve));
+        return WAIT;
+      },
+      { bucketDeadline: deadline.signal },
+    );
+    try {
+      const signal = await asking;
+      const ended = vi.fn();
+      void h.waiting.ended.then(ended);
+      if (reason === "deadline") deadline.abort();
+      else void h.waiting.server.close();
+      expect(signal.aborted).toBe(true);
+      await vi.waitFor(() => expect(h.closeListeners).toHaveBeenCalledOnce());
+      expect(ended).not.toHaveBeenCalled();
+      finishRead();
+      await expect(h.waiting.ended).resolves.toEqual({
+        kind: reason === "deadline" ? "timed-out" : "stopped",
+      });
+    } finally {
+      finishRead();
+      await h.waiting.server.close();
+    }
+  });
+
   it("waits, answering `acceptingSales: false` with its term", async () => {
     const recheck = vi.fn(() => Promise.resolve(WAIT));
     const h = harness(recheck);

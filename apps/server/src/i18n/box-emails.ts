@@ -123,6 +123,17 @@ export const BACKUP_REFUSED_EMAIL_WORDS = {
   },
 } as const satisfies Record<"en" | "es", { subject: string; text: string }>;
 
+export const SELLING_UNCONFIRMED_EMAIL_WORDS = {
+  en: {
+    subject: "{venue}: the box started without backup confirmation",
+    text: "After an unexpected stop, the box could not confirm from the backup bucket that it was still the main box. It started after waiting a minute and will keep checking. If you moved service to another box, use that box and leave this one switched off.",
+  },
+  es: {
+    subject: "{venue}: el servidor arrancó sin confirmación de la copia",
+    text: "Tras detenerse sin aviso, el servidor no pudo confirmar en el depósito de copias de seguridad que seguía siendo el principal. Arrancó tras esperar un minuto y seguirá comprobándolo. Si trasladaste el servicio a otro servidor, usa ese servidor y deja este apagado.",
+  },
+} as const;
+
 export const UPGRADE_ROLLBACK_EMAIL_WORDS = {
   en: {
     subject: "{venue}: the box rolled back an upgrade",

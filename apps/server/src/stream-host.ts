@@ -39,6 +39,7 @@ import {
   StreamSupervisor,
   type BucketConfig,
   type ObjectStore,
+  type SignedPointer,
   type SpawnFn,
   type StreamNotStarted,
   type StreamStatus,
@@ -169,18 +170,28 @@ export interface BucketReplacement {
 
 type BucketMainDeps = Pick<StreamHostDeps, "db" | "node" | "ring" | "nodeId" | "store">;
 
-async function readMainPointer(
+async function readConfiguredPointer(
   deps: BucketMainDeps,
   signal: AbortSignal | undefined,
   openStore: typeof createS3ObjectStore,
 ) {
   const settings = await readStreamSettings(deps.db, deps.ring);
   if (settings === null) return null;
-  const stored = await readPointer(
-    boundObjectStore(deps.store ?? openStore(settings.bucket), 15_000),
-    settings.streamId,
-    { signal },
-  );
+  return {
+    stored: await readPointer(
+      boundObjectStore(deps.store ?? openStore(settings.bucket), 15_000),
+      settings.streamId,
+      { signal },
+    ),
+  };
+}
+
+async function readMainPointer(
+  deps: BucketMainDeps,
+  signal: AbortSignal | undefined,
+  openStore: typeof createS3ObjectStore,
+) {
+  const stored = (await readConfiguredPointer(deps, signal, openStore))?.stored ?? null;
   if (stored === null) return null;
   const held = await readNodeMembership(deps.db);
   if (held === null || stored.pointer.body.term <= held.body.term) return null;
@@ -221,6 +232,43 @@ export async function readNewerBucketMain(
   }
 }
 
+async function ownSignedPointer(deps: BucketMainDeps, pointer: SignedPointer): Promise<boolean> {
+  if (pointer.body.nodeId !== deps.nodeId) return false;
+  const own = nodeSigningPublicKey(await readNodeIdentityKey(deps.node, deps.ring, deps.nodeId));
+  return verifyPointer(pointer, own);
+}
+
+type HeldMembership = NonNullable<Awaited<ReturnType<typeof readNodeMembership>>>;
+
+function hasOnlyPrimary(held: HeldMembership, nodeId: string): boolean {
+  return (
+    held.body.nodes.some((node) => node.nodeId === nodeId && node.standing === "serving-primary") &&
+    held.body.nodes.every((node) => node.nodeId === nodeId || node.standing === "evicted")
+  );
+}
+
+export type StartupBucketAnswer = "unconfigured" | "clear" | "silent" | BucketReplacement;
+
+export async function readStartupBucket(
+  deps: BucketMainDeps,
+  signal: AbortSignal,
+): Promise<StartupBucketAnswer> {
+  try {
+    const configured = await readConfiguredPointer(deps, signal, createS3ObjectStore);
+    if (configured === null) return "unconfigured";
+    if (configured.stored === null) return "clear";
+    const { pointer } = configured.stored;
+    if (!(await ownSignedPointer(deps, pointer))) return "silent";
+    const held = await readNodeMembership(deps.db);
+    if (held === null) return "silent";
+    if (pointer.body.term <= held.body.term) return "clear";
+    const { streamId, nodeId, term } = pointer.body;
+    return hasOnlyPrimary(held, nodeId) ? { streamId, nodeId, term } : "silent";
+  } catch {
+    return "silent";
+  }
+}
+
 async function readBucketReplacement(
   deps: BucketMainDeps,
   signal: AbortSignal,
@@ -231,16 +279,9 @@ async function readBucketReplacement(
     if (latest === null) return null;
     const { pointer, held } = latest;
     const { streamId, nodeId, term } = pointer.body;
-    if (
-      nodeId !== deps.nodeId ||
-      !held.body.nodes.some(
-        (node) => node.nodeId === nodeId && node.standing === "serving-primary",
-      ) ||
-      held.body.nodes.some((node) => node.nodeId !== nodeId && node.standing !== "evicted")
-    )
-      return null;
-    const own = nodeSigningPublicKey(await readNodeIdentityKey(deps.node, deps.ring, nodeId));
-    return verifyPointer(pointer, own) ? { streamId, nodeId, term } : null;
+    return hasOnlyPrimary(held, deps.nodeId) && (await ownSignedPointer(deps, pointer))
+      ? { streamId, nodeId, term }
+      : null;
   } catch {
     return null;
   }
