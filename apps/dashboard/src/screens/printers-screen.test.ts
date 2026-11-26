@@ -12901,6 +12901,50 @@ describe("office printers in discovery", () => {
     await vi.waitFor(() => expect(api.assignPrinterProfiles).toHaveBeenCalledTimes(1));
   });
 
+  it.each([
+    ["en-GB", "Added through the main box", "Use this agent"],
+    ["es-ES", "Añadida a través del servidor principal", "Usar este agente"],
+  ] as const)(
+    "confirms the main-box add in its row until Add a printer is reopened (%s)",
+    async (locale, confirmation, move) => {
+      const before = currentLocale();
+      setLocale(locale);
+      try {
+        const listPagePrinters = vi.fn().mockResolvedValue([]);
+        const local = { ...agents[0]!, onThisBox: true };
+        const spare = { ...agents[1]!, active: true, onThisBox: false };
+        const { el } = await mountWith(
+          [office(), office({ agentId: spare.id, agentName: spare.name }), ...discoveredNetwork],
+          {
+            listAgents: vi.fn().mockResolvedValue([local, spare]),
+            listPagePrinters,
+            registerPagePrinter: vi.fn(async () => {
+              listPagePrinters.mockResolvedValue([{ ...added, name: "HP LaserJet" }]);
+              return { id: added.id, outcome: "created" as const };
+            }),
+          },
+        );
+        q(el, "[data-test='add-page-printer-a1:10.0.0.56:9100']")!.click();
+        await flush(el);
+        await clickAndAwaitClose(el, "page-printer-add-modal", "confirm-add-page-printer");
+        const hpRow = "[data-test^=discovered-row-][data-test$=':10.0.0.56:9100']";
+        expect(text(el, hpRow)).toContain("HP LaserJet");
+        expect(text(el, hpRow)).toContain(confirmation);
+        expect(text(el, hpRow)).not.toContain(spare.name);
+        expect(q(el, hpRow)!.closest("tr")!.querySelector("wt-button")).toBeNull();
+        const moveButton = "[data-test='repoint-page-printer-a2:10.0.0.56:9100']";
+        expect(q(el, "[data-test='register-a1:10.0.0.77:9100']")).not.toBeNull();
+
+        await clickAndAwaitClose(el, "new-printer-modal", "cancel-new-printer");
+        await openDiscovery(el);
+        expect(text(el, moveButton)).toBe(move);
+        expect(text(el, hpRow)).not.toContain(confirmation);
+      } finally {
+        setLocale(before);
+      }
+    },
+  );
+
   it("keeps the dialog and the name when the server refuses the add, with Add still pressable", async () => {
     const registerPagePrinter = vi.fn().mockRejectedValue({ code: "page_printer.not_printable" });
     const { el } = await mountWith([office({ agentName: null })], { registerPagePrinter });

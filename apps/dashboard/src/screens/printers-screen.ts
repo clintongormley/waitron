@@ -42,6 +42,7 @@ import {
   type FoundPrinter,
   type OfficeRow,
 } from "./discovered-printers.js";
+import { discoveredPrinterAgentDetails } from "./discovered-printer-agent-details.js";
 import "../widgets/page-printer-add.js";
 import {
   printerProfileAssignment,
@@ -942,10 +943,12 @@ export class PrintersScreen extends LitElement {
   @state() private profileAssignment: (EquipmentProfileAssignment & { next?: () => void }) | null =
     null;
   @state() private addingPagePrinter: {
+    rowKey: string;
     entry: PagePrinterEntry;
     description: string;
     suggestedName: string;
   } | null = null;
+  @state() private pagePrintersAddedHere = new Map<string, { id: string; name: string }>();
   /** The rows (`FoundPrinter.key`) whose Use this agent is being sent. */
   @state() private pagePrinterSending = new Set<string>();
   @state() private pagePrinterRefusals: Record<string, string> = {};
@@ -1904,9 +1907,10 @@ export class PrintersScreen extends LitElement {
     return office ? office.kind !== "added" : this.#canAdd(device);
   }
 
-  #openPagePrinterAdd(device: DiscoveredPrinter, entry: PagePrinterEntry): void {
+  #openPagePrinterAdd(rowKey: string, device: DiscoveredPrinter, entry: PagePrinterEntry): void {
     const label = this.#discoveredLabel(device);
     this.addingPagePrinter = {
+      rowKey,
       entry,
       description: `${label} · ${entry.host}:${entry.port}${entry.path}`,
       suggestedName: label,
@@ -4367,6 +4371,7 @@ export class PrintersScreen extends LitElement {
     this.#registeredDevices.clear();
     this.discoveredNames = {};
     this.addingPagePrinter = null;
+    this.pagePrintersAddedHere = new Map();
     this.pagePrinterRefusals = {};
     this.addedPrinterName = null;
     this.showAllBluetooth = false;
@@ -5179,21 +5184,8 @@ export class PrintersScreen extends LitElement {
     this.#settleCommandPoll();
   }
 
-  /** A network printer's row names an agent only to say which one Use this agent would take. */
-  #agentLine(d: DiscoveredPrinter, row: OfficeRow | undefined): TemplateResult | typeof nothing {
-    if (!d.agentName || (d.transport === "network_tcp" && row?.kind !== "repoint")) return nothing;
-    return html`<div>${fill("printers.discovered_found_by", { agent: d.agentName })}</div>`;
-  }
-
   #actionLabel(words: StringKey, d: DiscoveredPrinter): string {
     return `${t(words)} ${this.#discoveredLabel(d)}`;
-  }
-
-  #repointNote(row: OfficeRow | undefined): TemplateResult | typeof nothing {
-    if (row?.kind !== "repoint") return nothing;
-    return html`<div>
-      ${t(row.agentGone ? "printers.page_printer_no_agent" : "printers.page_printer_other_agent")}
-    </div>`;
   }
 
   #officeAction(rowKey: string, d: DiscoveredPrinter, row: ListedOfficeRow): TemplateResult {
@@ -5209,7 +5201,7 @@ export class PrintersScreen extends LitElement {
           variant="primary"
           data-test=${`add-page-printer-${key}`}
           aria-label=${this.#actionLabel("action.add", d)}
-          @click=${() => this.#openPagePrinterAdd(d, entry)}
+          @click=${() => this.#openPagePrinterAdd(rowKey, d, entry)}
           >${t("action.add")}</wt-button
         >
       </div>`;
@@ -5250,6 +5242,14 @@ export class PrintersScreen extends LitElement {
       ) => {
         if (
           this.addingPagePrinter === adding &&
+          this.agents.some((agent) => agent.id === adding.entry.agentId && agent.onThisBox)
+        )
+          this.pagePrintersAddedHere = new Map([
+            ...this.pagePrintersAddedHere,
+            [adding.rowKey, event.detail],
+          ]);
+        if (
+          this.addingPagePrinter === adding &&
           this.canManageStationPrinters &&
           event.detail.outcome === "created"
         )
@@ -5277,6 +5277,8 @@ export class PrintersScreen extends LitElement {
     const found = this.#found();
     const probe = this.#probeShown(found);
     const rowKeyOf = new Map(found.map(({ device, key }) => [device, key]));
+    const rowKey = (d: DiscoveredPrinter) => rowKeyOf.get(d) ?? reportKey(d);
+    const addedHere = (d: DiscoveredPrinter) => this.pagePrintersAddedHere.get(rowKey(d));
     const office = new Map(
       found.flatMap(({ device, office: row }) =>
         row && row.kind !== "added" ? [[device, row] as const] : [],
@@ -5284,7 +5286,10 @@ export class PrintersScreen extends LitElement {
     );
     const refused = (d: DiscoveredPrinter) => office.get(d)?.kind === "refused";
     const addable = found
-      .filter((row) => this.#listed(row) || pairOnly.has(row.device))
+      .filter(
+        (row) =>
+          this.pagePrintersAddedHere.has(row.key) || this.#listed(row) || pairOnly.has(row.device),
+      )
       .map(({ device }) => device);
     // A device registered to a switched-on printer is a printer, whatever the scan decoded.
     const shown = (d: DiscoveredPrinter) =>
@@ -5313,24 +5318,33 @@ export class PrintersScreen extends LitElement {
       {
         key: "name",
         label: t("printers.name"),
-        cell: (d) =>
-          html`<div
+        cell: (d) => {
+          const added = addedHere(d);
+          return html`<div
             part=${refused(d) ? "discovered-details discovered-page-printer" : "discovered-details"}
             data-test=${`discovered-row-${reportKey(d)}`}
           >
-            <strong>${this.#discoveredLabel(d)}</strong>
+            <strong
+              >${added ? (this.pagePrinters.find(({ id }) => id === added.id)?.name ?? added.name) : this.#discoveredLabel(d)}</strong
+            >
             <div part="printer-meta">
-              <div>${transportName(d.transport)}</div>
-              ${this.#discoveredAddressLine(d)} ${this.#agentLine(d, office.get(d))}
-              ${this.#repointNote(office.get(d))}
-              ${lost.has(d) && !listed.has(this.#commandKeyOf(d)) ? html`<div>${t("printers.bluetooth_not_seen")}</div>` : nothing}
+              ${
+                added
+                  ? html`<div>${t("printers.page_printer_added_here")}</div>`
+                  : html`<div>${transportName(d.transport)}</div>
+                      ${this.#discoveredAddressLine(d)}
+                      ${discoveredPrinterAgentDetails(d, office.get(d))}
+                      ${lost.has(d) && !listed.has(this.#commandKeyOf(d)) ? html`<div>${t("printers.bluetooth_not_seen")}</div>` : nothing}`
+              }
             </div>
-          </div>`,
+          </div>`;
+        },
       },
       {
         key: "add",
         label: t("printers.actions"),
         cell: (d) => {
+          if (addedHere(d)) return nothing;
           const officeRow = office.get(d);
           if (officeRow) return this.#officeAction(rowKeyOf.get(d)!, d, officeRow);
           const add = html`<wt-button
@@ -5529,7 +5543,7 @@ export class PrintersScreen extends LitElement {
             aria-label=${t("printers.discovered_title")}
             .columns=${columns}
             .rows=${[...rows, ...lost]}
-            .rowKey=${(d: DiscoveredPrinter) => rowKeyOf.get(d) ?? reportKey(d)}
+            .rowKey=${rowKey}
             .emptyMessage=${t(
               addable.length < found.length
                 ? "printers.discovered_all_added"

@@ -8,6 +8,9 @@ quieres y vuelve a elegir **Añadir**. Si se te pide, marca los perfiles de disp
 usarla y elige **Guardar perfiles**, o elige **Dejar sin asignar**. Si es una impresora de recibos nueva,
 después se abre la calibración.
 
+Si añades una impresora A4 a través del servidor principal y quieres cambiarla de agente, cierra y
+vuelve a abrir **Añadir impresora**. Elige **Usar este agente** junto al agente que puede acceder a ella.
+
 Una impresora Bluetooth debe estar antes en modo de emparejamiento. Elige **Emparejar y añadir**
 junto a ella, introduce su PIN y vuelve a elegir **Emparejar y añadir**. Si es una impresora nueva, se
 abre el diálogo del nombre: elige **Añadir**.
