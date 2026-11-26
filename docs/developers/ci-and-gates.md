@@ -2889,17 +2889,27 @@ Do not leave an item parked indefinitely with an unknown cause: if you cannot re
 locally, reproduce it on the test box or add diagnostics in CI. Required checks must still pass
 on the branch's current head before you land it.
 
-### The disposable typecheck's memory target
+### Typecheck memory targets
 
-The full CI typecheck gives the Go compiler a soft `GOMEMLIMIT=6GiB` target on disposable runners.
-Go can exceed the target while it manages time spent collecting memory. [Go garbage collector guide](https://go.dev/doc/gc-guide#Memory_limit).
+The full CI typecheck gives each Go compiler process a soft memory target (`GOMEMLIMIT`).
+Disposable runners use `6GiB` and GitHub-hosted runners use `8GiB`. Go can exceed the target
+while it manages time spent collecting memory. [Go garbage collector guide](https://go.dev/doc/gc-guide#Memory_limit).
+
+In one [hosted Server pair on an Intel Xeon Platinum 8370C](https://github.com/clintongormley/waitron/actions/runs/45782727177/job/139781855396),
+at the 8 GiB target the runner had at least 5.97 GiB available and the swap-out counter stayed at
+zero. Server took 74 seconds and used 273 seconds of CPU time (user plus system). At the compiler
+default the runner went down to 0.27 GiB available and wrote to swap. Server took 52 seconds and
+used 180 seconds of CPU time. A
+[full hosted probe](https://github.com/clintongormley/waitron/actions/runs/45781577832/job/139778076732)
+at 8 GiB finished the job in 169 seconds on an AMD EPYC 9V45.
+
 In the [24 November probe](https://github.com/clintongormley/waitron/actions/runs/45492983300/job/138795935538),
 the previously failing `01ec75f7e0` passed `pnpm typecheck` in 94 seconds, with 123 seconds for the
 job. The runner session peaked at 11.39 GiB on a guest with 15.62 GiB of visible RAM and zero swap.
 Kernel logs and the recorded memory-kill counters showed zero kills. `GODEBUG=gctrace=1` reported a
 Server heap peak of 8,155 MB, about 2 GiB above the target. Server's check took 30.3 seconds. The
 guest measurements cover one tuned run. The earlier failures supplied exit logs without peak
-memory or kernel records. Recheck the setting if typecheck exits 137 again or takes over 4m30s.
+memory or kernel records. Recheck the disposable setting if typecheck exits 137 again or takes over 4m30s.
 
 On a disposable-runner probe, add `GODEBUG=gctrace=1` to `pnpm typecheck`. To capture the runner's
 memory alongside the compiler trace, read `memory.peak` and `memory.events` for the group named by

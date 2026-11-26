@@ -1008,7 +1008,7 @@ jobs:
 
       - name: Run pnpm typecheck
         env:
-          GOMEMLIMIT: ${{ runner.environment == 'self-hosted' && '6GiB' || '' }}
+          GOMEMLIMIT: ${{ runner.environment == 'self-hosted' && '6GiB' || '8GiB' }}
         run: |
           compiler=(pnpm typecheck)
           if [ -n "${TYPECHECK_DEADLINE_AT:-}" ]; then
