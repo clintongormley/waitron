@@ -113,11 +113,13 @@ export function billSwitcher(options: BillSwitcherOptions): TemplateResult | typ
     shown !== undefined && bills.length > 1
       ? ` · ${fill(t("table.bill_position"), { position: String(index + 1), count: String(bills.length) })}`
       : "";
-  const heading = bottomSheet
-    ? fill(t(party.name === null ? "table.bills_on_table" : "table.bills_for_party"), {
-        party: party.displayName,
-      })
-    : undefined;
+  const headingKey =
+    party.name !== null
+      ? "table.bills_for_party"
+      : /^\d+$/.test(party.displayName)
+        ? "table.bills_on_numbered_table"
+        : "table.bills_on_table";
+  const heading = bottomSheet ? fill(t(headingKey), { party: party.displayName }) : undefined;
   const marked = othersUnsent(bills, party, billId, options.personId);
   const words = marked.length === 0 ? undefined : unsentWords(marked);
   const label = shown === undefined ? closed : `${t("table.bills_title")}: ${closed}${position}`;

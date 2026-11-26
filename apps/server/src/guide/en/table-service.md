@@ -616,7 +616,7 @@ At the counter, use **Parked orders** to retrieve or discard a table's bill. Dis
 bill leaves a seated table with a fresh empty bill. To free the table, use **Finish table**.
 
 Tap the switcher to list the table's bills in number order. On a narrow screen, the list opens
-from the bottom. Scroll to reach **+ New bill**. Each row shows the bill's number and
+from the bottom. Each row shows the bill's number and
 name, what it still owes, how much it was paid over its total, such as **€5.00 over**, or
 **Paid ✓** (**Deferred payment** for a bill closed as a deferred payment), and a line such as **Ana has an unsent order: 3 items** for each person with dishes on that bill not yet sent. When another bill holds dishes you have not
 sent, the switcher says so, such as **✎ Bill 2 unsent**, and the list marks that bill **✎ Unsent**.

@@ -278,6 +278,21 @@ describe("A803 switcher: the table screen's bill switcher", () => {
     }
   });
 
+  it.each([
+    ["en", "4", "Bills on Table 4"],
+    ["en", "Table 4", "Bills on Table 4"],
+    ["en", "Ventana", "Bills on Ventana"],
+    ["es", "Mesa 4", "Cuentas de Mesa 4"],
+  ] as const)("names the sheet in %s for %s", async (locale, displayName, heading) => {
+    setLocale(locale);
+    const el = await mountScreen(one, "wo-1", { ...switcherParty, displayName });
+    const picker = switcher(el)!;
+    await userEvent.click(picker.shadowRoot!.querySelector("button")!);
+    const menu = picker.querySelector('[role="menu"]')!;
+    const title = picker.querySelector(`#${menu.getAttribute("aria-labelledby")}`);
+    expect(title?.textContent?.trim()).toBe(heading);
+  });
+
   it("shows on a handheld too", async () => {
     const { el } = await mountWidget<TillTableOrderScreen>("till-table-order-screen", {
       products: [],

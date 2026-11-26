@@ -1916,7 +1916,8 @@ export const en = {
   "locale.save_failed": "Could not save your language, try again",
   "table.error": "Could not update the table, try again",
   "table.bills_title": "Bills",
-  "table.bills_on_table": "Bills on Table {party}",
+  "table.bills_on_table": "Bills on {party}",
+  "table.bills_on_numbered_table": "Bills on Table {party}",
   "table.bills_for_party": "Bills for {party}",
   // `{party}` is the party's display name; `{n}` the number the bill holds at its table; `{name}`
   // the name staff gave the bill.
@@ -4349,7 +4350,8 @@ export const es: Record<StringKey, string> = {
   "locale.save_failed": "No se pudo guardar tu idioma, inténtalo de nuevo",
   "table.error": "No se pudo actualizar la mesa, inténtalo de nuevo",
   "table.bills_title": "Cuentas",
-  "table.bills_on_table": "Cuentas de la mesa {party}",
+  "table.bills_on_table": "Cuentas de {party}",
+  "table.bills_on_numbered_table": "Cuentas de la mesa {party}",
   "table.bills_for_party": "Cuentas de {party}",
   "table.bill_of": "{party} · Cuenta {n}",
   "table.bill_of_named": "{party} · Cuenta {n} · {name}",

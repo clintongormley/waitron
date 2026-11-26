@@ -651,6 +651,11 @@ describe("opens-below", () => {
 
   it("docks a long menu above the keyboard and restores the anchor when undocked", async () => {
     await page.viewport(600, 360);
+    const resizeErrors: string[] = [];
+    const onError = (event: ErrorEvent) => {
+      if (event.message.includes("ResizeObserver")) resizeErrors.push(event.message);
+    };
+    window.addEventListener("error", onError);
     try {
       const { el, trigger, popup, actions, picked } = await longMenu(15);
       el.opensBelow = true;
@@ -661,16 +666,18 @@ describe("opens-below", () => {
       await el.updateComplete;
       await userEvent.click(trigger);
       el.setAttribute("bottom-sheet", "");
+      const sheet = popup.querySelector<HTMLElement>(".actions")!;
       await vi.waitFor(() => {
-        const box = popup.getBoundingClientRect();
+        const box = sheet.getBoundingClientRect();
+        expect(popup.getBoundingClientRect().height).toBe(innerHeight);
         expect(box.left).toBe(0);
         expect(box.right).toBe(innerWidth);
         expect(box.bottom).toBeCloseTo(innerHeight - 36, 0);
-        expect(box.top).toBeGreaterThanOrEqual(24);
+        expect(box.top).toBeGreaterThanOrEqual(24 + trigger.getBoundingClientRect().height);
       });
-      expect(getComputedStyle(popup).backgroundColor).toBe("rgb(12, 13, 14)");
-      expect(getComputedStyle(popup, "::backdrop").backgroundColor).toBe("rgb(9, 10, 11)");
-      expect(popup.scrollHeight).toBeGreaterThan(popup.clientHeight);
+      expect(getComputedStyle(sheet).backgroundColor).toBe("rgb(12, 13, 14)");
+      expect(getComputedStyle(popup).backgroundColor).toBe("rgb(9, 10, 11)");
+      expect(sheet.scrollHeight).toBeGreaterThan(sheet.clientHeight);
       await userEvent.click(actions.at(-1)!);
       expect(picked).toEqual(["Action 15"]);
 
@@ -683,9 +690,29 @@ describe("opens-below", () => {
           0,
         );
       });
+      expect(resizeErrors).toEqual([]);
     } finally {
+      window.removeEventListener("error", onError);
       await page.viewport(1280, 900);
     }
+  });
+
+  it("dismisses a bottom sheet without tapping the covered control", async () => {
+    const el = await mount(
+      '<wt-row-actions label="Actions" bottom-sheet><button>Edit</button></wt-row-actions>',
+    );
+    const outside = document.createElement("button");
+    outside.textContent = "Other action";
+    outside.style.cssText = "position: fixed; top: 0; right: 0;";
+    const otherAction = vi.fn();
+    outside.addEventListener("click", otherAction);
+    host.append(outside);
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    await userEvent.click(el.shadowRoot!.querySelector("button")!);
+    expect(popup.matches(":popover-open")).toBe(true);
+    await userEvent.click(outside, { force: true });
+    expect(popup.matches(":popover-open")).toBe(false);
+    expect(otherAction).not.toHaveBeenCalled();
   });
 
   it("a menu taller than the room under its trigger opens under it, fits the window and scrolls its last action into reach", async () => {

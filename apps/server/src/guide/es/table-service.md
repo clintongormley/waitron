@@ -655,7 +655,7 @@ Descartar su última cuenta deja la mesa ocupada con una cuenta nueva y vacía. 
 usa **Cerrar mesa**.
 
 Toca el selector para ver las cuentas de la mesa por orden de número. En una pantalla estrecha,
-la lista se abre desde abajo. Desplázate hasta **+ Cuenta nueva**. Cada fila muestra el número y
+la lista se abre desde abajo. Cada fila muestra el número y
 el nombre de la cuenta, lo que queda por pagar, lo que se pagó de más, por ejemplo **5,00 € de
 más**, o **Pagada ✓** (**Pago aplazado** si se cerró como pago aplazado), y una línea como **Ana tiene un
 pedido sin enviar: 3 artículos** por cada persona con platos sin enviar en esa cuenta. Cuando otra
