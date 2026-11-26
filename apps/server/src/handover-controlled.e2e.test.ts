@@ -114,6 +114,26 @@ import { nodeId as brandNodeId, saleId as brandSaleId } from "@waitron/shared";
 import { systemClock } from "./till-backend.js";
 import { deploymentEnvironment } from "./config.js";
 
+const stepdownCloses = new Map<string, Promise<void>>();
+
+vi.mock("./handover-stepdown.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./handover-stepdown.js")>();
+  const stepDown: typeof actual.stepDown = (deps, request) =>
+    actual.stepDown(
+      {
+        ...deps,
+        close: () => {
+          const closing = deps.close();
+          stepdownCloses.set(deps.nodeId, closing);
+          void closing.catch(() => {});
+          return closing;
+        },
+      },
+      request,
+    );
+  return { ...actual, stepDown };
+});
+
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-time-service.js", () => ({
   observeTimeServiceHourClock: () =>
     Promise.resolve({
@@ -287,11 +307,12 @@ const SIGN_IN = { email: "owner@example.test", password: PASSWORD };
 /** How long the run keeps AEAT's answer back after the stepdown has answered. */
 const HELD_MS = 500;
 const START_MS = 10_000;
+const STEPDOWN_CLOSE_MS = 40_000;
 const ROUTER_PROBE_MS = 5_000;
 // Each stage's limit covers its starts and waits, plus time for the requests that have no limit of
 // their own. A hang stops the run at that stage and names the stage; earlier stages' cases still
 // report.
-const STEPDOWN_MS = 3 * START_MS + 50_000 + 15_000;
+const STEPDOWN_MS = 3 * START_MS + 50_000 + 15_000 + STEPDOWN_CLOSE_MS;
 const PLACING_MS = START_MS + 40_000 + 15_000;
 const SELLING_MS = 4 * START_MS + 2 * ROUTER_PROBE_MS + 60_000 + 20_000;
 const RESTARTS_MS = 2 * START_MS + 15_000 + 10_000;
@@ -389,14 +410,19 @@ const retained: RetainedHttpListener[] = [];
 async function start(box: Box): Promise<void> {
   if (runEnded) throw new Error(`${box.name} started after the run ended`);
   box.restartAsked = hold();
-  const boot = () =>
-    startServer(box.env, box.env, {
-      ...seamsFor(box),
-      timings: { minTickMs: 200, maxTickMs: 600_000 },
-    });
-  const first = box.firstListener;
-  delete box.firstListener;
-  const starting = first === undefined ? boot() : startWithRetainedListeners([first], boot);
+  const starting = (async () => {
+    const listener =
+      box.firstListener ?? (await retainHttpListener("127.0.0.1", undefined, box.port));
+    if (box.firstListener === undefined) retained.push(listener);
+    delete box.firstListener;
+    if (runEnded) throw new Error(`${box.name} started after the run ended`);
+    return startWithRetainedListeners([listener], () =>
+      startServer(box.env, box.env, {
+        ...seamsFor(box),
+        timings: { minTickMs: 200, maxTickMs: 600_000 },
+      }),
+    );
+  })();
   let gaveUp = false;
   startsRunning.add(
     starting.then(
@@ -998,7 +1024,14 @@ async function offerToStepdown(boxes: Boxes): Promise<StepdownSeen> {
     aeat.release();
   }
   await within(m1.restartAsked.wait, 20_000, "M1's restart after its stepdown");
+  // A restart can be requested before the original close releases the listener and store.
+  const closing = stepdownCloses.get(m1.nodeId);
+  if (closing === undefined) throw new Error("M1 asked to restart without a stepdown close");
+  await within(closing, STEPDOWN_CLOSE_MS, "M1's stepdown close");
+  // The fixture's close wrapper also updates its count of running servers.
   await m1.server!.close();
+  stepdownCloses.delete(m1.nodeId);
+  delete m1.server;
   const m1SweepsAtRestart = m1.sweeps;
   const inFlightAfterStepdown = filingStateOf(m1.venueFile, inFlight);
 
@@ -2073,8 +2106,13 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     releaseAeat();
     await Promise.allSettled(startsRunning);
     const closing = [
-      boxes?.m1.server?.close(),
-      boxes?.m2.server?.close(),
+      ...[boxes?.m1, boxes?.m2].map(async (box) => {
+        if (box === undefined) return;
+        const stepdownClose = stepdownCloses.get(box.nodeId);
+        if (stepdownClose !== undefined)
+          await within(stepdownClose, STEPDOWN_CLOSE_MS, `${box.name}'s stepdown close`);
+        await box.server?.close();
+      }),
       boxes?.m1.agent?.close(),
       boxes?.m2.agent?.close(),
     ];
@@ -2088,8 +2126,8 @@ describe("a controlled handover between two boxes, simulated in one process", ()
     );
     vi.useRealTimers();
     kill.mockRestore();
-    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
     for (const result of closed) if (result.status === "rejected") throw result.reason;
+    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
   }, 60_000);
 
   const seen = (): { b: Boxes; run: StepdownSeen; later: QuietSeen } => {
