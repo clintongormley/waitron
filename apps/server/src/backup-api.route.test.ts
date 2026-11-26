@@ -28,7 +28,7 @@ import { planVenue } from "@waitron/provisioning";
 import type { StreamView } from "@waitron/stream";
 import { mountBackupApi, type BackupApiDeps } from "./backup-api.js";
 import { eq, sql } from "drizzle-orm";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
 import { readStreamSettings, writeStreamSettings } from "./stream-host.js";
 import { createTurns, type Turns } from "./backup-turns.js";
@@ -387,6 +387,48 @@ afterEach(async () => {
   });
   bucket = new FakeBucket();
 });
+
+/** A manual run, once the scheduled run Save started has finished. */
+async function startManualRun(sup: BackupSupervisor): Promise<{ run: Promise<void> }> {
+  const started = await poll(async () => {
+    try {
+      return { run: sup.runNow() };
+    } catch (error) {
+      if (isAppError(error) && error.code === "backup.run_in_progress") return undefined;
+      throw error;
+    }
+  });
+  return started;
+}
+
+/** Each archive in `dest` with the N its header names. */
+async function archivesIn(
+  dest: string,
+): Promise<{ name: string; keyNumber: number | undefined }[]> {
+  return Promise.all(
+    (await readdir(dest))
+      .filter((name) => name.endsWith(".backup.enc"))
+      .map(async (name) => {
+        const header = await readArtifactFileHeader(join(dest, name));
+        return { name, keyNumber: header.version === 2 ? header.keyNumber : undefined };
+      }),
+  );
+}
+
+/** Every file opens with the key its own header names. */
+async function expectEachOpensUnderItsKey(
+  dest: string,
+  files: { name: string; keyNumber: number | undefined }[],
+): Promise<void> {
+  const out = mkdtempSync(join(tmpdir(), "backup-api-open-"));
+  cleanup.push(() => rm(out, { recursive: true, force: true }));
+  for (const file of files) {
+    const key = heldBackupKey(MASTER_BYTES, file.keyNumber!).key;
+    await expect(
+      decryptBackupFile(join(dest, file.name), join(out, file.name), key),
+    ).resolves.toMatch(/^[0-9a-f]{64}$/);
+  }
+}
 
 describe("backup admin routes", () => {
   it.each([
@@ -795,16 +837,7 @@ describe("backup admin routes", () => {
     });
     expect(applied.status).toBe(200);
     await poll(async () => ((await sup.status()).archiveUnderCurrentKey ? true : undefined));
-    /** Each archive in `dest` with the N its header names. */
-    const stored = async () =>
-      Promise.all(
-        (await readdir(dest))
-          .filter((name) => name.endsWith(".backup.enc"))
-          .map(async (name) => {
-            const header = await readArtifactFileHeader(join(dest, name));
-            return { name, keyNumber: header.version === 2 ? header.keyNumber : undefined };
-          }),
-      );
+    const stored = () => archivesIn(dest);
     const beforeRun = await stored();
     expect(beforeRun.map((file) => file.keyNumber)).toEqual([1]);
 
@@ -821,7 +854,7 @@ describe("backup admin routes", () => {
     let manual: Promise<void> | undefined;
     let change: ReturnType<typeof app.request> | undefined;
     try {
-      manual = sup.runNow();
+      manual = (await startManualRun(sup)).run;
       // The holder is inside its copy under key 1 before the change is sent.
       await reached;
       change = app.request("/api/backup/rotate", {
@@ -842,20 +875,94 @@ describe("backup admin routes", () => {
       const files = await stored();
       return files.some((file) => file.keyNumber === 2) ? files : undefined;
     });
-    const out = mkdtempSync(join(tmpdir(), "backup-api-open-"));
-    cleanup.push(() => rm(out, { recursive: true, force: true }));
-    for (const file of after) {
-      // Every file opens with the key its header names, so none names 2 under key 1.
-      const key = heldBackupKey(MASTER_BYTES, file.keyNumber!).key;
-      await expect(
-        decryptBackupFile(join(dest, file.name), join(out, file.name), key),
-      ).resolves.toMatch(/^[0-9a-f]{64}$/);
-    }
+    // None names 2 while written under key 1.
+    await expectEachOpensUnderItsKey(dest, after);
     // The run the change stopped added at most one file, under key 1.
     expect(after.filter((file) => file.keyNumber === 1).length).toBeLessThanOrEqual(
       beforeRun.length + 1,
     );
     expect(after.every((file) => file.keyNumber === 1 || file.keyNumber === 2)).toBe(true);
+  }, 60_000);
+
+  it("a backup that finishes after the change wrote key N+1, before its reload, is stored under key N", async () => {
+    const dest = makeDestDir();
+    const sc: Scenario = { stateDir: await makeStateDir(), base: {}, role: "primary" };
+    const sup = makeSupervisor(sc);
+    let changeWrote!: () => void;
+    let releaseChange!: () => void;
+    const wrote = new Promise<void>((resolve) => (changeWrote = resolve));
+    const changeReleased = new Promise<void>((resolve) => (releaseChange = resolve));
+    let holdChange = false;
+    const app = buildApp(sup, sc.stateDir, {}, undefined, undefined, undefined, undefined, {
+      stream: {
+        reload: async (write) => {
+          await write?.();
+          if (holdChange) {
+            changeWrote();
+            await changeReleased;
+          }
+        },
+      },
+    });
+    const cookie = await login(app);
+    const applied = await app.request("/api/backup/apply", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        destinations: [{ kind: "local-fs", dir: dest }],
+        schedule: DAILY_AT_0330,
+        retention: RETENTION,
+      }),
+    });
+    expect(applied.status).toBe(200);
+    await poll(async () => ((await sup.status()).archiveUnderCurrentKey ? true : undefined));
+    const beforeRun = await archivesIn(dest);
+    expect(beforeRun.map((file) => file.keyNumber)).toEqual([1]);
+
+    let entered!: () => void;
+    let releaseRun!: () => void;
+    const reached = new Promise<void>((resolve) => (entered = resolve));
+    const runReleased = new Promise<void>((resolve) => (releaseRun = resolve));
+    const archive = store.archiveInWorker;
+    vi.spyOn(store, "archiveInWorker").mockImplementationOnce(async (source, target, signal) => {
+      entered();
+      await runReleased;
+      await archive(source, target, signal);
+    });
+    let manual: Promise<void> | undefined;
+    let change: ReturnType<typeof app.request> | undefined;
+    try {
+      manual = (await startManualRun(sup)).run;
+      // The holder is inside its copy under key 1 before the change is sent.
+      await reached;
+      holdChange = true;
+      change = app.request("/api/backup/rotate", {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify(changeKey()),
+      });
+      // The change holds with key 2 in backup.env and its reload not yet begun.
+      await wrote;
+      expect(await fileKey(sc.stateDir)).toBe(KEY_2);
+      releaseRun();
+      await manual;
+      const runStored = (await archivesIn(dest)).filter(
+        (file) => !beforeRun.some((before) => before.name === file.name),
+      );
+      expect(runStored.map((file) => file.keyNumber)).toEqual([1]);
+      await expectEachOpensUnderItsKey(dest, runStored);
+      releaseChange();
+      expect((await change!).status).toBe(200);
+    } finally {
+      releaseRun();
+      releaseChange();
+      await Promise.allSettled([manual, change]);
+    }
+    const next = await poll(async () => {
+      const files = (await archivesIn(dest)).filter((file) => file.keyNumber === 2);
+      return files.length > 0 ? files : undefined;
+    });
+    await expectEachOpensUnderItsKey(dest, next);
   }, 60_000);
 
   it("apply keeps the date of a key rotated before archives were enabled", async () => {

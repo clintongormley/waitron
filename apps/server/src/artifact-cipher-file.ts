@@ -166,11 +166,15 @@ export async function decryptBackupFile(
   // A file that is not version 2 goes to the version 1 opener, which refuses it as before and
   // clears the key slot.
   if (version !== 2) return decryptArtifactFile(artifactPath, outPath, keyText, keySlot);
-  const backupKey = Buffer.from(keyText, "base64url");
-  if (backupKey.length !== 32 || backupKey.toString("base64url") !== keyText) {
-    throw new AppError("recovery.passphrase_invalid", {});
-  }
+  const backupKey = backupKeyBytes(keyText);
+  if (backupKey === undefined) throw new AppError("recovery.passphrase_invalid", {});
   return decryptArtifactFileUnderBackupKey(artifactPath, outPath, backupKey);
+}
+
+/** A backup key's 32 bytes, or `undefined` unless the text is exactly their base64url spelling. */
+export function backupKeyBytes(keyText: string): Buffer | undefined {
+  const bytes = Buffer.from(keyText, "base64url");
+  return bytes.length === 32 && bytes.toString("base64url") === keyText ? bytes : undefined;
 }
 
 /** The version and, for version 2, the master key id and N, read without opening the file. */

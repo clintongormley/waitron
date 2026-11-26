@@ -8,6 +8,7 @@ import {
   type ArchiveRecordMeta,
   type LoadFailureDetail,
 } from "./backup-settings-evidence.js";
+import { backupKeyBytes } from "./artifact-cipher-file.js";
 import { isUnset } from "./env-value.js";
 export const MIN_RECOVERY_KEY_LENGTH = 12;
 import type { BackupDestination } from "./storage-backend.js";
@@ -112,7 +113,13 @@ export function loadBackupKey(
   const key = loadRecoveryKey(env);
   const keyNumber = loadKeyNumber(env);
   const masterKeyId = loadMasterKeyId(env);
-  if (key === undefined || keyNumber === undefined || masterKeyId === undefined) return undefined;
+  if (
+    key === undefined ||
+    backupKeyBytes(key) === undefined ||
+    keyNumber === undefined ||
+    masterKeyId === undefined
+  )
+    return undefined;
   return { key, keyNumber, masterKeyId };
 }
 

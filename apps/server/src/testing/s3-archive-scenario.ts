@@ -14,7 +14,10 @@ import {
 import { downloadArchive } from "../archive-download.js";
 import { archiveNamespace } from "../archive-settings.js";
 import { artifactHeaderBytes } from "../artifact-cipher.js";
-import { decryptArtifactFile, encryptArtifactFile } from "../artifact-cipher-file.js";
+import { makeMasterKey } from "@waitron/credentials";
+import { decryptBackupFile, encryptArtifactFileUnderBackupKey } from "../artifact-cipher-file.js";
+import { backupKeyFrameInput } from "../backup-key-record.js";
+import { heldBackupKey } from "./backup-key.js";
 import { checkedRecoveryKey } from "../backup-config.js";
 import { backupArchiveKey, parseBackupArchiveKey } from "../backup-keys.js";
 import { AWS_REHEARSAL_LIMITS } from "./aws-rehearsal-limits.js";
@@ -26,8 +29,10 @@ const MiB = 1024 * 1024;
 /** `planParts` in `packages/stream/src/s3-file-store.ts` uses its 8 MiB minimum up to 80,000 MiB. */
 const PART_BYTES = 8 * MiB;
 const ABORT_ARCHIVE_BYTES = 3 * PART_BYTES;
-const RECOVERY_KEY = "rehearsal-synthetic-recovery-key-not-a-secret";
-const WRONG_KEY = "rehearsal-synthetic-wrong-key-not-a-secret";
+const REHEARSAL_MASTER_KEY = makeMasterKey();
+const REHEARSAL_KEY = heldBackupKey(REHEARSAL_MASTER_KEY, 2);
+const RECOVERY_KEY = REHEARSAL_KEY.key;
+const WRONG_KEY = heldBackupKey(REHEARSAL_MASTER_KEY, 1).key;
 
 /** A Vitest time limit for each scenario; nothing inside it enforces this. */
 export const ARCHIVE_SCENARIO_MS = 180_000;
@@ -78,8 +83,13 @@ async function syntheticArchive(
   signal: AbortSignal,
 ): Promise<{ plainHash: string; path: string }> {
   const path = join(folder, "archive.backup.enc");
-  const plain = syntheticPlaintext(encryptedBytes - artifactHeaderBytes(1), seed);
-  await encryptArtifactFile(plain.chunks, path, RECOVERY_KEY, signal);
+  const plain = syntheticPlaintext(encryptedBytes - artifactHeaderBytes(2), seed);
+  await encryptArtifactFileUnderBackupKey(
+    plain.chunks,
+    path,
+    backupKeyFrameInput(REHEARSAL_KEY),
+    signal,
+  );
   expect((await stat(path)).size).toBe(encryptedBytes);
   return { plainHash: plain.digest(), path };
 }
@@ -163,7 +173,7 @@ export async function runArchiveRoundTrip(fixture: S3ScenarioFixture): Promise<v
 
       await step("decrypted-match", async () => {
         const out = join(work, "decrypted.bin");
-        await decryptArtifactFile(downloaded.path, out, pack.recoveryKey);
+        await decryptBackupFile(downloaded.path, out, pack.recoveryKey);
         const decrypted = await sha256Of(out);
         await rm(out);
         expect(decrypted).toBe(plainHash);
@@ -172,7 +182,7 @@ export async function runArchiveRoundTrip(fixture: S3ScenarioFixture): Promise<v
 
       await step("wrong-key-refused", async () => {
         await refusedDecrypt(join(work, "wrong-key.bin"), (out) =>
-          decryptArtifactFile(downloaded.path, out, WRONG_KEY),
+          decryptBackupFile(downloaded.path, out, WRONG_KEY),
         );
         phase("wrong-key-refused");
       });
@@ -188,7 +198,7 @@ export async function runArchiveRoundTrip(fixture: S3ScenarioFixture): Promise<v
           await handle.close();
         }
         await refusedDecrypt(join(work, "tampered.bin"), (out) =>
-          decryptArtifactFile(downloaded.path, out, pack.recoveryKey),
+          decryptBackupFile(downloaded.path, out, pack.recoveryKey),
         );
         phase("tamper-refused");
       });

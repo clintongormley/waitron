@@ -413,13 +413,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         if (body.cloud === true && (await deps.readCloudStatus?.())?.environment !== "test") {
           throw new AppError("backup.cloud_unavailable", { field: "cloud" });
         }
-        // Archives are locked with the key the box holds; this route never writes one. The box env
-        // (`backup.env` under the raw environment, as a reload reads it) is authoritative: after a
-        // failed reload the supervisor still holds the key it loaded before the key file changed.
+        // Archives are locked with the key the box env holds (`backup.env` under the raw
+        // environment, as a reload reads it); this route never writes one.
         const env = await deps.readBoxEnv();
-        const held = await readHeldKey(
-          async () => loadRecoveryKey(env) ?? deps.supervisor.current().recoveryKey,
-        );
+        const held = await readHeldKey(async () => loadRecoveryKey(env));
         const recoveryKey = held.key;
         if (recoveryKey === undefined) {
           throw held.held

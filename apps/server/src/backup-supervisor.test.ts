@@ -101,7 +101,11 @@ beforeAll(async () => {
   }
 }, 120_000);
 
-const KEY_RECORDS = [heldBackupKey(makeMasterKey(), 1), heldBackupKey(makeMasterKey(), 2)];
+const SUPERVISOR_MASTER_KEY = makeMasterKey();
+const KEY_RECORDS = [
+  heldBackupKey(SUPERVISOR_MASTER_KEY, 1),
+  heldBackupKey(SUPERVISOR_MASTER_KEY, 2),
+];
 const STRONG_KEY_1 = KEY_RECORDS[0]!.key;
 const STRONG_KEY_2 = KEY_RECORDS[1]!.key;
 /** Opens an archive's bytes under backup key text, as the box holds it. */

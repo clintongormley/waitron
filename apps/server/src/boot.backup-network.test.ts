@@ -1,6 +1,8 @@
 import { seedModuleSettings } from "../test/module-settings.js";
-import { HELD_BACKUP_KEY, openUnderHeldKey } from "./testing/recovery-key.js";
+import { HELD_BACKUP_KEY, holdRecoveryKey, openUnderHeldKey } from "./testing/recovery-key.js";
 import { backupKeySettings } from "./testing/backup-key.js";
+import { keyFingerprint } from "./backup-supervisor.js";
+import { parseEnvFile } from "./env-file.js";
 import { ensureStreamId } from "@waitron/db";
 import { copyMigrationsRoot, tradingBootEnv } from "./testing/boot-trading-fixture.js";
 import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
@@ -609,8 +611,11 @@ describe("stream encryption checks at the real trading boot", () => {
   it("refuses Save when the provider ignores keys and keeps trading without saved stream settings", async () => {
     streamCheck.refuse = true;
     let cookie = "";
+    let stateDir = "";
     await bootAndTrade(
-      async () => {
+      async (scratch) => {
+        stateDir = scratch;
+        await holdRecoveryKey(scratch);
         cookie = await managerCookie();
         return {};
       },
@@ -633,7 +638,15 @@ describe("stream encryption checks at the real trading boot", () => {
           error: { code: "backup.stream_test_failed", params: { reason: "encryption_ignored" } },
         });
         const status = await fetch(`${base}/api/backup/stream`, { ...via, headers: { cookie } });
-        expect(await status.json()).toMatchObject({ configured: false, recoveryKeySet: false });
+        expect(await status.json()).toMatchObject({
+          configured: false,
+          recoveryKeySet: true,
+          keyFingerprint: keyFingerprint(HELD_BACKUP_KEY.key),
+        });
+        // The refused Save left the held key file exactly as it was.
+        expect(parseEnvFile(await readFile(join(stateDir, "backup.env"), "utf8"))).toEqual(
+          backupKeySettings(HELD_BACKUP_KEY),
+        );
       },
     );
   }, 60_000);

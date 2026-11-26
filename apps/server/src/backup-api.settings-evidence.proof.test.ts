@@ -66,7 +66,8 @@ vi.mock("@waitron/credentials", async (importOriginal) => {
   };
 });
 
-const KEY_1 = "recovery-key-one-strong";
+/** A key text the opener takes: 32 bytes as base64url. */
+const KEY_1 = Buffer.alloc(32, 1).toString("base64url");
 const MASTER_BYTES = makeMasterKey();
 let MASTER: { secret: string };
 const VENUE = "c0000000-0000-4000-8000-000000000002";

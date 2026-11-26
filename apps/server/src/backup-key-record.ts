@@ -1,6 +1,7 @@
 import { backupKey, masterKeyId } from "@waitron/credentials";
 import type { BackupKeyFrameInput } from "@waitron/provisioning";
-import { decodeMasterKeyCode, isAppError } from "@waitron/shared";
+import { AppError, decodeMasterKeyCode, isAppError } from "@waitron/shared";
+import { backupKeyBytes } from "./artifact-cipher-file.js";
 import { loadBackupKey, loadKeyRotatedAt } from "./backup-config.js";
 import { writeBackupKey, type BackupKeyRecord } from "./backup-env-writer.js";
 import { keyFingerprint } from "./backup-supervisor.js";
@@ -35,8 +36,12 @@ export function writeBackupKeyOne(
 
 /** The record as the archive frame takes it: the key's and the master key id's bytes. */
 export function backupKeyFrameInput(record: BackupKeyRecord): BackupKeyFrameInput {
+  const backupKey = backupKeyBytes(record.key);
+  if (backupKey === undefined) {
+    throw new AppError("backup.archive_key_invalid", { input: "backup_key" });
+  }
   return {
-    backupKey: Buffer.from(record.key, "base64url"),
+    backupKey,
     keyNumber: record.keyNumber,
     masterKeyId: Buffer.from(record.masterKeyId, "hex"),
   };

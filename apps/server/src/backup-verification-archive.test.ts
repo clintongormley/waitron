@@ -114,7 +114,7 @@ describe("authenticated verification archive", () => {
     expect(await readdir(f.stagingDir)).toEqual([]);
     expect(await readFile(f.artifactPath)).toEqual(encrypted);
   });
-  it("verifies a backup file written under backup key N", async () => {
+  it("refuses a backup file written under backup key N: it opens Cloud copies only", async () => {
     const f = await fixture();
     f.recoveryKey = HELD_BACKUP_KEY.key;
     const encrypted = encryptArtifactUnderBackupKey(
@@ -124,9 +124,7 @@ describe("authenticated verification archive", () => {
     await writeFile(f.artifactPath, encrypted);
     f.expected.archive.sha256 = createHash("sha256").update(encrypted).digest("hex");
     f.expected.archive.bytes = encrypted.length;
-    const validated = await validate(f);
-    expect(await readFile(validated.databasePath)).toEqual(f.entries[1].bytes);
-    await validated.discard();
+    await refuses(f, unsupported);
   });
   it("decodes gzip before verification, preserves database bytes and refuses decoded archive tails", async () => {
     const f = await fixture();

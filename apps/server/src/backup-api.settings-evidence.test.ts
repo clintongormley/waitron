@@ -46,7 +46,8 @@ import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
 const PASSWORD = "correct horse";
 const MANAGER_EMAIL = "manager@x.com";
-const KEY_1 = "recovery-key-one-strong";
+/** A key text the opener takes: 32 bytes as base64url. */
+const KEY_1 = Buffer.alloc(32, 1).toString("base64url");
 const ringOf = (byte: number, version: string, previous?: { byte: number; version: string }) =>
   loadKeyRing({
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, byte).toString("base64"),

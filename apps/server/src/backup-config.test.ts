@@ -26,16 +26,19 @@ describe("loadRecoveryKey", () => {
   });
 });
 
+/** 32 bytes as base64url: the only spelling the opener takes. */
+const HELD_KEY_TEXT = Buffer.alloc(32, 9).toString("base64url");
+
 describe("loadBackupKey", () => {
   const HELD = {
-    WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123",
+    WAITRON_BACKUP_RECOVERY_KEY: HELD_KEY_TEXT,
     WAITRON_BACKUP_KEY_NUMBER: "2",
     WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
   };
 
   it("returns the key, its number and its master key id together", () => {
     expect(loadBackupKey(HELD)).toEqual({
-      key: "held-recovery-key-0123",
+      key: HELD_KEY_TEXT,
       keyNumber: 2,
       masterKeyId: "0123456789abcdef",
     });
@@ -52,6 +55,12 @@ describe("loadBackupKey", () => {
     ["no master key id", { WAITRON_BACKUP_MASTER_KEY_ID: undefined }],
     ["an upper-case id", { WAITRON_BACKUP_MASTER_KEY_ID: "0123456789ABCDEF" }],
     ["a short id", { WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcde" }],
+    ["a key with a trailing =", { WAITRON_BACKUP_RECOVERY_KEY: `${HELD_KEY_TEXT}=` }],
+    [
+      "a key of 31 bytes",
+      { WAITRON_BACKUP_RECOVERY_KEY: Buffer.alloc(31, 9).toString("base64url") },
+    ],
+    ["a key that is not base64url", { WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123" }],
   ])("is undefined with %s", (_, change) => {
     expect(loadBackupKey({ ...HELD, ...change })).toBeUndefined();
   });
@@ -74,7 +83,7 @@ describe("loadBackupKey", () => {
 
   it("the backup settings carry the number and id they read", () => {
     expect(resolveBackupConfig({ env: HELD, sealed: SEALED })).toMatchObject({
-      recoveryKey: "held-recovery-key-0123",
+      recoveryKey: HELD_KEY_TEXT,
       keyNumber: 2,
       masterKeyId: "0123456789abcdef",
     });
@@ -84,6 +93,7 @@ describe("loadBackupKey", () => {
     ["no number", { WAITRON_BACKUP_KEY_NUMBER: undefined }],
     ["no master key id", { WAITRON_BACKUP_MASTER_KEY_ID: undefined }],
     ["a malformed number", { WAITRON_BACKUP_KEY_NUMBER: "01" }],
+    ["a key with a trailing =", { WAITRON_BACKUP_RECOVERY_KEY: `${HELD_KEY_TEXT}=` }],
   ])("an enabled record with %s is refused", (_, change) => {
     expect(() => resolveBackupConfig({ env: { ...HELD, ...change }, sealed: SEALED })).toThrow(
       new AppError("backup.recovery_key_missing", {}),
@@ -92,17 +102,17 @@ describe("loadBackupKey", () => {
 
   it("a switched-off record without N or the id still reports the key it holds", () => {
     const cfg = resolveBackupConfig({
-      env: { WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123" },
+      env: { WAITRON_BACKUP_RECOVERY_KEY: HELD_KEY_TEXT },
       sealed: { ...SEALED, enabled: false },
     });
-    expect(cfg).toMatchObject({ enabled: false, recoveryKey: "held-recovery-key-0123" });
+    expect(cfg).toMatchObject({ enabled: false, recoveryKey: HELD_KEY_TEXT });
     expect(cfg?.keyNumber).toBeUndefined();
     expect(cfg?.masterKeyId).toBeUndefined();
   });
 });
 
 describe("resolveBackupConfig", () => {
-  const KEY = "held-recovery-key-0123";
+  const KEY = HELD_KEY_TEXT;
   const N_AND_ID = {
     WAITRON_BACKUP_KEY_NUMBER: "1",
     WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
@@ -217,7 +227,7 @@ describe("loadBackupSettings", () => {
   it("leaves archives off with the code when the dashboard record will not decrypt", async () => {
     expect(
       await loadBackupSettings({
-        env: { WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123" },
+        env: { WAITRON_BACKUP_RECOVERY_KEY: HELD_KEY_TEXT },
         readSealed: unreadable,
       }),
     ).toEqual({ loadErrorCode: "credentials.decrypt_failed" });
@@ -244,7 +254,7 @@ describe("loadBackupSettings", () => {
   const meta = { keyVersion: 1, writtenAt: "2026-10-29T10:00:00.000Z", digest: "0123456789abcdef" };
   const record = { digest: meta.digest, writtenAt: meta.writtenAt };
   const KEY = {
-    WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123",
+    WAITRON_BACKUP_RECOVERY_KEY: HELD_KEY_TEXT,
     WAITRON_BACKUP_KEY_NUMBER: "1",
     WAITRON_BACKUP_MASTER_KEY_ID: "0123456789abcdef",
   };

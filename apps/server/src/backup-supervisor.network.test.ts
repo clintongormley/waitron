@@ -72,6 +72,11 @@ const MASTER = makeMasterKey();
 const KEY_ONE = heldBackupKey(MASTER, 1);
 const KEY_TWO = heldBackupKey(MASTER, 2);
 
+/** The config's key fields for one backup key: its text, number and master key id together. */
+function backupKeyFields(record: typeof KEY_ONE): Partial<BackupConfig> {
+  return { recoveryKey: record.key, keyNumber: record.keyNumber, masterKeyId: record.masterKeyId };
+}
+
 function config(
   destinations: { id: string; dir: string }[],
   overrides: Partial<BackupConfig> = {},
@@ -489,7 +494,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
       expect(await local()).toEqual({ stored: true, upload: null, prune: null, archive: true });
 
       holdNextPut = true;
-      cfg = config([{ id: "local", dir }], { recoveryKey: KEY_TWO.key });
+      cfg = config([{ id: "local", dir }], backupKeyFields(KEY_TWO));
       await sup.reload();
       await newUpload.reached;
       expect(await local()).toEqual({ stored: false, upload: null, prune: null, archive: false });
@@ -535,8 +540,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
     });
     const logs: LogLine[] = [];
     const keyOne = KEY_ONE.key;
-    const keyTwo = KEY_TWO.key;
-    let cfg = config([{ id: "usb", dir: dirA }], { recoveryKey: keyOne });
+    let cfg = config([{ id: "usb", dir: dirA }], backupKeyFields(KEY_ONE));
     const sup = await supervisor(() => cfg, logs);
     try {
       await sup.reload();
@@ -546,7 +550,7 @@ describe("BackupSupervisor status, one destination at a time", () => {
       const reading = sup.status();
       await listingA.reached;
 
-      cfg = config([{ id: "usb", dir: dirB }], { recoveryKey: keyTwo });
+      cfg = config([{ id: "usb", dir: dirB }], backupKeyFields(KEY_TWO));
       failPut = false;
       await sup.reload();
       await poll(async () => ((await sup.status()).archiveUnderCurrentKey ? true : undefined));
