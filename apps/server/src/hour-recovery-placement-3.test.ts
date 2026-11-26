@@ -780,7 +780,7 @@ describe("selected-hour admission before archive placement", () => {
   });
 
   it("interactive recovery is wired through the real setup boot and a certificate-verified HTTPS connection", async () => {
-    const f = await archiveHost();
+    const f = await archiveHost("archive", "master-key");
     vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
     const migrations = join(root, "boot-migrations");
     const sets = manifestSets();
@@ -822,7 +822,7 @@ describe("selected-hour admission before archive placement", () => {
           JSON.stringify({
             source: {
               kind: "archive",
-              recoveryKey: "archive password",
+              masterKey: key.secret,
               environment: "preproduction",
             },
             preparation: { ...preparation, proposal },

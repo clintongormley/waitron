@@ -3,6 +3,7 @@ import { isSecure } from "./encrypted-connection.js";
 import type { OperationBinding, OperationClient } from "@waitron/module";
 import type { FirstSetupHold } from "@waitron/provisioning";
 import { AppError, isUuid } from "@waitron/shared";
+import { openingKeyFor } from "./backup-file-key.js";
 import type { Logger } from "./logger.js";
 import type { SetupDeps } from "./setup-api-deps.js";
 import { readFirstFiscalBody } from "./setup-first-fiscal-api.js";
@@ -190,14 +191,16 @@ export function mountRecoveryPreparationApi(
         }
         const body = exact(payload, ["eventId", "source"]);
         const eventId = text(body.eventId, "eventId", 256);
-        const raw = exact(body.source, ["kind", "recoveryKey", "environment"]);
+        const raw = exact(body.source, ["kind", "masterKey", "environment"]);
         if (raw.kind !== "archive") invalid("body");
+        const masterKey = text(raw.masterKey, "masterKey", 4096);
+        const rawEnvironment = environment(raw.environment);
         return c.json(
           await deps.stageRecovery(eventId, {
             kind: "archive-file",
             artifactPath: upload.artifactPath,
-            recoveryKey: text(raw.recoveryKey, "recoveryKey", 4096),
-            environment: environment(raw.environment),
+            recoveryKey: await openingKeyFor(upload, masterKey),
+            environment: rawEnvironment,
           }),
         );
       } finally {
@@ -241,13 +244,15 @@ export function mountRecoveryPreparationApi(
       const rawSource = body.source as Record<string, unknown> | undefined;
       let source: RecoveryPreparationSource;
       if (rawSource?.kind === "archive") {
-        const raw = exact(rawSource, ["kind", "recoveryKey", "environment"]);
+        const raw = exact(rawSource, ["kind", "masterKey", "environment"]);
         if (artifact === undefined) invalid("artifact");
+        const masterKey = text(raw.masterKey, "masterKey", 4096);
+        const rawEnvironment = environment(raw.environment);
         source = {
           kind: "archive",
           artifact,
-          recoveryKey: text(raw.recoveryKey, "recoveryKey", 4096),
-          environment: environment(raw.environment),
+          recoveryKey: await openingKeyFor({ artifact }, masterKey),
+          environment: rawEnvironment,
         };
       } else if (rawSource?.kind === "staged") {
         const raw = exact(rawSource, ["kind", "stagedId"]);
