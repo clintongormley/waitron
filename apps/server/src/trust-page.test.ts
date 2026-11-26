@@ -103,6 +103,7 @@ describe("the Spanish guide", () => {
   it("gives the detected device's removal and installation steps", () => {
     const html = renderTrustPage({ ...base, locale: "es", device: "macos" });
     const mac = CONNECTION_DEVICE_ES.macos;
+    expect(html).toMatch(heading("1. Elimina el certificado anterior de este servidor"));
     expect(html).toContain(mac.removal[0]);
     expect(html).toMatch(heading(`3. ${mac.heading}`));
     expect(html).toContain(mac.install[0]);

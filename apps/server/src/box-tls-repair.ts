@@ -67,7 +67,7 @@ const refused = () => new AppError("setup.not_ready", {});
 const missing = (error: unknown) => (error as NodeJS.ErrnoException).code === "ENOENT";
 const tlsDir = (deps: BoxTlsRepairDeps) => join(deps.stateDir, TLS_DIR);
 const flowDir = (deps: BoxTlsRepairDeps) => join(deps.stateDir, TLS_REPAIR_FLOW_DIR);
-const pendingPath = (deps: BoxTlsRepairDeps) => join(flowDir(deps), "record.json");
+const pendingPath = (stateDir: string) => join(stateDir, TLS_REPAIR_FLOW_DIR, "record.json");
 async function regularDirectory(path: string) {
   const info = await fs.lstat(path);
   if (!info.isDirectory() || info.isSymbolicLink()) throw refused();
@@ -101,8 +101,8 @@ async function snapshot(deps: BoxTlsRepairDeps, directory = tlsDir(deps)): Promi
   for (const name of names) result[name] = await readMember(join(directory, name));
   return result;
 }
-async function pending(deps: BoxTlsRepairDeps): Promise<Pending | null> {
-  const value = await readDurableHostJson(pendingPath(deps), limit);
+async function pending(stateDir: string): Promise<Pending | null> {
+  const value = await readDurableHostJson(pendingPath(stateDir), limit);
   if (value === null) return null;
   const p = value as Pending;
   if (
@@ -167,10 +167,14 @@ export async function readBoxCertificateDetails(stateDir: string): Promise<Certi
   const ca = pem && boxRootIdentity(pem);
   if (!ca) return {};
   const fingerprint = ca.cert.fingerprint256;
+  const complete = await pending(stateDir).then(
+    (repair) => repair?.complete !== false,
+    () => false,
+  );
   return {
     certificateName: ca.name,
     fingerprint,
-    previousCertificate: await previousCertificateFor(stateDir, fingerprint),
+    previousCertificate: complete ? await previousCertificateFor(stateDir, fingerprint) : undefined,
   };
 }
 
@@ -254,7 +258,7 @@ export async function inspectBoxTls(
     return await inspection(
       await snapshot(deps, directory),
       deps,
-      await pending(deps),
+      await pending(deps.stateDir),
       options.requireCurrentAddresses !== false,
     );
   } catch {
@@ -324,7 +328,7 @@ export async function repairBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspec
   await fs.mkdir(deps.stateDir, { recursive: true, mode: 0o700 });
   return withRecoveryLock(deps.stateDir, async () => {
     const s = await snapshot(deps);
-    let p = await pending(deps);
+    let p = await pending(deps.stateDir);
     const inspected = await inspection(s, deps, p);
     if (inspected.state === "healthy") return inspected;
     await fs.mkdir(tlsDir(deps), { recursive: true, mode: 0o700 });
@@ -351,7 +355,7 @@ export async function repairBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspec
       };
       await fs.rm(join(flowDir(deps), "candidate.json"), { force: true });
       await mkdirDurable(flowDir(deps), 0o700);
-      await writeDurableHostJson(pendingPath(deps), p, limit);
+      await writeDurableHostJson(pendingPath(deps.stateDir), p, limit);
     }
     await regularDirectory(folder);
     let saved = await readDurableHostJson(join(flowDir(deps), "candidate.json"), limit);
@@ -443,7 +447,7 @@ export async function repairBoxTls(deps: BoxTlsRepairDeps): Promise<BoxTlsInspec
       await syncDirectory(tlsDir(deps));
     }
     p = { ...p, complete: true };
-    await writeDurableHostJson(pendingPath(deps), p, limit);
+    await writeDurableHostJson(pendingPath(deps.stateDir), p, limit);
     return inspection(installed, deps, p);
   });
 }

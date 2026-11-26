@@ -234,7 +234,7 @@ it("offers one public repair action, retains installed trust and omits private c
   const html = await (await app.request("http://waitron.local:8080/setup/connection")).text();
   expect(html).toContain('id="connection-repair"');
   expect(html).toContain("Set up secure connection");
-  expect(html).toContain("Keep your installed Waitron certificate.");
+  expect(html).toContain("Keep this box’s current certificate.");
   expect(html).not.toContain("Remove any old Waitron certificate");
   expect(html).not.toMatch(/<(input|textarea|select|form)\b/);
 });

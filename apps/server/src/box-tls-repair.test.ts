@@ -388,7 +388,9 @@ it("reuses a candidate saved just before an interruption, without minting anothe
 });
 
 it("a complete TLS pair waits for the interrupted completion marker before being served", async () => {
-  const f = await fixture(null);
+  const f = await fixture();
+  await rm(join(f.stateDir, "tls", "ca.key"));
+  await rm(join(f.stateDir, "tls", "server.pem"));
   const original = faults.rename.getMockImplementation()!;
   let markers = 0;
   faults.rename.mockImplementation(async (from, to) => {
@@ -403,8 +405,16 @@ it("a complete TLS pair waits for the interrupted completion marker before being
   }
   const before = await contents(f.stateDir);
   expect(await inspectBoxTls(f)).toMatchObject({ state: "repair-required", trust: "new-required" });
+  expect(
+    (await tlsRepair.readBoxCertificateDetails(f.stateDir)).previousCertificate,
+  ).toBeUndefined();
   expect(await repairBoxTls({ ...f })).toMatchObject({ state: "healthy", trust: "new-required" });
   expect(await contents(f.stateDir)).toEqual(before);
+  expect((await tlsRepair.readBoxCertificateDetails(f.stateDir)).previousCertificate).toMatchObject(
+    {
+      fingerprint: new X509Certificate(material.caCertPem).fingerprint256,
+    },
+  );
 });
 
 it("refuses linked TLS material without reading or changing its target", async () => {

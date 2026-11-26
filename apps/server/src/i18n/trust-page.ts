@@ -59,7 +59,7 @@ export const TRUST_PAGE_WORDS = {
       `¿Vas a añadir un servidor de reserva? No necesitas el certificado de este servidor. Abre esta dirección (${link}) y acepta el aviso del navegador una sola vez.`,
     intro: (spare: boolean) =>
       `${spare ? "En los demás casos, instala" : "Instala"} el certificado de Waitron antes de introducir contraseñas o datos sensibles en este sitio.`,
-    remove: "Elimina el certificado anterior de Waitron",
+    remove: "Elimina el certificado anterior de este servidor",
     removeIntro:
       "Si ya instalaste un certificado de Waitron en este dispositivo, compáralo con el certificado anterior que se muestra abajo. Si el nombre o la huella no coinciden, deja esa entrada como está.",
     findDevice:

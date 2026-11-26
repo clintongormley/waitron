@@ -29,7 +29,7 @@ export const CONNECTION_TEXT = {
     stop: "Stop",
     stopped: "Stopped. You can close this tab, or check the connection again.",
     choiceHelp: "Check again rereads the connection without repairing it. Stop ends this attempt.",
-    retained: "Keep your installed Waitron certificate.",
+    retained: "Keep this box’s current certificate.",
     retainedHelp:
       "If this device already trusts it, continue below. Otherwise, download and install it on this device.",
     newTrust: "Install the new Waitron certificate on each device.",
@@ -74,7 +74,7 @@ export const CONNECTION_TEXT = {
     stopped: "Intento detenido. Puedes cerrar esta pestaña o comprobar la conexión de nuevo.",
     choiceHelp:
       "Comprobar de nuevo vuelve a leer la conexión sin repararla. Detener finaliza este intento.",
-    retained: "Conserva el certificado de Waitron que ya tienes instalado.",
+    retained: "Conserva el certificado actual de este servidor.",
     retainedHelp:
       "Si este dispositivo ya confía en él, continúa abajo. Si no, descárgalo e instálalo en este dispositivo.",
     newTrust: "Instala el nuevo certificado de Waitron en cada dispositivo.",
