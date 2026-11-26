@@ -198,8 +198,7 @@ No stored fiscal row is to be rewritten.
   which the owner's answer of 18 November keeps (owner, 2026-11-18, question 8 of the
   [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)); the adviser is still to confirm the details.
   The accountant's sheet lists a voided invoice again as a minus row under the day of the void in the
-  sale's own UTC offset, the day these figures count it made (watcher, 2026-11-25). No till screen or
-  server route calls `recordVoid` yet.
+  sale's own UTC offset, the day these figures count it made (watcher, 2026-11-25).
   Test titles still say "tenant"
   (`top-sellers.test.ts:501`, `overdue-orders.test.ts:252`, `vat-summary.test.ts:233`,
   `vat-summary-period.test.ts:128`), "design §3" (`overdue-orders.test.ts:194`) and "spec §12"
@@ -402,12 +401,11 @@ cancellation aside (`cancelsRefusedOriginal`, `setAside` and `setAsideHeldCancel
 (`packages/fiscal-verifactu/src/record-remedy-held.ts`) and the correction remedy's exception for a
 held (`retenido`) cancellation (`packages/fiscal-verifactu/src/record-remedy.ts:185-187`), a remedy
 refused for a voided sale while `release-held-cancellation` is off or while its cancellation is not
-on this box (`record-remedy.ts:188-190`). The ordinary cancellation it handles is written only by
-core's `recordVoid` (`packages/core/src/record-void.ts`), which no till screen or server route calls
-(`git grep -n 'recordVoid\b' -- 'apps/**/*.ts' 'packages/**/*.ts' ':!*.test.ts' ':!**/testing/**'`,
-2026-11-24, lists no caller outside core but `start-clock-gate.ts`'s name list; the fiscal
-backends' `recordVoid` methods, which core's calls, and the payments package's `recordVoid` are
-other functions). The code is kept, not deleted.
+on this box (`record-remedy.ts:188-190`). The till's **Nothing was served** (core's `recordVoid`, from
+`cancelPlacedOrder` in `apps/server/src/working-order-counter.ts`) writes such a cancellation when
+it cancels a receipt AEAT has not answered and AEAT then refuses that receipt; a receipt whose
+current version AEAT has already refused, with any code, it does not cancel (`fiscal.original_refused`). With `release-held-cancellation`
+off, the cancellation's case and the refused receipt's stay open. The code is kept, not deleted.
 
 The whole-branch review reproduced a dependency cycle when a correction was appended behind an
 ordinary cancellation still waiting to be sent: the cancellation waited for that correction's
@@ -769,12 +767,18 @@ fiscal drain without a series switch.
 
 ## C126 (cancelling an order whose invoice was issued credits it; owner, 2026-10-02, option b, decided without the asesor) — landed as #1030
 
+_2026-11-26: CANCEL-UNSERVED PR 3 ([plan](../superpowers/plans/2026-11-25-cancel-unserved.md) §5) replaces C126 for a printed bill nothing was served on, nobody paid and that names no customer: the till's **Nothing was served** files a cancellation of the receipt, not a corrective._
+
 **11 November 2026, A840:** Counter's Cancel and credit entry is retired. The
 unpaid-departure move route check refuses a closed party with `party.not_open`
 and finds no invoiced Counter waiting row for that bill. The shared server
 invoice-credit/PIN branch and its financial tests remain: a later cancellation
 of the departed bill requires correction authority and writes its credit note
 (`cancel-invoiced-order.test.ts:838`). The account below records the earlier counter entry.
+_2026-11-26 (CANCEL-UNSERVED PR 3): when the departed bill never held a payment and nothing on it
+was served, the cancel files a cancellation of its receipt under `sale.void` instead; when anything
+was served it is refused (`bill.served_dishes`), and when AEAT refused its receipt and nothing replaced
+it, it is refused (`fiscal.original_refused`)._
 
 - **C126 (cancelling an order whose invoice was issued credits it; owner, 2026-10-02, option b,
   decided without the asesor) — landed as #1030.** `POST /api/working-orders/:id/cancel` (`cancelPlacedOrder`,
@@ -786,6 +790,9 @@ of the departed bill requires correction authority and writes its credit note
     The dialog's dismiss button reads "Keep the bill" ("Mantener la cuenta"), not the
     shared "Cancel" beside "Cancel and credit" (owner, 2026-10-02). The owner also kept the
     cancel's answer empty, so the till goes on reading the credit note's number from the bills.
+    _2026-11-26 (CANCEL-UNSERVED PR 3): the owner chose "Say what was filed" — "The till's message
+    is right straight away; your bills rule for the number stays." The cancel answers which record
+    it filed (`{ filed }`); the till still reads the credit note's number from the bills._
   - **Done by B34 (#1077, 2026-10-03; owner, 2026-10-02): a counter order invoiced when it was placed and still
     unpaid can be cancelled with a credit note at the till.** The waiting list "is drawn only
     inside the held-orders card" (Task 16, in [till.md](till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)), so a till layout without that card offers no Cancel and
@@ -1218,11 +1225,11 @@ for goodwill money back: the owner's "Add it" (O6, lane L `questions.md`, "WATCH
 
 The owner's answer of 18 November allows either a correction or a cancellation (question 2 of the
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md)). **Reopen bill** on a table's
-printed, unpaid bill files the same whole credit note as **Cancel and credit** and puts copies of
+printed, unpaid bill files a whole credit note and puts copies of
 its dishes on a new open bill of the party; staff then use Move dishes and Print the bill. The copies
 are new dish rows, an exception to A1308's "the order line is the dish", because a printed ticket is
 drawn from its bill's lines and the credited ticket must still reprint with its dishes. The design,
-D1 (an approver's PIN, as Cancel and credit), D2 (no paper for the credit note) and D3 (a part-paid
+D1 (an approver's PIN), D2 (no paper for the credit note) and D3 (a part-paid
 printed bill stays refused) are the lane watcher's choices of 2026-11-20 (lane L `questions.md`,
 09:58 and 10:11); D4 (a dish held in an unsent group is fired first) is the lane's
 default. The owner landed #3876 on 2026-11-20 ("land it"), whose description lists D1 to D4 as theirs to
@@ -1252,6 +1259,12 @@ owner's "yes", lane L `questions.md`, 16:43). It stops those dishes in the kitch
 the reopened bill, except a dish the kitchen had started or finished, which keeps its charge there
 (watcher, 22:42). On the till, that dish's sent-dish window offers **Comp…**, as for any dish cancelled with its charge kept, which takes the charge off with a reason (A1599). An extra of that dish the kitchen had not started comes off. The stop is not offered on a bill holding a payment, one given back in full included.
 A dish held in an unsent group is stopped without being fired; D4 still applies to **Mark served**._
+
+_2026-11-26: **Reopen bill**, **Pay for items** on a printed bill and a cancel that files a corrective
+refuse a receipt whose current version AEAT refused and that nothing replaced
+(`fiscal.original_refused`, by the filing queue's own test through the seat's `refuseCreditOf`):
+the corrective would be filed against a receipt AEAT refused, after which Fiscal filing's replacement is
+refused (`sale.replacement_not_first`) (watcher, lane L `questions.md`, 16:37)._
 
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)
 

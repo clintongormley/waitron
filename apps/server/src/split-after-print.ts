@@ -12,7 +12,7 @@ import { withIssuanceTransaction } from "@waitron/core";
 import { AppError, stringToThousandths } from "@waitron/shared";
 import { holdsPayment } from "./bill-payments.js";
 import { billReopenRefusal } from "./bill-reopen-state.js";
-import { creditWholeInvoice, type IssuedInvoice } from "./cancel-credit.js";
+import { creditWholeInvoice, refuseCreditOfRefused, type IssuedInvoice } from "./cancel-credit.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
 import { readSplitOrderLabel } from "./receipt-order.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
@@ -37,7 +37,7 @@ import {
   type BillRead,
 } from "./working-order-counter.js";
 import { createOpenOrder } from "./working-order-open.js";
-import { servedOrCharged } from "./served-dishes.js";
+import { handedOver, servedOrCharged } from "./served-dishes.js";
 import { readInvoiceNumber } from "./stored-order-lines.js";
 import { removeFromLine } from "./working-order-removal.js";
 import { type TillSaleDeps } from "./working-order-context.js";
@@ -88,14 +88,14 @@ export async function splitAfterPrint(
  * this transaction, when it has. */
 export async function refuseReopen(
   tx: Transaction,
-  deps: Pick<TillSaleDeps, "admission">,
+  deps: Pick<TillSaleDeps, "admission" | "backend">,
   cfg: DeviceRequestConfig,
   id: string,
   read?: BillRead,
   stopUnserved = false,
 ): Promise<{ partyId: string; invoice: IssuedInvoice; unserved: UnservedBillDish[] }> {
   const placed = await lockPlacedOrder(tx, deps, cfg, id, read);
-  const refused = await refuseSplitBill(tx, id, placed.partyId, placed.invoice);
+  const refused = await refuseSplitBill(tx, deps, id, placed.partyId, placed.invoice);
   await refuseSplitMoney(tx, id);
   return { ...refused, unserved: await refuseUnservedDishes(tx, id, stopUnserved) };
 }
@@ -144,12 +144,14 @@ export async function reopenToSplitIn(
 /** The bill's own refusals, ahead of its money's: each says why this bill cannot be reopened. */
 async function refuseSplitBill(
   tx: Transaction,
+  deps: Pick<TillSaleDeps, "backend">,
   id: string,
   partyId: string | null,
   invoice: IssuedInvoice | undefined,
 ): Promise<{ partyId: string; invoice: IssuedInvoice }> {
   const refusal = await billReopenRefusal(tx, id, partyId, invoice?.id);
   if (refusal !== undefined) throw refusal;
+  await refuseCreditOfRefused(tx, deps.backend, invoice!.id);
   return { partyId: partyId!, invoice: invoice! };
 }
 
@@ -161,8 +163,11 @@ async function refuseUnservedDishes(
   const dishes = await unservedDishes(tx, id);
   if (dishes.length === 0) return dishes;
   // Not offered on a bill holding a payment: stopping dishes could leave the reopened bill owing
-  // less than it has received.
-  const canStop = (await servedOrCharged(tx, id)).length > 0 && !(await holdsPayment(tx, id));
+  // less than it has received. Nor on one handed over, whose dishes the customer took.
+  const canStop =
+    (await servedOrCharged(tx, id)).length > 0 &&
+    !(await handedOver(tx, id)) &&
+    !(await holdsPayment(tx, id));
   if (!stopUnserved || !canStop)
     throw new AppError("bill.unserved_dishes", { workingOrderId: id, dishes, canStop });
   return dishes;

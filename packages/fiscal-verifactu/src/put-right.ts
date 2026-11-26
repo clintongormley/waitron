@@ -5,11 +5,12 @@ import type { FilingCaseView } from "./filing-overview-types.js";
 export type PutRight =
   | { kind: "record-correction" }
   | { kind: "replacement-invoice" }
-  | { kind: "none"; why: "full-invoice" | "not-yet" };
+  | { kind: "none"; why: "full-invoice" | "not-yet" | "voided" | "set-aside" };
 
 /** The parts of a case `putRightFor` reads. */
 export interface PutRightCase {
   cause: FilingCaseView["cause"];
+  cancelledNeverHeld?: boolean;
   evidence: Pick<FilingCaseView["evidence"], "codigo" | "mensaje">;
   record: Pick<FilingCaseView["record"], "tipoRegistro" | "tipoFactura">;
   submission: Pick<
@@ -39,6 +40,11 @@ export function putRightFor(
     fullInvoiceReplacement = FULL_INVOICE_REPLACEMENT_ON,
   }: { fullInvoiceReplacement?: boolean } = {},
 ): PutRight {
+  if (view.cancelledNeverHeld === true) {
+    if (view.cause === "fiscal.anulacion_retenida") return { kind: "none", why: "set-aside" };
+    if (view.cause === "fiscal.registro_rechazado" && view.record.tipoRegistro === "alta")
+      return { kind: "none", why: "voided" };
+  }
   const code = view.evidence.codigo;
   if (
     view.cause !== "fiscal.registro_rechazado" ||

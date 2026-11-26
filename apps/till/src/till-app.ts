@@ -304,6 +304,7 @@ import type { BillEditConflictsPrompt } from "./widgets/bill-edit-conflicts-dial
 import { trackDialog } from "./widgets/track-dialog.js";
 import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
 import {
+  cancelCreditApprovers,
   cancelCreditRefusalOf,
   creditedElsewhere,
   type CancelCreditContinue,
@@ -1693,7 +1694,6 @@ interface CancelCrediting {
   partyId: string;
   workingOrderId: string;
   invoiceNumber: string | null;
-  amount: string;
   /** The reason last pressed, which an approver's PIN is sent with. */
   reason: string;
   refusal: CancelCreditRefusal | null;
@@ -21123,7 +21123,7 @@ export class TillApp extends LitElement {
     return said !== undefined && "shown" in said ? said.revision : undefined;
   }
 
-  /** Cancel and credit, or Reopen bill, chosen on an invoiced bill: its dialog opens. */
+  /** Nothing was served, or Reopen bill, chosen on an invoiced bill: its dialog opens. */
   #onCancelCreditBill(event: Event, mode: CancelCreditMode): void {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
     const party = this.orderParty;
@@ -21135,7 +21135,6 @@ export class TillApp extends LitElement {
       partyId: party.id,
       workingOrderId,
       invoiceNumber: bill.invoiceNumber ?? null,
-      amount: bill.total,
       reason: "",
       refusal: null,
       busy: false,
@@ -21190,15 +21189,15 @@ export class TillApp extends LitElement {
     this.cancelCrediting = sending;
     const sent = this.#sentNow();
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
-    let split: { billId: string } | undefined;
+    let answer: { billId: string } | { filed: CancelCreditDone["filed"] };
     try {
       if (open.mode === "split")
-        split = await this.api.splitAfterPrint(open.workingOrderId, {
+        answer = await this.api.splitAfterPrint(open.workingOrderId, {
           signal: limit.signal,
           stopUnserved,
         });
       else
-        await this.api.cancelOrder(open.workingOrderId, open.reason, override, {
+        answer = await this.api.cancelOrder(open.workingOrderId, open.reason, override, {
           signal: limit.signal,
         });
     } catch (error) {
@@ -21215,15 +21214,14 @@ export class TillApp extends LitElement {
     }
     if (this.#cancelCreditingNow(open.id) === null) return;
     this.#closeCancelCreditApprovers();
-    if (split === undefined) await this.#onCancelCredited(open.id, sent);
-    else await this.#onSplitAfterPrint(open.id, sent, split.billId);
+    if ("filed" in answer) await this.#onCancelCredited(open.id, sent, answer.filed);
+    else await this.#onSplitAfterPrint(open.id, sent, answer.billId);
   }
 
-  /** The split's answer names the new bill, which the screen then shows. */
   async #onSplitAfterPrint(id: number, sent: Sent, billId: string): Promise<void> {
     const open = this.#cancelCreditingNow(id);
     if (open === null) return;
-    this.#showCancelCredited(id, { corrective: null });
+    this.#showCancelCredited(id, { filed: "corrective", corrective: null });
     if (this.#hasLeftParty(open.partyId, sent)) return;
     const shown = this.activeTabId === open.workingOrderId && (await this.#switchToBill(billId));
     await this.#retakePartyFromFloor();
@@ -21256,19 +21254,20 @@ export class TillApp extends LitElement {
     await this.#sendCancelCredit({ ...now, busy: false });
   }
 
-  /** The corrective number is read from the bills after the result is shown. A read without a
+  /** A corrective's number is read from the bills after the result is shown. A read without a
    * time limit must not hold the dialog busy, and an old read must not replace a later result. */
-  async #onCancelCredited(id: number, sent: Sent): Promise<void> {
+  async #onCancelCredited(id: number, sent: Sent, filed: CancelCreditDone["filed"]): Promise<void> {
     const open = this.#cancelCreditingNow(id);
     if (open === null) return;
-    this.#showCancelCredited(id, { corrective: null });
+    this.#showCancelCredited(id, { filed, corrective: null });
     const shown = this.cancelCrediting;
     if (this.#hasLeftParty(open.partyId, sent)) return;
     await this.#retakePartyFromFloor();
     if (this.#hasLeftParty(open.partyId, sent)) return;
     const { bills } = await this.#loadPartyBills();
     if (this.cancelCrediting === shown && !this.#hasLeftParty(open.partyId, sent)) {
-      this.#showCancelCredited(id, { corrective: latestCorrectiveOf(bills, open.workingOrderId) });
+      const corrective = latestCorrectiveOf(bills, open.workingOrderId);
+      this.#showCancelCredited(id, { filed, corrective });
     }
   }
 
@@ -21281,11 +21280,11 @@ export class TillApp extends LitElement {
     this.cancelCrediting = { ...now, refusal: null, busy: false, done };
   }
 
-  /** The people who can approve the cancel in dialog `id` are read, and their PIN prompt opens. */
-  async #askCancelCreditApprover(id: number): Promise<void> {
+  /** Those holding `permission`, which the cancel in dialog `id` was refused for, are read. */
+  async #askCancelCreditApprover(id: number, permission?: string): Promise<void> {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const approvers = await this.api.listCancelCreditAuthorizers({ signal: limit.signal });
+      const approvers = await cancelCreditApprovers(this.api, permission, limit.signal);
       const now = this.#cancelCreditingNow(id);
       if (now === null) return;
       this.cancelCrediting = { ...now, busy: false };
@@ -21310,7 +21309,7 @@ export class TillApp extends LitElement {
     if (this.#cancelCreditingNow(open.id) === null) return;
     const refusal = refusalOf(error);
     if (unapproved && open.mode === "cancel" && refusal.code === "authorization.not_permitted") {
-      await this.#askCancelCreditApprover(open.id);
+      await this.#askCancelCreditApprover(open.id, refusal.permission);
       return;
     }
     if (approverId !== undefined && APPROVER_REFUSALS.has(refusal.code)) {
@@ -21326,8 +21325,10 @@ export class TillApp extends LitElement {
     if (this.cancelCrediting !== shown || this.#hasLeftParty(open.partyId, sent)) return;
     const bill = bills?.find((row) => row.workingOrderId === open.workingOrderId);
     if (!CANCEL_MAY_HAVE_LANDED.has(refusal.code) || bill?.status !== "abandoned") return;
+    const corrective = latestCorrectiveOf(bills, open.workingOrderId);
     this.#showCancelCredited(open.id, {
-      corrective: latestCorrectiveOf(bills, open.workingOrderId),
+      filed: corrective === null ? "cancellation" : "corrective",
+      corrective,
       creditedElsewhere: creditedElsewhere(open, bills!),
     });
   }
@@ -21341,7 +21342,6 @@ export class TillApp extends LitElement {
         .mode=${open.mode}
         .canMarkServed=${this.capabilities.includes("hand-over-orders")}
         .invoiceNumber=${open.invoiceNumber}
-        .amount=${open.amount}
         .refusal=${open.refusal}
         .busy=${open.busy}
         .done=${open.done}

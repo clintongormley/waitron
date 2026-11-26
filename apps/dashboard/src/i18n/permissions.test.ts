@@ -15,7 +15,7 @@ it.each(["sales", "reports", "people", "venue"])(
   },
 );
 
-// Cancel and credit on the till names this permission in these words ("issue corrective receipts and
+// Reopen bill on the till names this permission in these words ("issue corrective receipts and
 // invoices"), so the two change together.
 it("names the permission to correct an issued document as the till does", () => {
   expect(PERMISSION_TEXT["sale.rectify"].label).toBe("permission.sale.rectify");

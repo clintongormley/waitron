@@ -676,7 +676,7 @@ Todo lo demás que haces en la mesa está en el menú **⋮**, junto al selector
 primera, con el nombre de la cuenta en pantalla como título, por ejemplo **Cuenta 2 · Clint**, actúa
 solo sobre esa cuenta: **Poner nombre a esta cuenta**, **Mover platos…**, **Juntar cuentas**,
 **Mover esta cuenta**, **Descuento en la cuenta**, **Registrar salida sin pagar**, **Factura
-completa**, **Imprimir la cuenta**, **Copia del ticket**, **Cancelar y abonar** y **Reabrir
+completa**, **Imprimir la cuenta**, **Copia del ticket**, **No se sirvió nada** y **Reabrir
 cuenta**, cada una cuando corresponde. La segunda, **Toda la mesa**, actúa sobre todos los de la mesa:
 **Alergias**, **Poner nombre a los clientes**, **Comensales**, **Marcar cuenta pedida para …** con
 el nombre del grupo (una vez pedida, **Anular la petición de cuenta de …**), **Separar una mesa**
@@ -788,6 +788,13 @@ llegaron. Cuando algo de la cuenta ya se ha servido y no se ha pagado nada, **Pa
 reabrir** para cada plato que siga en la lista y lo deja fuera de la cuenta reabierta, salvo uno que
 la cocina había empezado o terminado, que se queda en ella y se cobra. Para quitar ese cobro, abre
 los detalles del plato en **Enviado** y elige **Descuento…** en el menú **Más**.
+
+Si los clientes se van antes de que se sirva nada, abre **⋮** y elige **No se sirvió nada**. Se
+ofrece en una cuenta impresa que no ha recibido ningún pago y no lleva el nombre de un cliente.
+Recupera el ticket en papel, indica el motivo y confirma. Waitron anula el ticket y avisa a cocina
+para que pare los platos de la cuenta. Necesitas **Anular ventas**; si no lo tienes, elige a alguien
+que lo tenga y pídele que introduzca su PIN. Si algo de la cuenta se ha servido, la caja muestra esos
+platos: cobra la cuenta o, si se ofrece, usa **Reabrir cuenta**.
 
 Cuando un cliente ya ha pagado una parte de la cuenta con
 [un ticket propio](table-service.md#pay-window), la cuenta muestra los platos y después descuenta

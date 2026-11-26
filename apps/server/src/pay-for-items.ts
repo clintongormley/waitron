@@ -1,6 +1,7 @@
 import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { endingRestores, type Ending } from "@waitron/adjustments";
 import { withIssuanceTransaction } from "@waitron/core";
+import type { FiscalBackend } from "@waitron/fiscal";
 import {
   billPayments,
   withTransaction,
@@ -599,7 +600,7 @@ export interface PayForItemsAsk {
  * bill is priced by its own dishes, which a reopen would copy, after Reopen bill's refusals.
  */
 export async function previewPayForItems(
-  deps: { db: Database; admission: TradingAdmission },
+  deps: { db: Database; admission: TradingAdmission; backend: FiscalBackend },
   cfg: DeviceRequestConfig,
   fromBillId: string,
   ask: PayForItemsAsk,

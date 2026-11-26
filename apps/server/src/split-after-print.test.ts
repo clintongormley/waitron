@@ -13,9 +13,13 @@ import {
   kitchenStations,
   lineServiceCancellations,
   printJobs,
+  readLiveSeriesIdTx,
   sales,
   workingOrders,
 } from "@waitron/db";
+import { recordReplacement } from "@waitron/core";
+import { loginWithPin } from "@waitron/identity";
+import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { adjustments, computeAdjustmentReport, listAdjustmentReasons } from "@waitron/adjustments";
 import { createExtraList, writeProductModifiers } from "@waitron/menu";
 import {
@@ -24,7 +28,11 @@ import {
   currentBusinessDay,
   resolveVenueClock,
 } from "@waitron/reporting";
-import { filedSales } from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import { filedRecordsOf, filedSales } from "@waitron/fiscal-verifactu/test/invoice-records.js";
+import {
+  acceptedByAeat,
+  refusedByAeat,
+} from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import {
   clearRoutingCell,
   readPartyAllergy,
@@ -379,24 +387,6 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     expect(byId.get(party.tabId)).not.toHaveProperty("reopenedFrom");
   });
 
-  it("Cancel and credit still needs sale.rectify", async () => {
-    const party = await printed("Tarta");
-    const before = written();
-    const cancel = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${party.tabId}/cancel`,
-      { reason: "Wrong" },
-    );
-    expect({ status: cancel.status, code: cancel.json.code }).toEqual({
-      status: 403,
-      code: "authorization.not_permitted",
-    });
-    expect(written()).toEqual(before);
-    expect(await statusOf(venue, party.tabId)).toBe("placed");
-  });
-
   it("a part-paid bill names its unserved dishes, its money moving nowhere", async () => {
     const party = await seat("Tarta");
     expect((await printBill(party, party.tabId, true)).status).toBe(200);
@@ -616,6 +606,90 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
     await expectRefused(id, () => split(id), { status: 409, code: "bill.not_issued" });
   });
 
+  it("refuses a ticket AEAT refused and that nothing replaced, writing nothing", async () => {
+    const party = await printed("Tarta");
+    const saleId = (await invoiceOf(party.tabId)).id;
+    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+
+    const answer = await expectRefused(party.tabId, () => split(party.tabId), {
+      status: 409,
+      code: "fiscal.original_refused",
+    });
+    expect(answer.json.params).toEqual({ saleId });
+    expect(await creditsOf(saleId)).toEqual([]);
+    expect(await filedRecordsOf(venue.db, saleId)).toEqual([
+      { kind: "invoice", state: "rechazado" },
+    ]);
+  });
+
+  it("refuses a ticket AEAT refused before its unserved dishes", async () => {
+    const party = await seat("Steak", "Tarta");
+    expect((await serve(party, party.tabId, "Tarta")).status).toBe(200);
+    expect((await printBill(party, party.tabId, true)).status).toBe(200);
+    const saleId = (await invoiceOf(party.tabId)).id;
+    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+
+    for (const body of [{}, { stopUnserved: true }]) {
+      await expectRefused(
+        party.tabId,
+        () => fixture.split(venue, party.tabId, venue.supervisorTill, venue.app, body),
+        { status: 409, code: "fiscal.original_refused" },
+      );
+    }
+    expect(await creditsOf(saleId)).toEqual([]);
+  });
+
+  it("refuses a ticket AEAT refused on a bill where nothing was served", async () => {
+    const party = await seat("Tarta");
+    expect((await printBill(party, party.tabId, true)).status).toBe(200);
+    const saleId = (await invoiceOf(party.tabId)).id;
+    await inTx(venue, (tx) => refusedByAeat(tx, saleId));
+
+    await expectRefused(party.tabId, () => split(party.tabId), {
+      status: 409,
+      code: "fiscal.original_refused",
+    });
+  });
+
+  it("reopens a ticket AEAT accepted", async () => {
+    const party = await printed("Tarta");
+    const saleId = (await invoiceOf(party.tabId)).id;
+    await inTx(venue, (tx) => acceptedByAeat(tx, saleId));
+
+    const answer = await split(party.tabId);
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await creditsOf(saleId)).toHaveLength(1);
+  });
+
+  it("reopens a ticket AEAT refused once it was replaced, crediting the replacement", async () => {
+    const party = await printed("Tarta");
+    const saleId = (await invoiceOf(party.tabId)).id;
+    const replacementId = await inTx(venue, async (tx) => {
+      await refusedByAeat(tx, saleId);
+      const session = await loginWithPin(tx, {
+        deviceId: venue.deviceId,
+        personId: venue.adminId,
+        pin: "1234",
+      });
+      const replaced = await recordReplacement(tx, venue.backend, {
+        operationDescription: "Restaurante",
+        origin: venue.cfg.origin,
+        nodeId: venue.cfg.nodeId,
+        seriesId: brandSeriesId(await readLiveSeriesIdTx(tx, venue.cfg.nodeId, "corrective")),
+        correctsSaleId: brandSaleId(saleId),
+        authz: { sessionId: session.id },
+        clock: venue.clock,
+      });
+      return replaced.saleId;
+    });
+
+    const answer = await split(party.tabId);
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await creditsOf(replacementId)).toHaveLength(1);
+  });
+
   it("refuses a second request, filing one corrective", async () => {
     const party = await printed("Tarta");
     expect((await split(party.tabId)).status).toBe(200);
@@ -633,6 +707,8 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
 
   it("refuses on a box waiting for its time as the cancel does, copying nothing", async () => {
     const party = await printed("Tarta");
+    const unserved = await seat("Tarta");
+    expect((await printBill(unserved, unserved.tabId, true)).status).toBe(200);
     const waiting = venue.appWith({
       backend: gateSeatOnStartClock(venue.backend, () => true),
       clockUnconfirmed: () => true,
@@ -641,10 +717,13 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
       waiting,
       venue.supervisorTill,
       "POST",
-      `/api/working-orders/${party.tabId}/cancel`,
+      `/api/working-orders/${unserved.tabId}/cancel`,
       { reason: "Wrong" },
     );
-    expect(cancel.status).not.toBe(200);
+    expect({ status: cancel.status, code: cancel.json.code }).toEqual({
+      status: 409,
+      code: "clock.unconfirmed",
+    });
 
     await expectRefused(party.tabId, () => split(party.tabId, venue.supervisorTill, waiting), {
       status: cancel.status,
@@ -916,7 +995,7 @@ describe("POST /api/working-orders/:id/split-after-print", () => {
   });
 });
 
-describe("Cancel and credit on a printed table bill", () => {
+describe("Nothing was served on a printed table bill", () => {
   it("takes the bill's dishes, and a kitchen-ready one's Ready, out of the party's groups", async () => {
     const party = await seat("Tarta");
     venue.db.run(sql`update ticket_items set state = 'ready' where working_order_line_id in
@@ -1032,11 +1111,10 @@ describe("the Given free sheet for a printed bill", () => {
     expect(await freeOn(party.tabId)).toEqual([]);
   });
 
-  it("leaves out a comped dish on a printed bill that was cancelled and credited", async () => {
+  it("leaves out a comped dish on a printed bill that was cancelled", async () => {
     const party = await seat("Red wine bottle", "Tarta");
     await seedGivenAwayLine(venue, party.tabId, 1);
-    expect((await serve(party, party.tabId)).status).toBe(200);
-    expect((await printBill(party, party.tabId)).status).toBe(200);
+    expect((await printBill(party, party.tabId, true)).status).toBe(200);
     expect(await freeOn(party.tabId)).toHaveLength(1);
 
     const cancelled = await send(
@@ -1199,6 +1277,20 @@ describe("Reopen bill stopping the dishes that never came", () => {
       { kind: "void", lineName: "CHULETA", quantity: 1000 },
       { kind: "void", lineName: "BEER SMALL", quantity: 1000 },
     ]);
+  });
+
+  it("refuses the flag on a bill handed over at the counter before it was moved to the table", async () => {
+    const party = await steakAndBeer();
+    venue.db.run(
+      sql`update working_orders set collected_at = ${new Date().toISOString()} where id = ${party.tabId}`,
+    );
+
+    const refused = await expectRefused(party.tabId, () => stop(party.tabId), {
+      status: 409,
+      code: "bill.unserved_dishes",
+    });
+
+    expect(refused.json.params).toMatchObject({ canStop: false });
   });
 
   it("refuses the flag when nothing was served, as Reopen does today", async () => {

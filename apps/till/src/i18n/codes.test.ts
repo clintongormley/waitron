@@ -626,7 +626,7 @@ it("says what to do about each refusal of an unpaid departure, in both languages
   }
 });
 
-it("words each refusal a cancel and credit can meet, in both languages, naming no identifier", () => {
+it("words each refusal Nothing was served can meet, in both languages, naming no identifier", () => {
   const generic = {
     en: codeMessage("server.internal", "en"),
     es: codeMessage("server.internal", "es"),
@@ -642,6 +642,27 @@ it("words each refusal a cancel and credit can meet, in both languages, naming n
     expect(codeMessage(code, "es")).not.toBe(generic.es);
     expect(codeMessage(code, "en")).not.toContain(code);
   }
+});
+
+it("words Nothing was served's refusals of served dishes and of a receipt AEAT has not answered or refused, in both languages", () => {
+  expect(codeMessage("bill.served_dishes", "en")).toBe(
+    "These dishes were served or charged, so the receipt can't be cancelled. Take payment, or use Reopen bill where it is offered.",
+  );
+  expect(codeMessage("bill.served_dishes", "es")).toBe(
+    "Estos platos se sirvieron o se cobran, así que el ticket no se puede anular. Cobra la cuenta o, si se ofrece, usa Reabrir cuenta.",
+  );
+  expect(codeMessage("fiscal.original_unanswered", "en")).toBe(
+    "AEAT has not answered for this receipt yet. Try again later.",
+  );
+  expect(codeMessage("fiscal.original_unanswered", "es")).toBe(
+    "La AEAT aún no ha respondido sobre este ticket. Inténtalo más tarde.",
+  );
+  expect(codeMessage("fiscal.original_refused", "en")).toBe(
+    "AEAT refused this receipt, so it cannot be cancelled. Take payment.",
+  );
+  expect(codeMessage("fiscal.original_refused", "es")).toBe(
+    "La AEAT rechazó este ticket, así que no se puede anular. Cobra la cuenta.",
+  );
 });
 
 it("words money back larger than what is left of its receipt", () => {

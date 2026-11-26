@@ -32,8 +32,13 @@ beforeEach(async () => {
   saleId = await seedSale(suite.db, node, 1);
 });
 
-async function version(position: number, estado: string, correctsRegistroId?: string) {
-  const pending = altaFor(node, saleId, 1, position, "preproduction");
+async function version(
+  position: number,
+  estado: string,
+  correctsRegistroId?: string,
+  invoiceNumber = 1,
+) {
+  const pending = altaFor(node, saleId, invoiceNumber, position, "preproduction");
   return withTransaction(suite.db, async (tx) => {
     const record = await appendToChain(tx, node.nodeId, {
       ...pending,
@@ -55,12 +60,12 @@ async function version(position: number, estado: string, correctsRegistroId?: st
   });
 }
 
-async function cancellation() {
+async function cancellation(underSale: SaleId = saleId) {
   return withTransaction(suite.db, async (tx) => {
     const record = await appendToChain(
       tx,
       node.nodeId,
-      anulacionFor(node, saleId, 1, 4, "preproduction"),
+      anulacionFor(node, underSale, 1, 4, "preproduction"),
     );
     await tx.insert(verifactuSubmissions).values({ registroId: record.id, proximoIntentoEn: NOW });
     return record.id;
@@ -180,6 +185,35 @@ it("sets aside a cancellation of the rejected current version despite two older 
     ).rows,
   ).toEqual([{ registro_id: cancel, cause: "fiscal.anulacion_retenida" }]);
   expect(await immutableRows()).toEqual(before);
+});
+
+// Nothing makes a cancellation carry the sale of the invoice it cancels.
+it("sets aside a cancellation of a rejected invoice filed under another sale", async () => {
+  const original = await version(1, "rechazado");
+  const cancel = await cancellation(await seedSale(suite.db, node, 2));
+  const before = await immutableRows();
+  const wire = await sending([]);
+
+  const result = await drain(wire.deps, NOW);
+
+  expect(wire.sent).toEqual([]);
+  expect((await state(cancel)).estado).toBe("retenido");
+  expect((await state(original)).estado).toBe("rechazado");
+  expect(result.recordsHalted).toBe(1);
+  expect(await immutableRows()).toEqual(before);
+});
+
+it("sends a cancellation of an accepted invoice whose sale holds another, rejected invoice", async () => {
+  const original = await version(1, "aceptado");
+  await version(2, "rechazado", undefined, 2);
+  const cancel = await cancellation();
+  const wire = await sending([original]);
+
+  const result = await drain(wire.deps, NOW);
+
+  expect(wire.sent).toEqual([[cancel]]);
+  expect((await state(cancel)).estado).toBe("aceptado");
+  expect(result.recordsHalted).toBe(0);
 });
 
 it.each(["aceptado", "rechazado"])(

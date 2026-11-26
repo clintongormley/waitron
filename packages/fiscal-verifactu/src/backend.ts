@@ -55,6 +55,7 @@ import type { SifRegistration } from "./registro-sif.js";
 import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.js";
 import type { Entorno, RegistroRow } from "./registro-row.js";
 import { queueSubmission } from "./queue-submission.js";
+import { currentAltaRefused } from "./refused-current-alta.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
 import { verifactuRecords } from "./schema/verifactu-records.js";
 import { verifyChain } from "./verify.js";
@@ -461,6 +462,21 @@ export class VerifactuBackend implements FiscalBackend {
     return filedFiguresFor(tx, saleIds);
   }
 
+  async refuseCreditOf(tx: Transaction, saleId: SaleId): Promise<void> {
+    const { rows } = await tx.execute(sql`
+      select 1 from verifactu_records receipt indexed by verifactu_records_sale_idx
+      where receipt.sale_id = ${saleId} and receipt.tipo_registro = 'alta'
+        and receipt.corrects_registro_id is null
+        and ${currentAltaRefused({
+          idEmisorFactura: sql`receipt.id_emisor_factura`,
+          numSerieFactura: sql`receipt.num_serie_factura`,
+          fechaExpedicionFactura: sql`receipt.fecha_expedicion_factura`,
+        })}
+      limit 1
+    `);
+    if (rows.length > 0) throw new AppError("fiscal.original_refused", { saleId });
+  }
+
   /** Voids a previously recorded sale by appending an anulación referencing its identity. */
   async recordVoid(
     tx: Transaction,
@@ -483,12 +499,32 @@ export class VerifactuBackend implements FiscalBackend {
     if (original === undefined) {
       throw new AppError("fiscal.sale_not_recorded", { saleId });
     }
-
     // The anulación extends the ISSUING box's chain, under that box's SIF, and inherits the
     // original's origin and invoice identity.
     const origin = readSaleOrigin(original.source, original.device_id);
     const chart = await this.admitIssuance(tx, issuingNodeId);
     const sif = await currentSif(tx, issuingNodeId);
+
+    // Another chain's receipt still waiting on AEAT can end held, and a cancellation of a held
+    // receipt stops every later record here (docs/superpowers/plans/2026-11-25-cancel-unserved.md §2).
+    // "Another chain" is another installation, as the drain's `originalSettled` reads it: an earlier
+    // installation on this same box is another chain too.
+    const { rows: unanswered } = await tx.execute(sql`
+      select 1 from verifactu_records r indexed by verifactu_records_sale_idx
+      left join verifactu_submissions s on s.registro_id = r.id
+      where r.sale_id = ${saleId} and r.tipo_registro = 'alta' and r.sif_id <> ${sif.id}
+        and coalesce(s.estado, '') not in ('aceptado', 'aceptado_con_errores', 'rechazado')
+      limit 1
+    `);
+    if (unanswered.length > 0) throw new AppError("fiscal.original_unanswered", { saleId });
+    const { rows: refused } = await tx.execute(
+      sql`select 1 where ${currentAltaRefused({
+        idEmisorFactura: original.id_emisor_factura,
+        numSerieFactura: original.num_serie_factura,
+        fechaExpedicionFactura: original.fecha_expedicion_factura,
+      })}`,
+    );
+    if (refused.length > 0) throw new AppError("fiscal.original_refused", { saleId });
     const taxpayer = await this.taxpayer(tx);
     const now = (await prepareIssueClock(tx, { nodeId: issuingNodeId }, this.clock)).now();
 

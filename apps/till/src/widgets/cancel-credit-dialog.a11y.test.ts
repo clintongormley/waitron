@@ -1,13 +1,16 @@
 import { afterEach, describe, it } from "vitest";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
 import "./cancel-credit-dialog.js";
-import type { DialogRefusal } from "../state/bill-payment.js";
-import type { CancelCreditDone, TillCancelCreditDialog } from "./cancel-credit-dialog.js";
+import type {
+  CancelCreditDone,
+  CancelCreditRefusal,
+  TillCancelCreditDialog,
+} from "./cancel-credit-dialog.js";
 
 afterEach(cleanupWidgets);
 
 interface State {
-  refusal: DialogRefusal | null;
+  refusal: CancelCreditRefusal | null;
   busy: boolean;
   pressed: boolean;
   done: CancelCreditDone | null;
@@ -25,8 +28,40 @@ const states: [string, State][] = [
       done: null,
     },
   ],
+  [
+    "refused for served dishes",
+    {
+      refusal: {
+        code: "bill.served_dishes",
+        served: [
+          { lineId: "l-1", dishName: "Steak", quantity: "1" },
+          { lineId: "l-2", dishName: "Beer", quantity: "2" },
+        ],
+      },
+      busy: false,
+      pressed: false,
+      done: null,
+    },
+  ],
   ["sending", { refusal: null, busy: true, pressed: false, done: null }],
-  ["done", { refusal: null, busy: false, pressed: false, done: { corrective: "R/3" } }],
+  [
+    "done",
+    {
+      refusal: null,
+      busy: false,
+      pressed: false,
+      done: { filed: "corrective", corrective: "R/3" },
+    },
+  ],
+  [
+    "done, receipt cancelled",
+    {
+      refusal: null,
+      busy: false,
+      pressed: false,
+      done: { filed: "cancellation", corrective: null },
+    },
+  ],
 ];
 
 describe.each(["light", "dark"] as const)("till-cancel-credit-dialog a11y (%s theme)", (theme) => {
@@ -35,7 +70,6 @@ describe.each(["light", "dark"] as const)("till-cancel-credit-dialog a11y (%s th
       "till-cancel-credit-dialog",
       {
         invoiceNumber: "A/12",
-        amount: "24.50",
         refusal: state.refusal,
         busy: state.busy,
         done: state.done,
@@ -74,7 +108,6 @@ describe.each(["light", "dark"] as const)(
         {
           mode: "split",
           invoiceNumber: "A/12",
-          amount: "24.50",
           refusal:
             unserved === null ? null : { code: "bill.unserved_dishes", dishes: unserved, canStop },
           canMarkServed: true,

@@ -636,8 +636,8 @@ Enter to show it. Home and End reach the first and last choices. Escape closes t
 Everything else you do at the table is in the **⋮** menu beside the switcher, in two parts. The
 first, headed with the bill on screen, such as **Bill 2 · Clint**, acts on that bill alone: **Name
 this bill**, **Move dishes…**, **Merge bills**, **Move this bill**, **Comp the bill**, **Record
-unpaid departure**, **Full invoice**, **Print the bill**, **Receipt copy**, **Cancel and
-credit** and **Reopen bill**, each when it applies. The second, **Whole table**, acts on everyone at the
+unpaid departure**, **Full invoice**, **Print the bill**, **Receipt copy**, **Nothing was
+served** and **Reopen bill**, each when it applies. The second, **Whole table**, acts on everyone at the
 table: **Allergies**, **Name the party**, **Guests**, **Mark bill requested for …** with the party's
 name (once requested, **Cancel the bill request for …**), **Split a table** (when the party sits at
 more than one table), **Join a table**, **Move guests** and **Finish table**. An action that needs a
@@ -744,6 +744,13 @@ something on the bill has been served and nothing has been paid, **Stop these di
 stops every dish still listed and leaves it off the reopened bill, except one the kitchen had
 started or finished, which stays on it, charged. To take that charge off, open the dish's details
 in **Sent** and choose **Comp…** from its **More** menu.
+
+If the guests leave before anything is served, open **⋮** and choose **Nothing was served**. It is
+offered on a printed bill that has taken no payment and names no customer. Get the paper receipt
+back from the guests, give a reason and confirm. Waitron cancels the receipt, and the kitchen is told
+to stop the bill's dishes. You need **Void sales** for this; if you do not have it, choose someone
+who does and ask them to enter their PIN. If anything on the bill was served, the till lists those
+dishes instead: take payment, or use **Reopen bill** where it is offered.
 
 When a guest has already paid part of the bill with
 [a receipt of their own](table-service.md#pay-window), the bill lists the dishes, then that payment

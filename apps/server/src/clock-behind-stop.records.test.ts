@@ -29,6 +29,8 @@ import {
 } from "./testing/bill-venue.js";
 import { mountTillApi } from "./till-api.js";
 import { systemClock } from "./till-backend.js";
+import { VerifactuBackend } from "@waitron/fiscal-verifactu";
+import { deploymentEnvironment } from "./config.js";
 import "./errors.js";
 
 let venue: BillVenue;
@@ -471,11 +473,19 @@ describe("a cancel's credit", () => {
     expect(await statusOf(venue, id)).toBe("abandoned");
   });
 
-  it("refuses a credit under a 2001 clock as clock.unusable", async () => {
+  it("refuses a cancellation under a 2001 clock as clock.unusable", async () => {
     const id = await placed(nowMs(), true);
     const records = allRecords();
+    const clock = clockAt(Date.parse("2001-06-01T12:00:00Z"));
+    // The seat dates a cancellation by its own clock, so it is built on the 2001 one too.
+    const backend = new VerifactuBackend({
+      clock,
+      db: venue.db,
+      environment: deploymentEnvironment(process.env),
+      deploymentEnvironment: deploymentEnvironment(process.env),
+    });
 
-    const answer = await cancel(at(Date.parse("2001-06-01T12:00:00Z")), id);
+    const answer = await cancel(venue.appWith({ clock, backend }), id);
 
     expect(answer.status).toBe(409);
     expect(answer.json).toMatchObject({ code: "clock.unusable" });

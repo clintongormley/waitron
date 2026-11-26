@@ -67,6 +67,7 @@ export function conflictCase(registroId: string, openedAt: string): FilingCaseVi
     ],
     lookups: [],
     heldBehind: 3,
+    cancelledNeverHeld: false,
   };
 }
 

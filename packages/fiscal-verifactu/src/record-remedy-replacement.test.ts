@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { beforeEach, expect, it } from "vitest";
 import { recordCorrection, recordSale } from "@waitron/core";
-import { invoiceSeries, sales, taxpayer, withTransaction } from "@waitron/db";
+import { invoiceSeries, sales, saleVoids, taxpayer, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hashPin, registerModulePermissions, startManagementSession } from "@waitron/identity";
 import type { ModuleRouteContext } from "@waitron/module";
@@ -363,6 +363,29 @@ it("refuses a case AEAT accepted with errors", async () => {
     { ...body, caseRegistroId: original.caseRegistroId, registroId: original.registroId },
     "fiscal.remedy_invalid",
   );
+});
+
+it("refuses to replace an invoice cancelled in Waitron while AEAT had not answered it, writing nothing", async () => {
+  await withTransaction(suite.db, async (tx) => {
+    const registroId = body.registroId as string;
+    const [record] = await tx
+      .select({ saleId: verifactuRecords.saleId })
+      .from(verifactuRecords)
+      .where(eq(verifactuRecords.id, registroId));
+    const saleId = brandSaleId(record!.saleId);
+    const answered = (estado: string, codigoError: string | null) =>
+      tx
+        .update(verifactuSubmissions)
+        .set({ estado, codigoError })
+        .where(eq(verifactuSubmissions.registroId, registroId));
+    await answered("pendiente", null);
+    await tx
+      .insert(saleVoids)
+      .values({ saleId, reason: "Nothing was served", voidedAt: TODAY.toISOString() });
+    await backend().recordVoid(tx, saleId, "Nothing was served", node.nodeId);
+    await answered("rechazado", "1112");
+  });
+  await refuses(body, "fiscal.remedy_invalid");
 });
 
 it("refuses a full invoice while full-invoice replacement is switched off, as it is by default", async () => {

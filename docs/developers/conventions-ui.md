@@ -627,7 +627,9 @@ The owner, 2026-10-01: _"A handheld should be able to do pretty much anything a 
 depends on the permissions of the person using the handheld."_ A handheld places, collects and
 cancels like a till; the operator's permissions decide. Placing, and cancelling an order with no
 invoice, check no permission, only a signed-in operator; cancelling an order whose invoice was
-issued needs `sale.rectify` (C126), which staff do not hold, from the operator or from someone
+issued needs `sale.void` when the cancel files a cancellation of the receipt (no payment, no
+customer named, no corrective or replacement; CANCEL-UNSERVED, 2026-11-26) and `sale.rectify` (C126) when it files
+a corrective, neither of which staff hold, from the operator or from someone
 holding it who enters their PIN, as an unpaid departure, a bill refund and opening the drawer accept (B33);
 collecting, like every route that takes
 a payment, needs `payment.take` (C128), which every role holds. Guard:

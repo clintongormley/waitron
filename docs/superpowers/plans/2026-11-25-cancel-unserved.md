@@ -1,7 +1,7 @@
 # CANCEL-UNSERVED: a receipt for a bill nobody was served and nobody paid is cancelled at AEAT
 
 Status: cleared 2026-11-25 by the watcher (16:41, five changes) and, for PR 2, by the owner (16:43, relayed).
-PR 1 landed as #4356; PR 2 is built (branch `feat/cancel-unserved-reopen`); PR 3 is not started.
+PR 1 landed as #4356; PR 2 landed as #4377; PR 3 is built on branch `feat/cancel-unserved-void`.
 FISCAL: the owner lands every pull request (PR). Base: `main` at `bb1389b737`. "Run": a throwaway change in a detached
 worktree for this revision (server halves only; not the till, not the other-box refusal); "run (earlier)": a previous one.
 **Words.** *Receipt*: the simplified invoice (F2). *Cancellation*: the record telling AEAT the receipt should never have
@@ -37,15 +37,18 @@ The till reaches the second row with a 1112 receipt that was replaced and never 
 | --- | --- |
 | a dish, extra or drink served, or a dish cancelled with its charge kept | `bill.served_dishes`, naming them |
 | a payment on its way; time not confirmed; box handed over | today's codes |
-| a receipt **another box's chain** issued and AEAT has not answered | `fiscal.original_unanswered` |
+| a receipt **another chain** issued (another box's, or an earlier installation's on this box) and AEAT has not answered | `fiscal.original_unanswered` |
+| a receipt whose current version AEAT refused, with any code, on any chain (watcher, 26 Nov 15:31) | `fiscal.original_refused` |
 
 - **Served:** any line's `served_quantity`, or a `line_service_cancellations` row (keeping a served dish's charge puts its
   mark back to 0, run), except rows Record unpaid departure wrote for dishes it stopped: those with `cancelled_at` at or
   after its `recorded_at` (`unpaid-departure.ts:142`, then `:151`).
 - **Other box:** a cancellation of another chain's *held* receipt stopped every later record here (five passes, 100 hours,
   run (earlier)); a waiting one can become held. Thrown in Veri\*Factu's `recordVoid`, no seat method: one expected failure
-  of 330 fiscal tests, 451 of 451 server ones (run (earlier)). Only after a box switch. On the box's own chain a waiting,
-  refused or held receipt needs nothing (run (earlier)).
+  of 330 fiscal tests, 451 of 451 server ones (run (earlier)). Only after a box switch. On the box's own chain a waiting or
+  held receipt needs nothing (run (earlier)). A refused one is refused by the test that sets a cancellation aside
+  (`currentAltaRefused`). Reopen bill, Pay for items on a printed bill and a cancel filing a corrective refuse such a
+  receipt too, by the same test through the seat's `refuseCreditOf`, before anything is written (watcher, 26 Nov 16:37).
 - **After** (run): the bill is abandoned, a seated party gets a fresh one, Orders says **Voided**. If AEAT refuses the
   cancellation: the usual **Refused** case, no resend. Staff's answer decides: Print anyway leaves dishes unmarked, so no
   mark proves nothing, and a wrong answer takes a real sale out of AEAT for good.
@@ -164,7 +167,9 @@ went red with Task 6 in place (run). Void mechanics stay in `record-void.test.ts
 | Served | These dishes were served or charged, so the receipt can't be cancelled. Take payment, or use Reopen bill where it is offered. | Estos platos se sirvieron o se cobran, así que el ticket no se puede anular. Cobra la cuenta o, si se ofrece, usa Reabrir cuenta. |
 | Payment held | This bill holds a payment, so its receipt cannot be cancelled. | Esta cuenta tiene un pago, así que no se puede anular su ticket. |
 | Approver can't | The person who approved this cannot do it. Choose someone who can. | La persona que lo ha aprobado no puede hacerlo. Elige a alguien que pueda. |
-| Other box | The other box has not finished sending its receipts. Try again later. | El otro servidor aún no ha terminado de enviar sus tickets. Inténtalo más tarde. |
+| Not answered | AEAT has not answered for this receipt yet. Try again later. | La AEAT aún no ha respondido sobre este ticket. Inténtalo más tarde. |
+| Refused | AEAT refused this receipt, so it cannot be cancelled. Take payment. | La AEAT rechazó este ticket, así que no se puede anular. Cobra la cuenta. |
+| Reopen, refused | AEAT refused this receipt, so the bill cannot be reopened. Take payment. | La AEAT rechazó este ticket, así que la cuenta no se puede reabrir. Cóbrala. |
 | Done (no number) | Receipt {number} cancelled. (The receipt is cancelled.) | Ticket {number} anulado. (El ticket queda anulado.) |
 
 **Task 9, words:** both `table-service.md` guides; the dashboard help of both permissions; `conventions-ui.md:630`,

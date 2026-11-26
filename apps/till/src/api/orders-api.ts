@@ -25,6 +25,9 @@ import type {
 import type { TillSaleResult, BillParty } from "./payments-api.js";
 import type { TillRequest, ReadOptions } from "./till-request.js";
 
+/** What a cancel filed for a bill's receipt: its cancellation, or a corrective that credits it. */
+export type CancelFiled = "cancellation" | "corrective" | null;
+
 /** An order's dishes: `ordered` counts the order's dishes less cancellations, extras left out and a
  * dish not sold by the unit as one; the rest count those not yet served by where they stand. */
 export interface OrderStateCounts {
@@ -413,13 +416,14 @@ export class OrdersApi extends FloorApi {
   async reprintOrder(orderId: string): Promise<void> {
     await this.#request<void>(`/api/orders/${orderId}/reprint`, "POST", {});
   }
-  async cancelOrder(
+  /** Answers what the server filed for the bill's receipt; `null` when it had none. */
+  cancelOrder(
     id: string,
     reason: string,
     override?: { personId: string; pin: string },
     options: ReadOptions = {},
-  ): Promise<void> {
-    await this.#request<void>(
+  ): Promise<{ filed: CancelFiled }> {
+    return this.#request<{ filed: CancelFiled }>(
       `/api/working-orders/${id}/cancel`,
       "POST",
       { reason, ...(override ? { override } : {}) },
@@ -446,7 +450,7 @@ export class OrdersApi extends FloorApi {
       options.signal,
     );
   }
-  /** Who may approve cancelling and crediting an invoiced bill → `GET /api/cancel-credit-authorizers`. */
+  /** Who may approve cancelling an invoiced bill → `GET /api/cancel-credit-authorizers`. */
   listCancelCreditAuthorizers(options: ReadOptions = {}): Promise<StaffMember[]> {
     return this.#request<StaffMember[]>(
       "/api/cancel-credit-authorizers",

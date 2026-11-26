@@ -1,5 +1,5 @@
 import { seedPersons } from "@waitron/identity/test/person-rows.js";
-import type { Query } from "drizzle-orm";
+import { sql, type Query } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { newId, withTransaction, type Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -10,7 +10,9 @@ import { steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
 import { appendToChain } from "./chain.js";
 import { readDeviceReceiptEvidence } from "./device-receipt-evidence.js";
+import { originalSettled } from "./drain.js";
 import { openFilingCase } from "./filing-cases.js";
+import { currentAltaRefused } from "./refused-current-alta.js";
 import { FISCAL_PERMISSIONS } from "./permissions.js";
 import { applyAbsentOriginalCancellation } from "./record-remedy-absent.js";
 import { verifactuSubmissions } from "./schema/verifactu-submissions.js";
@@ -108,6 +110,86 @@ describe("reads of a sale's filed alta", () => {
       "SEARCH verifactu_records USING INDEX verifactu_records_sale_idx (sale_id=?)",
     ]);
   });
+
+  it("finds the alta a credit's refusal judges through the sale index, and its versions through the first alta's sale", async () => {
+    const plan = await planOf((tx) => backend().refuseCreditOf(tx, brandSaleId(newId())));
+    expect(plan).toEqual([
+      "SEARCH receipt USING INDEX verifactu_records_sale_idx (sale_id=?)",
+      "CORRELATED SCALAR SUBQUERY 2",
+      "SEARCH original_first USING INDEX verifactu_records_identidad_uq (id_emisor_factura=? AND num_serie_factura=? AND fecha_expedicion_factura=? AND tipo_registro=?)",
+      "SEARCH original USING INDEX verifactu_records_sale_idx (sale_id=?)",
+      "CORRELATED SCALAR SUBQUERY 1",
+      "SEARCH replacement USING COVERING INDEX verifactu_records_corrects_registro_uq (corrects_registro_id=?)",
+      "SEARCH original_envio USING INDEX sqlite_autoindex_verifactu_submissions_1 (registro_id=?)",
+    ]);
+  });
+
+  // `recordVoid` binds the invoice's values; the filing queue's set-aside names a cancellation's columns.
+  it.each([
+    [
+      "bound values",
+      sql`select 1 where ${currentAltaRefused({
+        idEmisorFactura: "B12345678",
+        numSerieFactura: "A-1",
+        fechaExpedicionFactura: "2026-11-26",
+      })}`,
+      ["SCAN CONSTANT ROW", "SCALAR SUBQUERY 2"],
+    ],
+    [
+      "a cancellation's columns",
+      sql`select r.id from verifactu_records r where r.id in ${[newId()]} and ${currentAltaRefused({
+        idEmisorFactura: sql`r.id_emisor_factura`,
+        numSerieFactura: sql`r.num_serie_factura`,
+        fechaExpedicionFactura: sql`r.fecha_expedicion_factura`,
+      })}`,
+      [
+        "SEARCH r USING INDEX sqlite_autoindex_verifactu_records_1 (id=?)",
+        "CORRELATED SCALAR SUBQUERY 2",
+      ],
+    ],
+  ] as const)(
+    "finds the refused current alta through its first alta's sale, given %s",
+    async (_, query, outer) => {
+      const plan = await withTransaction(suite.db, async (tx) =>
+        tx.all<{ detail: string }>(sql`explain query plan ${query}`).map((row) => row.detail),
+      );
+      expect(plan).toEqual([
+        ...outer,
+        "SEARCH original_first USING INDEX verifactu_records_identidad_uq (id_emisor_factura=? AND num_serie_factura=? AND fecha_expedicion_factura=? AND tipo_registro=?)",
+        "SEARCH original USING INDEX verifactu_records_sale_idx (sale_id=?)",
+        "CORRELATED SCALAR SUBQUERY 1",
+        "SEARCH replacement USING COVERING INDEX verifactu_records_corrects_registro_uq (corrects_registro_id=?)",
+        "SEARCH original_envio USING INDEX sqlite_autoindex_verifactu_submissions_1 (registro_id=?)",
+      ]);
+    },
+  );
+
+  // The filing queue's claim asks this of every waiting cancellation, and of each earlier one.
+  it.each([
+    ["r", "original"],
+    ["prior", "prior_original"],
+  ] as const)(
+    "finds whether a cancellation's original is settled through its first alta's sale (%s)",
+    async (record, original) => {
+      const plan = await withTransaction(suite.db, async (tx) =>
+        tx
+          .all<{ detail: string }>(
+            sql`explain query plan select ${sql.raw(record)}.id from verifactu_records ${sql.raw(record)}
+              where ${sql.raw(record)}.id in ${[newId()]} and ${originalSettled(record, original)}`,
+          )
+          .map((row) => row.detail),
+      );
+      expect(plan).toEqual([
+        `SEARCH ${record} USING INDEX sqlite_autoindex_verifactu_records_1 (id=?)`,
+        "CORRELATED SCALAR SUBQUERY 2",
+        `SEARCH ${original}_first USING INDEX verifactu_records_identidad_uq (id_emisor_factura=? AND num_serie_factura=? AND fecha_expedicion_factura=? AND tipo_registro=?)`,
+        `SEARCH ${original} USING INDEX verifactu_records_sale_idx (sale_id=?)`,
+        "CORRELATED SCALAR SUBQUERY 1",
+        "SEARCH replacement USING COVERING INDEX verifactu_records_corrects_registro_uq (corrects_registro_id=?)",
+        `SEARCH ${original}_envio USING INDEX sqlite_autoindex_verifactu_submissions_1 (registro_id=?)`,
+      ]);
+    },
+  );
 
   it("finds the alta an absent-original cancellation takes its origin from through the sale index", async () => {
     registerModulePermissions(FISCAL_PERMISSIONS);

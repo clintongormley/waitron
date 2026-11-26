@@ -3,6 +3,7 @@ import {
   lineServiceCancellations,
   unpaidDepartures,
   workingOrderLines,
+  workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { staffPresentationName } from "@waitron/menu";
@@ -16,12 +17,27 @@ export interface ServedBillDish {
 }
 
 /**
+ * Whether the bill was handed over. Record unpaid departure also stamps
+ * `collected_at`, at or after its `recorded_at`, to stop kitchen work: that stamp is no handover.
+ */
+export async function handedOver(tx: Transaction, billId: string): Promise<boolean> {
+  const [bill] = await tx
+    .select({ collectedAt: workingOrders.collectedAt, departedAt: unpaidDepartures.recordedAt })
+    .from(workingOrders)
+    .leftJoin(unpaidDepartures, eq(unpaidDepartures.workingOrderId, workingOrders.id))
+    .where(eq(workingOrders.id, billId));
+  if (bill === undefined || bill.collectedAt === null) return false;
+  return bill.departedAt === null || bill.collectedAt < bill.departedAt;
+}
+
+/**
  * Every row of the bill served, and every dish (not its extras) taken off service with its charge
- * kept. Record unpaid departure writes kept-charge rows for the dishes it stops, at or after its
- * `recorded_at`; those were never served nor charged here, so they do not count. A set menu's price
- * row is written served, so it never counts: its dishes do.
+ * kept; every row of a bill {@link handedOver}. Record unpaid departure writes kept-charge rows for
+ * the dishes it stops, at or after its `recorded_at`; those were never served nor charged here, so
+ * they do not count. A set menu's price row is written served, so it never counts: its dishes do.
  */
 export async function servedOrCharged(tx: Transaction, billId: string): Promise<ServedBillDish[]> {
+  const whole = await handedOver(tx, billId);
   const rows = await tx
     .select({
       line: workingOrderLines,
@@ -40,7 +56,9 @@ export async function servedOrCharged(tx: Transaction, billId: string): Promise<
   return rows.flatMap(({ line, kept, keptAt, departedAt }) => {
     if (line.setMenuRole === "set_menu") return [];
     const departure = departedAt !== null && keptAt !== null && keptAt >= departedAt;
-    const quantity = line.servedQuantity + (kept === null || departure ? 0 : kept);
+    const quantity = whole
+      ? line.quantity
+      : line.servedQuantity + (kept === null || departure ? 0 : kept);
     return quantity === 0
       ? []
       : [

@@ -2563,12 +2563,12 @@ describe("TillApi", () => {
     });
   });
 
-  it("cancelOrder POSTs the reason to the addressed order's /cancel route (empty 200 body)", async () => {
-    const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+  it("cancelOrder POSTs the reason to the addressed order's /cancel route and answers what it filed", async () => {
+    const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ filed: "cancellation" }));
 
     await expect(
       new TillApi("", fetchStub).cancelOrder("wo1", "Cliente cambió de idea"),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ filed: "cancellation" });
 
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/wo1/cancel",

@@ -33,8 +33,8 @@ Opened on a private copy of main that day by holding House coffee on Counter. To
 ## Cash handed back for a voided cash sale is recorded nowhere
 
 A void writes no payment or refund row, so if staff give a customer cash back, the void's day shows
-a drawer shortfall at cash-up. No till screen or server route calls `recordVoid` yet, so nothing
-can do this today. **Owner decision 2026-09-25:** keep it here and decide it when the till's void
+a drawer shortfall at cash-up. The till's **Nothing was served** voids only a receipt that never held
+a payment, so nothing can do this today. **Owner decision 2026-09-25:** keep it here and decide it when the till's void
 screen is designed.
 
 ## The till's top bar is one row at every width (A395, #1435): left open

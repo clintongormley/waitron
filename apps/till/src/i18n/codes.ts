@@ -653,6 +653,15 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Some dishes on this bill are not marked served. If the guests have had them, mark them served",
     es: "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos",
   },
+  "bill.served_dishes": { en: en["cancel_credit.served"], es: es["cancel_credit.served"] },
+  "fiscal.original_unanswered": {
+    en: "AEAT has not answered for this receipt yet. Try again later.",
+    es: "La AEAT aún no ha respondido sobre este ticket. Inténtalo más tarde.",
+  },
+  "fiscal.original_refused": {
+    en: "AEAT refused this receipt, so it cannot be cancelled. Take payment.",
+    es: "La AEAT rechazó este ticket, así que no se puede anular. Cobra la cuenta.",
+  },
   "meal_end.unserved_dishes": {
     en: "Some dishes on this bill are not marked served. If the guests have had them, mark them served; otherwise print anyway. A dish that never comes is refunded after payment with Give money back.",
     es: "Algunos platos de esta cuenta no están marcados como servidos. Si los clientes ya los han tomado, márcalos como servidos; si no, imprime igualmente. Un plato que no llegue se devuelve después del cobro con Devolver dinero.",

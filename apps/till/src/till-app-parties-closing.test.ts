@@ -13,6 +13,7 @@ import { TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import { completedFor, previewFor } from "./widgets/give-back-dialog.test-helpers.js";
 import type { GiveBackRequest, GiveBackView, GiveBackWrite } from "./api/give-back-types.js";
 import type { PartyBill, TableState } from "./api/floor-api.js";
+import type { CancelFiled } from "./api/orders-api.js";
 import {
   seated,
   table4,
@@ -38,7 +39,7 @@ import {
   held,
 } from "../test/party-app-fixture.js";
 
-describe("till-app: cancelling and crediting an invoiced bill", () => {
+describe("till-app: cancelling an invoiced bill", () => {
   const invoiced: PartyBill = {
     ...checkBill,
     status: "placed",
@@ -71,8 +72,12 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
   const offered = (el: TillApp) =>
     tableOrder(el)!.shadowRoot!.querySelector("[data-cancel-credit]");
 
-  /** The server's side of the party's bills: `cancelOrder` cancels the bill unless it rejects. */
-  function billServer(cancel: (id: string) => Promise<void> = async () => {}) {
+  /** The server's side of the party's bills: `cancelOrder` cancels the bill unless it rejects,
+   * answering that it filed `filed`; the corrective's number is R/3. */
+  function billServer(
+    cancel: (id: string) => Promise<void> = async () => {},
+    filed: CancelFiled = "corrective",
+  ) {
     let bills: PartyBill[] = [tabBill, invoiced];
     let readsFail = false;
     return {
@@ -82,7 +87,8 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
       }),
       cancelOrder: vi.fn(async (id: string) => {
         await cancel(id);
-        bills = [tabBill, cancelled];
+        bills = [tabBill, filed === "corrective" ? cancelled : { ...cancelled, correctives: [] }];
+        return { filed };
       }),
       cancelBehindTheScenes: () => {
         bills = [tabBill, cancelled];
@@ -93,7 +99,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     };
   }
 
-  /** The table is opened and the invoiced bill's Cancel and credit is pressed. */
+  /** The table is opened and the invoiced bill's Nothing was served is pressed. */
   async function openCancel(overrides: Record<string, unknown> = {}) {
     const mounted = await mountApp({
       listCancelCreditAuthorizers: vi
@@ -107,7 +113,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     return mounted;
   }
 
-  /** The invoiced bill is put on screen, and the ⋮'s Cancel and credit is pressed. */
+  /** The invoiced bill is put on screen, and the ⋮'s Nothing was served is pressed. */
   async function pressCancelCredit(el: TillApp): Promise<void> {
     const order = tableOrder(el)!;
     if (order.orderId !== "wo-check") {
@@ -132,11 +138,10 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     await flush(el, 6);
   }
 
-  it("opens over the table naming the bill's invoice and amount, and sends nothing yet", async () => {
+  it("opens over the table naming the bill's invoice, and sends nothing yet", async () => {
     const { el } = await openCancel();
 
     expect(dialog(el)!.invoiceNumber).toBe("A/12");
-    expect(dialog(el)!.amount).toBe("30.00");
     expect(api.cancelOrder).not.toHaveBeenCalled();
   });
 
@@ -314,6 +319,8 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     ["sale.correction_exceeds_total", null],
     ["sale.correction_not_whole", null],
     ["working_order.not_placed", null],
+    ["fiscal.original_unanswered", null],
+    ["fiscal.original_refused", null],
   ] as const)(
     "keeps the dialog open with %s's sentence, and reads the bills again",
     async (code, key) => {
@@ -394,30 +401,41 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     expect(doneText(el)).toBeNull();
   });
 
-  it("when the bills cannot be read after the cancel, still says the bill is cancelled and offers no cancel again", async () => {
-    const server = billServer();
-    server.cancelOrder.mockImplementationOnce(async () => server.failReads());
-    const { el } = await openCancel(server);
-    await typeReason(el, "Wrong table");
+  it.each([
+    ["corrective", t("cancel_credit.done_unnumbered")],
+    ["cancellation", "Receipt A/12 cancelled."],
+  ] as const)(
+    "when the bills cannot be read after a cancel filing a %s, says so and offers no cancel again",
+    async (filed, said) => {
+      const server = billServer(async () => server.failReads(), filed);
+      const { el } = await openCancel(server);
+      await typeReason(el, "Wrong table");
 
-    await confirmCancel(el);
+      await confirmCancel(el);
 
-    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
-    expect(offered(el)).toBeNull();
-  });
+      expect(doneText(el)).toBe(said);
+      expect(offered(el)).toBeNull();
+    },
+  );
 
-  it("shows a completed table cancel while the corrective read has not answered", async () => {
-    const server = billServer();
-    const { el } = await openCancel(server);
-    server.getPartyBills.mockImplementationOnce(() => new Promise<PartyBill[]>(() => undefined));
-    await typeReason(el, "Wrong table");
+  it.each([
+    ["corrective", t("cancel_credit.done_unnumbered")],
+    ["cancellation", "Receipt A/12 cancelled."],
+  ] as const)(
+    "shows a completed table cancel filing a %s while the bills read has not answered",
+    async (filed, said) => {
+      const server = billServer(undefined, filed);
+      const { el } = await openCancel(server);
+      server.getPartyBills.mockImplementationOnce(() => new Promise<PartyBill[]>(() => undefined));
+      await typeReason(el, "Wrong table");
 
-    await confirmCancel(el);
+      await confirmCancel(el);
 
-    expect(server.cancelOrder).toHaveBeenCalledOnce();
-    expect(dialog(el)!.busy).toBe(false);
-    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
-  });
+      expect(server.cancelOrder).toHaveBeenCalledOnce();
+      expect(dialog(el)!.busy).toBe(false);
+      expect(doneText(el)).toBe(said);
+    },
+  );
 
   it("shows a table cancel refusal while the follow-up bills read has not answered", async () => {
     const server = billServer(async () => {
@@ -623,7 +641,10 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
         table7,
         table9,
       ]),
-      cancelOrder: vi.fn(async () => cancel()),
+      cancelOrder: vi.fn(async () => {
+        cancel();
+        return { filed: "corrective" as const };
+      }),
       createPartyBill: vi.fn().mockResolvedValue({ billId: "wo-new", revision: 5 }),
     };
   }
@@ -659,6 +680,93 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     await flush(el, 6);
 
     expect(server.getPartyBills).toHaveBeenCalledTimes(billReads);
+  });
+
+  it("names the receipt cancelled when the server answers that it filed a cancellation", async () => {
+    const server = billServer(undefined, "cancellation");
+    const { el } = await openCancel(server);
+    await typeReason(el, "Nobody came");
+
+    await confirmCancel(el);
+
+    expect(doneText(el)).toBe("Receipt A/12 cancelled.");
+    expect(offered(el)).toBeNull();
+  });
+
+  it.each([
+    ["sale.void", "listUnpaidDepartureAuthorizers", "listCancelCreditAuthorizers"],
+    ["sale.rectify", "listCancelCreditAuthorizers", "listUnpaidDepartureAuthorizers"],
+  ] as const)(
+    "refused for %s, asks those who hold that permission for their PIN",
+    async (permission, asked, notAsked) => {
+      let refuse = true;
+      const server = billServer(async () => {
+        if (refuse) {
+          refuse = false;
+          throw { code: "authorization.not_permitted", status: 403, permission };
+        }
+      });
+      const { el } = await openCancel({
+        ...server,
+        listUnpaidDepartureAuthorizers: vi
+          .fn()
+          .mockResolvedValue([{ personId: "void-1", displayName: "Ana" }]),
+        listCancelCreditAuthorizers: vi
+          .fn()
+          .mockResolvedValue([{ personId: "rect-1", displayName: "Luis" }]),
+      });
+      await typeReason(el, "Nobody came");
+
+      await confirmCancel(el);
+
+      expect(api[asked]).toHaveBeenCalledOnce();
+      expect(api[notAsked]).not.toHaveBeenCalled();
+      expect(approval(el)!.authorizers).toEqual(
+        permission === "sale.void"
+          ? [{ personId: "void-1", displayName: "Ana" }]
+          : [{ personId: "rect-1", displayName: "Luis" }],
+      );
+    },
+  );
+
+  it("lists the dishes served and keeps the confirm quiet until the window is opened again", async () => {
+    const server = billServer(async () => {
+      throw {
+        code: "bill.served_dishes",
+        status: 409,
+        workingOrderId: "wo-check",
+        dishes: [{ lineId: "l-1", dishName: "Steak", quantity: "2" }],
+      };
+    });
+    const { el } = await openCancel(server);
+    await typeReason(el, "Nobody came");
+
+    await confirmCancel(el);
+
+    const shown = dialog(el)!.shadowRoot!;
+    expect(
+      [...shown.querySelectorAll("[data-served-dish]")].map((li) => li.textContent!.trim()),
+    ).toEqual(["2 × Steak"]);
+    expect(shown.querySelector("[data-split-mark-served]")).toBeNull();
+    const confirm = () =>
+      dialog(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        "[data-cancel-credit-confirm]",
+      )!;
+    expect(confirm().disabled).toBe(true);
+    await typeReason(el, "Nobody came at all");
+    expect(confirm().disabled).toBe(true);
+
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!.click();
+    await flush(el);
+    const ask = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await ask.updateComplete;
+    expect(ask.open).toBe(true);
+    ask.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => dialog(el)).toBeNull();
+    await pressCancelCredit(el);
+    await typeReason(el, "Nobody came");
+    expect(dialog(el)!.shadowRoot!.querySelector("[data-served-dish]")).toBeNull();
+    expect(confirm().disabled).toBe(false);
   });
 
   it("Cancel closes the dialog and sends nothing", async () => {
@@ -735,15 +843,15 @@ describe("till-app: reopening a printed bill", () => {
       stoppedToNothingBehindTheScenes: () => {
         bills = [tabBill, cancelled, { ...reopened, total: "0.00", outstanding: "0.00" }];
       },
-      /** Cancel and credit made on another till, and another bill opened at the table since. */
+      /** Nothing was served on another till, and another bill opened at the table since. */
       cancelledElsewhereThenNewBill: (total = "18.00") => {
         bills = [tabBill, cancelled, { ...unrelated, total, outstanding: total }];
       },
-      /** Cancel and credit made on another till: the bill is credited and no new bill opens. */
+      /** Nothing was served on another till: the bill is cancelled and no new bill opens. */
       cancelledElsewhere: () => {
         bills = [tabBill, cancelled];
       },
-      /** Cancel and credit on another till of the party's only bill in use: the server opens it a
+      /** Nothing was served on another till for the party's only bill in use: the server opens it a
        * fresh empty bill (`ensureFamilyBill`). */
       cancelledElsewhereLeavingEmptyBill: () => {
         bills = [cancelled, { ...unrelated, total: "0.00", outstanding: "0.00" }];
@@ -1152,6 +1260,7 @@ describe("till-app: reopening a printed bill", () => {
     ["bill.left_unpaid", "split.refused_left_unpaid"],
     ["bill.not_at_table", "split.refused_not_at_table"],
     ["bill.not_issued", "split.refused_not_issued"],
+    ["fiscal.original_refused", "split.refused_receipt_refused"],
   ] as const)("keeps the dialog open with %s's sentence", async (code, key) => {
     const server = billServer(async () => {
       throw { code, status: 409, workingOrderId: "wo-check" };

@@ -1,11 +1,14 @@
 import { eq, sql } from "drizzle-orm";
 import type { RecordSaleInput } from "@waitron/core";
-import type { Database, Transaction } from "@waitron/db";
+import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import type { TrustedClock } from "@waitron/fiscal";
-import { jobOrigin } from "@waitron/shared";
+import { jobOrigin, saleId as brandSaleId } from "@waitron/shared";
 import type { NodeId, SeriesId } from "@waitron/shared";
-import type { VerifactuClient } from "@waitron/verifactu";
+import type { RegistroAlta, VerifactuClient } from "@waitron/verifactu";
+import { appendToChain } from "../src/chain.js";
+import { decodeRegistroRow, fromRegistroRow } from "../src/registro-row.js";
 import { verifactuRecords } from "../src/schema/verifactu-records.js";
+import { verifactuSubmissions } from "../src/schema/verifactu-submissions.js";
 
 const BASE = new Date("2026-03-01T13:05:00+01:00");
 
@@ -106,4 +109,61 @@ export async function refusedByAeat(db: Database | Transaction, saleId: string):
     update verifactu_submissions set estado = 'rechazado', codigo_error = '1112'
     where registro_id in (select id from verifactu_records where sale_id = ${saleId})
   `);
+}
+
+/** Leaves every record of `saleId` accepted by AEAT. */
+export async function acceptedByAeat(db: Database | Transaction, saleId: string): Promise<void> {
+  await db.execute(sql`
+    update verifactu_submissions set estado = 'aceptado'
+    where registro_id in (select id from verifactu_records where sale_id = ${saleId})
+  `);
+}
+
+/** A correction record of the sale's latest alta, as the record-correction remedy files one,
+ * left in the delivery state given, or with no submission for `null`. */
+export async function fixedVersionOf(
+  db: Database,
+  nodeId: NodeId,
+  saleId: string,
+  estado: string | null,
+  codigoError: string | null,
+) {
+  await withTransaction(db, async (tx) => {
+    const { rows } = await tx.execute<Record<string, unknown>>(sql`
+      select * from verifactu_records r
+      where sale_id = ${saleId} and tipo_registro = 'alta'
+        and not exists (select 1 from verifactu_records n where n.corrects_registro_id = r.id)
+    `);
+    const stored = decodeRegistroRow(rows[0]!);
+    const previous = fromRegistroRow(stored) as RegistroAlta;
+    const appended = await appendToChain(tx, nodeId, {
+      tipo: "alta",
+      saleId: brandSaleId(saleId),
+      origin: jobOrigin("operator_script"),
+      entorno: "production",
+      correctsRegistroId: stored.id,
+      input: {
+        IDEmisorFactura: previous.IDFactura.IDEmisorFactura,
+        NumSerieFactura: previous.IDFactura.NumSerieFactura,
+        FechaExpedicionFactura: new Date(
+          Date.parse(`${stored.fecha_expedicion_factura}T00:00:00Z`) - 60 * 60_000,
+        ),
+        NombreRazonEmisor: previous.NombreRazonEmisor,
+        TipoFactura: "F2",
+        DescripcionOperacion: previous.DescripcionOperacion,
+        Desglose: previous.Desglose,
+        CuotaTotal: previous.CuotaTotal,
+        ImporteTotal: previous.ImporteTotal,
+        Subsanacion: "S",
+        RechazoPrevio: estado === "rechazado" ? "X" : "N",
+        SistemaInformatico: previous.SistemaInformatico,
+        generadoEn: new Date("2026-03-02T10:00:00+01:00"),
+        offsetMinutes: 60,
+      },
+    });
+    if (estado !== null)
+      await tx
+        .insert(verifactuSubmissions)
+        .values({ registroId: appended.id, estado, codigoError });
+  });
 }

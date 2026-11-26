@@ -85,6 +85,7 @@ export async function readFilingOverview(
         ...lookupEvidence(row.evidence),
       })),
       heldBehind: heldByCase.get(found.registroId) ?? 0,
+      cancelledNeverHeld: found.cancelledNeverHeld,
     })),
     totalCases: total,
     heldWithoutCase,
