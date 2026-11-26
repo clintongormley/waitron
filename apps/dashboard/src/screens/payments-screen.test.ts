@@ -461,9 +461,11 @@ describe("payments-screen", () => {
       ["first", "First terminal"],
       ["second", "Second terminal"],
     ]) {
-      await vi.waitFor(() =>
-        expect(qProfile(el, "[data-test=equipment-profile-picker]")?.textContent).toContain(name),
-      );
+      await vi.waitFor(() => {
+        const dialog = qProfile(el, "[data-test=equipment-profile-picker]");
+        expect(dialog?.textContent).toContain(name);
+        expect(dialog?.shadowRoot?.querySelector("dialog")?.open).toBe(true);
+      });
       await vi.waitFor(() =>
         expect(qProfile(el, "[data-test=equipment-profile-till]")).not.toBeNull(),
       );
