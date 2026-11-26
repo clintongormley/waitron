@@ -11697,10 +11697,17 @@ describe("Deleting a printer", () => {
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
     expect(dialogOf(el)!.actionError).toBe(codeMessage("connection.failed"));
 
-    const moved = { ...kitchenImpact, removes: kitchenImpact.removes.slice(0, -2) };
+    const moved = {
+      ...kitchenImpact,
+      target: { ...kitchenImpact.target, name: "Kitchen pass" },
+      removes: kitchenImpact.removes.slice(0, -2),
+    };
     reread.resolve(moved);
     await vi.waitFor(() => expect(dialogOf(el)!.impact).toBe(moved));
     await flush(el);
+    expect(dialogOf(el)!.shadowRoot!.querySelector("wt-modal")!.heading).toBe(
+      "¿Eliminar Kitchen pass?",
+    );
     expect(confirmOf(el).hasAttribute("disabled")).toBe(false);
     expect(dialogOf(el)!.actionError).toBe(codeMessage("connection.failed"));
   });

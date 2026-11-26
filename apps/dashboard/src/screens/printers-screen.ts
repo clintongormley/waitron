@@ -5718,7 +5718,7 @@ export class PrintersScreen extends LitElement {
           : html`${this.#renderTestPageSent()}${this.#renderEveryStationNotice()}${this.#preview.job ? nothing : reprinted}${this.#renderPairedAgain()}${this.errorKey ? html`<p class="error" role="alert">${this.#bluetoothRefusal(this.errorKey)}</p>` : nothing}
             ${this.#renderRefreshError()}`
       }
-      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#deleteDialog.render("delete-printer-dialog", printerDeleteCopy(this.#deletePrinter.name, this.#deletePrinter.bluetooth))}${this.#renderEveryStationDialog()}
+      ${this.#renderPrinterDetails()}${this.#renderAgentModal()}${this.#renderDeleteAgent()}${this.#renderEditAgent()}${this.#renderNewPrinter()}${this.#renderPrinterName()}${this.#renderPagePrinterAdd()}${this.#renderPairAgain()}${this.#renderPairDialog()}${this.#renderEditPrinter()}${this.#renderAcceptDialog()}${this.#renderEquipmentLabel()}${this.#deleteDialog.render("delete-printer-dialog", printerDeleteCopy(this.#deleteDialog.targetName ?? this.#deletePrinter.name, this.#deletePrinter.bluetooth))}${this.#renderEveryStationDialog()}
       ${
         this.profileAssignment && this.addingPagePrinter === null
           ? html`<dashboard-equipment-profile-picker

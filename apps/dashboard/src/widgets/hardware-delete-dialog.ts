@@ -44,6 +44,10 @@ export class HardwareDeleteDialog {
     return this.#opening?.id ?? null;
   }
 
+  get targetName(): string | undefined {
+    return this.#impact?.target.name;
+  }
+
   get submitting(): boolean {
     return this.#submitting;
   }

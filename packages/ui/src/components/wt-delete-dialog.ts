@@ -40,10 +40,6 @@ export type DeleteDialogSummaryCopy = DeleteDialogWords & {
   summary: (impact: DeleteImpact) => { sentence: string; ends: string[] };
 };
 
-/** Asks before deleting a record, naming it and showing what refuses the delete, the work it ends
- * and the settings it removes. The parent reads the impact, sends the delete and closes the dialog;
- * it sets `submitting` inside its `wt-delete-confirm` listener, which is what stops a second press
- * sending a second delete. */
 @customElement("wt-delete-dialog")
 export class WtDeleteDialog extends LitElement {
   static override styles = [
