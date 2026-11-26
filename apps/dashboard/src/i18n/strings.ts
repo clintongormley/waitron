@@ -2123,8 +2123,7 @@ export const en = {
   "printers.delete_ends": "Work that ends",
   "printers.delete_removes": "Settings that are removed",
   "printers.delete_irreversible": "This can't be undone.",
-  "printers.drawer_delete_retained":
-    "This drawer has a balance or an unfinished count. Adding a printer at the same address keeps it when Waitron restores the same registration.",
+  "printers.drawer_delete_retained": "This drawer has a balance or an unfinished count.",
   "printers.drawer_delete_close_first": "Close first",
   "printers.drawer_delete_use_till":
     "On {names}, open More, choose Close drawer and leave zero cash.",
@@ -6971,8 +6970,7 @@ export const es: Record<StringKey, string> = {
   "printers.delete_ends": "Trabajo que finaliza",
   "printers.delete_removes": "Configuración que se elimina",
   "printers.delete_irreversible": "Esta acción no se puede deshacer.",
-  "printers.drawer_delete_retained":
-    "Este cajón tiene saldo o un recuento pendiente. Se conserva si al añadir una impresora en la misma dirección Waitron recupera el mismo registro.",
+  "printers.drawer_delete_retained": "Este cajón tiene saldo o un recuento pendiente.",
   "printers.drawer_delete_close_first": "Cerrar primero",
   "printers.drawer_delete_use_till":
     "En {names}, abre Más, elige Cerrar cajón y deja el cajón vacío.",

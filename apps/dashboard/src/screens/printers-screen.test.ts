@@ -11373,20 +11373,31 @@ describe("Deleting a printer", () => {
     expect(root.querySelector("[data-target], [data-irreversible]")).toBeNull();
   });
 
-  it.each([{ devices: [{ id: "d-bar", name: "Bar till" }] }, { devices: [] }])(
+  it.each([
+    {
+      devices: [{ id: "d-bar", name: "Bar till" }],
+      locale: "en-GB",
+      warning: "This drawer has a balance or an unfinished count.",
+    },
+    { devices: [], locale: "es-ES", warning: "Este cajón tiene saldo o un recuento pendiente." },
+  ] as const)(
     "shows Close first guidance immediately for a printer with an unfinished drawer",
-    async ({ devices }) => {
+    async ({ devices, locale, warning }) => {
+      setLocale(locale);
       const { el, api } = await mounted({
-        getPrinterDeleteImpact: vi.fn(async () => ({ ...kitchenImpact, drawerClose: { devices } })),
+        getPrinterDeleteImpact: vi.fn(async () => ({
+          ...kitchenImpact,
+          drawerClose: { devices: [...devices] },
+        })),
       });
       await openDelete(el, "p1");
       const root = dialogOf(el)!.shadowRoot!;
-      expect(root.textContent).toContain(t("printers.drawer_delete_retained"));
       expect(confirmOf(el).textContent?.trim()).toBe(t("printers.drawer_delete_anyway"));
       expect(root.querySelector("[data-test=delete-cancel]")?.textContent?.trim()).toBe(
         t("printers.drawer_delete_stop"),
       );
       const guidance = root.querySelector('[data-test="delete-guidance"]')!;
+      expect(guidance.previousElementSibling?.textContent?.trim()).toBe(warning);
       expect(guidance.textContent).toContain(t("printers.drawer_delete_close_first"));
       expect(root.querySelector("[data-test=delete-alternative]")).toBeNull();
       if (devices.length > 0) {
