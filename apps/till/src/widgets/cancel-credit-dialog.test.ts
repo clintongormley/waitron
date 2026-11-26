@@ -596,7 +596,7 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
       const el = await mount({ mode: "split", done: { corrective, creditedElsewhere: true } });
 
       expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
-        "This bill's receipt was already cancelled, perhaps on another device, and no new bill was opened.",
+        "This bill's receipt was already cancelled on another device.",
       );
     },
   );
@@ -674,7 +674,7 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
     el.done = { corrective: "R/3", creditedElsewhere: true };
     await el.updateComplete;
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
-      "El ticket de esta cuenta ya estaba anulado, quizá en otro dispositivo, y no se abrió ninguna cuenta nueva.",
+      "El ticket de esta cuenta ya se anuló en otro dispositivo.",
     );
   });
 });

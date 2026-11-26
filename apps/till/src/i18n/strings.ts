@@ -2227,8 +2227,7 @@ export const en = {
     "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it. If it was not taken, choose Reopen bill again.",
   "split.done":
     "Receipt cancelled and the bill reopened. Move each guest's dishes to their own bill, then print each one.",
-  "split.credited_elsewhere":
-    "This bill's receipt was already cancelled, perhaps on another device, and no new bill was opened.",
+  "split.credited_elsewhere": "This bill's receipt was already cancelled on another device.",
   "bill_refund.done_cash": "Refunded: {amount}. Hand it over in cash.",
   "bill_refund.done_card": "Refunded: {amount} to the card.",
   "bill_refund.done_terminal": "The refund of {amount} on the card terminal is recorded.",
@@ -4632,8 +4631,7 @@ export const es: Record<StringKey, string> = {
     "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo. Si no se cobró, vuelve a elegir Reabrir cuenta.",
   "split.done":
     "Ticket anulado y cuenta reabierta. Pasa los platos de cada cliente a su propia cuenta y después imprime cada una.",
-  "split.credited_elsewhere":
-    "El ticket de esta cuenta ya estaba anulado, quizá en otro dispositivo, y no se abrió ninguna cuenta nueva.",
+  "split.credited_elsewhere": "El ticket de esta cuenta ya se anuló en otro dispositivo.",
   "bill_refund.done_cash": "Devuelto: {amount}. Entrégalo en efectivo.",
   "bill_refund.done_card": "Devuelto: {amount} a la tarjeta.",
   "bill_refund.done_terminal": "La devolución de {amount} en el datáfono queda registrada.",

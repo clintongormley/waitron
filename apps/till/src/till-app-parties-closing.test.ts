@@ -709,8 +709,7 @@ describe("till-app: reopening a printed bill", () => {
 
   const SPLIT_DONE =
     "Receipt cancelled and the bill reopened. Move each guest's dishes to their own bill, then print each one.";
-  const ALREADY_CANCELLED =
-    "This bill's receipt was already cancelled, perhaps on another device, and no new bill was opened.";
+  const ALREADY_CANCELLED = "This bill's receipt was already cancelled on another device.";
 
   /** The server's side: `splitAfterPrint` cancels the bill and opens `wo-split`, unless it rejects. */
   function billServer(
