@@ -841,39 +841,55 @@ test("a focused control in a tree cell keeps its focus when the columns are reor
   expect(el.shadowRoot!.activeElement).toBe(focused);
 });
 
+const widthRows: Row[] = [
+  { id: "1", parent: null, name: "Ada", status: "active" },
+  { id: "2", parent: null, name: "A much longer product name than the rest", status: "off" },
+];
+
+function headerWidths(el: WtDataTable<Row>): number[] {
+  return [...el.shadowRoot!.querySelectorAll("thead th")].map((cell) => box(cell).width);
+}
+
+async function chooseActive(el: WtDataTable<Row>): Promise<void> {
+  await chooseOption(el.shadowRoot!.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
+  await el.updateComplete;
+}
+
 test("columns a layout hides while a filter holds the widths release the held widths", async () => {
   await wide();
   const extra: DataTableColumn<Row> = { key: "extra", label: "Extra", cell: (row) => row.id };
-  const el = await table({ rows: filterRows, columns: [nameColumn, statusColumn, extra] });
-  const root = el.shadowRoot!;
-  await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
-  await el.updateComplete;
-  expect(root.querySelector("table")!.hasAttribute("data-locked-columns")).toBe(true);
+  const columns = [nameColumn, statusColumn, extra];
+  const natural = headerWidths(await table({ rows: widthRows.slice(0, 1), columns }));
+  const el = await table({ rows: widthRows, columns });
+  const before = headerWidths(el);
+  expect(natural).not.toEqual(before);
+  await chooseActive(el);
+  expect(headerWidths(el)).toEqual(before);
   el.layoutHiddenColumns = ["extra"];
   await el.updateComplete;
-  expect(root.querySelector("table")!.hasAttribute("data-locked-columns")).toBe(false);
-  expect(root.querySelectorAll("colgroup col")).toHaveLength(0);
+  expect(headerWidths(el)).toHaveLength(2);
   el.layoutHiddenColumns = undefined;
   await el.updateComplete;
-  expect(root.querySelector("table")!.hasAttribute("data-locked-columns")).toBe(false);
+  expect(headerWidths(el)).toEqual(natural);
 });
 
 test("widths a filter holds are let go and redrawn when the table's own width changes", async () => {
   await wide();
-  const el = await table({ rows: filterRows, columns: [nameColumn, statusColumn] });
-  el.style.display = "block";
-  el.style.width = "900px";
-  const frames = async () => {
-    for (let frame = 0; frame < 3; frame++) await new Promise(requestAnimationFrame);
-    await el.updateComplete;
+  const sized = async (rows: Row[], width: string) => {
+    const el = await table({ rows, columns: [nameColumn, statusColumn] });
+    el.style.display = "block";
+    el.style.width = width;
+    return el;
   };
-  await frames();
-  const root = el.shadowRoot!;
-  await chooseOption(root.querySelector<WtCombobox>('[data-filter="status"]')!, "active");
+  const natural = await sized(widthRows.slice(0, 1), "1000px");
+  const el = await sized(widthRows, "900px");
+  // Without this wait the case still passes when the redraw after letting the widths go is removed.
+  for (let frame = 0; frame < 2; frame++) await new Promise(requestAnimationFrame);
   await el.updateComplete;
-  const native = root.querySelector("table")!;
-  expect(native.hasAttribute("data-locked-columns")).toBe(true);
+  const before = headerWidths(el);
+  await chooseActive(el);
+  expect(headerWidths(el)).toEqual(before);
+  expect(headerWidths(natural)).not.toEqual(before);
   el.style.width = "1000px";
-  await frames();
-  expect(native.hasAttribute("data-locked-columns")).toBe(false);
+  await vi.waitFor(() => expect(headerWidths(el)).toEqual(headerWidths(natural)));
 });

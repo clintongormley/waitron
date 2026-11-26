@@ -296,42 +296,57 @@ test("resetColumnView saves the view without that column's filter and sort, and 
     filter: {
       label: "Filter by team",
       allLabel: "Any team",
-      value: (person: Person) => person.id,
-      options: [{ value: "1", label: "One" }],
+      value: (person: Person) => (person.id === "3" ? "back" : "front"),
+      options: [
+        { value: "front", label: "Front" },
+        { value: "back", label: "Back" },
+      ],
     },
   } satisfies DataTableColumn<Person>;
-  const el = await peopleTable({
+  const props = {
     viewKey: "people.reset",
     columns: [name, sortedStatus, team],
     sortKey: "status",
     sortDirection: "descending",
-    filterSelections: { status: "active", team: "1" },
-  });
+  } satisfies Partial<WtDataTable<Person>>;
+  const el = await peopleTable(props);
+  el.chooseFilter("status", ["active"]);
+  el.chooseFilter("team", ["front"]);
+  await el.updateComplete;
+  expect(shownKeys(el)).toEqual(["1"]);
   el.resetColumnView("status", "name");
   expect(el.sortKey).toBe("name");
   expect(el.sortDirection).toBe("ascending");
-  expect(el.filterSelections).toEqual({ team: "1" });
-  expect(JSON.parse(sessionStorage.getItem("people.reset")!)).toEqual({
-    sortKey: "name",
-    sortDirection: "ascending",
-    filters: { team: "1" },
-  });
-  el.sortKey = "status";
-  el.sortDirection = "descending";
-  el.resetColumnView("team", "name");
-  expect(el.sortKey).toBe("status");
-  expect(el.sortDirection).toBe("descending");
-  expect(el.filterSelections).toEqual({});
+  expect(el.filterValues("status")).toEqual([]);
+  expect(el.filterValues("team")).toEqual(["front"]);
+  cleanup();
+  const reopened = await peopleTable(props);
+  expect(reopened.sortKey).toBe("name");
+  expect(reopened.sortDirection).toBe("ascending");
+  expect(reopened.filterValues("status")).toEqual([]);
+  expect(reopened.filterValues("team")).toEqual(["front"]);
+  expect(shownKeys(reopened)).toEqual(["1", "2"]);
+  reopened.sortKey = "status";
+  reopened.sortDirection = "descending";
+  reopened.resetColumnView("team", "name");
+  expect(reopened.sortKey).toBe("status");
+  expect(reopened.sortDirection).toBe("descending");
+  expect(reopened.filterValues("team")).toEqual([]);
 });
 
-test("a filter choice set in code is kept as given until the columns change, then judged", async () => {
-  const el = await peopleTable({ viewKey: "people.judged", columns: [name, statusColumn({})] });
-  el.filterSelections = { status: "" };
+test("a filter choice its column stops offering is kept until the columns change, then dropped", async () => {
+  const status = statusColumn({});
+  const el = await peopleTable({ viewKey: "people.judged", columns: [name, status] });
+  el.chooseFilter("status", ["paused"]);
   await el.updateComplete;
+  expect(shownKeys(el)).toEqual(["3"]);
+  status.filter.options = statusFilter.options.filter((option) => option.value !== "paused");
   el.sortDirection = "descending";
   await el.updateComplete;
-  expect(el.filterSelections).toEqual({ status: "" });
-  el.columns = [name, statusColumn({})];
+  expect(el.filterValues("status")).toEqual(["paused"]);
+  expect(shownKeys(el)).toEqual(["3"]);
+  el.columns = [name, status];
   await el.updateComplete;
-  expect(el.filterSelections).toEqual({});
+  expect(el.filterValues("status")).toEqual([]);
+  expect(shownKeys(el)).toEqual(["1", "2", "3"]);
 });
