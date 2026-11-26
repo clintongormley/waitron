@@ -2,7 +2,7 @@ import "./errors.js";
 import { existsSync } from "node:fs";
 import { copyFile, mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { nodeSigningPublicKey } from "@waitron/credentials";
+import { masterKeyNameOf, nodeSigningPublicKey } from "@waitron/credentials";
 import { readNodeMembership, type Database, type DeploymentEnvironment } from "@waitron/db";
 import {
   servingPrimaryNodeId,
@@ -11,9 +11,11 @@ import {
 } from "@waitron/membership";
 import { checkHandoverCopy, type WaitronModule } from "@waitron/module";
 import { writeFileDurable } from "@waitron/provisioning";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { openBackupQuery, PAIR_COPY_DIR, SCRATCH_DIR, VENUE_FILE } from "@waitron/store";
-import { checkedNewRecoveryKey, readHeldKey } from "./backup-config.js";
+import { readArtifactFileHeader } from "./artifact-cipher-file.js";
+import type { HeldBackupKey } from "./backup-config.js";
+import { heldKeyOpens, openingKeyFor } from "./backup-file-key.js";
 import { COPY_READY_FILE, type SelectedCopy } from "./handover-copy-selection.js";
 import { readStoredTrustSet, type StoredTrustDeps } from "./membership-trust.js";
 import { readNodeIdentityKey } from "./node-identity.js";
@@ -82,17 +84,30 @@ export async function stageCheckedCopy(
   }
 }
 
+/** Opens the file with the box's held backup key when its header names that key, and otherwise
+ * only with the typed master key it names. */
 export async function stageBackupAsCopy(
   deps: CheckedCopyDeps & {
     artifactPath: string;
-    recoveryKey?: string;
-    readRecoveryKey(): Promise<string | undefined>;
+    masterKey?: string;
+    readBackupKey(): Promise<HeldBackupKey | undefined>;
     environment: DeploymentEnvironment;
   },
 ): Promise<SelectedCopy> {
-  const recoveryKey =
-    checkedNewRecoveryKey(deps.recoveryKey) ?? (await readHeldKey(deps.readRecoveryKey)).key;
-  if (recoveryKey === undefined) throw new AppError("handover.backup_key_missing", {});
+  const header = await readArtifactFileHeader(deps.artifactPath);
+  if (header.version !== 2)
+    throw new AppError("backup.artifact_invalid", { reason: "bad_version" });
+  let recoveryKey: string;
+  if (deps.masterKey !== undefined) {
+    recoveryKey = await openingKeyFor(deps, deps.masterKey);
+  } else {
+    const held = await heldBackupKey(deps.readBackupKey);
+    if (held === undefined || !heldKeyOpens(header, held))
+      throw new AppError("handover.backup_needs_master_key", {
+        keyName: masterKeyNameOf(header.masterKeyId, header.masterKeyDay),
+      });
+    recoveryKey = held.key;
+  }
   const validated = await validateArtifactFile({
     ...deps,
     recoveryKey,
@@ -105,5 +120,17 @@ export async function stageBackupAsCopy(
     return selection;
   } finally {
     await validated.discard();
+  }
+}
+
+/** A held key under the length floor opens nothing, so it counts as none. */
+async function heldBackupKey(
+  read: () => Promise<HeldBackupKey | undefined>,
+): Promise<HeldBackupKey | undefined> {
+  try {
+    return await read();
+  } catch (error) {
+    if (isAppError(error) && error.code === "backup.recovery_key_too_short") return undefined;
+    throw error;
   }
 }

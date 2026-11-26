@@ -1319,10 +1319,6 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "The backup key this box holds is too short. Use “Change the backup key” on the Recovery pack card to replace it.",
     es: "La clave de las copias que tiene este servidor es demasiado corta. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para sustituirla.",
   },
-  "backup.new_recovery_key_too_short": {
-    en: "That backup encryption key is too short",
-    es: "Esa clave de cifrado de copias es demasiado corta",
-  },
   "backup.recovery_key_missing": {
     en: "This box holds no backup key. Use “Change the backup key” on the Recovery pack card to make one.",
     es: "Este servidor no tiene clave de las copias. Usa «Cambiar la clave de las copias» en la tarjeta Paquete de recuperación para crearla.",

@@ -347,13 +347,6 @@ it("has English and Spanish copy for a failed archive bucket test and a key chan
   }
 });
 
-it("has English and Spanish copy for a new recovery key that is too short", () => {
-  const code = "backup.new_recovery_key_too_short";
-  expect(codeMessage(code, "en")).not.toBe(codeMessage("test.unmapped_code", "en"));
-  expect(codeMessage(code, "es")).not.toBe(codeMessage("test.unmapped_code", "es"));
-  expect(codeMessage(code, "es")).not.toBe(codeMessage(code, "en"));
-});
-
 it("has English and Spanish copy for a test email with no account address and a backup change with no settings", () => {
   for (const code of ["email.test_recipient_missing", "backup.not_configured"]) {
     expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));

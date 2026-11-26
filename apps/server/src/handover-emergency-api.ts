@@ -81,6 +81,7 @@ import type { Logger } from "./logger.js";
 import { assertHeldDocumentReadable } from "./membership-trust.js";
 import { requireNodeOperationHttps } from "./node-operation-https.js";
 import { createPasswordThrottle, type PasswordThrottle } from "./password-throttle.js";
+import type { HeldBackupKey } from "./backup-config.js";
 import { stageBackupAsCopy } from "./handover-copy-from-backup.js";
 import { followedCopyId, stageFollowedAsCopy } from "./handover-copy-from-follow.js";
 import {
@@ -132,7 +133,7 @@ interface Deps {
     migrationsRoot: string | null;
   };
   backup?: {
-    readRecoveryKey(): Promise<string | undefined>;
+    readBackupKey(): Promise<HeldBackupKey | undefined>;
     environment: DeploymentEnvironment;
     migrationsRoot: string | null;
     restart(): void;
@@ -166,7 +167,8 @@ const STATUS = {
   "setup.request_invalid": 400,
   "handover.copy_predates_destination": 409,
   "handover.backup_key_missing": 409,
-  "backup.new_recovery_key_too_short": 400,
+  "handover.backup_needs_master_key": 409,
+  "promotion.break_glass_invalid": 422,
   "recovery.passphrase_invalid": 422,
   "backup.artifact_invalid": 422,
   "backup.archive_invalid": 422,
@@ -401,8 +403,8 @@ export function mountHandoverEmergencyApi(
         deps.backup?.uploadLimit ?? MAX_RESTORE_UPLOAD_BYTES,
       );
       if (!isRecord(payload) || artifact === undefined) refuseRequest("artifact");
-      if (payload.recoveryKey !== undefined && typeof payload.recoveryKey !== "string")
-        refuseRequest("recoveryKey");
+      if (payload.masterKey !== undefined && typeof payload.masterKey !== "string")
+        refuseRequest("masterKey");
       return inTurn(deps.node, "handover-emergency", async () => {
         await authenticate(c, parseSwitchSignIn(c, payload.signIn));
         const { sourceNodeId } = await mirrorSource();
@@ -422,9 +424,7 @@ export function mountHandoverEmergencyApi(
             ...deps.backup,
             signal: c.req.raw.signal,
             artifactPath,
-            ...(payload.recoveryKey === undefined
-              ? {}
-              : { recoveryKey: payload.recoveryKey as string }),
+            ...(payload.masterKey === undefined ? {} : { masterKey: payload.masterKey as string }),
           });
         } finally {
           await rm(folder, { recursive: true, force: true });
