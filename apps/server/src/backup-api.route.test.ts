@@ -3388,10 +3388,49 @@ describe("backup admin routes", () => {
         const res = await post("/api/backup/rotate", changeKey());
         expect(res.status).toBe(200);
         expect(await res.json()).toMatchObject({
+          reloadErrorCode: "backup.archive_settings_invalid",
           loadErrorCode: "backup.archive_settings_invalid",
         });
         expect(await fileKey(sc.stateDir)).toBe(KEY_2);
         expect((await readSealed())!.revision).not.toBe(sealed.revision);
+      }, 60_000);
+
+      it("after the revision fails, settings the reload finds unusable are named beside the changed key", async () => {
+        const { sc, post } = await savedInBucket();
+        sc.readRecord = async () => {
+          throw new AppError("backup.archive_settings_invalid", { reason: "fields" });
+        };
+        const restore = refuseArchiveWrites();
+        let res: Response;
+        try {
+          res = await post("/api/backup/rotate", changeKey());
+        } finally {
+          restore();
+        }
+        expect(res.status).toBe(500);
+        expect((await res.json()).error).toMatchObject({
+          code: "backup.rotation_metadata_failed",
+          params: { reloadErrorCode: "backup.archive_settings_invalid" },
+        });
+        expect(await fileKey(sc.stateDir)).toBe(KEY_2);
+      }, 60_000);
+
+      it("after the revision fails, a reload that loads another key than the one written fails loud", async () => {
+        const { sc, sup, post } = await savedInBucket();
+        // The box's own environment wins over the key file, so the reload keeps KEY_1.
+        sc.base = { WAITRON_BACKUP_RECOVERY_KEY: KEY_1 };
+        const restore = refuseArchiveWrites();
+        let res: Response;
+        try {
+          res = await post("/api/backup/rotate", changeKey());
+        } finally {
+          restore();
+        }
+        expect(res.status).toBe(500);
+        expect(await res.json()).toMatchObject({ error: { code: "backup.effective_mismatch" } });
+        expect(sup.current().recoveryKey).toBe(KEY_1);
+        expect(sup.current().loadErrorCode).toBeNull();
+        expect(await fileKey(sc.stateDir)).toBe(KEY_2);
       }, 60_000);
 
       const failedReloads: [string, (sc: Scenario, sup: BackupSupervisor) => void][] = [
@@ -3509,6 +3548,7 @@ describe("backup admin routes", () => {
         const res = await post("/api/backup/rotate", changeKey());
         expect(res.status).toBe(200);
         expect(await res.json()).toMatchObject({
+          reloadErrorCode: "backup.archive_settings_invalid",
           loadErrorCode: "backup.archive_settings_invalid",
           recoveryKeySet: true,
         });

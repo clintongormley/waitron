@@ -295,6 +295,22 @@ it.each([
   },
 );
 
+it("settings the box loaded but cannot use are named as not loaded, never 'Backups now use'", async () => {
+  const rotate = vi
+    .fn()
+    .mockResolvedValue({ ...ANSWER, reloadErrorCode: "backup.archive_settings_invalid" });
+  const { el } = await open(stubApi(rotate, status(4)));
+  await type(el, KEY);
+  button(el, "change-backup-key")!.click();
+  await expect
+    .poll(() => words(el.shadowRoot!.querySelector("[data-test=done]")))
+    .toBe(t("backup_key_dialog.saved_not_loaded"));
+  expect(words(el.shadowRoot!.querySelector("[data-test=done-warning]"))).toBe(
+    codeMessage("backup.archive_settings_invalid"),
+  );
+  expect(el.shadowRoot!.textContent).not.toContain("Backups now use");
+});
+
 it("after a failed reload whose status cannot be read, claims nothing about which key backups use", async () => {
   const rotate = vi
     .fn()

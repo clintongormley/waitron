@@ -277,10 +277,11 @@ async function probeArchive(
 }
 
 /**
- * `apply` checks what it will store the way boot would read it before writing anything, and after
- * a reload that loads the settings asserts the EFFECTIVE key equals the one it chose. A reload that
- * throws after `apply` or `disable` committed, or that leaves `apply`'s stored settings unusable, is
- * answered 200 with `reloadErrorCode`: the write stands.
+ * `apply` checks what it will store the way boot would read it before writing anything. After a
+ * reload that loads the settings, `apply` and `rotate` assert the EFFECTIVE key equals the one they
+ * wrote. A reload that throws after `apply`, `disable` or `rotate` committed, or that leaves
+ * `apply`'s or `rotate`'s stored settings unusable, is reported as `reloadErrorCode`: the write
+ * stands.
  */
 export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "backup.failed");
@@ -329,6 +330,18 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
       const errorCode = codeOf(error);
       log("warn", "backup.reload_after_write_failed", { errorCode });
       return errorCode;
+    }
+  };
+
+  /** A reload's own failure, or else the code of settings it loaded but cannot use. */
+  const reloadOutcome = async (): Promise<string | undefined> =>
+    (await reloadAfterWrite()) ?? deps.supervisor.current().loadErrorCode ?? undefined;
+
+  // The effective key is what the box will actually encrypt under. If a partial env override (or
+  // any merge) made it differ from the written key, fail LOUD rather than orphan archives.
+  const assertEffectiveKey = (reloadErrorCode: string | undefined, recoveryKey: string): void => {
+    if (reloadErrorCode === undefined && deps.supervisor.current().recoveryKey !== recoveryKey) {
+      throw new AppError("backup.effective_mismatch", {});
     }
   };
 
@@ -473,16 +486,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
         }
 
         await storeSettings(settings, personId);
-        const reloadErrorCode =
-          (await reloadAfterWrite()) ?? deps.supervisor.current().loadErrorCode ?? undefined;
-        // The effective key is what the box will actually encrypt under. If a partial env override (or
-        // any merge) made it differ from the held key, fail LOUD rather than orphan archives.
-        if (
-          reloadErrorCode === undefined &&
-          deps.supervisor.current().recoveryKey !== recoveryKey
-        ) {
-          throw new AppError("backup.effective_mismatch", {});
-        }
+        const reloadErrorCode = await reloadOutcome();
+        assertEffectiveKey(reloadErrorCode, recoveryKey);
         return writeAnswer(c, reloadErrorCode);
       });
     }),
@@ -549,7 +554,9 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           }
           return c.json({
             ...(await statusBody()),
-            ...(unreadableCode === undefined ? {} : { loadErrorCode: unreadableCode }),
+            ...(unreadableCode === undefined
+              ? {}
+              : { loadErrorCode: unreadableCode, reloadErrorCode: unreadableCode }),
           });
         }
         await changeBackupKey(deps, record, keyRotatedAt);
@@ -562,7 +569,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           } catch (error) {
             log("warn", "backup.rotation_metadata_failed", { errorCode: codeOf(error) });
             const sealedState = await deps.sealedState.refresh();
-            const reloadErrorCode = await reloadAfterWrite();
+            const reloadErrorCode = await reloadOutcome();
+            assertEffectiveKey(reloadErrorCode, recoveryKey);
             throw new AppError("backup.rotation_metadata_failed", {
               effectiveKeyChanged: true,
               keyFingerprint: keyFingerprint(recoveryKey),
@@ -573,15 +581,8 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
           }
           await deps.sealedState.refresh();
         }
-        const reloadErrorCode = await reloadAfterWrite();
-        const loaded = deps.supervisor.current();
-        if (
-          reloadErrorCode === undefined &&
-          loaded.loadErrorCode === null &&
-          loaded.recoveryKey !== recoveryKey
-        ) {
-          throw new AppError("backup.effective_mismatch", {});
-        }
+        const reloadErrorCode = await reloadOutcome();
+        assertEffectiveKey(reloadErrorCode, recoveryKey);
         return writeAnswer(c, reloadErrorCode);
       });
     }),
