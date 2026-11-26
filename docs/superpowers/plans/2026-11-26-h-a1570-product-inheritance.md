@@ -1,47 +1,51 @@
 # A1570 PR 2 · Inherited values in dashboard Products
 
-A manager can see what a blank product setting uses, or deliberately set the same value so it
-stays fixed. The list and folded details keep the facts staff need. Reuse the shared fields from
-#4281 and the Dashboard's `inherit.value` and `inherit.suffix` strings. Keep the current fallback
-rules and submitted values. Menu screens and the wording guard are later work. The product editor
-shared with Menu Structure gets the same product fields wherever it opens.
-[Owner's design](../specs/2026-11-24-inherited-values-design.md).
+A manager can see what a blank product setting uses, or set the same value so it stays fixed.
+The list and folded details keep the facts staff need. Reuse the shared fields from #4281 and
+Dashboard’s `inherit.value` and `inherit.suffix` strings. Keep the fallback rules and submitted
+values. The product editor serves Products and Menus, and its related forms also serve Modifiers
+and Units. Menu-specific fields and the wording guard are later work.
+[Owner’s design](../specs/2026-11-24-inherited-values-design.md).
 
-1. In `apps/dashboard/src/widgets/`, give the existing product and modifier name fallbacks to
+1. In `apps/dashboard/src/widgets/`, pass the existing product and modifier name fallbacks to
    `.inherited` in `form-fields.ts`, `product-editor.ts`, `variant-form.ts`, `option-list-form.ts`,
-   `option-label-form.ts`, `extra-list-form.ts` and `unit-form.ts`. Opt in at the Products callers
-   of helpers also used by menu screens. Preserve region → base language → existing default and
-   each name's current source. A variant description follows the parent's map only while the
-   variant has no description in any language. Use `inTable: true` for the extra price column.
-   Keep the extras name summary to entered names with `namesLine`. In the existing `product-editor`,
-   `variant-form`, `option-list-form`, `option-label-form`, `extra-list-form` and `unit-form` tests,
-   check the inherited field value and its source. Keep the submitted payload checks, including an
-   empty price, an explicitly equal price and avoiding stored copies of fallback text.
-2. In `product-editor.ts`, use a first empty `wt-combobox` option with `inherited: true`, localized
-   `label`, effective `valueLabel` and the localized suffix for variant course and takeaway VAT.
-   Keep the same choice with its own ID or rate in the ordinary list and keep the parent product's
-   existing picker. Fold only entered course and description, plus effective allergens, diet and
-   VAT. Keep the warning for unreviewed allergens. In `product-nutrition-picker.ts`, label the
-   inherit chip “Inherit” in `apps/dashboard/src/i18n/strings.ts` and keep the explicit None action.
-   In `product-editor.test.ts`, `.nutrition.test.ts` and `product-nutrition-picker.test.ts`, check
-   the two rows and saved values, the omitted summary fields and the retained facts and warning.
-3. Use solid, full paint for inherited colours and photos in `swatch-styles.ts`, `product-media.ts`,
-   `product-appearance.ts` and `image-upload.ts`. Preserve source names for screen readers and the
-   disabled Remove action. In `color-field.ts`, use a localized Inherit choice for the product and
-   category callers, with the already resolved colour when present. In `product-browser.ts`,
-   `category-color-form.ts`, `category-create-form.ts` and `product-editor-dialog.ts`, pass the
-   existing parent/venue lookup, including a changed parent in the create form. Keep No colour for
-   the venue default editor. Reuse the existing muted inherited price and allergen styles in the
-   product list and variant table. In `product-list`, `product-appearance`, `variant-form`,
-   `product-browser` and `category-color-form`/`category-create-form` tests, check the computed solid
-   paint, accessible source and choice that saves `null`. Keep the media and row-action assertions.
-4. Update `apps/server/src/guide/{en,es}/{products,modifiers}.md`, preserving heading IDs, and
-   `docs/developers/design-system.md` where it describes the dashed product swatches. Leave the
-   menu slice and wording guard in the A1570 backlog entry. Use the existing Dashboard browser
-   tests ahead of each change. Observe the new checks fail on the old display, then run all changed
-   suites green before the Dashboard typecheck. Run the guide guards and Lane H’s fiscal and till
-   gates. Open Products at phone and desktop widths in English and Spanish and both themes. Look
-   at an empty field, its filled equivalent, the two picker rows, the folded details and a photo.
+   `option-label-form.ts`, `extra-list-form.ts` and `unit-form.ts`. Make inheritance optional at
+   the shared helpers and set it at the product callers. Preserve the region, base-language and
+   existing default precedence and each name’s source. A variant description follows its parent’s
+   map only while the variant has no description in any language. Use `inTable: true` for extra
+   prices. Use `namesLine` for the extras name summary and remove `effectiveNamesLine` and the
+   tests for its retired summary. In the sibling form tests, assert the displayed fallback and
+   keep the payload checks for blank and explicit values, including an extra priced at exactly its
+   inherited price. Extend `section-details-form.test.ts` to keep its menu placeholder as a prompt.
+2. In `product-editor.ts`, give variant Course and Takeaway VAT a first empty combobox option with
+   `inherited: true`, localized `label`, effective `valueLabel` and the localized suffix. Include
+   the same course ID or tax rate in the ordinary rows. A parent with no course reads “Inherit:
+   None” in the list. Keep the parent product’s existing picker and the missing-course wording.
+   Fold only entered course and description, plus effective allergens, diet and VAT. Keep the
+   unreviewed warning. In `product-nutrition-picker.ts`, use the localized “Inherit” chip. Remove
+   the unused inherited branch of `foldedValue` and the old VAT and allergen strings from
+   `apps/dashboard/src/i18n/strings.ts`. In `product-editor.test.ts`, `.nutrition.test.ts` and
+   `product-nutrition-picker.test.ts`, check the retained summary facts and warning. Choose the
+   course and VAT rows by value. Check `null` against an explicit `mains` or `10.00` when the
+   parent has that value, and distinguish the saved choices when reopened. For allergens use a
+   parent with “Contains none” and check inherited `null` against the variant’s own empty set.
+3. Use solid, full paint in `swatch-styles.ts`, `product-media.ts`, `product-appearance.ts` and
+   `image-upload.ts`. Preserve the accessible names and disabled Remove action. Reuse
+   `color-field.ts`’s `noneChoice` for the product and categories with “Inherit” and a chip when
+   there is a colour. Preserve the accessible description of the product’s colour chip. Retire
+   the old `categoryColor`/`inheritedFrom` picker options and their strings. In `product-browser.ts`,
+   `category-color-form.ts`, `category-create-form.ts` and `product-editor-dialog.ts`, resolve the
+   colour from the category’s parent ID or venue default. The create form uses its draft parent ID.
+   Keep “No colour” for the venue default editor. In `product-list.test.ts`,
+   `product-appearance.test.ts`, `image-upload.test.ts` and `color-field.test.ts`, compare inherited
+   and own paint and keep the accessible names and row actions. In `product-browser.test.ts`,
+   `category-color-form.test.ts` and `category-create-form.unsaved.test.ts`, pin a different parent
+   colour, recompute on a parent change, and distinguish null from fixing the same palette colour.
+4. Update the English and Spanish `apps/server/src/guide` Products and Modifiers guides, keeping
+   heading IDs, and the product examples in `docs/developers/design-system.md`. Keep the menu slice
+   and wording guard in `docs/backlog.md`. Run the changed Dashboard browser tests red then green,
+   the Dashboard typecheck, guide guards, and Lane H’s fiscal and till gates. Open Products in
+   English and Spanish at phone and desktop widths in both themes. Inspect blank and filled fields,
+   the two picker rows, folded details and a photo. Keep pictures in Lane H’s local folder.
 
-Estimate about 220 production lines and 310 test lines changed. Report additions and removals
-separately and keep the visual receipts in Lane H's local folder.
+Estimate about 220 production and 310 test lines changed. Report additions and removals separately.
