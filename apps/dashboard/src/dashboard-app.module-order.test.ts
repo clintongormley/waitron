@@ -7,8 +7,6 @@ import type { DashboardApi } from "./api/client.js";
 import "./dashboard-app.js";
 import type { DashboardApp } from "./dashboard-app.js";
 
-// The shipped registry has no two modules in one group that state an `order`, so the sort is
-// exercised against a registry of its own.
 function contribution(id: string, order: number): DashboardContribution {
   return {
     module: id,
@@ -21,7 +19,7 @@ function contribution(id: string, order: number): DashboardContribution {
     },
     strings: { en: { [`nav.${id}`]: id }, es: { [`nav.${id}`]: id } },
     create: () => ({ render: () => html`<p>${id}</p>` }),
-  } as DashboardContribution;
+  };
 }
 
 vi.mock("@waitron/dashboard-modules", async (importOriginal) => ({
