@@ -11,7 +11,8 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { encodeRecoveryKit } from "@waitron/stream";
 import { authorityKey, makeMasterKey } from "@waitron/credentials";
 import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
-import { encryptArtifact } from "./artifact-cipher.js";
+import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
+import { heldBackupKey } from "./testing/backup-key.js";
 import { packArchive } from "./backup-archive.js";
 import { recoveryArchiveSourceId, recoveryStreamSourceId } from "./recovery-source.js";
 import type { StartedServer } from "./boot.js";
@@ -20,6 +21,9 @@ import { awaitListening, copyMigrationsRoot, httpsVia } from "./testing/boot-har
 import { freePorts } from "./testing/free-ports.js";
 
 const PAPER_KEY = encodeMasterKeyCode(makeMasterKey());
+/** The master key that sealed the file; the copy's current one, `PAPER_KEY`, authorises. */
+const ARCHIVE_MASTER_KEY = makeMasterKey();
+const ARCHIVE_KEY_TEXT = encodeMasterKeyCode(ARCHIVE_MASTER_KEY);
 
 vi.mock("@hono/node-server", async () => {
   const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
@@ -89,9 +93,9 @@ it.each(["archive", "bucket"])(
         bytes: Buffer.from(Buffer.alloc(32, 7).toString("base64")),
       },
     ];
-    const artifact = encryptArtifact(
+    const artifact = masterKeyArchiveBytes(
       packArchive([...entries, { name: "db.dump", bytes: await readFile(database) }]),
-      "archive-key",
+      ARCHIVE_MASTER_KEY,
     );
     download.mockResolvedValue({
       databasePath: database,
@@ -134,7 +138,7 @@ it.each(["archive", "bucket"])(
       closeClient = client.close;
       const form = new FormData();
       form.set("artifact", new Blob([new Uint8Array(artifact)]), "copy.waitron");
-      form.set("recoveryKey", "archive-key");
+      form.set("masterKey", ARCHIVE_KEY_TEXT);
       form.set("environment", "preproduction");
       form.set("oldBoxGone", "1");
       form.set("recoveryOperation", JSON.stringify(operation));
@@ -183,12 +187,16 @@ it.each(["archive", "bucket"])(
         nodeRecoveryKey: true,
       });
       expect(marker).not.toContain(PAPER_KEY);
+      expect(marker).not.toContain(ARCHIVE_KEY_TEXT);
+      expect(marker).not.toContain(heldBackupKey(ARCHIVE_MASTER_KEY).key);
       expect(await readFile(join(stateDir, "flows/restore/node-key"), "utf8")).toBe(
         authorityKey(decodeMasterKeyCode(PAPER_KEY)).toString("hex"),
       );
       const logs = await readFile(join(scratch, "logs/waitron.log"), "utf8");
       expect(logs).not.toContain(PAPER_KEY);
       expect(logs).not.toContain("archive-key");
+      expect(logs).not.toContain(ARCHIVE_KEY_TEXT);
+      expect(logs).not.toContain(heldBackupKey(ARCHIVE_MASTER_KEY).key);
       await vi.waitFor(() => expect(kill).toHaveBeenCalledWith(process.pid, "SIGTERM"));
     } finally {
       await closeClient?.();

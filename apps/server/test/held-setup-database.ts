@@ -54,7 +54,8 @@ interface HeldSetup {
   roots: { stateDir: string; venueDir: string };
   host: Awaited<ReturnType<typeof hourFirstFiscalFixture>>["host"];
   installationName: string;
-  /** `archiveHost()`'s backup. A wipe deletes its hour choice, so a restore after one chooses again. */
+  /** A backup file sealed under the venue's master key. A wipe deletes its hour choice, so a restore
+   * after one chooses again. */
   archive: Awaited<ReturnType<typeof archiveHost>>;
 }
 
@@ -70,7 +71,7 @@ const heldTemplate = migratedTemplate("held-setup-template-", TEST_MIGRATIONS);
  */
 export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSetup> {
   const status = options.status ?? "committed";
-  const f = await archiveHost();
+  const f = await archiveHost("archive", "master-key");
   await mkdir(join(f.roots.stateDir, SCRATCH_DIR), { recursive: true });
   const migrated = await heldTemplate();
   await Promise.all(

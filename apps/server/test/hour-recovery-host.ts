@@ -370,7 +370,7 @@ export async function archiveHost(
   const outcome = (await recoverySelectPastWaits(clock, service, client())) as {
     input: unknown;
   };
-  return { ...f, restore, options, isolation, service, outcome, database, entries };
+  return { ...f, restore, options, isolation, service, outcome, database, entries, sealing };
 }
 
 export async function archiveCommand(f: Awaited<ReturnType<typeof archiveHost>>) {
@@ -580,7 +580,12 @@ export function restoreApp(deps: Partial<SetupDeps> = {}) {
   return app;
 }
 
+/** The Restore backup form, which sends the master key: `f` must be sealed under it. */
 export function archiveForm(f: Awaited<ReturnType<typeof archiveHost>>, context: unknown) {
+  if (f.sealing !== "master-key")
+    throw new Error(
+      'archiveForm sends the master key: build its archive with archiveHost(kind, "master-key")',
+    );
   const form = new FormData();
   form.set("artifact", new Blob([Uint8Array.from(f.restore.artifact)]), "selected.wbk");
   form.set("masterKey", key.secret);
@@ -773,7 +778,7 @@ export async function managedHttp(f: Awaited<ReturnType<typeof archiveHost>>) {
             secretAccessKey: "unused",
             sessionToken: "unused",
           },
-          recoveryKey: "archive password",
+          recoveryKey: f.restore.recoveryKey,
           expiresAt,
           operationExpiresAt: expiresAt,
         });
