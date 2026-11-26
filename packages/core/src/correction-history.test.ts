@@ -579,6 +579,21 @@ it.each([
   });
 });
 
+it("refuses a full invoice another box issued as another box's, without fullInvoice", async () => {
+  const { saleId } = await sellSteak();
+  backend.setCorrectionAdmission({ eligible: false, reason: "wrong_node", fullInvoice: true });
+
+  for (const read of [
+    () => preview(saleId),
+    () => withTransaction(suite.db, (tx) => readCorrectableLines(tx, backend, saleId, nodeId)),
+  ]) {
+    expect(await captureError(read)).toMatchObject({
+      code: "sale.correction_not_admitted",
+      params: { reason: "wrong_node" },
+    });
+  }
+});
+
 describe("a full invoice's correction, asked for with fullInvoice", () => {
   const FULL = { fullInvoice: true } as const;
   const admitted = {

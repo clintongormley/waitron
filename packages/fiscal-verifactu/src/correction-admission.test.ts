@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { newId, withTransaction } from "@waitron/db";
+import { previewCorrectionAmounts, readCorrectableLines } from "@waitron/core";
+import { captureError, newId, withTransaction } from "@waitron/db";
 import { seedPerson } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { CorrectionAdmission, FiledFigures } from "@waitron/fiscal";
-import { saleId as brandSaleId, type SaleId } from "@waitron/shared";
+import { saleId as brandSaleId, decimal, type SaleId } from "@waitron/shared";
 import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import type { DetalleDesgloseInput } from "@waitron/verifactu";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -242,6 +243,31 @@ describe("a full invoice, an F1 or an R4 by replacement, says so in every answer
     const { saleId } = await file({ tipo: "F1", on: other });
     expect(await admission(saleId)).toStrictEqual(full(refused("wrong_node")));
   });
+
+  it.each([
+    [
+      "the preview",
+      (saleId: SaleId) =>
+        withTransaction(suite.db, (tx) =>
+          previewCorrectionAmounts(tx, backend, saleId, node.nodeId, { gross: decimal("1.00") }),
+        ),
+    ],
+    [
+      "the lines",
+      (saleId: SaleId) =>
+        withTransaction(suite.db, (tx) => readCorrectableLines(tx, backend, saleId, node.nodeId)),
+    ],
+  ] as const)(
+    "another node's, read by %s without fullInvoice, is refused as another node's",
+    async (_name, read) => {
+      const other = await seedNode(suite.db, "B");
+      const { saleId } = await file({ tipo: "F1", on: other });
+      expect(await captureError(() => read(saleId))).toMatchObject({
+        code: "sale.correction_not_admitted",
+        params: { reason: "wrong_node" },
+      });
+    },
+  );
 
   it("with no submission", async () => {
     const { saleId } = await file({ tipo: "F1", estado: null });
