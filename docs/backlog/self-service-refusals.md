@@ -527,6 +527,8 @@ _2026-11-16, SETUP-OTHER-ENVIRONMENT (chosen by the watcher; not owner-reviewed)
 
 _2026-11-16, LIVE-SETUP-STAMP-ORDER: the [stamp-order fix](https://github.com/clintongormley/waitron/blob/28f9998ef84db3fb671b1e59a7a5916b0d317da4/docs/superpowers/plans/2026-11-16-live-setup-stamp-order.md) prevents a new attempt refused before activation starts from leaving a production stamp; existing stranded attempts are outside that change._
 
+_On 26 November 2026 the half-finished adopt check moved with `/setup-api/reset-incomplete-adopt` to `apps/server/src/setup-operation-routes.ts`._
+
 ### `shell.reset.resetting`
 
 Screen: Setup wizard. Fix: [setup-reset](#setup-reset).
@@ -543,6 +545,8 @@ State: Reset was requested. The warning explicitly covers the case where the sup
 Route: Existing: reload after restart. Missing if the half-join remains: a retry/restart procedure and a clear outcome; do not assert success merely because the reset endpoint answered.
 
 _2026-11-11, A1089 slice 1: the words no longer say to contact support. When joining again reports the join stopped partway, the page offers the reset again (`#offerReset` in `apps/setup/src/setup-app.ts`), and the words now say to press Reset this server again. Still open: nothing tells the person what to do if a repeated reset never takes effect. The rest of this entry records the earlier tree._
+
+_On 26 November 2026 the reset request and restart scheduling call moved with `/setup-api/reset-incomplete-adopt` to `apps/server/src/setup-operation-routes.ts`._
 
 ### `aeat_certificate.refused.check_failed`
 
