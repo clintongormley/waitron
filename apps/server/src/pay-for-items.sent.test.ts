@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { and, asc, eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  billPayments,
   printJobs,
   sales,
   ticketItems,
@@ -18,6 +19,7 @@ import { setRoutingCell, setZoneSalePolicyOverride } from "@waitron/venue-servic
 import { readBillEditState } from "./bill-editing.js";
 import { moveBill } from "./move-bill.js";
 import { moveDishes } from "./testing/bill-action-fixture.js";
+import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import {
@@ -33,8 +35,10 @@ import { testTradingAdmission } from "./testing/trading-admission.js";
 import { printSaleReceipt } from "./till-sale.js";
 import { attachedPrinter } from "./testing/working-order.test-support.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { handOverOrder, listCounterWaiting } from "./working-order-counter.js";
 import { parkOrder } from "./working-order-open.js";
-import { payForItems, type ItemPick } from "./pay-for-items.js";
+import { listStationQueues } from "./working-order-station-queue.js";
+import { payForItems, previewPayForItems, type ItemPick } from "./pay-for-items.js";
 import "./errors.js";
 
 // Pay for items on a Counter order already sent to the kitchen, with no receipt yet: the chosen
@@ -133,23 +137,53 @@ async function lineOf(billId: string, name: string): Promise<string> {
   return row!.id;
 }
 
+async function cashRequest(billId: string, picks: ItemPick[], applied: string) {
+  return {
+    submissionId: randomUUID(),
+    picks,
+    expectedEdits: [await inTx(v, (tx) => readBillEditState(tx, billId))],
+    method: "cash" as const,
+    applied,
+    tip: "0.00",
+    tendered: applied,
+  };
+}
+
 async function payInCash(billId: string, picks: ItemPick[], applied: string) {
   return payForItems(
     deps(),
     v.cfg,
     billId,
-    {
-      submissionId: randomUUID(),
-      picks,
-      expectedEdits: [await inTx(v, (tx) => readBillEditState(tx, billId))],
-      method: "cash",
-      applied,
-      tip: "0.00",
-      tendered: applied,
-    },
+    await cashRequest(billId, picks, applied),
     v.operator,
     null,
   );
+}
+
+/** An amount paid in cash on the bill, as Pay > An amount takes it. */
+async function receive(billId: string, amount: string) {
+  await takeBillPayment(
+    deps(),
+    v.cfg,
+    billId,
+    {
+      submissionId: randomUUID(),
+      kind: "contribution",
+      amount,
+      method: "cash",
+      tendered: amount,
+      applied: amount,
+      tip: "0.00",
+    },
+    v.operator,
+  );
+}
+
+async function billsNaming(billId: string) {
+  return v.db
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(eq(workingOrders.itemsPaidFrom, billId));
 }
 
 async function billOf(billId: string) {
@@ -397,5 +431,100 @@ describe("Pay for items on a sent Counter order", () => {
     ).rejects.toMatchObject({ code: "bill.not_issued" });
 
     expect((await billOf(orderId)).status).toBe("placed");
+  });
+
+  it("Waiting lists the paid part with the number it was sent under", async () => {
+    const orderId = await sentOrder("Burger", "Paella");
+    const { orderNumber } = await billOf(orderId);
+
+    const paid = await payInCash(orderId, [{ lineId: await lineOf(orderId, "Burger") }], "12.00");
+
+    const waiting = await listCounterWaiting({ db: v.db });
+    expect(waiting.find((order) => order.id === paid.billId)).toMatchObject({
+      status: "settled",
+      formerNumbers: [orderNumber],
+      total: "12.00",
+    });
+    expect(waiting.find((order) => order.id === orderId)).toMatchObject({
+      status: "placed",
+      orderNumber,
+      total: "20.00",
+    });
+  });
+
+  it("a handed-over original keeps the paid part off the kitchen screen", async () => {
+    const orderId = await sentOrder("Burger", "Paella");
+    const { stationId } = (await kitchenItemOf(await lineOf(orderId, "Burger")))!;
+    await inTx(v, (tx) => handOverOrder(tx, v.cfg, orderId));
+
+    const paid = await payInCash(orderId, [{ lineId: await lineOf(orderId, "Burger") }], "12.00");
+
+    const queue = (await inTx(v, (tx) => listStationQueues(tx, [stationId]))).get(stationId)!;
+    expect(queue.map((group) => group.orderId)).not.toContain(orderId);
+    expect(queue.map((group) => group.orderId)).not.toContain(paid.billId);
+    expect((await billOf(paid.billId)).collectedAt).toBe((await billOf(orderId)).collectedAt);
+  });
+
+  it("a part-paid original left exactly paid issues its invoice", async () => {
+    const orderId = await sentOrder("Burger", "Paella");
+    await receive(orderId, "20.00");
+
+    await payInCash(orderId, [{ lineId: await lineOf(orderId, "Burger") }], "12.00");
+
+    expect((await billOf(orderId)).status).toBe("settled");
+    expect((await salesOf(orderId)).map(({ total }) => centsToDecimal(total))).toEqual(["20.00"]);
+  });
+
+  it("a part-paid original left holding more than it owes keeps the money, issuing nothing", async () => {
+    const orderId = await sentOrder("Burger", "Paella");
+    await receive(orderId, "25.00");
+
+    const paid = await payInCash(orderId, [{ lineId: await lineOf(orderId, "Burger") }], "12.00");
+
+    expect((await billOf(paid.billId)).status).toBe("settled");
+    expect((await billOf(orderId)).status).toBe("placed");
+    expect(await salesOf(orderId)).toEqual([]);
+    const kept = await v.db
+      .select({ applied: billPayments.applied, state: billPayments.state })
+      .from(billPayments)
+      .where(eq(billPayments.workingOrderId, orderId));
+    expect(kept.map(({ applied, state }) => [centsToDecimal(applied), state])).toEqual([
+      ["25.00", "received"],
+    ]);
+  });
+
+  it("the same submission twice makes one bill", async () => {
+    const orderId = await sentOrder("Burger", "Paella");
+    const request = await cashRequest(
+      orderId,
+      [{ lineId: await lineOf(orderId, "Burger") }],
+      "12.00",
+    );
+
+    const first = await payForItems(deps(), v.cfg, orderId, request, v.operator, null);
+    const again = await payForItems(deps(), v.cfg, orderId, request, v.operator, null);
+
+    expect(again.billId).toBe(first.billId);
+    expect(await billsNaming(orderId)).toEqual([{ id: first.billId }]);
+    expect(await salesOf(first.billId)).toHaveLength(1);
+    expect(await dishesOf(orderId)).toEqual([["Paella", "1.000"]]);
+    expect((await billOf(orderId)).status).toBe("placed");
+  });
+
+  it("the preview prices a sent Counter order's chosen dishes, writing nothing", async () => {
+    const orderId = await sentOrder("Burger", "Paella");
+    const before = await rowsOf(orderId);
+
+    expect(
+      await previewPayForItems(
+        deps(),
+        v.cfg,
+        orderId,
+        { picks: [{ lineId: await lineOf(orderId, "Burger") }], method: "cash", tendered: "20.00" },
+        null,
+      ),
+    ).toEqual({ total: "12.00", applied: "12.00", tip: "0.00", change: "8.00" });
+    expect(await rowsOf(orderId)).toEqual(before);
+    expect(await billsNaming(orderId)).toEqual([]);
   });
 });
