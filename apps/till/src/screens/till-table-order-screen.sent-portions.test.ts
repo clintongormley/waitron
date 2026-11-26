@@ -434,3 +434,32 @@ it("A803 portion grouping: a grouped Undo served sends nothing once the bill is 
   });
   expect(events).toEqual([]);
 });
+
+it("A803 portion grouping: Comp on a grouped row cancelled with its charge kept offers only the whole row", async () => {
+  const rows = [2, 1].map((lineNo) => ({
+    ...steakRow(`s-${lineNo}`, lineNo, "fired"),
+    cancelledQuantity: "1.000",
+  }));
+  const currentOrders = current({
+    reminder: null,
+    groups: [currentGroup("g1", 3, "fired", rows)],
+    ungrouped: [],
+  });
+  const el = await openGrouped("served", { currentOrders });
+  expect(text(q(el, "[data-sent-line-dialog]"))).toContain("Cancelled, charged");
+  const events = capture(el, "adjust");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-comp]"));
+  expect(events).toEqual([
+    {
+      kind: "comp",
+      target: expect.objectContaining({
+        lineIds: ["s-1", "s-2"],
+        quantity: "2",
+        total: "21.00",
+        unitTotal: null,
+      }),
+    },
+  ]);
+  expect((events[0] as { target: object }).target).not.toHaveProperty("startCount");
+});

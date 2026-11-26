@@ -3647,7 +3647,6 @@ export class TillTableOrderScreen extends LitElement {
 
   #sentOrderLine(slice: SentSlice): TabLine | undefined {
     if (
-      slice.kind === "cancelled_charged" ||
       !this.#sentBillOpen(slice.row) ||
       this.#draftStore?.editsLocked ||
       this.#draftStore?.sending
@@ -3705,6 +3704,43 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
+  /** What Comp… takes off the window's dish and its priced extras; undefined when the window may
+   * not comp it or nothing on it still costs anything. A count of the cancelled portions comps
+   * exactly those: the server's split moves cancelled portions first (`splitLineServiceState`).
+   * A grouped cancelled row comps whole only, as the server takes part of a row from its portions
+   * not cancelled (`takenPortions`). */
+  #sentCompTarget(members: readonly SentSlice[]): AdjustTarget | undefined {
+    const lines = members.map((member) => this.#sentOrderLine(member));
+    const line = lines[0];
+    if (line === undefined || lines.some((one) => one === undefined)) return;
+    const zero = decimal("0");
+    const priced = (target: AdjustTarget) => compareDecimal(decimal(target.total), zero) > 0;
+    const target =
+      members.length > 1
+        ? rowAdjustTarget(lines as TabLine[], this.lines, this.#adjustName(line), (extra) =>
+            this.#adjustName(extra),
+          )
+        : lineAdjustTarget(line, this.lines, this.#adjustName(line));
+    if (!priced(target)) return;
+    target.extras =
+      members.length > 1
+        ? target.extras!.filter(priced)
+        : this.lines
+            .filter((row) => row.parentLineNo === line.lineNo)
+            .map((row) => lineAdjustTarget(row, this.lines, this.#adjustName(row)))
+            .filter(priced);
+    const slice = members[0]!;
+    if (slice.kind === "cancelled_charged") {
+      if (members.length > 1) target.unitTotal = null;
+      else if (
+        target.unitTotal !== null &&
+        compareDecimal(decimal(slice.quantity), decimal(target.quantity!)) < 0
+      )
+        target.startCount = slice.quantity;
+    }
+    return target;
+  }
+
   #actOnSentLine(
     pending: typeof this.sentLinePending,
     action: "fire" | "station" | "void" | "comp",
@@ -3730,7 +3766,7 @@ export class TillTableOrderScreen extends LitElement {
       (action === "fire" && !members.every((member) => this.#canFireSent(member))) ||
       (action === "station" && !members.every((member) => this.#canMoveSent(member))) ||
       (action === "void" && !this.#canVoidSent(slice)) ||
-      (action === "comp" && members.some((member) => this.#sentOrderLine(member) === undefined))
+      (action === "comp" && this.#sentCompTarget(members) === undefined)
     )
       return;
     this.sentLinePending = null;
@@ -3739,28 +3775,9 @@ export class TillTableOrderScreen extends LitElement {
       members.length > 1 ? { lineIds: members.map((member) => member.row.lineId) } : {};
     if (action === "fire")
       this.#dispatch("fire-held-line", { lineId: slice.row.lineId, ...lineIds });
-    else if (action === "comp") {
-      const line = this.#sentOrderLine(slice)!;
-      const priced = (target: AdjustTarget) =>
-        compareDecimal(decimal(target.total), decimal("0")) > 0;
-      const target =
-        members.length > 1
-          ? rowAdjustTarget(
-              members.map((member) => this.#sentOrderLine(member)!),
-              this.lines,
-              this.#adjustName(line),
-              (extra) => this.#adjustName(extra),
-            )
-          : lineAdjustTarget(line, this.lines, this.#adjustName(line));
-      target.extras =
-        members.length > 1
-          ? target.extras!.filter(priced)
-          : this.lines
-              .filter((row) => row.parentLineNo === line.lineNo)
-              .map((row) => lineAdjustTarget(row, this.lines, this.#adjustName(row)))
-              .filter(priced);
-      this.#dispatch("adjust", { kind: "comp", target });
-    } else if (action === "void")
+    else if (action === "comp")
+      this.#dispatch("adjust", { kind: "comp", target: this.#sentCompTarget(members)! });
+    else if (action === "void")
       this.#dispatch("cancel-item", { lineId: slice.row.lineId, ...lineIds });
     else
       this.#dispatch("move-station", {
@@ -3906,7 +3923,7 @@ export class TillTableOrderScreen extends LitElement {
     const refused =
       this.sentChangeRefused?.pending === pending ? this.sentChangeRefused : undefined;
     const voidable = slice !== undefined && this.#canVoidSent(slice);
-    const compable = slice !== undefined && this.#sentOrderLine(slice) !== undefined;
+    const compable = members !== undefined && this.#sentCompTarget(members) !== undefined;
     const refusedVoid = refused !== undefined && voidable;
     const refusedComp = refused !== undefined && compable;
     // More of a weighed dish is weighed on its own, so it goes in the New order.

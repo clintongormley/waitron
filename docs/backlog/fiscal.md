@@ -1238,7 +1238,7 @@ _2026-11-25: **Reopen bill** on a bill where something was served (or its charge
 never came offers **Stop these dishes and reopen** (CANCEL-UNSERVED PR 2, [plan](../superpowers/plans/2026-11-25-cancel-unserved.md) §4; the
 owner's "yes", lane L `questions.md`, 16:43). It stops those dishes in the kitchen and leaves them off
 the reopened bill, except a dish the kitchen had started or finished, which keeps its charge there
-(watcher, 22:42). On the till, that dish's sent-dish window offers only Close, as for any dish cancelled with its charge kept, so it cannot be comped there; the server's Comp with a reason does take it off. An extra of that dish the kitchen had not started comes off. The stop is not offered on a bill holding a payment, one given back in full included.
+(watcher, 22:42). On the till, that dish's sent-dish window offers **Comp…**, as for any dish cancelled with its charge kept, which takes the charge off with a reason (A1599). An extra of that dish the kitchen had not started comes off. The stop is not offered on a bill holding a payment, one given back in full included.
 A dish held in an unsent group is stopped without being fired; D4 still applies to **Mark served**._
 
 ### W41s-11: the guide is the recovery procedure, and the old box is kept off by hand after a restore (watcher, 2026-11-14)

@@ -616,3 +616,151 @@ it("a retained Comp prices the latest dish and new extras before Lit paints the 
     ]),
   ).toEqual([["8.00", [["new-extra", "2.00"]]]]);
 });
+
+async function openCancelledCharged(
+  store = new DraftStore(),
+  status: PartyBill["status"] = "open",
+  { cancelled = "4.000", dishPrice = "2.00", salsaPrice = "0.50" } = {},
+) {
+  const orders = structuredClone(current());
+  orders.groups[0]!.rows[0]!.cancelledQuantity = cancelled;
+  orders.groups[0]!.rows[0]!.servedQuantity = "0.000";
+  if (status !== "open") orders.groups[0]!.rows[0]!.billStatus = status;
+  const croquettes = { id: "l-croq", name: "Croquetas", quantity: "4.000", groupId: "g1" };
+  return openLine("served", {
+    currentOrders: orders,
+    draftStore: store,
+    lines: [
+      heldLine({ ...croquettes, state: "ready", unitPriceGross: dishPrice }),
+      heldLine({
+        id: "salsa",
+        lineNo: 2,
+        parentLineNo: 1,
+        name: "Salsa",
+        unitPriceGross: salsaPrice,
+      }),
+    ],
+    bills: [bill(status)],
+  });
+}
+
+it("a dish cancelled with its charge kept offers Comp for it and its priced extras", async () => {
+  const el = await openCancelledCharged();
+  const events = capture(el, "adjust");
+  expect(q(el, "[data-sent-line-dialog]").textContent).toContain("Cancelled, charged");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-comp]"));
+  await el.updateComplete;
+  expect(
+    events.map((e) => [
+      e.detail.kind,
+      e.detail.target.lineId,
+      e.detail.target.total,
+      e.detail.target.extras.map((x: { lineId: string; total: string }) => [x.lineId, x.total]),
+    ]),
+  ).toEqual([["comp", "l-croq", "9.00", [["salsa", "1.00"]]]]);
+  expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(false);
+});
+
+it("a dish cancelled with its charge kept offers no other action than Comp", async () => {
+  const el = await openCancelledCharged();
+  await openMore(el);
+  for (const action of [
+    "[data-sent-line-fire]",
+    "[data-sent-line-station]",
+    "[data-sent-line-unserve]",
+    "[data-sent-line-void]",
+    "[data-sent-line-serve]",
+    "[data-sent-change]",
+    "[data-sent-change-fields]",
+  ])
+    expect(q(el, action), action).toBeNull();
+  expect(q(el, "[data-sent-line-comp]")).not.toBeNull();
+});
+
+it.each(["settled", "owner", "loading", "sending"] as const)(
+  "a dish cancelled with its charge kept offers no Comp when %s prevents it",
+  async (refusal) => {
+    const store = new DraftStore();
+    if (refusal === "owner") store.ownershipLocked = true;
+    if (refusal === "loading") store.lockEdits();
+    if (refusal === "sending") store.sending = true;
+    const el = await openCancelledCharged(store, refusal === "settled" ? "settled" : "open");
+    expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(true);
+    expect(q(el, "[data-sent-line-dialog] wt-row-actions")).toBeNull();
+  },
+);
+
+it.each([
+  ["1.000", "1"],
+  ["4.000", undefined],
+] as const)(
+  "Comp from %s cancelled croquetas of 4 starts its count at the cancelled portions",
+  async (cancelled, start) => {
+    const el = await openCancelledCharged(undefined, "open", { cancelled });
+    const events = capture(el, "adjust");
+    expect(q(el, "[data-sent-line-dialog]").textContent).toContain("Cancelled, charged");
+    await openMore(el);
+    await userEvent.click(q(el, "[data-sent-line-comp]"));
+    await el.updateComplete;
+    expect(
+      events.map((e) => [
+        e.detail.target.quantity,
+        e.detail.target.total,
+        e.detail.target.startCount,
+      ]),
+    ).toEqual([["4", "9.00", start]]);
+  },
+);
+
+it("Comp from the live portions of a part-cancelled dish starts at the whole dish", async () => {
+  const el = await openCancelledCharged(undefined, "open", { cancelled: "1.000" });
+  await userEvent.click(q(el, "[data-sent-line-close]"));
+  await el.updateComplete;
+  const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  const infos = panel.shadowRoot!.querySelectorAll<HTMLElement>('[data-sent-info="l-croq"]');
+  expect(infos).toHaveLength(2);
+  await userEvent.click(infos[1]!);
+  await el.updateComplete;
+  expect(q(el, "[data-sent-line-dialog]").textContent).not.toContain("Cancelled, charged");
+  const events = capture(el, "adjust");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-comp]"));
+  await el.updateComplete;
+  expect(events.map((e) => [e.detail.target.quantity, e.detail.target.startCount])).toEqual([
+    ["4", undefined],
+  ]);
+});
+
+it("a cancelled dish with nothing left to take off offers no Comp", async () => {
+  const el = await openCancelledCharged(undefined, "open", {
+    dishPrice: "0.00",
+    salsaPrice: "0.00",
+  });
+  expect(q(el, "[data-sent-line-dialog]").hasAttribute("open")).toBe(true);
+  expect(q(el, "[data-sent-line-dialog] wt-row-actions")).toBeNull();
+});
+
+it("a cancelled dish given away whose extra still costs offers Comp for the extra", async () => {
+  const el = await openCancelledCharged(undefined, "open", { dishPrice: "0.00" });
+  const events = capture(el, "adjust");
+  await openMore(el);
+  await userEvent.click(q(el, "[data-sent-line-comp]"));
+  await el.updateComplete;
+  expect(
+    events.map((e) => [
+      e.detail.target.total,
+      e.detail.target.extras.map((x: { lineId: string; total: string }) => [x.lineId, x.total]),
+    ]),
+  ).toEqual([["1.00", [["salsa", "1.00"]]]]);
+});
+
+it("a sent dish already given away in full offers no Comp, while its other actions stay", async () => {
+  const el = await openLine("held", {
+    lines: [heldLine({ unitPriceGross: "0.00" })],
+    bills: [bill("open")],
+  });
+  await openMore(el);
+  expect(q(el, "[data-sent-line-fire]")).not.toBeNull();
+  expect(q(el, "[data-sent-line-comp]")).toBeNull();
+});

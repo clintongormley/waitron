@@ -39,6 +39,8 @@ export interface AdjustTarget {
    * action may take part of (a cancel one or all, the Comp window a count); null when only the
    * whole of it can be adjusted (a weighed dish, or an extra). */
   unitTotal: string | null;
+  /** The count the Comp window starts at, below `quantity`; absent, the whole dish. */
+  startCount?: string;
   extras?: AdjustTarget[];
   started?: boolean;
   /** Sold by weight, which the server refuses to comp in part. */
@@ -237,7 +239,9 @@ export class TillAdjustmentDialog extends LitElement {
             : this.kind,
       extraId: this.kind === "comp" ? draft.extraId : null,
       count:
-        this.kind === "comp" && this.#partial() ? (draft.count ?? this.target?.quantity) : null,
+        this.kind === "comp" && this.#partial()
+          ? (draft.count ?? this.target?.startCount ?? this.target?.quantity)
+          : null,
       quantity: this.#partial() ? draft.quantity : null,
       reasonId: draft.reasonId,
       note: draft.note.trim() || null,
@@ -560,7 +564,7 @@ export class TillAdjustmentDialog extends LitElement {
   }
 
   #count(): string {
-    return this.count ?? this.target?.quantity ?? "1";
+    return this.count ?? this.target?.startCount ?? this.target?.quantity ?? "1";
   }
 
   #compKinds(): CompKind[] {
