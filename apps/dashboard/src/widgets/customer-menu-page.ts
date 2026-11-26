@@ -140,6 +140,14 @@ export class CustomerMenuPage extends LitElement {
         color: var(--wt-color-primary-text);
         font-weight: var(--wt-font-weight-bold);
       }
+      @media (forced-colors: active) {
+        nav a {
+          border-block-end-color: Canvas;
+        }
+        nav a[aria-current] {
+          border-block-end-color: Highlight;
+        }
+      }
       nav a:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: calc(-1 * var(--wt-focus-offset));
@@ -265,6 +273,7 @@ export class CustomerMenuPage extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#resize.observe(this);
+    if (this.parentElement) this.#resize.observe(this.parentElement);
   }
 
   override disconnectedCallback(): void {
@@ -333,7 +342,7 @@ export class CustomerMenuPage extends LitElement {
     if (scroller) {
       const top = this.#source instanceof Document ? 0 : scroller.getBoundingClientRect().top;
       scroller.scrollTop += heading.getBoundingClientRect().top - top - stripDepth(strip);
-      // Two short sections can share the last scroll position. Hold the chosen link until it moves.
+      // A jump can clamp at the end. Keep the chosen link until the scroll position changes.
       this.#jumpedAt = scroller.scrollTop;
     }
     heading.focus({ preventScroll: true });

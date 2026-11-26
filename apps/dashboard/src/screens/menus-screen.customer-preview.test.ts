@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { cdp, page, userEvent } from "vitest/browser";
 import type { CustomerMenuPreview, MenuStatus, PublicGuestMenu } from "@waitron/shared";
 import { DashboardApi } from "../api/client.js";
 import type { MenuStructure } from "../api/menu-api.js";
@@ -246,7 +246,7 @@ describe("the customer menu Online preview", () => {
     await open(() => Response.json(publishedSections()));
     const search = page.getByRole("searchbox", { name: "Search dishes" });
     await expect.element(search, { timeout: 1000 }).toBeVisible();
-    await search.fill("  PEPPER  ");
+    await search.fill("  ROAST  ");
     await expect.element(page.getByText("Roast pepper", { exact: true })).toBeVisible();
     await expect.element(page.getByRole("heading", { name: "Vegetables" })).toBeVisible();
     await expect.element(page.getByText("House bread", { exact: true })).not.toBeInTheDocument();
@@ -330,6 +330,61 @@ describe("the customer menu Online preview", () => {
       }
     },
   );
+
+  it("keeps the current underline distinct with forced colours", async () => {
+    const session = cdp();
+    await session.send("Emulation.setEmulatedMedia", {
+      features: [{ name: "forced-colors", value: "active" }],
+    });
+    try {
+      await open(() => Response.json(publishedSections()));
+      const links = page.getByRole("link", { name: "From the oven", exact: true });
+      await expect.element(links.first()).toHaveAttribute("aria-current", "location");
+      expect(getComputedStyle(links.first().element()).borderBottomColor).not.toBe(
+        getComputedStyle(links.nth(1).element()).borderBottomColor,
+      );
+    } finally {
+      await session.send("Emulation.setEmulatedMedia", { features: [] });
+    }
+  });
+
+  it("follows the Computer canvas when it becomes one pixel too narrow", async () => {
+    const viewport = [innerWidth, innerHeight] as const;
+    try {
+      await page.viewport(1200, 800);
+      const { el, host } = await open(() => Response.json(publishedSections()));
+      host.style.cssText += "height: 700px; container-type: size; overflow-y: auto;";
+      const first = page.getByRole("link", { name: "From the oven", exact: true }).first();
+      await expect.element(first).toHaveAttribute("aria-current", "location");
+      const canvas = customerPage(el)!.parentElement!;
+      const preview = (canvas.getRootNode() as ShadowRoot).host as HTMLElement;
+      preview.style.inlineSize = "720px";
+      await new Promise(requestAnimationFrame);
+      await new Promise(requestAnimationFrame);
+      expect(getComputedStyle(canvas).overflowY).toBe("visible");
+      preview.style.inlineSize = "719px";
+      await new Promise(requestAnimationFrame);
+      await new Promise(requestAnimationFrame);
+      expect(getComputedStyle(canvas).overflowY).toBe("auto");
+      canvas.scrollTop = canvas.scrollHeight;
+      await expect
+        .element(page.getByRole("link", { name: "Desserts and coffee" }), { timeout: 1000 })
+        .toHaveAttribute("aria-current", "location");
+      expect(host.scrollTop).toBe(0);
+    } finally {
+      await page.viewport(...viewport);
+    }
+  });
+
+  it("tracks sections when the browser page itself scrolls", async () => {
+    await open(() => Response.json(publishedSections()));
+    const last = page.getByRole("link", { name: "Desserts and coffee" });
+    await expect.element(last).toBeVisible();
+    const doc = document.scrollingElement!;
+    doc.scrollTop = doc.scrollHeight;
+    expect(doc.scrollTop).toBeGreaterThan(0);
+    await expect.element(last).toHaveAttribute("aria-current", "location");
+  });
 
   it("keeps the last chosen language when the previous request arrives late", async () => {
     const late = gate<Response>();

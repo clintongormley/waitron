@@ -447,9 +447,9 @@ la vista previa. Tras publicar, comprueba la versión y la hora en el encabezado
 
 Abre **Carta para clientes** y elige **Móvil** u **Ordenador** para comprobar el diseño publicado.
 En **Idioma** puedes revisar el texto en cada idioma del contenido. Usa **Buscar platos** para
-encontrar un plato o menú del día por su nombre, o elige una sección para ir a ella. Debajo de los platos verás
-la leyenda de alérgenos y el aviso. Los clientes aún no pueden abrir esta página. Para revisar
-o publicar tus cambios, abre **Vista previa**.
+encontrar un plato o menú por su nombre, o elige una sección para ir a ella. Debajo de los platos
+verás la leyenda de alérgenos y el aviso. Los clientes aún no pueden abrir esta página. Para
+revisar o publicar tus cambios, abre **Vista previa**.
 
 ## Corrige la carta publicada en una emergencia {#patch-live-menu}
 
