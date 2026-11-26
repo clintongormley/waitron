@@ -669,7 +669,7 @@ describe("the menu editor's heading", () => {
   it.each([
     ["en", "normal"],
     ["es-ES", "normal"],
-    ["es-ES", "0.09em"],
+    ["es-ES", "0.15em"],
   ] as const)(
     "fits all three menu tabs at 390 px in %s with %s letter spacing",
     async (locale, letterSpacing) => {
@@ -686,8 +686,10 @@ describe("the menu editor's heading", () => {
       expect(buttons).toHaveLength(3);
       expect(strip.scrollWidth).toBeLessThanOrEqual(strip.clientWidth);
       expect(new Set(buttons.map((button) => button.getBoundingClientRect().top)).size).toBe(1);
-      for (const button of buttons)
-        expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
+      for (const button of buttons) {
+        expect(button.clientWidth).toBeGreaterThanOrEqual(44);
+        expect(button.scrollWidth, button.innerText).toBeLessThanOrEqual(button.clientWidth);
+      }
     },
   );
 
