@@ -71,6 +71,7 @@ export {
 export {
   authorityKey,
   authorityKeyMatches,
+  backupKey,
   makeMasterKey,
   masterKeyCheckValue,
   masterKeyId,

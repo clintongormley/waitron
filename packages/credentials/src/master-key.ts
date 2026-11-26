@@ -11,6 +11,7 @@ import "./errors.js";
 
 const MASTER_KEY_BYTES = 16;
 const SALT = Buffer.from("waitron.master-key.v1", "ascii");
+const LARGEST_BACKUP_KEY_NUMBER = 0xffff_ffff;
 const X25519_PKCS8_PREFIX = Buffer.from("302e020100300506032b656e04220420", "hex");
 
 function derive(masterKey: Uint8Array, info: string): Buffer {
@@ -40,6 +41,14 @@ export function authorityKeyMatches(authority: Uint8Array, checkValue: string): 
 
 export function masterKeyMatches(masterKey: Uint8Array, checkValue: string): boolean {
   return authorityKeyMatches(authorityKey(masterKey), checkValue);
+}
+
+/** N runs from 1 to 0xffffffff: what a version 2 archive frame's four-byte field can name. */
+export function backupKey(masterKey: Uint8Array, n: number): Buffer {
+  if (!Number.isInteger(n) || n < 1 || n > LARGEST_BACKUP_KEY_NUMBER) {
+    throw new AppError("master_key.derivation_input_invalid", { input: "backup_key_number" });
+  }
+  return derive(masterKey, `backup-key.${String(n)}`);
 }
 
 /** The sealing pair's public half as SPKI DER. The private half is never returned. */

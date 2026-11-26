@@ -18,7 +18,12 @@ import { invoiceSeries, nodes, taxpayer, withTransaction, openVenueDatabase } fr
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { buildManifest } from "./backup-manifest.js";
-import { encryptArtifact, decryptArtifact } from "./artifact-cipher.js";
+import {
+  encryptArtifact,
+  decryptArtifact,
+  encryptArtifactUnderBackupKey,
+} from "./artifact-cipher.js";
+import { backupKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
 import { packArchive } from "./backup-archive.js";
 import { validateArtifactFile, restoreFromArtifactFile, type RestoreFileDeps } from "./restore.js";
 import { captureCloudArchive } from "./testing/cloud-archive.js";
@@ -140,6 +145,35 @@ it("validates one protected database, owns cleanup and retains the encrypted sou
   expect(await readdir(f.stagingDir)).toEqual([]);
   guard.forbidden.clear();
   expect(await readFile(f.artifactPath)).toEqual(input);
+});
+it("validates a version 2 file sealed under backup key N, opened with that key's text", async () => {
+  const f = await fixture();
+  const raw = decryptArtifact(await artifact(f), f.recoveryKey);
+  const masterKey = Buffer.from("000102030405060708090a0b0c0d0e0f", "hex");
+  const key = backupKey(masterKey, 2);
+  const sealed = encryptArtifactUnderBackupKey(raw, {
+    backupKey: key,
+    keyNumber: 2,
+    masterKeyId: masterKeyId(sealingPublicKey(masterKey)),
+  });
+  await writeFile(f.artifactPath, sealed);
+  await expect(validateArtifactFile(f)).rejects.toMatchObject({
+    code: "recovery.passphrase_invalid",
+  });
+  const validated = await validateArtifactFile({ ...f, recoveryKey: key.toString("base64url") });
+  try {
+    expect(validated.sourceId).toBe(createHash("sha256").update(sealed).digest("hex"));
+    expect(await readdir(join(validated.databasePath, ".."))).toEqual(["node.db", "venue.db"]);
+    const opened = await openVenueDatabase(join(validated.databasePath, ".."));
+    try {
+      expect((await opened.venue.select().from(taxpayer))[0].legalName).toBe("File roundtrip");
+    } finally {
+      await opened.close();
+    }
+  } finally {
+    await validated.discard();
+  }
+  expect(await readdir(f.stagingDir)).toEqual([]);
 });
 it("validates a gzip archive with exact extracted bytes and the ciphertext source id", async () => {
   const f = await fixture();

@@ -64,5 +64,7 @@ declare module "@waitron/shared" {
     /** The day handed for a master key's name is not a real calendar day written `YYYY-MM-DD`.
      * Carries nothing, so a wrong value passed by mistake (such as the printed key) is not kept. */
     "master_key.name_day_invalid": Record<string, never>;
+    /** A backup key number that is not a whole number from 1 to 0xffffffff. */
+    "master_key.derivation_input_invalid": { input: "backup_key_number" };
   }
 }

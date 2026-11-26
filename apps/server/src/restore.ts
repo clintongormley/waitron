@@ -83,7 +83,7 @@ import { parseEnvFile } from "./env-file.js";
 import { isUnset } from "./env-value.js";
 import { errnoOf } from "./errno.js";
 import { type ArchiveEntry } from "./backup-archive.js";
-import { decryptArtifactFile, type ArchiveKeySlot } from "./artifact-cipher-file.js";
+import { decryptBackupFile, type ArchiveKeySlot } from "./artifact-cipher-file.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
 import { decodeArchiveFile } from "./backup-compression.js";
 import { unpackArchiveFile } from "./backup-archive-file.js";
@@ -1150,7 +1150,7 @@ export async function validateArtifactFile(
     await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
     scratch = await mkdtemp(join(deps.stagingDir, ARCHIVE_VALIDATE_PREFIX));
     const plaintext = join(scratch, "plaintext");
-    const sourceId = await decryptArtifactFile(
+    const sourceId = await decryptBackupFile(
       deps.artifactPath,
       plaintext,
       deps.recoveryKey,
