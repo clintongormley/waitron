@@ -44,8 +44,8 @@ page are separate work. Allow about 200 product and 250 test lines.
 | Screen message | English | Spanish |
 | --- | --- | --- |
 | Before review | Reviewing fixes this choice. | Al revisar, esta elección queda fijada. |
-| Stale list | The available copies changed. Choose a copy from the updated list. | Las copias disponibles han cambiado. Elige una copia de la lista actualizada. |
-| Fixed choice | To choose a different copy, use Close recovery access in Waitron Cloud and start a new request. | Para elegir otra copia, usa Cerrar el acceso de recuperación en Waitron Cloud e inicia una nueva solicitud. |
+| Stale list | Choose a copy from the updated list. | Elige una copia de la lista actualizada. |
+| Fixed choice | To choose a different copy, use Close recovery access in Waitron Cloud and start a new request. | Para elegir otra copia, usa Cerrar acceso de recuperación en Waitron Cloud e inicia una nueva solicitud. |
 | Approve again | Approve this same request again in Waitron Cloud, then choose the copy again. | Vuelve a aprobar esta misma solicitud en Waitron Cloud y elige la copia de nuevo. |
 
 Run each changed test file before and after its change, then the field, guide, language and box word

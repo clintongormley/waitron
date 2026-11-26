@@ -149,14 +149,15 @@ describe("setup Cloud recovery", () => {
     expect(listed.status).toBe(200);
     expect(listed.headers.get("content-type")).toContain("application/json");
     expect(await listed.json()).toMatchObject({ points: [view.point] });
-    const select = (point: unknown) =>
+    const select = (point: unknown, venue: unknown = view.point!.venueId) =>
       app.request("/setup-api/cloud-recovery/select", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ pointId: point, venueId: view.point!.venueId }),
+        body: JSON.stringify({ pointId: point, venueId: venue }),
       });
     const invalid = await select([pointId]);
     expect(invalid.status).toBe(400);
+    expect((await select(pointId, "wrong venue")).status).toBe(400);
     expect(cloudRecovery.select).not.toHaveBeenCalled();
     const selected = await select(pointId);
     expect(selected.status).toBe(200);

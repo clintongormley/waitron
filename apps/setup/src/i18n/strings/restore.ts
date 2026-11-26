@@ -125,8 +125,7 @@ export const restoreEn = {
   "cloud_restore.choose_copy": "Choose the copy to restore",
   "cloud_restore.no_checked_copies": "Waitron Cloud has no checked copy of this venue yet.",
   "cloud_restore.review_fixes_choice": "Reviewing fixes this choice.",
-  "cloud_restore.selection.stale":
-    "The available copies changed. Choose a copy from the updated list.",
+  "cloud_restore.selection.stale": "Choose a copy from the updated list.",
   "cloud_restore.selection.fixed":
     "To choose a different copy, use Close recovery access in Waitron Cloud and start a new request.",
   "cloud_restore.selection.approve_again":
@@ -336,10 +335,9 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "cloud_restore.no_checked_copies":
     "Waitron Cloud todavía no tiene ninguna copia comprobada de este local.",
   "cloud_restore.review_fixes_choice": "Al revisar, esta elección queda fijada.",
-  "cloud_restore.selection.stale":
-    "Las copias disponibles han cambiado. Elige una copia de la lista actualizada.",
+  "cloud_restore.selection.stale": "Elige una copia de la lista actualizada.",
   "cloud_restore.selection.fixed":
-    "Para elegir otra copia, usa Cerrar el acceso de recuperación en Waitron Cloud e inicia una nueva solicitud.",
+    "Para elegir otra copia, usa Cerrar acceso de recuperación en Waitron Cloud e inicia una nueva solicitud.",
   "cloud_restore.selection.approve_again":
     "Vuelve a aprobar esta misma solicitud en Waitron Cloud y elige la copia de nuevo.",
   "cloud_restore.later_changes": "Los cambios posteriores no estarán en este local restaurado.",

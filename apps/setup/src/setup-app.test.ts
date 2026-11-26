@@ -1215,14 +1215,24 @@ describe("setup-app", () => {
       id: "dc0f49fe-28e4-4d59-b4ff-f58ae673657d",
       capturedAt: "2026-09-23T10:00:00.000Z",
     };
+    let finishSelection!: (view: unknown) => void;
+    const selecting = new Promise((resolve) => {
+      finishSelection = resolve;
+    });
     const selectCloudRecoveryPoint = vi
       .fn()
       .mockResolvedValueOnce({ ...base, point: newest })
+      .mockReturnValueOnce(selecting)
       .mockResolvedValueOnce({ ...base, points: [older], selectionNotice: "stale" })
-      .mockResolvedValueOnce({ ...base, point: older });
+      .mockResolvedValueOnce({ ...base, point: older })
+      .mockResolvedValueOnce({ ...base, point: older })
+      .mockResolvedValueOnce({ ...base, selectionNotice: "fixed" });
     const el = await mountSetupApp(
       stubApi({
-        cloudRecoveryStatus: vi.fn().mockResolvedValue(base),
+        cloudRecoveryStatus: vi
+          .fn()
+          .mockResolvedValueOnce(base)
+          .mockResolvedValue({ ...base, selectionNotice: "stale" }),
         cloudRecoveryPoints: vi.fn().mockResolvedValue({ ...base, points: [newest, older] }),
         selectCloudRecoveryPoint,
       }),
@@ -1238,6 +1248,20 @@ describe("setup-app", () => {
     root.querySelector<HTMLInputElement>("[data-test=acknowledge]")!.click();
     second!.click();
     await flush(el);
+    const copy = root.querySelector("setup-recovery-copy")!;
+    await copy.updateComplete;
+    expect(copy.shadowRoot!.querySelector("[data-test=preview]")?.hasAttribute("disabled")).toBe(
+      true,
+    );
+    finishSelection({ ...base, selectionNotice: "approve_again" });
+    await flush(el);
+    expect(first?.checked).toBe(true);
+    expect(await bottomOf(await screenHost(el, "cloud-restore"))).toContain(
+      "Approve this same request again",
+    );
+    expect(root.querySelector("setup-recovery-copy")).toBe(copy);
+    second!.click();
+    await flush(el);
     expect(root.querySelector("setup-recovery-copy")).toBeNull();
     expect(await bottomOf(await screenHost(el, "cloud-restore"))).toContain("updated list");
     const [refreshed] = root.querySelectorAll<HTMLInputElement>('input[type="radio"]');
@@ -1248,6 +1272,20 @@ describe("setup-app", () => {
     expect(selectCloudRecoveryPoint).toHaveBeenLastCalledWith(older.id, older.venueId);
     expect(refreshed?.checked).toBe(true);
     expect(root.querySelector<HTMLInputElement>("[data-test=acknowledge]")!.checked).toBe(false);
+    cloudRecoveryAction(el, "status");
+    await flush(el);
+    expect(selectCloudRecoveryPoint).toHaveBeenCalledTimes(4);
+    expect(root.querySelector('input[type="radio"]:checked')).toBeNull();
+    const [pickNewer, pickEarlier] = root.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+    pickEarlier!.click();
+    await flush(el);
+    pickNewer!.click();
+    await flush(el);
+    expect(root.querySelector("fieldset")?.disabled).toBe(true);
+    expect(pickEarlier?.checked).toBe(true);
+    expect(await bottomOf(await screenHost(el, "cloud-restore"))).toContain(
+      "Close recovery access",
+    );
   });
 
   it("submits one Cloud restore when the rendered button is clicked twice before the shell redraws", async () => {

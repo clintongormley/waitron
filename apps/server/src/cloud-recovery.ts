@@ -435,26 +435,20 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       unavailable();
     return verification;
   }
-  function operationExpiry(result: unknown): string {
+  function approvedResult(result: unknown) {
     if (
       !record(result) ||
       !validDate(result.operationExpiresAt) ||
       Date.parse(result.operationExpiresAt) <= Date.now()
     )
       return unavailable();
-    return result.operationExpiresAt;
+    return { reply: result, deadline: result.operationExpiresAt };
   }
 
   async function listPoints(state: SavedState): Promise<CloudRecoveryView> {
     try {
-      const result = await post(state, "points");
-      const deadline = operationExpiry(result);
-      if (
-        !record(result) ||
-        !uuid(result.venueId) ||
-        !Array.isArray(result.points) ||
-        result.points.length > 50
-      )
+      const { reply: result, deadline } = approvedResult(await post(state, "points"));
+      if (!uuid(result.venueId) || !Array.isArray(result.points) || result.points.length > 50)
         return unavailable();
       const points = result.points.map(point);
       if (points.some((p) => p.venueId !== result.venueId)) return unavailable();
@@ -504,11 +498,13 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
         return view(state, "expired", undefined, new Date().toISOString());
       throw error;
     }
-    const deadline = operationExpiry(info);
-    if (!record(info)) unavailable();
-    const p = point(info.point);
-    if (state.pointId && state.pointId !== p.id) unavailable();
-    const verification = checkedVerification(state, info, p);
+    const { reply, deadline } = approvedResult(info);
+    const p = point(reply.point);
+    if (state.pointId && state.pointId !== p.id) {
+      if (state.version === 1) return unavailable();
+      return { ...view(state, "approved", undefined, deadline), selectionNotice: "stale" } as const;
+    }
+    const verification = checkedVerification(state, reply, p);
     state.pointId = p.id;
     if (state.version === 2) state.snapshotVerification = verification;
     await save(state);
@@ -687,11 +683,10 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
           }
           return { ...view(state, "approved"), selectionNotice: error.notice };
         }
-        const deadline = operationExpiry(result);
-        if (!record(result)) return unavailable();
-        const selected = point(result.point);
+        const { reply, deadline } = approvedResult(result);
+        const selected = point(reply.point);
         if (selected.id !== pointId || selected.venueId !== venueId) return unavailable();
-        state.snapshotVerification = checkedVerification(state, result, selected, null);
+        state.snapshotVerification = checkedVerification(state, reply, selected, null);
         state.pointId = selected.id;
         await save(state);
         return view(state, "approved", selected, deadline);

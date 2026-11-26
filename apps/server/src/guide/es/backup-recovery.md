@@ -114,7 +114,7 @@ campo. Para Waitron Cloud, elige **Iniciar la recuperación desde Cloud**, intro
 muestra la página en tu cuenta de Waitron Cloud (**Abrir Waitron Cloud**) y aprueba allí la
 solicitud. En el servidor, elige **Comprobar la aprobación**. La copia comprobada más reciente ya
 está seleccionada. Puedes elegir una anterior antes de pulsar **Revisar copia**, que fija tu
-elección. Para cambiarla después, usa **Cerrar el acceso de recuperación** en Waitron Cloud e
+elección. Para cambiarla después, usa **Cerrar acceso de recuperación** en Waitron Cloud e
 inicia una nueva solicitud. Si todavía no hay copias comprobadas, vuelve a pulsar **Comprobar la
 aprobación** cuando haya una disponible.
 

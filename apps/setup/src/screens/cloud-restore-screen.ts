@@ -80,6 +80,7 @@ export class SetupCloudRestoreScreen extends LitElement {
   @state() private reviewed = false;
   private readonly feedback = new FormFeedback(this);
   #approvalBinding?: string;
+  #returnChoiceFocus = false;
 
   constructor() {
     super();
@@ -121,6 +122,15 @@ export class SetupCloudRestoreScreen extends LitElement {
   }
 
   override updated(changed: PropertyValues<this>): void {
+    if (changed.has("busy") && !this.busy && this.#returnChoiceFocus) {
+      this.#returnChoiceFocus = false;
+      if (document.activeElement === document.body) {
+        const radios = [
+          ...this.shadowRoot!.querySelectorAll<HTMLInputElement>('input[name="backup-copy"]'),
+        ];
+        (radios.find((radio) => radio.checked) ?? radios[0])?.focus();
+      }
+    }
     if (changed.has("invalidField") && this.#refusalUnder(this.#shownRefusal) !== undefined) {
       void focusFirstInvalid(this.shadowRoot!);
     }
@@ -284,9 +294,11 @@ export class SetupCloudRestoreScreen extends LitElement {
                                   name="backup-copy"
                                   .value=${point.id}
                                   .checked=${live(!!approved && point.id === approved.id)}
-                                  @change=${() => {
-                                    if (!selectionLocked)
-                                      this.#dispatchAction({ action: "select", pointId: point.id });
+                                  @change=${(event: Event) => {
+                                    if (selectionLocked) return;
+                                    this.#returnChoiceFocus =
+                                      this.shadowRoot!.activeElement === event.currentTarget;
+                                    this.#dispatchAction({ action: "select", pointId: point.id });
                                   }}
                                 />
                                 <time datetime=${point.capturedAt}

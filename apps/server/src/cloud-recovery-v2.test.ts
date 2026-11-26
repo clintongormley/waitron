@@ -283,6 +283,51 @@ describe("choosing the approved venue's snapshot", () => {
       }),
     );
   });
+
+  it("allows the operator to pick again if Cloud accepted a choice but the proxy lost its reply", async () => {
+    const f = await fixture();
+    let chosen = point;
+    let proxyLosesReply = true;
+    const fetchCloud = f.options.fetch!;
+    f.options.fetch = async (url, init) => {
+      const reply = await fetchCloud(url, init);
+      const call = f.calls.at(-1);
+      return proxyLosesReply && call?.action === "select" && call.payload[4] === olderId
+        ? new Response("Gateway timeout", { status: 504 })
+        : reply;
+    };
+    f.rewrite = (action, result) => {
+      if (action === "select" && f.calls.at(-1)?.payload[4] === olderId) chosen = older;
+      return {
+        ...result,
+        ...(result.point ? { point: chosen, verification: verification(chosen) } : {}),
+      };
+    };
+    const client = createCloudRecoveryClient(f.options);
+    await client.start();
+    await client.select(point.id, point.venueId);
+    await expect(client.select(olderId, point.venueId)).rejects.toMatchObject(cloudUnavailable);
+    const status = await client.status();
+    expect(status).toMatchObject({ state: "approved", selectionNotice: "stale" });
+    expect(status.point).toBeUndefined();
+    expect((await f.saved()).pointId).toBe(point.id);
+    proxyLosesReply = false;
+    expect((await client.select(olderId, point.venueId)).point?.id).toBe(olderId);
+    expect(await f.saved()).toMatchObject({
+      pointId: olderId,
+      snapshotVerification: verification(older),
+    });
+  });
+
+  it("refuses a selected copy from outside the venue shown on the box", async () => {
+    const f = await fixture();
+    const client = createCloudRecoveryClient(f.options);
+    await client.start();
+    f.rewrite = (action, result) =>
+      action === "select" ? { ...result, point: { ...point, venueId: olderId } } : result;
+    await expect(client.select(point.id, point.venueId)).rejects.toMatchObject(cloudUnavailable);
+    expect((await f.saved()).pointId).toBeUndefined();
+  });
 });
 
 describe("target-bound snapshot recovery v2", () => {

@@ -2490,10 +2490,11 @@ export class SetupApp extends LitElement {
             if (!newest || list.requestId !== view.requestId) view = list;
             else if (view.point) view = { ...view, points: list.points };
             else if (
+              view.selectionNotice === "stale" ||
               previous?.selectionNotice === "stale" ||
               previous?.selectionNotice === "approve_again"
             )
-              view = list;
+              view = { ...list, selectionNotice: view.selectionNotice };
             else {
               view = await this.api.selectCloudRecoveryPoint(newest.id, newest.venueId);
               if (view.state === "approved") view = { ...view, points: view.points ?? list.points };

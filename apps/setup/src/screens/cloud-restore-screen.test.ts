@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 import { setLocale } from "../i18n/t.js";
 import {
   cleanupWidgets,
@@ -54,6 +55,26 @@ const ACKNOWLEDGE_PROBLEM =
   "Confirm that the old box and surviving peers are stopped, and that you accept losing changes after this snapshot.";
 
 describe("Cloud restore screen", () => {
+  it("returns keyboard focus to the radio after a choice is confirmed", async () => {
+    const view = approvedView();
+    const older = approvedView("75ad2157-93d0-4438-8c56-7429c45e58ba").point;
+    const { el, host } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: { ...view, points: [view.point, older] },
+    });
+    host.addEventListener("cloud-restore-action", () => {
+      el.busy = true;
+    });
+    const [first, second] =
+      el.shadowRoot!.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+    first!.focus();
+    await userEvent.keyboard("{ArrowDown}");
+    await el.updateComplete;
+    expect(el.busy).toBe(true);
+    el.view = { ...el.view!, point: older };
+    el.busy = false;
+    await el.updateComplete;
+    expect(el.shadowRoot!.activeElement).toBe(second);
+  });
   it("offers Check approval when Cloud has no checked copy", async () => {
     const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
       view: { ...approvedView(), point: undefined, points: [] },

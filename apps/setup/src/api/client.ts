@@ -237,13 +237,6 @@ export interface BucketRestoreBody extends RecoveryRestoreCredentials {
   venueConfirmed: string | null;
 }
 
-export interface CloudRecoveryPoint {
-  id: string;
-  venueId: string;
-  capturedAt: string;
-  modules: Record<string, number>;
-}
-
 export interface CloudRecoveryView {
   version?: 2;
   requestId: string;
@@ -251,8 +244,8 @@ export interface CloudRecoveryView {
   openCloudUrl: string;
   expiresAt: string;
   state: "awaiting_owner" | "approved" | "expired";
-  point?: CloudRecoveryPoint;
-  points?: CloudRecoveryPoint[];
+  point?: { id: string; venueId: string; capturedAt: string; modules: Record<string, number> };
+  points?: NonNullable<CloudRecoveryView["point"]>[];
   selectionNotice?: "stale" | "fixed" | "approve_again";
 }
 
