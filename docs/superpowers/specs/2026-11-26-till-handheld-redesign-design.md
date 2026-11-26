@@ -393,9 +393,10 @@ Under the card, a muted centred note when shares differ by a cent (`ba` 1), or a
 **The guest's share** (`ba` 2): the §7.1 guest screen. The language pill (line border, rounded) at
 the top left and "Skip ›" (muted text) at the top right; the venue's name (muted) above "Your share"
 in 24px bold, a muted line with the table, "Guest 1 of 3" and the bill; the share centred in 42px;
-"Leave a tip?" (muted) above three equal boxes (5%, 10%, 15%), each with a line border, the
-percentage in bold and its amount muted under it; "Custom amount" as a centred text link; and one
-plain button at the foot, "No tip · hand back to your waiter".
+"Leave a tip?" (muted) above the tip choices drawn as §7.11's step 2 (one under another, full
+width, 64px, the percentage at the left and its amount on the share at the right end), then "Custom
+amount"; one plain button at the foot, "No tip · hand back to your waiter". `ba` 2 draws the three
+percentages side by side; they follow step 2 so the two tip screens match (a call made in the write-up).
 
 **The dish rows** (`bb` 1): rows the full width, plain, with a line under each, at least 52px high.
 Left to right: a 24px square tick box with rounded corners, the quantity (bold), the name with any
@@ -427,6 +428,127 @@ end, then the chevron-down icon. Open, the list hangs under it in a card with a 
 chosen machine's row lifted and bold. Then "Operation number (optional)" (muted label) over a 44px
 field with a line border and a muted placeholder ("from the machine's slip"). The foot holds "It went
 through · €80.52" (filled) over "It was declined" (plain).
+
+### 7.11 How the Pay screens of §7.1–§7.8 look
+
+What the pictures `o`, `q`, `r`, `k` and `ah` show, element by element, so the build does not have
+to guess. Where a later decision changed a picture, this follows the decision and names the frame
+that still draws the look. The tokens, the app bar and the foot bar are as in §7.10 ("lifted",
+"muted", "line" and "plain" as named there): a back link on the left, a centred title with a muted
+subtitle, and on a screen that charges a card the 44px device button on the right (line border, 8px
+corners, the NFC icon: three arcs). Foot buttons are full width, 52px high, one under another, 8px
+apart, the main one filled in `--wt-color-primary`, the others plain with a line border, a text link
+last.
+
+**The guest's bill, step 1** (`ah` 1). No app bar. A top row on the page ground (`--wt-color-bg`):
+the language pill at the left (36px high, fully rounded, line border, the language name in bold 14px
+with the chevron-down icon after it) and "Skip ›" at the right (bold 14px, muted, no border). Under
+it, the venue's name (16px, muted, bold), "Here is your bill" (24px bold) and a muted 13px line with
+the table and the date and time. The dishes follow as plain rows the full width, a line under each:
+the quantity in a 28px column, the customer-facing name, and the price at the right end, 15px. Then
+"Total" and the amount on one row, 20px bold, the amount at the right end. The foot holds "Leave a
+tip?" (filled) over "No tip · hand back to your waiter" (plain), the same size.
+
+**Step 2, Leave a tip** (`o` 2). "Leave a tip" (26px) and a muted line, "On a bill of €73.20." Then
+four buttons one under another, full width, 64px high, 10px apart, with 16px margins: the percentage
+in bold 20px at the left and its amount, muted 17px, at the right end; the last reads "Custom
+amount" with nothing at its right. A chosen percentage has a 2px primary border and a lifted
+background; the others are plain with a line border. The foot holds "Done · hand back to your
+waiter" (filled) over "Back to the bill" (plain). The top row is step 1's; `o` 2 predates it and
+puts the venue's name there instead. Skip shows on step 1 only; steps 2 and 3 go back with their
+plain button. Done is the design system's disabled button until a choice is made (calls made in the
+write-up).
+
+**Step 3, Custom amount** (`o` 3). "How much would you like to pay?" (26px, it wraps) and a muted
+line, "Your bill is €73.20. Anything above it is a tip." A field 16px in from each side with a 2px
+primary border (it is being typed into), 8px corners and a plain background: "You pay" muted 14px at
+the left, the amount in 34px bold with tabular figures at the right end. Under it, one row: "Bill
+€73.20" muted at the left, "Tip €6.80" at the right with the figure bold in the text colour. Then
+the keypad of Cash (below). The foot holds "Done · hand back to your waiter" (filled) over "Back to
+the percentages" (plain). Below the bill's amount Done is the design system's disabled button.
+
+**Pay** (`ah` 2). App bar: "‹ Table 4", "Pay" over "Bill 1", the device button. The amount block:
+muted 13px "To pay", the amount centred in 42px bold with tabular figures, and a muted 14px line
+"Bill €73.20 + tip €7.32" with "Remove tip" after it on the same line, a bold primary text link.
+The ways to pay sit under it, 12px in from each side, 8px apart: four full-width buttons, each 56px
+high with 10px corners, a line border and a plain background. In each, left to right: a 22px column
+holding the check icon (primary text colour) on the chosen one and empty on the others, so the names
+line up; the name in bold 17px; and at the right end a muted 14px hint ("between guests", "choose
+dishes", "type it"), or on Whole bill the amount. The chosen one has a 2px primary border and a
+lifted background. Under them, "Full invoice instead", a centred bold 14px primary text link. The
+foot holds "Charge €80.52" (filled, the card icon beside the text, before it), "Cash" (plain) and
+"Other card machine" (a centred text link). `q` 1's segmented row of four tabs is not used.
+
+**Pay with a full invoice set up** (`q` 2). The link is replaced by one line in a box 12px in from
+each side (line border, 8px corners, plain, 14px text): "Full invoice" in bold text colour, then
+muted "· Garcia Lopez SL" and, on a second line, "Printed on Office"; "Change" at the right end, a
+bold primary text link 40px high. Under the box, "Receipt instead" as a centred text link. The rest
+of Pay is as above.
+
+**The device sheet** (`r` 1–3), opened by the device button, which turns lifted while the sheet is
+open. The screen behind is dimmed (a 40% black scrim) and the sheet rises from just under the app
+bar, plain, with 16px top corners and a grab handle (40 by 5px, `--wt-color-surface-sunken`). At the
+top, the live camera, 230px high, 16px in from each side, 12px corners, with four corner brackets
+framing the middle and a caption along its foot: "Point at a device's QR sticker · scan as many as
+you need". The camera's dark ground, the brackets and the caption are drawn in fixed colours, as a
+camera view would be. Under it, a muted 13px hint: "Or choose below. Tapping a device on the phone
+works on any screen." After a scan (`r` 2) the hint gives way to a notice with 8px corners, the
+check icon beside "Picked up Reader 3" in bold 14px; it is drawn with a fixed pale green background
+and dark green text, and the build takes it from `--wt-color-success`. Then one dropdown per device
+this payment uses, 56px high, 16px in from each side, 8px apart, with a line border, 8px corners and
+a plain background: a muted 12px label ("Card reader", "Receipt printer", "Payment slip printer", or
+"Invoice printer" in the receipt printer's place, `r` 3) over the device's name in 16px, and the
+chevron-down icon at the right end. The dropdown a scan just changed has a 2px primary border and a
+lifted background (`r` 2). The cash drawer's dropdown, where the profile allows one, is the same,
+labelled "Cash drawer". At the sheet's foot, "Done"
+(filled, full width, 52px), with no line above it.
+
+**The full invoice's details** (`q` 4). App bar: a back link, "Full invoice" over "Bill 1", nothing
+on the right. `q` 4's back link reads "Table 4"; by §7.10's rule it names the screen before, "Pay".
+The fields come one under another, 12px in from each side and 10px apart, postcode and city side by
+side, each with a muted 12px label over the value and the required mark; the picture draws them with
+a muted 2px underline and the asterisk in a fixed red, but they are the shared field primitives and
+take their look from there. Then "Send the invoice" as a muted 12px label in capitals, and a
+two-part switch, "Print it" and "Email it", 44px high with a line border and 8px corners, the chosen
+half filled in the text colour with its words in the surface colour. Under it, with Print chosen, a
+"Printer" dropdown with the chevron-down icon at the right end, showing "Office (A4)". With Email chosen, an "Email address" field
+(the shared field primitive) takes the dropdown's place. The foot holds "Use full invoice" (filled) alone.
+
+**Cash** (`ah` 3). App bar: "‹ Pay", "Cash" over "Bill 1", no device button. The amount block as on
+Pay, without Remove tip. Then the quick amounts in a 2-by-2 grid, 8px apart, 12px in from each side:
+"Exact" and the next notes up, each 56px high, 10px corners, line border, plain, bold 18px; the one
+chosen has a 2px primary border and a lifted background. Under them a lifted panel with 10px
+corners: "Give back" (16px) at the left and the change at the right end in 26px bold. Then the
+keypad: three columns, 6px apart, 46px keys with 8px corners, line borders, plain, 18px figures; 1
+to 9, then the decimal mark bottom left, 0, and the backspace icon bottom right. The foot holds one
+filled button saying what happened: "Took €90.00 · give €9.48". An amount typed on the keypad shows
+in a field above the quick amounts, drawn as An amount's field (§7.10), and clears the quick choice
+(a call made in the write-up).
+
+**At the reader** (`k` 3). App bar: no back link and no device button; the title names the way to
+pay, with a muted subtitle ("Split equally" over "Bill 1 · guest 1 of 3"). One centred column in the
+middle of the screen: a 96px ring with a 4px edge in `--wt-color-surface-sunken`, its top quarter in
+the primary colour, with the card icon inside; "Tap or insert the card" (22px bold); the amount in
+44px bold with tabular figures; the reader's name in 22px bold, as §7.6 asks (`k` 3 draws it at 15px; the spec wins); a muted 15px
+line "waiting 0:14"; and a muted 13px note, "The reader is in charge now: this screen moves
+on by itself when the card is accepted or declined." There is no foot bar and nothing to press. The ring's primary quarter turns while it waits, and
+stands still when the device asks for reduced motion. "Pay the next guest (2 of 3)" afterwards is §7.10's between-guests screen.
+
+**Paid** (`k` 4, brought into line with §7.10's Paid screens). One layout for every Paid screen,
+whole bill or part (a call made in the write-up: `k` 4 and pass 3's `ba` 4, `bb` 3 and `bc` 2 were
+drawn differently). App bar: "‹ Table 4", "Paid" over the bill and what is left on it, nothing on the
+right. A centred column near the top: a 56px filled circle with the check icon (`k` 4 draws 96px in
+a fixed pale and dark green; the build uses `--wt-color-success`), then what was taken as a sentence
+in 30px bold ("€80.52 by card"), and where the receipt went in muted 14px under it ("Receipt printed
+on Bar"). Then the facts as `k` 4's full-width list, a line above and a line under each row, 15px,
+the label muted at the left and the value at the right end: how it was paid ("Card · Reader 2"),
+any tip, and "Still to pay on Table 4" with "Bill 2 · Ana €21.90". On a part payment the bill box of
+§7.10 (`bc` 2) or the share list (`ba` 4) takes the list's place. The foot holds the next step
+(filled: "Pay Bill 2 · Ana", "Next: Guest 3 · €24.43", "Pay the rest · €35.50"), then "Back to Table
+4" (plain) where the next step is not already that, then "Print payment slip" as a centred text link
+with a muted 13px note under it, "Only if the guest asks. It prints once." Once printed, the link
+becomes muted text, "Slip printed", and does nothing. With nothing left owed on the table, the foot
+holds "Back to Table 4" (filled) and the slip link; the table is freed by Finish table, never here.
 
 ## 8. The till: the same pieces side by side
 
