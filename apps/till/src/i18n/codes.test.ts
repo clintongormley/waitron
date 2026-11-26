@@ -539,6 +539,7 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
     "adjustment.weighed_partial",
     "adjustment.quantity_invalid",
     "adjustment.no_reduction",
+    "adjustment.not_standing",
     "adjustment_reason.not_found",
   ]) {
     expect(codeMessage(code, "en"), code).not.toBe(generic.en);
@@ -560,6 +561,12 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
   );
   expect(codeMessage("adjustment.no_reduction", "es")).toBe(
     "Así no se descuenta nada. Comprueba si ya es gratis o introduce un descuento mayor",
+  );
+  expect(codeMessage("adjustment.not_standing", "en")).toBe(
+    "A comp or discount on these dishes has already come off this bill. Reload the bill and try again",
+  );
+  expect(codeMessage("adjustment.not_standing", "es")).toBe(
+    "Un descuento de estos platos ya se ha quitado de esta cuenta. Vuelve a cargar la cuenta e inténtalo de nuevo",
   );
   expect(codeMessage("adjustment.weighed_partial", "en")).toBe(
     "Part of an item sold by weight or measure can't be comped. Comp the whole line instead",
