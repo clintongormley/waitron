@@ -92,6 +92,8 @@ describe("print job preview", () => {
   it("shows both invoice pages at the receipt scale and lets a phone keyboard pan", async () => {
     await page.viewport(1440, 800);
     const canvas = document.createElement("canvas");
+    canvas.width = 900;
+    canvas.height = 1273;
     const data = canvas.toDataURL().split(",")[1]!;
     const { el, host } = await mountWidget<PrintJobPreviewDialog>("dashboard-print-job-preview", {
       open: true,
@@ -117,7 +119,9 @@ describe("print job preview", () => {
     await page.viewport(390, 800);
     for (const image of pages) {
       await image.decode();
-      expect(image.getBoundingClientRect().width).toBeCloseTo(width);
+      const drawn = image.getBoundingClientRect();
+      expect(drawn.width).toBeCloseTo(width);
+      expect(drawn.height / drawn.width).toBeCloseTo(1273 / 900);
     }
     const paper = el.shadowRoot!.querySelector<HTMLElement>(".paper-viewport")!;
     paper.focus();

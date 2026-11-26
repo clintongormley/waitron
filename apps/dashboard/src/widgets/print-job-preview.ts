@@ -9,7 +9,7 @@ import type { A4PrintJobPreview, PrintJobPreview, PrintJobRow } from "../api/pri
 import { formatIsoMinute } from "../date-utils.js";
 import { codeMessage } from "../i18n/codes.js";
 import { jobStatusName } from "../i18n/domain.js";
-import { jobErrorMessage, jobStatus, jobWaitMessage } from "../screens/printer-job-status.js";
+import { jobErrorMessage, jobStatus, jobWaitMessage } from "./printer-job-status.js";
 import { fill, t } from "../i18n/t.js";
 import { PrintPaper, paperStyles } from "./print-paper.js";
 

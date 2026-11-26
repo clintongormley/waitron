@@ -2,7 +2,7 @@ import type { PrintJobRow, PrintJobStatus } from "../api/printing-api.js";
 import { holdReason } from "../i18n/a4-holds.js";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, t } from "../i18n/t.js";
-import { pageFailureReason } from "../widgets/page-test-pages.js";
+import { pageFailureReason } from "./page-test-pages.js";
 
 type DisplayStatus = PrintJobStatus | "held";
 

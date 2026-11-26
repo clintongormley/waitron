@@ -4420,6 +4420,33 @@ it("reprints the selected preview and returns the keyboard to the printout", asy
   expect(api.getPrintJobPreview).toHaveBeenLastCalledWith("j1");
 });
 
+it("shows a late reprint refusal inside the preview after stepping to another job", async () => {
+  let fail!: (error: unknown) => void;
+  const api = stubApi({
+    resendPrintJob: vi.fn().mockImplementation(() => new Promise((_, reject) => (fail = reject))),
+  });
+  const { el } = await mountWidget<PrintersScreen>("dashboard-printers-screen", { api });
+  await flush(el);
+  q(el, "[data-test=view-job-j2]")!.click();
+  await flush(el);
+  q(el, "[data-test=preview-reprint]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-send]")!.click();
+  await flush(el);
+  q(el, "[data-test=reprint-cancel]")!.click();
+  await vi.waitFor(() => expect(q(el, "dashboard-print-job-reprint-dialog")).toBeNull());
+  q(el, "[data-test=preview-previous]")!.click();
+  await flush(el);
+  expect(text(el, "[data-test=preview-status]")).toBe(jobStatusName("failed"));
+
+  fail({ code: "print_job.not_resendable" });
+  await flush(el);
+  const preview = q(el, "dashboard-print-job-preview")!;
+  expect(preview.shadowRoot!.querySelector("[role=alert]")?.textContent?.trim()).toBe(
+    codeMessage("print_job.not_resendable"),
+  );
+});
+
 it("reports a failed job preview request", async () => {
   const api = stubApi({
     getPrintJobPreview: vi.fn().mockRejectedValue({ code: "server.internal" }),

@@ -28,7 +28,7 @@ export class PrintQueuePreview {
 
   close(): void {
     ++this.#read;
-    this.job = this.paper = this.error = this.reprintError = null;
+    this.job = this.paper = this.error = null;
     this.loading = false;
     this.changed();
   }
@@ -50,7 +50,7 @@ export class PrintQueuePreview {
     const read = ++this.#read;
     if (openingOrder === undefined) {
       this.job = job;
-      this.paper = this.error = this.reprintError = null;
+      this.paper = this.error = null;
       this.loading = true;
       this.changed();
     }

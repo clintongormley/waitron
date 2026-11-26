@@ -73,7 +73,7 @@ import {
   jobReason,
   jobStatus,
   jobWaitMessage,
-} from "./printer-job-status.js";
+} from "../widgets/printer-job-status.js";
 import { formatIsoMinute, formatRecentMinute } from "../date-utils.js";
 import { settingsCardStyles, settingsRows, type SettingsRow } from "../widgets/settings-card.js";
 import {
@@ -1157,7 +1157,7 @@ export class PrintersScreen extends LitElement {
         return await this.api.resendPrintJob(id, printerId);
       } catch (error) {
         if (this.reprintJob?.id !== id) {
-          if (this.#preview.job?.id === id) this.#preview.reprintError = codeOf(error);
+          if (this.#preview.job) this.#preview.reprintError = codeOf(error);
           else this.errorKey = codeOf(error);
         }
         throw error;
