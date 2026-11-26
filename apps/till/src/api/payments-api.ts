@@ -88,6 +88,12 @@ export interface AdjustmentPreview {
     reduction: string;
     rows: { quantity: string; unitGross: string }[];
   }[];
+  /** The set menu's comp or discount this one replaces; absent when there is none. */
+  replaces?: {
+    action: Exclude<AdjustmentAction, "cancel">;
+    percentBp: number | null;
+    amount: string;
+  };
 }
 /** A cash tender: the full amount the operator keyed in (the server computes the change). */
 export interface CashTender {

@@ -1,3 +1,4 @@
+import type { Ending } from "@waitron/adjustments";
 import type { Transaction } from "@waitron/db";
 import {
   aLaCarteLineTotal,
@@ -10,7 +11,7 @@ import {
   subtractDecimal,
   type Decimal,
 } from "@waitron/shared";
-import { familyAt, gross, type Row } from "./adjustment-rows.js";
+import { familyAt, gross, readRows, type Row } from "./adjustment-rows.js";
 import type { Plan } from "./adjustments-apply.js";
 import { takesSetMenus, totalAfterAdjusting } from "./set-menu-regroup.js";
 
@@ -29,27 +30,32 @@ interface Part {
 type Planned = Pick<Plan, "rows" | "released" | "stamped" | "carve" | "writes" | "reduction">;
 
 /**
- * The bill's total now and once the plan is applied: less `cancelDrop` (a cancel's whole drop), or,
- * for a comp or discount, its rows as {@link applyAdjustment} writes them, grouped again; on a bill
- * with no set menus to group, less the plan's reduction.
+ * The bill's total now and once `ending` has ended and the plan is applied: less `cancelDrop` (a
+ * cancel's whole drop), or, for a comp or discount, its rows as {@link applyAdjustment} writes them,
+ * grouped again; on a bill with no set menus to group, less the plan's reduction. The plan was read
+ * with `ending` as ended.
  */
 export async function billTotalOf(
   tx: Transaction,
   orderId: string,
   plan: Planned,
   cancelDrop: Decimal | null,
+  ending?: Ending,
 ): Promise<{ before: Decimal; after: Decimal }> {
-  const before = centsToDecimal(plan.rows.reduce((sum, { lineTotal }) => sum + lineTotal, 0));
-  if (cancelDrop !== null) return { before, after: subtractDecimal(before, cancelDrop) };
+  const totalOf = (rows: readonly Row[]) =>
+    centsToDecimal(rows.reduce((sum, { lineTotal }) => sum + lineTotal, 0));
+  const ended = totalOf(plan.rows);
+  const before = ending === undefined ? ended : totalOf(await readRows(tx, orderId));
+  if (cancelDrop !== null) return { before, after: subtractDecimal(ended, cancelDrop) };
   if (
     !plan.rows.some(({ setMenuRole }) => setMenuRole !== null) &&
     !(await takesSetMenus(tx, orderId))
   ) {
-    return { before, after: subtractDecimal(before, plan.reduction) };
+    return { before, after: subtractDecimal(ended, plan.reduction) };
   }
   return {
     before,
-    after: centsToDecimal(await totalAfterAdjusting(tx, orderId, rowsAfter(plan))),
+    after: centsToDecimal(await totalAfterAdjusting(tx, orderId, rowsAfter(plan), ending)),
   };
 }
 

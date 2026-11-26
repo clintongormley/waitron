@@ -86,6 +86,12 @@ import {
 } from "./working-order-removal.js";
 import { bumpRevision, refusePaymentInFlight } from "./working-order-edit-state.js";
 import { billTotalOf } from "./adjustment-bill-total.js";
+import {
+  endReplacedOnSetMenu,
+  setMenuDishes,
+  setMenuReplacement,
+  type Replaced,
+} from "./set-menu-adjustment.js";
 import { atReleasedPrices, regroupAdjusted, releaseDishes } from "./set-menu-dish-release.js";
 import {
   assertTabOpen,
@@ -157,6 +163,8 @@ export interface AdjustmentPreview {
     reduction: string;
     rows: { quantity: string; unitGross: string }[];
   }[];
+  /** The set menu's comp or discount the action replaces (D52); absent when there is none. */
+  replaces?: Replaced;
 }
 
 /** New prices for one row, or for the part of it split off with the part of its dish covered when
@@ -597,7 +605,11 @@ export async function planAdjustment(
     }
     const target = line;
     // An extra has no extras of its own, so it is a family of one.
-    const family = [target, ...view.filter((other) => other.parentLineId === target.id)];
+    const family = [
+      target,
+      ...view.filter((other) => other.parentLineId === target.id),
+      ...setMenuDishes(target, view),
+    ];
     covered = coveredQuantity(orderId, target, ask.quantity);
     const partial = covered < target.quantity;
     const weighed = (target.unitPrecision ?? 0) > 0;
@@ -904,7 +916,8 @@ export async function previewAdjustment(
   ask: AdjustmentAsk,
   venueLocale: string,
 ): Promise<AdjustmentPreview> {
-  const plan = await planAdjustment(tx, ask, venueLocale);
+  const replacing = await setMenuReplacement(tx, ask);
+  const plan = await planAdjustment(tx, ask, venueLocale, replacing?.ending);
   const regrouped =
     ask.action === "cancel"
       ? await regroupDropOfRemoval(
@@ -939,6 +952,7 @@ export async function previewAdjustment(
     ask.orderId,
     plan,
     ask.action === "cancel" ? reduction : null,
+    replacing?.ending,
   );
   await assertBillInvariantAt(tx, ask.orderId, billTotal.after);
   if (ask.action !== "cancel") {
@@ -950,6 +964,7 @@ export async function previewAdjustment(
     billTotal: { before: money(billTotal.before), after: money(billTotal.after) },
     needsApproval: plan.approval === null ? null : wireApproval(plan.approval),
     lines,
+    ...(replacing === null ? {} : { replaces: replacing.replaces }),
   };
 }
 
@@ -1097,6 +1112,8 @@ export async function applyAdjustment(
     "adjustment.apply",
     { ...command, expectedEdit, approverId: approver?.personId },
     async () => {
+      const before = args.action === "cancel" ? null : await totalBeforeEdit(tx, cfg, args.orderId);
+      await endReplacedOnSetMenu(tx, args);
       const plan = await planAdjustment(tx, args, venueLocale);
       const approved = await approvedBy(tx, plan.approval, approver);
       const activity =
@@ -1129,7 +1146,6 @@ export async function applyAdjustment(
           args.preparationStarted,
         );
       } else {
-        const before = await totalBeforeEdit(tx, cfg, args.orderId);
         await releaseDishes(tx, plan.released);
         const repriced = await reprice(
           tx,
