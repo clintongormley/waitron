@@ -136,7 +136,7 @@ function sandbox(extra = {}) {
     state: join(dir, "run/waitron-box-state"),
     tagHost: join(dir, "opt/waitron-host/box/name-tag-host.mjs"),
     networkHost: join(dir, "opt/waitron-host/box/network-host.mjs"),
-    storageHost: join(dir, "opt/waitron-host/box/storage-host.mjs"),
+    storageHost: join(dir, "opt/waitron-host/box/storage/storage-host.mjs"),
   };
   for (const path of Object.values(paths)) mkdirSync(dirname(path), { recursive: true });
   mkdirSync(paths.ntpUnits);
@@ -804,10 +804,11 @@ it.each([0, 1])("takes the worker lock before its adapter (lock refusal %s)", (r
 describe("waitron-box.sh storage requests", () => {
   const LIST = 'storage.list {"actor":{"source":"server"}}';
   const RELEASE = 'storage.release {"actor":{"source":"person","person":"owner"}}';
-  const echoing = (sb) => {
+  const echoing = (sb, module = sb.paths.storageHost) => {
     const received = join(sb.dir, "received");
+    mkdirSync(dirname(module), { recursive: true });
     writeFileSync(
-      sb.paths.storageHost,
+      module,
       `import fs from 'node:fs'; fs.writeFileSync(${JSON.stringify(received)}, fs.readFileSync(0)); console.log(JSON.stringify({ ok: true, node: process.execPath }));`,
     );
     return received;
@@ -874,6 +875,26 @@ describe("waitron-box.sh storage requests", () => {
     mkdirSync(dirname(runtime), { recursive: true });
     symlinkSync(process.execPath, runtime);
     expect(answerWith(sb, LIST)).toEqual({ ok: true, node: process.execPath });
+  });
+
+  it("reads the module and the runtime from WAITRON_HOST_DIR when it is set", () => {
+    const host = join(mkdtempSync(join(tmpdir(), "waitron-box-host-")), "host");
+    dirs.push(dirname(host));
+    const sb = withoutNode(sandbox({ WAITRON_HOST_DIR: host }));
+    echoing(sb, join(host, "box/storage/storage-host.mjs"));
+    const runtime = join(host, "node-v26.7.0/bin/node");
+    mkdirSync(dirname(runtime), { recursive: true });
+    symlinkSync(process.execPath, runtime);
+    expect(answerWith(sb, LIST)).toEqual({ ok: true, node: process.execPath });
+  });
+
+  it("runs no runtime but the pinned one", () => {
+    const sb = withoutNode(sandbox());
+    echoing(sb);
+    const runtime = join(sb.dir, "opt/waitron-host/node-v26.6.0/bin/node");
+    mkdirSync(dirname(runtime), { recursive: true });
+    symlinkSync(process.execPath, runtime);
+    expect(answerWith(sb, LIST)).toEqual({ ok: false, reason: "unknown_request" });
   });
 
   it("answers unknown_request when neither PATH nor the host holds a node", () => {

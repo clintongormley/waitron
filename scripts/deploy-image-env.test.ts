@@ -1155,6 +1155,16 @@ describe("the host modules a box carries", () => {
     return new Set([...loop("upgrades/"), ...loop(""), ...single]);
   }
 
+  /** The set build.sh installs for the USB drive module, and the folder it puts the set in. */
+  function imageStorageSet(): { modules: string[]; folder: string } {
+    const match =
+      /for module in ([\w/. -]+); do\n\s+install -D -m 0644 "\$repo\/scripts\/box\/\$module" "\$root\/opt\/waitron-host\/box\/(\.storage\.[\w-]+)\/\$module"\ndone\nln -s \2 "\$root\/opt\/waitron-host\/box\/storage"\n/.exec(
+        BUILD,
+      );
+    expect(match, "build.sh's storage set and its link").not.toBeNull();
+    return { modules: match![1]!.split(" "), folder: match![2]! };
+  }
+
   it("follows static, re-exported and awaited imports, and not a type named in a comment", () => {
     expect([...importClosure("network-host.mjs")]).toEqual(
       expect.arrayContaining(["network-manager.mjs", "network-change.mjs", "upgrades/copy.mjs"]),
@@ -1164,23 +1174,38 @@ describe("the host modules a box carries", () => {
     );
   });
 
-  it("every module build.sh installs has its relative imports installed too", () => {
+  it("every module build.sh installs has its relative imports installed beside it", () => {
     const installed = imageModules();
-    expect(installed).toContain("storage-host.mjs");
     expect(installed).toContain("upgrades/cli.mjs");
+    expect(installed).not.toContain("storage-host.mjs");
     for (const module of installed) {
       for (const needed of importClosure(module)) {
         expect(installed, `${module} imports ${needed}`).toContain(needed);
       }
     }
+    const storage = new Set(imageStorageSet().modules);
+    for (const module of storage) {
+      for (const needed of importClosure(module)) {
+        expect(storage, `${module} imports ${needed}`).toContain(needed);
+      }
+    }
   });
 
-  it("install and a checked upgrade copy storage-host.mjs and exactly what it imports, all of which the image carries", () => {
+  it("install and a checked upgrade copy storage-host.mjs and exactly what it imports into the folder the image carries them in", () => {
     const listed = only(WAITRON_SH, /^BOX_STORAGE_MODULES="([^"]+)"$/m, "storage module list");
     const modules = listed.split(" ");
     expect(new Set(modules)).toEqual(importClosure("storage-host.mjs"));
     expect(modules).toHaveLength(new Set(modules).size);
-    for (const module of modules) expect(imageModules()).toContain(module);
+    expect(imageStorageSet().modules).toEqual(modules);
+    expect(only(WAITRON_SH, /^BOX_STORAGE="([^"]+)"$/m, "storage link")).toBe(
+      "$WAITRON_HOST_DIR/box/storage",
+    );
+    expect(WAITRON_SH).toContain(
+      'stage="$(as_root mktemp -d "$WAITRON_HOST_DIR/box/.storage.XXXXXX")"',
+    );
+    expect(
+      only(read("deploy/box/waitron-box.sh"), /^STORAGE_HOST="([^"]+)"$/m, "the box's module path"),
+    ).toBe("$HOST_DIR/box/storage/storage-host.mjs");
   });
 });
 

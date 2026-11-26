@@ -20,7 +20,9 @@ READ_SECONDS="${WAITRON_TEST_READ_SECONDS:-5}"
 TAG_HOST="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/name-tag-host.mjs"
 NETWORK_HOST="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/network-host.mjs"
 NETWORK_CHANGE="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/network-change.mjs"
-STORAGE_HOST="${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host/box/storage-host.mjs"
+HOST_DIR="${WAITRON_HOST_DIR:-${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host}"
+STORAGE_HOST="$HOST_DIR/box/storage/storage-host.mjs"
+HOST_NODE="$HOST_DIR/node-v26.7.0/bin/node"
 
 # 2024-10-28T00:00:00Z and 2100-01-01T00:00:00Z, in milliseconds.
 FIRST_TARGET_MS=1730073600000
@@ -105,25 +107,20 @@ upgrade_status() {
   answer "{\"ok\":true,\"result\":$result}"
 }
 
-# A hand-installed box may have no node on PATH, only the runtime bootstrap.sh retains.
+# deploy/waitron.sh names the drives only when one of these exists; keep the two in step.
 storage_node() {
-  local found
   if command -v node >/dev/null 2>&1; then printf 'node'; return 0; fi
-  for found in "${WAITRON_TEST_HOST_ROOT:-}"/opt/waitron-host/node-*/bin/node; do
-    if [ -x "$found" ]; then printf '%s' "$found"; return 0; fi
-  done
-  return 1
+  [ -x "$HOST_NODE" ] && printf '%s' "$HOST_NODE"
 }
 
 upgrade_settings() (
-  local host="${WAITRON_HOST_DIR:-${WAITRON_TEST_HOST_ROOT:-}/opt/waitron-host}"
   local box="${WAITRON_DIR:-/opt/waitron}" reply
   if [ "$1" = save-upgrade-settings ]; then
     umask 077
     exec 9>"$box.upgrade-settings.lock" || { refuse host_failed; return; }
     if ! flock -n 9; then refuse busy; return; fi
   fi
-  if reply="$("$host/node-v26.7.0/bin/node" "$host/box/upgrades/cli.mjs" "$1" "$box" "${@:2}")"; then
+  if reply="$("$HOST_NODE" "$HOST_DIR/box/upgrades/cli.mjs" "$1" "$box" "${@:2}")"; then
     answer "$reply"
   else
     refuse host_failed

@@ -55,10 +55,15 @@ install -D -m 0755 "$repo/scripts/box/upgrades/bootstrap.sh" "$root/opt/waitron-
 )
 install -m 0644 "$root/opt/waitron-host/node-v26.7.0/LICENSE" "$root/app/third-party/node-host-LICENSE"
 install -d -m 0755 "$root/opt/waitron-host/box"
-for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag name-tag-host network-host network-manager network-change host-protocol wifi-record wifi-boot-copy storage-host; do
+for module in disk-start disk-key disk-recovery-key preboot disk-state name-tag name-tag-host network-host network-manager network-change host-protocol wifi-record wifi-boot-copy; do
   install -m 0644 "$repo/scripts/box/$module.mjs" "$root/opt/waitron-host/box/"
 done
 install -D -m 0644 "$repo/scripts/box/upgrades/contracts.mjs" "$root/opt/waitron-host/box/upgrades/contracts.mjs"
+# The USB drive module's own set, laid out as deploy/waitron.sh's install_storage_modules replaces it.
+for module in storage-host.mjs host-protocol.mjs name-tag.mjs upgrades/contracts.mjs wifi-boot-copy.mjs disk-key.mjs wifi-record.mjs; do
+  install -D -m 0644 "$repo/scripts/box/$module" "$root/opt/waitron-host/box/.storage.recipe/$module"
+done
+ln -s .storage.recipe "$root/opt/waitron-host/box/storage"
 trust="$root/opt/waitron-host/.release-trust.recipe/trust"
 for file in verify-release.mjs release-list.mjs upgrades/contracts.mjs; do
   install -D -m 0644 "$repo/scripts/box/$file" "$trust/$file"
