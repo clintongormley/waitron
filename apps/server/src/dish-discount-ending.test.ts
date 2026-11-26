@@ -47,10 +47,10 @@ let wine: {
   large: string;
   serve: { listId: string; labelIds: string[] };
 };
-/** A Rice pot in two sizes, each a Main of the Daily at no supplement. */
-/** Soup's second paid extra, Croutons at 1.00, and Sirloin's, a Sauce at 2.00. */
+/** Soup's second paid extra, Croutons at 1.00, and Sirloin's and the Rice pot's, a Sauce at 2.00. */
 let croutons: ExtraSelection;
 let sauce: ExtraSelection;
+/** A Rice pot in two sizes, each a Main of the Daily at no supplement. */
 let ricePot: { offer: string; half: string; full: string };
 
 async function variantDish(
@@ -162,6 +162,7 @@ useVenueDb({
       };
       croutons = await extraOf("Croutons", "1.00", spec.productIds.Soup, [spec.bread.listId]);
       sauce = await extraOf("Sauce", "2.00", spec.productIds.Sirloin, []);
+      await writeProductModifiers(tx, rice.id, [{ kind: "extras", id: sauce.listId }]);
       const root = await requireMenuRoot(tx, venue.tables.menuId);
       await addProducts(tx, root, [glass.id, rice.id]);
       spec.daily.versionId = spec.special.versionId = await publishWorkingMenu(
@@ -508,6 +509,24 @@ it("ends nothing when a second basket line keeps the stored dish another line na
     { id: small.id, lineTotal: 405 },
     { id: expect.not.stringMatching(small.id), lineTotal: 550 },
   ]);
+});
+
+it("ends nothing when a basket save swaps the variant of a dish whose extra alone is comped", async () => {
+  const { tabId } = await billOf([{ ...ricePotOf(ricePot.half), extras: [sauce] }]);
+  const sauceRow = (await rows(tabId)).find(({ name }) => name === "Sauce")!;
+  await give(tabId, sauceRow.id, FREE);
+  expect(await total(tabId)).toBe(1400);
+  const half = await rowOf(tabId, "Rice pot");
+
+  await saveBasket(tabId, [
+    { workingOrderLineId: half.id, ...ricePotOf(ricePot.full), extras: [sauce] },
+  ]);
+
+  // The comp goes with the removed dish and its extras: no ending, so no notice.
+  expect(await endingsOn(tabId)).toEqual([]);
+  expect(await rowOf(tabId, "Rice pot")).toMatchObject({ productId: ricePot.full });
+  expect((await rows(tabId)).some(({ id }) => id === sauceRow.id)).toBe(false);
+  expect(await total(tabId)).toBe(1600);
 });
 
 it("ends nothing when a basket save names another menu item in a discounted dish's place", async () => {
