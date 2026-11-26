@@ -1,4 +1,5 @@
 import { encryptArtifactFileUnderBackupKey } from "../artifact-cipher-file.js";
+import { encryptArtifactUnderBackupKey } from "../artifact-cipher.js";
 import { backupKeyFrameInput } from "../backup-key-record.js";
 import { heldBackupKey, HELD_MASTER_KEY_DAY } from "./backup-key.js";
 
@@ -16,6 +17,19 @@ export async function writeMasterKeyArchive(
       yield plaintext;
     })(),
     path,
+    backupKeyFrameInput(heldBackupKey(masterKey, n, day)),
+  );
+}
+
+/** {@link writeMasterKeyArchive}'s file as bytes. */
+export function masterKeyArchiveBytes(
+  plaintext: Uint8Array,
+  masterKey: Uint8Array,
+  n = 1,
+  day = HELD_MASTER_KEY_DAY,
+): Buffer {
+  return encryptArtifactUnderBackupKey(
+    plaintext,
     backupKeyFrameInput(heldBackupKey(masterKey, n, day)),
   );
 }

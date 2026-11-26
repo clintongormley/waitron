@@ -3,7 +3,8 @@ import { Socket } from "node:net";
 import { Hono } from "hono";
 import { TLSSocket } from "node:tls";
 import { afterEach, expect, it, vi } from "vitest";
-import { AppError } from "@waitron/shared";
+import { makeMasterKey } from "@waitron/credentials";
+import { AppError, encodeMasterKeyCode } from "@waitron/shared";
 import { encodeRecoveryKit } from "@waitron/stream";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { createSetupRecoveryPreparation } from "./recovery-preparation.js";
@@ -12,6 +13,7 @@ import { createFirstSetupCoordinator } from "@waitron/provisioning";
 import { mountSetup } from "./setup-api.js";
 import { type SetupDeps } from "./setup-api-deps.js";
 import type { PrepareRecovery } from "./setup-recovery-preparation-api.js";
+import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
 
 vi.mock("./restore-stream.js", { spy: true });
 
@@ -378,6 +380,9 @@ it("discards a staged copy by its id", async () => {
   expect(bad.status).toBe(400);
   expect(discardStagedRecovery).toHaveBeenCalledTimes(1);
 });
+const RESTORE_MASTER_KEY = makeMasterKey();
+const RESTORE_MASTER_KEY_TEXT = encodeMasterKeyCode(RESTORE_MASTER_KEY);
+const RESTORE_FILE = masterKeyArchiveBytes(Uint8Array.from([7, 2, 9]), RESTORE_MASTER_KEY);
 it("discards the staged copy once the restore is staged, and keeps it when the restore is refused", async () => {
   const clearStagedRecovery = vi.fn(async () => {});
   const stageRestore = vi.fn<NonNullable<SetupDeps["stageRestore"]>>(async () => {});
@@ -387,10 +392,10 @@ it("discards the staged copy once the restore is staged, and keeps it when the r
       method: "POST",
       headers: {
         "content-type": "application/octet-stream",
-        "x-waitron-recovery-key": "archive password",
+        "x-waitron-master-key": RESTORE_MASTER_KEY_TEXT,
         "x-waitron-restore-environment": "preproduction",
       },
-      body: new Uint8Array([7, 2, 9]),
+      body: Uint8Array.from(RESTORE_FILE),
     });
   stageRestore.mockRejectedValueOnce(new Error("refused"));
   expect((await restore()).status).toBe(500);
@@ -409,10 +414,10 @@ it("accepts a staged restore and restarts even when the staged copy cannot be de
     method: "POST",
     headers: {
       "content-type": "application/octet-stream",
-      "x-waitron-recovery-key": "archive password",
+      "x-waitron-master-key": RESTORE_MASTER_KEY_TEXT,
       "x-waitron-restore-environment": "preproduction",
     },
-    body: new Uint8Array([7, 2, 9]),
+    body: Uint8Array.from(RESTORE_FILE),
   });
   expect(response.status).toBe(202);
   expect(await response.json()).toEqual({ restoreStaged: true, restarting: true });

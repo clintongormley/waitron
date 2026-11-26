@@ -1,9 +1,16 @@
 import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { Hono } from "hono";
-import { expect, it, vi } from "vitest";
-import { AppError } from "@waitron/shared";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { expect, it, onTestFinished, vi } from "vitest";
+import { makeMasterKey, masterKeyId, sealingPublicKey } from "@waitron/credentials";
+import { AppError, encodeMasterKeyCode } from "@waitron/shared";
+import { decryptArtifactUnderBackupKey } from "./artifact-cipher.js";
 import { mountSetup } from "./setup-api.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
+import { heldBackupKey, heldBackupKeyName } from "./testing/backup-key.js";
+import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
 
 const receiveArchive = useSetupArchiveUpload();
 const preview: RecoveryBackupPreview = {
@@ -15,12 +22,18 @@ const preview: RecoveryBackupPreview = {
   taxpayer: { legalName: "Selected venue", taxId: "89890001K" },
   venueName: "Selected venue",
 };
-function request(headers: Record<string, string> = {}, body: Uint8Array = new Uint8Array([1, 2])) {
+const MASTER_KEY = makeMasterKey();
+const MASTER_KEY_TEXT = encodeMasterKeyCode(MASTER_KEY);
+const PLAINTEXT = Uint8Array.from([1, 2]);
+// Backup key 2, so a route that took backup key 1 would not open it.
+const ARCHIVE = masterKeyArchiveBytes(PLAINTEXT, MASTER_KEY, 2);
+const OPENING_KEY = heldBackupKey(MASTER_KEY, 2).key;
+function request(headers: Record<string, string> = {}, body: Uint8Array = ARCHIVE) {
   return {
     method: "POST",
     headers: {
       "content-type": "application/octet-stream",
-      "x-waitron-recovery-key": "archive-key",
+      "x-waitron-master-key": MASTER_KEY_TEXT,
       "x-waitron-restore-environment": "preproduction",
       ...headers,
     },
@@ -51,17 +64,76 @@ it("returns selected-copy metadata without staging or restarting and keeps it ou
   expect(read).toHaveBeenCalledWith({
     kind: "archive-file",
     artifactPath: expect.stringContaining("upload-"),
-    recoveryKey: "archive-key",
+    recoveryKey: OPENING_KEY,
     environment: "preproduction",
   });
   expect(stage).not.toHaveBeenCalled();
   expect(restart).not.toHaveBeenCalled();
-  expect(JSON.stringify(log.mock.calls)).not.toContain("archive-key");
+  expect(JSON.stringify(log.mock.calls)).not.toContain(MASTER_KEY_TEXT);
+  expect(JSON.stringify(log.mock.calls)).not.toContain(OPENING_KEY);
+});
+it("Review backup opens a backup file with the master key", async () => {
+  const app = new Hono();
+  const opened: Buffer[] = [];
+  const read = vi.fn(async (source: { recoveryKey: string }) => {
+    opened.push(
+      decryptArtifactUnderBackupKey(ARCHIVE, Buffer.from(source.recoveryKey, "base64url")),
+    );
+    return preview;
+  });
+  mountSetup(app, { environment: "preproduction", receiveArchive, previewRestore: read }, () => {});
+  const response = await app.request("/setup-api/restore/preview", request());
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual(preview);
+  expect(opened).toEqual([Buffer.from(PLAINTEXT)]);
+});
+it("a wrong master key at Review is refused naming the backup's key", async () => {
+  const app = new Hono();
+  const read = vi.fn(async () => preview);
+  mountSetup(app, { environment: "preproduction", receiveArchive, previewRestore: read }, () => {});
+  const response = await app.request(
+    "/setup-api/restore/preview",
+    request({ "x-waitron-master-key": encodeMasterKeyCode(makeMasterKey()) }),
+  );
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error: {
+      code: "promotion.break_glass_invalid",
+      params: {
+        masterKeyId: masterKeyId(sealingPublicKey(MASTER_KEY)).toString("hex"),
+        keyNumber: 2,
+        keyName: heldBackupKeyName(MASTER_KEY),
+      },
+    },
+  });
+  expect(read).not.toHaveBeenCalled();
+  expect((await app.request("/setup-api/restore/preview", request())).status).toBe(200);
+});
+it("a missing master key marks the field masterKey, and a backup key alone is not one", async () => {
+  const app = new Hono();
+  const read = vi.fn(async () => preview);
+  mountSetup(app, { environment: "preproduction", receiveArchive, previewRestore: read }, () => {});
+  const withoutMasterKey: Record<string, string> = { ...request().headers };
+  delete withoutMasterKey["x-waitron-master-key"];
+  for (const headers of [
+    withoutMasterKey,
+    { ...withoutMasterKey, "x-waitron-recovery-key": OPENING_KEY },
+  ]) {
+    const response = await app.request("/setup-api/restore/preview", {
+      ...request(),
+      headers,
+    });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "masterKey" } },
+    });
+  }
+  expect(read).not.toHaveBeenCalled();
 });
 it.each([
   [{ "content-type": "application/json" }, new Uint8Array([1]), "artifact"],
   [{}, new Uint8Array(), "artifact"],
-  [{ "x-waitron-recovery-key": "" }, new Uint8Array([1]), "recoveryKey"],
+  [{ "x-waitron-master-key": "" }, new Uint8Array([1]), "masterKey"],
   [{ "x-waitron-restore-environment": "dev" }, new Uint8Array([1]), "environment"],
 ] as const)(
   "refuses invalid preview input before opening any copy (%j)",
@@ -104,8 +176,11 @@ it("reports unavailable preview without opening a backup", async () => {
 it("previews the received file and disposes it after validation", async () => {
   const app = new Hono();
   const dispose = vi.fn(async () => {});
+  const dir = await mkdtemp(join(tmpdir(), "setup-preview-received-"));
+  onTestFinished(() => rm(dir, { recursive: true, force: true }));
+  await writeFile(join(dir, "artifact"), ARCHIVE);
   const received = {
-    artifactPath: "/owned/upload/artifact",
+    artifactPath: join(dir, "artifact"),
     byteLength: 2,
     fields: new Map(),
     dispose,
@@ -125,7 +200,7 @@ it("previews the received file and disposes it after validation", async () => {
   expect(read).toHaveBeenCalledWith({
     kind: "archive-file",
     artifactPath: received.artifactPath,
-    recoveryKey: "archive-key",
+    recoveryKey: OPENING_KEY,
     environment: "preproduction",
   });
   expect(dispose).toHaveBeenCalledOnce();

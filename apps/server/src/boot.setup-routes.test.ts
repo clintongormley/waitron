@@ -35,11 +35,17 @@ import {
   type Database,
   type VenueDatabase,
 } from "@waitron/db";
-import { backupKey, loadKeyRing, masterKeyId, sealingPublicKey } from "@waitron/credentials";
+import {
+  backupKey,
+  loadKeyRing,
+  makeMasterKey,
+  masterKeyId,
+  sealingPublicKey,
+} from "@waitron/credentials";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { enabledModules, parseModuleConfig } from "@waitron/module";
 import { savePrivacyContact } from "@waitron/provisioning";
-import { decodeMasterKeyCode } from "@waitron/shared";
+import { decodeMasterKeyCode, encodeMasterKeyCode } from "@waitron/shared";
 import { readStagedConfigurationImport } from "./configuration-import.js";
 import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
 import { parseEnvFile } from "./env-file.js";
@@ -61,7 +67,9 @@ import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
 import { ALL_MODULES } from "./modules.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
-import { encryptArtifact } from "./artifact-cipher.js";
+import { heldBackupKey } from "./testing/backup-key.js";
+import { WRONG_MASTER_KEY } from "./testing/master-key.js";
+import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
 import {
   buildConfigurationBundle,
   decodeConfigurationBundle,
@@ -138,6 +146,16 @@ vi.mock("./request-receive-limits.js", async (importOriginal) => {
 });
 
 const MAIN_NODE_ID = "44444444-4444-4444-8444-444444444444";
+const SEALING_MASTER_KEY = makeMasterKey();
+const SEALING_MASTER_KEY_TEXT = encodeMasterKeyCode(SEALING_MASTER_KEY);
+/** A backup file of a lone, empty manifest, made under {@link SEALING_MASTER_KEY}. */
+const sealedManifestOnly = () =>
+  new Uint8Array(
+    masterKeyArchiveBytes(
+      packArchive([{ name: "manifest.json", bytes: Buffer.from("{}") }]),
+      SEALING_MASTER_KEY,
+    ),
+  );
 
 /** A main box's answer to an adopt, with the parts a test varies given. */
 function bundleFor(overrides: {
@@ -815,15 +833,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       post("/setup-api/restore", {
         headers: {
           "content-type": "application/octet-stream",
-          "x-waitron-recovery-key": "not-the-key-that-sealed-it",
+          "x-waitron-master-key": WRONG_MASTER_KEY,
           "x-waitron-restore-environment": "preproduction",
         },
-        body: new Uint8Array(
-          encryptArtifact(
-            packArchive([{ name: "manifest.json", bytes: Buffer.from("{}") }]),
-            "the key that really sealed it",
-          ),
-        ),
+        body: sealedManifestOnly(),
       });
     try {
       await withSetupBoot(
@@ -856,7 +869,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           const retried = await restore(post);
           // Past the note, the restore goes on to refuse the copy for its own reason.
           expect(((await retried.json()) as { error?: { code: string } }).error?.code).toBe(
-            "recovery.passphrase_invalid",
+            "promotion.break_glass_invalid",
           );
           const entries = JSON.parse(await readFile(notePath, "utf8")) as {
             params: { stepMs: number; source: string };
@@ -1506,7 +1519,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 60_000);
 
-  it("validates a restore artifact before staging it, refusing one the recovery key cannot open", async () => {
+  it("validates a restore artifact before staging it, refusing one the master key does not open", async () => {
     beforeServerStarts();
     const venue = await freshVenue();
     try {
@@ -1514,22 +1527,25 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         venue.directory,
         {},
         async ({ post, kills, stateDir }) => {
-          const response = await post("/setup-api/restore", {
-            headers: {
-              "content-type": "application/octet-stream",
-              "x-waitron-recovery-key": "not-the-key-that-sealed-it",
-              "x-waitron-restore-environment": "preproduction",
-            },
-            body: new Uint8Array(
-              encryptArtifact(
-                packArchive([{ name: "manifest.json", bytes: Buffer.from("{}") }]),
-                "the key that really sealed it",
-              ),
-            ),
-          });
+          const send = (masterKey: string) =>
+            post("/setup-api/restore", {
+              headers: {
+                "content-type": "application/octet-stream",
+                "x-waitron-master-key": masterKey,
+                "x-waitron-restore-environment": "preproduction",
+              },
+              body: sealedManifestOnly(),
+            });
+          const wrongKey = await send(WRONG_MASTER_KEY);
+          expect(wrongKey.status).toBe(400);
+          expect(((await wrongKey.json()) as { error?: { code: string } }).error?.code).toBe(
+            "promotion.break_glass_invalid",
+          );
+          // The master key that made the file opens it, and validation refuses the copy inside.
+          const response = await send(SEALING_MASTER_KEY_TEXT);
           const body = (await response.json()) as { error?: { code: string } };
           expect(response.status).toBe(422);
-          expect(body.error?.code).toBe("recovery.passphrase_invalid");
+          expect(body.error?.code).toBe("restore.manifest_invalid");
           await expect(readFile(join(stateDir, "flows/restore/record.json"))).rejects.toMatchObject(
             {
               code: "ENOENT",
@@ -1552,15 +1568,10 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       post("/setup-api/restore", {
         headers: {
           "content-type": "application/octet-stream",
-          "x-waitron-recovery-key": "not-the-key-that-sealed-it",
+          "x-waitron-master-key": WRONG_MASTER_KEY,
           "x-waitron-restore-environment": "preproduction",
         },
-        body: new Uint8Array(
-          encryptArtifact(
-            packArchive([{ name: "manifest.json", bytes: Buffer.from("{}") }]),
-            "the key that really sealed it",
-          ),
-        ),
+        body: sealedManifestOnly(),
       });
     const operationFile = OPERATION_FILE_BASE.WAITRON_RECOVERY_OPERATION_FILE;
     try {
@@ -1584,9 +1595,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         {},
         async ({ post, kills }) => {
           const response = await restore(post);
-          expect(response.status).toBe(422);
+          expect(response.status).toBe(400);
           expect(((await response.json()) as { error?: { code: string } }).error?.code).toBe(
-            "recovery.passphrase_invalid",
+            "promotion.break_glass_invalid",
           );
           expect(kills).toEqual([]);
         },
@@ -1728,7 +1739,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     try {
       const dump = join(dumpDir, "venue.db");
       await source.store.venue.archiveTo(dump);
-      const artifact = encryptArtifact(
+      const artifact = masterKeyArchiveBytes(
         packArchive([
           {
             name: "manifest.json",
@@ -1750,7 +1761,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             ),
           },
         ]),
-        "validation-key",
+        SEALING_MASTER_KEY,
       );
       await withSetupBoot(
         venue.directory,
@@ -1767,7 +1778,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           const response = await post("/setup-api/restore", {
             headers: {
               "content-type": "application/octet-stream",
-              "x-waitron-recovery-key": "validation-key",
+              "x-waitron-master-key": SEALING_MASTER_KEY_TEXT,
               "x-waitron-restore-environment": "preproduction",
               "x-waitron-old-box-gone": "1",
             },
@@ -1778,7 +1789,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           expect(await readdir(join(stateDir, "scratch/restore"))).toEqual([]);
           expect(await readFile(join(stateDir, "flows/restore/artifact"))).toEqual(artifact);
           expect(await readFile(join(stateDir, "flows/restore/key"), "utf8")).toBe(
-            "validation-key",
+            heldBackupKey(SEALING_MASTER_KEY).key,
           );
           await poll(() => (kills.length > 0 ? kills.length : undefined));
           expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
@@ -2089,7 +2100,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         );
         const dump = join(await mkdtemp(join(tmpdir(), "waitron-boot-archive-")), "venue.db");
         await source.store.venue.archiveTo(dump);
-        const artifact = encryptArtifact(
+        const artifact = masterKeyArchiveBytes(
           packArchive([
             {
               name: "manifest.json",
@@ -2117,7 +2128,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
               ),
             },
           ]),
-          "the archive's recovery key",
+          SEALING_MASTER_KEY,
         );
         await rm(dirname(dump), { recursive: true, force: true });
         await withSetupBoot(
@@ -2127,7 +2138,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             const response = await post("/setup-api/restore", {
               headers: {
                 "content-type": "application/octet-stream",
-                "x-waitron-recovery-key": "the archive's recovery key",
+                "x-waitron-master-key": SEALING_MASTER_KEY_TEXT,
                 "x-waitron-restore-environment": "preproduction",
               },
               body: new Uint8Array(artifact),

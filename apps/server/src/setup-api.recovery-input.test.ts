@@ -1,7 +1,8 @@
-import { AppError } from "@waitron/shared";
+import { makeMasterKey } from "@waitron/credentials";
+import { AppError, encodeMasterKeyCode } from "@waitron/shared";
 import { useSetupArchiveUpload } from "./testing/setup-archive-upload.js";
 import { Hono } from "hono";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
@@ -9,8 +10,17 @@ import { mountSetup } from "./setup-api.js";
 import { type SetupDeps } from "./setup-api-deps.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import type { CloudRecoveryView } from "./cloud-recovery.js";
+import { recoveryArchiveSourceId } from "./recovery-source.js";
+import { stageRestoreRequest } from "./restore-request.js";
+import { heldBackupKey } from "./testing/backup-key.js";
+import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
 
 const receiveArchive = useSetupArchiveUpload();
+const MASTER_KEY = makeMasterKey();
+const MASTER_KEY_TEXT = encodeMasterKeyCode(MASTER_KEY);
+// Backup key 2, so a route that took backup key 1 would not open it.
+const ARCHIVE = masterKeyArchiveBytes(Uint8Array.from([1, 2, 3]), MASTER_KEY, 2);
+const OPENING_KEY = heldBackupKey(MASTER_KEY, 2).key;
 const pointId = "9f41b8b8-b14e-472a-8eb4-f9259b80f0d1";
 const operation = {
   binding: {
@@ -78,8 +88,8 @@ function setup(
 function request(kind: string, supplied: Record<string, unknown> = credentials) {
   if (kind === "archive") {
     const body = new FormData();
-    body.set("artifact", new Blob([new Uint8Array([1, 2, 3])]), "copy.waitron");
-    body.set("recoveryKey", "archive-key");
+    body.set("artifact", new Blob([Uint8Array.from(ARCHIVE)]), "copy.waitron");
+    body.set("masterKey", MASTER_KEY_TEXT);
     body.set("environment", "preproduction");
     body.set("oldBoxGone", "1");
     for (const [key, value] of Object.entries(supplied))
@@ -132,7 +142,7 @@ it.each(["archive", "bucket", "cloud"])(
                 signal: expect.any(AbortSignal),
               }
             : { kind: "archive-file", artifactPath: "/fixture/cloud-archive" }),
-          recoveryKey: kind === "archive" ? "archive-key" : "archive-cloud-key",
+          recoveryKey: kind === "archive" ? OPENING_KEY : "archive-cloud-key",
           environment: "preproduction",
           ...credentials,
         },
@@ -140,9 +150,82 @@ it.each(["archive", "bucket", "cloud"])(
       );
     }
     expect(JSON.stringify(log.mock.calls)).not.toContain("node-paper-key");
-    expect(JSON.stringify(log.mock.calls)).not.toContain("archive-key");
+    expect(JSON.stringify(log.mock.calls)).not.toContain(MASTER_KEY_TEXT);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(OPENING_KEY);
   },
 );
+
+it("the master key typed for a file restore also authorises it when no other key is sent", async () => {
+  const { app, stageRestore, log } = setup();
+  const req = request("archive", { recoveryOperation: operation });
+  const response = await app.request(req.path, req.init);
+  expect(response.status).toBe(202);
+  expect(stageRestore).toHaveBeenCalledWith(
+    expect.objectContaining({
+      recoveryKey: OPENING_KEY,
+      recoveryOperation: operation,
+      nodeRecoverySecret: MASTER_KEY_TEXT,
+    }),
+    { oldBoxGone: true },
+  );
+  expect(JSON.stringify(log.mock.calls)).not.toContain(MASTER_KEY_TEXT);
+});
+
+it("Restore backup stages backup key N, never the master key", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "setup-restore-staged-key-"));
+  try {
+    const app = new Hono();
+    mountSetup(
+      app,
+      {
+        environment: "preproduction",
+        receiveArchive,
+        stageRestore: (request) => stageRestoreRequest(stateDir, request),
+        requestRestart: vi.fn(),
+      },
+      () => {},
+    );
+    const bound = {
+      ...operation,
+      binding: { ...operation.binding, sourceId: recoveryArchiveSourceId(ARCHIVE) },
+    };
+    const req = request("archive", { recoveryOperation: bound });
+    const response = await app.request(req.path, req.init);
+    expect(response.status).toBe(202);
+    const flow = join(stateDir, "flows/restore");
+    expect(await readFile(join(flow, "key"), "utf8")).toBe(OPENING_KEY);
+    expect(JSON.parse(await readFile(join(flow, "record.json"), "utf8")).request).toHaveProperty(
+      "nodeRecoveryKey",
+      true,
+    );
+    const names = await readdir(flow, { recursive: true });
+    expect(names).toContain("node-key");
+    for (const name of names) {
+      const path = join(flow, name);
+      if (!(await stat(path)).isFile()) continue;
+      expect(await readFile(path, "utf8"), name).not.toContain(MASTER_KEY_TEXT);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+it("a missing master key marks the field masterKey, and a backup key alone is not one", async () => {
+  const { app, stageRestore } = setup();
+  for (const backupKey of [undefined, OPENING_KEY]) {
+    const req = request("archive");
+    const form = req.init.body as FormData;
+    form.delete("masterKey");
+    if (backupKey !== undefined) form.set("recoveryKey", backupKey);
+    const response = await app.request(req.path, req.init);
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.request_invalid", params: { field: "masterKey" } },
+    });
+  }
+  expect(stageRestore).not.toHaveBeenCalled();
+});
 
 it.each([
   ["archive", null],
@@ -222,7 +305,8 @@ it.each(["archive", "bucket", "cloud"])(
       expect((await restarted.app.request(replay.path, replay.init)).status).toBe(202);
       const persisted = await readFile(join(dir, "flows/setup/operation.json"), "utf8");
       expect(persisted).not.toContain("node-paper-key");
-      expect(persisted).not.toContain("archive-key");
+      expect(persisted).not.toContain(MASTER_KEY_TEXT);
+      expect(persisted).not.toContain(OPENING_KEY);
       expect(persisted).not.toContain("outsideAllocation");
       await new Promise((resolve) => setTimeout(resolve, 0));
     } finally {
@@ -295,7 +379,8 @@ it.each(["archive", "bucket", "cloud"])(
     const { app, stageRestore, stageBucketRestore } = setup();
     const bad = [
       { recoveryOperation: null, nodeRecoverySecret: "node-paper-key" },
-      { recoveryOperation: operation },
+      // A file restore's typed master key stands in for a missing separate one.
+      ...(kind === "archive" ? [] : [{ recoveryOperation: operation }]),
       { nodeRecoverySecret: "node-paper-key" },
       { recoveryOperation: operation, nodeRecoverySecret: " " },
       { recoveryOperation: operation, nodeRecoverySecret: "x".repeat(4097) },
@@ -404,7 +489,7 @@ it.each(["archive", "bucket", "cloud"])(
     }
   },
 );
-it.each(["recoveryKey", "environment"])(
+it.each(["masterKey", "environment"])(
   "refuses an invalid raw %s before receiving ciphertext",
   async (field) => {
     const app = new Hono();
@@ -426,7 +511,7 @@ it.each(["recoveryKey", "environment"])(
       body: new Uint8Array(),
       headers: {
         "content-type": "application/octet-stream",
-        "x-waitron-recovery-key": field === "recoveryKey" ? "" : "key",
+        "x-waitron-master-key": field === "masterKey" ? "" : MASTER_KEY_TEXT,
         "x-waitron-restore-environment": field === "environment" ? "dev" : "preproduction",
       },
     });
@@ -459,7 +544,7 @@ it("refuses a raw upload before receiving it when the box has no operation file"
       body: new Uint8Array([1, 2]),
       headers: {
         "content-type": "application/octet-stream",
-        "x-waitron-recovery-key": "key",
+        "x-waitron-master-key": MASTER_KEY_TEXT,
         "x-waitron-restore-environment": "preproduction",
       },
     });
@@ -492,10 +577,10 @@ it.each([false, true])("removes received ciphertext after restore refusal=%s", a
   );
   const response = await app.request("/setup-api/restore", {
     method: "POST",
-    body: new Uint8Array([1, 2]),
+    body: Uint8Array.from(ARCHIVE),
     headers: {
       "content-type": "application/octet-stream",
-      "x-waitron-recovery-key": "key",
+      "x-waitron-master-key": MASTER_KEY_TEXT,
       "x-waitron-restore-environment": "preproduction",
     },
   });

@@ -31,7 +31,7 @@ import { readHourHistory } from "@waitron/fiscal-verifactu/src/hour-history-read
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedVenueNodes, TAXPAYER_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
-import { seriesId } from "@waitron/shared";
+import { decodeMasterKeyCode, seriesId } from "@waitron/shared";
 import { mintMasterKey } from "../src/testing/master-key.js";
 import "../src/recovery-module-operation.js";
 import { validateArtifact } from "../src/restore.js";
@@ -42,8 +42,9 @@ import {
 import "../src/operation-authentication.js";
 import { buildManifest } from "../src/backup-manifest.js";
 import { packArchive, unpackArchive } from "../src/backup-archive.js";
-import { decryptArtifact } from "../src/artifact-cipher.js";
 import { sealFixtureArtifact } from "./fixture-salt.js";
+import { heldBackupKey } from "../src/testing/backup-key.js";
+import { masterKeyArchiveBytes } from "../src/testing/master-key-archive.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "../src/recovery-backup-preview.js";
 import { restoreFromStream } from "../src/restore-stream.js";
 import { recoveryStreamSourceId } from "../src/recovery-source.js";
@@ -295,7 +296,12 @@ export async function compareWith(
     )) as { id: string }
   ).id;
 }
-export async function archiveHost(kind: "archive" | "stream" = "archive") {
+/** `sealing`: "master-key" makes the archive a backup file under the venue's master key, as a
+ * person holds one; "password" seals it under the fixture's archive password. */
+export async function archiveHost(
+  kind: "archive" | "stream" = "archive",
+  sealing: "password" | "master-key" = "password",
+) {
   const f = await host();
   await seedModuleSettings(suite.db, { "fiscal-none": false });
   const manifest = await buildManifest({
@@ -307,24 +313,26 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
   });
   const database = join(root, "archive.db");
   await suite.db.archiveTo(database);
-  const artifact = sealFixtureArtifact(
-    packArchive([
-      { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
-      { name: "db.dump", bytes: await readFile(database) },
-      await nodeDumpEntry(suite.node, root),
-      {
-        name: "secrets/trading.env",
-        bytes: Buffer.from(`WAITRON_NODE_ID=${node.nodeId}\n`),
-      },
-      { name: "secrets/node-key.enc", bytes: Buffer.from("synthetic sealed node key") },
-      { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },
-      {
-        name: "secrets/credentials.key",
-        bytes: Buffer.from(Buffer.alloc(32, 7).toString("base64")),
-      },
-    ]),
-    "archive password",
-  );
+  const plaintext = packArchive([
+    { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+    { name: "db.dump", bytes: await readFile(database) },
+    await nodeDumpEntry(suite.node, root),
+    {
+      name: "secrets/trading.env",
+      bytes: Buffer.from(`WAITRON_NODE_ID=${node.nodeId}\n`),
+    },
+    { name: "secrets/node-key.enc", bytes: Buffer.from("synthetic sealed node key") },
+    { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },
+    {
+      name: "secrets/credentials.key",
+      bytes: Buffer.from(Buffer.alloc(32, 7).toString("base64")),
+    },
+  ]);
+  const masterKey = decodeMasterKeyCode(key.secret);
+  const artifact =
+    sealing === "master-key"
+      ? masterKeyArchiveBytes(plaintext, masterKey)
+      : sealFixtureArtifact(plaintext, "archive password");
   const restore = {
     ...f.roots,
     stagingDir: root,
@@ -332,14 +340,12 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
     modules: ALL_MODULES,
     environment: "preproduction" as const,
     artifact,
-    recoveryKey: "archive password",
+    recoveryKey: sealing === "master-key" ? heldBackupKey(masterKey).key : "archive password",
     log: () => {},
     readBoot,
   };
   let selected = await previewRecoveryArchive(restore);
-  const entries = unpackArchive(decryptArtifact(artifact, "archive password")).filter(
-    (entry) => entry.name !== "db.dump",
-  );
+  const entries = unpackArchive(plaintext).filter((entry) => entry.name !== "db.dump");
   if (kind === "stream")
     selected = {
       ...selected,
@@ -577,14 +583,13 @@ export function restoreApp(deps: Partial<SetupDeps> = {}) {
 export function archiveForm(f: Awaited<ReturnType<typeof archiveHost>>, context: unknown) {
   const form = new FormData();
   form.set("artifact", new Blob([Uint8Array.from(f.restore.artifact)]), "selected.wbk");
-  form.set("recoveryKey", "archive password");
+  form.set("masterKey", key.secret);
   form.set("environment", "preproduction");
   form.set("oldBoxGone", "1");
   form.set(
     "recoveryOperation",
     JSON.stringify({ binding: f.options.binding, input: f.outcome.input }),
   );
-  form.set("nodeRecoverySecret", key.secret);
   form.set("recoveryContext", JSON.stringify(context));
   return form;
 }

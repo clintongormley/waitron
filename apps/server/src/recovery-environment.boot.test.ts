@@ -27,7 +27,9 @@ import { seedNonproductionHistory } from "@waitron/fiscal-verifactu/test/drain-f
 import { beginEnvironmentMove } from "@waitron/provisioning";
 import { NODE_MIGRATIONS } from "@waitron/node-db";
 import { seedBusinessDay, seedVenueSettings } from "@waitron/db/testing/seed.js";
-import { encryptArtifact } from "./artifact-cipher.js";
+import { makeMasterKey } from "@waitron/credentials";
+import { encodeMasterKeyCode } from "@waitron/shared";
+import { masterKeyArchiveBytes } from "./testing/master-key-archive.js";
 import { packArchive } from "./backup-archive.js";
 import { nodeDumpEntry } from "./testing/node-copy.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -366,8 +368,8 @@ it("boots real HTTPS first setup after Move and previews another backup", async 
   await suite.db.insert(nodes).values({ id: sourceNode, name: "Selected box" });
   const sourceCopy = join(f.stateDir, "selected.db");
   await suite.db.archiveTo(sourceCopy);
-  const archiveKey = "synthetic-archive-key";
-  const artifact = encryptArtifact(
+  const masterKey = makeMasterKey();
+  const artifact = masterKeyArchiveBytes(
     packArchive([
       {
         name: "manifest.json",
@@ -390,7 +392,7 @@ it("boots real HTTPS first setup after Move and previews another backup", async 
         bytes: Buffer.from(Buffer.alloc(32, 7).toString("base64")),
       },
     ]),
-    archiveKey,
+    masterKey,
   );
   const migrations = join(f.stateDir, "test-migrations");
   await copyMigrationsRoot(migrations);
@@ -448,7 +450,7 @@ it("boots real HTTPS first setup after Move and previews another backup", async 
         method: "POST",
         headers: {
           "Content-Type": "application/octet-stream",
-          "x-waitron-recovery-key": archiveKey,
+          "x-waitron-master-key": encodeMasterKeyCode(masterKey),
           "x-waitron-restore-environment": environment,
         },
         body: new Uint8Array(artifact),
