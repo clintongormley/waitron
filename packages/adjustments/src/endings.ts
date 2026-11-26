@@ -16,6 +16,7 @@ import {
   addDecimal,
   centsToDecimal,
   compareDecimal,
+  decimal,
   decimalToCents,
   divideDecimal,
   MONEY_SCALE,
@@ -258,12 +259,12 @@ export async function endAdjustment(
   }
 }
 
-const NOTHING = "0.00" as Decimal;
+const NOTHING = decimal("0.00");
 
 /**
- * What each of `endingIds` gave back, in money: each row's recorded reduction is what was taken off
- * the quantity its line held then, so it counts in proportion to the quantity the row holds now, as
- * {@link restoreOf} gave it back; a row no longer on any bill counts whole.
+ * What each of `endingIds` gave back, in money, reckoned from each row's recorded reduction (taken
+ * off the quantity its line held then) at the quantity the row holds now, not the quantity it held
+ * when the ending was written; a row no longer on any bill counts whole.
  */
 export async function givenBackBy(
   tx: Transaction,
@@ -311,8 +312,6 @@ export interface EndedDiscount {
   lineId: string | null;
   action: AdjustmentAction;
   percentBp: number | null;
-  /** What it took off when given, in cents. */
-  reduction: number;
   /** What this ending gave back ({@link givenBackBy}). */
   givenBack: Decimal;
   reasonId: string;
@@ -340,7 +339,6 @@ export async function readDiscountNotices(
       lineId: adjustmentEndings.lineId,
       action: adjustments.action,
       percentBp: adjustments.percentBp,
-      reduction: adjustments.reduction,
       reasonId: adjustments.reasonId,
       lineName: adjustments.lineName,
     })

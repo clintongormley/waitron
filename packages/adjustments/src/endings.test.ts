@@ -462,7 +462,7 @@ describe("the notices a bill answers", () => {
         lineId: null,
         action: "discount_percent",
         percentBp: 1000,
-        reduction: 160,
+        givenBack: "1.60",
         lineName: "Hake",
       }),
     ]);
