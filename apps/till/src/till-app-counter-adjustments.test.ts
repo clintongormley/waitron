@@ -2658,7 +2658,7 @@ describe("till-app: a counter save refused for a dish already sent", () => {
     ["Pay the rest", "counter-bill-pay", {}, "getBillBalance"],
   ] as const)(
     "a refused %s loads the order again and explains why it cannot go further",
-    async (_, event, detail, next, stationName) => {
+    async (_, event, detail, next, stationName?: string) => {
       const combined = next === "recordSale" || next === "pay";
       const code = stationName === undefined ? "ticket.already_served" : "ticket.already_fired";
       const refuse = vi.fn().mockRejectedValue({ code, status: 409, stationName });
