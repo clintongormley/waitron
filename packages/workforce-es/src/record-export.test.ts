@@ -10,7 +10,12 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedVenue } from "@waitron/db/testing/seed.js";
 import { persons, registerModulePermissions } from "@waitron/identity";
-import { jobOrigin, type RecordExportDocument, type RecordExportInput } from "@waitron/shared";
+import {
+  AppError,
+  jobOrigin,
+  type RecordExportDocument,
+  type RecordExportInput,
+} from "@waitron/shared";
 import {
   WORKFORCE_MIGRATIONS,
   WORKFORCE_PERMISSIONS,
@@ -714,6 +719,37 @@ it.each([
     expect((await read()).closures[0]).toEqual(before);
   },
 );
+
+it("uses the venue's working-time rules when it has an agreement", async () => {
+  expect(await run((tx) => api.WORKFORCE_ES_RECORD_EXPORT.workSummaryRules(tx))).toBeNull();
+  await suite.db.insert(api.convenioConfig).values({
+    id: 1,
+    workingDaysPerWeek: 6,
+    overtimeModel: "period_net",
+    dailyTargetMinutes: 420,
+  });
+  expect(await run((tx) => api.WORKFORCE_ES_RECORD_EXPORT.workSummaryRules(tx))).toMatchObject({
+    workingDaysPerWeek: 6,
+    overtimeModel: "period-net",
+    dailyTargetMinutes: 420,
+  });
+});
+
+it("passes on work-rule read errors other than a missing agreement", async () => {
+  const error = new AppError("setup.request_invalid", { field: "agreement" });
+  await expect(
+    run(async (tx) => {
+      const select = vi.spyOn(tx, "select").mockImplementationOnce(() => {
+        throw error;
+      });
+      try {
+        return await api.WORKFORCE_ES_RECORD_EXPORT.workSummaryRules(tx);
+      } finally {
+        select.mockRestore();
+      }
+    }),
+  ).rejects.toBe(error);
+});
 
 it("exports credited work and raw pauses using the enabled agreement policy", async () => {
   await suite.db.insert(api.convenioConfig).values({
