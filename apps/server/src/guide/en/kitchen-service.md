@@ -319,7 +319,7 @@ tapping its heading.
 
 ## Get help on a station screen {#kitchen-help}
 
-Tap **?** at the top right of a station screen, before the theme and language buttons, to turn help
+Tap the **Help** button (a circled question mark) at the top right of a station screen, before the theme and language buttons, to turn help
 on. **?** marks then show on the first card and on **Columns** of each board, on **Changes to
 orders** while there are changes to read, and on **Merged** or **Stacked** on a screen with more
 than one station. On the pass they also show on the first **Ready**. Tap
@@ -328,7 +328,7 @@ about that part; some notes link to this guide. The rest of the screen works as 
 on.
 
 Help goes off by itself two minutes after the screen was last touched, and a guide page opened from
-a note closes with it. Tap **?** again to turn it off sooner. A till's **Prep station** and **Pass**
+a note closes with it. Tap **Help** again to turn it off sooner. A till's **Prep station** and **Pass**
 screens show the same marks, apart from **Merged** and **Stacked**; there help goes off when the till
 locks.
 

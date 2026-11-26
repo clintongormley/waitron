@@ -144,13 +144,12 @@ Retiring the summary once its last consumer moves away remains open.
 - **The "Continue with Google" button was checked in Chromium only** (the vitest browser suites and
   screenshots); Firefox and Safari not looked at. Left open by A228 (#1078).
 
-## A1606 The sidebar and account menu: clearer sections, real icons, who is signed in
-
-[Approved design](../superpowers/specs/2026-11-26-dashboard-sidebar-and-account-menu-design.md)
-(owner, 2026-11-26). The remaining work is the banner buttons and the account menu that shows who
-is signed in.
-
 ## Decisions and deliberate limits
+
+- **Sidebar and account menu (A1606, 2026-11-26).** Rota stays under Team and Calendar under Venue
+  setup. The owner said “it feels weird having the calendar in two places, but leave it like that
+  for now”. The design session left the role name out of the account menu. See the
+  [approved design](../superpowers/specs/2026-11-26-dashboard-sidebar-and-account-menu-design.md).
 
 - **The theme editor (A841, owner, 2026-10-19 and 2026-10-20).** Moved here from the deleted design.
   Waitron works the colours out from a few choices by default, with Advanced to set them by hand ("A by

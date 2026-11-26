@@ -353,14 +353,14 @@ el mismo orden; una sección se pliega tocando su cabecera.
 
 ## Ayuda en la pantalla de estación {#kitchen-help}
 
-Toca **?** arriba a la derecha de una pantalla de estación, antes de los botones de tema e idioma,
+Toca el botón **Ayuda** (un signo de interrogación dentro de un círculo) arriba a la derecha de una pantalla de estación, antes de los botones de tema e idioma,
 para activar la ayuda. Aparecen marcas **?** en la primera tarjeta y en **Columnas** de cada
 tablero, en **Cambios en los pedidos** mientras haya cambios por leer, y en **Todo junto** o **Por
 estación** en una pantalla con más de una estación. En el pase aparecen también en el primer **Listo**. Toca una marca para leer una nota breve sobre esa parte; algunas notas enlazan
 con esta guía. El resto de la pantalla funciona como siempre mientras la ayuda está activa.
 
 La ayuda se desactiva sola dos minutos después de la última vez que se tocó la pantalla, y una
-página de la guía abierta desde una nota se cierra con ella. Toca **?** otra vez para desactivarla
+página de la guía abierta desde una nota se cierra con ella. Toca **Ayuda** otra vez para desactivarla
 antes. Las pantallas **Estaciones** y **Pase** de un terminal muestran las mismas marcas, salvo **Todo
 junto** y **Por estación**; allí la ayuda se desactiva cuando el terminal se bloquea.
 

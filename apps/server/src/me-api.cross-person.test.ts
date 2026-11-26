@@ -332,6 +332,7 @@ describe("Me API — the identity property: the session's person, never the body
       (await who.json()) as {
         personId: string;
         roleIds: string[];
+        displayName: string;
         email: string | null;
         locale: string | null;
         venueLocale: string;
@@ -346,6 +347,7 @@ describe("Me API — the identity property: the session's person, never the body
       },
     ).toEqual({
       personId: p,
+      displayName: "P",
       roleIds: [
         (
           await suite.db.execute<{ id: string }>(

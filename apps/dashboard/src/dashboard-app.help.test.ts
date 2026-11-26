@@ -458,10 +458,20 @@ async function atViewport(host: HTMLElement, width: number, body: () => Promise<
   }
 }
 
-const languageGroup = (el: DashboardApp) =>
+const languageChooser = (el: DashboardApp) =>
   q(el, "[data-test=account-menu] [data-test=language-chooser]");
+const languageTrigger = (el: DashboardApp) =>
+  languageChooser(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=lang-trigger]")!;
+const languageMenu = (el: DashboardApp) =>
+  languageChooser(el)!.shadowRoot!.querySelector<HTMLElement>("[role=menu]");
+async function openLanguageList(el: DashboardApp) {
+  expect(languageTrigger(el)).not.toBeNull();
+  await userEvent.click(languageTrigger(el));
+  await vi.waitFor(() => expect(languageMenu(el)?.matches(":popover-open")).toBe(true));
+}
+
 const languageChoice = (el: DashboardApp, code: string) =>
-  languageGroup(el)?.shadowRoot!.querySelector<HTMLButtonElement>(`[data-test=lang-${code}]`) ??
+  languageChooser(el)?.shadowRoot!.querySelector<HTMLButtonElement>(`[data-test=lang-${code}]`) ??
   null;
 
 it.each(
@@ -529,43 +539,66 @@ it.each(
   },
 );
 
-it("signed in, the banner has no language chooser and the account menu holds the language choices after Theme", async () => {
-  const { el } = await signedIn();
+it("signed in, fetches languages only when opening the Language list", async () => {
+  const { el, api } = await signedIn();
   expect(q(el, ".banner-actions > wt-language-chooser")).toBeNull();
-  expect([...accountMenu(el).children].map((child) => child.getAttribute("data-test"))).toEqual([
-    "profile-row",
-    "theme-choices",
-    "language-chooser",
-    "about",
-    "logout",
-  ]);
-  const group = languageGroup(el)!;
-  expect(group.getAttribute("layout")).toBe("group");
+  expect(api.getLocales).not.toHaveBeenCalled();
   await openAccountMenu(el);
-  await vi.waitFor(() => expect(languageChoice(el, "es-ES")).not.toBeNull());
-  await expect
-    .element(group.shadowRoot!.querySelector<HTMLElement>("[role=group]")!)
-    .toHaveAccessibleName("Language");
-  expect(languageChoice(el, "en-GB")!.getAttribute("aria-pressed")).toBe("true");
-  expect(languageChoice(el, "es-ES")!.getAttribute("aria-pressed")).toBe("false");
+  expect(api.getLocales).not.toHaveBeenCalled();
+  expect(languageChooser(el)!.parentElement!.textContent!.trim()).toBe("Language");
+  await openLanguageList(el);
+  expect(menuPopup(el).matches(":popover-open")).toBe(true);
+  expect(api.getLocales).toHaveBeenCalledOnce();
+  expect(languageChoice(el, "en-GB")!.getAttribute("aria-checked")).toBe("true");
+  expect(languageChoice(el, "es-ES")!.getAttribute("aria-checked")).toBe("false");
 });
 
-it("signed in, the account menu reads the languages through the passive client, once", async () => {
-  const background = {
-    getLocales: vi.fn().mockResolvedValue({
-      locales: [
-        { code: "es-ES", label: "Español" },
-        { code: "en-GB", label: "English" },
-      ],
-      venueDefault: "es-ES",
-      loginDefault: "es-ES",
-      venueName: "Deli Test SL",
-    }),
-  };
-  const { el, api } = await signedIn({ background });
-  await vi.waitFor(() => expect(languageChoice(el, "es-ES")).not.toBeNull());
-  expect(background.getLocales).toHaveBeenCalledOnce();
-  expect(api.getLocales).not.toHaveBeenCalled();
+it.each([
+  [1440, 485],
+  [390, 485],
+  [780, 320],
+])("keeps a long Language list below its button at %i×%i", async (width, height) => {
+  const before = { width: window.innerWidth, height: window.innerHeight };
+  await page.viewport(width, height);
+  try {
+    const { el } = await signedIn({
+      getMe: vi.fn().mockResolvedValue({ ...englishMe, onboardingIntent: "demo" }),
+      getLocales: vi.fn().mockResolvedValue({
+        locales: [
+          "en-GB",
+          "es-ES",
+          "ca-ES",
+          "eu-ES",
+          "gl-ES",
+          "fr-FR",
+          "de-DE",
+          "it-IT",
+          "pt-PT",
+        ].map((code) => ({
+          code,
+          label: new Intl.DisplayNames([code], { type: "language" }).of(code),
+        })),
+        venueDefault: "es-ES",
+        loginDefault: "es-ES",
+        venueName: "Deli Test SL",
+      }),
+    });
+    await openAccountMenu(el);
+    const name = languageTrigger(el).querySelector("[part=name]")!;
+    const code = languageTrigger(el).querySelector("[part=code]")!;
+    expect(name.getBoundingClientRect().width).toBeGreaterThan(0);
+    expect(code.getBoundingClientRect().width).toBe(0);
+    await openLanguageList(el);
+    const menu = languageMenu(el)!;
+    expect(menu.getBoundingClientRect().top).toBeGreaterThan(
+      languageTrigger(el).getBoundingClientRect().bottom,
+    );
+    expect(menu.getBoundingClientRect().bottom).toBeLessThanOrEqual(innerHeight - 8);
+    expect(menu.clientHeight).toBeGreaterThanOrEqual(44);
+    expect(menu.scrollHeight).toBeGreaterThan(menu.clientHeight);
+  } finally {
+    await page.viewport(before.width, before.height);
+  }
 });
 
 it.each([1280, 390])(
@@ -596,13 +629,22 @@ it("a language picked in the account menu changes the language, and closes the m
     const { el, api } = await signedIn();
     expect(currentLocale()).toBe("en-GB");
     await openAccountMenu(el);
-    await vi.waitFor(() => expect(languageChoice(el, "es-ES")).not.toBeNull());
+    await openLanguageList(el);
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() => expect(languageMenu(el)).toBeNull());
+    expect(menuPopup(el).matches(":popover-open")).toBe(true);
+    expect(languageChooser(el)!.shadowRoot!.activeElement).toBe(languageTrigger(el));
+    await openLanguageList(el);
     await userEvent.click(languageChoice(el, "es-ES")!);
     await vi.waitFor(() => expect(currentLocale()).toBe("es-ES"));
     expect(api.putLocale).toHaveBeenCalledExactlyOnceWith("es-ES");
     await flush(el);
     expect(menuPopup(el).matches(":popover-open")).toBe(false);
-    expect(languageChoice(el, "es-ES")!.getAttribute("aria-pressed")).toBe("true");
+    expect(languageMenu(el)).toBeNull();
+    expect(accountMenu(el).shadowRoot!.activeElement).toBe(
+      accountMenu(el).shadowRoot!.querySelector("button"),
+    );
+    expect(languageTrigger(el).querySelector("[part=name]")!.textContent).toBe("Español");
     await expect.element(switchButton(el)).toHaveAccessibleName("Ayuda");
   } finally {
     await page.viewport(before.width, before.height);
@@ -613,7 +655,7 @@ it("the account menu's language choices have no accessibility violations, in bot
   for (const theme of ["light", "dark"] as const) {
     const { el } = await signedIn({}, theme);
     await openAccountMenu(el);
-    await vi.waitFor(() => expect(languageChoice(el, "es-ES")).not.toBeNull());
+    await openLanguageList(el);
     await expectNoA11yViolations(q(el, "[data-test=brand-banner]")!);
     cleanupWidgets();
   }

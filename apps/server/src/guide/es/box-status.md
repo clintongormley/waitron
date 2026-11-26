@@ -8,9 +8,9 @@ registro del servidor, usa **Diagnóstico**.
 
 ## Abre la página {#open}
 
-Para guardar un archivo sobre un problema del panel, elige **Informar de un problema** en la barra
-superior. También puedes hacerlo antes de iniciar sesión. Abre el panel por HTTPS si no aparece
-el botón.
+Para guardar un archivo sobre un problema del panel, elige el botón con un bocadillo y un signo de exclamación
+en la barra superior (**Informar de un problema**). También puedes hacerlo antes de iniciar sesión.
+Abre el panel por HTTPS si no aparece el botón.
 Durante la configuración, elige **Informar de un problema** en la cabecera de la página. Puedes
 guardar un informe aunque el servidor no responda o esta página ya abierta pierda la conexión.
 Si aparece **Enviar a Waitron Cloud**, revisa el informe adjunto antes de enviarlo. Incluye

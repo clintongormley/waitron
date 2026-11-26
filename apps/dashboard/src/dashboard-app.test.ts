@@ -1342,9 +1342,14 @@ describe("dashboard-app", () => {
   it("keeps the underlying screen after saving your profile — a save re-probes the session while the URL still says profile", async () => {
     // A save's profile-updated re-probes the session while the URL still reads "profile"; the
     // screen under the modal must survive that.
-    const saveProfile = vi.fn().mockResolvedValue({ emailVerificationSent: false });
+    let session = { ...meResponse, displayName: "Alex", email: "alex@example.com" };
+    const saveProfile = vi.fn(async (input: { displayName: string }) => {
+      session = { ...session, displayName: input.displayName };
+      return { emailVerificationSent: false };
+    });
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({
+        getMe: vi.fn(async () => session),
         listStaff: vi.fn().mockResolvedValue([]),
         getProfile: vi.fn().mockResolvedValue({
           displayName: "Alex",
@@ -1374,6 +1379,8 @@ describe("dashboard-app", () => {
       }),
     });
     await flush(el);
+    const name = () => el.shadowRoot!.querySelector("[data-test=account-name]")!.textContent;
+    expect(name()).toBe("Alex");
     navItem(el, "products")!.click();
     await flush(el);
     expect(el.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
@@ -1388,13 +1395,14 @@ describe("dashboard-app", () => {
     await profileScreen.updateComplete;
 
     profileScreen
-      .shadowRoot!.querySelector("wt-input[name=telephone]")!
-      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "+34 600 000 001" } }));
+      .shadowRoot!.querySelector("wt-input[name=displayName]")!
+      .dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Alex Rivera" } }));
     await profileScreen.updateComplete;
     profileScreen.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
     await flush(el);
     await flush(el); // the save's own profile-updated -> #probeSession() round trip
     expect(saveProfile).toHaveBeenCalledOnce();
+    expect(name()).toBe("Alex Rivera");
 
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=close-profile]")!.click();
     await flush(el);
@@ -5178,13 +5186,13 @@ describe("dashboard-app — per-user locale (Task 10)", () => {
   it("names the shell's language on the chooser, and the new one once a pick is saved", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api: stubApi() });
     await flush(el);
-    const pressed = () =>
-      shellChooser(el)!.shadowRoot!.querySelector('[aria-pressed="true"]')!.textContent!.trim();
-    await vi.waitFor(() => expect(pressed()).toBe("Español"));
+    const language = () =>
+      shellChooser(el)!.shadowRoot!.querySelector('[part="name"]')!.textContent!.trim();
+    await vi.waitFor(() => expect(language()).toBe("Español"));
 
     emit(shellChooser(el)!, "wt-locale-selected", { code: "en-GB" });
     await flush(el);
-    expect(pressed()).toBe("English");
+    expect(language()).toBe("English");
   });
 
   it("a rejected putLocale leaves the language unchanged (the switch is gated behind the durable write)", async () => {
@@ -8624,6 +8632,12 @@ describe("dashboard-app: remaining faces and shell controls", () => {
     });
     await flush(el);
     const chooser = shellChooser(el)!;
+    expect(getLocales).not.toHaveBeenCalled();
+    const account = el.shadowRoot!.querySelector<HTMLElement>("[data-test=account-menu]")!;
+    account.shadowRoot!.querySelector("button")!.click();
+    const trigger = chooser.shadowRoot!.querySelector<HTMLElement>("[data-test=lang-trigger]");
+    expect(trigger).not.toBeNull();
+    trigger!.click();
     await vi.waitFor(() =>
       expect(
         chooser.shadowRoot!.querySelector('[data-test="lang-en-GB"]')?.textContent?.trim(),
@@ -10966,8 +10980,9 @@ describe("dashboard-app: About Waitron", () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
     await flush(el);
     const menu = accountMenuTrigger(el)!;
-    expect([...menu.children].map((child) => child.getAttribute("data-test")).slice(-3)).toEqual([
-      "language-chooser",
+    expect([...menu.children].map((child) => child.getAttribute("data-test")).slice(-4)).toEqual([
+      "language-row",
+      null,
       "about",
       "logout",
     ]);

@@ -15,7 +15,7 @@ function buttonOf(el: WtHelpSwitch): HTMLButtonElement {
 }
 
 function iconOf(el: WtHelpSwitch): HTMLElement {
-  return el.shadowRoot!.querySelector<HTMLElement>(".icon")!;
+  return el.shadowRoot!.querySelector<HTMLElement>("wt-icon")!;
 }
 
 test("starts unpressed while help is off", async () => {
@@ -23,8 +23,8 @@ test("starts unpressed while help is off", async () => {
   const button = buttonOf(el);
   expect(button.getAttribute("aria-pressed")).toBe("false");
   expect(button.getAttribute("aria-label")).toBe("Help");
-  expect(iconOf(el).getAttribute("aria-hidden")).toBe("true");
-  expect(iconOf(el).textContent).toBe("?");
+  expect(iconOf(el)?.getAttribute("name")).toBe("help");
+  expect(iconOf(el).getBoundingClientRect().width).toBe(18);
 });
 
 test("a click turns help on and shows as pressed; a second turns it off", async () => {
@@ -81,15 +81,14 @@ test("paints from the tokens", async () => {
   const el = (await mount("<wt-help-switch></wt-help-switch>")) as WtHelpSwitch;
   host.style.setProperty("--wt-color-text-muted", "rgb(1, 2, 3)");
   host.style.setProperty("--wt-color-primary", "rgb(4, 5, 6)");
-  host.style.setProperty("--wt-color-on-primary", "rgb(7, 8, 9)");
-  expect(getComputedStyle(iconOf(el)).color).toBe("rgb(1, 2, 3)");
-  expect(getComputedStyle(iconOf(el)).borderColor).toBe("rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-surface-lifted", "rgb(7, 8, 9)");
+  expect(getComputedStyle(buttonOf(el)).color).toBe("rgb(1, 2, 3)");
   setHelpMode(true);
   await el.updateComplete;
-  const pressed = getComputedStyle(iconOf(el));
-  expect(pressed.backgroundColor).toBe("rgb(4, 5, 6)");
-  expect(pressed.color).toBe("rgb(7, 8, 9)");
-  expect(pressed.borderColor).toBe("rgba(0, 0, 0, 0)");
+  const pressed = getComputedStyle(buttonOf(el));
+  expect(pressed.backgroundColor).toBe("rgb(7, 8, 9)");
+  expect(pressed.borderColor).toBe("rgb(4, 5, 6)");
+  expect(parseFloat(pressed.borderWidth)).toBeGreaterThan(0);
 });
 
 test("takes the app's word for Help", async () => {

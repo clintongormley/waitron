@@ -27,11 +27,7 @@ export class DashboardProblemReport extends LitElement {
     :host {
       display: inline-flex;
     }
-    :host([compact]) .trigger-label {
-      display: none;
-    }
   `;
-  @property({ type: Boolean, reflect: true }) compact = false;
   @property({ attribute: false }) api?: ReportDialogCloud;
   @property({ attribute: false }) navigationScreens?: ReadonlySet<string>;
   @state() private snapshot?: ClientReportSnapshot;
@@ -146,13 +142,12 @@ export class DashboardProblemReport extends LitElement {
     return html`<wt-button
         data-report-problem
         variant="ghost"
-        shape=${this.compact ? "round" : "default"}
+        shape="round"
         aria-label=${t("problem_report.title")}
         title=${t("problem_report.title")}
         @click=${this.show}
-        ><wt-icon name="report-problem"></wt-icon
-        ><span class="trigger-label">${t("problem_report.title")}</span></wt-button
-      >
+        ><wt-icon name="report-problem" size="lg"></wt-icon
+      ></wt-button>
       <wt-report-dialog
         .open=${this.snapshot !== undefined}
         .description=${this.description}

@@ -8,15 +8,14 @@ import "./components/wt-icon.js";
 /** Styles for `themeChoices`; the host's shadow root must adopt them. */
 export const themeChoicesStyles = css`
   .theme-choices {
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--wt-space-1);
-    padding-inline-start: var(--wt-space-4);
+    padding-inline: var(--wt-space-3);
   }
 
   .theme-choices-label {
-    flex: 1;
+    grid-column: 1 / -1;
     color: var(--wt-color-text-muted);
     font-size: var(--wt-font-size-sm);
   }
@@ -24,16 +23,18 @@ export const themeChoicesStyles = css`
   .theme-choice {
     box-sizing: border-box;
     display: inline-flex;
-    flex: none;
     align-items: center;
     justify-content: center;
+    gap: var(--wt-space-1);
     min-width: var(--wt-tap-min);
     min-height: var(--wt-tap-min);
-    padding: var(--wt-space-2);
-    border: 1px solid transparent;
+    padding: var(--wt-space-1);
+    border: var(--wt-field-line-width) solid var(--wt-color-border);
     border-radius: var(--wt-radius-md);
     background: transparent;
     color: var(--wt-color-text);
+    font: inherit;
+    font-size: var(--wt-font-size-sm);
     cursor: pointer;
   }
   .theme-choice:hover {
@@ -41,15 +42,20 @@ export const themeChoicesStyles = css`
   }
   .theme-choice[aria-pressed="true"] {
     border-color: var(--wt-color-primary);
-    background: var(--wt-color-primary);
-    color: var(--wt-color-on-primary);
+    background: var(--wt-color-surface-lifted);
   }
   .theme-choice > wt-icon {
     color: inherit;
+    flex: none;
   }
   .theme-choice:focus-visible {
     outline: var(--wt-focus-ring);
     outline-offset: var(--wt-focus-offset);
+  }
+  @media (forced-colors: active) {
+    .theme-choice[aria-pressed="true"] {
+      border-color: Highlight;
+    }
   }
 `;
 
@@ -60,9 +66,10 @@ export const themeChoicesStyles = css`
 export function themeChoices(options: {
   active: ThemeChoice;
   labels: WtThemeLabels;
+  shortDeviceLabel: string;
   onPick: (choice: ThemeChoice) => void;
 }): TemplateResult {
-  const { active, labels, onPick } = options;
+  const { active, labels, onPick, shortDeviceLabel } = options;
   return html`<div
     class="theme-choices"
     role="group"
@@ -81,6 +88,7 @@ export function themeChoices(options: {
           @click=${() => onPick(choice)}
         >
           <wt-icon name="theme-${choice}"></wt-icon>
+          ${choice === "device" ? shortDeviceLabel : labels[choice]}
         </button>`,
     )}
   </div>`;

@@ -12,14 +12,14 @@ afterEach(async () => {
   await emulateForcedColours(null);
 });
 
-test("Help ON fills its icon while keyboard focus remains outside it", async () => {
+test("Help ON fills its button while keyboard focus remains outside it", async () => {
   const wrapper = await mount(
     '<div style="padding: 20px"><button>Before</button><wt-help-switch></wt-help-switch></div>',
   );
   const el = wrapper.querySelector<WtHelpSwitch>("wt-help-switch")!;
   await el.updateComplete;
-  const icon = el.shadowRoot!.querySelector(".icon")!;
-  const box = icon.getBoundingClientRect();
+  const button = el.shadowRoot!.querySelector("button")!;
+  const box = button.getBoundingClientRect();
   const sample = async () => (await elementPixels(wrapper))(box.left + 5, box.top + 5);
   const off = await sample();
   setHelpMode(true);
@@ -27,7 +27,6 @@ test("Help ON fills its icon while keyboard focus remains outside it", async () 
   expect(await sample()).not.toEqual(off);
   wrapper.querySelector("button")!.focus();
   await userEvent.tab();
-  const button = el.shadowRoot!.querySelector("button")!;
   expect(button.matches(":focus-visible")).toBe(true);
   const at = await elementPixels(wrapper);
   const b = button.getBoundingClientRect();

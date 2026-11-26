@@ -5,6 +5,7 @@ import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import type { DataTableColumn, WtDataTable } from "./wt-data-table.js";
 import "./wt-data-table.js";
 import { WtLanguageChooser } from "./wt-language-chooser.js";
+import "./wt-row-actions.js";
 
 const twoLocales = async () => [
   { code: "es-ES", label: "Español (servidor)" },
@@ -76,6 +77,7 @@ describe("wt-language-chooser", () => {
     expect(menuOf(el)).toBeNull();
     // Before the list loads, the name comes from the languages every app supports.
     expect(nameOf(el)).toBe("Español");
+    expect(triggerOf(el).querySelector("wt-icon")?.getAttribute("name")).toBe("chevron-down");
 
     await open(el);
     expect(loadLocales).toHaveBeenCalledTimes(1);
@@ -84,6 +86,36 @@ describe("wt-language-chooser", () => {
     expect(optionOf(el, "en-GB")!.textContent!.trim()).toBe("English (server)");
     // Once loaded, the trigger reads the loaded name.
     expect(nameOf(el)).toBe("Español (servidor)");
+  });
+
+  it("moves a long list above a low trigger and keeps it scrollable within the viewport", async () => {
+    await page.viewport(390, 500);
+    const el = await mountChooser({
+      active: "en-GB",
+      loadLocales: async () =>
+        [
+          "English",
+          "Español",
+          "Català",
+          "Galego",
+          "Euskara",
+          "Français",
+          "Deutsch",
+          "Italiano",
+          "Português",
+        ].map((label, index) => ({ code: index === 0 ? "en-GB" : `language-${index}`, label })),
+    });
+    el.style.position = "fixed";
+    el.style.bottom = "30px";
+    await open(el);
+    const menu = menuOf(el)!;
+    expect(menu.getBoundingClientRect().bottom).toBeLessThan(
+      triggerOf(el).getBoundingClientRect().top,
+    );
+    expect(menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(8);
+    expect(menu.scrollHeight).toBeGreaterThan(menu.clientHeight);
+    menu.scrollTop = menu.scrollHeight;
+    expect(menu.scrollTop).toBeGreaterThan(0);
   });
 
   it("tells a screen reader the trigger opens a menu, and whether it is open, on the inner button", async () => {
@@ -466,6 +498,34 @@ describe("wt-language-chooser", () => {
     expect(before.top - trigger.top).toBeCloseTo(150, 0);
     expect(menu.top).toBeGreaterThanOrEqual(trigger.bottom);
     expect(menu.top - trigger.bottom).toBeLessThan(trigger.height);
+  });
+
+  it("follows its trigger when the row-actions panel it is slotted into scrolls", async () => {
+    const container = await mount(`
+      <div>
+        <style>wt-row-actions::part(popup) { max-height: 160px !important; }</style>
+        <wt-row-actions label="Account" opens-below>
+          <div style="height: 60px"></div>
+          <wt-language-chooser active="en-GB" below-only data-keep-open></wt-language-chooser>
+          <div style="height: 180px"></div>
+        </wt-row-actions>
+      </div>`);
+    const parent = container.querySelector("wt-row-actions")!;
+    const el = container.querySelector("wt-language-chooser")!;
+    el.loadLocales = twoLocales;
+    await parent.updateComplete;
+    parent.show();
+    await open(el);
+    const popup = parent.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    const button = triggerOf(el);
+    const before = button.getBoundingClientRect().bottom;
+    const gap = () =>
+      menuOf(el)!.getBoundingClientRect().top - button.getBoundingClientRect().bottom;
+    const initialGap = gap();
+    expect(initialGap).toBeGreaterThan(0);
+    popup.scrollTop = 32;
+    expect(button.getBoundingClientRect().bottom).toBeCloseTo(before - 32, 0);
+    await expect.poll(gap).toBeCloseTo(initialGap, 0);
   });
 
   it("stops listening for scrolls in the shadow root holding it once the menu closes or it leaves the page", async () => {

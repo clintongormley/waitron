@@ -25,13 +25,14 @@ function mountChoices(
   if (theme) host.setAttribute("data-theme", theme);
   const root = host.attachShadow({ mode: "open" });
   root.adoptedStyleSheets = [themeChoicesStyles.styleSheet!];
-  render(html`${themeChoices({ active, labels, onPick })}`, root);
+  const options = { active, labels, onPick, shortDeviceLabel: "Dispositivo" };
+  render(html`${themeChoices(options)}`, root);
   const group = root.querySelector<HTMLElement>("[data-test=theme-choices]")!;
   const buttons = [...group.querySelectorAll<HTMLButtonElement>("button")];
   return { root, group, buttons };
 }
 
-it("is a group named by its visible label, holding one icon-only button per choice in order", async () => {
+it("is a labelled group with an icon and a short visible label for each choice", async () => {
   const { group, buttons } = mountChoices("device");
   expect(group.getAttribute("role")).toBe("group");
   await expect.element(page.elementLocator(group)).toHaveAccessibleName("Tema");
@@ -42,7 +43,7 @@ it("is a group named by its visible label, holding one icon-only button per choi
   ]);
   for (const [i, name] of ["Claro", "Oscuro", "Según el dispositivo"].entries())
     await expect.element(page.elementLocator(buttons[i]!)).toHaveAccessibleName(name);
-  expect(buttons.map((b) => b.textContent!.trim())).toEqual(["", "", ""]);
+  expect(buttons.map((b) => b.textContent!.trim())).toEqual(["Claro", "Oscuro", "Dispositivo"]);
   expect(group.querySelector("#theme-choices-label")!.textContent).toBe("Tema");
   expect(buttons.map((b) => b.type)).toEqual(["button", "button", "button"]);
   expect(buttons.map((b) => b.querySelector("wt-icon")!.getAttribute("name"))).toEqual([
@@ -70,7 +71,7 @@ it("hands a pick to onPick and changes nothing itself", () => {
 });
 
 it.each(["light", "dark"] as const)(
-  "fills the pressed choice alone, with the primary colour, in the %s theme",
+  "lifts and outlines the pressed choice alone in the %s theme",
   (theme) => {
     const { buttons } = mountChoices("dark", () => {}, theme);
     const bg = (b: HTMLButtonElement) => getComputedStyle(b).backgroundColor;
@@ -78,22 +79,22 @@ it.each(["light", "dark"] as const)(
     expect(bg(buttons[0]!)).toBe(bg(buttons[2]!));
     expect(bg(buttons[0]!)).toBe("rgba(0, 0, 0, 0)");
     const probe = document.createElement("span");
-    probe.style.background = "var(--wt-color-primary)";
-    probe.style.color = "var(--wt-color-on-primary)";
+    probe.style.background = "var(--wt-color-surface-lifted)";
+    probe.style.borderColor = "var(--wt-color-primary)";
     buttons[1]!.parentElement!.append(probe);
     expect(bg(buttons[1]!)).toBe(getComputedStyle(probe).backgroundColor);
-    expect(getComputedStyle(buttons[1]!).color).toBe(getComputedStyle(probe).color);
+    expect(getComputedStyle(buttons[1]!).borderColor).toBe(getComputedStyle(probe).borderColor);
     probe.remove();
   },
 );
 
-it("lays the label and the three choices on one row at 320 px, each at least a tap target", () => {
+it("puts the label above three equal choices at 320 px, each at least a tap target", () => {
   const { root, buttons } = mountChoices("device");
   const label = root.querySelector<HTMLElement>("#theme-choices-label")!.getBoundingClientRect();
   const boxes = buttons.map((b) => b.getBoundingClientRect());
   expect(new Set(boxes.map((r) => r.top)).size).toBe(1);
-  expect(label.right).toBeLessThanOrEqual(boxes[0]!.left);
-  expect(label.bottom).toBeGreaterThan(boxes[0]!.top);
+  expect(new Set(boxes.map((r) => r.width)).size).toBe(1);
+  expect(label.bottom).toBeLessThan(boxes[0]!.top);
   const tap = parseFloat(
     getComputedStyle(root.host as HTMLElement).getPropertyValue("--wt-tap-min"),
   );
@@ -101,6 +102,22 @@ it("lays the label and the three choices on one row at 320 px, each at least a t
     expect(r.width).toBeGreaterThanOrEqual(tap);
     expect(r.height).toBeGreaterThanOrEqual(tap);
   }
+  for (const button of buttons) expect(button.scrollWidth).toBeLessThanOrEqual(button.clientWidth);
+});
+
+it("places each label beside its icon and gives unpressed choices a visible border", () => {
+  const { buttons } = mountChoices("device");
+  const button = buttons[0]!;
+  const icon = button.querySelector("wt-icon")!.getBoundingClientRect();
+  const label = [...button.childNodes].find((node) => node.textContent?.trim() === "Claro")!;
+  const text = document.createRange();
+  text.selectNodeContents(label);
+  const box = text.getBoundingClientRect();
+  expect(icon.right).toBeLessThan(box.left);
+  expect(box.top).toBeLessThan(icon.bottom);
+  const style = getComputedStyle(button);
+  expect(style.borderColor).not.toBe("rgba(0, 0, 0, 0)");
+  expect(parseFloat(style.borderWidth)).toBeGreaterThan(0);
 });
 
 it("themeLabelsPerLocale hands back the same labels until the language changes", () => {

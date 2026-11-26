@@ -101,6 +101,7 @@ it("says menú in Spanish only for an on-screen menu or a set menu, never a rest
     "menus.set_menu_price",
     "menus.set_menu_sources_load_error",
     "nav.account_menu",
+    "nav.account_menu_person",
     "nav.set_menus",
     "sales.set_menus",
     "set_menus.empty",

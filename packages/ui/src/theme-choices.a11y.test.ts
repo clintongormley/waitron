@@ -13,7 +13,10 @@ describe.each(["light", "dark"] as const)("themeChoices a11y (%s theme)", (theme
     const el = await mountThemed("<div></div>", theme);
     const root = el.attachShadow({ mode: "open" });
     root.adoptedStyleSheets = [themeChoicesStyles.styleSheet!];
-    render(html`${themeChoices({ active, labels, onPick: () => {} })}`, root);
+    render(
+      html`${themeChoices({ active, labels, shortDeviceLabel: "Device", onPick: () => {} })}`,
+      root,
+    );
     await expectNoA11yViolations(host);
   });
 });

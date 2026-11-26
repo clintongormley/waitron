@@ -228,6 +228,7 @@ export class AccountApi extends VenueApi {
   getMe(options?: RequestOptions): Promise<{
     tradingAdmission?: TradingAdmissionView;
     personId: string;
+    displayName: string;
     roleIds: string[];
     email: string | null;
     locale: string | null;
@@ -246,6 +247,7 @@ export class AccountApi extends VenueApi {
     return this.#request<{
       tradingAdmission?: TradingAdmissionView;
       personId: string;
+      displayName: string;
       roleIds: string[];
       email: string | null;
       locale: string | null;
