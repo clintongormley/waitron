@@ -884,7 +884,8 @@ ready food at tables in every zone the till's profile allows, not only the zones
 Tap **List** or **Map** to switch how the zone on screen draws its tables. On a phone the switch is
 in the zone's ⋮ menu. The device keeps your choice for each zone, so the zone opens the same way
 next time, and switching one zone leaves the others as they were. A zone you have not switched
-opens as a map when it has tables placed on its plan, and as a list when it has none.
+opens as a map when it has tables placed on its plan, and as a list when it has none. If the tables are
+too close together to tap on the map, switch that zone to **List**.
 
 ## Join and split tables {#join-tables}
 

@@ -994,23 +994,74 @@ export class WtFloorMap extends LitElement {
     </div>`;
   }
 
+  // Enlarging a tightly spaced row could route a tap to the neighbouring stool.
+  #compactStoolTargets(view: View): Map<Group, PlanRect> | undefined {
+    const stools = this.#readingOrder;
+    const row = stools[0]?.box.y;
+    if (
+      row === undefined ||
+      !stools.every(
+        ({ fixed, members, box }) =>
+          fixed && members.length === 1 && members[0]!.placement.shape === "round" && box.y === row,
+      )
+    )
+      return;
+
+    const size = this.#size!;
+    const styles = getComputedStyle(this);
+    const tap = parseFloat(styles.getPropertyValue("--floor-map-tap-size"));
+    const edge = parseFloat(styles.getPropertyValue("--wt-space-2"));
+    const minimum = tap + edge * 2;
+    if (!(view.scale > 0 && size.height >= minimum && size.width >= minimum)) return;
+
+    const place = (centre: number, span: number): number => {
+      const start = centre - tap / 2;
+      return this.#touched ? start : Math.min(span - tap - edge, Math.max(edge, start));
+    };
+    const targets = new Map<Group, PlanRect>();
+    let right = -Infinity;
+    for (const stool of stools) {
+      const { box } = stool;
+      if (Math.max(box.width, box.height) * view.scale >= tap) return;
+      const centre = centreOf(box, view);
+      const x = place(centre.x, size.width);
+      if (x < right) return;
+      targets.set(stool, {
+        x: (x - view.x) / view.scale,
+        y: (place(centre.y, size.height) - view.y) / view.scale,
+        width: tap / view.scale,
+        height: tap / view.scale,
+      });
+      right = x + tap;
+    }
+    return targets;
+  }
+
   #renderGroups(view: View, still: boolean): TemplateResult {
+    const targets = this.#compactStoolTargets(view);
     const tabStop =
       (this.#focusedId === null ? undefined : this.#groupOf.get(this.#focusedId)) ??
       this.#readingOrder[0];
-    return html`${this.#links.map((linked) => this.#renderLink(linked, view))}${repeat(
+    return html`${this.#links.map((linked) => this.#renderLink(linked, view, targets))}${repeat(
       this.#groups,
       (g) => g.key,
-      (g) => this.#renderGroup(g, view, still, g === tabStop),
-    )}${this.#renderFixedDrag(view)}`;
+      (g) => this.#renderGroup(g, view, still, g === tabStop, targets?.get(g)),
+    )}${this.#renderFixedDrag(view, targets)}`;
   }
 
-  #renderGroup(group: Group, view: View, still: boolean, tabStop: boolean): TemplateResult {
-    const { box, members, label } = group;
+  #renderGroup(
+    group: Group,
+    view: View,
+    still: boolean,
+    tabStop: boolean,
+    target: PlanRect | undefined,
+  ): TemplateResult {
+    const { members, label } = group;
+    const box = target ?? group.box;
     const [first] = members as [FloorMapTable, ...FloorMapTable[]];
     const merged = members.length > 1;
     const drawn = merged ? box : first.placement;
-    const named = group.drawsName && showsName(drawn, view.scale);
+    const named = group.drawsName && showsName(target ?? drawn, view.scale);
     const cue = named && showsCue(drawn, view.scale) ? first.cue : null;
     const drag = this.#drag?.tableId === first.id && !group.fixed ? this.#drag : null;
     const allergy = members.some((member) => member.allergy);
@@ -1036,7 +1087,7 @@ export class WtFloorMap extends LitElement {
         height: px(box.height * view.scale),
       })}
     >
-      ${members.map((m) => this.#renderShape(m, box, view.scale, still))}
+      ${members.map((m) => this.#renderShape(m, box, view.scale, still, target))}
       ${allergy ? html`<span part="allergy" aria-hidden="true">!</span>` : nothing}
       ${
         cue !== null
@@ -1056,12 +1107,16 @@ export class WtFloorMap extends LitElement {
     </button>`;
   }
 
-  #renderLink(linked: readonly Group[], view: View): TemplateResult {
+  #renderLink(
+    linked: readonly Group[],
+    view: View,
+    targets: Map<Group, PlanRect> | undefined,
+  ): TemplateResult {
     const drag = this.#drag;
     const centres = linked.map((g) =>
       drag?.tableId === g.members[0]!.id && !g.fixed
         ? centreOf(g.box, view, drag.dx, drag.dy)
-        : centreOf(g.box, view),
+        : centreOf(targets?.get(g) ?? g.box, view),
     );
     // `svg`, not `html`: a separate `html` fragment makes an HTML-namespace <line> that draws nothing.
     return html`<svg part="links" aria-hidden="true">
@@ -1076,14 +1131,18 @@ export class WtFloorMap extends LitElement {
 
   /** A fixed group's copy where the drag would put it, and a line to the table marked as the drop
    * target. */
-  #renderFixedDrag(view: View): TemplateResult | typeof nothing {
+  #renderFixedDrag(
+    view: View,
+    targets: Map<Group, PlanRect> | undefined,
+  ): TemplateResult | typeof nothing {
     const drag = this.#drag;
     const group = drag === null ? undefined : this.#groupOf.get(drag.tableId);
     if (!group?.fixed) return nothing;
-    const { box, members } = group;
+    const enlarged = targets?.get(group);
+    const box = enlarged ?? group.box;
     const target = this.#markedTarget(drag);
     const from = centreOf(box, view);
-    const to = target === null ? null : centreOf(target.box, view);
+    const to = target === null ? null : centreOf(targets?.get(target) ?? target.box, view);
     return html`<span
         part="ghost"
         aria-hidden="true"
@@ -1093,7 +1152,7 @@ export class WtFloorMap extends LitElement {
           width: px(box.width * view.scale),
           height: px(box.height * view.scale),
         })}
-        >${members.map((m) => this.#renderShape(m, box, view.scale, null))}</span
+        >${group.members.map((m) => this.#renderShape(m, box, view.scale, null, enlarged))}</span
       >${
         to === null
           ? nothing
@@ -1109,8 +1168,9 @@ export class WtFloorMap extends LitElement {
     box: PlanRect,
     scale: number,
     still: boolean | null,
+    target?: PlanRect,
   ): TemplateResult {
-    const p = table.placement;
+    const p = { ...table.placement, ...target };
     const outline = still === null ? null : table.outline;
     return html`<span
       part="shape"

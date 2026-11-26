@@ -38,11 +38,12 @@ afterEach(() => {
   cleanup();
 });
 
-async function map(tables: FloorMapTable[]): Promise<WtFloorMap> {
+async function map(tables: FloorMapTable[], width = 600, height = 300): Promise<WtFloorMap> {
   const el = (await mountInShadowRoot(
-    `<wt-floor-map style="width: 600px; height: 300px"></wt-floor-map>`,
+    `<wt-floor-map style="width: ${width}px; height: ${height}px"></wt-floor-map>`,
   )) as WtFloorMap;
   applyTokens((el.getRootNode() as ShadowRoot).host as HTMLElement);
+  el.style.setProperty("--floor-map-tap-size", "var(--wt-tap-min)");
   el.tables = tables;
   await new Promise(requestAnimationFrame);
   await new Promise(requestAnimationFrame);
@@ -116,6 +117,45 @@ function hold(el: WtFloorMap, x: number, y: number): void {
   down(el, x, y);
   vi.advanceTimersByTime(500);
 }
+
+const stools = [17, 53, 89].map((x, i) => ({
+  ...t(`b${i}`, `B${i}`, { x, y: 59, width: 2, height: 2, shape: "round" }),
+  fixed: true,
+}));
+
+it("keeps crowded stools separate when full tap targets would overlap", async () => {
+  const [a, b, c] = stools;
+  const el = await map([a!, { ...b!, placement: { ...b!.placement, x: 19 } }, c!], 374, 60);
+  const first = await boxIn(el, button(el, "b0"));
+  const next = await boxIn(el, button(el, "b1"));
+  expect(first.width).toBeLessThan(44);
+  expect(first.left + first.width).toBeLessThanOrEqual(next.left);
+});
+
+it("draws a compact stool's copy and link using its visible target", async () => {
+  const el = await map(
+    stools.map((stool) => ({ ...stool, linkId: "party", cue: { icon: null, text: "2 ready" } })),
+    374,
+    60,
+  );
+  const a = await boxIn(el, button(el, "b0"));
+  const c = await boxIn(el, button(el, "b2"));
+  expect(a.width).toBe(44);
+  expect(part(el, "cue")).toBeNull();
+  hold(el, a.left + 22, a.top + 22);
+  move(el, c.left + 22, c.top + 22);
+  await el.updateComplete;
+  expect((await boxIn(el, part(el, "ghost")!)).width).toBe(44);
+  for (const name of ["links", "drag-link"]) {
+    expect(Number(part(el, name)!.querySelector("line")!.getAttribute("x1"))).toBeCloseTo(
+      a.left + 22,
+    );
+  }
+  expect(Number(part(el, "drag-link")!.querySelector("line")!.getAttribute("x2"))).toBeCloseTo(
+    c.left + 22,
+  );
+  up(el, c.left + 22, c.top + 22);
+});
 
 it("marks the table under a dragged table as the drop target, and clears it on release", async () => {
   const el = await map([t1, t2]);
