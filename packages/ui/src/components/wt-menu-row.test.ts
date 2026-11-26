@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanup, host, mount } from "../test-helpers.js";
 import { setHelpMode } from "../help-mode.js";
 import type { WtButton } from "./wt-button.js";
@@ -13,6 +13,58 @@ import "./wt-row-actions.js";
 afterEach(() => {
   cleanup();
   setHelpMode(false);
+});
+
+test("paints a full menu action from the row tokens and puts the value before its chevron", async () => {
+  const row = await mount(
+    '<wt-menu-row action label="Guests" value="3" chevron divider></wt-menu-row>',
+  );
+  host.style.setProperty("--wt-menu-row-height", "60px");
+  host.style.setProperty("--wt-color-border", "rgb(1, 2, 3)");
+  host.style.setProperty("--wt-color-text-muted", "rgb(4, 5, 6)");
+  row.style.fontWeight = "700";
+  await expect.element(page.getByRole("button", { name: "Guests 3" })).toBeVisible();
+  const button = row.shadowRoot!.querySelector("button")!;
+  const value = button.querySelector(".value")!;
+  const icon = button.querySelector("wt-icon")!;
+  expect(row.getBoundingClientRect().height).toBe(60);
+  expect(getComputedStyle(row).borderBottomColor).toBe("rgb(1, 2, 3)");
+  expect(getComputedStyle(row).borderBottomWidth).toBe("1px");
+  expect(getComputedStyle(value).color).toBe("rgb(4, 5, 6)");
+  expect(getComputedStyle(button).fontWeight).toBe("400");
+  expect(icon.getBoundingClientRect().left - value.getBoundingClientRect().right).toBeCloseTo(6);
+  expect(icon.shadowRoot!.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+});
+
+test("lays out a slotted control as a plain row and keeps its native behavior", async () => {
+  const row = await mount(
+    '<wt-menu-row label="Notifications" divider><input type="checkbox" aria-label="Notifications"></wt-menu-row>',
+  );
+  const control = row.querySelector("input")!;
+  const label = row.shadowRoot!.querySelector(".label");
+  expect(label?.textContent).toBe("Notifications");
+  expect(control.getBoundingClientRect().left).toBeGreaterThan(
+    label!.getBoundingClientRect().right,
+  );
+  expect(row.shadowRoot!.querySelector("button")).toBeNull();
+  await userEvent.click(control);
+  expect(control.checked).toBe(true);
+});
+
+test("keeps the help badge beside the new action", async () => {
+  setHelpMode(true);
+  await mount(
+    '<wt-menu-row action label="Guests" help="Change the guest count." help-label="Help: Guests"></wt-menu-row>',
+  );
+  const action = page.getByRole("button", { name: "Guests", exact: true });
+  const help = page.getByRole("button", { name: "Help: Guests" });
+  await expect.element(action).toBeVisible();
+  expect(help.element().getBoundingClientRect().left).toBeGreaterThanOrEqual(
+    action.element().getBoundingClientRect().right,
+  );
+  await help.click();
+  await expect.element(page.getByRole("tooltip")).toBeVisible();
+  await expect.element(help).toHaveAttribute("aria-expanded", "true");
 });
 
 const MENU =

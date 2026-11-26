@@ -6,6 +6,7 @@ export * from "@waitron/ui-core/components/wt-icon";
 export const CHECK_ICON_PATH = "M6.37 12L2.57 8.2L3.52 7.25L6.37 10.1L12.48 3.98L13.43 4.93Z";
 
 export const MENU_ICONS: Record<string, string> = {
+  "chevron-right": "M5.5 2.7 10.8 8l-5.3 5.3-1.1-1.1L8.6 8 4.4 3.8z",
   kebab:
     "M6.7 3a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 8a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0M6.7 13a1.3 1.3 0 1 0 2.6 0a1.3 1.3 0 1 0 -2.6 0",
   // Material Symbols Outlined, Copyright Google, Apache-2.0.

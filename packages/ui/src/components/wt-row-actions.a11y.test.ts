@@ -1,7 +1,7 @@
 import { registerIcons } from "./wt-icon.js";
 import axe from "axe-core";
 import { afterEach, describe, expect, test } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanup, host } from "../test-helpers.js";
 import { expectNoA11yViolations, mountThemed } from "../a11y-helpers.js";
 import "./wt-row-actions.js";
@@ -58,6 +58,24 @@ describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (the
     await userEvent.keyboard("{Escape}");
     expect(el.shadowRoot!.activeElement).toBe(trigger);
   });
+
+  test.each(["Table actions", ""])(
+    "the menu sheet has a dialog name with heading %j",
+    async (heading) => {
+      const el = await mountThemed(
+        `<wt-row-actions label="Table 4" bottom-sheet sheet-variant="menu" sheet-heading="${heading}"><button>Edit</button></wt-row-actions>`,
+        theme,
+      );
+      const trigger = el.shadowRoot!.querySelector("button")!;
+      const dialog = page.getByRole("dialog", { name: heading || "Table 4" });
+      expect(dialog.query()).toBeNull();
+      expect(trigger.getAttribute("aria-haspopup")).toBe("dialog");
+      await expectNoA11yViolations(host);
+      await userEvent.click(trigger);
+      await expect.element(dialog).toBeVisible();
+      await expectNoA11yViolations(host);
+    },
+  );
 
   test("names the hamburger and its open create, edit and delete actions", async () => {
     const el = await mountThemed(

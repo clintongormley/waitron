@@ -3,6 +3,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles, disabledStyles } from "../base-styles.js";
 import { popupIndex, popupPlacement } from "../popup-helpers.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
+import { tabbables } from "../tabbable.js";
 import "./wt-icon.js";
 import type { WtIconSize } from "./wt-icon.js";
 
@@ -115,7 +116,8 @@ export class WtRowActions extends LitElement {
         min-width: 0;
       }
       :host([bottom-sheet]) [popover] {
-        inset: 0;
+        --wt-row-actions-bottom: 0px;
+        inset: 0 0 var(--wt-row-actions-bottom) 0;
         height: auto;
         width: auto;
         max-width: none;
@@ -139,7 +141,9 @@ export class WtRowActions extends LitElement {
       :host([bottom-sheet]) .actions {
         box-sizing: border-box;
         max-height: calc(
-          100dvh - var(--wt-keyboard-top) - var(--bottom-sheet-inset) - var(--wt-tap-min)
+          100dvh - var(--wt-keyboard-top) - var(--bottom-sheet-inset) - var(--wt-tap-min) - var(
+              --wt-row-actions-bottom
+            )
         );
         overflow-y: auto;
         overscroll-behavior: contain;
@@ -151,6 +155,40 @@ export class WtRowActions extends LitElement {
         border-radius: var(--wt-radius-lg) var(--wt-radius-lg) 0 0;
         background: var(--wt-color-surface);
         box-shadow: var(--wt-shadow-2);
+      }
+      :host([bottom-sheet][sheet-variant="menu"]) [popover] {
+        --wt-row-actions-bottom: var(--wt-menu-sheet-bottom-offset);
+      }
+      :host([bottom-sheet][sheet-variant="menu"]) .actions {
+        padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        border: 0;
+        box-shadow: var(--wt-menu-sheet-shadow);
+      }
+      :host([bottom-sheet][sheet-variant="menu"]) .actions::before {
+        content: "";
+        flex: none;
+        align-self: center;
+        width: var(--wt-menu-sheet-handle-width);
+        height: var(--wt-menu-sheet-handle-height);
+        margin-block: var(--wt-space-2) calc(var(--wt-space-1) / 2);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-surface-sunken);
+      }
+      :host([bottom-sheet][sheet-variant="menu"]) h2,
+      :host([bottom-sheet][sheet-variant="menu"]) ::slotted([data-sheet-heading]) {
+        margin: 0;
+        padding-block: var(--wt-menu-sheet-heading-padding-top) var(--wt-space-1);
+        padding-inline: var(--wt-menu-row-padding-start);
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+        font-weight: var(--wt-font-weight-bold);
+        letter-spacing: var(--wt-letter-spacing-caps);
+        text-transform: uppercase;
+      }
+      @media (forced-colors: active) {
+        :host([bottom-sheet][sheet-variant="menu"]) .actions {
+          border-block-start: var(--wt-field-line-width) solid CanvasText;
+        }
       }
       @media (prefers-reduced-motion: no-preference) {
         :host([bottom-sheet]) [popover]:popover-open .actions {
@@ -217,11 +255,18 @@ export class WtRowActions extends LitElement {
    * the trigger, where a second tap would land on an action. */
   @property({ type: Boolean, attribute: "opens-below" }) opensBelow = false;
   @property({ type: Boolean, attribute: "bottom-sheet", reflect: true }) bottomSheet = false;
+  @property({ attribute: "sheet-variant", reflect: true }) sheetVariant: "menu" | "" = "";
+  @property({ attribute: "sheet-heading" }) sheetHeading = "";
   @state() private expanded = false;
   @state() private isMenu = false;
   @state() private directDelete: HTMLElement | null = null;
   @query("button") private trigger!: HTMLButtonElement;
   @query("[popover]") private popup!: HTMLElement;
+  @query(".actions") private actions!: HTMLElement;
+
+  private get menuSheet(): boolean {
+    return this.bottomSheet && this.sheetVariant === "menu";
+  }
 
   // Observes the popup only while it is open.
   readonly #resize = new ResizeObserver(() => this.positionPopup());
@@ -279,6 +324,13 @@ export class WtRowActions extends LitElement {
     this.positionPopup();
     this.#resize.observe(popup);
     window.addEventListener("resize", this.onWindowResize);
+    if (this.menuSheet) {
+      const first = this.sheetControls().find(
+        (control) => control.getAttribute("aria-disabled") !== "true",
+      );
+      (first ?? this.actions).focus();
+      return;
+    }
     const options = this.menuRows();
     (options.find((row) => row.getAttribute("aria-checked") === "true") ?? options[0])?.focus();
   }
@@ -316,7 +368,7 @@ export class WtRowActions extends LitElement {
     const style = getComputedStyle(this.popup);
     const border = this.popup.offsetHeight - this.popup.clientHeight;
     const height =
-      this.popup.querySelector(".actions")!.getBoundingClientRect().height +
+      this.actions.getBoundingClientRect().height +
       parseFloat(style.paddingTop) +
       parseFloat(style.paddingBottom) +
       border;
@@ -361,7 +413,7 @@ export class WtRowActions extends LitElement {
 
   /** The menu's drawn actions, slotted directly or inside a slotted group. */
   private rows(): Element[] {
-    const selector = "button, a[href], wt-button";
+    const selector = "button, a[href], wt-button, wt-menu-row[action]";
     return this.popup
       .querySelector("slot")!
       .assignedElements({ flatten: true })
@@ -423,8 +475,7 @@ export class WtRowActions extends LitElement {
   private onPopupClick(event: MouseEvent): void {
     if (!this.bottomSheet || event.target !== this.popup) return;
     event.stopPropagation();
-    this.hide();
-    this.trigger.focus();
+    this.hide({ restoreFocus: true });
   }
 
   private onAction(event: MouseEvent): void {
@@ -466,11 +517,24 @@ export class WtRowActions extends LitElement {
         : null;
   }
 
+  private sheetControls(): HTMLElement[] {
+    return [...tabbables(this.actions, undefined, true)];
+  }
+
   private onKeydown(event: KeyboardEvent): void {
     if (event.defaultPrevented || !this.popup.matches(":popover-open")) return;
     if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
+      this.hide({ restoreFocus: true });
+      return;
+    }
+    if (this.menuSheet) {
+      if (event.key !== "Tab") return;
+      const controls = this.sheetControls();
+      const current = controls.indexOf(event.composedPath()[0] as HTMLElement);
+      if (current >= 0 && controls[current + (event.shiftKey ? -1 : 1)]) return;
+      event.preventDefault();
       this.hide({ restoreFocus: true });
       return;
     }
@@ -496,7 +560,7 @@ export class WtRowActions extends LitElement {
         part="trigger"
         aria-label=${this.directDelete?.getAttribute("aria-label") ?? this.label}
         aria-expanded=${this.directDelete ? nothing : this.expanded}
-        aria-haspopup=${!this.directDelete && this.isMenu ? "menu" : nothing}
+        aria-haspopup=${this.directDelete ? nothing : this.menuSheet ? "dialog" : this.isMenu ? "menu" : nothing}
         popovertarget=${this.directDelete ? nothing : "actions"}
         @click=${this.onTriggerClick}
         @keydown=${this.onKeydown}
@@ -517,9 +581,14 @@ export class WtRowActions extends LitElement {
         <div
           class="actions"
           part=${this.bottomSheet ? "sheet" : nothing}
+          role=${this.menuSheet ? "dialog" : nothing}
+          tabindex=${this.menuSheet ? -1 : nothing}
+          aria-labelledby=${this.menuSheet && this.sheetHeading ? "sheet-heading" : nothing}
+          aria-label=${this.menuSheet && !this.sheetHeading ? this.label : nothing}
           @click=${this.judgeAction}
           @auxclick=${this.judgeAuxclick}
         >
+          ${this.menuSheet && this.sheetHeading ? html`<h2 id="sheet-heading">${this.sheetHeading}</h2>` : nothing}
           <slot @slotchange=${this.onSlotChange} @click=${this.onAction}></slot>
         </div>
       </div>

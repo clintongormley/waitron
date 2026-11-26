@@ -184,6 +184,21 @@ const panel = (theme: "light" | "dark") => `
     </wt-card>
     <wt-floor-plan-canvas style="height: 240px; margin-top: 16px"></wt-floor-plan-canvas>
     <wt-floor-map style="height: 240px; margin-top: 16px"></wt-floor-map>
+    <div class="row">
+      <wt-row-actions label="Table 4" bottom-sheet sheet-variant="menu" sheet-heading="Table 4">
+        <span slot="trigger">Table 4</span>
+        <wt-menu-row action label="Allergies" value="Nuts" chevron divider></wt-menu-row>
+        <wt-menu-row action label="Guests" value="3" chevron divider></wt-menu-row>
+        <wt-menu-row action label="Name the party" value="Garcia" chevron></wt-menu-row>
+      </wt-row-actions>
+      <wt-row-actions label="Till menu" bottom-sheet sheet-variant="menu" style="--wt-menu-sheet-bottom-offset: 80px; --wt-menu-row-height: 46px">
+        <span slot="trigger">Till menu</span>
+        <div data-sheet-heading>Tonight in the dining room</div>
+        <wt-menu-row action label="Add a spare table" value="3" chevron divider></wt-menu-row>
+        <wt-menu-row action label="Taken off" value="1" chevron divider></wt-menu-row>
+        <wt-menu-row action label="Back to the Dinner plan" chevron></wt-menu-row>
+      </wt-row-actions>
+    </div>
     <wt-sheet heading="Tables" style="margin-top: 16px">
       <p>Table 1 · Table 2 · Table 3</p>
     </wt-sheet>

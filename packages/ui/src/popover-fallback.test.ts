@@ -116,33 +116,40 @@ for (const width of [390, 1280]) {
   );
 }
 
-test("the fallback bottom sheet dims the page and lets a choice receive the tap", async () => {
-  await page.viewport(390, 360);
-  const el = await mount(
-    '<wt-row-actions label="Actions" bottom-sheet><button>Edit</button></wt-row-actions>',
-  );
-  el.style.setProperty("--wt-color-scrim", "rgb(9, 10, 11)");
-  const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
-  const choice = el.querySelector("button")!;
-  const picked = vi.fn();
-  choice.addEventListener("click", picked);
-  const trigger = el.shadowRoot!.querySelector("button")!;
-  const outside = document.createElement("button");
-  outside.textContent = "Other action";
-  outside.style.cssText = "position: fixed; top: 0; right: 0;";
-  const otherAction = vi.fn();
-  outside.addEventListener("click", otherAction);
-  host.append(outside);
-  await userEvent.click(trigger);
-  await userEvent.click(outside, { force: true });
-  expect(popup.matches(":popover-open")).toBe(false);
-  expect(otherAction).not.toHaveBeenCalled();
-  await userEvent.click(trigger);
-  expect(getComputedStyle(popup).backgroundColor).toBe("rgb(9, 10, 11)");
-  await userEvent.click(choice);
-  expect(picked).toHaveBeenCalledOnce();
-  expect(popup.matches(":popover-open")).toBe(false);
-});
+test.each(["", 'sheet-variant="menu"'])(
+  "the fallback bottom sheet dims the page and lets a choice receive the tap (%s)",
+  async (variant) => {
+    await page.viewport(390, 360);
+    const el = await mount(
+      `<wt-row-actions label="Actions" bottom-sheet ${variant}><button>Edit</button></wt-row-actions>`,
+    );
+    el.style.setProperty("--wt-color-scrim", "rgb(9, 10, 11)");
+    const popup = el.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+    const choice = el.querySelector("button")!;
+    const picked = vi.fn();
+    choice.addEventListener("click", picked);
+    const trigger = el.shadowRoot!.querySelector("button")!;
+    const outside = document.createElement("button");
+    outside.textContent = "Other action";
+    outside.style.cssText = "position: fixed; top: 0; right: 0;";
+    const otherAction = vi.fn();
+    outside.addEventListener("click", otherAction);
+    host.append(outside);
+    await userEvent.click(trigger);
+    await userEvent.click(outside, { force: true });
+    expect(popup.matches(":popover-open")).toBe(false);
+    expect(otherAction).not.toHaveBeenCalled();
+    await userEvent.click(trigger);
+    expect(getComputedStyle(popup).backgroundColor).toBe("rgb(9, 10, 11)");
+    if (variant) {
+      expect(document.activeElement).toBe(choice);
+      expect(popup.querySelector('[role="dialog"]')?.getAttribute("aria-label")).toBe("Actions");
+    }
+    await userEvent.click(choice);
+    expect(picked).toHaveBeenCalledOnce();
+    expect(popup.matches(":popover-open")).toBe(false);
+  },
+);
 
 test("a modal's combobox is hittable and Escape closes only the list, then selection works", async () => {
   const dialog = (await mount(
