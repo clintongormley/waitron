@@ -48,7 +48,7 @@ afterEach(async () => {
 });
 
 const bundle: ConfigurationBundle = {
-  version: 61,
+  version: 62,
   contentLanguages: null,
   holidayArea: null,
   settings: {},
@@ -204,6 +204,7 @@ describe("staged configuration import", () => {
     ["export before the payments settings switches", { version: 56 }],
     ["export before the full invoice corrective series", { version: 57 }],
     ["export with per-device home settings", { version: 59 }],
+    ["export before other card machines", { version: 61 }],
     ["future version", { version: bundle.version + 1 }],
     ["format-9 export", { version: 9, venue: bundle.venue }],
   ])("refuses %s through setup before replacing staged files", async (_label, change) => {

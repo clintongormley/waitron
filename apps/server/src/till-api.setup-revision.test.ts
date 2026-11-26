@@ -231,7 +231,7 @@ describe("the till's setup revision", () => {
     expect(before.body.tipsEnabled).toBe(false);
     await withTransaction(suite.db, (tx) =>
       saveSettings(tx, PAYMENTS_SETTINGS, {
-        doc: { providers: {}, tipsEnabled: true, testProviders: false },
+        doc: { providers: {}, tipsEnabled: true, testProviders: false, otherCardMachines: [] },
         expectedRevision: 0,
         personId: null,
       }),

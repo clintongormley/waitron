@@ -7,10 +7,14 @@ import {
   PAYMENTS_SETTINGS,
   cardProviderById,
   cardReaders,
+  otherCardMachineFault,
+  otherCardMachineNameKey,
+  type OtherCardMachine,
 } from "@waitron/payments";
 import { type Logger, requireManagementSession, readJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { and, eq, isNull } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import type { Hono } from "hono";
 import type { PaymentsApiDeps } from "./payments-api-deps.js";
 import { run, runConnect, runPathProvider } from "./payments-api-errors.js";
@@ -22,6 +26,34 @@ function screenStringMap(body: Record<string, unknown>): Record<string, string> 
     out[field] = value;
   }
   return out;
+}
+
+function requireRevision(revision: unknown): number {
+  if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0)
+    throw new AppError("management.request_invalid", { field: "revision" });
+  return revision;
+}
+
+function otherCardMachinesFrom(value: unknown, storedIds: ReadonlySet<string>): OtherCardMachine[] {
+  if (!Array.isArray(value))
+    throw new AppError("management.request_invalid", { field: "otherCardMachines" });
+  const names = new Set<string>();
+  return value.map((entry: unknown, index) => {
+    const refuse = (key?: string) =>
+      new AppError("management.request_invalid", {
+        field: `otherCardMachines.${index}${key === undefined ? "" : `.${key}`}`,
+      });
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) throw refuse();
+    const row = entry as Record<string, unknown>;
+    const id = row.id ?? randomUUID();
+    if (typeof id !== "string" || (row.id !== undefined && !storedIds.has(id))) throw refuse("id");
+    const fault = otherCardMachineFault({ ...row, id });
+    if (fault !== null) throw refuse(fault);
+    const name = (row.name as string).trim();
+    if (names.has(otherCardMachineNameKey(name))) throw refuse("name");
+    names.add(otherCardMachineNameKey(name));
+    return { id, name, paysInto: row.paysInto as OtherCardMachine["paysInto"] };
+  });
 }
 
 export function mountPaymentsProviderSettingsRoutes(
@@ -58,13 +90,12 @@ export function mountPaymentsProviderSettingsRoutes(
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
-      const { tipsEnabled, testProviders, revision } = body;
+      const { tipsEnabled, testProviders } = body;
       if (typeof tipsEnabled !== "boolean")
         throw new AppError("management.request_invalid", { field: "tipsEnabled" });
       if (typeof testProviders !== "boolean")
         throw new AppError("management.request_invalid", { field: "testProviders" });
-      if (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0)
-        throw new AppError("management.request_invalid", { field: "revision" });
+      const revision = requireRevision(body.revision);
       const { saved, practiceChanged } = await gated(sessionId, async (tx, personId) => {
         if (testProviders && !testProvidersAvailable)
           throw new AppError("payment.test_providers_prepare_only", {});
@@ -78,6 +109,40 @@ export function mountPaymentsProviderSettingsRoutes(
       });
       if (practiceChanged && testProvidersAvailable) await deps.cardSimulator?.reapply();
       return c.json(paymentSettingsAnswer(saved));
+    }),
+  );
+
+  const otherCardMachinesPath = "/management-api/payments/other-card-machines";
+  const machinesAnswer = ({ doc, revision }: Awaited<ReturnType<typeof readPaymentsSettings>>) => ({
+    machines: doc.otherCardMachines,
+    revision,
+  });
+
+  app.get(otherCardMachinesPath, (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      return c.json(machinesAnswer(await gated(sessionId, readPaymentsSettings)));
+    }),
+  );
+
+  app.put(otherCardMachinesPath, (c) =>
+    run(c, log, async () => {
+      const sessionId = requireManagementSession(c);
+      const body = await readJsonBody<Record<string, unknown>>(c);
+      const revision = requireRevision(body.revision);
+      const saved = await gated(sessionId, async (tx, personId) => {
+        const { doc } = await readPaymentsSettings(tx);
+        const otherCardMachines = otherCardMachinesFrom(
+          body.machines,
+          new Set(doc.otherCardMachines.map((machine) => machine.id)),
+        );
+        return saveSettings(tx, PAYMENTS_SETTINGS, {
+          doc: { ...doc, otherCardMachines },
+          expectedRevision: revision,
+          personId,
+        });
+      });
+      return c.json(machinesAnswer(saved));
     }),
   );
 

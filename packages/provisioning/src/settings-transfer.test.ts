@@ -242,21 +242,32 @@ it("refuses a menu colour no save would store", () => {
   );
 });
 
-it("carries tips and keeps the destination's provider and practice choices", async () => {
+it("carries tips and other card machines and keeps the destination's provider and practice choices", async () => {
+  const otherCardMachines = [{ id: "m1", name: "Bar terminal", paysInto: "connected_account" }];
   await withTransaction(suite.db, (tx) =>
     saveSettings(tx, payments, {
-      doc: { providers: { stripe: false }, tipsEnabled: true, testProviders: true },
+      doc: {
+        providers: { stripe: false },
+        tipsEnabled: true,
+        testProviders: true,
+        otherCardMachines,
+      },
       expectedRevision: 0,
       personId: null,
     }),
   );
   const exported = await exportSettingsDocuments(suite.db, ALL_MODULES);
   expect(exported).toEqual({
-    payments: { version: 1, doc: { tipsEnabled: true } },
+    payments: { version: 1, doc: { tipsEnabled: true, otherCardMachines } },
   });
   await withTransaction(suite.db, async (tx) => {
     await saveSettings(tx, payments, {
-      doc: { providers: { sumup: false }, tipsEnabled: false, testProviders: true },
+      doc: {
+        providers: { sumup: false },
+        tipsEnabled: false,
+        testProviders: true,
+        otherCardMachines: [{ id: "m9", name: "Old", paysInto: "other" }],
+      },
       expectedRevision: 1,
       personId: null,
     });
@@ -266,12 +277,14 @@ it("carries tips and keeps the destination's provider and practice choices", asy
     providers: { sumup: false },
     tipsEnabled: true,
     testProviders: true,
+    otherCardMachines,
   });
 });
 
 it.each([
   ["providers", { stripe: false }],
   ["testProviders", true],
+  ["otherCardMachines", [{ id: "m1", name: " ", paysInto: "other" }]],
 ])("refuses %s in an imported payment document", (field, value) => {
   expect(() =>
     checkImportedSettings(
