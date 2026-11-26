@@ -1892,6 +1892,12 @@ pull request that left it:
   person lost `system.manage`, is counted received though no link to it was offered. So is an older
   pack whose receipt lands while a newer pack's link is on offer.
 
+## A1612. Redesign the restore page's review step ("Recovery allocation") so a person can understand it
+
+- **Asked for (owner, 2026-11-26 18:37, shown A1323 PR 3c's pictures at tablet width):** "that screen is terrible, very hard to understand. but i don't think it is the point of this pr. land it, and then put a redesign on the backlog".
+- **The step today** (the setup app's restore page, after Review; words in `apps/setup/src/i18n/strings/restore.ts`, `restore.allocation_*`): the heading "Recovery allocation" and "Use the current outside recovery record. An old pack cannot replace it."; a "Recovery record" box to paste the record from the custodian or phone; the master key field with Scan the recovery pack and Choose the recovery pack PDF; two boxes to tick ("The old machine is offline and no other recovery is running." and "I have kept this request with the outside recovery records."); Back and Restore backup.
+- **Next:** a design session with the owner, pictures first. Nothing is designed yet. A1323's PRs 4b and 4e change the same page, so design it with them in view.
+
 ## A1323. One master key for the venue
 
 - **Asked for (owner, 2026-11-04):** "ideally we'd just have one master key which unlocks everything".
