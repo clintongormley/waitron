@@ -1,9 +1,9 @@
 # A1418 part 1: the stop mark, the start-up bucket check and the alerts — Implementation Plan
 
-> **26 November 2026:** The [Lane H slice 2 proposal](2026-11-26-h-a1418-restore-bucket-term.md)
+> **26 November 2026:** The [Lane H slice 2 plan](2026-11-26-h-a1418-restore-bucket-term.md)
 > uses Task 6's bucket term floor. For this slice it preserves the existing first-start failure
 > path, including for an unusable term. The draft's hard stop and wait for an unreadable bucket
-> require a separate decision. The proposal is awaiting watcher clearance.
+> require a separate decision.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. Implementers are dispatched as `subagent_type: "implementer"`.
 

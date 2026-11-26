@@ -2018,8 +2018,8 @@ declare module "@waitron/shared" {
      * failed, so the box sells but does not copy to the bucket. Built as data by
      * `firstStartAlertSource`, never thrown. */
     "restore.first_start_failed": Record<string, never>;
-    /** A restore could not read the bucket's term within its deadline, or opening or reading
-     * the bucket failed without a code of its own. Logged, never shown. */
+    /** A restore could not read the bucket's term within its deadline, or reading the settings,
+     * opening the bucket or reading it failed without a code of its own. Logged, never shown. */
     "restore.pointer_unreadable": Record<string, never>;
     /** A bucket term leaves too little room to advance the chart. Logged, never shown. */
     "restore.bucket_term_invalid": Record<string, never>;

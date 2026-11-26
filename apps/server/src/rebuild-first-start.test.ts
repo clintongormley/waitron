@@ -559,7 +559,7 @@ describe("readBucketTerm", () => {
     expect(openStore).not.toHaveBeenCalled();
   });
 
-  it("answers the pointer's term, and null when the bucket holds no pointer", async () => {
+  it("uses the pointer's term above older generations and returns null when the bucket is empty", async () => {
     await storeSettings(SETTINGS);
     const store = createMemoryObjectStore();
     expect(await readBucketTerm(suite.db, RING, { openStore: () => store })).toBeNull();
@@ -579,6 +579,8 @@ describe("readBucketTerm", () => {
       ),
       null,
     );
+    expect(await readBucketTerm(suite.db, RING, { openStore: () => store })).toBe(2);
+    await claimGeneration(store, LOCATION, generationName(1, NODE, NOW));
     expect(await readBucketTerm(suite.db, RING, { openStore: () => store })).toBe(2);
   });
 
@@ -611,13 +613,14 @@ describe("readBucketTerm", () => {
     expect((await readNodeMembership(suite.db))!.body.term).toBe(8);
   });
 
-  it("finds an opened generation with no pointer and ignores keys outside generation folders", async () => {
+  it("uses the highest generation with no pointer and ignores keys outside generation folders", async () => {
     await storeSettings(SETTINGS);
     const store = createMemoryObjectStore();
-    await store.put(generationName(90, NODE, NOW), new Uint8Array());
+    await store.put(`${generationName(90, NODE, NOW)}Z`, new Uint8Array());
     await store.put(`gen-99-${NODE}-20261131T101112Z/opened.json`, new Uint8Array());
+    await claimGeneration(store, LOCATION, generationName(10, NODE, NOW));
     await claimGeneration(store, LOCATION, generationName(7, NODE, NOW));
-    expect(await readBucketTerm(suite.db, RING, { openStore: () => store })).toBe(7);
+    expect(await readBucketTerm(suite.db, RING, { openStore: () => store })).toBe(10);
   });
 
   it("cancels a generation listing that does not answer before the deadline", async () => {
