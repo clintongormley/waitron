@@ -15,7 +15,7 @@ import { invalid } from "./bill-allocation.js";
 import { parseGiveBackRequest, type GiveBackPart, type GiveBackRequest } from "./give-back-plan.js";
 import { reasonOf, type GiveBackDeps, type WaitReason } from "./give-back-read.js";
 import { perDatabase } from "./live-in-process.js";
-import { AS_ADMITTED, readCorrectionLegs } from "./invoice-correction-legs.js";
+import { readCorrectionLegs } from "./invoice-correction-legs.js";
 import {
   openInvoiceCorrection,
   previewInvoiceCorrection,
@@ -304,15 +304,7 @@ export async function openCorrectionPart(
 ) {
   const lineIds = part.kind === "correction" ? part.lineIds : [];
   const selection = { gross: part.amount, ...(lineIds.length === 0 ? {} : { lineIds }) };
-  const split = await previewInvoiceCorrection(
-    tx,
-    deps.backend,
-    cfg,
-    reading,
-    saleId,
-    selection,
-    AS_ADMITTED,
-  );
+  const split = await previewInvoiceCorrection(tx, deps.backend, cfg, reading, saleId, selection);
   return openInvoiceCorrection(
     tx,
     deps,
@@ -327,7 +319,6 @@ export async function openCorrectionPart(
       expectedSplit: split.vatBreakdown.map(({ rate, base, tax }) => ({ rate, base, tax })),
     },
     actor,
-    AS_ADMITTED,
   );
 }
 

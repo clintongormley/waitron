@@ -34,7 +34,6 @@ import { openInvoiceCorrection } from "./invoice-corrections.js";
 import {
   openedCorrection,
   parseInvoiceCorrection,
-  previewCorrection,
   previewedSplit,
 } from "./testing/invoice-correction.js";
 import { fingerprint } from "./parties.js";
@@ -1016,13 +1015,10 @@ describe("Refund a payment naming no cancels", () => {
     await refusedNeedsCorrection(paid, refundBody(paid, "0.01"));
   });
 
-  it("is refused on an invoice naming a customer, as its corrective's money, though the receipts-only preview still refuses the invoice", async () => {
+  it("is refused on an invoice naming a customer, as its corrective's money", async () => {
     const b = await bill([{ name: "Burger" }, { name: "Steak" }]);
     await chooseCustomer(b);
     const paid = await pay(b, "37.00");
-    expect(await previewCorrection(venue, paid.saleId, { gross: "1.00" })).toEqual({
-      json: { code: "sale.correction_not_admitted", params: { reason: "not_simplified" } },
-    });
     await refusedNeedsCorrection(paid, refundBody(paid, "10.00"));
   });
 

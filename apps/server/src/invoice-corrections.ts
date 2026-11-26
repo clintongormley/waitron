@@ -7,7 +7,6 @@ import {
   recordCorrection,
   type CorrectableLine,
   type CorrectionPreview,
-  type FullInvoiceCorrection,
   type RecordCorrectionInput,
 } from "@waitron/core";
 import {
@@ -125,7 +124,6 @@ async function checkCorrectionOpenable(
   reading: TrustedReading,
   saleId: SaleId,
   selection: { gross: Decimal; lineIds?: readonly string[] },
-  kind: FullInvoiceCorrection,
 ): Promise<CorrectionPreview & { moneyRefundable: Decimal }> {
   const [settled] = await tx
     .select({ id: saleSettlements.id })
@@ -142,7 +140,14 @@ async function checkCorrectionOpenable(
       refundId: pending.pendingRefundId!,
     });
   const moneyRefundable = appliedRemainingOf(refundable);
-  const preview = await previewCorrectionAmounts(tx, backend, saleId, cfg.nodeId, selection, kind);
+  const preview = await previewCorrectionAmounts(
+    tx,
+    backend,
+    saleId,
+    cfg.nodeId,
+    selection,
+    AS_ADMITTED,
+  );
   if (compareDecimal(moneyRefundable, preview.gross) < 0)
     throw new AppError("invoice_correction.money_short", {
       saleId,
@@ -266,20 +271,11 @@ export async function previewInvoiceCorrection(
   reading: TrustedReading,
   saleId: SaleId,
   selection: { gross: string; lineIds?: readonly string[] },
-  kind: FullInvoiceCorrection = {},
 ): Promise<CorrectionPreview & { moneyRefundable: Decimal }> {
-  return checkCorrectionOpenable(
-    tx,
-    backend,
-    cfg,
-    reading,
-    saleId,
-    {
-      gross: moneyOf(selection.gross, "gross"),
-      ...(selection.lineIds === undefined ? {} : { lineIds: selection.lineIds }),
-    },
-    kind,
-  );
+  return checkCorrectionOpenable(tx, backend, cfg, reading, saleId, {
+    gross: moneyOf(selection.gross, "gross"),
+    ...(selection.lineIds === undefined ? {} : { lineIds: selection.lineIds }),
+  });
 }
 
 /**
@@ -294,7 +290,6 @@ export async function openInvoiceCorrection(
   saleId: SaleId,
   ask: InvoiceCorrectionAsk,
   actor: { personId: string; authorization: Authorization },
-  kind: FullInvoiceCorrection = {},
 ): Promise<{ correction: InvoiceCorrectionView; replayed: boolean }> {
   const print = fingerprint({
     gross: ask.gross,
@@ -324,15 +319,10 @@ export async function openInvoiceCorrection(
   if (reason.noteRequired && ask.note === null) throw new AppError("adjustment.note_required", {});
 
   const reading = deps.clock.now();
-  const preview = await checkCorrectionOpenable(
-    tx,
-    deps.backend,
-    cfg,
-    reading,
-    saleId,
-    { gross: ask.gross, ...(ask.lineIds === undefined ? {} : { lineIds: ask.lineIds }) },
-    kind,
-  );
+  const preview = await checkCorrectionOpenable(tx, deps.backend, cfg, reading, saleId, {
+    gross: ask.gross,
+    ...(ask.lineIds === undefined ? {} : { lineIds: ask.lineIds }),
+  });
   await refuseChangedSplit(tx, saleId, preview, ask.expectedSplit, preview.moneyRefundable);
 
   const [row] = await tx
