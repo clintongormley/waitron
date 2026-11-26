@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { TillApp } from "./till-app.js";
 import type { TillCounterScreen } from "./screens/till-counter-screen.js";
-import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
+import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
+import { EACH_UNIT_ID } from "@waitron/menu/src/unit-validation.js";
+import type { TillProduct, ZoneOffers } from "./api/menu-api.js";
+import { quantityLabel } from "./state/order-line.js";
 import { setLocale, t } from "./i18n/t.js";
 import {
   balanceOf,
@@ -17,6 +20,7 @@ import {
   takenOf,
   invoiceOf,
   inDialog,
+  offers,
   till,
   type,
 } from "../test/bill-pay-app.js";
@@ -885,3 +889,357 @@ it("a Counter order sent after another order was parked lists its own dishes in 
 
   expect(dialog(el)!.lines.map((row) => row.lineId)).toEqual(["sent-dish"]);
 });
+
+/** A Counter order sent to the kitchen in a zone that pays after sending, with no receipt, opened
+ * from Waiting with Lunch and Beer on it; Waiting answers what the server lists after `paid`. */
+async function sentWaitingOrder(
+  paid: () => "no" | "items" | "whole",
+  overrides: Record<string, unknown> = {},
+) {
+  const id = "placed-order";
+  const lunch = line({ id: "dish-1", lineNo: 1, name: "Lunch", unitPriceGross: "30.00" });
+  const beer = line({ id: "dish-2", lineNo: 2, name: "Beer", unitPriceGross: "5.00" });
+  const row = (over: Record<string, unknown>) => ({
+    id,
+    items: [],
+    orderNumber: 7,
+    label: null,
+    status: "placed",
+    total: "35.00",
+    openedAt: "2026-11-10T10:00:00Z",
+    settledAt: null,
+    collectedAt: null,
+    serviceMode: "ticket_then_pay",
+    counts: { ordered: 2, unsent: 0, held: 0, waiting: 2, ready: 0 },
+    canHandOver: false,
+    movableDishes: [],
+    ...over,
+  });
+  const waiting = () => {
+    const now = paid();
+    if (now === "whole") return [row({ status: "settled", settledAt: "2026-11-10T10:05:00Z" })];
+    if (now === "no") return [row({})];
+    return [
+      row({ total: "5.00", counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 } }),
+      row({
+        id: "wo-paid",
+        orderNumber: 8,
+        formerOrderNumbers: [7],
+        status: "settled",
+        total: "30.00",
+        settledAt: "2026-11-10T10:05:00Z",
+        counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 },
+      }),
+    ];
+  };
+  const api = stubApi({
+    getFindBill: vi.fn(async () => ({
+      workingOrderId: id,
+      partyId: null,
+      edit: { editorVersion: 2, draftId: null, draftRevision: null, billId: id },
+    })),
+    listCounterWaiting: vi.fn(async () => waiting()),
+    retrievePlacedOrder: vi.fn(async () => ({
+      zoneId: null,
+      serviceMode: "ticket_then_pay",
+      id,
+      orderNumber: 7,
+      revision: paid() === "items" ? 1 : 0,
+      label: null,
+      expectedEdit: null,
+      kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+      lines: (paid() === "items"
+        ? []
+        : [{ workingOrderLineId: "dish-1", menuItemId: "offer-meal", quantity: "1.000", product }]
+      ).concat([
+        { workingOrderLineId: "dish-2", menuItemId: "offer-meal", quantity: "1.000", product },
+      ]),
+    })),
+    getTabLines: vi.fn(async () => ({
+      revision: paid() === "items" ? 1 : 0,
+      lines: paid() === "items" ? [beer] : [lunch, beer],
+    })),
+    getBillBalance: vi.fn(async () =>
+      paid() === "items"
+        ? balanceOf({ workingOrderId: id, status: "placed", total: "5.00", outstanding: "5.00" })
+        : balanceOf({ workingOrderId: id, status: "placed", total: "35.00", outstanding: "35.00" }),
+    ),
+    ...overrides,
+  });
+  const { el } = await mountWidget<TillApp>("till-app", { api });
+  await flush(el);
+  emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+  await flush(el);
+  let counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  emit(counter, "pay-waiting-order", { id });
+  await flush(el, 6);
+  counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+  const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
+  await tender.updateComplete;
+  tender.shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
+  await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+  await flush(el);
+  return { el, api };
+}
+
+const waitingShown = (el: TillApp) =>
+  el
+    .shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!
+    .counterWaiting.map((row) => [row.orderNumber, row.status, row.total]);
+
+it("Items on a sent Counter order with no receipt says the dishes move to a bill of their own, not that a receipt is cancelled", async () => {
+  const { el } = await sentWaitingOrder(() => "no", {
+    previewItemPayment: vi
+      .fn()
+      .mockResolvedValue({ total: "30.00", applied: "30.00", tip: "0.00", change: "20.00" }),
+  });
+  await press(el, 'input[name="way"][value="items"]');
+  await press(el, 'input[name="line"][value="1"]');
+  await type(el, "tendered", "50");
+  await press(el, "[data-pay-continue]");
+  await flush(el);
+
+  expect(inDialog(el, "[data-pay-own-bill]")?.textContent?.trim()).toBe(
+    t("bill_pay.items_own_bill"),
+  );
+});
+
+it("paying Items on a sent Counter order lists Waiting again, with what is left and the paid part", async () => {
+  let paid: "no" | "items" = "no";
+  const id = "placed-order";
+  const { el, api } = await sentWaitingOrder(() => paid, {
+    previewItemPayment: vi
+      .fn()
+      .mockResolvedValue({ total: "30.00", applied: "30.00", tip: "0.00", change: "20.00" }),
+    payForItems: vi.fn(async () => {
+      paid = "items";
+      return {
+        billId: "wo-paid",
+        payment: takenOf(
+          { applied: "30.00", tendered: "50.00", change: "20.00" },
+          {
+            workingOrderId: "wo-paid",
+            status: "settled",
+            total: "30.00",
+            received: "30.00",
+            outstanding: "0.00",
+          },
+          invoiceOf("30.00"),
+        ),
+        sourceBalance: balanceOf({
+          workingOrderId: id,
+          status: "placed",
+          total: "5.00",
+          outstanding: "5.00",
+        }),
+      };
+    }),
+  });
+  expect(waitingShown(el)).toEqual([[7, "placed", "35.00"]]);
+  await press(el, 'input[name="way"][value="items"]');
+  await press(el, 'input[name="line"][value="1"]');
+  await type(el, "tendered", "50");
+  await press(el, "[data-pay-continue]");
+  await press(el, "[data-pay-confirm]");
+  await flush(el, 8);
+
+  expect(api.payForItems).toHaveBeenCalledOnce();
+  expect(waitingShown(el)).toEqual([
+    [7, "placed", "5.00"],
+    [8, "settled", "30.00"],
+  ]);
+});
+
+it("paying the whole of a sent Counter order from its Pay window lists Waiting again, settled", async () => {
+  let paid: "no" | "whole" = "no";
+  const id = "placed-order";
+  const { el, api } = await sentWaitingOrder(() => paid, {
+    previewBillPayment: vi.fn().mockResolvedValue(cash("35.00", "15.00")),
+    takeBillPayment: vi.fn(async () => {
+      paid = "whole";
+      return takenOf(
+        { applied: "35.00", tendered: "50.00", change: "15.00" },
+        {
+          workingOrderId: id,
+          status: "settled",
+          total: "35.00",
+          received: "35.00",
+          outstanding: "0.00",
+        },
+        invoiceOf("35.00"),
+      );
+    }),
+  });
+  expect(waitingShown(el)).toEqual([[7, "placed", "35.00"]]);
+  await type(el, "tendered", "50");
+  await press(el, "[data-pay-continue]");
+  await press(el, "[data-pay-confirm]");
+  await flush(el, 8);
+
+  expect(api.takeBillPayment).toHaveBeenCalledOnce();
+  expect(waitingShown(el)).toEqual([[7, "settled", "35.00"]]);
+});
+
+it.each([
+  ["sent to the kitchen first", true],
+  ["never saved", false],
+])(
+  "an English till's Counter order %s keeps its dishes' English unit words after Pay reads it again",
+  async (_, sendFirst) => {
+    const each = {
+      id: EACH_UNIT_ID,
+      staffName: "Each",
+      staffAbbreviation: "ea",
+      name: { en: "each", es: "unidad" },
+      abbreviation: { en: "ea", es: "ud" },
+      precision: 0,
+      hardwareUnit: null,
+    };
+    const live: TillProduct = { ...product, unit: each };
+    // The server keeps a line's unit words in the venue's default language only.
+    const stored = {
+      ...product,
+      unit: {
+        ...each,
+        staffName: "unidad",
+        staffAbbreviation: "ud",
+        name: { es: "unidad" },
+        abbreviation: { es: "ud" },
+      },
+    };
+    let id = "";
+    let sent = false;
+    const storedOrder = () => ({
+      zoneId: null,
+      serviceMode: "ticket_then_pay",
+      id,
+      orderNumber: 7,
+      revision: 0,
+      label: null,
+      expectedEdit: null,
+      kitchenNote: { scope: { workingOrderId: id }, note: null, revision: 0, ownerRevision: 0 },
+      lines: [
+        {
+          workingOrderLineId: "dish-1",
+          menuItemId: "offer-meal",
+          quantity: "1.000",
+          product: stored,
+        },
+      ],
+    });
+    const offer: ZoneOffers["offers"][number] = {
+      id: "offer-meal",
+      menuId: "cat-default",
+      productId: "meal",
+      grossPrice: "30.00",
+      unitPrice: "30.00",
+      available: true,
+      image: null,
+      description: null,
+      menuName: "Carta",
+      placements: [[]],
+      name: "Lunch",
+      customerName: null,
+      kitchenName: null,
+      unit: each,
+      vatClass: "general",
+      takeawayVatClass: "general",
+      category: "Other",
+      allergens: null,
+      diet: null,
+      dietOverride: null,
+      dietaryDeclarations: [],
+      offeredModifiers: [],
+      variants: [],
+      courseId: null,
+    };
+    const api = stubApi({
+      listDefaultZoneOffers: vi.fn().mockResolvedValue({
+        ...offers,
+        offers: [offer],
+        menus: servedMenus(
+          [{ id: "cat-default", name: "Carta", isDefault: true, versionId: "v1" }],
+          [offer],
+        ),
+      }),
+      parkOrder: vi.fn(async (request: { id: string }) => {
+        id = request.id;
+        return { id, orderNumber: 7, serviceMode: "ticket_then_pay" };
+      }),
+      getKitchenNote: vi.fn(async () => ({
+        scope: { workingOrderId: id },
+        note: null,
+        revision: 0,
+        ownerRevision: 0,
+      })),
+      placeOrder: vi.fn(async () => {
+        sent = true;
+        return { id, status: "placed" };
+      }),
+      listCounterWaiting: vi.fn(async () =>
+        sent
+          ? [
+              {
+                id,
+                items: [],
+                orderNumber: 7,
+                label: null,
+                status: "placed",
+                total: "30.00",
+                openedAt: "2026-11-10T10:00:00Z",
+                settledAt: null,
+                collectedAt: null,
+                serviceMode: "ticket_then_pay",
+                counts: { ordered: 1, unsent: 0, held: 0, waiting: 1, ready: 0 },
+                canHandOver: false,
+                movableDishes: [],
+              },
+            ]
+          : [],
+      ),
+      retrieveWorkingOrder: vi.fn(async () => storedOrder()),
+      retrievePlacedOrder: vi.fn(async () => storedOrder()),
+      getTabLines: vi.fn(async () => ({
+        revision: 0,
+        lines: [
+          line({
+            id: "dish-1",
+            lineNo: 1,
+            name: "Lunch",
+            unitPriceGross: "30.00",
+            ...(sent ? {} : { sentAt: null, firedAt: null, state: null }),
+          }),
+        ],
+      })),
+      getBillBalance: vi.fn(async () =>
+        balanceOf({
+          workingOrderId: id,
+          status: sent ? "placed" : "open",
+          total: "30.00",
+          outstanding: "30.00",
+        }),
+      ),
+    });
+    const { el } = await mountWidget<TillApp>("till-app", { api });
+    await flush(el);
+    emit(lock(el), "logged-in", { personId: "p1", displayName: "Alex", permissions: [] });
+    await flush(el);
+    const counter = el.shadowRoot!.querySelector<TillCounterScreen>("till-counter-screen")!;
+    counter.store.addProduct(live, "1");
+    await flush(el);
+    if (sendFirst) {
+      emit(counter, "place-order");
+      await flush(el, 6);
+      expect(counter.stage).toBe("collect");
+    }
+    expect(counter.store.lines.map(quantityLabel)).toEqual(["1 ea"]);
+    const tender = counter.shadowRoot!.querySelector("till-tender-pay")!;
+    await tender.updateComplete;
+    tender.shadowRoot!.querySelector<HTMLElement>("[data-counter-pay]")!.click();
+    await vi.waitFor(() => expect(dialog(el)).not.toBeNull());
+    await flush(el);
+
+    expect(sendFirst ? api.retrievePlacedOrder : api.retrieveWorkingOrder).toHaveBeenCalled();
+    expect(counter.store.lines.map(quantityLabel)).toEqual(["1 ea"]);
+  },
+);

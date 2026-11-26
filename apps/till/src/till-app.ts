@@ -379,7 +379,7 @@ import {
 } from "./widgets/held-orders.js";
 import { waitingScope, type PayWaitingOrderDetail } from "./widgets/counter-waiting.js";
 import { moveRefusalKey } from "./widgets/station-choice-dialog.js";
-import { otherPartyRead, shownTableNames, type SeatedRead } from "./widgets/table-targets.js";
+import { otherPartyRead, type SeatedRead } from "./widgets/table-targets.js";
 import type {
   BillPayDetail,
   MealEndShown,
@@ -408,7 +408,13 @@ import {
   stillToPay,
 } from "./state/bill-state.js";
 import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
-import { billRequestOf } from "./state/table-signals.js";
+import {
+  describePartyChange,
+  partyChangeMessage,
+  partyOf,
+  tableLabels,
+  type PartyChange,
+} from "./state/party-change.js";
 import {
   barBillToOpen,
   barTables,
@@ -1202,87 +1208,6 @@ function takeOverRefusalError(code: string): CounterError {
   if (code === "draft.not_found") return "table.take_over_gone";
   if (code === "draft.already_submitted") return "table.take_over_sent";
   return tableWriteError({ code });
-}
-
-/** The tables' shown names, and whether those differ from their saved names. */
-interface TableNames {
-  names: string;
-  named: boolean;
-}
-
-/** What another device changed about a party, worked out by comparing the floor before and after.
- * `tables` names the party's tables as they were. */
-type PartyChange = { tables: TableNames } & (
-  | { kind: "gone" }
-  | { kind: "tables"; now: TableNames }
-  | { kind: "bills"; outstanding: string }
-  | { kind: "bill_request"; requested: boolean }
-  | { kind: "other" }
-);
-
-function tableLabels(tables: TableState[], ids: readonly string[]): TableNames {
-  const names = shownTableNames(ids, tables).join(", ");
-  const saved = ids.flatMap((id) => tables.find((table) => table.id === id)?.label ?? []);
-  return { names, named: names !== saved.join(", ") };
-}
-
-function partyOf(tables: TableState[], partyId: string): TableParty | undefined {
-  return tables.find((table) => table.party?.id === partyId)?.party ?? undefined;
-}
-
-function describePartyChange(
-  was: TableParty,
-  before: TableState[],
-  after: TableState[],
-): PartyChange {
-  const is = partyOf(after, was.id);
-  const tables = tableLabels(before, was.tableIds);
-  if (is === undefined || is.state !== "open") return { tables, kind: "gone" };
-  if (was.tableIds.join() !== is.tableIds.join()) {
-    return { tables, kind: "tables", now: tableLabels(after, is.tableIds) };
-  }
-  if (was.billCount !== is.billCount || was.outstanding !== is.outstanding) {
-    return { tables, kind: "bills", outstanding: is.outstanding };
-  }
-  const requested = billRequestOf(after, was.id) !== undefined;
-  if (requested !== (billRequestOf(before, was.id) !== undefined)) {
-    return { tables, kind: "bill_request", requested };
-  }
-  return { tables, kind: "other" };
-}
-
-function partyChangeDetail(change: PartyChange): string {
-  switch (change.kind) {
-    case "gone":
-      return t("party.changed_gone");
-    case "tables":
-      return t(change.now.named ? "party.changed_tables_named" : "party.changed_tables").replace(
-        "{tables}",
-        () => change.now.names,
-      );
-    case "bills":
-      return t("party.changed_bills").replace("{amount}", () =>
-        formatMoney(change.outstanding, currentLocale()),
-      );
-    case "bill_request":
-      return t(
-        change.requested ? "party.changed_bill_requested" : "party.changed_bill_request_cancelled",
-      );
-    case "other":
-      return t("party.changed_other");
-  }
-}
-
-function partyChangeMessage(change: PartyChange): string {
-  const detail = partyChangeDetail(change);
-  return [
-    t(change.tables.named ? "party.changed_named" : "party.changed").replace(
-      "{table}",
-      () => change.tables.names,
-    ),
-    detail,
-    t("party.try_again"),
-  ].join(" ");
 }
 
 /** Refusals of a tab-line or group command, shown in their code's own words: each says what the
@@ -12242,6 +12167,7 @@ export class TillApp extends LitElement {
         .deferredOffered=${this.#deferredOfferFor(open)}
         .ownReceiptOffered=${this.#ownReceiptOffered(open)}
         .itemsBarred=${itemsBarredReason({ found: open.found !== undefined, counter: open.surface === "counter", printed: open.printed === true, paysAfterSending: this.#counterOrderMode?.orderId === open.billId && this.#counterOrderMode.mode === "ticket_then_pay", status: open.balance?.status ?? (open.surface === "counter" ? (this.stage === "collect" ? "placed" : undefined) : this.partyBills.find((bill) => bill.workingOrderId === open.billId)?.status) })}
+        .sentWithoutReceipt=${open.surface === "counter" && open.printed !== true}
         .credited=${billNoticeText(open.credited)}
         .cardReader=${this.#cardReader()}
         .takesCash=${this.#takesCash()}
@@ -23296,6 +23222,14 @@ export class TillApp extends LitElement {
     if (result.payment.state === "pending")
       this.#startPendingReread(open.id, result.payment.id, taken, result.paidOn);
     await reread();
+    await this.#rereadWaitingFor(open);
+  }
+
+  /** Waiting lists Counter orders sent or paid: one it lists is read again after a payment. A
+   * counter order's `visit` is the operator session. */
+  async #rereadWaitingFor(open: PayingOrder): Promise<void> {
+    if (open.surface === "counter" && this.counterWaiting.some((row) => row.id === open.billId))
+      await this.#refreshListsAfterWrite(open.visit, [["waiting", "refresh.waiting_after_sale"]]);
   }
 
   /** The order read again after an answer, on `balance` when it is the bill's own; else on `answered`,
@@ -23358,6 +23292,7 @@ export class TillApp extends LitElement {
     // The paid order drops off the held list.
     if (open.surface === "counter")
       await this.#refreshAfterWrite("held", "refresh.held_after_sale");
+    await this.#rereadWaitingFor(open);
   }
 
   async #onBillPayRefused(

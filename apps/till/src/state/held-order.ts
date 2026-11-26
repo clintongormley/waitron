@@ -9,6 +9,15 @@ import { displayQuantity, offeredListsOf } from "./order-line.js";
 import type { SetMenuOfferLookup } from "./set-menus.js";
 import type { OrderLine } from "./working-order.js";
 
+/** The stored unit worded as the live offer words it: a stored line keeps its unit's abbreviation
+ * in the venue's default language only (`prepareUnitSnapshot`), not in the till's. */
+function wordedUnit(stored: TillProduct, live: TillProduct | undefined): Partial<TillProduct> {
+  const unit = stored.unit;
+  if (unit === undefined || live?.unit?.id !== unit.id) return {};
+  const { name, abbreviation, staffName, staffAbbreviation } = live.unit;
+  return { unit: { ...unit, name, abbreviation, staffName, staffAbbreviation } };
+}
+
 /** `order`'s lines rebuilt against `offered`, and the one banner that says what the rebuild
  * changed. */
 export function basketLinesOf(
@@ -55,7 +64,7 @@ export function basketLinesOf(
         ? live
         : {
             ...stored,
-            ...(recorded === undefined ? {} : { unit: recorded.offer.unit }),
+            ...(recorded === undefined ? wordedUnit(stored, live) : { unit: recorded.offer.unit }),
             ...(line.menuVersionId === undefined ? {} : { menuVersionId: line.menuVersionId }),
             ...(live === undefined ? {} : { offeredModifiers: offeredListsOf(live) }),
           };

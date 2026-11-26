@@ -502,6 +502,8 @@ export class TillBillPayDialog extends LitElement {
   @property({ type: Boolean }) confirmationLocked = false;
   /** Why Items is shown disabled, under the choices; null while it is offered. */
   @property({ attribute: false }) itemsBarred: StringKey | null = null;
+  /** The bill is placed with no receipt: a Counter order sent before it is paid. */
+  @property({ type: Boolean }) sentWithoutReceipt = false;
   /** The printed bill this window paid from was credited, as the till words it; null if not. */
   @property({ attribute: false }) credited: string | null = null;
   /** Whether the venue takes tips; without them the dialog asks for and offers none. The app sets
@@ -2237,7 +2239,7 @@ export class TillBillPayDialog extends LitElement {
         this.#ownBill()
           ? html`<p class="own-bill" data-pay-own-bill>
               ${t(
-                this.balance?.status === "placed"
+                this.balance?.status === "placed" && !this.sentWithoutReceipt
                   ? "bill_pay.items_own_bill_printed"
                   : "bill_pay.items_own_bill",
               )}
