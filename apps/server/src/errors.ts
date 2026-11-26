@@ -1471,7 +1471,8 @@ declare module "@waitron/shared" {
      * names the current key, when there is one. */
     "master_key.wrong": { keyName?: string };
     /** "Change the backup key", which carries the venue's master key, came over a connection that
-     * is not encrypted or from a page on another site (`Origin` or `Sec-Fetch-Site`). */
+     * is not encrypted or from another page (another origin, or a `Sec-Fetch-Site` other than
+     * same-origin). */
     "backup.key_change_page_required": Record<string, never>;
     /**
      * `retireSelf` was invoked on a node that is NOT fenced (serving, absent from the chart, or with

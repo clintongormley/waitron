@@ -1026,9 +1026,8 @@ describe("backup admin routes", () => {
   }, 60_000);
 
   it("apply fails loud when the effective key differs from the held one", async () => {
-    // The orphan-prevention guard: a supervisor whose reloaded config resolves a DIFFERENT recovery
-    // key than the operator asked for (here forced via buildConfig) must be refused, not silently
-    // encrypt future archives under a key the operator never recorded.
+    // A supervisor whose reloaded config resolves a DIFFERENT key than `backup.env` holds (forced
+    // here via buildConfig) is refused, not left encrypting archives under a key the venue never held.
     const dest = makeDestDir();
     const stateDir = await makeStateDir();
     const mismatch: BackupConfig = {
@@ -1811,6 +1810,27 @@ describe("backup admin routes", () => {
       },
       60_000,
     );
+
+    it("refuses a plain-http key change for its page before asking the person to sign in again", async () => {
+      const stateDir = await makeStateDir();
+      const sup = makeSupervisor({ stateDir, base: {}, role: "primary" });
+      const app = buildApp(sup, stateDir);
+      const cookie = await login(app);
+      await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie, false));
+      const res = await app.request(
+        "/api/backup/rotate",
+        {
+          method: "POST",
+          headers: { cookie, "content-type": "application/json" },
+          body: JSON.stringify({ masterKey: MASTER.secret }),
+        },
+        {},
+      );
+      expect(res.status).toBe(403);
+      expect(await res.json()).toEqual({
+        error: { code: "backup.key_change_page_required", params: {} },
+      });
+    }, 60_000);
 
     it("refuses a body without the master key, naming the field", async () => {
       const stateDir = await makeStateDir();

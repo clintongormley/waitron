@@ -523,10 +523,10 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     run(c, log, async () => {
       const personId = await authorize(c);
       guardWritable();
-      await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       if (!isSecure(c) || !sentFromThisOrigin(c)) {
         throw new AppError("backup.key_change_page_required", {});
       }
+      await requireFreshManagementSignIn(deps.db, requireManagementSession(c));
       const { masterKey } = await readRotateBody(c);
       return deps.turns(async () => {
         guardWritable(); // Again: role or env ownership may have changed while this write waited.
