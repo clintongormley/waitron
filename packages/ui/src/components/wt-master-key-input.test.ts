@@ -1228,7 +1228,7 @@ test("a refused camera shows the camera-failed line, and Scan tries again", asyn
   await vi.waitFor(() => expect(failed()).toBe(EN.cameraFailed));
   expect(scanner(el)).toBeNull();
   expect(leaked).not.toHaveBeenCalled();
-  expect(el.shadowRoot!.querySelector("[data-camera-failed]")!.getAttribute("role")).toBe("status");
+  expect(announced(el)).toBe(EN.cameraFailed);
   await scan(el);
   expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(2);
   await type(el, "AB");
@@ -1278,4 +1278,116 @@ test("the scan control and its lines in Spanish", async () => {
   expect(buttonNamed(el, ES.stopScan)).toBeDefined();
   await vi.waitFor(() => expect(scannerLine(el)).toBe(ES.notKeyCode), { timeout: 10_000 });
   expect(live(stream)).toBe(true);
+});
+
+function deepActive(): Element | null {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active;
+}
+
+const scanControl = (el: WtMasterKeyInput) =>
+  el.shadowRoot!.querySelector("wt-button.scan")!.shadowRoot!.querySelector("button")!;
+
+test("focus stays on the scan button when Scan, Stop scanning and a read key change it", async () => {
+  film(KEY);
+  const { el, seen } = await field();
+  const control = scanControl(el);
+  control.focus();
+  expect(deepActive()).toBe(control);
+
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(scanner(el)).not.toBeNull();
+  expect(deepActive()).toBe(control);
+  expect(buttonNamed(el, EN.stopScan)?.shadowRoot!.querySelector("button")).toBe(control);
+
+  await userEvent.keyboard("{Enter}");
+  await el.updateComplete;
+  expect(scanner(el)).toBeNull();
+  expect(buttonNamed(el, EN.scan)).toBeDefined();
+  expect(deepActive()).toBe(control);
+
+  // The first camera's tracks ended at Stop scanning.
+  filming!.stop();
+  const stream = film(KEY);
+  await userEvent.keyboard("{Enter}");
+  await vi.waitFor(() => expect(seen.at(-1)).toEqual({ masterKey: KEY }), { timeout: 10_000 });
+  await el.updateComplete;
+  expect(ended(stream)).toBe(true);
+  expect(buttonNamed(el, EN.scan)).toBeDefined();
+  expect(deepActive()).toBe(control);
+});
+
+const announced = (el: WtMasterKeyInput) =>
+  el.shadowRoot!.querySelector(".visually-hidden[role='status']")!.textContent!.trim();
+
+test("the camera stops when a chosen PDF fills the field, and a key seen later changes nothing", async () => {
+  const stream = film(KEY);
+  const { el, seen } = await field({
+    readPack: async () => async () => reading({ masterKey: "8DP7 4BAY PVBR RM5X FV2W PQYB 5M5A" }),
+  });
+  await scan(el);
+  await expect.poll(() => live(stream)).toBe(true);
+  await choose(el);
+  await el.pdfRead;
+  await el.updateComplete;
+  expect(scanner(el)).toBeNull();
+  expect(ended(stream)).toBe(true);
+  const count = seen.length;
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  expect(seen).toHaveLength(count);
+});
+
+test.each([
+  [
+    "typing",
+    async (el: WtMasterKeyInput) => {
+      await type(el, "88DP");
+    },
+  ],
+  [
+    "clear()",
+    async (el: WtMasterKeyInput) => {
+      el.clear();
+      await el.updateComplete;
+    },
+  ],
+  [
+    "a new key name",
+    async (el: WtMasterKeyInput) => {
+      el.keyName = "2026-01-02 · AAAA";
+      await el.updateComplete;
+    },
+  ],
+])("%s stops the camera", async (_how, change) => {
+  const stream = film("hello");
+  const { el } = await field();
+  await scan(el);
+  await expect.poll(() => live(stream)).toBe(true);
+  await change(el);
+  expect(scanner(el)).toBeNull();
+  expect(ended(stream)).toBe(true);
+  expect(buttonNamed(el, EN.scan)).toBeDefined();
+});
+
+test("a script click on Scan while the field is disabled asks for no camera", async () => {
+  film("hello");
+  const { el } = await field({ disabled: true });
+  (buttonNamed(el, EN.scan) as HTMLElement).click();
+  await el.updateComplete;
+  expect(scanner(el)).toBeNull();
+  expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+});
+
+test("a camera that does not start is said through the field's hidden status line", async () => {
+  vi.spyOn(navigator.mediaDevices, "getUserMedia").mockRejectedValue(
+    new DOMException("Permission denied", "NotAllowedError"),
+  );
+  const { el } = await field();
+  await scan(el);
+  await vi.waitFor(() => expect(announced(el)).toBe(EN.cameraFailed));
+  const visible = el.shadowRoot!.querySelector("[data-camera-failed]")!;
+  expect(visible.textContent!.trim()).toBe(EN.cameraFailed);
+  expect(visible.getAttribute("role")).toBeNull();
 });

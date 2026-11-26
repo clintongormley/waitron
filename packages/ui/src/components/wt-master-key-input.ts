@@ -174,7 +174,6 @@ export class WtMasterKeyInput extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    this.scanning = false;
     // Taken out now, not at the next render, so a field put back on the page does not film again.
     this.shadowRoot?.querySelector("wt-qr-scanner")?.remove();
     this.clear();
@@ -207,6 +206,7 @@ export class WtMasterKeyInput extends LitElement {
   }
 
   #empty(): void {
+    this.scanning = false;
     this.#reading = undefined;
     this.value = "";
     this.#file = undefined;
@@ -231,6 +231,7 @@ export class WtMasterKeyInput extends LitElement {
   }
 
   #start(): object {
+    this.scanning = false;
     this.problem = undefined;
     this.loaded = false;
     this.cameraFailed = false;
@@ -292,6 +293,7 @@ export class WtMasterKeyInput extends LitElement {
   }
 
   #startScan(): void {
+    if (this.disabled) return;
     this.cameraFailed = false;
     this.otherCode = false;
     this.scanning = true;
@@ -303,7 +305,6 @@ export class WtMasterKeyInput extends LitElement {
       this.otherCode = true;
       return;
     }
-    this.scanning = false;
     this.#start();
     this.#mask();
     this.value = key;
@@ -321,7 +322,6 @@ export class WtMasterKeyInput extends LitElement {
         .message=${this.otherCode ? copy.notKeyCode : ""}
         unavailable=${copy.cameraFailed}
         @wt-qr-read=${(event: CustomEvent<{ text: string }>) => {
-          // The read text may be the key: it goes no further than this field.
           event.stopPropagation();
           this.#read(event.detail.text);
         }}
@@ -332,9 +332,7 @@ export class WtMasterKeyInput extends LitElement {
         }}
       ></wt-qr-scanner>`;
     if (this.cameraFailed)
-      return html`<p class="camera-failed" data-camera-failed role="status">
-        ${copy.cameraFailed}
-      </p>`;
+      return html`<p class="camera-failed" data-camera-failed>${copy.cameraFailed}</p>`;
     return nothing;
   }
 
@@ -374,28 +372,19 @@ export class WtMasterKeyInput extends LitElement {
       ></wt-input>
       <div class="controls">
         ${
-          this.scanning
+          canFilm()
             ? html`<wt-button
                 class="scan"
                 variant="secondary"
+                ?disabled=${this.disabled}
                 @click=${(event: Event) => {
                   event.stopPropagation();
-                  this.scanning = false;
+                  if (this.scanning) this.scanning = false;
+                  else this.#startScan();
                 }}
-                >${copy.stopScan}</wt-button
+                >${this.scanning ? copy.stopScan : copy.scan}</wt-button
               >`
-            : canFilm()
-              ? html`<wt-button
-                  class="scan"
-                  variant="secondary"
-                  ?disabled=${this.disabled}
-                  @click=${(event: Event) => {
-                    event.stopPropagation();
-                    this.#startScan();
-                  }}
-                  >${copy.scan}</wt-button
-                >`
-              : nothing
+            : nothing
         }
         <wt-button
           class="choose"
@@ -424,7 +413,15 @@ export class WtMasterKeyInput extends LitElement {
         }}
       />
       <p class="visually-hidden" role="status">
-        ${fromPack ? line : this.loaded ? copy.loaded : nothing}
+        ${
+          this.cameraFailed
+            ? copy.cameraFailed
+            : fromPack
+              ? line
+              : this.loaded
+                ? copy.loaded
+                : nothing
+        }
       </p>`;
   }
 }
