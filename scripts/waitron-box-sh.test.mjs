@@ -7,6 +7,7 @@ import {
   existsSync,
   mkdirSync,
   openSync,
+  readlinkSync,
   mkdtempSync,
   readFileSync,
   renameSync,
@@ -813,12 +814,12 @@ describe("waitron-box.sh storage requests", () => {
     );
     return received;
   };
-  // A PATH with no node on it: the stubs, bash to run them, and mkdir, the one other command the
-  // storage path runs.
+  // A PATH with no node on it: the stubs, bash to run them, and mkdir and readlink, the other
+  // commands the storage path runs.
   const withoutNode = (sb) => {
     const tools = join(sb.dir, "tools");
     mkdirSync(tools);
-    for (const tool of ["bash", "mkdir"]) {
+    for (const tool of ["bash", "mkdir", "readlink"]) {
       const found = spawnSync("bash", ["-c", `command -v ${tool}`], { encoding: "utf8" });
       symlinkSync(found.stdout.trim(), join(tools, tool));
     }
@@ -901,6 +902,72 @@ describe("waitron-box.sh storage requests", () => {
     const sb = withoutNode(sandbox());
     echoing(sb);
     expect(answerWith(sb, LIST)).toEqual({ ok: false, reason: "unknown_request" });
+  });
+
+  // The installer can rename a new set's link over box/storage after node has loaded the old
+  // set's entry and before that entry's started-directly check runs. The node on PATH here makes
+  // that switch from a load hook, at the moment the entry has loaded.
+  it("answers from the set it started in when the link switches to another as it loads", () => {
+    const sb = sandbox();
+    const box = join(sb.dir, "opt/waitron-host/box");
+    const SET = [
+      "storage-host.mjs",
+      "host-protocol.mjs",
+      "name-tag.mjs",
+      "upgrades/contracts.mjs",
+      "wifi-boot-copy.mjs",
+      "disk-key.mjs",
+      "wifi-record.mjs",
+    ];
+    for (const set of [".storage.old", ".storage.new"]) {
+      for (const module of SET) {
+        mkdirSync(dirname(join(box, set, module)), { recursive: true });
+        copyFileSync(join(HERE, "box", module), join(box, set, module));
+      }
+    }
+    rmSync(join(box, "storage"), { recursive: true });
+    symlinkSync(".storage.old", join(box, "storage"));
+    symlinkSync(".storage.new", join(box, ".storage.new.link"));
+    const hook = join(sb.dir, "switch.mjs");
+    writeFileSync(
+      hook,
+      `import { renameSync } from "node:fs";
+import { registerHooks } from "node:module";
+registerHooks({
+  load(url, context, nextLoad) {
+    const loaded = nextLoad(url, context);
+    if (url.endsWith("/storage-host.mjs")) {
+      renameSync(${JSON.stringify(join(box, ".storage.new.link"))}, ${JSON.stringify(join(box, "storage"))});
+    }
+    return loaded;
+  },
+});
+`,
+    );
+    const bin = join(sb.dir, "switching-bin");
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, "node"),
+      `#!/usr/bin/env bash\nexec ${JSON.stringify(process.execPath)} --import ${JSON.stringify(hook)} "$@"\n`,
+    );
+    chmodSync(join(bin, "node"), 0o755);
+    sb.env.PATH = `${bin}${delimiter}${sb.env.PATH}`;
+
+    const reply = ask(sb, "storage.list not-a-request\n");
+    expect(readlinkSync(join(box, "storage"))).toBe(".storage.new");
+    expect(reply.stdout).toBe('{"ok":false,"reason":"request_invalid"}\n');
+  });
+
+  it("answers host_failed, running nothing, when the module's folder cannot be resolved", () => {
+    const sb = sandbox();
+    const received = echoing(sb);
+    const bin = join(sb.dir, "failing-bin");
+    mkdirSync(bin);
+    writeFileSync(join(bin, "readlink"), "#!/usr/bin/env bash\nexit 1\n");
+    chmodSync(join(bin, "readlink"), 0o755);
+    sb.env.PATH = `${bin}${delimiter}${sb.env.PATH}`;
+    expect(answer(sb, LIST)).toEqual({ ok: false, reason: "host_failed" });
+    expect(existsSync(received)).toBe(false);
   });
 });
 

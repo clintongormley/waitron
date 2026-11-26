@@ -343,7 +343,14 @@ main() {
     mkdir -p -m 0700 "$STATE_DIR"
     exec 9> "$STATE_DIR/storage.lock"
     if ! flock -n 9; then refuse busy; exit 0; fi
-    if reply="$(printf '%s' "$line" | "$node" "$STORAGE_HOST")"; then answer "$reply"; else refuse host_failed; fi
+    # Handed to node resolved: given the link, an install renaming a new set's link over
+    # box/storage as node starts makes the module's entry check see two folders and answer nothing.
+    if storage_host="$(readlink -f -- "$STORAGE_HOST")" \
+      && reply="$(printf '%s' "$line" | "$node" "$storage_host")"; then
+      answer "$reply"
+    else
+      refuse host_failed
+    fi
     exit 0
   fi
   if [ ${#line} -gt 700 ]; then refuse request_invalid; exit 0; fi
