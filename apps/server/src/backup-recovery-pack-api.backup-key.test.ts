@@ -86,6 +86,7 @@ function fixture(
     loadFonts?: typeof loadRecoveryPackFonts;
     /** The stream refuses to start again after the key file is written. */
     streamStartFails?: boolean;
+    now?: () => Date;
   } = {},
 ) {
   const steps: string[] = [];
@@ -104,7 +105,7 @@ function fixture(
         recoveryKey: undefined,
       }),
       loadFonts: options.loadFonts ?? loadRecoveryPackFonts,
-      now: () => new Date(MADE_AT),
+      now: options.now ?? (() => new Date(MADE_AT)),
       stateDir,
       stream: {
         reload: async (write) => {
@@ -139,6 +140,8 @@ function fixture(
         upToDate: boolean;
         reasons: unknown[];
         backupKey: unknown;
+        unreceived: unknown;
+        masterKey: unknown;
       };
     },
   };
@@ -331,6 +334,40 @@ async function rotateApp(stateDir: string) {
   );
   return packRequests(app, { token: () => admin.token, sockets });
 }
+
+describe("a new master key whose pack never arrived", () => {
+  it("is named as unreceived on the pack that holds it, and a second new master key needs only the sign-in", async () => {
+    const stateDir = await stateFolder(3);
+    let at = Date.parse(MADE_AT);
+    const f = fixture(stateDir, { now: () => new Date((at += 60_000)) });
+    const first = await f.make(true);
+    expect(first.status).toBe(200);
+    const firstName = decodeURIComponent(first.headers.get("x-waitron-master-key-name")!);
+    await first.arrayBuffer();
+    expect(await f.status()).toMatchObject({
+      unreceived: { number: 1, holdsCurrentMasterKey: true },
+      masterKey: { name: firstName, pack: 1 },
+    });
+
+    const second = await f.make(true, {}, { locale: "en", newMasterKey: true });
+    expect(second.status).toBe(200);
+    expect(second.headers.get("x-waitron-recovery-pack")).toBe("2");
+    const secondBytes = shownBytes(second);
+    const secondName = decodeURIComponent(second.headers.get("x-waitron-master-key-name")!);
+    await second.arrayBuffer();
+    expect(secondName).not.toBe(firstName);
+    const current = await withTransaction(suite.db, (tx) => readCurrentMasterKey(tx));
+    expect(Buffer.from(current!.publicKey)).toEqual(sealingPublicKey(secondBytes));
+    expect(await keyFile(stateDir)).toMatchObject({
+      WAITRON_BACKUP_RECOVERY_KEY: heldBackupKey(secondBytes, 5).key,
+      WAITRON_BACKUP_KEY_NUMBER: "5",
+    });
+    expect(await f.status()).toMatchObject({
+      unreceived: { number: 2, holdsCurrentMasterKey: true },
+      masterKey: { name: secondName, pack: 2 },
+    });
+  });
+});
 
 describe("the backup key is written only once the pack and its master key are saved", () => {
   const masterKeyRows = () => suite.db.select().from(masterKeys);
