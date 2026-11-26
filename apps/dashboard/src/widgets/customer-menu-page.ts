@@ -562,6 +562,9 @@ export class CustomerMenuPage extends LitElement {
           column-gap: var(--wt-space-2);
           align-items: baseline;
         }
+        .dish-name {
+          flex: 1 1 50%;
+        }
         .price {
           margin-block-start: 0;
           margin-inline-start: auto;
@@ -849,7 +852,9 @@ export class CustomerMenuPage extends LitElement {
               return html`<div class="dish">
                 <div>
                   <div class="dish-heading">
-                    <div>${this.#entryName(member)} ${declarations(member, words)}</div>
+                    <div class="dish-name">
+                      ${this.#entryName(member)} ${declarations(member, words)}
+                    </div>
                     ${member.description ? html`<p class="description">${member.description}</p>` : nothing}
                     ${hasCautionedChoice(member, this.excluded) ? html`<p class="description" lang=${words.language}>${words.text.checkChoices}</p>` : nothing}
                     <p class="price">${dishPrice(member, menu.language)}</p>

@@ -819,7 +819,7 @@ describe("the customer menu Online preview", () => {
     }
   });
 
-  it("gives a long name and price range separate lines in the narrow Computer preview", async () => {
+  it("keeps a short price beside a long name and wraps a large range in the narrow Computer preview", async () => {
     await page.viewport(390, 844);
     try {
       const preview = published();
@@ -831,6 +831,13 @@ describe("the customer menu Online preview", () => {
       dish.name = "Wood-roasted peppers with confit garlic";
       dish.price = { min: "1234.50", max: "2345.00" };
       dish.unit = "kg";
+      section.members.push({
+        ...dish,
+        name: "Wood-roasted peppers with olive oil",
+        price: { min: "6.50", max: "6.50" },
+        unit: "",
+        allergens: { milk: {} },
+      });
       await open(() => Response.json(preview));
       await page.getByRole("radio", { name: "Computer" }).click();
       const name = page.getByText(dish.name, { exact: true }).element();
@@ -843,6 +850,16 @@ describe("the customer menu Online preview", () => {
       );
       expect(price.getBoundingClientRect().right).toBeCloseTo(
         card.querySelector("img")!.getBoundingClientRect().right,
+        0,
+      );
+      const short = page
+        .getByText("Wood-roasted peppers with olive oil", { exact: true })
+        .element();
+      const shortCard = short.closest(".dish")!;
+      price.selectNodeContents(shortCard.querySelector(".price")!);
+      expect(price.getBoundingClientRect().top).toBeLessThan(short.getClientRects()[0]!.bottom);
+      expect(price.getBoundingClientRect().right).toBeCloseTo(
+        shortCard.querySelector("img")!.getBoundingClientRect().right,
         0,
       );
     } finally {
