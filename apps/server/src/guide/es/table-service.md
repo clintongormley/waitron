@@ -624,7 +624,8 @@ lo que le descuentas. Un menú no se puede anular: anula o mueve sus platos.
 
 Una invitación o un descuento en un menú cubre su precio y sus suplementos, no los extras de pago.
 Si se anulan, se mueven o se pagan aparte algunos de sus platos, el descuento se quita; si mueves o
-pagas todos, se va con ellos.
+pagas todos, se va con ellos. Si cambias los extras o la variante de un plato con descuento, el
+descuento se quita.
 
 Para pasar un menú a otra cuenta, abre **Mover platos…** y selecciona el menú. Sus platos se
 mueven con él.

@@ -1470,7 +1470,11 @@ its list for piece 4; 3b's and 3c's subjects, which stay frozen as 2b left them.
   window's preview answers for the same terms there (3a's preview, D33). No Dismiss: it goes when
   the bill closes. Recommended. Alternatives: a Dismiss (a column that changes, on an otherwise
   append-only record); or offering it again on the whole bill when the dishes are spread over
-  several places.
+  several places. _2026-11-26, while building 3b2:_ nothing records which dishes were in a set menu
+  once its discount ends, so a set menu's notice offers no place (`reapplyOn` null; staff pick it in
+  the comp window) and stays until the bill closes, even once its other dishes are gone (the
+  watcher, lane B `questions.md`, "WATCHER 2026-11-26 20:07"). A notice also goes once its bill is
+  paid or abandoned, and a dish's notice once its line leaves the bill.
 - **D55. The adjustments report leaves out a discount that came off.** Its total is "What the bills
   actually lost" (`AdjustmentTally.reduction`, `packages/adjustments/src/reports.ts:45-46`): a 50%
   Daily (7.00) whose Hake is then cancelled counts the cancel's 8.00 (D48), the difference between
