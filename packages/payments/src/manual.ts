@@ -3,6 +3,7 @@ import type { Decimal, DeviceOrigin, NodeId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
 import { insertCapturedPayment, recordRefund } from "./store.js";
 import type { PaymentRow } from "./store.js";
+import type { OtherCardMachineDestination } from "./settings.js";
 
 /**
  * The `provider` value for a card tender taken on a SEPARATE bank terminal with no electronic link
@@ -26,7 +27,7 @@ export interface ManualCardPaymentParams {
   settledAt: Date;
   /** Optional hand-keyed acquirer / bank-terminal operation number — a human reconciliation hook. */
   externalRef?: string;
-  externalProvider?: "connected_account" | "other";
+  externalProvider?: OtherCardMachineDestination;
   externalMachine?: string;
   /** The bill payment this card payment was taken for; absent for a payment of a whole order. */
   billPaymentId?: string;

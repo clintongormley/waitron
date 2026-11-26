@@ -1,6 +1,6 @@
 import "./errors.js";
 import { validatePayload, putCredential, deleteCredential } from "@waitron/credentials";
-import { type Transaction, saveSettings, venueCredentials, readSettings } from "@waitron/db";
+import { type Transaction, newId, saveSettings, venueCredentials, readSettings } from "@waitron/db";
 import { requireFreshManagementSignIn, authorizeManager } from "@waitron/identity";
 import {
   readPaymentsSettings,
@@ -14,7 +14,6 @@ import {
 import { type Logger, requireManagementSession, readJsonBody } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { and, eq, isNull } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
 import type { Hono } from "hono";
 import type { PaymentsApiDeps } from "./payments-api-deps.js";
 import { run, runConnect, runPathProvider } from "./payments-api-errors.js";
@@ -37,6 +36,7 @@ function requireRevision(revision: unknown): number {
 function otherCardMachinesFrom(value: unknown, storedIds: ReadonlySet<string>): OtherCardMachine[] {
   if (!Array.isArray(value))
     throw new AppError("management.request_invalid", { field: "otherCardMachines" });
+  const ids = new Set<string>();
   const names = new Set<string>();
   return value.map((entry: unknown, index) => {
     const refuse = (key?: string) =>
@@ -45,14 +45,17 @@ function otherCardMachinesFrom(value: unknown, storedIds: ReadonlySet<string>): 
       });
     if (typeof entry !== "object" || entry === null || Array.isArray(entry)) throw refuse();
     const row = entry as Record<string, unknown>;
-    const id = row.id ?? randomUUID();
-    if (typeof id !== "string" || (row.id !== undefined && !storedIds.has(id))) throw refuse("id");
-    const fault = otherCardMachineFault({ ...row, id });
+    const id = row.id === undefined ? newId() : row.id;
+    if (typeof id !== "string" || (row.id !== undefined && !storedIds.has(id)) || ids.has(id))
+      throw refuse("id");
+    ids.add(id);
+    const name = typeof row.name === "string" ? row.name.trim() : row.name;
+    const fault = otherCardMachineFault({ ...row, id, name });
     if (fault !== null) throw refuse(fault);
-    const name = (row.name as string).trim();
-    if (names.has(otherCardMachineNameKey(name))) throw refuse("name");
-    names.add(otherCardMachineNameKey(name));
-    return { id, name, paysInto: row.paysInto as OtherCardMachine["paysInto"] };
+    const key = otherCardMachineNameKey(name as string);
+    if (names.has(key)) throw refuse("name");
+    names.add(key);
+    return { id, name: name as string, paysInto: row.paysInto as OtherCardMachine["paysInto"] };
   });
 }
 
@@ -112,28 +115,29 @@ export function mountPaymentsProviderSettingsRoutes(
     }),
   );
 
-  const otherCardMachinesPath = "/management-api/payments/other-card-machines";
   const machinesAnswer = ({ doc, revision }: Awaited<ReturnType<typeof readPaymentsSettings>>) => ({
-    machines: doc.otherCardMachines,
+    otherCardMachines: doc.otherCardMachines,
     revision,
   });
 
-  app.get(otherCardMachinesPath, (c) =>
+  app.get("/management-api/payments/other-card-machines", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       return c.json(machinesAnswer(await gated(sessionId, readPaymentsSettings)));
     }),
   );
 
-  app.put(otherCardMachinesPath, (c) =>
+  app.put("/management-api/payments/other-card-machines", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);
       const body = await readJsonBody<Record<string, unknown>>(c);
       const revision = requireRevision(body.revision);
       const saved = await gated(sessionId, async (tx, personId) => {
-        const { doc } = await readPaymentsSettings(tx);
+        const { doc, revision: current } = await readPaymentsSettings(tx);
+        if (current !== revision)
+          throw new AppError("settings.out_of_date", { module: "payments", revision: current });
         const otherCardMachines = otherCardMachinesFrom(
-          body.machines,
+          body.otherCardMachines,
           new Set(doc.otherCardMachines.map((machine) => machine.id)),
         );
         return saveSettings(tx, PAYMENTS_SETTINGS, {

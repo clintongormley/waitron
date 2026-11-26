@@ -87,6 +87,7 @@ it("keeps a valid list of other card machines", () => {
 
 const machine = { id: "m1", name: "Bar terminal", paysInto: "other" };
 it.each([
+  ["a null list", null],
   ["a list that is not an array", { m1: machine }],
   ["an entry that is not an object", ["m1"]],
   ["an entry with an unknown key", [{ ...machine, colour: "red" }]],
@@ -96,9 +97,17 @@ it.each([
   ["a blank name", [{ ...machine, name: "   " }]],
   ["a non-string name", [{ ...machine, name: 7 }]],
   ["a name over 60 characters", [{ ...machine, name: "x".repeat(61) }]],
+  ["a name with spaces at either end", [{ ...machine, name: " Bar terminal " }]],
   ["another destination", [{ ...machine, paysInto: "bank" }]],
   ["a repeated id", [machine, { ...machine, name: "Terrace" }]],
-  ["a repeated name", [machine, { ...machine, id: "m2", name: " bar TERMINAL " }]],
+  ["a repeated name", [machine, { ...machine, id: "m2", name: "bar TERMINAL" }]],
+  [
+    "a name repeated in another Unicode spelling",
+    [
+      { ...machine, name: "Sal\u00f3n" },
+      { ...machine, id: "m2", name: "Salo\u0301n" },
+    ],
+  ],
 ])("refuses other card machines with %s", (_label, otherCardMachines) => {
   expect(payments.PAYMENTS_SETTINGS.parse({ providers: {}, otherCardMachines })).toEqual({
     ok: false,

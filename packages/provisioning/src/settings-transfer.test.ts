@@ -298,3 +298,23 @@ it.each([
     }),
   );
 });
+
+it("refuses an imported payment document whose machine list is null and keeps the stored list", async () => {
+  const stored = {
+    providers: {},
+    tipsEnabled: false,
+    testProviders: false,
+    otherCardMachines: [{ id: "m1", name: "Bar terminal", paysInto: "other" }],
+  };
+  await withTransaction(suite.db, (tx) =>
+    saveSettings(tx, payments, { doc: stored, expectedRevision: 0, personId: null }),
+  );
+  const value = { payments: { version: 1, doc: { tipsEnabled: true, otherCardMachines: null } } };
+  await withTransaction(suite.db, async (tx) => {
+    await expect(importSettingsDocuments(tx, value, ALL_MODULES)).rejects.toMatchObject({
+      code: "setup.request_invalid",
+      params: { field: "settings.payments.otherCardMachines" },
+    });
+  });
+  expect(await readSettings(suite.db, payments)).toEqual({ doc: stored, revision: 1 });
+});

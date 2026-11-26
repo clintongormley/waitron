@@ -5,11 +5,12 @@ export const PAYMENTS_PERMISSIONS: readonly ModulePermission[] = [
   { permission: "payments.providers.manage", defaultHolders: [] },
 ];
 export const OTHER_CARD_MACHINE_DESTINATIONS = ["connected_account", "other"] as const;
+export type OtherCardMachineDestination = (typeof OTHER_CARD_MACHINE_DESTINATIONS)[number];
 export const OTHER_CARD_MACHINE_NAME_MAX = 60;
 export interface OtherCardMachine {
   id: string;
   name: string;
-  paysInto: (typeof OTHER_CARD_MACHINE_DESTINATIONS)[number];
+  paysInto: OtherCardMachineDestination;
 }
 interface PaymentsDocument {
   providers: Record<string, boolean>;
@@ -20,7 +21,6 @@ interface PaymentsDocument {
 
 const MACHINE_KEYS = ["id", "name", "paysInto"];
 
-/** The field (`id`, `name` or `paysInto`) a machine's own value fails on, or null. */
 export function otherCardMachineFault(value: unknown): string | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return "id";
   const entry = value as Record<string, unknown>;
@@ -29,17 +29,18 @@ export function otherCardMachineFault(value: unknown): string | null {
   if (typeof entry.id !== "string" || entry.id === "") return "id";
   if (
     typeof entry.name !== "string" ||
-    entry.name.trim() === "" ||
-    entry.name.trim().length > OTHER_CARD_MACHINE_NAME_MAX
+    entry.name !== entry.name.trim() ||
+    entry.name === "" ||
+    entry.name.length > OTHER_CARD_MACHINE_NAME_MAX
   )
     return "name";
-  if (!OTHER_CARD_MACHINE_DESTINATIONS.includes(entry.paysInto as OtherCardMachine["paysInto"]))
+  if (!OTHER_CARD_MACHINE_DESTINATIONS.includes(entry.paysInto as OtherCardMachineDestination))
     return "paysInto";
   return null;
 }
 
 export function otherCardMachineNameKey(name: string): string {
-  return name.trim().toLowerCase();
+  return name.trim().normalize("NFC").toLowerCase();
 }
 
 function parseOtherCardMachines(value: unknown): OtherCardMachine[] | null {
@@ -81,7 +82,9 @@ export const PAYMENTS_SETTINGS = defineSettingsDocument<PaymentsDocument>({
       return { ok: false, field: "providers" };
     if (Object.values(value.providers).some((enabled) => typeof enabled !== "boolean"))
       return { ok: false, field: "providers" };
-    const otherCardMachines = parseOtherCardMachines(value.otherCardMachines ?? []);
+    const otherCardMachines = parseOtherCardMachines(
+      value.otherCardMachines === undefined ? [] : value.otherCardMachines,
+    );
     if (otherCardMachines === null) return { ok: false, field: "otherCardMachines" };
     return {
       ok: true,
