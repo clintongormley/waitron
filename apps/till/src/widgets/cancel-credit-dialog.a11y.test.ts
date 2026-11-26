@@ -44,10 +44,23 @@ const states: [string, State][] = [
     },
   ],
   ["sending", { refusal: null, busy: true, pressed: false, done: null }],
-  ["done", { refusal: null, busy: false, pressed: false, done: { filed: "corrective", corrective: "R/3" } }],
+  [
+    "done",
+    {
+      refusal: null,
+      busy: false,
+      pressed: false,
+      done: { filed: "corrective", corrective: "R/3" },
+    },
+  ],
   [
     "done, receipt cancelled",
-    { refusal: null, busy: false, pressed: false, done: { filed: "cancellation", corrective: null } },
+    {
+      refusal: null,
+      busy: false,
+      pressed: false,
+      done: { filed: "cancellation", corrective: null },
+    },
   ],
 ];
 

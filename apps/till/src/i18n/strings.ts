@@ -2196,7 +2196,6 @@ export const en = {
   "departure.approvers_failed": "Could not read who can approve this. Try again.",
   "departure.unconfirmed":
     "The departure got no answer, so it may have been recorded. Check this bill before trying again.",
-  // Cancel and credit: an invoiced, unpaid bill is credited in full and cancelled
   "cancel_credit.action": "Nothing was served",
   "cancel_credit.title": "Nothing was served",
   "cancel_credit.scope":

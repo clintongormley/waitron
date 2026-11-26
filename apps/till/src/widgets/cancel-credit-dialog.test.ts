@@ -278,7 +278,10 @@ describe("till-cancel-credit-dialog: done", () => {
   });
 
   it("says the receipt is cancelled when it has no number either", async () => {
-    const el = await mount({ invoiceNumber: null, done: { filed: "cancellation", corrective: null } });
+    const el = await mount({
+      invoiceNumber: null,
+      done: { filed: "cancellation", corrective: null },
+    });
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
       "The receipt is cancelled.",
@@ -335,7 +338,8 @@ describe("till-cancel-credit-dialog: served dishes", () => {
     expect(actions(el).error).toBe("");
   });
 
-  it("keeps the confirm quiet, whatever is typed, until the window is opened again", async () => {
+  // Opening the window again is proved in till-app-parties-closing.test.ts, "lists the dishes served…".
+  it("keeps the confirm quiet, whatever is typed, while the served dishes are listed", async () => {
     const el = await mount({
       refusal: { code: "bill.served_dishes", served: [steak] },
     });
@@ -345,10 +349,6 @@ describe("till-cancel-credit-dialog: served dishes", () => {
     expect(confirm(el).disabled).toBe(true);
     await press(el);
     expect(asked).toEqual([]);
-
-    const reopened = await mount();
-    await type(reopened, "Wrong table");
-    expect(confirm(reopened).disabled).toBe(false);
   });
 
   it("says it in Spanish", async () => {

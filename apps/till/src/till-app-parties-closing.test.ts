@@ -99,7 +99,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     };
   }
 
-  /** The table is opened and the invoiced bill's Cancel and credit is pressed. */
+  /** The table is opened and the invoiced bill's Nothing was served is pressed. */
   async function openCancel(overrides: Record<string, unknown> = {}) {
     const mounted = await mountApp({
       listCancelCreditAuthorizers: vi
@@ -113,7 +113,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     return mounted;
   }
 
-  /** The invoiced bill is put on screen, and the ⋮'s Cancel and credit is pressed. */
+  /** The invoiced bill is put on screen, and the ⋮'s Nothing was served is pressed. */
   async function pressCancelCredit(el: TillApp): Promise<void> {
     const order = tableOrder(el)!;
     if (order.orderId !== "wo-check") {
@@ -757,10 +757,10 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
 
     dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!.click();
     await flush(el);
-    const ask = el.shadowRoot!.querySelector("wt-unsaved-changes");
-    if (ask?.open) {
-      ask.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
-    }
+    const ask = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+    await ask.updateComplete;
+    expect(ask.open).toBe(true);
+    ask.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
     await expect.poll(() => dialog(el)).toBeNull();
     await pressCancelCredit(el);
     await typeReason(el, "Nobody came");

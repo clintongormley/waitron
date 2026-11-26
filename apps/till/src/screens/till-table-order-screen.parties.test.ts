@@ -317,7 +317,7 @@ describe("till-table-order-screen: paying a bill by its state", () => {
   });
 });
 
-describe("till-table-order-screen: Cancel and credit", () => {
+describe("till-table-order-screen: Nothing was served", () => {
   const invoiced: PartyBill = {
     ...check,
     workingOrderId: "wo-invoiced",

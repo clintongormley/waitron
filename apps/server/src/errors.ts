@@ -964,7 +964,7 @@ declare module "@waitron/shared" {
       dishes: UnservedBillDish[];
       canStop: boolean;
     };
-    /** Cancel and credit cannot cancel the receipt: these dishes were served or their charge kept. */
+    /** The receipt cannot be cancelled: these dishes were served or their charge kept. */
     "bill.served_dishes": { workingOrderId: string; dishes: ServedBillDish[] };
     /**
      * A merge, or a move of every dish, would move `workingOrderId`'s full invoice onto

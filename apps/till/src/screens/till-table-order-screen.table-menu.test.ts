@@ -241,7 +241,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(groups(el)[0]!.items).toContain("No se sirvió nada");
   });
 
-  it("a presented full invoice naming a customer offers no Cancel and credit, which the server would refuse", async () => {
+  it("a presented full invoice naming a customer offers no Nothing was served, which the server would refuse", async () => {
     const named = partyBill("wo-2", 2, "54.00", {
       status: "placed",
       receiptAvailable: true,
@@ -259,7 +259,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(item(el, "[data-cancel-credit]")).toBeNull();
   });
 
-  it("a presented full invoice naming no customer still offers Cancel and credit", async () => {
+  it("a presented full invoice naming no customer still offers Nothing was served", async () => {
     const unnamed = partyBill("wo-2", 2, "54.00", {
       status: "placed",
       receiptAvailable: true,
@@ -281,7 +281,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(split).toEqual([{ workingOrderId: "wo-2" }]);
   });
 
-  it("a presented bill its guests left unpaid offers Cancel and credit but no Reopen bill", async () => {
+  it("a presented bill its guests left unpaid offers Nothing was served but no Reopen bill", async () => {
     const left = partyBill("wo-2", 2, "54.00", {
       status: "placed",
       receiptAvailable: true,
@@ -293,7 +293,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(item(el, "[data-split-after-print]")).toBeNull();
   });
 
-  it("offers Reopen bill on a printed bill with payments, and Cancel and credit only without", async () => {
+  it("offers Reopen bill on a printed bill with payments, and Nothing was served only without", async () => {
     const part = partyBill("wo-3", 3, "20.00", {
       status: "placed",
       total: "54.00",
@@ -308,7 +308,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(split).toEqual([{ workingOrderId: "wo-3" }]);
   });
 
-  it("offers no Reopen bill wherever it offers no Cancel and credit", async () => {
+  it("offers no Reopen bill wherever it offers no Nothing was served", async () => {
     const named = partyBill("wo-2", 2, "54.00", {
       status: "placed",
       receiptAvailable: true,
@@ -400,7 +400,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(finish).toEqual([{}]);
   });
 
-  it("Receipt copy and Cancel and credit send their events for the bill on screen", async () => {
+  it("Receipt copy and Nothing was served send their events for the bill on screen", async () => {
     const paid = partyBill("wo-1", 1, "0.00", { status: "settled", receiptAvailable: true });
     const presented = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
     const el = await mountScreen({ bills: [paid, presented], orderId: "wo-1" });
@@ -773,7 +773,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       expect(item(el, "[data-bill-receipt]")).toBeNull();
     });
 
-    it("a presented bill with a receipt and payments offers no Cancel and credit", async () => {
+    it("a presented bill with a receipt and payments offers no Nothing was served", async () => {
       const presented = partyBill("wo-2", 2, "20.00", {
         status: "placed",
         total: "54.00",
