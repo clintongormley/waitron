@@ -157,6 +157,7 @@ describe("the live copy's wiring", () => {
     async function configure(
       options: {
         term?: number;
+        solo?: boolean;
         standing?: "serving-secondary" | "evicted";
         endorsement?: "missing" | "forged";
       } = {},
@@ -175,11 +176,15 @@ describe("the live copy's wiring", () => {
           minTerm: options.term ?? 1,
           nodes: [
             { nodeId: NODE_ID, contactUrl: "https://old.example", standing: "serving-primary" },
-            {
-              nodeId: "node-b",
-              contactUrl: "https://new.example",
-              standing: options.standing ?? "serving-secondary",
-            },
+            ...(options.solo
+              ? []
+              : [
+                  {
+                    nodeId: "node-b",
+                    contactUrl: "https://new.example",
+                    standing: options.standing ?? "serving-secondary",
+                  },
+                ]),
           ],
           signerNodeId: NODE_ID,
           signerPrivateKey: keys.privateKey,
@@ -217,6 +222,29 @@ describe("the live copy's wiring", () => {
       await configure({ endorsement: "forged" });
       expect(await readNewerBucketMain(deps(bucket))).toBeNull();
     });
+    it.each(["equal term", "wrong key", "joined peer"])(
+      "ignores a replacement pointer with %s",
+      async (caseName) => {
+        await configure({ solo: caseName !== "joined peer" });
+        const bucket = store();
+        await publish(
+          bucket,
+          caseName === "equal term" ? 1 : 2,
+          NODE_ID,
+          caseName === "wrong key" ? spareKeys.privateKey : keys.privateKey,
+        );
+        const reads = vi.spyOn(bucket, "get");
+        const stop = vi.fn(async () => {});
+        const rt = runtime({ store: bucket, mainCheckIntervalMs: 5 });
+        rt.observeReplacement(stop);
+        try {
+          await vi.waitFor(() => expect(reads.mock.calls.length).toBeGreaterThanOrEqual(2));
+        } finally {
+          await rt.stop();
+        }
+        expect(stop).not.toHaveBeenCalled();
+      },
+    );
     it.each([
       "equal",
       "older",

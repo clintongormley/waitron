@@ -3915,6 +3915,25 @@ their connection check), `box-leaf-names.test.ts`, the start-up reissue cases in
 `boot.restore.test.ts` and `boot.reconcile.test.ts`. Weaker than the rule: nothing checks that a
 NEW entry point which reads `tls/` calls `finishTlsInstall` first.
 
+## A solo box stays stopped when it verifies a replacement
+
+A solo primary checks its configured bucket while serving. A restored box starts this check once
+its first start has completed. A newer published pointer for the same stream and node counts only
+when it verifies with the box’s own signing key. The bucket and archive recovery cases
+(`stream-loop.e2e.test.ts` and `restore-command.archive.test.ts`) exercise the publication of that
+evidence. The archive case runs the first start and pointer publisher with a simulated full-copy
+upload.
+
+The check closes the request gate and signals the filing drain before the local marker write. The
+box retries a failed write with the evidence it already verified. Until the marker reaches disk, a
+forced process stop can lose it. `replaced.json` belongs to one box. Reset deletes it. A restore
+removes it after placing the database and secrets. A restart that finds the marker serves the
+waiting page and alert email duty.
+
+Sales can still reach the old box between restore and verified detection. When service moves back
+by restoring the replacement’s latest backup, those sales survive only in the old database that the
+restore sets aside. The guide explains when to keep that copy.
+
 ## A venue's changes stream to one place: the spare's store or the owner's bucket
 
 **The rule.** A main box with a spare streams `venue.db` to the spare's store and never to the

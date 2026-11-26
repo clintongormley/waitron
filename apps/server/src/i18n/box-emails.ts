@@ -42,6 +42,17 @@ export const UNPLANNED_STOP_EMAIL_WORDS = {
   },
 } as const;
 
+export const REPLACED_EMAIL_WORDS = {
+  en: {
+    subject: "{venue}: this box was replaced",
+    text: "The replacement is now this venue’s main box. Leave this box switched off. To move service back here, shut down the replacement and restore its latest backup onto this box.",
+  },
+  es: {
+    subject: "{venue}: se ha sustituido este servidor",
+    text: "El servidor de sustitución es ahora el principal del local. Deja este servidor apagado. Para volver a usar este servidor, apaga el servidor de sustitución y restaura aquí su copia de seguridad más reciente.",
+  },
+} as const;
+
 /** By what set the clock, `unverified` (with its own subject) instead of any when the box could
  * not confirm the step took; `{step}` is `forward`, `back` or `moved` with the step's length. */
 export const CLOCK_CORRECTED_EMAIL_WORDS = {

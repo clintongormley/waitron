@@ -111,6 +111,16 @@ it("waitron.sh's plain reset keeps exactly the layout's kept entries", () => {
   );
 });
 
+it("does not back up or keep a box's replacement marker on reset", () => {
+  expect(STATE_LAYOUT.find(({ name }) => name === "replaced.json")).toMatchObject({
+    reset: "deleted",
+    backup: { exclude: expect.any(String) },
+  });
+  expect(layout.REQUIRED_BACKUP_STATE).not.toContain("replaced.json");
+  expect(layout.OPTIONAL_BACKUP_STATE).not.toContain("replaced.json");
+  expect(RESET_KEPT).not.toContain("replaced.json");
+});
+
 it("reports definitions but accepts comments, format items and the layout module", () => {
   const text =
     'export const NEW_NAME = "spare-space.released";\nconst p = join(deps.stateDir, "tls");\n// we write "secrets.env" here\n/* join(stateDir, "trading.env") */\nconst item = { item: "secrets.env" };';

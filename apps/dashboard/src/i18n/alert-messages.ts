@@ -94,6 +94,10 @@ export const ALERT_MESSAGES: Readonly<
     en: "The box stopped without warning.",
     es: "El servidor se detuvo sin aviso.",
   },
+  "start.replaced": {
+    en: "This box has been replaced. Leave it switched off.",
+    es: "Este servidor se ha sustituido. Déjalo apagado.",
+  },
   "backup.archives_deleted": {
     en: "Low disk space: the box deleted its {count} oldest backups ({date:date}).",
     es: "Poco espacio en disco: el servidor borró sus {count} copias más antiguas ({date:date}).",

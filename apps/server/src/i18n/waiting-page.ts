@@ -174,3 +174,19 @@ export const WAITING_PAGE_WORDS: Readonly<
     },
   },
 };
+export const REPLACED_PAGE_WORDS = {
+  "en-GB": {
+    title: "This box has been replaced",
+    body: "The replacement is now this venue’s main box. Leave this box switched off.",
+    recovery:
+      "To move service back here, shut down the replacement and restore its latest backup onto this box.",
+    guide: "Read how to restore the replacement’s backup",
+  },
+  "es-ES": {
+    title: "Este servidor se ha sustituido",
+    body: "El servidor de sustitución es ahora el principal del local. Deja este servidor apagado.",
+    recovery:
+      "Para volver a usar este servidor, apaga el servidor de sustitución y restaura aquí su copia de seguridad más reciente.",
+    guide: "Consulta cómo restaurar la copia del servidor de sustitución",
+  },
+} as const;

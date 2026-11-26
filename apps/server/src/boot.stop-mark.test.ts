@@ -1,15 +1,25 @@
-import { incidents } from "@waitron/db";
+import { loadKeyRing } from "@waitron/credentials";
+import { incidents, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { pointerKey, signPointer } from "@waitron/stream";
+import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import { eq } from "drizzle-orm";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { expect, it, vi } from "vitest";
+import * as atomic from "./fs-atomic.js";
+import { seedTermZeroMembership } from "./membership-seed.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { readStreamSettings, writeStreamSettings } from "./stream-host.js";
+import { startFakeSmtp } from "./testing/boot-harness.js";
+import { TRADING_BOOT_KEY_ENV } from "./testing/boot-trading-fixture.js";
 import {
   ephemeralServerFixture,
   withTradingBootServer,
 } from "./testing/ephemeral-server-fixture.js";
 import { setupVenue } from "./testing/venue-fixtures.js";
+import { saveSmtpForTest } from "./testing/saved-smtp.js";
 import { synchronisedBoxHost } from "./testing/synchronised-box-host.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -88,3 +98,140 @@ it.each([false, true])(
     );
   },
 );
+
+it("stops admissions before saving the replacement and stays stopped after an offline restart", async () => {
+  const { cfg } = await setupVenue(suite.db);
+  const ring = loadKeyRing(TRADING_BOOT_KEY_ENV);
+  const identity = { ownerDb: suite.db, node: suite.node, ring };
+  await establishNodeIdentity(identity, cfg.nodeId);
+  await seedTermZeroMembership({ ...identity, db: suite.db }, cfg.nodeId, "https://old.example");
+  await withTransaction(suite.db, (tx) =>
+    writeStreamSettings(
+      tx,
+      ring,
+      {
+        region: "eu-west-1",
+        bucket: "copies",
+        prefix: "",
+        accessKeyId: "test",
+        secretAccessKey: "test-secret",
+      },
+      null,
+    ),
+  );
+  const { streamId } = (await readStreamSettings(suite.db, ring))!;
+  const key = await readNodeIdentityKey(suite.node, ring, cfg.nodeId);
+  const bucket = new SwitchableStore(() => new Date());
+  const restart = vi.fn();
+  let releaseFirst!: () => void;
+  let releaseSecond!: () => void;
+  const first = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const second = new Promise<void>((resolve) => {
+    releaseSecond = resolve;
+  });
+  const write = atomic.writeFileDurable;
+  let attempts = 0;
+  const saved = vi.spyOn(atomic, "writeFileDurable").mockImplementation(async (...args) => {
+    if (args[0].endsWith("/replaced.json")) {
+      attempts++;
+      if (attempts === 1) {
+        await first;
+        throw Object.assign(new Error("disk full"), { code: "ENOSPC" });
+      }
+      await second;
+    }
+    await write(...args);
+  });
+  let env: Record<string, string>;
+  const boot = (vars: Record<string, string>) =>
+    startServer(vars, vars, {
+      boxHost: synchronisedBoxHost(),
+      stream: { store: bucket, mainCheckIntervalMs: 5 },
+      restart,
+    });
+  const probe = async (origin: string) =>
+    (await fetch(`${origin}/api/node`)).json() as Promise<{ acceptingSales: boolean }>;
+  const smtp = await startFakeSmtp();
+  try {
+    await withTransaction(suite.db, (tx) =>
+      saveSmtpForTest(tx, ring, {
+        url: `smtp://127.0.0.1:${smtp.port}`,
+        from: "notices@example.test",
+      }),
+    );
+    await withTradingBootServer(
+      {
+        db: suite.db,
+        nodeId: cfg.nodeId,
+        scratchPrefix: "waitron-boot-replaced-",
+        start: (vars) => {
+          env = vars;
+          return boot(vars);
+        },
+        httpPort,
+      },
+      async (base) => {
+        try {
+          expect(await probe(base)).toMatchObject({ acceptingSales: true });
+          const pointer = signPointer(
+            {
+              streamId,
+              nodeId: cfg.nodeId,
+              term: 1,
+              generation: `gen-1-${cfg.nodeId}-20261022T093100Z`,
+              writtenAt: heartbeatAt,
+            },
+            key,
+          );
+          await bucket.put(pointerKey(), new TextEncoder().encode(JSON.stringify(pointer)));
+          await vi.waitFor(() => expect(attempts).toBe(1), { timeout: 2_000 });
+          expect(await probe(base)).toMatchObject({ acceptingSales: false });
+          const refused = await fetch(`${base}/api/attendance/commands`, { method: "POST" });
+          expect(refused.status).toBe(503);
+          expect(await refused.json()).toMatchObject({ error: { code: "handover.stepping_down" } });
+          bucket.down = true;
+          releaseFirst();
+          await vi.waitFor(() => expect(attempts).toBe(2), { timeout: 2_000 });
+          expect(await probe(base)).toMatchObject({ acceptingSales: false });
+          expect(restart).not.toHaveBeenCalled();
+          releaseSecond();
+          await vi.waitFor(() => expect(restart).toHaveBeenCalledOnce());
+          const markFile = join(env.WAITRON_STATE_DIR!, "replaced.json");
+          expect(JSON.parse(await readFile(markFile, "utf8"))).toMatchObject({
+            streamId,
+            nodeId: cfg.nodeId,
+            term: 1,
+          });
+
+          const held = await boot(env);
+          try {
+            const offline = `http://127.0.0.1:${httpPort()}`;
+            expect(await probe(offline)).toMatchObject({ acceptingSales: false });
+            const response = await fetch(offline, { headers: { "Accept-Language": "en" } });
+            const page = await response.text();
+            expect(page).toContain("Leave this box switched off");
+            expect(page).toContain('href="/help/en/backup-recovery#replaced-box"');
+            expect((await fetch(`${offline}/carry-on`, { method: "POST" })).status).toBe(404);
+            const rows = await suite.db
+              .select({ code: incidents.code })
+              .from(incidents)
+              .where(eq(incidents.code, "start.replaced"));
+            expect(rows).toEqual([{ code: "start.replaced" }]);
+            await vi.waitFor(() => expect(smtp.messages).toHaveLength(1), { timeout: 10_000 });
+            expect(smtp.messages[0]).toContain("To: owner@example.test");
+          } finally {
+            await held.close();
+          }
+        } finally {
+          releaseFirst();
+          releaseSecond();
+        }
+      },
+    );
+  } finally {
+    saved.mockRestore();
+    await smtp.close();
+  }
+}, 30_000);

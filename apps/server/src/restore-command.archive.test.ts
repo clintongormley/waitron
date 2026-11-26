@@ -7,7 +7,8 @@ import { DatabaseSync } from "node:sqlite";
 import { dirname, join } from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { loadKeyRing } from "@waitron/credentials";
+import { loadKeyRing, nodeSigningPublicKey } from "@waitron/credentials";
+import { generateNodeKeyPair } from "@waitron/membership";
 import {
   invoiceSeries,
   settings,
@@ -32,7 +33,10 @@ import { allocationFixture } from "@waitron/fiscal-verifactu/test/allocation-fix
 import { stampDeployment, nextInvoiceNumberOf } from "@waitron/db";
 import { mintMasterKey } from "./testing/master-key.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
-import type { BucketConfig, FileCall, S3FileStore } from "@waitron/stream";
+import * as stream from "@waitron/stream";
+import type { BucketConfig, FileCall, S3FileStore, S3ObjectStore } from "@waitron/stream";
+import { FakeLitestream } from "@waitron/stream/testing/fake-litestream.js";
+import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import { appendToChain, readChain, readChainHead } from "@waitron/workforce";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { encodeArchiveRecoveryPack, type ArchiveRecoveryPack } from "./archive-recovery-pack.js";
@@ -47,7 +51,23 @@ import {
   type ValidatedArtifact,
 } from "./restore.js";
 import { runRestore } from "./restore-command.js";
-import { readStreamSettings } from "./stream-host.js";
+import { readStreamSettings, writeStreamSettings } from "./stream-host.js";
+import {
+  assembleArchiveEntries,
+  collectStateParts,
+  snapshotNodeDatabase,
+} from "./archive-entries.js";
+import { ensureBoxSecrets } from "./box-secrets.js";
+import { establishNodeIdentity, readNodeIdentityKey } from "./node-identity.js";
+import { seedTermZeroMembership } from "./membership-seed.js";
+import { loadBoxEnv } from "./box-env.js";
+import { startServer } from "./boot.js";
+import { bootEnv, boxDirs, copyMigrations } from "./testing/stream-box.js";
+import {
+  retainHttpListener,
+  startWithRetainedListeners,
+} from "./testing/retained-http-listener.js";
+import { seedModuleSettings } from "../test/module-settings.js";
 import {
   NOT_A_PACK,
   PACK_DAMAGED,
@@ -417,6 +437,118 @@ async function run(
 }
 
 describe("waitron-restore restore --from-archive", () => {
+  it("publishes a newer bucket pointer signed with the archived box's key", async () => {
+    const f = await fixture();
+    const original = await boxDirs(f.root, "original");
+    await suite.db.archiveTo(join(original.venue, "venue.db"));
+    await suite.node.archiveTo(join(original.venue, "node.db"));
+    await ensureBoxSecrets({
+      stateDir: original.state,
+      hostnames: ["localhost"],
+      now: () => new Date(),
+    });
+    await writeFile(join(original.state, "trading.env"), `WAITRON_NODE_ID=${ids.node}\n`);
+    await writeFile(
+      join(original.state, "backup.env"),
+      `WAITRON_BACKUP_RECOVERY_KEY=${RECOVERY_KEY}\n`,
+    );
+    const env = await loadBoxEnv({}, original.state);
+    const ring = loadKeyRing(env);
+    let publicKey: string;
+    let streamId: string;
+    const source = await openVenueDatabase(original.venue);
+    try {
+      await establishNodeIdentity({ ownerDb: source.venue, node: source.node, ring }, ids.node);
+      publicKey = nodeSigningPublicKey(await readNodeIdentityKey(source.node, ring, ids.node));
+      await seedTermZeroMembership(
+        { db: source.venue, node: source.node, ring },
+        ids.node,
+        "https://old.example",
+      );
+      await seedModuleSettings(source.venue, { "fiscal-none": false });
+      await withTransaction(source.venue, (tx) => writeStreamSettings(tx, ring, PACK.bucket, null));
+      streamId = (await readStreamSettings(source.venue, ring))!.streamId;
+      await source.venue.archiveTo(join(f.root, "stream-source.db"));
+      const manifest = await buildManifest({
+        db: source.venue,
+        node: source.node,
+        modules: ALL_MODULES,
+        environment: "preproduction",
+        now: new Date("2026-10-01T03:00:00Z"),
+      });
+      const parts = await collectStateParts({
+        stateDir: original.state,
+        modules: ALL_MODULES,
+        resolvers: {},
+        snapshotNode: snapshotNodeDatabase(source.node, f.root),
+      });
+      const entries = assembleArchiveEntries(
+        manifest,
+        await readFile(join(f.root, "stream-source.db")),
+        parts,
+      );
+      await writeFile(join(f.bucketDir, KEY), encryptArtifact(packArchive(entries), RECOVERY_KEY));
+    } finally {
+      await source.close();
+    }
+
+    const replacementMark = join(f.stateDir, "replaced.json");
+    const mark = JSON.stringify({ streamId, nodeId: ids.node, term: 1 });
+    await writeFile(replacementMark, mark);
+    const refused = await run(f, ["--confirm-old-box-gone"], {
+      restore: (deps) =>
+        restoreFromArtifactFile({
+          ...deps,
+          migrationsRoot: null,
+          beforeDatabaseMove: async () => {
+            throw new AppError("storage.disk_full", {});
+          },
+        }),
+    });
+    expect(refused.code).toBe(1);
+    expect(await readFile(replacementMark, "utf8")).toBe(mark);
+    const restored = await run(f, ["--confirm-old-box-gone"]);
+    expect(restored.code, restored.out.join("\n")).toBe(0);
+    await expect(stat(replacementMark)).rejects.toMatchObject({ code: "ENOENT" });
+    const bucket = Object.assign(new SwitchableStore(() => new Date()), {
+      listFolders: async () => [],
+    }) satisfies S3ObjectStore;
+    const open = vi.spyOn(stream, "createS3FolderStore").mockReturnValue(bucket);
+    const litestream = new FakeLitestream();
+    const listener = await retainHttpListener();
+    try {
+      const migrations = await copyMigrations(f.root);
+      const startup = await loadBoxEnv(
+        bootEnv({ state: f.stateDir, venue: f.venueDir }, listener.port, migrations, "litestream"),
+        f.stateDir,
+      );
+      const server = await startWithRetainedListeners([listener], () =>
+        startServer(startup, {}, { stream: { store: bucket, spawn: litestream.spawn } }),
+      );
+      try {
+        await vi.waitFor(() => expect(litestream.running()).toBeDefined(), { timeout: 5_000 });
+        const [claim] = await bucket.list("gen-");
+        const generation = claim!.key.split("/")[0]!;
+        bucket.upload(`${generation}/0000/0000000000000001-0000000000000001.ltx`);
+        await vi.waitFor(
+          async () => {
+            const stored = await stream.readPointer(bucket, streamId);
+            expect(stored?.pointer.body).toMatchObject({ nodeId: ids.node, term: 1, streamId });
+          },
+          { timeout: 10_000 },
+        );
+        const pointer = (await stream.readPointer(bucket, streamId))!.pointer;
+        expect(stream.verifyPointer(pointer, publicKey)).toBe(true);
+        expect(stream.verifyPointer(pointer, generateNodeKeyPair().publicKey)).toBe(false);
+      } finally {
+        await server.close();
+      }
+    } finally {
+      open.mockRestore();
+      if (listener.server.listening) await listener.close();
+    }
+  }, 60_000);
+
   it("restores an archive from a venue that never streamed, with no kit anywhere", async () => {
     const ring = loadKeyRing({
       WAITRON_CREDENTIALS_KEY: VAULT_KEY,

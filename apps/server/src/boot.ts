@@ -138,6 +138,7 @@ import { LiveEvents, changeSubscriber, mountLiveApi } from "./live-api.js";
 import { backgroundDuties, stopBackgroundDuties } from "./background-duties.js";
 import {
   stepDown,
+  stepDownForReplacement,
   type StepDownDeps,
   type StepDownRequest,
   type StepDownResult,
@@ -372,7 +373,13 @@ import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup
 import { errnoOf } from "./errno.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { recordUnexpectedStop } from "./stop-alert.js";
-import { writeRestartMark, type PreviousStop } from "./stop-mark.js";
+import {
+  hasReplacementMark,
+  writeReplacementMark,
+  writeRestartMark,
+  type PreviousStop,
+} from "./stop-mark.js";
+import { mountReplacementHold } from "./replacement-hold.js";
 import {
   clearStagedConfigurationImport,
   readStagedConfigurationImport,
@@ -2011,7 +2018,27 @@ async function bootServer(
   // Before the start check: a spare that lost its node.db cannot sign its question, so the main box
   // it counts reads as silent and the start would wait, answering the venue's name.
   await refuseLostNodeState(db, store.node, ring, config.node.nodeId);
-  // Restricted starts run only the return sender and the reset-order duty, which read this venue's data.
+  const listenOwnName = (localApp: Hono, stopWork: () => Promise<void>) => {
+    const server = startTradingListener(config, localApp, now, log);
+    undoOnFailure.push(() => closeListener(server));
+    const mdns = startMdnsResponder({
+      names: () => ownNameOnly,
+      makeSocket: seams.mdnsSocket,
+      devMode: config.devMode,
+      httpHost: config.httpHost,
+      getAddresses: boxAddresses,
+      log,
+    });
+    undoOnFailure.push(() => mdns.stop());
+    return makeStartedServer(
+      server,
+      health,
+      log,
+      { stopWork, settleRequests: () => Promise.resolve(), closePools: () => store.close() },
+      mdns,
+      startLandingListener(config, log),
+    );
+  };
   const restrictedStart = () => {
     let heardHoldings: () => HeardHoldings | null = () => null;
     const returnRecords = startReturnRecordsDuty({
@@ -2118,36 +2145,31 @@ async function bootServer(
           ),
       ],
       log,
-      listen: (restrictedApp, stopWork) => {
-        const server = startTradingListener(config, restrictedApp, now, log);
-        undoOnFailure.push(() => closeListener(server));
-        const mdns = startMdnsResponder({
-          names: () => ownNameOnly,
-          makeSocket: seams.mdnsSocket,
-          devMode: config.devMode,
-          httpHost: config.httpHost,
-          getAddresses: boxAddresses,
-          log,
-        });
-        undoOnFailure.push(() => mdns.stop());
-        return makeStartedServer(
-          server,
-          health,
-          log,
-          {
-            stopWork,
-            settleRequests: () => Promise.resolve(),
-            closePools: () => store.close(),
-          },
-          mdns,
-          startLandingListener(config, log),
-        );
-      },
+      listen: listenOwnName,
     });
   };
   if ((await readHandoverRestriction(store.node, config.node.nodeId)) !== null) {
     await closeSupersededOperation({ node: store.node, nodeId: config.node.nodeId }, log);
     return restrictedStart();
+  }
+  if (await hasReplacementMark(config.stateDir)) {
+    const runner = createJobRunner({ now, log });
+    const stop = () => runner.stopJobs();
+    undoOnFailure.push(stop);
+    await mountReplacementHold({
+      app,
+      db,
+      config,
+      nodeId: node.nodeId,
+      ring,
+      health,
+      runner,
+      disk: diskFull,
+      space: freeSpace,
+      now,
+      log,
+    });
+    return listenOwnName(app, stop);
   }
   let carriedOnWithoutPeer = false;
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
@@ -2989,6 +3011,7 @@ async function bootServer(
     {
       nodeId: tradingContext.nodeId,
       acceptingSales,
+      admissionsClosed: () => health.takesNoSales === true,
       readTradingAdmission: () => tradingAdmission.snapshot(),
       environment: config.environment,
       readMembership: () => readNodeMembership(db),
@@ -4948,6 +4971,13 @@ async function bootServer(
         membershipTerm: evidence.membershipTerm,
       }),
     );
+  else if (acceptingSales && firstStart.mayStream)
+    streamHost.observeReplacement((evidence) => {
+      health.takesNoSales = true;
+      return stepDownForReplacement(stepDownDeps, () =>
+        writeReplacementMark(config.stateDir, evidence),
+      );
+    });
   jobRunner.add(
     housekeepingJob({
       db,

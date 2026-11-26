@@ -10,6 +10,14 @@ Usa una carpeta para la copia del bucket que no contenga la copia de otro flujo.
 
 Puedes compartir una carpeta de copias entre servidores: cada servidor elimina solo sus propias copias. Tras una restauración, elige una carpeta nueva si quieres conservar todas las copias anteriores, porque el servidor restaurado puede seguir eliminándolas. Waitron deja intactas las copias de otros servidores y los archivos que no reconoce; gestiona esos archivos cuando necesites más espacio.
 
+## Si otro servidor se ha hecho cargo del local {#replaced-box}
+
+El servidor de sustitución es ahora el principal de tu local. Deja este servidor apagado.
+
+Para volver a usar este servidor, guarda la copia de seguridad más reciente del servidor de sustitución y apágalo. En este servidor, detén el servicio de Waitron y ejecuta el comando de restauración indicado en la sección **The operator CLIs** de la guía de instalación. Usa las credenciales que permiten abrir y autorizar la copia elegida. Vuelve a iniciar el servicio cuando el comando termine correctamente.
+
+Comprueba si este servidor registró alguna venta después de que el servidor de sustitución se hiciera cargo y antes de que este se detuviera. Esas ventas no figuran en la copia del servidor de sustitución. Después de restaurar aquí, solo quedarán en la copia de la base de datos anterior que Waitron guarda aparte. Conserva esa copia si necesitas esas ventas. Si la descartas, las perderás.
+
 ## Si se interrumpió la primera configuración {#interrupted-setup}
 
 Recargar la pestaña que estaba haciendo la configuración sigue con ella, hasta que la configuración
@@ -260,8 +268,9 @@ cada arranque siguiente la vuelve a ejecutar.
 
 ## Después de una recuperación {#after-recovery}
 
-Mantén el servidor antiguo apagado y desconectado de la red. Si se vuelve a encender, puede
-seguir vendiendo y emitiendo facturas con sus series antiguas.
+Mantén el servidor antiguo apagado y desconectado de la red. Si vuelve a arrancar antes de
+verificar el servidor de sustitución, puede seguir vendiendo y emitiendo facturas con sus series
+antiguas.
 
 Abre **Informes → Remisión a la AEAT** y mira
 [Historial que puede faltar](fiscal-filing.md#missing-history). En **Cambios de identidad sin

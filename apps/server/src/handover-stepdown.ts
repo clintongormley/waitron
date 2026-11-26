@@ -113,6 +113,23 @@ export async function stepDown(
   return { restarting: true, replayed: false };
 }
 
+export async function stepDownForReplacement(
+  deps: StepDownDeps,
+  save: () => Promise<void>,
+): Promise<void> {
+  if (!deps.gate.isClosed()) {
+    deps.gate.close({ allowed: STEPDOWN_ALLOWED });
+    try {
+      signalDuties(deps.duties);
+    } catch (error) {
+      deps.log("error", "handover.stepdown_signal_failed", { errorCode: codeOf(error) });
+    }
+  }
+  await save();
+  // The observer must return before the stream's shutdown can await it.
+  setTimeout(() => void afterAnswer(deps), 0);
+}
+
 async function writeRestriction(deps: StepDownDeps, request: StepDownRequest): Promise<void> {
   await withNodeTransaction(deps.node, async (tx) => {
     if (request.kind === "handed-over") {
