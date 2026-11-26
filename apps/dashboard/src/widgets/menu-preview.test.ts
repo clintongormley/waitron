@@ -666,6 +666,57 @@ it.each([
 });
 
 it.each([
+  ["en", "Allergen or diet changes are not live yet: Lemonade and Daily menu."],
+  ["es-ES", "Hay cambios de alérgenos o dieta sin publicar: Lemonade y Daily menu."],
+])("shows the declaration advisory only while changes remain (%s)", async (locale, line) => {
+  setLocale(locale);
+  const targets = { before: [], after: [] };
+  const el = await mount({
+    preview: preview([
+      {
+        id: "lemonade",
+        targets,
+        kind: "product_changed",
+        productId: "p-lemonade",
+        name: "Lemonade",
+        fields: ["allergens"],
+        source: "shared_product",
+      },
+      {
+        id: "daily",
+        targets,
+        kind: "set_menu_changed",
+        setMenu: { id: "daily", name: "Daily menu" },
+        fields: ["diet"],
+        source: "set_menu",
+      },
+    ]),
+  });
+  expect(text(q(el, '[data-test="declarations-advisory"]'))).toContain(line);
+  const published = vi.fn();
+  el.addEventListener("wt-menu-publish", published);
+  q(el, '[data-test="publish"]')!.click();
+  await el.updateComplete;
+  expect(published).toHaveBeenCalledOnce();
+  expect(q(el, '[data-test="publish-confirmation"]')).toBeNull();
+
+  el.preview = preview([
+    {
+      id: "price",
+      targets,
+      kind: "price_changed",
+      productId: "p-lemonade",
+      name: "Lemonade",
+      from: "1.00",
+      to: "2.00",
+      source: "this_menu",
+    },
+  ]);
+  await el.updateComplete;
+  expect(q(el, '[data-test="declarations-advisory"]')).toBeNull();
+});
+
+it.each([
   ["en", "Daily menu: allergens, diet"],
   ["es-ES", "Daily menu: alérgenos, dieta"],
 ])("names a change to a set menu's dish allergens and diet (%s)", async (locale, line) => {

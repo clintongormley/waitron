@@ -1,4 +1,4 @@
-import type { Transaction } from "@waitron/db";
+import { readVenueClock, type Transaction } from "@waitron/db";
 import {
   isModifierListKind,
   validateOptionalTranslations,
@@ -10,6 +10,7 @@ import {
   listProductVariants,
   readProductDeclarationValues,
   waitingDeclarationMenus,
+  type DeclarationMenu,
   createProduct,
   writeProductModifiers,
   readProductModifiers,
@@ -17,6 +18,7 @@ import {
 import { type Logger, requireManagementSession, readJsonBody } from "@waitron/server-kit";
 import {
   AppError,
+  classifySavedTimeZone,
   type ProductModifierRef,
   isUuid,
   type ProductRouting,
@@ -30,6 +32,7 @@ import type { Hono } from "hono";
 import type { GatedWork } from "./content-translations-api.js";
 import type { MenuApiDeps } from "./menu-api-deps.js";
 import { run, runBodyProduct, runBodyCategory, runCreateProduct } from "./menu-api-errors.js";
+import { localTimeOf } from "./menu-publication-time.js";
 import {
   isPlainObject,
   idList,
@@ -174,7 +177,24 @@ export function mountMenuProductEditorRoutes(
             personId,
           );
           const routed = product.active ? await applyRouting(tx, product, routing) : product;
-          return { ...routed, declarationMenus: await waitingDeclarationMenus(tx, family, before) };
+          const waiting = await waitingDeclarationMenus(tx, family, before);
+          const zone = waiting.some(({ queued }) => queued.length > 0)
+            ? classifySavedTimeZone((await readVenueClock(tx)).timeZone)
+            : null;
+          const declarationMenus: DeclarationMenu[] = waiting.map(({ queued, ...menu }) => ({
+            ...menu,
+            queued: queued.map((edition) => ({
+              ...edition,
+              local: {
+                ...localTimeOf(
+                  new Date(edition.activatesAt),
+                  zone?.kind === "valid" ? zone.timeZone : "UTC",
+                ),
+                ...(zone?.kind === "valid" ? {} : { utcFallback: true as const }),
+              },
+            })),
+          }));
+          return { ...routed, declarationMenus };
         }),
       );
     }),

@@ -18,6 +18,7 @@ import { relativeTime } from "./relative-time.js";
 import { codeMessage } from "../i18n/codes.js";
 import {
   renderFoldedMenuWarnings,
+  renderDeclarationsAdvisory,
   publishWarningStyles,
   renderMenuWarnings,
   renderPublishWarningConfirmation,
@@ -482,11 +483,13 @@ export class MenuPreviewPanel extends LitElement {
   }
 
   #renderWarnings() {
-    const warnings = this.failed ? [] : (this.preview?.warnings ?? []);
-    if (warnings.length === 0) return nothing;
+    if (this.failed || this.preview === null) return nothing;
+    const { warnings, changes } = this.preview;
+    const advisory = renderDeclarationsAdvisory(changes);
+    if (warnings.length === 0 && advisory === nothing) return nothing;
     return html`<wt-card>
       <h2 slot="header">${t("menu_preview.warnings_heading")}</h2>
-      ${renderFoldedMenuWarnings(warnings, this.menuName)}
+      ${advisory} ${renderFoldedMenuWarnings(warnings, this.menuName)}
     </wt-card>`;
   }
 

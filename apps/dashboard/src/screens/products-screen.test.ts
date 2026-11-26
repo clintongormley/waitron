@@ -279,7 +279,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getProductEditor: vi.fn().mockResolvedValue(value),
     countProductMenus: vi.fn().mockResolvedValue(0),
     createProductEditor: vi.fn().mockResolvedValue({ ...value, id: "new" }),
-    updateProductEditor: vi.fn().mockResolvedValue(value),
+    updateProductEditor: vi.fn().mockResolvedValue({ ...value, declarationMenus: [] }),
     getMenuStructure: vi.fn().mockImplementation((id: string) => Promise.resolve(structures[id])),
     getMenuStructures: vi
       .fn()
@@ -1718,10 +1718,49 @@ describe("menu-screen", () => {
     await flush(el);
     const body: ProductSaveBody = { ...readBody };
     delete body.available;
+    const closed = dialogClosed(editor(el).shadowRoot!.querySelector("wt-modal")!);
     emit(editor(el), "wt-submit", { value, body });
-    await flush(el);
+    await closed;
+    await el.updateComplete;
     expect(api.updateProductEditor).toHaveBeenCalledExactlyOnceWith("p1", body);
     expect(editor(el).open).toBe(false);
+    expect(el.shadowRoot!.querySelector("dashboard-live-declarations-dialog")).toBeNull();
+  });
+
+  it("asks about every affected live menu when the saved product list fails to refresh", async () => {
+    const api = stubApi({
+      listProducts: vi
+        .fn()
+        .mockResolvedValueOnce(products)
+        .mockRejectedValue({ code: "connection.failed" }),
+      updateProductEditor: vi.fn().mockResolvedValue({
+        ...value,
+        declarationMenus: [
+          { menuId: "lunch", name: "Lunch service", live: true, queued: [] },
+          { menuId: "dinner", name: "Dinner service", live: true, queued: [] },
+        ],
+      }),
+    });
+    const { el } = await mountWidget<ProductsScreen>("dashboard-products-screen", { api });
+    await flush(el);
+    emit(list(el), "edit-product", { productId: "p1" });
+    await expect.poll(() => editor(el).open).toBe(true);
+    const closed = dialogClosed(editor(el).shadowRoot!.querySelector("wt-modal")!);
+    emit(editor(el), "wt-submit", { value });
+    await closed;
+
+    const question = page.getByRole("dialog", { name: "Update the live menus now?" });
+    await expect.element(question).toBeVisible();
+    await expect
+      .element(
+        page.getByText(
+          "These live menus still show the old allergens and diets: Lunch service and Dinner service.",
+        ),
+      )
+      .toBeVisible();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector('[role="alert"]')?.textContent ?? "")
+      .toContain(codeMessage("connection.failed"));
   });
 
   it("loads both kinds of modifier list and hands them to the product editor", async () => {
@@ -3688,7 +3727,7 @@ describe("menu-screen", () => {
       async (hidden) => {
         const api = variantApi();
         const saved = { ...variantValue, available: !hidden };
-        vi.mocked(api.updateProductEditor).mockResolvedValue(saved);
+        vi.mocked(api.updateProductEditor).mockResolvedValue({ ...saved, declarationMenus: [] });
         if (hidden)
           vi.mocked(api.listProducts)
             .mockResolvedValueOnce(withVariant)

@@ -1649,7 +1649,7 @@ describe("Products browser history", () => {
       },
       updateProductEditor: async () => {
         updated = true;
-        return saved;
+        return { ...saved, declarationMenus: [] };
       },
     });
     const search = m
