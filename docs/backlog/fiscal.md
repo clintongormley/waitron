@@ -343,10 +343,10 @@ the owner's answer to Q41 (owner, 2026-11-18, question 10 of the
 [19 November sheet](../compliance/2026-11-19-adviser-meeting.md); the adviser is still to confirm the details) is to record what happened rather
 than rebuild lost invoices from AEAT's records ([incident record](#an-incident-record-the-venue-can-show-the-tax-office-hardware-faults-a-break-in-lost-data)). Signed witnesses and fencing (W41s-10b) were retired on 9 November
 2026: A1342 (#2654) stops a returning old main box once a spare it vouched for has taken over, on
-signed newer evidence in the backup bucket. A box restored from backup keeps the old box's id, so
-the old box is not fenced after a restore. Until the
-[A1418 replacement check](../superpowers/plans/2026-11-26-h-a1418-box-stop-intent.md) is built, the
-guide tells the owner to keep the old box off and disconnected. Keep their authority, recovery and
+signed newer evidence in the backup bucket. A box restored from backup keeps the old box's id.
+The [A1418 replacement check](../superpowers/plans/2026-11-26-h-a1418-replacement-stop.md) stops the
+old solo box once it verifies a newer copy signed with its own key. Keep the old box off and
+disconnected during recovery and while it has no verified replacement. Keep their authority, recovery and
 public fiscal-enablement gates. W41s-10a's remaining qualification work follows.
 
 ### Qualify reconciliation against live AEAT
@@ -1260,6 +1260,9 @@ The recovery guide's **After a recovery** section (`apps/server/src/guide/en/bac
 no separate operations file. It tells the owner to keep the old box switched off and disconnected,
 because after a restore it can go on selling if it is switched on again. Revisit that sentence
 when A1418's replacement check lands.
+
+_2026-11-26, A1418 slice 3. The guide still says to keep the old box switched off. A solo box can
+trade until it verifies the replacement’s newer bucket copy._
 
 ### A555: counter full invoices stay as the Pay window issues them (owner, 2026-11-12)
 

@@ -6,7 +6,7 @@ import {
   isDashboardPath,
   type SupportedLocale,
 } from "@waitron/shared";
-import { WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
+import { REPLACED_PAGE_WORDS, WAITING_PAGE_WORDS } from "./i18n/waiting-page.js";
 import { codeOf } from "@waitron/server-kit";
 import { errnoOf } from "./errno.js";
 import { resolveLoginLocale } from "./login-locale.js";
@@ -114,6 +114,26 @@ export function waitingPageRoute(
       return waitingPageAnswer(c, names, log, section);
     });
   };
+}
+
+export function mountReplacementPage(app: Hono, log: Logger): void {
+  waitingPageRoute(
+    async () => [],
+    log,
+    async (_c, _other, locale) => {
+      const text = REPLACED_PAGE_WORDS[locale];
+      return {
+        page: renderLogoBoxPage(
+          locale,
+          text.title,
+          `<h1>${escapeHtml(text.title)}</h1>
+<p>${escapeHtml(text.body)}</p>
+<p>${escapeHtml(text.recovery)}</p>
+<p><a href="/help/${locale === "es-ES" ? "es" : "en"}/backup-recovery#replaced-box">${escapeHtml(text.guide)}</a></p>`,
+        ),
+      };
+    },
+  )(app);
 }
 
 /** The waiting page as `waitingPageRoute` answers it, with `status` and the page's `returnTo`. */

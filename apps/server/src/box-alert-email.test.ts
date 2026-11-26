@@ -83,6 +83,15 @@ describe("the full-disk email", () => {
   });
 });
 
+it.each([
+  ["en", "Corner Bistro: this box was replaced", "Leave this box switched off"],
+  ["es", "Corner Bistro: se ha sustituido este servidor", "Deja este servidor apagado"],
+] as const)("tells managers what to do with a replaced box in %s", (language, subject, text) => {
+  const message = boxEmailMessage("start.replaced", language, "Corner Bistro");
+  expect(message.subject).toBe(subject);
+  expect(message.text).toContain(text);
+});
+
 describe("the clock stop emails", () => {
   it.each(["clock.unusable"] as const)(
     "%s sends nobody to whoever installed the box, and names the pages and button that fix it",

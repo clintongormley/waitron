@@ -27,6 +27,7 @@ import {
 } from "@waitron/db";
 import { setNodeMode, writeMirrorLink } from "@waitron/node-db";
 import { loadKeyRing } from "@waitron/credentials";
+import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
@@ -549,6 +550,8 @@ describe("startServer, against a migrated venue directory", () => {
         null,
       ),
     );
+    const bucket = new SwitchableStore(() => new Date());
+    const observerReads = vi.spyOn(bucket, "get");
     let disarmedBeforeServing = false;
     const [server, failed] = await withCapturedStdout(async (lines) => {
       const originalSync = atomic.syncFolderHolding;
@@ -563,14 +566,18 @@ describe("startServer, against a migrated venue directory", () => {
         }
         await originalSync(path);
       });
-      const started = await startServer({
-        ...KEY_ENV,
-        WAITRON_STATE_DIR: stateDir,
-        WAITRON_VENUE_DIR: venue.directory,
-        WAITRON_HTTP_PORT: String(port),
-        WAITRON_MIGRATIONS_DIR: migrationsRoot,
-        WAITRON_ENV: "preproduction",
-      });
+      const started = await startServer(
+        {
+          ...KEY_ENV,
+          WAITRON_STATE_DIR: stateDir,
+          WAITRON_VENUE_DIR: venue.directory,
+          WAITRON_HTTP_PORT: String(port),
+          WAITRON_MIGRATIONS_DIR: migrationsRoot,
+          WAITRON_ENV: "preproduction",
+        },
+        {},
+        { stream: { store: bucket, mainCheckIntervalMs: 5 } },
+      );
       return [started, await waitForEvent(lines, "restore.first_start_failed")] as const;
     });
     const { via, close } = httpsVia(await readFile(join(stateDir, "tls", "ca.crt")));
@@ -602,6 +609,7 @@ describe("startServer, against a migrated venue directory", () => {
       expect(body.alerts.map((alert) => alert.code)).not.toContain("backup.stream_stopped");
       expect(existsSync(join(stateDir, "flows/restore/record.json"))).toBe(true);
       await server.close();
+      expect(observerReads).not.toHaveBeenCalled();
       vi.restoreAllMocks();
       await writeFile(join(stateDir, "flows/restore/record.json"), "{ torn after serving");
       const restarted = await startServer({

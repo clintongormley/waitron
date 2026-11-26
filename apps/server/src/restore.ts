@@ -103,7 +103,7 @@ import {
 } from "./restore-staging-dirs.js";
 import { unpackStateFiles } from "./state-secrets.js";
 import { deleteBackupRoomNote } from "./backup-room-note.js";
-import { clearRestartMark } from "./stop-mark.js";
+import { clearReplacementMark, clearRestartMark } from "./stop-mark.js";
 import { removeReplacedResetMarker } from "./replaced-reset.js";
 import { clearSelectedCopy } from "./handover-copy-selection.js";
 import { type StagedSecrets, stageSecrets, moduleRecordEntries } from "./restore-secrets.js";
@@ -546,6 +546,7 @@ export async function writeValidated(
       if (!deps.skipSecrets) await clearFirstStart();
       throw error;
     }
+    if (!deps.skipSecrets) await clearReplacementMark(deps.stateDir);
   } finally {
     try {
       if (admissionDirectory !== undefined)

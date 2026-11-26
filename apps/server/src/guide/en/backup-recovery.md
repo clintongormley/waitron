@@ -10,6 +10,18 @@ Use a bucket-copy folder that holds no other stream's copy. When Waitron says �
 
 You can share an archive folder between boxes: each box removes only its own backups. After a restore, choose a new folder if you want to keep all previous copies, because the restored box can still remove them. Waitron leaves other boxes’ archives and files it does not recognise alone; manage those files yourself when you need more room.
 
+## When another box has taken over {#replaced-box}
+
+The replacement is now your venue’s main box. Leave this box switched off.
+
+To move service back to this box, keep the replacement’s latest backup and shut the replacement down. On this box, stop the Waitron service and run the restore command from the installation guide’s **The operator CLIs** section. Use the credentials that open and authorise the selected backup. Start the service again when the command succeeds.
+
+If the restore command is interrupted, run it again before starting the service.
+
+Before adding `--confirm-old-box-gone`, make sure the replacement is off. A running replacement with no recent bucket uploads can pass the restore check.
+
+The replacement’s backup leaves out sales this box made between the replacement taking over and this box stopping. After you restore here, those sales survive only in the old database copy that Waitron sets aside. Keep that copy if this box might have taken sales during that time. Discarding the set-aside copy deletes them.
+
 ## When first setup was interrupted {#interrupted-setup}
 
 Reloading the tab that was doing the setup carries on with it, until the setup starts activation.
@@ -242,8 +254,8 @@ runs it; if it stops while writing the backup into place, every later start runs
 
 ## After a recovery {#after-recovery}
 
-Keep the old box switched off and disconnected from the network. If it is switched on again,
-it can go on selling and issuing invoices under its old series.
+Keep the old box switched off and disconnected from the network. If it starts again before it can
+verify the replacement, it can still sell and issue invoices under its old series.
 
 Open **Reporting → Fiscal filing** and look at
 [Possibly missing history](fiscal-filing.md#missing-history). Under **Identity changes without a

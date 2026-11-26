@@ -1,12 +1,13 @@
 import { lockVenueDatabase, readVenueHolder } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
 import { isAppError } from "@waitron/shared";
-import { STOP_MARK_FILE } from "@waitron/store";
+import { REPLACED_FILE, STOP_MARK_FILE } from "@waitron/store";
 import { lstat, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { errnoOf } from "./errno.js";
 import { syncFolderHolding, writeFileDurable } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
+import type { BucketReplacement } from "./stream-host.js";
 
 const MARK = { version: 1, mark: "restart" };
 
@@ -20,7 +21,28 @@ export function writeRestartMark(stateDir: string): Promise<void> {
 }
 
 export async function clearRestartMark(stateDir: string): Promise<void> {
-  const file = join(stateDir, STOP_MARK_FILE);
+  await clearMark(join(stateDir, STOP_MARK_FILE));
+}
+
+export function writeReplacementMark(stateDir: string, evidence: BucketReplacement): Promise<void> {
+  return writeFileDurable(join(stateDir, REPLACED_FILE), JSON.stringify(evidence), 0o600);
+}
+
+export async function hasReplacementMark(stateDir: string): Promise<boolean> {
+  try {
+    await lstat(join(stateDir, REPLACED_FILE));
+    return true;
+  } catch (error) {
+    if (errnoOf(error) === "ENOENT") return false;
+    throw error;
+  }
+}
+
+export function clearReplacementMark(stateDir: string): Promise<void> {
+  return clearMark(join(stateDir, REPLACED_FILE));
+}
+
+async function clearMark(file: string): Promise<void> {
   try {
     await unlink(file);
   } catch (error) {

@@ -161,24 +161,42 @@ export interface NewerBucketMain {
   contactUrl: string;
 }
 
+export interface BucketReplacement {
+  streamId: string;
+  nodeId: string;
+  term: number;
+}
+
+type BucketMainDeps = Pick<StreamHostDeps, "db" | "node" | "ring" | "nodeId" | "store">;
+
+async function readMainPointer(
+  deps: BucketMainDeps,
+  signal: AbortSignal | undefined,
+  openStore: typeof createS3ObjectStore,
+) {
+  const settings = await readStreamSettings(deps.db, deps.ring);
+  if (settings === null) return null;
+  const stored = await readPointer(
+    boundObjectStore(deps.store ?? openStore(settings.bucket), 15_000),
+    settings.streamId,
+    { signal },
+  );
+  if (stored === null) return null;
+  const held = await readNodeMembership(deps.db);
+  if (held === null || stored.pointer.body.term <= held.body.term) return null;
+  return { pointer: stored.pointer, held };
+}
+
 export async function readNewerBucketMain(
-  deps: Pick<StreamHostDeps, "db" | "node" | "ring" | "nodeId" | "store">,
+  deps: BucketMainDeps,
   signal?: AbortSignal,
   openStore: typeof createS3ObjectStore = createS3ObjectStore,
 ): Promise<NewerBucketMain | null> {
   try {
-    const settings = await readStreamSettings(deps.db, deps.ring);
-    if (settings === null) return null;
-    const stored = await readPointer(
-      boundObjectStore(deps.store ?? openStore(settings.bucket), 15_000),
-      settings.streamId,
-      { signal },
-    );
-    if (stored === null) return null;
-    const { pointer } = stored;
-    const held = await readNodeMembership(deps.db);
-    if (held === null) return null;
-    if (pointer.body.nodeId === deps.nodeId || pointer.body.term <= held.body.term) return null;
+    const latest = await readMainPointer(deps, signal, openStore);
+    if (latest === null) return null;
+    const { pointer, held } = latest;
+    if (pointer.body.nodeId === deps.nodeId) return null;
     const member = held.body.nodes.find(
       (n) => n.nodeId === pointer.body.nodeId && n.standing !== "evicted",
     );
@@ -199,6 +217,31 @@ export async function readNewerBucketMain(
     };
   } catch {
     // An unavailable or unverified bucket cannot establish that another main exists.
+    return null;
+  }
+}
+
+async function readBucketReplacement(
+  deps: BucketMainDeps,
+  signal: AbortSignal,
+  openStore: typeof createS3ObjectStore,
+): Promise<BucketReplacement | null> {
+  try {
+    const latest = await readMainPointer(deps, signal, openStore);
+    if (latest === null) return null;
+    const { pointer, held } = latest;
+    const { streamId, nodeId, term } = pointer.body;
+    if (
+      nodeId !== deps.nodeId ||
+      !held.body.nodes.some(
+        (node) => node.nodeId === nodeId && node.standing === "serving-primary",
+      ) ||
+      held.body.nodes.some((node) => node.nodeId !== nodeId && node.standing !== "evicted")
+    )
+      return null;
+    const own = nodeSigningPublicKey(await readNodeIdentityKey(deps.node, deps.ring, nodeId));
+    return verifyPointer(pointer, own) ? { streamId, nodeId, term } : null;
+  } catch {
     return null;
   }
 }
@@ -281,12 +324,35 @@ export class StreamHost {
     stop: (evidence: NewerBucketMain) => Promise<unknown>,
     intervalMs = this.#deps.mainCheckIntervalMs ?? 15_000,
   ): void {
+    this.#observe(readNewerBucketMain, stop, intervalMs);
+  }
+
+  observeReplacement(stop: (evidence: BucketReplacement) => Promise<void>): void {
+    let verified: BucketReplacement | null = null;
+    // A refused local write cannot undo evidence already verified before the bucket went away.
+    this.#observe(
+      async (deps, signal, openStore) =>
+        (verified ??= await readBucketReplacement(deps, signal, openStore)),
+      stop,
+      this.#deps.mainCheckIntervalMs ?? 15_000,
+    );
+  }
+
+  #observe<Evidence>(
+    read: (
+      deps: BucketMainDeps,
+      signal: AbortSignal,
+      openStore: typeof createS3ObjectStore,
+    ) => Promise<Evidence | null>,
+    stop: (evidence: Evidence) => Promise<unknown>,
+    intervalMs: number,
+  ): void {
     if (this.#stopped || this.#observer !== undefined) return;
     const abort = new AbortController();
     this.#observerAbort = abort;
     this.#observer = (async () => {
       while (!abort.signal.aborted) {
-        const evidence = await readNewerBucketMain(this.#deps, abort.signal, (bucket) => {
+        const evidence = await read(this.#deps, abort.signal, (bucket) => {
           if (
             this.#pointerStore === undefined ||
             !isDeepStrictEqual(this.#pointerStore.bucket, bucket)

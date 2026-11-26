@@ -28,6 +28,7 @@ import {
   HANDOVER_ADMITTED_WORK_LIMIT_MS,
   STEPDOWN_ALLOWED,
   stepDown,
+  stepDownForReplacement,
   type StepDownDeps,
 } from "./handover-stepdown.js";
 import { beginHandover } from "./handover-store.js";
@@ -739,31 +740,38 @@ describe("a stepdown stops the background work before it writes", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS, NODE_MIGRATIONS] });
   const begin = () => beginHandover({ node: suite.node, nodeId: SOURCE }, BINDING, "source");
 
-  it("a drain that would claim as the write begins sees its stop and claims nothing", async () => {
-    await begin();
-    const claiming = hold();
-    const checked = hold();
-    const claims: string[] = [];
-    const runner = createJobRunner({ now: () => new Date(), log: () => {} });
-    runner.add(
-      testDrain(async (_now, signal) => {
-        await claiming.wait;
-        if (!signal.aborted) claims.push("claimed");
-        checked.release();
-        return emptyDrainResult();
-      }),
-    );
-    const duties = fakeDuties({ jobRunner: runner });
-    const node = hookedNode(suite.node, async () => {
-      claiming.release();
-      await checked.wait;
-    });
-    const r = rig(node, { duties });
-    const response = await r.app.request("/stepdown", { method: "POST" });
-    expect(await response.json()).toEqual({ restarting: true, replayed: false });
-    expect(claims).toEqual([]);
-    await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
-  });
+  it.each(["handover", "replacement"] as const)(
+    "a drain that would claim as the %s write begins sees its stop and claims nothing",
+    async (kind) => {
+      await begin();
+      const claiming = hold();
+      const checked = hold();
+      const claims: string[] = [];
+      const runner = createJobRunner({ now: () => new Date(), log: () => {} });
+      runner.add(
+        testDrain(async (_now, signal) => {
+          await claiming.wait;
+          if (!signal.aborted) claims.push("claimed");
+          checked.release();
+          return emptyDrainResult();
+        }),
+      );
+      const duties = fakeDuties({ jobRunner: runner });
+      const duringSave = async () => {
+        claiming.release();
+        await checked.wait;
+      };
+      const r = rig(hookedNode(suite.node, duringSave), { duties });
+      if (kind === "handover") {
+        const response = await r.app.request("/stepdown", { method: "POST" });
+        expect(await response.json()).toEqual({ restarting: true, replayed: false });
+      } else {
+        await stepDownForReplacement(r.deps, duringSave);
+      }
+      expect(claims).toEqual([]);
+      await vi.waitFor(() => expect(r.restart).toHaveBeenCalledTimes(1));
+    },
+  );
 
   it("a write that fails is the caller's answer, writes no restriction, and restarts the box", async () => {
     await begin();

@@ -39,6 +39,7 @@ export const REPLACED_DATABASE_PREFIX = `.${VENUE_FILE}-replaced-`;
 export const SPARE_SPACE_FILE = "spare-space";
 export const SPARE_SPACE_RELEASED_FILE = "spare-space.released";
 export const STOP_MARK_FILE = "stop-mark.json";
+export const REPLACED_FILE = "replaced.json";
 export const BACKUP_ROOM_NOTE_FILE = "backup-room-note.json";
 export const BACKUP_ROOM_START_DELETED_FILE = "backup-room-start-deleted.json";
 export const RESET_REQUEST_FILE = "reset-request.json";
@@ -145,6 +146,13 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     kind: "file",
     reset: "deleted",
     why: "A deliberate restart is distinguishable from a crash after the process exits.",
+  },
+  {
+    name: REPLACED_FILE,
+    backup: { exclude: "A replacement stop belongs to this box." },
+    kind: "file",
+    reset: "deleted",
+    why: "A verified replacement keeps this box stopped through offline restarts.",
   },
   {
     name: BACKUP_ROOM_NOTE_FILE,

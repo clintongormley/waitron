@@ -10,6 +10,18 @@ Usa una carpeta para la copia del bucket que no contenga la copia de otro flujo.
 
 Puedes compartir una carpeta de copias entre servidores: cada servidor elimina solo sus propias copias. Tras una restauración, elige una carpeta nueva si quieres conservar todas las copias anteriores, porque el servidor restaurado puede seguir eliminándolas. Waitron deja intactas las copias de otros servidores y los archivos que no reconoce; gestiona esos archivos cuando necesites más espacio.
 
+## Si otro servidor se ha hecho cargo del local {#replaced-box}
+
+El servidor de sustitución es ahora el principal de tu local. Deja este servidor apagado.
+
+Para volver a usar este servidor, guarda la copia de seguridad más reciente del servidor de sustitución y apágalo. En este servidor, detén el servicio de Waitron y ejecuta el comando de restauración indicado en la sección **The operator CLIs** de la guía de instalación. Usa las credenciales que permiten abrir y autorizar la copia elegida. Vuelve a iniciar el servicio cuando el comando termine correctamente.
+
+Si el comando de restauración se interrumpe, ejecútalo de nuevo antes de iniciar el servicio.
+
+Antes de añadir `--confirm-old-box-gone`, comprueba que el servidor de sustitución está apagado. Un servidor de sustitución activo que no haya subido datos al bucket recientemente puede superar la comprobación.
+
+La copia del servidor de sustitución deja fuera las ventas que este servidor registró entre el momento en que el otro se hizo cargo y la parada de este. Después de restaurar aquí, esas ventas solo quedarán en la copia de la base de datos anterior que Waitron guarda aparte. Conserva esa copia si este servidor pudo registrar ventas durante ese tiempo. Si la descartas, perderás esas ventas.
+
 ## Si se interrumpió la primera configuración {#interrupted-setup}
 
 Recargar la pestaña que estaba haciendo la configuración sigue con ella, hasta que la configuración
@@ -266,8 +278,9 @@ cada arranque siguiente la vuelve a ejecutar.
 
 ## Después de una recuperación {#after-recovery}
 
-Mantén el servidor antiguo apagado y desconectado de la red. Si se vuelve a encender, puede
-seguir vendiendo y emitiendo facturas con sus series antiguas.
+Mantén el servidor antiguo apagado y desconectado de la red. Si vuelve a arrancar antes de
+verificar el servidor de sustitución, puede seguir vendiendo y emitiendo facturas con sus series
+antiguas.
 
 Abre **Informes → Remisión a la AEAT** y mira
 [Historial que puede faltar](fiscal-filing.md#missing-history). En **Cambios de identidad sin

@@ -160,6 +160,9 @@ What the box does with the answers:
   confirm the other box has been shut down **(owner)**: "they need to confirm that the other box has
   been shut down first". **(default)** The box then claims the bucket at a higher term, as a restore
   does, so the other box learns that it has been replaced.
+  On 26 November 2026 at 15:51 the owner chose to shut down the replacement and restore its latest
+  backup onto this box when moving service back. See the
+  [replacement-stop plan](../plans/2026-11-26-h-a1418-replacement-stop.md).
 - **(default)** "A minute or so" **(owner)** is 60 seconds. The wait ends as soon as everything
   configured has answered, so a box whose internet is up starts in seconds.
 - **(default)** A box with no bucket and no Cloud account has nobody to ask, so it does not wait.

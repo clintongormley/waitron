@@ -34,6 +34,7 @@ describe("the node-local manifest", () => {
       "module-records/<module>.json#prepared|state|transferred",
       "module-records/<module>.json#retained|state|source-only",
       "stop-mark.json|state|destination-owned",
+      "replaced.json|state|destination-owned",
       "replaced-reset.json|state|destination-owned",
       "identity-change.json|state|destination-owned",
       ".venue.db-litestream/|venue-folder|rebuildable",
