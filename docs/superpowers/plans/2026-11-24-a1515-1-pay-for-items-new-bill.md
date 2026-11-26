@@ -1751,6 +1751,8 @@ were tried.
   old kind (`bench/`, demo seed and dashboard: none). But the old kind is then no longer there to fall
   back on for the sent Counter order the owner has asked for next (COUNTER-SENT-ITEMS, 12:17); it is
   designed on the new route, so PR 3 does not block it and the two only meet in `pay-for-items.ts`.
+  _2026-11-26: a sent Counter order with no receipt now offers Items
+  ([COUNTER-SENT-ITEMS](2026-11-26-counter-sent-items.md))._
 
 **#4313, landed first.** `moveOrderLines` regroups both bills (`working-order-transfer.ts:195`), so the
 put-back (`movedItemsBack`) and Pay for items' move do too; pricing the preview by grouping is lane B's

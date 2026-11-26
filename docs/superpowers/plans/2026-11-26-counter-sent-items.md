@@ -147,6 +147,14 @@
 - `till-app-pay-for-items.test.ts:505-520` keeps its bar (a table bill) with the new words.
 - The words test at `till-app-counter-payment-window.test.ts:305-312` also covers the new key.
 
+_2026-11-26, as built: the till also bars Items on a sent order in a zone paid before preparation
+(`items_barred_counter_prepay`; the watcher cleared it with the other changes outside this plan,
+lane C's questions file, 14:47). Fixes from the finishing review: `items_barred_counter` is named
+`items_barred_moved_to_table`; the database rule also requires no party and a pay-after-sending
+mode, as the server does; `isSentCounterOrder` is named `sentCounterOrderWithoutReceipt`;
+`carryHandover` became part of the new bill's update; and `withSentOrderOpen` takes the answer
+its caller already read._
+
 - [ ] Failing tests → implement → `pnpm --filter @waitron/till exec vitest run src/state/pay-for-items.test.ts src/till-app-counter-payment-window.test.ts src/till-app-pay-for-items.test.ts` and the till's typecheck. Then `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`, and from the root `pnpm exec vitest run scripts/guide-links.test.ts`. Commit `git commit -s -m "Offer Items on a Counter order already sent to the kitchen"`.
 
 ## Try in the real till

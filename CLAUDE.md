@@ -485,6 +485,11 @@ Receipts moved on 2026-11-24 are in [conventions-ui](docs/developers/conventions
 - **A write of a table `scripts/write-path-tables.json` lists lives only in the files that
   JSON names; the database refuses no write elsewhere.** Guard: `scripts/write-path-tables.test.ts`
   is the whole of the enforcement, weaker than its name. Receipt: [conventions-data.md](docs/developers/conventions-data.md#a-write-of-a-table-scriptswrite-path-tablesjson-lists-lives-only-in-the-files-it-names).
+- **Only `apps/server/src/sent-order-open.ts` sets a placed order back to `open`, around Pay for
+  items' move; the database allows it only for a Counter order in a pay-after-sending zone with no
+  sale.** Guard:
+  `scripts/sent-order-open.test.ts`, weaker than its name: it reads literals.
+  [Limits](docs/developers/conventions-data.md#only-one-file-sets-a-placed-order-back-to-open).
 - **`activity_log` is for people to read: no product decision reads it, though a screen may join
   other tables to its entries for display** (owner, 2026-11-04). Write it through `recordActivity`,
   declaring each kind in `packages/db/src/activity-kinds.ts`; `data` names people by id only.
