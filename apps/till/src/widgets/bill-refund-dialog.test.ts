@@ -28,7 +28,6 @@ function paymentOf(over: Partial<BillPaymentView> = {}): BillPaymentView {
     state: "received",
     createdAt: "2026-09-30T20:00:00.000Z",
     receivedAt: "2026-09-30T20:00:00.000Z",
-    lines: [],
     refunds: [],
     ...over,
   };
@@ -208,21 +207,6 @@ describe("till-bill-refund-dialog: how much and why", () => {
     expect(text(root(el).querySelector('input[value="whole"]')!.closest("label"))).toBe(
       t("bill_refund.whole").replace("{amount}", money("30.00")),
     );
-  });
-
-  it("gives an item payment back only whole, asking for no amount", async () => {
-    const el = await mount({ payment: paymentOf({ kind: "items", applied: "35.00" }) });
-    const asked = capture<RefundAsk>(el, "bill-refund-continue");
-
-    expect(root(el).querySelector('input[name="howMuch"]')).toBeNull();
-    expect(field(el, "amount")).toBeNull();
-    expect(text(root(el).querySelector("[data-refund-whole-only]"))).toBe(
-      t("bill_refund.whole_only").replace("{amount}", money("35.00")),
-    );
-    await choose(el, "wrong");
-    await click(el, "[data-refund-continue]");
-
-    expect(asked).toEqual([{ appliedAmount: "35.00", tipAmount: "0.00", reason: "Wrong dish" }]);
   });
 
   it("marks the reason required, says it under the field and above the action, and sends nothing", async () => {

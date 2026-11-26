@@ -11693,7 +11693,6 @@ describe("till-app", () => {
             outstanding: "12.00",
             tips: "0.00",
             payments: [],
-            paidLines: [],
           }),
         });
         const screen = await toTableOrder(el, openTable);
@@ -21408,7 +21407,6 @@ describe("the counter's waiting orders (sent and not paid, or settled and not ha
           getBillBalance: vi.fn().mockResolvedValue(balance),
           previewBillPayment: vi.fn().mockResolvedValue({
             kind: "allocated",
-            choice: null,
             applied: "2.00",
             tip: "0.00",
             change: "3.00",
@@ -27185,7 +27183,6 @@ describe("A737 Find a bill page", () => {
       outstanding: "20.10",
       tips: "0.00",
       payments: [],
-      paidLines: [],
     });
     const { el, counter, view } = await open({
       getFindBill: vi.fn().mockResolvedValue(billRow()),

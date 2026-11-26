@@ -1,13 +1,7 @@
 import { and, eq, type Query } from "drizzle-orm";
 import { SQLiteSelectBase } from "drizzle-orm/sqlite-core";
 import { expect, it, vi } from "vitest";
-import {
-  adjustmentLines,
-  billPaymentLines,
-  billSetMenuCopies,
-  workingOrderLines,
-  workingOrders,
-} from "@waitron/db";
+import { adjustmentLines, billSetMenuCopies, workingOrderLines, workingOrders } from "@waitron/db";
 import { recordAdjustment } from "@waitron/adjustments";
 import { decimal, type ProductAllergens } from "@waitron/shared";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -32,7 +26,6 @@ import { createCourse } from "./kitchen.js";
 import { partyOfOrder, readPartyBills } from "./parties.js";
 import { getHeldOrder } from "./working-order-held-read.js";
 import {
-  cashContribution,
   counterOrder,
   inTx,
   order,
@@ -274,22 +267,6 @@ it("reads the live menus' declarations only for a caller that shows the bill's d
   expect(
     await liveReads(() => inTx(venue, (tx) => readBillsSetMenus(tx, [id], "published"))),
   ).toBeGreaterThan(0);
-});
-
-it("keeps a paid dish placed but makes it unavailable for moves", async () => {
-  const id = await tableBill();
-  await order(venue, id, "Burger");
-  const payment = await cashContribution(venue, id, "2.00");
-  const { lineId: dishId } = await placeDish(id, 2);
-  await inTx(venue, (tx) =>
-    tx.insert(billPaymentLines).values({
-      billPaymentId: payment,
-      lineId: dishId,
-      quantity: 1000,
-      amount: 0,
-    }),
-  );
-  expect((await read(id)).dishes).toMatchObject([{ lineId: dishId, movable: false }]);
 });
 
 const asked = (copy: typeof daily, versionId = copy.versionId) => ({

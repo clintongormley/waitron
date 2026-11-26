@@ -25,10 +25,7 @@ export interface BillFunds {
   received: Decimal;
   /** The applied amount of its pending card payments. */
   reserved: Decimal;
-  hasPending: boolean;
 }
-
-export type AllocationChoice = "full_with_tip" | "use_pool";
 
 /**
  * `addedTip` is what the payer adds on top of what the payment's own rule makes a tip: for cash,
@@ -38,13 +35,10 @@ export type AllocationPayment =
   { method: "cash"; tendered: Decimal; addedTip: Decimal } | { method: "card"; addedTip: Decimal };
 
 export type AllocationRequest = (
-  | { kind: "items"; due: Decimal }
-  | { kind: "contribution"; amount: Decimal }
-  | { kind: "share"; shareOf: number }
-) & { payment: AllocationPayment; choice?: AllocationChoice };
+  { kind: "contribution"; amount: Decimal } | { kind: "share"; shareOf: number }
+) & { payment: AllocationPayment };
 
 export interface Allocation {
-  choice: AllocationChoice | null;
   applied: Decimal;
   tip: Decimal;
   /** Cash only. */
@@ -53,14 +47,7 @@ export interface Allocation {
   charged: Decimal | null;
 }
 
-export interface AllocationOption {
-  choice: AllocationChoice;
-  applied: Decimal;
-  tip: Decimal;
-}
-
-export type AllocationPreview =
-  ({ kind: "allocated" } & Allocation) | { kind: "choose"; options: AllocationOption[] };
+export type AllocationPreview = { kind: "allocated" } & Allocation;
 
 export interface AllocationConfig {
   tipsEnabled: boolean;
@@ -98,9 +85,6 @@ export function equalShare(available: Decimal, n: number): Decimal {
 
 function dueOf(request: AllocationRequest, available: Decimal): Decimal {
   switch (request.kind) {
-    case "items":
-      if (compareDecimal(request.due, ZERO) <= 0) throw invalid("lines");
-      return request.due;
     case "contribution":
       if (compareDecimal(request.amount, ZERO) <= 0) throw invalid("amount");
       return request.amount;
@@ -109,19 +93,10 @@ function dueOf(request: AllocationRequest, available: Decimal): Decimal {
   }
 }
 
-/** The choices §3.3 offers, in a fixed order. */
-function offeredChoices(funds: BillFunds, config: AllocationConfig): AllocationChoice[] {
-  const offered: AllocationChoice[] = [];
-  if (config.tipsEnabled) offered.push("full_with_tip");
-  if (!funds.hasPending) offered.push("use_pool");
-  return offered;
-}
-
 function finish(
   funds: BillFunds,
   payment: AllocationPayment,
   config: AllocationConfig,
-  choice: AllocationChoice | null,
   applied: Decimal,
   ruleTip: Decimal,
 ): Allocation {
@@ -134,20 +109,19 @@ function finish(
   }
   const paid = addDecimal(applied, tip);
   if (payment.method === "card") {
-    return { choice, applied: money(applied), tip, change: null, charged: money(paid) };
+    return { applied: money(applied), tip, change: null, charged: money(paid) };
   }
   const change = subtractDecimal(payment.tendered, paid);
   if (compareDecimal(change, ZERO) < 0) {
     // Cash that covers the applied amount is short only of the tip the payer added.
     throw invalid(compareDecimal(payment.tendered, applied) >= 0 ? "addedTip" : "tendered");
   }
-  return { choice, applied: money(applied), tip, change: money(change), charged: null };
+  return { applied: money(applied), tip, change: money(change), charged: null };
 }
 
 /**
  * §3.1: applied is the smaller of what the request asks to pay and what is available; the rest of
- * the money is change (cash) or tip (card). An item payment whose lines cost more than is
- * available answers with the §3.3 choices unless the request names one of them. Writes nothing.
+ * the money is change (cash) or tip (card). Writes nothing.
  */
 export function previewAllocation(
   funds: BillFunds,
@@ -163,46 +137,14 @@ export function previewAllocation(
     throw new AppError("bill.nothing_outstanding", { workingOrderId: funds.workingOrderId });
   }
   const due = dueOf(request, available);
-  if (request.kind !== "items" || compareDecimal(due, available) <= 0) {
-    const applied = minDecimal(due, available);
-    const ruleTip = request.payment.method === "card" ? subtractDecimal(due, applied) : ZERO;
-    return {
-      kind: "allocated",
-      ...finish(funds, request.payment, config, null, applied, ruleTip),
-    };
-  }
-  const offered = offeredChoices(funds, config);
-  if (offered.length === 0) {
-    throw new AppError("order.payment_in_flight", { workingOrderId: funds.workingOrderId });
-  }
-  const ruleTipOf = (choice: AllocationChoice): Decimal =>
-    choice === "full_with_tip" ? subtractDecimal(due, available) : ZERO;
-  if (request.choice !== undefined && offered.includes(request.choice)) {
-    return {
-      kind: "allocated",
-      ...finish(
-        funds,
-        request.payment,
-        config,
-        request.choice,
-        available,
-        ruleTipOf(request.choice),
-      ),
-    };
-  }
-  return {
-    kind: "choose",
-    options: offered.map((choice) => ({
-      choice,
-      applied: money(available),
-      tip: money(addDecimal(ruleTipOf(choice), request.payment.addedTip)),
-    })),
-  };
+  const applied = minDecimal(due, available);
+  const ruleTip = request.payment.method === "card" ? subtractDecimal(due, applied) : ZERO;
+  return { kind: "allocated", ...finish(funds, request.payment, config, applied, ruleTip) };
 }
 
 /**
  * §3.6: the payment goes ahead only on the allocation the operator was shown. Anything else —
- * another device paid in between, a line was added, a choice is needed — is refused
+ * another device paid in between, a line was added — is refused
  * `bill.allocation_changed` with the new preview, for the till to show again.
  */
 export function confirmAllocation(
@@ -213,12 +155,11 @@ export function confirmAllocation(
 ): Allocation {
   const preview = previewAllocation(funds, request, config);
   if (
-    preview.kind === "allocated" &&
     compareDecimal(preview.applied, seen.applied) === 0 &&
     compareDecimal(preview.tip, seen.tip) === 0
   ) {
-    const { choice, applied, tip, change, charged } = preview;
-    return { choice, applied, tip, change, charged };
+    const { applied, tip, change, charged } = preview;
+    return { applied, tip, change, charged };
   }
   throw new AppError("bill.allocation_changed", { workingOrderId: funds.workingOrderId, preview });
 }

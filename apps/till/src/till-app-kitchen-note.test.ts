@@ -1098,7 +1098,6 @@ it.each(["send-lines", "pay-tab", "bill-pay"])(
         outstanding: "1.00",
         tips: "0.00",
         payments: [],
-        paidLines: [],
       }),
     });
     await editTable(el, "Together");

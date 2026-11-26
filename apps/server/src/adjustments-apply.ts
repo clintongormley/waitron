@@ -57,7 +57,7 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import { invalid, money } from "./bill-allocation.js";
-import { assertBillInvariant, refusePaidLines } from "./bill-payments.js";
+import { assertBillInvariant } from "./bill-payments.js";
 import { runServiceCommand } from "./parties.js";
 import { requireOrderBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
@@ -798,7 +798,7 @@ function zeroed(subjects: readonly Subject[]): Change[] {
 
 /**
  * Everything an adjustment decides before it writes, reading only: the refusals of the bill, the
- * line, the amount, the paid lines and the reason's policy, and the rows it would change. A dish is
+ * line, the amount and the reason's policy, and the rows it would change. A dish is
  * taken with its extras; part of one splits its extras in proportion, the part covered taking the
  * part of each. An extra is taken on its own, and only whole.
  */
@@ -859,11 +859,6 @@ export async function planAdjustment(
     );
     reduction = sumDecimals(changes.map((change) => change.reduction));
     nominal = sumDecimals(rows.map((row) => listValue(row, row.quantity)));
-    await refusePaidLines(
-      tx,
-      orderId,
-      changes.map(({ row }) => ({ id: row.id, lineNo: row.lineNo, keeps: 0 })),
-    );
   } else {
     line = rows.find((row) => row.id === ask.lineId) ?? null;
     if (line === null)
@@ -905,13 +900,6 @@ export async function planAdjustment(
       );
       nominal = sumDecimals(family.map((row) => listValue(row, row.quantity - left.get(row.id)!)));
       before = reduction;
-      await refusePaidLines(
-        tx,
-        orderId,
-        removedPortions === null
-          ? [{ id: target.id, lineNo: target.lineNo, keeps: target.quantity - covered }]
-          : removedPortions.map((one) => ({ id: one.id, lineNo: one.lineNo, keeps: 0 })),
-      );
     } else {
       // Part of a weighed line, carved off, can round to totals whose sum is not the line's: 0.005 kg
       // at €1.00/kg is €0.01, while 0.002 kg and 0.003 kg are €0.00 each.
@@ -969,7 +957,6 @@ export async function planAdjustment(
       before = sumDecimals(subjects.map(({ row, quantity }) => gross(row, quantity)));
       const discount = requestedDiscount(ask, before);
       changes = ask.action === "comp" ? zeroed(subjects) : spread(subjects, discount);
-      const covering = family.flatMap(standingFor);
       if (row !== null) {
         const { membersOf } = row;
         const taken = partial
@@ -1010,11 +997,6 @@ export async function planAdjustment(
       }
       reduction = sumDecimals(changes.map((change) => change.reduction));
       nominal = sumDecimals(subjects.map(({ row, quantity }) => listValue(row, quantity)));
-      await refusePaidLines(
-        tx,
-        orderId,
-        covering.map((one) => ({ id: one.id, lineNo: one.lineNo, keeps: 0 })),
-      );
     }
   }
 

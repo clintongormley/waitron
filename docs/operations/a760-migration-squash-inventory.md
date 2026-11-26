@@ -1,3 +1,6 @@
+> 2026-11-25, A1515-1 PR 3: `bill_payment_lines` is deleted with the old items payment. The
+> inventory below records the A760 layout before that removal.
+
 > 2026-11-18, A1308 os4: the recorded facts from `working_line_contexts` move onto
 > `working_order_lines`. The inventory below records the A760 layout before the fold.
 

@@ -6527,7 +6527,7 @@ already separates it. Correction and MOVED slips print none.
 An order, at a table or the counter, stores each dish as its own portion, so two identical burgers
 are two lines. Screens draw identical portions in identical state as one row with a count, placed where its first member
 would stand, its members in line order: the till's Sent panel, its sent-line fallback list and the
-Move dishes picker (`portionGroups`, `tabLinePortionKey`,
+Move dishes picker, Items in Pay (`portionGroups`, `tabLinePortionKey`,
 `sentSlicePortionKey`, `apps/till/src/state/portion-groups.ts`), the station screen's cards and the
 pass ("2× Burger", `kitchenPortionKey`), the counter basket's retrieved order while none of it is
 paid (`foldRetrievedPortions`, `apps/till/src/state/counter-portion-rows.ts`), and the dashboard's
@@ -6535,14 +6535,9 @@ order detail (`readBillLines`, `apps/server/src/orders-list.ts`). Two rows stay 
 the row draws or acts on
 differs: the dish, its names and answers, note, course, release group, station, preparation state,
 held or asked for, served or not, cancellation, prices, the extras as a set with their counts, and whatever else the
-screen shows for the line, such as an allergy or paid mark. Only a whole portion groups, a line of
+screen shows for the line, such as an allergy. Only a whole portion groups, a line of
 one in a unit with no decimals; a weighed or measured line, and a line no portion is bound to,
 always stand alone.
-
-The table’s dish list marks quantities covered by pending or received item payments with
-"Has a payment" / "Tiene un pago", or "{paid} of {quantity} have a payment" /
-"{paid} de {quantity} tienen un pago" for part of a row. The words do not distinguish money
-received from a card payment still in progress.
 
 On the till, Mark served and Undo served on a grouped row ask how many and act on its first that
 many members; Move station takes every member; Change dish changes every member; Move dishes… picks the row's first members whole
@@ -6550,7 +6545,7 @@ many members; Move station takes every member; Change dish changes every member;
 or a count of it. Fire now releases every member of the row with its extras in one group.
 Finish table keeps a cancellation for each dish and groups the slips according to the station's
 setting. On the station screen a tap or a move takes every member, and the pass only draws the rows. These lists keep
-one row per portion: Items in Pay, until the A739 payment window releases its files; the counter basket
+one row per portion: the counter basket
 once any of its order is paid (`foldRetrievedPortions`); and MOVED slips, which lay out each line
 alone (`printMovedSlips`, `apps/server/src/kitchen-ticket-moves.ts`).
 
@@ -6583,10 +6578,7 @@ is picked.
   timed reads do not repeat and closing the panel does not start, so its mark stays as that read left it
   until the order is next read.
 - **A blocked row** shows its tick greyed with the reason under the dish, tied to the tick by
-  `aria-describedby`: "Has a payment" / "Tiene un pago" for a dish with any quantity covered by a
-  pending or received payment for chosen items on this bill (the till now takes those only on a
-  printed bill, but the server still accepts one on an open bill, as a till from before Pay for
-  items sends it), and "Payments keep {amount} on this bill: move fewer dishes" when one more would leave the bill's total below what it has
+  `aria-describedby`: "Payments keep {amount} on this bill: move fewer dishes" when one more would leave the bill's total below what it has
   received or reserved. A row holding picks keeps its tick usable so it can be cleared. The greyed box is drawn by the
   widget, because the browser's own disabled box is too faint on the light page.
 - **The destinations** follow under "Move to": the party's other open bills, a part-paid one included,
@@ -6613,12 +6605,11 @@ their names (`table.move_dishes_includes`).
   bill's total. The tick is checked for a whole bill and indeterminate for a bill with picks. Pressing
   it makes an unticked or part-ticked bill whole and clears a whole one; a held bill's tick only clears.
   Picking every dish of a bill, a set menu's dishes counting as picked with it and a set menu that
-  goes with its last dish needing no pick, makes it whole too, unless a dish is paid or the bill
+  goes with its last dish needing no pick, makes it whole too, unless the bill
   holds this person's own unsent dishes, which
   say `table.split_own_unsent` under the header and go only with the whole bill.
 - **A `whole` row** of a whole bill draws ticked with no stepper, in muted text with its tick in full
-  colour, as a paler tick falls under 3:1 on the page (Departures in the A803 4c plan). A paid dish stays ticked and
-  disabled, saying why; a row the floor stops is not stopped, because the whole bill keeps its
+  colour, as a paler tick falls under 3:1 on the page (Departures in the A803 4c plan). A row the floor stops is not stopped, because the whole bill keeps its
   payments. Unticking a row turns the bill into picks of every other row, each up to its limit, so a
   part-paid bill's floor can leave some unticked. Where those picks would make the bill whole again,
   unticking a set menu's dish unticks the set menu too, and unticking a set menu unticks its dishes.

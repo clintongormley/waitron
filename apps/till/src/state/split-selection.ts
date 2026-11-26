@@ -114,17 +114,16 @@ function setMenusThatGo(source: SplitSource): Set<string> {
   );
 }
 
-/** Whole keeps the bill's name and payments, so a paid dish or this person's unsent dishes,
- * which go only if the whole bill is chosen, leave the picks as picks. A picked set menu takes its
- * dishes along. */
+/** This person's unsent dishes go only if the whole bill is chosen, so they leave the picks as
+ * picks. A picked set menu takes its dishes along. */
 function picksEveryDish(source: SplitSource, picks: Picks): boolean {
   const goes = setMenusThatGo(source);
   for (const { lineId, setMenuLineId } of setMenuDishes(source))
     if (picks.has(setMenuLineId)) goes.add(lineId);
   return (
     !source.ownUnsent &&
-    source.groups.groups.every(
-      (group) => !group.paid && group.members.every(({ id }) => picks.has(id) || goes.has(id)),
+    source.groups.groups.every((group) =>
+      group.members.every(({ id }) => picks.has(id) || goes.has(id)),
     )
   );
 }
@@ -304,7 +303,7 @@ export function splitSourcesFrom(
   bills: readonly PartyBill[],
   drafts: readonly Draft[],
   personId: string,
-  keyFor: (lines: readonly TabLine[], balance: BillBalance) => (dish: TabLine) => string | null,
+  keyFor: (lines: readonly TabLine[]) => (dish: TabLine) => string | null,
 ): SplitSource[] {
   const billById = new Map(bills.map((bill) => [bill.workingOrderId, bill]));
   const foreign = new Map<string, Draft>();
@@ -320,7 +319,7 @@ export function splitSourcesFrom(
     return [
       {
         bill,
-        groups: pickGroups(lines, apartInSetMenus(bill.setMenus, keyFor(lines, balance)), balance),
+        groups: pickGroups(lines, apartInSetMenus(bill.setMenus, keyFor(lines)), balance),
         held:
           holder === undefined
             ? null

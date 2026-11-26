@@ -756,8 +756,8 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
   });
 
   it("puts a refusal that names no shown field above the action, and the action stays enabled", async () => {
-    const el = await mount({ kind: "cancel", refusal: "bill.line_paid" });
-    expect(actions(el).error).toBe(codeMessage("bill.line_paid"));
+    const el = await mount({ kind: "cancel", refusal: "bill.received_exceeds_total" });
+    expect(actions(el).error).toBe(codeMessage("bill.received_exceeds_total"));
     expect(continueButton(el).disabled).toBe(false);
   });
 
@@ -770,7 +770,6 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     "adjustment.weighed_partial",
     "adjustment.quantity_invalid",
     "adjustment_reason.not_found",
-    "bill.line_paid",
     "bill.received_exceeds_total",
     "bill.refund_in_progress",
     "order.payment_in_flight",
@@ -875,7 +874,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(refusalField("adjustment.no_reduction", "comp", true)).toBeNull();
     expect(refusalField("adjustment.free_not_allowed", "discount", false)).toBe("value");
     expect(refusalField("adjustment.free_not_allowed", "comp", false)).toBeNull();
-    expect(refusalField("bill.line_paid", "comp", false)).toBeNull();
+    expect(refusalField("bill.received_exceeds_total", "comp", false)).toBeNull();
   });
 });
 

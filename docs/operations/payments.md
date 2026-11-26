@@ -1,10 +1,12 @@
 # Part payments and an unanswered card payment
 
-For a table bill, use **Pay items** for particular dishes, **Contribute** for an amount
+For a table bill, use **Items** for particular dishes, **An amount** for an amount
 towards the bill, or **Split equally** for the people still to pay. Review the amount applied,
 tip and change before taking payment. **Move dishes…** with **+ New bill** puts whole dishes on
-another bill, and a part-paid bill's unpaid dishes may go too. **Pay items** moves the chosen
-dishes to a bill of their own, paid at once; on a printed bill it keeps the payment on that bill.
+another bill; a part-paid bill's dishes may go too, as long as what stays still covers what it has
+been paid, a card payment in progress included.
+**Items** moves the chosen dishes to a bill of their own, paid at once; it reopens a printed
+bill first. Choosing every dish pays the whole bill.
 
 These are the current table-payment actions. The separate payment-window and bill/table
 redesigns remain pending until their implementations land.

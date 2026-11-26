@@ -533,62 +533,6 @@ it("writes nothing on a bill discounted as a whole (D2)", async () => {
   expect(await rows(bill.tabId)).toEqual(before);
 });
 
-it("leaves a dish paid for by item as it is (D2)", async () => {
-  const bill = await seated();
-  await send(bill, "Hake", "Sirloin");
-  await ungroup(bill.tabId);
-  const hake = (await shape(bill.tabId)).find(({ what }) => what === "Hake")!;
-  const hakeLineNo = (await rows(bill.tabId)).find(({ id }) => id === hake.id)!.lineNo;
-  expect(
-    await takeBillPayment(
-      specDeps(spec),
-      venue.cfg,
-      bill.tabId,
-      {
-        submissionId: randomUUID(),
-        tip: "0.00",
-        kind: "items",
-        lines: [{ lineNo: hakeLineNo }],
-        method: "cash",
-        tendered: "16.00",
-        applied: "16.00",
-      },
-      venue.operator,
-    ),
-  ).toMatchObject({ outcome: "received" });
-  await regroup(bill.tabId);
-  const shaped = await shape(bill.tabId);
-  const [daily] = menuRows(shaped);
-  expect(
-    shaped.map(({ id, what, role, price, setMenuLineId, place }) => ({
-      id: what === "Hake" ? id : undefined,
-      what,
-      role,
-      price,
-      setMenuLineId,
-      place,
-    })),
-  ).toEqual([
-    { id: hake.id, what: "Hake", role: null, price: 1600, setMenuLineId: null, place: null },
-    {
-      id: undefined,
-      what: "Sirloin",
-      role: "dish",
-      price: 500,
-      setMenuLineId: daily!.id,
-      place: 1,
-    },
-    {
-      id: undefined,
-      what: "Daily menu",
-      role: "set_menu",
-      price: 1400,
-      setMenuLineId: null,
-      place: null,
-    },
-  ]);
-});
-
 it("leaves a set menu whose dish was cancelled keeping its charge as it is (D15)", async () => {
   const { bill, daily, soup, hake } = await groupedSoupAndHake("Soup", "fire");
   const soupLineNo = (await rows(bill.tabId)).find(({ id }) => id === soup.id)!.lineNo;

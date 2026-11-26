@@ -253,8 +253,8 @@ describe("the whole-basket save of a bill with a sent dish", () => {
       `/api/working-orders/${billId}/payments`,
       {
         submissionId: randomUUID(),
-        kind: "items",
-        lines: [{ lineNo: 1 }],
+        kind: "contribution",
+        amount: "50.00",
         method: "cash",
         tendered: "50.00",
         applied: "50.00",

@@ -293,6 +293,7 @@ import {
   billEditConflictRows,
   type BillEditConflict,
 } from "./state/bill-edit-conflicts.js";
+import { counterBillEdit, expectedEditOf, foundBillEdit } from "./state/bill-edit.js";
 import "./widgets/bill-edit-conflicts-dialog.js";
 import type { BillEditConflictsPrompt } from "./widgets/bill-edit-conflicts-dialog.js";
 import { trackDialog } from "./widgets/track-dialog.js";
@@ -325,10 +326,13 @@ import {
 } from "./state/bill-payment.js";
 import { CounterOverpaidRead } from "./state/counter-overpaid.js";
 import {
+  billPaymentsBannerOutstanding,
+  counterItemsEditFor,
   itemsAllocatedFrom,
   itemsBarredReason,
   itemsRefusal,
   paysOnNewBill,
+  previewEdit,
   previewPayment,
   takePayment,
   withItems,
@@ -932,7 +936,6 @@ const TABLE_REFUSALS = new Set([
   "bill.presented",
   "bill.paid",
   "bill.other_party",
-  "bill.line_paid",
   "bill.received_exceeds_total",
   "bill.refund_in_progress",
   "bill.not_overpaid",
@@ -966,7 +969,6 @@ const BILL_LEFT_REFUSALS: ReadonlySet<string> = new Set(["tab.not_open", "bill.o
  * payments are read again, so the screen shows what the bill now holds. */
 const BILL_MONEY_REFUSALS = new Set([
   "bill.payments_received",
-  "bill.line_paid",
   "bill.received_exceeds_total",
   "bill.refund_in_progress",
   "order.payment_in_flight",
@@ -987,7 +989,6 @@ const DESTINATION_REFUSALS: ReadonlySet<string> = new Set([
 
 /** A split refused for the state of one of its bills, each named when it is not on screen. */
 const SPLIT_BILL_REFUSALS: ReadonlySet<string> = new Set([
-  "bill.line_paid",
   "bill.received_exceeds_total",
   "bill.refund_in_progress",
   "order.payment_in_flight",
@@ -1704,18 +1705,6 @@ interface DeferredClosing {
   sent: string[];
 }
 
-/** The edit state a Find bill row was read with, as a write on it expects: null for a bill at no
- * table, undefined for a table bill whose row carried none. */
-function foundBillEdit(row: {
-  partyId: string | null;
-  edit?: BillEditState | null;
-}): BillEditExpected | null | undefined {
-  if (row.partyId === null) return null;
-  if (row.edit === undefined || row.edit === null) return undefined;
-  const { billId, editorVersion, draftId, draftRevision } = row.edit;
-  return { billId, editorVersion, draftId, draftRevision };
-}
-
 /** A deferred close's refusal: its code, the server's reason, and the sentence for both. */
 function deferredRefusal(error: unknown): {
   code: string;
@@ -1799,9 +1788,7 @@ const NOT_CHARGED_OUTCOMES = new Set<BillPaymentResult["outcome"]>([
   "network_unavailable",
 ]);
 
-/** Fields of a payment's ask that a preview refuses for what was typed alone; `lines` is not one,
- * as the server also refuses it for a line another device has changed (`itemsDue`,
- * `apps/server/src/bill-payments.ts`). */
+/** Fields of a payment's ask that a preview refuses for what was typed alone. */
 const TYPED_FIELDS = new Set(["tendered", "amount", "shareOf", "addedTip"]);
 
 /** Refusals of an approver's PIN, which the PIN prompt shows. */
@@ -18355,26 +18342,14 @@ export class TillApp extends LitElement {
     try {
       const bill = await asked.api.getFindBill(orderId, { signal: limit.signal });
       if (!this.#counterRelocationCurrent(asked)) return null;
-      if (
-        bill.workingOrderId !== orderId ||
-        bill.partyId !== null ||
-        bill.edit == null ||
-        bill.edit.billId !== orderId
-      )
-        throw { code: "draft.out_of_date" };
-      const edits = [bill.edit];
+      const edits = [counterBillEdit(bill, orderId)];
       if (target != null) {
         const destination = await asked.api.listDrafts(target.id, { signal: limit.signal });
         edits.push(...destination.billEdits);
       }
       if (!this.#counterRelocationCurrent(asked)) return null;
       asked.expectedEdits = edits
-        .map(({ billId, editorVersion, draftId, draftRevision }) => ({
-          billId,
-          editorVersion,
-          draftId,
-          draftRevision,
-        }))
+        .map(expectedEditOf)
         .sort((a, b) => (a.billId < b.billId ? -1 : a.billId > b.billId ? 1 : 0));
       if (
         new Set(asked.expectedEdits.map((edit) => edit.billId)).size !== asked.expectedEdits.length
@@ -22508,6 +22483,9 @@ export class TillApp extends LitElement {
       if (!this.#hasLeftCounterOrder(open.billId, open.visit)) {
         await this.#reloadCounterOrder(open.billId, open.visit);
         this.#refreshOpenPayLines(open.billId);
+        const outstanding = billPaymentsBannerOutstanding(this.errorKey, balance, open.billId);
+        if (outstanding !== undefined && !this.#hasLeftCounterOrder(open.billId, open.visit))
+          this.#sayBillPayments(outstanding);
       }
     } else if (!this.#hasLeftOrder(open.billId, open.visit)) {
       await this.#rereadAmounts(open.billId, open.visit, balance);
@@ -22950,17 +22928,15 @@ export class TillApp extends LitElement {
         if (now !== null) this.billPaying = { ...now, busy: false, refusal: this.#saidInDialog() };
         return;
       }
-      const expectedEdit =
+      const { expectedEdit, readCounterEdit } = previewEdit(
         open.found !== undefined
           ? open.found.expectedEdit
           : open.surface === "counter"
             ? this.#counterExpectedEdit(open.billId)
-            : this.#draftSync?.expectedEditFor(open.billId);
-      if (
-        expectedEdit === undefined ||
-        (expectedEdit === null && (open.surface === "table" || asked.choice.kind === "items"))
-      )
-        throw { code: "draft.out_of_date" };
+            : this.#draftSync?.expectedEditFor(open.billId),
+        open,
+        asked.choice,
+      );
       const api = this.api;
       const session = this.#operatorSession;
       const visit = this.#orderVisit;
@@ -22978,9 +22954,16 @@ export class TillApp extends LitElement {
         if (now !== null) this.billPaying = { ...now, busy: false };
         return;
       }
-      const preview = await previewPayment(api, open.billId, asked, expectedEdit);
+      const paidEdit = readCounterEdit ? await counterItemsEditFor(api, open) : expectedEdit;
+      if (readCounterEdit && !current()) {
+        const now = this.#billPayingNow(open.id);
+        if (now !== null) this.billPaying = { ...now, busy: false };
+        return;
+      }
+      const preview = await previewPayment(api, open.billId, asked, paidEdit);
       const now = this.#billPayingNow(open.id);
-      if (now !== null) this.billPaying = { ...now, asked, preview, expectedEdit, busy: false };
+      if (now !== null)
+        this.billPaying = { ...now, asked, preview, expectedEdit: paidEdit, busy: false };
     } catch (error) {
       await this.#onBillPayRefused(open.id, error, asked, "preview");
     }
@@ -23028,8 +23011,8 @@ export class TillApp extends LitElement {
       (event as CustomEvent<BillPayConfirmDetail | null>).detail ?? {};
     const confirmation = withItems(
       confirmationOf(
-        paymentAsk(asked.choice, asked.pay, asked.allocation, open.expectedEdit),
-        open.preview as Extract<AllocationPreview, { kind: "allocated" }>,
+        paymentAsk(asked.choice, asked.pay, open.expectedEdit),
+        open.preview!,
         asked.card?.entry === "reader" && readerId !== undefined
           ? { ...asked.card, readerId }
           : asked.card,
@@ -23117,7 +23100,10 @@ export class TillApp extends LitElement {
       try {
         const result = await this.#withReaderPayment(asked.card?.entry === "reader", () =>
           this.#resend(
-            (signal) => takePayment(api, open.billId, submission.request, { signal }),
+            (signal) =>
+              takePayment(api, open.billId, submission.shown.asked.choice, submission.request, {
+                signal,
+              }),
             limit.signal,
             () => session === this.#operatorSession,
             () => {

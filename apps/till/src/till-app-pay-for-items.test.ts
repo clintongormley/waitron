@@ -174,11 +174,15 @@ describe("till-app: Pay for items on a bill of their own", () => {
     await type(el, "tendered", "50");
     await press(el, "[data-pay-continue]");
 
-    expect(api.previewItemPayment).toHaveBeenCalledWith("wo-4", {
-      picks: [{ lineId: "line-4" }, { lineId: "line-5" }],
-      method: "cash",
-      tendered: "50",
-    });
+    expect(api.previewItemPayment).toHaveBeenCalledWith(
+      "wo-4",
+      {
+        picks: [{ lineId: "line-4" }, { lineId: "line-5" }],
+        method: "cash",
+        tendered: "50",
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(api.previewBillPayment).not.toHaveBeenCalled();
     expect(text(inDialog(el, "[data-pay-scope]"))).toBe(
       fill(t("bill_pay.scope_items"), { items: "Tarta, Vino", amount: money("30.00") }),
@@ -315,10 +319,14 @@ describe("till-app: Pay for items on a bill of their own", () => {
     await type(el, "externalRef", "OP-73");
     await type(el, "externalMachine", "Bank");
     await press(el, "[data-pay-continue]");
-    expect(api.previewItemPayment).toHaveBeenCalledWith("wo-4", {
-      picks: [{ lineId: "line-4" }, { lineId: "line-5" }],
-      method: "card",
-    });
+    expect(api.previewItemPayment).toHaveBeenCalledWith(
+      "wo-4",
+      {
+        picks: [{ lineId: "line-4" }, { lineId: "line-5" }],
+        method: "card",
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     await press(el, "[data-pay-confirm]");
     expect(payForItems).toHaveBeenCalledWith(
       "wo-4",
@@ -341,13 +349,17 @@ describe("till-app: Pay for items on a bill of their own", () => {
     await chooseItems(el, [1, 2, 3, 4, 5]);
     await type(el, "tendered", "120");
     await press(el, "[data-pay-continue]");
-    expect(api.previewBillPayment).toHaveBeenCalledWith("wo-4", {
-      kind: "share",
-      shareOf: 1,
-      method: "cash",
-      tendered: "120",
-      expectedEdit: wo4Edit,
-    });
+    expect(api.previewBillPayment).toHaveBeenCalledWith(
+      "wo-4",
+      {
+        kind: "share",
+        shareOf: 1,
+        method: "cash",
+        tendered: "120",
+        expectedEdit: wo4Edit,
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(api.previewItemPayment).not.toHaveBeenCalled();
     expect(api.payForItems).not.toHaveBeenCalled();
   });
@@ -400,11 +412,15 @@ describe("till-app: Pay for items on a bill of their own", () => {
     );
     await press(el, "[data-pay-confirm]");
 
-    expect(api.previewItemPayment).toHaveBeenCalledWith("wo-4", {
-      picks: [{ lineId: "line-4" }],
-      method: "cash",
-      tendered: "50",
-    });
+    expect(api.previewItemPayment).toHaveBeenCalledWith(
+      "wo-4",
+      {
+        picks: [{ lineId: "line-4" }],
+        method: "cash",
+        tendered: "50",
+      },
+      { signal: expect.any(AbortSignal) },
+    );
     expect(payForItems).toHaveBeenCalledWith(
       "wo-4",
       expect.objectContaining({ picks: [{ lineId: "line-4" }], expectedEdits: [wo4Edit] }),
@@ -876,6 +892,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
     expect(vi.mocked(api.previewItemPayment).mock.calls.at(-1)).toEqual([
       "wo-5",
       expect.objectContaining({ picks: [{ lineId: "copy-5" }] }),
+      { signal: expect.any(AbortSignal) },
     ]);
   });
 
@@ -1387,8 +1404,9 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       signals: [],
     };
 
-    /** Signed in at the counter with the held order `wo-1` retrieved, its edit state as each
-     * read in `edits` gives it (the last one repeating). */
+    /** Signed in at the counter with the held order `wo-1` retrieved. As the server does for an
+     * order with no party, its held read carries no edit state; the bill read gives it as each
+     * read in `edits` does (the last one repeating). */
     async function retrieved(
       overrides: Record<string, unknown>,
       edits: (typeof counterEdit | null)[] = [counterEdit],
@@ -1397,6 +1415,13 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       let reads = 0;
       const { el } = await mountApp({
         listWorkingOrders: vi.fn().mockResolvedValue([heldWo1]),
+        getFindBill: vi.fn(async () => ({
+          ...heldWo1,
+          workingOrderId: "wo-1",
+          edit: ((edit) => (edit === null ? null : { ...edit, editorId: null, editorName: null }))(
+            edits[Math.min(reads++, edits.length - 1)]!,
+          ),
+        })),
         retrieveWorkingOrder: vi.fn(async () => ({
           zoneId: null,
           kitchenNote: {
@@ -1409,7 +1434,7 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
           orderNumber: 5,
           label: "Ana",
           revision: 3,
-          expectedEdit: edits[Math.min(reads++, edits.length - 1)],
+          expectedEdit: null,
           lines: [
             {
               workingOrderLineId: "counter-dish",
@@ -1497,11 +1522,15 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       await press(el, "[data-pay-confirm]");
       await flush(el);
 
-      expect(api.previewItemPayment).toHaveBeenCalledWith("wo-1", {
-        picks: [{ lineId }],
-        method: "cash",
-        tendered: "50",
-      });
+      expect(api.previewItemPayment).toHaveBeenCalledWith(
+        "wo-1",
+        {
+          picks: [{ lineId }],
+          method: "cash",
+          tendered: "50",
+        },
+        { signal: expect.any(AbortSignal) },
+      );
       expect(payForItems).toHaveBeenCalledWith(
         "wo-1",
         {
@@ -1883,6 +1912,44 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       expect(warning?.message).toContain(money("25.00"));
     });
 
+    it("at the Counter items are paid with the edit state the bill read gives, read at Continue", async () => {
+      const el = await retrieved({
+        previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+        payForItems: vi.fn().mockResolvedValue(paidOnWo9({}, onWo1)),
+      });
+      await chooseFirst(el);
+      expect(api.getFindBill).not.toHaveBeenCalled();
+      await press(el, "[data-pay-continue]");
+
+      expect(api.getFindBill).toHaveBeenCalledExactlyOnceWith("wo-1", {
+        signal: expect.any(AbortSignal),
+      });
+      expect(api.previewItemPayment).toHaveBeenCalledOnce();
+      await press(el, "[data-pay-confirm]");
+      await flush(el);
+      expect(vi.mocked(api.payForItems).mock.calls[0]![1]).toMatchObject({
+        expectedEdits: [counterEdit],
+      });
+    });
+
+    it("at the Counter a bill read naming a party pays no items", async () => {
+      const el = await retrieved({
+        previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+        getFindBill: vi.fn(async () => ({
+          ...heldWo1,
+          workingOrderId: "wo-1",
+          partyId: "v1",
+          edit: { ...counterEdit, editorId: null, editorName: null },
+        })),
+      });
+      await chooseFirst(el);
+      await press(el, "[data-pay-continue]");
+      await flush(el);
+
+      expect(api.previewItemPayment).not.toHaveBeenCalled();
+      expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+    });
+
     it("at the Counter with no edit state the order is read again before items are paid", async () => {
       const el = await retrieved(
         { previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()) },
@@ -1901,6 +1968,352 @@ describe("till-app: Pay for items by card reader, after no answer, and at the Co
       await press(el, "[data-pay-continue]");
       expect(api.previewItemPayment).toHaveBeenCalledOnce();
       expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
+    });
+
+    it("at the Counter an unanswered bill read at Continue lets Continue be pressed again once it reaches its time limit", async () => {
+      let reads = 0;
+      // The first read answers only its abort; with no signal it never answers.
+      const getFindBill = vi.fn(
+        (_billId: string, options?: { signal?: AbortSignal }) =>
+          new Promise((resolve, reject) => {
+            if (reads++ === 0) {
+              options?.signal?.addEventListener("abort", () =>
+                reject(new DOMException("aborted", "AbortError")),
+              );
+              return;
+            }
+            resolve({
+              ...heldWo1,
+              workingOrderId: "wo-1",
+              edit: { ...counterEdit, editorId: null, editorName: null },
+            });
+          }),
+      );
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
+      const el = await retrieved({
+        getFindBill,
+        previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+      });
+      await chooseFirst(el);
+      await press(el, "[data-pay-continue]");
+
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1_000);
+      await flush(el, 4);
+      expect(dialog(el)!.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await flush(el, 4);
+      expect(dialog(el)!.busy).toBe(false);
+      expect(formError(el)).toBe(codeMessage("server.internal"));
+      expect(api.previewItemPayment).not.toHaveBeenCalled();
+      expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+
+      await press(el, "[data-pay-continue]");
+      await flush(el);
+      expect(getFindBill).toHaveBeenCalledTimes(2);
+      expect(api.previewItemPayment).toHaveBeenCalledOnce();
+      expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
+    });
+
+    it("at the Counter an unanswered items preview lets Continue be pressed again once it reaches its time limit", async () => {
+      let previews = 0;
+      // The first preview answers only its abort; with no signal it never answers.
+      const previewItemPayment = vi.fn(
+        (_billId: string, _ask: unknown, options?: { signal?: AbortSignal }) =>
+          new Promise<ItemPaymentPreview>((resolve, reject) => {
+            if (previews++ === 0) {
+              options?.signal?.addEventListener("abort", () =>
+                reject(new DOMException("aborted", "AbortError")),
+              );
+              return;
+            }
+            resolve(itemsPreview());
+          }),
+      );
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+      onTestFinished(() => {
+        vi.useRealTimers();
+      });
+      const el = await retrieved({ previewItemPayment });
+      await chooseFirst(el);
+      await press(el, "[data-pay-continue]");
+
+      await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS - 1_000);
+      await flush(el, 4);
+      expect(dialog(el)!.busy).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await flush(el, 4);
+      expect(dialog(el)!.busy).toBe(false);
+      expect(formError(el)).toBe(codeMessage("server.internal"));
+      expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+
+      await press(el, "[data-pay-continue]");
+      await flush(el);
+      expect(previewItemPayment).toHaveBeenCalledTimes(2);
+      expect(inDialog(el, "[data-pay-confirm]")).not.toBeNull();
+    });
+
+    it("at the Counter a bill read answered after its Pay window closed asks for no preview", async () => {
+      let answer: (bill: unknown) => void = () => undefined;
+      const el = await retrieved({
+        getFindBill: vi.fn(() => new Promise((resolve) => (answer = resolve))),
+        previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+      });
+      await chooseFirst(el);
+      await press(el, "[data-pay-continue]");
+      emit(dialog(el)!, "bill-pay-close");
+      await flush(el);
+      expect(dialog(el)).toBeNull();
+
+      answer({
+        ...heldWo1,
+        workingOrderId: "wo-1",
+        edit: { ...counterEdit, editorId: null, editorName: null },
+      });
+      await flush(el, 4);
+
+      expect(api.previewItemPayment).not.toHaveBeenCalled();
+    });
+
+    it("at the Counter a change of tip asks again without reading the bill again, and pays with the edit state read at Continue", async () => {
+      const el = await retrieved(
+        {
+          previewItemPayment: vi
+            .fn()
+            .mockResolvedValueOnce(itemsPreview())
+            .mockResolvedValue(itemsPreview({ tip: "20.00", change: "0.00" })),
+          payForItems: vi.fn().mockResolvedValue(paidOnWo9({}, onWo1)),
+        },
+        [counterEdit, { ...counterEdit, editorVersion: 3 }],
+      );
+      await chooseFirst(el);
+      await press(el, "[data-pay-continue]");
+      await press(el, 'input[name="leaveTip"][value="all"]');
+      await flush(el);
+
+      expect(api.previewItemPayment).toHaveBeenCalledTimes(2);
+      expect(api.getFindBill).toHaveBeenCalledOnce();
+      await press(el, "[data-pay-confirm]");
+      await flush(el);
+      expect(vi.mocked(api.payForItems).mock.calls[0]![1]).toMatchObject({
+        expectedEdits: [counterEdit],
+      });
+    });
+
+    it("at the Counter items refused as out of date are paid, at the next Continue, with the edit state a new bill read gives", async () => {
+      const fresh = { ...counterEdit, editorVersion: 3 };
+      const el = await retrieved(
+        {
+          previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+          payForItems: vi
+            .fn()
+            .mockRejectedValueOnce({ code: "draft.out_of_date", status: 409 })
+            .mockResolvedValue(paidOnWo9({}, onWo1)),
+        },
+        [counterEdit, fresh],
+      );
+      await chooseFirst(el);
+      await press(el, "[data-pay-continue]");
+      await press(el, "[data-pay-confirm]");
+      await flush(el);
+      expect(formError(el)).toBe(codeMessage("draft.out_of_date"));
+      expect(inDialog(el, "[data-pay-confirm]")).toBeNull();
+      expect(api.getFindBill).toHaveBeenCalledOnce();
+
+      await press(el, "[data-pay-continue]");
+      expect(api.getFindBill).toHaveBeenCalledTimes(2);
+      expect(api.previewItemPayment).toHaveBeenCalledTimes(2);
+      await press(el, "[data-pay-confirm]");
+      await flush(el);
+
+      expect(
+        vi.mocked(api.payForItems).mock.calls.map(([, request]) => request.expectedEdits),
+      ).toEqual([[counterEdit], [fresh]]);
+    });
+
+    describe("a retrieved order already part-paid", () => {
+      const toPay = (amount: string) =>
+        [
+          t("table.bill_to_pay").replace("{amount}", money(amount)),
+          t("bill.pay_with_bill_payments"),
+        ].join(". ");
+      const banner = (el: TillApp) => text(el.shadowRoot!.querySelector(".error"));
+
+      /** `wo-1` coming to €120.00 with €50.00 paid, until a payment leaves `left` to pay. */
+      async function partPaid(overrides: Record<string, unknown>, left: () => string | null) {
+        const outstanding = () => left() ?? "70.00";
+        return retrieved({
+          listWorkingOrders: vi.fn(async () => [
+            { ...heldWo1, outstanding: outstanding(), hasPayments: true },
+          ]),
+          getBillBalance: vi.fn(async () =>
+            balanceOf({ workingOrderId: "wo-1", received: "50.00", outstanding: outstanding() }),
+          ),
+          ...overrides,
+        });
+      }
+
+      it("at the Counter the banner says what is left to pay once dishes are paid for", async () => {
+        let left: string | null = null;
+        const el = await partPaid(
+          {
+            previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+            payForItems: vi.fn(async () => {
+              left = "40.00";
+              return paidOnWo9(
+                {},
+                { ...onWo1, total: "90.00", received: "50.00", outstanding: "40.00" },
+              );
+            }),
+          },
+          () => left,
+        );
+        expect(banner(el)).toBe(toPay("70.00"));
+
+        await chooseFirst(el);
+        await press(el, "[data-pay-continue]");
+        await press(el, "[data-pay-confirm]");
+        await flush(el);
+        emit(dialog(el)!, "bill-pay-close");
+        await flush(el);
+
+        expect(banner(el)).toBe(toPay("40.00"));
+      });
+
+      it("at the Counter the banner says what is left to pay once an amount is paid", async () => {
+        let left: string | null = null;
+        const el = await partPaid(
+          {
+            previewBillPayment: vi.fn().mockResolvedValue(cash("30.00", "0.00")),
+            takeBillPayment: vi.fn(async () => {
+              left = "40.00";
+              return takenOf(
+                { kind: "contribution", applied: "30.00", tendered: "30.00" },
+                { workingOrderId: "wo-1", received: "80.00", outstanding: "40.00" },
+              );
+            }),
+          },
+          () => left,
+        );
+        expect(banner(el)).toBe(toPay("70.00"));
+
+        emit(counter(el), "counter-bill-pay", {});
+        await flush(el);
+        await press(el, 'input[name="way"][value="contribution"]');
+        await type(el, "amount", "30");
+        await type(el, "tendered", "30");
+        await press(el, "[data-pay-continue]");
+        await press(el, "[data-pay-confirm]");
+        await flush(el);
+        emit(dialog(el)!, "bill-pay-close");
+        await flush(el);
+
+        expect(api.takeBillPayment).toHaveBeenCalledOnce();
+        expect(banner(el)).toBe(toPay("40.00"));
+      });
+
+      it("at the Counter the banner says nothing is to pay once dishes paid for leave the order paid over its total", async () => {
+        let left: string | null = null;
+        const el = await partPaid(
+          {
+            previewItemPayment: vi.fn().mockResolvedValue(itemsPreview()),
+            payForItems: vi.fn(async () => {
+              left = "-5.00";
+              return paidOnWo9(
+                {},
+                {
+                  ...onWo1,
+                  total: "45.00",
+                  received: "50.00",
+                  outstanding: "0.00",
+                  overpaid: "5.00",
+                },
+              );
+            }),
+          },
+          () => left,
+        );
+
+        await chooseFirst(el);
+        await press(el, "[data-pay-continue]");
+        await press(el, "[data-pay-confirm]");
+        await flush(el);
+        emit(dialog(el)!, "bill-pay-close");
+        await flush(el);
+
+        expect(banner(el)).toBe(toPay("0.00"));
+      });
+
+      it("at the Counter a payment leaves another message over the order as it was", async () => {
+        let left: string | null = null;
+        const el = await partPaid(
+          {
+            switchDining: vi.fn().mockRejectedValue({ code: "device.forbidden_action" }),
+            previewBillPayment: vi.fn().mockResolvedValue(cash("30.00", "0.00")),
+            takeBillPayment: vi.fn(async () => {
+              left = "40.00";
+              return takenOf(
+                { kind: "contribution", applied: "30.00", tendered: "30.00" },
+                { workingOrderId: "wo-1", received: "80.00", outstanding: "40.00" },
+              );
+            }),
+          },
+          () => left,
+        );
+        emit(counter(el), "dining-change", { dining: "takeaway" });
+        await flush(el);
+        const refused = banner(el);
+        expect(refused).toBe(codeMessage("device.forbidden_action"));
+
+        emit(counter(el), "counter-bill-pay", {});
+        await flush(el);
+        await press(el, 'input[name="way"][value="contribution"]');
+        await type(el, "amount", "30");
+        await type(el, "tendered", "30");
+        await press(el, "[data-pay-continue]");
+        await press(el, "[data-pay-confirm]");
+        await flush(el);
+        emit(dialog(el)!, "bill-pay-close");
+        await flush(el);
+
+        expect(api.takeBillPayment).toHaveBeenCalledOnce();
+        expect(banner(el)).toBe(refused);
+      });
+
+      it("at the Counter a balance answered for another bill is never shown as the order's to pay", async () => {
+        const el = await partPaid(
+          {
+            previewBillPayment: vi.fn().mockResolvedValue(cash("30.00", "0.00")),
+            takeBillPayment: vi
+              .fn()
+              .mockResolvedValue(
+                takenOf(
+                  { kind: "contribution", applied: "30.00", tendered: "30.00" },
+                  { workingOrderId: "wo-2", received: "110.00", outstanding: "10.00" },
+                ),
+              ),
+          },
+          () => null,
+        );
+
+        emit(counter(el), "counter-bill-pay", {});
+        await flush(el);
+        await press(el, 'input[name="way"][value="contribution"]');
+        await type(el, "amount", "30");
+        await type(el, "tendered", "30");
+        await press(el, "[data-pay-continue]");
+        await press(el, "[data-pay-confirm]");
+        await flush(el);
+        emit(dialog(el)!, "bill-pay-close");
+        await flush(el);
+
+        expect(api.takeBillPayment).toHaveBeenCalledOnce();
+        expect(banner(el)).toBe(toPay("70.00"));
+      });
     });
   });
 });

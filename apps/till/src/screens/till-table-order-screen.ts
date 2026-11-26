@@ -70,7 +70,6 @@ import {
   multiplyDecimal,
   perDishOptionQuantity,
   subtractDecimal,
-  sumDecimals,
   type BillSetMenuState,
   type Decimal,
   type PlacedDish,
@@ -204,7 +203,7 @@ import { seatsGuests, shownName as tableShownName } from "../state/floor-today.j
 import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
-import { paidQuantities, payLines } from "../state/bill-payment.js";
+import { payLines } from "../state/bill-payment.js";
 import { billHasUnsent, billUnsentText } from "../state/bill-unsent.js";
 import {
   apartInSetMenus,
@@ -442,28 +441,14 @@ function sameSources(a: DishSources, b: DishSources): boolean {
   );
 }
 
-/** The key that groups a bill's dishes as the screen lists them. Portions also differ by what the
- * list prints of each: its allergy mark and a whole payment. A part payment would print against
- * one portion's count, so such a line stands alone. */
+/** The key that groups a bill's dishes as the screen lists them. Portions also differ by the
+ * allergy mark the list prints of each. */
 function fallbackPortionKeys({
   lines,
-  balance,
   allergy,
-}: DishSources): (dish: TabLine) => string | null {
-  const paidOf = balance === null ? undefined : paidQuantities(balance);
-  return (dish) => {
-    const paid = paidOf?.get(dish.lineNo);
-    if (
-      paid !== undefined &&
-      compareDecimal(decimal(paid), decimal("0")) > 0 &&
-      compareDecimal(decimal(paid), decimal(dish.quantity)) < 0
-    )
-      return null;
-    return tabLinePortionKey(dish, lines, [
-      paid ?? null,
-      allergyGuestId(allergy, { kind: "working", id: dish.id }),
-    ]);
-  };
+}: Pick<DishSources, "lines" | "allergy">): (dish: TabLine) => string | null {
+  return (dish) =>
+    tabLinePortionKey(dish, lines, allergyGuestId(allergy, { kind: "working", id: dish.id }));
 }
 
 /** The element `node` renders inside: its slot, its parent, or the host of its shadow root. */
@@ -899,12 +884,6 @@ export class TillTableOrderScreen extends LitElement {
         margin: var(--wt-space-1) 0 0;
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
-      }
-
-      .line-paid {
-        display: block;
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
       }
 
       .empty {
@@ -2878,24 +2857,6 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  #paidIndexed?: { lines: readonly TabLine[]; balance: BillBalance | null; dishes: Set<number> };
-
-  /** Each dish the shown bill's balance has paid any of, by line number: a dish counts as paid
-   * when it or any of its extras is. */
-  #paidDishes(): Set<number> {
-    const balance = this.#balanceShown();
-    const indexed = this.#paidIndexed;
-    if (indexed?.lines === this.lines && indexed.balance === balance) return indexed.dishes;
-    const paid = balance === null ? undefined : paidQuantities(balance);
-    const zero = decimal("0");
-    const dishes = new Set<number>();
-    for (const row of this.lines)
-      if (compareDecimal(decimal(paid?.get(row.lineNo) ?? "0"), zero) > 0)
-        dishes.add(row.parentLineNo ?? row.lineNo);
-    this.#paidIndexed = { lines: this.lines, balance, dishes };
-    return dishes;
-  }
-
   /** The dish line of each member a Sent window can change, or undefined when it is read-only. */
   #sentChangeLines(members: readonly SentSlice[]): TabLine[] | undefined {
     const zero = decimal("0");
@@ -2909,11 +2870,8 @@ export class TillTableOrderScreen extends LitElement {
       return;
     const lines = members.map((member) => this.#sentOrderLine(member));
     if (lines.some((line) => line === undefined)) return;
-    const paidDishes = this.#paidDishes();
     const editable = (line: TabLine) =>
-      !paidDishes.has(line.lineNo) &&
-      this.#liveProduct(line) !== undefined &&
-      this.#stationsAllowChange(line);
+      this.#liveProduct(line) !== undefined && this.#stationsAllowChange(line);
     return (lines as TabLine[]).every(editable) ? (lines as TabLine[]) : undefined;
   }
 
@@ -3484,7 +3442,6 @@ export class TillTableOrderScreen extends LitElement {
         >${this.#nameForLine(line)}${this.#nutrition(line)}${this.#isChild(line) ? nothing : allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: line.id })}${` ×${quantityText(this.#isChild(line) ? quantity : times(quantity))}`}
         ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}
         ${this.#isChild(line) ? nothing : this.#sentCourse(line.courseId, line.course)}
-        ${this.#paidMark(line.lineNo, line.quantity)}
       </span>
       <span class="sent-fallback-price" data-sent-fallback-price
         >${lineTotal(times(listedGross(line)), times(this.#lineGross(line)))}</span
@@ -3983,7 +3940,6 @@ export class TillTableOrderScreen extends LitElement {
                 ${allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: row.lineId })}
               </p>
               ${lineNutrition(row.nutrition, row.sentAt !== undefined)}
-              ${row.workingOrderId === this.orderId ? this.#paidMarkOf(members!.map((member) => member.row)) : nothing}
               ${
                 seed === undefined
                   ? nothing
@@ -5417,39 +5373,6 @@ export class TillTableOrderScreen extends LitElement {
     this.#dispatch("bill-pay", detail);
   }
 
-  #paidMark(lineNo: number, quantity: string): TemplateResult | typeof nothing {
-    const balance = this.#balanceShown();
-    return this.#paidText(
-      balance === null ? undefined : paidQuantities(balance).get(lineNo),
-      quantity,
-    );
-  }
-
-  #paidMarkOf(rows: readonly CurrentOrderRow[]): TemplateResult | typeof nothing {
-    if (rows.length === 1) return this.#paidMark(rows[0]!.lineNo, rows[0]!.quantity);
-    const balance = this.#balanceShown();
-    if (balance === null) return nothing;
-    const paid = paidQuantities(balance);
-    return this.#paidText(
-      trimQuantity(sumDecimals(rows.map((row) => decimal(paid.get(row.lineNo) ?? "0")))),
-      trimQuantity(sumDecimals(rows.map((row) => decimal(row.quantity)))),
-    );
-  }
-
-  #paidText(paid: string | undefined, quantity: string): TemplateResult | typeof nothing {
-    if (paid === undefined || compareDecimal(decimal(paid), decimal("0")) <= 0) return nothing;
-    const whole = compareDecimal(decimal(paid), decimal(quantity)) >= 0;
-    return html`<span class="line-paid" data-line-paid
-      >${
-        whole
-          ? t("table.pick_payment_stays")
-          : t("table.line_payment_part")
-              .replace("{paid}", () => quantityText(paid))
-              .replace("{quantity}", () => quantityText(quantity))
-      }</span
-    >`;
-  }
-
   #shownBills(): PartyBill[] {
     return shownBills(this.bills);
   }
@@ -6530,17 +6453,8 @@ export class TillTableOrderScreen extends LitElement {
     };
     if (this.#splitRows !== undefined && sameSplitInputs(this.#splitRows.inputs, inputs))
       return this.#splitRows.sources;
-    const sources = splitSourcesFrom(
-      read,
-      this.bills,
-      this.partyDrafts,
-      this.personId,
-      (lines, balance) =>
-        fallbackPortionKeys({
-          lines,
-          balance,
-          allergy: inputs.allergy,
-        }),
+    const sources = splitSourcesFrom(read, this.bills, this.partyDrafts, this.personId, (lines) =>
+      fallbackPortionKeys({ lines, allergy: inputs.allergy }),
     );
     this.#splitRows = { inputs, sources };
     return sources;

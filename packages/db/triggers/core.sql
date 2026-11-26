@@ -52,7 +52,6 @@ BEGIN
     AND (new.working_order_id IS old.working_order_id
       -- Reopen bill carries a received payment to the bill reopened from its abandoned one.
       OR (old.state = 'received' AND new.state = 'received'
-        AND old.kind <> 'items'
         AND (SELECT status FROM working_orders WHERE id = old.working_order_id) = 'abandoned'
         AND exists (SELECT 1 FROM working_orders
           WHERE id = new.working_order_id AND status = 'open'
@@ -71,7 +70,6 @@ BEGIN
       OR (old.state = 'received' AND new.state = 'received'
         AND new.applied + new.tip = old.applied + old.tip
         AND new.tip > old.tip
-        AND old.kind <> 'items'
         AND new.applied >= (SELECT coalesce(sum(applied_amount), 0) FROM refunds
           WHERE bill_payment_id = old.id AND state IN ('pending', 'completed'))
         AND NOT exists (SELECT 1 FROM tenders WHERE bill_payment_id = old.id)

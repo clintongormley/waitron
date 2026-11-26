@@ -915,7 +915,6 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
           outstanding: "5.00",
           tips: "0.00",
           payments: [],
-          paidLines: [],
         },
       });
       el.personId = "me";

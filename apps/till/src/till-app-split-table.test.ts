@@ -92,7 +92,6 @@ function balance(workingOrderId: string, total: string): BillBalance {
     outstanding: total,
     tips: "0.00",
     payments: [],
-    paidLines: [],
   };
 }
 
@@ -2437,7 +2436,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
     describe("what each row says and reads again", () => {
       it.each([
-        "bill.line_paid",
+        "bill.received_exceeds_total",
         "bill.refund_in_progress",
         "order.payment_in_flight",
         "working_order.not_open",
@@ -2462,7 +2461,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         },
       );
 
-      it.each(["bill.line_paid", "bill.paid"])(
+      it.each(["bill.received_exceeds_total", "bill.paid"])(
         "%s on the bill on screen is said in its own words",
         async (code) => {
           const el = await refusedOn("wo-4", { code, workingOrderId: "wo-4" });
@@ -2473,17 +2472,19 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
       );
 
       it("reads the label before the re-read, for a bill the re-read no longer lists", async () => {
-        const el = await panelWith(refused({ code: "bill.line_paid", workingOrderId: "b2" }));
+        const el = await panelWith(
+          refused({ code: "bill.received_exceeds_total", workingOrderId: "b2" }),
+        );
         await tick(el, "b2");
         api.getPartyBills!.mockResolvedValue([partyBill("wo-4", 1, "10.00")]);
         await pressSplit(el);
 
-        expect(said(el)).toBe(onBill("Bill 2", "bill.line_paid"));
+        expect(said(el)).toBe(onBill("Bill 2", "bill.received_exceeds_total"));
       });
 
       it("reads the bill's balance again after a money refusal", async () => {
         const el = await panelWith({
-          ...refused({ code: "bill.line_paid", workingOrderId: "wo-4" }),
+          ...refused({ code: "bill.received_exceeds_total", workingOrderId: "wo-4" }),
           getPartyBills: vi
             .fn()
             .mockResolvedValue([
@@ -2710,23 +2711,25 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         expect(banner(el)).toBeNull();
       });
 
-      it.each(["table.not_shared", "bill.line_paid", "party.out_of_date", "draft.taken_over"])(
-        "%s arriving after the waiter left for the floor does nothing",
-        async (code) => {
-          const { el, refuse } = await requestOut("b2");
-          emit(tableOrder(el)!, "back-to-floor");
-          await flush(el);
+      it.each([
+        "table.not_shared",
+        "bill.received_exceeds_total",
+        "party.out_of_date",
+        "draft.taken_over",
+      ])("%s arriving after the waiter left for the floor does nothing", async (code) => {
+        const { el, refuse } = await requestOut("b2");
+        emit(tableOrder(el)!, "back-to-floor");
+        await flush(el);
 
-          refuse({ code, billId: "b2", workingOrderId: "b2" });
-          await flush(el, 6);
+        refuse({ code, billId: "b2", workingOrderId: "b2" });
+        await flush(el, 6);
 
-          expect(banner(el)).toBeNull();
-          emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
-          await flush(el, 6);
-          expect(tableOrder(el)!.splitRefusal).toBeNull();
-          expect(banner(el)).toBeNull();
-        },
-      );
+        expect(banner(el)).toBeNull();
+        emit(floor(el)!, "open-table", { tableId: "t4", seated: true });
+        await flush(el, 6);
+        expect(tableOrder(el)!.splitRefusal).toBeNull();
+        expect(banner(el)).toBeNull();
+      });
 
       it("does not hand a refused split to the next table opened", async () => {
         const el = await refusedOn("b2", inFlight("management.request_invalid"));
@@ -2763,7 +2766,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
 
     describe("no banner while a read is out", () => {
       it.each([
-        ["the money row", { code: "bill.line_paid", workingOrderId: "b2" }],
+        ["the money row", { code: "bill.received_exceeds_total", workingOrderId: "b2" }],
         ["party.out_of_date", { code: "party.out_of_date" }],
       ])("%s says nothing until its read answers", async (_name, error) => {
         const { el, refuse } = await requestOut("b2");
@@ -2988,7 +2991,6 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
             state: "received",
             createdAt: "2026-09-30T20:00:00.000Z",
             receivedAt: "2026-09-30T20:00:00.000Z",
-            lines: [],
             refunds: [],
           },
         ],
@@ -3227,7 +3229,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         await openMoveDishes(el);
         await pickMoveDish(el);
         const release = holdBills();
-        refuse({ code: "bill.line_paid", workingOrderId: "b2" });
+        refuse({ code: "bill.received_exceeds_total", workingOrderId: "b2" });
         await flush(el, 6);
         expect(banner(el)).toBeNull();
 
@@ -3239,7 +3241,7 @@ describe("till-app: Split a table's panel compares what the waiter saw", () => {
         expect(panelOpen(el)).toBe(false);
         expect(refusal(el)).toBeNull();
         expect(tableOrder(el)!.splitRefusal).toBeNull();
-        expect(banner(el)!.textContent).toContain(onBill("Bill 2", "bill.line_paid"));
+        expect(banner(el)!.textContent).toContain(onBill("Bill 2", "bill.received_exceeds_total"));
       });
 
       it("Move dishes' leave question stays open", async () => {

@@ -102,7 +102,7 @@ function heldChangeOf(
   ];
 }
 /**
- * The caller checks that the bill and paid quantities allow removal. Corrections must precede
+ * The caller checks that the bill allows removal. Corrections must precede
  * deletion because notices and slips read the removed rows. Answers, in cents, what working the
  * bill's set menus out again took off its total beyond the removed part's own charge.
  */
@@ -616,16 +616,6 @@ export async function planHeldCorrections(
       ),
     ]),
   };
-}
-/** A dish line and its extras, none of which an edit may leave holding a paid quantity. */
-export function paidLineParts(
-  parent: EditableParent,
-): { id: string; lineNo: number; keeps: number }[] {
-  return [parent, ...parent.children].map((line) => ({
-    id: line.id,
-    lineNo: parent.lineNo,
-    keeps: 0,
-  }));
 }
 /**
  * Count a write on the order's revision only when it changed something, and answer the revision the

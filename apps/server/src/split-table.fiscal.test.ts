@@ -234,25 +234,6 @@ async function contribute(billId: string, amount: string): Promise<void> {
   expect(paid.status, JSON.stringify(paid.json)).toBe(200);
 }
 
-async function payFor(billId: string, lineNo: number, amount: string): Promise<void> {
-  const paid = await send(
-    venue.app,
-    venue.cookie,
-    "POST",
-    `/api/working-orders/${billId}/payments`,
-    {
-      submissionId: randomUUID(),
-      kind: "items",
-      lines: [{ lineNo }],
-      method: "cash",
-      tendered: amount,
-      applied: amount,
-      tip: "0.00",
-    },
-  );
-  expect(paid.status, JSON.stringify(paid.json)).toBe(200);
-}
-
 async function split(
   partyId: string,
   tableId: string,
@@ -274,9 +255,9 @@ async function split(
 }
 
 describe("A803 split: issuance", () => {
-  it("a loose pick of the last unpaid dish of an item-paid bill issues its one invoice, on the staying party", async () => {
+  it("a loose pick that leaves the bill exactly paid issues its one invoice, on the staying party", async () => {
     const { partyId, tabId, first, leaving } = await atTwoTables("Seafood rice", "Small beer");
-    await payFor(tabId, 1, "35.00");
+    await contribute(tabId, "35.00");
     const [, beerLineId] = lineIdsOf(tabId);
     expect(fiscalRecordCount(venue, tabId)).toBe(0);
 
@@ -297,7 +278,7 @@ describe("A803 split: issuance", () => {
 
   it("when the party's first table is the one taken away, the invoice names the table that stays", async () => {
     const { partyId, tabId, first, leaving } = await atTwoTables("Seafood rice", "Small beer");
-    await payFor(tabId, 1, "35.00");
+    await contribute(tabId, "35.00");
     const [, beerLineId] = lineIdsOf(tabId);
 
     const answer = await split(partyId, first, {
@@ -313,7 +294,7 @@ describe("A803 split: issuance", () => {
 
   it("the new bill holds no sale", async () => {
     const { partyId, tabId, leaving } = await atTwoTables("Seafood rice", "Small beer");
-    await payFor(tabId, 1, "35.00");
+    await contribute(tabId, "35.00");
     const [, beerLineId] = lineIdsOf(tabId);
 
     const answer = await split(partyId, leaving, {
@@ -329,12 +310,9 @@ describe("A803 split: issuance", () => {
     expect(await statusOf(venue, newBill!)).toBe("open");
   });
 
-  it.each<[string, (billId: string) => Promise<void>]>([
-    ["an item payment", (billId) => payFor(billId, 1, "35.00")],
-    ["a contribution", (billId) => contribute(billId, "35.00")],
-  ])("a whole bill part-paid by %s issues nothing", async (_, paying) => {
+  it("a whole bill part-paid by a contribution issues nothing", async () => {
     const { partyId, tabId, leaving } = await atTwoTables("Seafood rice", "Small beer");
-    await paying(tabId);
+    await contribute(tabId, "35.00");
 
     const answer = await split(partyId, leaving, { wholeBillIds: [tabId], loose: [] });
 

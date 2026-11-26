@@ -17,7 +17,9 @@ import { listDishNames } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import type { PayLine, PayRefusal, PayRequest } from "../widgets/bill-pay-dialog.js";
+import { counterBillEdit } from "./bill-edit.js";
 import { moneyPlus, paymentAsk, type Confirmation, type PayChoice } from "./bill-payment.js";
+import { limited, TABLE_REQUEST_LIMIT_MS } from "./draft-sync.js";
 
 /** What Pay for items sends beyond a bill payment's confirmation, fixed when the waiter confirms:
  * the server's retry fingerprint reads all of it, so a resend after no answer sends the same. */
@@ -34,12 +36,11 @@ function wholeLine(line: PayLine, units: number): boolean {
   return line.unitTotal === null || units === Number(line.quantity);
 }
 
-/** The choice for `picks` (units by line number) of the `offered` lines: every line of the bill
- * picked whole is the whole bill, paid as today. */
+/** The choice for `picks` (units by line number): every line of the bill picked whole is the whole
+ * bill, paid as today. */
 export function itemsChoiceOf(
   lines: readonly PayLine[],
   picks: ReadonlyMap<number, number>,
-  offered: readonly PayLine[],
 ): PayChoice {
   const everyLine = lines.every((line) => {
     const units = picks.get(line.lineNo);
@@ -48,7 +49,7 @@ export function itemsChoiceOf(
   if (lines.length > 0 && everyLine) return { kind: "whole" };
   return {
     kind: "items",
-    picks: offered.flatMap((line) => {
+    picks: lines.flatMap((line) => {
       const units = picks.get(line.lineNo);
       if (units === undefined) return [];
       const pick = { lineNo: line.lineNo, lineId: line.lineId };
@@ -84,7 +85,6 @@ export function itemsAllocated(
 ): AllocationPreview {
   return {
     kind: "allocated",
-    choice: null,
     applied: preview.applied,
     tip: preview.tip,
     change: preview.change,
@@ -113,14 +113,14 @@ export function itemsBarredReason(open: {
  * on a bill of their own. */
 export function paysOnNewBill(
   preview: AllocationPreview | null,
-): preview is Extract<AllocationPreview, { kind: "allocated" }> & { total: string } {
-  return preview?.kind === "allocated" && preview.total !== undefined;
+): preview is AllocationPreview & { total: string } {
+  return preview?.total !== undefined;
 }
 
 /** A `bill.allocation_changed` refusal's fresh preview: a whole payment of the would-be new bill,
  * which holds nothing else, so what it applies is the items' total. */
 export function itemsAllocatedFrom(preview: AllocationPreview): AllocationPreview {
-  return preview.kind === "allocated" ? { ...preview, total: preview.applied } : preview;
+  return { ...preview, total: preview.applied };
 }
 
 /** The Pay window's words for a set-menu dish that leaves only with its set menu, its cancel having
@@ -199,19 +199,94 @@ export function itemsRequestOf(
 }
 
 /** The preview for `asked`: an items choice through Pay for items, every other through today's bill
- * payment preview. */
+ * payment preview. Given up at the till's request time limit. */
 export async function previewPayment(
   api: TillApi,
   billId: string,
   asked: PayRequest,
   expectedEdit: BillEditExpected | null,
 ): Promise<AllocationPreview> {
-  if (asked.choice.kind === "items")
-    return itemsAllocated(await api.previewItemPayment(billId, itemsAsk(asked)), asked.pay.method);
-  return api.previewBillPayment(
-    billId,
-    paymentAsk(asked.choice, asked.pay, asked.allocation, expectedEdit),
-  );
+  const limit = limited(TABLE_REQUEST_LIMIT_MS);
+  const options = { signal: limit.signal };
+  try {
+    if (asked.choice.kind === "items")
+      return itemsAllocated(
+        await api.previewItemPayment(billId, itemsAsk(asked), options),
+        asked.pay.method,
+      );
+    return await api.previewBillPayment(
+      billId,
+      paymentAsk(asked.choice, asked.pay, expectedEdit),
+      options,
+    );
+  } finally {
+    limit.done();
+  }
+}
+
+/** The edit state Pay for items sends for a Counter order with no party, whose held read carries
+ * none (`working-order-held-read.ts`) while the items route checks one; refused as
+ * `counterBillEdit` refuses. */
+export async function counterItemsEdit(
+  api: TillApi,
+  billId: string,
+  options: ReadOptions,
+): Promise<BillEditExpected> {
+  return counterBillEdit(await api.getFindBill(billId, options), billId);
+}
+
+/** The edit state `expectedEdit` the Pay window's preview of `choice` holds, refused as out of
+ * date when unknown, or when there is none for a table bill or an items choice; except that Pay for
+ * items on a Counter order not from Find a bill, holding none, reads the bill's (`readCounterEdit`). */
+export function previewEdit(
+  expectedEdit: BillEditExpected | null | undefined,
+  open: { surface: "table" | "counter"; found?: unknown },
+  choice: PayChoice,
+): { expectedEdit: BillEditExpected | null; readCounterEdit: boolean } {
+  const readCounterEdit =
+    expectedEdit === null &&
+    open.found === undefined &&
+    open.surface === "counter" &&
+    choice.kind === "items";
+  if (
+    expectedEdit === undefined ||
+    (expectedEdit === null &&
+      !readCounterEdit &&
+      (open.surface === "table" || choice.kind === "items"))
+  )
+    throw { code: "draft.out_of_date" };
+  return { expectedEdit, readCounterEdit };
+}
+
+/** The edit state Pay for items sends from Counter window `open`: on its confirmation, the one
+ * that confirmation's preview was asked with; otherwise the bill's, read within the time limit. */
+export async function counterItemsEditFor(
+  api: TillApi,
+  open: {
+    billId: string;
+    preview: AllocationPreview | null;
+    expectedEdit: BillEditExpected | null;
+  },
+): Promise<BillEditExpected> {
+  if (open.preview !== null && open.expectedEdit?.billId === open.billId) return open.expectedEdit;
+  const limit = limited(TABLE_REQUEST_LIMIT_MS);
+  try {
+    return await counterItemsEdit(api, open.billId, { signal: limit.signal });
+  } finally {
+    limit.done();
+  }
+}
+
+/** What a Counter order's banner saying to take the rest as a bill payment shows once `balance` is
+ * read for order `billId`: the balance's outstanding while that banner is up and the balance is
+ * the order's; otherwise undefined, leaving the banner as it is. */
+export function billPaymentsBannerOutstanding(
+  said: string | object | undefined,
+  balance: BillBalance | undefined,
+  billId: string,
+): string | undefined {
+  if (typeof said !== "object" || !("billPayments" in said)) return undefined;
+  return balance?.workingOrderId === billId ? balance.outstanding : undefined;
 }
 
 /** Takes the payment: with an items part through Pay for items, answering the new bill as
@@ -220,10 +295,14 @@ export async function previewPayment(
 export async function takePayment(
   api: TillApi,
   billId: string,
+  choice: PayChoice,
   request: Confirmation & { submissionId: string },
   options: ReadOptions,
 ): Promise<BillPaymentResult & { paidOn?: string; sourceBalance?: BillBalance }> {
   const { items } = request;
+  // An items choice is asked for as a whole bill, so the bill's own route would charge all of it.
+  if (items === undefined && choice.kind === "items")
+    throw new Error("Pay for items needs its items part");
   if (items === undefined) return api.takeBillPayment(billId, request, options);
   const paid = await api.payForItems(billId, itemsRequestOf({ ...request, items }), options);
   return { ...paid.payment, paidOn: paid.billId, sourceBalance: paid.sourceBalance };

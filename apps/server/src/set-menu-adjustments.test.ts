@@ -81,28 +81,6 @@ async function total(billId: string) {
   return (await specRows(spec, billId)).reduce((sum, { lineTotal }) => sum + lineTotal, 0);
 }
 
-async function lineNoOf(billId: string, lineId: string) {
-  return (await specRows(spec, billId)).find(({ id }) => id === lineId)!.lineNo;
-}
-
-function payByItems(billId: string, lineNo: number, amount: string) {
-  return takeBillPayment(
-    specDeps(spec),
-    venue.cfg,
-    billId,
-    {
-      submissionId: crypto.randomUUID(),
-      tip: "0.00",
-      kind: "items",
-      lines: [{ lineNo }],
-      method: "cash",
-      tendered: amount,
-      applied: amount,
-    },
-    venue.operator,
-  );
-}
-
 /** The spec bill's first Sirloin, placed at 5.00 in a Daily menu. */
 async function firstSirloin(billId: string) {
   const sirloin = (await specRows(spec, billId)).find(({ name }) => name === "Sirloin")!;
@@ -197,7 +175,7 @@ it("a bill discount spreads over set menus and surcharges and the ticket matches
 
 // With an empty Special, a new Hake draws the Daily's +5.00 Sirloin to the Special at 0.00 unless
 // something holds the Sirloin where it is.
-it("the offered move never names a comped, discounted or item-paid dish", async () => {
+it("the offered move never names a comped or discounted dish", async () => {
   const offeredFor = async (fix: (billId: string, lineId: string) => Promise<unknown>) => {
     const tab = await seatWithNoAllergies(venue, await venue.table(crypto.randomUUID()));
     await sendSpecDishes(spec, tab, [
@@ -235,8 +213,6 @@ it("the offered move never names a comped, discounted or item-paid dish", async 
     (billId: string, lineId: string) => adjust(billId, lineId, { action: "comp" }),
     (billId: string, lineId: string) =>
       adjust(billId, lineId, { action: "discount_percent", percentBp: 1000 }),
-    async (billId: string, lineId: string) =>
-      payByItems(billId, await lineNoOf(billId, lineId), "5.00"),
   ]) {
     const { third, suggestion } = await offeredFor(fix);
     expect(suggestion?.moves).toEqual([]);

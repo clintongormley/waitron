@@ -419,7 +419,6 @@ describe("A803 move dishes panel", () => {
       outstanding: "11.00",
       tips: "0.00",
       payments: [],
-      paidLines: [],
     };
     const el = await mountScreen({
       bills: [
@@ -594,23 +593,23 @@ describe("A803 move dishes refresh:", () => {
     return sent;
   }
 
-  it("a re-read that pays one picked dish elsewhere keeps the row's first unpaid members", async () => {
+  it("a re-read in which one picked dish left the bill keeps the row's first members", async () => {
     const el = await mountScreen();
     await openMoveDishes(el);
     await tick(el, "c1");
     await step(el, "dec", "c1");
     await step(el, "dec", "c1");
     expect(picker(el).picks).toEqual(new Set(["c1", "c2"]));
+    el.lines = [...BEERS.slice(1), HAM];
     el.billBalance = {
       workingOrderId: "wo-2",
       status: "open",
-      total: "32.00",
-      received: "5.00",
+      total: "27.00",
+      received: "0.00",
       reserved: "0.00",
       outstanding: "27.00",
       tips: "0.00",
       payments: [],
-      paidLines: [{ lineId: "c1", lineNo: 1, paidQuantity: "1.000" }],
     };
     await el.updateComplete;
     await picker(el).updateComplete;
@@ -711,7 +710,6 @@ describe("A803 move dishes refresh:", () => {
       outstanding: "32.00",
       tips: "0.00",
       payments: [],
-      paidLines: [],
     };
     const el = await mountScreen({ balance });
     await openMoveDishes(el);

@@ -676,7 +676,7 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
 
   const cents = (amount: string) => Math.round(Number(amount) * 100);
 
-  it("A803 portion lifecycle: moving one of two sent burgers with extras keeps its portion, ticket and extra ids and its kitchen state, both bills' totals add up, and paying for it as an item files it with its cheese", async () => {
+  it("A803 portion lifecycle: moving one of two sent burgers with extras keeps its portion, ticket and extra ids and its kitchen state, both bills' totals add up, and paying the bill it moved to files it with its cheese", async () => {
     const p = await submitted("2");
     const [first] = p.portions;
     const family = (await linesOf(p.billId)).filter(
@@ -716,7 +716,6 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
     expect(cents(left!) + cents(other!)).toBe(cents(total));
     expect(cents(other!)).toBe(cents(total) / 2);
 
-    const burgerNo = (await linesOf(p.otherId)).find((line) => line.id === first!.lineId)!.lineNo;
     const paid = await send(
       venue.app,
       venue.cookie,
@@ -724,8 +723,8 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
       `/api/working-orders/${p.otherId}/payments`,
       {
         submissionId: randomUUID(),
-        kind: "items",
-        lines: [{ lineNo: burgerNo }],
+        kind: "share",
+        shareOf: 1,
         method: "cash",
         tendered: other!,
         applied: other!,

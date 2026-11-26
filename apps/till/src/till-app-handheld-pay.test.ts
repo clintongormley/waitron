@@ -94,7 +94,6 @@ const invoiceOf = (total: string, invoiceType: "F1" | "F2"): TillSaleResult => (
 
 const wholeCard: AllocationPreview = {
   kind: "allocated",
-  choice: null,
   applied: "120.00",
   tip: "0.00",
   change: null,

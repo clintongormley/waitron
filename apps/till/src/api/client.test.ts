@@ -1425,7 +1425,6 @@ describe("TillApi", () => {
         state: "received",
         createdAt: "2026-08-06T10:00:00.000Z",
         receivedAt: "2026-08-06T10:00:00.000Z",
-        lines: [],
         refunds: [],
       },
     });
@@ -6406,7 +6405,6 @@ describe("TillApi: a bill's payments", () => {
     state: "received",
     createdAt: "2026-09-30T20:00:00.000Z",
     receivedAt: "2026-09-30T20:00:00.000Z",
-    lines: [],
     refunds: [],
   };
   const balance: BillBalance = {
@@ -6418,7 +6416,6 @@ describe("TillApi: a bill's payments", () => {
     outstanding: "20.00",
     tips: "0.00",
     payments: [cashPayment],
-    paidLines: [{ lineId: "line-2", lineNo: 2, paidQuantity: "1.000" }],
   };
 
   it("getBillBalance GETs the bill's payments and answers its balance", async () => {
@@ -6434,26 +6431,28 @@ describe("TillApi: a bill's payments", () => {
     );
   });
 
-  it("previewBillPayment POSTs the ask to the preview route and answers the choices the server offers", async () => {
+  it("previewBillPayment POSTs the ask to the preview route under the caller's signal and answers the allocation", async () => {
     const ask: BillPaymentAsk = {
       expectedEdit: null,
-      kind: "items",
-      lines: [{ lineNo: 1 }],
+      kind: "share",
+      shareOf: 2,
       method: "card",
     };
     const preview: AllocationPreview = {
-      kind: "choose",
-      options: [
-        { choice: "full_with_tip", applied: "15.00", tip: "10.00" },
-        { choice: "use_pool", applied: "15.00", tip: "0.00" },
-      ],
+      kind: "allocated",
+      applied: "15.00",
+      tip: "10.00",
+      change: null,
+      charged: "25.00",
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(preview));
+    const signal = new AbortController().signal;
 
-    await expect(new TillApi("", fetchStub).previewBillPayment("wo-1", ask)).resolves.toEqual(
-      preview,
-    );
+    await expect(
+      new TillApi("", fetchStub).previewBillPayment("wo-1", ask, { signal }),
+    ).resolves.toEqual(preview);
     expect(fetchStub).toHaveBeenCalledWith("/api/working-orders/wo-1/payments/preview", post(ask));
+    expect(fetchStub.mock.calls[0]![1]).toMatchObject({ signal });
   });
 
   it("takeBillPayment POSTs the request under the caller's signal and answers the outcome, balance and invoice", async () => {
@@ -6513,7 +6512,6 @@ describe("TillApi: a bill's payments", () => {
   it("takeBillPayment surfaces a stale allocation's fresh preview on the refusal", async () => {
     const fresh = {
       kind: "allocated",
-      choice: null,
       applied: "25.00",
       tip: "0.00",
       change: "5.00",

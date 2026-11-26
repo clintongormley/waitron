@@ -24,7 +24,7 @@ import {
 } from "@waitron/shared";
 import { or, eq, and, inArray, sql, isNull, isNotNull, exists } from "drizzle-orm";
 import { setImmediate as nextTurn } from "node:timers/promises";
-import { assertLinesKeptExcess, readBillExcess, refusePaidLines } from "./bill-payments.js";
+import { assertLinesKeptExcess, readBillExcess } from "./bill-payments.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
 import { copyKitchenJobLines, copyKitchenPrintLinks } from "./kitchen-ticket-links.js";
 import { splitLineServiceState, readLineCancellations } from "./line-service-state.js";
@@ -140,12 +140,6 @@ export async function moveOrderLines(
     .from(workingOrderLines)
     .where(sourceWhere)
     .orderBy(workingOrderLines.lineNo);
-  // A moved row takes its id with it, and a paid quantity stays on the bill it was paid on.
-  await refusePaidLines(
-    tx,
-    fromTabId,
-    source.map((line) => ({ id: line.id, lineNo: line.lineNo, keeps: 0 })),
-  );
 
   const movedMenus = source.filter(({ setMenuRole }) => setMenuRole === "set_menu");
   const movedMenuIds = new Set(movedMenus.map(({ id }) => id));
@@ -509,18 +503,6 @@ async function carveLines(
   if (fromTabId !== toTabId && partials.length > 0) {
     throw new Error("a part of a line is cut only within its order");
   }
-  // A split keeps the source row, so its paid quantity may stay there while unpaid units move.
-  await refusePaidLines(
-    tx,
-    fromTabId,
-    partials.map(({ line, quantity }) => ({
-      id: line.id,
-      lineNo: line.lineNo,
-      keeps: opts.splitIntoUnits
-        ? 1000
-        : decimalToThousandths(line.quantity) - stringToThousandths(quantity),
-    })),
-  );
 
   const movedLineIds =
     wholeLineNos.length > 0

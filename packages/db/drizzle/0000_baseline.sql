@@ -1334,18 +1334,6 @@ CREATE TABLE `custom_themes` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `custom_themes_name_key_uq` ON `custom_themes` (`name_key`);--> statement-breakpoint
 CREATE UNIQUE INDEX `custom_themes_in_use_uq` ON `custom_themes` (`in_use`);--> statement-breakpoint
-CREATE TABLE `bill_payment_lines` (
-	`id` text PRIMARY KEY NOT NULL,
-	`bill_payment_id` text NOT NULL,
-	`line_id` text NOT NULL,
-	`quantity` integer NOT NULL,
-	`amount` integer NOT NULL,
-	FOREIGN KEY (`bill_payment_id`) REFERENCES `bill_payments`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "bill_payment_lines_quantity_ck" CHECK("bill_payment_lines"."quantity" > 0),
-	CONSTRAINT "bill_payment_lines_amount_ck" CHECK("bill_payment_lines"."amount" >= 0)
-);
---> statement-breakpoint
-CREATE INDEX `bill_payment_lines_payment_idx` ON `bill_payment_lines` (`bill_payment_id`);--> statement-breakpoint
 CREATE TABLE `bill_payments` (
 	`id` text PRIMARY KEY NOT NULL,
 	`working_order_id` text NOT NULL,
@@ -1373,7 +1361,7 @@ CREATE TABLE `bill_payments` (
 	FOREIGN KEY (`working_order_id`) REFERENCES `working_orders`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`requested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
 	FOREIGN KEY (`attested_by`) REFERENCES `persons`(`id`) ON UPDATE no action ON DELETE restrict,
-	CONSTRAINT "bill_payments_kind_ck" CHECK("bill_payments"."kind" in ('items', 'contribution', 'share')),
+	CONSTRAINT "bill_payments_kind_ck" CHECK("bill_payments"."kind" in ('contribution', 'share')),
 	CONSTRAINT "bill_payments_source_ck" CHECK("bill_payments"."source" in ('device', 'demo_seed', 'readiness_test', 'operator_script', 'business_day_close')),
 	CONSTRAINT "bill_payments_source_device_ck" CHECK(("bill_payments"."source" = 'device') = ("bill_payments"."device_id" is not null)),
 	CONSTRAINT "bill_payments_method_ck" CHECK("bill_payments"."method" in ('cash', 'card')),
@@ -2946,7 +2934,6 @@ BEGIN
     AND (new.working_order_id IS old.working_order_id
       -- Reopen bill carries a received payment to the bill reopened from its abandoned one.
       OR (old.state = 'received' AND new.state = 'received'
-        AND old.kind <> 'items'
         AND (SELECT status FROM working_orders WHERE id = old.working_order_id) = 'abandoned'
         AND exists (SELECT 1 FROM working_orders
           WHERE id = new.working_order_id AND status = 'open'
@@ -2965,7 +2952,6 @@ BEGIN
       OR (old.state = 'received' AND new.state = 'received'
         AND new.applied + new.tip = old.applied + old.tip
         AND new.tip > old.tip
-        AND old.kind <> 'items'
         AND new.applied >= (SELECT coalesce(sum(applied_amount), 0) FROM refunds
           WHERE bill_payment_id = old.id AND state IN ('pending', 'completed'))
         AND NOT exists (SELECT 1 FROM tenders WHERE bill_payment_id = old.id)

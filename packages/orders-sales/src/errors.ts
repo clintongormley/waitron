@@ -14,9 +14,8 @@ declare module "@waitron/shared" {
      */
     "bill.tip_not_allowed": { workingOrderId: string; chargeable: string };
     /**
-     * The allocation the operator was shown is no longer the server's, or a choice between paying
-     * the full price with a tip and using the earlier contributions is needed. `preview` is the
-     * server's current answer, for the till to show again.
+     * The allocation the operator was shown is no longer the server's. `preview` is the server's
+     * current answer, for the till to show again.
      */
     "bill.allocation_changed": { workingOrderId: string; preview: AllocationPreview };
     /**

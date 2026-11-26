@@ -900,11 +900,6 @@ declare module "@waitron/shared" {
     "advance.correction_open": { workingOrderId: string; saleId: string; invoiceNumber: string };
     "bill.unsent_dishes": { billId: string };
     /**
-     * A write would charge again, move, void, reduce or edit a quantity of a line that a pending
-     * or received item payment has paid for. The line's unpaid quantity stays free.
-     */
-    "bill.line_paid": { workingOrderId: string; lineNo: number };
-    /**
      * A write would leave the bill's total below the money it has received or reserved; on a bill
      * already below it, an edit of its lines is refused only for taking the total further below.
      * `excess` is by how much; refunding that first lets the write through.
@@ -934,11 +929,9 @@ declare module "@waitron/shared" {
     "bill.tip_not_allowed_on_excess": { workingOrderId: string };
     /**
      * Money has been taken on the bill. Paying it in one go by the
-     * single-payment routes, placing it, merging it with another bill and moving items between it
-     * and another are refused while it has any pending or received bill payment, even one given
-     * back in full; abandoning it and finishing its table are refused while it still holds money,
-     * except by Reopen bill, which moves the money to the reopened bill and raises this code
-     * only for a received items payment.
+     * single-payment routes, placing it and merging it with another bill are refused while it has
+     * any pending or received bill payment, even one given back in full; abandoning it and finishing its table are refused while it still holds money,
+     * except by Reopen bill, which moves the money to the reopened bill.
      */
     "bill.payments_received": { workingOrderId: string };
     /** Reopen bill on a printed bill on which an advance was ever taken, even one given back
@@ -1007,11 +1000,6 @@ declare module "@waitron/shared" {
     "tender.refund_not_stuck": { refundId: string };
     "tender.refund_outcome_unconfirmed": { refundId: string };
     "tender.attestation_contradicted": { refundId: string; evidence: "never_sent" };
-    /**
-     * A refund of an item payment asked for less than the whole of it: an item payment is given
-     * back whole, which frees its lines. `applied` and `tip` are that whole.
-     */
-    "bill.refund_not_whole": { paymentId: string; applied: string; tip: string };
     /** A bill refund of a payment that paid for its own ticket, an advance (`saleId`, numbered
      * `invoiceNumber`): a payment on account is not refunded this way. Once an invoice took
      * it off, `advance.taken_off_final_invoice` instead. */

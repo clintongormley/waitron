@@ -114,16 +114,16 @@ describe("a printed bill", () => {
     expect(tenders.reduce((sum, row) => sum + row.amount, 0)).toBe(3000);
   });
 
-  it("items and equal shares can be paid on a printed bill", async () => {
+  it("an amount and equal shares can be paid on a printed bill", async () => {
     const bill = await printed("Red wine bottle", "Steak");
 
-    const items = await pay(bill.tabId, {
-      kind: "items",
-      lines: [{ lineNo: 2 }],
+    const amount = await pay(bill.tabId, {
+      kind: "contribution",
+      amount: "25.00",
       tendered: "25.00",
       applied: "25.00",
     });
-    expect(items.status, JSON.stringify(items.json)).toBe(200);
+    expect(amount.status, JSON.stringify(amount.json)).toBe(200);
     const share = await pay(bill.tabId, {
       kind: "share",
       shareOf: 2,

@@ -15,7 +15,6 @@ import {
 import {
   isNetworkFailure,
   type OutsideCardDetails,
-  type AllocationChoice,
   type AllocationPreview,
   type BillBalance,
   type BillEditExpected,
@@ -80,37 +79,23 @@ export function moneyPlus(a: string, b: string): Decimal {
 export type PayMethod =
   { method: "cash"; tendered: string; addedTip?: string } | { method: "card"; addedTip?: string };
 
-/** The ask for a payment; `allocation` names which of the server's two ways pays for items that
- * cost more than is left. */
+/** The ask for a payment; chosen items are asked for as the whole of the bill they are paid on. */
 export function paymentAsk(
   choice: PayChoice,
   pay: PayMethod,
-  allocation?: AllocationChoice,
   expectedEdit: BillEditExpected | null = null,
 ): BillPaymentAsk {
   const ask: BillPaymentAsk =
-    choice.kind === "items"
-      ? {
-          kind: "items",
-          lines: choice.picks.map((pick) =>
-            pick.units === undefined
-              ? { lineNo: pick.lineNo }
-              : { lineNo: pick.lineNo, quantity: String(pick.units) },
-          ),
+    choice.kind === "contribution"
+      ? { kind: "contribution", amount: choice.amount, method: pay.method, expectedEdit }
+      : {
+          kind: "share",
+          shareOf: choice.kind === "share" ? choice.shareOf : 1,
           method: pay.method,
           expectedEdit,
-        }
-      : choice.kind === "contribution"
-        ? { kind: "contribution", amount: choice.amount, method: pay.method, expectedEdit }
-        : {
-            kind: "share",
-            shareOf: choice.kind === "whole" ? 1 : choice.shareOf,
-            method: pay.method,
-            expectedEdit,
-          };
+        };
   if (pay.method === "cash") ask.tendered = pay.tendered;
   if (pay.addedTip !== undefined) ask.addedTip = pay.addedTip;
-  if (allocation !== undefined) ask.choice = allocation;
   return ask;
 }
 
@@ -128,23 +113,14 @@ export type Confirmation = Omit<BillPaymentRequest, "submissionId"> & { items?: 
 
 /**
  * The payment the operator confirmed: the ask with the allocation they were shown, which the server
- * takes only while it still holds. `shown` is the allocated preview, or the option picked from the
- * two the server offered, whose choice the ask then names.
+ * takes only while it still holds.
  */
 export function confirmationOf(
   ask: BillPaymentAsk,
-  shown:
-    | Extract<AllocationPreview, { kind: "allocated" }>
-    | { choice: AllocationChoice; applied: string; tip: string },
+  shown: AllocationPreview,
   card?: CardEntry,
 ): Confirmation {
-  return {
-    ...ask,
-    ...("kind" in shown ? {} : { choice: shown.choice }),
-    applied: shown.applied,
-    tip: shown.tip,
-    ...card,
-  };
+  return { ...ask, applied: shown.applied, tip: shown.tip, ...card };
 }
 
 /** A request as sent: its body with a submission id, keyed by its body and what it is about. */
@@ -407,25 +383,11 @@ export function refundOffered(payment: BillPaymentView, status: BillBalance["sta
   return compareDecimal(moneyPlus(left.applied, left.tip), decimal("0")) > 0;
 }
 
-const paidByBalance = new WeakMap<BillBalance, ReadonlyMap<number, string>>();
-
-/** The quantity paid of each line of `balance` by line number, worked out once per balance read. */
-export function paidQuantities(balance: BillBalance): ReadonlyMap<number, string> {
-  let paid = paidByBalance.get(balance);
-  if (paid === undefined) {
-    const byLineNo = new Map<number, string>();
-    for (const line of balance.paidLines)
-      if (!byLineNo.has(line.lineNo)) byLineNo.set(line.lineNo, line.paidQuantity);
-    paid = byLineNo;
-    paidByBalance.set(balance, paid);
-  }
-  return paid;
-}
-
 /** The bill's dishes as an item payment offers them, each with its extras, which are paid with it.
- * A dish is paid a unit at a time only when sold by the unit, in several units, with no extras; the
- * server refuses part of any other. A set-menu dish whose amount, extras included, is 0.00 is left
- * out (owner, 2026-11-21); its set menu is listed as a line of its own. */
+ * A dish is paid a unit at a time only when its unit has no decimal places, it has several, and it
+ * has no extras.
+ * A set-menu dish whose amount, extras included, is 0.00 is left out (owner, 2026-11-21); its set
+ * menu is listed as a line of its own. */
 export function payLines(
   lines: readonly TabLine[],
   name: (line: TabLine) => string,

@@ -1178,15 +1178,11 @@ export interface BillTenderRefund {
   tip: string;
 }
 
-export type AllocationChoice = "full_with_tip" | "use_pool";
-
 /** What a bill payment asks for, before the operator has seen its allocation. */
 export interface BillPaymentAsk {
   expectedEdit: BillEditExpected | null;
   dining?: Dining;
-  kind: "items" | "contribution" | "share";
-  /** `items` only: parent lines; a line with no `quantity` is paid whole. */
-  lines?: { lineNo: number; quantity?: string }[];
+  kind: "contribution" | "share";
   /** `contribution` only. */
   amount?: string;
   /** `share` only: how many people are still to pay. The server works out the share. */
@@ -1196,7 +1192,6 @@ export interface BillPaymentAsk {
   tendered?: string;
   /** Cash: the part of the change left as a tip. Card: what is charged above what is due. */
   addedTip?: string;
-  choice?: AllocationChoice;
 }
 
 /**
@@ -1219,22 +1214,18 @@ export interface BillPaymentRequest extends BillPaymentAsk, OutsideCardDetails {
   ownReceipt?: true;
 }
 
-/** How one payment splits between the bill, change and tip, or the two ways an item payment that
- * costs more than is left can go. */
-export type AllocationPreview =
-  | {
-      kind: "allocated";
-      choice: AllocationChoice | null;
-      applied: string;
-      tip: string;
-      /** Cash only. */
-      change: string | null;
-      /** Card only: what the card is charged. */
-      charged: string | null;
-      /** Pay for items only: the chosen items' price. */
-      total?: string;
-    }
-  | { kind: "choose"; options: { choice: AllocationChoice; applied: string; tip: string }[] };
+/** How one payment splits between the bill, change and tip. */
+export interface AllocationPreview {
+  kind: "allocated";
+  applied: string;
+  tip: string;
+  /** Cash only. */
+  change: string | null;
+  /** Card only: what the card is charged. */
+  charged: string | null;
+  /** Pay for items only: the chosen items' price. */
+  total?: string;
+}
 
 export interface BillRefundView {
   refusalReason?: "provider_balance_unavailable";
@@ -1265,7 +1256,7 @@ export interface BillPaymentView extends OutsideCardDetails {
   givenBack?: string;
   id: string;
   submissionId: string;
-  kind: "items" | "contribution" | "share";
+  kind: "contribution" | "share";
   shareOf: number | null;
   method: "cash" | "card";
   /** A card's: keyed on a separate terminal (`manual`), or taken at a reader; null for cash. */
@@ -1278,8 +1269,6 @@ export interface BillPaymentView extends OutsideCardDetails {
   state: "pending" | "received" | "failed" | "declined";
   createdAt: string;
   receivedAt: string | null;
-  /** An item payment's lines; `lineNo` is null for a line no longer on this bill. */
-  lines: { lineId: string; lineNo: number | null; quantity: string; amount: string }[];
   refunds: BillRefundView[];
 }
 
@@ -1310,8 +1299,6 @@ export interface BillBalance {
   /** The net tips of the received payments. */
   tips: string;
   payments: BillPaymentView[];
-  /** `paidQuantity` at three places, such as "1.000". */
-  paidLines: { lineId: string; lineNo: number; paidQuantity: string }[];
   /** On an open bill: the bill its chosen items moved to while a card payment of theirs is pending. */
   beingPaidOn?: { billId: string; billNumber: number | null };
 }
@@ -1332,7 +1319,7 @@ export interface BillPaymentResult {
 
 type WholeBillTender = Omit<
   BillPaymentRequest,
-  "kind" | "shareOf" | "lines" | "amount" | "choice" | "submissionId" | "applied" | "tip"
+  "kind" | "shareOf" | "amount" | "submissionId" | "applied" | "tip"
 >;
 
 type CounterPaymentEdit = { revision: number; label?: string };
@@ -5039,15 +5026,24 @@ export class TillApi {
 
   /** How a payment would split between the bill, change and tip, writing nothing →
    * `POST /api/working-orders/:id/payments/preview`. Refuses as the payment would. */
-  previewBillPayment(billId: string, ask: BillPaymentAsk): Promise<AllocationPreview> {
-    return this.#request(`/api/working-orders/${billId}/payments/preview`, "POST", ask);
+  previewBillPayment(
+    billId: string,
+    ask: BillPaymentAsk,
+    options: ReadOptions = {},
+  ): Promise<AllocationPreview> {
+    return this.#request(
+      `/api/working-orders/${billId}/payments/preview`,
+      "POST",
+      ask,
+      options.signal,
+    );
   }
 
   /**
    * Takes a payment against the bill → `POST /api/working-orders/:id/payments`. A resend with the
    * same submission id and body is answered as the first was. A reader card's decline is an answer,
    * not a refusal. Refuses, among others, `bill.allocation_changed` (carrying the fresh `preview`),
-   * `bill.line_paid`, `bill.tip_not_allowed` (carrying `chargeable`), `bill.nothing_outstanding`,
+   * `bill.tip_not_allowed` (carrying `chargeable`), `bill.nothing_outstanding`,
    * `order.payment_in_flight`, `bill.refund_in_progress`, `working_order.not_open` and
    * `submission.id_reused`.
    */
@@ -5061,8 +5057,17 @@ export class TillApi {
 
   /** What paying for the chosen items would take, writing nothing →
    * `POST /api/working-orders/:id/item-payments/preview`. Refuses as the payment would. */
-  previewItemPayment(billId: string, ask: ItemPaymentAsk): Promise<ItemPaymentPreview> {
-    return this.#request(`/api/working-orders/${billId}/item-payments/preview`, "POST", ask);
+  previewItemPayment(
+    billId: string,
+    ask: ItemPaymentAsk,
+    options: ReadOptions = {},
+  ): Promise<ItemPaymentPreview> {
+    return this.#request(
+      `/api/working-orders/${billId}/item-payments/preview`,
+      "POST",
+      ask,
+      options.signal,
+    );
   }
 
   /** Moves the chosen items to a new bill and takes the payment there →
@@ -5112,7 +5117,7 @@ export class TillApi {
   /** Gives money back from one payment of the bill →
    * `POST /api/working-orders/:id/payments/:paymentId/refunds`. Refuses, among others,
    * `authorization.not_permitted`, `pin.invalid`, `bill.refund_exceeds_payment`,
-   * `bill.refund_not_whole`, `bill.refund_unsupported` and `bill.manual_refund_pin_required`. */
+   * `bill.refund_unsupported` and `bill.manual_refund_pin_required`. */
   refundBillPayment(
     billId: string,
     paymentId: string,
@@ -5464,7 +5469,7 @@ export class TillApi {
   /**
    * Move whole dishes, named by line id, from one bill of a party to another, or to a new bill of
    * the party when `toBillId` is null → `POST /api/bills/:fromBillId/move-dishes`, answering the
-   * bill they went to. Rejects, among others, `bill.line_paid`,
+   * bill they went to. Rejects, among others, `bill.received_exceeds_total`,
    * `tab.line_not_found`, `draft.taken_over`, `party.out_of_date` and `sale.empty_basket`.
    * `invoiceChoice` answers `bill.merge_invoice_choice_required` for a move that takes every dish,
    * and is sent only when given, as {@link mergeBills} sends it.

@@ -13,22 +13,18 @@ import { reopenedChainIds } from "./reopened-bills.js";
 import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import {
   billAdvances,
-  billPaymentLines,
   refunds as refundRows,
   appendDrawerEntry,
   billPayments,
-  insertInChunks,
   invoiceCorrectionRefunds,
   invoiceCorrections,
   isUniqueViolation,
   sales,
   tenders,
   withTransaction,
-  workingOrderLines,
   workingOrders,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { assertQuantityPrecision } from "@waitron/menu";
 import {
   AppError,
   addDecimal,
@@ -39,12 +35,9 @@ import {
   diskFullIn,
   firstCodeInCauseChain,
   isAppError,
-  multiplyDecimal,
   rawCentsToDecimal,
-  stringToThousandths,
   subtractDecimal,
   sumDecimals,
-  thousandthsToDecimal,
   workingOrderId as brandWorkingOrderId,
 } from "@waitron/shared";
 import type { Decimal, Dining } from "@waitron/shared";
@@ -79,12 +72,7 @@ import {
   previewAllocation,
   ZERO,
 } from "./bill-allocation.js";
-import type {
-  AllocationChoice,
-  AllocationPreview,
-  AllocationRequest,
-  BillFunds,
-} from "./bill-allocation.js";
+import type { AllocationPreview, AllocationRequest, BillFunds } from "./bill-allocation.js";
 import { pinnedAt } from "./issue-moment.js";
 import { CARD_TIMING_COLUMNS, cardSaleMoment } from "./sale-day.js";
 import { claimLive, perDatabase } from "./live-in-process.js";
@@ -189,9 +177,7 @@ export type BillPaymentDeps = TillSaleDeps & {
 export interface BillPaymentAsk {
   expectedEdit: BillEditExpected | null;
   dining?: Dining;
-  kind: "items" | "contribution" | "share";
-  /** `items` only. A line's `quantity`, absent, is the whole line. */
-  lines?: { lineNo: number; quantity?: string }[];
+  kind: "contribution" | "share";
   /** `contribution` only. */
   amount?: string;
   /** `share` only: how many people are still to pay. */
@@ -201,7 +187,6 @@ export interface BillPaymentAsk {
   tendered?: string;
   /** What the payer adds as a tip on top of what the allocation's own rule makes one. */
   addedTip?: string;
-  choice?: AllocationChoice;
 }
 
 export interface CounterPaymentBasket {
@@ -266,7 +251,7 @@ export interface BillPaymentView extends OutsideCardDetails {
   givenBack?: Decimal;
   id: string;
   submissionId: string;
-  kind: "items" | "contribution" | "share";
+  kind: PaymentRow["kind"];
   shareOf: number | null;
   method: "cash" | "card";
   /** A card's: keyed on a separate terminal (`manual`), or taken at a reader; `null` for cash. */
@@ -279,8 +264,6 @@ export interface BillPaymentView extends OutsideCardDetails {
   state: "pending" | "received" | "failed" | "declined";
   createdAt: string;
   receivedAt: string | null;
-  /** An item payment's lines; `lineNo` is the line's number on this bill now. */
-  lines: { lineId: string; lineNo: number | null; quantity: Decimal; amount: Decimal }[];
   refunds: BillRefundView[];
 }
 
@@ -302,7 +285,6 @@ export interface BillBalance {
   /** The net tips of the received payments. */
   tips: Decimal;
   payments: BillPaymentView[];
-  paidLines: { lineId: string; lineNo: number; paidQuantity: Decimal }[];
   /** On an open bill: the open bill its chosen items moved to (Pay for items) while a card
    * payment of theirs is pending. */
   beingPaidOn?: { billId: string; billNumber: number | null };
@@ -329,15 +311,12 @@ function settledBill(balance: BillBalance, invoice: TillSaleResult): SettledBill
 }
 
 type PaymentRow = typeof billPayments.$inferSelect;
-type PaymentLineRow = typeof billPaymentLines.$inferSelect;
 type RefundRow = typeof refundRows.$inferSelect;
 
 export interface PaymentMoney {
   row: PaymentRow;
   netApplied: Decimal;
   netTip: Decimal;
-  /** How many completed refunds it has; an advance's correctives count as its refunds. */
-  refunds: number;
 }
 
 /** Each payment with what its completed refunds leave of it; `refunds` may hold refunds of other
@@ -356,7 +335,6 @@ function moneyOf(
       row,
       netApplied: advance?.left ?? centsToDecimal(net.applied),
       netTip: centsToDecimal(net.tip - (advance?.tipGivenBack ?? 0)),
-      refunds: net.own.length + (advance?.correctives ?? 0),
     };
   });
 }
@@ -453,22 +431,6 @@ async function readPaymentsAndRefunds(
   return { rows, refunds, advanced };
 }
 
-async function readPaymentLines(
-  tx: Transaction,
-  payments: readonly PaymentMoney[],
-): Promise<PaymentLineRow[]> {
-  if (payments.length === 0) return [];
-  return tx
-    .select()
-    .from(billPaymentLines)
-    .where(
-      inArray(
-        billPaymentLines.billPaymentId,
-        payments.map(({ row }) => row.id),
-      ),
-    );
-}
-
 function fundsOf(
   workingOrderId: string,
   total: Decimal,
@@ -484,80 +446,11 @@ function fundsOf(
         .map((payment) => payment.netApplied),
     ),
     reserved: sumDecimals(pending.map((payment) => centsToDecimal(payment.row.applied))),
-    hasPending: pending.length > 0,
   };
-}
-
-/**
- * Each line's paid quantity, in thousandths: what its pending and received item payments cover.
- * An item payment is refunded only whole (design §6), and once it is, its lines are free again.
- */
-function paidQuantitiesOf(
-  payments: readonly PaymentMoney[],
-  lines: readonly Pick<PaymentLineRow, "billPaymentId" | "lineId" | "quantity">[],
-): Map<string, number> {
-  const holding = new Set(
-    payments
-      .filter(
-        ({ row, refunds, netApplied }) =>
-          (row.state === "pending" || row.state === "received") &&
-          !(refunds > 0 && compareDecimal(netApplied, ZERO) === 0),
-      )
-      .map(({ row }) => row.id),
-  );
-  const paid = new Map<string, number>();
-  for (const line of lines) {
-    if (!holding.has(line.billPaymentId)) continue;
-    paid.set(line.lineId, (paid.get(line.lineId) ?? 0) + line.quantity);
-  }
-  return paid;
 }
 
 /** The states in which a payment is held on its bill, one given back in full included. */
 const HOLDING_STATES: readonly PaymentRow["state"][] = ["pending", "received"];
-
-/** {@link paidQuantitiesOf} the bill, read. */
-export async function readPaidQuantities(
-  tx: Transaction,
-  workingOrderId: string,
-): Promise<ReadonlyMap<string, number>> {
-  const lines = await tx
-    .select({
-      billPaymentId: billPaymentLines.billPaymentId,
-      lineId: billPaymentLines.lineId,
-      quantity: billPaymentLines.quantity,
-    })
-    .from(billPaymentLines)
-    .innerJoin(billPayments, eq(billPayments.id, billPaymentLines.billPaymentId))
-    .where(
-      and(
-        eq(billPayments.workingOrderId, workingOrderId),
-        inArray(billPayments.state, [...HOLDING_STATES]),
-      ),
-    );
-  if (lines.length === 0) return new Map();
-  return paidQuantitiesOf(await readPaymentMoney(tx, [workingOrderId]), lines);
-}
-
-/**
- * Refuse `bill.line_paid` for the first of these lines of the bill that would hold less than its
- * paid quantity after the write: `keeps` is the quantity, in thousandths, the write leaves on that
- * line's row. A write that must not touch a paid line at all passes 0. `paid` is the bill's
- * {@link readPaidQuantities}, when the caller has read them already.
- */
-export async function refusePaidLines(
-  tx: Transaction,
-  workingOrderId: string,
-  lines: readonly { id: string; lineNo: number; keeps: number }[],
-  paid?: ReadonlyMap<string, number>,
-): Promise<void> {
-  if (lines.length === 0) return;
-  const quantities = paid ?? (await readPaidQuantities(tx, workingOrderId));
-  const refused = lines.find((line) => (quantities.get(line.id) ?? 0) > line.keeps);
-  if (refused !== undefined) {
-    throw new AppError("bill.line_paid", { workingOrderId, lineNo: refused.lineNo });
-  }
-}
 
 /**
  * The invariant of design §4.4, for the money: the net applied of each bill's received payments
@@ -757,14 +650,6 @@ export async function readPaymentsByBill(
   return { received, holding, holdingMoney };
 }
 
-async function readLineNos(tx: Transaction, workingOrderId: string): Promise<Map<string, number>> {
-  const rows = await tx
-    .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, workingOrderId));
-  return new Map(rows.map((row) => [row.id, row.lineNo]));
-}
-
 export function toRefundView(refund: RefundRow): BillRefundView {
   return {
     id: refund.id,
@@ -781,9 +666,7 @@ export function toRefundView(refund: RefundRow): BillRefundView {
 
 function toView(
   payment: PaymentRow,
-  lines: readonly PaymentLineRow[],
   refunds: readonly RefundRow[],
-  lineNos: ReadonlyMap<string, number>,
   manualCards: ReadonlyMap<string, OutsideCardDetails & { externalRef: string | null }>,
   advance:
     | (PaymentMoney &
@@ -821,14 +704,6 @@ function toView(
     state: payment.state,
     createdAt: payment.createdAt,
     receivedAt: payment.receivedAt,
-    lines: lines
-      .filter((line) => line.billPaymentId === payment.id)
-      .map((line) => ({
-        lineId: line.lineId,
-        lineNo: lineNos.get(line.lineId) ?? null,
-        quantity: thousandthsToDecimal(line.quantity),
-        amount: centsToDecimal(line.amount),
-      })),
     refunds: refunds.filter((refund) => refund.billPaymentId === payment.id).map(toRefundView),
   };
 }
@@ -988,8 +863,6 @@ export async function readBillBalance(
   const { rows, refunds, advanced } = await readPaymentsAndRefunds(tx, workingOrderId);
   const advances = await advancesPaidBy(tx, [workingOrderId], advanced);
   const held = moneyOf(rows, refunds, advances.payments);
-  const lines = await readPaymentLines(tx, held);
-  const lineNos = await readLineNos(tx, workingOrderId);
   const manualCards = await manualCardsOf(tx, rows);
   const funds = fundsOf(
     workingOrderId,
@@ -1036,17 +909,7 @@ export async function readBillBalance(
     tips: money(
       sumDecimals(held.filter(({ row }) => row.state === "received").map(({ netTip }) => netTip)),
     ),
-    payments: held.map((payment) =>
-      toView(payment.row, lines, refunds, lineNos, manualCards, advanceOf(payment)),
-    ),
-    paidLines: [...paidQuantitiesOf(held, lines)]
-      .flatMap(([lineId, quantity]) => {
-        const lineNo = lineNos.get(lineId);
-        return lineNo === undefined
-          ? []
-          : [{ lineId, lineNo, paidQuantity: thousandthsToDecimal(quantity) }];
-      })
-      .sort((a, b) => a.lineNo - b.lineNo),
+    payments: held.map((payment) => toView(payment.row, refunds, manualCards, advanceOf(payment))),
   };
 }
 
@@ -1445,123 +1308,15 @@ export async function refuseCoveredWhileAdvanceCorrectionOpen(
     await refuseWhileAdvanceCorrectionOpen(tx, workingOrderId);
 }
 
-interface ItemsDue {
-  due: Decimal;
-  rows: { lineId: string; quantity: number; amount: number }[];
-}
-
-/**
- * What an item payment's lines cost, and the rows it records. Whole units only for a line sold by
- * the unit; a weighed line, and a dish with extras, whose extras are paid with it, only whole. A
- * held line may be paid for. `held` is the bill's {@link readPaymentMoney}.
- */
-async function itemsDue(
-  tx: Transaction,
-  workingOrderId: string,
-  requested: readonly { lineNo: number; quantity?: string }[],
-  held: readonly PaymentMoney[],
-): Promise<ItemsDue> {
-  if (requested.length === 0) throw invalid("lines");
-  if (new Set(requested.map((line) => line.lineNo)).size !== requested.length) {
-    throw invalid("lines");
-  }
-  const lines = await tx
-    .select({
-      id: workingOrderLines.id,
-      lineNo: workingOrderLines.lineNo,
-      parentLineId: workingOrderLines.parentLineId,
-      quantity: workingOrderLines.quantity,
-      unitPriceGross: workingOrderLines.unitPriceGross,
-      unitPrecision: workingOrderLines.unitPrecision,
-      lineTotal: workingOrderLines.lineTotal,
-    })
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, workingOrderId));
-  const paid = paidQuantitiesOf(held, await readPaymentLines(tx, held));
-  const byLineNo = new Map(lines.map((line) => [line.lineNo, line]));
-  const childrenOf = new Map<string, (typeof lines)[number][]>();
-  for (const line of lines) {
-    if (line.parentLineId === null) continue;
-    const siblings = childrenOf.get(line.parentLineId);
-    if (siblings === undefined) childrenOf.set(line.parentLineId, [line]);
-    else siblings.push(line);
-  }
-  const rows: ItemsDue["rows"] = [];
-  for (const asked of requested) {
-    const line = byLineNo.get(asked.lineNo);
-    if (line === undefined) {
-      throw new AppError("tab.line_not_found", { tabId: workingOrderId, lineNo: asked.lineNo });
-    }
-    if (line.parentLineId !== null) throw invalid("lines");
-    const children = childrenOf.get(line.id) ?? [];
-    let quantity = line.quantity;
-    if (asked.quantity !== undefined) {
-      try {
-        assertQuantityPrecision(asked.quantity, 0, { positive: true });
-        quantity = stringToThousandths(asked.quantity);
-      } catch {
-        throw invalid("lines");
-      }
-      if (quantity > line.quantity) throw invalid("lines");
-      const whole = quantity === line.quantity;
-      if (!whole && (children.length > 0 || (line.unitPrecision ?? 0) !== 0)) {
-        throw invalid("lines");
-      }
-    }
-    const already = [line, ...children].some((part) => (paid.get(part.id) ?? 0) > 0);
-    if ((paid.get(line.id) ?? 0) + quantity > line.quantity || (children.length > 0 && already)) {
-      throw new AppError("bill.line_paid", { workingOrderId, lineNo: line.lineNo });
-    }
-    rows.push({
-      lineId: line.id,
-      quantity,
-      amount:
-        quantity === line.quantity
-          ? line.lineTotal
-          : decimalToCents(
-              money(
-                multiplyDecimal(
-                  centsToDecimal(line.unitPriceGross),
-                  thousandthsToDecimal(quantity),
-                ),
-              ),
-            ),
-    });
-    for (const child of children) {
-      rows.push({ lineId: child.id, quantity: child.quantity, amount: child.lineTotal });
-    }
-  }
-  return { due: sumDecimals(rows.map((row) => centsToDecimal(row.amount))), rows };
-}
-
-async function allocationRequestFor(
-  tx: Transaction,
-  workingOrderId: string,
-  ask: BillPaymentAsk,
-  held: readonly PaymentMoney[],
-): Promise<{ request: AllocationRequest; items: ItemsDue | null }> {
+function allocationRequestFor(ask: BillPaymentAsk): AllocationRequest {
   const addedTip = decimal(ask.addedTip ?? "0.00");
   const payment =
     ask.method === "cash"
       ? { method: "cash" as const, tendered: decimal(ask.tendered!), addedTip }
       : { method: "card" as const, addedTip };
-  const choice = ask.choice === undefined ? {} : { choice: ask.choice };
-  switch (ask.kind) {
-    case "items": {
-      const items = await itemsDue(tx, workingOrderId, ask.lines ?? [], held);
-      return { request: { kind: "items", due: items.due, payment, ...choice }, items };
-    }
-    case "contribution":
-      return {
-        request: { kind: "contribution", amount: decimal(ask.amount!), payment, ...choice },
-        items: null,
-      };
-    case "share":
-      return {
-        request: { kind: "share", shareOf: ask.shareOf!, payment, ...choice },
-        items: null,
-      };
-  }
+  return ask.kind === "contribution"
+    ? { kind: "contribution", amount: decimal(ask.amount!), payment }
+    : { kind: "share", shareOf: ask.shareOf!, payment };
 }
 
 /** An open bill, else `working_order.not_found` or `working_order.not_open`. */
@@ -1648,14 +1403,13 @@ export async function previewBillPayment(
     });
     await assertBillHasNoUnsent(tx, workingOrderId);
     const { held, advances } = payable.held ?? (await readHeld(tx, [workingOrderId]));
-    const { request } = await allocationRequestFor(tx, workingOrderId, ask, held);
     const funds = fundsOf(
       workingOrderId,
       await billPaymentTotal(tx, workingOrderId, advances),
       held,
     );
     const { doc } = await readPaymentsSettings(tx);
-    return previewAllocation(funds, request, { tipsEnabled: doc.tipsEnabled });
+    return previewAllocation(funds, allocationRequestFor(ask), { tipsEnabled: doc.tipsEnabled });
   });
 }
 
@@ -1684,9 +1438,9 @@ async function resultOf(
   };
 }
 
-/** A payment request as its retry fingerprint reads it: the lines in line order and every amount at
- * the money scale, an absent added tip as none, so a resend that spells the same request another
- * way is the same request. Receipt language and guest count are excluded from the match. */
+/** A payment request as its retry fingerprint reads it: every amount at the money scale, an absent
+ * added tip as none, so a resend that spells the same request another way is the same request.
+ * Receipt language and guest count are excluded from the match. */
 export function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
   const scaled = (value: string | undefined) =>
     value === undefined ? undefined : money(decimal(value));
@@ -1696,7 +1450,6 @@ export function retryShapeOf(req: BillPaymentRequest): Record<string, unknown> {
     guestCount: undefined,
     receiptLanguage: undefined,
     printCardSlip: undefined,
-    lines: req.lines?.slice().sort((a, b) => a.lineNo - b.lineNo),
     amount: scaled(req.amount),
     tendered: scaled(req.tendered),
     addedTip: scaled(req.addedTip ?? "0"),
@@ -1907,9 +1660,9 @@ async function saveCounterBasket(
  * The start every payment of a bill shares, in the caller's transaction: the operator must still
  * be signed in on the requesting device ({@link assertStillSignedIn}); a retry finds its first row;
  * otherwise the bill must be payable (`requirePayableBill`) with no payment of the whole order in
- * flight, the allocation must be the one the operator saw (design §3.6), and the payment and its
- * lines are inserted in `state`. A new payment answers the bill's total too, which the insert
- * leaves as it was.
+ * flight, the allocation must be the one the operator saw (design §3.6), and the payment is
+ * inserted in `state`. A new payment answers the bill's total too, which the insert leaves as it
+ * was.
  *
  * Keyed by `submissionId` within the bill (design §5.1): a matched retry returns the first row
  * without changing it here. A different fingerprint or an id already used for a refund is
@@ -2045,12 +1798,6 @@ async function beginBillPayment(
   const { tipsEnabled } = (await readPaymentsSettings(tx)).doc;
   const addedTip =
     basket !== undefined && req.entry === "reader" && !tipsEnabled ? ZERO : req.addedTip;
-  const { request, items } = await allocationRequestFor(
-    tx,
-    workingOrderId,
-    { ...req, addedTip },
-    held,
-  );
   deps.backend.assertRecordableAt(reading);
   if (refusals.diskFull()) refuseForDiskStop(refusals.log, workingOrderId);
   if (!payable.invoiced) {
@@ -2060,7 +1807,7 @@ async function beginBillPayment(
   const funds = fundsOf(workingOrderId, total, held);
   const allocation = confirmAllocation(
     funds,
-    request,
+    allocationRequestFor({ ...req, addedTip }),
     { tipsEnabled },
     {
       applied: basket === undefined ? decimal(req.applied) : total,
@@ -2102,13 +1849,6 @@ async function beginBillPayment(
       slipWanted,
     })
     .returning();
-  if (items !== null) {
-    await insertInChunks(
-      tx,
-      billPaymentLines,
-      items.rows.map((row) => ({ billPaymentId: payment!.id, ...row })),
-    );
-  }
   await captureBillPaymentAttendance(tx, payment!, attendance, {
     at: reading.instant.toISOString(),
   });

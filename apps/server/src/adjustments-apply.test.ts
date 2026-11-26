@@ -4202,7 +4202,7 @@ describe("a counter order (B11c)", () => {
     expect(commands).toEqual([{ scopeKind: "bill" }]);
   });
 
-  it("refuses a comp of a dish paid for on its own, writing nothing, and comps the unpaid one", async () => {
+  it("comps a dish down to exactly what was received, on a part-paid bill at the counter", async () => {
     const { billId, partyId } = await bill([{ name: "Burger" }, { name: "Steak" }]);
     const paid = await send(
       venue.app,
@@ -4212,8 +4212,8 @@ describe("a counter order (B11c)", () => {
       {
         submissionId: randomUUID(),
         tip: "0.00",
-        kind: "items",
-        lines: [{ lineNo: 2 }],
+        kind: "contribution",
+        amount: "25.00",
         method: "cash",
         tendered: "25.00",
         applied: "25.00",
@@ -4232,14 +4232,6 @@ describe("a counter order (B11c)", () => {
     );
     const before = await counterStateOf(billId);
     expect(before.order).toMatchObject({ status: "open", partyId: null });
-
-    await expect(
-      adjust(billId, { ...(await todayLine(venue, billId, 2)), action: "comp" }),
-    ).rejects.toMatchObject({
-      code: "bill.line_paid",
-      params: { workingOrderId: billId, lineNo: 2 },
-    });
-    expect(await counterStateOf(billId)).toEqual(before);
 
     await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
     expect(await priced(billId)).toEqual([

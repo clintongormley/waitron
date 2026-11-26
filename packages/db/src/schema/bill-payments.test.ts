@@ -16,7 +16,7 @@ import {
   REFUND_DELETE_REFUSAL,
 } from "../trigger-refusals.js";
 import { billAdvances } from "./bill-advances.js";
-import { billPaymentLines, billPayments } from "./bill-payments.js";
+import { billPayments } from "./bill-payments.js";
 import { refunds } from "./refunds.js";
 import { drawerOpens } from "./drawer-opens.js";
 import { persons } from "./identity/persons.js";
@@ -44,7 +44,7 @@ let otherBillId = "";
 let nextSubmission = 0;
 let nextInvoice = 0;
 
-describe("bill payments: the three tables, their checks and their triggers", () => {
+describe("bill payments: the two tables, their checks and their triggers", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS], resetPerTest: false });
 
   function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
@@ -348,6 +348,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
 
     it.each([
       ["an unknown kind", { kind: "gift" }, "bill_payments_kind_ck"],
+      ["the old items kind", { kind: "items" }, "bill_payments_kind_ck"],
       ["an unknown method", { method: "voucher" }, "bill_payments_method_ck"],
       ["an unknown state", { state: "lost" }, "bill_payments_state_ck"],
       ["a share with no count", { kind: "share", shareOf: null }, "bill_payments_share_of_ck"],
@@ -426,7 +427,6 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       ["a share among two", { kind: "share", shareOf: 2 }],
       ["cash handed over exactly", { method: "cash", applied: 1000, tip: 100, tendered: 1100 }],
       ["a tip alone, applied nothing", { applied: 0, tip: 100 }],
-      ["an item payment", { kind: "items" }],
       ["a received payment with its time", { state: "received", receivedAt: AT }],
       ["a declined payment keeps its received time", { state: "declined", receivedAt: AT }],
       ["a failed payment with its time", { state: "failed", failedAt: AT }],
@@ -583,7 +583,7 @@ describe("bill payments: the three tables, their checks and their triggers", () 
 
     it.each([
       ["the cash handed over", `tendered = 5000`],
-      ["the kind", `kind = 'items'`],
+      ["the kind", `kind = 'share'`],
       ["the share count", `kind = 'share', share_of = 2`],
       ["the method", `method = 'cash', tendered = 2000`],
       ["the bill", `working_order_id = '${"__OTHER__"}'`],
@@ -663,13 +663,6 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       const error = await captureError(() => updatePayment(id, set));
       expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
       expect(await amounts(id)).toEqual(before);
-    });
-
-    it("a payment for chosen items may not move it", async () => {
-      const id = await receivedPayment({ kind: "items", applied: 1500, tip: 0 });
-      const error = await captureError(() => updatePayment(id, `applied = 1000, tip = 500`));
-      expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
-      expect(await amounts(id)).toEqual({ applied: 1500, tip: 0 });
     });
 
     it.each([
@@ -799,74 +792,6 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       const error = await captureError(() => updatePayment(id, `attestation_note = 'second'`));
       expect(triggerRaised(error, BILL_PAYMENT_CHANGE_REFUSAL)).toBe(true);
       expect((await attestation(id)).attestationNote).toBe("first");
-    });
-  });
-
-  describe("bill_payment_lines", () => {
-    it("records an item payment's line, quantity and amount", async () => {
-      const paymentId = await insertPayment({ kind: "items" });
-      const lineId = "eeeeeeee-0000-4000-8000-000000000001";
-      await inTx((tx) =>
-        tx
-          .insert(billPaymentLines)
-          .values({ billPaymentId: paymentId, lineId, quantity: 1000, amount: 2500 }),
-      );
-      const [row] = await inTx((tx) =>
-        tx.select().from(billPaymentLines).where(eq(billPaymentLines.billPaymentId, paymentId)),
-      );
-      expect(row).toMatchObject({ lineId, quantity: 1000, amount: 2500 });
-    });
-
-    it("keys to its bill payment, and names a line by plain id with no key", async () => {
-      const missing = "dddddddd-0000-4000-8000-0000000000fe";
-      const error = await captureError(() =>
-        inTx((tx) =>
-          tx
-            .insert(billPaymentLines)
-            .values({ billPaymentId: missing, lineId: missing, quantity: 1000, amount: 100 }),
-        ),
-      );
-      expect(isRefusal(error, FOREIGN_KEY_VIOLATION)).toBe(true);
-      const paymentId = await insertPayment({ kind: "items" });
-      await inTx((tx) =>
-        tx
-          .insert(billPaymentLines)
-          .values({ billPaymentId: paymentId, lineId: missing, quantity: 1000, amount: 100 }),
-      );
-    });
-
-    it.each([
-      ["a quantity of zero", { quantity: 0, amount: 100 }, "bill_payment_lines_quantity_ck"],
-      ["a negative amount", { quantity: 1000, amount: -1 }, "bill_payment_lines_amount_ck"],
-    ])("refuses %s", async (_name, values, check) => {
-      const paymentId = await insertPayment({ kind: "items" });
-      const error = await captureError(() =>
-        inTx((tx) =>
-          tx
-            .insert(billPaymentLines)
-            .values({ billPaymentId: paymentId, lineId: "line", ...values }),
-        ),
-      );
-      expect(checkFailed(error, check)).toBe(true);
-    });
-
-    it("is append-only: an update and a delete are both refused", async () => {
-      const paymentId = await insertPayment({ kind: "items" });
-      await inTx((tx) =>
-        tx
-          .insert(billPaymentLines)
-          .values({ billPaymentId: paymentId, lineId: "line", quantity: 1000, amount: 100 }),
-      );
-      const update = await captureError(() =>
-        run(
-          sql`update bill_payment_lines set quantity = 2000 where bill_payment_id = ${paymentId}`,
-        ),
-      );
-      expect(triggerRaised(update, "bill_payment_lines is append-only")).toBe(true);
-      const remove = await captureError(() =>
-        run(sql`delete from bill_payment_lines where bill_payment_id = ${paymentId}`),
-      );
-      expect(triggerRaised(remove, "bill_payment_lines is append-only")).toBe(true);
     });
   });
 
@@ -1358,10 +1283,6 @@ describe("bill payments: the three tables, their checks and their triggers", () 
       await expectRefusedMove(
         await reopened({ method: "card", tendered: null }, { before: (id) => insertRefund(id) }),
       );
-    });
-
-    it("…not an items payment", async () => {
-      await expectRefusedMove(await reopened({ kind: "items" }));
     });
 
     it.each([

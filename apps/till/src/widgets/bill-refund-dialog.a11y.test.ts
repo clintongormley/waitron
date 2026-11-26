@@ -22,7 +22,6 @@ const card: BillPaymentView = {
   state: "received",
   createdAt: "2026-09-30T20:00:00.000Z",
   receivedAt: "2026-09-30T20:00:00.000Z",
-  lines: [],
   refunds: [],
 };
 
@@ -85,9 +84,9 @@ describe.each(["light", "dark"] as const)("till-bill-refund-dialog a11y (%s them
     await expectNoA11yViolations(host);
   });
 
-  it("has no violations giving back an item payment whole, with a refusal above the action", async () => {
+  it("has no violations giving a contribution back, with a refusal above the action", async () => {
     const { host } = await mount({
-      payment: { ...card, kind: "items", method: "cash", tip: "0.00" },
+      payment: { ...card, method: "cash", tip: "0.00" },
       refusal: { code: "bill.refund_in_progress" },
     });
     await expectNoA11yViolations(host);

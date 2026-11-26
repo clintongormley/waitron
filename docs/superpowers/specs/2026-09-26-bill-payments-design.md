@@ -1,5 +1,8 @@
 # Several payments against one bill — the payment and billing design
 
+> **25 November 2026:** the items kind and `bill_payment_lines` (§2.2) were removed; Pay for items
+> moves the dishes to [a bill of their own](../plans/2026-11-24-a1515-1-pay-for-items-new-bill.md).
+
 > **24 November 2026:** "refund first" (§4.3, §4.4, §6a and answers 2, 4 and 6) is replaced by
 > [a bill paid more than it comes to](2026-11-24-overpaid-open-bills-design.md), approved by the owner.
 

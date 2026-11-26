@@ -37,7 +37,6 @@ const EXPECTED = [
   "adjustments",
   "attendance_answers",
   "bill_advances",
-  "bill_payment_lines",
   "declaraciones_responsables",
   "deferred_closures",
   "document_page_reprints",

@@ -559,7 +559,6 @@ it("switches the button off while a card payment's outcome is unknown, saying wh
   const api = deferredApi({
     previewBillPayment: vi.fn().mockResolvedValue({
       kind: "allocated",
-      choice: null,
       applied: "120.00",
       tip: "0.00",
       change: null,

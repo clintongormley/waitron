@@ -203,7 +203,6 @@ export type {
 } from "./schema/deferred-closures.js";
 export {
   billPaymentKind,
-  billPaymentLines,
   billPaymentMethod,
   billPayments,
   billPaymentState,

@@ -1,4 +1,3 @@
-import { setTipsForTest } from "./testing/payment-settings.js";
 import { cancelItemHttp } from "./testing/cancel-line.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
@@ -47,15 +46,13 @@ useVenueDb({
 
 interface Body {
   submissionId?: string;
-  kind: "items" | "contribution" | "share";
-  lines?: { lineNo: number; quantity?: string }[];
+  kind: "contribution" | "share";
   amount?: string;
   shareOf?: number;
   method: "cash" | "card";
   entry?: "manual" | "reader";
   tendered?: string;
   addedTip?: string;
-  choice?: "full_with_tip" | "use_pool";
   readerId?: string;
   applied: string;
   tip: string;
@@ -448,21 +445,14 @@ describe("a malformed payment body", () => {
   it.each([
     ["a list for a body", [], "body"],
     ["an unknown kind", { ...card, kind: "gift" }, "kind"],
+    ["the old items kind", { ...card, kind: "items", lines: [{ lineNo: 1 }] }, "kind"],
     ["an unknown method", { ...card, method: "cheque" }, "method"],
-    ["lines that are not a list", { ...card, kind: "items", amount: undefined, lines: 1 }, "lines"],
-    [
-      "a line numbered 0",
-      { ...card, kind: "items", amount: undefined, lines: [{ lineNo: 0 }] },
-      "lines",
-    ],
-    ["lines on a contribution", { ...card, lines: [{ lineNo: 1 }] }, "lines"],
     ["an amount on a share", { ...card, kind: "share", shareOf: 2 }, "amount"],
     ["a share of none", { ...card, kind: "share", amount: undefined, shareOf: 0 }, "shareOf"],
     ["a share count on a contribution", { ...card, shareOf: 2 }, "shareOf"],
     ["money with three decimals", { ...card, amount: "5.001" }, "amount"],
     ["cash handed over for a card", { ...card, tendered: "5.00" }, "tendered"],
     ["a malformed added tip", { ...card, addedTip: "-1" }, "addedTip"],
-    ["an unknown choice", { ...card, choice: "both" }, "choice"],
     ["no submission id", { ...card, submissionId: "" }, "submissionId"],
     ["a malformed applied amount", { ...card, applied: "five" }, "applied"],
     ["an unknown entry", { ...card, entry: "swipe" }, "entry"],
@@ -498,16 +488,15 @@ describe("a malformed payment body", () => {
 });
 
 describe("change versus tip (design §8 test 1)", () => {
-  // Steak €25.00 + House salad €12.00 + Small beer €3.00 = €40.00, and a Tarta that stays unpaid.
-  const items = [{ lineNo: 1 }, { lineNo: 2 }, { lineNo: 3 }];
+  // Steak €25.00 + House salad €12.00 + Small beer €3.00 = €40.00, and a Tarta, so €18.00 stays owing.
   const bill = () => tabWithDishes("Steak", "House salad", "Small beer", "Tarta");
 
-  it("gives €10.00 change on €50.00 cash for €40.00 of items", async () => {
+  it("gives €10.00 change on €50.00 cash for a €40.00 part payment", async () => {
     const billId = await bill();
 
     const paid = await pay(billId, {
-      kind: "items",
-      lines: items,
+      kind: "contribution",
+      amount: "40.00",
       method: "cash",
       tendered: "50.00",
       applied: "40.00",
@@ -523,8 +512,8 @@ describe("change versus tip (design §8 test 1)", () => {
     const billId = await bill();
 
     const paid = await pay(billId, {
-      kind: "items",
-      lines: items,
+      kind: "contribution",
+      amount: "40.00",
       method: "cash",
       tendered: "50.00",
       addedTip: "10.00",
@@ -542,15 +531,15 @@ describe("change versus tip (design §8 test 1)", () => {
     const calls = venue.card.collectCalls.length;
 
     const shown = await preview(billId, {
-      kind: "items",
-      lines: items,
+      kind: "contribution",
+      amount: "40.00",
       method: "card",
       addedTip: "10.00",
     });
     const collectsAfterPreview = venue.card.collectCalls.length;
     const paid = await pay(billId, {
-      kind: "items",
-      lines: items,
+      kind: "contribution",
+      amount: "40.00",
       method: "card",
       entry: "reader",
       addedTip: "10.00",
@@ -566,169 +555,6 @@ describe("change versus tip (design §8 test 1)", () => {
       payment: { applied: "40.00", tip: "10.00", change: null },
       balance: { received: "40.00", tips: "10.00", outstanding: "18.00" },
     });
-  });
-});
-
-describe("the steak (design §8 test 3, §3.3)", () => {
-  // Seafood rice 35 + Steak 25 + Red wine bottle 30 + House salad 12 + Tarta 18 = €120.00; the steak is line 2.
-  const steak = [{ lineNo: 2 }];
-
-  /** €105.00 contributed, one payment of it carrying a €5.00 tip that must never count. */
-  async function billWith105(): Promise<string> {
-    const billId = await tabWithDishes(
-      "Seafood rice",
-      "Steak",
-      "Red wine bottle",
-      "House salad",
-      "Tarta",
-    );
-    await cashContribution(billId, "100.00");
-    const tipped = await pay(billId, {
-      kind: "contribution",
-      amount: "5.00",
-      method: "cash",
-      tendered: "10.00",
-      addedTip: "5.00",
-      applied: "5.00",
-      tip: "5.00",
-    });
-    expect(tipped.json).toMatchObject({ balance: { tips: "5.00", outstanding: "15.00" } });
-    return billId;
-  }
-
-  it("offers exactly the two choices with tips on and nothing pending", async () => {
-    const billId = await billWith105();
-
-    const shown = await preview(billId, { kind: "items", lines: steak, method: "card" });
-
-    expect(shown.json).toEqual({
-      kind: "choose",
-      options: [
-        { choice: "full_with_tip", applied: "15.00", tip: "10.00" },
-        { choice: "use_pool", applied: "15.00", tip: "0.00" },
-      ],
-    });
-  });
-
-  it("paying the full price by card leaves nothing outstanding and records a €10.00 tip", async () => {
-    const billId = await billWith105();
-
-    const paid = await pay(billId, {
-      kind: "items",
-      lines: steak,
-      method: "card",
-      entry: "reader",
-      choice: "full_with_tip",
-      applied: "15.00",
-      tip: "10.00",
-    });
-
-    expect(venue.card.collectCalls.at(-1)).toMatchObject({ amount: "25.00" });
-    expect(paid.json).toMatchObject({
-      outcome: "received",
-      payment: { applied: "15.00", tip: "10.00" },
-      invoice: { total: "120.00" },
-    });
-    expect(await statusOf(venue, billId)).toBe("settled");
-  });
-
-  it("paying what is left from the pool leaves nothing outstanding and records no tip", async () => {
-    const billId = await billWith105();
-
-    const paid = await pay(billId, {
-      kind: "items",
-      lines: steak,
-      method: "card",
-      entry: "reader",
-      choice: "use_pool",
-      applied: "15.00",
-      tip: "0.00",
-    });
-
-    expect(venue.card.collectCalls.at(-1)).toMatchObject({ amount: "15.00" });
-    expect(paid.json).toMatchObject({
-      payment: { applied: "15.00", tip: "0.00" },
-      invoice: { total: "120.00" },
-    });
-  });
-
-  it("offers only the pool with tips off", async () => {
-    const billId = await billWith105();
-
-    await setTipsForTest(venue.db, false);
-    const shown = await preview(billId, { kind: "items", lines: steak, method: "card" }).finally(
-      () => setTipsForTest(venue.db, true),
-    );
-
-    expect(shown.json).toEqual({
-      kind: "choose",
-      options: [{ choice: "use_pool", applied: "15.00", tip: "0.00" }],
-    });
-  });
-
-  it("offers only the full price with a card pending, and that choice is taken", async () => {
-    const billId = await billWith105();
-    venue.card.stallNextCollect();
-    await cardContribution(billId, "5.00");
-
-    const shown = await preview(billId, { kind: "items", lines: steak, method: "card" });
-    const paid = await pay(billId, {
-      kind: "items",
-      lines: steak,
-      method: "cash",
-      tendered: "25.00",
-      choice: "full_with_tip",
-      applied: "10.00",
-      tip: "15.00",
-    });
-
-    expect(shown.json).toEqual({
-      kind: "choose",
-      options: [{ choice: "full_with_tip", applied: "10.00", tip: "15.00" }],
-    });
-    expect(paid.json).toMatchObject({
-      payment: { applied: "10.00", tip: "15.00", change: "0.00" },
-      balance: { reserved: "5.00", outstanding: "0.00" },
-    });
-  });
-
-  it("offers neither with tips off and a card pending: order.payment_in_flight", async () => {
-    const billId = await billWith105();
-    venue.card.stallNextCollect();
-    await cardContribution(billId, "5.00");
-
-    await setTipsForTest(venue.db, false);
-    const shown = await preview(billId, { kind: "items", lines: steak, method: "card" }).finally(
-      () => setTipsForTest(venue.db, true),
-    );
-
-    expect(shown.status).toBe(409);
-    expect(shown.json).toMatchObject({ code: "order.payment_in_flight" });
-  });
-
-  it("refuses an item payment naming the line a pending card pays for: bill.line_paid", async () => {
-    const billId = await tabWithDishes("Steak", "Tarta");
-    venue.card.stallNextCollect();
-    await pay(billId, {
-      kind: "items",
-      lines: [{ lineNo: 1 }],
-      method: "card",
-      entry: "reader",
-      applied: "25.00",
-      tip: "0.00",
-    });
-
-    const again = await pay(billId, {
-      kind: "items",
-      lines: [{ lineNo: 1 }],
-      method: "cash",
-      tendered: "25.00",
-      applied: "25.00",
-      tip: "0.00",
-    });
-
-    expect(again.status).toBe(409);
-    expect(again.json).toMatchObject({ code: "bill.line_paid", params: { lineNo: 1 } });
   });
 });
 
@@ -928,16 +754,9 @@ describe("several devices (design §8 test 12, §5.2), each race in both orders"
   });
 
   it("cash first while a third card is at the reader: the card for the same last €30.00 is refused order.payment_in_flight", async () => {
-    // €58.00: the Tarta paid, a €10.00 card at the reader, then the last €30.00 twice.
+    // €58.00: €18.00 paid, a €10.00 card at the reader, then the last €30.00 twice.
     const billId = await tabWithDishes("Steak", "House salad", "Small beer", "Tarta");
-    await pay(billId, {
-      kind: "items",
-      lines: [{ lineNo: 4 }],
-      method: "cash",
-      tendered: "18.00",
-      applied: "18.00",
-      tip: "0.00",
-    });
+    await cashContribution(billId, "18.00");
     const third = await heldCard(billId, "10.00");
     const calls = venue.card.collectCalls.length;
 

@@ -50,7 +50,6 @@ import {
   type CheckedApprover,
 } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
-import { refusePaidLines } from "./bill-payments.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
 import { requireOrderBillEditor, parseBillEditExpected } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
@@ -292,15 +291,6 @@ export async function cancelItem(
         if (!started) {
           await assertTabOpen(tx, bill!.id);
           await refusePaymentInFlight(tx, [bill!.id]);
-          await refusePaidLines(
-            tx,
-            bill!.id,
-            taken.map(({ dish, off }) => ({
-              id: dish.id,
-              lineNo: dish.lineNo,
-              keeps: dish.quantity - off,
-            })),
-          );
           const tickets = await tx
             .select()
             .from(ticketItems)

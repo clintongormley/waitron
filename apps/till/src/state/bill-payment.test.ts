@@ -4,7 +4,6 @@ import { NO_BOX_ANSWERING } from "../api/server-router.js";
 import {
   confirmationOf,
   isLatestSend,
-  paidQuantities,
   payLines,
   paymentAsk,
   paymentNotRecorded,
@@ -42,7 +41,9 @@ describe("paymentAsk", () => {
       addedTip: "0",
     });
   });
-  it("asks for whole lines without a quantity, and for units of a line as a whole-number quantity", () => {
+  it("chosen items are asked for as the whole of their own bill", () => {
+    const pay = { method: "card", addedTip: "10.00" } as const;
+
     expect(
       paymentAsk(
         {
@@ -52,14 +53,9 @@ describe("paymentAsk", () => {
             { lineNo: 3, lineId: "l-3", units: 2 },
           ],
         },
-        { method: "card" },
+        pay,
       ),
-    ).toEqual({
-      expectedEdit: null,
-      kind: "items",
-      lines: [{ lineNo: 1 }, { lineNo: 3, quantity: "2" }],
-      method: "card",
-    });
+    ).toEqual(paymentAsk({ kind: "whole" }, pay));
   });
 
   it("asks for a contribution with the cash handed over", () => {
@@ -104,8 +100,8 @@ describe("paymentAsk", () => {
       ),
     ).toEqual({
       expectedEdit: null,
-      kind: "items",
-      lines: [{ lineNo: 2 }],
+      kind: "share",
+      shareOf: 1,
       method: "card",
       addedTip: "10.00",
     });
@@ -124,7 +120,6 @@ describe("confirmationOf", () => {
         ask,
         {
           kind: "allocated",
-          choice: null,
           applied: "40.00",
           tip: "0.00",
           change: null,
@@ -135,31 +130,12 @@ describe("confirmationOf", () => {
     ).toEqual({ ...ask, applied: "40.00", tip: "0.00", entry: "manual" });
   });
 
-  // The steak: €25.00 of lines against €15.00 left. The operator picks one of the two offered.
-  it("names the choice the operator picked and sends that option's amounts", () => {
-    expect(
-      confirmationOf(
-        ask,
-        { choice: "full_with_tip", applied: "15.00", tip: "10.00" },
-        { entry: "reader", readerId: "rd-1" },
-      ),
-    ).toEqual({
-      ...ask,
-      choice: "full_with_tip",
-      applied: "15.00",
-      tip: "10.00",
-      entry: "reader",
-      readerId: "rd-1",
-    });
-  });
-
   it("sends cash with no card entry", () => {
     const cash = paymentAsk({ kind: "share", shareOf: 2 }, { method: "cash", tendered: "20.00" });
 
     expect(
       confirmationOf(cash, {
         kind: "allocated",
-        choice: null,
         applied: "15.00",
         tip: "0.00",
         change: "5.00",
@@ -174,7 +150,6 @@ describe("the submission id of a confirmation", () => {
     paymentAsk({ kind: "contribution", amount: "10.00" }, { method: "cash", tendered: "10.00" }),
     {
       kind: "allocated",
-      choice: null,
       applied: "10.00",
       tip: "0.00",
       change: "0.00",
@@ -651,31 +626,6 @@ describe("refusalOf", () => {
   });
 });
 
-describe("paidQuantities", () => {
-  it("gives the quantity paid of each line by its number, the first listed when one is listed twice", () => {
-    const paid = paidQuantities({
-      workingOrderId: "wo-1",
-      status: "open",
-      total: "30.00",
-      received: "15.00",
-      reserved: "0.00",
-      outstanding: "15.00",
-      tips: "0.00",
-      payments: [],
-      paidLines: [
-        { lineId: "line-1", lineNo: 1, paidQuantity: "1.000" },
-        { lineId: "line-3", lineNo: 3, paidQuantity: "2.000" },
-        { lineId: "line-3", lineNo: 3, paidQuantity: "9.000" },
-      ],
-    });
-
-    expect([...paid]).toEqual([
-      [1, "1.000"],
-      [3, "2.000"],
-    ]);
-  });
-});
-
 describe("payLines", () => {
   const row = (over: Partial<TabLine>): TabLine => ({
     changesAfterSending: null,
@@ -767,7 +717,6 @@ describe("a payment's refunds", () => {
     state: "received",
     createdAt: "2026-09-30T20:00:00.000Z",
     receivedAt: "2026-09-30T20:00:00.000Z",
-    lines: [],
     refunds: [],
     ...over,
   });
@@ -938,12 +887,10 @@ describe("Pay for items in the bill payment state", () => {
         paymentAsk(
           { kind: "items", picks: [{ lineNo: 1, lineId: "id-Flan" }] },
           { method: "card" },
-          undefined,
           edit(editorVersion),
         ),
         {
           kind: "allocated",
-          choice: null,
           applied: "4.00",
           tip: "0.00",
           change: null,

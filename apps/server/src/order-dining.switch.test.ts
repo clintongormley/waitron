@@ -238,17 +238,17 @@ describe("switching an order's way of selling", () => {
     const toTakeaway = await switchTo(tabId, "takeaway", { expectedEdit: await editOf(tabId) });
     expect(toTakeaway.status).toBe(200);
     const path = `/api/working-orders/${tabId}/payments`;
-    const pay = (lineNo: number, amount: string) =>
+    const pay = (amount: string) =>
       send(venue.app, venue.cookie, "POST", path, {
         submissionId: randomUUID(),
-        kind: "items",
-        lines: [{ lineNo }],
+        kind: "contribution",
+        amount,
         method: "cash",
         tendered: amount,
         applied: amount,
         tip: "0.00",
       });
-    const first = await pay(1, "1.80");
+    const first = await pay("1.80");
     expect([first.status, first.json.invoice]).toEqual([200, undefined]);
     const before = await orderOf(tabId);
 
@@ -257,7 +257,7 @@ describe("switching an order's way of selling", () => {
     expect(back.status).toBe(409);
     expect(back.json).toEqual({ code: "order.dining_locked", params: { reason: "paid" } });
     expect(await orderOf(tabId)).toEqual(before);
-    const second = await pay(2, "4.00");
+    const second = await pay("4.00");
     expect(second.status).toBe(200);
     expect(filedRates(tabId)).toEqual([2100, 400]);
   });
@@ -586,8 +586,8 @@ describe("splitting a table with loose dishes", () => {
       `/api/working-orders/${newBill}/payments`,
       {
         submissionId: randomUUID(),
-        kind: "items",
-        lines: [{ lineNo: classesOf(newBill)[0]!.line_no }],
+        kind: "share",
+        shareOf: 1,
         method: "cash",
         tendered: "1.80",
         applied: "1.80",

@@ -35,7 +35,6 @@ const balance: BillBalance = {
   outstanding: "50.00",
   tips: "0.00",
   payments: [],
-  paidLines: [],
 };
 
 const payment: BillPaymentView = {
@@ -52,7 +51,6 @@ const payment: BillPaymentView = {
   state: "received",
   createdAt: "2026-10-13T09:00:00.000Z",
   receivedAt: "2026-10-13T09:00:00.000Z",
-  lines: [],
   refunds: [],
 };
 
@@ -155,7 +153,6 @@ describe.each(["en", "es"] as const)("leading-zero amounts in %s", (locale) => {
       },
       preview: {
         kind: "allocated",
-        choice: null,
         applied: "35.00",
         tip: "0.00",
         change: "15.00",

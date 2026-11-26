@@ -291,7 +291,6 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       outstanding: "3.00",
       tips: "0.00",
       payments: [],
-      paidLines: [],
     })),
     getPartyBills: floorPartyBills(),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
@@ -1528,18 +1527,18 @@ describe("till-app table ordering: refused and failed table actions", () => {
       "splitTable",
     ],
   ] as const)(
-    "a %s refused because an item is already paid for says so in that code's own words",
+    "a %s refused because the bill would owe less than it received says so in that code's own words",
     async (type, detail, method) => {
       const { el } = await mountApp({
         ...seatedFloor(),
-        [method]: vi.fn().mockRejectedValue({ code: "bill.line_paid" }),
+        [method]: vi.fn().mockRejectedValue({ code: "bill.received_exceeds_total" }),
       });
       const screen = await toTableOrder(el);
 
       emit(screen, type, detail);
       await flush(el);
 
-      expect(banner(el)!.textContent).toContain(codeMessage("bill.line_paid"));
+      expect(banner(el)!.textContent).toContain(codeMessage("bill.received_exceeds_total"));
     },
   );
 

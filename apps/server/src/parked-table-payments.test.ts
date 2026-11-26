@@ -123,3 +123,80 @@ it.each(["missing", "stale"] as const)(
     expect(await balance.json()).toMatchObject({ received: "0.00", outstanding: "35.00" });
   },
 );
+
+describe("a Counter order paid for by item, with the edit state the till can read", () => {
+  async function parkedCounterOrder(): Promise<{ id: string; lineIds: string[] }> {
+    const id = randomUUID();
+    const parked = await venue.app.request("/api/working-orders", {
+      method: "POST",
+      headers: { cookie: venue.cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        dining: "eat_in",
+        id,
+        zoneId: counterZone,
+        lines: [
+          { menuItemId: venue.offerFor("Seafood rice"), quantity: "1" },
+          { menuItemId: venue.offerFor("Steak"), quantity: "1" },
+        ],
+        label: "Parked order",
+      }),
+    });
+    expect(parked.status, await parked.clone().text()).toBe(200);
+    const read = await venue.app.request(`/api/working-orders/${id}`, {
+      headers: { cookie: venue.cookie },
+    });
+    expect(read.status).toBe(200);
+    const held = (await read.json()) as HeldOrder;
+    expect(held.expectedEdit).toBeNull();
+    return { id, lineIds: held.lines.map((line) => line.workingOrderLineId!) };
+  }
+
+  const payForSeafoodRice = (id: string, lineId: string, expectedEdit: unknown) =>
+    venue.app.request(`/api/working-orders/${id}/item-payments`, {
+      method: "POST",
+      headers: { cookie: venue.cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        submissionId: randomUUID(),
+        picks: [{ lineId }],
+        expectedEdits: [expectedEdit],
+        method: "cash",
+        tendered: "35.00",
+        applied: "35.00",
+        tip: "0.00",
+      }),
+    });
+
+  it("refuses the held read's answer, which carries no edit state for an order with no party", async () => {
+    const { id, lineIds } = await parkedCounterOrder();
+
+    const response = await payForSeafoodRice(id, lineIds[0]!, null);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      error: { code: "management.request_invalid" },
+    });
+  });
+
+  it("moves the dish to a paid bill of its own with the edit state the bill read answers", async () => {
+    const { id, lineIds } = await parkedCounterOrder();
+    const found = await venue.app.request(`/api/bills/${id}`, {
+      headers: { cookie: venue.cookie },
+    });
+    expect(found.status).toBe(200);
+    const bill = (await found.json()) as { partyId: string | null; edit: { billId: string } };
+    expect(bill.partyId).toBeNull();
+    expect(bill.edit.billId).toBe(id);
+
+    const response = await payForSeafoodRice(id, lineIds[0]!, bill.edit);
+
+    expect(response.status, await response.clone().text()).toBe(200);
+    const paid = (await response.json()) as {
+      billId: string;
+      payment: { invoice: { total: string } };
+      sourceBalance: { total: string; outstanding: string };
+    };
+    expect(paid.billId).not.toBe(id);
+    expect(paid.payment).toMatchObject({ invoice: { total: "35.00" } });
+    expect(paid.sourceBalance).toMatchObject({ total: "25.00", outstanding: "25.00" });
+  });
+});

@@ -982,42 +982,6 @@ describe("A803 portions: part of a row, and a row's extras", () => {
     );
   });
 
-  it("A803 portions: a row's olives are refused when one of their pizzas was paid by item, as today's olives line is", async () => {
-    const lines = [{ name: "Pizza", quantity: "2", olives: 1 }, bread];
-    const grouped = await groupedBill(lines);
-    const portions = await portionsBill(lines);
-    // A dish with extras is paid by item only whole, with its extras.
-    const payOne = async (billId: string, lineNo: number, amount: string) => {
-      const answer = await send(
-        venue.app,
-        venue.cookie.staff,
-        "POST",
-        `/api/working-orders/${billId}/payments`,
-        {
-          submissionId: randomUUID(),
-          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-          tip: "0.00",
-          kind: "items",
-          lines: [{ lineNo }],
-          method: "cash",
-          tendered: amount,
-          applied: amount,
-        },
-      );
-      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
-    };
-    await payOne(grouped.billId, 1, "21.00");
-    await payOne(portions.billId, 3, "10.50");
-    const [line] = await olivesOf(grouped.billId);
-    const members = await olivesOf(portions.billId);
-
-    const today = await refusalOf(grouped.billId, { ...tenOff, lineId: line! });
-    expect(today).toEqual({ code: "bill.line_paid" });
-    expect(
-      await refusalOf(portions.billId, { ...tenOff, lineId: members[0]!, lineIds: members }),
-    ).toEqual(today);
-  });
-
   it("A803 portions: part of a row's olives is refused adjustment.quantity_invalid, changing nothing", async () => {
     const { billId } = await portionsBill([{ name: "Pizza", quantity: "2", olives: 1 }]);
     const members = await olivesOf(billId);
@@ -1317,40 +1281,6 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
         fieldLineIds,
       );
     });
-  });
-
-  it("A803 portions: a row one of whose portions was paid by item is refused as a line paid in part is today", async () => {
-    const pay = async (
-      billId: string,
-      line: { lineNo: number; quantity?: string },
-      amount: string,
-    ) =>
-      send(venue.app, venue.cookie.staff, "POST", `/api/working-orders/${billId}/payments`, {
-        submissionId: randomUUID(),
-        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
-        tip: "0.00",
-        kind: "items",
-        lines: [line],
-        method: "cash",
-        tendered: amount,
-        applied: amount,
-      });
-    const grouped = await groupedBill([{ name: "Burger", quantity: "2" }, bread]);
-    const portions = await portionsBill([{ name: "Burger", quantity: "2" }, bread]);
-    const paidGrouped = await pay(grouped.billId, { lineNo: 1, quantity: "1" }, "12.00");
-    expect(paidGrouped.status, JSON.stringify(paidGrouped.json)).toBe(200);
-    const paidPortion = await pay(portions.billId, { lineNo: 2 }, "12.00");
-    expect(paidPortion.status, JSON.stringify(paidPortion.json)).toBe(200);
-    const [line] = await dishesNamed(grouped.billId, "Burger");
-    const members = await dishesNamed(portions.billId, "Burger");
-
-    const today = await refusalOf(grouped.billId, { action: "comp", lineId: line! });
-    expect(today).toEqual({ code: "bill.line_paid" });
-    const before = await stateOf(portions.billId);
-    expect(
-      await refusalOf(portions.billId, { action: "comp", lineId: members[0]!, lineIds: members }),
-    ).toEqual(today);
-    expect(await stateOf(portions.billId)).toEqual(before);
   });
 });
 

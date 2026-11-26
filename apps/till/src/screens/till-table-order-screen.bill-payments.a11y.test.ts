@@ -79,10 +79,6 @@ const balance: BillBalance = {
   outstanding: "39.00",
   tips: "0.00",
   payments: [],
-  paidLines: [
-    { lineId: "line-2", lineNo: 2, paidQuantity: "1.000" },
-    { lineId: "line-3", lineNo: 3, paidQuantity: "1.000" },
-  ],
 };
 
 const lines = [
@@ -171,7 +167,7 @@ describe.each(["light", "dark"] as const)(
   (theme) => {
     it.each([
       ["an untouched bill offering the three ways", { ...bill, hasPayments: false }, null],
-      ["a partly paid bill with its paid items marked", bill, balance],
+      ["a partly paid bill", bill, balance],
     ] as const)("has no violations for %s", async (_case, shownBill, billBalance) => {
       const { el, host } = await mountWidget<TillTableOrderScreen>(
         "till-table-order-screen",
@@ -220,7 +216,6 @@ describe.each(["light", "dark"] as const)(
             received: "15.00",
             outstanding: "-5.00",
             overpaid: "5.00",
-            paidLines: [],
           },
           tipsEnabled: true,
         },

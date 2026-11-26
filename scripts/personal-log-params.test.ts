@@ -23,7 +23,7 @@ const SCAN_TIMEOUT_MS = 20_000;
 vi.setConfig({ testTimeout: SCAN_TIMEOUT_MS + 10_000 });
 
 const REVIEWED_TYPES: ReadonlyMap<string, string> = new Map([
-  ["AllocationPreview", "a payment's allocation: a choice, money amounts and options; no person"],
+  ["AllocationPreview", "a payment's allocation: money amounts; no person"],
   ["Approval", "how an adjustment is approved: a kind, staff role names and a limit; no person"],
   ["Array", "TypeScript's own; holds what its arguments name, which the guard reads"],
   ["BillEditState", "holds editorName, which is on the list, beside ids and revision numbers"],

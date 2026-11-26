@@ -7,7 +7,7 @@ import type { OrderLine } from "./working-order.js";
  * A retrieved counter order's identical portions as one basket row each (A1208, plan D7): lines
  * whose listed dishes share a {@link tabLinePortionKey} become the first member's line at the
  * group's count, naming every member. The lines as given when the listing is unknown or the order
- * holds money, so a paid portion is never folded into a row it could be lowered out of.
+ * holds money: the `table-service` guide says a parked order folds while none of it is paid.
  */
 export function foldRetrievedPortions(
   lines: readonly OrderLine[],

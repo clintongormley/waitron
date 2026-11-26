@@ -245,7 +245,6 @@ it.each(["en-GB", "es-ES"])(
       }),
       previewBillPayment: vi.fn().mockResolvedValue({
         kind: "allocated",
-        choice: null,
         applied: "40.00",
         tip: "0.00",
         change: null,

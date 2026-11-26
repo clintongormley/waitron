@@ -1446,7 +1446,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
         total: decimal(balance.total),
         received: decimal(balance.received),
         reserved,
-        hasPending: false,
       },
       {
         kind: "contribution",
@@ -1455,8 +1454,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       },
       { tipsEnabled: (await readPaymentsSettings(tx)).doc.tipsEnabled },
     );
-    if (preview.kind !== "allocated")
-      throw new AppError("payment.not_stuck", { paymentId: payment.id });
     return {
       remaining: decimal(remaining),
       applied: preview.applied,
@@ -1506,7 +1503,6 @@ export function mountPaymentsApi(app: Hono, deps: PaymentsApiDeps, log: Logger):
       workingOrderId,
       preview: {
         kind: "allocated",
-        choice: null,
         applied: allocation.applied,
         tip: allocation.tip,
         charged: allocation.remaining,

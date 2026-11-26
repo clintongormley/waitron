@@ -60,7 +60,7 @@ async function billRevision(billId: string) {
   const [bill] = await venue.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
   return bill!.revision;
 }
-async function setup(paidWater = false, discounted = false) {
+async function setup(partPaid = false, discounted = false) {
   const p = await billWith(
     venue,
     [
@@ -70,12 +70,12 @@ async function setup(paidWater = false, discounted = false) {
     ],
     { release: "hold", shape: "grouped" },
   );
-  const [pizza, extra, burger, water] = await rowsOf(venue, p.billId);
-  if (paidWater) {
+  const [pizza, extra, burger] = await rowsOf(venue, p.billId);
+  if (partPaid) {
     const payment = await call("POST", `/api/working-orders/${p.billId}/payments`, {
       submissionId: randomUUID(),
-      kind: "items",
-      lines: [{ lineNo: water!.lineNo, quantity: "1" }],
+      kind: "contribution",
+      amount: "2.00",
       method: "cash",
       tendered: "2.00",
       applied: "2.00",
@@ -108,7 +108,7 @@ async function setup(paidWater = false, discounted = false) {
     expect(saved.status, JSON.stringify(saved.json)).toBe(200);
     draft = (saved.json as unknown as BillDraftSnapshot).draft!;
   }
-  if (paidWater) {
+  if (partPaid) {
     for (const line of [pizza!, burger!]) {
       const path = `/api/parties/${p.partyId}/lines/${line.id}`;
       const read = await call("GET", `${path}/cancellation`);

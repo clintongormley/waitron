@@ -9,7 +9,6 @@ import type {
   TabLine,
 } from "../api/client.js";
 import { billGross } from "./adjust-target.js";
-import { paidQuantities } from "./bill-payment.js";
 import { tabLinePortionKey } from "./portion-groups.js";
 import {
   pickGroups,
@@ -81,7 +80,6 @@ function balanceOf(
   over: {
     received?: string;
     reserved?: string;
-    paid?: string[];
     status?: BillBalance["status"];
   } = {},
 ): BillBalance {
@@ -94,16 +92,10 @@ function balanceOf(
     outstanding: "0.00",
     tips: "0.00",
     payments: [],
-    paidLines: (over.paid ?? []).map((lineId) => ({
-      lineId,
-      lineNo: lines.find((row) => row.id === lineId)!.lineNo,
-      paidQuantity: "1.000",
-    })),
   };
 }
 
-const keyFor = (lines: readonly TabLine[], balance: BillBalance) => (row: TabLine) =>
-  tabLinePortionKey(row, lines, paidQuantities(balance).get(row.lineNo) ?? null);
+const keyFor = (lines: readonly TabLine[]) => (row: TabLine) => tabLinePortionKey(row, lines);
 
 function bill(id: string, number: number | null, over: Partial<PartyBill> = {}): PartyBill {
   return {
@@ -129,7 +121,6 @@ function bill(id: string, number: number | null, over: Partial<PartyBill> = {}):
 interface SourceOptions {
   received?: string;
   reserved?: string;
-  paid?: string[];
   status?: PartyBill["status"];
   held?: SplitSource["held"];
   ownUnsent?: boolean;
@@ -145,11 +136,10 @@ function source(
   const balance = balanceOf(lines, {
     ...(options.received === undefined ? {} : { received: options.received }),
     ...(options.reserved === undefined ? {} : { reserved: options.reserved }),
-    ...(options.paid === undefined ? {} : { paid: options.paid }),
   });
   return {
     bill: bill(id, number, { status: options.status ?? "open", total: balance.total }),
-    groups: pickGroups(lines, keyFor(lines, balance), balance),
+    groups: pickGroups(lines, keyFor(lines), balance),
     held: options.held ?? null,
     ownUnsent: options.ownUnsent ?? false,
     refundPending: options.refundPending ?? false,
@@ -256,18 +246,6 @@ describe("A803 selection:", () => {
       });
     });
 
-    it("whole-bill tick of a part-paid bill is allowed and untick leaves its paid rows out", () => {
-      const lines = [dish("paid", 1, "5.00"), dish("a", 2, "6.00"), dish("b", 3, "7.00")];
-      const one = source("b1", 1, lines, { paid: ["paid"], received: "5.00" });
-
-      const whole = toggleBill(one, NOTHING);
-      expect(billTick(one, whole)).toBe("all");
-
-      const next = pickOnBill(one, whole, new Set(["paid", "a"]));
-      expect(sorted(next.picks.get("b1"))).toEqual(["a"]);
-      expect(toSelection([one], next).loose).toEqual([{ billId: "b1", lineIds: ["a"] }]);
-    });
-
     it("2 of 4 from a whole bill: unticking the Caña row drops all four, and a pick count keeps 4a's first-members rule", () => {
       const lines = [dish("p", 1, "12.00"), ...fourBeerLines(2)];
       const one = source("b1", 1, lines);
@@ -299,15 +277,6 @@ describe("A803 selection:", () => {
 
       expect(billTick(one, next)).toBe("all");
       expect(next.picks.has("b1")).toBe(false);
-    });
-
-    it("every unpaid dish on a part-paid bill does not", () => {
-      const paid = dish("paid", 3, "5.00");
-      const one = source("b1", 1, [...lines, paid], { paid: ["paid"], received: "5.00" });
-      const next = pickOnBill(one, NOTHING, new Set(["a", "b"]));
-
-      expect(billTick(one, next)).toBe("some");
-      expect(next.whole.size).toBe(0);
     });
 
     it("every sent dish on a bill holding this person's unsent dishes does not, and toSelection lists the picks and leaves the unsent dishes out", () => {
@@ -414,14 +383,8 @@ describe("A803 selection:", () => {
       staysPicks(withDaily(["a"]), ["daily"]);
     });
 
-    it("by a set menu, with a paid dish or this person's unsent dishes, does not", () => {
-      const unsent = { ...withDaily(["a", "b"]), ownUnsent: true };
-      staysPicks(unsent, ["daily"]);
-      const paid = {
-        ...withDaily(["a", "b"]),
-        groups: source("b1", 1, [...lines, daily], { paid: ["a"] }).groups,
-      };
-      staysPicks(paid, ["daily"]);
+    it("by a set menu, with this person's unsent dishes, does not", () => {
+      staysPicks({ ...withDaily(["a", "b"]), ownUnsent: true }, ["daily"]);
     });
 
     it("unticking a set menu's dish on a whole bill drops the set menu too, and stays so after a read", () => {
@@ -529,20 +492,10 @@ describe("A803 selection:", () => {
       expect(sorted(pickOnBill(part, wholeOf("b1"), untick).picks.get("b1"))).toEqual(["a"]);
     });
 
-    it("a contribution marks no dish paid", () => {
+    it("a contribution holds a dish back by the money floor only", () => {
       const one = source("b1", 1, [dish("a", 1, "26.00")], { received: "10.00" });
 
-      expect(rowsOf(one, NOTHING)[0]!.blocked?.reason).not.toBe("paid");
-    });
-
-    it("a paid row of a whole bill keeps its paid stop", () => {
-      const lines = [dish("paid", 1, "5.00"), dish("a", 2, "6.00")];
-      const one = source("b1", 1, lines, { paid: ["paid"], received: "5.00" });
-
-      expect(rowsOf(one, wholeOf("b1")).map((row) => row.blocked?.reason ?? null)).toEqual([
-        "paid",
-        null,
-      ]);
+      expect(rowsOf(one, NOTHING)[0]!.blocked).toEqual({ reason: "floor", kept: "10.00" });
     });
   });
 
@@ -954,18 +907,18 @@ describe("A803 selection:", () => {
     });
 
     it("draws rows from the read's lines and balance, and groups with the key it is given", () => {
-      const paidLines = balanceOf([a, b], { paid: ["a"], received: "5.00" });
+      const balance = balanceOf([a, b], { received: "6.00" });
       const [one] = splitSourcesFrom(
-        { bills: [{ billId: "b1", lines: [a, b], balance: paidLines }] },
+        { bills: [{ billId: "b1", lines: [a, b], balance }] },
         [bill("b1", 1)],
         [],
         "me",
         keyFor,
       );
 
-      expect(rowsOf(one!, NOTHING).map((row) => row.blocked?.reason ?? null)).toEqual([
-        "paid",
+      expect(rowsOf(one!, NOTHING).map((row) => row.blocked)).toEqual([
         null,
+        { reason: "floor", kept: "6.00" },
       ]);
     });
   });
@@ -994,10 +947,7 @@ describe("A803 selection:", () => {
       }));
 
     /** Daily A holds s1 and h1, Daily B holds s2 and h2, and the water is in neither. */
-    const twoDailies = (
-      a: Partial<TabLine> = {},
-      paid: { paid?: string[]; received?: string } = {},
-    ): SplitSource => {
+    const twoDailies = (a: Partial<TabLine> = {}): SplitSource => {
       const lines = [
         daily("A", 1, a),
         inMenu("s1", 2, "Soup"),
@@ -1018,7 +968,7 @@ describe("A803 selection:", () => {
         dishes: [...held("A", "s1", "h1"), ...held("B", "s2", "h2")],
       };
       const [one] = splitSourcesFrom(
-        { bills: [{ billId: "b1", lines, balance: balanceOf(lines, paid) }] },
+        { bills: [{ billId: "b1", lines, balance: balanceOf(lines) }] },
         [bill("b1", 1, { setMenus })],
         [],
         "me",
@@ -1110,16 +1060,6 @@ describe("A803 selection:", () => {
 
       expect(sends(one, ticked)).toEqual(picked("B", "h2", "s2"));
     });
-
-    it("a paid dish of the first stays, and the second's same dish can still go", () => {
-      const one = twoDailies({}, { paid: ["s1"], received: "4.00" });
-
-      expect(
-        rowsOf(one, NOTHING).map((row) => [row.members[0]!.id, row.blocked?.reason ?? null]),
-      ).toContainEqual(["s1", "paid"]);
-      const ticked = read(one, press(one, press(one, NOTHING, "s1"), "s2"));
-      expect(sends(one, ticked)).toEqual(picked("s2"));
-    });
   });
 
   describe("splitSummary", () => {
@@ -1198,12 +1138,12 @@ describe("A803 selection:", () => {
     const b = dish("b", 2, "6.00");
     const c = dish("c", 3, "7.00");
 
-    it("a re-read that pays a picked dish drops it and names its bill in changed", () => {
+    it("a re-read in which a picked dish left a part-paid bill drops it and names its bill in changed", () => {
       const one = source("b1", 1, [a, b, c]);
       const split = looseOf({ b1: ["a", "b"] });
-      const paid = source("b1", 1, [a, b, c], { paid: ["a"], received: "5.00" });
+      const left = source("b1", 1, [b, c], { received: "7.00" });
 
-      const out = tidySplit(drawn([one], split), [paid], split);
+      const out = tidySplit(drawn([one], split), [left], split);
 
       expect(sorted(out.split.picks.get("b1"))).toEqual(["b"]);
       expect(out.changed).toEqual(["b1"]);
@@ -1213,22 +1153,26 @@ describe("A803 selection:", () => {
     it("the same when it was the bill's last pick: the tick goes to none", () => {
       const one = source("b1", 1, [a, b]);
       const split = looseOf({ b1: ["a"] });
-      const paid = source("b1", 1, [a, b], { paid: ["a"], received: "5.00" });
+      const left = source("b1", 1, [b]);
 
-      const out = tidySplit(drawn([one], split), [paid], split);
+      const out = tidySplit(drawn([one], split), [left], split);
 
-      expect(billTick(paid, out.split)).toBe("none");
+      expect(billTick(left, out.split)).toBe("none");
       expect(out.split.picks.has("b1")).toBe(false);
       expect(out.changed).toEqual(["b1"]);
     });
 
-    it("a re-read that pays one of 2 of 4 names the bill, and the count stays", () => {
+    it("a re-read in which one of 2 of 4 left the bill names the bill, and the count stays", () => {
       const lines = fourBeerLines();
       const one = source("b1", 1, lines);
       const split = looseOf({ b1: ["c1", "c2"] });
-      const paid = source("b1", 1, lines, { paid: ["c1"], received: "5.00" });
+      const left = source(
+        "b1",
+        1,
+        lines.filter((row) => row.id !== "c1"),
+      );
 
-      const out = tidySplit(drawn([one], split), [paid], split);
+      const out = tidySplit(drawn([one], split), [left], split);
 
       expect(sorted(out.split.picks.get("b1"))).toEqual(["c2", "c3"]);
       expect(out.changed).toEqual(["b1"]);
@@ -1287,7 +1231,7 @@ describe("A803 selection:", () => {
     it("a re-read where a whole bill is part-paid stays whole and names nothing", () => {
       const one = source("b1", 1, [a, b]);
       const split = wholeOf("b1");
-      const paid = source("b1", 1, [a, b], { paid: ["a"], received: "5.00" });
+      const paid = source("b1", 1, [a, b], { received: "5.00" });
 
       const out = tidySplit(drawn([one], split), [paid], split);
 
@@ -1457,20 +1401,6 @@ describe("A803 selection:", () => {
       const out = tidySplit(
         drawn([source("b1", 1, [a, b, c])], split),
         [source("b1", 1, [a, b])],
-        split,
-      );
-
-      expect(out.split.whole.size).toBe(0);
-      expect(sorted(out.split.picks.get("b1"))).toEqual(["a"]);
-      expect(out.changed).toEqual([]);
-    });
-
-    it("a read that leaves only a paid dish unpicked keeps the picks and names nothing", () => {
-      const split = looseOf({ b1: ["a"] });
-
-      const out = tidySplit(
-        drawn([source("b1", 1, [a, b, c], { paid: ["c"] })], split),
-        [source("b1", 1, [a, c], { paid: ["c"] })],
         split,
       );
 

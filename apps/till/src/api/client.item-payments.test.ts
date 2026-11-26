@@ -24,11 +24,10 @@ const balance: BillBalance = {
   overpaid: "0.00",
   tips: "0.00",
   payments: [],
-  paidLines: [],
 };
 
 describe("TillApi: Pay for items", () => {
-  it("previewItemPayment POSTs the picks and payment to the items preview route", async () => {
+  it("previewItemPayment POSTs the picks and payment to the items preview route under the caller's signal", async () => {
     const ask: ItemPaymentAsk = {
       picks: [{ lineId: "line-1", quantity: "1" }, { lineId: "line-2" }],
       method: "cash",
@@ -41,13 +40,14 @@ describe("TillApi: Pay for items", () => {
       change: "2.50",
     };
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse(preview));
+    const signal = new AbortController().signal;
 
-    await expect(new TillApi("", fetchStub).previewItemPayment("wo-4", ask)).resolves.toEqual(
-      preview,
-    );
+    await expect(
+      new TillApi("", fetchStub).previewItemPayment("wo-4", ask, { signal }),
+    ).resolves.toEqual(preview);
     expect(fetchStub).toHaveBeenCalledWith(
       "/api/working-orders/wo-4/item-payments/preview",
-      expect.objectContaining({ method: "POST", body: JSON.stringify(ask) }),
+      expect.objectContaining({ method: "POST", body: JSON.stringify(ask), signal }),
     );
   });
 
@@ -82,7 +82,6 @@ describe("TillApi: Pay for items", () => {
           state: "received",
           createdAt: "2026-11-24T20:00:00.000Z",
           receivedAt: "2026-11-24T20:00:00.000Z",
-          lines: [],
           refunds: [],
         },
         balance,

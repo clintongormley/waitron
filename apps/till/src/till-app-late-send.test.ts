@@ -1873,7 +1873,6 @@ const partlyPaidBalance = {
   outstanding: "3.00",
   tips: "0.00",
   payments: [],
-  paidLines: [],
 };
 const billPayDialog = (el: TillApp) => el.shadowRoot!.querySelector("till-bill-pay-dialog");
 const billPayment = (overrides: Record<string, unknown> = {}) => ({

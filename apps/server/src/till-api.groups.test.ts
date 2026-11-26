@@ -38,7 +38,6 @@ import { inTx, provisionBillVenue, send, tabWith, type BillVenue } from "./testi
 import "./errors.js";
 import { AppError, PERSON_HEADER } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
-import { readPaidQuantities } from "./bill-payments.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 
 // The HTTP layer of the order-group routes: body parsing, the operator taken from the session, the
@@ -2388,7 +2387,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
       copy.mockRestore();
     }
   });
-  it.each([1, 2])("keeps %s paid units on the source or refuses the entire split", async (paid) => {
+  it("splits a part-paid line into single units, its first unit keeping its id", async () => {
     const party = await seated();
     const submitted = await submitGrouped(party, [
       { lines: [dish("Tarta", "5")], release: "hold" },
@@ -2397,41 +2396,33 @@ describe("POST /api/parties/:id/groups/split-line", () => {
     const group = (submitted.json as unknown as SubmitAnswer).groups[0]!;
     const payment = await call("POST", `/api/working-orders/${party.tabId}/payments`, {
       submissionId: randomUUID(),
-      kind: "items",
-      lines: [{ lineNo: 1, quantity: String(paid) }],
+      kind: "contribution",
+      amount: "18.00",
       method: "cash",
-      tendered: String(paid * 18),
-      applied: String(paid * 18),
+      tendered: "18.00",
+      applied: "18.00",
       tip: "0.00",
     });
     expect(payment.status).toBe(200);
-    const before = await snapshot(party);
     const body = {
       submissionId: randomUUID(),
       expectedPartyRevision: await revisionOf(party.partyId),
       lineId: group.lineIds[0]!,
     };
     const result = await call("POST", `/api/parties/${party.partyId}/groups/split-line`, body);
-    if (paid === 1) {
-      expect(result.status).toBe(200);
-      const rows = await inTx(venue, (tx) =>
-        tx
-          .select()
-          .from(workingOrderLines)
-          .where(eq(workingOrderLines.workingOrderId, party.tabId))
-          .orderBy(workingOrderLines.lineNo),
-      );
-      expect(rows.map((row) => row.quantity)).toEqual([1000, 1000, 1000, 1000, 1000]);
-      expect(rows[0]!.id).toBe(body.lineId);
-    } else {
-      expect(result.status).toBe(409);
-      expect(result.json).toEqual(
-        refusal("bill.line_paid", { workingOrderId: party.tabId, lineNo: 1 }),
-      );
-      expect(await snapshot(party)).toEqual(before);
-    }
-    const quantities = await inTx(venue, (tx) => readPaidQuantities(tx, party.tabId));
-    expect([...quantities]).toEqual([[body.lineId, paid * 1000]]);
+    expect(result.status).toBe(200);
+    const rows = await inTx(venue, (tx) =>
+      tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, party.tabId))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    expect(rows.map((row) => row.quantity)).toEqual([1000, 1000, 1000, 1000, 1000]);
+    expect(rows[0]!.id).toBe(body.lineId);
+    expect(rows.reduce((sum, row) => sum + row.lineTotal, 0)).toBe(9000);
+    const balance = await call("GET", `/api/working-orders/${party.tabId}/payments`);
+    expect(balance.json).toMatchObject({ received: "18.00" });
   });
 });
 

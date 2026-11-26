@@ -235,7 +235,6 @@ it("Split a table's panel protects its ticks and counts, and Split submits with 
         outstanding: "6.00",
         tips: "0.00",
         payments: [],
-        paidLines: [],
       },
     })),
   };

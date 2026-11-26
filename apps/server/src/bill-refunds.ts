@@ -149,7 +149,7 @@ export async function refundTender(
  * needing from the operator or the override the permission {@link refundPermission} names; where
  * that is `payment.take`, a hand-keyed card needs no approver's PIN. A completed refund issues the
  * bill if it leaves it paid. A payment gives back up to its net applied money; its tip comes back
- * only with the whole of what is left of it; an item payment only whole, which frees its lines.
+ * only with the whole of what is left of it.
  *
  * Keyed by `submissionId` across the whole bill (design §5.1): the same refund again answers the
  * first and writes nothing, except that a card refund still pending is resumed; the id with another
@@ -254,13 +254,6 @@ export async function refundBillPayment(
           const refundableCents = decimalToCents(refundable);
           if (!refundAmountsFit(applied, tip, refundableCents, decimalToCents(refundableTip))) {
             throw new AppError("bill.refund_exceeds_payment", {
-              paymentId,
-              applied: money(refundable),
-              tip: money(refundableTip),
-            });
-          }
-          if (payment.kind === "items" && applied !== refundableCents) {
-            throw new AppError("bill.refund_not_whole", {
               paymentId,
               applied: money(refundable),
               tip: money(refundableTip),

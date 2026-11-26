@@ -491,37 +491,6 @@ describe("money and cards around an advance", () => {
     });
   });
 
-  it("an advance paid for dishes, given back through Correct invoice, frees its dishes: one can be taken off and the other paid again by dish", async () => {
-    const bill = await seated("Tasting menu", "Side dish", "Starter plate");
-    const advanceId = await advanceOf(
-      bill.billId,
-      await pay(bill.billId, {
-        kind: "items",
-        lines: [{ lineNo: 2 }, { lineNo: 3 }],
-        method: "cash",
-        tendered: "21.00",
-        applied: "21.00",
-        ownReceipt: true,
-      }),
-    );
-    await correctAdvance(advanceId, "21.00", { base: "19.09", tax: "1.91" });
-
-    const removed = await removeDish(bill, "Side dish");
-    expect(removed.status, JSON.stringify(removed.json)).toBe(200);
-
-    const paidAgain = await pay(bill.billId, {
-      kind: "items",
-      lines: [{ lineNo: 3 }],
-      method: "cash",
-      tendered: "11.00",
-      applied: "11.00",
-    });
-    expect(paidAgain.status, JSON.stringify(paidAgain.json)).toBe(200);
-    expect(paidAgain.json).toMatchObject({
-      balance: { total: "131.00", received: "11.00", outstanding: "120.00" },
-    });
-  });
-
   it("switching the bill between ticket and full invoice after an advance is allowed and changes only the rest's invoice", async () => {
     const bill = await seated("Tasting menu");
     const advanceId = await advanceOf(

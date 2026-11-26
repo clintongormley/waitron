@@ -36,10 +36,9 @@ type RefundDraft = { howMuch: "whole" | "part"; amount: string; reasonId: string
 
 /**
  * Gives back one payment of a bill: the whole of what is left of it, its tip included, or part of
- * it without the tip; a payment for particular items only whole. It asks why. It holds no request
- * of its own: `bill-refund-continue` carries the ask, which the app sends in the operator's name, or
- * with a supervisor's or manager's PIN when they may not give refunds; `bill-refund-reasons` asks the
- * app to read the reasons again.
+ * it without the tip. It asks why. It holds no request of its own: `bill-refund-continue` carries
+ * the ask, which the app sends in the operator's name, or with a supervisor's or manager's PIN when
+ * they may not give refunds; `bill-refund-reasons` asks the app to read the reasons again.
  * For a card keyed on a separate terminal the app sets {@link terminal} first, and the dialog asks
  * staff to give it back on that terminal and confirm, sending the same ask confirmed, which always
  * takes one PIN.
@@ -142,7 +141,7 @@ export class TillBillRefundDialog extends LitElement {
   }
 
   #comparable(value: RefundDraft): string {
-    const part = !this.#wholeOnly() && value.howMuch === "part";
+    const part = value.howMuch === "part";
     const amount = part ? typedAmount(value.amount) : null;
     return JSON.stringify({
       part,
@@ -219,7 +218,6 @@ export class TillBillRefundDialog extends LitElement {
   /** Whether `amount` is a part this payment can give: above zero, and below what is left of it. */
   #canGivePart(amount: string): boolean {
     return (
-      !this.#wholeOnly() &&
       compareDecimal(decimal(amount), decimal("0")) > 0 &&
       compareDecimal(decimal(amount), decimal(this.#left().applied)) < 0
     );
@@ -237,12 +235,8 @@ export class TillBillRefundDialog extends LitElement {
     };
   }
 
-  #wholeOnly(): boolean {
-    return this.payment.kind === "items";
-  }
-
   #part(): boolean {
-    return !this.#wholeOnly() && this.howMuch === "part";
+    return this.howMuch === "part";
   }
 
   /** The part typed, at the money scale, or null when it is not a part this payment can give. */
@@ -474,10 +468,6 @@ export class TillBillRefundDialog extends LitElement {
     left: { applied: string; tip: string; total: string },
     error: string | undefined,
   ): TemplateResult {
-    if (this.#wholeOnly())
-      return html`<p data-refund-whole-only>
-        ${t("bill_refund.whole_only").replace("{amount}", () => this.#money(left.total))}
-      </p>`;
     const whole =
       compareDecimal(decimal(left.tip), decimal("0")) > 0
         ? t("bill_refund.whole_tip")

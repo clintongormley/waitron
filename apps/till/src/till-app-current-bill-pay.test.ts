@@ -57,7 +57,6 @@ it.each(["30.00", "24.00"])(
       .mockResolvedValue(balanceOf({ total: "27.00", outstanding: "27.00" }));
     const previewBillPayment = vi.fn().mockResolvedValue({
       kind: "allocated",
-      choice: null,
       applied: amount,
       tip: "0.00",
       charged: amount,
@@ -115,7 +114,6 @@ it("keeps an unanswered reader request reachable on its original moved bill with
     getTill: vi.fn().mockResolvedValue(readerTill),
     previewBillPayment: vi.fn().mockResolvedValue({
       kind: "allocated",
-      choice: null,
       applied: "120.00",
       tip: "0.00",
       charged: "120.00",
@@ -319,7 +317,6 @@ it("does not resolve an unanswered card from a balance read started before the s
     getTill: vi.fn().mockResolvedValue(readerTill),
     previewBillPayment: vi.fn().mockResolvedValue({
       kind: "allocated",
-      choice: null,
       applied: "120.00",
       tip: "0.00",
       charged: "120.00",
@@ -453,7 +450,6 @@ it("keeps a reader's pending outcome visible when its bill moves", async () => {
     getTill: vi.fn().mockResolvedValue(readerTill),
     previewBillPayment: vi.fn().mockResolvedValue({
       kind: "allocated",
-      choice: null,
       applied: "120.00",
       tip: "0.00",
       charged: "120.00",
@@ -566,7 +562,6 @@ it("keeps a handheld's earlier card watched after the next guest's preview and a
   const getBillBalance = vi.fn().mockResolvedValue(balanceOf());
   const previewBillPayment = vi.fn().mockResolvedValue({
     kind: "allocated",
-    choice: null,
     applied: "40.00",
     tip: "0.00",
     charged: "40.00",
@@ -606,7 +601,6 @@ it("keeps a handheld's earlier card watched after the next guest's preview and a
   await type(el, "amount", "10");
   previewBillPayment.mockResolvedValue({
     kind: "allocated",
-    choice: null,
     applied: "10.00",
     tip: "0.00",
     charged: "10.00",

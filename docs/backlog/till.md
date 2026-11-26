@@ -902,11 +902,12 @@ here is asked or built before that. They were separate entries, many of them que
     [Finish table](../../apps/server/src/finish-party-service.ts),
     [service cancellation](../../apps/server/src/line-cancel.ts).
   - A cancellation that reduces the charge can take part of a measured row. A comp or discount
-    refuses a partial quantity on a line with decimal places. Item payment can take whole units
-    from a larger zero-decimal row without extras. These paths use the stored row and its unit
+    refuses a partial quantity on a line with decimal places. Pay for items can take part of
+    any row, measured ones included, where its extras split evenly and the parts cost what the row
+    does; the till offers whole units of a larger row without extras. These paths use the stored row and its unit
     precision, so a zero-decimal check alone cannot identify an ordinary whole dish.
     [Price adjustments](../../apps/server/src/adjustments-apply.ts),
-    [item payments](../../apps/server/src/bill-payments.ts).
+    [Pay for items](../../apps/server/src/pay-for-items.ts).
 - **A table's seats are a guide, never a limit (owner, 2026-10-08, A429 decision 6).** The seat
   count is one number, used as a guide and for bookings; the till seats a larger party without a
   refusal.
@@ -2051,7 +2052,7 @@ Board 3 is the target. The order's bottom row becomes **Hold · Pay**.
 - **Paying part of a counter order is new.** Today the counter takes one payment for the whole
   total (`apps/till/src/widgets/tender-pay.ts`), and the bill payments design said partial payment
   at the counter was not asked for (`docs/superpowers/specs/2026-09-26-bill-payments-design.md` §9).
-  Tables already have Pay items, Contribute and Split equally (`apps/till/src/widgets/bill-pay-dialog.ts`);
+  Tables already have Items, An amount and Split equally (`apps/till/src/widgets/bill-pay-dialog.ts`);
   the counter takes the same path. What is printed follows that design: a payment that leaves
   something to pay prints nothing of Waitron's (the reader prints its slip) and the window says
   "Receipt: printed when the bill is fully paid"; the last payment issues one receipt for the whole

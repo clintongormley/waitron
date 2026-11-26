@@ -569,37 +569,6 @@ describe("A1515 a bill left owing less than it was paid", () => {
     expect(await balanceOf(billId)).toMatchObject({ overpaid: "5.00" });
   });
 
-  it("keeps as a tip none of a payment for chosen items taken the old way", async () => {
-    const party = await seatedWith(venue, "Croquettes", "Croquettes");
-    const billId = party.tabId;
-    const contribution = await take(billId, "cash", "5.00");
-    const items = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/working-orders/${billId}/payments`,
-      {
-        submissionId: randomUUID(),
-        kind: "items",
-        lines: [{ lineNo: 2 }],
-        method: "cash",
-        tendered: "10.00",
-        applied: "10.00",
-        tip: "0.00",
-      },
-    );
-    expect(items.status, JSON.stringify(items.json)).toBe(200);
-    const itemsId = (items.json.payment as { id: string }).id;
-    await payForCroquettes(party.partyId, billId);
-    expect(await balanceOf(billId)).toMatchObject({ overpaid: "5.00" });
-
-    const kept = await keepAsTip(billId, "5.00");
-
-    expect(kept.status, JSON.stringify(kept.json)).toBe(200);
-    expect(await paymentOf(itemsId)).toEqual({ applied: "10.00", tip: "0.00" });
-    expect(await paymentOf(contribution)).toEqual({ applied: "0.00", tip: "5.00" });
-  });
-
   it("adding a dish uses up the excess", async () => {
     const { billId, partyId } = await overpaidBill();
 

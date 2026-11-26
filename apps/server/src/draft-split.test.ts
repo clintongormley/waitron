@@ -4,7 +4,6 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   billPayments,
-  billPaymentLines,
   ticketItems,
   printJobs,
   sales,
@@ -187,7 +186,6 @@ async function frozen() {
       .orderBy(orderEvents.id),
     commands: await venue.db.select().from(serviceCommands).orderBy(serviceCommands.id),
     payments: await venue.db.select().from(billPayments).orderBy(billPayments.id),
-    allocations: await venue.db.select().from(billPaymentLines).orderBy(billPaymentLines.id),
     tickets: await venue.db.select().from(ticketItems).orderBy(ticketItems.id),
     jobs: await venue.db.select().from(printJobs).orderBy(printJobs.id),
     sales: await venue.db.select().from(sales).orderBy(sales.id),
@@ -336,57 +334,45 @@ describe("splitting a saved outbox to a new bill", () => {
     expect(await frozen()).toEqual(before);
   });
 
-  it.each(["contribution", "items"] as const)(
-    "keeps a received %s on its original bill and refuses moving its charged food",
-    async (kind) => {
-      const p = await setup();
-      // Grouped, as an order stored before portions.
-      const { source, snapshot } = await withSentFood(p, false, [], "grouped");
-      const paymentId = randomUUID();
-      await inTx(venue, async (tx) => {
-        await tx.insert(billPayments).values({
-          id: paymentId,
-          workingOrderId: p.billId,
-          submissionId: randomUUID(),
-          fingerprint: "fixture",
-          kind,
-          method: "cash",
-          applied: 100,
-          tendered: 100,
-          state: "received",
-          requestedBy: venue.operatorId,
-          source: "device",
-          deviceId: venue.deviceId,
-          receivedAt: new Date().toISOString(),
-        });
-        if (kind === "items")
-          await tx.insert(billPaymentLines).values({
-            billPaymentId: paymentId,
-            lineId: source.id,
-            quantity: 1000,
-            amount: 100,
-          });
+  it("keeps a received contribution on its original bill and refuses moving its charged food", async () => {
+    const p = await setup();
+    // Grouped, as an order stored before portions.
+    const { source, snapshot } = await withSentFood(p, false, [], "grouped");
+    const paymentId = randomUUID();
+    await inTx(venue, async (tx) => {
+      await tx.insert(billPayments).values({
+        id: paymentId,
+        workingOrderId: p.billId,
+        submissionId: randomUUID(),
+        fingerprint: "fixture",
+        kind: "contribution",
+        method: "cash",
+        applied: 100,
+        tendered: 100,
+        state: "received",
+        requestedBy: venue.operatorId,
+        source: "device",
+        deviceId: venue.deviceId,
+        receivedAt: new Date().toISOString(),
       });
-      const before = await frozen();
-      const result = await send(
-        venue.app,
-        venue.cookie,
-        "POST",
-        `/api/bills/${p.billId}/move-dishes`,
-        {
-          expectedEdits: [snapshot.edit],
-          expectedPartyRevision: snapshot.revision,
-          lineIds: [source.id],
-          toBillId: null,
-        },
-      );
-      expect(result.status).toBe(409);
-      expect(result.json).toMatchObject({
-        code: kind === "items" ? "bill.line_paid" : "bill.received_exceeds_total",
-      });
-      expect(await frozen()).toEqual(before);
-    },
-  );
+    });
+    const before = await frozen();
+    const result = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/bills/${p.billId}/move-dishes`,
+      {
+        expectedEdits: [snapshot.edit],
+        expectedPartyRevision: snapshot.revision,
+        lineIds: [source.id],
+        toBillId: null,
+      },
+    );
+    expect(result.status).toBe(409);
+    expect(result.json).toMatchObject({ code: "bill.received_exceeds_total" });
+    expect(await frozen()).toEqual(before);
+  });
 
   it("rolls back moved rows, ownership, numbering and audit when later attendance capture fails", async () => {
     const p = await setup();

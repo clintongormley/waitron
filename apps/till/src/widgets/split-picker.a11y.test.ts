@@ -3,7 +3,6 @@ import { decimal, formatMoney } from "@waitron/shared";
 import type { BillBalance, PartyBill, TabLine } from "../api/client.js";
 import { currentLocale } from "../i18n/t.js";
 import { billGross } from "../state/adjust-target.js";
-import { paidQuantities } from "../state/bill-payment.js";
 import { tabLinePortionKey } from "../state/portion-groups.js";
 import { pickGroups } from "../state/portion-selection.js";
 import type { SplitPicks, SplitSource } from "../state/split-selection.js";
@@ -51,7 +50,6 @@ function source(
   over: {
     status?: PartyBill["status"];
     received?: string;
-    paid?: string[];
     held?: SplitSource["held"];
     ownUnsent?: boolean;
   } = {},
@@ -65,14 +63,8 @@ function source(
     outstanding: "0.00",
     tips: "0.00",
     payments: [],
-    paidLines: (over.paid ?? []).map((lineId) => ({
-      lineId,
-      lineNo: DISHES.find((row) => row.id === lineId)!.lineNo,
-      paidQuantity: "1.000",
-    })),
   };
-  const keyOf = (row: TabLine) =>
-    tabLinePortionKey(row, DISHES, paidQuantities(balance).get(row.lineNo) ?? null);
+  const keyOf = (row: TabLine) => tabLinePortionKey(row, DISHES);
   return {
     bill: {
       dining: "eat_in",
@@ -108,8 +100,8 @@ const STATES: [string, SplitSource, SplitPicks][] = [
   ["nothing ticked", source(), NOTHING],
   ["a whole bill", source(), WHOLE],
   ["some, with a stepped row", source(), SOME],
-  ["part-paid, with a paid row", source({ received: "9.00", paid: ["h1"] }), NOTHING],
-  ["whole and part-paid, with a paid row", source({ received: "9.00", paid: ["h1"] }), WHOLE],
+  ["part-paid, with a row held back", source({ received: "16.00" }), NOTHING],
+  ["whole and part-paid", source({ received: "16.00" }), WHOLE],
   ["presented", source({ status: "placed" }), NOTHING],
   ["held", source({ held: luis }), NOTHING],
   ["held and selected", source({ held: luis }), WHOLE],

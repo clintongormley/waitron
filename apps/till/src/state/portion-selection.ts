@@ -8,7 +8,7 @@ import {
 } from "@waitron/shared";
 import type { BillBalance, TabLine } from "../api/client.js";
 import { billGross } from "./adjust-target.js";
-import { moneyPlus, paidQuantities } from "./bill-payment.js";
+import { moneyPlus } from "./bill-payment.js";
 import { portionGroups } from "./portion-groups.js";
 
 /** One row of Move dishes…: identical whole portions as one row with a count, anything else alone. */
@@ -23,17 +23,14 @@ export interface PickRow {
   /** The money one member takes off the bill, its extras included, at the money scale. */
   each: string;
   /** The most members of this row that can be picked while the other rows' picks stay as they are:
-   * none for a paid row, and never so many that the bill would hold less than it has received or
-   * reserved. */
+   * never so many that the bill would hold less than it has received or reserved. */
   limit: number;
   /** Why no (more) member of this row can be picked, or why it holds more picks than its limit;
    * null when one more can be, or when all are picked within the limit. */
-  blocked: { reason: "paid" } | { reason: "floor"; kept: string } | { reason: "presented" } | null;
+  blocked: { reason: "floor"; kept: string } | { reason: "presented" } | null;
 }
 
 export type Picks = ReadonlySet<string>;
-
-const ZERO = decimal("0");
 
 const times = (each: Decimal, count: number) => multiplyDecimal(each, decimal(String(count)));
 
@@ -42,7 +39,6 @@ interface PickGroup {
   members: readonly TabLine[];
   extras: readonly TabLine[];
   each: Decimal;
-  paid: boolean;
 }
 
 /** A bill's dishes grouped into Move dishes…' rows. The grouping does not depend on the picks, so
@@ -54,9 +50,7 @@ export interface PickGroups {
   readonly floor: { total: Decimal; received: Decimal; kept: Decimal } | null;
 }
 
-/**
- * The bill's dishes as Move dishes… offers them. A dish with any quantity paid makes its row paid.
- */
+/** The bill's dishes as Move dishes… offers them. */
 export function pickGroups(
   lines: readonly TabLine[],
   keyOf: (dish: TabLine) => string | null,
@@ -71,15 +65,11 @@ export function pickGroups(
     if (siblings === undefined) extras.set(parent, [row]);
     else siblings.push(row);
   }
-  const paid = balance === null ? null : paidQuantities(balance);
   const extrasOf = (members: readonly TabLine[]) => extras.get(members[0]!.lineNo) ?? [];
   const groups = portionGroups(dishes, keyOf, (row) => row.lineNo).map((members): PickGroup => ({
     members,
     extras: extrasOf(members),
     each: billGross([members[0]!, ...extrasOf(members)]),
-    paid:
-      paid !== null &&
-      members.some((member) => compareDecimal(decimal(paid.get(member.lineNo) ?? "0"), ZERO) > 0),
   }));
   return {
     groups,
@@ -97,22 +87,17 @@ export function pickGroups(
 const pickedOf = (members: readonly TabLine[], picks: Picks) =>
   members.filter((member) => picks.has(member.id)).length;
 
-/** What the picks on unpaid rows take off the bill. */
+/** What the picks take off the bill. */
 export function pickedTotal(bill: PickGroups, picks: Picks): Decimal {
-  return sumDecimals(
-    bill.groups
-      .filter((group) => !group.paid)
-      .map((group) => times(group.each, pickedOf(group.members, picks))),
-  );
+  return sumDecimals(bill.groups.map((group) => times(group.each, pickedOf(group.members, picks))));
 }
 
 function rowOf(bill: PickGroups, group: PickGroup, picks: Picks, total: Decimal): PickRow {
-  const { members, extras, each, paid } = group;
+  const { members, extras, each } = group;
   const picked = pickedOf(members, picks);
   const floor = bill.floor;
   let limit = members.length;
-  if (paid) limit = 0;
-  else if (floor !== null) {
+  if (floor !== null) {
     let left = subtractDecimal(floor.total, subtractDecimal(total, times(each, picked)));
     limit = 0;
     while (limit < members.length) {
@@ -122,16 +107,14 @@ function rowOf(bill: PickGroups, group: PickGroup, picks: Picks, total: Decimal)
     }
   }
   let blocked: PickRow["blocked"] = null;
-  if (paid) blocked = { reason: "paid" };
-  else if (floor !== null && (picked > limit || (picked < members.length && picked >= limit)))
+  if (floor !== null && (picked > limit || (picked < members.length && picked >= limit)))
     blocked = { reason: "floor", kept: floor.kept };
   return { members, extras, counted: members.length > 1, each, limit, blocked };
 }
 
 /**
- * The rows drawn over a set of picks: a paid row is blocked `paid`, and a pick that would leave the
- * bill's total below what it has received or reserved is blocked `floor`. With no balance read,
- * nothing is blocked.
+ * The rows drawn over a set of picks: a pick that would leave the bill's total below what it has
+ * received or reserved is blocked `floor`. With no balance read, nothing is blocked.
  */
 export function pickRows(bill: PickGroups, picks: Picks): PickRow[] {
   const total = pickedTotal(bill, picks);
@@ -158,7 +141,7 @@ export function toggleRow(row: PickRow, picks: Picks): Picks {
 
 /**
  * The picks after a re-read. `before` is the rows last drawn; `bill` is the re-read bill's groups.
- * Each row read before hands its count to the unpaid row now holding most of its members (on a tie,
+ * Each row read before hands its count to the row now holding most of its members (on a tie,
  * the one drawn first), and counts handed to one row add up. The rows then take their counts in
  * the order they are drawn, each its first members and never more than its limit over the picks
  * already placed: together they keep within the floor the rows' limits work out, and a row left
@@ -174,7 +157,6 @@ export function tidyPicks(before: readonly PickRow[], bill: PickGroups, picks: P
     let home: PickGroup | undefined;
     let shared = 0;
     for (const group of bill.groups) {
-      if (group.paid) continue;
       const held = group.members.filter((member) => ids.has(member.id)).length;
       if (held > shared) {
         home = group;
@@ -192,10 +174,9 @@ export function tidyPicks(before: readonly PickRow[], bill: PickGroups, picks: P
   return next;
 }
 
-/** The picked dishes' line ids, in line order, leaving out a pick on a paid row. */
+/** The picked dishes' line ids, in line order. */
 export function pickedLineIds(rows: readonly PickRow[], picks: Picks): string[] {
   return rows
-    .filter((row) => row.blocked?.reason !== "paid")
     .flatMap((row) => row.members.filter((member) => picks.has(member.id)))
     .sort((a, b) => a.lineNo - b.lineNo)
     .map((member) => member.id);
