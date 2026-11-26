@@ -186,12 +186,34 @@ export class WtDeleteDialog extends LitElement {
     </section>`;
   }
 
+  private impactDetails(copy: DeleteDialogCopy | DeleteDialogSummaryCopy, impact: DeleteImpact) {
+    if ("summary" in copy) {
+      const { sentence, ends } = copy.summary(impact);
+      return html`
+        ${sentence ? html`<p class="summary">${sentence}</p>` : nothing}
+        ${this.group("ends", copy.ends, ends)}
+      `;
+    }
+    return html`
+      ${this.group(
+        "ends",
+        copy.ends,
+        impact.ends.map((item) => copy.item(item)),
+      )}
+      ${this.group(
+        "removes",
+        copy.removes,
+        impact.removes.map((item) => copy.item(item)),
+      )}
+      <p class="irreversible" data-irreversible>${copy.irreversible}</p>
+    `;
+  }
+
   override render() {
     const { copy, impact } = this;
     if (!copy) return nothing;
     const ready = this.ready;
     const compact = "summary" in copy;
-    const summary = impact && compact ? copy.summary(impact) : undefined;
     const alternative = impact && copy.alternative?.(impact);
     const message = [this.readError, this.actionError].filter((each) => each !== "").join(" ");
     const status = this.loading
@@ -216,26 +238,7 @@ export class WtDeleteDialog extends LitElement {
                   copy.refusals,
                   impact.refusals.map((each) => copy.refusal(each)),
                 )}
-                ${
-                  compact
-                    ? html`
-                        ${summary?.sentence ? html`<p class="summary">${summary.sentence}</p>` : nothing}
-                        ${this.group("ends", copy.ends, summary?.ends ?? [])}
-                      `
-                    : html`
-                        ${this.group(
-                          "ends",
-                          copy.ends,
-                          impact.ends.map((item) => copy.item(item)),
-                        )}
-                        ${this.group(
-                          "removes",
-                          copy.removes,
-                          impact.removes.map((item) => copy.item(item)),
-                        )}
-                        <p class="irreversible" data-irreversible>${copy.irreversible}</p>
-                      `
-                }
+                ${this.impactDetails(copy, impact)}
                 ${
                   alternative
                     ? html`

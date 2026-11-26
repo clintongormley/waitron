@@ -33,7 +33,7 @@ describe("printer delete confirmation", () => {
     [
       "es",
       "¿Eliminar BlueTooth Printer?",
-      "Se desemparejará y se quitará de Clint y del perfil Handheld.",
+      "Se desvinculará y se quitará de Clint y del perfil Handheld.",
     ],
   ])(
     "names the printer and each affected device and profile once in %s",
