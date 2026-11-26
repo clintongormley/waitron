@@ -187,16 +187,29 @@ describe("recordCorrection — the record type a correction files", () => {
       const rows = await filedCorrective();
       expect(rows).toHaveLength(1);
       const row = rows[0]!;
+      const { rows: corrected } = await suite.db.execute<{ id_emisor_factura: string }>(
+        sql`select id_emisor_factura from verifactu_records where sale_id = ${originalId}`,
+      );
       expect(ref.recordId).toBe(row.id);
       expect({
         tipoFactura: row.tipo_factura,
         tipoRectificativa: row.tipo_rectificativa,
         importeRectificacion: row.importe_rectificacion,
+        facturasRectificadas: row.facturas_rectificadas,
         destinatarios: row.destinatarios,
       }).toEqual({
         tipoFactura: files,
         tipoRectificativa: "I",
         importeRectificacion: null,
+        facturasRectificadas: {
+          IDFacturaRectificada: [
+            {
+              IDEmisorFactura: corrected[0]!.id_emisor_factura,
+              NumSerieFactura: "A/700",
+              FechaExpedicionFactura: "02-03-2026",
+            },
+          ],
+        },
         destinatarios: files === "R1" ? storedCustomer : null,
       });
       expect(validate(fromRegistroRow(row) as RegistroAlta, { now: laterDay })).toEqual([]);

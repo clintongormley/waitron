@@ -302,9 +302,10 @@ declare module "@waitron/shared" {
 
     /**
      * Thrown by `VerifactuBackend.recordCorrection` (./backend.ts) when a correction by differences
-     * names an alta that is neither an `F2` nor an R5 by replacement (`TipoRectificativa` "S"),
-     * which stands in for the `F2` it replaced. Filing the wrong rectificativa is unrepairable, so
-     * this refuses rather than mis-types it. Also thrown, with `replaces: true`, for a replacement
+     * has no record type under `correctionRecordType` (./correction-record-type.ts): an `F1`, or an
+     * `R4` by replacement, is corrected only naming a customer, an `F2`, or an `R5` by replacement,
+     * only naming none, and any other original never. Filing the wrong rectificativa is
+     * unrepairable, so this refuses rather than mis-types it. Also thrown, with `replaces: true`, for a replacement
      * unless AEAT refused every record Waitron stored of the original, none with code `3000`, and
      * the original is an `F1` replaced naming a customer (an `R4`) or an `F2` replaced naming none
      * (an `R5`). A full invoice's replacement is an `R4` (AEAT's FAQ: «Cuando se haya consignado
