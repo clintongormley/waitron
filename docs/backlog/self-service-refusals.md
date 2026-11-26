@@ -1213,6 +1213,10 @@ Leaving the screen sends no further apply or rotation request in those cases. Ex
 cases still exercise a later successful submission; that is not evidence that retry corrects a
 persistent effective-key conflict.
 
+_2026-11-26, A1323 PR 4a: Backups no longer has a key step, Show the current key or a key file
+download; Change the backup key on the Recovery pack card works the next key out from the master
+key, so the key downloads above are gone._
+
 **Still open:** authenticated inspection and correction of saved versus effective backup-key
 configuration, with each choice explained and a safe Stop. Source inspection finds that `statusBody` in
 `apps/server/src/backup-api.ts` prefers the saved key's fingerprint; this change does not qualify

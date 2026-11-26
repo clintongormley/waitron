@@ -1732,7 +1732,7 @@ export const en = {
   "recovery_pack.keep_backup_key":
     "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its backup key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
   "recovery_pack.older_key":
-    "The box's backups still use the backup key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too until Backups shows the settings loaded.",
+    "The box's backups still use the backup key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too while the Recovery pack card says this.",
   "recovery_pack.row.last": "Last pack",
   "recovery_pack.row.backup_key": "Backup key",
   "recovery_pack.last_none": "None yet",
@@ -6577,7 +6577,7 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.keep_backup_key":
     "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave de las copias si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
   "recovery_pack.older_key":
-    "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior hasta que Copias de seguridad muestre los ajustes cargados.",
+    "Las copias del servidor siguen usando la clave de las copias anterior al último cambio, porque el servidor no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior mientras la tarjeta Paquete de recuperación lo diga.",
   "recovery_pack.row.last": "Último paquete",
   "recovery_pack.row.backup_key": "Clave de las copias",
   "recovery_pack.last_none": "Ninguno todavía",

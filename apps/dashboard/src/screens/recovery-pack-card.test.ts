@@ -419,6 +419,11 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     setLocale(locale);
     const el = await mount(stubApi(status({ ...STATES["up to date"], backupsUseOlderKey: true })));
     expect(line(el)).toContain(t("recovery_pack.older_key"));
+    expect(t("recovery_pack.older_key")).toContain(
+      locale === "en-GB"
+        ? "keep the older pack too while the Recovery pack card says this."
+        : "guarda también el paquete anterior mientras la tarjeta Paquete de recuperación lo diga.",
+    );
   });
 });
 
