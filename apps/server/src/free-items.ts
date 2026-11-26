@@ -259,7 +259,12 @@ export async function listFreeItems(
           a.bill.openedAt.localeCompare(b.bill.openedAt) || a.bill.id.localeCompare(b.bill.id),
       );
     for (const { bill, lines } of groups) {
-      const dishes = lines.filter((line) => line.parentLineId === null);
+      // A set menu's comp or discount also takes its dishes' supplements off, but the set menu is
+      // the one thing given.
+      const ids = new Set<string | null>(lines.map(({ lineId }) => lineId));
+      const dishes = lines.filter(
+        ({ parentLineId, setMenuLineId }) => parentLineId === null && !ids.has(setMenuLineId),
+      );
       const counted = dishes.length > 0 ? dishes : lines;
       const departmentId =
         entry.lineId === null

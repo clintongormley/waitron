@@ -436,7 +436,9 @@ it("a replacement after an AEAT refusal repeats the divided rows and their parts
 });
 
 /** Comps the bill's row named `name`, or takes 100% off the whole bill for null; answers the adjustment's ids. */
-async function compRow(tabId: string, name: string | null) {
+/** Comps the row named `name`, or with `discount` takes 100% off it; a null name takes 100% off the
+ * whole bill. */
+async function compRow(tabId: string, name: string | null, discount = false) {
   const row =
     name === null ? null : (await specRows(spec, tabId)).find((line) => line.name === name)!;
   const { adjustmentIds } = await inTx(venue, async (tx) =>
@@ -449,9 +451,12 @@ async function compRow(tabId: string, name: string | null) {
         expectedEdit: await readBillEditState(tx, tabId),
         submissionId: crypto.randomUUID(),
         expectedRevision: await readOrderRevision(tx, tabId),
-        reasonId: await reasonIdOf(tx, row === null ? COMP_BILL_REASON : GIVE_AWAY_REASON),
-        ...(row === null
-          ? { lineId: null, action: "discount_percent" as const, percentBp: 10000 }
+        reasonId: await reasonIdOf(
+          tx,
+          row === null || discount ? COMP_BILL_REASON : GIVE_AWAY_REASON,
+        ),
+        ...(row === null || discount
+          ? { lineId: row?.id ?? null, action: "discount_percent" as const, percentBp: 10000 }
           : { lineId: row.id, action: "comp" as const }),
         note: null,
         operatorId: venue.operator.personId,
@@ -531,7 +536,7 @@ describe("the Given free sheet", () => {
     }
   });
 
-  it("keeps the set menu's rate when a dish's supplement on the bill is comped too", async () => {
+  it("counts a set menu's dish comped on its own, which takes it out at its a la carte price", async () => {
     const [before] = await venue.db
       .select({ grossPrice: menuItems.grossPrice })
       .from(menuItems)
@@ -539,28 +544,53 @@ describe("the Given free sheet", () => {
     const versionId = await hakeSupplement(200);
     try {
       const bill = await lunchBill(spec, lunch, versionId);
-      const menuComp = await compRow(bill.tabId, "Lunch menu");
-      const hakeComp = await compRow(bill.tabId, "Hake");
+      const comped = await compRow(bill.tabId, "Hake");
       const listed = await givenFreeAt30Percent(bill.tabId);
-      expect(
-        listed.filter(({ adjustmentId }) => [...menuComp, ...hakeComp].includes(adjustmentId)),
-      ).toMatchObject([
-        {
-          item: "Lunch menu",
-          menuPrice: "14.00",
-          amountTakenOff: "14.00",
-          estimatedCost: "8.10",
-        },
+      expect(listed.filter(({ adjustmentId }) => comped.includes(adjustmentId))).toMatchObject([
         {
           item: "Hake",
-          menuPrice: "2.00",
-          amountTakenOff: "2.00",
-          // 2.00 ÷ 1.10 × 0.70 = 1.27.
-          estimatedCost: "1.27",
+          quantity: "1.000",
+          menuPrice: "12.50",
+          amountTakenOff: "12.50",
+          // 12.50 ÷ 1.10 × 0.70 = 7.95.
+          estimatedCost: "7.95",
         },
       ]);
     } finally {
       lunch.versionId = await hakeSupplement(before!.grossPrice);
     }
   });
+
+  it.each([
+    ["comp", false],
+    ["100% discount", true],
+  ])(
+    "counts a set menu once, at its own rate, when its %s covers a dish's supplement",
+    async (_name, discount) => {
+      const [before] = await venue.db
+        .select({ grossPrice: menuItems.grossPrice })
+        .from(menuItems)
+        .where(eq(menuItems.id, lunch.items.Hake));
+      const versionId = await hakeSupplement(200);
+      try {
+        const bill = await lunchBill(spec, lunch, versionId);
+        const given = await compRow(bill.tabId, "Lunch menu", discount);
+        const listed = await givenFreeAt30Percent(bill.tabId);
+        expect(listed.filter(({ adjustmentId }) => given.includes(adjustmentId))).toMatchObject([
+          {
+            item: "Lunch menu",
+            quantity: "1.000",
+            kind: discount ? "discount" : "comp",
+            menuPrice: "16.00",
+            amountTakenOff: "16.00",
+            // 14.00 ÷ 1.21 × 0.70 = 8.10 for the menu, plus 2.00 ÷ 1.10 × 0.70 = 1.27 for the Hake's
+            // supplement: 9.37.
+            estimatedCost: "9.37",
+          },
+        ]);
+      } finally {
+        lunch.versionId = await hakeSupplement(before!.grossPrice);
+      }
+    },
+  );
 });
