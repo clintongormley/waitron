@@ -22,10 +22,11 @@ import {
   dayCutoverChanges,
   readSettings,
   deviceProfiles,
+  kitchenCourses,
   settings as businessDaySettingsTable,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { STARTER_ZONE_NAMES } from "@waitron/venue-service";
+import { STARTER_COURSE_NAMES, STARTER_ZONE_NAMES } from "@waitron/venue-service";
 import {
   STARTER_PROFILE_NAMES,
   STARTER_STATION_NAMES,
@@ -170,6 +171,26 @@ it("a new venue's first station starts at the default late flags and keeps a sta
       forgotten_after_minutes: 15,
     },
   ]);
+});
+
+it.each([
+  ["Madrid", {}],
+  ["Barcelona", { ca: "Plats principals" }],
+  ["Valencia", { "ca-ES-valencia": "Plats principals" }],
+  ["A Coruña", { gl: "Pratos principais" }],
+] as const)("seeds course names for the content languages in %s", async (province, regional) => {
+  await applyVenue(planVenue({ ...request(), province, staffLanguage: "en" }, ALL_MODULES), {
+    db: suite.db,
+    modules: ALL_MODULES,
+  });
+  const [mains] = await suite.db
+    .select({ name: kitchenCourses.name, customerNames: kitchenCourses.customerNames })
+    .from(kitchenCourses)
+    .where(eq(kitchenCourses.starterKey, "mains"));
+  expect(mains).toEqual({
+    name: "Mains",
+    customerNames: { en: "Mains", es: STARTER_COURSE_NAMES.Mains.es, ...regional },
+  });
 });
 
 it("keeps authored starters and profiles when a retry changes the working language", async () => {

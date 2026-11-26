@@ -21,6 +21,7 @@ import { schemaVersionsByModule } from "./backup-manifest.js";
 import {
   buildConfigurationBundle,
   importConfigurationTables,
+  validateConfigurationBundle,
   decodeConfigurationBundle,
   encodeConfigurationBundle,
 } from "./configuration-transfer.js";
@@ -177,28 +178,28 @@ it("exports neither today's keep-open nor station closure, and imports both as o
     en: "To share",
     es: "Para compartir",
   });
-  await expect(
-    withTransaction(target.db, (tx) =>
-      importConfigurationTables(
-        tx,
+  for (const customer_names of ['{"en":3}', '{"en":" To share "}', '{"es":" "}']) {
+    expect(() =>
+      validateConfigurationBundle(
         {
           ...bundle,
           tables: {
             ...bundle.tables,
-            kitchen_courses: bundle.tables.kitchen_courses!.map((row) => ({
-              ...row,
-              customer_names: '{"en":3}',
-            })),
+            kitchen_courses: bundle.tables.kitchen_courses!.map((row) =>
+              row === course ? { ...row, customer_names } : row,
+            ),
           },
         },
         ALL_MODULES,
         versions,
       ),
-    ),
-  ).rejects.toMatchObject({
-    code: "setup.request_invalid",
-    params: { field: "kitchen_courses.customer_names" },
-  });
+    ).toThrowError(
+      expect.objectContaining({
+        code: "setup.request_invalid",
+        params: { field: "kitchen_courses.customer_names" },
+      }),
+    );
+  }
   await applyHistoricalTestVenue(planVenue(request("B44001133"), ALL_MODULES), {
     db: target.db,
     modules: ALL_MODULES,

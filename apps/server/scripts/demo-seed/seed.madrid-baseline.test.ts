@@ -2584,7 +2584,10 @@ for (const locale of ["en", "es"] as const) {
         { name: "starter_key", type: "TEXT", notnull: 0, dflt_value: null, pk: 0 },
       );
       for (const row of Object.values(coursesNow.rows)) {
-        row.customer_names = {};
+        const [english, translation] = Object.entries(STARTER_COURSE_NAMES).find(
+          ([, names]) => names.es === row.name,
+        )!;
+        row.customer_names = { en: english, es: translation.es };
         row.starter_key =
           row.name === STARTER_COURSE_NAMES.Mains.es
             ? "mains"

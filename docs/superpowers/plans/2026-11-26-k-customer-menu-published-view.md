@@ -16,7 +16,10 @@ or scheduling. The published version holds fixed copies of the names for the fut
    add a **Customer names** row action on Courses. Use the existing multilingual text fields and
    a draft-scoped Save and Cancel dialog using the fieldset in `set-menu-terms-form.ts`. A blank clears that language. Use the same validation
    and permission as the existing Courses editor. The `kitchen_courses` export carries the column. Validate its shape in
-   `packages/db/src/configuration-transfer.ts`.
+   `packages/db/src/configuration-transfer.ts`. The owner added starter translations on 26 November
+   at 17:38 in Lane K `questions.md`. Use the existing country starter language selection and
+   `starterNames` in venue-service's provisioning seed. Keep the staff name and test fresh setup
+   through `venue-apply.test.ts`.
 2. **Freeze and show changes.** In `packages/menu/src/{menu-document,set-menus,set-menu-document}.ts`
    and the shared `menu-document-types.ts`, freeze the root’s `sections.names` as `MenuDocument.menuNames`.
    Add `PublishedSetMenu.courses`, keyed by the course IDs in its lines, with `{ name, names }` from

@@ -1,5 +1,10 @@
 import { and, asc, eq, isNull, ne, sql } from "drizzle-orm";
-import { getCountryPack, starterName } from "@waitron/country-packs";
+import {
+  getCountryPack,
+  resolveInstalledStartingContentLanguages,
+  starterName,
+  starterNames,
+} from "@waitron/country-packs";
 import {
   departments,
   departmentCourses,
@@ -62,11 +67,16 @@ export const VENUE_SERVICE_PROVISIONING: ModuleProvisioning = {
           const courses =
             taxpayer === null ? [] : (getCountryPack(taxpayer.country)?.starterCourses ?? []);
           if (courses.length > 0) {
+            const { languages } = resolveInstalledStartingContentLanguages({
+              country: taxpayer?.country,
+              area: venue.province,
+            });
             const inserted = await tx
               .insert(kitchenCourses)
               .values(
                 courses.map(({ name, starterKey }, displayOrder) => ({
                   name: starterName(STARTER_COURSE_NAMES, name, staffLanguage),
+                  customerNames: starterNames(STARTER_COURSE_NAMES, name, languages),
                   starterKey: starterKey ?? null,
                   displayOrder,
                 })),

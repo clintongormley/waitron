@@ -5,6 +5,7 @@ import {
   AppError,
   DEFAULT_READY_WARNING_AFTER_MINUTES,
   DEFAULT_STATION_THRESHOLDS,
+  FALLBACK_LOCALE,
   compareStationNames,
 } from "@waitron/shared";
 import {
@@ -16,7 +17,13 @@ import {
 } from "@waitron/db";
 import type { BumpMode, ChangesAfterSending, StationColour, TicketGrouping } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
-import { assertProductWritable, productWithId, type ProductScope } from "@waitron/menu";
+import {
+  assertProductWritable,
+  mergeOptionalTranslations,
+  productWithId,
+  readContentLanguages,
+  type ProductScope,
+} from "@waitron/menu";
 import { assertStationDestination, readCourseSettingsByZone } from "@waitron/venue-service";
 export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -357,6 +364,7 @@ export async function updateCourse(
   tx: Transaction,
   id: string,
   patch: Partial<Pick<Course, "name" | "displayOrder" | "customerNames">>,
+  fallbackLanguage: string = FALLBACK_LOCALE,
 ): Promise<void> {
   if (Object.hasOwn(patch, "active")) {
     throw new AppError("management.request_invalid", { field: "active" });
@@ -365,6 +373,15 @@ export async function updateCourse(
   const { name, displayOrder, customerNames } = patch;
   const set = { name, displayOrder, customerNames };
   if (name === undefined && displayOrder === undefined && customerNames === undefined) return;
+  if (customerNames !== undefined) {
+    const [stored] = await tx
+      .select({ customerNames: kitchenCourses.customerNames })
+      .from(kitchenCourses)
+      .where(eq(kitchenCourses.id, id));
+    const languages = await readContentLanguages(tx, fallbackLanguage);
+    set.customerNames =
+      mergeOptionalTranslations(stored!.customerNames, customerNames, languages) ?? {};
+  }
 
   let updated: { id: string }[];
   try {

@@ -127,8 +127,15 @@ export function validateCoreConfiguration(
   for (const { customer_names: names } of tables.kitchen_courses ?? []) {
     if (names === undefined) continue;
     try {
-      if (typeof names === "string" && normalizeOptionalTranslations(JSON.parse(names)) !== null)
-        continue;
+      if (typeof names === "string") {
+        const stored = JSON.parse(names) as Record<string, unknown>;
+        const normalized = normalizeOptionalTranslations(stored);
+        if (
+          normalized !== null &&
+          Object.entries(stored).every(([language, text]) => normalized[language] === text)
+        )
+          continue;
+      }
     } catch {
       // Refuse malformed JSON and invalid maps under the same field.
     }

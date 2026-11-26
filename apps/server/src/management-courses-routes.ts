@@ -1,5 +1,5 @@
 import { type Logger, requireManagementSession, readJsonBody } from "@waitron/server-kit";
-import { isUuid, AppError, normalizeOptionalTranslations } from "@waitron/shared";
+import { isUuid, AppError, FALLBACK_LOCALE, normalizeOptionalTranslations } from "@waitron/shared";
 import type { Hono } from "hono";
 // Error declaration for `course.not_found` in the route and path id check.
 import "@waitron/venue-service";
@@ -81,12 +81,13 @@ export function mountManagementCourseRoutes(app: Hono, deps: ManagementApiDeps, 
         patch.displayOrder = parseDisplayOrder(body.displayOrder);
       }
       if (body.customerNames !== undefined) {
-        const names = normalizeOptionalTranslations(body.customerNames);
-        if (names === null)
+        if (normalizeOptionalTranslations(body.customerNames) === null)
           throw new AppError("management.request_invalid", { field: "customerNames" });
-        patch.customerNames = names;
+        patch.customerNames = body.customerNames as Record<string, string>;
       }
-      await withVenueAuth(deps, sessionId, (tx) => updateCourse(tx, id, patch));
+      await withVenueAuth(deps, sessionId, (tx) =>
+        updateCourse(tx, id, patch, deps.venueLocale ?? FALLBACK_LOCALE),
+      );
       return c.body(null, 204);
     }),
   );

@@ -1,4 +1,8 @@
-import type { StarterStaffLanguage, StarterTranslations } from "@waitron/country-packs";
+import type {
+  StarterContentLanguage,
+  StarterStaffLanguage,
+  StarterTranslations,
+} from "@waitron/country-packs";
 
 /** A one-name row holds the staff language only, so these carry each staff language but English. */
 type StaffNames = StarterTranslations<Exclude<StarterStaffLanguage, "en">>;
@@ -30,8 +34,18 @@ export const STARTER_PERIOD_NAMES = {
 } as const satisfies StaffNames;
 
 export const STARTER_COURSE_NAMES = {
-  "Sharing plates": { es: "Pica pica" },
-  Starters: { es: "Entradas" },
-  Mains: { es: "Platos principales" },
-  Desserts: { es: "Postres" },
-} as const satisfies StaffNames;
+  "Sharing plates": {
+    es: "Pica pica",
+    ca: "Plats per compartir",
+    "ca-ES-valencia": "Plats per compartir",
+    gl: "Pratos para compartir",
+  },
+  Starters: { es: "Entradas", ca: "Entrants", "ca-ES-valencia": "Entrants", gl: "Entrantes" },
+  Mains: {
+    es: "Platos principales",
+    ca: "Plats principals",
+    "ca-ES-valencia": "Plats principals",
+    gl: "Pratos principais",
+  },
+  Desserts: { es: "Postres", ca: "Postres", "ca-ES-valencia": "Postres", gl: "Sobremesas" },
+} as const satisfies StarterTranslations<StarterContentLanguage>;
