@@ -789,6 +789,9 @@ was served it is refused (`bill.served_dishes`)._
     The dialog's dismiss button reads "Keep the bill" ("Mantener la cuenta"), not the
     shared "Cancel" beside "Cancel and credit" (owner, 2026-10-02). The owner also kept the
     cancel's answer empty, so the till goes on reading the credit note's number from the bills.
+    _2026-11-26 (CANCEL-UNSERVED PR 3): the owner chose "Say what was filed" — "The till's message
+    is right straight away; your bills rule for the number stays." The cancel answers which record
+    it filed (`{ filed }`); the till still reads the credit note's number from the bills._
   - **Done by B34 (#1077, 2026-10-03; owner, 2026-10-02): a counter order invoiced when it was placed and still
     unpaid can be cancelled with a credit note at the till.** The waiting list "is drawn only
     inside the held-orders card" (Task 16, in [till.md](till.md#task-16-981-counter-handover-with-b25-b26-b29-b30)), so a till layout without that card offers no Cancel and
