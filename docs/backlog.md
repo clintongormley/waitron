@@ -568,9 +568,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   "(pass 2)"). Phone first, layout by screen width, one order screen
   for counter and tables, full-screen panels instead of dialogs, a guest-facing bill with a tip
   question. The bill picker opens at the bottom on narrow screens and shows where the current
-  bill sits in the list. The remaining order and payment screens use the
+  bill sits in the list. The narrow floor has the zone chooser, Map/List and ☰ at the bottom.
+  The remaining order and payment screens use the
   [shared panels and payment controls](developers/design-system.md#full-screen-panels-and-payment-controls).
-  The navigation, order, menu and payment slices remain.
+  The wide floor bar, kitchen destinations, All zones, table jobs, order, menu and payment
+  slices remain.
   [Spec](superpowers/specs/2026-11-26-till-handheld-redesign-design.md)
   · [Build plan](superpowers/plans/2026-11-26-till-handheld-redesign-pass-1.md).
 

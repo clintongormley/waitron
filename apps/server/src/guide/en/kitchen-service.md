@@ -148,7 +148,7 @@ on, and a tap on one of its dishes moves the card's dishes at the same stage.
 Each prep station sets
 its own late flags, and a **Ready warning** time of 3 minutes unless you change it, when you add it
 with **Add a station**, and under **Late flags (minutes)** when you edit it in **Prep stations**. On a
-phone or tablet, the Ready bar turns amber once a ready dish has waited that long: see
+wide handheld floor, the Ready bar turns amber once a ready dish has waited that long. See
 [See which tables have food ready](table-service.md#ready-bar). Each
 prep station also sets how identical dishes print on its tickets,
 whether it prints held groups in advance, and whether a dish already sent to it can be

@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
+import { SUPPORTED_LOCALES } from "@waitron/shared";
 import {
   cleanupWidgets,
   declareTouchScreen,
@@ -9,6 +10,7 @@ import {
 import type { ShellAffordance, TillShell } from "./till-shell.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
 import "./till-shell.js";
+import "../screens/till-floor-screen.js";
 
 const locale = currentLocale();
 afterEach(() => {
@@ -280,6 +282,144 @@ it("the handheld More menu follows ☰ when a wider window moves it", async () =
     const more = await openHandheldMore(["find-bill", "schedule", "station"]);
     await more.resizeUntilTriggerMoves(1024, 768);
     await more.expectPopupUnderTriggerBelowCap();
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+it("puts the narrow Floor controls in one bottom bar and returns focus on widening", async () => {
+  await page.viewport(390, 844);
+  try {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "phone-portrait",
+      operatorName: "Ana",
+      clockAvailable: true,
+      clockState: {
+        personId: "person",
+        businessDay: "2026-11-26",
+        state: "working",
+        firstClockIn: false,
+        lastEntryId: "clock-in",
+      },
+      activeScreen: "floor",
+      canCloseDrawer: true,
+      transferAvailable: true,
+      transferCount: 2,
+    });
+    const floor = document.createElement("till-floor-screen");
+    floor.canChangeToday = true;
+    floor.zones = [
+      {
+        id: "room",
+        name: "Dining room",
+        displayOrder: 0,
+        active: true,
+        closed: false,
+        closesAt: null,
+        hasPlan: true,
+        layoutSetName: "Dinner",
+        layoutDue: null,
+        serviceMode: "table_tab",
+      },
+    ];
+    el.append(floor);
+    const root = el.shadowRoot!;
+    const bar = () => root.querySelector<HTMLElement>("[data-floor-bar]");
+    await vi.waitFor(() => expect(bar()).not.toBeNull());
+    expect(root.querySelector(".head")).toBeNull();
+    expect(root.querySelectorAll('[data-test="more-menu"]')).toHaveLength(1);
+    expect(bar()!.querySelector("[data-floor-zone-chooser]")!.textContent).toContain("Dining room");
+    expect(bar()!.querySelector('[slot="badge"]')).toHaveProperty("count", 2);
+    const trigger = bar()!
+      .querySelector("[data-floor-zone-chooser]")!
+      .shadowRoot!.querySelector("button")!;
+    expect(trigger.getBoundingClientRect().height).toBeGreaterThanOrEqual(48);
+    const more = () => root.querySelector<HTMLElement>('[data-test="more-menu"]')!;
+    const openMore = () => userEvent.click(more().shadowRoot!.querySelector("button")!);
+    await openMore();
+    expect(more().querySelector("[data-open-transfers] [data-floor-count]")?.textContent).toBe("2");
+    expect(more().querySelector(".drawer-close")?.textContent?.trim()).toBe("Close the drawer");
+    const person = more().querySelector(".operator")!;
+    expect(person.parentElement?.querySelector('[data-clock-action="out"]')).not.toBeNull();
+    expect(
+      more()
+        .querySelector('[data-menu-item="taken-off"]')
+        ?.textContent?.trim()
+        .replace(/\s+/g, " "),
+    ).toBe("Taken off 0");
+    expect(more().querySelector('[data-menu-item="reset"]')?.textContent?.trim()).toBe(
+      "Back to the Dinner plan",
+    );
+    await userEvent.click(more().querySelector<HTMLElement>('[data-menu-item="spares"]')!);
+    const zoneMenu = floor.shadowRoot!.querySelector("till-floor-zone-menu")!;
+    await vi.waitFor(() =>
+      expect(zoneMenu.shadowRoot!.querySelector('[data-dialog="spares"]')).toHaveProperty(
+        "open",
+        true,
+      ),
+    );
+    await page.viewport(820, 844);
+    await vi.waitFor(() => expect(bar()).toBeNull());
+    const wideMenu = floor.shadowRoot!.querySelector("till-floor-zone-menu")!;
+    expect(wideMenu).toBe(zoneMenu);
+    expect(wideMenu.shadowRoot!.querySelector('[data-dialog="spares"]')).toHaveProperty(
+      "open",
+      true,
+    );
+    await userEvent.keyboard("{Escape}");
+    await vi.waitFor(() =>
+      expect(zoneMenu.shadowRoot!.querySelector('[data-dialog="spares"]')).toHaveProperty(
+        "open",
+        false,
+      ),
+    );
+    await page.viewport(700, 844);
+    await vi.waitFor(() => expect(bar()).not.toBeNull());
+    expect(floor.shadowRoot!.querySelector(".zone-toolbar [data-zone]")).toBeNull();
+    expect(zoneMenu.shadowRoot!.querySelector("wt-row-actions")?.hidden).toBe(true);
+    await openMore();
+    await page.viewport(800, 844);
+    await vi.waitFor(() => {
+      expect(bar()).toBeNull();
+      expect(more().shadowRoot!.activeElement).toBe(more().shadowRoot!.querySelector("button"));
+    });
+    expect(floor.shadowRoot!.querySelector(".zone-toolbar")).not.toBeNull();
+    await page.viewport(700, 844);
+    await vi.waitFor(() =>
+      expect(more().shadowRoot!.activeElement).toBe(more().shadowRoot!.querySelector("button")),
+    );
+  } finally {
+    await page.viewport(1280, 900);
+  }
+});
+
+it("shows the active language in the joined floor menu choice and gives Log out no arrow", async () => {
+  setLocale("en-GB");
+  await page.viewport(390, 844);
+  try {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "phone-portrait",
+      operatorName: "Ana",
+      activeScreen: "floor",
+      loadLocales: async () => [...SUPPORTED_LOCALES],
+    });
+    el.append(document.createElement("till-floor-screen"));
+    const more = () => el.shadowRoot!.querySelector<HTMLElement>(".floor-menu")!;
+    await vi.waitFor(() => expect(more()).not.toBeNull());
+    await userEvent.click(more().shadowRoot!.querySelector("button")!);
+    const chooser = more().querySelector("wt-language-chooser")!;
+    const choices = () => [...chooser.shadowRoot!.querySelectorAll(".choice")];
+    await vi.waitFor(() => expect(choices()).toHaveLength(2));
+    const [spanish, english] = choices();
+    expect(spanish!.getAttribute("aria-pressed")).toBe("false");
+    expect(english!.getAttribute("aria-pressed")).toBe("true");
+    expect(spanish!.getBoundingClientRect().right).toBe(english!.getBoundingClientRect().left);
+    expect(getComputedStyle(chooser.shadowRoot!.querySelector(".group-label")!).fontSize).toBe(
+      "16px",
+    );
+    const logout = more().querySelector(".logout")!.shadowRoot!.querySelector("button")!;
+    expect(getComputedStyle(logout, "::after").content).toBe("none");
+    expect(getComputedStyle(logout).fontWeight).toBe("600");
   } finally {
     await page.viewport(1280, 900);
   }

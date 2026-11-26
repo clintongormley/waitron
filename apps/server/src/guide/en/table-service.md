@@ -530,25 +530,23 @@ is paid.
 ## Get back to your tables with unsent dishes {#unsent-tables}
 
 On a busy shift it is easy to start an order at one table, get called to another, and forget the
-dishes you never sent. So on a phone or tablet the bar at the top shows **Floor**, then a button
+dishes you never sent. So on a phone or tablet the bar at the top shows a button
 such as **✎ T4**, by the table's short name, for each table where you have dishes not yet sent;
 however many of your bills there hold unsent dishes, a table gets one button. Tap a button to go
 back to that table. The table you are at is highlighted. Once nothing of yours is unsent there, for
 example after you send everything, its button stays highlighted without the ✎ until you leave, and
 then goes, while a table you leave with dishes still unsent keeps its ✎ button. If someone else takes over your bill, it stops counting as yours: at once at the
 table you are at, and at any other table when the Floor next updates its tables. When there are
-more buttons than fit, **Floor** stays where it is and the table buttons slide sideways beside it;
-a faded edge shows there are more that way.
+more buttons than fit, slide them sideways. A faded edge shows where there are more. On a wide
+handheld floor, **Floor** is first. With a keyboard, use Left and Right to switch between **Floor**
+and the table buttons. Home opens **Floor** and End opens the last table. On a narrow floor, use Tab
+to reach a table shortcut and Enter to open it.
 
-With a keyboard, Tab reaches the selected button. Left and Right open the previous or next tab,
-wrapping between **Floor** and your tables. Home opens **Floor** and End opens the last table.
-
-Tapping **Floor** after a table opens that table's zone, if this device shows it. Everything else is
-in **More** (☰): your name, with your clock actions if you clock in on this device, when the bar
-has no room for it, which on a phone is always; the screens your profile allows; **Zones on this
-device**, **Equipment**, **Language**, **Theme** and, if this device has a touch screen and its
-browser supports vibration, **Vibrate on button press**, under a **Settings** heading; **About
-Waitron**; **Log out**; and, while the venue has a logo, **Powered by Waitron** under it.
+Choose **Floor** after a table to open that table's zone, if this device shows it. On a narrow
+floor, choose another zone by tapping its name at the bottom. Open **More** (☰) there for your
+clock actions, changes to today's floor, bills and cash, hours and schedule, Help and settings.
+On a wide handheld floor, open **More** at the top for **Equipment**, **Language** and
+**Theme** under **Settings**.
 
 ## Take an order on a phone {#phone-order}
 
@@ -871,7 +869,11 @@ can name a bill only at a table. The name is not printed on station tickets or r
 ## See which tables have food ready {#ready-bar}
 
 When the station has dishes ready, you want to know which tables to take them to without going to
-look. On a phone or tablet, a bar at the foot of the **Floor** lists each table with food ready and
+look. On a narrow floor, check the ready count on each table. If the line above the bottom bar
+names another zone with food ready, tap it to open that zone. You can also see each zone's
+current cue in the zone list.
+
+On a phone or tablet with a wide floor, the **Ready** bar lists each table with food ready and
 how many dishes are waiting, such as **Ready · T2 · 3**. Each table is shown by its short name, such
 as T2 for Table 2, or by its full name while it has none; a table joined to another for today shows
 both, such as T4+T5. While no food has waited too long, the table whose food has waited longest
@@ -894,11 +896,11 @@ ready food at tables in every zone the till's profile allows, not only the zones
 
 ## Show a zone as a map or a list {#floor-view}
 
-Tap **List** or **Map** to switch how the zone on screen draws its tables. On a phone the switch is
-in the zone's ⋮ menu. The device keeps your choice for each zone, so the zone opens the same way
+Tap **List** or **Map** to change the view. On a narrow floor, find the button at the bottom. The device keeps your choice for each zone, so the zone opens the same way
 next time, and switching one zone leaves the others as they were. A zone you have not switched
 opens as a map when it has tables placed on its plan, and as a list when it has none. If the tables are
-too close together to tap on the map, switch that zone to **List**.
+too close together to tap on the map, switch that zone to **List**. When the map shows **Drag to see
+more tables**, drag the map to bring the rest into view.
 
 ## Join and split tables {#join-tables}
 
@@ -947,13 +949,12 @@ To choose which zones this device shows, see
 ## Choose the zones this device shows {#device-zones}
 
 A device shows every zone its profile allows. If you only work the terrace, the other zones get in
-the way, so you can choose which of them this device shows and which one it opens on. On a till,
-open **More** (☰), then **Settings**, then **Zones on this device**. On a phone or tablet, open
-**More** (☰) and choose **Zones on this device**, under **Settings**. Tick **Show** for each zone
-you want, choose the one that **Opens first**, and tap **Save**.
+the way, so you can choose which zones this device shows and which one it opens on. On a narrow
+floor, tap the current zone at the bottom, then **Choose zones for this phone…**. On other screens,
+open **More** (☰), then choose **Zones on this device** under **Settings**. Tick **Show** for each
+zone you want, choose the one that **Opens first**, and tap **Save**.
 
-The **Floor** then shows only the zones you chose, and with a single zone it shows no zone tabs at
-all. A till shows its chosen table zones on the Floor and its chosen counter zones on the Counter. A
+A till shows its chosen table zones on the Floor and its chosen counter zones on the Counter. A
 phone or tablet has no Counter, so its Floor shows every zone you chose. Until you save a choice, a
 phone or tablet opens where it always has; after that it opens on your **Opens first** zone. After
 you open a table, see [Get back to your tables with unsent dishes](table-service.md#unsent-tables).

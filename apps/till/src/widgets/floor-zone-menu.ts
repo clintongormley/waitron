@@ -17,6 +17,14 @@ export class TillFloorZoneMenu extends LitElement {
   static override styles = [
     baseStyles,
     css`
+      :host([embedded]) {
+        position: absolute;
+      }
+
+      wt-row-actions[hidden] {
+        display: none;
+      }
+
       .rows {
         display: flex;
         flex-direction: column;
@@ -48,6 +56,7 @@ export class TillFloorZoneMenu extends LitElement {
   @property({ attribute: false }) tables: TableState[] = [];
   /** Below the till's phone width the List/Map toggle lives here, above a heading for the zone's items. */
   @property({ type: Boolean }) phone = false;
+  @property({ type: Boolean, reflect: true }) embedded = false;
   @property() view: "map" | "list" = "map";
   /** Whether this device may change this zone's plan today; without it only a phone's toggle is offered. */
   @property({ type: Boolean }) canChangeToday = false;
@@ -142,34 +151,51 @@ export class TillFloorZoneMenu extends LitElement {
       </wt-button>`;
   }
 
-  #planItems(zone: FloorZone): TemplateResult {
+  openPlanAction(action: Dialog): void {
+    if (
+      this.canChangeToday &&
+      this.zone &&
+      (action !== "reset" || this.zone.layoutSetName !== null)
+    )
+      this.open = action;
+  }
+
+  planRows(embedded = false): TemplateResult | typeof nothing {
+    const zone = this.zone;
+    if (!zone || !this.canChangeToday) return nothing;
     const setName = zone.layoutSetName;
     return html`${
-        this.phone
+        this.phone || embedded
           ? html`<p class="heading" data-menu-heading>
-              ${t("floor.zone_menu_heading").replace("{zone}", () => zone.name)}
+              ${t(embedded ? "floor.zone_service" : "floor.zone_menu_heading").replace("{zone}", () => zone.name)}
             </p>`
           : nothing
       }
-      <wt-button icon="menu-add" data-menu-item="spares" @click=${() => (this.open = "spares")}>
+      <wt-button
+        icon=${embedded ? nothing : "menu-add"}
+        data-menu-item="spares"
+        @click=${() => this.openPlanAction("spares")}
+      >
         ${t("floor.add_spare")}
+        ${embedded ? html`<span data-floor-count>${sparesOf(this.tables).length}</span>` : nothing}
       </wt-button>
       <wt-button
-        icon="menu-open"
+        icon=${embedded ? nothing : "menu-open"}
         data-menu-item="taken-off"
-        @click=${() => (this.open = "taken-off")}
+        @click=${() => this.openPlanAction("taken-off")}
       >
-        ${t("floor.taken_off")}
+        ${t(embedded ? "floor.taken_off_service" : "floor.taken_off")}
+        ${embedded ? html`<span data-floor-count>${takenOffOf(this.tables).length}</span>` : nothing}
       </wt-button>
       ${
         setName === null
           ? nothing
           : html`<wt-button
-              icon="menu-reset-plan"
+              icon=${embedded ? nothing : "menu-reset-plan"}
               data-menu-item="reset"
-              @click=${() => (this.open = "reset")}
+              @click=${() => this.openPlanAction("reset")}
             >
-              ${t("floor.reset_plan").replace("{set}", () => setName)}
+              ${t(embedded ? "floor.return_to_plan" : "floor.reset_plan").replace("{set}", () => setName)}
             </wt-button>`
       }`;
   }
@@ -181,9 +207,10 @@ export class TillFloorZoneMenu extends LitElement {
     return html`<wt-row-actions
         label=${planned ? t("floor.zone_menu") : t("floor.view_menu")}
         align="end"
+        ?hidden=${this.embedded}
       >
         ${
-          this.phone
+          this.phone && !this.embedded
             ? html`<wt-button
                 icon=${this.view === "map" ? "menu-list" : "menu-map"}
                 data-menu-item="view"
@@ -193,7 +220,7 @@ export class TillFloorZoneMenu extends LitElement {
               </wt-button>`
             : nothing
         }
-        ${planned ? this.#planItems(zone) : nothing}
+        ${this.embedded ? nothing : this.planRows()}
       </wt-row-actions>
       ${
         planned

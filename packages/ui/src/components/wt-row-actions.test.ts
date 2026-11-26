@@ -678,6 +678,10 @@ describe("opens-below", () => {
       expect(getComputedStyle(sheet).backgroundColor).toBe("rgb(12, 13, 14)");
       expect(getComputedStyle(popup).backgroundColor).toBe("rgb(9, 10, 11)");
       expect(sheet.scrollHeight).toBeGreaterThan(sheet.clientHeight);
+      el.style.setProperty("--wt-row-actions-bottom-offset", "72px");
+      await vi.waitFor(() => {
+        expect(sheet.getBoundingClientRect().bottom).toBeCloseTo(innerHeight - 72, 0);
+      });
       await userEvent.click(actions.at(-1)!);
       expect(picked).toEqual(["Action 15"]);
 

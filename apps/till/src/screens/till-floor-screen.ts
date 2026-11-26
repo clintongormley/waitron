@@ -1,3 +1,10 @@
+import {
+  floorOtherZone,
+  floorScreenFooterStyles,
+  floorZoneControls,
+  zoneTabMarks,
+  type ZoneTabMark,
+} from "../widgets/floor-bar.js";
 import { TILL_LIVE_TYPES, type TillLiveConnection } from "../api/live-connection.js";
 import { liveGate } from "../state/live-gate.js";
 import { zoneKeepOpen, servicePeriodStyles } from "../widgets/service-period.js";
@@ -33,7 +40,6 @@ import {
   toFloorTable,
 } from "@waitron/ui";
 import type {
-  FloorCueIcon,
   FloorMapDrop,
   FloorMapTable,
   FloorPulse,
@@ -112,14 +118,10 @@ import type { BillEditExpected } from "../api/order-types.js";
 import { TABLE_REQUEST_LIMIT_MS, limited } from "../state/draft-sync.js";
 import { delayUntil, nextCountdownChange, reminderDueAt } from "../state/release-reminder.js";
 import {
-  kindCue,
-  kindWords,
   MAP_PRECEDENCE,
-  mapKinds,
   mapLook,
   readyText,
   reminderClock,
-  topTabKind,
   type MapKind,
 } from "../state/floor-look.js";
 import {
@@ -317,13 +319,6 @@ function stripSpan(strip: HTMLElement): { left: number; right: number } {
 const tabKey = (zoneTab: Element): string =>
   zoneTab.querySelector<HTMLElement>("wt-button.tab")!.dataset.zone!;
 
-/** What a hidden zone's tab shows: its tables' most urgent state. */
-interface ZoneTabMark {
-  kind: MapKind;
-  icon: FloorCueIcon | null;
-  words: string;
-}
-
 interface ZoneOnScreen {
   tabs: ZoneTab[];
   /** Keyed by zone; the zone on screen and a zone with nothing urgent have none. */
@@ -346,6 +341,7 @@ export class TillFloorScreen extends LitElement {
     servicePeriodStyles,
     edgeFadeStyles,
     floorTrayStyles,
+    floorScreenFooterStyles,
     floorRingStyles,
     signalChipStyles,
     stepChipStyles,
@@ -1020,7 +1016,7 @@ export class TillFloorScreen extends LitElement {
   #drops = new Set<PendingDrop>();
   /** Each room's revision as this screen's last change there answered it, and that answer's `nextFloorMoment`. */
   #carried = new Map<string | null, CarriedRevision>();
-  #mapCopy = { locale: "", copy: { label: "", allergy: "" } };
+  #mapCopy = { locale: "", copy: { label: "", allergy: "", pan: "" } };
 
   /** The clock the last render was drawn by. */
   #drawnAt = 0;
@@ -1124,8 +1120,13 @@ export class TillFloorScreen extends LitElement {
     }
   }
 
+  @property({ attribute: false }) useFloorFooter = false;
+  #footerZone?: ZoneOnScreen;
+
   override updated(): void {
-    // Read by the app, which lifts the Sent and Served toasts clear of the bar.
+    if (this.useFloorFooter && this.#footerZone !== this.#zone)
+      this.dispatchEvent(new Event("floor-footer-update", { bubbles: true }));
+    this.#footerZone = this.useFloorFooter ? this.#zone : undefined;
     this.toggleAttribute("ready-bar", this.shadowRoot!.querySelector("[data-ready-bar]") !== null);
     this.#watchReminders();
     this.#watchFloor();
@@ -2169,6 +2170,7 @@ export class TillFloorScreen extends LitElement {
       .zone=${zone}
       .tables=${this.#zone.visible}
       .phone=${this.#phone.matches}
+      .embedded=${this.useFloorFooter}
       .view=${view}
       .canChangeToday=${canChange}
       @zone-toggle-view=${(event: Event) => {
@@ -2290,6 +2292,8 @@ export class TillFloorScreen extends LitElement {
       this.tables,
       this.zones,
       this.activeZone,
+      this.useFloorFooter,
+      this.canChangeToday,
       this.refusedZoneId,
       this.viewOverride,
       this.viewMemory,
@@ -2309,7 +2313,12 @@ export class TillFloorScreen extends LitElement {
       (zone) => zone.id === this.refusedZoneId && (zone.closed || !seatsGuests(zone)),
     );
     const activeKey = resolveActiveTabKey(this.activeZone, tabs);
-    const marks = this.#tabMarks(tabs, activeKey);
+    const marks = zoneTabMarks(
+      this.tables,
+      tabs,
+      this.useFloorFooter ? undefined : activeKey,
+      this.#drawnAt,
+    );
     const visible = this.tables.filter((table): table is ZonedTable => table.zoneId === activeKey);
     const planned = visible.some((table) => table.today !== null);
     const listed = listedTables(visible);
@@ -2337,48 +2346,61 @@ export class TillFloorScreen extends LitElement {
     };
   }
 
-  #tabMarks(tabs: readonly ZoneTab[], activeKey: string | undefined): Map<string, ZoneTabMark> {
-    const now = this.#drawnAt;
-    const hidden = new Set(tabs.map((tab) => tab.key).filter((key) => key !== activeKey));
-    const byZone = new Map<string, { table: TableState; kinds: MapKind[] }[]>();
-    for (const table of this.tables) {
-      if (table.zoneId === null || !hidden.has(table.zoneId)) continue;
-      const rows = byZone.get(table.zoneId) ?? [];
-      rows.push({ table, kinds: mapKinds(table, now) });
-      byZone.set(table.zoneId, rows);
-    }
-    const marks = new Map<string, ZoneTabMark>();
-    for (const [zoneId, rows] of byZone) {
-      const kind = topTabKind(new Set(rows.flatMap((row) => row.kinds)));
-      if (kind === null) continue;
-      const members = rows.filter((row) => row.kinds.includes(kind)).map((row) => row.table);
-      const icon = kindCue(kind, members, now)?.icon ?? null;
-      marks.set(zoneId, { kind, icon, words: kindWords(kind, members, now) });
-    }
-    return marks;
-  }
-
-  /** Rebuilt only when the language changes, so a redraw hands the map the same copy. */
-  #floorMapCopy(): { label: string; allergy: string } {
+  #floorMapCopy(): { label: string; allergy: string; pan: string } {
     const locale = currentLocale();
     if (this.#mapCopy.locale !== locale)
       this.#mapCopy = {
         locale,
-        copy: { label: t("floor.map_label"), allergy: t("floor.allergy") },
+        copy: { label: t("floor.map_label"), allergy: t("floor.allergy"), pan: t("floor.map_pan") },
       };
     return this.#mapCopy.copy;
+  }
+
+  footerControls(choose: () => void) {
+    if (!this.#zone) return nothing;
+    const { tabs, marks, activeKey, view } = this.#zone;
+    return floorZoneControls(
+      tabs,
+      marks,
+      activeKey,
+      view,
+      (key) => this.#selectZone(key),
+      () => this.#toggleView(view),
+      choose,
+    );
+  }
+
+  otherZoneLine() {
+    if (!this.#zone) return nothing;
+    const { tabs, marks, activeKey } = this.#zone;
+    return floorOtherZone(tabs, marks, activeKey, (key) => this.#selectZone(key));
+  }
+
+  zonePlanRows() {
+    return this.shadowRoot?.querySelector("till-floor-zone-menu")?.planRows(true) ?? nothing;
+  }
+
+  focusZoneToolbar(): void {
+    (
+      this.shadowRoot!.querySelector<HTMLElement>('[data-zone][variant="primary"]') ??
+      this.shadowRoot!.querySelector<HTMLElement>(".screen")
+    )?.focus();
   }
 
   override render() {
     const { tabs, marks, refusedZone, activeKey, planned, view, listed, onMap, unplaced } =
       this.#zone;
-    // A read still out keeps the empty list or map.
     const empty = listed.length === 0 && onMap.length === 0 ? this.#emptyFloor(activeKey) : nothing;
     return html`
-      <section class="screen" aria-label=${t("floor.title")}>
+      <section
+        class="screen"
+        ?data-floor-footer=${this.useFloorFooter}
+        tabindex="-1"
+        aria-label=${t("floor.title")}
+      >
         <div class="zone-toolbar">
           ${
-            tabs.length > 1
+            !this.useFloorFooter && tabs.length > 1
               ? html`${this.#tabsEdge("start", tabs, marks)}
                   <nav
                     class="tabs"
@@ -2392,7 +2414,7 @@ export class TillFloorScreen extends LitElement {
           }
           <div class="actions help-anchor">
             ${
-              this.#phone.matches || empty !== nothing
+              this.useFloorFooter || this.#phone.matches || empty !== nothing
                 ? nothing
                 : html`<wt-button
                     class="view-toggle"
@@ -2452,12 +2474,12 @@ export class TillFloorScreen extends LitElement {
         }
         ${this.#seatDialog()} ${this.#waitingDialog("clear")} ${this.#waitingDialog("move")}
         ${this.#detailsSheet()} ${this.#seatsPrompt()} ${this.#splitJoined()}
-        ${this.#renameWindow()} ${this.#joinWith()} ${this.#readyBar()}
+        ${this.#renameWindow()} ${this.#joinWith()}
+        ${this.useFloorFooter ? nothing : this.#readyBar()}
       </section>
     `;
   }
 
-  /** Keyed on what would be drawn, not on `visible`: tables taken off today's plan are not drawn. */
   #emptyFloor(activeKey: string | undefined): TemplateResult | typeof nothing {
     if (this.tablesAnswered && activeKey !== undefined)
       return html`<p data-floor-no-tables role="status">
@@ -2488,6 +2510,7 @@ export class TillFloorScreen extends LitElement {
           data-floor-map
           .tables=${onMap}
           .fitKey=${activeKey ?? ""}
+          .compact=${this.useFloorFooter}
           .copy=${this.#floorMapCopy()}
           .reducedMotion=${this.reducedMotion}
           .canDrag=${this.canChangeToday}

@@ -12,6 +12,7 @@ import {
   type FloorMapPulse,
   floorMapFillStyles,
 } from "../floor-map-fills.js";
+import * as compactFloor from "../floor-map-compact.js";
 import { floorRingStyles, renderFloorPulse, renderFloorRing } from "../floor-ring.js";
 import "../floor-chips.js";
 import "./wt-icon.js";
@@ -54,6 +55,7 @@ export interface FloorMapCopy {
   /** The tables' group name. */
   label: string;
   allergy: string;
+  pan?: string;
 }
 
 export interface FloorMapTap {
@@ -80,6 +82,8 @@ interface View {
 /** The last fit: its scale, and the crop's centre in grid squares. */
 interface Fit {
   scale: number;
+  minimum: number;
+  inset: number;
   x: number;
   y: number;
 }
@@ -248,6 +252,7 @@ export class WtFloorMap extends LitElement {
     baseStyles,
     floorMapFillStyles,
     floorRingStyles,
+    compactFloor.viewportStyles,
     css`
       :host {
         display: block;
@@ -487,6 +492,9 @@ export class WtFloorMap extends LitElement {
   /** A change fits the view again. */
   @property() fitKey = "";
 
+  /** Keep tables tappable when only part of the plan can fit on the screen. */
+  @property({ type: Boolean }) compact = false;
+
   @property({ attribute: false }) copy: Partial<FloorMapCopy> = {};
 
   /** `undefined` reads `prefers-reduced-motion` on every render; a test sets it. */
@@ -511,6 +519,8 @@ export class WtFloorMap extends LitElement {
   #travel: Travel | null = null;
 
   #tablesCrop: PlanRect | null = null;
+
+  #smallestTableEdge = 0;
 
   /** The crops this drag has drawn while the view was untouched, since it started or since
    * `tables` last changed, united, so a drag back inward does not shrink the plan; null until such
@@ -806,19 +816,22 @@ export class WtFloorMap extends LitElement {
     const view = this.#view;
     if (view === null || !(view.scale > 0)) return;
     const fit = this.#fit!;
-    const scale = Math.min(
-      fit.scale * MAX_ZOOM,
-      Math.max(fit.scale * MIN_ZOOM, view.scale * ratio),
-    );
+    const scale = Math.min(fit.scale * MAX_ZOOM, Math.max(fit.minimum, view.scale * ratio));
     const change = scale / view.scale;
-    const size = this.#size!;
+    const size = this.compact ? compactFloor.viewport(this) : this.#size!;
     const x = mx + dx - (mx - view.x) * change;
     const y = my + dy - (my - view.y) * change;
-    this.#view = {
-      scale,
-      x: Math.min(size.width, Math.max(0, x + fit.x * scale)) - fit.x * scale,
-      y: Math.min(size.height, Math.max(0, y + fit.y * scale)) - fit.y * scale,
-    };
+    const crop = this.#crop();
+    const reachX = fit.x * scale;
+    const reachY = fit.y * scale;
+    this.#view =
+      this.compact && crop
+        ? compactFloor.clampView({ x, y, scale }, crop, size)
+        : {
+            scale,
+            x: Math.min(size.width, Math.max(0, x + reachX)) - reachX,
+            y: Math.min(size.height, Math.max(0, y + reachY)) - reachY,
+          };
     this.#touched = true;
     this.requestUpdate();
   }
@@ -903,8 +916,9 @@ export class WtFloorMap extends LitElement {
   }
 
   #panTo(box: PlanRect): void {
+    // A key can arrive before ResizeObserver delivers the new floor height.
     const view = this.#view!;
-    const size = this.#size!;
+    const size = this.compact ? compactFloor.viewport(this) : this.#size!;
     const left = view.x + box.x * view.scale;
     const top = view.y + box.y * view.scale;
     const dx = intoView(left, left + box.width * view.scale, size.width);
@@ -940,12 +954,28 @@ export class WtFloorMap extends LitElement {
   }
 
   protected override willUpdate(changed: Map<PropertyKey, unknown>): void {
+    if (changed.has("tables") || changed.has("compact")) {
+      const placements = this.tables.map((table) => table.placement);
+      const crop = cropToTables(placements, this.compact ? 0 : undefined);
+      if (this.compact) {
+        const smallest = placements.reduce(
+          (edge, placement) => Math.min(edge, placement.width, placement.height),
+          Infinity,
+        );
+        if (
+          smallest !== this.#smallestTableEdge ||
+          (!this.#touched && !sameRect(crop, this.#tablesCrop))
+        )
+          this.#needsFit = true;
+        this.#smallestTableEdge = smallest;
+      }
+      this.#tablesCrop = crop;
+    }
     if (changed.has("tables")) {
       this.#groups = groupsOf(this.tables);
       this.#links = linksOf(this.#groups);
       this.#readingOrder = readingOrder(this.#groups);
       this.#groupOf = new Map(this.#groups.flatMap((g) => g.members.map((m) => [m.id, g])));
-      this.#tablesCrop = cropToTables(this.tables.map((t) => t.placement));
       if (this.#held !== null && !this.#groupOf.has(this.#held.dataset["tableId"]!))
         this.#endDrag();
       else if (this.#drag !== null && !this.#touched) {
@@ -966,7 +996,7 @@ export class WtFloorMap extends LitElement {
       this.#needsFit = true;
     this.#dragGrew = false;
     this.style.setProperty("--floor-map-ratio", ratio);
-    if (changed.has("fitKey")) this.#needsFit = true;
+    if (changed.has("fitKey") || changed.has("compact")) this.#needsFit = true;
     if (this.#needsFit) this.#fitView();
   }
 
@@ -974,23 +1004,40 @@ export class WtFloorMap extends LitElement {
     if (this.#size === null) return;
     const crop = this.#crop();
     if (crop === null) return;
-    const scale = fitScale(crop, this.#size);
+    const { width, height } = this.#size;
+    const fitted = fitScale(crop, this.#size);
+    const { scale, minimum, inset } =
+      this.compact && width > 0 && height > 0
+        ? compactFloor.fit(crop, this.#size, this.#smallestTableEdge, getComputedStyle(this))
+        : { scale: fitted, minimum: fitted * MIN_ZOOM, inset: 0 };
     this.#fittedToDrag = this.#dragCrop !== null;
-    this.#fit = { scale, x: crop.x + crop.width / 2, y: crop.y + crop.height / 2 };
+    this.#fit = { scale, minimum, inset, x: crop.x + crop.width / 2, y: crop.y + crop.height / 2 };
     this.#touched = false;
     this.#view = {
       scale,
-      x: (this.#size.width - crop.width * scale) / 2 - crop.x * scale,
-      y: (this.#size.height - crop.height * scale) / 2 - crop.y * scale,
+      x: Math.max(inset, (width - crop.width * scale) / 2) - crop.x * scale,
+      y: Math.max(inset, (height - crop.height * scale) / 2) - crop.y * scale,
     };
     this.#needsFit = false;
   }
 
   protected override render(): TemplateResult {
     const view = this.#view;
+    const crop = this.#crop();
+    const size = this.#size;
+    const overflows =
+      this.compact &&
+      crop !== null &&
+      view !== null &&
+      size !== null &&
+      (crop.width * view.scale > size.width ||
+        crop.height * view.scale + 2 * this.#fit!.inset > size.height);
     const still = this.reducedMotion ?? matchMedia("(prefers-reduced-motion: reduce)").matches;
-    return html`<div role="group" aria-label=${{ ...DEFAULT_COPY, ...this.copy }.label}>
-      ${view === null ? nothing : this.#renderGroups(view, still)}
+    return html`<div class="map-content">
+      <div class="plan" role="group" aria-label=${{ ...DEFAULT_COPY, ...this.copy }.label}>
+        ${view === null ? nothing : this.#renderGroups(view, still)}
+      </div>
+      ${overflows && this.copy.pan ? html`<span class="pan-hint" aria-hidden="true">${this.copy.pan}</span>` : nothing}
     </div>`;
   }
 

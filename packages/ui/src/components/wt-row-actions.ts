@@ -121,11 +121,16 @@ export class WtRowActions extends LitElement {
         max-width: none;
         min-width: 0;
         max-height: none;
-        padding: var(--wt-keyboard-top) 0 var(--wt-keyboard-inset);
+        --bottom-sheet-inset: max(
+          var(--wt-keyboard-inset),
+          var(--wt-row-actions-bottom-offset, 0px)
+        );
+        padding: var(--wt-keyboard-top) var(--wt-row-actions-sheet-inline-inset, 0px)
+          var(--bottom-sheet-inset);
         overflow: hidden;
         border: 0;
         border-radius: 0;
-        background: var(--wt-color-scrim);
+        background: var(--wt-row-actions-sheet-scrim, var(--wt-color-scrim));
       }
       :host([bottom-sheet]) [popover]:is(:popover-open, .\\:popover-open) {
         display: grid;
@@ -134,7 +139,7 @@ export class WtRowActions extends LitElement {
       :host([bottom-sheet]) .actions {
         box-sizing: border-box;
         max-height: calc(
-          100dvh - var(--wt-keyboard-top) - var(--wt-keyboard-inset) - var(--wt-tap-min)
+          100dvh - var(--wt-keyboard-top) - var(--bottom-sheet-inset) - var(--wt-tap-min)
         );
         overflow-y: auto;
         overscroll-behavior: contain;
@@ -509,7 +514,12 @@ export class WtRowActions extends LitElement {
         @keydown=${this.onKeydown}
         @click=${this.onPopupClick}
       >
-        <div class="actions" @click=${this.judgeAction} @auxclick=${this.judgeAuxclick}>
+        <div
+          class="actions"
+          part=${this.bottomSheet ? "sheet" : nothing}
+          @click=${this.judgeAction}
+          @auxclick=${this.judgeAuxclick}
+        >
           <slot @slotchange=${this.onSlotChange} @click=${this.onAction}></slot>
         </div>
       </div>

@@ -1,0 +1,389 @@
+import { css, html, nothing, type TemplateResult } from "lit";
+import type { FloorCueIcon, ZoneTab } from "@waitron/ui";
+import type { TableState } from "../api/floor-api.js";
+import type { StringKey } from "../i18n/strings.js";
+import { currentLocale, t } from "../i18n/t.js";
+import { kindCue, kindWords, mapKinds, topTabKind, type MapKind } from "../state/floor-look.js";
+
+type Marks = ReadonlyMap<string, { kind: MapKind; words: string }>;
+
+export const floorToastStyles = css`
+  :host {
+    --wt-floor-controls-height: 0px;
+  }
+  .submitted-toast {
+    position: fixed;
+    inset-inline: var(--wt-space-3);
+    bottom: max(
+      calc(var(--wt-tap-min) + 2 * var(--wt-space-3) + env(safe-area-inset-bottom)),
+      calc(var(--wt-floor-controls-height) + var(--wt-page-padding, 0px) + var(--wt-space-2))
+    );
+    z-index: 10;
+  }
+  .app:has(till-floor-screen[ready-bar]) .submitted-toast {
+    bottom: calc(
+      var(--wt-page-padding) + var(--wt-tap-min) + 2 * var(--wt-space-3) +
+        env(safe-area-inset-bottom)
+    );
+  }
+`;
+
+export const floorScreenFooterStyles = css`
+  .screen[data-floor-footer] {
+    position: relative;
+    padding: 0 max(var(--wt-space-3), env(safe-area-inset-right)) var(--wt-space-1)
+      max(var(--wt-space-3), env(safe-area-inset-left));
+  }
+  .screen[data-floor-footer] .zone-toolbar,
+  .screen[data-floor-footer] .actions {
+    display: contents;
+  }
+  .screen[data-floor-footer] .actions > wt-help-tooltip {
+    inset-block-start: var(--wt-space-2);
+    inset-inline-end: var(--wt-space-2);
+    z-index: 1;
+  }
+  .screen[data-floor-footer] .map {
+    flex: 1;
+  }
+  .screen[data-floor-footer] wt-floor-map {
+    flex: 1;
+    inline-size: 100%;
+    aspect-ratio: auto;
+    min-block-size: calc(var(--wt-tap-min) * 3);
+    border-radius: calc((var(--wt-radius-md) + var(--wt-radius-lg)) / 2);
+    outline: 1px solid var(--wt-color-border);
+    outline-offset: -1px;
+  }
+  .screen[data-floor-footer] wt-floor-map::part(name) {
+    --wt-floor-table-weight: 700;
+    font-size: calc((var(--wt-font-size-md) + 3 * var(--wt-font-size-lg)) / 4);
+    font-weight: var(--wt-floor-table-weight);
+  }
+`;
+
+export const floorBarStyles = css`
+  .floor-controls {
+    display: flex;
+    flex-direction: column;
+    flex: none;
+  }
+  .floor-bar {
+    --wt-floor-menu-font-size: calc((var(--wt-font-size-md) + var(--wt-font-size-lg)) / 2);
+    --wt-floor-name-font-size: calc((var(--wt-floor-menu-font-size) + var(--wt-font-size-lg)) / 2);
+    --wt-floor-bar-height: 0px;
+    --wt-row-actions-sheet-inline-inset: var(--wt-page-padding, 0px);
+    --wt-row-actions-bottom-offset: calc(
+      var(--wt-floor-bar-height, 0px) + var(--wt-page-padding, 0px)
+    );
+    --wt-row-actions-sheet-scrim: linear-gradient(
+      var(--wt-color-scrim) calc(100% - var(--wt-row-actions-bottom-offset)),
+      transparent 0
+    );
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: var(--wt-space-2);
+    padding: var(--wt-space-2) max(var(--wt-space-3), env(safe-area-inset-right))
+      max(var(--wt-space-2), env(safe-area-inset-bottom))
+      max(var(--wt-space-3), env(safe-area-inset-left));
+    background: var(--wt-color-surface);
+    border-block-start: 1px solid var(--wt-color-border);
+  }
+  @media (orientation: portrait) {
+    .shell:has(> .floor-controls) > .region,
+    .floor-controls {
+      margin-inline: calc(-1 * var(--wt-page-padding, 0px));
+    }
+    .floor-bar {
+      --wt-row-actions-sheet-inline-inset: 0px;
+    }
+  }
+  .floor-bar > [data-view-toggle]::part(button) {
+    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
+  }
+  .floor-bar > wt-row-actions::part(trigger) {
+    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1));
+    inline-size: 100%;
+    border: 1px solid var(--wt-color-border);
+    background: var(--wt-color-surface);
+  }
+  .floor-bar [data-floor-zone-chooser]::part(trigger) {
+    overflow-wrap: anywhere;
+    justify-content: start;
+    font-size: var(--wt-font-size-lg);
+    font-weight: var(--wt-font-weight-bold);
+    text-align: start;
+  }
+  .floor-bar .floor-menu::part(trigger) {
+    min-inline-size: calc(var(--wt-tap-min) + var(--wt-space-1));
+  }
+  .floor-bar [slot="badge"] {
+    inset-block-start: calc(-1 * var(--wt-space-1));
+    inset-inline-end: calc(-1 * var(--wt-space-1));
+  }
+  .floor-bar wt-row-actions::part(sheet)::before {
+    content: "";
+    display: block;
+    inline-size: var(--wt-tap-min);
+    block-size: var(--wt-space-1);
+    flex: none;
+    align-self: center;
+    margin-block: var(--wt-space-1) var(--wt-space-2);
+    border-radius: var(--wt-radius-full);
+    background: var(--wt-color-border);
+  }
+  .floor-bar [data-floor-zone] {
+    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-4));
+    border-block-end: 1px solid var(--wt-color-border);
+    border-radius: 0;
+    font-size: var(--wt-floor-name-font-size);
+    font-weight: var(--wt-font-weight-bold);
+  }
+  .floor-bar [data-floor-zone][aria-checked="true"] [data-row-check] {
+    --wt-action-native-icon-color: var(--wt-color-primary);
+    color: var(--wt-action-native-icon-color);
+  }
+  .floor-bar [data-open-device-zones] {
+    justify-content: center;
+    color: var(--wt-color-primary-text);
+    font-size: calc((var(--wt-font-size-md) + var(--wt-floor-menu-font-size)) / 2);
+    font-weight: var(--wt-font-weight-bold);
+    text-align: center;
+  }
+  .floor-bar .settings-heading,
+  .floor-bar [data-menu-heading] {
+    margin: 0;
+    padding: var(--wt-space-2) var(--wt-space-4) var(--wt-space-1);
+    border-block-end: 1px solid var(--wt-color-border);
+    color: var(--wt-color-text-muted);
+    font-size: var(--wt-font-size-sm);
+    font-weight: var(--wt-font-weight-bold);
+    text-transform: uppercase;
+  }
+  .floor-bar summary.settings-heading,
+  .floor-help {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-sizing: border-box;
+    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
+    padding-inline: var(--wt-space-4);
+    border-block-end: 1px solid var(--wt-color-border);
+    color: var(--wt-color-text);
+    font-size: var(--wt-floor-menu-font-size);
+    font-weight: var(--wt-font-weight-normal);
+    text-transform: none;
+  }
+  .floor-bar summary.settings-heading {
+    cursor: pointer;
+  }
+  .floor-bar summary.settings-heading::after {
+    content: "›" / "";
+  }
+  .floor-bar details[open] > summary.settings-heading::after {
+    content: "⌄" / "";
+  }
+  .floor-bar .floor-menu wt-button::part(button) {
+    min-block-size: var(--wt-tap-min);
+    padding-inline: var(--wt-space-4);
+  }
+  .floor-bar .floor-menu wt-button:not([data-clock-action="out"]) {
+    inline-size: 100%;
+  }
+  .floor-bar .floor-menu wt-button:not([data-clock-action="out"])::part(button) {
+    min-block-size: calc(var(--wt-tap-min) + var(--wt-space-1) / 2);
+    border-block-end: 1px solid var(--wt-color-border);
+    border-radius: 0;
+    font-size: var(--wt-floor-menu-font-size);
+  }
+  .floor-bar .floor-menu wt-button:not([data-clock-action="out"], .logout)::part(button)::after {
+    content: "›" / "";
+    margin-inline-start: auto;
+    color: var(--wt-color-text-muted);
+  }
+  .floor-bar .floor-menu .logout::part(button) {
+    color: var(--wt-color-primary-text);
+    font-weight: var(--wt-font-weight-bold);
+  }
+  .floor-bar [data-floor-count] {
+    margin-inline-start: auto;
+    color: var(--wt-color-text-muted);
+  }
+  .floor-bar .floor-menu wt-button:has([data-floor-count])::part(button)::after {
+    margin-inline-start: 0;
+  }
+  .floor-operator {
+    display: flex;
+    align-items: center;
+    gap: var(--wt-space-2);
+    padding: var(--wt-space-2) var(--wt-space-3);
+  }
+  .floor-operator-initials {
+    display: grid;
+    place-items: center;
+    min-inline-size: var(--wt-tap-min);
+    min-block-size: var(--wt-tap-min);
+    border-radius: var(--wt-radius-full);
+    background: var(--wt-color-primary);
+    color: var(--wt-color-on-primary);
+    font-weight: var(--wt-font-weight-bold);
+  }
+  .floor-operator .operator {
+    flex: 1;
+    font-size: var(--wt-floor-name-font-size);
+    font-weight: bold;
+    overflow-wrap: anywhere;
+  }
+  .floor-operator [data-clock-action] {
+    width: auto;
+  }
+  .floor-operator [data-clock-action]::part(button) {
+    border: 1px solid var(--wt-color-border);
+    border-radius: var(--wt-radius-md);
+  }
+  [data-floor-other-zone] {
+    margin: var(--wt-space-1) max(var(--wt-space-3), env(safe-area-inset-right)) var(--wt-space-2)
+      max(var(--wt-space-3), env(safe-area-inset-left));
+  }
+  [data-floor-other-zone]::part(button) {
+    min-block-size: var(--wt-tap-min);
+    justify-content: start;
+    background: var(--wt-color-tab-warning-tint);
+    font-weight: var(--wt-font-weight-normal);
+    text-align: start;
+  }
+  [data-floor-other-zone] [aria-hidden] {
+    margin-inline-start: auto;
+  }
+  .floor-zone-mark {
+    margin-inline-start: auto;
+    padding-inline: var(--wt-space-2);
+    border-radius: var(--wt-radius-full);
+    background: var(--wt-color-field-fill);
+  }
+  .floor-zone-mark[data-mark="ready"] {
+    background: var(--wt-color-success);
+    color: var(--wt-color-on-success);
+  }
+`;
+
+export function floorMenuSection(label: StringKey, rows: TemplateResult) {
+  return html`<section class="settings-group" aria-label=${t(label)}>
+    <span class="settings-heading">${t(label)}</span>${rows}
+  </section>`;
+}
+
+export function floorOperatorLine(
+  name: string,
+  operator: TemplateResult,
+  clockOut: TemplateResult | typeof nothing,
+) {
+  const initials = name
+    .trim()
+    .split(/\s+/u, 2)
+    .map((word) => Array.from(word)[0])
+    .join("")
+    .toLocaleUpperCase(currentLocale());
+  return html`<div class="floor-operator">
+    <span class="floor-operator-initials" aria-hidden="true">${initials}</span
+    >${operator}${clockOut}
+  </div>`;
+}
+
+export function measureFloorControls(controls: HTMLElement): number {
+  const bar = controls.querySelector("footer")!;
+  bar.style.setProperty("--wt-floor-bar-height", `${bar.getBoundingClientRect().height}px`);
+  return controls.getBoundingClientRect().height;
+}
+
+export function floorZoneControls(
+  tabs: readonly ZoneTab[],
+  marks: Marks,
+  active: string | undefined,
+  view: "map" | "list",
+  select: (key: string) => void,
+  toggle: () => void,
+  choose: () => void,
+) {
+  const name = tabs.find((tab) => tab.key === active)?.name ?? t("floor.zones");
+  return html`<wt-row-actions data-floor-zone-chooser bottom-sheet label=${name}>
+      <span slot="trigger">${name} <span aria-hidden="true">⌃</span></span>
+      <div role="menu" aria-label=${t("floor.zones")}>
+        ${tabs.map(({ key, name }) => {
+          const mark = marks.get(key);
+          return html`<button
+            type="button"
+            role="menuitemradio"
+            data-row-choice
+            data-floor-zone=${key}
+            aria-checked=${key === active ? "true" : "false"}
+            @click=${() => select(key)}
+          >
+            <wt-icon data-row-check name="menu-check" size="lg"></wt-icon>${name}
+            ${mark ? html`<span class="floor-zone-mark" data-mark=${mark.kind}>${mark.words}</span>` : nothing}
+          </button>`;
+        })}
+        <button
+          type="button"
+          role="menuitem"
+          data-row-choice
+          data-open-device-zones
+          @click=${choose}
+        >
+          ${t("floor.choose_zones")}
+        </button>
+      </div>
+    </wt-row-actions>
+    <wt-button variant="secondary" data-view-toggle @click=${toggle}>
+      ${t(view === "map" ? "floor.view_list" : "floor.view_map")}
+    </wt-button>`;
+}
+
+export function floorOtherZone(
+  tabs: readonly ZoneTab[],
+  marks: Marks,
+  active: string | undefined,
+  select: (key: string) => void,
+) {
+  const others = tabs.filter(({ key }) => key !== active && marks.has(key));
+  const top = topTabKind(new Set(others.map(({ key }) => marks.get(key)!.kind)));
+  const zone = others.find(({ key }) => marks.get(key)!.kind === top);
+  return zone === undefined
+    ? nothing
+    : html`<wt-button data-floor-other-zone variant="secondary" @click=${() => select(zone.key)}>
+        <span><strong>${zone.name}</strong> · ${marks.get(zone.key)!.words}</span>
+        <span aria-hidden="true">›</span>
+      </wt-button>`;
+}
+
+/** What a hidden zone's tab shows: its tables' most urgent state. */
+export interface ZoneTabMark {
+  kind: MapKind;
+  icon: FloorCueIcon | null;
+  words: string;
+}
+
+export function zoneTabMarks(
+  tables: readonly TableState[],
+  tabs: readonly ZoneTab[],
+  activeKey: string | undefined,
+  now: number,
+): Map<string, ZoneTabMark> {
+  const hidden = new Set(tabs.map((tab) => tab.key).filter((key) => key !== activeKey));
+  const byZone = new Map<string, { table: TableState; kinds: MapKind[] }[]>();
+  for (const table of tables) {
+    if (table.zoneId === null || !hidden.has(table.zoneId)) continue;
+    const rows = byZone.get(table.zoneId) ?? [];
+    rows.push({ table, kinds: mapKinds(table, now) });
+    byZone.set(table.zoneId, rows);
+  }
+  const marks = new Map<string, ZoneTabMark>();
+  for (const [zoneId, rows] of byZone) {
+    const kind = topTabKind(new Set(rows.flatMap((row) => row.kinds)));
+    if (kind === null) continue;
+    const members = rows.filter((row) => row.kinds.includes(kind)).map((row) => row.table);
+    const icon = kindCue(kind, members, now)?.icon ?? null;
+    marks.set(zoneId, { kind, icon, words: kindWords(kind, members, now) });
+  }
+  return marks;
+}
