@@ -38,8 +38,8 @@ const pendingApi = new Proxy(
   { get: (_target, key) => (key === "then" ? undefined : () => new Promise(() => {})) },
 ) as TillApi;
 
-async function onPage(width: number): Promise<void> {
-  await page.viewport(width, 900);
+async function onPage(width: number, height = 900): Promise<void> {
+  await page.viewport(width, height);
   expect(window.innerWidth).toBe(width);
   pageStyle = document.createElement("style");
   pageStyle.textContent = pageStyleText;
@@ -134,8 +134,11 @@ describe("device screens at phone width", () => {
     });
   }
 
-  it("fits the Downstairs bar stools as named tap targets at 390px", async () => {
-    await onPage(390);
+  it.each([
+    [390, 844],
+    [844, 390],
+  ])("fits the Downstairs bar stools as named tap targets at %i × %i px", async (width, height) => {
+    await onPage(width, height);
     const { el } = await mountWidget<TillFloorScreen>("till-floor-screen", {
       canChangeToday: true,
       zones: [

@@ -1330,8 +1330,8 @@ their midpoint; the wheel pans and Ctrl+wheel zooms ×2 per 100 px of `deltaY`
 about the pointer, the wheel event always prevented. A wheel reporting lines counts 16 px a line,
 and one reporting pages the map's width (`deltaX`) or height (`deltaY`) a page. Zoom runs from half to four times the fitted
 scale, and a pan stops with the crop's centre at the map's edge. Tables sharing a `joinId` are one button covering their turned boxes, named by its name for today, else by `mergeLabel` of its tables' shown names (each table's name for today, else its label; "Terrace 4+5", "4+10", "Bar+Window"), whose `data-table-id` is its first member's by label in number order; each table is
-drawn at its plan size and angle. In a shallow map, a row of separate fixed round stools can
-draw at `--wt-tap-min` with names when the targets fit side by side. Groups (a table, or a
+drawn at its plan size and angle. A row of separate fixed round stools drawn smaller than
+`--wt-tap-min` can take that size and show names when the targets fit side by side. Groups (a table, or a
 merge) sharing a `linkId` are one party at several groups: each stays its own button and is dragged
 alone, and one `<svg part="links">` per party, drawn under the buttons and taking no pointer, joins
 the centres of its groups in the number order of their first members' labels with 1 px
