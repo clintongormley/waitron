@@ -333,6 +333,20 @@ function markTypeImports(project, modules) {
   }
 }
 
+function restoreRuntimeImports(project, file) {
+  const service = project.service;
+  for (;;) {
+    // Move to File can choose a type import when a later `typeof` use follows a value use.
+    const diagnostic = service.getSemanticDiagnostics(file).find(({ code }) => code === 1361);
+    if (!diagnostic) return;
+    const { code, start, length } = diagnostic;
+    const [fix] = service.getCodeFixesAtPosition(file, start, start + length, [code], {}, {});
+    for (const { fileName, textChanges } of fix.changes) {
+      project.set(fileName, replace(project.readFile(fileName), textChanges));
+    }
+  }
+}
+
 function verifyClientImports(source, targets, allowedType, readFile) {
   const files = new Set([source, ...Object.keys(targets)]);
   const checked = new Set();
@@ -728,7 +742,10 @@ export async function main([mapFile], root) {
       project.set(file, groupForTypeScript(original, targets));
     }
     for (const operation of operations) moveDeclarations(project, ...operation);
-    if (routeTargets.size) markTypeImports(project, routeTargets);
+    if (routeTargets.size) {
+      markTypeImports(project, routeTargets);
+      for (const file of routeTargets) restoreRuntimeImports(project, file);
+    }
     for (const { file, destinations } of clients) {
       redirectInlineImports(project, file, destinations);
       markTypeImports(project, new Set(Object.keys(destinations)));

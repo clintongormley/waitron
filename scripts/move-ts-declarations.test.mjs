@@ -502,6 +502,37 @@ describe("move-ts-declarations", () => {
     );
   });
 
+  it("keeps a runtime import when a lifted group also uses it in a type query", async () => {
+    write("tsconfig.json", '{"compilerOptions":{"module":"NodeNext","verbatimModuleSyntax":true}}');
+    write("table.ts", 'export const table = { row: "record" };\n');
+    write(
+      "original.ts",
+      [
+        'import { table } from "./table.js";',
+        "",
+        "interface Router {",
+        "  post(path: string, handler: () => string): void;",
+        "}",
+        "",
+        "export function mount(app: Router) {",
+        "  const read = () => table.row;",
+        "  const select = (rows: (typeof table.row)[]) => rows[0];",
+        '  app.post("/start", () => select([read()]));',
+        "}",
+      ].join("\n"),
+    );
+    const withLocal = {
+      ...lift,
+      groups: {
+        mountStart: { first: "local read", last: "post /start", parameters: { app: "Router" } },
+      },
+    };
+
+    await move("original.ts", { "start.ts": ["mountStart"] }, ["Router", "mount"], withLocal);
+
+    expect(read("start.ts")).toContain('import { table } from "./table.js";');
+  });
+
   it("refuses a range whose end route comes before its start", async () => {
     write("original.ts", mount);
     const reversed = {
