@@ -866,8 +866,9 @@ this floor — removing the `min-width` regresses that guard.
 
 Use `wt-full-screen-panel` when your actions need to stay visible while the details scroll. Give
 the panel a container with a set height. Put the top bar in `header` and the actions in `footer`.
-The default slot scrolls between them. Supply `body-label` to name that area when it needs a
-keyboard tab stop. For a modal, put the panel inside `wt-dialog full-screen`. Set the dialog's
+The default slot scrolls between them. Always set `body-label` so the area has a name when it
+becomes a keyboard tab stop. For a modal, put the panel inside `wt-dialog full-screen`. The
+dialog's outer body clips its content, so the panel supplies the scrolling. Set the dialog's
 `aria-label` and put any heading or description in the panel itself. Send Back through
 `requestClose` to keep the dialog's leave check. Keep validation messages and recovery links
 immediately above your foot actions.

@@ -24,8 +24,8 @@ describe.each(["light", "dark"] as const)("wt-full-screen-panel (%s)", (theme) =
     await expectNoA11yViolations(host);
   });
 
-  test("composes the named full-screen dialog with pinned bars and usable controls", async () => {
-    await page.viewport(390, 844);
+  test("keeps both bars in the named dialog when the panel body overflows", async () => {
+    await page.viewport(390, 568);
     await mountThemed(
       `<wt-dialog full-screen aria-label="Pay" open>
         <wt-full-screen-panel body-label="Payment options">
@@ -54,8 +54,10 @@ describe.each(["light", "dark"] as const)("wt-full-screen-panel (%s)", (theme) =
     );
     await expect.element(page.getByRole("dialog", { name: "Pay" })).toBeVisible();
     const panel = host.querySelector("wt-full-screen-panel")!;
+    const body = panel.shadowRoot!.querySelector<HTMLElement>("[part=body]")!;
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
     expect(panel.querySelector("wt-top-bar")!.getBoundingClientRect().top).toBe(0);
-    expect(panel.querySelector("wt-foot-button-bar")!.getBoundingClientRect().bottom).toBe(844);
+    expect(panel.querySelector("wt-foot-button-bar")!.getBoundingClientRect().bottom).toBe(568);
     await expectNoA11yViolations(host);
   });
 });

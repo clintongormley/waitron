@@ -49,6 +49,6 @@ test("supports native activation and disables it when asked", async () => {
   tile.setAttribute("disabled", "");
   await (tile as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(button!.disabled).toBe(true);
-  button!.click();
+  await userEvent.click(tile, { force: true });
   expect(pressed).toHaveBeenCalledTimes(2);
 });
