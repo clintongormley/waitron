@@ -46,9 +46,13 @@ unrecognised or invalid saved state for diagnosis. Do not erase it to force a ve
 
 ## Recover through setup
 
-Start a fresh recovery in setup on the qualified build. Setup asks Cloud for a checked copy
-matched to this build's verification target. Review that copy, use your venue's master key to
-prepare recovery and confirm that the old box is offline and this is your only recovery. After
+Start a fresh recovery in setup on the qualified build. Setup lists the copies checked for this
+build's verification target and selects the newest. Choose the copy you want before you review
+it. If the list is empty, [check which build the verifier is pinned to](#pin-the-build-you-will-run)
+and choose **Check approval** when a checked copy is available.
+
+Review the copy, use your venue's master key to prepare recovery, and confirm that the old box is
+offline and this is your only recovery. After
 the box restarts, check that Cloud acknowledges the same request and copy while approval is live.
 
 Keep the same build from the first setup request until Cloud acknowledges the restore. Use a

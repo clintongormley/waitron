@@ -4,6 +4,7 @@ import {
   cleanupWidgets,
   mountWidget,
   REVIEWED_CREDENTIALS,
+  REVIEWED_PREVIEW,
   reviewBackup,
 } from "../widgets/test-helpers.js";
 import type { SetupCloudRestoreScreen } from "./cloud-restore-screen.js";
@@ -53,6 +54,39 @@ const ACKNOWLEDGE_PROBLEM =
   "Confirm that the old box and surviving peers are stopped, and that you accept losing changes after this snapshot.";
 
 describe("Cloud restore screen", () => {
+  it("offers Check approval when Cloud has no checked copy", async () => {
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: { ...approvedView(), point: undefined, points: [] },
+    });
+    expect(el.shadowRoot!.textContent).toContain(
+      "Waitron Cloud has no checked copy of this venue yet.",
+    );
+    expect(q(el, "[data-test=check]")).not.toBeNull();
+    expect(q(el, "setup-recovery-copy")).toBeNull();
+  });
+
+  it("locks both choices during Review backup and keeps them locked after success", async () => {
+    const view = approvedView();
+    const older = approvedView("75ad2157-93d0-4438-8c56-7429c45e58ba").point;
+    const { el } = await mountWidget<SetupCloudRestoreScreen>("setup-cloud-restore-screen", {
+      view: { ...view, points: [view.point, older] },
+    });
+    let finishReview!: (preview: typeof REVIEWED_PREVIEW) => void;
+    const reply = new Promise<typeof REVIEWED_PREVIEW>((resolve) => {
+      finishReview = resolve;
+    });
+    vi.spyOn(el.api, "previewCloudRestore").mockReturnValue(reply);
+    const copy = el.shadowRoot!.querySelector("setup-recovery-copy")!;
+    await copy.updateComplete;
+    const reviewing = copy.review();
+    await el.updateComplete;
+    const choices = el.shadowRoot!.querySelector<HTMLFieldSetElement>("fieldset")!;
+    expect(choices.disabled).toBe(true);
+    finishReview(REVIEWED_PREVIEW);
+    await reviewing;
+    await el.updateComplete;
+    expect(choices.disabled).toBe(true);
+  });
   it("starts pairing and shows only the code, link and deadline", async () => {
     const { el, host } = await mountWidget<SetupCloudRestoreScreen>(
       "setup-cloud-restore-screen",

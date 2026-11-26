@@ -67,18 +67,26 @@ const point = {
   deleting: false,
   deletedAt: null,
 };
-function verification() {
+function verification(selected = point) {
   const t = target();
   return {
     protocol: "backup-data-restore/v1",
     target: t,
     policyDigest: t.policyDigest,
     requestDigest: "1".repeat(64),
-    archiveSha256: point.digest,
+    archiveSha256: selected.digest,
     archiveBytes: 7,
-    pointId: point.id,
+    pointId: selected.id,
   };
 }
+const olderId = "715955bb-2dbd-4481-9746-f6d3e95a8651";
+const older = {
+  ...point,
+  id: olderId,
+  capturedAt: "2026-09-23T10:00:00.000Z",
+  objectKey: `snapshots/${olderId}`,
+};
+const operationExpiresAt = () => new Date(Date.now() + 60 * 60_000).toISOString();
 const dirs: string[] = [];
 afterEach(async () => {
   vi.restoreAllMocks();
@@ -119,6 +127,13 @@ async function fixture() {
         expiresAt: f.expiresAt,
       };
     else if (action === "restored") result = { version: 2, status: "restored" };
+    else if (action === "points")
+      result = {
+        version: 2,
+        venueId: point.venueId,
+        operationExpiresAt: operationExpiresAt(),
+        points: [point, older],
+      };
     else
       result = {
         version: 2,
@@ -177,6 +192,99 @@ async function fixture() {
   };
 }
 
+describe("choosing the approved venue's snapshot", () => {
+  it("leaves a named Cloud approval unselected until the box lists and selects", async () => {
+    const f = await fixture();
+    const client = createCloudRecoveryClient(f.options);
+    await client.start();
+    expect(await client.status()).toMatchObject({ state: "approved" });
+    expect(f.calls.map(({ action }) => action)).toEqual(["start", "status"]);
+    const list = await client.points();
+    expect(list.points?.map(({ id }) => id)).toEqual([point.id, olderId]);
+    expect(list.points?.[0]).toEqual({
+      id: point.id,
+      venueId: point.venueId,
+      capturedAt: point.capturedAt,
+      modules: { core: 1 },
+    });
+    expect(f.calls.at(-1)?.payload.slice(3, 5)).toEqual(["points", ""]);
+    expect((await f.saved()).pointId).toBeUndefined();
+  });
+
+  it.each([{ verification: "unchecked" }, { venueId: olderId }])(
+    "refuses a list containing a point with %j",
+    async (fault) => {
+      const f = await fixture();
+      const client = createCloudRecoveryClient(f.options);
+      await client.start();
+      f.rewrite = (action, result) =>
+        action === "points" ? { ...result, points: [point, { ...older, ...fault }] } : result;
+      await expect(client.points()).rejects.toMatchObject(cloudUnavailable);
+    },
+  );
+
+  it.each([
+    { status: 400, error: "invalid_input", notice: "stale", actions: ["select", "points"] },
+    { status: 403, error: "proof_required", notice: "approve_again", actions: ["select"] },
+    { status: 409, error: "conflict", notice: "fixed", actions: ["select"] },
+    { status: 410, error: "unavailable", notice: undefined, actions: ["select"] },
+  ])("keeps the saved selection on a $status $error response", async (refusal) => {
+    const f = await fixture();
+    const fetchCloud = f.options.fetch!;
+    f.options.fetch = async (url, init) => {
+      const reply = await fetchCloud(url, init);
+      return f.calls.at(-1)?.payload[4] === olderId
+        ? Response.json({ error: refusal.error }, { status: refusal.status })
+        : reply;
+    };
+    const client = createCloudRecoveryClient(f.options);
+    await client.start();
+    await client.select(point.id, point.venueId);
+    const confirmed = await f.saved();
+    f.calls.length = 0;
+    const result = await client.select(olderId, point.venueId);
+    expect(result.state).toBe(refusal.status === 410 ? "expired" : "approved");
+    expect(result.selectionNotice).toBe(refusal.notice);
+    expect(f.calls.map(({ action }) => action)).toEqual(refusal.actions);
+    expect(await f.saved()).toEqual(confirmed);
+  });
+
+  it("repeats the same choice once after a lost reply and restores that archive", async () => {
+    const f = await fixture();
+    let lost = false,
+      chosen = point;
+    const fetchCloud = f.options.fetch!;
+    f.options.fetch = async (url, init) => {
+      const reply = await fetchCloud(url, init);
+      if (f.calls.at(-1)?.action === "select" && !lost) {
+        lost = true;
+        throw new TypeError("connection reset after selection");
+      }
+      return reply;
+    };
+    f.rewrite = (action, result) => {
+      if (action === "select") chosen = older;
+      return ["select", "info", "read"].includes(action)
+        ? { ...result, point: chosen, verification: verification(chosen) }
+        : result;
+    };
+    const client = createCloudRecoveryClient(f.options);
+    await client.start();
+    expect((await client.select(olderId, point.venueId)).point?.id).toBe(olderId);
+    expect(
+      f.calls.filter(({ action }) => action === "select").map(({ payload }) => payload[4]),
+    ).toEqual([olderId, olderId]);
+    const staged = vi.fn(async () => {});
+    await client.restore(staged, olderId);
+    expect(staged).toHaveBeenCalledWith(
+      expect.objectContaining({
+        managedCloud: { requestId: (await f.saved()).requestId, pointId: olderId },
+        snapshotVerification: verification(older),
+      }),
+    );
+  });
+});
+
 describe("target-bound snapshot recovery v2", () => {
   it("exports a strict saved-target reader and target comparator", () => {
     expect(v2.readSavedSnapshotRecoveryTarget).toBeTypeOf("function");
@@ -229,11 +337,12 @@ describe("target-bound snapshot recovery v2", () => {
       target: target(),
     });
   });
-  it("uses bound proofs for status, info, read and restored and carries exact verification into the restore request", async () => {
+  it("uses bound proofs for status, select, info, read and restored and carries exact verification into the restore request", async () => {
     const f = await fixture();
     const client = createCloudRecoveryClient(f.options);
     await client.start();
     await client.status();
+    await client.select(point.id, point.venueId);
     let staged: unknown;
     await client.restore(async (request) => {
       expect(await readFile(request.artifactPath, "utf8")).toBe("archive");
@@ -285,7 +394,12 @@ describe("target-bound snapshot recovery v2", () => {
               origin,
               saved.requestId,
               call.action,
-              ["read", "restored"].includes(call.action) ? point.digest : "",
+              (
+                { read: point.digest, restored: point.digest, select: point.id } as Record<
+                  string,
+                  string
+                >
+              )[call.action] ?? "",
               target().digest,
               expect.any(Number),
             ],
@@ -319,6 +433,7 @@ describe("target-bound snapshot recovery v2", () => {
     const f = await fixture();
     const client = createCloudRecoveryClient(f.options);
     await client.start();
+    await client.select(point.id, point.venueId);
     await client.restore(async () => {}, point.id);
     const saved = await f.saved();
     await client.markRestored({ requestId: String(saved.requestId), pointId: point.id });
@@ -359,6 +474,7 @@ describe("target-bound snapshot recovery v2", () => {
       const f = await fixture();
       const client = createCloudRecoveryClient(f.options);
       await client.start();
+      await client.select(point.id, point.venueId);
       let infos = 0;
       f.rewrite = (action, result) => {
         if (action === "info") infos++;
@@ -394,7 +510,7 @@ describe("target-bound snapshot recovery v2", () => {
     const f = await fixture();
     await createCloudRecoveryClient(f.options).start();
     f.rewrite = (action, result) => {
-      if (action !== "info") return result;
+      if (action !== "select") return result;
       const descriptor: Record<string, unknown> = { ...verification() };
       if (fault === "missing") delete result.verification;
       else {
@@ -415,9 +531,9 @@ describe("target-bound snapshot recovery v2", () => {
       }
       return result;
     };
-    await expect(createCloudRecoveryClient(f.options).status()).rejects.toMatchObject(
-      cloudUnavailable,
-    );
+    await expect(
+      createCloudRecoveryClient(f.options).select(point.id, point.venueId),
+    ).rejects.toMatchObject(cloudUnavailable);
     expect((await f.saved()).pointId).toBeUndefined();
     expect(f.options.download).not.toHaveBeenCalled();
   });
@@ -427,6 +543,7 @@ describe("target-bound snapshot recovery v2", () => {
       const f = await fixture();
       const client = createCloudRecoveryClient(f.options);
       await client.start();
+      await client.select(point.id, point.venueId);
       let infos = 0;
       f.rewrite = (action, result) => {
         if (action === "info") infos++;
@@ -445,6 +562,7 @@ describe("target-bound snapshot recovery v2", () => {
       const f = await fixture();
       const client = createCloudRecoveryClient(f.options);
       await client.start();
+      await client.select(point.id, point.venueId);
       if (where === "before-info") f.changeTarget();
       if (where === "during-info")
         f.rewrite = (action, result) => {
@@ -466,7 +584,7 @@ describe("target-bound snapshot recovery v2", () => {
     const f = await fixture();
     const client = createCloudRecoveryClient(f.options);
     await client.start();
-    await client.status();
+    await client.select(point.id, point.venueId);
     f.rewrite = (action, result) =>
       action === "info"
         ? { ...result, verification: { ...verification(), requestDigest: "2".repeat(64) } }
@@ -614,7 +732,7 @@ describe("target-bound snapshot recovery v2", () => {
     });
     const client = createCloudRecoveryClient(f.options);
     await client.start();
-    await client.status();
+    await client.select(point.id, point.venueId);
     expect((await stat(join(f.stateDir, "cloud/recovery.json"))).size).toBeGreaterThan(16384);
     const saved = await v2.readSavedSnapshotRecoveryTarget(f.stateDir);
     expect(saved?.target.modules).toHaveLength(32);
@@ -695,14 +813,14 @@ describe("target-bound snapshot recovery v2", () => {
     const client = createCloudRecoveryClient(f.options);
     await client.start();
     f.rewrite = (action, result) =>
-      action === "info"
+      action === "select"
         ? {
             ...result,
             point: { ...point, size: 2_147_483_648 },
             verification: { ...verification(), archiveBytes: 2_147_483_648 },
           }
         : result;
-    await expect(client.status()).resolves.toMatchObject({
+    await expect(client.select(point.id, point.venueId)).resolves.toMatchObject({
       state: "approved",
       point: { id: point.id },
     });
@@ -714,7 +832,7 @@ describe("target-bound snapshot recovery v2", () => {
       const f = await fixture();
       await createCloudRecoveryClient(f.options).start();
       f.rewrite = (action, result) => {
-        if (action !== "info") return result;
+        if (action !== "select") return result;
         const v: Record<string, unknown> = { ...verification() };
         if (fault === "empty") v.archiveBytes = 0;
         if (fault === "fraction") v.archiveBytes = 7.5;
@@ -729,9 +847,9 @@ describe("target-bound snapshot recovery v2", () => {
           verification: v,
         };
       };
-      await expect(createCloudRecoveryClient(f.options).status()).rejects.toMatchObject(
-        cloudUnavailable,
-      );
+      await expect(
+        createCloudRecoveryClient(f.options).select(point.id, point.venueId),
+      ).rejects.toMatchObject(cloudUnavailable);
     },
   );
   it.each([
@@ -826,7 +944,7 @@ it.each([false, true])(
     const f = await fixture();
     const client = createCloudRecoveryClient(f.options);
     const original = await client.start();
-    await client.status();
+    await client.select(point.id, point.venueId);
     const venueDir = join(f.stateDir, "venue");
     await mkdir(venueDir);
     const password = "backup administrator password";

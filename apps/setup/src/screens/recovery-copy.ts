@@ -78,6 +78,7 @@ export class SetupRecoveryCopy extends LitElement {
   @property({ attribute: false }) bucketKit?: string;
   @property({ attribute: false }) cloudPointId?: string;
   @property({ attribute: false }) selectionId?: string;
+  @property({ type: Boolean }) reviewDisabled = false;
   @property({ type: Boolean }) oldBoxGone = false;
   @state() private preview?: RecoveryBackupPreview;
   @state() private busy = false;
@@ -253,7 +254,7 @@ export class SetupRecoveryCopy extends LitElement {
   #notifyPreview(): void {
     this.dispatchEvent(
       new CustomEvent("recovery-preview", {
-        detail: { preview: this.preview },
+        detail: { preview: this.preview, reviewing: this.busy },
         bubbles: true,
         composed: true,
       }),
@@ -273,7 +274,7 @@ export class SetupRecoveryCopy extends LitElement {
   }
 
   async #review(): Promise<void> {
-    if (!this.#canReview || this.busy) return;
+    if (!this.#canReview || this.busy || this.reviewDisabled) return;
     const artifact = this.artifact;
     const bucketKit = this.bucketKit;
     const cloudPointId = this.cloudPointId;
@@ -345,7 +346,10 @@ export class SetupRecoveryCopy extends LitElement {
         this.#notifyRefusal(error);
       }
     } finally {
-      if (current()) this.busy = false;
+      if (current()) {
+        this.busy = false;
+        if (cloudPointId !== undefined) this.#notifyPreview();
+      }
     }
   }
 
@@ -447,7 +451,7 @@ export class SetupRecoveryCopy extends LitElement {
         <wt-button
           data-test="preview"
           variant=${this.#canReview ? "primary" : "secondary"}
-          ?disabled=${!this.#canReview || this.busy}
+          ?disabled=${!this.#canReview || this.busy || this.reviewDisabled}
           ?loading=${this.busy}
           @click=${() => void this.#review()}
           >${t("restore.preview_action")}</wt-button

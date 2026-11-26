@@ -99,6 +99,7 @@ export function dispatchBucketRestoreRequested(
 /** `cloud-restore-action`'s detail. */
 export type CloudRestoreActionDetail =
   | { action: "start" | "status" | "start-again" }
+  | { action: "select"; pointId: string }
   | ({ action: "restore"; pointId: string; oldBoxGone: boolean } & RecoveryRestoreCredentials);
 
 export interface ConfigurationRequestDetail {

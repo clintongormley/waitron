@@ -1,5 +1,6 @@
 import { LitElement, type PropertyValues, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { live } from "lit/directives/live.js";
 import {
   FormFeedback,
   baseStyles,
@@ -48,8 +49,11 @@ export class SetupCloudRestoreScreen extends LitElement {
         border-inline-start: var(--wt-space-1) solid var(--wt-color-border);
         padding: var(--wt-space-2) var(--wt-space-4);
       }
-      h2 {
-        font-size: var(--wt-font-size-lg);
+      fieldset {
+        display: grid;
+        gap: var(--wt-space-2);
+        margin-block: var(--wt-space-4);
+        border: 1px solid var(--wt-color-border);
       }
     `,
   ];
@@ -72,6 +76,8 @@ export class SetupCloudRestoreScreen extends LitElement {
   /** As `setup-recovery-copy` last announced. */
   @state() private reviewNeeded = false;
   @state() private recoveryInvalid = false;
+  @state() private reviewing = false;
+  @state() private reviewed = false;
   private readonly feedback = new FormFeedback(this);
   #approvalBinding?: string;
 
@@ -107,6 +113,8 @@ export class SetupCloudRestoreScreen extends LitElement {
           : undefined;
       this.acknowledged = confirmation?.acknowledged ?? false;
       this.oldBoxGone = confirmation?.oldBoxGone ?? false;
+      this.reviewing = false;
+      this.reviewed = false;
       this.feedback.reset();
       this.#approvalBinding = binding;
     }
@@ -153,7 +161,7 @@ export class SetupCloudRestoreScreen extends LitElement {
   }
 
   #action(action: "start" | "status" | "start-again" | "restore"): void {
-    if (this.busy) return;
+    if (this.busy || this.reviewing) return;
     if (action === "restore") {
       if (
         this.view?.state !== "approved" ||
@@ -171,6 +179,10 @@ export class SetupCloudRestoreScreen extends LitElement {
     const detail: CloudRestoreActionDetail | undefined =
       action === "restore" ? this.#restoreDetail() : { action };
     if (!detail) return;
+    this.#dispatchAction(detail);
+  }
+
+  #dispatchAction(detail: CloudRestoreActionDetail): void {
     this.feedback.dismiss("refusal");
     this.dispatchEvent(
       new CustomEvent("cloud-restore-action", { detail, bubbles: true, composed: true }),
@@ -196,12 +208,17 @@ export class SetupCloudRestoreScreen extends LitElement {
 
   override render() {
     const approved = this.view?.state === "approved" && this.view.point;
+    const choices = this.view?.state === "approved" ? this.view.points : undefined;
+    const notice = this.view?.selectionNotice;
+    const selectionLocked = this.busy || this.reviewing || this.reviewed || notice === "fixed";
     const acknowledgeInvalid = this.feedback.attempted && !this.acknowledged;
     const fieldsInvalid = Boolean(approved) && this.feedback.attempted && this.#incomplete;
     const shownRefusal = this.#shownRefusal;
     const refused = this.#refusalUnder(shownRefusal);
     const bottom = bottomMessage(
-      this.#shows(this.invalidField) ? null : (shownRefusal ?? null),
+      this.#shows(this.invalidField)
+        ? null
+        : (shownRefusal ?? (notice ? t(`cloud_restore.selection.${notice}`) : null)),
       fieldsInvalid || refused !== undefined ? t("cloud_restore.fix_fields") : null,
       approved && this.reviewNeeded ? t("restore.review_first") : null,
     );
@@ -251,20 +268,50 @@ export class SetupCloudRestoreScreen extends LitElement {
                 </p>
                 <wt-button
                   data-test="check"
-                  ?disabled=${this.busy}
+                  ?disabled=${this.busy || this.reviewing}
                   @click=${() => this.#action("status")}
                   >${t("cloud_restore.check")}</wt-button
                 >
                 ${
+                  choices?.length
+                    ? html`<fieldset ?disabled=${selectionLocked} aria-describedby="review-choice">
+                          <legend>${t("cloud_restore.choose_copy")}</legend>
+                          ${choices.map(
+                            (point) =>
+                              html`<label>
+                                <input
+                                  type="radio"
+                                  name="backup-copy"
+                                  .value=${point.id}
+                                  .checked=${live(!!approved && point.id === approved.id)}
+                                  @change=${() => {
+                                    if (!selectionLocked)
+                                      this.#dispatchAction({ action: "select", pointId: point.id });
+                                  }}
+                                />
+                                <time datetime=${point.capturedAt}
+                                  >${localTime(point.capturedAt) ?? point.capturedAt}</time
+                                >
+                              </label>`,
+                          )}
+                        </fieldset>
+                        <p id="review-choice">${t("cloud_restore.review_fixes_choice")}</p>`
+                    : choices
+                      ? html`<p>${t("cloud_restore.no_checked_copies")}</p>`
+                      : nothing
+                }
+                ${
                   approved
                     ? html`
-                        <h2>${t("cloud_restore.approved_heading")}</h2>
-                        <p>
-                          ${t("cloud_restore.captured")}
-                          <time datetime=${approved.capturedAt}
-                            >${localTime(approved.capturedAt) ?? approved.capturedAt}</time
-                          >
-                        </p>
+                        ${
+                          choices?.some(({ id }) => id === approved.id)
+                            ? nothing
+                            : html`<p>
+                                <time datetime=${approved.capturedAt}
+                                  >${localTime(approved.capturedAt) ?? approved.capturedAt}</time
+                                >
+                              </p>`
+                        }
                         <setup-recovery-copy
                           .errorMessage=${shownRefusal}
                           .refusedField=${this.invalidField}
@@ -283,10 +330,17 @@ export class SetupCloudRestoreScreen extends LitElement {
                             event.stopPropagation();
                             this.reviewNeeded = event.detail.needed;
                           }}
+                          @recovery-preview=${(
+                            event: CustomEvent<{ preview?: unknown; reviewing: boolean }>,
+                          ) => {
+                            this.reviewing = event.detail.reviewing;
+                            if (event.detail.preview !== undefined) this.reviewed = true;
+                          }}
                           .api=${this.api}
                           .boxAddress=${this.boxAddress}
                           .cloudPointId=${approved.id}
                           .selectionId=${this.#currentApprovalBinding()}
+                          .reviewDisabled=${this.busy}
                         ></setup-recovery-copy>
                         <p class="warning">${t("cloud_restore.later_changes")}</p>
                         <label class="field"
@@ -329,7 +383,7 @@ export class SetupCloudRestoreScreen extends LitElement {
             ? html`<wt-button
                 variant="primary"
                 data-test="restore"
-                ?disabled=${this.busy || fieldsInvalid || this.reviewNeeded}
+                ?disabled=${this.busy || this.reviewing || fieldsInvalid || this.reviewNeeded}
                 @click=${() => this.#action("restore")}
                 >${t("cloud_restore.restore")}</wt-button
               >`

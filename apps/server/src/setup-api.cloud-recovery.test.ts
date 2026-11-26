@@ -32,6 +32,8 @@ function setup() {
   const cloudRecovery = {
     start: vi.fn(async () => view),
     status: vi.fn(async () => view),
+    points: vi.fn(async () => ({ ...view, point: undefined, points: [view.point!] })),
+    select: vi.fn(async () => view),
     startAgain: vi.fn(async () => view),
     binding: vi.fn(async () => ({ requestId, pointId })),
     restore: vi.fn(
@@ -141,6 +143,26 @@ async function approvedCloudRecovery() {
 const operationConflict = { error: { code: "setup.operation_conflict", params: {} } };
 
 describe("setup Cloud recovery", () => {
+  it("lists summaries and selects one copy by its point and venue IDs", async () => {
+    const { app, cloudRecovery } = setup();
+    const listed = await app.request("/setup-api/cloud-recovery/points");
+    expect(listed.status).toBe(200);
+    expect(listed.headers.get("content-type")).toContain("application/json");
+    expect(await listed.json()).toMatchObject({ points: [view.point] });
+    const select = (point: unknown) =>
+      app.request("/setup-api/cloud-recovery/select", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pointId: point, venueId: view.point!.venueId }),
+      });
+    const invalid = await select([pointId]);
+    expect(invalid.status).toBe(400);
+    expect(cloudRecovery.select).not.toHaveBeenCalled();
+    const selected = await select(pointId);
+    expect(selected.status).toBe(200);
+    expect(await selected.json()).toEqual(view);
+    expect(cloudRecovery.select).toHaveBeenCalledWith(pointId, view.point!.venueId);
+  });
   it("starts and refreshes through a browser-safe view", async () => {
     const { app, cloudRecovery } = setup();
     const started = await app.request("/setup-api/cloud-recovery/start", { method: "POST" });

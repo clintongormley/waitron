@@ -40,6 +40,13 @@ const record = (value: unknown): value is Record<string, unknown> =>
 const validDate = (value: unknown): value is string =>
   typeof value === "string" && Number.isFinite(Date.parse(value));
 class ExpiredRequest extends Error {}
+type SelectionNotice = "stale" | "fixed" | "approve_again";
+class SelectionRefusal extends Error {
+  constructor(readonly notice: SelectionNotice | "awaiting_owner") {
+    super(notice);
+  }
+}
+type RecoveryAction = "start" | "status" | "info" | "read" | "restored" | "points" | "select";
 function unavailable(): never {
   throw new AppError("cloud.unavailable", {});
 }
@@ -61,12 +68,19 @@ export interface CloudRecoveryPoint {
   deletedAt: null;
 }
 export interface CloudRecoveryView {
+  version?: 2;
   requestId: string;
   code: string;
   openCloudUrl: string;
   expiresAt: string;
   state: "awaiting_owner" | "approved" | "expired";
-  point?: Pick<CloudRecoveryPoint, "id" | "venueId" | "capturedAt" | "modules">;
+  point?: PointSummary;
+  points?: PointSummary[];
+  selectionNotice?: SelectionNotice;
+}
+type PointSummary = Pick<CloudRecoveryPoint, "id" | "venueId" | "capturedAt" | "modules">;
+function pointSummary({ id, venueId, capturedAt, modules }: CloudRecoveryPoint): PointSummary {
+  return { id, venueId, capturedAt, modules };
 }
 interface Grant {
   point: CloudRecoveryPoint;
@@ -265,11 +279,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       publicKey: key.publicKey.export({ type: "spki", format: "der" }).toString("base64url"),
     };
   }
-  function proof(
-    state: SavedState,
-    action: "start" | "status" | "info" | "read" | "restored",
-    digest = "",
-  ) {
+  function proof(state: SavedState, action: RecoveryAction, value = "") {
     assertCurrent(state);
     const bytes =
       state.version === 2
@@ -291,7 +301,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
                     options.origin,
                     state.requestId,
                     action,
-                    digest,
+                    value,
                     state.target.digest,
                     Date.now(),
                   ],
@@ -314,7 +324,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
                     options.origin,
                     state.requestId,
                     action,
-                    digest,
+                    value,
                     Date.now(),
                   ],
             ),
@@ -324,11 +334,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       signature: signCloudPayload(bytes, state.privateKey),
     };
   }
-  async function post(
-    state: SavedState,
-    action: "start" | "status" | "info" | "read" | "restored",
-    digest = "",
-  ): Promise<unknown> {
+  async function post(state: SavedState, action: RecoveryAction, value = ""): Promise<unknown> {
     let body: string;
     try {
       body = JSON.stringify(
@@ -337,35 +343,51 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
               version: 2,
               ...(action === "start" || action === "status" ? {} : { id: state.requestId }),
               target: state.target,
-              ...proof(state, action, digest),
+              ...proof(state, action, value),
             }
           : action === "start" || action === "status"
             ? proof(state, action)
-            : { id: state.requestId, ...proof(state, action, digest) },
+            : { id: state.requestId, ...proof(state, action, value) },
       );
     } catch {
       return refuseLocally();
     }
-    let result: unknown;
-    try {
-      const response = await fetchImpl(`${options.origin}/api/recovery/${action}`, {
+    const choosing = action === "points" || action === "select";
+    const send = () =>
+      fetchImpl(`${options.origin}/api/recovery/${action}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body,
         signal: AbortSignal.timeout(30_000),
       });
-      if (response.status === 410 && (action === "status" || action === "info"))
+    let result: unknown;
+    try {
+      const response = await (action === "select" ? send().catch(send) : send());
+      if (response.status === 410 && (choosing || action === "status" || action === "info"))
         throw new ExpiredRequest();
-      if (!response.ok) unavailable();
+      if (!response.ok && !choosing) unavailable();
       const replyBytes = await readCloudResponseBytes(
         response,
         state.version === 2 ? 65536 : 16384,
       );
       const raw = replyBytes.toString();
       result = state.version === 2 ? parseBackupVerificationJson(raw, 65536) : JSON.parse(raw);
+      if (!response.ok) {
+        const code = record(result) ? result.error : undefined;
+        if (response.status === 409 && code === "approval_required")
+          throw new SelectionRefusal("awaiting_owner");
+        if (action === "select") {
+          if (response.status === 400 && code === "invalid_input")
+            throw new SelectionRefusal("stale");
+          if (response.status === 403 && code === "proof_required")
+            throw new SelectionRefusal("approve_again");
+          if (response.status === 409 && code === "conflict") throw new SelectionRefusal("fixed");
+        }
+        unavailable();
+      }
       if (state.version === 2 && (!record(result) || result.version !== 2)) unavailable();
     } catch (error) {
-      if (error instanceof ExpiredRequest) throw error;
+      if (error instanceof ExpiredRequest || error instanceof SelectionRefusal) throw error;
       return unavailable();
     }
     assertCurrent(state);
@@ -378,20 +400,22 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     deadline?: string,
   ): CloudRecoveryView {
     return {
+      ...(state.version === 2 ? { version: state.version } : {}),
       requestId: state.requestId,
       code: state.code,
       openCloudUrl: `${options.origin}/recover#request=${state.requestId}`,
       expiresAt: deadline ?? state.expiresAt ?? new Date(Date.now() + 15 * 60_000).toISOString(),
       state: mode,
-      ...(p
-        ? { point: { id: p.id, venueId: p.venueId, capturedAt: p.capturedAt, modules: p.modules } }
-        : {}),
+      ...(p ? { point: pointSummary(p) } : {}),
     };
   }
   function checkedVerification(
     state: SavedState,
     response: Record<string, unknown>,
     p: CloudRecoveryPoint,
+    previous: SnapshotRecoveryVerification | null | undefined = state.version === 2
+      ? state.snapshotVerification
+      : undefined,
   ): SnapshotRecoveryVerification | undefined {
     if (state.version === 1) return undefined;
     const target = currentTarget();
@@ -406,11 +430,47 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
       verification.pointId !== p.id ||
       verification.archiveSha256 !== p.digest ||
       verification.archiveBytes !== p.size ||
-      (state.snapshotVerification &&
-        !sameSnapshotRecoveryVerification(state.snapshotVerification, verification))
+      (previous && !sameSnapshotRecoveryVerification(previous, verification))
     )
       unavailable();
     return verification;
+  }
+  function operationExpiry(result: unknown): string {
+    if (
+      !record(result) ||
+      !validDate(result.operationExpiresAt) ||
+      Date.parse(result.operationExpiresAt) <= Date.now()
+    )
+      return unavailable();
+    return result.operationExpiresAt;
+  }
+
+  async function listPoints(state: SavedState): Promise<CloudRecoveryView> {
+    try {
+      const result = await post(state, "points");
+      const deadline = operationExpiry(result);
+      if (
+        !record(result) ||
+        !uuid(result.venueId) ||
+        !Array.isArray(result.points) ||
+        result.points.length > 50
+      )
+        return unavailable();
+      const points = result.points.map(point);
+      if (points.some((p) => p.venueId !== result.venueId)) return unavailable();
+      return { ...view(state, "approved", undefined, deadline), points: points.map(pointSummary) };
+    } catch (error) {
+      if (error instanceof ExpiredRequest) return view(state, "expired");
+      if (error instanceof SelectionRefusal && error.notice === "awaiting_owner")
+        return view(state, "awaiting_owner");
+      throw error;
+    }
+  }
+
+  async function choiceState() {
+    const state = await readForSetup();
+    if (state?.version !== 2 || state.phase) return refuseLocally();
+    return state;
   }
   async function statusOf(state: SavedState, action: "start" | "status") {
     let result: unknown;
@@ -435,6 +495,7 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
     state.expiresAt = result.expiresAt;
     await save(state);
     if (result.state === "awaiting_owner") return view(state, "awaiting_owner");
+    if (state.version === 2 && !state.pointId) return view(state, "approved");
     let info: unknown;
     try {
       info = await post(state, "info");
@@ -443,19 +504,15 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
         return view(state, "expired", undefined, new Date().toISOString());
       throw error;
     }
-    if (
-      !record(info) ||
-      !validDate(info.operationExpiresAt) ||
-      Date.parse(info.operationExpiresAt) <= Date.now()
-    )
-      unavailable();
+    const deadline = operationExpiry(info);
+    if (!record(info)) unavailable();
     const p = point(info.point);
     if (state.pointId && state.pointId !== p.id) unavailable();
     const verification = checkedVerification(state, info, p);
     state.pointId = p.id;
     if (state.version === 2) state.snapshotVerification = verification;
     await save(state);
-    return view(state, "approved", p, info.operationExpiresAt);
+    return view(state, "approved", p, deadline);
   }
   async function approvedInfo(state: SavedState): Promise<unknown> {
     try {
@@ -609,6 +666,35 @@ export function createCloudRecoveryClient(options: CloudRecoveryOptions) {
         const state = await readForSetup();
         if (!state) refuseLocally();
         return statusOf(state, "status");
+      });
+    },
+    async points(): Promise<CloudRecoveryView> {
+      return locked(async () => listPoints(await choiceState()));
+    },
+    async select(pointId: string, venueId: string): Promise<CloudRecoveryView> {
+      return locked(async () => {
+        const state = await choiceState();
+        let result: unknown;
+        try {
+          result = await post(state, "select", pointId);
+        } catch (error) {
+          if (error instanceof ExpiredRequest) return view(state, "expired");
+          if (!(error instanceof SelectionRefusal)) throw error;
+          if (error.notice === "awaiting_owner") return view(state, "awaiting_owner");
+          if (error.notice === "stale") {
+            const fresh = await listPoints(state);
+            return fresh.state === "approved" ? { ...fresh, selectionNotice: "stale" } : fresh;
+          }
+          return { ...view(state, "approved"), selectionNotice: error.notice };
+        }
+        const deadline = operationExpiry(result);
+        if (!record(result)) return unavailable();
+        const selected = point(result.point);
+        if (selected.id !== pointId || selected.venueId !== venueId) return unavailable();
+        state.snapshotVerification = checkedVerification(state, result, selected, null);
+        state.pointId = selected.id;
+        await save(state);
+        return view(state, "approved", selected, deadline);
       });
     },
     async startAgain(): Promise<CloudRecoveryView> {

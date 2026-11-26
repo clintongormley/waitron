@@ -111,8 +111,12 @@ el kit en **Kit de recuperación**, y elige el **Entorno** en el que funcionaba 
 el paquete se hizo antes de que el servidor tuviera copia en el bucket, no es un paquete de
 recuperación de Waitron o está dañado o se modificó después de hacerse, la página lo dice bajo el
 campo. Para Waitron Cloud, elige **Iniciar la recuperación desde Cloud**, introduce el código que
-muestra la página en tu cuenta de Waitron Cloud (**Abrir Waitron Cloud**) y después elige
-**Comprobar la aprobación**. La recuperación de Cloud requiere un servicio compatible.
+muestra la página en tu cuenta de Waitron Cloud (**Abrir Waitron Cloud**) y aprueba allí la
+solicitud. En el servidor, elige **Comprobar la aprobación**. La copia comprobada más reciente ya
+está seleccionada. Puedes elegir una anterior antes de pulsar **Revisar copia**, que fija tu
+elección. Para cambiarla después, usa **Cerrar el acceso de recuperación** en Waitron Cloud e
+inicia una nueva solicitud. Si todavía no hay copias comprobadas, vuelve a pulsar **Comprobar la
+aprobación** cuando haya una disponible.
 
 Elige un servidor con espacio libre suficiente para la base de datos recuperada y las copias
 temporales necesarias para abrir la copia de seguridad.

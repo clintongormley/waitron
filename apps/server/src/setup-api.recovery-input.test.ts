@@ -43,6 +43,8 @@ function setup(
   const cloudRecovery: NonNullable<SetupDeps["cloudRecovery"]> = {
     start: async () => view,
     status: async () => view,
+    points: async () => view,
+    select: async () => view,
     startAgain: async () => view,
     markRestored: async () => {},
     reportRestored: async () => {},

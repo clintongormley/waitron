@@ -101,8 +101,11 @@ and choose its **Backup environment**. For your bucket, choose your recovery pac
 the old box ran in. If the pack was made before the box had a bucket copy, is not a Waitron recovery
 pack, or is damaged or was changed after it was made, the page says so under the field. For Waitron
 Cloud, choose **Start Cloud recovery**, enter the code the page shows in your Waitron Cloud account
-(**Open Waitron Cloud**), then choose **Check approval**. Cloud recovery requires a supported
-recovery service.
+(**Open Waitron Cloud**) and approve the request there. Back on the box, choose **Check approval**.
+The latest checked copy is selected. You can choose an earlier copy before choosing **Review
+backup**, which fixes your choice. To change it afterward, choose **Close recovery access** in
+Waitron Cloud and start a new request. If Waitron Cloud has no checked copy yet, choose **Check
+approval** again when a checked copy is available.
 
 Choose a box with enough free disk space for the recovered database and the temporary copies
 needed to open the backup.
