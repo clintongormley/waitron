@@ -1,28 +1,33 @@
 # A1610 sent-order-open guard implementation plan
 
-The CI guard should check every eligible TypeScript file for literal writes that reopen orders and
-finish comfortably inside its existing 30-second limit. GitHub-hosted job 140003829093 spent 36.995
-seconds in the whole-tree case. At `3a764b17c3`, a local profile counted 3,584 files and measured
-2.06 seconds of parsing in 2.42 seconds of scan time, after reading the files. The proposed text
-check retained 870 candidates, including the only file the full scan flagged. The exact reason the
-hosted runner was slower that time is unknown.
+Keep the scan for literal writes that reopen orders comfortably inside its 30-second CI limit.
+GitHub-hosted job 140003829093 spent 36.995 seconds in the whole-tree case. In the local profile,
+parsing took 2.06 of 2.42 seconds after reads. The two-stage text check selected 486 of 3,584 files
+and kept the same finding. The cause of the slowdown across the hosted job is unknown.
 
-1. In `scripts/sent-order-open.test.ts`, first run a temporary regression test that watches the real
-   `ts.createSourceFile`. A source with neither `status` nor `open` and no backslash must return no
-   findings and make zero parser calls. Confirm the old code still parses it. Use the existing
-   TypeScript spy pattern in `scripts/no-history-length.test.ts` for this experiment.
-2. Add an early return in `openingWrites`. A file can be skipped if it has no backslash and lacks
-   either `status` or `open`, using case-insensitive checks because the SQL rule ignores case. Let
-   TypeScript parse files with backslashes since escaped spellings may hide either word. Keep the
-   current file selection, parser, findings, and timeout. Add scanner examples for an escaped
-   TypeScript property and value, an escaped SQL string, and uppercase SQL. Keep every existing
-   assertion and remove the temporary parser spy after observing it pass.
-3. Run the focused file locally. In a disposable checkout, add a second reopen write with escaped
-   letters in a different eligible file and confirm that the whole-tree case names it. Run the
-   restored check and compare the whole-tree case time against the unchanged guard. Record the
-   selected current-head root-guards job, runner and case time in the PR, and check the merge's own
-   root-guards job. Leave product code and CI routing alone. Recheck the backlog and delete any
-   entry for A1610 that appeared since this plan was written. Neither backlog file names it now.
+The watcher assigned this in Lane I `questions.md` at 16:37 on 26 November 2026: “A1610, the
+sent-order-open guard timeout, is yours (queued first). Root cause, not a retry or a bare limit raise.”
+Lane I reported the failure, measured parsing cost, and remaining uncertainty to Lane C in its
+`questions.md` before plan clearance.
 
-Expected size is about four scanner lines and three test cases. The existing TypeScript parser
-continues to decide which writes the guard flags.
+1. Edit `scripts/sent-order-open.test.ts`. Write `skips parsing text missing either required word`
+   first, using the TypeScript spy pattern from `scripts/no-history-length.test.ts`. Assert that a
+   file mentioning only `open` and a file mentioning only `status` with an unrelated Unicode escape
+   both yield no findings and together make zero real `ts.createSourceFile` calls. Watch the old
+   guard fail on the call count. Retain this test to catch a return to unnecessary parsing.
+2. At the start of `openingWrites`, require both `status` and `open` case-insensitively in the raw
+   text or, when the source includes a backslash, in the text from `decodeEscapes` in
+   `scripts/no-till-as-issuer.mjs`. Let the existing parser examine the original source for any
+   candidate. Extend the existing cases with an escaped TypeScript key and value, an escaped
+   `sql.raw` string, and uppercase SQL. Use `String.raw` for escaped examples and confirm the words
+   are absent from their raw input. Leave existing assertions, traversal, file selection, timeout,
+   and CI job intact. Expect about six scanner lines and 15–20 test and spy lines.
+3. Run the focused file. In a disposable checkout, introduce a second reopen write using escaped
+   letters and confirm the whole-tree case names the new file. Measure the whole-tree case against
+   the original and candidate trees on the same Mac with `pnpm exec vitest run --coverage
+   --reporter=verbose scripts/sent-order-open.test.ts`, using separate coverage report directories.
+   A one-file coverage diagnostic checks time while CI checks aggregate coverage. Aim for a local
+   case at most 15 seconds so the 30-second limit still has room for the observed hosted slowdown.
+   If the candidate misses that target, investigate before pushing. Record the current-head CI
+   runner, selected root-guards result and case time. Check the merge's own run after landing.
+   Recheck the backlog for A1610 and remove any completed entry. It has no entry as of this review.
