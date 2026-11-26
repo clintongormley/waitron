@@ -449,6 +449,6 @@ requested and what the card provider reported. Check the charge in the provider'
 
 ## Shut down this box {#shutdown}
 
-On a standalone main box with one saved backup destination and no streaming, open **Box status** and choose **Shut down this box**. Sign in again as an administrator when prompted. Waitron pauses work and checks the backup it just saved. Keep the box on until you see **Safe to switch off**. You can cancel while the check is running or if it pauses.
+On a standalone main box with one saved backup destination and no streaming, open **Box status** and choose **Shut down this box**. Enter your administrator password when prompted. If you need a password, set one in **Account settings** first. Waitron pauses work and checks the backup it just saved. Keep the box on until you see **Safe to switch off**. You can cancel while the check is running or if it pauses.
 
 When the box starts again, sign in and choose **Carry on selling on this box** to reopen it. Choose **Keep it stopped** if another box took over.

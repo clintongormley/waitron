@@ -57,6 +57,7 @@ export class FreshSignIn extends LitElement {
   @property({ attribute: false }) api!: DashboardApi;
   @property({ type: Boolean }) disabled = false;
   @property({ type: Boolean }) allowRecoveryCode = true;
+  @property({ type: Boolean }) passwordOnly = false;
 
   @state() private profile: OwnProfile | null = null;
   @state() private profileFailed = false;
@@ -86,7 +87,9 @@ export class FreshSignIn extends LitElement {
   /** Which ways in the person has; null until the profile is read. */
   get ways(): SignInWays | null {
     const own = this.profile;
-    return own === null ? null : { password: own.hasPassword, passkey: own.passkeys.length > 0 };
+    return own === null
+      ? null
+      : { password: own.hasPassword, passkey: !this.passwordOnly && own.passkeys.length > 0 };
   }
 
   /** A sentence for the screen's bottom message that no refusal answered; "" when there is none. */
@@ -177,6 +180,7 @@ export class FreshSignIn extends LitElement {
     if (ways === null) return null;
     const way = method ?? (ways.password ? "password" : "passkey");
     if (way === "password" && !ways.password) return null;
+    if (way === "passkey" && this.passwordOnly) return null;
     if (!ways.password && !ways.passkey) return null;
     this.message = "";
     this.#checked = way;
@@ -273,7 +277,11 @@ export class FreshSignIn extends LitElement {
     if (ways === null) return nothing;
     if (!ways.password && !ways.passkey)
       return html`<p data-test="no-way-in">
-        ${t("fresh_sign_in.no_way_in")} ${t("profile.password_recovery")}
+        ${
+          this.passwordOnly
+            ? t("box_status.shutdown.add_password")
+            : `${t("fresh_sign_in.no_way_in")} ${t("profile.password_recovery")}`
+        }
       </p>`;
     return html`
       ${ways.password ? autofillUsername(this.profile!.email) : nothing}

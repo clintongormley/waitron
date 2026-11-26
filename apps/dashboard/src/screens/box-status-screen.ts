@@ -1117,6 +1117,7 @@ export class BoxStatusScreen extends LitElement {
         }}
       >
         <p>${t("box_status.shutdown.what")}</p>
+        <p>${t("box_status.shutdown.password_reason")}</p>
         <wt-form-actions slot="footer" .error=${this.shutdownError}>
           <wt-button
             slot="cancel"

@@ -140,7 +140,7 @@ export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): 
         permission: "node.manage",
         touch: false,
       });
-      if (fresh) await requireFreshManagementSignIn(deps.db, token, { allowRecoveryCode: false });
+      if (fresh) await requireFreshManagementSignIn(deps.db, token, { passwordOnly: true });
     };
     app.post(SHUTDOWN_PATH, (c) =>
       run(c, log, async () => {

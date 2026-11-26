@@ -22,10 +22,12 @@ import { mountBoxStatusApi, type BoxStatusDeps } from "./box-status.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import { backupArchiveKey } from "./backup-keys.js";
 import { mountManagementApi } from "./management-api.js";
+import { mountMeApi } from "./me-api.js";
 import { ALL_MODULES } from "./modules.js";
 import { FIXTURE_CERT_PEM } from "./testing/tls-fixture.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { createAdminShutdown } from "./admin-shutdown.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
 
 // Exercise box-status authorization and the composed status read over a manager login. The full
 // manifest is migrated because the route composes cells several modules own.
@@ -122,6 +124,11 @@ function buildApp(
     },
     () => {},
   );
+  mountMeApi(
+    app,
+    { db: suite.db, venueLocale: "en", modules: [], credentialKeyRing: TOTP_KEY_RING },
+    () => {},
+  );
   mountBoxStatusApi(
     app,
     {
@@ -204,26 +211,38 @@ it("lets an administrator sign in again and cancel while payments are paused", a
   const paymentPath = "/api/working-orders/order/payments";
   app.post(paymentPath, (c) => c.body(null, 204));
   const socket = new TLSSocket(new Socket());
-  const cancel = (cookie: string) =>
+  const changeShutdown = (method: "POST" | "DELETE", cookie: string) =>
     app.request(
       "https://box.example/api/box/shutdown",
-      { method: "DELETE", headers: { cookie } },
+      { method, headers: { cookie } },
       {
         incoming: { socket },
       },
     );
   try {
     const cookie = await login(app, "owner@example.test", "dashPass123");
-    shutdown.start();
+    await withTransaction(suite.db, (tx) => setFreshManagementSignIn(tx, cookie, true, "passkey"));
+    const needsPassword = await changeShutdown("POST", cookie);
+    expect(await needsPassword.json()).toMatchObject({
+      error: { code: "management_session.proof_required" },
+    });
+    expect(shutdown.status()).toEqual({ phase: "idle" });
+    const proved = await app.request("/management-api/session/me/fresh-sign-in", {
+      method: "POST",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({ method: "password", password: "dashPass123" }),
+    });
+    expect(proved.status).toBe(204);
+    expect((await changeShutdown("POST", cookie)).status).toBe(202);
     vi.setSystemTime(Date.now() + IDLE_TIMEOUT_MS + 1_000);
-    const expired = await cancel(cookie);
+    const expired = await changeShutdown("DELETE", cookie);
     expect(expired.status).toBe(401);
     expect(await expired.json()).toMatchObject({ error: { code: "management_session.expired" } });
     const refused = await app.request(paymentPath, { method: "POST" });
     expect(refused.status).toBe(503);
     expect(await refused.json()).toMatchObject({ error: { code: "box.shutdown_in_progress" } });
     const fresh = await login(app, "owner@example.test", "dashPass123");
-    const cancelled = await cancel(fresh);
+    const cancelled = await changeShutdown("DELETE", fresh);
     expect(cancelled.status).toBe(200);
     expect(await cancelled.json()).toEqual({ phase: "idle" });
     expect((await app.request(paymentPath, { method: "POST" })).status).toBe(204);

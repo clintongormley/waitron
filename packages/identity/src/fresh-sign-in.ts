@@ -7,7 +7,7 @@ import { resolveManagementSession } from "./management-session.js";
 export async function requireFreshManagementSignIn(
   tx: Transaction,
   token: string,
-  options: { allowRecoveryCode?: boolean } = {},
+  options: { allowRecoveryCode?: boolean; passwordOnly?: boolean } = {},
 ) {
   const session = await resolveManagementSession(tx, token, { touch: false });
   const [row] = await tx
@@ -16,6 +16,8 @@ export async function requireFreshManagementSignIn(
     .where(eq(dashboardSessions.id, session.sessionRowId));
   const age = Date.now() - Date.parse(row?.provedAt ?? "");
   if (!Number.isFinite(age) || age < 0 || age >= 15 * 60_000)
+    throw new AppError("management_session.proof_required", {});
+  if (options.passwordOnly && row?.proofMethod !== "password")
     throw new AppError("management_session.proof_required", {});
   if (
     options.allowRecoveryCode === false &&

@@ -4766,6 +4766,10 @@ export const en = {
   "box_status.shutdown.question": "Shut down this box?",
   "box_status.shutdown.what":
     "Waitron pauses selling and staff clocking while it saves and checks a full backup. You need the backup and its recovery key to restore. An administrator must choose whether to sell here again when this box starts.",
+  "box_status.shutdown.password_reason":
+    "Use your password to confirm. You can use that password to sign back in and cancel, or to carry on when the box starts again.",
+  "box_status.shutdown.add_password":
+    "You need a password to shut down this box. Set a password in Account settings, then try again. If you only sign in with Google, add a passkey there first.",
   "box_status.shutdown.checking":
     "Waiting for work to finish and checking the saved backup. Leave the box on.",
   "box_status.shutdown.paused":
@@ -9658,6 +9662,10 @@ export const es: Record<StringKey, string> = {
   "box_status.shutdown.question": "¿Apagar este servidor?",
   "box_status.shutdown.what":
     "Waitron pausa las ventas y los fichajes mientras guarda y comprueba una copia de seguridad completa. Necesitas la copia y su clave de recuperación para restaurarla. Al arrancar, un administrador deberá decidir si se vuelve a vender aquí.",
+  "box_status.shutdown.password_reason":
+    "Usa tu contraseña para confirmar. Podrás usarla para volver a iniciar sesión y cancelar, o para continuar cuando el servidor vuelva a arrancar.",
+  "box_status.shutdown.add_password":
+    "Necesitas una contraseña para apagar este servidor. Crea una contraseña en Configuración de la cuenta y vuelve a intentarlo. Si solo inicias sesión con Google, añade primero una llave de acceso allí.",
   "box_status.shutdown.checking":
     "Esperando a que termine el trabajo y comprobando la copia guardada. Deja el servidor encendido.",
   "box_status.shutdown.paused":
