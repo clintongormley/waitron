@@ -2083,6 +2083,12 @@ through the comp window names the notice and clears it (D54). The adjustments re
 discount that came off (D55). The till draws the notice in A1515-4 (another lane); this PR is what
 it reads. No schema change.
 
+_2026-11-26, at finish review: only the changed dish's share of the discount comes off, and another
+portion it covers keeps its share; a notice's amount is what came off that bill, not what the
+discount took off when given; a dish's notice is given again only on a line it came off; and the
+report counts what still stands of a partly ended discount, leaving out only one wholly given
+back._
+
 **What the server provides for A1515-4:** on every bill in the party read (`parties.ts:650`) and the
 counter order read (`working-order-held-read.ts:497`), `discountNotices?: { adjustmentId; why;
 dishName; on: string; action: "comp" | "discount_percent" | "discount_amount"; percentBp: number |

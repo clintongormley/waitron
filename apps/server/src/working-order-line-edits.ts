@@ -448,8 +448,8 @@ export async function applyLineEdits(
       optionSnapshots !== parent.optionSnapshots ||
       extrasChanged;
     if (!changed && rise === 0) return;
-    // A stored line keeps its unit price (bar a dish's own comp or discount, which ends once its
-    // extras change), so its extras and its quantity move what it charges; its
+    // A stored line keeps its unit price (bar a dish's own comp or discount, which gives that dish's
+    // share back once its extras change), so its extras and its quantity move what it charges; its
     // options answer is filed on the sale line, and a card at the reader files the answer it priced.
     if (extrasChanged || rise !== 0 || optionSnapshots !== parent.optionSnapshots)
       chargesUnchanged = false;
