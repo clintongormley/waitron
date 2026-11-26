@@ -17,9 +17,9 @@ Nothing is submitted to or stored on the box.
 **2026-11-14 update:** the till offers the same preview and download from its More menu and
 above sign-in, enrolment, device choice, clock-in and attendance pages.
 Setup API route names and stored capture with manager read/download remain open. The stored slices
-need separate plans. The [2026-10-22 plan](../superpowers/plans/2026-10-22-a982-one-touch-problem-reports.md)
-and older slice notes below retain their original context. Cloud forwarding and automatic
-crash/freeze intake remain separate follow-ups.
+need separate plans. The [2026-10-22 plan](../superpowers/plans/2026-10-22-a982-one-touch-problem-reports.md) and older slice
+notes below retain their original context. Cloud forwarding and automatic crash/freeze intake remain
+separate follow-ups.
 
 - **Slice 2 — one-touch bug report.** A `bug_reports` table (`local`, grants in its
   module's set), a capture endpoint that FREEZES a self-contained bundle (the projected client

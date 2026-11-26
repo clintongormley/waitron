@@ -1495,7 +1495,7 @@ export class DashboardApp extends LitElement {
           code === "management_session.expired" || code === "person.suspended" ? code : null,
         );
       } else {
-        // The shell starts on login. The boot refusal records that first sign-in screen.
+        // Boot starts on login. A later refusal leaves the recorded sign-in screen in place.
         if (this.checkingSession) diag.record("info", "nav", { screen: "login" });
         this.screen = "login";
       }
