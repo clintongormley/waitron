@@ -111,6 +111,7 @@ async function mountNarrow(
       loaded: "",
       notPack: "",
       damaged: "",
+      damagedNoScan: "",
       notWhole: "",
       wrongKey: () => "",
       elsewhere: () => "",

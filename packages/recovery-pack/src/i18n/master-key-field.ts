@@ -10,6 +10,7 @@ type MasterKeyFieldWords = {
   loaded: string;
   notPack: string;
   damaged: string;
+  damagedNoScan: string;
   notWhole: string;
   wrongKey: (keyName: string) => string;
   elsewhere: (heldBy: number | null) => string;
@@ -33,7 +34,8 @@ export const MASTER_KEY_FIELD_WORDS: Record<PackLocale, MasterKeyFieldWords> = {
     },
     loaded: "Key loaded",
     notPack: "This PDF is not a recovery pack.",
-    damaged: "This recovery pack PDF is damaged. Type the key.",
+    damaged: "This recovery pack PDF is damaged. Type the key or scan it.",
+    damagedNoScan: "This recovery pack PDF is damaged. Type the key.",
     notWhole: "Not a whole master key. Check it against the recovery pack.",
     wrongKey: (keyName) => `Wrong master key. Use the one dated ${keyName}.`,
     elsewhere: (heldBy) =>
@@ -58,7 +60,8 @@ export const MASTER_KEY_FIELD_WORDS: Record<PackLocale, MasterKeyFieldWords> = {
     },
     loaded: "Clave cargada",
     notPack: "Este PDF no es un paquete de recuperación.",
-    damaged: "Este PDF del paquete de recuperación está dañado. Escribe la clave.",
+    damaged: "Este PDF del paquete de recuperación está dañado. Escribe la clave o escanéala.",
+    damagedNoScan: "Este PDF del paquete de recuperación está dañado. Escribe la clave.",
     notWhole: "No es una clave maestra completa. Compárala con el paquete de recuperación.",
     wrongKey: (keyName) => `Clave maestra incorrecta. Usa la del ${keyName}.`,
     elsewhere: (heldBy) =>

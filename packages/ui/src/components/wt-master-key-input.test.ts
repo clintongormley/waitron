@@ -31,7 +31,8 @@ const EN: MasterKeyInputCopy = {
   },
   loaded: "Key loaded",
   notPack: "This PDF is not a recovery pack.",
-  damaged: "This recovery pack PDF is damaged. Type the key.",
+  damaged: "This recovery pack PDF is damaged. Type the key or scan it.",
+  damagedNoScan: "This recovery pack PDF is damaged. Type the key.",
   notWhole: "Not a whole master key. Check it against the recovery pack.",
   wrongKey: (name) => `Wrong master key. Use the one dated ${name}.`,
   elsewhere: (heldBy) =>
@@ -312,6 +313,25 @@ test("a loader that fails is a damaged pack too", async () => {
   const { el } = await field({ readPack: () => Promise.reject(new Error("chunk failed")) });
   await choose(el);
   await settled(el, EN.damaged);
+});
+
+test("a damaged pack does not offer scanning on a browser with no getUserMedia", async () => {
+  Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+    value: undefined,
+    configurable: true,
+  });
+  try {
+    const { el } = await field();
+    el.readPack = async () => async () => Promise.reject(new Error("broken"));
+    await choose(el);
+    await settled(el, EN.damagedNoScan);
+    expect(el.shadowRoot!.querySelector('[role="status"]')!.textContent).toContain(
+      EN.damagedNoScan,
+    );
+  } finally {
+    delete (navigator.mediaDevices as { getUserMedia?: unknown }).getUserMedia;
+  }
+  expect(typeof navigator.mediaDevices.getUserMedia).toBe("function");
 });
 
 test("a pack whose key does not decode is damaged", async () => {

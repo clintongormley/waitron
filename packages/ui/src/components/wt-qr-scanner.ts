@@ -1,6 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, query, state } from "lit/decorators.js";
-import jsQR from "jsqr";
+import type jsQR from "jsqr";
 import { baseStyles } from "../base-styles.js";
 
 /** How often a frame is read from the camera. */
@@ -99,11 +99,24 @@ export class WtQrScanner extends LitElement {
     }
     this.#stream = stream;
     this.filming = true;
+    // Loaded only once a camera answers, so a page that never films never downloads it.
+    const decoding = import("jsqr").then(
+      (module) => module.default,
+      () => undefined,
+    );
     await this.updateComplete;
     const video = this.video!;
     video.srcObject = stream;
     void video.play().catch(() => undefined);
-    this.#timer = setInterval(() => this.#read(), FRAME_MS);
+    const decode = await decoding;
+    if (session !== this.#session) return;
+    if (decode === undefined) {
+      this.stop();
+      this.filming = false;
+      this.#fail("unsupported");
+      return;
+    }
+    this.#timer = setInterval(() => this.#read(decode), FRAME_MS);
   }
 
   #fail(reason: QrScannerUnavailableReason): void {
@@ -117,7 +130,7 @@ export class WtQrScanner extends LitElement {
     );
   }
 
-  #read(): void {
+  #read(decode: typeof jsQR): void {
     const video = this.video;
     if (video === undefined || video.videoWidth === 0) return;
     const scale = Math.min(1, DECODE_WIDTH / video.videoWidth);
@@ -133,7 +146,7 @@ export class WtQrScanner extends LitElement {
     if (canvas.width !== width) canvas.width = width;
     if (canvas.height !== height) canvas.height = height;
     this.#frame.drawImage(video, 0, 0, width, height);
-    const decoded = jsQR(this.#frame.getImageData(0, 0, width, height).data, width, height);
+    const decoded = decode(this.#frame.getImageData(0, 0, width, height).data, width, height);
     if (decoded === null) return;
     this.onRead(decoded.data);
   }

@@ -7,7 +7,8 @@ describe("the master-key field's words", () => {
     expect(words.label).toBe("Master key");
     expect(words.button).toBe("Choose the recovery pack PDF");
     expect(words.notPack).toBe("This PDF is not a recovery pack.");
-    expect(words.damaged).toBe("This recovery pack PDF is damaged. Type the key.");
+    expect(words.damaged).toBe("This recovery pack PDF is damaged. Type the key or scan it.");
+    expect(words.damagedNoScan).toBe("This recovery pack PDF is damaged. Type the key.");
     expect(words.notWhole).toBe("Not a whole master key. Check it against the recovery pack.");
     expect(words.wrongKey("2026-11-23 · QZJV")).toBe(
       "Wrong master key. Use the one dated 2026-11-23 · QZJV.",
@@ -26,6 +27,9 @@ describe("the master-key field's words", () => {
     expect(words.button).toBe("Elegir el PDF del paquete de recuperación");
     expect(words.notPack).toBe("Este PDF no es un paquete de recuperación.");
     expect(words.damaged).toBe(
+      "Este PDF del paquete de recuperación está dañado. Escribe la clave o escanéala.",
+    );
+    expect(words.damagedNoScan).toBe(
       "Este PDF del paquete de recuperación está dañado. Escribe la clave.",
     );
     expect(words.notWhole).toBe(

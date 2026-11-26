@@ -101,6 +101,30 @@ describe("wt-qr-scanner", () => {
     expect(reads).toHaveBeenCalledTimes(1);
   });
 
+  test("after stop() no frame is read, even from a video still playing", async () => {
+    film("hello");
+    const drawn = vi.spyOn(CanvasRenderingContext2D.prototype, "drawImage");
+    const el = (await mount(SCANNER)) as WtQrScanner;
+    await expect.poll(() => drawn.mock.calls.length, { timeout: 10_000 }).toBeGreaterThan(0);
+
+    el.stop();
+    const still = cameraFilming("hello");
+    try {
+      const video = el.shadowRoot!.querySelector("video")!;
+      video.srcObject = still.stream;
+      await video.play();
+      await expect.poll(() => video.videoWidth).toBeGreaterThan(0);
+      drawn.mockClear();
+      await new Promise((resolve) => setTimeout(resolve, 600));
+
+      expect(live(still.stream)).toBe(true);
+      expect(drawn).not.toHaveBeenCalled();
+    } finally {
+      still.stop();
+      for (const track of still.stream.getTracks()) track.stop();
+    }
+  });
+
   test("the camera stops when the scanner leaves the page", async () => {
     const stream = film("hello");
     const el = (await mount(SCANNER)) as WtQrScanner;
@@ -124,6 +148,22 @@ describe("wt-qr-scanner", () => {
     answer(camera.stream);
 
     await expect.poll(() => ended(camera.stream)).toBe(true);
+  });
+
+  test("a camera refusal that arrives after the scanner left the page says nothing", async () => {
+    let refuse!: (error: DOMException) => void;
+    vi.spyOn(navigator.mediaDevices, "getUserMedia").mockReturnValue(
+      new Promise((_resolve, reject) => (refuse = reject)),
+    );
+    const unavailable = vi.fn();
+    const el = (await mount(SCANNER)) as WtQrScanner;
+    el.addEventListener("wt-qr-unavailable", unavailable);
+
+    el.remove();
+    refuse(new DOMException("Permission denied", "NotAllowedError"));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(unavailable).not.toHaveBeenCalled();
   });
 
   test("the caller's unavailable text shows when getUserMedia refuses", async () => {

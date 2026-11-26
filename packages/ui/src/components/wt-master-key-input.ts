@@ -20,6 +20,8 @@ export type MasterKeyInputCopy = {
   loaded: string;
   notPack: string;
   damaged: string;
+  /** Said for a damaged pack instead of `damaged` where `scan` is not shown. */
+  damagedNoScan: string;
   notWhole: string;
   wrongKey: (keyName: string) => string;
   /** A pack without the master key; `heldBy` is the number of the pack that holds it, when known. */
@@ -341,6 +343,7 @@ export class WtMasterKeyInput extends LitElement {
     // A pack is refused as another key's only while `keyName` is set, and a new one empties the field.
     if (problem === "wrongKey") return copy.wrongKey(this.keyName!);
     if (typeof problem === "object") return copy.elsewhere(problem.heldBy);
+    if (problem === "damaged" && !canFilm()) return copy.damagedNoScan;
     if (problem !== undefined) return copy[problem];
     if (this.attempted && value !== "" && printed(value) === undefined) return copy.notWhole;
     return this.error;
