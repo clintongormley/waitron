@@ -21925,8 +21925,8 @@ export class TillApp extends LitElement {
     const unanswered = this.#unansweredWholePayments.get(key);
     const closingRefundedBill =
       bill !== undefined &&
-      compareDecimal(decimal(detail.amount), decimal("0")) === 0 &&
-      canCloseRefundedZeroBill(bill, this.billBalance);
+      canCloseRefundedZeroBill(bill, this.billBalance) &&
+      compareDecimal(decimal(detail.amount), decimal("0")) === 0;
     if (
       unanswered === undefined &&
       bill !== undefined &&
