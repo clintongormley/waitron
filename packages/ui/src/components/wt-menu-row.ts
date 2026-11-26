@@ -62,11 +62,11 @@ export class WtMenuRow extends LitElement {
         font-size: var(--wt-font-size-md);
       }
       .trailing wt-icon {
-        --wt-action-native-icon-color: var(--wt-color-text-muted);
+        color: inherit;
         flex: none;
       }
       .trailing wt-icon[name="check"] {
-        --wt-action-native-icon-color: var(--wt-color-primary);
+        color: var(--wt-color-primary);
       }
       .row ::slotted(*) {
         flex: none;

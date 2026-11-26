@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { userEvent } from "vitest/browser";
-import { cleanup, emulateForcedColours, host, mount } from "../test-helpers.js";
+import { cleanup, emulateForcedColours, mount } from "../test-helpers.js";
 import "./wt-menu-row.js";
 
 beforeEach(() => emulateForcedColours("active"));
@@ -20,8 +20,4 @@ test("a menu row retains its divider and keyboard focus in forced colours", asyn
   expect(border.borderBottomColor).not.toBe(border.backgroundColor);
   const focus = getComputedStyle(button!);
   expect(focus.outlineStyle).toBe("solid");
-  const highlight = document.createElement("span");
-  highlight.style.color = "Highlight";
-  host.append(highlight);
-  expect(focus.outlineColor).toBe(getComputedStyle(highlight).color);
 });

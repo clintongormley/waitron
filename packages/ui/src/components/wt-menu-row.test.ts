@@ -61,11 +61,16 @@ test("clicking a row inside a native choice focuses the choice", async () => {
 
 test("keeps the help badge beside the new action", async () => {
   setHelpMode(true);
-  const row = await mount(
-    '<wt-menu-row action label="Guests" help="Change the guest count." help-label="Help: Guests"></wt-menu-row>',
+  const sheet = await mount(
+    `<wt-row-actions bottom-sheet sheet-variant="menu" label="Table actions">
+      <wt-menu-row action label="Guests" help="Change the guest count." help-label="Help: Guests"></wt-menu-row>
+    </wt-row-actions>`,
   );
+  const popup = sheet.shadowRoot!.querySelector("[popover]")!;
+  const row = sheet.querySelector("wt-menu-row")!;
   const picked = vi.fn();
   row.addEventListener("click", picked);
+  await userEvent.click(sheet.shadowRoot!.querySelector("button")!);
   const action = page.getByRole("button", { name: "Guests", exact: true });
   const help = page.getByRole("button", { name: "Help: Guests" });
   await expect.element(action).toBeVisible();
@@ -79,8 +84,10 @@ test("keeps the help badge beside the new action", async () => {
   expect(picked).not.toHaveBeenCalled();
   await tooltip.click();
   expect(picked).not.toHaveBeenCalled();
+  expect(popup.matches(":popover-open")).toBe(true);
   await action.click();
   expect(picked).toHaveBeenCalledOnce();
+  expect(popup.matches(":popover-open")).toBe(false);
 });
 
 const MENU =

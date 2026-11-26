@@ -146,6 +146,11 @@ test.each(["", 'sheet-variant="menu"'])(
       expect(popup.getBoundingClientRect().bottom).toBe(296);
       expect(document.activeElement).toBe(choice);
       expect(popup.querySelector('[role="dialog"]')?.getAttribute("aria-label")).toBe("Actions");
+      outside.style.cssText = "position: fixed; bottom: 0; right: 0;";
+      await userEvent.click(outside);
+      expect(otherAction).toHaveBeenCalledOnce();
+      expect(popup.matches(":popover-open")).toBe(false);
+      await userEvent.click(trigger);
     }
     await userEvent.click(choice);
     expect(picked).toHaveBeenCalledOnce();

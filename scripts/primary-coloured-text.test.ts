@@ -83,6 +83,11 @@ export const GRAPHIC_USES: readonly GraphicUse[] = [
     draws: "the column chooser's eye icon",
   },
   {
+    file: "packages/ui/src/components/wt-menu-row.ts",
+    selector: '.trailing wt-icon[name="check"]',
+    draws: "the check mark on a chosen menu row",
+  },
+  {
     file: "packages/ui/src/components/wt-number-stepper.ts",
     selector: "button",
     draws: "the − and + icons",
