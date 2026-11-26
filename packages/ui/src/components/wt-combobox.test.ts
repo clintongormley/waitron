@@ -4288,3 +4288,83 @@ test("keeps a search action first without giving it Enter when a choice matches"
   ]);
   expect(el.value).toBe("tea");
 });
+
+test("an inherited choice without an inherited suffix gives the trigger no description", async () => {
+  const { el, trigger } = await mountCombobox();
+  el.options = [explicitNone, inheritNone];
+  await el.updateComplete;
+  expect(trigger.querySelector(".value")!.textContent!.trim()).toBe("Ninguno");
+  expect(trigger.hasAttribute("aria-describedby")).toBe(false);
+  expect(el.shadowRoot!.querySelectorAll(".hint")).toHaveLength(0);
+});
+
+test("every part naming the trigger is drawn, whether or not the choice is inherited", async () => {
+  registerIcons({ "test-station": "M1 1H15V15H1Z" });
+  const { el, trigger } = await mountCombobox();
+  const named = () =>
+    trigger
+      .getAttribute("aria-labelledby")!
+      .split(" ")
+      .map((id) => el.shadowRoot!.getElementById(id)?.textContent?.trim());
+  el.options = [explicitNone, { ...inheritNone, icon: "test-station", iconLabel: "Prep station" }];
+  await el.updateComplete;
+  expect(named()).toEqual(["Dietary tags", "Ninguno"]);
+  el.value = "none";
+  await el.updateComplete;
+  expect(named()).toEqual(["Dietary tags", "Ninguno"]);
+});
+
+test("turning multiple choice off puts the inherit row first again", async () => {
+  const { el, trigger } = await mountCombobox();
+  el.multiple = true;
+  el.options = [explicitNone, inheritNone, { value: "mains", label: "Mains" }];
+  await el.updateComplete;
+  const labels = () => optionRows(el).map((row) => row.querySelector(".option-label")!.textContent);
+  await userEvent.click(trigger);
+  expect(labels()).toEqual(["Ninguno", "Heredar: Ninguno", "Mains"]);
+  await userEvent.keyboard("{Escape}");
+  el.multiple = false;
+  await el.updateComplete;
+  await userEvent.click(trigger);
+  expect(labels()).toEqual(["Heredar: Ninguno", "Mains", "Ninguno"]);
+});
+
+test("a refresh that drops the active row moves to the chosen one, not the inherit row", async () => {
+  const { el, trigger } = await mountCombobox();
+  el.options = [
+    inheritNone,
+    { value: "mains", label: "Mains" },
+    { value: "starters", label: "Starters" },
+  ];
+  el.value = "starters";
+  await el.updateComplete;
+  trigger.focus();
+  await userEvent.keyboard("{ArrowDown}");
+  expect(activeRowText(el, searchBox(el))).toBe("Starters");
+  await userEvent.keyboard("{ArrowUp}");
+  expect(activeRowText(el, searchBox(el))).toBe("Mains");
+  el.options = [
+    inheritNone,
+    { value: "starters", label: "Starters" },
+    { value: "sweets", label: "Sweets" },
+  ];
+  await el.updateComplete;
+  expect(activeRowText(el, searchBox(el))).toBe("Starters");
+});
+
+test("a refresh that keeps the active first row leaves it active", async () => {
+  const { el, trigger } = await mountCombobox();
+  el.options = [
+    inheritNone,
+    { value: "mains", label: "Mains" },
+    { value: "starters", label: "Starters" },
+  ];
+  el.value = "starters";
+  await el.updateComplete;
+  trigger.focus();
+  await userEvent.keyboard("{ArrowDown}{Home}");
+  expect(activeRowText(el, searchBox(el))).toBe("Heredar: Ninguno");
+  el.options = [...el.options, { value: "sweets", label: "Sweets" }];
+  await el.updateComplete;
+  expect(activeRowText(el, searchBox(el))).toBe("Heredar: Ninguno");
+});

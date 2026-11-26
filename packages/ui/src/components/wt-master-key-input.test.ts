@@ -224,6 +224,19 @@ test("a choice that holds no file reads nothing", async () => {
   expect(loader).not.toHaveBeenCalled();
 });
 
+test("a choice that holds no file leaves a typed key, its line and pdfRead alone", async () => {
+  const { el, seen } = await field();
+  await type(el, KEY);
+  const sent = seen.length;
+  fileControl(el).dispatchEvent(new Event("change", { bubbles: true }));
+  await el.updateComplete;
+  await inner(el).updateComplete;
+  expect(el.pdfRead).toBeNull();
+  expect(seen).toHaveLength(sent);
+  expect(native(el).value).toBe(KEY);
+  expect(message(el)).toBeUndefined();
+});
+
 test("a PDF larger than maxPdfBytes is refused as not a pack without being read", async () => {
   const { el, seen, loader, read } = await field();
   await type(el, KEY);

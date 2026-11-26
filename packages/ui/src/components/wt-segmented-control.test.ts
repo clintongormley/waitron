@@ -431,3 +431,27 @@ test("hides a repeated visible label while keeping the group named and keyboard-
   expect(el.value).toBe("staff_only");
   expect(el.shadowRoot!.activeElement).toBe(buttons(el)[1]);
 });
+
+test("shows its label above the choices unless asked to hide it", async () => {
+  const el = await setup();
+  expect(el.shadowRoot!.querySelector(".label")?.textContent).toBe("Ordered on its own by");
+});
+
+test("equal segments never give way, and turning them on or off measures the row again", async () => {
+  const el = await setupNarrow(200, PASS_ES);
+  expect(givenWay(el)).toBe(true);
+  el.setAttribute("equal-width", "");
+  await el.updateComplete;
+  expect(givenWay(el), "turning equal segments on").toBe(false);
+  expect(await statesOverFrames(el)).toEqual([false, false, false, false, false]);
+  el.removeAttribute("equal-width");
+  await el.updateComplete;
+  expect(givenWay(el), "turning equal segments off").toBe(true);
+});
+
+test("equal segments too narrow for whole words do not give way", async () => {
+  const el = await setupNarrow(100, PASS_ES);
+  el.setAttribute("equal-width", "");
+  await el.updateComplete;
+  expect(await statesOverFrames(el)).toEqual([false, false, false, false, false]);
+});
