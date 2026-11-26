@@ -9,7 +9,7 @@ import { createLabelComparator, foldCache, foldForSearch, searchFor } from "@wai
 import { ChangeObserver } from "../change-observer.js";
 import { subscribePageLanguage } from "../page-language.js";
 import { delegatesFocusShadowRootOptions, dispatchWtChange, uniqueId } from "../interactive.js";
-import "./wt-icon.js";
+import { CHECK_ICON_PATH } from "./wt-icon.js";
 import { popupIndex, popupPlacement } from "../popup-helpers.js";
 
 export interface ComboboxOption {
@@ -57,14 +57,10 @@ function closedText(option: ComboboxOption): string {
 /** With `search="auto"`, the search box shows only when there are more options than this. */
 export const SEARCH_THRESHOLD = 7;
 
-/**
- * The icons wt-combobox draws, which its consuming app registers. `check` is adapted from Google's
- * Material Symbols icon set, Copyright Google, licensed under the Apache License, Version 2.0
- * (https://www.apache.org/licenses/LICENSE-2.0), published at https://fonts.google.com/icons.
- */
+/** The icons the combobox draws, which its consuming app registers. */
 export const DROPDOWN_ICONS: Record<string, string> = {
   "chevron-down": "M2 4L8 10L14 4L14 6.8L8 12.8L2 6.8Z",
-  check: "M6.37 12L2.57 8.2L3.52 7.25L6.37 10.1L12.48 3.98L13.43 4.93Z",
+  check: CHECK_ICON_PATH,
 };
 
 const TYPE_AHEAD_RESET_MS = 500;

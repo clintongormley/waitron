@@ -1,0 +1,51 @@
+import { afterEach, expect, test, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import { cleanup, host, mountInShadowRoot } from "../test-helpers.js";
+import { mountThemed } from "../a11y-helpers.js";
+import "../index.js";
+
+afterEach(async () => {
+  cleanup();
+  await page.viewport(1280, 900);
+});
+
+test("paints a 56 px bar and keeps its heading centred with a long Back label", async () => {
+  await page.viewport(390, 844);
+  const element = await mountThemed(
+    `
+    <wt-top-bar heading="Pay" subtitle="Bill 1" back-label="An unusually long previous screen name">
+      <wt-icon-button slot="action" icon="check" label="Equipment"></wt-icon-button>
+    </wt-top-bar>`,
+    "light",
+  );
+  host.style.setProperty("--wt-color-surface", "rgb(231, 244, 249)");
+  const header = element.shadowRoot?.querySelector("header");
+  expect(header).toBeInstanceOf(HTMLElement);
+  const heading = header!.querySelector("h2")!;
+  const frame = header!.getBoundingClientRect();
+  const title = heading.getBoundingClientRect();
+  const back = header!.querySelector("wt-button")!;
+  const action = element.querySelector("[slot=action]")!;
+  expect(getComputedStyle(header!).backgroundColor).toBe("rgb(231, 244, 249)");
+  expect(frame.height).toBe(56);
+  expect(title.left + title.width / 2).toBeCloseTo(frame.left + frame.width / 2, 0);
+  expect(back.getBoundingClientRect().right).toBeLessThanOrEqual(title.left);
+  expect(action.getBoundingClientRect().left).toBeGreaterThanOrEqual(title.right);
+});
+
+test("Back emits one composed event from the bar", async () => {
+  const bar = await mountInShadowRoot(
+    '<wt-top-bar heading="Pay" back-label="Table 4"></wt-top-bar>',
+  );
+  const listener = vi.fn();
+  document.addEventListener("wt-back", listener);
+  try {
+    const back = bar.shadowRoot?.querySelector("wt-button")?.shadowRoot?.querySelector("button");
+    expect(back).toBeInstanceOf(HTMLButtonElement);
+    await userEvent.click(back!);
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener.mock.calls[0]![0]).toMatchObject({ bubbles: true, composed: true, detail: {} });
+  } finally {
+    document.removeEventListener("wt-back", listener);
+  }
+});

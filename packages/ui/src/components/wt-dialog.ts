@@ -3,6 +3,7 @@ import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "../base-styles.js";
 import { uniqueId } from "../interactive.js";
 import { modalClosed, modalOpened, openSurfaces } from "../modal-layer.js";
+import { syncScrollTabStop } from "../scroll-tab-stop.js";
 import { composedParent, isTabbable, tabbables } from "../tabbable.js";
 import { belongsToComposition } from "@waitron/ui-core/submit-on-enter";
 import type { LeaveReason } from "@waitron/ui-core/unsaved-changes";
@@ -98,6 +99,23 @@ export class WtDialog extends LitElement {
         overflow: auto;
         overscroll-behavior: contain;
         flex-shrink: 1000000;
+      }
+
+      :host([full-screen]) dialog {
+        inset: var(--wt-keyboard-top) 0 var(--wt-keyboard-inset);
+        inline-size: 100%;
+        block-size: var(--wt-dialog-band);
+        max-inline-size: none;
+        max-block-size: none;
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+      }
+
+      :host([full-screen]) .body {
+        flex: 1;
+        padding: 0;
+        overflow: clip;
       }
 
       .header {
@@ -331,6 +349,8 @@ export class WtDialog extends LitElement {
   // Shadows the native ARIAMixin accessor so a caller's aria-label reaches the inner <dialog> when
   // there is no `heading` to name it.
   @property({ attribute: "aria-label" }) override ariaLabel: string | null = null;
+
+  @property({ type: Boolean, reflect: true, attribute: "full-screen" }) fullScreen = false;
 
   private readonly headingId = uniqueId("wt-dialog-heading");
   private readonly descriptionId = uniqueId("wt-dialog-description");
@@ -583,21 +603,11 @@ export class WtDialog extends LitElement {
   }
 
   private syncBodyTabStop(): void {
-    const body = this.bodyEl;
-    const overflows = this.dialog.open && body.scrollHeight > body.clientHeight;
-    if (this.bodyTabStop === "always" || overflows) {
-      body.tabIndex = 0;
-      // A group rather than a region: a region is a landmark, and a dialog's content can hold
-      // landmarks of its own.
-      body.setAttribute("role", "group");
-      if (this.heading) body.setAttribute("aria-labelledby", this.headingId);
-      else body.removeAttribute("aria-labelledby");
-      if (!this.heading && this.ariaLabel) body.setAttribute("aria-label", this.ariaLabel);
-      else body.removeAttribute("aria-label");
-    } else {
-      for (const name of ["tabindex", "role", "aria-labelledby", "aria-label"])
-        body.removeAttribute(name);
-    }
+    const mode =
+      this.fullScreen || (!this.dialog.open && this.bodyTabStop === "overflow")
+        ? "none"
+        : this.bodyTabStop;
+    syncScrollTabStop(this.bodyEl, mode, this.ariaLabel, this.heading ? this.headingId : undefined);
   }
 
   private readonly messageResize = new ResizeObserver(() => this.syncMessageTabStop());
