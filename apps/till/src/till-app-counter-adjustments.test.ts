@@ -2648,7 +2648,7 @@ describe("till-app: a counter save refused for a dish already sent", () => {
     ["Send", "place-order", {}, "placeOrder"],
     ["Pay in cash", "confirm-payment", { method: "cash", amount: "10" }, "recordSale"],
     [
-      "Pay in cash (station named)",
+      "Pay in cash (work already sent to Grill)",
       "confirm-payment",
       { method: "cash", amount: "10" },
       "recordSale",
@@ -2660,7 +2660,7 @@ describe("till-app: a counter save refused for a dish already sent", () => {
     "a refused %s loads the order again and explains why it cannot go further",
     async (_, event, detail, next, stationName) => {
       const combined = next === "recordSale" || next === "pay";
-      const code = stationName === undefined ? "ticket.already_served" : "ticket.already_started";
+      const code = stationName === undefined ? "ticket.already_served" : "ticket.already_fired";
       const refuse = vi.fn().mockRejectedValue({ code, status: 409, stationName });
       const onward = vi.fn();
       const el = await (event === "place-order" ? placeCounter : retrieved)({
@@ -2680,7 +2680,7 @@ describe("till-app: a counter save refused for a dish already sent", () => {
       expect(banner(el)!.textContent!.trim()).toBe(
         stationName === undefined
           ? t(words[code])
-          : t("held.sent_dish_started_named").replace("{name}", stationName),
+          : t("held.sent_dish_fired_named").replace("{name}", stationName),
       );
       expect(counter(el).store.dirty).toBe(false);
       expect(inBasket(el, '[data-cancel-line="1"]')).not.toBeNull();

@@ -2690,6 +2690,17 @@ describe("A803 waiting copy: kitchen paper", () => {
     it("counter paper: a whole-bill save cannot drop a waiting dish already sent to the kitchen", async () => {
       const t = await waitingAtCounter();
       const burger = await lineOf(t.bill2, "Burger");
+      const actor = await passDevice();
+      await inTx(v, (tx) =>
+        moveDishesToStation(
+          tx,
+          v.cfg,
+          t.bill2,
+          { submissionId: randomUUID(), lineIds: [burger.id], stationId: t.pastry.id },
+          actor,
+        ),
+      );
+      expect((await kitchenItemOf(burger.id)).stationId).toBe(t.pastry.id);
       const mark = (await printed(t.grill.printer)).length;
 
       await expect(
