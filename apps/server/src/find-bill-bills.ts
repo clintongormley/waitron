@@ -46,6 +46,10 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
        where dl.sale_id = s.id and dl.deducts_sale_id is not null)`;
   // A payment that paid an advance holds what is left of the advance, as the Pay window counts it
   // (readBillAdvances): a give-back is a corrective of the advance, not a refund of the payment.
+  const paymentHolds = sql`case when a.id is null
+          then bp.applied - coalesce((select sum(br.applied_amount) from refunds br
+            where br.bill_payment_id = bp.id and br.state = 'completed'),0)
+          else a.total + coalesce((select sum(ac.total) from sales ac where ${correctivesOf(sql`ac`, sql`a.id`)}),0) end`;
   return sql`with facts as (
     select wo.id, wo.opened_at, wo.order_number, wo.party_id,
       case when ud.id is null then wo.bill_name else coalesce(wo.bill_name, wo.label) end as bill_name,
@@ -73,10 +77,7 @@ export function findBillsRelation(inZones?: OrderZoneCondition): SQL {
           join invoice_correction_refunds icr on icr.tender_refund_id = tr.id
           join invoice_corrections ic on ic.id = icr.invoice_correction_id
           where tr.sale_id = s.id and t.sale_id = s.id and tr.state = 'completed' and ic.state = 'filed')
-      else (select coalesce(sum(case when a.id is null
-          then bp.applied - coalesce((select sum(br.applied_amount) from refunds br
-            where br.bill_payment_id = bp.id and br.state = 'completed'),0)
-          else a.total + coalesce((select sum(ac.total) from sales ac where ${correctivesOf(sql`ac`, sql`a.id`)}),0) end),0)
+      else (select coalesce(sum(${paymentHolds}),0)
         from bill_payments bp
         left join bill_advances ba on ba.bill_payment_id = bp.id
         left join sales a on a.id = ba.advance_sale_id

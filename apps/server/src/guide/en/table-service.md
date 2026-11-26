@@ -727,7 +727,7 @@ A printed bill takes no more dishes. If the guests order something else, put it 
 
 If the guests then want to pay separately, open **⋮** and choose **Reopen bill**. This
 cancels the existing receipt and reopens the bill, ready for [**Move dishes…**](table-service.md#move-dishes).
-Money already paid counts towards it, a payment on its own receipt included.
+Money already paid counts towards it.
 If **Reopen bill** lists dishes not yet served, choose **Mark served** for any that came. Once
 something on the bill has been served and nothing has been paid, **Stop these dishes and reopen**
 stops every dish still listed and leaves it off the reopened bill, except one the kitchen had

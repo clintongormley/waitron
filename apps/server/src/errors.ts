@@ -997,7 +997,8 @@ declare module "@waitron/shared" {
     "tender.refund_needs_correction": { tenderId: string };
     /** A refund, outside Correct invoice, of the money a payment on account (`saleId`, numbered
      * `invoiceNumber`) took, before an invoice took it off. After, it is refused
-     * `advance.taken_off_final_invoice` while that invoice's payments still hold money. */
+     * `advance.taken_off_final_invoice` while that invoice's payments still hold money or its bill
+     * can be reopened (`reopenBill`). */
     "tender.refund_of_advance": { tenderId: string; saleId: string; invoiceNumber: string };
     "tender.manual_refund_pin_required": { tenderId: string };
     "tender.refund_unavailable": { tenderId: string };
