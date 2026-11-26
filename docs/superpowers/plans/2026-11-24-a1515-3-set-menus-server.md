@@ -1528,7 +1528,7 @@ the carves and copies that list the set-menu columns, and readers of `adjustment
 
 D38 as the owner answers it. `reducedLineIds` and `frozenLineIdSources` (`set-menu-freeze.ts`) stop
 counting a share of one (spec section 6). D2's freeze for comps and discounts is gone after 3c; only
-kept-charge cancels, service cancellations and, until A1515-1 PR 3, item payments freeze.
+kept-charge cancels and service cancellations freeze.
 
 ## PR 4 — Moving dishes with their discounts (`feat/a1515-3-moves`)
 

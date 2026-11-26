@@ -14,7 +14,7 @@ import "./errors.js";
  * Refuses moving these set-menu dishes away from their set menu when that would unfreeze them
  * (D18): `set_menu.moves_with_set_menu` for a dish whose cancel kept its charge or whose service
  * was cancelled, and `set_menu.move_adjusted` for one a comp or discount lowered, or one held
- * itself or through an extra (D30, D34).
+ * through an extra (D30, D34).
  */
 export async function refuseMovingFrozenDishes(
   tx: Transaction,
