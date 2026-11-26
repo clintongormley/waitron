@@ -8,7 +8,6 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import forge from "node-forge";
 import type { BackupQuery } from "@waitron/store";
 import { beginOwnTotpEnrollment, startManagementSession } from "@waitron/identity";
 import { afterEach, beforeEach, vi } from "vitest";
@@ -20,7 +19,6 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { migrationOptionsFor } from "@waitron/migrations";
 import { orderedMigrationSets, withOperationAuthority } from "@waitron/module";
 import { nodeId, seriesId } from "@waitron/shared";
-import { certificate } from "@waitron/server-kit/certificate.js";
 import { activateAllocation } from "@waitron/fiscal-verifactu/src/allocation.js";
 import {
   withHourAdmission,
@@ -42,6 +40,7 @@ import { packArchive, type ArchiveEntry } from "../backup-archive.js";
 import { encryptArtifactAsync } from "../artifact-cipher.js";
 import { buildBackupVerificationTarget } from "../backup-verification-target.js";
 import type { BackupVerificationRequest } from "../backup-verification-protocol.js";
+import { mintSelfSignedServerCert } from "../self-signed-cert.js";
 import type { BackupVerificationDeps } from "../backup-verification.js";
 
 export const verificationNode = {
@@ -54,15 +53,11 @@ const bases = [
   { code: "A", purpose: "standard" },
   { code: "R", purpose: "corrective" },
 ];
-const pair = forge.pki.rsa.generateKeyPair(2048);
-const issuer = { cn: "Verification fixture CA", key: pair.privateKey };
-const validity = { notBefore: new Date("2026-01-01Z"), notAfter: new Date("2030-01-01Z") };
-const ca = certificate(issuer.cn, pair, issuer, "01", validity, [
-  { name: "basicConstraints", cA: true },
-]);
-const server = certificate("verification.test", pair, issuer, "02", validity, [
-  { name: "basicConstraints", cA: false },
-]);
+const tls = mintSelfSignedServerCert({
+  hostnames: ["waitron.local"],
+  ipAddresses: ["127.0.0.1"],
+  now: new Date(verificationTime),
+});
 const candidate = makeAuthority().issue();
 const runtime = {
   release: "authority-test",
@@ -276,10 +271,9 @@ export function useBackupVerificationFixture() {
     const files: Record<string, string> = {
       "secrets.env": `WAITRON_CREDENTIALS_KEY=${vault}\nWAITRON_CREDENTIALS_KEY_VERSION=1\n`,
       "trading.env": `WAITRON_NODE_ID=${verificationNode.nodeId}\nWAITRON_ENV=production\n`,
-      "tls/ca.crt": forge.pki.certificateToPem(ca),
-      "tls/ca.key": forge.pki.privateKeyToPem(pair.privateKey),
-      "tls/server.pem":
-        forge.pki.certificateToPem(server) + forge.pki.privateKeyToPem(pair.privateKey),
+      "tls/ca.crt": tls.caCertPem,
+      "tls/ca.key": tls.caKeyPem,
+      "tls/server.pem": tls.serverCertPem + tls.serverKeyPem,
     };
     for (const [name, value] of Object.entries(files)) {
       await mkdir(dirname(join(stateDir, name)), { recursive: true });

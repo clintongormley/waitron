@@ -10,20 +10,22 @@ import {
   reissueServerLeaf,
 } from "./self-signed-cert.js";
 
-// One RSA-2048 keypair for the whole suite, so it pays keygen once rather than per case.
-let sharedKeypair: forge.pki.rsa.KeyPair;
+// Reuse three distinct keys across cases.
+let sharedKeys: forge.pki.rsa.KeyPair[];
 beforeAll(() => {
-  sharedKeypair = forge.pki.rsa.generateKeyPair(2048);
+  sharedKeys = Array.from({ length: 3 }, () => forge.pki.rsa.generateKeyPair(2048));
 });
 
-const mint = (over: Record<string, unknown> = {}) =>
-  mintSelfSignedServerCert({
+const mint = (over: Record<string, unknown> = {}) => {
+  const keys = sharedKeys.slice();
+  return mintSelfSignedServerCert({
     hostnames: ["waitron.local", "localhost"],
     ipAddresses: ["127.0.0.1"],
     now: new Date("2026-08-26T00:00:00Z"),
-    keypair: () => sharedKeypair,
+    keypair: () => keys.shift()!,
     ...over,
   });
+};
 
 describe("mintSelfSignedServerCert", () => {
   it("mints a leaf carrying every requested hostname and IP as a SAN", () => {
@@ -34,12 +36,14 @@ describe("mintSelfSignedServerCert", () => {
     expect(cert.subjectAltName).toContain("127.0.0.1");
   });
 
-  it("signs the leaf with the CA (leaf issuer == CA subject)", () => {
-    const { caCertPem, serverCertPem } = mint();
-    const ca = forge.pki.certificateFromPem(caCertPem);
+  it("signs the leaf with the intermediate named as its issuer", () => {
+    const { caCertPem, caKeyPem, serverCertPem } = mint();
+    const root = forge.pki.certificateFromPem(caCertPem);
+    const signer = forge.pki.certificateFromPem(caKeyPem);
     const leaf = forge.pki.certificateFromPem(serverCertPem);
-    expect(leaf.issuer.getField("CN").value).toBe(ca.subject.getField("CN").value);
-    expect(ca.verify(leaf)).toBe(true);
+    expect(leaf.issuer.getField("CN").value).toBe(signer.subject.getField("CN").value);
+    expect(root.verify(signer)).toBe(true);
+    expect(signer.verify(leaf)).toBe(true);
   });
 
   it("sets the leaf subject CN to hostnames[0] and gives the CA and leaf distinct serials", () => {
@@ -74,13 +78,13 @@ describe("mintSelfSignedServerCert", () => {
     expect(cert.subjectAltName).toContain("DNS:waitron.local");
   });
 
-  it("the CA carries a critical nameConstraints extension permitting waitron.local + loopback + RFC1918", () => {
+  it("the intermediate carries a critical nameConstraints extension permitting waitron.local + loopback + RFC1918", () => {
     const m = mintSelfSignedServerCert({
       hostnames: ["waitron.local", "localhost"],
       ipAddresses: ["127.0.0.1", "192.168.1.50"],
       now: new Date("2026-09-09T00:00:00Z"),
     });
-    const ca = forge.pki.certificateFromPem(m.caCertPem);
+    const ca = forge.pki.certificateFromPem(m.caKeyPem);
     const nc = ca.getExtension("nameConstraints") as
       { critical?: boolean; value?: string } | undefined;
     expect(nc).toBeDefined();
@@ -134,14 +138,51 @@ describe("reissueServerLeaf", () => {
       now,
     });
     const ca = new X509Certificate(original.caCertPem);
-    const cert = new X509Certificate(leaf.serverCertPem);
-    expect(cert.verify(ca.publicKey)).toBe(true);
+    const [leafBlock, signerBlock] = forge.pem.decode(leaf.serverCertPem);
+    const signer = new X509Certificate(forge.pem.encode(signerBlock!));
+    const cert = new X509Certificate(forge.pem.encode(leafBlock!));
+    expect(signer.verify(ca.publicKey)).toBe(true);
+    expect(cert.verify(signer.publicKey)).toBe(true);
     expect(cert.subjectAltName).toContain("IP Address:192.168.1.77");
     expect(cert.subjectAltName).not.toContain("192.168.1.10");
     expect(cert.subjectAltName).toContain("DNS:waitron.local");
     expect(cert.serialNumber).not.toBe(new X509Certificate(original.serverCertPem).serialNumber);
     expect(leaf.serverKeyPem).not.toBe(original.serverKeyPem);
     expect(cert.checkPrivateKey(createPrivateKey(leaf.serverKeyPem))).toBe(true);
+  });
+
+  it.each(["same key", "wrong path length"])("refuses a signer with the %s", (damage) => {
+    const original = mint(damage === "same key" ? { keypair: () => sharedKeys[0]! } : {});
+    const [signerData, keyData] = forge.pem.decode(original.caKeyPem);
+    const signer = forge.pki.certificateFromPem(forge.pem.encode(signerData!));
+    if (damage === "wrong path length") {
+      signer.setExtensions([
+        ...signer.extensions.filter((entry) => entry.name !== "basicConstraints"),
+        { name: "basicConstraints", cA: true, pathLenConstraint: 1 },
+      ]);
+      signer.sign(sharedKeys[0]!.privateKey, forge.md.sha256.create());
+    }
+    expect(() =>
+      reissueServerLeaf({
+        ...original,
+        caKeyPem: forge.pki.certificateToPem(signer) + forge.pem.encode(keyData!),
+        hostnames: ["waitron.local"],
+        ipAddresses: [],
+        now: new Date("2026-08-26T00:00:00Z"),
+      }),
+    ).toThrow(expect.objectContaining({ code: "setup.not_ready" }));
+  });
+
+  it("reports setup not ready when the box clock predates its signing certificates", () => {
+    const original = mint({ now: new Date("2026-08-26T00:00:00Z") });
+    expect(() =>
+      reissueServerLeaf({
+        ...original,
+        hostnames: ["waitron.local"],
+        ipAddresses: [],
+        now: new Date("2026-08-24T00:00:00Z"),
+      }),
+    ).toThrow(expect.objectContaining({ code: "setup.not_ready" }));
   });
 
   it("never outlives its authority", () => {
@@ -152,7 +193,7 @@ describe("reissueServerLeaf", () => {
       hostnames: ["waitron.local"],
       ipAddresses: [],
       now: new Date("2031-09-23T10:00:00Z"),
-      keypair: () => sharedKeypair,
+      keypair: () => sharedKeys[2]!,
     });
     const caEnd = Date.parse(new X509Certificate(original.caCertPem).validTo);
     const leafEnd = Date.parse(new X509Certificate(leaf.serverCertPem).validTo);
@@ -168,7 +209,7 @@ describe("reissueServerLeaf", () => {
         hostnames: [],
         ipAddresses: [],
         now: new Date("2026-09-23T10:00:00Z"),
-        keypair: () => sharedKeypair,
+        keypair: () => sharedKeys[2]!,
       }),
     ).toThrow(expect.objectContaining({ code: "setup.cert_hostnames_empty" }));
   });

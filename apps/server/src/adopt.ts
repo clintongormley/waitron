@@ -36,7 +36,7 @@ import { parseModuleOverrides, type ModuleConfig } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { ALL_MODULES } from "./modules.js";
 
-import { assertAuthorityKeyMatches, installVenueAuthority, markJoined } from "./box-tls-install.js";
+import { assertVenueAuthority, installVenueAuthority, markJoined } from "./box-tls-install.js";
 import type { DeploymentEnvironment } from "./config.js";
 import type { JoinedBox } from "./box-join-attempt.js";
 import { writePendingAdoption } from "./finish-adoption.js";
@@ -175,7 +175,7 @@ export async function adoptFromPrimary(
   ) {
     throw new AppError("mirror.bundle_fetch_failed", {});
   }
-  assertAuthorityKeyMatches(bundle.boxCaPem, bundle.boxCaKeyPem);
+  assertVenueAuthority(bundle.boxCaPem, bundle.boxCaKeyPem, deps.now());
   const bundleEnv = keyRingEnv(bundle.credentialsRing);
   // The ring persisted below would be hidden at the next start, and the keys sealed under it lost.
   // Compared as `loadKeyRing` reads each side, so another spelling of the same ring joins.

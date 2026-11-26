@@ -8,7 +8,6 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
-import forge from "node-forge";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -17,7 +16,7 @@ import * as store from "@waitron/store";
 import { useVenueDb, type VenueDb } from "@waitron/db/testing/venue-db.js";
 import { withNodeTransaction } from "@waitron/db";
 import { loadKeyRing, sealNodeSigningKeyTx } from "@waitron/credentials";
-import { certificate } from "@waitron/server-kit/certificate.js";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { buildManifest } from "./backup-manifest.js";
 import { packArchive, type ArchiveEntry } from "./backup-archive.js";
 import { encryptArtifactAsync } from "./artifact-cipher.js";
@@ -47,21 +46,17 @@ const capturedAt = "2026-10-20T08:00:00.000Z";
 const runtime = { release: "test-release", revision: "a".repeat(40), fingerprint: "b".repeat(64) };
 const key = "private-archive-key-sentinel";
 const vault = Buffer.alloc(32, 19).toString("base64");
-const pair = forge.pki.rsa.generateKeyPair(2048);
-const issuer = { cn: "Verification fixture CA", key: pair.privateKey };
-const validity = { notBefore: new Date("2026-01-01Z"), notAfter: new Date("2030-01-01Z") };
-const ca = certificate(issuer.cn, pair, issuer, "01", validity, [
-  { name: "basicConstraints", cA: true },
-]);
-const server = certificate("verification.test", pair, issuer, "02", validity, [
-  { name: "basicConstraints", cA: false },
-]);
+const tls = mintSelfSignedServerCert({
+  hostnames: ["waitron.local"],
+  ipAddresses: ["127.0.0.1"],
+  now: new Date(capturedAt),
+});
 const recoveryEntries = Object.entries({
   "secrets.env": `WAITRON_CREDENTIALS_KEY=${vault}\nWAITRON_CREDENTIALS_KEY_VERSION=1\n`,
   "trading.env": `WAITRON_NODE_ID=${sourceNodeId}\nWAITRON_ENV=preproduction\n`,
-  "tls/ca.crt": forge.pki.certificateToPem(ca),
-  "tls/ca.key": forge.pki.privateKeyToPem(pair.privateKey),
-  "tls/server.pem": forge.pki.certificateToPem(server) + forge.pki.privateKeyToPem(pair.privateKey),
+  "tls/ca.crt": tls.caCertPem,
+  "tls/ca.key": tls.caKeyPem,
+  "tls/server.pem": tls.serverCertPem + tls.serverKeyPem,
 }).map(([name, text]) => ({ name: "secrets/" + name, bytes: Buffer.from(text) }));
 async function seedSource(db: VenueDb["db"]) {
   db.run(

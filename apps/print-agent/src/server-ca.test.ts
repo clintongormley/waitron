@@ -28,6 +28,7 @@ function rsaKeys(): { publicKey: forge.pki.rsa.PublicKey; privateKey: forge.pki.
 function mintCa(
   leafCn: string,
   dnsName?: string,
+  withIntermediate = false,
 ): { caPem: string; serverKeyPem: string; serverCertPem: string } {
   const caKeys = rsaKeys();
   const ca = forge.pki.createCertificate();
@@ -43,6 +44,18 @@ function mintCa(
   ]);
   ca.sign(caKeys.privateKey, forge.md.sha256.create());
 
+  const signingKeys = withIntermediate ? rsaKeys() : caKeys;
+  const issuerName = withIntermediate ? "test-intermediate" : "test-ca";
+  let chain = "";
+  if (withIntermediate) {
+    const intermediate = forge.pki.certificateFromPem(forge.pki.certificateToPem(ca));
+    intermediate.publicKey = signingKeys.publicKey;
+    intermediate.serialNumber = "03";
+    intermediate.setSubject([{ name: "commonName", value: issuerName }]);
+    intermediate.sign(caKeys.privateKey, forge.md.sha256.create());
+    chain = forge.pki.certificateToPem(intermediate);
+  }
+
   const serverKeys = rsaKeys();
   const leaf = forge.pki.createCertificate();
   leaf.publicKey = serverKeys.publicKey;
@@ -50,7 +63,7 @@ function mintCa(
   leaf.validity.notBefore = new Date(2026, 0, 1);
   leaf.validity.notAfter = new Date(2030, 0, 1);
   leaf.setSubject([{ name: "commonName", value: leafCn }]);
-  leaf.setIssuer([{ name: "commonName", value: "test-ca" }]);
+  leaf.setIssuer([{ name: "commonName", value: issuerName }]);
   leaf.setExtensions([
     { name: "basicConstraints", cA: false },
     { name: "extKeyUsage", serverAuth: true },
@@ -63,12 +76,12 @@ function mintCa(
       ],
     },
   ]);
-  leaf.sign(caKeys.privateKey, forge.md.sha256.create());
+  leaf.sign(signingKeys.privateKey, forge.md.sha256.create());
 
   return {
     caPem: forge.pki.certificateToPem(ca),
     serverKeyPem: forge.pki.privateKeyToPem(serverKeys.privateKey),
-    serverCertPem: forge.pki.certificateToPem(leaf),
+    serverCertPem: forge.pki.certificateToPem(leaf) + chain,
   };
 }
 
@@ -140,8 +153,8 @@ describe("createServerTrustingFetch", () => {
     await expect(trusting(`${origin}/x`)).rejects.toThrow();
   });
 
-  it("with the box CA fetched from /ca.crt, the same request succeeds", async () => {
-    const material = mintCa("localhost");
+  it("verifies a served chain against the root fetched from /ca.crt", async () => {
+    const material = mintCa("localhost", undefined, true);
     const { server, origin } = await startHttps(material);
     servers.push(server);
     const responder = caResponder(material.caPem);

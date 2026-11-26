@@ -3899,9 +3899,9 @@ same `tls/` still goes to repair. A linked `tls/` emptied by a staged reset cut 
 joined record went still goes to repair.
 
 **Every start checks its leaf.** `ensureLeaf` (`apps/server/src/box-secrets.ts`) reissues the
-leaf when it lacks one of the box's names or a current address, does not verify under
-`tls/ca.crt`, or does not match the private key in `tls/server.pem`, and otherwise leaves it byte for
-byte. A start that refuses, and a box another box has fenced, leave `tls/` as it was; a failed
+leaf when it lacks one of the box's names or a current address, does not verify through the intermediate in
+`tls/server.pem` to the root in `tls/ca.crt`, or does not match the private key in `tls/server.pem`,
+and otherwise leaves it byte for byte. A start that refuses, and a box another box has fenced, leave `tls/` as it was; a failed
 reissue logs `tls.leaf_reissue_failed` and the start carries on, because a wrong name is no
 reason to stop selling.
 

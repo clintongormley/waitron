@@ -114,7 +114,7 @@ export function mountConnectionBootstrap(
   if (bootstrapOnly)
     app.on("GET", ["/ca.crt", "/setup-api/ca.crt"], async (c) => {
       const status = await inspectBoxTls(deps);
-      if (offered && status.caAvailable) {
+      if (offered && status.fingerprint !== undefined) {
         try {
           const pem = await readBoxPublicCa(deps.stateDir, deps.now());
           if (pem !== null && new X509Certificate(pem).fingerprint256 === status.fingerprint)

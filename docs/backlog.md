@@ -380,8 +380,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 ### The setup wizard, onboarding and the demo venue
 
-- **A1573. A box certificate that cannot vouch for other websites on Android** (owner, 2026-11-25; go-live, size M). Android ignores the limit on the certificate a device installs, and obeys it on a second certificate underneath. Changing it later means installing a new certificate on every device. [Detail](backlog/setup.md#a1573-a-box-certificate-that-cannot-vouch-for-other-websites-on-android)
-
+- **Staff-owned Android phones.** The owner’s decision waits for A1573’s trust checks on a second Android phone and an iPhone. [Phone checks](backlog/setup.md#androidios-on-device-install-and-trust-rows)
 - **Stream the remaining recovery archive uploads.**
   The unused archive-preparation route and emergency handover buffer uploads within 256 MiB.
   [Detail](backlog/setup.md#stream-the-remaining-recovery-archive-uploads).

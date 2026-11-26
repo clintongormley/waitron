@@ -1,4 +1,4 @@
-import { createPrivateKey, X509Certificate } from "node:crypto";
+import { createPrivateKey } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { posix } from "node:path";
 import { loadKeyRing, resolveBackupKeyInputs } from "@waitron/credentials";
@@ -10,6 +10,7 @@ import type { BackupVerificationReason } from "./backup-verification-protocol.js
 import { loadBoxEnv } from "./box-env.js";
 import { errnoOf } from "./errno.js";
 import { readArtifactIdentity } from "./restore.js";
+import { boxCertCurrent, boxLeafChain, boxRoot, boxSigner } from "./self-signed-cert.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 
 type StateResult = {
@@ -93,24 +94,21 @@ export async function verifyBackupStateSecrets(
     return UNSUPPORTED;
   }
   try {
-    const read = (name: string) => Buffer.from(byName.get("secrets/tls/" + name)!.bytes);
-    const ca = new X509Certificate(read("ca.crt"));
-    const server = new X509Certificate(read("server.pem"));
+    const read = (name: string) =>
+      Buffer.from(byName.get("secrets/tls/" + name)!.bytes).toString("utf8");
+    const root = boxRoot(read("ca.crt"));
+    if (!root) return INVALID;
+    const serverPem = read("server.pem");
+    const server = boxLeafChain(serverPem, root, "server");
+    const signer = boxSigner(read("ca.key"), root);
     if (
-      !ca.checkPrivateKey(createPrivateKey(read("ca.key"))) ||
-      !server.checkPrivateKey(createPrivateKey(read("server.pem"))) ||
-      !ca.ca ||
-      !ca.verify(ca.publicKey) ||
-      !server.checkIssued(ca) ||
-      !server.verify(ca.publicKey)
+      !signer ||
+      !server ||
+      signer.cert.fingerprint256 !== server.signer.fingerprint256 ||
+      !server.leaf.checkPrivateKey(createPrivateKey(serverPem))
     )
       return INVALID;
-    if (
-      [ca, server].some(
-        (cert) =>
-          Date.parse(cert.validFrom) > now.getTime() || Date.parse(cert.validTo) <= now.getTime(),
-      )
-    )
+    if (![root, signer.cert, server.leaf].every((cert) => boxCertCurrent(cert, now)))
       return UNAVAILABLE;
   } catch (error) {
     if (errnoOf(error)?.startsWith("ERR_OSSL_")) return INVALID;

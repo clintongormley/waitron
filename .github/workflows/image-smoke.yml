@@ -286,15 +286,11 @@ jobs:
 
           code=$(curl -sk -o ca.crt -w '%{http_code}' https://127.0.0.1/setup-api/ca.crt)
           [ "$code" = "200" ]
-          # A 200 carrying an error page would satisfy a status check on its own, so the body is
-          # parsed and then checked against the leaf the box just served: this endpoint is worth
-          # nothing unless what it hands back is the issuer a phone needs in order to trust that
-          # leaf.
+          # The download must be the root that verifies the chain actually sent over TLS.
           openssl x509 -in ca.crt -noout -subject -issuer
           openssl x509 -in ca.crt -noout -text | grep -q "CA:TRUE"
-          openssl s_client -connect 127.0.0.1:443 -showcerts </dev/null 2>/dev/null \
-            | openssl x509 > leaf.pem
-          openssl verify -CAfile ca.crt leaf.pem
+          openssl s_client -connect 127.0.0.1:443 -verify_return_error -verify_ip 127.0.0.1 \
+            -CAfile ca.crt </dev/null
 
       - name: The image serves the Spanish Products guide
         run: |

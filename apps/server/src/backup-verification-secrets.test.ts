@@ -16,6 +16,7 @@ import * as archiveReaders from "./backup-archive.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
 import { encryptArtifactAsync } from "./artifact-cipher.js";
 import { loadBoxEnv } from "./box-env.js";
+import { issueClientCert, mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import {
   verifyBackupKeyPlacement,
@@ -50,13 +51,24 @@ const leaf = certificate("verification.test", serverKeys, issuer, "02", validity
 ]);
 const pem = forge.pki.certificateToPem;
 const privatePem = forge.pki.privateKeyToPem;
+const signerKeys = forge.pki.rsa.generateKeyPair(2048);
+const tlsKeys = [caKeys, signerKeys, serverKeys].values();
+const material = mintSelfSignedServerCert({
+  hostnames: ["waitron.local"],
+  ipAddresses: ["127.0.0.1"],
+  now,
+  keypair: () => tlsKeys.next().value!,
+});
+const signerPem = forge.pem.encode(forge.pem.decode(material.caKeyPem)[0]!);
+const signer = forge.pki.certificateFromPem(signerPem);
+const issuerName = String(signer.subject.getField("CN").value);
 function entries(): ArchiveEntry[] {
   return Object.entries({
     "secrets.env": `WAITRON_CREDENTIALS_KEY=${key}\nWAITRON_CREDENTIALS_KEY_VERSION=2\n`,
     "trading.env": `WAITRON_NODE_ID=${source.nodeId}\nWAITRON_ENV=preproduction\n${RETIRED_KEY}=${account}\n`,
-    "tls/ca.crt": pem(ca),
-    "tls/ca.key": privatePem(caKeys.privateKey),
-    "tls/server.pem": pem(leaf) + privatePem(serverKeys.privateKey),
+    "tls/ca.crt": material.caCertPem,
+    "tls/ca.key": material.caKeyPem,
+    "tls/server.pem": material.serverCertPem + material.serverKeyPem,
   }).map(([name, text]) => ({ name: "secrets/" + name, bytes: Buffer.from(text) }));
 }
 function set(input: ArchiveEntry[], name: string, text: string): ArchiveEntry[] {
@@ -101,6 +113,19 @@ describe("private host recovery material", () => {
   it("accepts complete matching state with no selected-node sealed row", async () => {
     expect(await verifyBackupStateSecrets(entries(), source, now)).toEqual(pass);
   });
+  it("refuses an old root whose private key is still in the backup", async () => {
+    const old = set(
+      set(set(entries(), "tls/ca.crt", pem(ca)), "tls/ca.key", privatePem(caKeys.privateKey)),
+      "tls/server.pem",
+      pem(leaf) + privatePem(serverKeys.privateKey),
+    );
+    expect(await verifyBackupStateSecrets(old, source, now)).toEqual(invalid);
+  });
+  it("refuses a client-only certificate in the backed-up serving identity", async () => {
+    const client = issueClientCert({ ...material, hostname: "waitron.local", now });
+    const state = set(entries(), "tls/server.pem", client.clientCertPem + client.clientKeyPem);
+    expect(await verifyBackupStateSecrets(state, source, now)).toEqual(invalid);
+  });
   it.each(RECOVERY_FILES)("requires recovery file %s", async (name) => {
     expect(
       await verifyBackupStateSecrets(
@@ -143,23 +168,32 @@ describe("private host recovery material", () => {
       const wrong = name === "tls/ca.key" ? serverKeys.privateKey : caKeys.privateKey;
       const encoded = privatePem(wrong);
       expect(createPrivateKey(encoded).type).toBe("private");
-      expect(await verifyBackupStateSecrets(set(entries(), name, encoded), source, now)).toEqual(
-        invalid,
-      );
+      const certificateChain = name === "tls/ca.key" ? signerPem : material.serverCertPem;
+      expect(
+        await verifyBackupStateSecrets(
+          set(entries(), name, certificateChain + encoded),
+          source,
+          now,
+        ),
+      ).toEqual(invalid);
     },
   );
   it("checks the server signature even when the issuer name matches", async () => {
     const wrong = certificate(
       "verification.test",
       serverKeys,
-      { cn: issuer.cn, key: serverKeys.privateKey },
+      { cn: issuerName, key: serverKeys.privateKey },
       "03",
       validity,
-      [{ name: "basicConstraints", cA: false }],
+      [
+        { name: "basicConstraints", cA: false },
+        { name: "extKeyUsage", serverAuth: true },
+      ],
     );
-    expect(new X509Certificate(pem(wrong)).issuer).toBe(new X509Certificate(pem(ca)).subject);
+    expect(new X509Certificate(pem(wrong)).issuer).toBe(new X509Certificate(signerPem).subject);
+    const wrongChain = pem(wrong) + signerPem + material.serverKeyPem;
     expect(
-      await verifyBackupStateSecrets(set(entries(), "tls/server.pem", pem(wrong)), source, now),
+      await verifyBackupStateSecrets(set(entries(), "tls/server.pem", wrongChain), source, now),
     ).toEqual(invalid);
   });
   it("requires a CA certificate rather than a matching self-signed leaf", async () => {
@@ -170,14 +204,38 @@ describe("private host recovery material", () => {
       await verifyBackupStateSecrets(set(entries(), "tls/ca.crt", pem(wrong)), source, now),
     ).toEqual(invalid);
   });
+  it("reports a self-signed root using an unsupported key algorithm as invalid", async () => {
+    const ecRoot = `-----BEGIN CERTIFICATE-----
+MIIBfTCCASOgAwIBAgIUQpbXa26WB3/3g2FB12HLn2nRmlkwCgYIKoZIzj0EAwIw
+GzEZMBcGA1UEAwwQd2FpdHJvbi1zZXR1cC1jYTAeFw0yNjExMjYxMDI5MjBaFw0z
+NjExMjMxMDI5MjBaMBsxGTAXBgNVBAMMEHdhaXRyb24tc2V0dXAtY2EwWTATBgcq
+hkjOPQIBBggqhkjOPQMBBwNCAAR5y/3nUrAY6cJIM5F+fE7qBogVvcW/qakoHj+I
+aucE4IG+fD1FPUKUR38nn7lBUHiGOl3kpoFiHWk7dLrS1VQ8o0UwQzAdBgNVHQ4E
+FgQUZVrs7c3swpA9Ho3n35Vm0xZEOlYwEgYDVR0TAQH/BAgwBgEB/wIBATAOBgNV
+HQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwIDSAAwRQIgXqTyCA1iw58dta4PYdtedJJC
+b1YaBIhopZ0LIDXrxKYCIQCuPZWAIRmOhl5lML4OTrvojcISBlszAvEXOD2kZaxb
+Jg==
+-----END CERTIFICATE-----
+`;
+    const cert = new X509Certificate(ecRoot);
+    expect(cert.verify(cert.publicKey)).toBe(true);
+    expect(cert.publicKey.asymmetricKeyType).toBe("ec");
+    expect(
+      await verifyBackupStateSecrets(
+        set(entries(), "tls/ca.crt", ecRoot),
+        source,
+        cert.validFromDate,
+      ),
+    ).toEqual(invalid);
+  });
   it("refuses a CA whose own signature is damaged", async () => {
-    const cert = forge.pki.certificateFromPem(pem(ca));
+    const cert = forge.pki.certificateFromPem(material.caCertPem);
     cert.sign(serverKeys.privateKey, forge.md.sha256.create());
     expect(
       await verifyBackupStateSecrets(set(entries(), "tls/ca.crt", pem(cert)), source, now),
     ).toEqual(invalid);
   });
-  it.each(["2025-01-01T00:00:00.000Z", "2030-01-01T00:00:00.000Z"])(
+  it.each(["2025-01-01T00:00:00.000Z", "2040-01-01T00:00:00.000Z"])(
     "treats renewal at %s as unavailable rather than damaged key material",
     async (at) => {
       expect(await verifyBackupStateSecrets(entries(), source, new Date(at))).toEqual(unavailable);
@@ -428,23 +486,36 @@ it("a vault key supplied only by excluded backup.env is an unsupported layout", 
 it("does not accept a non-finite verification clock", async () => {
   expect(await verifyBackupStateSecrets(entries(), source, new Date(NaN))).toEqual(unavailable);
 });
-it.each(["CA", "server"])("checks the %s validity independently", async (which) => {
-  const expired = { ...validity, notAfter: new Date("2026-09-01T00:00:00.000Z") };
-  const changed =
-    which === "CA"
-      ? certificate(issuer.cn, caKeys, issuer, "05", expired, [
-          { name: "basicConstraints", cA: true },
-        ])
-      : certificate("verification.test", serverKeys, issuer, "06", expired, [
-          { name: "basicConstraints", cA: false },
-        ]);
+it.each(["root", "signer", "server"])("checks the %s validity independently", async (which) => {
+  const input = entries();
+  const expired = new Date(now.getTime() - 1000);
+  if (which === "root") {
+    const root = forge.pki.certificateFromPem(material.caCertPem);
+    root.validity.notAfter = expired;
+    root.sign(caKeys.privateKey, forge.md.sha256.create());
+    expect(
+      await verifyBackupStateSecrets(set(input, "tls/ca.crt", pem(root)), source, now),
+    ).toEqual(unavailable);
+    return;
+  }
+  const server = forge.pki.certificateFromPem(material.serverCertPem);
+  if (which === "server") {
+    server.validity.notAfter = expired;
+    server.sign(signerKeys.privateKey, forge.md.sha256.create());
+    const chain = pem(server) + signerPem + material.serverKeyPem;
+    expect(
+      await verifyBackupStateSecrets(set(input, "tls/server.pem", chain), source, now),
+    ).toEqual(unavailable);
+    return;
+  }
+  const intermediate = forge.pki.certificateFromPem(signerPem);
+  intermediate.validity.notAfter = expired;
+  intermediate.sign(caKeys.privateKey, forge.md.sha256.create());
+  const chain = pem(server) + pem(intermediate) + material.serverKeyPem;
+  const signing = pem(intermediate) + privatePem(signerKeys.privateKey);
   expect(
     await verifyBackupStateSecrets(
-      set(
-        entries(),
-        which === "CA" ? "tls/ca.crt" : "tls/server.pem",
-        pem(changed) + (which === "server" ? privatePem(serverKeys.privateKey) : ""),
-      ),
+      set(set(input, "tls/ca.key", signing), "tls/server.pem", chain),
       source,
       now,
     ),
@@ -489,14 +560,20 @@ it("checks the server issuer name as well as its signature", async () => {
   const wrong = certificate(
     "verification.test",
     serverKeys,
-    { cn: "Different test CA", key: caKeys.privateKey },
+    { cn: "Different test CA", key: signerKeys.privateKey },
     "07",
     validity,
-    [{ name: "basicConstraints", cA: false }],
+    [
+      { name: "basicConstraints", cA: false },
+      { name: "extKeyUsage", serverAuth: true },
+    ],
   );
-  expect(new X509Certificate(pem(wrong)).verify(new X509Certificate(pem(ca)).publicKey)).toBe(true);
+  expect(new X509Certificate(pem(wrong)).verify(new X509Certificate(signerPem).publicKey)).toBe(
+    true,
+  );
+  const wrongChain = pem(wrong) + signerPem + material.serverKeyPem;
   expect(
-    await verifyBackupStateSecrets(set(entries(), "tls/server.pem", pem(wrong)), source, now),
+    await verifyBackupStateSecrets(set(entries(), "tls/server.pem", wrongChain), source, now),
   ).toEqual(invalid);
 });
 it("ignores a redundant retired key in backup.env", async () => {

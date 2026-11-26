@@ -1,3 +1,5 @@
+import { X509Certificate, createPrivateKey } from "node:crypto";
+import forge from "node-forge";
 import { buildLandingApp } from "./landing-app.js";
 import { mountDiscovery } from "./discovery-api.js";
 import { EventEmitter } from "node:events";
@@ -11,14 +13,21 @@ import { mountConnectionBootstrap } from "./connection-bootstrap.js";
 import { CONNECTION_TEXT } from "./connection-bootstrap-strings.js";
 import { RECOVERY_PAGE_WORDS } from "./i18n/recovery-page.js";
 import { NOT_SET_UP_WORDS } from "./i18n/trust-page.js";
+import { certChain, fixtureBoxKeys } from "./testing/box-tls.js";
 
 const now = new Date("2026-10-21T00:00:00Z");
 let material: SelfSignedMaterial;
+let rootKeyPem: string;
 beforeAll(() => {
+  const keys = fixtureBoxKeys();
+  const root = keys();
+  const generated = [root, keys(), keys()].values();
+  rootKeyPem = forge.pki.privateKeyToPem(root.privateKey);
   material = mintSelfSignedServerCert({
     hostnames: ["waitron.local", "localhost"],
     ipAddresses: ["127.0.0.1"],
     now,
+    keypair: () => generated.next().value!,
   });
 });
 const dirs: string[] = [];
@@ -378,34 +387,42 @@ it("does not continue to protected admission while a leaf is still missing", asy
   expect(f.onRepaired).not.toHaveBeenCalled();
 });
 
-it.each(["repair reply", "public page"])(
-  "%s includes only the parsed public certificate from a combined PEM",
-  async (surface) => {
-    const f = await fixture(true);
-    const combined = material.caCertPem + material.caKeyPem;
-    await writeFile(join(f.stateDir, "tls/ca.crt"), combined);
-    const response =
-      surface === "repair reply"
-        ? await f.app.request(url, { method: "POST", headers: allowed })
-        : await f.app.request("/setup/connection");
-    expect(response.status).toBe(200);
-    const content = await response.text();
-    expect(content).not.toContain("PRIVATE KEY");
-    if (surface === "repair reply") {
-      const result = JSON.parse(content);
-      expect(result.caCertificate).toBe(material.caCertPem);
-      expect(Object.keys(result).sort()).toEqual([
-        "caAvailable",
-        "caCertificate",
-        "continuationRequired",
-        "fingerprint",
-        "state",
-        "trust",
-      ]);
-    }
-    expect(await readFile(join(f.stateDir, "tls/ca.crt"), "utf8")).toBe(combined);
-  },
-);
+it("an explicit repair replaces a public root with its private key appended", async () => {
+  const f = await fixture(true);
+  expect(
+    new X509Certificate(material.caCertPem).checkPrivateKey(createPrivateKey(rootKeyPem)),
+  ).toBe(true);
+  const caFile = join(f.stateDir, "tls/ca.crt");
+  await writeFile(caFile, material.caCertPem + rootKeyPem);
+  const response = await f.app.request(url, { method: "POST", headers: allowed });
+  expect(response.status).toBe(200);
+  const content = await response.text();
+  expect(content).not.toContain("PRIVATE KEY");
+  const result = JSON.parse(content);
+  const replaced = await readFile(caFile, "utf8");
+  expect(replaced.includes("PRIVATE KEY")).toBe(false);
+  expect(result).toEqual({
+    caAvailable: true,
+    caCertificate: replaced,
+    continuationRequired: true,
+    fingerprint: new X509Certificate(replaced).fingerprint256,
+    state: "healthy",
+    trust: "new-required",
+  });
+  expect(replaced).not.toBe(material.caCertPem);
+  expect(certChain(replaced)).toHaveLength(1);
+});
+
+it("the public page leaves a combined certificate file untouched and exposes no key", async () => {
+  const f = await fixture(true);
+  const combined = material.caCertPem + material.caKeyPem;
+  const caFile = join(f.stateDir, "tls/ca.crt");
+  await writeFile(caFile, combined);
+  const response = await f.app.request("/setup/connection");
+  expect(response.status).toBe(200);
+  expect(await response.text()).not.toContain("PRIVATE KEY");
+  expect(await readFile(caFile, "utf8")).toBe(combined);
+});
 
 it.each(["en", "es"] as const)(
   "rereads low disk space on the public connection page in %s",

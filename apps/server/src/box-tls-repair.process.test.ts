@@ -1,3 +1,4 @@
+import { certChain } from "./testing/box-tls.js";
 import { dirname, join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -105,7 +106,10 @@ it.each([
     const ca = await readFile(join(f.stateDir, "tls/ca.crt"), "utf8");
     if (candidate !== null) expect(ca).toBe(candidate.caCertPem);
     const leaf = new X509Certificate(await readFile(join(f.stateDir, "tls/server.pem")));
-    expect(leaf.verify(new X509Certificate(ca).publicKey)).toBe(true);
+    const served = await readFile(join(f.stateDir, "tls/server.pem"), "utf8");
+    const signer = new X509Certificate(certChain(served)[1]!);
+    expect(signer.verify(new X509Certificate(ca).publicKey)).toBe(true);
+    expect(leaf.verify(signer.publicKey)).toBe(true);
     expect(
       leaf.checkPrivateKey(createPrivateKey(await readFile(join(f.stateDir, "tls/server.pem")))),
     ).toBe(true);

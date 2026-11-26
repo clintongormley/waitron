@@ -1,11 +1,9 @@
-import { execFileSync } from "node:child_process";
 import { X509Certificate, createPrivateKey } from "node:crypto";
 import { cp, mkdtemp, readFile, readdir, stat, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createSecureContext } from "node:tls";
-import forge from "node-forge";
-import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { chmod, lstat, symlink, writeFile, mkdir, type FileHandle } from "node:fs/promises";
 import {
   ensureBoxSecrets,
@@ -18,6 +16,7 @@ import {
 import { inspectBoxTls } from "./box-tls-repair.js";
 import { finishTlsInstall } from "./box-tls-install.js";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
+import { fixtureBoxKeys, handshake } from "./testing/box-tls.js";
 import {
   syncsAndRenames as recordSyncsAndRenames,
   writtenDurably,
@@ -49,10 +48,6 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   };
 });
 
-let kp: forge.pki.rsa.KeyPair;
-beforeAll(() => {
-  kp = forge.pki.rsa.generateKeyPair(2048);
-});
 const dirs: string[] = [];
 afterEach(async () => {
   for (const d of dirs.splice(0)) await rm(d, { recursive: true, force: true });
@@ -68,7 +63,7 @@ const deps = (stateDir: string) => ({
   hostnames: ["waitron.local", "localhost"],
   now: () => new Date("2026-08-26T00:00:00Z"),
   mint: (o: Parameters<typeof mintSelfSignedServerCert>[0]) =>
-    mintSelfSignedServerCert({ ...o, keypair: () => kp }),
+    mintSelfSignedServerCert({ ...o, keypair: fixtureBoxKeys() }),
   makeKeyRing: () => ({ key: "A".repeat(43) + "=", version: 1 }), // shape only; boot uses the real one
   listIpv4: () => ["192.168.1.50"],
 });
@@ -481,32 +476,15 @@ describe("mintedBoxLeaf", () => {
   });
 });
 
-function haveOpenssl(): boolean {
-  try {
-    execFileSync("openssl", ["version"], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// node-forge's verifyCertificateChain does NOT enforce nameConstraints (lib/x509.js §"check names
-// with permitted names tree" is a TODO), so openssl is the only local proof that the filtered leaf
-// carries no SAN the CA refuses.
-describe.runIf(haveOpenssl())("ensureBoxSecrets leaf verifies against its own CA (openssl)", () => {
-  it("mints a leaf that verifies even when the interface list carries out-of-set addresses", async () => {
-    const d = await newDir();
-    await ensureBoxSecrets({
-      ...deps(d),
-      listIpv4: () => ["192.168.1.50", "100.64.1.2", "169.254.1.2"],
-    });
-    const out = execFileSync(
-      "openssl",
-      ["verify", "-CAfile", join(d, "tls", "ca.crt"), join(d, "tls", "server.pem")],
-      { encoding: "utf8" },
-    );
-    expect(out).toMatch(/OK/);
+it("mints a leaf that verifies even when the interface list carries out-of-set addresses", async () => {
+  const d = await newDir();
+  await ensureBoxSecrets({
+    ...deps(d),
+    now: () => new Date(),
+    listIpv4: () => ["192.168.1.50", "100.64.1.2", "169.254.1.2"],
   });
+  const root = await readFile(join(d, "tls", "ca.crt"), "utf8");
+  expect(await handshake(d, root, "waitron.local")).toBe("verified");
 });
 
 describe("tightenTlsDir", () => {

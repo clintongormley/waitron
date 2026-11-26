@@ -1,8 +1,8 @@
 import { X509Certificate } from "node:crypto";
 import { createSecureContext } from "node:tls";
-import forge from "node-forge";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mintSelfSignedServerCert, reissueServerLeaf } from "./self-signed-cert.js";
+import { certChain, fixtureBoxKeys } from "./testing/box-tls.js";
 
 const forced = vi.hoisted(() => ({ bytes: undefined as Buffer | undefined }));
 
@@ -15,11 +15,6 @@ vi.mock("node:crypto", async (importOriginal) => {
         ? Buffer.from(forced.bytes)
         : actual.randomBytes(size)) as typeof actual.randomBytes,
   };
-});
-
-let sharedKeypair: forge.pki.rsa.KeyPair;
-beforeAll(() => {
-  sharedKeypair = forge.pki.rsa.generateKeyPair(2048);
 });
 
 afterEach(() => {
@@ -53,9 +48,10 @@ describe("certificate serials", () => {
         hostnames,
         ipAddresses,
         now,
-        keypair: () => sharedKeypair,
+        keypair: fixtureBoxKeys(),
       });
       expectLoadable(material.caCertPem);
+      expectLoadable(certChain(material.serverCertPem)[1]!);
       expectLoadable(material.serverCertPem, material.serverKeyPem);
     },
   );
@@ -67,7 +63,7 @@ describe("certificate serials", () => {
         hostnames,
         ipAddresses,
         now,
-        keypair: () => sharedKeypair,
+        keypair: fixtureBoxKeys(),
       });
       forced.bytes = draw;
       const leaf = reissueServerLeaf({
@@ -76,7 +72,7 @@ describe("certificate serials", () => {
         hostnames,
         ipAddresses,
         now,
-        keypair: () => sharedKeypair,
+        keypair: fixtureBoxKeys(),
       });
       expectLoadable(leaf.serverCertPem, leaf.serverKeyPem);
     },
