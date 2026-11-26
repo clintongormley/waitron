@@ -281,9 +281,11 @@ options list does not: an option such as _rare_ or _well done_ carries no allerg
 suitability of its own, because it is a way of asking for the same dish rather than something extra
 to eat. The till and station show each item's own list.
 
-Allergens and diet labels are part of the published menu: publish the menu to put a change live.
-[Patch live menu](products.md#patch-live-menu) can also put a product's current allergens and diets
-live without publishing.
+If a live or scheduled menu still shows earlier allergens or diet labels after you save, Waitron
+lists the affected live menus and lets you choose which scheduled versions to update.
+Choose **Update now** to correct those menus
+straight away. If you choose **Not now**, use **Review and publish** to see which changes are still
+waiting. Publish the menu or use [Patch live menu](products.md#patch-live-menu) to put them live.
 
 In the Products list, **Not reviewed**, **None** and **Declared** distinguish a dish you have not
 checked from one you have checked. A variant shows the status of the allergens it uses.

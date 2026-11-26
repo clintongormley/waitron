@@ -4066,6 +4066,22 @@ export const en = {
   "menu_preview.also_on": "also on {menus}",
   "menu_preview.warnings_heading": "Warnings",
   "menu_preview.allergens_unreviewed": "Allergens not yet reviewed",
+  "menu_preview.declarations_advisory":
+    "Allergen or diet changes are not live yet: {names}. Publish or patch the menu to put them live.",
+  "live_declarations.live_title": "Update the live menus now?",
+  "live_declarations.scheduled_title": "Update the scheduled menus now?",
+  "live_declarations.live_menus":
+    "These live menus still show the old allergens and diets: {menus}.",
+  "live_declarations.also_scheduled": "These scheduled menus differ too",
+  "live_declarations.scheduled": "Choose the scheduled versions to update",
+  "live_declarations.version": "{menu}, from {time}",
+  "live_declarations.update": "Update now",
+  "live_declarations.not_now": "Not now",
+  "live_declarations.retry": "Try again",
+  "live_declarations.refused":
+    "The product is saved, but these menus were not updated: {menus}. Try again, or publish them.",
+  "live_declarations.unconfirmed":
+    "The product is saved, but Waitron could not confirm the update for: {menus}.",
   "menu_preview.document_heading": "The menu as it will be published",
   "menu_preview.document_heading_live": "The menu as it is live",
   "menu_preview.shortcut_missing_one":
@@ -8947,6 +8963,22 @@ export const es: Record<StringKey, string> = {
   "menu_preview.also_on": "también en {menus}",
   "menu_preview.warnings_heading": "Avisos",
   "menu_preview.allergens_unreviewed": "Alérgenos sin revisar",
+  "menu_preview.declarations_advisory":
+    "Hay cambios de alérgenos o dieta sin publicar: {names}. Publica el menú o actualiza su versión activa.",
+  "live_declarations.live_title": "¿Actualizar ahora los menús activos?",
+  "live_declarations.scheduled_title": "¿Actualizar ahora los menús programados?",
+  "live_declarations.live_menus":
+    "Estos menús activos aún muestran los alérgenos y las dietas anteriores: {menus}.",
+  "live_declarations.also_scheduled": "Estos menús programados también tienen diferencias",
+  "live_declarations.scheduled": "Elige las versiones programadas que quieres actualizar",
+  "live_declarations.version": "{menu}, a partir del {time}",
+  "live_declarations.update": "Actualizar ahora",
+  "live_declarations.not_now": "Ahora no",
+  "live_declarations.retry": "Volver a intentar",
+  "live_declarations.refused":
+    "El producto se ha guardado, pero no se han actualizado estos menús: {menus}. Vuelve a intentarlo o publícalos.",
+  "live_declarations.unconfirmed":
+    "El producto se ha guardado, pero Waitron no ha podido confirmar la actualización de estos menús: {menus}.",
   "menu_preview.document_heading": "La carta tal como se publicará",
   "menu_preview.document_heading_live": "La carta tal como está publicada",
   "menu_preview.shortcut_missing_one":

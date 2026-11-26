@@ -118,7 +118,7 @@ export class MenuStructureProductEditor {
   close(): void {
     this.#target = null;
     this.#returning = false;
-    if (this.#dialog.reading || this.#dialog.open || this.#dialog.busy) this.#dialog.close();
+    if (this.#dialog.active) this.#dialog.close();
   }
 
   #afterClose(): void {

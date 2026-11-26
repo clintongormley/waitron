@@ -2354,7 +2354,7 @@ describe("mountMenuApi — products", () => {
       const preview = await send(app, "GET", `/management-api/menus/${menuId}/preview`);
       const { hash } = (await preview.json()) as MenuPreview;
       const scheduled = await send(app, "POST", `/management-api/menus/${menuId}/publications`, {
-        body: { expectedHash: hash, activatesAt: { date: "2099-01-01", time: "12:00" } },
+        body: { expectedHash: hash, activatesAt: { date: "2099-01-01", time: "00:30" } },
       });
       expect(scheduled.status).toBe(201);
       const { versionId } = (await scheduled.json()) as { versionId: string };
@@ -2365,7 +2365,14 @@ describe("mountMenuApi — products", () => {
         expect.objectContaining({
           menuId,
           live: false,
-          queued: [expect.objectContaining({ versionId, stillOld: false })],
+          queued: [
+            {
+              versionId,
+              stillOld: false,
+              activatesAt: "2098-12-31T23:30:00.000Z",
+              local: { date: "2099-01-01", time: "00:30", offset: "+01:00", repeated: false },
+            },
+          ],
         }),
       ]);
     });

@@ -3,6 +3,7 @@ import type { MenuPreview } from "../api/client.js";
 import { staffPresentationName } from "@waitron/shared";
 import { localizedName } from "../i18n/localized.js";
 import { fill, t } from "../i18n/t.js";
+import { conjunctionList } from "../i18n/list.js";
 import { publicationBlockerCount } from "./menu-publication-actions.js";
 import { leftToBrowser } from "../navigation.js";
 import "@waitron/ui/src/components/wt-dialog.js";
@@ -109,6 +110,20 @@ export function renderFoldedMenuWarnings(warnings: MenuPreview["warnings"], menu
           ${renderMenuWarnings(entries, menuName, true)}
         </wt-disclosure>`;
   });
+}
+
+export function renderDeclarationsAdvisory(changes: MenuPreview["changes"]) {
+  const names = new Set<string>();
+  for (const change of changes) {
+    if (change.kind !== "product_changed" && change.kind !== "set_menu_changed") continue;
+    if (change.fields.some((field) => field === "allergens" || field === "diet"))
+      names.add(change.kind === "product_changed" ? change.name : change.setMenu.name);
+  }
+  return names.size === 0
+    ? nothing
+    : html`<p data-test="declarations-advisory">
+        ${fill("menu_preview.declarations_advisory", { names: conjunctionList([...names]) })}
+      </p>`;
 }
 
 export interface PublishWarningConfirmation {

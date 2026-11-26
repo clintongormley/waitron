@@ -102,7 +102,7 @@ it("saves a product, refreshes the same Structure row and returns focus to its m
     .mockImplementation(async (id, value) => {
       expect(id).toBe("p-burger");
       product = { ...product, name: value.name };
-      return { ...menuProductEditorValue, name: value.name };
+      return { ...menuProductEditorValue, name: value.name, declarationMenus: [] };
     });
   const menu = await openMenu({
     updateProductEditor: update,
@@ -124,6 +124,54 @@ it("saves a product, refreshes the same Structure row and returns focus to its m
     .toBe("Double burger");
   expect(update).toHaveBeenCalledTimes(1);
   await expect.poll(() => menu.table()?.activeElement).toBe(menu.row());
+});
+
+it("returns focus to the Structure row after the live menu question closes", async () => {
+  const menu = await openMenu({
+    updateProductEditor: async (_id, body) => ({
+      ...menuProductEditorValue,
+      name: body.name,
+      declarationMenus: [{ menuId: "menu-one", name: "Lunch", live: true, queued: [] }],
+    }),
+  });
+  const editor = await menu.open();
+  await changeName(editor, "Double burger");
+  const modal = editor.shadowRoot!.querySelector("wt-modal")!;
+  const closed = dialogClosed(modal);
+  await userEvent.click(page.elementLocator(modal.querySelector('[data-test="save"]')!));
+  await closed;
+
+  const question = page.getByRole("dialog", { name: "Update the live menus now?" });
+  await expect.element(question).toBeVisible();
+  expect(menu.table()?.activeElement).not.toBe(menu.row());
+  await page.getByRole("button", { name: "Not now" }).click();
+  await expect.element(question).not.toBeInTheDocument();
+  await expect.poll(() => menu.table()?.activeElement).toBe(menu.row());
+});
+
+it("clears a pending live menu question when browser history leaves Structure", async () => {
+  const menu = await openMenu({
+    getMenuPrices: async () => [],
+    updateProductEditor: async () => ({
+      ...menuProductEditorValue,
+      declarationMenus: [{ menuId: "menu-one", name: "Lunch", live: true, queued: [] }],
+    }),
+  });
+  const editor = await menu.open();
+  await changeName(editor, "Double burger");
+  await userEvent.click(
+    page.elementLocator(editor.shadowRoot!.querySelector('[data-test="save"]')!),
+  );
+  const question = page.getByRole("dialog", { name: "Update the live menus now?" });
+  await expect.element(question).toBeVisible();
+
+  history.replaceState(null, "", "/menus/menu/menu-one/view/prices");
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await expect.element(question).not.toBeInTheDocument();
+  history.replaceState(null, "", address);
+  window.dispatchEvent(new PopStateEvent("popstate"));
+  await expect.poll(menu.row).toBeTruthy();
+  expect(menu.root.querySelector("dashboard-live-declarations-dialog")).toBeNull();
 });
 
 it("starts at the photo and returns there after opening a variant and pressing Escape", async () => {
@@ -310,7 +358,11 @@ it.each(["saved", "other menu", "Prices"] as const)(
         });
         if (!saved) throw { code: "connection.failed" };
         product = { ...product, name: body.name };
-        return { ...menuProductEditorValue, name: body.name };
+        return {
+          ...menuProductEditorValue,
+          name: body.name,
+          declarationMenus: [{ menuId: "menu-one", name: "Lunch", live: true, queued: [] }],
+        };
       });
     const menu = await openMenu({
       listMenus: async () => [
@@ -350,6 +402,7 @@ it.each(["saved", "other menu", "Prices"] as const)(
         .toContain("Burger");
     }
     expect(menu.editor()?.open ?? false).toBe(saved);
+    expect(menu.root.querySelector("dashboard-live-declarations-dialog")).toBeNull();
     if (prices) {
       history.replaceState(null, "", address);
       window.dispatchEvent(new PopStateEvent("popstate"));
@@ -375,7 +428,7 @@ it.each([true, false])(
             }),
       updateProductEditor: async () => {
         rows = [{ ...menuProduct, name }];
-        return { ...menuProductEditorValue, name };
+        return { ...menuProductEditorValue, name, declarationMenus: [] };
       },
     });
     const search = menu.root.querySelector<HTMLElementTagNameMap["wt-input"]>(
@@ -411,7 +464,7 @@ it("clears a post-save read failure when the product list retry succeeds", async
     updateProductEditor: async () => {
       product = { ...product, name: "Double burger" };
       fail = true;
-      return { ...menuProductEditorValue, name: product.name };
+      return { ...menuProductEditorValue, name: product.name, declarationMenus: [] };
     },
   });
   const editor = await menu.open();

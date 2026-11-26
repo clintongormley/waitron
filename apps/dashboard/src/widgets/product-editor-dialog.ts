@@ -1,5 +1,6 @@
 import { html, nothing, type LitElement, type ReactiveController } from "lit";
 import type { ContentLanguages } from "@waitron/shared";
+import type { DeclarationMenu } from "@waitron/menu";
 import type { WtModal } from "@waitron/ui";
 import type {
   CategoryInput,
@@ -31,6 +32,8 @@ import { productEditorField, type ProductEditor } from "./product-editor.js";
 import type { ProductEditorDraft } from "./product-editor-model.js";
 import type { CourseList } from "./course-list.js";
 import { unitRefusalErrors, type UnitFormErrors } from "./unit-form.js";
+import type { LiveDeclarationQuestion } from "./live-declarations-dialog.js";
+import "./live-declarations-dialog.js";
 import "./product-editor.js";
 import "./course-list.js";
 import "./category-create-form.js";
@@ -84,6 +87,8 @@ export class ProductEditorDialog implements ReactiveController {
   #childRefusals: { error: unknown; errors: ChildRefusals } | null = null;
   #addedCourse: string | null = null;
   #closingCourses: number | null = null;
+  #pendingDeclarations: LiveDeclarationQuestion | null = null;
+  #declarationQuestion: LiveDeclarationQuestion | null = null;
   readonly #child: ProductChildCreate;
 
   constructor(
@@ -108,12 +113,24 @@ export class ProductEditorDialog implements ReactiveController {
     return this.effects.api();
   }
 
+  get active(): boolean {
+    return (
+      this.reading ||
+      this.open ||
+      this.busy ||
+      this.#pendingDeclarations !== null ||
+      this.#declarationQuestion !== null
+    );
+  }
+
   hostDisconnected(): void {
     this.close();
   }
 
   close(): void {
     this.#editorGeneration++;
+    this.#pendingDeclarations = null;
+    this.#declarationQuestion = null;
     this.#child.reset();
     this.#editingList = null;
     this.#fieldErrors = {};
@@ -179,7 +196,7 @@ export class ProductEditorDialog implements ReactiveController {
     this.host.requestUpdate();
     const editing = this.value;
     let generation = this.#editorGeneration;
-    let saved: ProductEditorValue;
+    let saved: ProductEditorValue & { declarationMenus?: DeclarationMenu[] };
     try {
       saved = editing
         ? await this.#api.updateProductEditor(editing.id, event.detail.body)
@@ -205,6 +222,8 @@ export class ProductEditorDialog implements ReactiveController {
     if (generation === this.#editorGeneration) {
       this.#editor()?.closeSaved(event.detail.value);
       this.close();
+      if (editing !== null && saved.declarationMenus?.length)
+        this.#pendingDeclarations = { id: saved.id, menus: saved.declarationMenus };
       generation = this.#editorGeneration;
       this.busy = true;
       this.effects.closed?.(false);
@@ -231,8 +250,24 @@ export class ProductEditorDialog implements ReactiveController {
 
   #afterClose(event: Event): void {
     if (event.composedPath()[0] !== this.#editor()?.shadowRoot?.querySelector("wt-modal")) return;
-    if (!this.open) this.effects.afterClose?.();
+    if (this.open) return;
+    if (this.#pendingDeclarations === null) this.effects.afterClose?.();
+    else {
+      this.#declarationQuestion = this.#pendingDeclarations;
+      this.#pendingDeclarations = null;
+      this.host.requestUpdate();
+    }
   }
+
+  readonly #closeDeclarations = (event: Event): void => {
+    event.stopPropagation();
+    this.#declarationQuestion = null;
+    this.host.requestUpdate();
+    this.effects.afterClose?.();
+  };
+
+  readonly #correctDeclarations: DashboardApi["correctLiveDeclarations"] = (id, queued) =>
+    this.#api.correctLiveDeclarations(id, queued);
 
   #coursesWindow(): WtModal {
     return this.host.shadowRoot!.querySelector<WtModal>("[data-test=courses-dialog]")!;
@@ -463,6 +498,15 @@ export class ProductEditorDialog implements ReactiveController {
           void this.openExisting(event.detail.productId);
         }}
       ></dashboard-product-editor>
+      ${
+        this.#declarationQuestion === null
+          ? nothing
+          : html`<dashboard-live-declarations-dialog
+              .question=${this.#declarationQuestion}
+              .correct=${this.#correctDeclarations}
+              @wt-close=${this.#closeDeclarations}
+            ></dashboard-live-declarations-dialog>`
+      }
       <wt-modal
         size="standard"
         data-test="courses-dialog"

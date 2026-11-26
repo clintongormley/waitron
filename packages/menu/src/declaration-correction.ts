@@ -1,6 +1,6 @@
 import { and, asc, eq, gt } from "drizzle-orm";
 import { menuReleases, menus, menuVersions, now, type Transaction } from "@waitron/db";
-import { AppError, type MenuDocument } from "@waitron/shared";
+import { AppError, type LocalTime, type MenuDocument } from "@waitron/shared";
 import type { DeclarationValues } from "./declaration-values.js";
 import { canonicalJson } from "./menu-document.js";
 import { declarationsFor } from "./menu-patch.js";
@@ -35,12 +35,18 @@ export interface QueuedDeclarationCorrection {
   stillOld: boolean;
 }
 
-export interface DeclarationMenu {
+type WaitingVersion = Pick<QueuedDeclarationCorrection, "versionId" | "activatesAt" | "stillOld">;
+
+interface WaitingDeclarationMenu {
   menuId: string;
   name: string;
   /** The live version disagrees, so the correction route corrects it. */
   live: boolean;
-  queued: { versionId: string; activatesAt: string; stillOld: boolean }[];
+  queued: WaitingVersion[];
+}
+
+export interface DeclarationMenu extends WaitingDeclarationMenu {
+  queued: (WaitingVersion & { local: LocalTime & { utcFallback?: true } })[];
 }
 
 const holds = (copy: DeclarationCopy, values: DeclarationValues | undefined): boolean =>
@@ -175,7 +181,7 @@ export async function waitingDeclarationMenus(
   tx: Transaction,
   productIds: readonly string[],
   before: ReadonlyMap<string, DeclarationValues>,
-): Promise<DeclarationMenu[]> {
+): Promise<WaitingDeclarationMenu[]> {
   const after = await readProductDeclarationValues(tx, productIds);
   const unchanged = productIds.every(
     (id) => canonicalJson(after.get(id) ?? null) === canonicalJson(before.get(id) ?? null),

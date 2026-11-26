@@ -407,6 +407,30 @@ describe("DashboardApi routes", () => {
     ]);
   });
 
+  it("sends the selected scheduled versions to the product's declaration correction route", async () => {
+    const answer = { menus: [{ menuId: "m-lunch", name: "Lunch" }] };
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse(answer));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.correctLiveDeclarations("prod-9", ["version-2"])).resolves.toEqual(answer);
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/management-api/products/prod-9/live-declarations", "POST", { queued: ["version-2"] }],
+    ]);
+  });
+
+  it("ends a declaration correction whose reply never arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      const api = new DashboardApi("", () => new Promise(() => {}));
+      const correction = api.correctLiveDeclarations("prod-9", []);
+      const refused = expect(correction).rejects.toEqual({ code: "connection.timed_out" });
+      await vi.advanceTimersByTimeAsync(30_000);
+      await refused;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("reads and saves the department's operation description with its receipt policy", async () => {
     const settings = {
       receipt: { operationDescription: "Restaurant service" },

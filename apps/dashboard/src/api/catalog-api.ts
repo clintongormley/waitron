@@ -1,5 +1,5 @@
 import type { DashboardRequest } from "@waitron/dashboard-kit";
-import type { ProductItemsChange, ExtraOfferUsage } from "@waitron/menu";
+import type { DeclarationMenu, ProductItemsChange, ExtraOfferUsage } from "@waitron/menu";
 import type {
   ProductEditorSaveBody,
   Product,
@@ -19,6 +19,7 @@ import { MenuApi } from "./menu-api.js";
 
 /** A product editor write: the editor's read still carries `vatClass`, which the save refuses. */
 export type ProductSaveBody = Omit<ProductEditorSaveBody, "vatClass">;
+export type ProductEditorUpdate = ProductEditorValue & { declarationMenus: DeclarationMenu[] };
 // ── Menu-management types ──────────────────────────────────────────────────────────────────
 
 export type PricingUnit = "each" | "weight";
@@ -212,8 +213,20 @@ export class CatalogApi extends MenuApi {
   createProductEditor(input: ProductSaveBody): Promise<ProductEditorValue> {
     return this.#request<ProductEditorValue>("/management-api/products/editor", "POST", input);
   }
-  updateProductEditor(id: string, input: ProductSaveBody): Promise<ProductEditorValue> {
-    return this.#request<ProductEditorValue>(`/management-api/products/${id}/editor`, "PUT", input);
+  updateProductEditor(id: string, input: ProductSaveBody): Promise<ProductEditorUpdate> {
+    return this.#request(`/management-api/products/${id}/editor`, "PUT", input);
+  }
+
+  correctLiveDeclarations(
+    id: string,
+    queued: string[],
+  ): Promise<{ menus: { menuId: string; name: string }[] }> {
+    return this.#request(
+      `/management-api/products/${id}/live-declarations`,
+      "POST",
+      { queued },
+      { timeLimitMs: 30_000, refusals: "envelope" },
+    );
   }
   // ── Options lists and extras lists (`/management-api/modifiers/{options,extras}`) ───────────────
 
