@@ -33,6 +33,7 @@ import type {
   GiveBackRequest,
   GiveBackRight,
   GiveBackView,
+  GiveBackWaitReason,
   GiveBackWay,
 } from "../api/give-back-types.js";
 import { reasonPicker } from "./reason-picker.js";
@@ -696,7 +697,7 @@ export class TillGiveBackDialog extends LitElement {
       hint,
       this.view!.choices[purpose],
       () => this.#choose(purpose),
-      waitReasonText,
+      this.#waitText,
     );
   }
   #choices(view: GiveBackView) {
@@ -755,7 +756,7 @@ export class TillGiveBackDialog extends LitElement {
               namesLocale: this.namesLocale,
               ticked: this.draft.lineIds,
               onTick: (line, checked) => this.#tick(line, checked),
-              reasonText: waitReasonText,
+              reasonText: this.#waitText,
             })
           : nothing
       }
@@ -814,7 +815,7 @@ export class TillGiveBackDialog extends LitElement {
         purpose,
         chosen: this.draft.way,
         onChoose: (way) => this.#chooseWay(way),
-        reasonText: waitReasonText,
+        reasonText: this.#waitText,
       })}
       ${
         answer === null
@@ -903,10 +904,12 @@ export class TillGiveBackDialog extends LitElement {
     if (step === null) return this.view?.underWay ?? null;
     return step.kind === "done" && !waitsForCard(step.outcome) ? step.outcome.underWay : null;
   }
+  readonly #waitText = (reason: GiveBackWaitReason) => waitReasonText(reason, this.fullInvoice);
   #underWay(correction: InvoiceCorrectionView) {
     return html`<till-give-back-under-way
       .api=${this.api}
       .saleId=${this.saleId}
+      .fullInvoice=${this.fullInvoice}
       .correction=${correction}
       .corrections=${this.corrections}
       .refunds=${this.refunds}

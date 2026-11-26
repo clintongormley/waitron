@@ -63,9 +63,13 @@ export async function readApprovers(
     limit.done();
   }
 }
-/** Why a choice, a dish or a payment must wait. */
-export const waitReasonText = (reason: GiveBackWaitReason): string =>
-  recoveryText(reason) ?? giveBackReasonMessage(reason.code, currentLocale(), reason.params);
+/** Why a choice, a dish or a payment must wait, on a full invoice when `fullInvoice`. */
+export const waitReasonText = (reason: GiveBackWaitReason, fullInvoice = false): string =>
+  recoveryText(reason) ??
+  giveBackReasonMessage(reason.code, currentLocale(), {
+    ...reason.params,
+    ...(fullInvoice && { fullInvoice }),
+  });
 /** Runs `work`, keeping the till from reloading for a box update until it ends, also when the
  * device locks meanwhile and the window goes. */
 export function holdingReload<T>(host: HTMLElement, work: () => Promise<T>): Promise<T> {

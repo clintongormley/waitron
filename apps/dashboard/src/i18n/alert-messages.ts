@@ -495,13 +495,13 @@ export const ALERT_MESSAGES: Readonly<
     },
   },
   "invoice_correction.filing_refused": {
-    en: `{moneyBack:money} went back to a customer, but its corrective receipt could not be issued. Do not give the money back again. On a till, open Find a bill, choose it under Money back under way and press Finish.${MORE_EN}`,
-    es: `Se devolvieron {moneyBack:money} a un cliente, pero no se ha podido emitir su ticket rectificativo. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta, elígela en Devoluciones en curso y pulsa Terminar.${MORE_ES}`,
+    en: `{moneyBack:money} went back to a customer, but its corrective receipt could not be issued. Do not give the money back again. On a till, open Find a bill and choose it under Money back under way. If it offers Finish, press it. If not, it says why the corrective receipt cannot be issued yet; once that is put right, press Check again there.${MORE_EN}`,
+    es: `Se devolvieron {moneyBack:money} a un cliente, pero no se ha podido emitir su ticket rectificativo. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso. Si ofrece Terminar, púlsalo. Si no, indica por qué aún no se puede emitir el ticket rectificativo; cuando se haya resuelto, pulsa allí Comprobar de nuevo.${MORE_ES}`,
     variants: {
       fullInvoice: {
         mode: "replace",
-        en: `{moneyBack:money} went back to a customer, but its corrective invoice could not be issued. Do not give the money back again. On a till, open Find a bill, choose it under Money back under way and press Finish.${MORE_EN}`,
-        es: `Se devolvieron {moneyBack:money} a un cliente, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta, elígela en Devoluciones en curso y pulsa Terminar.${MORE_ES}`,
+        en: `{moneyBack:money} went back to a customer, but its corrective invoice could not be issued. Do not give the money back again. On a till, open Find a bill and choose it under Money back under way. If it offers Finish, press it. If not, it says why the corrective invoice cannot be issued yet; once that is put right, press Check again there.${MORE_EN}`,
+        es: `Se devolvieron {moneyBack:money} a un cliente, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso. Si ofrece Terminar, púlsalo. Si no, indica por qué aún no se puede emitir la factura rectificativa; cuando se haya resuelto, pulsa allí Comprobar de nuevo.${MORE_ES}`,
       },
     },
   },

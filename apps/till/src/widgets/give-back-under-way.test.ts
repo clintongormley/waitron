@@ -359,7 +359,7 @@ describe("ending it", () => {
     expect(
       giveBackFilingMessage("sale.correction_not_admitted", "en", { reason: "filing_refused" }),
     ).toBe(
-      "The tax agency refused this receipt, so the money given back cannot be recorded on it until the receipt is fixed in Fiscal filing, on the dashboard. Then press Check again.",
+      "The tax agency refused this receipt, or sending it to the agency is on hold, so the money given back cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
     );
 
     setLocale("es");
@@ -380,6 +380,26 @@ describe("ending it", () => {
         expect(words).not.toContain("equipo");
         expect(words).not.toBe(giveBackFilingMessage(code, "en", { reason }));
       }
+  });
+
+  it("on a full invoice refused or held, says so and offers Check again, not Finish", async () => {
+    const fileNow = {
+      refusal: "sale.correction_not_admitted",
+      reason: "filing_refused",
+      closable: false,
+    };
+    const { el } = await mount({ ...OPEN, moneyBack: "6.05", left: "0.00", fileNow });
+    el.fullInvoice = true;
+    await el.updateComplete;
+    expect(shown(el, "finish")).toBe(false);
+    expect(shown(el, "check")).toBe(true);
+    expect(text(root(el).querySelector("[data-file-refusal]"))).toBe(
+      giveBackFilingMessage("sale.correction_not_admitted", "en", {
+        reason: "filing_refused",
+        fullInvoice: true,
+      }),
+    );
+    expect(text(root(el).querySelector("[data-file-refusal]"))).toMatch(/this full invoice/);
   });
 
   it("Cancel this money back is offered only with nothing back or waiting, and closes it", async () => {

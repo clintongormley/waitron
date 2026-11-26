@@ -3,7 +3,7 @@ import { deferred } from "../../test/clock-app.js";
 import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
-import { codeMessage } from "../i18n/codes.js";
+import { codeMessage, giveBackReasonMessage } from "../i18n/codes.js";
 import { en, es } from "../i18n/strings.js";
 import { guideHref } from "../help-guide.js";
 import { formatMoney } from "@waitron/shared";
@@ -155,12 +155,34 @@ describe("the choice", () => {
     expect(goodwill.tagName).not.toBe("WT-CHOICE-ROW");
     expect(goodwill.getAttribute("aria-disabled")).toBe("true");
     expect(text(root(el).querySelector("[data-choice-reason=goodwill]"))).toBe(
-      "The tax agency refused this receipt, so money for dishes or goodwill cannot go back until the receipt is fixed in Fiscal filing, on the dashboard. Money owed for cancelled dishes and the extra paid on top can still go back.",
+      "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, money for dishes or goodwill cannot go back; money owed for cancelled dishes and the extra paid on top can.",
     );
     await choose(el, "goodwill");
     expect(root(el).querySelector("[data-purpose]")).toBeNull();
     await choose(el, "extra");
     expect(text(root(el).querySelector("[data-purpose]"))).toBe("Extra paid on top of the bill");
+  });
+
+  it("on a full invoice, names it in a choice's wait and hands that on to Money back under way", async () => {
+    const refused = { code: "sale.correction_not_admitted", params: { reason: "filing_refused" } };
+    const { el } = await mount(
+      withView({
+        choices: { ...VIEW.choices, goodwill: { available: false, reason: refused } },
+      }),
+    );
+    el.fullInvoice = true;
+    await el.updateComplete;
+    expect(text(root(el).querySelector("[data-choice-reason=goodwill]"))).toBe(
+      giveBackReasonMessage("sale.correction_not_admitted", "en", {
+        reason: "filing_refused",
+        fullInvoice: true,
+      }),
+    );
+
+    const opened = await mount(withView({ underWay: UNDER_WAY }));
+    opened.el.fullInvoice = true;
+    await opened.el.updateComplete;
+    await vi.waitFor(() => expect(underWay(opened.el)?.fullInvoice).toBe(true));
   });
 
   it("says on a dish line held by a refused receipt what can still go back", async () => {
@@ -174,7 +196,7 @@ describe("the choice", () => {
     );
     await choose(el, "dishes");
     expect(text(root(el).querySelector("[data-line-reason=croquetas]"))).toBe(
-      "The tax agency refused this receipt, so money for dishes or goodwill cannot go back until the receipt is fixed in Fiscal filing, on the dashboard. Money owed for cancelled dishes and the extra paid on top can still go back.",
+      "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, money for dishes or goodwill cannot go back; money owed for cancelled dishes and the extra paid on top can.",
     );
   });
 

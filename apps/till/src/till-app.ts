@@ -9464,7 +9464,6 @@ export class TillApp extends LitElement {
       this.#openGiveBack(true);
   }
 
-  /** Offered while money is left to give back, or while a press or rest is saved on this device. */
   #offersGiveBack(): boolean {
     if (this.#hasRefundableTenders()) return true;
     const receipt = this.historicalReceipt;

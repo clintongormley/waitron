@@ -1073,7 +1073,7 @@ describe("a money back left unfinished", () => {
 });
 
 describe("a correction whose automatic filing was refused", () => {
-  it("says how much went back, without the refusal's code", () => {
+  it("says how much went back, without the refusal's code, and what to press whether or not Finish is offered", () => {
     const params = {
       correctionId: "c1",
       saleId: "s1",
@@ -1081,10 +1081,10 @@ describe("a correction whose automatic filing was refused", () => {
       refusal: "authorization.not_permitted",
     };
     expect(alertMessage("invoice_correction.filing_refused", params, "en")).toBe(
-      "€24.20 went back to a customer, but its corrective receipt could not be issued. Do not give the money back again. On a till, open Find a bill, choose it under Money back under way and press Finish. Later checks do not add to this alert while it is open, so there may be more.",
+      "€24.20 went back to a customer, but its corrective receipt could not be issued. Do not give the money back again. On a till, open Find a bill and choose it under Money back under way. If it offers Finish, press it. If not, it says why the corrective receipt cannot be issued yet; once that is put right, press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
     );
     expect(alertMessage("invoice_correction.filing_refused", params, "es")).toBe(
-      "Se devolvieron 24,20 € a un cliente, pero no se ha podido emitir su ticket rectificativo. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta, elígela en Devoluciones en curso y pulsa Terminar. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
+      "Se devolvieron 24,20 € a un cliente, pero no se ha podido emitir su ticket rectificativo. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso. Si ofrece Terminar, púlsalo. Si no, indica por qué aún no se puede emitir el ticket rectificativo; cuando se haya resuelto, pulsa allí Comprobar de nuevo. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
     );
   });
 });
@@ -1104,10 +1104,10 @@ describe("a money back on a full invoice", () => {
   it("names its corrective invoice when its filing was refused", () => {
     const refused = { ...params, refusal: "authorization.not_permitted" };
     expect(alertMessage("invoice_correction.filing_refused", refused, "en")).toBe(
-      "€24.20 went back to a customer, but its corrective invoice could not be issued. Do not give the money back again. On a till, open Find a bill, choose it under Money back under way and press Finish. Later checks do not add to this alert while it is open, so there may be more.",
+      "€24.20 went back to a customer, but its corrective invoice could not be issued. Do not give the money back again. On a till, open Find a bill and choose it under Money back under way. If it offers Finish, press it. If not, it says why the corrective invoice cannot be issued yet; once that is put right, press Check again there. Later checks do not add to this alert while it is open, so there may be more.",
     );
     expect(alertMessage("invoice_correction.filing_refused", refused, "es")).toBe(
-      "Se devolvieron 24,20 € a un cliente, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta, elígela en Devoluciones en curso y pulsa Terminar. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
+      "Se devolvieron 24,20 € a un cliente, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso. Si ofrece Terminar, púlsalo. Si no, indica por qué aún no se puede emitir la factura rectificativa; cuando se haya resuelto, pulsa allí Comprobar de nuevo. Mientras esta alerta esté abierta, las comprobaciones posteriores no la amplían, así que puede haber más.",
     );
   });
 

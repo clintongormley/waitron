@@ -1141,9 +1141,10 @@ const CORRECTION_NOT_ADMITTED: Record<string, { en: string; es: string }> = {
     es: "Aquí no se puede rectificar una factura completa que sustituye tickets.",
   },
   refused_no_fix: REFUSED_NO_FIX,
+  // A refused filing and one held from sending both answer `filing_refused`.
   filing_refused: {
-    en: "The tax agency refused this receipt. Fix it in Fiscal filing, on the dashboard, then try again.",
-    es: "La Agencia Tributaria rechazó este ticket. Corrígelo en Remisión a la AEAT, en el panel, y vuelve a intentarlo.",
+    en: "The tax agency refused this invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Then try again.",
+    es: "La Agencia Tributaria rechazó esta factura, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después vuelve a intentarlo.",
   },
   filing_versions_unusable: FIGURES_UNCHECKED,
   filed_figures_unreadable: FIGURES_UNCHECKED,
@@ -1462,25 +1463,36 @@ function zoneAdmissionMessage(reason: unknown, locale: string): string {
   return pickLocale({ en: en[key], es: es[key] }, locale);
 }
 
-/** In Give money back a refused receipt holds back only money for dishes and goodwill. */
+/** In Give money back a refused or held filing holds back only money for dishes and goodwill. */
 const GIVE_BACK_FILING_REFUSED = {
-  en: "The tax agency refused this receipt, so money for dishes or goodwill cannot go back until the receipt is fixed in Fiscal filing, on the dashboard. Money owed for cancelled dishes and the extra paid on top can still go back.",
-  es: "La Agencia Tributaria rechazó este ticket, así que el dinero de platos o por cortesía no se puede devolver hasta que se corrija en Remisión a la AEAT, en el panel. El dinero de platos cancelados y lo pagado de más sí se pueden devolver.",
+  receipt: {
+    en: "The tax agency refused this receipt, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, money for dishes or goodwill cannot go back; money owed for cancelled dishes and the extra paid on top can.",
+    es: "La Agencia Tributaria rechazó este ticket, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
+  },
+  fullInvoice: {
+    en: "The tax agency refused this full invoice, or sending it to the agency is on hold. Fiscal filing, on the dashboard, shows which and what to do. Until then, money for dishes or goodwill cannot go back; money owed for cancelled dishes and the extra paid on top can.",
+    es: "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Hasta entonces, el dinero de platos o por cortesía no se puede devolver; el de platos cancelados y lo pagado de más, sí.",
+  },
 };
 
-/** {@link codeMessage} as Give money back words it, where other choices stay open. */
+/** {@link codeMessage} as Give money back words it, where other choices stay open; `fullInvoice`
+ * in `params` names the invoice a full invoice. */
 export function giveBackReasonMessage(
   code: string,
   locale: string = currentLocale(),
   params?: Record<string, unknown>,
 ): string {
   return code === "sale.correction_not_admitted" && params?.reason === "filing_refused"
-    ? pickLocale(GIVE_BACK_FILING_REFUSED, locale)
+    ? pickLocale(
+        GIVE_BACK_FILING_REFUSED[params.fullInvoice === true ? "fullInvoice" : "receipt"],
+        locale,
+      )
     : codeMessage(code, locale, params);
 }
 
 /** Why Money back under way cannot record the money given back, by the refusal's reason: all but
- * `filing_refused` let Finish end it unrecorded, and that one lasts until the receipt is fixed. */
+ * `filing_refused` let Finish end it unrecorded, and that one lasts until the filing is put
+ * right. */
 const GIVE_BACK_NEVER_RECORDED: Record<string, { en: string; es: string }> = {
   replaced: {
     en: "This receipt was replaced by a full invoice, so the money given back cannot be recorded on it.",
@@ -1500,28 +1512,53 @@ const GIVE_BACK_NEVER_RECORDED: Record<string, { en: string; es: string }> = {
   },
   refused_no_fix: REFUSED_NO_FIX,
   filing_refused: {
-    en: "The tax agency refused this receipt, so the money given back cannot be recorded on it until the receipt is fixed in Fiscal filing, on the dashboard. Then press Check again.",
-    es: "La Agencia Tributaria rechazó este ticket, así que el dinero devuelto no se puede registrar en él hasta que se corrija en Remisión a la AEAT, en el panel. Después pulsa Comprobar de nuevo.",
+    en: "The tax agency refused this receipt, or sending it to the agency is on hold, so the money given back cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
+    es: "La Agencia Tributaria rechazó este ticket, o su envío a la Agencia está detenido, así que el dinero devuelto aún no se puede registrar en él. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después pulsa Comprobar de nuevo.",
+  },
+};
+
+/** {@link GIVE_BACK_NEVER_RECORDED}'s words that name a receipt, for a full invoice. */
+const FULL_INVOICE_NEVER_RECORDED: Record<string, { en: string; es: string }> = {
+  voided: {
+    en: "This full invoice was cancelled, so the money given back cannot be recorded on it.",
+    es: "Esta factura completa se anuló, así que el dinero devuelto no se puede registrar en ella.",
+  },
+  wrong_node: {
+    en: "Another box issued this full invoice, so this box cannot record the money given back on it.",
+    es: "Otro servidor emitió esta factura completa, así que este servidor no puede registrar en ella el dinero devuelto.",
+  },
+  filing_refused: {
+    en: "The tax agency refused this full invoice, or sending it to the agency is on hold, so the money given back cannot be recorded on it yet. Fiscal filing, on the dashboard, shows which and what to do. Then press Check again.",
+    es: "La Agencia Tributaria rechazó esta factura completa, o su envío a la Agencia está detenido, así que el dinero devuelto aún no se puede registrar en ella. Remisión a la AEAT, en el panel, muestra cuál de las dos cosas ha pasado y qué hacer. Después pulsa Comprobar de nuevo.",
   },
 };
 
 /** Any other refusal of recording: Finish is not offered while it holds. */
 const GIVE_BACK_NOT_RECORDED_NOW = {
-  en: "The money given back cannot be recorded on this receipt now, so Finish is not offered. Press Check again to see whether that has changed.",
-  es: "El dinero devuelto no se puede registrar ahora en este ticket, así que no se ofrece Terminar. Pulsa Comprobar de nuevo para ver si ha cambiado.",
+  receipt: {
+    en: "The money given back cannot be recorded on this receipt now, so Finish is not offered. Press Check again to see whether that has changed.",
+    es: "El dinero devuelto no se puede registrar ahora en este ticket, así que no se ofrece Terminar. Pulsa Comprobar de nuevo para ver si ha cambiado.",
+  },
+  fullInvoice: {
+    en: "The money given back cannot be recorded on this full invoice now, so Finish is not offered. Press Check again to see whether that has changed.",
+    es: "El dinero devuelto no se puede registrar ahora en esta factura completa, así que no se ofrece Terminar. Pulsa Comprobar de nuevo para ver si ha cambiado.",
+  },
 };
 
-/** Why Money back under way cannot record the money given back on the receipt (its `fileNow`
- * refusal), never naming a correction. */
+/** Why Money back under way cannot record the money given back on the invoice (its `fileNow`
+ * refusal), never naming a correction; `fullInvoice` in `params` names it a full invoice. */
 export function giveBackFilingMessage(
   code: string,
   locale: string = currentLocale(),
   params?: Record<string, unknown>,
 ): string {
   const reason = params?.reason;
-  return code === "sale.correction_not_admitted" &&
-    typeof reason === "string" &&
-    Object.hasOwn(GIVE_BACK_NEVER_RECORDED, reason)
-    ? pickLocale(GIVE_BACK_NEVER_RECORDED[reason]!, locale)
-    : pickLocale(GIVE_BACK_NOT_RECORDED_NOW, locale);
+  const full = params?.fullInvoice === true;
+  if (code === "sale.correction_not_admitted" && typeof reason === "string") {
+    if (full && Object.hasOwn(FULL_INVOICE_NEVER_RECORDED, reason))
+      return pickLocale(FULL_INVOICE_NEVER_RECORDED[reason]!, locale);
+    if (Object.hasOwn(GIVE_BACK_NEVER_RECORDED, reason))
+      return pickLocale(GIVE_BACK_NEVER_RECORDED[reason]!, locale);
+  }
+  return pickLocale(GIVE_BACK_NOT_RECORDED_NOW[full ? "fullInvoice" : "receipt"], locale);
 }

@@ -86,6 +86,7 @@ export class TillGiveBackUnderWay extends LitElement {
   static override styles = [baseStyles, giveBackStyles];
   @property({ attribute: false }) api!: GiveBackUnderWayApi;
   @property() saleId = "";
+  @property({ type: Boolean }) fullInvoice = false;
   @property({ attribute: false }) correction!: InvoiceCorrectionView;
   @property({ attribute: false }) corrections!: InvoiceCorrectionSession;
   @property({ attribute: false }) refunds!: TenderRefundSession;
@@ -291,7 +292,10 @@ export class TillGiveBackUnderWay extends LitElement {
     this.message =
       recoveryText(refusal) ??
       (FILING_REFUSALS.has(refusal.code)
-        ? giveBackFilingMessage(refusal.code, currentLocale(), { reason: refusal.reason })
+        ? giveBackFilingMessage(refusal.code, currentLocale(), {
+            reason: refusal.reason,
+            fullInvoice: this.fullInvoice,
+          })
         : codeMessage(refusal.code, currentLocale(), refusal));
     if (REREAD_AFTER.has(refusal.code)) await this.#refreshAfter();
   }
@@ -488,9 +492,10 @@ export class TillGiveBackUnderWay extends LitElement {
     return html`${
       fileNow !== null && "refusal" in fileNow
         ? html`<p data-file-refusal>
-            ${giveBackFilingMessage(fileNow.refusal, currentLocale(), fileNow)}${
-              finishes && closes ? ` ${t("give_back.uw_finish_unrecorded")}` : ""
-            }
+            ${giveBackFilingMessage(fileNow.refusal, currentLocale(), {
+              ...fileNow,
+              fullInvoice: this.fullInvoice,
+            })}${finishes && closes ? ` ${t("give_back.uw_finish_unrecorded")}` : ""}
           </p>`
         : nothing
     }
