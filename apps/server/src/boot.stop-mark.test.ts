@@ -8,15 +8,21 @@ import {
   writeNodeMembership,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { buildNextMembershipDocument } from "@waitron/membership";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { pointerKey, signPointer } from "@waitron/stream";
 import { SwitchableStore } from "@waitron/stream/testing/switchable-store.js";
 import { eq } from "drizzle-orm";
-import { readFile, stat } from "node:fs/promises";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { Socket } from "node:net";
 import { join } from "node:path";
+import { TLSSocket } from "node:tls";
+import type { Hono } from "hono";
 import { expect, it, vi } from "vitest";
+import { writeArchiveSettings } from "./archive-settings.js";
+import { BackupSupervisor } from "./backup-supervisor.js";
 import * as atomic from "./fs-atomic.js";
 import { startServer as bootServer } from "./boot.js";
 import { boxHostnameFor } from "./box-name.js";
@@ -29,6 +35,8 @@ import { readStreamSettings, writeStreamSettings } from "./stream-host.js";
 import { startFakeSmtp } from "./testing/boot-harness.js";
 import { TRADING_BOOT_KEY_ENV } from "./testing/boot-trading-fixture.js";
 import { fakeMdnsSocket } from "./testing/fake-mdns-socket.js";
+import { setFreshManagementSignIn } from "./testing/fresh-management-sign-in.js";
+import { holdRecoveryKey } from "./testing/recovery-key.js";
 import {
   ephemeralServerFixture,
   withTradingBootServer,
@@ -45,6 +53,155 @@ vi.mock("@hono/node-server", async () => {
 const { startServer, httpPort } = ephemeralServerFixture();
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 const heartbeatAt = "2026-10-22T09:31:00.000Z";
+
+it.each([
+  ["drains the scheduled backup and writes only the restart mark if stopped mid-check", false],
+  ["refuses checked shutdown while streaming is configured", true],
+] as const)("%s", async (_description, streaming) => {
+  const { cfg } = await setupVenue(suite.db);
+  const { token } = await openManagementSession(suite.db, "admin");
+  const { token: staleToken } = await openManagementSession(suite.db, "admin");
+  let releaseScheduled!: () => void;
+  const held = new Promise<void>((resolve) => {
+    releaseScheduled = resolve;
+  });
+  let enterScheduled!: () => void;
+  const scheduled = new Promise<void>((resolve) => {
+    enterScheduled = resolve;
+  });
+  const scheduledBackup = vi
+    .spyOn(BackupSupervisor.prototype, "pass")
+    .mockImplementation(async (_now, signal) => {
+      signal.throwIfAborted();
+      signal.addEventListener("abort", releaseScheduled, { once: true });
+      try {
+        enterScheduled();
+        await held;
+        return { nextDueAt: null };
+      } finally {
+        signal.removeEventListener("abort", releaseScheduled);
+      }
+    });
+  let reachedCheck!: () => void;
+  const checking = new Promise<void>((resolve) => {
+    reachedCheck = resolve;
+  });
+  const checkedBackup = vi
+    .spyOn(BackupSupervisor.prototype, "runForShutdown")
+    .mockImplementation(async (signal) => {
+      signal.throwIfAborted();
+      await new Promise<void>((resolve) => {
+        signal.addEventListener("abort", () => resolve(), { once: true });
+        reachedCheck();
+      });
+    });
+  const socket = new TLSSocket(new Socket());
+  let app!: Hono;
+  let started!: Awaited<ReturnType<typeof startServer>>;
+  let stateDir!: string;
+  try {
+    await withTradingBootServer(
+      {
+        db: suite.db,
+        nodeId: cfg.nodeId,
+        scratchPrefix: "waitron-restart-during-shutdown-",
+        start: async (env) => {
+          stateDir = env.WAITRON_STATE_DIR;
+          const dir = join(stateDir, "copies");
+          await mkdir(dir);
+          await holdRecoveryKey(stateDir);
+          const ring = loadKeyRing(TRADING_BOOT_KEY_ENV);
+          await withTransaction(suite.db, async (tx) => {
+            await setFreshManagementSignIn(tx, token);
+            await writeArchiveSettings(
+              tx,
+              ring,
+              {
+                enabled: true,
+                destinations: [{ kind: "local-fs", id: "folder", dir }],
+                schedule: { kind: "wall-clock", days: "daily", at: { hour: 3, minute: 30 } },
+                retention: { count: 7, days: 30 },
+                destinationTimeoutMs: 15 * 60 * 1000,
+              },
+              null,
+            );
+            if (streaming)
+              await writeStreamSettings(
+                tx,
+                ring,
+                {
+                  region: "eu-west-1",
+                  bucket: "copies",
+                  prefix: "",
+                  accessKeyId: "test",
+                  secretAccessKey: "test-secret",
+                },
+                null,
+              );
+          });
+          started = await startServer(env, env, {
+            boxHost: synchronisedBoxHost(),
+            stream: { store: new SwitchableStore(() => new Date()) },
+            observeApp: (observed) => {
+              app = observed;
+            },
+          });
+          return started;
+        },
+        httpPort,
+      },
+      async () => {
+        await scheduled;
+        const begin = (session: string) =>
+          app.request(
+            "https://box.example/api/box/shutdown",
+            {
+              method: "POST",
+              headers: { cookie: `waitron_management_session=${session}` },
+            },
+            { incoming: { socket } },
+          );
+        const refused = await begin(staleToken);
+        expect(refused.status).toBe(400);
+        expect(await refused.json()).toMatchObject({
+          error: { code: "management_session.proof_required" },
+        });
+        const response = await begin(token);
+        if (streaming) {
+          releaseScheduled();
+          expect(response.status).toBe(409);
+          expect(await response.json()).toMatchObject({
+            error: { code: "box.shutdown_unavailable" },
+          });
+          return;
+        }
+        expect(await response.json()).toEqual({ phase: "checking" });
+        expect(response.status).toBe(202);
+        const view = await app.request("/api/box/status", {
+          headers: { cookie: `waitron_management_session=${token}` },
+        });
+        const enteredCheckEarly = checkedBackup.mock.calls.length !== 0;
+        releaseScheduled();
+        expect(view.status).toBe(200);
+        expect(enteredCheckEarly).toBe(false);
+        await checking;
+        await started.markRestart!();
+        await started.close();
+        expect(await readFile(join(stateDir, "stop-mark.json"), "utf8")).toBe(
+          '{"version":1,"mark":"restart"}',
+        );
+        await expect(stat(join(stateDir, "admin-shutdown.json"))).rejects.toHaveProperty(
+          "code",
+          "ENOENT",
+        );
+      },
+    );
+  } finally {
+    scheduledBackup.mockRestore();
+    checkedBackup.mockRestore();
+    socket.destroy();
+  }
+});
 
 async function configureStartupBucket() {
   const { cfg } = await setupVenue(suite.db);
@@ -70,6 +227,71 @@ async function configureStartupBucket() {
   const { streamId } = (await readStreamSettings(suite.db, ring))!;
   return { cfg, key, streamId, ring };
 }
+
+it("keeps the deliberate shutdown hold across starts until an administrator carries on", async () => {
+  const { cfg } = await setupVenue(suite.db);
+  let started: Awaited<ReturnType<typeof startServer>>;
+  let mark: string;
+  await withTradingBootServer(
+    {
+      db: suite.db,
+      nodeId: cfg.nodeId,
+      scratchPrefix: "waitron-boot-shutdown-hold-",
+      start: async (env) => {
+        mark = join(env.WAITRON_STATE_DIR!, "admin-shutdown.json");
+        await writeFile(mark, '{"version":1}');
+        const seams = {
+          boxHost: synchronisedBoxHost(),
+          waitingStart: { secure: () => true },
+          previousStop: { restart: false, heartbeatAt },
+        };
+        const first = await startServer(env, env, seams);
+        try {
+          expect(first.health.takesNoSales).toBe(true);
+        } finally {
+          await first.close();
+        }
+        started = await startServer(env, env, seams);
+        return started;
+      },
+      httpPort,
+    },
+    async (base) => {
+      const status = await fetch(`${base}/api/node`);
+      expect(await status.json()).toMatchObject({ acceptingSales: false });
+      const page = await fetch(base, { headers: { "Accept-Language": "en" } });
+      expect(await page.text()).toContain("This box is stopped");
+      const submit = (decision: string) =>
+        fetch(`${base}/carry-on`, {
+          method: "POST",
+          body: new URLSearchParams({
+            email: "owner@example.test",
+            password: "dashPass123",
+            decision,
+          }),
+        });
+      const keep = await submit("keep");
+      expect(keep.status).toBe(200);
+      const keptPage = await keep.text();
+      expect(keptPage).toContain("This box is stopped");
+      expect(keptPage).toContain('<p role="status">This box will stay stopped.</p>');
+      expect(await readFile(mark, "utf8")).toBe('{"version":1}');
+      const carry = await submit("carry");
+      expect(carry.status).toBe(200);
+      await carry.text();
+      await started.fullyStarted;
+      await expect(stat(mark)).rejects.toHaveProperty("code", "ENOENT");
+      const trading = await fetch(`http://127.0.0.1:${httpPort()}/api/node`);
+      expect(await trading.json()).toMatchObject({ acceptingSales: true });
+      expect(
+        await suite.db
+          .select({ code: incidents.code })
+          .from(incidents)
+          .where(eq(incidents.code, "start.unplanned_stop")),
+      ).toEqual([]);
+    },
+  );
+});
 
 it("serves a non-trading bucket waiting page after an unexpected stop", async () => {
   const { cfg } = await configureStartupBucket();

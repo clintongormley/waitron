@@ -296,6 +296,9 @@ export class BoxStatusScreen extends LitElement {
   @state() private confirmingClock = false;
   /** The Clock row's confirmation refusal; the next press clears it. */
   @state() private clockConfirmError = "";
+  @state() private shutdownOpen = false;
+  @state() private shutdownBusy = false;
+  @state() private shutdownError = "";
   @state() private restartOpen = false;
   @state() private restarting = false;
   @state() private restartAsked = false;
@@ -1045,6 +1048,97 @@ export class BoxStatusScreen extends LitElement {
     </wt-dialog>`;
   }
 
+  async #shutdown(cancel: boolean): Promise<void> {
+    const available = this.health?.shutdown?.available ?? false;
+    if (this.shutdownBusy) return;
+    this.shutdownBusy = true;
+    this.shutdownError = "";
+    try {
+      const status = await (cancel ? this.api.cancelBoxShutdown() : this.api.startBoxShutdown());
+      if (this.health !== null)
+        this.health = { ...this.health, shutdown: { ...status, available } };
+      this.shutdownOpen = false;
+      this.api.liveData.refresh();
+    } catch (error) {
+      this.shutdownError = codeMessage(codeOf(error));
+    } finally {
+      this.shutdownBusy = false;
+    }
+  }
+
+  #renderShutdown(): TemplateResult | typeof nothing {
+    const status = this.health?.shutdown;
+    if (
+      !this.canCheckClock ||
+      status === undefined ||
+      (!status.available && status.phase === "idle")
+    )
+      return nothing;
+    const phase = status.phase;
+    return html`<section class="box-restart">
+      <h2>${t("box_status.shutdown.title")}</h2>
+      <p role="status" data-test="box-shutdown-status">
+        ${phase === "idle" ? "" : t(`box_status.shutdown.${phase}`)}
+      </p>
+      ${
+        phase === "idle"
+          ? html`<wt-button
+              variant="secondary"
+              data-test="box-shutdown"
+              @click=${() => {
+                this.shutdownError = "";
+                this.shutdownOpen = true;
+              }}
+              >${t("box_status.shutdown.title")}</wt-button
+            >`
+          : nothing
+      }
+      ${
+        phase === "checking" || phase === "paused"
+          ? html`
+              <wt-button
+                variant="secondary"
+                data-test="box-shutdown-cancel"
+                ?disabled=${this.shutdownBusy}
+                @click=${() => void this.#shutdown(true)}
+                >${t("box_status.shutdown.cancel")}</wt-button
+              >
+              ${this.shutdownError ? html`<p class="refusal" role="alert">${this.shutdownError}</p>` : nothing}
+            `
+          : nothing
+      }
+      <wt-dialog
+        .open=${this.shutdownOpen}
+        .dismissible=${!this.shutdownBusy}
+        heading=${t("box_status.shutdown.question")}
+        @wt-close=${(event: Event) => {
+          event.stopPropagation();
+          this.shutdownOpen = false;
+        }}
+      >
+        <p>${t("box_status.shutdown.what")}</p>
+        <p>${t("box_status.shutdown.password_reason")}</p>
+        <wt-form-actions slot="footer" .error=${this.shutdownError}>
+          <wt-button
+            slot="cancel"
+            variant="secondary"
+            ?disabled=${this.shutdownBusy}
+            @click=${() => (this.shutdownOpen = false)}
+            >${t("box_status.restart.stop")}</wt-button
+          >
+          <wt-button
+            variant="primary"
+            data-test="box-shutdown-confirm"
+            ?disabled=${this.shutdownBusy}
+            ?loading=${this.shutdownBusy}
+            @click=${() => void this.#shutdown(false)}
+            >${t("box_status.shutdown.title")}</wt-button
+          >
+        </wt-form-actions>
+      </wt-dialog>
+    </section>`;
+  }
+
   #networkBusy(): boolean {
     return this.forgetting || this.networkAccepted || this.network?.change?.state === "running";
   }
@@ -1194,8 +1288,8 @@ export class BoxStatusScreen extends LitElement {
             </div>`
           : nothing
       }
-      ${this.#renderNetwork()} ${this.#renderRestart()} ${this.#renderClockCheckDialog()}
-      ${this.#renderRestartDialog()} ${this.#renderForgetDialog()}
+      ${this.#renderNetwork()} ${this.#renderRestart()} ${this.#renderShutdown()}
+      ${this.#renderClockCheckDialog()} ${this.#renderRestartDialog()} ${this.#renderForgetDialog()}
       <dashboard-box-wifi-dialog
         .api=${this.api}
         .blocked=${this.#networkBusy()}

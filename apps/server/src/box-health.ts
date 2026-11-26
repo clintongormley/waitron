@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { isReceiptPrinter, printers, sales, type Database, type Transaction } from "@waitron/db";
+import type { ShutdownStatus } from "./admin-shutdown.js";
 import type { TrustedClock } from "@waitron/fiscal";
 import { persons } from "@waitron/identity";
 import { cardReaders } from "@waitron/payments";
@@ -35,6 +36,7 @@ export interface BoxHealth {
   stream: StreamView;
   spare?: SpareFollowView | null;
   lastOfferedUpgrade?: LastOfferedUpgrade;
+  shutdown?: ShutdownStatus & { available: boolean };
   clock: {
     authority: AuthorityClockStatus;
     sync: TimeHealth;
@@ -74,6 +76,7 @@ export interface BoxHealthReaders {
   startClock?: () => StartClockWaiting | null;
   timeHealth: () => Promise<TimeHealth>;
   lastOfferedUpgrade?: () => Promise<LastOfferedUpgrade | null>;
+  shutdown?: () => Promise<BoxHealth["shutdown"]>;
   disk: Pick<DiskFullState, "since">;
   space: Pick<FreeSpaceState, "current">;
   /** May be cached; its `freeBytes` is replaced by `free()`'s. */
@@ -168,12 +171,13 @@ export async function collectBoxHealth(
   // An outbox this read did not try stays failing until a read that tries it succeeds.
   noticeRead.settle(readsOutbox ? noticesUnavailable : [...noticesUnavailable, "fiscal-outbox"]);
 
-  const [usage, free, reclaimable, sync, lastOfferedUpgrade] = await Promise.all([
+  const [usage, free, reclaimable, sync, lastOfferedUpgrade, shutdown] = await Promise.all([
     readers.usage(),
     readers.free(),
     readers.leftovers(),
     readers.timeHealth(),
     readers.lastOfferedUpgrade?.().catch(() => null),
+    readers.shutdown?.(),
   ]);
 
   const stream: StreamView & { pruneBlockedSince?: string } = { ...readers.stream() };
@@ -190,6 +194,7 @@ export async function collectBoxHealth(
     stream,
     ...(readers.spare === undefined ? {} : { spare: await readers.spare() }),
     ...(lastOfferedUpgrade == null ? {} : { lastOfferedUpgrade }),
+    ...(shutdown === undefined ? {} : { shutdown }),
     clock: {
       authority: readers.authorityClock(),
       sync,

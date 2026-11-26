@@ -39,6 +39,7 @@ export const REPLACED_DATABASE_PREFIX = `.${VENUE_FILE}-replaced-`;
 export const SPARE_SPACE_FILE = "spare-space";
 export const SPARE_SPACE_RELEASED_FILE = "spare-space.released";
 export const STOP_MARK_FILE = "stop-mark.json";
+export const SHUTDOWN_MARK_FILE = "admin-shutdown.json";
 export const REPLACED_FILE = "replaced.json";
 export const BACKUP_ROOM_NOTE_FILE = "backup-room-note.json";
 export const BACKUP_ROOM_START_DELETED_FILE = "backup-room-start-deleted.json";
@@ -146,6 +147,13 @@ export const STATE_LAYOUT: readonly StateEntry[] = [
     kind: "file",
     reset: "deleted",
     why: "A deliberate restart is distinguishable from a crash after the process exits.",
+  },
+  {
+    name: SHUTDOWN_MARK_FILE,
+    backup: { exclude: "The shutdown applies only to this box." },
+    kind: "file",
+    reset: "deleted",
+    why: "A deliberate shutdown must hold the next start until an administrator carries on.",
   },
   {
     name: REPLACED_FILE,

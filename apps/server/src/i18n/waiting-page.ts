@@ -11,6 +11,23 @@ export const BUCKET_WAIT_WORDS = {
   },
 } satisfies Record<SupportedLocale, { title: string; body: string }>;
 
+export const SHUTDOWN_WAIT_WORDS = {
+  "en-GB": {
+    title: "This box is stopped",
+    body: "An administrator shut down this box. Sign in to carry on selling here or keep this box stopped. If another box took over, keep this one stopped so sales and tax records stay together.",
+    carry: "Carry on selling on this box",
+    keep: "Keep it stopped",
+    kept: "This box will stay stopped.",
+  },
+  "es-ES": {
+    title: "Este servidor está detenido",
+    body: "Un administrador apagó este servidor. Inicia sesión para seguir vendiendo aquí o mantenerlo detenido. Si otro servidor tomó el relevo, mantén este detenido para conservar juntas las ventas y los registros fiscales.",
+    carry: "Seguir vendiendo en este servidor",
+    keep: "Mantenerlo detenido",
+    kept: "Este servidor seguirá detenido.",
+  },
+} as const;
+
 /** The words of the page's "Carry on as the main box" form and its answers. */
 export interface CarryOnWords {
   heading: string;

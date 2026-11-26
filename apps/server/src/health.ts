@@ -48,6 +48,7 @@ export interface HealthState {
   readSingletonRole?: () => SingletonRole;
   /** Set on a box started restricted after a handover: it runs no duty and takes no sales. */
   takesNoSales?: boolean;
+  adminPaused?: () => boolean;
 }
 
 export function createHealthState(startedAt: Date): HealthState {
@@ -146,7 +147,11 @@ export function healthSnapshot(
   now: Date,
 ): { ok: boolean; body: Record<string, unknown> } {
   const admission = state.readTradingAdmission?.();
-  if (state.takesNoSales === true || (admission !== undefined && admission.state !== "ready"))
+  if (
+    state.takesNoSales === true ||
+    state.adminPaused?.() ||
+    (admission !== undefined && admission.state !== "ready")
+  )
     return { ok: true, body: { ok: true, tradingAvailable: false } };
   const duties: Record<string, unknown> = {};
   let ok = state.lastPassAt !== null;

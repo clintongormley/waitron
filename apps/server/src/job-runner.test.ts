@@ -59,6 +59,37 @@ afterEach(async () => {
 });
 
 describe("job runner", () => {
+  it("drains the current pass, holds later passes while paused, then resumes", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    runner.add(
+      job({
+        pass: async () => {
+          times.push(elapsed());
+          await held;
+          return { nextDueAt: null };
+        },
+      }),
+    );
+    try {
+      const pause = runner.pauseJobs();
+      let settled = false;
+      void pause.settled.then(() => (settled = true));
+      await advance(1_000);
+      expect(settled).toBe(false);
+      release();
+      await pause.settled;
+      runner.wake("menu.activation");
+      await advance(60_000);
+      expect(times).toEqual([0]);
+      pause.resume();
+      await advance();
+      expect(times).toEqual([0, 61_000]);
+    } finally {
+      release();
+    }
+  });
+
   it("runs at once, then sleeps until due, bounded by floor and ceiling", async () => {
     const waits = [30_000, -1, 90_000];
     runner.add(

@@ -236,6 +236,12 @@ export const NODE_LOCAL_MANIFEST: readonly NodeLocalManifestRow[] = [
     treatment: "Each box uses the restart mark it wrote locally",
   },
   {
+    item: "admin-shutdown.json",
+    where: "state",
+    class: "destination-owned",
+    treatment: "Each box keeps its own administrator shutdown hold",
+  },
+  {
     item: "backup-room-note.json",
     where: "state",
     class: "source-only",

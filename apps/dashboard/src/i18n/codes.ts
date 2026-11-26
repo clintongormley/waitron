@@ -1798,6 +1798,14 @@ export const CODE_MESSAGES: Readonly<Record<string, { en: string; es: string }>>
     en: "The database contains changes this version of Waitron does not recognise. Install the same or a newer version of Waitron before trying again.",
     es: "La base de datos contiene cambios que esta versión de Waitron no reconoce. Instala la misma versión de Waitron o una más reciente antes de volver a intentarlo.",
   },
+  "box.shutdown_in_progress": {
+    en: "This box is paused for shutdown. Open Box status to see its progress.",
+    es: "Este servidor está en pausa para apagarse. Abre Estado del servidor para ver el progreso.",
+  },
+  "box.shutdown_unavailable": {
+    en: "Checked shutdown needs a standalone main box with one saved backup destination and streaming turned off.",
+    es: "El apagado con comprobación requiere un servidor principal sin servidor de reserva, con un solo destino de copias guardado y la copia continua desactivada.",
+  },
   "handover.stepping_down": {
     en: "This box is handing over or has handed over the venue, so it refused this action. Use the main box’s address once that box is taking sales.",
     es: "Este servidor está traspasando el local o ya lo ha traspasado, así que ha rechazado esta acción. Usa la dirección del servidor principal cuando ese servidor acepte ventas.",

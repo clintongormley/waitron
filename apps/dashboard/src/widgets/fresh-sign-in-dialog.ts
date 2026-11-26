@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import {
   baseStyles,
   draftScopeFor,
@@ -14,6 +15,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import type { DashboardApi } from "../api/client.js";
+import type { FreshSignInContext } from "../api/fresh-sign-in.js";
 import { t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import type { FreshSignIn, SignInWays } from "./fresh-sign-in.js";
@@ -38,6 +40,7 @@ export class FreshSignInDialog extends LitElement {
   >;
   @state() private opened = false;
   @state() private allowRecoveryCode = true;
+  @state() private passwordOnly = false;
   @state() private busy = false;
   @state() private ways: SignInWays | null = null;
   @state() private refusal = "";
@@ -50,11 +53,12 @@ export class FreshSignInDialog extends LitElement {
     new LocaleChangeController(this);
   }
 
-  show(signal: AbortSignal, context: { allowRecoveryCode?: boolean } = {}): Promise<boolean> {
+  show(signal: AbortSignal, context: Partial<FreshSignInContext> = {}): Promise<boolean> {
     if (signal.aborted) return Promise.resolve(false);
     this.#close(false);
     this.opened = true;
     this.allowRecoveryCode = context.allowRecoveryCode !== false;
+    this.passwordOnly = context.passwordOnly === true;
     this.ways = null;
     const { coordinator, scope } = draftScopeFor(this, {
       id: {},
@@ -136,13 +140,13 @@ export class FreshSignInDialog extends LitElement {
   override render() {
     const signIn = this.#signIn();
     const noWayIn = this.ways !== null && !this.ways.password && !this.ways.passkey;
-    return html`<wt-dialog
+    const dialog = html`<wt-dialog
       .open=${this.opened}
       heading=${t("fresh_sign_in.heading")}
       .beforeClose=${this.#beforeClose}
       @wt-close=${(event: Event) => {
         event.stopPropagation();
-        if (event.target === event.currentTarget) this.#close(false);
+        if (event.target === this.#dialog()) this.#close(false);
       }}
     >
       ${
@@ -151,6 +155,7 @@ export class FreshSignInDialog extends LitElement {
               <dashboard-fresh-sign-in
                 .api=${this.api}
                 .allowRecoveryCode=${this.allowRecoveryCode}
+                .passwordOnly=${this.passwordOnly}
                 ?disabled=${this.busy}
                 @sign-in-ways=${(event: CustomEvent<SignInWays>) => {
                   this.ways = event.detail;
@@ -179,6 +184,7 @@ export class FreshSignInDialog extends LitElement {
           : nothing
       }
     </wt-dialog>`;
+    return keyed(this.passwordOnly, dialog);
   }
 }
 declare global {

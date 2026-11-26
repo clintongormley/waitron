@@ -1,4 +1,4 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import {
   withTransaction,
@@ -7,7 +7,10 @@ import {
   type DeploymentMode,
   type SingletonRole,
 } from "@waitron/db";
-import { authorizeManager } from "@waitron/identity";
+import { authorizeManager, requireFreshManagementSignIn } from "@waitron/identity";
+import { AppError } from "@waitron/shared";
+import { SHUTDOWN_PATH, type AdminShutdown } from "./admin-shutdown.js";
+import { requireNodeOperationHttps } from "./node-operation-https.js";
 import type { SpareFollowView } from "./spare-follow.js";
 import type { StreamView } from "@waitron/stream";
 import type { BackupStatus } from "./backup-status.js";
@@ -104,6 +107,7 @@ export type BoxStatusDeps = {
   now: () => Date;
   tlsCertPath: string | undefined;
   readBackup: (() => Promise<BackupStatus>) | undefined;
+  shutdown?: Pick<AdminShutdown, "status" | "start" | "cancel"> & { available(): Promise<boolean> };
   readStream: () => StreamView;
   readSpare?: () => Promise<SpareFollowView | null>;
   readMode: () => DeploymentMode;
@@ -119,10 +123,43 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "management_session.expired": 401,
   "person.suspended": 403,
   "authorization.not_permitted": 403,
+  "node.operation_page_required": 403,
+  "box.shutdown_in_progress": 409,
+  "box.shutdown_unavailable": 409,
 };
 
 export function mountBoxStatusApi(app: Hono, deps: BoxStatusDeps, log: Logger): void {
   const run = createErrorBoundary(STATUS, "box-status.failed");
+  const shutdown = deps.shutdown;
+  if (shutdown !== undefined) {
+    const authorize = async (c: Context, fresh = false) => {
+      c.header("Cache-Control", "no-store");
+      const token = requireManagementSession(c);
+      await authorizeManager(deps.db, {
+        managementSessionId: token,
+        permission: "node.manage",
+        touch: false,
+      });
+      if (fresh) await requireFreshManagementSignIn(deps.db, token, { passwordOnly: true });
+    };
+    app.post(SHUTDOWN_PATH, (c) =>
+      run(c, log, async () => {
+        requireNodeOperationHttps(c);
+        await authorize(c, true);
+        if (!(await shutdown.available())) throw new AppError("box.shutdown_unavailable", {});
+        shutdown.start();
+        return c.json(shutdown.status(), 202);
+      }),
+    );
+    app.delete(SHUTDOWN_PATH, (c) =>
+      run(c, log, async () => {
+        requireNodeOperationHttps(c);
+        await authorize(c);
+        await shutdown.cancel();
+        return c.json(shutdown.status(), 200);
+      }),
+    );
+  }
   app.get("/api/box/status", (c) =>
     run(c, log, async () => {
       const sessionId = requireManagementSession(c);

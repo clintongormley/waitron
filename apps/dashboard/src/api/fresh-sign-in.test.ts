@@ -100,6 +100,39 @@ it("a second proof refusal is returned without another prompt", async () => {
   expect(raw).toHaveBeenCalledTimes(2);
 });
 
+it("asks for a password for shutdown even when another fresh sign-in is open", async () => {
+  const genericAnswer = pending<boolean>();
+  const passwordAnswer = pending<boolean>();
+  const prompt = vi
+    .fn()
+    .mockReturnValueOnce(genericAnswer.promise)
+    .mockReturnValueOnce(passwordAnswer.promise);
+  let usedPassword = false;
+  const raw: DashboardRequest = async <T>(path: string) => {
+    if (path === "/api/box/shutdown" ? !usedPassword : true) throw refusal;
+    return "started" as T;
+  };
+  const request = createFreshSignInGate({ sessionGeneration: () => 0, prompt }).wrap(raw);
+  const other = request("/other", "POST").catch((error: unknown) => error);
+  await vi.waitFor(() => expect(prompt).toHaveBeenCalledTimes(1));
+  const shutdown = request("/api/box/shutdown", "POST").catch((error: unknown) => error);
+  try {
+    await expect
+      .poll(() => prompt.mock.calls[1]?.[1])
+      .toEqual({
+        allowRecoveryCode: false,
+        passwordOnly: true,
+      });
+    usedPassword = true;
+    passwordAnswer.resolve(true);
+    expect(await shutdown).toBe("started");
+  } finally {
+    genericAnswer.resolve(false);
+    passwordAnswer.resolve(false);
+  }
+  expect(await other).toBe(refusal);
+});
+
 it("each GET attempt owns its deadline; waiting for a person has none", async () => {
   vi.useFakeTimers();
   try {

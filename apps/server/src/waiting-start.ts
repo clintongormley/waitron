@@ -71,6 +71,7 @@ export interface WaitingStartDeps {
     /** What this box's data download asks for its invoice records. */
     modules: readonly WaitronModule[];
     readNewerMain?: () => Promise<NewerBucketMain | null>;
+    shutdown?: () => Promise<void>;
     /** Whether a request reached the box over HTTPS from the page; tests replace it. */
     secure?: (c: Context) => boolean;
     /**
@@ -83,7 +84,7 @@ export interface WaitingStartDeps {
   routes: ((app: Hono, hooks: WaitingHooks) => void)[];
   node: NodeDatabase;
   /** The start check, asked again every `intervalMs` until it answers other than `wait`. */
-  recheck: (signal: AbortSignal) => Promise<StartPeerCheckOutcome>;
+  recheck: ((signal: AbortSignal) => Promise<StartPeerCheckOutcome>) | undefined;
   intervalMs: number;
   bucketDeadline?: AbortSignal;
   /**
@@ -185,27 +186,28 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
         downloadForm(intro, locale, secure, download, destination, carryOn.passkey !== undefined)
       );
     };
-    section = below;
-    oldBoxDataRoute({
-      venue: carryOn.db,
-      log,
-      modules: carryOn.modules,
-      totpKeyRing: carryOn.credentialKeyRing,
-      secure: carryOn.secure,
-      passkey: carryOn.passkey,
-      throttle,
-      // A waiting box holds no handover restriction: it did not hand over in a planned handover.
-      planned: async () => false,
-      answer: (c, status, download) =>
-        waitingPageAnswer(
-          c,
-          () => deps.addressesOf(waitingOn),
-          log,
-          (c, other, locale, destination) => below(c, other, locale, destination, download),
-          status,
-          download.returnTo ?? "/",
-        ),
-    })(app);
+    section = carryOn.shutdown === undefined ? below : carryOnSection;
+    if (carryOn.shutdown === undefined)
+      oldBoxDataRoute({
+        venue: carryOn.db,
+        log,
+        modules: carryOn.modules,
+        totpKeyRing: carryOn.credentialKeyRing,
+        secure: carryOn.secure,
+        passkey: carryOn.passkey,
+        throttle,
+        // A waiting box holds no handover restriction: it did not hand over in a planned handover.
+        planned: async () => false,
+        answer: (c, status, download) =>
+          waitingPageAnswer(
+            c,
+            () => deps.addressesOf(waitingOn),
+            log,
+            (c, other, locale, destination) => below(c, other, locale, destination, download),
+            status,
+            download.returnTo ?? "/",
+          ),
+      })(app);
   }
   if (deps.bucketDeadline !== undefined)
     section = async (_c, _other, locale, destination) => ({
@@ -327,6 +329,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
   for (const mount of deps.routes) mount(app, hooks);
 
   const schedule = (): void => {
+    if (deps.recheck === undefined) return;
     timer = setTimeout(() => {
       timer = undefined;
       asking = ask();
@@ -342,7 +345,7 @@ export function startWaiting(deps: WaitingStartDeps): WaitingStart {
     inAsk = true;
     let outcome: StartPeerCheckOutcome | null = null;
     try {
-      outcome = await deps.recheck(abortAsk.signal);
+      outcome = (await deps.recheck?.(abortAsk.signal)) ?? null;
     } catch (error) {
       log("warn", "waiting_start.recheck_failed", { errorCode: codeOf(error) });
     }

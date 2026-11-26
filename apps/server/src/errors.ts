@@ -465,6 +465,8 @@ declare module "@waitron/shared" {
      * structured classification, never the caught value's `.message`.
      */
     "server.shutdown_failed": { errorCode: string };
+    "box.shutdown_in_progress": Record<string, never>;
+    "box.shutdown_unavailable": Record<string, never>;
     /**
      * Shutdown did not finish within the deadline, so the process is exiting anyway (a box restarts
      * by SIGTERM → shutdown → exit → Docker restart, so a shutdown that never finishes is a box that

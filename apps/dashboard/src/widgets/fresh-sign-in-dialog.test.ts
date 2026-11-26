@@ -3,6 +3,7 @@ import { LiveData } from "@waitron/dashboard-kit";
 import { userEvent } from "vitest/browser";
 import type { DashboardApi } from "../api/client.js";
 import type { OwnProfile } from "../api/account-api.js";
+import { t } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import type { FreshSignIn } from "./fresh-sign-in.js";
 import type { FreshSignInDialog } from "./fresh-sign-in-dialog.js";
@@ -30,7 +31,12 @@ const profile: OwnProfile = {
   },
   passkeys: [],
 };
-async function open(ownProfile = profile) {
+const shutdownProof = { allowRecoveryCode: false, passwordOnly: true as const };
+const profileWithPasskey = {
+  ...profile,
+  passkeys: [{ id: "cred-mine", createdAt: "", lastUsedAt: null, provider: null }],
+};
+async function open(ownProfile = profile, context?: Parameters<FreshSignInDialog["show"]>[1]) {
   const api = {
     getProfile: vi.fn(async () => ownProfile),
     freshSignInPasskeyOptions: vi.fn(),
@@ -41,13 +47,60 @@ async function open(ownProfile = profile) {
     api: api as unknown as DashboardApi,
   });
   const stop = new AbortController();
-  const result = el.show(stop.signal);
+  const result = el.show(stop.signal, context);
   await el.updateComplete;
   const signIn = el.shadowRoot!.querySelector<FreshSignIn>("dashboard-fresh-sign-in")!;
   expect(signIn).not.toBeNull();
   await vi.waitFor(() => expect(signIn.ways).not.toBeNull());
   return { el, api, stop, result, signIn };
 }
+
+it.each([true, false])(
+  "offers only password proof for shutdown when hasPassword is %s",
+  async (hasPassword) => {
+    const { el, signIn, stop, result } = await open(
+      { ...profileWithPasskey, hasPassword },
+      shutdownProof,
+    );
+    expect(signIn.shadowRoot!.querySelector("[data-test=use-passkey]")).toBeNull();
+    expect(signIn.shadowRoot!.querySelector("wt-input[name=current-password]") !== null).toBe(
+      hasPassword,
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=confirm-proof]") !== null).toBe(hasPassword);
+    if (!hasPassword) {
+      expect(signIn.shadowRoot!.querySelector("[data-test=no-way-in]")?.textContent).toContain(
+        t("box_status.shutdown.add_password"),
+      );
+    }
+    stop.abort();
+    expect(await result).toBe(false);
+  },
+);
+
+it("keeps the password confirmation usable when it replaces an open sign-in prompt", async () => {
+  const { el, stop, result, api } = await open(profileWithPasskey);
+  const shutdown = new AbortController();
+  stop.abort();
+  const confirmed = el.show(shutdown.signal, shutdownProof);
+  try {
+    expect(await result).toBe(false);
+    const root = el.shadowRoot!;
+    const submit = () =>
+      root.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=confirm-proof]");
+    await expect.poll(() => submit()?.disabled).toBe(false);
+    const signIn = root.querySelector<FreshSignIn>("dashboard-fresh-sign-in")!;
+    const password = signIn.shadowRoot!.querySelector("wt-input[name=current-password]")!;
+    password.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "correct password" } }));
+    await userEvent.click(submit()!);
+    expect(await confirmed).toBe(true);
+    expect(api.confirmFreshSignIn).toHaveBeenCalledWith({
+      method: "password",
+      password: "correct password",
+    });
+  } finally {
+    shutdown.abort();
+  }
+});
 it("marks an empty password, then confirms and clears the typed password", async () => {
   const { el, api, result, signIn } = await open();
   const submit = () =>

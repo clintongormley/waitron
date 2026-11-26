@@ -131,6 +131,32 @@ const qa = (el: BoxStatusScreen, selector: string) => [
 ];
 const freeButton = (el: BoxStatusScreen) => q(el, "[data-test=free]") as HTMLElement | null;
 const text = (node: Element | null) => node?.textContent?.replace(/\s+/g, " ").trim() ?? "";
+it("shows that the box can be switched off only when the shutdown check is ready", async () => {
+  const startBoxShutdown = vi.fn().mockResolvedValue({ phase: "checking" });
+  const getBoxHealth = vi
+    .fn()
+    .mockResolvedValue(health({ shutdown: { phase: "idle", available: true } }));
+  const api = stubApi({ getBoxHealth, startBoxShutdown });
+  const { el } = await mount(api);
+  el.canCheckClock = true;
+  await el.updateComplete;
+  const open = q(el, '[data-test="box-shutdown"]');
+  expect(open).not.toBeNull();
+  await userEvent.click(open!);
+  const confirm = q(el, '[data-test="box-shutdown-confirm"]')!;
+  expect(text(confirm.closest("wt-dialog"))).toContain(
+    "If you haven’t set a password, set one in Account settings before you continue.",
+  );
+  const ready = t("box_status.shutdown.ready");
+  expect(text(el.shadowRoot as unknown as Element)).not.toContain(ready);
+  await userEvent.click(confirm);
+  await vi.waitFor(() => expect(startBoxShutdown).toHaveBeenCalledOnce());
+  getBoxHealth.mockResolvedValue(health({ shutdown: { phase: "ready", available: true } }));
+  api.liveData.refresh();
+  await vi.waitFor(() => expect(text(q(el, '[data-test="box-shutdown-status"]'))).toBe(ready));
+  expect(q(el, '[data-test="box-shutdown-cancel"]')).toBeNull();
+});
+
 const size = (bytes: number) => formatBytes(bytes, currentLocale());
 
 /** The colour a token paints, read through an element styled with it. */

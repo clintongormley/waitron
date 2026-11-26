@@ -11,6 +11,8 @@ import { archiveInWorker, VENUE_FILE } from "@waitron/store";
 import { AppError } from "@waitron/shared";
 import { codeOf } from "@waitron/server-kit";
 import { archiveNamespace } from "./archive-settings.js";
+import { waitForShutdownDrain } from "./admin-shutdown.js";
+import { rehearseShutdownBackup } from "./admin-shutdown-backup.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig, BackupConfigUnusable, BackupSchedule } from "./backup-config.js";
 import type { LoadFailure } from "./backup-settings-evidence.js";
@@ -408,6 +410,40 @@ export class BackupSupervisor {
     const running = this.#schedule.start("manual", this.#controller.signal);
     if (running === undefined) throw new AppError("backup.run_in_progress", {});
     return running;
+  }
+
+  async runForShutdown(signal: AbortSignal, migrationsRoot: string | null): Promise<void> {
+    if (this.#deps.readSingletonRole() !== "primary") throw new AppError("backup.not_primary", {});
+    if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
+    const schedule = this.#schedule;
+    const cfg = this.#config;
+    const controller = this.#controller;
+    const recoveryKey = cfg?.recoveryKey;
+    if (
+      this.#stopped ||
+      !schedule ||
+      !cfg ||
+      recoveryKey === undefined ||
+      !controller ||
+      cfg.cloud ||
+      this.#backends.length !== 1
+    )
+      throw new AppError("backup.not_enabled", {});
+    const stopping = AbortSignal.any([signal, controller.signal]);
+    await waitForShutdownDrain(schedule.running, stopping);
+    stopping.throwIfAborted();
+    const running = schedule.start("manual", stopping, (archive, signal) =>
+      rehearseShutdownBackup(archive, {
+        ...this.#deps,
+        recoveryKey,
+        migrationsRoot,
+        destinationTimeoutMs: cfg.destinationTimeoutMs,
+        signal,
+      }),
+    );
+    if (running === undefined) throw new AppError("backup.run_in_progress", {});
+    await running;
+    stopping.throwIfAborted();
   }
 
   /** Rewrites the note with the box's latest clock step while backups run. Never throws. */

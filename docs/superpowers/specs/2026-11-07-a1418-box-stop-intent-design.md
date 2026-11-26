@@ -176,6 +176,9 @@ What the box does with the answers:
 An action on the dashboard's box status screen, for someone holding the permission a handover needs
 (`node.promote`), signing in afresh over HTTPS.
 
+**26 November 2026.** The permission handover uses is now `node.manage`. The watcher confirmed that
+the shutdown action uses that permission for both the check and the later appliance power-off.
+
 1. **(default)** The screen says what will happen, and what is needed to restore: the backup and the
    recovery key. It offers the recovery pack for download there and then: the box holds the key while
    it runs, and the pack is made by the existing `POST /api/backup/recovery-pack`
@@ -217,6 +220,13 @@ An action on the dashboard's box status screen, for someone holding the permissi
    (`apps/server/src/backup-verification.ts:64, 158`, read). The owner: "30s may not be enough".
    **(default)** For this check the time limit is set by progress, not a fixed number: it stops only
    when the check has made no progress for a while, and the scratch space is sized to the backup.
+
+   **26 November 2026.** The watcher cleared a local restore rehearsal for a standalone box with a
+   saved archive. The rehearsal opens a private copy of the exact saved archive and uses SQLite
+   integrity and foreign-key checks. Ordinary restore validates the archive, places the copy and
+   runs its restore hooks. The per-module data checks run in Cloud's verifier under Cloud's
+   recovery protocol. See the
+   [qualification plan](../plans/2026-11-26-h-a1418-admin-shutdown.md).
 6. It writes `shutdown`, then powers the machine off **(owner)**: "a shutdown usually does". The box's
    host service (`deploy/box/waitron-box.sh`, read) answers only `clock.status` and `clock.set` today;
    it gains one request to power off. Where there is no host service (development, or a hosted copy),
