@@ -74,7 +74,7 @@ describe("allergen publish warnings", () => {
     const headings = [...el.shadowRoot!.querySelectorAll("wt-disclosure")];
     expect(headings.map(({ heading, open }) => [heading, open])).toEqual([
       ["2 products with allergens not yet reviewed", false],
-      ["1 missing Home page shortcut", false],
+      ["1 missing device home page shortcut", false],
       ["1 extra with a portion to check", false],
     ]);
     const section = await openAllergenWarnings(el);
