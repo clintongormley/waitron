@@ -34,7 +34,7 @@ import type { PresentedPayDetail, TillPresentedPayDialog } from "./widgets/prese
 import type { TillTenderPay } from "./widgets/tender-pay.js";
 import { FakeNdefReader, installNfc, PRINTER_ID, READER_ID } from "../test/equipment-nfc.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
-import { cameraFilming } from "../test/qr-camera.js";
+import { cameraFilming } from "@waitron/ui/test/qr-camera.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import type { BillRow } from "./api/find-bill-types.js";
 import { SUBMIT_RETRY_PAUSE_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";

@@ -27,6 +27,7 @@ export default defineConfig({
   optimizeDeps: {
     include: [
       "@waitron/ui > @oddbird/popover-polyfill",
+      "@waitron/ui > jsqr",
       "axe-core",
       "lit/directives/unsafe-html.js",
     ],

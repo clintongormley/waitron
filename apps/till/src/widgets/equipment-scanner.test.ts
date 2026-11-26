@@ -4,7 +4,7 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import { es } from "../i18n/strings.js";
 import "./equipment-scanner.js";
-import { cameraFilming } from "../../test/qr-camera.js";
+import { cameraFilming } from "@waitron/ui/test/qr-camera.js";
 import type { TillEquipmentScanner } from "./equipment-scanner.js";
 
 const PRINTER = "6f1c3a52-0000-4000-8000-000000000001";
