@@ -3028,14 +3028,14 @@ describe("dashboard-app", () => {
     }
   });
 
-  it("draws a nav item at the 14px body size and a group header at the 12px small size", async () => {
+  it("draws nav items and group headers at the 14px body size", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
     expect(getComputedStyle(navItem(el, "products")!).fontSize).toBe("14px");
     expect(getComputedStyle(el.shadowRoot!.querySelector("button.nav-group")!).fontSize).toBe(
-      "12px",
+      "14px",
     );
   });
 
@@ -3154,7 +3154,10 @@ describe("dashboard-app", () => {
       expect(
         Math.abs(arrow.top + arrow.height / 2 - (text.top + text.height / 2)),
       ).toBeLessThanOrEqual(1);
-      expect(getComputedStyle(chevron).opacity).toBe("0");
+      expect(getComputedStyle(chevron).opacity).toBe("1");
+      expect(
+        arrow.left - header.querySelector(".nav-group-label")!.getBoundingClientRect().right,
+      ).toBe(4);
       await userEvent.hover(header);
       expect(getComputedStyle(chevron).opacity).toBe("1");
       expect(textRect(header).left).toBe(text.left);
@@ -3211,7 +3214,9 @@ describe("dashboard-app", () => {
           header.click();
           await flush(el);
           expect(label.getBoundingClientRect().left).toBeCloseTo(
-            item.getBoundingClientRect().left + 15,
+            item.getBoundingClientRect().left +
+              parseFloat(getComputedStyle(item).borderInlineStartWidth) +
+              parseFloat(getComputedStyle(item).paddingInlineStart),
             0,
           );
         }
@@ -4381,14 +4386,14 @@ describe("dashboard-app", () => {
     expect(getComputedStyle(navItem(el, "products")!).color).toBe("rgb(1, 2, 3)");
   });
 
-  it("shows the gear icon on the System group header and the team icon on the Team header", async () => {
+  it("shows the server icon on the System group header and the team icon on the Team header", async () => {
     const { el } = await mountWidget<DashboardApp>("dashboard-app", {
       api: stubApi({ listStaff: vi.fn().mockResolvedValue([]) }),
     });
     await flush(el);
     const settingsHeader = el.shadowRoot!.querySelector('[data-test="nav-group-configuration"]')!;
     expect(settingsHeader.textContent).toContain(t("nav.group.configuration"));
-    expect(settingsHeader.querySelector('wt-icon[name="gear"]')).not.toBeNull();
+    expect(settingsHeader.querySelector('wt-icon[name="section-system"]')).not.toBeNull();
     const teamHeader = el.shadowRoot!.querySelector('[data-test="nav-group-team"]')!;
     expect([...teamHeader.querySelectorAll("wt-icon")].map((i) => i.getAttribute("name"))).toEqual([
       "section-team",

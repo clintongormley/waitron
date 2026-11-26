@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { page, userEvent } from "vitest/browser";
+import { commands, page, userEvent } from "vitest/browser";
 import { registerIcons, type WtIcon } from "@waitron/ui";
 import {
   cleanupWidgets,
@@ -19,7 +19,7 @@ const SECTION_ICONS = {
   operations: "section-operations",
   hardware: "section-hardware",
   purchasing: "section-purchasing",
-  configuration: "gear",
+  configuration: "section-system",
 } as const;
 
 beforeEach(() => registerIcons(DASHBOARD_ICONS));
@@ -122,37 +122,72 @@ it("draws each headed section icon on its header, from a registered path", async
   }
 });
 
-it("leaves a space-1 gap between each header's icon and its label, centred on the label's line", async () => {
+it("places 18px icons 12px before the full sidebar labels", async () => {
   await atSize(1280, 800, async () => {
     const { el } = await mountApp();
-    const probe = document.createElement("div");
-    probe.style.width = "var(--wt-space-1)";
-    el.shadowRoot!.append(probe);
-    const gap = probe.getBoundingClientRect().width;
-    probe.remove();
-    expect(gap).toBeGreaterThan(0);
     for (const id of Object.keys(SECTION_ICONS)) {
       const header = el.shadowRoot!.querySelector(`[data-test=nav-group-${id}]`)!;
       const icon = header.querySelector<HTMLElement>(".group-icon")!.getBoundingClientRect();
       const label = header.querySelector<HTMLElement>(".nav-group-label")!.getBoundingClientRect();
-      expect(label.left - icon.right, id).toBeGreaterThanOrEqual(gap);
+      const previous = header.previousElementSibling!;
+      const above = previous.hasAttribute("hidden") ? previous.previousElementSibling! : previous;
+      expect
+        .soft(header.getBoundingClientRect().top - above.getBoundingClientRect().bottom, id)
+        .toBe(8);
+      expect.soft(icon.width, id).toBe(18);
+      expect.soft(label.left - icon.right, id).toBe(12);
       expect((icon.top + icon.bottom) / 2, id).toBeCloseTo((label.top + label.bottom) / 2, 0);
+    }
+    for (const icon of el.shadowRoot!.querySelectorAll<HTMLElement>(".pinned-icon")) {
+      expect.soft(icon.getBoundingClientRect().width).toBe(18);
+      expect.soft(getComputedStyle(icon).marginInlineEnd).toBe("12px");
     }
   });
 });
 
-it("draws the section icons in the text colour, not the header label's primary colour", async () => {
-  const { el, host } = await mountApp();
-  host.style.setProperty("--wt-color-text", "rgb(1, 2, 3)");
-  host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
-  for (const id of Object.keys(SECTION_ICONS)) {
-    const header = el.shadowRoot!.querySelector<HTMLElement>(`[data-test=nav-group-${id}]`)!;
-    const icon = header.querySelector<HTMLElement>("wt-icon.group-icon")!;
-    expect(getComputedStyle(icon).color, id).toBe("rgb(1, 2, 3)");
-    expect(getComputedStyle(header.querySelector(".nav-group-label")!).color, id).toBe(
-      "rgb(4, 5, 6)",
-    );
-  }
+it("brightens icons on hover or for the current section, even when it is closed", async () => {
+  await atSize(1280, 800, async () => {
+    await commands.parkPointer();
+    history.replaceState(null, "", "/devices");
+    const { el, host } = await mountApp({ locale: "en-GB" });
+    host.style.setProperty("--wt-color-text", "rgb(1, 2, 3)");
+    host.style.setProperty("--wt-color-text-muted", "rgb(4, 5, 6)");
+    const current = el.shadowRoot!.querySelector<HTMLButtonElement>(
+      "[data-test=nav-group-hardware]",
+    )!;
+    const other = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-menu]")!;
+    const bookings = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-bookings]")!;
+    for (const row of [other, bookings]) {
+      expect.soft(getComputedStyle(row.querySelector("wt-icon")!).color).toBe("rgb(4, 5, 6)");
+      await userEvent.hover(row);
+      expect.soft(getComputedStyle(row.querySelector("wt-icon")!).color).toBe("rgb(1, 2, 3)");
+    }
+    const label = getComputedStyle(current.querySelector(".nav-group-label")!);
+    expect.soft(label.color).toBe("rgb(1, 2, 3)");
+    expect.soft(label.textTransform).toBe("none");
+    expect.soft(label.letterSpacing).toBe("normal");
+    expect.soft(label.fontSize).toBe("14px");
+    expect.soft(label.fontWeight).toBe("600");
+    expect(current.getAttribute("aria-expanded")).toBe("true");
+    current.click();
+    await el.updateComplete;
+    expect(current.getAttribute("aria-expanded")).toBe("false");
+    expect(getComputedStyle(current.querySelector("wt-icon")!).color).toBe("rgb(1, 2, 3)");
+    const search = el.shadowRoot!.querySelector("[data-test=nav-search]")!;
+    search.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Printers" } }));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=nav-devices]")).toBeNull();
+    const searchHeadingIcon = el.shadowRoot!.querySelector(
+      "[data-test=nav-group-hardware] wt-icon",
+    )!;
+    expect(getComputedStyle(searchHeadingIcon).color).toBe("rgb(1, 2, 3)");
+    search.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Products" } }));
+    await el.updateComplete;
+    const searchHeading = el.shadowRoot!.querySelector<HTMLElement>("[data-test=nav-group-menu]")!;
+    await userEvent.hover(searchHeading);
+    expect(searchHeading.matches(":hover")).toBe(true);
+    expect(getComputedStyle(searchHeading.querySelector("wt-icon")!).color).toBe("rgb(4, 5, 6)");
+  });
 });
 
 const sidebar = (el: DashboardApp) => el.shadowRoot!.querySelector<HTMLElement>("aside.sidebar")!;
@@ -386,7 +421,10 @@ it("the strip lists each section with a page the person may open, in order, name
       const button = stripButton(el, id);
       const icon = SECTION_ICONS[id];
       expect(button.getAttribute("aria-label"), id).toBe(t(`nav.group.${id}`));
-      expect(button.querySelector("wt-icon")!.getAttribute("name"), id).toBe(icon);
+      const symbol = button.querySelector("wt-icon")!;
+      expect(symbol.getAttribute("name"), id).toBe(icon);
+      expect.soft(symbol.getBoundingClientRect().width, id).toBe(20);
+      expect.soft(button.getBoundingClientRect().height, id).toBe(44);
     }
     expect(stripButton(el, "overview").querySelector("wt-icon")!.getAttribute("name")).toBe(
       "section-overview",
@@ -448,7 +486,7 @@ it("a session holding only invoice.inspect has a strip of its one section, with 
   });
 });
 
-it("the current section is marked by the highlight alone, its icon staying the text colour", async () => {
+it("highlights the current strip section and leaves idle icons muted", async () => {
   await atSize(1280, 800, async () => {
     localStorage.setItem(FOLDED_KEY, "true");
     const { el, host } = await mountApp();
@@ -457,6 +495,7 @@ it("the current section is marked by the highlight alone, its icon staying the t
     host.style.setProperty("--wt-color-surface-lifted", "rgb(21, 22, 23)");
     host.style.setProperty("--wt-color-surface", "rgb(24, 25, 26)");
     host.style.setProperty("--wt-color-text", "rgb(31, 32, 33)");
+    host.style.setProperty("--wt-color-text-muted", "rgb(34, 35, 36)");
     const current = stripButton(el, "overview");
     const other = stripButton(el, "reports");
     expect(current.getAttribute("aria-current")).toBe("page");
@@ -470,7 +509,7 @@ it("the current section is marked by the highlight alone, its icon staying the t
     const otherStyle = getComputedStyle(other);
     expect(otherStyle.borderInlineStartColor).not.toBe("rgb(11, 12, 13)");
     expect(otherStyle.backgroundColor).not.toBe("rgb(21, 22, 23)");
-    expect(getComputedStyle(other.querySelector("wt-icon")!).color).toBe("rgb(31, 32, 33)");
+    expect(getComputedStyle(other.querySelector("wt-icon")!).color).toBe("rgb(34, 35, 36)");
 
     current.setAttribute("aria-expanded", "true");
     expect(getComputedStyle(current.querySelector("wt-icon")!).color).toBe("rgb(31, 32, 33)");
@@ -557,11 +596,14 @@ describe("a section with several pages opens a panel beside its icon", () => {
       const { el, host } = await mountFoldedReading("reports");
       host.style.setProperty("--wt-color-primary-text", "rgb(4, 5, 6)");
       host.style.setProperty("--wt-color-primary", "rgb(7, 8, 9)");
+      host.style.setProperty("--wt-color-text", "rgb(1, 2, 3)");
       await userEvent.click(stripButton(el, "reports"));
       await el.updateComplete;
       const label = panel(el)!.querySelector<HTMLElement>(".strip-panel-label")!;
-      expect(getComputedStyle(label).textTransform).toBe("uppercase");
-      expect(getComputedStyle(label).color).toBe("rgb(4, 5, 6)");
+      expect.soft(getComputedStyle(label).textTransform).toBe("none");
+      expect.soft(getComputedStyle(label).letterSpacing).toBe("normal");
+      expect.soft(getComputedStyle(label).color).toBe("rgb(1, 2, 3)");
+      expect(getComputedStyle(panelPages(el)[0]!).paddingInlineStart).toBe("12px");
       panelPages(el)[0]!.click();
       await el.updateComplete;
       await userEvent.click(stripButton(el, "reports"));

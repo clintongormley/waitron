@@ -41,6 +41,7 @@ import {
   type LegalAbout,
 } from "@waitron/shared";
 import { navMatches, destinationMatches, type NavSearchDestination } from "./nav-search.js";
+import { sidebarHeadingStyles } from "./sidebar-heading-styles.js";
 import { collectSearchDestinations, validSearchDestinationPath } from "./nav-destinations.js";
 import { departmentReceiptSearchDestinations } from "./department-receipt-setting-search.js";
 import "@waitron/ui/src/components/wt-button.js";
@@ -384,7 +385,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     id: "configuration",
     headerKey: "nav.group.configuration",
-    icon: "gear",
+    icon: "section-system",
     items: [
       {
         screen: "box-status",
@@ -497,6 +498,7 @@ export class DashboardApp extends LitElement {
     baseStyles,
     iconButtonStyles,
     themeChoicesStyles,
+    sidebarHeadingStyles,
     css`
       /* Fills the page's content box (index.html sizes it to the window), so the page's own padding
          stays inside the window rather than below it. */
@@ -565,11 +567,20 @@ export class DashboardApp extends LitElement {
         border-inline-start: 3px solid transparent;
         border-radius: 0;
         background: transparent;
-        color: var(--wt-color-text);
+        color: var(--wt-color-text-muted);
+      }
+
+      .strip-button > wt-icon {
+        inline-size: calc(var(--wt-space-4) + var(--wt-space-1));
+        block-size: calc(var(--wt-space-4) + var(--wt-space-1));
       }
 
       .icon-button.strip-button:hover {
         background: var(--wt-color-surface);
+      }
+
+      .icon-button.strip-button:is(:hover, [aria-current]) {
+        color: var(--wt-color-text);
       }
 
       .icon-button.strip-button[aria-current] {
@@ -629,10 +640,18 @@ export class DashboardApp extends LitElement {
       .nav-pinned .nav-item {
         display: flex;
         align-items: center;
-        gap: var(--wt-space-2);
       }
 
+      .group-icon,
       .pinned-icon {
+        flex: none;
+        margin-inline-end: var(--wt-space-3);
+        color: var(--wt-color-text-muted);
+      }
+
+      button.nav-group:hover .group-icon,
+      .nav-group[data-current] .group-icon,
+      .nav-pinned .nav-item:is(:hover, [aria-current="page"]) .pinned-icon {
         color: var(--wt-color-text);
       }
 
@@ -646,82 +665,6 @@ export class DashboardApp extends LitElement {
         margin: 0;
         padding-inline: var(--wt-space-3);
         color: var(--wt-color-text-muted);
-      }
-
-      .nav-group {
-        position: relative;
-        display: flex;
-        align-items: flex-start;
-        gap: var(--wt-space-1);
-        width: 100%;
-        min-height: var(--wt-tap-min);
-        margin: var(--wt-space-1) 0 0;
-        padding: var(--wt-space-3);
-        border: none;
-        border-inline-start: 3px solid transparent;
-        background: transparent;
-        font: inherit;
-        line-height: var(--wt-font-size-lg);
-        text-align: start;
-        cursor: pointer;
-      }
-
-      /* After .nav-group's own rule, whose font shorthand would reset the size and weight. */
-      .nav-group,
-      .strip-panel-label {
-        color: var(--wt-color-primary-text);
-        font-size: var(--wt-font-size-sm);
-        font-weight: var(--wt-font-weight-bold);
-        text-transform: uppercase;
-        letter-spacing: var(--wt-letter-spacing-caps);
-      }
-
-      button.nav-group:hover {
-        background: var(--wt-color-surface);
-      }
-
-      div.nav-group {
-        cursor: default;
-      }
-
-      .nav-group .group-icon {
-        position: absolute;
-        inset-inline-start: calc(-1 * var(--wt-space-1));
-        margin-block-start: calc((var(--wt-font-size-lg) - var(--wt-font-size-sm)) / 2);
-      }
-
-      .nav-group-label {
-        flex: 1;
-        min-width: 0;
-      }
-
-      .nav-group .chevron-space {
-        flex-shrink: 0;
-        width: var(--wt-space-4);
-      }
-
-      .nav-group .chevron {
-        flex-shrink: 0;
-        width: var(--wt-space-4);
-        height: var(--wt-space-4);
-        margin-block-start: calc((var(--wt-font-size-lg) - var(--wt-space-4)) / 2);
-        opacity: 0;
-        transition: transform 150ms ease;
-      }
-
-      .nav-group:hover .chevron,
-      .nav-group:focus-visible .chevron {
-        opacity: 1;
-      }
-
-      @media (hover: none) {
-        .nav-group .chevron {
-          opacity: 1;
-        }
-      }
-
-      .nav-group[aria-expanded="true"] .chevron {
-        transform: rotate(180deg);
       }
 
       .nav-item,
@@ -759,6 +702,10 @@ export class DashboardApp extends LitElement {
         border-inline-start-color: var(--wt-color-primary);
         color: var(--wt-color-primary-text);
         font-weight: var(--wt-font-weight-bold);
+      }
+
+      .nav-group-pages > .nav-item {
+        padding-inline-start: calc(2 * var(--wt-space-3) + var(--wt-font-size-lg));
       }
 
       /* The content column beside the sidebar — scrolls independently, the same as .sidebar above,
@@ -3207,13 +3154,14 @@ export class DashboardApp extends LitElement {
   }
 
   /** `#permittedNav` narrowed by the search; `pages` is undefined when none is left. */
-  #shownNav(): { group: NavGroup; pages?: NavPage[] }[] {
-    const permitted = this.#permittedNav();
-    if (this.#searchHidden()) return permitted;
-    return permitted.map(({ group, pages }) => {
+  #shownNav(): { group: NavGroup; current: boolean; pages?: NavPage[] }[] {
+    const searchHidden = this.#searchHidden();
+    return this.#permittedNav().map(({ group, pages }) => {
+      const current = pages.some((page) => this.#isCurrentNavPage(page));
+      if (searchHidden) return { group, current, pages };
       const heading = group.headerKey === undefined ? "" : t(group.headerKey);
       const matched = navMatches(this.navSearch, pages, heading);
-      return { group, pages: matched.length > 0 ? matched : undefined };
+      return { group, current, pages: matched.length > 0 ? matched : undefined };
     });
   }
 
@@ -3629,7 +3577,7 @@ export class DashboardApp extends LitElement {
                 @keydown=${(e: KeyboardEvent) => this.#onNavSearchKeydown(e)}
               ></wt-input>`
         }
-        ${sections.map(({ group, pages }) => {
+        ${sections.map(({ group, current, pages }) => {
           if (pages === undefined) return nothing;
           // A search shows its matches open without touching `collapsedGroups`, and its headers
           // are plain labels rather than toggles.
@@ -3640,8 +3588,12 @@ export class DashboardApp extends LitElement {
               group.headerKey === undefined
                 ? nothing
                 : searching
-                  ? html`<div class="nav-group" data-test="nav-group-${group.id}">
-                      <wt-icon class="group-icon" size="sm" name=${group.icon}></wt-icon>
+                  ? html`<div
+                      class="nav-group"
+                      ?data-current=${current}
+                      data-test="nav-group-${group.id}"
+                    >
+                      <wt-icon class="group-icon" size="lg" name=${group.icon}></wt-icon>
                       <span class="nav-group-label">${t(group.headerKey)}</span>
                       <span class="chevron-space"></span>
                     </div>`
@@ -3650,18 +3602,22 @@ export class DashboardApp extends LitElement {
                       class="nav-group"
                       aria-expanded=${!collapsed}
                       aria-controls=${panelId}
+                      ?data-current=${current}
                       data-test="nav-group-${group.id}"
                       @click=${(e: MouseEvent) =>
                         this.#toggleGroup(group.id, e.currentTarget as HTMLElement)}
                     >
-                      <wt-icon class="group-icon" size="sm" name=${group.icon}></wt-icon>
+                      <wt-icon class="group-icon" size="lg" name=${group.icon}></wt-icon>
                       <span class="nav-group-label">${t(group.headerKey)}</span>
                       <wt-icon name="chevron-down" class="chevron"></wt-icon>
                     </button>`
             }
             <div
               id=${panelId}
-              class=${group.headerKey === undefined && pages.some((page) => page.icon) ? "nav-pinned" : nothing}
+              class=${classMap({
+                "nav-group-pages": group.headerKey !== undefined,
+                "nav-pinned": group.headerKey === undefined && pages.some((page) => page.icon),
+              })}
               ?hidden=${collapsed}
             >
               ${repeat(
@@ -3675,7 +3631,7 @@ export class DashboardApp extends LitElement {
                     data-test="nav-${navKey(page.screen, page.calendarView)}"
                     @click=${() => this.#openFromNav(page)}
                   >
-                    ${page.icon ? html`<wt-icon class="pinned-icon" size="sm" name=${page.icon}></wt-icon>` : nothing}
+                    ${page.icon ? html`<wt-icon class="pinned-icon" size="lg" name=${page.icon}></wt-icon>` : nothing}
                     ${page.label}
                   </button>`,
               )}

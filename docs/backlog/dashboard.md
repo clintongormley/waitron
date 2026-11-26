@@ -147,8 +147,8 @@ Retiring the summary once its last consumer moves away remains open.
 ## A1606 The sidebar and account menu: clearer sections, real icons, who is signed in
 
 [Approved design](../superpowers/specs/2026-11-26-dashboard-sidebar-and-account-menu-design.md)
-(owner, 2026-11-26). The remaining work is the sidebar styling and Material icons, followed by
-the banner and account menu. The sidebar styling revises A654's icon placement.
+(owner, 2026-11-26). The remaining work is the banner buttons and the account menu that shows who
+is signed in.
 
 ## Decisions and deliberate limits
 
@@ -357,11 +357,10 @@ registered as `venue-service:week`, and the others register theirs when they exi
   Pair device (Enable shares that dialog). The Units and Modifiers Delete dialogs do not: depending on
   the data they show a table or nothing, and a fixed height could squeeze the table.
 
-- **The sidebar folds to a strip of icons (A654, owner 2026-10-15).** Every sidebar icon draws in
-  the text colour, never the primary colour, and the current section is marked by its highlight
-  alone; the folded choice is kept per browser, and with no choice kept, a window wider than 48rem
-  and at most 64rem opens folded. How it works: `docs/developers/design-system.md` → "Dashboard
-  sidebar navigation".
+- **The sidebar folds to a strip of icons (A654, owner 2026-10-15).** The folded choice is kept per
+  browser. With no choice kept, a window wider than 48rem and at most 64rem opens folded. A1606
+  (owner, 2026-11-26) moves the icons into their rows and uses muted icons at rest, with full text
+  colour on hover and for the current section. See [Dashboard sidebar navigation](../developers/design-system.md#dashboard-sidebar-navigation).
 
 - **An open tab offers to reload after a box update (A491, owner 2026-10-11).** How it works:
   `docs/developers/conventions-ui.md` → "An open page notices a box update from one response
