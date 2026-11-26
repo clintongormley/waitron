@@ -11,7 +11,7 @@ export const dashboardPath: UrlPathConfig = {
   primary: "dashboard",
   children: {
     "*": { view: "view" },
-    products: { product: "product", category: "category" },
+    products: { product: "product", editor: "editor", category: "category" },
     "opening-hours": {
       view: "view",
       season: "season",

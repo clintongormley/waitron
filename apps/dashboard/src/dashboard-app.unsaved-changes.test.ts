@@ -5,7 +5,11 @@ import { leaveCoordinatorFor, navigationGuardFor, type WtInput } from "@waitron/
 import type { DashboardApi, MenuPriceRow, MenuPreview, Product } from "./api/client.js";
 import type { OwnProfile } from "./api/account-api.js";
 import { DashboardApp } from "./dashboard-app.js";
-import { menuProductApi } from "./testing/menu-product-fixture.js";
+import {
+  menuProduct,
+  menuProductApi,
+  menuProductEditorValue,
+} from "./testing/menu-product-fixture.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
 import type { MenuPricesTable } from "./widgets/menu-prices-table.js";
 import "./widgets/menu-prices-table.js";
@@ -1448,6 +1452,164 @@ describe("a Structure tab product row's Edit product link under the app's link r
     expect(new URL(String(write.mock.calls[0]![0])).pathname).toBe("/products/product/p-burger");
     await expect.poll(() => location.pathname).toBe("/products/product/p-burger");
     expect(m.app.shadowRoot!.querySelector("dashboard-products-screen")).not.toBeNull();
+  });
+});
+
+describe("Products browser history", () => {
+  async function onProducts(address = "/products", options: Partial<DashboardApi> = {}) {
+    const products = menuProductApi();
+    const m = await mount({
+      ...products,
+      listProducts: async () => [menuProduct],
+      getFolderRouting: async () => {
+        throw { code: "authorization.not_permitted" };
+      },
+      getMe: async () => ({
+        personId: "p1",
+        email: "ada@example.com",
+        roleIds: ["manager"],
+        locale: "en-GB",
+        venueLocale: "en-GB",
+        sessionDefault: "en-GB",
+        venueName: "Venue",
+        permissions: ["product.manage", "venue.view"],
+        modules: [],
+      }),
+      ...options,
+    });
+    await navigationGuardFor(window)!.write(address);
+    const screen = () => m.app.shadowRoot!.querySelector("dashboard-products-screen")!;
+    const editor = () =>
+      screen().shadowRoot!.querySelector<ProductEditor>("dashboard-product-editor")!;
+    await expect
+      .poll(() => screen()?.shadowRoot?.querySelector("dashboard-product-browser")?.tableHidden)
+      .toBe(false);
+    return { ...m, products: screen, editor };
+  }
+
+  async function editBurger(m: Awaited<ReturnType<typeof onProducts>>) {
+    m.products()
+      .shadowRoot!.querySelector("dashboard-product-browser")!
+      .dispatchEvent(
+        new CustomEvent("edit-product", { detail: { productId: "p-burger" }, bubbles: true }),
+      );
+    await changeProductName(m.editor, "Edited Burger");
+  }
+
+  async function changeProductName(editor: () => ProductEditor, value: string) {
+    await expect.poll(() => editor().open).toBe(true);
+    const name = editor().shadowRoot!.querySelector<WtInput>('wt-input[name="name"]')!;
+    name.dispatchEvent(new CustomEvent("wt-change", { detail: { value } }));
+    await editor().updateComplete;
+    expect(editor().currentValue.name).toBe(value);
+  }
+
+  it("keeps the draft on Keep editing and returns to Products on Discard", async () => {
+    const m = await onProducts();
+    await editBurger(m);
+    history.back();
+    await expect.poll(() => m.question.open).toBe(true);
+    expect(location.pathname).toBe("/products/product/p-burger");
+    await choose(m, "keep");
+    expect(m.editor().currentValue.name).toBe("Edited Burger");
+    history.back();
+    await expect.poll(() => m.question.open).toBe(true);
+    await choose(m, "discard");
+    await expect.poll(() => location.pathname).toBe("/products");
+    await expect.poll(() => m.editor().open).toBe(false);
+  });
+
+  it("asks before discarding an Add product draft on Back", async () => {
+    const m = await onProducts();
+    await userEvent.click(page.getByRole("button", { name: "Add product", exact: true }));
+    await changeProductName(m.editor, "New Burger");
+    history.back();
+    await expect.poll(() => m.question.open).toBe(true);
+    expect(location.pathname).toBe("/products/editor/new");
+    await choose(m, "discard");
+    await expect.poll(() => location.pathname).toBe("/products");
+    await expect.poll(() => m.editor().open).toBe(false);
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/profile");
+  });
+
+  it("cancels edits directly and lets the next Back leave Products", async () => {
+    const m = await onProducts();
+    await editBurger(m);
+    await userEvent.click(page.getByRole("button", { name: "Cancel", exact: true }));
+    await expect.poll(() => location.pathname).toBe("/products");
+    expect(m.question.open).toBe(false);
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/profile");
+  });
+
+  it("closes a linked product onto the Products list", async () => {
+    const m = await onProducts("/products/product/p-burger?field=image");
+    await expect.poll(() => m.editor().open).toBe(true);
+    await userEvent.click(page.getByRole("button", { name: "Cancel", exact: true }));
+    await expect.poll(() => location.pathname).toBe("/products");
+    expect(location.search).toBe("");
+    await expect.poll(() => m.editor().open).toBe(false);
+  });
+
+  it("keeps the saved-product notice when Back arrives before the list refresh", async () => {
+    const saved = { ...menuProductEditorValue, name: "Edited Burger" };
+    let updated = false;
+    let finishRefresh!: () => void;
+    const refresh = new Promise<void>((resolve) => (finishRefresh = resolve));
+    const m = await onProducts("/products", {
+      listProducts: async () => {
+        if (!updated) return [{ ...menuProduct, name: "Original Burger" }];
+        await refresh;
+        return [{ ...menuProduct, name: saved.name }];
+      },
+      updateProductEditor: async () => {
+        updated = true;
+        return saved;
+      },
+    });
+    const search = m
+      .products()
+      .shadowRoot!.querySelector("dashboard-product-browser")!
+      .shadowRoot!.querySelector('[name="menu-search"]')!;
+    search.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Original Burger" } }));
+    await editBurger(m);
+    const save = m
+      .editor()
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+    expect(save.disabled).toBe(false);
+    const back = vi.spyOn(history, "back");
+    save.click();
+    await expect.poll(() => location.pathname).toBe("/products");
+    expect(back).toHaveBeenCalledOnce();
+    finishRefresh();
+    await expect
+      .element(page.getByText("Edited Burger was saved and is hidden by your search or filters."))
+      .toBeVisible();
+    history.back();
+    await expect.poll(() => location.pathname).toBe("/profile");
+  });
+
+  it("offers Add to menus after saving a new product opened from its address", async () => {
+    const m = await onProducts("/products/editor/new", {
+      createProductEditor: async () => menuProductEditorValue,
+      getMenuStructures: async () => [],
+    });
+    await expect.poll(() => m.editor().open).toBe(true);
+    const name = m.editor().shadowRoot!.querySelector<WtInput>('wt-input[name="name"]')!;
+    name.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Burger" } }));
+    const price = m.editor().shadowRoot!.querySelector('wt-price-input[name="unit-price"]')!;
+    price.dispatchEvent(new CustomEvent("wt-change", { detail: { value: "8.50" } }));
+    await m.editor().updateComplete;
+    const save = m
+      .editor()
+      .shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!;
+    expect(save.disabled).toBe(false);
+    save.click();
+    await expect.poll(() => location.pathname).toBe("/products");
+    await expect
+      .poll(() => m.products().shadowRoot!.querySelector("dashboard-add-to-menus")?.open)
+      .toBe(true);
   });
 });
 

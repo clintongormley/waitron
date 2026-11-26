@@ -464,10 +464,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Tabs selected visible** (bundle of 1, size S, needs the owner). [Detail](backlog/menu.md#bundle-tabs-selected-visible)
 
-- **The Products list: dishes first, a List and a Tree (owner, 2026-11-24).** The redesign still
-  needs browser Back.
-  [Design](superpowers/specs/2026-11-24-products-list-redesign-design.md)
-
 - **The customer menu, online and printed (owner, 2026-11-24).** Each menu gets a Customer menu
   tab with Online and Print, named styles, and a customer page the box serves through Cloud.
   Hosted copies can show stale prices, allergens and diet labels until Cloud removes them in

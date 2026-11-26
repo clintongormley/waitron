@@ -7,6 +7,10 @@ copiar su nombre de estación de preparación, sus declaraciones dietéticas ni 
 Puedes añadir productos antes de crear una carta. Abre **Productos** en el panel de gestión y elige **Añadir producto**. Ponle un nombre al producto e
 introduce su precio.
 
+Cuando abras el editor desde la lista de productos, usa el botón **Atrás** del navegador para
+volver a la lista. Si has hecho cambios, elige **Seguir editando** o **Descartar cambios**. Cuando
+abras una variante desde su producto, **Atrás** te devuelve a ese producto.
+
 El editor tiene tres tarjetas. La primera reúne el nombre con su foto, **Categoría** y **Disponible**.
 La tercera reúne el precio, las variantes y los modificadores. Entre las dos, **Detalles** reúne el
 resto: la estación de preparación, cómo aparece el producto en la carta, los alérgenos y la dieta, el
