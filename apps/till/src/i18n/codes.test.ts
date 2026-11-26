@@ -1219,6 +1219,19 @@ it("names a full invoice, not a receipt, in Give money back's and Money back und
     );
 });
 
+it("says in Money back under way that the business's registered address is missing, and where to add it", () => {
+  expect(
+    giveBackFilingMessage("fiscal.taxpayer_domicile_missing", "en", { fullInvoice: true }),
+  ).toBe(
+    "The business's registered address is missing, so the money given back cannot be recorded on this full invoice yet. Add it on the dashboard, under Venue settings › Venue details. Then press Check again.",
+  );
+  expect(
+    giveBackFilingMessage("fiscal.taxpayer_domicile_missing", "es", { fullInvoice: true }),
+  ).toBe(
+    "Falta el domicilio fiscal del negocio, así que el dinero devuelto aún no se puede registrar en esta factura completa. Añádelo en el panel, en Ajustes del local › Datos del local. Después pulsa Comprobar de nuevo.",
+  );
+});
+
 it("leaves Refund a payment out of the correction refusals other flows share", () => {
   const worded = [
     ...[
@@ -1479,13 +1492,13 @@ it.each([
   },
 );
 
-it("tells staff the receipt waits for the advance's open correction, naming the advance and the correction's buttons", () => {
+it("tells staff the receipt waits for the advance's open money back, naming the advance, to finish or stop it as it offers", () => {
   const advance = { invoiceNumber: "A/12" };
   expect(codeMessage("advance.correction_open", "en", advance)).toBe(
-    "The receipt cannot be issued while money back on the payment on account A/12 is under way. In Give money back on that ticket, press Finish, Stop here or Cancel this money back, then try again.",
+    "The receipt cannot be issued while money back on the payment on account A/12 is under way. In Give money back on that ticket, finish or stop the money back as it offers, then try again.",
   );
   expect(codeMessage("advance.correction_open", "es", advance)).toBe(
-    "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta A/12. En Devolver dinero de ese ticket, pulsa Terminar, Parar aquí o Anular esta devolución y vuelve a intentarlo.",
+    "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta A/12. En Devolver dinero de ese ticket, termina o para la devolución según ofrezca y vuelve a intentarlo.",
   );
   expect(codeMessage("advance.correction_open", "en")).toMatch(
     /while money back on the payment on account is under way\. /,

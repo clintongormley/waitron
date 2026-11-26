@@ -727,8 +727,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Este pago a cuenta ya se descontó en el ticket de la mesa{invoiceNumber}, así que aún no se puede devolver desde este ticket dinero de platos o por cortesía. Primero devuelve dinero con Devolver dinero en {receipt}: devuelve dinero pagado en {it}. Cuando no quede nada pagado en {it}, Devolver dinero en este ticket devuelve el resto.",
   },
   "advance.correction_open": {
-    en: "The receipt cannot be issued while money back on the payment on account{invoiceNumber} is under way. In Give money back on that ticket, press Finish, Stop here or Cancel this money back, then try again.",
-    es: "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta{invoiceNumber}. En Devolver dinero de ese ticket, pulsa Terminar, Parar aquí o Anular esta devolución y vuelve a intentarlo.",
+    en: "The receipt cannot be issued while money back on the payment on account{invoiceNumber} is under way. In Give money back on that ticket, finish or stop the money back as it offers, then try again.",
+    es: "El ticket no se puede emitir mientras siga en curso una devolución del pago a cuenta{invoiceNumber}. En Devolver dinero de ese ticket, termina o para la devolución según ofrezca y vuelve a intentarlo.",
   },
   "tender.refund_unavailable": {
     en: "This payment cannot be refunded here. Reload the transaction and check its payments",
@@ -1535,6 +1535,15 @@ const FULL_INVOICE_NEVER_RECORDED: Record<string, { en: string; es: string }> = 
   },
 };
 
+/** Money back under way's words for a refusal by its code; only a full invoice's corrective needs
+ * the registered address. */
+const GIVE_BACK_NOT_RECORDED_BY_CODE: Record<string, { en: string; es: string }> = {
+  "fiscal.taxpayer_domicile_missing": {
+    en: "The business's registered address is missing, so the money given back cannot be recorded on this full invoice yet. Add it on the dashboard, under Venue settings › Venue details. Then press Check again.",
+    es: "Falta el domicilio fiscal del negocio, así que el dinero devuelto aún no se puede registrar en esta factura completa. Añádelo en el panel, en Ajustes del local › Datos del local. Después pulsa Comprobar de nuevo.",
+  },
+};
+
 /** Any other refusal of recording: Finish is not offered while it holds. */
 const GIVE_BACK_NOT_RECORDED_NOW = {
   receipt: {
@@ -1562,5 +1571,7 @@ export function giveBackFilingMessage(
     if (Object.hasOwn(GIVE_BACK_NEVER_RECORDED, reason))
       return pickLocale(GIVE_BACK_NEVER_RECORDED[reason]!, locale);
   }
+  if (Object.hasOwn(GIVE_BACK_NOT_RECORDED_BY_CODE, code))
+    return pickLocale(GIVE_BACK_NOT_RECORDED_BY_CODE[code]!, locale);
   return pickLocale(GIVE_BACK_NOT_RECORDED_NOW[full ? "fullInvoice" : "receipt"], locale);
 }

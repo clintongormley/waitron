@@ -484,24 +484,24 @@ export const ALERT_MESSAGES: Readonly<
     es: `Las devoluciones automáticas han fallado en {count} pagos con tarjeta. Waitron no las volverá a intentar; devuélvelos desde el panel del proveedor.${MORE_ES}`,
   },
   "invoice_correction.unfinished": {
-    en: `{moneyBack:money} went back to a customer over an hour ago, but that money back is not finished, so its corrective receipt has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish to issue it for what has gone back.${MORE_EN}`,
-    es: `Hace más de una hora se devolvieron {moneyBack:money} a un cliente, pero esa devolución no está terminada, así que no se ha emitido su ticket rectificativo. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar para emitirlo por lo devuelto.${MORE_ES}`,
+    en: `{moneyBack:money} went back to a customer over an hour ago, but that money back is not finished, so its corrective receipt has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish to issue it for what has gone back. If it offers none of these, follow what it says, then press Check again there.${MORE_EN}`,
+    es: `Hace más de una hora se devolvieron {moneyBack:money} a un cliente, pero esa devolución no está terminada, así que no se ha emitido su ticket rectificativo. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar para emitirlo por lo devuelto. Si no ofrece nada de esto, sigue lo que indica y pulsa allí Comprobar de nuevo.${MORE_ES}`,
     variants: {
       fullInvoice: {
         mode: "replace",
-        en: `{moneyBack:money} went back to a customer over an hour ago, but that money back is not finished, so its corrective invoice has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish to issue it for what has gone back.${MORE_EN}`,
-        es: `Hace más de una hora se devolvieron {moneyBack:money} a un cliente, pero esa devolución no está terminada, así que no se ha emitido su factura rectificativa. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar para emitirla por lo devuelto.${MORE_ES}`,
+        en: `{moneyBack:money} went back to a customer over an hour ago, but that money back is not finished, so its corrective invoice has not been issued. On a till, open Find a bill and choose it under Money back under way: give back the rest, or press Stop here or Finish to issue it for what has gone back. If it offers none of these, follow what it says, then press Check again there.${MORE_EN}`,
+        es: `Hace más de una hora se devolvieron {moneyBack:money} a un cliente, pero esa devolución no está terminada, así que no se ha emitido su factura rectificativa. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso: devuelve el resto, o pulsa Parar aquí o Terminar para emitirla por lo devuelto. Si no ofrece nada de esto, sigue lo que indica y pulsa allí Comprobar de nuevo.${MORE_ES}`,
       },
     },
   },
   "invoice_correction.filing_refused": {
-    en: `{moneyBack:money} went back to a customer, but its corrective receipt could not be issued. Do not give the money back again. On a till, open Find a bill and choose it under Money back under way. If it offers Finish, press it. If not, it says why the corrective receipt cannot be issued yet; once that is put right, press Check again there.${MORE_EN}`,
-    es: `Se devolvieron {moneyBack:money} a un cliente, pero no se ha podido emitir su ticket rectificativo. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso. Si ofrece Terminar, púlsalo. Si no, indica por qué aún no se puede emitir el ticket rectificativo; cuando se haya resuelto, pulsa allí Comprobar de nuevo.${MORE_ES}`,
+    en: `{moneyBack:money} went back to a customer, but its corrective receipt could not be issued. Do not give the money back again. On a till, open Find a bill and choose it under Money back under way. If it offers Finish, press it. If not, follow what it says, then press Check again there.${MORE_EN}`,
+    es: `Se devolvieron {moneyBack:money} a un cliente, pero no se ha podido emitir su ticket rectificativo. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso. Si ofrece Terminar, púlsalo. Si no, sigue lo que indica y pulsa allí Comprobar de nuevo.${MORE_ES}`,
     variants: {
       fullInvoice: {
         mode: "replace",
-        en: `{moneyBack:money} went back to a customer, but its corrective invoice could not be issued. Do not give the money back again. On a till, open Find a bill and choose it under Money back under way. If it offers Finish, press it. If not, it says why the corrective invoice cannot be issued yet; once that is put right, press Check again there.${MORE_EN}`,
-        es: `Se devolvieron {moneyBack:money} a un cliente, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso. Si ofrece Terminar, púlsalo. Si no, indica por qué aún no se puede emitir la factura rectificativa; cuando se haya resuelto, pulsa allí Comprobar de nuevo.${MORE_ES}`,
+        en: `{moneyBack:money} went back to a customer, but its corrective invoice could not be issued. Do not give the money back again. On a till, open Find a bill and choose it under Money back under way. If it offers Finish, press it. If not, follow what it says, then press Check again there.${MORE_EN}`,
+        es: `Se devolvieron {moneyBack:money} a un cliente, pero no se ha podido emitir su factura rectificativa. No vuelvas a devolver el dinero. En una caja, abre Buscar cuenta y elígela en Devoluciones en curso. Si ofrece Terminar, púlsalo. Si no, sigue lo que indica y pulsa allí Comprobar de nuevo.${MORE_ES}`,
       },
     },
   },
