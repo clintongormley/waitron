@@ -1,52 +1,33 @@
 import { seedZone } from "@waitron/db/testing/seed.js";
-import { removeBuiltInPermissionForTest, seedPersons } from "@waitron/identity/test/person-rows.js";
+import { seedPersons } from "@waitron/identity/test/person-rows.js";
 import { testTradingAdmission } from "./testing/trading-admission.js";
 import { readBillEditState } from "./bill-editing.js";
-import { deviceId as brandDeviceId } from "@waitron/shared";
-import { issueOrderInvoice } from "./testing/issue-order.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billPayments,
-  insertNodeSeriesTx,
   invoiceSeries,
   orderAmendments,
   saleLines,
   saleSettlements,
-  sales,
+  saleVoids,
   tenders,
   unpaidDepartures,
   withTransaction,
-  workingOrderLines,
-  workingOrders,
-  nextInvoiceNumberOf,
 } from "@waitron/db";
-import {
-  createExtraList,
-  createProduct,
-  setTakeawayVatRate,
-  units,
-  writeProductModifiers,
-} from "@waitron/menu";
 import { listOutstandingSales, recordCorrection } from "@waitron/core";
 import { verifactuRecords } from "@waitron/fiscal-verifactu";
-import { createPinThrottle, hashPin, loginWithPin, PIN_THROTTLE_IDLE_MS } from "@waitron/identity";
+import { createPinThrottle, hashPin, PIN_THROTTLE_IDLE_MS } from "@waitron/identity";
 import { captureAttempting } from "@waitron/payments";
 import { FakePaymentProvider } from "@waitron/payments/src/testing/fake-provider.js";
-import {
-  decimal,
-  negateDecimal,
-  saleId as brandSaleId,
-  seriesId as brandSeriesId,
-} from "@waitron/shared";
+import { saleId as brandSaleId, seriesId as brandSeriesId } from "@waitron/shared";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   inTx,
-  provisionBillVenue,
   placedCounterBillMovedTo,
   seatedWith,
   send,
@@ -54,9 +35,9 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { mountTillApi } from "./till-api.js";
-import { SESSION_COOKIE } from "./till-session.js";
 import { billShare, takeReaderBillPayment } from "./testing/bill-payment-fixture.js";
 import { openTillSession } from "./testing/session-device.js";
+import * as fixture from "./testing/cancel-invoice-venue.js";
 import "./errors.js";
 import { failingDerivationsOf, watchDerivations, watchedOrder } from "./testing/watched-scrypt.js";
 
@@ -64,23 +45,20 @@ vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
 );
 
-// Cancelling a placed order whose invoice was issued credits the whole invoice (an R5 corrective
-// invoice) and settles the original owing nothing, in the cancel's one transaction (owner decision
-// 2026-10-02). Driven over HTTP against a venue that files real Veri*Factu records.
+// Cancelling a placed order whose invoice was issued cancels it (`sale.void`) when nothing was
+// served and nothing paid, and otherwise credits it whole (an R5 corrective invoice), in the
+// cancel's one transaction. Driven over HTTP against a venue that files real Veri*Factu records.
+let cv: fixture.CancelInvoiceVenue;
 let venue: BillVenue;
 let ticketThenPayZone: string;
-/** Menu-item id of each product by its staff name, offered in the invoice-first counter zone. */
-let offerOf: (name: string) => string;
 let productIdOf: (name: string) => string;
-/** Café's extras list, offering Leche at 0.50. */
-let extraListId: string;
 let portionListId: string;
 let supervisorId: string;
 /** The supervisor's own session on the first till's device: holds `sale.rectify`. */
 let supervisorCookie: string;
 let supervisorSessionId: string;
 
-const SUPERVISOR_PIN = "7777";
+const SUPERVISOR_PIN = fixture.SUPERVISOR_PIN;
 const REASON = "Pedido equivocado";
 
 useVenueDb({
@@ -88,225 +66,35 @@ useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   timeoutMs: 60_000,
   setup: async (db) => {
-    venue = await provisionBillVenue(db);
-    await inTx(venue, (tx) => removeBuiltInPermissionForTest(tx, "staff", "cash.drawer"));
-    const productIds = await inTx(venue, async (tx) => {
-      const [kg] = await tx
-        .insert(units)
-        .values({
-          staffName: "Staff unit",
-          staffAbbreviation: "su",
-          seedKey: "credit-test-kg",
-          name: { "es-ES": "kilogramo" },
-          abbreviation: { "es-ES": "kg" },
-          precision: 3,
-          hardwareUnit: "kg",
-        })
-        .returning({ id: units.id });
-      const [category] = db.all<{ id: string }>(
-        sql`select id from categories where name = 'Platos'`,
-      );
-      // Taken away at 21%, 0.55 is invoiced 0.45 + 0.10 by the menu's gross arithmetic and 2.10 is
-      // 1.74 + 0.36, while those bases taxed at 21% are 0.09 and 0.37; Café with two 0.50 extras at
-      // 10% matches both ways.
-      const created = new Map<string, string>();
-      for (const [name, price, vatClass, takeawayVatRate] of [
-        ["Mosto", "0.55", "general", "21.00"],
-        ["Zumo", "2.10", "general", "21.00"],
-        ["Café", "3.00", "reduced", "10.00"],
-        ["Leche", "1.00", "reduced", "10.00"],
-      ] as const) {
-        const product = await createProduct(tx, {
-          categoryId: category!.id,
-          name,
-          customerName: { [venue.cfg.locale]: `${name} de la casa` },
-          kitchenName: name.toUpperCase(),
-          pricingUnit: "each",
-          unitPrice: price,
-          vatClass,
-          takeawayVatRate,
-        });
-        created.set(name, product.id);
-      }
-      const extras = await createExtraList(
-        tx,
-        {
-          name: "Añadidos",
-          customerName: null,
-          kitchenName: null,
-          minPicks: 0,
-          maxPicks: 2,
-          active: true,
-          items: [
-            { productId: created.get("Leche"), maxQuantity: 2, preselected: false, price: "0.50" },
-          ],
-        },
-        venue.cfg.locale,
-      );
-      extraListId = extras.id;
-      const ham = await createProduct(tx, {
-        categoryId: category!.id,
-        name: "Jamón",
-        unitId: kg!.id,
-        unitPrice: "0.27",
-        vatClass: "general",
-        takeawayVatRate: "21.00",
-      });
-      const portions = await createExtraList(
-        tx,
-        {
-          name: "Porciones",
-          customerName: null,
-          kitchenName: null,
-          minPicks: 0,
-          maxPicks: 3,
-          active: true,
-          items: [
-            {
-              productId: ham.id,
-              portion: "0.050",
-              maxQuantity: 3,
-              preselected: false,
-              price: null,
-            },
-          ],
-        },
-        venue.cfg.locale,
-      );
-      portionListId = portions.id;
-      await writeProductModifiers(tx, created.get("Café")!, [{ kind: "extras", id: extras.id }]);
-      const [beer] = db.all<{ id: string }>(sql`select id from products where name = 'Small beer'`);
-      await setTakeawayVatRate(tx, beer!.id, "21.00");
-      await writeProductModifiers(tx, created.get("Mosto")!, [{ kind: "extras", id: portions.id }]);
-      return new Map(
-        db
-          .all<{ id: string; name: string }>(sql`select id, name from products`)
-          .map((row) => [row.name, row.id]),
-      );
-    });
-    const offers = await inTx(venue, (tx) =>
-      offerProducts(tx, { zone: "counter", orderStart: "counter" }),
-    );
-    ticketThenPayZone = offers.zoneId;
-    productIdOf = (name) => productIds.get(name)!;
-    offerOf = (name) => offers.offerFor(productIdOf(name));
-    const session = await inTx(venue, async (tx) => {
-      const [person] = await seedPersons(tx, {
-        displayName: "Sophia",
-        pinHash: hashPin(SUPERVISOR_PIN),
-        role: "supervisor",
-      });
-      supervisorId = person!.id;
-      return loginWithPin(tx, {
-        deviceId: venue.deviceId,
-        personId: supervisorId,
-        pin: SUPERVISOR_PIN,
-      });
-    });
-    supervisorSessionId = session.id;
-    const [, ...device] = venue.cookie.split("; ");
-    supervisorCookie = [`${SESSION_COOKIE}=${session.token}`, ...device].join("; ");
+    cv = await fixture.provisionCancelInvoiceVenue(db);
+    ({
+      venue,
+      ticketThenPayZone,
+      productIdOf,
+      portionListId,
+      supervisorId,
+      supervisorCookie,
+      supervisorSessionId,
+    } = cv);
   },
 });
 
-/** Park and place through the routes, optionally seeding an issued invoice between them. */
-async function placed(
-  lines: { name: string; quantity: string; extras?: unknown[] }[],
+function placed(
+  lines: Parameters<typeof fixture.placed>[1],
   zoneId = ticketThenPayZone,
   issued = true,
   dining: "eat_in" | "takeaway" = "eat_in",
 ): Promise<string> {
-  const id = randomUUID();
-  const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
-    dining: "eat_in",
-    id,
-    zoneId,
-    lines: lines.map(({ name, ...line }) => ({ menuItemId: offerOf(name), ...line })),
-  });
-  expect(parked.status).toBe(200);
-  // The counter department sells eaten in; the way is switched before the kitchen has the order.
-  if (dining === "takeaway") {
-    await inTx(venue, (tx) =>
-      tx.update(workingOrders).set({ dining }).where(eq(workingOrders.id, id)),
-    );
-  }
-  if (issued) {
-    await issueOrderInvoice(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      { ...venue.cfg, origin: { source: "device", deviceId: brandDeviceId(venue.deviceId) } },
-      id,
-      venue.operatorId,
-    );
-  }
-  const place = await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/place`);
-  expect(place.status).toBe(200);
-  return id;
+  return fixture.placed(cv, lines, zoneId, issued, dining);
 }
+
+const invoiceOf = (billId: string) => fixture.invoiceOf(venue, billId);
+const creditsOf = (saleId: string) => fixture.creditsOf(venue, saleId);
+const linesOf = (saleId: string) => fixture.linesOf(venue, saleId);
+const activeCorrective = () => fixture.activeCorrective(venue);
 
 function cancel(id: string, cookie = supervisorCookie) {
   return send(venue.app, cookie, "POST", `/api/working-orders/${id}/cancel`, { reason: REASON });
-}
-
-/** The bill's own invoice: the sale its order filed. */
-async function invoiceOf(billId: string) {
-  const [row] = await inTx(venue, (tx) =>
-    tx.select().from(sales).where(eq(sales.workingOrderId, billId)),
-  );
-  return row!;
-}
-
-function creditsOf(saleId: string) {
-  return inTx(venue, (tx) => tx.select().from(sales).where(eq(sales.correctsSaleId, saleId)));
-}
-
-async function fiscalRecordOf(saleId: string) {
-  const [row] = await inTx(venue, (tx) =>
-    tx.select().from(verifactuRecords).where(eq(verifactuRecords.saleId, saleId)),
-  );
-  return row as typeof row & {
-    desglose: {
-      BaseImponibleOimporteNoSujeto: string;
-      TipoImpositivo: string;
-      CuotaRepercutida: string;
-    }[];
-    facturasRectificadas: { IDFacturaRectificada: Record<string, string>[] } | null;
-  };
-}
-
-async function linesOf(saleId: string) {
-  const rows = await inTx(venue, (tx) =>
-    tx
-      .select({
-        id: saleLines.id,
-        parentLineId: saleLines.parentLineId,
-        line: {
-          lineNo: saleLines.lineNo,
-          name: saleLines.name,
-          descriptions: saleLines.descriptions,
-          kitchenName: saleLines.kitchenName,
-          quantity: saleLines.quantity,
-          priceQuantity: saleLines.priceQuantity,
-          unitPrice: saleLines.unitPrice,
-          vatRate: saleLines.vatRate,
-          lineTotal: saleLines.lineTotal,
-          lineGross: saleLines.lineGross,
-          productId: saleLines.productId,
-        },
-      })
-      .from(saleLines)
-      .where(eq(saleLines.saleId, saleId))
-      .orderBy(saleLines.lineNo),
-  );
-  const lineNoOf = new Map(rows.map((row) => [row.id, row.line.lineNo]));
-  return rows.map((row) => ({
-    ...row.line,
-    parentLineNo: row.parentLineId === null ? null : lineNoOf.get(row.parentLineId),
-  }));
 }
 
 function amendmentsOf(billId: string) {
@@ -323,29 +111,36 @@ function amendmentsOf(billId: string) {
   );
 }
 
-async function activeCorrective() {
-  const [row] = await inTx(venue, (tx) =>
+/** The cancellations filed against the sale, by whom and why. */
+function voidsOf(saleId: string) {
+  return inTx(venue, (tx) =>
     tx
-      .select({ id: invoiceSeries.id, next: nextInvoiceNumberOf(invoiceSeries.id) })
-      .from(invoiceSeries)
-      .where(
-        and(
-          eq(invoiceSeries.nodeId, venue.cfg.nodeId),
-          eq(invoiceSeries.purpose, "corrective"),
-          isNull(invoiceSeries.retiredAt),
-        ),
-      ),
+      .select({ reason: saleVoids.reason, voidedBy: saleVoids.voidedBy })
+      .from(saleVoids)
+      .where(eq(saleVoids.saleId, saleId)),
   );
-  return row;
 }
 
-/** Everything a credit would write, so a refusal can be shown to have written none of it. */
+/** The sale's cancellation records (anulación) in the Veri*Factu chain. */
+function annulmentsOf(saleId: string) {
+  return inTx(venue, (tx) =>
+    tx
+      .select({ id: verifactuRecords.id })
+      .from(verifactuRecords)
+      .where(
+        and(eq(verifactuRecords.saleId, saleId), eq(verifactuRecords.tipoRegistro, "anulacion")),
+      ),
+  );
+}
+
+/** Everything a credit or a cancellation would write, so a refusal can be shown to have written none of it. */
 function fiscalSnapshot() {
   return venue.db.all(sql`
     select
       (select count(*) from sales) as sales,
       (select count(*) from sale_lines) as saleLines,
       (select count(*) from sale_settlements) as settlements,
+      (select count(*) from sale_voids) as voids,
       (select count(*) from verifactu_records) as recordCount,
       (select count(*) from order_amendments) as amendments,
       (select group_concat(id || ':' || (select coalesce(max(sales.invoice_number), 0) + 1 from sales where sales.series_id = invoice_series.id), ',') from invoice_series) as series,
@@ -412,232 +207,7 @@ function receivePayment(billId: string) {
   );
 }
 
-const negate = (amount: string) => negateDecimal(decimal(amount));
-
 describe("cancelling a placed order whose invoice was issued", () => {
-  it("credits the whole invoice in the corrective series, settles it owing nothing, and abandons the order", async () => {
-    const id = await placed([{ name: "Small beer", quantity: "1" }]);
-    const original = await invoiceOf(id);
-    expect(original.total).toBe(300);
-    // The requesting device is not the configuration's own, so the two cannot be confused below.
-    expect(venue.deviceId).not.toBe(venue.cfg.origin.deviceId);
-    expect(original).toMatchObject({ source: "device", deviceId: venue.deviceId });
-    const series = await activeCorrective();
-
-    const answer = await cancel(id);
-
-    expect(answer).toEqual({ status: 200, json: { body: "" } });
-    const credits = await creditsOf(original.id);
-    expect(credits).toHaveLength(1);
-    const credit = credits[0]!;
-    expect(credit).toMatchObject({
-      total: -300,
-      seriesId: series!.id,
-      invoiceNumber: series!.next,
-      nodeId: venue.cfg.nodeId,
-      source: "device",
-      deviceId: venue.deviceId,
-      authorizedBy: supervisorId,
-      workingOrderId: null,
-    });
-    expect(credit.vatBreakdown).toEqual(
-      original.vatBreakdown.map((group) => ({
-        rate: group.rate,
-        base: negate(group.base),
-        tax: negate(group.tax),
-      })),
-    );
-    expect(await linesOf(credit.id)).toEqual(
-      (await linesOf(original.id)).map((line) => ({
-        ...line,
-        quantity: -line.quantity,
-        lineTotal: -line.lineTotal,
-        lineGross: -line.lineGross!,
-      })),
-    );
-
-    const filed = await fiscalRecordOf(credit.id);
-    const rectified = await fiscalRecordOf(original.id);
-    expect(filed).toMatchObject({
-      tipoRegistro: "alta",
-      tipoFactura: "R5",
-      tipoRectificativa: "I",
-      importeTotal: negate(rectified.importeTotal!),
-      cuotaTotal: negate(rectified.cuotaTotal!),
-    });
-    expect(filed.desglose).toEqual(
-      rectified.desglose.map((group) => ({
-        ...group,
-        BaseImponibleOimporteNoSujeto: negate(group.BaseImponibleOimporteNoSujeto),
-        CuotaRepercutida: negate(group.CuotaRepercutida),
-      })),
-    );
-    expect(filed.facturasRectificadas?.IDFacturaRectificada).toEqual([
-      expect.objectContaining({
-        IDEmisorFactura: rectified.idEmisorFactura,
-        NumSerieFactura: rectified.numSerieFactura,
-      }),
-    ]);
-
-    const settled = await inTx(venue, (tx) =>
-      tx.select().from(saleSettlements).where(eq(saleSettlements.saleId, original.id)),
-    );
-    expect(settled).toHaveLength(1);
-    const outstanding = await inTx(venue, (tx) => listOutstandingSales(tx));
-    expect(outstanding.map((sale) => sale.saleId)).not.toContain(original.id);
-    expect(await activeCorrective()).toEqual({ id: series!.id, next: series!.next + 1 });
-
-    expect(await statusOf(venue, id)).toBe("abandoned");
-    expect(await amendmentsOf(id)).toEqual([
-      { kind: "order_placed", actorId: venue.operatorId, reason: null },
-      { kind: "order_cancelled", actorId: supervisorId, reason: REASON },
-    ]);
-  });
-
-  it("copies each line's unit price before any discount onto the credit unnegated, and its list total negated", async () => {
-    const id = randomUUID();
-    const parked = await send(venue.app, venue.cookie, "POST", "/api/working-orders", {
-      dining: "eat_in",
-      id,
-      zoneId: ticketThenPayZone,
-      lines: [
-        { menuItemId: offerOf("Small beer"), quantity: "1" },
-        { menuItemId: offerOf("Small beer"), quantity: "2" },
-      ],
-    });
-    expect(parked.status).toBe(200);
-    await inTx(venue, (tx) =>
-      tx
-        .update(workingOrderLines)
-        .set({ listUnitPriceGross: 400 })
-        .where(and(eq(workingOrderLines.workingOrderId, id), eq(workingOrderLines.lineNo, 1))),
-    );
-    await issueOrderInvoice(
-      {
-        admission: testTradingAdmission(),
-        db: venue.db,
-        backend: venue.backend,
-        clock: venue.clock,
-      },
-      { ...venue.cfg, origin: { source: "device", deviceId: brandDeviceId(venue.deviceId) } },
-      id,
-      venue.operatorId,
-    );
-    expect(
-      (await send(venue.app, venue.cookie, "POST", `/api/working-orders/${id}/place`)).status,
-    ).toBe(200);
-    const original = await invoiceOf(id);
-
-    expect((await cancel(id)).status).toBe(200);
-
-    const [credit] = await creditsOf(original.id);
-    const listPrices = (saleId: string) =>
-      inTx(venue, (tx) =>
-        tx
-          .select({
-            listGross: saleLines.listGross,
-            listUnitPriceGross: saleLines.listUnitPriceGross,
-          })
-          .from(saleLines)
-          .where(eq(saleLines.saleId, saleId))
-          .orderBy(saleLines.lineNo),
-      );
-    expect(await listPrices(original.id)).toEqual([
-      { listGross: 400, listUnitPriceGross: 400 },
-      { listGross: null, listUnitPriceGross: null },
-    ]);
-    expect(await listPrices(credit!.id)).toEqual([
-      { listGross: -400, listUnitPriceGross: 400 },
-      { listGross: null, listUnitPriceGross: null },
-    ]);
-  });
-
-  it("credits a two-rate invoice line by line, an extras pick under its dish, each rate the exact negative of the invoice's", async () => {
-    const id = await placed(
-      [
-        { name: "Small beer", quantity: "2" },
-        {
-          name: "Café",
-          quantity: "1",
-          extras: [
-            { listId: extraListId, picks: [{ productId: productIdOf("Leche"), quantity: 2 }] },
-          ],
-        },
-      ],
-      ticketThenPayZone,
-      true,
-      "takeaway",
-    );
-    const original = await invoiceOf(id);
-    expect(original.vatBreakdown).toHaveLength(2);
-
-    expect((await cancel(id)).status).toBe(200);
-
-    const [credit] = await creditsOf(original.id);
-    expect(credit!.total).toBe(-original.total);
-    expect(credit!.vatBreakdown).toEqual(
-      original.vatBreakdown.map((group) => ({
-        rate: group.rate,
-        base: negate(group.base),
-        tax: negate(group.tax),
-      })),
-    );
-    const invoiced = await linesOf(original.id);
-    expect(invoiced.map((line) => [line.name, line.quantity, line.parentLineNo])).toEqual([
-      ["Small beer", 2000, null],
-      ["Café", 1000, null],
-      ["Leche", 2000, 2],
-    ]);
-    expect(await linesOf(credit!.id)).toEqual(
-      invoiced.map((line) => ({
-        ...line,
-        quantity: -line.quantity,
-        lineTotal: -line.lineTotal,
-        lineGross: -line.lineGross!,
-      })),
-    );
-  });
-
-  it("credits a three-pick physical extra with its frozen price basis and exact line total", async () => {
-    const id = await placed(
-      [
-        {
-          name: "Mosto",
-          quantity: "1",
-          extras: [
-            { listId: portionListId, picks: [{ productId: productIdOf("Jamón"), quantity: 3 }] },
-          ],
-        },
-      ],
-      ticketThenPayZone,
-      true,
-      "takeaway",
-    );
-    const original = await invoiceOf(id);
-    const invoiced = await linesOf(original.id);
-    expect(invoiced[1]).toMatchObject({
-      name: "Jamón",
-      quantity: 150,
-      priceQuantity: 50,
-      unitPrice: 1,
-      lineGross: 3,
-      lineTotal: 2,
-    });
-
-    expect((await cancel(id)).status).toBe(200);
-
-    const [credit] = await creditsOf(original.id);
-    expect(credit!.total).toBe(-original.total);
-    expect(await linesOf(credit!.id)).toEqual(
-      invoiced.map((line) => ({
-        ...line,
-        quantity: -line.quantity,
-        lineTotal: -line.lineTotal,
-        lineGross: -line.lineGross!,
-      })),
-    );
-  });
-
   it("files the published 0.055 kg portion exactly after unit precision falls", async () => {
     await inTx(venue, async (tx) => {
       await tx.execute(
@@ -697,42 +267,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     }
   });
 
-  it("names, on each corrective line, the invoice line with the same number that it reverses", async () => {
-    const id = await placed([
-      { name: "Small beer", quantity: "2" },
-      {
-        name: "Café",
-        quantity: "1",
-        extras: [
-          { listId: extraListId, picks: [{ productId: productIdOf("Leche"), quantity: 2 }] },
-        ],
-      },
-    ]);
-    const original = await invoiceOf(id);
-
-    expect((await cancel(id)).status).toBe(200);
-
-    const [credit] = await creditsOf(original.id);
-    const linksOf = (saleId: string) =>
-      inTx(venue, (tx) =>
-        tx
-          .select({
-            id: saleLines.id,
-            lineNo: saleLines.lineNo,
-            correctsLineId: saleLines.correctsLineId,
-          })
-          .from(saleLines)
-          .where(eq(saleLines.saleId, saleId))
-          .orderBy(saleLines.lineNo),
-      );
-    const invoiced = await linksOf(original.id);
-    expect(invoiced).toHaveLength(3);
-    expect((await linksOf(credit!.id)).map((line) => [line.lineNo, line.correctsLineId])).toEqual(
-      invoiced.map((line) => [line.lineNo, line.id]),
-    );
-  });
-
-  it("refuses an operator without sale.rectify and no override, writing nothing and using no invoice number", async () => {
+  it("refuses an operator without sale.void and no override, writing nothing and using no invoice number", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);
 
     const answer = cancel(id, venue.cookie);
@@ -740,7 +275,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
       status: 403,
       code: "authorization.not_permitted",
     });
-    expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
+    expect((await answer).json.params).toEqual({ permission: "sale.void" });
   });
 
   it("refuses a bill holding a payment, writing nothing", async () => {
@@ -825,7 +360,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
   });
 
-  it("refuses a second cancel, leaving exactly one corrective", async () => {
+  it("refuses a second cancel, leaving exactly one cancellation", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);
     expect((await cancel(id)).status).toBe(200);
     const original = await invoiceOf(id);
@@ -836,88 +371,8 @@ describe("cancelling a placed order whose invoice was issued", () => {
       status: 409,
       code: "working_order.not_placed",
     });
-    expect(await creditsOf(original.id)).toHaveLength(1);
+    expect(await voidsOf(original.id)).toHaveLength(1);
   });
-
-  it("refuses when the node has no live corrective series, writing nothing", async () => {
-    const id = await placed([{ name: "Small beer", quantity: "1" }]);
-    const retired = await activeCorrective();
-    await inTx(venue, (tx) =>
-      tx
-        .update(invoiceSeries)
-        .set({ retiredAt: new Date() })
-        .where(eq(invoiceSeries.id, retired!.id)),
-    );
-    try {
-      await expectRefusedUnwritten(id, cancel(id), {
-        status: 409,
-        code: "series.no_corrective_for_node",
-      });
-    } finally {
-      await inTx(venue, (tx) =>
-        insertNodeSeriesTx(tx, venue.cfg.nodeId, [
-          { code: `R${randomUUID().slice(0, 8)}`, purpose: "corrective" },
-        ]),
-      );
-    }
-  });
-
-  it("refuses an operator without sale.rectify before looking for a corrective series, writing nothing", async () => {
-    const id = await placed([{ name: "Small beer", quantity: "1" }]);
-    const retired = await activeCorrective();
-    await inTx(venue, (tx) =>
-      tx
-        .update(invoiceSeries)
-        .set({ retiredAt: new Date() })
-        .where(eq(invoiceSeries.id, retired!.id)),
-    );
-    try {
-      await expectRefusedUnwritten(id, cancel(id, venue.cookie), {
-        status: 403,
-        code: "authorization.not_permitted",
-      });
-    } finally {
-      await inTx(venue, (tx) =>
-        insertNodeSeriesTx(tx, venue.cfg.nodeId, [
-          { code: `R${randomUUID().slice(0, 8)}`, purpose: "corrective" },
-        ]),
-      );
-    }
-  });
-
-  it.each([
-    ["Mosto", "-0.55", { rate: "21.00", base: "0.45", tax: "0.10" }],
-    ["Zumo", "-2.10", { rate: "21.00", base: "1.74", tax: "0.36" }],
-  ])(
-    "credits %s for %s with the invoice's own VAT split negated, where its lines would tax another",
-    async (name, total, invoiced) => {
-      const id = await placed([{ name, quantity: "1" }], ticketThenPayZone, true, "takeaway");
-      const original = await invoiceOf(id);
-      expect(original.vatBreakdown).toEqual([invoiced]);
-
-      expect((await cancel(id)).status).toBe(200);
-
-      const [credit] = await creditsOf(original.id);
-      expect(credit!.total).toBe(-original.total);
-      const negated = { rate: "21.00", base: negate(invoiced.base), tax: negate(invoiced.tax) };
-      expect(credit!.vatBreakdown).toEqual([negated]);
-      const filed = await fiscalRecordOf(credit!.id);
-      expect(filed).toMatchObject({
-        tipoFactura: "R5",
-        importeTotal: total,
-        cuotaTotal: negated.tax,
-      });
-      const [rectified] = (await fiscalRecordOf(original.id)).desglose;
-      expect(filed.desglose).toEqual([
-        {
-          ...rectified,
-          BaseImponibleOimporteNoSujeto: negated.base,
-          CuotaRepercutida: negated.tax,
-        },
-      ]);
-      expect(await statusOf(venue, id)).toBe("abandoned");
-    },
-  );
 
   it("cancelling a different bill keeps the remaining bill's party revision current", async () => {
     const party = await seatedWith(venue);
@@ -970,7 +425,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     ).toEqual([]);
   });
 
-  it("credits and abandons a bill its party left without paying, leaving the departure as recorded", async () => {
+  it("cancels the receipt of a bill its party left without paying and abandons it, leaving the departure as recorded", async () => {
     const party = await seatedWith(venue, "Small beer");
     const departed = await send(
       venue.app,
@@ -1010,8 +465,8 @@ describe("cancelling a placed order whose invoice was issued", () => {
 
     expect(answer.status).toBe(200);
     expect(await statusOf(venue, party.tabId)).toBe("abandoned");
-    const credits = await creditsOf(original.id);
-    expect(credits.map((credit) => credit.total)).toEqual([-original.total]);
+    expect(await voidsOf(original.id)).toEqual([{ reason: REASON, voidedBy: supervisorId }]);
+    expect(await creditsOf(original.id)).toEqual([]);
     expect(await readDeparture()).toEqual(departure);
     expect(await listedBills()).not.toContain(party.tabId);
     expect(
@@ -1020,30 +475,6 @@ describe("cancelling a placed order whose invoice was issued", () => {
     ).toEqual([]);
   });
 
-  it("fails loudly when the node has two live corrective series, writing nothing", async () => {
-    const id = await placed([{ name: "Small beer", quantity: "1" }]);
-    const code = `R${randomUUID().slice(0, 8)}`;
-    await inTx(venue, (tx) =>
-      insertNodeSeriesTx(tx, venue.cfg.nodeId, [{ code, purpose: "corrective" }]),
-    );
-    try {
-      const before = fiscalSnapshot();
-      const answer = await cancel(id);
-      expect({ status: answer.status, code: answer.json.code }).toEqual({
-        status: 500,
-        code: "server.internal",
-      });
-      expect(fiscalSnapshot()).toEqual(before);
-      expect(await statusOf(venue, id)).toBe("placed");
-    } finally {
-      await inTx(venue, (tx) =>
-        tx
-          .update(invoiceSeries)
-          .set({ retiredAt: new Date() })
-          .where(and(eq(invoiceSeries.nodeId, venue.cfg.nodeId), eq(invoiceSeries.code, code))),
-      );
-    }
-  });
   it("refuses an invoice already partly credited, writing nothing", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
@@ -1129,104 +560,7 @@ describe("cancelling a placed order whose invoice was issued", () => {
     expect(await creditsOf(original.id)).toEqual(raised);
   });
 
-  // The route sends only a reason; both refusals below come from the invoice as stored, so a
-  // retry meets the same one.
-  it("answers 409 when the invoice's stored lines disagree with its breakdown, writing nothing", async () => {
-    const id = await placed([{ name: "Small beer", quantity: "1" }]);
-    const original = await invoiceOf(id);
-    await inTx(venue, (tx) =>
-      tx.insert(saleLines).values({
-        saleId: original.id,
-        lineNo: 99,
-        name: "Añadida",
-        descriptions: { [venue.cfg.locale]: "Añadida" },
-        quantity: 1000,
-        unitPrice: 1,
-        vatRate: 2100,
-        lineTotal: 1,
-      }),
-    );
-
-    await expectRefusedUnwritten(id, cancel(id), {
-      status: 409,
-      code: "sale.correction_lines_mismatch",
-    });
-  });
-
-  it("answers 409 when the invoice's stored breakdown does not sum to its total, writing nothing", async () => {
-    const id = await placed([{ name: "Small beer", quantity: "1" }]);
-    const original = await invoiceOf(id);
-    const [trigger] = venue.db.all<{ sql: string }>(
-      sql`select sql from sqlite_master where type = 'trigger' and name = 'sales_append_only_update'`,
-    );
-    venue.db.run(sql.raw(`drop trigger "sales_append_only_update"`));
-    try {
-      await inTx(venue, (tx) =>
-        tx
-          .update(sales)
-          .set({ vatBreakdown: [{ rate: "21.00", base: "2.48", tax: "0.51" }] })
-          .where(eq(sales.id, original.id)),
-      );
-    } finally {
-      venue.db.run(sql.raw(trigger!.sql));
-    }
-
-    await expectRefusedUnwritten(id, cancel(id), {
-      status: 409,
-      code: "sale.total_mismatch",
-    });
-  });
-
-  // The cancel reverses every stored invoice line exactly, so these two reach the line checks with
-  // a value stored as bytes: it reads back as a new byte array each time, so the cancel's copy and
-  // the one `recordCorrection` reads are not the same value.
-  it("answers 409 when a stored invoice line's product reads back unlike itself, writing nothing", async () => {
-    const id = await placed([{ name: "Small beer", quantity: "1" }]);
-    const original = await invoiceOf(id);
-    await inTx(venue, (tx) =>
-      tx.insert(saleLines).values({
-        saleId: original.id,
-        lineNo: 99,
-        name: "Añadida",
-        descriptions: { [venue.cfg.locale]: "Añadida" },
-        quantity: 1000,
-        unitPrice: 0,
-        vatRate: 2100,
-        lineTotal: 0,
-        productId: sql`x'01'`,
-      }),
-    );
-
-    await expectRefusedUnwritten(id, cancel(id), {
-      status: 409,
-      code: "sale.correction_line_not_reversed",
-    });
-  });
-
-  it("answers 409 when a stored invoice line's id reads back unlike itself, writing nothing", async () => {
-    const id = await placed([{ name: "Small beer", quantity: "1" }]);
-    const original = await invoiceOf(id);
-    await inTx(venue, (tx) =>
-      tx.insert(saleLines).values({
-        id: sql`x'02'`,
-        saleId: original.id,
-        lineNo: 99,
-        name: "Añadida",
-        descriptions: { [venue.cfg.locale]: "Añadida" },
-        quantity: 1000,
-        unitPrice: 0,
-        vatRate: 2100,
-        lineTotal: 0,
-      }),
-    );
-
-    await expectRefusedUnwritten(id, cancel(id), {
-      status: 409,
-      code: "sale.correction_line_not_on_invoice",
-    });
-  });
-
-  it("files one credit when two cancels of the order arrive together, refusing the second", async () => {
+  it("files one cancellation when two cancels of the order arrive together, refusing the second", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     const series = await activeCorrective();
@@ -1237,16 +571,18 @@ describe("cancelling a placed order whose invoice was issued", () => {
       [200, undefined],
       [409, "working_order.not_placed"],
     ]);
-    expect(await creditsOf(original.id)).toHaveLength(1);
-    expect(await activeCorrective()).toEqual({ id: series!.id, next: series!.next + 1 });
+    expect(await voidsOf(original.id)).toHaveLength(1);
+    expect(await annulmentsOf(original.id)).toHaveLength(1);
+    expect(await creditsOf(original.id)).toEqual([]);
+    expect(await activeCorrective()).toEqual(series);
     expect(await amendmentsOf(id)).toHaveLength(2);
   });
 
-  it("keeps none of the credit when a write after it fails", async () => {
+  it("keeps none of the cancellation when a write after it fails", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
-    // The cancel's last write is its amendment, after the credit, its number, its record, the
-    // chain's move and the invoice's settlement.
+    // The cancel's last write is its amendment, after the cancellation, its record and the
+    // chain's move.
     venue.db.run(
       sql.raw(
         `create trigger refuse_cancel_amendment before insert on order_amendments
@@ -1268,12 +604,12 @@ describe("cancelling a placed order whose invoice was issued", () => {
     });
     expect(fiscalSnapshot()).toEqual(before);
     expect(await statusOf(venue, id)).toBe("placed");
-    expect(await creditsOf(original.id)).toEqual([]);
+    expect(await voidsOf(original.id)).toEqual([]);
     const outstanding = await inTx(venue, (tx) => listOutstandingSales(tx));
     expect(outstanding.map((sale) => sale.saleId)).toContain(original.id);
-    // The control: with the refusal gone, the same cancel credits the invoice.
+    // The control: with the refusal gone, the same cancel cancels the receipt.
     expect((await cancel(id)).status).toBe(200);
-    expect(await creditsOf(original.id)).toHaveLength(1);
+    expect(await voidsOf(original.id)).toHaveLength(1);
   });
 });
 
@@ -1307,22 +643,14 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     return { app, clockAt };
   }
 
-  it("credits the invoice for an operator without sale.rectify, naming the supervisor as authorising", async () => {
+  it("cancels the receipt for an operator without sale.void, naming the supervisor as authorising", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
 
     const answer = await cancelWith({ personId: supervisorId, pin: SUPERVISOR_PIN })(id);
 
     expect(answer).toEqual({ status: 200, json: { body: "" } });
-    const credits = await creditsOf(original.id);
-    expect(credits).toEqual([
-      expect.objectContaining({
-        total: -300,
-        source: "device",
-        deviceId: venue.deviceId,
-        authorizedBy: supervisorId,
-      }),
-    ]);
+    expect(await voidsOf(original.id)).toEqual([{ reason: REASON, voidedBy: supervisorId }]);
     expect(await statusOf(venue, id)).toBe("abandoned");
     expect(await amendmentsOf(id)).toEqual([
       { kind: "order_placed", actorId: venue.operatorId, reason: null },
@@ -1339,12 +667,12 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     });
   });
 
-  it("refuses the PIN of someone who does not hold sale.rectify, writing nothing", async () => {
+  it("refuses the PIN of someone who does not hold sale.void, writing nothing", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const answer = cancelWith({ personId: venue.operatorId, pin: "5555" })(id);
 
     await expectRefusedUnwritten(id, answer, { status: 403, code: "authorization.not_permitted" });
-    expect((await answer).json.params).toEqual({ permission: "sale.rectify" });
+    expect((await answer).json.params).toEqual({ permission: "sale.void" });
   });
 
   // Thunks, because the supervisor's id exists only once the suite's setup has run.
@@ -1370,7 +698,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     await expectRefusedUnwritten(id, cancelWith(override())(id), refusal);
   });
 
-  it("never checks an override sent by someone who holds sale.rectify, and credits on their own authority", async () => {
+  it("never checks an override sent by someone who holds sale.void, and cancels on their own authority", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
 
@@ -1380,9 +708,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
     )(id);
 
     expect(answer.status).toBe(200);
-    expect(await creditsOf(original.id)).toEqual([
-      expect.objectContaining({ authorizedBy: supervisorId }),
-    ]);
+    expect(await voidsOf(original.id)).toEqual([{ reason: REASON, voidedBy: supervisorId }]);
   });
 
   it("counts wrong PINs in the till's override bucket: after four even the right one is 429, the drawer too, until the wait is over", async () => {
@@ -1413,9 +739,7 @@ describe("cancelling an invoiced order on a supervisor's PIN", () => {
 
     clockAt.now += 2_001;
     expect((await cancelWith(right, venue.cookie, app)(id)).status).toBe(200);
-    expect(await creditsOf(original.id)).toEqual([
-      expect.objectContaining({ authorizedBy: supervisorId }),
-    ]);
+    expect(await voidsOf(original.id)).toEqual([{ reason: REASON, voidedBy: supervisorId }]);
   });
 
   it("refuses the PIN of someone who does not hold sale.rectify on a bill holding a payment as not permitted, writing nothing", async () => {
@@ -1577,7 +901,7 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
     });
   }
 
-  it("credits the invoice while another writer commits during the PIN check, deriving the key once", async () => {
+  it("cancels the receipt while another writer commits during the PIN check, deriving the key once", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     watchDerivations(SUPERVISOR_PIN, anotherWriter, anotherWriter, anotherWriter);
@@ -1586,9 +910,7 @@ describe("cancelling an invoiced order on a supervisor's PIN derives its key out
 
     expect(answer.status).toBe(200);
     expect(await watchedOrder()).toEqual(["writer", "derived"]);
-    expect(await creditsOf(original.id)).toEqual([
-      expect.objectContaining({ authorizedBy: supervisorId }),
-    ]);
+    expect(await voidsOf(original.id)).toEqual([{ reason: REASON, voidedBy: supervisorId }]);
   });
 
   it("derives no key for an override sent with an order that has no invoice", async () => {
@@ -1812,7 +1134,7 @@ describe("cancelling an invoiced order while a card is paying it", () => {
     expect(paid.json.outcome).toBe("received");
   });
 
-  it("credits the invoice once a declined card has left the reader", async () => {
+  it("cancels the receipt once a declined card has left the reader", async () => {
     const id = await placed([{ name: "Small beer", quantity: "1" }]);
     const original = await invoiceOf(id);
     const calls = venue.card.collectCalls.length;
@@ -1829,7 +1151,7 @@ describe("cancelling an invoiced order while a card is paying it", () => {
     expect(declined.json.outcome).toBe("declined");
 
     expect(await cancel(id)).toEqual({ status: 200, json: { body: "" } });
-    expect(await creditsOf(original.id)).toHaveLength(1);
+    expect(await voidsOf(original.id)).toHaveLength(1);
     expect(await statusOf(venue, id)).toBe("abandoned");
   });
 
@@ -1970,18 +1292,17 @@ describe("a party's bills name the invoice and its correctives (GET /api/parties
     expect(bill.correctives).toEqual([]);
   });
 
-  it("names the corrective a cancel filed against the invoice", async () => {
+  it("names the receipt a cancel cancelled, and no corrective", async () => {
     const party = await invoicedPartyBill();
     const original = await invoiceOf(party.tabId);
     expect((await cancel(party.tabId)).status).toBe(200);
-    const credits = await creditsOf(original.id);
-    expect(credits).toHaveLength(1);
+    expect(await voidsOf(original.id)).toHaveLength(1);
 
     const bill = await billOf(party.partyId, party.tabId);
 
     expect(bill.status).toBe("abandoned");
     expect(bill.invoiceNumber).toBe(await numberOf(original));
-    expect(bill.correctives).toEqual([await numberOf(credits[0]!)]);
+    expect(bill.correctives).toEqual([]);
   });
 
   it("names neither on a placed bill with no invoice", async () => {
@@ -2020,18 +1341,7 @@ describe("cancelling an invoiced counter order from the counter's waiting list",
     return `${series!.code}/${sale.invoiceNumber}`;
   }
 
-  async function reversedLineIdsOf(saleId: string) {
-    const rows = await inTx(venue, (tx) =>
-      tx
-        .select({ correctsLineId: saleLines.correctsLineId })
-        .from(saleLines)
-        .where(eq(saleLines.saleId, saleId))
-        .orderBy(saleLines.lineNo),
-    );
-    return rows.map((row) => row.correctsLineId);
-  }
-
-  it("lists it with its invoice, and once cancelled one corrective reverses each invoice line and it leaves the list", async () => {
+  it("lists it with its invoice, and once cancelled its receipt has one cancellation, no corrective, and it leaves the list", async () => {
     const id = await placed([
       { name: "Mosto", quantity: "1" },
       { name: "Zumo", quantity: "2" },
@@ -2045,19 +1355,9 @@ describe("cancelling an invoiced counter order from the counter's waiting list",
 
     expect(await cancel(id)).toEqual({ status: 200, json: { body: "" } });
 
-    const credits = await creditsOf(original.id);
-    expect(credits).toHaveLength(1);
-    const invoiceLineIds = (
-      await inTx(venue, (tx) =>
-        tx
-          .select({ id: saleLines.id })
-          .from(saleLines)
-          .where(eq(saleLines.saleId, original.id))
-          .orderBy(saleLines.lineNo),
-      )
-    ).map((row) => row.id);
-    expect(invoiceLineIds).toHaveLength(2);
-    expect(await reversedLineIdsOf(credits[0]!.id)).toEqual(invoiceLineIds);
+    expect(await voidsOf(original.id)).toHaveLength(1);
+    expect(await annulmentsOf(original.id)).toHaveLength(1);
+    expect(await creditsOf(original.id)).toEqual([]);
     expect(await statusOf(venue, id)).toBe("abandoned");
     expect(await waitingRow(id)).toBeUndefined();
   });
