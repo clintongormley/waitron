@@ -2150,6 +2150,7 @@ describe("storage requests", () => {
       drives: [{ drive: "sdb1", fileSystem: "vfat", readable: true, path: "/x" }],
     });
     expectRefusedReply("storage.list", { ok: true, drives: {} });
+    expectRefusedReply("storage.list", { ok: true, drives: [], extra: 1 });
   });
 
   it("the largest allowed list fits 4,096 bytes", () => {
