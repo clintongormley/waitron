@@ -637,6 +637,21 @@ it("words each refusal a cancel and credit can meet, in both languages, naming n
   }
 });
 
+it("words Nothing was served's refusals of served dishes and of another box's unanswered receipt, in both languages", () => {
+  expect(codeMessage("bill.served_dishes", "en")).toBe(
+    "These dishes were served or charged, so the receipt can't be cancelled. Take payment, or use Reopen bill where it is offered.",
+  );
+  expect(codeMessage("bill.served_dishes", "es")).toBe(
+    "Estos platos se sirvieron o se cobran, así que el ticket no se puede anular. Cobra la cuenta o, si se ofrece, usa Reabrir cuenta.",
+  );
+  expect(codeMessage("fiscal.original_unanswered", "en")).toBe(
+    "The other box has not finished sending its receipts. Try again later.",
+  );
+  expect(codeMessage("fiscal.original_unanswered", "es")).toBe(
+    "El otro servidor aún no ha terminado de enviar sus tickets. Inténtalo más tarde.",
+  );
+});
+
 it("words money back larger than what is left of its receipt", () => {
   expect(codeMessage("sale.correction_exceeds_total", "en")).toBe(
     "That is more than is left of this receipt after the money already given back.",

@@ -314,6 +314,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     ["sale.correction_exceeds_total", null],
     ["sale.correction_not_whole", null],
     ["working_order.not_placed", null],
+    ["fiscal.original_unanswered", null],
   ] as const)(
     "keeps the dialog open with %s's sentence, and reads the bills again",
     async (code, key) => {
@@ -402,7 +403,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
 
     await confirmCancel(el);
 
-    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
+    expect(doneText(el)).toBe("Receipt A/12 cancelled.");
     expect(offered(el)).toBeNull();
   });
 
@@ -416,7 +417,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
 
     expect(server.cancelOrder).toHaveBeenCalledOnce();
     expect(dialog(el)!.busy).toBe(false);
-    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
+    expect(doneText(el)).toBe("Receipt A/12 cancelled.");
   });
 
   it("shows a table cancel refusal while the follow-up bills read has not answered", async () => {
@@ -572,7 +573,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     expect(vi.mocked(api.cancelOrder).mock.calls).toEqual([
       ["wo-check", "Wrong table", undefined, { signal: expect.any(AbortSignal) }],
     ]);
-    expect(doneText(el)).toBe(t("cancel_credit.done_unnumbered"));
+    expect(doneText(el)).toBe("Receipt A/12 cancelled.");
     dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-finished]")!.click();
     await expect.poll(() => dialog(el)).toBeNull();
     expect(el.shadowRoot!.querySelector("wt-unsaved-changes")!.open).toBe(false);
@@ -659,6 +660,96 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
     await flush(el, 6);
 
     expect(server.getPartyBills).toHaveBeenCalledTimes(billReads);
+  });
+
+  it("names the receipt cancelled when the bills read after it name no corrective", async () => {
+    const server = billServer();
+    server.cancelOrder.mockImplementationOnce(async () => {
+      server.getPartyBills.mockResolvedValue([tabBill, { ...cancelled, correctives: [] }]);
+    });
+    const { el } = await openCancel(server);
+    await typeReason(el, "Nobody came");
+
+    await confirmCancel(el);
+
+    expect(doneText(el)).toBe("Receipt A/12 cancelled.");
+    expect(offered(el)).toBeNull();
+  });
+
+  it.each([
+    ["sale.void", "listUnpaidDepartureAuthorizers", "listCancelCreditAuthorizers"],
+    ["sale.rectify", "listCancelCreditAuthorizers", "listUnpaidDepartureAuthorizers"],
+  ] as const)(
+    "refused for %s, asks those who hold that permission for their PIN",
+    async (permission, asked, notAsked) => {
+      let refuse = true;
+      const server = billServer(async () => {
+        if (refuse) {
+          refuse = false;
+          throw { code: "authorization.not_permitted", status: 403, permission };
+        }
+      });
+      const { el } = await openCancel({
+        ...server,
+        listUnpaidDepartureAuthorizers: vi
+          .fn()
+          .mockResolvedValue([{ personId: "void-1", displayName: "Ana" }]),
+        listCancelCreditAuthorizers: vi
+          .fn()
+          .mockResolvedValue([{ personId: "rect-1", displayName: "Luis" }]),
+      });
+      await typeReason(el, "Nobody came");
+
+      await confirmCancel(el);
+
+      expect(api[asked]).toHaveBeenCalledOnce();
+      expect(api[notAsked]).not.toHaveBeenCalled();
+      expect(approval(el)!.authorizers).toEqual(
+        permission === "sale.void"
+          ? [{ personId: "void-1", displayName: "Ana" }]
+          : [{ personId: "rect-1", displayName: "Luis" }],
+      );
+    },
+  );
+
+  it("lists the dishes served and keeps the confirm quiet until the window is opened again", async () => {
+    const server = billServer(async () => {
+      throw {
+        code: "bill.served_dishes",
+        status: 409,
+        workingOrderId: "wo-check",
+        dishes: [{ lineId: "l-1", dishName: "Steak", quantity: "2" }],
+      };
+    });
+    const { el } = await openCancel(server);
+    await typeReason(el, "Nobody came");
+
+    await confirmCancel(el);
+
+    const shown = dialog(el)!.shadowRoot!;
+    expect(
+      [...shown.querySelectorAll("[data-served-dish]")].map((li) => li.textContent!.trim()),
+    ).toEqual(["2 × Steak"]);
+    expect(shown.querySelector("[data-split-mark-served]")).toBeNull();
+    const confirm = () =>
+      dialog(el)!.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
+        "[data-cancel-credit-confirm]",
+      )!;
+    expect(confirm().disabled).toBe(true);
+    await typeReason(el, "Nobody came at all");
+    expect(confirm().disabled).toBe(true);
+
+    dialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-cancel-credit-close]")!.click();
+    await flush(el);
+    const ask = el.shadowRoot!.querySelector("wt-unsaved-changes");
+    if (ask?.open) {
+      ask.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    }
+    await expect.poll(() => dialog(el)).toBeNull();
+    await pressCancelCredit(el);
+    await typeReason(el, "Nobody came");
+    expect(dialog(el)!.shadowRoot!.querySelector("[data-served-dish]")).toBeNull();
+    expect(confirm().disabled).toBe(false);
   });
 
   it("Cancel closes the dialog and sends nothing", async () => {

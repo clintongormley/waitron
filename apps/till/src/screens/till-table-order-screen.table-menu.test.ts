@@ -224,13 +224,21 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     expect(item(el, "[data-bill-receipt]")).not.toBeNull();
   });
 
-  it("a presented bill with a receipt and no payments offers Cancel and credit", async () => {
+  it("a presented bill with a receipt and no payments offers Nothing was served", async () => {
     const presented = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
     const el = await mountScreen({ bills: [presented] });
 
-    expect(groups(el)[0]!.items).toContain("Cancel and credit");
+    expect(groups(el)[0]!.items).toContain("Nothing was served");
     expect(item(el, "[data-cancel-credit]")).not.toBeNull();
     expect(groups(el)[0]!.items).toContain("Full invoice");
+  });
+
+  it("calls Nothing was served No se sirvió nada in Spanish", async () => {
+    setLocale("es");
+    const presented = partyBill("wo-2", 2, "54.00", { status: "placed", receiptAvailable: true });
+    const el = await mountScreen({ bills: [presented] });
+
+    expect(groups(el)[0]!.items).toContain("No se sirvió nada");
   });
 
   it("a presented full invoice naming a customer offers no Cancel and credit, which the server would refuse", async () => {
@@ -686,7 +694,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
       expect(groups(el)[0]!.items).toEqual(["Name this bill…", "Receipt copy"]);
     });
 
-    it("a presented bill keeps Name this bill, Move this bill, Record unpaid departure, Receipt copy, Cancel and credit and Reopen bill", async () => {
+    it("a presented bill keeps Name this bill, Move this bill, Record unpaid departure, Receipt copy, Nothing was served and Reopen bill", async () => {
       const el = await mountScreen({ bills: [presented] });
 
       expect(groups(el)[0]!.items).toEqual([
@@ -694,7 +702,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         "Move this bill…",
         "Record unpaid departure",
         "Receipt copy",
-        "Cancel and credit",
+        "Nothing was served",
         "Reopen bill",
       ]);
     });
@@ -713,7 +721,7 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         "Full invoice",
         "Print the bill",
         "Receipt copy",
-        "Cancel and credit",
+        "Nothing was served",
         "Reopen bill",
       ]);
     });

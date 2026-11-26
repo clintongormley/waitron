@@ -619,24 +619,9 @@ describe("Give money back's words", () => {
 describe("a corrective receipt corrects a receipt, a corrective invoice a full invoice", () => {
   it.each<[StringKey, string, string]>([
     [
-      "cancel_credit.scope_unnumbered",
-      "This bill's invoice ({amount}) will be credited in full: a corrective receipt is issued and the bill is cancelled.",
-      "La factura de esta cuenta ({amount}) se abona por completo: se emite un ticket rectificativo y se cancela la cuenta.",
-    ],
-    [
-      "cancel_credit.approval_next",
-      "If you cannot issue corrective receipts and invoices yourself, someone who can approves it with their PIN next.",
-      "Si tú no puedes emitir tickets y facturas rectificativos, a continuación lo aprueba alguien que pueda con su PIN.",
-    ],
-    [
-      "cancel_credit.refused_not_permitted",
+      "split.refused_not_permitted",
       "The person who approved this cannot issue corrective receipts and invoices. Choose someone who can.",
       "La persona que lo ha aprobado no puede emitir tickets y facturas rectificativos. Elige a alguien que pueda.",
-    ],
-    [
-      "cancel_credit.done_unnumbered",
-      "A corrective receipt was issued and the bill is cancelled.",
-      "Se emitió el ticket rectificativo y la cuenta queda cancelada.",
     ],
     [
       "find_page.replacement",

@@ -226,3 +226,24 @@ it("an untouched cancel-credit form closes without warning or credit", async () 
   expect((await question(app)).open).toBe(false);
   expect(app.submitted).toEqual([]);
 });
+it("a served-dishes refusal keeps the typed reason protected and sends nothing more", async () => {
+  const { app, form } = await mount();
+  const input = await fill(form, "Wrong table");
+  submit(form);
+  expect(app.submitted).toEqual([{ reason: "Wrong table" }]);
+  form.refusal = {
+    code: "bill.served_dishes",
+    served: [{ lineId: "l-1", dishName: "Steak", quantity: "1" }],
+  };
+  await form.updateComplete;
+  submit(form);
+  expect(app.submitted).toEqual([{ reason: "Wrong table" }]);
+  expect(unload()).toBe(true);
+  cancel(form);
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(input.value).toBe("Wrong table");
+  expect(app.closes).toBe(0);
+});

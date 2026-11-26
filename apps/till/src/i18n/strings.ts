@@ -2197,30 +2197,31 @@ export const en = {
   "departure.unconfirmed":
     "The departure got no answer, so it may have been recorded. Check this bill before trying again.",
   // Cancel and credit: an invoiced, unpaid bill is credited in full and cancelled
-  "cancel_credit.action": "Cancel and credit",
-  "cancel_credit.title": "Cancel and credit",
+  "cancel_credit.action": "Nothing was served",
+  "cancel_credit.title": "Nothing was served",
   "cancel_credit.scope":
-    "Invoice {invoice} ({amount}) will be credited in full: a corrective receipt is issued and the bill is cancelled.",
-  "cancel_credit.scope_unnumbered":
-    "This bill's invoice ({amount}) will be credited in full: a corrective receipt is issued and the bill is cancelled.",
+    "Only when nothing was served. If the receipt printed, get it back from the guests.",
   "cancel_credit.reason": "Reason",
   "cancel_credit.reason_invalid": "Say why the bill is cancelled",
   "cancel_credit.reason_long": "Keep the reason to 500 characters or fewer",
   "cancel_credit.approval_next":
-    "If you cannot issue corrective receipts and invoices yourself, someone who can approves it with their PIN next.",
-  "cancel_credit.confirm": "Cancel and credit",
+    "If you cannot void sales yourself, someone who can approves it with their PIN next.",
+  "cancel_credit.confirm": "Nothing was served",
   "cancel_credit.keep": "Keep the bill",
   "cancel_credit.approvers_failed": "Could not read who can approve this. Try again.",
   "cancel_credit.unconfirmed":
     "The cancel got no answer, so it may have been made. Check the table's bills before trying again.",
   "cancel_credit.refused_payments":
-    "This bill holds a payment, so it cannot be cancelled and credited.",
+    "This bill holds a payment, so its receipt cannot be cancelled.",
   "cancel_credit.refused_payment_in_flight":
     "A card payment on this bill is pending. Wait for the reader, then choose Pay to check it before cancelling.",
   "cancel_credit.refused_not_permitted":
-    "The person who approved this cannot issue corrective receipts and invoices. Choose someone who can.",
+    "The person who approved this cannot do it. Choose someone who can.",
+  "cancel_credit.served":
+    "These dishes were served or charged, so the receipt can't be cancelled. Take payment, or use Reopen bill where it is offered.",
   "cancel_credit.done": "Corrective receipt {number} issued. The bill is cancelled.",
-  "cancel_credit.done_unnumbered": "A corrective receipt was issued and the bill is cancelled.",
+  "cancel_credit.voided": "Receipt {number} cancelled.",
+  "cancel_credit.voided_unnumbered": "The receipt is cancelled.",
   "cancel_credit.done_action": "Done",
   // Reopen bill: a printed receipt is credited in full and its dishes go onto a new open bill
   "split.action": "Reopen bill",
@@ -2240,6 +2241,9 @@ export const en = {
   "split.unconfirmed":
     "Reopen bill got no answer, so it may have been done. Check the table's bills before trying again.",
   "split.refused_left_unpaid": "This bill was recorded as left unpaid, so its guests have gone.",
+  "split.refused_payments": "This bill holds a payment, so it cannot be cancelled and credited.",
+  "split.refused_not_permitted":
+    "The person who approved this cannot issue corrective receipts and invoices. Choose someone who can.",
   "split.refused_not_at_table": "Only a table's bill can be reopened.",
   "split.refused_not_issued": "This bill has no receipt yet.",
   "split.refused_payment_in_flight":
@@ -4621,30 +4625,30 @@ export const es: Record<StringKey, string> = {
   "departure.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
   "departure.unconfirmed":
     "La salida no obtuvo respuesta, así que puede que se haya registrado. Revisa esta cuenta antes de volver a intentarlo.",
-  "cancel_credit.action": "Cancelar y abonar",
-  "cancel_credit.title": "Cancelar y abonar",
-  "cancel_credit.scope":
-    "La factura {invoice} ({amount}) se abona por completo: se emite un ticket rectificativo y se cancela la cuenta.",
-  "cancel_credit.scope_unnumbered":
-    "La factura de esta cuenta ({amount}) se abona por completo: se emite un ticket rectificativo y se cancela la cuenta.",
+  "cancel_credit.action": "No se sirvió nada",
+  "cancel_credit.title": "No se sirvió nada",
+  "cancel_credit.scope": "Solo si no se sirvió nada. Si el ticket se ha impreso, recupéralo.",
   "cancel_credit.reason": "Motivo",
   "cancel_credit.reason_invalid": "Indica por qué se cancela la cuenta",
   "cancel_credit.reason_long": "Usa 500 caracteres como mucho para el motivo",
   "cancel_credit.approval_next":
-    "Si tú no puedes emitir tickets y facturas rectificativos, a continuación lo aprueba alguien que pueda con su PIN.",
-  "cancel_credit.confirm": "Cancelar y abonar",
+    "Si tú no puedes anular ventas, a continuación lo aprueba alguien que pueda con su PIN.",
+  "cancel_credit.confirm": "No se sirvió nada",
   "cancel_credit.keep": "Mantener la cuenta",
   "cancel_credit.approvers_failed": "No se pudo leer quién puede aprobarlo. Inténtalo de nuevo.",
   "cancel_credit.unconfirmed":
     "La cancelación no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",
   "cancel_credit.refused_payments":
-    "Esta cuenta tiene un pago, así que no se puede cancelar ni abonar.",
+    "Esta cuenta tiene un pago, así que no se puede anular su ticket.",
   "cancel_credit.refused_payment_in_flight":
     "Hay un pago con tarjeta pendiente en esta cuenta. Espera al datáfono y después pulsa Cobrar para comprobarlo antes de cancelar.",
   "cancel_credit.refused_not_permitted":
-    "La persona que lo ha aprobado no puede emitir tickets y facturas rectificativos. Elige a alguien que pueda.",
+    "La persona que lo ha aprobado no puede hacerlo. Elige a alguien que pueda.",
+  "cancel_credit.served":
+    "Estos platos se sirvieron o se cobran, así que el ticket no se puede anular. Cobra la cuenta o, si se ofrece, usa Reabrir cuenta.",
   "cancel_credit.done": "Ticket rectificativo {number} emitido. La cuenta queda cancelada.",
-  "cancel_credit.done_unnumbered": "Se emitió el ticket rectificativo y la cuenta queda cancelada.",
+  "cancel_credit.voided": "Ticket {number} anulado.",
+  "cancel_credit.voided_unnumbered": "El ticket queda anulado.",
   "cancel_credit.done_action": "Hecho",
   "split.action": "Reabrir cuenta",
   "split.title": "Reabrir cuenta",
@@ -4663,6 +4667,9 @@ export const es: Record<StringKey, string> = {
   "split.unconfirmed":
     "Reabrir cuenta no obtuvo respuesta, así que puede que se haya hecho. Revisa las cuentas de la mesa antes de volver a intentarlo.",
   "split.refused_left_unpaid": "Esta cuenta se registró como no pagada: los clientes se han ido.",
+  "split.refused_payments": "Esta cuenta tiene un pago, así que no se puede cancelar ni abonar.",
+  "split.refused_not_permitted":
+    "La persona que lo ha aprobado no puede emitir tickets y facturas rectificativos. Elige a alguien que pueda.",
   "split.refused_not_at_table": "Solo se puede reabrir la cuenta de una mesa.",
   "split.refused_not_issued": "Esta cuenta aún no tiene ticket.",
   "split.refused_payment_in_flight":

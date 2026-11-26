@@ -2,17 +2,18 @@ import { recoveryLink, recoveryRefusalText } from "./recovery-refusal.js";
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { live } from "lit/directives/live.js";
 import { customElement, property, state } from "lit/decorators.js";
-import { formatMoney } from "@waitron/shared";
 import { baseStyles, focusFirstInvalid, submitOnEnter, leaveCoordinatorFor } from "@waitron/ui";
 import type { DraftScope, LeaveCoordinator, LeaveReason, WtDialog } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-input.js";
 import { trackDialog } from "./track-dialog.js";
-import { currentLocale, fill, t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import { REASON_MAX, type DialogRefusal } from "../state/bill-payment.js";
 import type { MealEndUnservedDish, PartyBill } from "../api/floor-api.js";
+import type { TillApi } from "../api/client.js";
+import type { StaffMember } from "../api/device-session-api.js";
 import { servableDishes, serveListed, unservedDishText } from "./dish-format.js";
 
 /** `cancel` credits the receipt and cancels the bill; `split` also puts its dishes on a new bill. */
@@ -26,11 +27,15 @@ export interface CancelCreditDone {
   creditedElsewhere?: boolean;
 }
 
+/** A dish `bill.served_dishes` names as served or charged. */
+export type ServedDish = Omit<MealEndUnservedDish, "released">;
+
 /** A refusal; `bill.unserved_dishes` carries the dishes it lists, and `canStop` when Reopen bill
- * may stop them instead. */
+ * may stop them instead; `bill.served_dishes` carries `served`. */
 export interface CancelCreditRefusal extends DialogRefusal {
   dishes?: readonly MealEndUnservedDish[];
   canStop?: boolean;
+  served?: readonly ServedDish[];
 }
 
 /** `cancel-credit-continue`'s detail: `stopUnserved` when Stop these dishes and reopen was pressed. */
@@ -39,11 +44,25 @@ export interface CancelCreditContinue {
   stopUnserved?: true;
 }
 
-/** The refusal the dialog shows for `error`, keeping `bill.unserved_dishes`' dishes and `canStop`. */
+/** The refusal the dialog shows for `error`, keeping `bill.unserved_dishes`' dishes and `canStop`,
+ * and `bill.served_dishes`' dishes. */
 export function cancelCreditRefusalOf(error: unknown, refusal: DialogRefusal): CancelCreditRefusal {
   const { dishes, canStop } = (error ?? {}) as { dishes?: unknown; canStop?: unknown };
-  if (refusal.code !== "bill.unserved_dishes" || !Array.isArray(dishes)) return refusal;
+  if (!Array.isArray(dishes)) return refusal;
+  if (refusal.code === "bill.served_dishes") return { ...refusal, served: dishes as ServedDish[] };
+  if (refusal.code !== "bill.unserved_dishes") return refusal;
   return { ...refusal, dishes: dishes as MealEndUnservedDish[], canStop: canStop === true };
+}
+
+/** Who may approve a cancel refused for `permission`: `sale.void`'s holders, else `sale.rectify`'s. */
+export function cancelCreditApprovers(
+  api: Pick<TillApi, "listUnpaidDepartureAuthorizers" | "listCancelCreditAuthorizers">,
+  permission: string | undefined,
+  signal: AbortSignal,
+): Promise<StaffMember[]> {
+  return permission === "sale.void"
+    ? api.listUnpaidDepartureAuthorizers({ signal })
+    : api.listCancelCreditAuthorizers({ signal });
 }
 
 /** Whether a reopen that got no answer, finding the printed bill credited, was credited some other
@@ -79,6 +98,8 @@ const TEXT = {
       ...REFUSALS,
       network: "split.unconfirmed",
       "order.payment_in_flight": "split.refused_payment_in_flight",
+      "bill.payments_received": "split.refused_payments",
+      "authorization.not_permitted": "split.refused_not_permitted",
       "bill.left_unpaid": "split.refused_left_unpaid",
       "bill.not_at_table": "split.refused_not_at_table",
       "bill.not_issued": "split.refused_not_issued",
@@ -214,7 +235,7 @@ export class TillCancelCreditDialog extends LitElement {
   #bottomMessage(fieldError: string | null): string {
     const parts: string[] = [];
     if (fieldError !== null) parts.push(t("form.fix_fields"));
-    if (this.shownRefusal !== null && !this.#refusalOnReason() && this.#unservedShown() === null)
+    if (this.shownRefusal !== null && !this.#refusalOnReason() && !this.#listsDishes())
       parts.push(this.#refusalText(this.shownRefusal));
     return parts.join(" ");
   }
@@ -225,7 +246,7 @@ export class TillCancelCreditDialog extends LitElement {
 
   async #continue(): Promise<void> {
     if (!this.isConnected || !this.active || this.busy || this.done !== null) return;
-    if (this.#unservedShown() !== null) return;
+    if (this.#listsDishes()) return;
     this.attempted = true;
     this.shownRefusal = null;
     if (this.#ownError() !== null) {
@@ -263,20 +284,13 @@ export class TillCancelCreditDialog extends LitElement {
     this.#emit("cancel-credit-close");
   }
 
-  #scopeText(): string {
-    if (this.mode === "split") return t("split.scope");
-    const amount = formatMoney(this.amount, currentLocale());
-    return this.invoiceNumber === null
-      ? fill(t("cancel_credit.scope_unnumbered"), { amount })
-      : fill(t("cancel_credit.scope"), { invoice: this.invoiceNumber, amount });
-  }
-
   #doneText(done: CancelCreditDone): string {
     if (this.mode === "split")
       return t(done.creditedElsewhere ? "split.credited_elsewhere" : "split.done");
-    return done.corrective === null
-      ? t("cancel_credit.done_unnumbered")
-      : fill(t("cancel_credit.done"), { number: done.corrective });
+    if (done.corrective !== null) return fill(t("cancel_credit.done"), { number: done.corrective });
+    return this.invoiceNumber === null
+      ? t("cancel_credit.voided_unnumbered")
+      : fill(t("cancel_credit.voided"), { number: this.invoiceNumber });
   }
 
   #doneBody(done: CancelCreditDone) {
@@ -294,6 +308,20 @@ export class TillCancelCreditDialog extends LitElement {
   #unservedShown(): readonly MealEndUnservedDish[] | null {
     const refusal = this.shownRefusal;
     return refusal?.code === "bill.unserved_dishes" ? (refusal.dishes ?? null) : null;
+  }
+
+  /** A refusal listing its dishes holds the confirm until the window is opened again. */
+  #listsDishes(): boolean {
+    return this.#unservedShown() !== null || this.shownRefusal?.served !== undefined;
+  }
+
+  #servedBody(dishes: readonly ServedDish[]) {
+    return html`<div class="unserved" role="alert" data-cancel-credit-served>
+      <span>${t("cancel_credit.served")}</span>
+      <ul>
+        ${dishes.map((dish) => html`<li data-served-dish>${unservedDishText(dish)}</li>`)}
+      </ul>
+    </div>`;
   }
 
   #unservedBody(dishes: readonly MealEndUnservedDish[]) {
@@ -375,10 +403,14 @@ export class TillCancelCreditDialog extends LitElement {
     const own = this.attempted ? this.#ownError() : null;
     const fieldError = this.#reasonError(own);
     const unserved = this.#unservedShown();
+    const served = this.shownRefusal?.served;
     return html`<div class="body">
-      <p data-cancel-credit-scope>${this.#scopeText()}</p>
+      <p data-cancel-credit-scope>
+        ${t(this.mode === "split" ? "split.scope" : "cancel_credit.scope")}
+      </p>
       ${this.mode === "split" ? nothing : this.#reasonField(fieldError)}
       ${unserved === null ? nothing : this.#unservedBody(unserved)}
+      ${served === undefined ? nothing : this.#servedBody(served)}
       ${
         this.mode === "split"
           ? nothing
@@ -399,7 +431,7 @@ export class TillCancelCreditDialog extends LitElement {
           variant="primary"
           data-cancel-credit-confirm
           .loading=${this.busy}
-          .disabled=${this.busy || own !== null || unserved !== null}
+          .disabled=${this.busy || own !== null || this.#listsDishes()}
           @click=${() => void this.#continue()}
         >
           ${t(TEXT[this.mode].confirm)}

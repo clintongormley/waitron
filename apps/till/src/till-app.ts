@@ -303,6 +303,7 @@ import type { BillEditConflictsPrompt } from "./widgets/bill-edit-conflicts-dial
 import { trackDialog } from "./widgets/track-dialog.js";
 import type { DepartingBill } from "./widgets/unpaid-departure-dialog.js";
 import {
+  cancelCreditApprovers,
   cancelCreditRefusalOf,
   creditedElsewhere,
   type CancelCreditContinue,
@@ -21175,7 +21176,7 @@ export class TillApp extends LitElement {
     return said !== undefined && "shown" in said ? said.revision : undefined;
   }
 
-  /** Cancel and credit, or Reopen bill, chosen on an invoiced bill: its dialog opens. */
+  /** Nothing was served, or Reopen bill, chosen on an invoiced bill: its dialog opens. */
   #onCancelCreditBill(event: Event, mode: CancelCreditMode): void {
     const { workingOrderId } = (event as CustomEvent<{ workingOrderId: string }>).detail;
     const party = this.orderParty;
@@ -21333,11 +21334,11 @@ export class TillApp extends LitElement {
     this.cancelCrediting = { ...now, refusal: null, busy: false, done };
   }
 
-  /** The people who can approve the cancel in dialog `id` are read, and their PIN prompt opens. */
-  async #askCancelCreditApprover(id: number): Promise<void> {
+  /** Those holding `permission`, which the cancel in dialog `id` was refused for, are read. */
+  async #askCancelCreditApprover(id: number, permission?: string): Promise<void> {
     const limit = limited(TABLE_REQUEST_LIMIT_MS);
     try {
-      const approvers = await this.api.listCancelCreditAuthorizers({ signal: limit.signal });
+      const approvers = await cancelCreditApprovers(this.api, permission, limit.signal);
       const now = this.#cancelCreditingNow(id);
       if (now === null) return;
       this.cancelCrediting = { ...now, busy: false };
@@ -21362,7 +21363,7 @@ export class TillApp extends LitElement {
     if (this.#cancelCreditingNow(open.id) === null) return;
     const refusal = refusalOf(error);
     if (unapproved && open.mode === "cancel" && refusal.code === "authorization.not_permitted") {
-      await this.#askCancelCreditApprover(open.id);
+      await this.#askCancelCreditApprover(open.id, refusal.permission);
       return;
     }
     if (approverId !== undefined && APPROVER_REFUSALS.has(refusal.code)) {

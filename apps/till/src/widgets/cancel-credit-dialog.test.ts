@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { formatMoney } from "@waitron/shared";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
-import { currentLocale, setLocale, t } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import "./cancel-credit-dialog.js";
 import type { TillCancelCreditDialog } from "./cancel-credit-dialog.js";
@@ -20,7 +19,6 @@ async function mount(over: Partial<TillCancelCreditDialog> = {}) {
 
 const root = (el: TillCancelCreditDialog) => el.shadowRoot!;
 const text = (node: Element | null) => (node?.textContent ?? "").replace(/[ \n\t]+/g, " ").trim();
-const money = (amount: string) => formatMoney(amount, currentLocale());
 const reason = (el: TillCancelCreditDialog) =>
   root(el).querySelector<HTMLElement & { error: string; required: boolean }>(
     'wt-input[name="reason"]',
@@ -51,19 +49,25 @@ function capture<T>(el: TillCancelCreditDialog, type: string): T[] {
 }
 
 describe("till-cancel-credit-dialog: what it will do", () => {
-  it("names the invoice and its amount, and says a corrective receipt is issued and the bill cancelled", async () => {
+  it("says it is only for a bill nothing was served on, and to get a printed receipt back", async () => {
     const el = await mount();
 
     expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toBe(
-      `Invoice A/12 (${money("24.50")}) will be credited in full: a corrective receipt is issued and the bill is cancelled.`,
+      "Only when nothing was served. If the receipt printed, get it back from the guests.",
     );
-    expect(text(confirm(el))).toBe(t("cancel_credit.confirm"));
+    expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(
+      "Nothing was served",
+    );
+    expect(text(confirm(el))).toBe("Nothing was served");
+    expect(text(root(el).querySelector("[data-cancel-credit-next]"))).toBe(
+      "If you cannot void sales yourself, someone who can approves it with their PIN next.",
+    );
     expect(text(root(el).querySelector("[data-cancel-credit-next]"))).toBe(
       t("cancel_credit.approval_next"),
     );
   });
 
-  it("offers to keep the bill rather than a second Cancel beside Cancel and credit", async () => {
+  it("offers to keep the bill rather than a second Cancel beside Nothing was served", async () => {
     const el = await mount();
     const keep = root(el).querySelector("[data-cancel-credit-close]");
 
@@ -74,7 +78,7 @@ describe("till-cancel-credit-dialog: what it will do", () => {
     const el = await mount({ invoiceNumber: null });
 
     expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toBe(
-      `This bill's invoice (${money("24.50")}) will be credited in full: a corrective receipt is issued and the bill is cancelled.`,
+      "Only when nothing was served. If the receipt printed, get it back from the guests.",
     );
   });
 
@@ -83,9 +87,15 @@ describe("till-cancel-credit-dialog: what it will do", () => {
     const el = await mount();
 
     expect(text(root(el).querySelector("[data-cancel-credit-scope]"))).toBe(
-      `La factura A/12 (${money("24.50")}) se abona por completo: se emite un ticket rectificativo y se cancela la cuenta.`,
+      "Solo si no se sirvió nada. Si el ticket se ha impreso, recupéralo.",
     );
-    expect(text(confirm(el))).toBe("Cancelar y abonar");
+    expect(root(el).querySelector<HTMLElement & { heading: string }>("wt-dialog")!.heading).toBe(
+      "No se sirvió nada",
+    );
+    expect(text(confirm(el))).toBe("No se sirvió nada");
+    expect(text(root(el).querySelector("[data-cancel-credit-next]"))).toBe(
+      "Si tú no puedes anular ventas, a continuación lo aprueba alguien que pueda con su PIN.",
+    );
     expect(text(root(el).querySelector("[data-cancel-credit-close]"))).toBe("Mantener la cuenta");
   });
 });
@@ -158,6 +168,7 @@ describe("till-cancel-credit-dialog: refusals", () => {
     "device.unauthorized",
     "sale.correction_exceeds_total",
     "sale.correction_not_whole",
+    "fiscal.original_unanswered",
     "server.internal",
     "some.unmapped_code",
   ])("says %s in the shared message for its code, beside no field", async (code) => {
@@ -173,7 +184,7 @@ describe("till-cancel-credit-dialog: refusals", () => {
     const shared = await mount({ refusal: { code: "series.no_corrective_for_node" } });
 
     expect(actions(own).error).toBe(
-      "Esta cuenta tiene un pago, así que no se puede cancelar ni abonar.",
+      "Esta cuenta tiene un pago, así que no se puede anular su ticket.",
     );
     expect(actions(shared).error).toBe(
       "Este local no tiene una serie para rectificar facturas simplificadas. Avisa a un responsable",
@@ -251,11 +262,19 @@ describe("till-cancel-credit-dialog: done", () => {
     expect(root(el).querySelector("wt-form-actions [data-cancel-credit-finished]")).not.toBeNull();
   });
 
-  it("says the bill is cancelled when the corrective receipt's number could not be read", async () => {
+  it("names the receipt cancelled when no corrective receipt was read", async () => {
     const el = await mount({ done: { corrective: null } });
 
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
-      t("cancel_credit.done_unnumbered"),
+      "Receipt A/12 cancelled.",
+    );
+  });
+
+  it("says the receipt is cancelled when it has no number either", async () => {
+    const el = await mount({ invoiceNumber: null, done: { corrective: null } });
+
+    expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
+      "The receipt is cancelled.",
     );
   });
 
@@ -266,6 +285,70 @@ describe("till-cancel-credit-dialog: done", () => {
     expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(
       "Ticket rectificativo R/3 emitido. La cuenta queda cancelada.",
     );
+  });
+
+  it.each([
+    ["A/12", "Ticket A/12 anulado."],
+    [null, "El ticket queda anulado."],
+  ])("names the receipt cancelled (%s) in Spanish", async (invoiceNumber, said) => {
+    setLocale("es");
+    const el = await mount({ invoiceNumber, done: { corrective: null } });
+
+    expect(text(root(el).querySelector("[data-cancel-credit-done]"))).toBe(said);
+  });
+});
+
+describe("till-cancel-credit-dialog: served dishes", () => {
+  const steak = { lineId: "l-1", dishName: "Steak", quantity: "1" };
+  const canas = { lineId: "l-2", dishName: "Caña", quantity: "2" };
+  const servedBox = (el: TillCancelCreditDialog) =>
+    root(el).querySelector("[data-cancel-credit-served]");
+
+  it("lists the dishes served or charged, says what to do instead, and offers no Mark served", async () => {
+    const el = await mount({
+      refusal: { code: "bill.served_dishes", served: [steak, canas] },
+      canMarkServed: true,
+    });
+
+    expect(servedBox(el)!.getAttribute("role")).toBe("alert");
+    expect(text(servedBox(el)!.querySelector("span"))).toBe(
+      "These dishes were served or charged, so the receipt can't be cancelled. Take payment, or use Reopen bill where it is offered.",
+    );
+    expect([...root(el).querySelectorAll("[data-served-dish]")].map(text)).toEqual([
+      "Steak",
+      "2 × Caña",
+    ]);
+    expect(root(el).querySelector("[data-split-mark-served]")).toBeNull();
+    expect(root(el).querySelector("[data-split-stop-unserved]")).toBeNull();
+    expect(actions(el).error).toBe("");
+  });
+
+  it("keeps the confirm quiet, whatever is typed, until the window is opened again", async () => {
+    const el = await mount({
+      refusal: { code: "bill.served_dishes", served: [steak] },
+    });
+    const asked = capture(el, "cancel-credit-continue");
+
+    await type(el, "Wrong table");
+    expect(confirm(el).disabled).toBe(true);
+    await press(el);
+    expect(asked).toEqual([]);
+
+    const reopened = await mount();
+    await type(reopened, "Wrong table");
+    expect(confirm(reopened).disabled).toBe(false);
+  });
+
+  it("says it in Spanish", async () => {
+    setLocale("es");
+    const el = await mount({
+      refusal: { code: "bill.served_dishes", served: [canas] },
+    });
+
+    expect(text(servedBox(el)!.querySelector("span"))).toBe(
+      "Estos platos se sirvieron o se cobran, así que el ticket no se puede anular. Cobra la cuenta o, si se ofrece, usa Reabrir cuenta.",
+    );
+    expect([...root(el).querySelectorAll("[data-served-dish]")].map(text)).toEqual(["2 × Caña"]);
   });
 });
 
@@ -549,6 +632,14 @@ describe("till-cancel-credit-dialog: Reopen bill", () => {
     [
       "network",
       "Reopen bill got no answer, so it may have been done. Check the table's bills before trying again.",
+    ],
+    [
+      "bill.payments_received",
+      "This bill holds a payment, so it cannot be cancelled and credited.",
+    ],
+    [
+      "authorization.not_permitted",
+      "The person who approved this cannot issue corrective receipts and invoices. Choose someone who can.",
     ],
   ])("words %s for a split, not for a cancel", async (code, sentence) => {
     const el = await mount({ mode: "split", refusal: { code } });
