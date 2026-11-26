@@ -217,6 +217,8 @@ consent given this way, and you take sending the email as delivery (16 November)
 
 ### B3. Undoing a ticket when nothing was served or paid
 
+_2026-11-26: CANCEL-UNSERVED PR 3 (branch `feat/cancel-unserved-void`, [plan](../superpowers/plans/2026-11-25-cancel-unserved.md)) replaces C126 for a printed bill nothing was served on, nobody paid and that names no customer: the till's **Nothing was served** files a cancellation of the receipt, not a corrective._
+
 **The situation.** Sometimes a ticket exists for a sale that should be undone: an order entered on
 the wrong table, a takeaway invoiced and never collected, or a table recorded as "left without
 paying" by mistake. There are two ways to undo a ticket: a corrective invoice (R5) that reduces it

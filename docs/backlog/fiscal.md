@@ -769,6 +769,8 @@ fiscal drain without a series switch.
 
 ## C126 (cancelling an order whose invoice was issued credits it; owner, 2026-10-02, option b, decided without the asesor) — landed as #1030
 
+_2026-11-26: CANCEL-UNSERVED PR 3 (branch `feat/cancel-unserved-void`, [plan](../superpowers/plans/2026-11-25-cancel-unserved.md)) replaces C126 for a printed bill nothing was served on, nobody paid and that names no customer: the till's **Nothing was served** files a cancellation of the receipt, not a corrective._
+
 **11 November 2026, A840:** Counter's Cancel and credit entry is retired. The
 unpaid-departure move route check refuses a closed party with `party.not_open`
 and finds no invoiced Counter waiting row for that bill. The shared server

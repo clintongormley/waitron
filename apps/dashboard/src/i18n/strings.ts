@@ -8,11 +8,11 @@ export const en = {
   "permission.payment.take.help":
     "Take payments and collect bills on the till, or close a bill for later payment. The device must also allow the payment method.",
   "permission.sale.void.help":
-    "Void a recorded sale or authorise recording that a party left without paying. Other staff can ask for your PIN approval.",
+    "Void a recorded sale, cancel the receipt of a printed bill nothing was served on, or authorise recording that a party left without paying. Other staff can ask for your PIN approval.",
   "permission.sale.refund.help":
     "Refund payments and authorise removing charges for dishes already sent or served. Give money back on the till needs it too, except when a window opened by Cancel and refund or Finish table gives back only the cancelled dishes' money, and not on a separate card terminal.",
   "permission.sale.rectify.help":
-    "Authorise issuing a corrective receipt or invoice, including cancelling an invoiced order. Give money back on the till may need it when money for dishes or goodwill goes back beyond what is owed for cancelled dishes. Refunding the payment is a separate permission.",
+    "Authorise issuing a corrective receipt or invoice. Give money back on the till may need it when money for dishes or goodwill goes back beyond what is owed for cancelled dishes. Refunding the payment is a separate permission.",
   "permission.order.custom_item.help":
     "Ring up something that is not on the menu, with a name and price typed at the till. Someone without it can ask a person who has it to enter their PIN.",
   "permission.cash.drawer.help":
@@ -4810,11 +4810,11 @@ export const es: Record<StringKey, string> = {
   "permission.payment.take.help":
     "Cobra ventas y cuentas en la caja, o cierra una cuenta para cobrarla más tarde. El dispositivo también debe permitir la forma de pago.",
   "permission.sale.void.help":
-    "Anula una venta registrada o autoriza registrar que un grupo se ha ido sin pagar. Otros empleados pueden pedir tu autorización con PIN.",
+    "Anula una venta registrada o el ticket de una cuenta impresa en la que no se sirvió nada, o autoriza registrar que un grupo se ha ido sin pagar. Otros empleados pueden pedir tu autorización con PIN.",
   "permission.sale.refund.help":
     "Devuelve pagos y autoriza quitar cargos de platos ya enviados o servidos. Devolver dinero en la caja también lo necesita, salvo cuando una ventana abierta desde Cancelar y devolver o Cerrar mesa devuelve solo el dinero de los platos cancelados, y no en un datáfono aparte.",
   "permission.sale.rectify.help":
-    "Autoriza emitir un ticket rectificativo o una factura rectificativa, incluida la cancelación de un pedido facturado. Devolver dinero en la caja puede necesitarlo cuando se devuelve dinero de platos o por cortesía por encima de lo que se debe por platos cancelados. Devolver el pago requiere un permiso aparte.",
+    "Autoriza emitir un ticket rectificativo o una factura rectificativa. Devolver dinero en la caja puede necesitarlo cuando se devuelve dinero de platos o por cortesía por encima de lo que se debe por platos cancelados. Devolver el pago requiere un permiso aparte.",
   "permission.order.custom_item.help":
     "Añade a la venta algo que no está en la carta, con un nombre y un precio escritos en la caja. Quien no tenga este permiso puede pedir a alguien que lo tenga que introduzca su PIN.",
   "permission.cash.drawer.help":

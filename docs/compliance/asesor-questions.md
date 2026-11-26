@@ -3021,6 +3021,8 @@ This records a question; no enquiry has been sent.
 
 ### Q32. Cancelling an order whose ticket was already issued — a corrective invoice, or an annulment? (added 2026-10-02)
 
+_2026-11-26: CANCEL-UNSERVED PR 3 (branch `feat/cancel-unserved-void`, [plan](../superpowers/plans/2026-11-25-cancel-unserved.md)) replaces C126 for a printed bill nothing was served on, nobody paid and that names no customer: the till's **Nothing was served** files a cancellation of the receipt, not a corrective._
+
 **Why it matters.** In a zone that invoices first, the simplified invoice is issued when the order
 is placed, before anyone pays. If the order is then cancelled, the invoice must not be left standing
 with nothing to collect it. On 2026-10-02 (lane C item C126, built in lane B) the owner decided,
