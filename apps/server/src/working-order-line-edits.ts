@@ -24,6 +24,7 @@ import { eq, inArray, or, sql, and } from "drizzle-orm";
 import { readBillExcess, assertLinesKeptExcess } from "./bill-payments.js";
 import { readStationChanges, refuseChangesAfterSending } from "./changes-after-sending.js";
 import { requireMakeAtStation } from "./dead-ends.js";
+import { endRepricedDishDiscounts, type VariantSwap } from "./dish-discount-ending.js";
 import { copyAllergyWorkingTicks, refreshKitchenAllergyClashes } from "./kitchen-allergy.js";
 import { initiatedAt, requestedItem } from "./kitchen-phase.js";
 import { hasUngroupedHoldPaper } from "./kitchen-ticket-paper.js";
@@ -146,6 +147,8 @@ export async function applyLineEdits(
     edits: { parent: EditableParent; intent: LineIntent }[];
     removed: EditableParent[];
     fresh: RequestedLine[];
+    /** Removed lines each replaced by a fresh line of the same menu item at another variant. */
+    swaps?: VariantSwap[];
     /** Refuse a lower count where a removal would be refused, rather than take it. */
     refuseSentDrop?: true;
     /** A sent line keeps its options answers while the edit names none it does not hold: a rename
@@ -371,6 +374,7 @@ export async function applyLineEdits(
     expand: true,
   }));
   const raised: RequestedLine[] = [];
+  const extrasChangedIds: string[] = [];
   const resent: string[] = [];
   let chargesUnchanged = plan.removed.length === 0 && plan.fresh.length === 0;
   const portionOf = await readGrowingPortions(
@@ -432,6 +436,7 @@ export async function applyLineEdits(
             defaultLanguage,
           );
     const extrasChanged = extras.added.length > 0 || extras.removed.length > 0;
+    if (extrasChanged) extrasChangedIds.push(parent.id);
     const changed =
       intent.note !== parent.note ||
       (parent.sentAt === null &&
@@ -1154,6 +1159,15 @@ export async function applyLineEdits(
     changes
       .filter((change) => change.addedAt !== null || change.removedChildren.length > 0)
       .map((change) => change.parent.id),
+  );
+  await endRepricedDishDiscounts(
+    tx,
+    orderId,
+    extrasChangedIds,
+    (plan.swaps ?? []).map(({ fromId, freshIndex }) => ({
+      fromId,
+      toId: groups[freshIndex]!.rows[0]!.id!,
+    })),
   );
   if (plan.removed.length > 0) {
     const removedIds = plan.removed.map((parent) => parent.id);

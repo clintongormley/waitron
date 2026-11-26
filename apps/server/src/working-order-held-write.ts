@@ -29,6 +29,7 @@ import {
   type OrderLinePatch,
   refusePaymentInFlight,
 } from "./working-order-edit-state.js";
+import type { VariantSwap } from "./dish-discount-ending.js";
 import { applyLineEdits } from "./working-order-line-edits.js";
 import { screenNote } from "./working-order-pricing.js";
 import { countEdit, rowPortions, rowRise } from "./working-order-removal.js";
@@ -125,6 +126,7 @@ export async function saveHeldOrderIn(
   const claimed = new Set<string>();
   const edits: { parent: EditableParent; intent: LineIntent }[] = [];
   const fresh: RequestedLine[] = [];
+  const swaps: VariantSwap[] = [];
   for (const line of req.lines) {
     const parent =
       line.workingOrderLineId === undefined ? undefined : byId.get(line.workingOrderLineId);
@@ -143,6 +145,8 @@ export async function saveHeldOrderIn(
       (line.variantId ?? parent.parentProductId ?? parent.productId) === parent.productId;
     if (!sameItem) {
       claimed.delete(parent.id);
+      if (parent.menuItemId === line.menuItemId)
+        swaps.push({ fromId: parent.id, freshIndex: fresh.length });
       fresh.push(line);
       continue;
     }
@@ -166,6 +170,8 @@ export async function saveHeldOrderIn(
       edits,
       removed: order.parents.filter((parent) => !claimed.has(parent.id)),
       fresh,
+      // A stored line another basket line then claimed is not removed, so not swapped.
+      swaps: swaps.filter(({ fromId }) => !claimed.has(fromId)),
       refuseSentDrop: true,
       keepRecordedAnswers: true,
     },
